@@ -604,14 +604,17 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         // discriminating by kind keeps this one query, symmetric with CreateUpgradeChildAsync copying the parent.
         var parent = await db.Acquisitions.AsNoTracking()
             .Where(row => row.Id == id)
-            .Select(row => new { row.Kind, row.OwnedSourceTier, row.OwnedFormatTier, row.OwnedMediaQuality, row.OwnedMediaRevision, row.OwnedFormatScore })
+            .Select(row => new { row.Kind, row.EntityId, row.OwnedSourceTier, row.OwnedFormatTier, row.OwnedMediaQuality, row.OwnedMediaRevision, row.OwnedFormatScore })
             .FirstOrDefaultAsync(cancellationToken);
         if (parent is null) {
             return null;
         }
 
+        var hasSubtitles = MediaQualityLadder.IsVideoKind(parent.Kind)
+            && parent.EntityId is { } entityId
+            && await db.EntitySubtitles.AsNoTracking().AnyAsync(row => row.EntityId == entityId, cancellationToken);
         return MediaQualityLadder.IsUpgradeCapableKind(parent.Kind) || MediaQualityLadder.IsAudioKind(parent.Kind)
-            ? new UpgradeOwnedQuality(null, parent.OwnedMediaQuality, parent.OwnedMediaRevision, parent.OwnedFormatScore)
+            ? new UpgradeOwnedQuality(null, parent.OwnedMediaQuality, parent.OwnedMediaRevision, parent.OwnedFormatScore, hasSubtitles)
             : new UpgradeOwnedQuality(new BookQualityRank(parent.OwnedSourceTier, parent.OwnedFormatTier), null, FormatScore: parent.OwnedFormatScore);
     }
 
@@ -638,6 +641,9 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         var selected = child.SelectedReleaseJson is { Length: > 0 } json
             ? JsonSerializer.Deserialize<SelectedRelease>(json)
             : null;
+        var parentHasSubtitles = parent.EntityId is { } entityId
+            && MediaQualityLadder.IsVideoKind(parent.Kind)
+            && await db.EntitySubtitles.AsNoTracking().AnyAsync(row => row.EntityId == entityId, cancellationToken);
 
         return new UpgradeReplaceTarget(
             parentId,
@@ -653,7 +659,8 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             parent.OwnedMediaRevision,
             parent.ProfileId,
             parent.OwnedFormatScore,
-            selected?.ManualPick == true);
+            selected?.ManualPick == true,
+            parentHasSubtitles);
     }
 
     public async Task EnrichMetadataAsync(Guid acquisitionId, string? description, string? posterUrl, int? year, CancellationToken cancellationToken) {

@@ -27,9 +27,11 @@ public sealed class EfManualAcquisitionStore(
             .FirstOrDefaultAsync(cancellationToken);
         if (imported is not null) {
             var existingInput = await acquisitions.GetSearchInputAsync(imported.Id, cancellationToken);
+            var hasSubtitles = MediaQualityLadder.IsVideoKind(imported.Kind)
+                && await db.EntitySubtitles.AsNoTracking().AnyAsync(row => row.EntityId == entityId, cancellationToken);
             return existingInput is null || !PathExists(imported.FinalSourcePath)
                 ? null
-                : new ManualReplacementSearchTarget(entityId, existingInput, OwnedQuality(imported));
+                : new ManualReplacementSearchTarget(entityId, existingInput, OwnedQuality(imported, hasSubtitles));
         }
 
         var entity = await db.Entities.AsNoTracking()
@@ -65,8 +67,10 @@ public sealed class EfManualAcquisitionStore(
             SeasonNumber: seasonNumber,
             EpisodeNumber: episodeNumber,
             BookRendition: kind == EntityKind.Book ? BookRendition.Ebook : null);
+        var hasEntitySubtitles = MediaQualityLadder.IsVideoKind(kind)
+            && await db.EntitySubtitles.AsNoTracking().AnyAsync(row => row.EntityId == entityId, cancellationToken);
         var owned = MediaQualityLadder.IsUpgradeCapableKind(kind) || MediaQualityLadder.IsAudioKind(kind)
-            ? new UpgradeOwnedQuality(null, MediaQualityLadder.Detect(kind, Path.GetFileName(sourcePath!)).Code)
+            ? new UpgradeOwnedQuality(null, MediaQualityLadder.Detect(kind, Path.GetFileName(sourcePath!)).Code, HasSubtitles: hasEntitySubtitles)
             : new UpgradeOwnedQuality(
                 new BookQualityRank(BookSourceTier.Unknown, BookFormatDetection.FormatTierFromExtension(sourcePath!)),
                 null);
@@ -340,9 +344,9 @@ public sealed class EfManualAcquisitionStore(
         return (null, series?.Title, season?.SortOrder, entity.SortOrder);
     }
 
-    private static UpgradeOwnedQuality OwnedQuality(AcquisitionRow parent) =>
+    private static UpgradeOwnedQuality OwnedQuality(AcquisitionRow parent, bool hasSubtitles) =>
         MediaQualityLadder.IsUpgradeCapableKind(parent.Kind) || MediaQualityLadder.IsAudioKind(parent.Kind)
-            ? new UpgradeOwnedQuality(null, parent.OwnedMediaQuality, parent.OwnedMediaRevision, parent.OwnedFormatScore)
+            ? new UpgradeOwnedQuality(null, parent.OwnedMediaQuality, parent.OwnedMediaRevision, parent.OwnedFormatScore, hasSubtitles)
             : new UpgradeOwnedQuality(
                 new BookQualityRank(parent.OwnedSourceTier, parent.OwnedFormatTier),
                 null,

@@ -24,7 +24,8 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
     IAcquisitionHistoryStore history,
     ILogger<AcquisitionUpgradeReplaceJobHandler> logger,
     IEntityLifecycleMutationLease? entityLifecycle = null,
-    IAcquisitionUploadStorage? uploads = null) : IJobHandler {
+    IAcquisitionUploadStorage? uploads = null,
+    IMediaUpgradePayloadInspector? mediaUpgradeInspector = null) : IJobHandler {
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var payload = AcquisitionJobPayload.Parse(context.Job.PayloadJson);
         var childId = payload.AcquisitionId;
@@ -172,9 +173,58 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
             && rules.CutoffFormatScore is { } cutoff
             && target.ParentOwnedFormatScore < cutoff
             && candidateFormatScore > target.ParentOwnedFormatScore;
-        if (!target.ChildManualPick && !higherQuality && !sameQualityBetterRevision && !sameQualityBetterFormatScore) {
-            await AbortAsync(childId, "The downloaded release is no longer an upgrade over the current copy.", cancellationToken);
-            return;
+
+        MediaUpgradePayloadInspection? inspection = null;
+        if (!target.ChildManualPick && mediaUpgradeInspector is not null) {
+            inspection = await mediaUpgradeInspector.InspectAsync(
+                target.ParentFinalSourcePath!,
+                target.ChildContentPath!,
+                cancellationToken);
+        }
+
+        if (!target.ChildManualPick) {
+            if (mediaUpgradeInspector is not null && inspection is null) {
+                await RejectDownloadedCandidateAsync(
+                    context,
+                    target,
+                    childId,
+                    "The downloaded payload could not be safely inspected as one owned and one candidate video file.",
+                    cancellationToken);
+                return;
+            }
+
+            var actualResolutionDowngrade = inspection is { } measured
+                && measured.CandidateResolutionTier < measured.OwnedResolutionTier;
+            var claimedResolution = MediaQualityLadder.VideoResolutionTierOf(candidateCode);
+            var payloadContradictsClaimedResolution = claimedResolution is { } claimed
+                && inspection is { } inspected
+                && inspected.CandidateResolutionTier < claimed;
+            var sameQualityAddsSubtitles = candidatePosition == ownedPosition
+                && !target.ParentHasSubtitles
+                && inspection is {
+                    OwnedHasEmbeddedSubtitles: false,
+                    CandidateHasEmbeddedSubtitles: true
+                };
+
+            if (actualResolutionDowngrade || payloadContradictsClaimedResolution) {
+                await RejectDownloadedCandidateAsync(
+                    context,
+                    target,
+                    childId,
+                    "The downloaded payload's measured resolution is lower than the owned copy or the release's claimed quality.",
+                    cancellationToken);
+                return;
+            }
+
+            if (!higherQuality && !sameQualityBetterRevision && !sameQualityBetterFormatScore && !sameQualityAddsSubtitles) {
+                await RejectDownloadedCandidateAsync(
+                    context,
+                    target,
+                    childId,
+                    "The downloaded payload did not prove an upgrade over the current copy.",
+                    cancellationToken);
+                return;
+            }
         }
 
         // Video has no book format tier; the replacer's format-tier guard is a pass-through for this kind. The
@@ -249,6 +299,43 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
     }
 
     /// <summary>
+    /// Rejects a speculative downloaded upgrade without touching the owned file. The transfer is removed
+    /// with its data, then the existing failed-download recovery flow blocklists this exact release and can
+    /// queue the next accepted candidate on the same upgrade child.
+    /// </summary>
+    private async Task RejectDownloadedCandidateAsync(
+        JobContext context,
+        UpgradeReplaceTarget target,
+        Guid childId,
+        string reason,
+        CancellationToken cancellationToken) {
+        logger.LogInformation("AcquisitionUpgradeReplace: rejecting inspected child {Child}: {Reason}", childId, reason);
+        await RemoveTorrentAsync(target, cancellationToken);
+        if (!await acquisitions.TryTransitionStatusAsync(
+                childId,
+                [AcquisitionStatus.Importing],
+                AcquisitionStatus.Failed,
+                reason,
+                cancellationToken)) {
+            return;
+        }
+
+        var selected = await acquisitions.GetSelectedReleaseAsync(childId, cancellationToken);
+        await context.EnqueueIfNeededAsync(
+            new EnqueueJobRequest(
+                JobType.AcquisitionFailedHandle,
+                PayloadJson: AcquisitionFailedPayload.Serialize(
+                    childId,
+                    BlocklistReason.NotAnUpgrade,
+                    reason,
+                    selected),
+                TargetEntityId: childId.ToString(),
+                TargetLabel: "Recover rejected upgrade",
+                Origin: JobGraphOrigin.Interactive),
+            cancellationToken);
+    }
+
+    /// <summary>
     /// Records a durable Upgraded event against the PARENT acquisition (the owned copy that was replaced),
     /// carrying the new quality code and an old→new summary in the message. Best-effort: a history hiccup
     /// must never undo the applied upgrade. The parent's title/kind/entity come from its search input.
@@ -293,7 +380,8 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
         } catch (OperationCanceledException) {
             throw;
         } catch (Exception ex) {
-            // The book is already upgraded; a torrent-cleanup failure must not undo that.
+            // The owned copy may already be upgraded, or this may be a rejected speculative candidate;
+            // cleanup failure must not mutate the library file in either case.
             logger.LogWarning(ex, "AcquisitionUpgradeReplace: failed to remove the upgrade torrent for parent {Parent}.", target.ParentId);
         }
     }

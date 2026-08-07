@@ -14,4 +14,5 @@ export const BlocklistReason = {
   'no-importable-files': 'no-importable-files',
   manual: 'manual',
   'wrong-content': 'wrong-content',
+  'not-an-upgrade': 'not-an-upgrade',
 } as const;

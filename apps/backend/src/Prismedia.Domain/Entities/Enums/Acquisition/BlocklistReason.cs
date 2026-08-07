@@ -25,5 +25,9 @@ public enum BlocklistReason {
 
     /// <summary>The download's file list contradicted the sought work (wrong year, season, or episode) and it was abandoned.</summary>
     [Code("wrong-content")]
-    WrongContent
+    WrongContent,
+
+    /// <summary>The downloaded payload was inspected and did not improve the owned copy.</summary>
+    [Code("not-an-upgrade")]
+    NotAnUpgrade
 }

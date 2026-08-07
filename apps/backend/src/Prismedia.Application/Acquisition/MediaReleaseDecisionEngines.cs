@@ -191,14 +191,15 @@ public sealed class MediaQualityAllowedSpecification(EntityKind kind) : IRelease
 
 /// <summary>
 /// Upgrade-search gate for ladder kinds. A candidate is an upgrade when it sits strictly above the owned
-/// ladder position, OR — at the same ladder position and same revision — its custom-format score is
+/// ladder position, OR — for video whose owned copy has no subtitles — at the same ladder position so the
+/// downloaded payload can be probed for a real subtitle gain, OR — at the same ladder position and same revision — its custom-format score is
 /// strictly higher than the owned copy's while the owned score is below the profile's
 /// <see cref="BookAcquisitionRules.CutoffFormatScore"/>, OR — only under
 /// <see cref="ProperDownloadPolicy.PreferAndUpgrade"/> — it sits at the same ladder position but carries a
 /// strictly higher revision than the owned copy (a proper/repack of the same quality). Under
 /// <see cref="ProperDownloadPolicy.DoNotUpgrade"/> / <see cref="ProperDownloadPolicy.DoNotPrefer"/> a
 /// same-quality higher revision is not an upgrade. Ladder position always dominates: a lower position is
-/// never rescued by a revision or a format-score gain. No-op on ordinary first-grab searches.
+/// never rescued by subtitles, a revision, or a format-score gain. No-op on ordinary first-grab searches.
 /// </summary>
 public sealed class MediaUpgradeSpecification(EntityKind kind) : IReleaseSpecification {
     public ReleaseRejectionReason Reason => ReleaseRejectionReason.NotAnUpgrade;
@@ -215,6 +216,13 @@ public sealed class MediaUpgradeSpecification(EntityKind kind) : IReleaseSpecifi
         }
 
         if (candidate == owned) {
+            // A title cannot prove that a payload contains usable subtitle streams. When the owned video has
+            // none, admit an equal-ladder candidate as a speculative download; the replace handler probes both
+            // files and rejects/removes/blocklists the candidate unless it really adds embedded subtitles.
+            if (MediaQualityLadder.IsVideoKind(kind) && rules.OwnedHasSubtitles == false) {
+                return null;
+            }
+
             // Same-quality format-score upgrade: a strictly-better-scoring release counts only while a
             // cutoff format score is configured and the owned score is still below it. Independent of the
             // proper policy (custom-format scoring is not the PROPER/REPACK axis).
@@ -365,7 +373,8 @@ internal static class MediaReleaseEvaluation {
 
     /// <summary>
     /// The shared video release ranking (movies and TV alike): profile preference outranks everything,
-    /// then the position on the combined source × resolution quality ladder, then the revision boost
+    /// then the position on the combined source × resolution quality ladder, then an explicit subtitle
+    /// hint, then the revision boost
     /// (a proper/repack outranks a plain release at the same quality, unless propers are not preferred),
     /// then seeders.
     /// </summary>
@@ -374,6 +383,7 @@ internal static class MediaReleaseEvaluation {
         return PreferenceScore(release, rules) * 10_000
             + ReleaseTitleRelevance.Score(release, rules)
             + quality * 100_000
+            + (ReleaseSubtitleDetection.HasSubtitleHint(release.Title) ? 50_000 : 0)
             + RevisionBoost(release.Title, rules)
             + Math.Min(release.Seeders ?? 0, 9_999);
     }

@@ -220,6 +220,45 @@ public sealed class MediaReleaseDecisionEnginesTests {
     }
 
     [Fact]
+    public void SubtitleMissingOwnedVideoAdmitsEqualQualityForPayloadInspectionButNeverLowerQuality() {
+        var spec = new MediaUpgradeSpecification(EntityKind.Movie);
+        var rules = BookAcquisitionRules.Default with {
+            IsUpgradeSearch = true,
+            OwnedMediaQuality = VideoQuality.Remux2160p.ToCode(),
+            OwnedHasSubtitles = false
+        };
+
+        Assert.Null(spec.Evaluate(Release("Movie 2160p Remux", seeders: 10), rules));
+        Assert.Equal(
+            ReleaseRejectionReason.NotAnUpgrade,
+            spec.Evaluate(Release("Movie 2160p Remux", seeders: 10), rules with { OwnedHasSubtitles = true }));
+        Assert.Equal(
+            ReleaseRejectionReason.NotAnUpgrade,
+            spec.Evaluate(Release("Movie 1080p Remux MULTISUB", seeders: 10), rules));
+    }
+
+    [Theory]
+    [InlineData("Movie.1080p.WEB-DL.MULTISUB")]
+    [InlineData("Movie 1080p BluRay ENGSubs")]
+    [InlineData("Movie 1080p subbed")]
+    public void SubtitleReleaseHintsAreRecognized(string title) {
+        Assert.True(ReleaseSubtitleDetection.HasSubtitleHint(title));
+    }
+
+    [Fact]
+    public void SubtitleHintOutranksSeedersAtEqualVideoQualityWithoutOutrankingHigherQuality() {
+        var engine = new MovieReleaseDecisionEngine();
+        var scored = engine.Evaluate([
+            (Release("Movie 1080p WEB-DL MULTISUB", seeders: 1), null, "Idx"),
+            (Release("Movie 1080p WEB-DL", seeders: 9_000), null, "Idx"),
+            (Release("Movie 2160p WEB-DL", seeders: 1), null, "Idx")
+        ], BookAcquisitionRules.Default);
+
+        Assert.Equal("Movie 2160p WEB-DL", scored[0].Release.Title);
+        Assert.Equal("Movie 1080p WEB-DL MULTISUB", scored[1].Release.Title);
+    }
+
+    [Fact]
     public void MediaUpgradeSpecificationIsNoOpOnNonUpgradeSearches() {
         var spec = new MediaUpgradeSpecification(EntityKind.Movie);
         // Not an upgrade search → the gate never rejects, even for a weak release.

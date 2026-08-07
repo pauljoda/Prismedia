@@ -226,6 +226,54 @@ public sealed class EfMonitorStoreUpgradeTests {
     }
 
     [Fact]
+    public async Task EntityBackedMovieAtQualityCutoffWithoutSubtitlesStaysDueForSubtitleUpgrade() {
+        await using var db = CreateContext();
+        var store = await SeedMediaUpgradeMonitorAsync(
+            db,
+            EntityKind.Movie,
+            owned: "bluray-1080p",
+            cutoff: "bluray-1080p",
+            attachEntity: true,
+            subtitleStatusKnown: true,
+            hasSubtitles: false);
+
+        Assert.True(Assert.Single(await store.ListDueMonitorsAsync(360, CancellationToken.None)).IsUpgrade);
+    }
+
+    [Fact]
+    public async Task EntityBackedMovieAtQualityCutoffWithSubtitlesFulfills() {
+        await using var db = CreateContext();
+        var store = await SeedMediaUpgradeMonitorAsync(
+            db,
+            EntityKind.Movie,
+            owned: "bluray-1080p",
+            cutoff: "bluray-1080p",
+            attachEntity: true,
+            subtitleStatusKnown: true,
+            hasSubtitles: true);
+
+        Assert.Empty(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+        var monitor = Assert.Single(await store.ListAsync(CancellationToken.None));
+        Assert.Equal(MonitorStatus.Active, monitor.Status);
+        Assert.Null(monitor.AcquisitionId);
+    }
+
+    [Fact]
+    public async Task EntityBackedMovieWaitsForSubtitleExtractionBeforeJudgingCutoff() {
+        await using var db = CreateContext();
+        var store = await SeedMediaUpgradeMonitorAsync(
+            db,
+            EntityKind.Movie,
+            owned: "bluray-1080p",
+            cutoff: "bluray-1080p",
+            attachEntity: true,
+            subtitleStatusKnown: false);
+
+        Assert.Empty(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+        Assert.Equal(MonitorStatus.Active, (await store.ListAsync(CancellationToken.None))[0].Status);
+    }
+
+    [Fact]
     public async Task ImportedMovieWithUpgradeOffFulfills() {
         await using var db = CreateContext();
         var store = await SeedMediaUpgradeMonitorAsync(db, EntityKind.Movie, owned: "webdl-720p", cutoff: "bluray-1080p", upgradeOn: false);
@@ -312,7 +360,10 @@ public sealed class EfMonitorStoreUpgradeTests {
         string cutoff,
         bool upgradeOn = true,
         int? cutoffFormatScore = null,
-        int ownedFormatScore = 0) {
+        int ownedFormatScore = 0,
+        bool attachEntity = false,
+        bool subtitleStatusKnown = false,
+        bool hasSubtitles = false) {
         var now = DateTimeOffset.UtcNow;
         db.BookAcquisitionProfiles.Add(new BookAcquisitionProfileRow {
             Id = Guid.NewGuid(), Kind = AcquisitionProfileKinds.For(kind), DisplayName = "Default", IsDefault = true,
@@ -320,8 +371,38 @@ public sealed class EfMonitorStoreUpgradeTests {
             CutoffFormatScore = cutoffFormatScore, CreatedAt = now, UpdatedAt = now
         });
         var acquisitionId = Guid.NewGuid();
+        Guid? entityId = null;
+        if (attachEntity) {
+            entityId = Guid.NewGuid();
+            db.Entities.Add(new EntityRow {
+                Id = entityId.Value,
+                KindCode = kind.ToCode(),
+                Title = "Some Media",
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+            if (subtitleStatusKnown) {
+                db.EntitySubtitleStates.Add(new EntitySubtitleStateRow {
+                    EntityId = entityId.Value,
+                    SubtitlesExtractedAt = now
+                });
+            }
+            if (hasSubtitles) {
+                db.EntitySubtitles.Add(new EntitySubtitleRow {
+                    Id = Guid.NewGuid(),
+                    EntityId = entityId.Value,
+                    Language = "eng",
+                    Format = "vtt",
+                    Source = EntitySubtitleSource.Embedded,
+                    SourceKey = "stream:2",
+                    StoragePath = "/data/subtitles/movie/2.vtt",
+                    SourceFormat = "subrip",
+                    CreatedAt = now
+                });
+            }
+        }
         db.Acquisitions.Add(new AcquisitionRow {
-            Id = acquisitionId, Kind = kind, Status = AcquisitionStatus.Imported, Title = "Some Media", ExternalIdsJson = "{}", SourceUrlsJson = "[]",
+            Id = acquisitionId, EntityId = entityId, Kind = kind, Status = AcquisitionStatus.Imported, Title = "Some Media", ExternalIdsJson = "{}", SourceUrlsJson = "[]",
             OwnedMediaQuality = owned, OwnedFormatScore = ownedFormatScore, UpgradeQualityCaptured = true, CreatedAt = now, UpdatedAt = now
         });
         await db.SaveChangesAsync();

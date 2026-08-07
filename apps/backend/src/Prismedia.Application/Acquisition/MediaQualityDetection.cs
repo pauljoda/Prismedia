@@ -61,6 +61,21 @@ public static class VideoQualityDetection {
         tokens.Any(token => ReleaseTitleText.ContainsTerm(title, token));
 }
 
+/// <summary>
+/// Conservative release-title hints that a video payload carries subtitles. These hints affect ordering
+/// only; a speculative same-quality upgrade is still probed after download before it may replace anything.
+/// </summary>
+public static class ReleaseSubtitleDetection {
+    private static readonly string[] SubtitleTokens = [
+        "sub", "subs", "subbed", "subtitle", "subtitles", "engsub", "engsubs",
+        "multisub", "multisubs", "vostfr"
+    ];
+
+    /// <summary>True when the release title contains an explicit subtitle token.</summary>
+    public static bool HasSubtitleHint(string? title) =>
+        ReleaseTitleText.ContainsToken(title, SubtitleTokens);
+}
+
 /// <summary>Detects a music release's codec quality tier from its title tokens.</summary>
 public static class AudioQualityDetection {
     public static AudioQuality Detect(string title) =>
@@ -127,6 +142,21 @@ public static class MediaQualityLadder {
         }
 
         return 0;
+    }
+
+    /// <summary>The nominal vertical-resolution tier encoded by a video quality code, or null for unknown/non-video codes.</summary>
+    public static int? VideoResolutionTierOf(string? code) {
+        if (string.IsNullOrWhiteSpace(code) || !TryDecode<VideoQuality>(code, out var quality)) {
+            return null;
+        }
+
+        return quality switch {
+            VideoQuality.Hdtv720p or VideoQuality.Webrip720p or VideoQuality.Webdl720p or VideoQuality.Bluray720p => 720,
+            VideoQuality.Hdtv1080p or VideoQuality.Webrip1080p or VideoQuality.Webdl1080p or VideoQuality.Bluray1080p or VideoQuality.Remux1080p => 1080,
+            VideoQuality.Hdtv2160p or VideoQuality.Webrip2160p or VideoQuality.Webdl2160p or VideoQuality.Bluray2160p or VideoQuality.Remux2160p => 2160,
+            VideoQuality.Sdtv or VideoQuality.Dvd => 480,
+            _ => null
+        };
     }
 
     private static bool TryDecode<TEnum>(string code, out TEnum value) where TEnum : struct, Enum {

@@ -150,6 +150,7 @@ export const BLOCKLIST_REASON = {
   noImportableFiles: "no-importable-files",
   manual: "manual",
   wrongContent: "wrong-content",
+  notAnUpgrade: "not-an-upgrade",
 } as const;
 
 export type BlocklistReasonCode = (typeof BLOCKLIST_REASON)[keyof typeof BLOCKLIST_REASON];

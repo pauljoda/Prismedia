@@ -125,6 +125,15 @@ public sealed record BookAcquisitionRules(
     public int OwnedFormatScore { get; init; }
 
     /// <summary>
+    /// Whether the owned video already has at least one usable embedded or sidecar subtitle. When false,
+    /// same-ladder video candidates may pass the title gate provisionally so their downloaded payload can
+    /// be inspected; they are installed only when inspection proves they add subtitles without reducing
+    /// resolution. Null means the caller has no subtitle inventory and preserves the legacy quality-only
+    /// gate. Ignored by book and audio acquisition policies.
+    /// </summary>
+    public bool? OwnedHasSubtitles { get; init; }
+
+    /// <summary>
     /// The intended work title for this search, set per search by the runner. Scoring uses it as a soft
     /// relevance signal so a closer title match outranks a release for a similarly named spin-off or subtitle,
     /// and the media engines' <see cref="TitleIdentitySpecification"/> uses it as an acceptance gate.
@@ -385,7 +394,13 @@ public sealed record DueMonitor(
 /// The parent's owned custom-format score, so a same-quality candidate with a strictly higher format score
 /// (below the profile's cutoff) can be recognized as an upgrade. Defaults to 0.
 /// </param>
-public sealed record UpgradeOwnedQuality(Domain.Entities.BookQualityRank? BookRank, string? MediaQualityCode, int MediaRevision = 1, int FormatScore = 0);
+/// <param name="HasSubtitles">Whether the owned video has a usable embedded or sidecar subtitle. Ignored by non-video kinds.</param>
+public sealed record UpgradeOwnedQuality(
+    Domain.Entities.BookQualityRank? BookRank,
+    string? MediaQualityCode,
+    int MediaRevision = 1,
+    int FormatScore = 0,
+    bool HasSubtitles = false);
 
 /// <summary>
 /// Everything the upgrade-replace job needs to swap a downloaded upgrade child's file in for the owned copy:
@@ -399,6 +414,7 @@ public sealed record UpgradeOwnedQuality(Domain.Entities.BookQualityRank? BookRa
 /// <param name="ParentOwnedMediaRevision">The parent's owned revision for a media parent, so a same-quality higher-revision child is recognized as an upgrade at the pre-swap re-confirm gate. Defaults to 1; ignored on the book path.</param>
 /// <param name="ParentProfileId">The parent's chosen profile, so the handler can re-score the child release against the same custom formats. Null uses the kind's default profile.</param>
 /// <param name="ParentOwnedFormatScore">The parent's owned custom-format score, re-confirmed against at the pre-swap gate for a same-quality format-score upgrade. Defaults to 0.</param>
+/// <param name="ParentHasSubtitles">Whether the owned Entity currently has a usable embedded or sidecar subtitle.</param>
 public sealed record UpgradeReplaceTarget(
     Guid ParentId,
     Guid? ParentEntityId,
@@ -413,7 +429,19 @@ public sealed record UpgradeReplaceTarget(
     int ParentOwnedMediaRevision = 1,
     Guid? ParentProfileId = null,
     int ParentOwnedFormatScore = 0,
-    bool ChildManualPick = false);
+    bool ChildManualPick = false,
+    bool ParentHasSubtitles = false);
+
+/// <summary>
+/// Technical facts read from the owned and downloaded video payloads immediately before an automatic
+/// replacement. Resolution tiers come from real stream dimensions rather than release names; subtitle
+/// flags describe embedded streams that survive the atomic video-file swap.
+/// </summary>
+public sealed record MediaUpgradePayloadInspection(
+    int OwnedResolutionTier,
+    int CandidateResolutionTier,
+    bool OwnedHasEmbeddedSubtitles,
+    bool CandidateHasEmbeddedSubtitles);
 
 /// <summary>
 /// Outcome of an in-place owned-file replacement. On success the owned file was atomically swapped for the

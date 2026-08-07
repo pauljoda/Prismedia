@@ -134,6 +134,143 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
     }
 
     [Fact]
+    public async Task SameQualityMovieWithNewEmbeddedSubtitlesReplacesOwnedCopy() {
+        await using var db = CreateContext();
+        var (_, childId, _) = await SeedMediaAsync(
+            db,
+            EntityKind.Movie,
+            ownedCode: "bluray-1080p",
+            childSelectedTitle: "Movie 2020 1080p BluRay");
+        var replacer = new FakeReplacer(
+            OwnedFileReplaceResult.Ok("/library/Movie (2020)/Movie (2020).mkv", BookFormatTier.Unknown));
+
+        await RunAsync(
+            db,
+            new RecordingJobQueue(),
+            replacer,
+            childId,
+            new FakeMediaUpgradePayloadInspector(new(1080, 1080, false, true)));
+
+        Assert.True(replacer.Called);
+    }
+
+    [Fact]
+    public async Task SameQualitySubtitlePayloadDoesNotReplaceAnOwnedMovieThatAlreadyHasASidecar() {
+        await using var db = CreateContext();
+        var (parentId, childId, _) = await SeedMediaAsync(
+            db,
+            EntityKind.Movie,
+            ownedCode: "bluray-1080p",
+            childSelectedTitle: "Movie 2020 1080p BluRay MULTISUB");
+        var entityId = (await db.Acquisitions.FindAsync(parentId))!.EntityId!.Value;
+        db.EntitySubtitles.Add(new EntitySubtitleRow {
+            Id = Guid.NewGuid(),
+            EntityId = entityId,
+            Language = "eng",
+            Format = "vtt",
+            Source = EntitySubtitleSource.Sidecar,
+            SourceKey = "owned-sidecar",
+            StoragePath = "/data/subtitles/owned.vtt",
+            SourceFormat = "subrip",
+            CreatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var replacer = new FakeReplacer(OwnedFileReplaceResult.Ok("x", BookFormatTier.Unknown));
+
+        await RunAsync(
+            db,
+            new RecordingJobQueue(),
+            replacer,
+            childId,
+            new FakeMediaUpgradePayloadInspector(new(1080, 1080, false, true)));
+
+        Assert.False(replacer.Called);
+    }
+
+    [Fact]
+    public async Task SameQualityMovieWithoutNewSubtitlesIsRejectedForBlocklistRecovery() {
+        await using var db = CreateContext();
+        var (_, childId, monitorId) = await SeedMediaAsync(
+            db,
+            EntityKind.Movie,
+            ownedCode: "bluray-1080p",
+            childSelectedTitle: "Movie 2020 1080p BluRay MULTISUB");
+        var queue = new RecordingJobQueue();
+        var replacer = new FakeReplacer(OwnedFileReplaceResult.Ok("x", BookFormatTier.Unknown));
+
+        await RunAsync(
+            db,
+            queue,
+            replacer,
+            childId,
+            new FakeMediaUpgradePayloadInspector(new(1080, 1080, false, false)));
+
+        Assert.False(replacer.Called);
+        Assert.Equal(AcquisitionStatus.Failed, (await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == childId)).Status);
+        Assert.Equal(childId, (await db.Monitors.AsNoTracking().SingleAsync(row => row.Id == monitorId)).UpgradeChildAcquisitionId);
+        var recovery = Assert.Single(queue.Enqueued, job => job.Type == JobType.AcquisitionFailedHandle);
+        Assert.Equal(BlocklistReason.NotAnUpgrade, AcquisitionFailedPayload.Parse(recovery.PayloadJson!).Reason);
+    }
+
+    [Fact]
+    public async Task RejectedSpeculativeUpgradeDeletesItsDownloadedTransferData() {
+        await using var db = CreateContext();
+        var (_, childId, _) = await SeedMediaAsync(
+            db,
+            EntityKind.Movie,
+            ownedCode: "bluray-1080p",
+            childSelectedTitle: "Movie 2020 1080p BluRay MULTISUB");
+        var clientId = Guid.NewGuid();
+        (await db.DownloadTransfers.SingleAsync(row => row.AcquisitionId == childId)).DownloadClientConfigId = clientId;
+        await db.SaveChangesAsync();
+        var client = new RecordingDownloadClient();
+        var detail = new DownloadClientDetail(
+            clientId,
+            DownloadClientKind.QBittorrent,
+            "Downloads",
+            "http://download-client",
+            Username: null,
+            Category: "prismedia",
+            Enabled: true,
+            HasPassword: false,
+            Password: null);
+
+        await RunAsync(
+            db,
+            new RecordingJobQueue(),
+            new FakeReplacer(OwnedFileReplaceResult.Ok("x", BookFormatTier.Unknown)),
+            childId,
+            new FakeMediaUpgradePayloadInspector(new(1080, 1080, false, false)),
+            new SingleDownloadClientConfigStore(detail),
+            new SingleDownloadClientFactory(client));
+
+        Assert.Equal("hash", client.RemovedClientItemId);
+        Assert.True(client.DeletedData);
+    }
+
+    [Fact]
+    public async Task MeasuredResolutionDowngradeIsRejectedEvenWhenTitleClaimsEqualQualityAndSubtitles() {
+        await using var db = CreateContext();
+        var (_, childId, _) = await SeedMediaAsync(
+            db,
+            EntityKind.Movie,
+            ownedCode: "remux-2160p",
+            childSelectedTitle: "Movie 2020 2160p Remux MULTISUB");
+        var queue = new RecordingJobQueue();
+        var replacer = new FakeReplacer(OwnedFileReplaceResult.Ok("x", BookFormatTier.Unknown));
+
+        await RunAsync(
+            db,
+            queue,
+            replacer,
+            childId,
+            new FakeMediaUpgradePayloadInspector(new(2160, 1080, false, true)));
+
+        Assert.False(replacer.Called);
+        Assert.Contains(queue.Enqueued, job => job.Type == JobType.AcquisitionFailedHandle);
+    }
+
+    [Fact]
     public async Task ReviewedMovieReplacementWithUnknownTitleKeepsKnownOwnedQuality() {
         await using var db = CreateContext();
         var (parentId, childId, _) = await SeedMediaAsync(
@@ -258,12 +395,21 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
         return (parentId, childId, monitorId);
     }
 
-    private static async Task RunAsync(PrismediaDbContext db, RecordingJobQueue queue, FakeReplacer replacer, Guid childId) {
+    private static async Task RunAsync(
+        PrismediaDbContext db,
+        RecordingJobQueue queue,
+        FakeReplacer replacer,
+        Guid childId,
+        IMediaUpgradePayloadInspector? inspector = null,
+        IDownloadClientConfigStore? downloadClientConfigs = null,
+        IDownloadClientFactory? downloadClientFactory = null) {
         var handler = new AcquisitionUpgradeReplaceJobHandler(
             AcquisitionTestFactory.Store(db), new EfMonitorStore(db), new EfBookAcquisitionProfileStore(db), replacer,
-            new NullDownloadClientConfigStore(), new ThrowingDownloadClientFactory(),
+            downloadClientConfigs ?? new NullDownloadClientConfigStore(),
+            downloadClientFactory ?? new ThrowingDownloadClientFactory(),
             new EfAcquisitionHistoryStore(db),
-            NullLogger<AcquisitionUpgradeReplaceJobHandler>.Instance);
+            NullLogger<AcquisitionUpgradeReplaceJobHandler>.Instance,
+            mediaUpgradeInspector: inspector);
         var job = new JobRunSnapshot(
             Guid.NewGuid(), JobType.AcquisitionUpgradeReplace, JobRunStatus.Running, 0, null,
             AcquisitionJobPayload.Serialize(childId), null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null);
@@ -357,6 +503,51 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
 
     private sealed class ThrowingDownloadClientFactory : IDownloadClientFactory {
         public IDownloadClient Get(DownloadClientKind kind) => throw new NotSupportedException();
+    }
+
+    private sealed class SingleDownloadClientFactory(IDownloadClient client) : IDownloadClientFactory {
+        public IDownloadClient Get(DownloadClientKind kind) => client;
+    }
+
+    private sealed class SingleDownloadClientConfigStore(DownloadClientDetail detail) : IDownloadClientConfigStore {
+        public Task<DownloadClientDetail?> GetAsync(Guid id, CancellationToken cancellationToken) =>
+            Task.FromResult<DownloadClientDetail?>(id == detail.Id ? detail : null);
+        public Task<DownloadClientDetail?> GetDefaultAsync(CancellationToken cancellationToken) => Task.FromResult<DownloadClientDetail?>(detail);
+        public Task<DownloadClientDetail?> GetDefaultAsync(DownloadProtocol protocol, CancellationToken cancellationToken) => GetDefaultAsync(cancellationToken);
+        public Task<IReadOnlyList<DownloadClientDetail>> ListEnabledAsync(DownloadProtocol protocol, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<DownloadProtocol>> GetEnabledProtocolsAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<DownloadClientSummary>> ListAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<DownloadClientDetail>> ListDetailsAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<DownloadClientSummary> SaveAsync(DownloadClientSaveCommand command, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class RecordingDownloadClient : IDownloadClient {
+        public DownloadClientKind Kind => DownloadClientKind.QBittorrent;
+        public string? RemovedClientItemId { get; private set; }
+        public bool DeletedData { get; private set; }
+
+        public Task RemoveAsync(DownloadClientConnection connection, string clientItemId, bool deleteData, CancellationToken cancellationToken) {
+            RemovedClientItemId = clientItemId;
+            DeletedData = deleteData;
+            return Task.CompletedTask;
+        }
+
+        public Task<string> AddAsync(DownloadClientConnection connection, DownloadAddRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<string> AddTorrentFileAsync(DownloadClientConnection connection, string fileName, byte[] torrent, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<DownloadItemStatus?> GetItemAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<DownloadItemStatus>> ListItemsAsync(DownloadClientConnection connection, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<DownloadItemFile>> GetFilesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<DownloadItemProperties?> GetPropertiesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<byte[]> GetPieceStatesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<DownloadClientConnectionTest> TestAsync(DownloadClientConnection connection, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class FakeMediaUpgradePayloadInspector(MediaUpgradePayloadInspection? result) : IMediaUpgradePayloadInspector {
+        public Task<MediaUpgradePayloadInspection?> InspectAsync(
+            string ownedContentPath,
+            string candidateContentPath,
+            CancellationToken cancellationToken) => Task.FromResult(result);
     }
 
     private sealed class RecordingJobQueue : IJobQueueService {

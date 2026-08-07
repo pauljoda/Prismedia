@@ -341,8 +341,8 @@ public sealed partial class EfMonitorStore(
     /// The cutoff verdict for an imported acquisition, expressed in the vocabulary of its <paramref name="kind"/>.
     /// The single source of truth for "is this owned copy at/above cutoff?", shared by the due sweep (which
     /// fulfills a monitor once cutoff is met) and the cutoff-unmet list (which lists exactly the ones that are
-    /// NOT yet met). Books compare per-axis source/format tiers; media compare both the ladder position and
-    /// the custom-format score. When the kind does not upgrade (upgrade off, or a multi-file/unsupported kind)
+    /// NOT yet met). Books compare per-axis source/format tiers; media compare the ladder position, custom-format
+    /// score, and — for Entity-backed atomic video — whether subtitle extraction found a usable track. When the kind does not upgrade (upgrade off, or a multi-file/unsupported kind)
     /// the copy is treated as at cutoff (nothing to chase). When owned quality has not been captured yet the
     /// verdict is <c>OwnedQuality</c> null and <c>CutoffMet</c> false — the caller decides whether "not yet
     /// judgeable" belongs in the list.
@@ -353,7 +353,10 @@ public sealed partial class EfMonitorStore(
         bool captured,
         BookQualityRank ownedBookQuality,
         string? ownedMediaQuality,
-        int ownedFormatScore) {
+        int ownedFormatScore,
+        bool hasEntityTarget = false,
+        bool subtitleStatusKnown = false,
+        bool hasSubtitles = false) {
         var upgradeEnabled = policy is { UpgradeUntilCutoff: true, AutoPick: true };
         var isBook = kind == EntityKind.Book;
         var kindUpgrades = upgradeEnabled && (isBook || MediaQualityLadder.IsUpgradeCapableKind(kind));
@@ -373,8 +376,15 @@ public sealed partial class EfMonitorStore(
             return (KindUpgrades: true, HaveOwned: true, cutoffMet, ownedText, cutoffText);
         }
 
-        // Media: owned quality must be captured AND a real ladder code before it can be judged.
-        var haveOwned = captured && !string.IsNullOrWhiteSpace(ownedMediaQuality);
+        // Media: owned quality must be captured AND a real ladder code before it can be judged. Entity-backed
+        // atomic video also waits until subtitle extraction has produced a positive or negative answer; legacy
+        // acquisition-only monitors retain their historical quality-only cutoff semantics.
+        var trackSubtitleAxis = hasEntityTarget
+            && MediaQualityLadder.IsVideoKind(kind)
+            && MediaQualityLadder.IsUpgradeCapableKind(kind);
+        var haveOwned = captured
+            && !string.IsNullOrWhiteSpace(ownedMediaQuality)
+            && (!trackSubtitleAxis || subtitleStatusKnown);
         var cutoffCode = policy?.CutoffQuality;
         if (!haveOwned) {
             return (KindUpgrades: true, HaveOwned: false, CutoffMet: false, OwnedQuality: null, CutoffQuality: cutoffCode);
@@ -384,7 +394,8 @@ public sealed partial class EfMonitorStore(
         var cutoffPosition = MediaQualityLadder.PositionOf(kind, cutoffCode);
         var ladderCutoffMet = cutoffPosition == 0 || ownedPosition >= cutoffPosition;
         var formatCutoffMet = policy?.CutoffFormatScore is not { } formatCutoff || ownedFormatScore >= formatCutoff;
-        return (KindUpgrades: true, HaveOwned: true, CutoffMet: ladderCutoffMet && formatCutoffMet, ownedMediaQuality, cutoffCode);
+        var subtitleCutoffMet = !trackSubtitleAxis || hasSubtitles;
+        return (KindUpgrades: true, HaveOwned: true, CutoffMet: ladderCutoffMet && formatCutoffMet && subtitleCutoffMet, ownedMediaQuality, cutoffCode);
     }
 
     public Task<IReadOnlyList<DueMonitor>> ListDueMonitorsAsync(
@@ -459,6 +470,11 @@ public sealed partial class EfMonitorStore(
                 OwnedMediaQuality = acquisition == null ? null : acquisition.OwnedMediaQuality,
                 OwnedFormatScore = acquisition == null ? 0 : acquisition.OwnedFormatScore,
                 Captured = acquisition != null && acquisition.UpgradeQualityCaptured,
+                HasSubtitles = monitor.EntityId != null
+                    && db.EntitySubtitles.Any(subtitle => subtitle.EntityId == monitor.EntityId),
+                SubtitleStatusKnown = monitor.EntityId == null
+                    || db.EntitySubtitles.Any(subtitle => subtitle.EntityId == monitor.EntityId)
+                    || db.EntitySubtitleStates.Any(state => state.EntityId == monitor.EntityId && state.SubtitlesExtractedAt != null),
                 AcceptedCount = acquisition == null ? 0 : db.ReleaseCandidates.Count(candidate => candidate.AcquisitionId == acquisition.Id && candidate.Accepted),
                 ChildStatus = monitor.UpgradeChildAcquisitionId == null ? (AcquisitionStatus?)null
                     : db.Acquisitions.Where(c => c.Id == monitor.UpgradeChildAcquisitionId).Select(c => (AcquisitionStatus?)c.Status).FirstOrDefault(),
@@ -580,7 +596,15 @@ public sealed partial class EfMonitorStore(
 
                     var policy = policyByKind.GetValueOrDefault(AcquisitionProfileKinds.For(monitor.Kind));
                     var verdict = EvaluateCutoff(
-                        monitor.Kind, policy, row.Captured, row.OwnedQuality ?? BookQualityRank.Floor, row.OwnedMediaQuality, row.OwnedFormatScore);
+                        monitor.Kind,
+                        policy,
+                        row.Captured,
+                        row.OwnedQuality ?? BookQualityRank.Floor,
+                        row.OwnedMediaQuality,
+                        row.OwnedFormatScore,
+                        monitor.EntityId is not null,
+                        row.SubtitleStatusKnown,
+                        row.HasSubtitles);
                     if (!verdict.KindUpgrades) {
                         // The acquisition is complete, but the Entity intent remains active. New monitors
                         // carry EntityId, so detach transient acquisition bookkeeping; legacy rows without an
@@ -771,6 +795,11 @@ public sealed partial class EfMonitorStore(
                 acquisition.OwnedMediaQuality,
                 acquisition.OwnedFormatScore,
                 acquisition.UpgradeQualityCaptured,
+                HasSubtitles = monitor.EntityId != null
+                    && db.EntitySubtitles.Any(subtitle => subtitle.EntityId == monitor.EntityId),
+                SubtitleStatusKnown = monitor.EntityId == null
+                    || db.EntitySubtitles.Any(subtitle => subtitle.EntityId == monitor.EntityId)
+                    || db.EntitySubtitleStates.Any(state => state.EntityId == monitor.EntityId && state.SubtitlesExtractedAt != null),
                 acquisition.PosterUrl
             };
 
@@ -782,7 +811,12 @@ public sealed partial class EfMonitorStore(
             var policy = policyByKind.GetValueOrDefault(AcquisitionProfileKinds.For(row.Kind));
             var verdict = EvaluateCutoff(
                 row.Kind, policy, row.UpgradeQualityCaptured,
-                new BookQualityRank(row.OwnedSourceTier, row.OwnedFormatTier), row.OwnedMediaQuality, row.OwnedFormatScore);
+                new BookQualityRank(row.OwnedSourceTier, row.OwnedFormatTier),
+                row.OwnedMediaQuality,
+                row.OwnedFormatScore,
+                row.EntityId is not null,
+                row.SubtitleStatusKnown,
+                row.HasSubtitles);
 
             // Drop rows the sweep would (or already did) fulfill: kinds that never upgrade, copies at/above
             // cutoff. A not-yet-captured copy stays — it is genuinely below any cutoff until proven otherwise,
