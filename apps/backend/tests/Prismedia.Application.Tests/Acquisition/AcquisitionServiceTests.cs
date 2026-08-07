@@ -1142,6 +1142,57 @@ public sealed class AcquisitionServiceTests {
     }
 
     [Fact]
+    public async Task AutomaticSearchJobRechecksReleaseTimingBeforeCallingIndexers() {
+        var harness = Harness(TransferInfo(RecordedClientId, AcquisitionStatus.Searching));
+        harness.Store.SearchInput = new AcquisitionSearchInput(
+            AcquisitionId,
+            "Curiouser and Curiouser",
+            null,
+            EntityKind.VideoEpisode,
+            WantedEntityId);
+        var timing = new FixedReleaseTimingService(new AcquisitionReleaseTimingDecision(
+            CanSearch: false,
+            DateType: EntityDateType.Air,
+            SearchNotBefore: new DateOnly(2026, 8, 11),
+            Message: "Waiting until 2026-08-11, after the air date."));
+        var now = DateTimeOffset.UtcNow;
+        var job = new JobRunSnapshot(
+            Guid.NewGuid(),
+            JobType.AcquisitionSearch,
+            JobRunStatus.Running,
+            0,
+            null,
+            AcquisitionJobPayload.Serialize(AcquisitionId),
+            null,
+            AcquisitionId.ToString(),
+            "Curiouser and Curiouser",
+            now,
+            now,
+            null);
+        var handler = new AcquisitionSearchJobHandler(
+            harness.Store,
+            runner: null!,
+            profiles: null!,
+            queue: null!,
+            downloadClients: null!,
+            settings: null!,
+            missingChildren: null!,
+            NullLogger<AcquisitionSearchJobHandler>.Instance,
+            releaseTiming: timing);
+
+        await handler.HandleAsync(
+            new JobContext(job, harness.Queue),
+            CancellationToken.None);
+
+        Assert.Equal(AcquisitionStatus.WaitingForRelease, harness.Store.Status);
+        Assert.Contains(
+            (AcquisitionId, AcquisitionStatus.WaitingForRelease, "Waiting until 2026-08-11, after the air date."),
+            harness.Store.StatusChanges);
+        Assert.Equal(WantedEntityId, timing.EntityId);
+        Assert.Empty(harness.Queue.Requests);
+    }
+
+    [Fact]
     public async Task ReacquireEligibilityAllowsAnImportedAcquisitionWithoutSideEffects() {
         var harness = Harness(TransferInfo(RecordedClientId, AcquisitionStatus.Imported));
 

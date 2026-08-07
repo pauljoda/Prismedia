@@ -23,7 +23,8 @@ public sealed class AcquisitionSearchJobHandler(
     SettingsService settings,
     AcquisitionMissingChildFallback missingChildren,
     ILogger<AcquisitionSearchJobHandler> logger,
-    IJobGraphService? graphs = null) : IJobHandler {
+    IJobGraphService? graphs = null,
+    IAcquisitionReleaseTimingService? releaseTiming = null) : IJobHandler {
     /// <summary>
     /// States from which an explicit API or monitor action may publish a fresh Searching intent. This is a
     /// scheduling policy only; the job handler itself consumes Searching exclusively.
@@ -55,6 +56,31 @@ public sealed class AcquisitionSearchJobHandler(
                 payload.AcquisitionId,
                 currentStatus?.ToCode() ?? "missing");
             return;
+        }
+
+        // Creation normally gates automatic work before it publishes the job. Recheck at execution so
+        // metadata committed just after creation—and old queued work created before this policy existed—
+        // can still stop before the first indexer request. Explicit Search again is user authority and
+        // intentionally bypasses release timing.
+        if (!payload.ManualReview && releaseTiming is not null) {
+            var timing = await releaseTiming.EvaluateAsync(
+                input.EntityId,
+                input.ProfileId,
+                input.Kind,
+                cancellationToken);
+            if (!timing.CanSearch) {
+                if (!await store.TryTransitionStatusAsync(
+                        payload.AcquisitionId,
+                        [AcquisitionStatus.Searching],
+                        AcquisitionStatus.WaitingForRelease,
+                        timing.Message,
+                        cancellationToken)) {
+                    logger.LogInformation(
+                        "AcquisitionSearch: acquisition {Id} changed before its release gate could be restored.",
+                        payload.AcquisitionId);
+                }
+                return;
+            }
         }
         await context.ReportProgressAsync(10, "Searching indexers", cancellationToken);
 
