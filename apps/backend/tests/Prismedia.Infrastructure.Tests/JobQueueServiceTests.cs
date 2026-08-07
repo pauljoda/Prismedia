@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Acquisition;
 using Prismedia.Application.Jobs;
+using Prismedia.Application.Jobs.Handlers;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
@@ -577,6 +579,46 @@ public sealed class JobQueueServiceTests {
         Assert.Equal(1, pruned);
         Assert.NotNull(await db.JobRuns.FindAsync(waitingRoot.Id));
         Assert.Null(await db.JobRuns.FindAsync(terminalHistory.Id));
+    }
+
+    [Fact]
+    public async Task EnqueueRetiresAnOrphanedActiveKeyWhenTheGraphRootWasPruned() {
+        await using var db = CreateContext();
+        var service = new JobQueueService(db);
+        var acquisitionId = Guid.NewGuid();
+        var orphanedGraph = new JobGraphRow {
+            Id = Guid.NewGuid(),
+            Origin = JobGraphOrigin.Background,
+            Status = JobGraphStatus.Waiting,
+            DisplayName = "Orphaned acquisition search",
+            RootRunId = Guid.NewGuid(),
+            ActiveKey = $"{JobType.AcquisitionSearch.ToCode()}:{acquisitionId}",
+            CreatedAt = DateTimeOffset.UtcNow.AddDays(-30),
+            UpdatedAt = DateTimeOffset.UtcNow.AddDays(-30)
+        };
+        var openSignal = new JobGraphSignalRow {
+            Id = Guid.NewGuid(),
+            GraphId = orphanedGraph.Id,
+            Key = AcquisitionGraphSignals.Review(acquisitionId),
+            Kind = JobGraphSignalKind.DomainEvent,
+            CreatedAt = orphanedGraph.CreatedAt
+        };
+        db.JobGraphs.Add(orphanedGraph);
+        db.JobGraphSignals.Add(openSignal);
+        await db.SaveChangesAsync();
+
+        var replacement = await service.EnqueueAsync(new EnqueueJobRequest(
+            JobType.AcquisitionSearch,
+            PayloadJson: AcquisitionJobPayload.Serialize(acquisitionId),
+            TargetEntityId: acquisitionId.ToString(),
+            Origin: JobGraphOrigin.Background), CancellationToken.None);
+
+        Assert.NotEqual(orphanedGraph.Id, replacement.GraphId);
+        Assert.Equal(JobRunStatus.Queued, replacement.Status);
+        Assert.Equal(JobGraphStatus.Cancelled, orphanedGraph.Status);
+        Assert.True(orphanedGraph.CancellationRequested);
+        Assert.NotNull(orphanedGraph.FinishedAt);
+        Assert.NotNull(openSignal.CancelledAt);
     }
 
     [Fact]

@@ -98,6 +98,14 @@ public sealed partial class JobQueueService : IJobQueueService {
         }
 
         var (graph, row) = CreateRootGraph(request, origin, InitiatingUserId(), DateTimeOffset.UtcNow);
+        if (graph.ActiveKey is not null) {
+            var active = await FindActiveGraphRootAsync(graph.ActiveKey, cancellationToken);
+            if (active is not null) {
+                return ToSnapshot(active.Value.Run, active.Value.Origin);
+            }
+
+            await TryReleaseInvalidActiveGraphAsync(graph.ActiveKey, cancellationToken);
+        }
         await EnsureEntityResourceDeclaredAsync(row.ResourceKey, cancellationToken);
         _db.JobGraphs.Add(graph);
         _db.JobRuns.Add(row);
@@ -105,26 +113,120 @@ public sealed partial class JobQueueService : IJobQueueService {
             await _db.SaveChangesAsync(cancellationToken);
         } catch (DbUpdateException) when (graph.ActiveKey is not null) {
             _db.ChangeTracker.Clear();
-            var existing = await _db.JobGraphs.AsNoTracking()
-                .Where(active => active.ActiveKey == graph.ActiveKey &&
-                    (active.Status == JobGraphStatus.Queued ||
-                     active.Status == JobGraphStatus.Running ||
-                     active.Status == JobGraphStatus.Waiting))
-                .Join(
-                    _db.JobRuns.AsNoTracking(),
-                    active => active.RootRunId,
-                    run => run.Id,
-                    (active, run) => new { active.Origin, Run = run })
-                .OrderBy(candidate => candidate.Run.CreatedAt)
-                .FirstOrDefaultAsync(cancellationToken);
+            var existing = await FindActiveGraphRootAsync(graph.ActiveKey, cancellationToken);
             if (existing is null) {
+                if (await TryReleaseInvalidActiveGraphAsync(graph.ActiveKey, cancellationToken)) {
+                    return await EnqueueAsync(request, cancellationToken);
+                }
+
                 throw;
             }
 
-            return ToSnapshot(existing.Run, existing.Origin);
+            return ToSnapshot(existing.Value.Run, existing.Value.Origin);
         }
 
         return ToSnapshot(row, origin);
+    }
+
+    private async Task<(JobGraphOrigin Origin, JobRunRow Run)?> FindActiveGraphRootAsync(
+        string activeKey,
+        CancellationToken cancellationToken) {
+        var existing = await _db.JobGraphs.AsNoTracking()
+            .Where(active => active.ActiveKey == activeKey &&
+                (active.Status == JobGraphStatus.Queued ||
+                 active.Status == JobGraphStatus.Running ||
+                 active.Status == JobGraphStatus.Waiting))
+            .Where(active => _db.JobRuns.Any(run => run.GraphId == active.Id &&
+                    (run.Status == JobRunStatus.Queued || run.Status == JobRunStatus.Running)) ||
+                _db.JobGraphSignals.Any(signal => signal.GraphId == active.Id &&
+                    signal.ResolvedAt == null && signal.CancelledAt == null))
+            .Join(
+                _db.JobRuns.AsNoTracking(),
+                active => active.RootRunId,
+                run => run.Id,
+                (active, run) => new { active.Origin, Run = run })
+            .OrderBy(candidate => candidate.Run.CreatedAt)
+            .FirstOrDefaultAsync(cancellationToken);
+        return existing is null ? null : (existing.Origin, existing.Run);
+    }
+
+    private async Task<bool> TryReleaseInvalidActiveGraphAsync(
+        string activeKey,
+        CancellationToken cancellationToken) {
+        if (await TryRetireRootlessActiveGraphAsync(activeKey, cancellationToken)) {
+            return true;
+        }
+
+        var inertGraphId = await _db.JobGraphs.AsNoTracking()
+            .Where(graph => graph.ActiveKey == activeKey &&
+                (graph.Status == JobGraphStatus.Queued ||
+                 graph.Status == JobGraphStatus.Running ||
+                 graph.Status == JobGraphStatus.Waiting))
+            .Where(graph => _db.JobRuns.Any(run => run.Id == graph.RootRunId))
+            .Where(graph => !_db.JobRuns.Any(run => run.GraphId == graph.Id &&
+                (run.Status == JobRunStatus.Queued || run.Status == JobRunStatus.Running)))
+            .Where(graph => !_db.JobGraphSignals.Any(signal => signal.GraphId == graph.Id &&
+                signal.ResolvedAt == null && signal.CancelledAt == null))
+            .Select(graph => (Guid?)graph.Id)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (inertGraphId is not { } id) {
+            return false;
+        }
+
+        await ReconcileGraphStateAsync(id, cancellationToken);
+        return !await _db.JobGraphs.AsNoTracking().AnyAsync(graph =>
+            graph.Id == id &&
+            (graph.Status == JobGraphStatus.Queued ||
+             graph.Status == JobGraphStatus.Running ||
+             graph.Status == JobGraphStatus.Waiting), cancellationToken);
+    }
+
+    /// <summary>
+    /// Retires historical active-key blockers whose root was pruned by older builds. A graph with any
+    /// queued or running node is deliberately left untouched; only a workflow that cannot execute and
+    /// cannot provide its deduplication snapshot is safe to supersede.
+    /// </summary>
+    private async Task<bool> TryRetireRootlessActiveGraphAsync(
+        string activeKey,
+        CancellationToken cancellationToken) {
+        var graphId = await _db.JobGraphs.AsNoTracking()
+            .Where(graph => graph.ActiveKey == activeKey &&
+                (graph.Status == JobGraphStatus.Queued ||
+                 graph.Status == JobGraphStatus.Running ||
+                 graph.Status == JobGraphStatus.Waiting))
+            .Where(graph => !_db.JobRuns.Any(run => run.Id == graph.RootRunId))
+            .Where(graph => !_db.JobRuns.Any(run => run.GraphId == graph.Id &&
+                (run.Status == JobRunStatus.Queued || run.Status == JobRunStatus.Running)))
+            .Select(graph => (Guid?)graph.Id)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (graphId is not { } id) {
+            return false;
+        }
+
+        await using var mutation = await JobGraphMutationScope.AcquireAsync(_db, id, cancellationToken);
+        if (mutation is null || mutation.Graph.ActiveKey != activeKey ||
+            mutation.Graph.Status is not (JobGraphStatus.Queued or JobGraphStatus.Running or JobGraphStatus.Waiting) ||
+            await _db.JobRuns.AnyAsync(run => run.Id == mutation.Graph.RootRunId, cancellationToken) ||
+            await _db.JobRuns.AnyAsync(run => run.GraphId == id &&
+                (run.Status == JobRunStatus.Queued || run.Status == JobRunStatus.Running), cancellationToken)) {
+            return false;
+        }
+
+        var now = DateTimeOffset.UtcNow;
+        var signals = await _db.JobGraphSignals
+            .Where(signal => signal.GraphId == id && signal.ResolvedAt == null && signal.CancelledAt == null)
+            .ToArrayAsync(cancellationToken);
+        foreach (var signal in signals) {
+            signal.CancelledAt = now;
+        }
+
+        mutation.Graph.CancellationRequested = true;
+        mutation.Graph.Status = JobGraphStatus.Cancelled;
+        mutation.Graph.UpdatedAt = now;
+        mutation.Graph.FinishedAt = now;
+        await _db.SaveChangesAsync(cancellationToken);
+        await mutation.CommitAsync(cancellationToken);
+        return true;
     }
 
     public async Task<JobRunSnapshot> EnqueueChildAsync(
