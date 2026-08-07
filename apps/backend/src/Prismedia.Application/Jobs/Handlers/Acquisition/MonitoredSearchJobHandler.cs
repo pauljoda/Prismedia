@@ -23,7 +23,8 @@ public sealed class MonitoredSearchJobHandler(
     RequestCommitService requests,
     ILogger<MonitoredSearchJobHandler> logger,
     IJobQueueService? jobs = null,
-    IAcquisitionReleaseTimingService? releaseTiming = null) : IJobHandler {
+    IAcquisitionReleaseTimingService? releaseTiming = null,
+    IJobGraphService? graphs = null) : IJobHandler {
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var due = await ResolveWorkAsync(context.Job, cancellationToken);
         if (due.Count == 0) {
@@ -186,6 +187,8 @@ public sealed class MonitoredSearchJobHandler(
             return null;
         }
 
+        var graphCoordinator = new AcquisitionSearchGraphCoordinator(acquisitions, graphs);
+        var priorGraphId = await graphCoordinator.PrepareAsync(searchTarget, cancellationToken);
         var request = new EnqueueJobRequest(
                 JobType.AcquisitionSearch,
                 PayloadJson: AcquisitionJobPayload.Serialize(searchTarget),
@@ -193,13 +196,14 @@ public sealed class MonitoredSearchJobHandler(
                 TargetLabel: monitor.Title,
                 Origin: JobGraphOrigin.Background,
                 GraphRootEntityId: monitor.EntityId?.ToString());
+        JobRunSnapshot? search;
         if (jobs is null) {
-            await context.EnqueueIfNeededAsync(request, cancellationToken);
+            search = await context.EnqueueIfNeededAsync(request, cancellationToken);
         } else {
-            var search = await jobs.EnqueueAsync(request, cancellationToken);
-            if (search.GraphId is { } graphId) {
-                await acquisitions.SetJobGraphIdAsync(searchTarget, graphId, cancellationToken);
-            }
+            search = await jobs.EnqueueAsync(request, cancellationToken);
+        }
+        if (search?.GraphId is { } graphId) {
+            await graphCoordinator.LinkAsync(searchTarget, priorGraphId, graphId, cancellationToken);
         }
         await monitors.MarkSearchedAsync(monitor.MonitorId, cancellationToken);
         return $"Re-searching {monitor.Title}";

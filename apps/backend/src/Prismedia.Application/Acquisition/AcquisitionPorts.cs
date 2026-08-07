@@ -437,9 +437,27 @@ public interface IAcquisitionLifecycleStore {
     Task<Guid?> GetJobGraphIdAsync(Guid id, CancellationToken cancellationToken) =>
         Task.FromResult<Guid?>(null);
 
-    /// <summary>Links an acquisition to its owning graph without replacing an already-linked graph.</summary>
+    /// <summary>Links a previously unlinked acquisition to its owning graph.</summary>
     Task SetJobGraphIdAsync(Guid id, Guid graphId, CancellationToken cancellationToken) =>
         Task.CompletedTask;
+
+    /// <summary>
+    /// Moves an acquisition to a replacement workflow only while its current graph still matches the
+    /// caller's observation. Re-search uses this compare-and-swap so a delayed publisher cannot overwrite
+    /// a newer search, download, or recovery graph.
+    /// </summary>
+    async Task<bool> TryRelinkJobGraphIdAsync(
+        Guid id,
+        Guid? expectedGraphId,
+        Guid graphId,
+        CancellationToken cancellationToken) {
+        if (expectedGraphId is not null) {
+            return false;
+        }
+
+        await SetJobGraphIdAsync(id, graphId, cancellationToken);
+        return true;
+    }
 
     /// <summary>
     /// Lists durable Downloaded completion tickets that still need an ordinary import or upgrade-replace

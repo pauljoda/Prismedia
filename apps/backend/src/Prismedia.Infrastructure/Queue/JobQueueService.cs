@@ -815,12 +815,24 @@ public sealed partial class JobQueueService : IJobQueueService {
 
     public async Task<int> PruneHistoryAsync(TimeSpan retention, CancellationToken cancellationToken) {
         var cutoff = DateTimeOffset.UtcNow - retention;
-        return await _db.JobRuns
+        var query = _db.JobRuns
             .Where(job =>
                 (job.Status == JobRunStatus.Completed || job.Status == JobRunStatus.Cancelled) &&
                 job.FinishedAt != null &&
-                job.FinishedAt < cutoff)
-            .ExecuteDeleteAsync(cancellationToken);
+                job.FinishedAt < cutoff &&
+                (job.GraphId == null || !_db.JobGraphs.Any(graph =>
+                    graph.Id == job.GraphId &&
+                    (graph.Status == JobGraphStatus.Queued ||
+                     graph.Status == JobGraphStatus.Running ||
+                     graph.Status == JobGraphStatus.Waiting))));
+        if (_db.Database.IsRelational()) {
+            return await query.ExecuteDeleteAsync(cancellationToken);
+        }
+
+        var rows = await query.ToArrayAsync(cancellationToken);
+        _db.JobRuns.RemoveRange(rows);
+        await _db.SaveChangesAsync(cancellationToken);
+        return rows.Length;
     }
 
 }

@@ -28,6 +28,20 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
     }
 
     /// <inheritdoc />
+    public async Task<bool> TryRelinkJobGraphIdAsync(
+        Guid id,
+        Guid? expectedGraphId,
+        Guid graphId,
+        CancellationToken cancellationToken) {
+        var affected = await db.Acquisitions
+            .Where(row => row.Id == id && row.JobGraphId == expectedGraphId)
+            .ExecuteUpdateAsync(
+                setters => setters.SetProperty(row => row.JobGraphId, graphId),
+                cancellationToken);
+        return affected == 1;
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<DownloadedAcquisitionCompletion>> ListDownloadedCompletionWorkAsync(
         CancellationToken cancellationToken) {
         var rows = await db.Acquisitions.AsNoTracking()

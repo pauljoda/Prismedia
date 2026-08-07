@@ -100,6 +100,8 @@ public sealed partial class AcquisitionService {
             return await store.GetAsync(detail.Summary.Id, cancellationToken);
         }
 
+        var graphCoordinator = new AcquisitionSearchGraphCoordinator(store, graphs);
+        var priorGraphId = await graphCoordinator.PrepareAsync(detail.Summary.Id, cancellationToken);
         var resourceKey = await DeclareSearchResourceAsync(cancellationToken);
         var searchRequest = new EnqueueJobRequest(
                 JobType.AcquisitionSearch,
@@ -117,7 +119,11 @@ public sealed partial class AcquisitionService {
             ? await queue.EnqueueAsync(searchRequest, cancellationToken)
             : await parentContext.EnqueueAsync(searchRequest, cancellationToken);
         if (searchJob.GraphId is { } graphId) {
-            await store.SetJobGraphIdAsync(detail.Summary.Id, graphId, cancellationToken);
+            await graphCoordinator.LinkAsync(
+                detail.Summary.Id,
+                priorGraphId,
+                graphId,
+                cancellationToken);
         }
         return await store.GetAsync(detail.Summary.Id, cancellationToken);
     }

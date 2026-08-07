@@ -549,6 +549,37 @@ public sealed class JobQueueServiceTests {
     }
 
     [Fact]
+    public async Task PruneHistoryRetainsTerminalNodesWhileTheirGraphIsStillActive() {
+        await using var db = CreateContext();
+        var service = new JobQueueService(db);
+        var old = DateTimeOffset.UtcNow.AddDays(-30);
+        var waitingRoot = NewJobRun(JobType.AcquisitionSearch, JobRunStatus.Completed, old);
+        waitingRoot.FinishedAt = old.AddMinutes(1);
+        var waitingGraph = new JobGraphRow {
+            Id = Guid.NewGuid(),
+            Origin = JobGraphOrigin.Background,
+            Status = JobGraphStatus.Waiting,
+            DisplayName = "Waiting for release review",
+            RootRunId = waitingRoot.Id,
+            ActiveKey = $"{JobType.AcquisitionSearch.ToCode()}:{Guid.NewGuid()}",
+            CreatedAt = old,
+            UpdatedAt = old
+        };
+        waitingRoot.GraphId = waitingGraph.Id;
+        var terminalHistory = NewJobRun(JobType.Noop, JobRunStatus.Completed, old);
+        terminalHistory.FinishedAt = old.AddMinutes(1);
+        db.JobGraphs.Add(waitingGraph);
+        db.JobRuns.AddRange(waitingRoot, terminalHistory);
+        await db.SaveChangesAsync();
+
+        var pruned = await service.PruneHistoryAsync(TimeSpan.FromDays(7), CancellationToken.None);
+
+        Assert.Equal(1, pruned);
+        Assert.NotNull(await db.JobRuns.FindAsync(waitingRoot.Id));
+        Assert.Null(await db.JobRuns.FindAsync(terminalHistory.Id));
+    }
+
+    [Fact]
     public async Task CancelAndClearFailuresMoveRunsOutOfActiveBuckets() {
         await using var db = CreateContext();
         var service = new JobQueueService(db);

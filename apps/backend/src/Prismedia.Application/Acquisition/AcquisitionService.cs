@@ -254,7 +254,8 @@ public sealed partial class AcquisitionService(
     VideoScanConcurrencyGate? scanGate = null,
     IAcquisitionUploadStorage? uploads = null,
     IAcquisitionSearchResourcePolicy? searchResources = null,
-    IAcquisitionReleaseTimingService? releaseTiming = null) : IAcquisitionRequestService, IAcquisitionGraphCancellation {
+    IAcquisitionReleaseTimingService? releaseTiming = null,
+    IJobGraphService? graphs = null) : IAcquisitionRequestService, IAcquisitionGraphCancellation {
     public Task<IReadOnlyList<AcquisitionSummary>> ListAsync(CancellationToken cancellationToken) =>
         store.ListAsync(cancellationToken);
 
