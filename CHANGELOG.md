@@ -14,7 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
-- Current and recent job views now hide runs belonging to NSFW libraries whenever SFW mode is active, preventing hidden library names and activity from appearing in operational history.
+- Job Control now hides current, recent, and lane history belonging to NSFW libraries whenever SFW mode is active, preventing hidden library names and activity from appearing in operational history.
 - Monitored release dates, missing items, container updates, and upgrades now drain one search at a time independently of scheduler windows, with durable retry/backoff intent instead of queue-wide bursts or arbitrary attempt caps. Acquisition searches compare and de-duplicate every query variant before selecting globally, prioritizing quality and revision before protocol preference and swarm health; deliberate re-searches also supersede the prior release-review wait without losing or blocking their next durable search.
 - Unchanged library snapshots now remain truly idle instead of re-enqueuing unfinished enrichment across the whole root. Crash-interrupted delete-files and unmonitor claims are resumed by one independent serial recovery worker, with blocked records isolated from the rest of the backlog.
 - Watched libraries now coalesce filesystem notifications into a durable path ledger and queue surgical reconciliation after writes settle, while scheduled scans remain an integrity fallback for missed or unsupported notifications. Video scans reconcile a same-path replacement as one exact source and reuse the signature snapshot as folder context, avoiding a second recursive discovery and whole-root upsert while retaining safe stale cleanup.

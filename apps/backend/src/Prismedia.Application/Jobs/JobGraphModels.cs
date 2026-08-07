@@ -101,7 +101,7 @@ public interface IJobGraphService {
 
     Task<IReadOnlyList<JobGraphSnapshot>> ListAsync(CancellationToken cancellationToken);
 
-    /// <summary>Lists graphs while excluding Entity-backed work hidden by the active NSFW policy.</summary>
+    /// <summary>Lists graphs while excluding entity- or library-root-backed work hidden by the active NSFW policy.</summary>
     Task<IReadOnlyList<JobGraphSnapshot>> ListAsync(
         bool hideNsfw,
         CancellationToken cancellationToken) =>
@@ -109,7 +109,7 @@ public interface IJobGraphService {
 
     Task<JobGraphDetailSnapshot?> GetAsync(Guid graphId, CancellationToken cancellationToken);
 
-    /// <summary>Gets a graph only when its Entity-backed work is visible under the active NSFW policy.</summary>
+    /// <summary>Gets a graph only when its entity- or library-root-backed work is visible under the active NSFW policy.</summary>
     Task<JobGraphDetailSnapshot?> GetAsync(
         Guid graphId,
         bool hideNsfw,

@@ -66,23 +66,29 @@ public sealed partial class JobGraphService {
     private async Task<HashSet<Guid>> HiddenGraphIdsAsync(
         IReadOnlyCollection<JobGraphRow> graphs,
         CancellationToken cancellationToken) {
-        var rootEntityByGraph = graphs
+        var rootTargetByGraph = graphs
             .Select(graph => new {
                 graph.Id,
-                EntityId = Guid.TryParse(graph.RootEntityId, out var entityId) ? entityId : (Guid?)null
+                TargetId = Guid.TryParse(graph.RootEntityId, out var targetId) ? targetId : (Guid?)null
             })
-            .Where(candidate => candidate.EntityId is not null)
-            .ToDictionary(candidate => candidate.Id, candidate => candidate.EntityId!.Value);
-        var entityIds = rootEntityByGraph.Values.Distinct().ToArray();
-        var hiddenEntityIds = entityIds.Length == 0
+            .Where(candidate => candidate.TargetId is not null)
+            .ToDictionary(candidate => candidate.Id, candidate => candidate.TargetId!.Value);
+        var targetIds = rootTargetByGraph.Values.Distinct().ToArray();
+        var hiddenEntityIds = targetIds.Length == 0
             ? []
             : await db.Entities.AsNoTracking()
-                .Where(entity => entityIds.Contains(entity.Id) && entity.IsNsfw)
+                .Where(entity => targetIds.Contains(entity.Id) && entity.IsNsfw)
                 .Select(entity => entity.Id)
                 .ToArrayAsync(cancellationToken);
-        var hiddenEntities = hiddenEntityIds.ToHashSet();
-        var hiddenGraphs = rootEntityByGraph
-            .Where(candidate => hiddenEntities.Contains(candidate.Value))
+        var hiddenRootIds = targetIds.Length == 0
+            ? []
+            : await db.LibraryRoots.AsNoTracking()
+                .Where(root => targetIds.Contains(root.Id) && root.IsNsfw)
+                .Select(root => root.Id)
+                .ToArrayAsync(cancellationToken);
+        var hiddenTargets = hiddenEntityIds.Concat(hiddenRootIds).ToHashSet();
+        var hiddenGraphs = rootTargetByGraph
+            .Where(candidate => hiddenTargets.Contains(candidate.Value))
             .Select(candidate => candidate.Key)
             .ToHashSet();
 

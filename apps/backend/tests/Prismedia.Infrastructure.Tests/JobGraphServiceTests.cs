@@ -454,6 +454,55 @@ public sealed class JobGraphServiceTests {
         Assert.Null(await graphs.GetAsync(graph.Id, hideNsfw: true, CancellationToken.None));
     }
 
+    [Fact]
+    public async Task HiddenNsfwLibraryRootGraphsAreExcludedFromListAndDetail() {
+        await using var db = CreateContext();
+        var graphs = new JobGraphService(db);
+        var safeRootId = Guid.NewGuid();
+        var hiddenRootId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.LibraryRoots.AddRange(
+            new LibraryRootRow {
+                Id = safeRootId,
+                Path = "/media/safe",
+                Label = "Safe Library",
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new LibraryRootRow {
+                Id = hiddenRootId,
+                Path = "/media/hidden",
+                Label = "Hidden Library",
+                IsNsfw = true,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        await db.SaveChangesAsync();
+        var safeGraph = await graphs.StartAsync(
+            new StartJobGraphRequest(
+                JobGraphOrigin.Background,
+                "Safe Library",
+                new GraphJobNodeRequest("scan", new EnqueueJobRequest(JobType.ScanLibrary)),
+                RootEntityKind: JobTargetKinds.LibraryRoot,
+                RootEntityId: safeRootId.ToString()),
+            CancellationToken.None);
+        var hiddenGraph = await graphs.StartAsync(
+            new StartJobGraphRequest(
+                JobGraphOrigin.Background,
+                "Hidden Library",
+                new GraphJobNodeRequest("scan", new EnqueueJobRequest(JobType.ScanLibrary)),
+                RootEntityKind: JobTargetKinds.LibraryRoot,
+                RootEntityId: hiddenRootId.ToString()),
+            CancellationToken.None);
+
+        Assert.Equal(2, (await graphs.ListAsync(hideNsfw: false, CancellationToken.None)).Count);
+        var visibleGraphs = await graphs.ListAsync(hideNsfw: true, CancellationToken.None);
+        Assert.Contains(visibleGraphs, graph => graph.Id == safeGraph.Id);
+        Assert.DoesNotContain(visibleGraphs, graph => graph.Id == hiddenGraph.Id);
+        Assert.NotNull(await graphs.GetAsync(safeGraph.Id, hideNsfw: true, CancellationToken.None));
+        Assert.Null(await graphs.GetAsync(hiddenGraph.Id, hideNsfw: true, CancellationToken.None));
+    }
+
     private static PrismediaDbContext CreateContext() {
         var options = new DbContextOptionsBuilder<PrismediaDbContext>()
             .UseInMemoryDatabase($"job-graphs-{Guid.NewGuid():N}")
