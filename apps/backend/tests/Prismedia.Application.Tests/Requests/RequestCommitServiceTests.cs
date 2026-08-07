@@ -1889,6 +1889,10 @@ public sealed class RequestCommitServiceTests {
         var scheduled = Assert.Single(fanout.Calls);
         Assert.Equal(response.Items.Select(item => item.EntityId!.Value).ToHashSet(), scheduled.ChildEntityIds.ToHashSet());
         Assert.Empty(writer.Applied);
+        var appliedReview = Assert.Single(writer.DeferredArtworkApplied);
+        Assert.Equal(
+            response.Items.Select(item => item.EntityId!.Value).ToHashSet(),
+            appliedReview.Proposal.Children.Select(child => child.TargetEntityId!.Value).ToHashSet());
         Assert.Equal(3, writer.ProviderIdentityBindings.Count);
         Assert.Equal([response.ContainerEntityId!.Value], monitors.EntityLifecycleMutationIds);
         Assert.Equal(2, suppressions.Cleared.Distinct().Count());
@@ -1962,6 +1966,13 @@ public sealed class RequestCommitServiceTests {
         Assert.Equal(response.ContainerEntityId, scheduled.ContainerEntityId);
         Assert.Equal([Assert.Single(response.Items).EntityId!.Value], scheduled.ChildEntityIds);
         Assert.False(scheduled.HydrateChildren);
+        Assert.NotNull(scheduled.ReviewedProposal);
+        var scheduledReview = scheduled.ReviewedProposal;
+        Assert.Equal(response.ContainerEntityId, scheduledReview.TargetEntityId);
+        var scheduledSeason = Assert.Single(scheduledReview.Children);
+        Assert.Equal(
+            FakeWantedEntityWriter.EntityIdFor("Episode:One"),
+            Assert.Single(scheduledSeason.Children).TargetEntityId);
         Assert.Equal(
             matchedLocalSeasonId,
             Assert.Single(writer.EnsuredChildren, request => request.Kind == EntityKind.VideoSeason)
@@ -1978,15 +1989,13 @@ public sealed class RequestCommitServiceTests {
         var appliedRoot = Assert.Single(
             writer.DeferredArtworkApplied,
             call => call.EntityId == FakeWantedEntityWriter.EntityIdFor("Series:One"));
+        var appliedSeason = Assert.Single(appliedRoot.Proposal.Children);
         Assert.DoesNotContain(
-            Assert.Single(appliedRoot.Proposal.Children).Children,
+            appliedSeason.Children,
             child => !child.TargetKind.IsRelationship());
-        var appliedSeason = Assert.Single(
+        Assert.DoesNotContain(
             writer.DeferredArtworkApplied,
             call => call.EntityId == FakeWantedEntityWriter.EntityIdFor("Season:One"));
-        Assert.Equal(
-            FakeWantedEntityWriter.EntityIdFor("Episode:One"),
-            Assert.Single(appliedSeason.Proposal.Children).TargetEntityId);
         Assert.DoesNotContain(
             writer.Applied,
             call => call.EntityId == FakeWantedEntityWriter.EntityIdFor("Season:One"));
@@ -2950,7 +2959,8 @@ public sealed class RequestCommitServiceTests {
         IReadOnlyList<Guid> ChildEntityIds,
         AcquisitionTargeting Targeting,
         bool HideNsfw,
-        bool HydrateChildren);
+        bool HydrateChildren,
+        EntityMetadataProposal? ReviewedProposal);
 
     private sealed class FakeRequestAcquisitionFanoutScheduler : IRequestAcquisitionFanoutScheduler {
         public List<FanoutCall> Calls { get; } = [];
@@ -2963,6 +2973,7 @@ public sealed class RequestCommitServiceTests {
             AcquisitionTargeting targeting,
             bool hideNsfw,
             bool hydrateChildren,
+            EntityMetadataProposal? reviewedProposal,
             CancellationToken cancellationToken) {
             Calls.Add(new FanoutCall(
                 containerEntityId,
@@ -2971,7 +2982,8 @@ public sealed class RequestCommitServiceTests {
                 childEntityIds,
                 targeting,
                 hideNsfw,
-                hydrateChildren));
+                hydrateChildren,
+                reviewedProposal));
             return Task.FromResult<Guid?>(null);
         }
     }

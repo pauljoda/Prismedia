@@ -964,16 +964,42 @@ public sealed partial class RequestCommitService(
             && startAcquisitions
             && explicitRequest;
 
-        // Apply the proposal only to newly materialized, fileless works: already-requested metadata is
-        // already durable and must not be rewritten on an idempotent repeat. Bind each reviewed node to
-        // the Entity just created so the cascade does not resolve 100+ identities again. Reviewed artwork
-        // stays as its already-visible remote URL during the commit; later metadata hydration can replace
-        // it with a cached file without downloading every selected image on the HTTP boundary.
         var anythingNew = picks.Any(pick => pick.Outcome == RequestCommitOutcome.Requested);
-        if (container.Created || anythingNew) {
+        var prepareReviewedDescendantsForFanout = useDeferredAcquisitionFanout
+            && !descriptor.DeferChildPhantomHydration;
+        var reviewedChildProposals = new Dictionary<Guid, EntityMetadataProposal>();
+        if (prepareReviewedDescendantsForFanout) {
+            foreach (var pick in picks) {
+                var reviewedChildProposal = await PreparePhantomDescendantsProposalAsync(
+                    child,
+                    pick.Identity,
+                    pick.Entity.EntityId,
+                    exactPluginId,
+                    preparedDescendants?.GetValueOrDefault(pick.Identity),
+                    hideNsfw,
+                    cancellationToken,
+                    requireFreshProviderMetadata: false);
+                if (reviewedChildProposal is not null) {
+                    reviewedChildProposals[pick.Entity.EntityId] = reviewedChildProposal;
+                }
+            }
+        }
+
+        // Apply the proposal to newly materialized, fileless works. A repeat reviewed request applies its
+        // selected metadata again because the user may have changed fields, people, tags, or artwork;
+        // acquisition creation remains idempotent. Bind each reviewed node to its resolved Entity so the
+        // cascade does not resolve 100+ identities again. The interactive boundary persists root and
+        // direct-child shells only. The durable fan-out job receives the fully
+        // targeted cached descendants and applies them before it permits its first acquisition search.
+        // Reviewed artwork stays as its already-visible remote URL during the commit; later metadata
+        // hydration can replace it with a cached file without downloading every selected image here.
+        if (container.Created || anythingNew || useDeferredAcquisitionFanout) {
             var applyChildren = proposal.Children.Where(node => node.TargetKind.IsRelationship())
                 .Concat(picks
-                    .Where(pick => pick.Outcome == RequestCommitOutcome.Requested && !pick.Entity.HasFile)
+                    .Where(pick => !pick.Entity.HasFile && (
+                        pick.Outcome == RequestCommitOutcome.Requested
+                        || useDeferredAcquisitionFanout
+                            && pick.Outcome == RequestCommitOutcome.AlreadyRequested))
                     .Select(PrepareImmediateChildProposal))
                 .ToArray();
             var immediateProposal = proposal with { Children = applyChildren };
@@ -1076,7 +1102,9 @@ public sealed partial class RequestCommitService(
             // nested phantoms can be committed now. Automatic container discovery deliberately starts from
             // shallow child shells: each new acquisition's enrich job hydrates that child's descendants
             // after the season/album itself is already visible and independently controllable.
-            if (explicitRequest && !descriptor.DeferChildPhantomHydration) {
+            if (explicitRequest
+                && !descriptor.DeferChildPhantomHydration
+                && !prepareReviewedDescendantsForFanout) {
                 await EnsurePhantomDescendantsAsync(
                     child,
                     pick,
@@ -1091,6 +1119,16 @@ public sealed partial class RequestCommitService(
 
         Guid? fanoutGraphId = null;
         if (fanoutPicks.Length > 0) {
+            var deferredReviewedProposal = reviewedChildProposals.Count == 0
+                ? null
+                : proposal with {
+                    TargetEntityId = container.EntityId,
+                    Children = proposal.Children.Where(node => node.TargetKind.IsRelationship())
+                        .Concat(fanoutPicks
+                            .Where(pick => reviewedChildProposals.ContainsKey(pick.Entity.EntityId))
+                            .Select(pick => reviewedChildProposals[pick.Entity.EntityId]))
+                        .ToArray()
+                };
             fanoutGraphId = await fanout!.ScheduleAsync(
                 container.EntityId,
                 descriptor.WantedEntityKind,
@@ -1099,6 +1137,7 @@ public sealed partial class RequestCommitService(
                 targeting,
                 hideNsfw,
                 descriptor.DeferChildPhantomHydration,
+                deferredReviewedProposal,
                 cancellationToken);
         }
 
@@ -1174,9 +1213,45 @@ public sealed partial class RequestCommitService(
         CancellationToken cancellationToken,
         bool requireFreshProviderMetadata = false,
         bool deferArtwork = false) {
+        var immediateProposal = await PreparePhantomDescendantsProposalAsync(
+            pickDescriptor,
+            identity,
+            parentEntityId,
+            exactPluginId,
+            prepared,
+            hideNsfw,
+            cancellationToken,
+            requireFreshProviderMetadata);
+        if (immediateProposal is null) {
+            return;
+        }
+
+        if (deferArtwork) {
+            await wanted.ApplyProposalWithDeferredArtworkAsync(
+                parentEntityId,
+                immediateProposal,
+                cancellationToken);
+        } else {
+            await wanted.ApplyProposalAsync(parentEntityId, immediateProposal, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// Materializes a reviewed node's structural children and returns the fully targeted proposal that
+    /// can join a parent metadata cascade. No provider work is repeated when prepared review data exists.
+    /// </summary>
+    private async Task<EntityMetadataProposal?> PreparePhantomDescendantsProposalAsync(
+        RequestKindDescriptor pickDescriptor,
+        ExternalIdentity identity,
+        Guid parentEntityId,
+        string? exactPluginId,
+        PreparedPhantomDescendants? prepared,
+        bool hideNsfw,
+        CancellationToken cancellationToken,
+        bool requireFreshProviderMetadata) {
         var grandchild = RequestKindRegistry.ChildOf(pickDescriptor);
         if (!pickDescriptor.MaterializeChildPhantoms || grandchild is null) {
-            return;
+            return null;
         }
 
         // The pick's own detail carries its children (a series proposal ships season shells only; the
@@ -1224,11 +1299,11 @@ public sealed partial class RequestCommitService(
                 : ResolveLegacyStructuralChildren(identity.Namespace, proposal);
         }
         if (proposal?.Patch is null) {
-            return;
+            return null;
         }
 
         if (childProposals.Count == 0) {
-            return;
+            return null;
         }
 
         // Discovery honors the blacklist: a phantom the user removed from Wanted never reappears.
@@ -1246,22 +1321,22 @@ public sealed partial class RequestCommitService(
 
         // Enrich the pick and its fresh phantoms through the shared cascade (titles, positions,
         // artwork); owned children are excluded so a request can't overwrite real metadata.
-        if (phantomPicks.Any(phantom => phantom.Outcome == RequestCommitOutcome.Requested)) {
-            var applyChildren = proposal.Children.Where(node => node.TargetKind.IsRelationship())
-                .Concat(phantomPicks
-                    .Where(phantom => !phantom.Entity.HasFile)
-                    .Select(PrepareImmediateChildProposal))
-                .ToArray();
-            var immediateProposal = proposal with { Children = applyChildren };
-            if (deferArtwork) {
-                await wanted.ApplyProposalWithDeferredArtworkAsync(
-                    parentEntityId,
-                    immediateProposal,
-                    cancellationToken);
-            } else {
-                await wanted.ApplyProposalAsync(parentEntityId, immediateProposal, cancellationToken);
-            }
+        var hasApplicablePhantom = prepared is not null
+            ? phantomPicks.Any(phantom => !phantom.Entity.HasFile)
+            : phantomPicks.Any(phantom => phantom.Outcome == RequestCommitOutcome.Requested);
+        if (!hasApplicablePhantom) {
+            return null;
         }
+
+        var applyChildren = proposal.Children.Where(node => node.TargetKind.IsRelationship())
+            .Concat(phantomPicks
+                .Where(phantom => !phantom.Entity.HasFile)
+                .Select(PrepareImmediateChildProposal))
+            .ToArray();
+        return proposal with {
+            TargetEntityId = parentEntityId,
+            Children = applyChildren
+        };
     }
 
     /// <summary>

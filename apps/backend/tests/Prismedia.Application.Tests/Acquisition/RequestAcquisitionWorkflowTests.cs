@@ -4,6 +4,7 @@ using Prismedia.Application.Jobs;
 using Prismedia.Application.Jobs.Handlers;
 using Prismedia.Application.Requests;
 using Prismedia.Contracts.Acquisition;
+using Prismedia.Contracts.Plugins;
 using Prismedia.Contracts.Requests;
 using Prismedia.Domain.Entities;
 
@@ -47,7 +48,7 @@ public sealed class RequestAcquisitionWorkflowTests {
     }
 
     [Fact]
-    public async Task ReviewedSeriesFanoutUsesAlreadyCommittedEpisodesWithoutRefetching() {
+    public async Task ReviewedSeriesFanoutAppliesCachedEpisodesBeforeStartingSearch() {
         var season = Guid.NewGuid();
         var events = new List<string>();
         var hydrator = new RecordingChildHydrator(events);
@@ -61,13 +62,38 @@ public sealed class RequestAcquisitionWorkflowTests {
             TargetLibraryRootId: null,
             ProfileId: null,
             HideNsfw: true,
-            HydrateChildren: false);
+            HydrateChildren: false,
+            ReviewedProposal: Proposal(season));
 
         await handler.HandleAsync(
             new JobContext(Job(payload), new ProgressJobQueue()),
             CancellationToken.None);
 
-        Assert.Equal([$"start:{season}"], events);
+        Assert.Equal([$"metadata:{season}", $"start:{season}"], events);
+    }
+
+    [Fact]
+    public async Task ReviewedMetadataFailureStopsFanoutBeforeAnySearchStarts() {
+        var season = Guid.NewGuid();
+        var events = new List<string>();
+        var requests = new RecordingGraphAcquisitionStarter(events) { FailMetadataApply = true };
+        var handler = new RequestAcquisitionFanoutJobHandler(
+            requests,
+            new RecordingChildHydrator(events),
+            NullLogger<RequestAcquisitionFanoutJobHandler>.Instance);
+        var payload = new RequestAcquisitionFanoutPayload(
+            [season],
+            TargetLibraryRootId: null,
+            ProfileId: null,
+            HideNsfw: true,
+            HydrateChildren: false,
+            ReviewedProposal: Proposal(season));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() => handler.HandleAsync(
+            new JobContext(Job(payload), new ProgressJobQueue()),
+            CancellationToken.None));
+
+        Assert.Equal([$"metadata:{season}"], events);
     }
 
     [Fact]
@@ -78,6 +104,7 @@ public sealed class RequestAcquisitionWorkflowTests {
             $$"""{"childEntityIds":["{{child}}"],"targetLibraryRootId":null,"profileId":null,"hideNsfw":true}""");
 
         Assert.True(payload.HydrateChildren);
+        Assert.Null(payload.ReviewedProposal);
     }
 
     [Fact]
@@ -162,6 +189,29 @@ public sealed class RequestAcquisitionWorkflowTests {
             GraphOrigin: JobGraphOrigin.Interactive);
     }
 
+    private static EntityMetadataProposal Proposal(Guid targetEntityId) => new(
+        "reviewed-series",
+        "tmdb",
+        EntityKind.VideoSeries,
+        1m,
+        "external-id",
+        new EntityMetadataPatch(
+            "Ted Lasso",
+            null,
+            new Dictionary<string, string>(),
+            [],
+            [],
+            null,
+            [],
+            new Dictionary<string, string>(),
+            new Dictionary<string, int>(),
+            new Dictionary<string, int>(),
+            null),
+        [],
+        [],
+        [],
+        targetEntityId);
+
     private sealed class RecordingChildHydrator(List<string> events) : IRequestChildHydrator {
         public Task<RequestChildHydrationResult?> HydrateAsync(
             Guid entityId,
@@ -176,6 +226,18 @@ public sealed class RequestAcquisitionWorkflowTests {
     private sealed class RecordingGraphAcquisitionStarter(List<string> events) : IRequestGraphAcquisitionStarter {
         public List<JobContext?> ParentContexts { get; } = [];
         public List<JobGraphOrigin> Origins { get; } = [];
+        public bool FailMetadataApply { get; init; }
+
+        public Task ApplyReviewedMetadataAsync(
+            Guid entityId,
+            EntityMetadataProposal proposal,
+            CancellationToken cancellationToken) {
+            events.Add($"metadata:{entityId}");
+            if (FailMetadataApply) {
+                throw new InvalidOperationException("Metadata apply failed.");
+            }
+            return Task.CompletedTask;
+        }
 
         public Task<RequestCommitResponse?> RequestEntityFromGraphAsync(
             Guid entityId,

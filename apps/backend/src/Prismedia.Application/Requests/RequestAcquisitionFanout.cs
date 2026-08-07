@@ -2,6 +2,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Prismedia.Application.Acquisition;
 using Prismedia.Application.Jobs;
+using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Requests;
@@ -17,6 +18,7 @@ public interface IRequestAcquisitionFanoutScheduler {
         AcquisitionTargeting targeting,
         bool hideNsfw,
         bool hydrateChildren,
+        EntityMetadataProposal? reviewedProposal,
         CancellationToken cancellationToken);
 }
 
@@ -31,6 +33,7 @@ public sealed class RequestAcquisitionFanoutScheduler(IJobQueueService jobs) : I
         AcquisitionTargeting targeting,
         bool hideNsfw,
         bool hydrateChildren,
+        EntityMetadataProposal? reviewedProposal,
         CancellationToken cancellationToken) {
         var distinctChildIds = childEntityIds.Distinct().ToArray();
         if (distinctChildIds.Length == 0) {
@@ -42,7 +45,8 @@ public sealed class RequestAcquisitionFanoutScheduler(IJobQueueService jobs) : I
             targeting.TargetLibraryRootId,
             targeting.ProfileId,
             hideNsfw,
-            hydrateChildren);
+            hydrateChildren,
+            reviewedProposal);
         var job = await jobs.EnqueueAsync(
             EnqueueJobRequest.ForEntity(
                 JobType.RequestAcquisitionFanout,
@@ -62,7 +66,8 @@ public sealed record RequestAcquisitionFanoutPayload(
     [property: JsonPropertyName("targetLibraryRootId")] Guid? TargetLibraryRootId,
     [property: JsonPropertyName("profileId")] Guid? ProfileId,
     [property: JsonPropertyName("hideNsfw")] bool HideNsfw,
-    [property: JsonPropertyName("hydrateChildren")] bool HydrateChildren = true) {
+    [property: JsonPropertyName("hydrateChildren")] bool HydrateChildren = true,
+    [property: JsonPropertyName("reviewedProposal")] EntityMetadataProposal? ReviewedProposal = null) {
     /// <summary>Serializes the durable queue payload.</summary>
     public string ToJson() => JsonSerializer.Serialize(this);
 
@@ -79,6 +84,11 @@ public sealed record RequestAcquisitionFanoutPayload(
                 || payload.ChildEntityIds.Count == 0
                 || payload.ChildEntityIds.Any(id => id == Guid.Empty)) {
                 throw new InvalidDataException("Request acquisition fan-out payload has no valid child entities.");
+            }
+            if (payload.ReviewedProposal is { } reviewedProposal
+                && (!reviewedProposal.TargetEntityId.HasValue
+                    || reviewedProposal.TargetEntityId.Value == Guid.Empty)) {
+                throw new InvalidDataException("Request acquisition fan-out payload has an invalid reviewed proposal target.");
             }
 
             return payload with { ChildEntityIds = payload.ChildEntityIds.Distinct().ToArray() };

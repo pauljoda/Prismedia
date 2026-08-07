@@ -1,6 +1,7 @@
 using Prismedia.Application.Acquisition;
 using Prismedia.Application.Jobs;
 using Prismedia.Contracts.Acquisition;
+using Prismedia.Contracts.Plugins;
 using Prismedia.Contracts.Requests;
 using Prismedia.Domain.Entities;
 
@@ -11,6 +12,14 @@ namespace Prismedia.Application.Requests;
 /// this narrow seam so structural hydration can be ordered before acquisition/search publication.
 /// </summary>
 public interface IRequestGraphAcquisitionStarter {
+    /// <summary>
+    /// Persists the complete cached review graph before any acquisition derived from it can search.
+    /// </summary>
+    Task ApplyReviewedMetadataAsync(
+        Guid entityId,
+        EntityMetadataProposal proposal,
+        CancellationToken cancellationToken);
+
     /// <summary>Starts or observes one graph-backed acquisition.</summary>
     Task<RequestCommitResponse?> RequestEntityFromGraphAsync(
         Guid entityId,
@@ -40,6 +49,13 @@ public interface IRequestGraphAcquisitionStarter {
 }
 
 public sealed partial class RequestCommitService {
+    /// <inheritdoc />
+    public Task ApplyReviewedMetadataAsync(
+        Guid entityId,
+        EntityMetadataProposal proposal,
+        CancellationToken cancellationToken) =>
+        wanted.ApplyProposalWithDeferredArtworkAsync(entityId, proposal, cancellationToken);
+
     /// <summary>
     /// Requests an entity from its own graph with no provider round-trip. Deferred reviewed-container
     /// fan-out uses the already committed Entity metadata after structural children have been hydrated.
