@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Web API and static text responses now use Brotli or gzip compression when clients support it, substantially reducing list and detail transfer sizes on remote connections.
 - Reviewed series requests now open the new series immediately after saving, persist the selected season and episode metadata before background acquisition begins, and keep known future episodes Waiting until their air date instead of searching indexers early. Partially aired seasons acquire released episodes individually instead of searching for an impossible season pack, and Calendar episode entries include both series and season context.
 - Slow indexer queries no longer trigger backoff when the provider's health check still succeeds, Prowlarr aggregate searches get a five-minute response window, and backed-off indexers offer a manual Retry now override in Acquisition settings.
 - Edited Request reviews now commit the selected metadata instead of falsely reporting proposal drift when browser JSON normalizes provider decimal scores.

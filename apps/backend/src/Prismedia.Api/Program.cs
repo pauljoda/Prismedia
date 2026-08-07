@@ -1,4 +1,6 @@
+using System.IO.Compression;
 using System.Text.Json.Serialization.Metadata;
+using Microsoft.AspNetCore.ResponseCompression;
 using Prismedia.Api;
 using Prismedia.Api.Codegen;
 using Prismedia.Api.Endpoints;
@@ -42,6 +44,15 @@ builder.Services.ConfigureHttpJsonOptions(options => {
     options.SerializerOptions.TypeInfoResolver = (options.SerializerOptions.TypeInfoResolver ?? new DefaultJsonTypeInfoResolver())
         .WithAddedModifier(CapabilityPolymorphism.ConfigureEntityCapabilityPolymorphism);
 });
+builder.Services.AddResponseCompression(options => {
+    options.EnableForHttps = true;
+    options.Providers.Add<BrotliCompressionProvider>();
+    options.Providers.Add<GzipCompressionProvider>();
+});
+builder.Services.Configure<BrotliCompressionProviderOptions>(options =>
+    options.Level = CompressionLevel.Fastest);
+builder.Services.Configure<GzipCompressionProviderOptions>(options =>
+    options.Level = CompressionLevel.Fastest);
 builder.Services.AddOpenApi(options => {
     // Nested types like CapabilitySource.Item share the simple name "Item"
     // with siblings in other capabilities. Use the declaring chain so each
@@ -88,6 +99,8 @@ builder.Services.AddPrismediaInfrastructure(builder.Configuration, builder.Envir
 builder.Services.AddHostedService<TranscodeReaperService>();
 
 var app = builder.Build();
+
+app.UseResponseCompression();
 
 if (app.Environment.IsDevelopment()) {
     app.MapOpenApi();
