@@ -86,6 +86,25 @@ public sealed partial class RequestCommitService {
             targeting = await InheritedTargetingAsync(entity, cancellationToken);
         }
 
+        // A season pack cannot exist while any of its episodes are undated or still in the future.
+        // Use the already-committed episode graph as the acquisition plan instead: aired episodes can
+        // search now and each future episode enters its own release-date wait without touching indexers.
+        if (descriptor.WantedEntityKind == EntityKind.VideoSeason && releaseTiming is not null) {
+            var timing = await releaseTiming.EvaluateAsync(
+                entity.EntityId,
+                targeting.ProfileId,
+                descriptor.AcquisitionKind,
+                cancellationToken);
+            if (timing.PreferChildAcquisitions) {
+                var children = await RequestMissingChildItemsAsync(
+                    entity.EntityId,
+                    parentContext,
+                    origin,
+                    cancellationToken);
+                return new RequestCommitResponse(null, children.Items);
+            }
+        }
+
         return await RequestFromEntityGraphAsync(
             descriptor,
             entity,

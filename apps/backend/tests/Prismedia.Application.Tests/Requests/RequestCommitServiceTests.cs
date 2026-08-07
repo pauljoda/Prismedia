@@ -1971,11 +1971,14 @@ public sealed class RequestCommitServiceTests {
         Assert.Equal("Episode:One", episodeCall.ItemId);
         Assert.Equal(FakeWantedEntityWriter.EntityIdFor("Season:One"), episodeCall.ParentEntityId);
         var appliedSeason = Assert.Single(
-            writer.Applied,
+            writer.DeferredArtworkApplied,
             call => call.EntityId == FakeWantedEntityWriter.EntityIdFor("Season:One"));
         Assert.Equal(
             FakeWantedEntityWriter.EntityIdFor("Episode:One"),
             Assert.Single(appliedSeason.Proposal.Children).TargetEntityId);
+        Assert.DoesNotContain(
+            writer.Applied,
+            call => call.EntityId == FakeWantedEntityWriter.EntityIdFor("Season:One"));
         Assert.Empty(reviews.ReviewCalls);
     }
 
@@ -2246,7 +2249,67 @@ public sealed class RequestCommitServiceTests {
                 Assert.Equal(EntityKind.VideoEpisode, episode.Kind);
                 Assert.Null(episode.Author);
                 Assert.Equal("Series", episode.Series);
-            });
+        });
+    }
+
+    [Fact]
+    public async Task UnreleasedSeasonStartsEpisodeAcquisitionsInsteadOfAnImpossiblePackSearch() {
+        var seasonId = Guid.NewGuid();
+        var airedEpisodeId = Guid.NewGuid();
+        var futureEpisodeId = Guid.NewGuid();
+        var seriesId = Guid.NewGuid();
+        var proposal = Leaf(EntityKind.VideoSeason, "Season 4", "S4");
+        var writer = new FakeWantedEntityWriter();
+        var acquisitions = new FakeAcquisitionRequestService();
+        var monitors = new FakeMonitorStore();
+        var service = new RequestCommitService(
+            new FakeProposalSource(proposal),
+            new NullReviewSource(),
+            writer,
+            acquisitions,
+            monitors,
+            new FakeSuppressionStore(),
+            new FakeEntityGiveUpService(writer),
+            releaseTiming: new FixedReleaseTimingService(new AcquisitionReleaseTimingDecision(
+                false,
+                EntityDateType.Air,
+                SearchNotBefore: new DateOnly(2026, 9, 1),
+                PreferChildAcquisitions: true)));
+        writer.Containers[seasonId] = MonitoredContainer(
+            seasonId,
+            EntityKind.VideoSeason,
+            "Season 4",
+            new ExternalIdentity(Provider, "S4")) with { ParentEntityId = seriesId };
+        writer.Containers[airedEpisodeId] = MonitoredContainer(
+            airedEpisodeId,
+            EntityKind.VideoEpisode,
+            "Episode 1",
+            new ExternalIdentity(Provider, "S4E1")) with { ParentEntityId = seasonId };
+        writer.Containers[futureEpisodeId] = MonitoredContainer(
+            futureEpisodeId,
+            EntityKind.VideoEpisode,
+            "Episode 2",
+            new ExternalIdentity(Provider, "S4E2")) with { ParentEntityId = seasonId };
+        writer.Containers[seriesId] = new MonitorableEntity(
+            seriesId,
+            EntityKind.VideoSeries,
+            "Ted Lasso",
+            []);
+        writer.WantedChildren[seasonId] = [airedEpisodeId, futureEpisodeId];
+
+        var response = await service.RequestEntityFromGraphAsync(
+            seasonId,
+            hideNsfw: false,
+            CancellationToken.None,
+            hydrateChildren: false);
+
+        Assert.NotNull(response);
+        Assert.Equal(2, response.Items.Count);
+        Assert.All(acquisitions.Created, request => Assert.Equal(EntityKind.VideoEpisode, request.Kind));
+        Assert.Equal(
+            ["S4E1", "S4E2"],
+            acquisitions.Created.Select(request => request.IdentityValue!).ToArray());
+        Assert.DoesNotContain(acquisitions.Created, request => request.Kind == EntityKind.VideoSeason);
     }
 
     private static (RequestCommitService Service, FakeWantedEntityWriter Writer, FakeAcquisitionRequestService Acquisitions, FakeMonitorStore Monitors) ServiceWithMonitors(
@@ -2681,6 +2744,16 @@ public sealed class RequestCommitServiceTests {
 
         public Task<IReadOnlyList<Guid>> ListChildIdsAsync(Guid parentEntityId, EntityKind childKind, CancellationToken cancellationToken) =>
             Task.FromResult(WantedChildren.GetValueOrDefault(parentEntityId, []));
+    }
+
+    private sealed class FixedReleaseTimingService(AcquisitionReleaseTimingDecision decision)
+        : IAcquisitionReleaseTimingService {
+        public Task<AcquisitionReleaseTimingDecision> EvaluateAsync(
+            Guid? entityId,
+            Guid? profileId,
+            EntityKind kind,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(decision);
     }
 
     private sealed class FakeMonitorStore : Prismedia.Application.Acquisition.IMonitorStore {

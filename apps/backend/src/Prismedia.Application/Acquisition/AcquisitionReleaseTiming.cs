@@ -17,14 +17,29 @@ public sealed record AcquisitionReleaseTimingDecision(
     DateOnly? SearchNotBefore = null,
     bool WaitingForMetadata = false,
     string? Message = null,
-    EntityDateType? ResolvedDateType = null) {
+    EntityDateType? ResolvedDateType = null,
+    bool PreferChildAcquisitions = false) {
     /// <summary>An acquisition that is not release-gated.</summary>
     public static AcquisitionReleaseTimingDecision Ready { get; } = new(true);
 }
 
+/// <summary>Completeness and latest release milestone for one structural unit's direct children.</summary>
+public sealed record EntityReleaseDateCoverage(
+    int TotalChildren,
+    int DatedChildren,
+    EntityDate? LatestDate);
+
 /// <summary>Reads one canonical release date from an Entity without exposing persistence to the use case.</summary>
 public interface IEntityReleaseDateStore {
     Task<EntityDate?> GetAsync(Guid entityId, EntityDateType type, CancellationToken cancellationToken);
+
+    /// <summary>Reads direct-child date coverage used to decide between whole-unit and per-child acquisition.</summary>
+    Task<EntityReleaseDateCoverage> GetDirectChildCoverageAsync(
+        Guid parentEntityId,
+        EntityKind childKind,
+        EntityDateType type,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(new EntityReleaseDateCoverage(0, 0, LatestDate: null));
 }
 
 /// <summary>Evaluates whether automatic searching may begin for one requested Entity.</summary>
@@ -95,6 +110,13 @@ public sealed class AcquisitionReleaseTimingService(
         EntityKind kind,
         CancellationToken cancellationToken) {
         var policy = await profiles.GetReleaseTimingAsync(profileId, kind, cancellationToken);
+        if (kind == EntityKind.VideoSeason && entityId is { } seasonId) {
+            var structuralDecision = await EvaluateVideoSeasonAsync(seasonId, cancellationToken);
+            if (!structuralDecision.CanSearch) {
+                return structuralDecision;
+            }
+        }
+
         var defaultType = DefaultAutomaticDateType(kind);
         var isImplicitEpisodeGate = policy.SearchAfterDateType is null && defaultType is not null;
         if ((policy.SearchAfterDateType ?? defaultType) is not { } type || entityId is not { } id) {
@@ -115,7 +137,11 @@ public sealed class AcquisitionReleaseTimingService(
         }
         if (date?.SortableValue is not { } sortable) {
             if (isImplicitEpisodeGate) {
-                return AcquisitionReleaseTimingDecision.Ready;
+                return new AcquisitionReleaseTimingDecision(
+                    false,
+                    type,
+                    WaitingForMetadata: true,
+                    Message: $"No {DisplayName(type)} date was included in the request metadata. Checking the configured provider before searching.");
             }
             return new AcquisitionReleaseTimingDecision(
                 false,
@@ -139,6 +165,49 @@ public sealed class AcquisitionReleaseTimingService(
                     ? $"Waiting until {searchNotBefore:yyyy-MM-dd}, after the {DisplayName(type)} date."
                     : $"Waiting until {searchNotBefore:yyyy-MM-dd}, using the {DisplayName(resolvedType!.Value)} date for the {DisplayName(type)} preference.",
             ResolvedDateType: resolvedType);
+    }
+
+    /// <summary>
+    /// A whole-season release cannot exist before its final episode. Incomplete or partially aired
+    /// seasons therefore acquire their episodes independently: aired episodes can search immediately,
+    /// future episodes wait on their own air dates, and the indexers never receive an impossible pack query.
+    /// </summary>
+    private async Task<AcquisitionReleaseTimingDecision> EvaluateVideoSeasonAsync(
+        Guid seasonId,
+        CancellationToken cancellationToken) {
+        var coverage = await dates.GetDirectChildCoverageAsync(
+            seasonId,
+            EntityKind.VideoEpisode,
+            EntityDateType.Air,
+            cancellationToken);
+        if (coverage.TotalChildren == 0
+            || coverage.DatedChildren != coverage.TotalChildren
+            || coverage.LatestDate?.SortableValue is null) {
+            return new AcquisitionReleaseTimingDecision(
+                false,
+                EntityDateType.Air,
+                coverage.LatestDate,
+                WaitingForMetadata: true,
+                Message: "Waiting for air dates for every episode before considering a whole-season search.",
+                PreferChildAcquisitions: true);
+        }
+
+        var searchNotBefore = EndOfPrecision(
+            coverage.LatestDate.SortableValue.Value,
+            coverage.LatestDate.Precision);
+        var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
+        if (today >= searchNotBefore) {
+            return AcquisitionReleaseTimingDecision.Ready;
+        }
+
+        return new AcquisitionReleaseTimingDecision(
+            false,
+            EntityDateType.Air,
+            coverage.LatestDate,
+            searchNotBefore,
+            Message: $"Waiting until {searchNotBefore:yyyy-MM-dd}, when the final episode is scheduled to air.",
+            ResolvedDateType: EntityDateType.Air,
+            PreferChildAcquisitions: true);
     }
 
     /// <summary>

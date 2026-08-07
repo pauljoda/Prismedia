@@ -318,7 +318,8 @@ public sealed partial class RequestCommitService(
     Acquisition.IMonitorStore monitors,
     IWantedSuppressionStore suppressions,
     IEntityGiveUpService entityGiveUp,
-    IRequestAcquisitionFanoutScheduler? fanout = null) :
+    IRequestAcquisitionFanoutScheduler? fanout = null,
+    IAcquisitionReleaseTimingService? releaseTiming = null) :
     IMonitoredEntityRecovery,
     IRequestChildHydrator,
     IRequestGraphAcquisitionStarter,
@@ -1083,7 +1084,8 @@ public sealed partial class RequestCommitService(
                     preparedDescendants?.GetValueOrDefault(pick.Identity),
                     hideNsfw,
                     cancellationToken,
-                    requireFreshProviderMetadata: !explicitRequest);
+                    requireFreshProviderMetadata: !explicitRequest,
+                    deferArtwork: useDeferredAcquisitionFanout);
             }
         }
 
@@ -1127,7 +1129,8 @@ public sealed partial class RequestCommitService(
         PreparedPhantomDescendants? prepared,
         bool hideNsfw,
         CancellationToken cancellationToken,
-        bool requireFreshProviderMetadata = false) =>
+        bool requireFreshProviderMetadata = false,
+        bool deferArtwork = false) =>
         EnsurePhantomDescendantsAsync(
             pickDescriptor,
             pick.Identity,
@@ -1136,7 +1139,8 @@ public sealed partial class RequestCommitService(
             prepared,
             hideNsfw,
             cancellationToken,
-            requireFreshProviderMetadata);
+            requireFreshProviderMetadata,
+            deferArtwork);
 
     private Task EnsurePhantomDescendantsAsync(
         RequestKindDescriptor pickDescriptor,
@@ -1163,7 +1167,8 @@ public sealed partial class RequestCommitService(
         PreparedPhantomDescendants? prepared,
         bool hideNsfw,
         CancellationToken cancellationToken,
-        bool requireFreshProviderMetadata = false) {
+        bool requireFreshProviderMetadata = false,
+        bool deferArtwork = false) {
         var grandchild = RequestKindRegistry.ChildOf(pickDescriptor);
         if (!pickDescriptor.MaterializeChildPhantoms || grandchild is null) {
             return;
@@ -1245,7 +1250,15 @@ public sealed partial class RequestCommitService(
                     .Where(phantom => !phantom.Entity.HasFile)
                     .Select(PrepareImmediateChildProposal))
                 .ToArray();
-            await wanted.ApplyProposalAsync(parentEntityId, proposal with { Children = applyChildren }, cancellationToken);
+            var immediateProposal = proposal with { Children = applyChildren };
+            if (deferArtwork) {
+                await wanted.ApplyProposalWithDeferredArtworkAsync(
+                    parentEntityId,
+                    immediateProposal,
+                    cancellationToken);
+            } else {
+                await wanted.ApplyProposalAsync(parentEntityId, immediateProposal, cancellationToken);
+            }
         }
     }
 

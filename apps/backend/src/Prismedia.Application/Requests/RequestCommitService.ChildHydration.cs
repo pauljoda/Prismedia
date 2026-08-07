@@ -1,4 +1,5 @@
 using Prismedia.Application.Jobs;
+using Prismedia.Contracts.Requests;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Requests;
@@ -48,6 +49,11 @@ public interface IMissingChildAcquisitionRequester {
 }
 
 public sealed partial class RequestCommitService {
+    private sealed record MissingChildRequestResult(
+        int Covered,
+        int Missing,
+        IReadOnlyList<RequestCommitItem> Items);
+
     /// <inheritdoc />
     public async Task<RequestChildHydrationResult?> HydrateAsync(
         Guid entityId,
@@ -117,16 +123,33 @@ public sealed partial class RequestCommitService {
         JobContext? parentContext,
         JobGraphOrigin origin,
         CancellationToken cancellationToken) {
+        var result = await RequestMissingChildItemsAsync(
+            entityId,
+            parentContext,
+            origin,
+            cancellationToken);
+        return (result.Covered, result.Missing);
+    }
+
+    /// <summary>
+    /// Starts direct child requests and preserves their response items for release-aware fan-out that
+    /// deliberately skips an unavailable whole-unit pack.
+    /// </summary>
+    private async Task<MissingChildRequestResult> RequestMissingChildItemsAsync(
+        Guid entityId,
+        JobContext? parentContext,
+        JobGraphOrigin origin,
+        CancellationToken cancellationToken) {
         var entity = await wanted.GetEntityAsync(entityId, cancellationToken);
         if (entity is null) {
-            return (0, 0);
+            return new MissingChildRequestResult(0, 0, []);
         }
 
         var descriptor = RequestKindRegistry.All.FirstOrDefault(candidate =>
             candidate is { Committable: true } && candidate.WantedEntityKind == entity.Kind);
         var child = descriptor is null ? null : RequestKindRegistry.ChildOf(descriptor);
         if (child is not { Committable: true }) {
-            return (0, 0);
+            return new MissingChildRequestResult(0, 0, []);
         }
 
         var missing = await wanted.ListWantedChildIdsAsync(entityId, child.WantedEntityKind, cancellationToken);
@@ -136,6 +159,7 @@ public sealed partial class RequestCommitService {
         }
 
         var covered = 0;
+        var items = new List<RequestCommitItem>();
         foreach (var childId in missing) {
             if (await acquisitions.EnsureOpenEntitySearchAsync(
                     childId,
@@ -158,12 +182,13 @@ public sealed partial class RequestCommitService {
                 origin);
             if (response is { Items.Count: > 0 }) {
                 covered++;
+                items.AddRange(response.Items);
             }
         }
 
         var total = missing.Count;
         if (RequestKindRegistry.ChildOf(child) is not { Committable: true }) {
-            return (covered, total);
+            return new MissingChildRequestResult(covered, total, items);
         }
 
         var wantedSet = missing.ToHashSet();
@@ -175,15 +200,16 @@ public sealed partial class RequestCommitService {
                 continue;
             }
 
-            var (subCovered, subMissing) = await RequestMissingChildrenAsync(
+            var descendants = await RequestMissingChildItemsAsync(
                 ownedChildId,
                 parentContext,
                 origin,
                 cancellationToken);
-            covered += subCovered;
-            total += subMissing;
+            covered += descendants.Covered;
+            total += descendants.Missing;
+            items.AddRange(descendants.Items);
         }
 
-        return (covered, total);
+        return new MissingChildRequestResult(covered, total, items);
     }
 }

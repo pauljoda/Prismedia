@@ -87,7 +87,7 @@ public sealed class AcquisitionReleaseTimingServiceTests {
     }
 
     [Fact]
-    public async Task EpisodeWithoutAirDateAndNoProfileGateSearchesImmediately() {
+    public async Task EpisodeWithoutAirDateWaitsForProviderMetadataBeforeSearching() {
         var service = Create(
             AcquisitionReleaseTimingPolicy.Immediate,
             date: null,
@@ -99,8 +99,75 @@ public sealed class AcquisitionReleaseTimingServiceTests {
             EntityKind.VideoEpisode,
             CancellationToken.None);
 
-        Assert.True(decision.CanSearch);
+        Assert.False(decision.CanSearch);
+        Assert.True(decision.WaitingForMetadata);
+    }
+
+    [Fact]
+    public async Task SeasonWithFutureEpisodesSearchesChildrenInsteadOfAnUnreleasedPack() {
+        var latestAirDate = new EntityDate(
+            EntityDateType.Air.ToCode(),
+            "2026-08-11",
+            new DateOnly(2026, 8, 11),
+            DatePrecision.Day.ToCode());
+        var service = Create(
+            AcquisitionReleaseTimingPolicy.Immediate,
+            date: null,
+            new DateTimeOffset(2026, 8, 7, 12, 0, 0, TimeSpan.Zero),
+            new EntityReleaseDateCoverage(6, 6, latestAirDate));
+
+        var decision = await service.EvaluateAsync(
+            EntityId,
+            profileId: null,
+            EntityKind.VideoSeason,
+            CancellationToken.None);
+
+        Assert.False(decision.CanSearch);
         Assert.False(decision.WaitingForMetadata);
+        Assert.True(decision.PreferChildAcquisitions);
+        Assert.Equal(new DateOnly(2026, 8, 11), decision.SearchNotBefore);
+    }
+
+    [Fact]
+    public async Task SeasonWaitsForCompleteEpisodeDateCoverageBeforeIndexerWork() {
+        var service = Create(
+            AcquisitionReleaseTimingPolicy.Immediate,
+            date: null,
+            new DateTimeOffset(2026, 8, 7, 12, 0, 0, TimeSpan.Zero),
+            new EntityReleaseDateCoverage(6, 5, LatestDate: null));
+
+        var decision = await service.EvaluateAsync(
+            EntityId,
+            profileId: null,
+            EntityKind.VideoSeason,
+            CancellationToken.None);
+
+        Assert.False(decision.CanSearch);
+        Assert.True(decision.WaitingForMetadata);
+        Assert.True(decision.PreferChildAcquisitions);
+    }
+
+    [Fact]
+    public async Task SeasonWithEveryEpisodeAiredCanSearchAsAWholeUnit() {
+        var latestAirDate = new EntityDate(
+            EntityDateType.Air.ToCode(),
+            "2026-08-06",
+            new DateOnly(2026, 8, 6),
+            DatePrecision.Day.ToCode());
+        var service = Create(
+            AcquisitionReleaseTimingPolicy.Immediate,
+            date: null,
+            new DateTimeOffset(2026, 8, 7, 12, 0, 0, TimeSpan.Zero),
+            new EntityReleaseDateCoverage(6, 6, latestAirDate));
+
+        var decision = await service.EvaluateAsync(
+            EntityId,
+            profileId: null,
+            EntityKind.VideoSeason,
+            CancellationToken.None);
+
+        Assert.True(decision.CanSearch);
+        Assert.False(decision.PreferChildAcquisitions);
     }
 
     [Fact]
@@ -138,10 +205,13 @@ public sealed class AcquisitionReleaseTimingServiceTests {
     private static AcquisitionReleaseTimingService Create(
         AcquisitionReleaseTimingPolicy policy,
         EntityDate? date,
-        DateTimeOffset now) =>
-        new(new StubProfiles(policy), new StubDates(date), new FixedTimeProvider(now));
+        DateTimeOffset now,
+        EntityReleaseDateCoverage? childCoverage = null) =>
+        new(new StubProfiles(policy), new StubDates(date, childCoverage), new FixedTimeProvider(now));
 
-    private sealed class StubDates(EntityDate? date) : IEntityReleaseDateStore {
+    private sealed class StubDates(
+        EntityDate? date,
+        EntityReleaseDateCoverage? childCoverage = null) : IEntityReleaseDateStore {
         public StubDates(IReadOnlyDictionary<EntityDateType, EntityDate> dates) : this((EntityDate?)null) {
             Dates = dates;
         }
@@ -150,6 +220,13 @@ public sealed class AcquisitionReleaseTimingServiceTests {
 
         public Task<EntityDate?> GetAsync(Guid entityId, EntityDateType type, CancellationToken cancellationToken) =>
             Task.FromResult(Dates?.GetValueOrDefault(type) ?? date);
+
+        public Task<EntityReleaseDateCoverage> GetDirectChildCoverageAsync(
+            Guid parentEntityId,
+            EntityKind childKind,
+            EntityDateType type,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(childCoverage ?? new EntityReleaseDateCoverage(0, 0, LatestDate: null));
     }
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider {
