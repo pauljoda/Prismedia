@@ -1110,10 +1110,15 @@ public sealed partial class RequestCommitService(
 
     /// <summary>
     /// Binds reviewed metadata, including its remote artwork references, to the child Entity already
-    /// resolved by the request writer. The deferred-artwork apply path decides when bytes are localized.
+    /// resolved by the request writer. Structural grandchildren are applied only after their own wanted
+    /// skeletons receive stable ids; carrying them through the parent cascade would resolve the same
+    /// reviewed identities twice and hold the interactive request open unnecessarily.
     /// </summary>
     private static EntityMetadataProposal PrepareImmediateChildProposal(CommitPick pick) =>
-        pick.Proposal with { TargetEntityId = pick.Entity.EntityId };
+        pick.Proposal with {
+            TargetEntityId = pick.Entity.EntityId,
+            Children = pick.Proposal.Children.Where(child => child.TargetKind.IsRelationship()).ToArray()
+        };
 
     /// <summary>
     /// Materializes a pick's own structural children as wanted phantoms when its kind nests further —

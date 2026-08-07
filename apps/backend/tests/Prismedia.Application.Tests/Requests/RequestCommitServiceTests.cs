@@ -1970,6 +1970,12 @@ public sealed class RequestCommitServiceTests {
         Assert.Equal("episode-db", episodeCall.IdentityNamespace);
         Assert.Equal("Episode:One", episodeCall.ItemId);
         Assert.Equal(FakeWantedEntityWriter.EntityIdFor("Season:One"), episodeCall.ParentEntityId);
+        var appliedRoot = Assert.Single(
+            writer.DeferredArtworkApplied,
+            call => call.EntityId == FakeWantedEntityWriter.EntityIdFor("Series:One"));
+        Assert.DoesNotContain(
+            Assert.Single(appliedRoot.Proposal.Children).Children,
+            child => !child.TargetKind.IsRelationship());
         var appliedSeason = Assert.Single(
             writer.DeferredArtworkApplied,
             call => call.EntityId == FakeWantedEntityWriter.EntityIdFor("Season:One"));
