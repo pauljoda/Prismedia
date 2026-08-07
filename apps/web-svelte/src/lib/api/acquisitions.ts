@@ -31,6 +31,7 @@ import {
   reSearchAcquisition as reSearchAcquisitionRequest,
   searchManualReplacement as searchManualReplacementRequest,
   retryAcquisitionImport as retryAcquisitionImportRequest,
+  retryIndexerNow as retryIndexerNowRequest,
   saveAcquisitionProfile as saveAcquisitionProfileRequest,
   saveDownloadClient,
   saveIndexer,
@@ -87,6 +88,10 @@ export async function deleteIndexerConfig(id: string): Promise<void> {
 
 export async function testIndexerConnection(payload: IndexerTestRequest): Promise<IndexerTestResponse> {
   return unwrapGenerated(await testIndexer(payload), "Failed to test indexer");
+}
+
+export async function retryIndexerNow(id: string): Promise<void> {
+  unwrapGenerated(await retryIndexerNowRequest(id), "Failed to clear indexer backoff", [204]);
 }
 
 // ── Download clients ──────────────────────────────────────────

@@ -9823,6 +9823,49 @@ export const testIndexer = async (indexerTestRequest: IndexerTestRequest, option
 
 
 
+export type retryIndexerNowResponse204 = {
+  data: void
+  status: 204
+}
+
+export type retryIndexerNowResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type retryIndexerNowResponseSuccess = (retryIndexerNowResponse204) & {
+  headers: Headers;
+};
+export type retryIndexerNowResponseError = (retryIndexerNowResponse404) & {
+  headers: Headers;
+};
+
+export type retryIndexerNowResponse = (retryIndexerNowResponseSuccess | retryIndexerNowResponseError)
+
+export const getRetryIndexerNowUrl = (id: string,) => {
+
+
+
+
+  return `/api/acquisitions/indexers/${id}/retry`
+}
+
+/**
+ * @summary Clears an indexer's failure backoff so it can be used immediately.
+ */
+export const retryIndexerNow = async (id: string, options?: RequestInit): Promise<retryIndexerNowResponse> => {
+
+  return orvalFetch<retryIndexerNowResponse>(getRetryIndexerNowUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
 export type createAcquisitionResponse200 = {
   data: AcquisitionSummary
   status: 200

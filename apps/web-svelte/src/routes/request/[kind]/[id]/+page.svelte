@@ -385,11 +385,11 @@
       );
 
       const requested = response.items.filter((item) => item.outcome === REQUEST_COMMIT_OUTCOME.requested);
+      if (response.containerEntityId) {
+        await goto(resolve((resolveEntityHref(review.entityKind, response.containerEntityId) ?? "/request") as "/"));
+        return;
+      }
       if (requested.length === 0) {
-        if (response.containerEntityId) {
-          await goto(resolve((resolveEntityHref(review.entityKind, response.containerEntityId) ?? "/request") as "/"));
-          return;
-        }
         const alreadyOwned = response.items.filter(
           (item) => item.outcome === REQUEST_COMMIT_OUTCOME.alreadyOwned,
         ).length;

@@ -14,6 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Reviewed series requests now open the new series immediately after saving, persist the selected season and episode metadata before background acquisition begins, and keep known future episodes Waiting until their air date instead of searching indexers early. Calendar episode entries now include both series and season context.
+- Slow indexer queries no longer trigger backoff when the provider's health check still succeeds, Prowlarr aggregate searches get a five-minute response window, and backed-off indexers offer a manual Retry now override in Acquisition settings.
 - Edited Request reviews now commit the selected metadata instead of falsely reporting proposal drift when browser JSON normalizes provider decimal scores.
 - Turning on monitoring for a series or other provider-backed container now materializes the provider's missing child works immediately, shows them as independently controllable Wanted activity while deeper metadata enriches in the background, and keeps recurring people or studios from invalidating large episodic catalogs.
 - Collection thumbnails now use a square frame across web and native apps, and household users can add visible items to shared manual or hybrid collections without receiving a false not-found error.

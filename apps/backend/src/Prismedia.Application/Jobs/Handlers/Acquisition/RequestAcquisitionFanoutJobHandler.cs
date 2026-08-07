@@ -26,17 +26,19 @@ public sealed class RequestAcquisitionFanoutJobHandler(
             cancellationToken.ThrowIfCancellationRequested();
             var entityId = payload.ChildEntityIds[index];
 
-            // A structural unit's children are search input, not post-search decoration. Hydrate before
-            // CreateAndSearch publishes the parent acquisition so a barren album/season search can
-            // immediately fall back to its already-materialized tracks/episodes.
-            var hydration = await childHydrator.HydrateAsync(
-                entityId,
-                payload.HideNsfw,
-                cancellationToken);
-            if (hydration is { Hydrated: false }) {
-                logger.LogWarning(
-                    "Request acquisition fan-out could not hydrate structural children for Entity {EntityId}; continuing with the whole-unit search.",
-                    entityId);
+            if (payload.HydrateChildren) {
+                // Artist reviews intentionally commit shallow album shells. Hydrate those children before
+                // CreateAndSearch so a barren album search can immediately fall back to its tracks. Series
+                // reviews already committed their complete episode graph and skip this provider refetch.
+                var hydration = await childHydrator.HydrateAsync(
+                    entityId,
+                    payload.HideNsfw,
+                    cancellationToken);
+                if (hydration is { Hydrated: false }) {
+                    logger.LogWarning(
+                        "Request acquisition fan-out could not hydrate structural children for Entity {EntityId}; continuing with the whole-unit search.",
+                        entityId);
+                }
             }
 
             await requests.RequestEntityFromGraphAsync(

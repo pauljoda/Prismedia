@@ -61,6 +61,49 @@ public sealed class AcquisitionReleaseTimingServiceTests {
     }
 
     [Fact]
+    public async Task FutureEpisodeAirDateWaitsWithoutAProfileGate() {
+        var airDate = new EntityDate(
+            EntityDateType.Air.ToCode(),
+            "2026-08-11",
+            new DateOnly(2026, 8, 11),
+            DatePrecision.Day.ToCode());
+        var service = Create(
+            AcquisitionReleaseTimingPolicy.Immediate,
+            airDate,
+            new DateTimeOffset(2026, 8, 7, 12, 0, 0, TimeSpan.Zero));
+
+        var decision = await service.EvaluateAsync(
+            EntityId,
+            profileId: null,
+            EntityKind.VideoEpisode,
+            CancellationToken.None);
+
+        Assert.False(decision.CanSearch);
+        Assert.False(decision.WaitingForMetadata);
+        Assert.Equal(EntityDateType.Air, decision.DateType);
+        Assert.Equal(EntityDateType.Air, decision.ResolvedDateType);
+        Assert.Equal(airDate, decision.Date);
+        Assert.Equal(new DateOnly(2026, 8, 11), decision.SearchNotBefore);
+    }
+
+    [Fact]
+    public async Task EpisodeWithoutAirDateAndNoProfileGateSearchesImmediately() {
+        var service = Create(
+            AcquisitionReleaseTimingPolicy.Immediate,
+            date: null,
+            new DateTimeOffset(2026, 8, 7, 12, 0, 0, TimeSpan.Zero));
+
+        var decision = await service.EvaluateAsync(
+            EntityId,
+            profileId: null,
+            EntityKind.VideoEpisode,
+            CancellationToken.None);
+
+        Assert.True(decision.CanSearch);
+        Assert.False(decision.WaitingForMetadata);
+    }
+
+    [Fact]
     public async Task StreamingPreferenceFallsBackToDigitalVodDate() {
         var digitalDate = new EntityDate(
             EntityDateType.DigitalRelease.ToCode(),

@@ -45,6 +45,9 @@ public interface IIndexerStatusStore {
 
     /// <summary>Steps the indexer one escalation level back down (clearing the window at level zero).</summary>
     Task RecordSuccessAsync(Guid indexerConfigId, CancellationToken cancellationToken);
+
+    /// <summary>Clears all recorded failure and suppression state after a healthy probe or manual override.</summary>
+    Task ClearAsync(Guid indexerConfigId, CancellationToken cancellationToken);
 }
 
 /// <summary>

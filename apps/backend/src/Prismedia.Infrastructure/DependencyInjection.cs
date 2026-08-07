@@ -440,7 +440,7 @@ public static class DependencyInjection {
         // out across every indexer it aggregates; direct Torznab/Newznab calls hit a single tracker.
         services.AddSingleton<ProwlarrSearchConcurrencyGate>();
         services.AddScoped(provider => new ProwlarrIndexerClient(
-            new HttpClient { Timeout = TimeSpan.FromSeconds(100) },
+            new HttpClient { Timeout = TimeSpan.FromMinutes(5) },
             provider.GetRequiredService<ProwlarrSearchConcurrencyGate>()));
         services.AddScoped<IIndexerSearchClient>(provider => provider.GetRequiredService<ProwlarrIndexerClient>());
         services.AddScoped(_ => new TorznabIndexerClient(new HttpClient { Timeout = TimeSpan.FromSeconds(60) }));

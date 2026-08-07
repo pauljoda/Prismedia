@@ -34,10 +34,27 @@ describe("release calendar", () => {
       parentEntityId: "series-1",
       parentKind: ENTITY_KIND.videoSeries,
       parentTitle: "It's Always Sunny in Philadelphia",
+      grandparentTitle: null,
     };
 
     expect(releaseCalendarEventTitle(season)).toBe("It's Always Sunny in Philadelphia · Season 15");
     expect(releaseCalendarEventHref(season)).toBe("/series/series-1/seasons/season-15");
+  });
+
+  it("includes the series title on episode entries", () => {
+    const episode = {
+      entityId: "episode-2",
+      kind: ENTITY_KIND.videoEpisode,
+      title: "Curiouser and Curiouser",
+      parentEntityId: "season-4",
+      parentKind: ENTITY_KIND.videoSeason,
+      parentTitle: "Season 4",
+      grandparentTitle: "Ted Lasso",
+    };
+
+    expect(releaseCalendarEventTitle(episode)).toBe(
+      "Ted Lasso · Season 4 · Curiouser and Curiouser",
+    );
   });
 
   it("bounds crowded month cells and reports every hidden event", () => {

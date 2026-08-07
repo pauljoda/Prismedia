@@ -233,7 +233,7 @@ public sealed class AcquisitionSearchRunnerTests {
     }
 
     [Fact]
-    public async Task IndexerHttpTimeoutKeepsSoulseekFallbackAndDoesNotCancelTheSearchJob() {
+    public async Task HealthyIndexerTimeoutKeepsFallbackWithoutOpeningBackoff() {
         var prowlarrId = Guid.NewGuid();
         var soulseekId = Guid.NewGuid();
         var soulseek = new FakeIndexerSearchClient([
@@ -250,7 +250,7 @@ public sealed class AcquisitionSearchRunnerTests {
                 null,
                 null)
         ], IndexerKind.Slskd);
-        var timedOut = new TimedOutIndexerSearchClient();
+        var timedOut = new TimedOutIndexerSearchClient(healthy: true);
         var statuses = new FakeIndexerStatusStore();
         var runner = new AcquisitionSearchRunner(
             new FakeIndexerConfigStore(
@@ -274,10 +274,36 @@ public sealed class AcquisitionSearchRunnerTests {
             CancellationToken.None);
 
         Assert.Single(outcome.Errors, error => error.IndexerId == prowlarrId);
-        Assert.Single(statuses.Failures, failure => failure.IndexerConfigId == prowlarrId);
+        Assert.Empty(statuses.Failures);
+        Assert.Equal([prowlarrId], statuses.Cleared);
         Assert.Single(outcome.Candidates, candidate => candidate.Accepted && candidate.Release.Protocol == DownloadProtocol.Soulseek);
         Assert.Equal(1, timedOut.SearchCount);
         Assert.Equal(2, soulseek.SearchCount);
+    }
+
+    [Fact]
+    public async Task UnhealthyIndexerTimeoutStillOpensBackoff() {
+        var prowlarrId = Guid.NewGuid();
+        var timedOut = new TimedOutIndexerSearchClient(healthy: false);
+        var statuses = new FakeIndexerStatusStore();
+        var runner = new AcquisitionSearchRunner(
+            new FakeIndexerConfigStore(Config(prowlarrId, IndexerKind.Prowlarr, "Prowlarr", priority: 10)),
+            new FakeClientFactory(timedOut),
+            new FakeProfileStore(),
+            new FakeBlocklistStore("unrelated"),
+            new FakeDownloadClientConfigStore(DownloadProtocol.Torrent),
+            statuses,
+            new IndexerQueryWindow(),
+            Policies(new BookAcquisitionPolicyModule()),
+            Settings());
+
+        var outcome = await runner.RunAsync(
+            new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author", EntityKind.Book),
+            CancellationToken.None);
+
+        Assert.Single(outcome.Errors, error => error.IndexerId == prowlarrId);
+        Assert.Single(statuses.Failures, failure => failure.IndexerConfigId == prowlarrId);
+        Assert.Empty(statuses.Cleared);
     }
 
     [Fact]
@@ -522,7 +548,7 @@ public sealed class AcquisitionSearchRunnerTests {
         public Task<IndexerConnectionTest> TestAsync(IndexerConnection connection, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
-    private sealed class TimedOutIndexerSearchClient : IIndexerSearchClient {
+    private sealed class TimedOutIndexerSearchClient(bool healthy) : IIndexerSearchClient {
         public int SearchCount { get; private set; }
         public IndexerKind Kind => IndexerKind.Prowlarr;
 
@@ -536,7 +562,7 @@ public sealed class AcquisitionSearchRunnerTests {
         }
 
         public Task<IndexerConnectionTest> TestAsync(IndexerConnection connection, CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+            Task.FromResult(new IndexerConnectionTest(healthy, healthy ? "Healthy" : "Unavailable"));
     }
 
     private sealed class CallerCancelledIndexerSearchClient : IIndexerSearchClient {
@@ -579,6 +605,7 @@ public sealed class AcquisitionSearchRunnerTests {
 
     private sealed class FakeIndexerStatusStore : IIndexerStatusStore {
         public List<(Guid IndexerConfigId, string Message)> Failures { get; } = [];
+        public List<Guid> Cleared { get; } = [];
 
         public Task<IReadOnlyDictionary<Guid, IndexerHealth>> GetAllAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyDictionary<Guid, IndexerHealth>>(new Dictionary<Guid, IndexerHealth>());
@@ -587,6 +614,10 @@ public sealed class AcquisitionSearchRunnerTests {
             return Task.CompletedTask;
         }
         public Task RecordSuccessAsync(Guid indexerConfigId, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task ClearAsync(Guid indexerConfigId, CancellationToken cancellationToken) {
+            Cleared.Add(indexerConfigId);
+            return Task.CompletedTask;
+        }
     }
 
     /// <summary>Supplies only the enabled-protocol set the runner consults; everything else is unused by the search path.</summary>

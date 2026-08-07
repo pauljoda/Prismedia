@@ -25,6 +25,7 @@ function seasonEvent(index: number, date: string): ReleaseCalendarEvent {
     parentEntityId: "series-1",
     parentKind: ENTITY_KIND.videoSeries,
     parentTitle: "It's Always Sunny in Philadelphia",
+    grandparentTitle: null,
     dateType: ENTITY_DATE_TYPE.air,
     value: date,
     date,

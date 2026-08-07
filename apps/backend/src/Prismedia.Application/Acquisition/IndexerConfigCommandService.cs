@@ -6,7 +6,8 @@ namespace Prismedia.Application.Acquisition;
 /// <summary>Application use case for listing, saving, deleting, and testing indexer configurations.</summary>
 public sealed class IndexerConfigCommandService(
     IIndexerConfigStore store,
-    IIndexerSearchClientFactory clients) {
+    IIndexerSearchClientFactory clients,
+    IIndexerStatusStore statuses) {
     public Task<IReadOnlyList<IndexerConfigSummary>> ListAsync(CancellationToken cancellationToken) =>
         store.ListAsync(cancellationToken);
 
@@ -15,6 +16,16 @@ public sealed class IndexerConfigCommandService(
 
     public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) =>
         store.DeleteAsync(id, cancellationToken);
+
+    /// <summary>Clears a configured indexer's failure cooldown so the next search may use it immediately.</summary>
+    public async Task<bool> RetryNowAsync(Guid id, CancellationToken cancellationToken) {
+        if (await store.GetAsync(id, cancellationToken) is null) {
+            return false;
+        }
+
+        await statuses.ClearAsync(id, cancellationToken);
+        return true;
+    }
 
     /// <summary>Resolves the API key (reusing the stored key when none is supplied for an existing config), then probes connectivity.</summary>
     public async Task<IndexerTestResponse> TestAsync(IndexerTestRequest request, CancellationToken cancellationToken) {
@@ -27,6 +38,9 @@ public sealed class IndexerConfigCommandService(
 
         var connection = new IndexerConnection(request.Id ?? Guid.Empty, request.Kind, request.BaseUrl.Trim().TrimEnd('/'), apiKey, []);
         var result = await clients.Get(request.Kind).TestAsync(connection, cancellationToken);
+        if (result.Connected && request.Id is { } existingId) {
+            await statuses.ClearAsync(existingId, cancellationToken);
+        }
         return new IndexerTestResponse(result.Connected, result.Message);
     }
 

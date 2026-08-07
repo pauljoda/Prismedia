@@ -74,6 +74,19 @@ public sealed class EfIndexerStatusStoreTests {
     }
 
     [Fact]
+    public async Task ManualOverrideClearsTheEntireBackoffState() {
+        await using var db = CreateContext();
+        var store = new EfIndexerStatusStore(db);
+        var id = Guid.NewGuid();
+
+        await store.RecordFailureAsync(id, "timeout", CancellationToken.None);
+        await store.RecordFailureAsync(id, "timeout", CancellationToken.None);
+        await store.ClearAsync(id, CancellationToken.None);
+
+        Assert.DoesNotContain(id, await store.GetAllAsync(CancellationToken.None));
+    }
+
+    [Fact]
     public void TheQueryWindowGatesOnlyPastTheConfiguredLimit() {
         var window = new IndexerQueryWindow();
         var id = Guid.NewGuid();

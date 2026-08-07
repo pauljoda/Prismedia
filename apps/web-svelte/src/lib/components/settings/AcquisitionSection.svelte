@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Boxes, CircleAlert, CircleCheck, Loader2, Pencil, PlugZap, Plus, Trash2 } from "@lucide/svelte";
+  import { Boxes, CircleAlert, CircleCheck, Loader2, Pencil, PlugZap, Plus, RotateCcw, Trash2 } from "@lucide/svelte";
   import { Badge, Button, Checkbox, Panel, Select, StatusLed, TextInput } from "@prismedia/ui-svelte";
   import {
     BLOCKLIST_REASON,
@@ -47,6 +47,7 @@
     saveCustomFormat,
     saveDownloadClientConfig,
     saveIndexerConfig,
+    retryIndexerNow,
     testDownloadClientConnection,
     testIndexerConnection,
   } from "$lib/api/acquisitions";
@@ -242,6 +243,18 @@
       await load();
     } catch (err) {
       onError(err instanceof Error ? err.message : "Failed to delete indexer");
+    } finally {
+      busy = false;
+    }
+  }
+  async function retryIndexer(id: string) {
+    busy = true;
+    try {
+      await retryIndexerNow(id);
+      onMessage("Indexer backoff cleared");
+      await load();
+    } catch (err) {
+      onError(err instanceof Error ? err.message : "Failed to clear indexer backoff");
     } finally {
       busy = false;
     }
@@ -634,7 +647,12 @@
                 </div>
                 <span class="min-w-0 truncate text-xs text-text-muted" title={item.baseUrl}>{item.baseUrl}</span>
                 {#if item.disabledUntil}
-                  <div class="min-w-0"><Badge variant="warning" title={item.lastFailureMessage ?? undefined}>backing off until {new Date(item.disabledUntil).toLocaleTimeString()}</Badge></div>
+                  <div class="flex min-w-0 flex-wrap items-center gap-1.5">
+                    <Badge variant="warning" title={item.lastFailureMessage ?? undefined}>backing off until {new Date(item.disabledUntil).toLocaleTimeString()}</Badge>
+                    <Button size="sm" variant="ghost" onclick={() => retryIndexer(item.id)} disabled={busy} class="gap-1.5">
+                      <RotateCcw class="h-3.5 w-3.5" /> Retry now
+                    </Button>
+                  </div>
                 {/if}
               </div>
               <div class="flex shrink-0 items-center gap-1">

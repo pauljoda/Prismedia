@@ -43,4 +43,16 @@ public sealed class EfIndexerStatusStore(PrismediaDbContext db) : IIndexerStatus
         row.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
     }
+
+    public async Task ClearAsync(Guid indexerConfigId, CancellationToken cancellationToken) {
+        var row = await db.IndexerStatuses.FirstOrDefaultAsync(
+            candidate => candidate.IndexerConfigId == indexerConfigId,
+            cancellationToken);
+        if (row is null) {
+            return;
+        }
+
+        db.IndexerStatuses.Remove(row);
+        await db.SaveChangesAsync(cancellationToken);
+    }
 }

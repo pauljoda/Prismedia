@@ -43,9 +43,9 @@ export function calendarDayEventSlice<T>(events: T[]): CalendarDayEventSlice<T> 
 
 /** Adds structural context to generic child titles such as "Season 15". */
 export function releaseCalendarEventTitle(
-  event: Pick<ReleaseCalendarEvent, "title" | "parentTitle">,
+  event: Pick<ReleaseCalendarEvent, "title" | "parentTitle" | "grandparentTitle">,
 ): string {
-  return event.parentTitle ? `${event.parentTitle} · ${event.title}` : event.title;
+  return [event.grandparentTitle, event.parentTitle, event.title].filter(Boolean).join(" · ");
 }
 
 /** Resolves nested calendar entries through their structural parent when their route requires it. */

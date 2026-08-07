@@ -21,6 +21,8 @@ export interface ReleaseCalendarEvent {
   parentKind: null | EntityKind;
   /** @nullable */
   parentTitle: string | null;
+  /** @nullable */
+  grandparentTitle: string | null;
   dateType: EntityDateType;
   value: string;
   date: string;

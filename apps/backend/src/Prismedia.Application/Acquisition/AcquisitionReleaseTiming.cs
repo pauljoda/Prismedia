@@ -95,7 +95,9 @@ public sealed class AcquisitionReleaseTimingService(
         EntityKind kind,
         CancellationToken cancellationToken) {
         var policy = await profiles.GetReleaseTimingAsync(profileId, kind, cancellationToken);
-        if (policy.SearchAfterDateType is not { } type || entityId is not { } id) {
+        var defaultType = DefaultAutomaticDateType(kind);
+        var isImplicitEpisodeGate = policy.SearchAfterDateType is null && defaultType is not null;
+        if ((policy.SearchAfterDateType ?? defaultType) is not { } type || entityId is not { } id) {
             return AcquisitionReleaseTimingDecision.Ready;
         }
 
@@ -112,6 +114,9 @@ public sealed class AcquisitionReleaseTimingService(
             break;
         }
         if (date?.SortableValue is not { } sortable) {
+            if (isImplicitEpisodeGate) {
+                return AcquisitionReleaseTimingDecision.Ready;
+            }
             return new AcquisitionReleaseTimingDecision(
                 false,
                 type,
@@ -121,7 +126,7 @@ public sealed class AcquisitionReleaseTimingService(
         }
 
         var milestone = EndOfPrecision(sortable, date.Precision);
-        var searchNotBefore = milestone.AddDays(policy.SearchDelayDays);
+        var searchNotBefore = milestone.AddDays(isImplicitEpisodeGate ? 0 : policy.SearchDelayDays);
         var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
         return new AcquisitionReleaseTimingDecision(
             today >= searchNotBefore,
@@ -135,6 +140,13 @@ public sealed class AcquisitionReleaseTimingService(
                     : $"Waiting until {searchNotBefore:yyyy-MM-dd}, using the {DisplayName(resolvedType!.Value)} date for the {DisplayName(type)} preference.",
             ResolvedDateType: resolvedType);
     }
+
+    /// <summary>
+    /// Safety milestone applied even when a profile otherwise searches immediately. Episodes with a
+    /// known future air date must not spend indexer or worker resources before they can exist.
+    /// </summary>
+    public static EntityDateType? DefaultAutomaticDateType(EntityKind kind) =>
+        kind == EntityKind.VideoEpisode ? EntityDateType.Air : null;
 
     /// <summary>
     /// Ordered milestones that can satisfy a configured gate. Subscription streaming and digital/VOD

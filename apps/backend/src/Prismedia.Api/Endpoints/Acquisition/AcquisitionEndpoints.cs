@@ -71,6 +71,18 @@ public static class AcquisitionEndpoints {
             .Produces<IndexerTestResponse>()
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
 
+        group.MapPost("/indexers/{id:guid}/retry", async (
+            Guid id,
+            IndexerConfigCommandService indexers,
+            CancellationToken cancellationToken) =>
+            await indexers.RetryNowAsync(id, cancellationToken)
+                ? Results.NoContent()
+                : Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "Indexer was not found.")))
+            .WithName("RetryIndexerNow")
+            .WithSummary("Clears an indexer's failure backoff so it can be used immediately.")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
         group.MapPost("/search", async (
             AcquisitionCreateRequest request,
             AcquisitionService acquisitions,

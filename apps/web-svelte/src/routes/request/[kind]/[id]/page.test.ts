@@ -140,7 +140,7 @@ describe("reviewed request route", () => {
         selectedImages: {},
       }), true);
     });
-    expect(mocks.goto).toHaveBeenCalledWith("/request");
+    expect(mocks.goto).toHaveBeenCalledWith("/series/series-entity");
   });
 
   it("uses the identify metadata controls and sends the cached filtered proposal", async () => {

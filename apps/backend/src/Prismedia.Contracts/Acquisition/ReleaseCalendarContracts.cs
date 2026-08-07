@@ -15,6 +15,7 @@ public sealed record ReleaseCalendarEvent(
     Guid? ParentEntityId,
     EntityKind? ParentKind,
     string? ParentTitle,
+    string? GrandparentTitle,
     EntityDateType DateType,
     string Value,
     DateOnly Date,

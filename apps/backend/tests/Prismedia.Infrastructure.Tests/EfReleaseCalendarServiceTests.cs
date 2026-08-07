@@ -132,6 +132,67 @@ public sealed class EfReleaseCalendarServiceTests {
     }
 
     [Fact]
+    public async Task IncludesSeriesContextForEpisodeCalendarEntries() {
+        await using var db = CreateContext();
+        var now = new DateTimeOffset(2026, 8, 7, 12, 0, 0, TimeSpan.Zero);
+        var seriesId = Guid.NewGuid();
+        var seasonId = Guid.NewGuid();
+        var episodeId = Guid.NewGuid();
+        db.Entities.AddRange(
+            new EntityRow {
+                Id = seriesId,
+                KindCode = EntityKind.VideoSeries.ToCode(),
+                Title = "Ted Lasso",
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = seasonId,
+                KindCode = EntityKind.VideoSeason.ToCode(),
+                Title = "Season 4",
+                ParentEntityId = seriesId,
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = episodeId,
+                KindCode = EntityKind.VideoEpisode.ToCode(),
+                Title = "Curiouser and Curiouser",
+                ParentEntityId = seasonId,
+                IsWanted = true,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        db.Monitors.Add(new MonitorRow {
+            Id = Guid.NewGuid(),
+            EntityId = episodeId,
+            Kind = EntityKind.VideoEpisode,
+            Status = MonitorStatus.Active,
+            Title = "Curiouser and Curiouser",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.EntityDates.Add(Date(
+            episodeId,
+            EntityDateType.Air,
+            "2026-08-11",
+            new DateOnly(2026, 8, 11),
+            now));
+        await db.SaveChangesAsync();
+
+        var service = new EfReleaseCalendarService(db, new FixedTimeProvider(now));
+        var calendarEvent = Assert.Single(await service.ListAsync(
+            new DateOnly(2026, 8, 1),
+            new DateOnly(2026, 8, 31),
+            hideNsfw: false,
+            CancellationToken.None));
+
+        Assert.Equal(seasonId, calendarEvent.ParentEntityId);
+        Assert.Equal("Season 4", calendarEvent.ParentTitle);
+        Assert.Equal("Ted Lasso", calendarEvent.GrandparentTitle);
+    }
+
+    [Fact]
     public async Task MarksDigitalVodAsTheGateForAStreamingPreference() {
         await using var db = CreateContext();
         var now = new DateTimeOffset(2026, 7, 24, 12, 0, 0, TimeSpan.Zero);

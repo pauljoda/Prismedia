@@ -58,8 +58,19 @@ public sealed class EfReleaseCalendarService(PrismediaDbContext db, TimeProvider
             ? new Dictionary<Guid, CalendarParent>()
             : await db.Entities.AsNoTracking()
                 .Where(entity => parentIds.Contains(entity.Id) && (!hideNsfw || !entity.IsNsfw))
-                .Select(entity => new CalendarParent(entity.Id, entity.KindCode, entity.Title))
+                .Select(entity => new CalendarParent(entity.Id, entity.KindCode, entity.Title, entity.ParentEntityId))
                 .ToDictionaryAsync(entity => entity.Id, cancellationToken);
+
+        var grandparentIds = parents.Values
+            .Where(parent => parent.ParentEntityId != null)
+            .Select(parent => parent.ParentEntityId!.Value)
+            .Distinct()
+            .ToArray();
+        var grandparents = grandparentIds.Length == 0
+            ? new Dictionary<Guid, string>()
+            : await db.Entities.AsNoTracking()
+                .Where(entity => grandparentIds.Contains(entity.Id) && (!hideNsfw || !entity.IsNsfw))
+                .ToDictionaryAsync(entity => entity.Id, entity => entity.Title, cancellationToken);
 
         var visibleIds = entities.Keys.ToArray();
         var dateCodes = ReleaseCalendarDateTypes.All.Select(type => type.ToCode()).ToArray();
@@ -101,8 +112,10 @@ public sealed class EfReleaseCalendarService(PrismediaDbContext db, TimeProvider
                 .OrderByDescending(candidate => candidate.IsDefault)
                 .ThenBy(candidate => candidate.CreatedAt)
                 .FirstOrDefault();
-            var resolvedGateType = profile?.SearchAfterDateType is { } configuredGate
-                ? AcquisitionReleaseTimingService.ResolutionOrder(configuredGate)
+            var configuredGate = profile?.SearchAfterDateType
+                ?? AcquisitionReleaseTimingService.DefaultAutomaticDateType(target.Kind);
+            var resolvedGateType = configuredGate is { } gate
+                ? AcquisitionReleaseTimingService.ResolutionOrder(gate)
                     .Where(candidateType => dates.Any(candidate =>
                         candidate.EntityId == date.EntityId
                         && candidate.Code == candidateType.ToCode()
@@ -117,7 +130,7 @@ public sealed class EfReleaseCalendarService(PrismediaDbContext db, TimeProvider
                     : DatePrecision.Day;
             var searchNotBefore = isSearchGate
                 ? AcquisitionReleaseTimingService.EndOfPrecision(date.SortableValue!.Value, date.Precision)
-                    .AddDays(profile!.SearchDelayDays)
+                    .AddDays(profile?.SearchAfterDateType is null ? 0 : profile.SearchDelayDays)
                 : (DateOnly?)null;
             var calendarEntity = entities[target.EntityId];
             var parent = calendarEntity.ParentEntityId is { } parentId
@@ -127,6 +140,9 @@ public sealed class EfReleaseCalendarService(PrismediaDbContext db, TimeProvider
             var parentKind = parent?.KindCode.TryDecodeAs<EntityKind>(out var decodedParentKind) == true
                 ? decodedParentKind
                 : (EntityKind?)null;
+            var grandparentTitle = parent?.ParentEntityId is { } grandparentId
+                ? grandparents.GetValueOrDefault(grandparentId)
+                : null;
             result.Add(new ReleaseCalendarEvent(
                 target.EntityId,
                 target.MonitorId,
@@ -136,6 +152,7 @@ public sealed class EfReleaseCalendarService(PrismediaDbContext db, TimeProvider
                 parent?.Id,
                 parentKind,
                 parent?.Title,
+                grandparentTitle,
                 dateType,
                 date.Value,
                 date.SortableValue!.Value,
@@ -162,5 +179,5 @@ public sealed class EfReleaseCalendarService(PrismediaDbContext db, TimeProvider
 
     private sealed record CalendarEntity(Guid Id, string KindCode, string Title, Guid? ParentEntityId);
 
-    private sealed record CalendarParent(Guid Id, string KindCode, string Title);
+    private sealed record CalendarParent(Guid Id, string KindCode, string Title, Guid? ParentEntityId);
 }

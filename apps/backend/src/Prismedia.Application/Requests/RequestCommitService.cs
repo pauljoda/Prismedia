@@ -959,16 +959,15 @@ public sealed partial class RequestCommitService(
             cancellationToken,
             requestOwnedEntity: explicitRequest && requestOwnedChildren && child.AcquireFromEntity);
 
-        var deferRequestedChildHydration = fanout is not null
+        var useDeferredAcquisitionFanout = fanout is not null
             && startAcquisitions
-            && explicitRequest
-            && descriptor.DeferChildPhantomHydration;
+            && explicitRequest;
 
         // Apply the proposal only to newly materialized, fileless works: already-requested metadata is
         // already durable and must not be rewritten on an idempotent repeat. Bind each reviewed node to
-        // the Entity just created so the cascade does not resolve 100+ identities again. Artist album
-        // artwork stays as the reviewed remote URL during the visible commit; durable hydration later
-        // replaces it with a cached file without downloading every cover on the HTTP boundary.
+        // the Entity just created so the cascade does not resolve 100+ identities again. Reviewed artwork
+        // stays as its already-visible remote URL during the commit; later metadata hydration can replace
+        // it with a cached file without downloading every selected image on the HTTP boundary.
         var anythingNew = picks.Any(pick => pick.Outcome == RequestCommitOutcome.Requested);
         if (container.Created || anythingNew) {
             var applyChildren = proposal.Children.Where(node => node.TargetKind.IsRelationship())
@@ -977,7 +976,7 @@ public sealed partial class RequestCommitService(
                     .Select(PrepareImmediateChildProposal))
                 .ToArray();
             var immediateProposal = proposal with { Children = applyChildren };
-            if (deferRequestedChildHydration) {
+            if (useDeferredAcquisitionFanout) {
                 await wanted.ApplyProposalWithDeferredArtworkAsync(
                     container.EntityId,
                     immediateProposal,
@@ -1017,12 +1016,11 @@ public sealed partial class RequestCommitService(
         var attachOwnedEntityMonitor = requestOwnedChildren
             || preset == MonitorPreset.All
             || !explicitRequest;
-        var useBatchedArtistCommit = deferRequestedChildHydration;
-        var fanoutPicks = useBatchedArtistCommit
+        var fanoutPicks = useDeferredAcquisitionFanout
             ? picks.Where(pick => pick.Outcome is
                 RequestCommitOutcome.Requested or RequestCommitOutcome.AlreadyRequested).ToArray()
             : [];
-        if (useBatchedArtistCommit) {
+        if (useDeferredAcquisitionFanout) {
             // The reviewed graph and its explicit un-suppression are committed before one durable job
             // starts the ordinary per-child acquisition pipeline. This keeps the request response bounded
             // by metadata persistence instead of every search/monitor/job round-trip. The same batch path
@@ -1044,7 +1042,7 @@ public sealed partial class RequestCommitService(
         foreach (var pick in picks) {
             var needsOwnedEntityMonitor = pick.Outcome == RequestCommitOutcome.AlreadyOwned
                 && attachOwnedEntityMonitor;
-            if (useBatchedArtistCommit && !needsOwnedEntityMonitor) {
+            if (useDeferredAcquisitionFanout && !needsOwnedEntityMonitor) {
                 items.Add(new RequestCommitItem(
                     RequestProposalReading.FormatQualifiedIdentity(pick.Identity),
                     pick.Title,
@@ -1098,6 +1096,7 @@ public sealed partial class RequestCommitService(
                 fanoutPicks.Select(pick => pick.Entity.EntityId).ToArray(),
                 targeting,
                 hideNsfw,
+                descriptor.DeferChildPhantomHydration,
                 cancellationToken);
         }
 

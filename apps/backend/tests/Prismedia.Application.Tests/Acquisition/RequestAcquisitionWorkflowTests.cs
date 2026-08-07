@@ -29,7 +29,8 @@ public sealed class RequestAcquisitionWorkflowTests {
             [first, second],
             TargetLibraryRootId: null,
             ProfileId: null,
-            HideNsfw: true);
+            HideNsfw: true,
+            HydrateChildren: true);
 
         await handler.HandleAsync(
             new JobContext(Job(payload), new ProgressJobQueue()),
@@ -43,6 +44,40 @@ public sealed class RequestAcquisitionWorkflowTests {
         ], events);
         Assert.All(requests.ParentContexts, context => Assert.NotNull(context));
         Assert.All(requests.Origins, origin => Assert.Equal(JobGraphOrigin.Interactive, origin));
+    }
+
+    [Fact]
+    public async Task ReviewedSeriesFanoutUsesAlreadyCommittedEpisodesWithoutRefetching() {
+        var season = Guid.NewGuid();
+        var events = new List<string>();
+        var hydrator = new RecordingChildHydrator(events);
+        var requests = new RecordingGraphAcquisitionStarter(events);
+        var handler = new RequestAcquisitionFanoutJobHandler(
+            requests,
+            hydrator,
+            NullLogger<RequestAcquisitionFanoutJobHandler>.Instance);
+        var payload = new RequestAcquisitionFanoutPayload(
+            [season],
+            TargetLibraryRootId: null,
+            ProfileId: null,
+            HideNsfw: true,
+            HydrateChildren: false);
+
+        await handler.HandleAsync(
+            new JobContext(Job(payload), new ProgressJobQueue()),
+            CancellationToken.None);
+
+        Assert.Equal([$"start:{season}"], events);
+    }
+
+    [Fact]
+    public void LegacyFanoutPayloadStillHydratesShallowChildren() {
+        var child = Guid.NewGuid();
+
+        var payload = RequestAcquisitionFanoutPayload.Parse(
+            $$"""{"childEntityIds":["{{child}}"],"targetLibraryRootId":null,"profileId":null,"hideNsfw":true}""");
+
+        Assert.True(payload.HydrateChildren);
     }
 
     [Fact]

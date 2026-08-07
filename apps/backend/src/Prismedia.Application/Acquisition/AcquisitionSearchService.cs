@@ -18,6 +18,7 @@ public sealed class AcquisitionSearchRunner(
     IndexerQueryWindow queryWindow,
     IAcquisitionPolicyRegistry policies,
     SettingsService settings) {
+    private static readonly TimeSpan HealthProbeTimeout = TimeSpan.FromSeconds(15);
     /// <param name="upgradeOwnedQuality">
     /// When set, runs this as an upgrade search: the engine accepts only releases that strictly beat this
     /// owned quality (in the kind's vocabulary — a book rank or a media ladder code) and never downgrade the
@@ -186,7 +187,8 @@ public sealed class AcquisitionSearchRunner(
         Contracts.Acquisition.IndexerConfigDetail Config,
         IReadOnlyList<IndexerRelease> Found,
         string? Error,
-        bool RateLimited = false);
+        bool RateLimited = false,
+        bool ConfirmedHealthy = false);
 
     private async Task<IndexerSearchResult> SearchIndexerAsync(
         Contracts.Acquisition.IndexerConfigDetail config,
@@ -200,19 +202,44 @@ public sealed class AcquisitionSearchRunner(
             return new IndexerSearchResult(config, [], "Hourly query limit reached; this indexer was skipped for this search.", RateLimited: true);
         }
 
+        var client = clients.Get(config.Kind);
+        var connection = new IndexerConnection(config.Id, config.Kind, config.BaseUrl, config.ApiKey, policy.RouteCategories(input, config.Categories));
         try {
             // Narrow the indexer's configured categories to the acquisition kind's Torznab range, so a
             // movie or album search never queries the book categories the indexer was set up with.
-            var categories = policy.RouteCategories(input, config.Categories);
-            var connection = new IndexerConnection(config.Id, config.Kind, config.BaseUrl, config.ApiKey, categories);
-            var found = await clients.Get(config.Kind).SearchAsync(connection, new IndexerQuery(text, categories, input.Kind), cancellationToken);
+            var categories = connection.Categories;
+            var found = await client.SearchAsync(connection, new IndexerQuery(text, categories, input.Kind), cancellationToken);
             return new IndexerSearchResult(config, found, null);
         } catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested) {
             // HttpClient reports its own Timeout as TaskCanceledException. That is one indexer's
-            // failure, not cancellation of the durable acquisition-search job.
-            return new IndexerSearchResult(config, [], ex.Message);
+            // failed query, not cancellation of the durable acquisition-search job. A quick successful
+            // health probe proves the provider is still usable, so this slow query must not quarantine it.
+            return new IndexerSearchResult(
+                config,
+                [],
+                ex.Message,
+                ConfirmedHealthy: await IsHealthyAsync(client, connection, cancellationToken));
         } catch (Exception ex) when (ex is not OperationCanceledException) {
-            return new IndexerSearchResult(config, [], ex.Message);
+            return new IndexerSearchResult(
+                config,
+                [],
+                ex.Message,
+                ConfirmedHealthy: await IsHealthyAsync(client, connection, cancellationToken));
+        }
+    }
+
+    private static async Task<bool> IsHealthyAsync(
+        IIndexerSearchClient client,
+        IndexerConnection connection,
+        CancellationToken cancellationToken) {
+        using var probeCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        probeCancellation.CancelAfter(HealthProbeTimeout);
+        try {
+            return (await client.TestAsync(connection, probeCancellation.Token)).Connected;
+        } catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) {
+            return false;
+        } catch (Exception exception) when (exception is not OperationCanceledException) {
+            return false;
         }
     }
 
@@ -227,7 +254,9 @@ public sealed class AcquisitionSearchRunner(
                 continue;
             }
 
-            if (search.Error is null) {
+            if (search.ConfirmedHealthy) {
+                await indexerStatuses.ClearAsync(search.Config.Id, cancellationToken);
+            } else if (search.Error is null) {
                 await indexerStatuses.RecordSuccessAsync(search.Config.Id, cancellationToken);
             } else {
                 await indexerStatuses.RecordFailureAsync(search.Config.Id, search.Error, cancellationToken);

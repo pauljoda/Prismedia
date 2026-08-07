@@ -1938,9 +1938,10 @@ public sealed class RequestCommitServiceTests {
                 Target(episode, RequestMediaKind.Episode, episodeIdentity, position: 1)
             ]);
         var reviews = new FakeReviewSource(_ => throw new InvalidOperationException("Provider review must not run."));
-        var (service, writer, acquisitions, _, _) = ReviewedService(submittedSeries, reviews);
+        var fanout = new FakeRequestAcquisitionFanoutScheduler();
+        var (service, writer, acquisitions, _, _) = ReviewedService(submittedSeries, reviews, fanout);
 
-        await service.CommitReviewedAsync(
+        var response = await service.CommitReviewedAsync(
             new ReviewedRequestCommitRequest(
                 RequestMediaKind.Series,
                 pluginId,
@@ -1954,9 +1955,13 @@ public sealed class RequestCommitServiceTests {
             hideNsfw: false,
             CancellationToken.None);
 
-        var seasonAcquisition = Assert.Single(acquisitions.Created);
-        Assert.Equal("tvdb", seasonAcquisition.IdentityNamespace);
-        Assert.Equal("Season:One", seasonAcquisition.IdentityValue);
+        Assert.NotNull(response);
+        Assert.Empty(acquisitions.Created);
+        Assert.Null(Assert.Single(response.Items).AcquisitionId);
+        var scheduled = Assert.Single(fanout.Calls);
+        Assert.Equal(response.ContainerEntityId, scheduled.ContainerEntityId);
+        Assert.Equal([Assert.Single(response.Items).EntityId!.Value], scheduled.ChildEntityIds);
+        Assert.False(scheduled.HydrateChildren);
         Assert.Equal(
             matchedLocalSeasonId,
             Assert.Single(writer.EnsuredChildren, request => request.Kind == EntityKind.VideoSeason)
@@ -2860,7 +2865,8 @@ public sealed class RequestCommitServiceTests {
         string ContainerTitle,
         IReadOnlyList<Guid> ChildEntityIds,
         AcquisitionTargeting Targeting,
-        bool HideNsfw);
+        bool HideNsfw,
+        bool HydrateChildren);
 
     private sealed class FakeRequestAcquisitionFanoutScheduler : IRequestAcquisitionFanoutScheduler {
         public List<FanoutCall> Calls { get; } = [];
@@ -2872,6 +2878,7 @@ public sealed class RequestCommitServiceTests {
             IReadOnlyList<Guid> childEntityIds,
             AcquisitionTargeting targeting,
             bool hideNsfw,
+            bool hydrateChildren,
             CancellationToken cancellationToken) {
             Calls.Add(new FanoutCall(
                 containerEntityId,
@@ -2879,7 +2886,8 @@ public sealed class RequestCommitServiceTests {
                 containerTitle,
                 childEntityIds,
                 targeting,
-                hideNsfw));
+                hideNsfw,
+                hydrateChildren));
             return Task.FromResult<Guid?>(null);
         }
     }

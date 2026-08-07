@@ -16,6 +16,7 @@ public interface IRequestAcquisitionFanoutScheduler {
         IReadOnlyList<Guid> childEntityIds,
         AcquisitionTargeting targeting,
         bool hideNsfw,
+        bool hydrateChildren,
         CancellationToken cancellationToken);
 }
 
@@ -29,6 +30,7 @@ public sealed class RequestAcquisitionFanoutScheduler(IJobQueueService jobs) : I
         IReadOnlyList<Guid> childEntityIds,
         AcquisitionTargeting targeting,
         bool hideNsfw,
+        bool hydrateChildren,
         CancellationToken cancellationToken) {
         var distinctChildIds = childEntityIds.Distinct().ToArray();
         if (distinctChildIds.Length == 0) {
@@ -39,7 +41,8 @@ public sealed class RequestAcquisitionFanoutScheduler(IJobQueueService jobs) : I
             distinctChildIds,
             targeting.TargetLibraryRootId,
             targeting.ProfileId,
-            hideNsfw);
+            hideNsfw,
+            hydrateChildren);
         var job = await jobs.EnqueueAsync(
             EnqueueJobRequest.ForEntity(
                 JobType.RequestAcquisitionFanout,
@@ -58,7 +61,8 @@ public sealed record RequestAcquisitionFanoutPayload(
     [property: JsonPropertyName("childEntityIds")] IReadOnlyList<Guid> ChildEntityIds,
     [property: JsonPropertyName("targetLibraryRootId")] Guid? TargetLibraryRootId,
     [property: JsonPropertyName("profileId")] Guid? ProfileId,
-    [property: JsonPropertyName("hideNsfw")] bool HideNsfw) {
+    [property: JsonPropertyName("hideNsfw")] bool HideNsfw,
+    [property: JsonPropertyName("hydrateChildren")] bool HydrateChildren = true) {
     /// <summary>Serializes the durable queue payload.</summary>
     public string ToJson() => JsonSerializer.Serialize(this);
 
