@@ -12,7 +12,7 @@ namespace Prismedia.Application.Jobs.Handlers.Scan;
 /// Discovers image files organized by directory, creates gallery and image entities,
 /// and chains downstream thumbnail/fingerprint jobs.
 /// </summary>
-[JobDefinition(JobType.ScanGallery, SingletonBehavior = JobSingletonBehavior.QueueWide, BlocksAutoIdentify = true)]
+[JobDefinition(JobType.ScanGallery, SingletonBehavior = JobSingletonBehavior.QueueWideWhenUntargeted, BlocksAutoIdentify = true)]
 public sealed class ScanGalleryJobHandler(
     ILogger<ScanGalleryJobHandler> logger,
     IFileDiscovery fileDiscovery,

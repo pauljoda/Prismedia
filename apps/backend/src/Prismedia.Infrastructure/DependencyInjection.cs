@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Prismedia.Application.Collections;
@@ -104,6 +105,14 @@ public static class DependencyInjection {
         MediaToolOptions mediaToolOptions,
         string dataDir,
         string cacheDir) {
+        services.AddSingleton<IHostLoadProbe, HostLoadProbe>();
+        services.AddSingleton<IMediaProcessLeaseStore, PostgresMediaProcessLeaseStore>();
+        services.AddSingleton<IMediaProcessAdmission>(provider =>
+            new MediaProcessAdmission(
+                provider.GetRequiredService<IMediaProcessLeaseStore>(),
+                provider.GetRequiredService<IHostLoadProbe>(),
+                AdaptiveJobCapacity.BackgroundMediaProcessLimit(Environment.ProcessorCount),
+                logger: provider.GetRequiredService<ILogger<MediaProcessAdmission>>()));
         services.AddSingleton<ProcessExecutor>();
         services.AddSingleton(mediaToolOptions);
         services.AddSingleton<MediaToolService>();

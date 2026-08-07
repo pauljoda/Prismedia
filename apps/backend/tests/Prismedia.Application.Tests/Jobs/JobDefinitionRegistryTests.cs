@@ -15,6 +15,7 @@ public sealed class JobDefinitionRegistryTests {
         AssertDefinition(JobType.GeneratePreview, JobResourceClass.HeavyCpu, JobNodeImportance.BestEffort, blocksAutoIdentify: true);
         AssertDefinition(JobType.ExtractSubtitles, JobResourceClass.HeavyCpu, JobNodeImportance.BestEffort, blocksAutoIdentify: true);
         Assert.True(JobDefinitionRegistry.IsQueueWideSingleton(JobType.ScanLibrary, hasTarget: false));
+        Assert.False(JobDefinitionRegistry.IsQueueWideSingleton(JobType.ScanLibrary, hasTarget: true));
         Assert.True(JobDefinitionRegistry.BlocksAutoIdentify(JobType.ScanLibrary));
         Assert.True(JobDefinitionRegistry.IsQueueWideSingleton(JobType.MonitoredSearch, hasTarget: false));
         Assert.False(JobDefinitionRegistry.IsQueueWideSingleton(JobType.MonitoredSearch, hasTarget: true));

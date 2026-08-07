@@ -2842,6 +2842,35 @@ public sealed class ScanJobHandlerTests {
     }
 
     [Fact]
+    public async Task ChangedVideoSignatureInvalidatesEveryByteDerivedAssetBeforeReconcile() {
+        var root = new LibraryRootData(
+            Guid.NewGuid(), "/media/videos", "Videos",
+            Enabled: true, Recursive: true,
+            ScanVideos: true, ScanImages: false, ScanAudio: false, ScanBooks: false, IsNsfw: false);
+        const string videoPath = "/media/videos/movie.mkv";
+        var videoId = Guid.NewGuid();
+        var persistence = new FakeScanPersistence([root]) {
+            UpsertedVideoIds = [videoId]
+        };
+        var snapshots = new FakeScanSnapshotStore();
+        snapshots.Seed(root.Id, JobType.ScanLibrary.ToCode(), [videoPath]);
+        var handler = new ScanLibraryJobHandler(
+            NullLogger<ScanLibraryJobHandler>.Instance,
+            new ChangedSignatureFileDiscovery(videoPath),
+            persistence,
+            persistence,
+            persistence,
+            snapshots);
+
+        await handler.HandleAsync(
+            new JobContext(SingleRootScanJob(root), new RecordingJobQueue()),
+            CancellationToken.None);
+
+        Assert.Equal([(videoPath, videoPath)], persistence.ReboundVideoPaths);
+        Assert.Single(persistence.UpsertedVideoItems);
+    }
+
+    [Fact]
     public async Task IncompleteSidecarDiscoveryDoesNotAdvanceTheVideoSnapshot() {
         var root = new LibraryRootData(
             Guid.NewGuid(), "/media/videos", "Videos",
@@ -3182,6 +3211,7 @@ public sealed class ScanJobHandlerTests {
         public IReadOnlyList<PlayableVideoSourceOwner> PlayableVideoSourceOwners { get; init; } = [];
         public IReadOnlyList<PlayableVideoRefreshSourceTarget> ExistingVideoTargets { get; init; } = [];
         public List<VideoSubtitleSidecarState> InvalidatedSubtitleStates { get; } = [];
+        public List<(string PreviousPath, string ReplacementPath)> ReboundVideoPaths { get; } = [];
         public int PlayableVideoRecoveryTargetCalls { get; private set; }
         public int DownstreamNeedsChecks { get; private set; }
         public bool HasTechnical { get; init; }
@@ -3535,6 +3565,14 @@ public sealed class ScanJobHandlerTests {
                 : Task.FromException<IReadOnlyList<Guid>>(VideoUpsertException);
         }
 
+        public Task<IReadOnlyList<Guid>> RebindPlayableVideoSourceAsync(
+            string previousPath,
+            string replacementPath,
+            CancellationToken cancellationToken) {
+            ReboundVideoPaths.Add((previousPath, replacementPath));
+            return Task.FromResult(UpsertedVideoIds);
+        }
+
         public Task<IReadOnlyList<PlayableVideoSourceOwner>> ListPlayableVideoSourceOwnersAsync(
             IReadOnlyCollection<string> filePaths,
             CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<PlayableVideoSourceOwner>>(
@@ -3865,6 +3903,34 @@ public sealed class ScanJobHandlerTests {
                 .ToArray();
             return Task.FromResult<IReadOnlyList<FileSignature>>(signatures);
         }
+    }
+
+    private sealed class ChangedSignatureFileDiscovery(string path) : IFileDiscovery {
+        public Task<IReadOnlyList<string>> DiscoverFilesAsync(
+            string rootPath,
+            MediaCategory category,
+            bool recursive,
+            IReadOnlySet<string> excludedPaths,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<string>>(category == MediaCategory.Video ? [path] : []);
+
+        public Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> DiscoverFilesByDirectoryAsync(
+            string rootPath,
+            MediaCategory category,
+            bool recursive,
+            IReadOnlySet<string> excludedPaths,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<FileSignature>> DiscoverFileSignaturesAsync(
+            string rootPath,
+            MediaCategory category,
+            bool recursive,
+            IReadOnlySet<string> excludedPaths,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<FileSignature>>(category == MediaCategory.Video
+                ? [new FileSignature(path, path.Length + 1, 1)]
+                : []);
     }
 
     private sealed class NoopJobQueue : IJobQueueService {

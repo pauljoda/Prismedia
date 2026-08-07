@@ -14,7 +14,7 @@ namespace Prismedia.Application.Jobs.Handlers.Scan;
 /// removes stale entries, and chains downstream probe/fingerprint/preview jobs.
 /// Optimized for throughput: batch entity upserts, batch downstream checks, batch job enqueues.
 /// </summary>
-[JobDefinition(JobType.ScanLibrary, SingletonBehavior = JobSingletonBehavior.QueueWide, BlocksAutoIdentify = true)]
+[JobDefinition(JobType.ScanLibrary, SingletonBehavior = JobSingletonBehavior.QueueWideWhenUntargeted, BlocksAutoIdentify = true)]
 public sealed class ScanLibraryJobHandler(
     ILogger<ScanLibraryJobHandler> logger,
     IFileDiscovery fileDiscovery,
@@ -66,6 +66,17 @@ public sealed class ScanLibraryJobHandler(
             "[METRICS] scan-library-unchanged {Label} — {Timing}",
             root.Label,
             timer.Finish().ToLogString());
+    }
+
+    protected override async Task OnChangedFileSignaturesAsync(
+        IReadOnlyCollection<string> changedPaths,
+        CancellationToken cancellationToken) {
+        foreach (var path in changedPaths) {
+            // Rebinding a path to itself is the existing atomic source-generation boundary: it
+            // preserves Entity identity while retiring probe data, hashes, subtitles, previews,
+            // trickplay, generated files, and cached playback packages for every shared owner.
+            await videos.RebindPlayableVideoSourceAsync(path, path, cancellationToken);
+        }
     }
 
     /// <summary>

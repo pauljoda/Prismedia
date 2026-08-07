@@ -232,6 +232,14 @@ public abstract class ScanJobHandler(
                 }
             }
 
+            if (delta.Changed.Count > 0) {
+                using (timer.Phase("invalidate-replaced-sources")) {
+                    await OnChangedFileSignaturesAsync(
+                        delta.Changed.Select(signature => signature.Path).ToArray(),
+                        cancellationToken);
+                }
+            }
+
             ScanRootOutcome detailedOutcome;
             using (timer.Phase("detailed-reconcile")) {
                 detailedOutcome = await ScanRootCoreAsync(context, root, cancellationToken);
@@ -362,6 +370,14 @@ public abstract class ScanJobHandler(
     protected virtual Task OnNoFileChangesAsync(
         JobContext context, LibraryRootData root, CancellationToken cancellationToken) =>
         Task.CompletedTask;
+
+    /// <summary>
+    /// Invalidates byte-derived state before changed source files are reconciled. Media handlers may
+    /// ignore paths they do not own, such as metadata sidecars included only for snapshot detection.
+    /// </summary>
+    protected virtual Task OnChangedFileSignaturesAsync(
+        IReadOnlyCollection<string> changedPaths,
+        CancellationToken cancellationToken) => Task.CompletedTask;
 
     /// <summary>
     /// Removes source-backed media that is no longer covered by any configured library root. This

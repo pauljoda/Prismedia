@@ -14,6 +14,13 @@ public static class AdaptiveJobCapacity {
     public static int CpuPermitBudget(int logicalProcessorCount) =>
         Math.Max(1, Math.Max(1, logicalProcessorCount) - 1);
 
+    /// <summary>
+    /// Returns the small cross-process cap for derived-media ffmpeg work. Playback does not consume
+    /// these slots and is never bounded by this calculation.
+    /// </summary>
+    public static int BackgroundMediaProcessLimit(int logicalProcessorCount) =>
+        Math.Clamp((Math.Max(1, logicalProcessorCount) + 7) / 8, 1, 2);
+
     /// <summary>Returns the permits required by one resource profile for the current server budget.</summary>
     public static int CpuCost(JobResourceClass resourceClass, int totalPermits) =>
         resourceClass switch {

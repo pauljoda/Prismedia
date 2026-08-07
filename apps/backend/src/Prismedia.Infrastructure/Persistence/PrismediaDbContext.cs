@@ -130,6 +130,8 @@ public sealed class PrismediaDbContext : DbContext {
 
     public DbSet<JobResourceLeaseRow> JobResourceLeases => Set<JobResourceLeaseRow>();
 
+    public DbSet<MediaProcessLeaseRow> MediaProcessLeases => Set<MediaProcessLeaseRow>();
+
     public DbSet<IndexerConfigRow> IndexerConfigs => Set<IndexerConfigRow>();
     public DbSet<IndexerStatusRow> IndexerStatuses => Set<IndexerStatusRow>();
 

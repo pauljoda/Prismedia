@@ -27,6 +27,17 @@ public sealed class AdaptiveJobCapacityTests {
     }
 
     [Theory]
+    [InlineData(1, 1)]
+    [InlineData(8, 1)]
+    [InlineData(16, 2)]
+    [InlineData(64, 2)]
+    public void BackgroundMediaProcessLimitStaysSmallAndIndependentOfPlayback(
+        int logicalProcessors,
+        int expected) {
+        Assert.Equal(expected, AdaptiveJobCapacity.BackgroundMediaProcessLimit(logicalProcessors));
+    }
+
+    [Theory]
     [InlineData(JobResourceClass.Light, 1, 0)]
     [InlineData(JobResourceClass.StandardCpu, 1, 1)]
     [InlineData(JobResourceClass.HeavyCpu, 1, 1)]

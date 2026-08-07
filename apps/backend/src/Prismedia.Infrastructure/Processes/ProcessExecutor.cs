@@ -5,7 +5,7 @@ namespace Prismedia.Infrastructure.Processes;
 /// <summary>
 /// Runs external command-line processes and captures their standard output and error streams.
 /// </summary>
-public class ProcessExecutor {
+public class ProcessExecutor(IMediaProcessAdmission? mediaAdmission = null) {
     /// <summary>
     /// Starts a process with explicit arguments and environment overrides.
     /// </summary>
@@ -24,6 +24,7 @@ public class ProcessExecutor {
         IReadOnlyDictionary<string, string>? environment,
         CancellationToken cancellationToken,
         bool lowPriority = false) {
+        await using var mediaLease = await AcquireMediaLeaseAsync(fileName, lowPriority, cancellationToken);
         var startInfo = new ProcessStartInfo(fileName) {
             RedirectStandardError = true,
             RedirectStandardOutput = true,
@@ -137,6 +138,7 @@ public class ProcessExecutor {
         string outputPath,
         CancellationToken cancellationToken,
         bool lowPriority = false) {
+        await using var mediaLease = await AcquireMediaLeaseAsync(fileName, lowPriority, cancellationToken);
         Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
 
         var startInfo = new ProcessStartInfo(fileName) {
@@ -191,6 +193,10 @@ public class ProcessExecutor {
         IReadOnlyDictionary<string, string>? environment,
         Stream output,
         CancellationToken cancellationToken) {
+        await using var mediaLease = await AcquireMediaLeaseAsync(
+            fileName,
+            lowPriority: false,
+            cancellationToken);
         var startInfo = new ProcessStartInfo(fileName) {
             RedirectStandardError = true,
             RedirectStandardOutput = true,
@@ -241,5 +247,27 @@ public class ProcessExecutor {
         } catch {
             // Intentionally ignored — priority is an optimization, not a correctness requirement.
         }
+    }
+
+    private ValueTask<IAsyncDisposable> AcquireMediaLeaseAsync(
+        string fileName,
+        bool lowPriority,
+        CancellationToken cancellationToken) {
+        if (mediaAdmission is null || !IsFfmpegExecutable(fileName)) {
+            return ValueTask.FromResult<IAsyncDisposable>(EmptyAsyncLease.Instance);
+        }
+
+        return lowPriority
+            ? mediaAdmission.AcquireBackgroundAsync(cancellationToken)
+            : mediaAdmission.RegisterPlaybackAsync(cancellationToken);
+    }
+
+    private static bool IsFfmpegExecutable(string fileName) =>
+        Path.GetFileNameWithoutExtension(fileName)
+            .Equals("ffmpeg", StringComparison.OrdinalIgnoreCase);
+
+    private sealed class EmptyAsyncLease : IAsyncDisposable {
+        internal static EmptyAsyncLease Instance { get; } = new();
+        public ValueTask DisposeAsync() => ValueTask.CompletedTask;
     }
 }

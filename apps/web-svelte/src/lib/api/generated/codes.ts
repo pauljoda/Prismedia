@@ -819,6 +819,14 @@ export const MEDIA_IMAGE_KIND = {
 
 export type MediaImageKindCode = (typeof MEDIA_IMAGE_KIND)[keyof typeof MEDIA_IMAGE_KIND];
 
+// source: enum MediaProcessKind
+export const MEDIA_PROCESS_KIND = {
+  playback: "playback",
+  background: "background",
+} as const;
+
+export type MediaProcessKindCode = (typeof MEDIA_PROCESS_KIND)[keyof typeof MEDIA_PROCESS_KIND];
+
 // source: enum MetadataPatchField
 export const METADATA_PATCH_FIELD = {
   title: "title",

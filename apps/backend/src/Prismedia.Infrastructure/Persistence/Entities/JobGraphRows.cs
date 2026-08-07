@@ -55,3 +55,13 @@ public sealed class JobResourceLeaseRow {
     public Guid JobRunId { get; set; }
     public DateTimeOffset ExpiresAt { get; set; }
 }
+
+/// <summary>Short-lived cross-process observation of one active ffmpeg process.</summary>
+public sealed class MediaProcessLeaseRow {
+    public Guid Id { get; set; }
+    public MediaProcessKind Kind { get; set; }
+    public string OwnerId { get; set; } = string.Empty;
+    public DateTimeOffset AcquiredAt { get; set; }
+    public DateTimeOffset HeartbeatAt { get; set; }
+    public DateTimeOffset ExpiresAt { get; set; }
+}

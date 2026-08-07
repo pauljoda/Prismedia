@@ -98,8 +98,10 @@ public sealed partial class SettingsService {
         var created = await _persistence.AddLibraryRootAsync(state, cancellationToken);
 
         if (created.Enabled && _jobs is not null) {
-            var queued = await LibraryScanJobs.QueueScansForKindsAsync(
+            var queued = await LibraryScanJobs.QueueScansForRootAsync(
                 _jobs,
+                created.Id,
+                created.Label,
                 new LibraryScanSelection(
                     Videos: created.ScanVideos,
                     Images: created.ScanImages,

@@ -12,7 +12,7 @@ namespace Prismedia.Application.Jobs.Handlers.Scan;
 /// Discovers comic book archives (CBZ/ZIP), creates book/chapter/page entities,
 /// and chains downstream thumbnail jobs for pages.
 /// </summary>
-[JobDefinition(JobType.ScanBook, SingletonBehavior = JobSingletonBehavior.QueueWide, BlocksAutoIdentify = true)]
+[JobDefinition(JobType.ScanBook, SingletonBehavior = JobSingletonBehavior.QueueWideWhenUntargeted, BlocksAutoIdentify = true)]
 public sealed class ScanBookJobHandler(
     ILogger<ScanBookJobHandler> logger,
     IFileDiscovery fileDiscovery,

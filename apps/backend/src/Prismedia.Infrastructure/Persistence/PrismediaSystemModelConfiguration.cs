@@ -381,6 +381,23 @@ internal static partial class PrismediaModelConfiguration {
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        modelBuilder.Entity<MediaProcessLeaseRow>(entity => {
+            entity.ToTable("media_process_leases");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.Kind)
+                .HasColumnName("kind")
+                .HasMaxLength(32)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<MediaProcessKind>())
+                .IsRequired();
+            entity.Property(row => row.OwnerId).HasColumnName("owner_id").HasMaxLength(160).IsRequired();
+            entity.Property(row => row.AcquiredAt).HasColumnName("acquired_at");
+            entity.Property(row => row.HeartbeatAt).HasColumnName("heartbeat_at");
+            entity.Property(row => row.ExpiresAt).HasColumnName("expires_at");
+            entity.HasIndex(row => new { row.Kind, row.ExpiresAt });
+            entity.HasIndex(row => row.ExpiresAt);
+        });
+
         modelBuilder.Entity<JobRunRow>(entity => {
             entity.ToTable("job_runs");
             entity.HasKey(row => row.Id);

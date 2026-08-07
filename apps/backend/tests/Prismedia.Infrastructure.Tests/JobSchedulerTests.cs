@@ -87,14 +87,15 @@ public sealed class JobSchedulerTests {
 
         var request = Assert.Single(queue.Enqueued);
         Assert.Equal(JobType.ScanLibrary, request.Type);
-        // Scans are aggregate per-kind singletons that cover every enabled root, so there is no
-        // per-root target.
-        Assert.Null(request.TargetEntityId);
+        Assert.Equal(rootId.ToString(), request.TargetEntityId);
+        Assert.Equal(JobResourceKeys.LibraryScan, request.ResourceKey);
+        Assert.True(ScanRootPayload.TryParse(request.PayloadJson, out var payload));
+        Assert.Equal(rootId, payload.RootId);
         Assert.Equal(triggeredAt, settings.Roots.Single().LastScannedAt);
     }
 
     [Fact]
-    public async Task ScheduleRecurringScansEnqueuesOneScanPerEnabledKindAcrossAllDueRoots() {
+    public async Task ScheduleRecurringScansEnqueuesOnlyEnabledKindsForEachDueRoot() {
         var videoRoot = CreateRoot(Guid.NewGuid(), lastScannedAt: null);
         var imageBookRoot = CreateRoot(Guid.NewGuid(), lastScannedAt: null) with {
             ScanVideos = false,
@@ -108,15 +109,16 @@ public sealed class JobSchedulerTests {
 
         await scheduler.ScheduleRecurringScansAsync(CancellationToken.None);
 
-        // One scan per enabled kind across both roots: video from the first, image + book from the
-        // second — and nothing per-root.
+        // One scan per enabled kind and exact root: video from the first, image + book from the second.
         var types = queue.Enqueued.Select(request => request.Type).ToHashSet();
         Assert.Equal(3, queue.Enqueued.Count);
         Assert.Contains(JobType.ScanLibrary, types);
         Assert.Contains(JobType.ScanGallery, types);
         Assert.Contains(JobType.ScanBook, types);
         Assert.DoesNotContain(JobType.ScanAudio, types);
-        Assert.All(queue.Enqueued, request => Assert.Null(request.TargetEntityId));
+        Assert.Single(queue.Enqueued, request => request.TargetEntityId == videoRoot.Id.ToString());
+        Assert.Equal(2, queue.Enqueued.Count(request => request.TargetEntityId == imageBookRoot.Id.ToString()));
+        Assert.All(queue.Enqueued, request => Assert.Equal(JobResourceKeys.LibraryScan, request.ResourceKey));
         Assert.All(settings.Roots, root => Assert.NotNull(root.LastScannedAt));
     }
 

@@ -5,7 +5,7 @@ namespace Prismedia.Application.Jobs;
 /// <summary>
 /// Maps a library root's per-kind scan flags to the scan job types that cover them and
 /// enqueues those scans. This is the single source of truth shared by library creation,
-/// file mutations, and the recurring scheduler so every entry point queues exactly the
+/// file mutations, and the recurring scheduler so every root-scoped entry point queues exactly the
 /// kinds a root has enabled (for example a books-only root yields only
 /// <see cref="JobType.ScanBook"/>).
 /// </summary>
@@ -26,10 +26,45 @@ public static class LibraryScanJobs {
     }
 
     /// <summary>
-    /// Enqueues one scan job per enabled media kind. Each scan job covers every enabled library root
-    /// of that kind (the scan handler iterates them, skipping unchanged roots via the file snapshot),
-    /// so scans are per-kind singletons: a kind that already has a scan queued or running is skipped
-    /// and its duplicate dropped. The next scheduler tick or library change re-triggers it.
+    /// Enqueues the selected scan kinds for one exact root. Root-targeted scans deduplicate per kind
+    /// and share a single durable resource so large roots and media families reconcile one at a time.
+    /// </summary>
+    public static async Task<int> QueueScansForRootAsync(
+        IJobQueueService queue,
+        Guid rootId,
+        string rootLabel,
+        LibraryScanSelection selection,
+        CancellationToken cancellationToken) {
+        await queue.DeclareResourceAsync(
+            JobResourceKeys.LibraryScan,
+            maxConcurrency: 1,
+            minimumStartInterval: TimeSpan.Zero,
+            cancellationToken);
+
+        var targetId = rootId.ToString();
+        var payloadJson = new ScanRootPayload(rootId).ToJson();
+        var queued = 0;
+        foreach (var type in ScanJobTypesFor(selection)) {
+            if (await queue.HasPendingAsync(type, targetId, cancellationToken)) {
+                continue;
+            }
+
+            await queue.EnqueueAsync(new EnqueueJobRequest(
+                type,
+                payloadJson,
+                TargetKind,
+                targetId,
+                rootLabel,
+                ResourceKey: JobResourceKeys.LibraryScan), cancellationToken);
+            queued++;
+        }
+
+        return queued;
+    }
+
+    /// <summary>
+    /// Enqueues legacy aggregate scan jobs, one per enabled media kind. New callers with a known root
+    /// should use <see cref="QueueScansForRootAsync"/> so unrelated roots are never traversed.
     /// </summary>
     /// <param name="queue">Durable job queue.</param>
     /// <param name="selection">The media families whose scans should be enqueued.</param>
