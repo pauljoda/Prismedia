@@ -358,6 +358,44 @@ public sealed class WantedEntityWriterTests {
     }
 
     [Fact]
+    public async Task EnsureChildrenMatchesZeroPaddedLocalSeasonTitleWithoutProviderBinding() {
+        await using var db = CreateContext();
+        var seriesId = AddEntity(
+            db,
+            EntityKind.VideoSeries.ToCode(),
+            "Daniel Tiger's Neighborhood",
+            isWanted: false);
+        var localSeasonId = AddEntity(
+            db,
+            EntityKind.VideoSeason.ToCode(),
+            "Season 06",
+            isWanted: false,
+            parentEntityId: seriesId);
+        await db.SaveChangesAsync();
+
+        var result = Assert.Single(await Writer(db).EnsureChildrenAsync(
+            seriesId,
+            [
+                new WantedEntityEnsureRequest(
+                    EntityKind.VideoSeason,
+                    new ExternalIdentity("tmdb", "40050_s6"),
+                    "Season 6")
+            ],
+            CancellationToken.None));
+
+        Assert.False(result.Created);
+        Assert.Equal(localSeasonId, result.EntityId);
+        Assert.Single(await db.Entities.AsNoTracking()
+            .Where(row =>
+                row.ParentEntityId == seriesId
+                && row.KindCode == EntityKind.VideoSeason.ToCode())
+            .ToArrayAsync());
+        Assert.Contains(await db.EntityExternalIds.AsNoTracking()
+            .Where(row => row.EntityId == localSeasonId)
+            .ToArrayAsync(), row => row.Provider == "tmdb" && row.Value == "40050_s6");
+    }
+
+    [Fact]
     public async Task EnsureChildrenPromotesAFilelessProviderSeasonToVisibleWantedState() {
         await using var db = CreateContext();
         var seriesId = AddEntity(

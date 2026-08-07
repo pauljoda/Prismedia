@@ -65,6 +65,20 @@ public sealed class StructuralChildMatcherTests {
     }
 
     [Fact]
+    public void ZeroPaddedStructuralNumberMatchesByNumericValueWithoutPersistedPosition() {
+        var localSeason = Local(EntityKind.VideoSeason.ToCode(), "Season 06", sortOrder: null);
+        var providerSeason = Proposal(EntityKind.VideoSeason, "Season 6", ("seasonNumber", 6));
+
+        var match = StructuralChildMatcher.FindProviderChild(
+            localSeason,
+            [providerSeason],
+            new HashSet<int>(),
+            cautious: true);
+
+        Assert.Same(providerSeason, match);
+    }
+
+    [Fact]
     public void CountMismatchTreatsAmpersandAndAndAsEquivalentTitleTokens() {
         var localEpisode = Local(EntityKind.VideoEpisode.ToCode(), "Show and Tell", 42);
         var providerEpisode = Proposal(EntityKind.VideoEpisode, "Show & Tell", ("episodeNumber", 42));

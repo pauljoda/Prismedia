@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Provider season matching now treats zero-padded folder numbers such as `Season 06` as the same season as `Season 6`, preventing monitored series from creating duplicate canonical seasons.
 - Web library grids now restore recent Back navigations without refetching, default to 100 cards per page, skip off-screen rendering and per-card artwork analysis, and migrate the previous 250-card default while preserving larger sizes as an explicit choice.
 - Book and series details now use compact contents, child-reference, acquisition-summary, and Identify-status reads. Book chapter lists no longer download the entire EPUB, and active acquisition polling no longer resends release candidates on every tick.
 - Web API and static text responses now use Brotli or gzip compression when clients support it, substantially reducing list and detail transfer sizes on remote connections.

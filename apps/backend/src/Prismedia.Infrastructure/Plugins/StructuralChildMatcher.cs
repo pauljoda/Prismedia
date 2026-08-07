@@ -162,7 +162,7 @@ internal static class StructuralChildMatcher {
         return tokens.Length > 0 && !IsGenericStructuralTitle(tokens);
     }
 
-    private static string[] NormalizeTitleTokens(string? value) {
+    internal static string[] NormalizeTitleTokens(string? value) {
         if (string.IsNullOrWhiteSpace(value)) {
             return [];
         }
@@ -185,7 +185,23 @@ internal static class StructuralChildMatcher {
 
         return normalized
             .ToString()
-            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+            .Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries)
+            .Select(NormalizeNumericToken)
+            .ToArray();
+    }
+
+    /// <summary>
+    /// Compares structural numbers by value rather than folder formatting: <c>Season 06</c> and
+    /// <c>Season 6</c> describe the same season. Trimming instead of parsing avoids overflow for an
+    /// unexpectedly long numeric token while preserving an all-zero token as canonical <c>0</c>.
+    /// </summary>
+    private static string NormalizeNumericToken(string token) {
+        if (!token.All(char.IsDigit)) {
+            return token;
+        }
+
+        var normalized = token.TrimStart('0');
+        return normalized.Length == 0 ? "0" : normalized;
     }
 
     private static bool IsDiacritic(char character) =>

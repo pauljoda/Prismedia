@@ -251,8 +251,25 @@ public sealed class WantedEntityWriter(
                         && requestedTitles.Contains(row.Title.ToLower()))
                     .OrderBy(row => row.Id)
                     .ToArrayAsync(leaseCancellationToken);
+                if (kind == EntityKind.VideoSeason) {
+                    // Structural binding normally supplies PreferredEntityId, but provider responses can
+                    // omit a usable season position or identity. Keep the final materialization fallback
+                    // value-aware too, so a scanned "Season 06" is reused for provider title "Season 6"
+                    // instead of creating a second season merely because the folder uses zero padding.
+                    var seasonTitleKeys = requests
+                        .Select(request => StructuralTitleKey(request.Title))
+                        .ToHashSet(StringComparer.OrdinalIgnoreCase);
+                    titleCandidates = await db.Entities
+                        .Where(row => row.KindCode == kindCode
+                            && row.ParentEntityId == parentEntityId)
+                        .OrderBy(row => row.Id)
+                        .ToArrayAsync(leaseCancellationToken);
+                    titleCandidates = titleCandidates
+                        .Where(row => seasonTitleKeys.Contains(StructuralTitleKey(row.Title)))
+                        .ToArray();
+                }
                 var titleCandidatesByTitle = titleCandidates
-                    .GroupBy(row => row.Title.Trim().ToLower())
+                    .GroupBy(row => TitleMatchKey(kind, row.Title))
                     .ToDictionary(group => group.Key, group => new Queue<EntityRow>(group));
                 var allocatedTitleMatches = new HashSet<Guid>();
                 var now = DateTimeOffset.UtcNow;
@@ -281,7 +298,7 @@ public sealed class WantedEntityWriter(
                     }
 
                     if (entity is null
-                        && titleCandidatesByTitle.TryGetValue(request.Title.Trim().ToLower(), out var candidates)) {
+                        && titleCandidatesByTitle.TryGetValue(TitleMatchKey(kind, request.Title), out var candidates)) {
                         while (candidates.Count > 0 && entity is null) {
                             var candidate = candidates.Dequeue();
                             if (allocatedTitleMatches.Add(candidate.Id)) {
@@ -382,6 +399,14 @@ public sealed class WantedEntityWriter(
             cancellationToken);
         return results ?? throw LifecycleConflict();
     }
+
+    private static string TitleMatchKey(EntityKind kind, string title) =>
+        kind == EntityKind.VideoSeason
+            ? StructuralTitleKey(title)
+            : title.Trim().ToLowerInvariant();
+
+    private static string StructuralTitleKey(string title) =>
+        string.Join(' ', StructuralChildMatcher.NormalizeTitleTokens(title)).ToLowerInvariant();
 
     /// <inheritdoc />
     public async Task<bool> BindProviderIdentityAsync(
