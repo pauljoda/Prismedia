@@ -61,6 +61,19 @@ public interface IPluginRequestProposalSource {
         PluginIdentityRoute route,
         bool hideNsfw,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Resolves only the fresh root and direct provider children needed for container discovery. Unlike
+    /// interactive review, this must not eagerly expand every child subtree before the newly discovered
+    /// works can become visible. Implementations that cannot separate the two paths remain compatible by
+    /// falling back to the full fresh review.
+    /// </summary>
+    Task<RequestReviewResponse?> ResolveFreshDiscoveryAsync(
+        RequestKindDescriptor descriptor,
+        PluginIdentityRoute route,
+        bool hideNsfw,
+        CancellationToken cancellationToken) =>
+        ResolveFreshReviewAsync(descriptor, route, hideNsfw, cancellationToken);
 }
 
 /// <summary>Result of ensuring a wanted entity: the entity, whether this call created it, and whether it already owns a real file.</summary>
@@ -839,76 +852,6 @@ public sealed partial class RequestCommitService(
     }
 
     /// <summary>
-    /// Re-syncs a monitored container entity from its provider: resolves the container's proposal, and
-    /// materializes any works selected by the container's discovery policy and sends them through the same
-    /// generic monitored child-acquisition path as a direct child toggle. Per-child suppression remains
-    /// authoritative, so explicitly unmonitored works do not reappear under an All/Future parent. Returns
-    /// false when the Entity is gone, is not a registered grouping
-    /// kind, or no provider can resolve it — the sweep pauses the monitor in that case.
-    /// </summary>
-    public async Task<bool> SyncContainerAsync(Guid entityId, CancellationToken cancellationToken) {
-        var container = await wanted.GetEntityAsync(entityId, cancellationToken);
-        if (container is null || container.ProviderIdentity is null) {
-            return false;
-        }
-
-        var descriptor = RequestKindRegistry.All.FirstOrDefault(candidate =>
-            candidate is { IsContainer: true, Committable: true } && candidate.WantedEntityKind == container.Kind);
-        if (descriptor is null) {
-            return false;
-        }
-
-        // The container monitor's preset gates auto-discovery: only All and Future keep materializing and
-        // acquiring newly-discovered works. Missing and None keep monitoring the works
-        // committed up front but ignore new arrivals,
-        // so the sync re-resolves nothing new for them. A monitor with no stored preset is treated as All
-        // (the default), preserving the pre-preset "always mirror the container" behavior.
-        var preset = await monitors.GetPresetByEntityAsync(entityId, cancellationToken) ?? MonitorPreset.All;
-        var autoMonitorsNewWorks = preset is MonitorPreset.All or MonitorPreset.Future;
-        var targeting = await monitors.GetTargetingByEntityAsync(entityId, cancellationToken)
-            ?? AcquisitionTargeting.None;
-
-        foreach (var route in new[] { container.ProviderIdentity }) {
-            var identity = route.Identity;
-            // Conservative SFW default: the sweep has no user session (mirrors background enrichment).
-            var review = await proposals.ResolveFreshReviewAsync(
-                descriptor, route, hideNsfw: true, cancellationToken);
-            var proposal = review?.Proposal;
-            if (proposal?.Patch is null) {
-                continue;
-            }
-
-            // Presets that do not auto-monitor new works pass no children, so a discovered work is never
-            // materialized or acquired; the container is still touched (kept alive) but nothing new appears.
-            var selectedChildren = autoMonitorsNewWorks
-                ? ResolveReviewedStructuralChildren(proposal, review!.Targets)
-                : [];
-
-            // Provider resolution can be slow. Materialization runs under the exact direct monitor's
-            // Active lease; recursive unmonitor claims contend on the same database row. If cleanup wins,
-            // no Entity write begins. If sync wins, its whole commit is visible before Claim re-resolves.
-            return await monitors.ExecuteIfActiveEntityMutationAsync(
-                entityId,
-                async leaseCancellationToken => {
-                    await CommitContainerCoreAsync(
-                        descriptor, identity, proposal, selectedChildren,
-                        requestOwnedChildren: false,
-                        startAcquisitions: autoMonitorsNewWorks,
-                        explicitRequest: false,
-                        targeting,
-                        preset: null,
-                        hideNsfw: true,
-                        exactPluginId: route.PluginId,
-                        preparedDescendants: null,
-                        leaseCancellationToken);
-                },
-                cancellationToken);
-        }
-
-        return false;
-    }
-
-    /// <summary>
     /// The shared container materialization: ensure the container and its picked works as wanted
     /// entities, apply the proposal filtered to the fileless picks, and keep the container monitored.
     /// <paramref name="startAcquisitions"/> controls whether selected children enter the ordinary monitored
@@ -1130,9 +1073,11 @@ public sealed partial class RequestCommitService(
                     null));
             }
 
-            // A pick that nests further (a season's episodes) materializes its own children as wanted
-            // phantoms — discovery only, never acquisitions; each phantom is requested from its page.
-            if (!descriptor.DeferChildPhantomHydration) {
+            // An explicit reviewed request already paid for the complete immutable proposal tree, so its
+            // nested phantoms can be committed now. Automatic container discovery deliberately starts from
+            // shallow child shells: each new acquisition's enrich job hydrates that child's descendants
+            // after the season/album itself is already visible and independently controllable.
+            if (explicitRequest && !descriptor.DeferChildPhantomHydration) {
                 await EnsurePhantomDescendantsAsync(
                     child,
                     pick,

@@ -622,16 +622,12 @@ public sealed class RequestCommitServiceTests {
         var synced = await service.SyncContainerAsync(seriesEntityId, CancellationToken.None);
 
         Assert.True(synced);
-        Assert.Equal(
-            [
-                new PluginIdentityRoute("series-metadata", rootIdentity),
-                new PluginIdentityRoute("series-metadata", new ExternalIdentity("tmdbseason", "TV1:1"))
-            ],
-            source.FreshExactRoutes);
+        Assert.Equal([new PluginIdentityRoute("series-metadata", rootIdentity)], source.FreshExactRoutes);
         Assert.Empty(source.ExactRoutes);
         Assert.Empty(source.IdentityOnlyLookups);
+        Assert.DoesNotContain(writer.Ensured, call => call.Kind == EntityKind.VideoEpisode);
         Assert.Contains(writer.Ensured, call =>
-            call.Kind == EntityKind.VideoEpisode && call.ItemId == "TV1:1:1");
+            call.Kind == EntityKind.VideoSeason && call.ItemId == "TV1:1");
         var acquisition = Assert.Single(acquisitions.Created);
         Assert.Equal(EntityKind.VideoSeason, acquisition.Kind);
         Assert.Equal(("tmdbseason", "TV1:1"), (acquisition.IdentityNamespace, acquisition.IdentityValue));

@@ -116,6 +116,7 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
   let syncPollGeneration = 0;
 
   const childCards = $derived(options.childCards?.() ?? []);
+  const childGraphKey = $derived(childCards.map((card) => card.entity.id).join("|"));
   const hasActiveChildAcquisition = $derived(
     childCards.some((card) =>
       acquisitionStatusShouldPoll(card.wantedStatus)
@@ -267,10 +268,21 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
           await refresh();
         }
       } else {
+        const discoveryBaseline = childGraphKey;
         monitor = await startEntityMonitor(id, {
           ...targeting,
           preset: monitor?.preset ?? targeting.preset,
         });
+        if (monitorIsActive(monitor) && eligibility?.discoversChildren === true) {
+          // Starting a container monitor queues provider discovery on the server. Keep refreshing the
+          // owning graph until its shallow child shells arrive, so missing seasons/albums appear without
+          // a page reload while their deeper metadata continues enriching in the background.
+          syncBusy = true;
+          const generation = ++syncPollGeneration;
+          void pollOwnerAfterSync(id, generation, discoveryBaseline).finally(() => {
+            if (generation === syncPollGeneration) syncBusy = false;
+          });
+        }
       }
     } catch (reason) {
       // Preserve the last confirmed state and tell the user why the requested transition did not land.
@@ -330,7 +342,11 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
     }
   }
 
-  async function pollOwnerAfterSync(entityId: string, generation: number): Promise<void> {
+  async function pollOwnerAfterSync(
+    entityId: string,
+    generation: number,
+    stopWhenChildGraphDiffersFrom?: string,
+  ): Promise<void> {
     for (let attempt = 0; attempt < 12; attempt += 1) {
       await new Promise<void>((resolve) => setTimeout(resolve, 5_000));
       if (
@@ -344,6 +360,12 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
         refresh(),
         Promise.resolve().then(() => options.onChanged?.()),
       ]);
+      if (
+        stopWhenChildGraphDiffersFrom !== undefined
+        && childGraphKey !== stopWhenChildGraphDiffersFrom
+      ) {
+        return;
+      }
     }
   }
 

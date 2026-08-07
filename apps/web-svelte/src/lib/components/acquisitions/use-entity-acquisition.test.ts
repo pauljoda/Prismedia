@@ -280,6 +280,27 @@ describe("useEntityAcquisition", () => {
     await waitFor(() => expect(screen.getByTestId("show-sync")).toHaveTextContent("yes"));
   });
 
+  it("refreshes the owning graph while a newly enabled container monitor discovers children", async () => {
+    vi.useFakeTimers();
+    const onChanged = vi.fn(async () => {});
+    mocks.fetchAcquisitionForEntity.mockResolvedValue(null);
+    mocks.fetchMonitorEligibility.mockResolvedValue({
+      canMonitor: true,
+      trackableProviders: ["tmdb"],
+      discoversChildren: true,
+    });
+    mocks.startEntityMonitor.mockResolvedValue(activeMonitor("series-1", null));
+
+    render(Harness, { entityId: "series-1", onChanged });
+    await vi.waitFor(() => expect(screen.getByRole("button", { name: "Monitor" })).toBeInTheDocument());
+    await fireEvent.click(screen.getByRole("button", { name: "Monitor" }));
+    await vi.waitFor(() => expect(onChanged).toHaveBeenCalledOnce());
+
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(onChanged).toHaveBeenCalledTimes(2);
+  });
+
   it("surfaces a failed provider check instead of silently doing nothing", async () => {
     mocks.fetchAcquisitionForEntity.mockResolvedValue(null);
     mocks.fetchEntityMonitor.mockResolvedValue(activeMonitor("series-1", null));

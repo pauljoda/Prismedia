@@ -221,6 +221,7 @@ public sealed class PluginRequestMetadataSource(
             new PluginIdentityRoute(request.PluginId, request.ExternalIdentity),
             hideNsfw,
             forceRefresh: false,
+            expandStructuralChildren: true,
             cancellationToken);
     }
 
@@ -229,6 +230,7 @@ public sealed class PluginRequestMetadataSource(
         PluginIdentityRoute route,
         bool hideNsfw,
         bool forceRefresh,
+        bool expandStructuralChildren,
         CancellationToken cancellationToken) {
         var provider = await ValidateExplicitRouteAsync(descriptor.PluginEntityKind, route, hideNsfw, cancellationToken);
         if (provider is null) {
@@ -246,18 +248,20 @@ public sealed class PluginRequestMetadataSource(
             || !IsCompatibleTarget(descriptor, proposal.TargetKind)
             || !MatchesExplicitRoute(proposal, route)
             || !DeclaresLookupIdentity(provider, proposal.TargetKind.ToCode(), route.Identity.Namespace)
-            || !HasUniqueProposalIds(proposal)) {
+            || !HasUniqueStructuralProposalIds(proposal)) {
             return null;
         }
 
-        proposal = await ExpandReviewChildrenAsync(
-            provider,
-            descriptor,
-            proposal,
-            hideNsfw,
-            forceRefresh,
-            cancellationToken);
-        if (!HasUniqueProposalIds(proposal)) {
+        if (expandStructuralChildren) {
+            proposal = await ExpandReviewChildrenAsync(
+                provider,
+                descriptor,
+                proposal,
+                hideNsfw,
+                forceRefresh,
+                cancellationToken);
+        }
+        if (!HasUniqueStructuralProposalIds(proposal)) {
             return null;
         }
 
@@ -317,7 +321,7 @@ public sealed class PluginRequestMetadataSource(
                         cancellationToken);
                     if (resolved?.Patch is not null
                         && IsCompatibleTarget(childDescriptor, resolved.TargetKind)
-                        && HasUniqueProposalIds(resolved)) {
+                        && HasUniqueStructuralProposalIds(resolved)) {
                         expanded = resolved;
                     }
                 }
@@ -346,7 +350,27 @@ public sealed class PluginRequestMetadataSource(
         PluginIdentityRoute route,
         bool hideNsfw,
         CancellationToken cancellationToken) =>
-        ResolveReviewAsync(descriptor, route, hideNsfw, forceRefresh: true, cancellationToken);
+        ResolveReviewAsync(
+            descriptor,
+            route,
+            hideNsfw,
+            forceRefresh: true,
+            expandStructuralChildren: true,
+            cancellationToken);
+
+    /// <inheritdoc />
+    public Task<RequestReviewResponse?> ResolveFreshDiscoveryAsync(
+        RequestKindDescriptor descriptor,
+        PluginIdentityRoute route,
+        bool hideNsfw,
+        CancellationToken cancellationToken) =>
+        ResolveReviewAsync(
+            descriptor,
+            route,
+            hideNsfw,
+            forceRefresh: true,
+            expandStructuralChildren: false,
+            cancellationToken);
 
     public Task<RoutedRequestProposal?> ResolveProposalAsync(
         RequestKindDescriptor descriptor, ExternalIdentity identity, bool hideNsfw, bool includeChildren, CancellationToken cancellationToken) =>
@@ -580,7 +604,12 @@ public sealed class PluginRequestMetadataSource(
         return targets;
     }
 
-    private static bool HasUniqueProposalIds(EntityMetadataProposal proposal) {
+    /// <summary>
+    /// Request selectors address only the structural tree. Relationship proposal ids may legitimately
+    /// repeat when the same person or studio appears under several episodes, so they are validated by
+    /// their own metadata-apply path instead of invalidating the entire container review.
+    /// </summary>
+    private static bool HasUniqueStructuralProposalIds(EntityMetadataProposal proposal) {
         var ids = new HashSet<string>(StringComparer.Ordinal);
         return Visit(proposal);
 
@@ -590,7 +619,7 @@ public sealed class PluginRequestMetadataSource(
             }
 
             return (node.Children ?? [])
-                .Concat(node.Relationships ?? [])
+                .Where(child => !child.TargetKind.IsRelationship())
                 .All(Visit);
         }
     }

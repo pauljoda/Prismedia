@@ -544,6 +544,60 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
     }
 
     [Fact]
+    public async Task FreshDiscoveryReturnsDirectChildShellsWithoutExpandingTheirSubtrees() {
+        await using var db = await CreateSeriesPluginAsync();
+        var catalog = Catalog(db);
+        var runner = new ShallowSeriesRunner();
+        var source = new PluginRequestMetadataSource(
+            catalog,
+            new PluginIdentityRouter(catalog),
+            new IdentifyRunnerSelector([runner]));
+        var identity = new ExternalIdentity("tmdb", $"Series:{Guid.NewGuid():N}");
+
+        var discovery = await source.ResolveFreshDiscoveryAsync(
+            RequestKindRegistry.Find(RequestMediaKind.Series)!,
+            new PluginIdentityRoute("series-metadata", identity),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.NotNull(discovery);
+        var season = Assert.Single(discovery!.Proposal.Children);
+        Assert.Empty(season.Children);
+        Assert.Equal([EntityKind.VideoSeries], runner.Calls.Select(call => call.Entity.Kind).ToArray());
+        Assert.Equal(2, discovery.Targets.Count);
+        Assert.Contains(discovery.Targets, target =>
+            target.EntityKind == EntityKind.VideoSeason
+            && target.ExternalIdentity == new ExternalIdentity("tvdb", "Season:One"));
+    }
+
+    [Fact]
+    public async Task ReviewAllowsTheSameRelationshipProposalUnderSeveralEpisodes() {
+        await using var db = await CreateSeriesPluginAsync();
+        var catalog = Catalog(db);
+        var runner = new NestedSeriesRunner(repeatRelationshipProposal: true);
+        var source = new PluginRequestMetadataSource(
+            catalog,
+            new PluginIdentityRouter(catalog),
+            new IdentifyRunnerSelector([runner]));
+
+        var review = await source.ReviewAsync(
+            new RequestReviewRequest(
+                RequestMediaKind.Series,
+                "series-metadata",
+                new ExternalIdentity("tmdb", $"relationships:{Guid.NewGuid():N}")),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.NotNull(review);
+        Assert.Equal(4, review!.Targets.Count);
+        Assert.Equal(
+            2,
+            review.Proposal.Children[0].Children
+                .SelectMany(episode => episode.Relationships)
+                .Count(relationship => relationship.ProposalId == "person-recurring"));
+    }
+
+    [Fact]
     public async Task ReviewRejectsSameKindSiblingsWithTheSameExternalIdentity() {
         await using var db = await CreateSeriesPluginAsync();
         var catalog = Catalog(db);
@@ -792,7 +846,9 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
         }
     }
 
-    private sealed class NestedSeriesRunner(bool duplicateSeasonIdentity = false) : IIdentifyRunner {
+    private sealed class NestedSeriesRunner(
+        bool duplicateSeasonIdentity = false,
+        bool repeatRelationshipProposal = false) : IIdentifyRunner {
         public EntityMetadataProposal? Proposal { get; private set; }
 
         public string RuntimeCode => DotnetPluginProcessRunner.Code;
@@ -802,6 +858,21 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
             IdentifyPluginRequest request,
             CancellationToken cancellationToken) {
             var identity = Assert.Single(request.Query.ExternalIds!);
+            var recurringPerson = new EntityMetadataProposal(
+                "person-recurring",
+                descriptor.Manifest.Id,
+                EntityKind.Person,
+                1,
+                "cascade",
+                Patch(
+                    "Recurring Person",
+                    new Dictionary<string, string> { ["tmdb"] = "Person:One" },
+                    new Dictionary<string, int>()),
+                [],
+                [],
+                [],
+                null,
+                []);
             var episode = new EntityMetadataProposal(
                 "episode-one",
                 descriptor.Manifest.Id,
@@ -819,7 +890,15 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
                 [],
                 [],
                 null,
-                []);
+                repeatRelationshipProposal ? [recurringPerson] : []);
+            var episodeTwo = episode with {
+                ProposalId = "episode-two",
+                Patch = episode.Patch with {
+                    Title = "Episode 2",
+                    ExternalIds = new Dictionary<string, string> { ["episode-db"] = "Episode:Two" },
+                    Positions = new Dictionary<string, int> { [EntityPositionCodes.Episode] = 2 }
+                }
+            };
             var season = new EntityMetadataProposal(
                 "season-one",
                 descriptor.Manifest.Id,
@@ -832,7 +911,7 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
                     new Dictionary<string, int> { [EntityPositionCodes.Season] = 1 },
                     new Dictionary<string, string> { ["release"] = "2025-01-01" }),
                 [],
-                [episode],
+                repeatRelationshipProposal ? [episode, episodeTwo] : [episode],
                 [],
                 null,
                 []);
