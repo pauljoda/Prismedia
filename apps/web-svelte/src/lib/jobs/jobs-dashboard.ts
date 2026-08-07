@@ -224,6 +224,12 @@ const _JOB_DEFINITIONS = [
     label: "Database Backup",
     description: "Creates a retained automatic database backup.",
   },
+  {
+    type: JOB_TYPE.updatePlugins,
+    queueName: JOB_TYPE.updatePlugins,
+    label: "Plugin Updates",
+    description: "Checks installed plugins and installs compatible updates.",
+  },
   // Acquisition
   {
     type: JOB_TYPE.acquisitionSearch,

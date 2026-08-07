@@ -29,6 +29,10 @@ public sealed class AppSettingsRegistryTests {
             definition.Type == SettingValueType.Boolean &&
             definition.DefaultValue.GetBoolean());
         Assert.Contains(definitions, definition =>
+            definition.Key == AppSettings.Plugins.AutoUpdateEnabled.Key &&
+            definition.Type == SettingValueType.Boolean &&
+            definition.DefaultValue.GetBoolean());
+        Assert.Contains(definitions, definition =>
             definition.Key == AppSettings.Identify.DefaultProviders.Key &&
             definition.Type == SettingValueType.StringMap &&
             definition.DefaultValue.ValueKind == JsonValueKind.Object &&
@@ -171,6 +175,7 @@ public sealed class AppSettingsRegistryTests {
                 [AppSettings.Scan.AutoScanEnabled.Key] = JsonSerializer.SerializeToElement(true),
                 [AppSettings.Scan.IntervalMinutes.Key] = JsonSerializer.SerializeToElement(15),
                 [AppSettings.Collections.AutoRefreshEnabled.Key] = JsonSerializer.SerializeToElement(false),
+                [AppSettings.Plugins.AutoUpdateEnabled.Key] = JsonSerializer.SerializeToElement(false),
                 [AppSettings.Playback.AudioPreferredLanguages.Key] =
                     JsonSerializer.SerializeToElement(new[] { "ja", "jpn" }),
             },
@@ -178,11 +183,13 @@ public sealed class AppSettingsRegistryTests {
 
         var scan = await service.GetScanSettingsAsync(CancellationToken.None);
         var collections = await service.GetCollectionRefreshSettingsAsync(CancellationToken.None);
+        var pluginUpdates = await service.GetPluginUpdateSettingsAsync(CancellationToken.None);
         var playback = await service.GetPlaybackSettingsAsync(CancellationToken.None);
 
         Assert.True(scan.AutoScanEnabled);
         Assert.Equal(15, scan.IntervalMinutes);
         Assert.False(collections.AutoRefreshEnabled);
+        Assert.False(pluginUpdates.AutoUpdateEnabled);
         Assert.Equal(["ja", "jpn"], playback.AudioPreferredLanguages);
     }
 

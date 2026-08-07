@@ -207,6 +207,13 @@ public static class AppSettings {
             applyHint: "Applies within about 15 seconds after save.");
     }
 
+    public static class Plugins {
+        public static readonly SettingDefinition<bool> AutoUpdateEnabled = Bool(
+            Jobs.Group, "plugins.autoUpdateEnabled", "Automatically update plugins",
+            "Check for compatible plugin updates when the worker starts and every six hours, then install them automatically.",
+            true, 20, applyHint: "Takes effect within about 60 seconds.");
+    }
+
     public static class Playback {
         public static readonly SettingGroupDefinition Group = new(
             "playback", "Playback", "Video player defaults.", 50);

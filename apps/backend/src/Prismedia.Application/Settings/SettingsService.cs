@@ -213,6 +213,12 @@ public sealed partial class SettingsService {
         return new CollectionRefreshSettings(Read(values, AppSettings.Collections.AutoRefreshEnabled));
     }
 
+    /// <summary>Returns whether installed plugins should be updated automatically.</summary>
+    public async Task<PluginUpdateSettings> GetPluginUpdateSettingsAsync(CancellationToken cancellationToken) {
+        var values = await GetValueMapAsync([AppSettings.Plugins.AutoUpdateEnabled], cancellationToken);
+        return new PluginUpdateSettings(Read(values, AppSettings.Plugins.AutoUpdateEnabled));
+    }
+
     /// <summary>
     /// Returns configured metadata-provider defaults keyed by canonical EntityKind code.
     /// Stored provider ids are intentionally not resolved here; provider discovery decides whether

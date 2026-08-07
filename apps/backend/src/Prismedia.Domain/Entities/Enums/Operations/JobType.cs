@@ -110,6 +110,10 @@ public enum JobType {
     [Code("database-backup")]
     DatabaseBackup,
 
+    /// <summary>Checks installed plugins for compatible updates and installs newer artifacts.</summary>
+    [Code("update-plugins")]
+    UpdatePlugins,
+
     // ── Entity refresh ─────────────────────────────────────────
     /// <summary>Re-runs the processing pipeline for a single entity and its children.</summary>
     [Code("refresh-entity")]

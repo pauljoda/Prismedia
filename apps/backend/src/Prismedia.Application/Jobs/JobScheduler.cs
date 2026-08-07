@@ -17,6 +17,8 @@ public sealed class JobScheduler(
     ILogger<JobScheduler> logger,
     TimeProvider? timeProvider = null) : BackgroundService {
     private static readonly TimeSpan CheckInterval = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan PluginUpdateInterval = TimeSpan.FromHours(6);
+    private bool _pluginUpdateCheckQueuedOnStartup;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
         logger.LogInformation("Job scheduler started.");
@@ -26,6 +28,7 @@ public sealed class JobScheduler(
                 await ScheduleRecurringScansAsync(stoppingToken);
                 await ScheduleRecurringCollectionRefreshAsync(stoppingToken);
                 await ScheduleRecurringBackupsAsync(stoppingToken);
+                await SchedulePluginUpdatesAsync(stoppingToken);
                 await ScheduleAcquisitionMonitorAsync(stoppingToken);
                 await RecoverDownloadedCompletionJobsAsync(stoppingToken);
                 await RecoverStuckSearchesAsync(stoppingToken);
@@ -143,6 +146,39 @@ public sealed class JobScheduler(
             cancellationToken);
 
         logger.LogInformation("Scheduled hourly collection refresh job.");
+    }
+
+    /// <summary>
+    /// Enqueues an automatic plugin update check once when enabled for this worker run and then at
+    /// six-hour UTC boundaries. Resetting the startup marker while disabled makes turning the setting
+    /// back on take effect on the next scheduler tick instead of waiting for the next boundary.
+    /// </summary>
+    internal async Task SchedulePluginUpdatesAsync(CancellationToken cancellationToken) {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var settings = scope.ServiceProvider.GetRequiredService<SettingsService>();
+        var pluginUpdates = await settings.GetPluginUpdateSettingsAsync(cancellationToken);
+        if (!pluginUpdates.AutoUpdateEnabled) {
+            _pluginUpdateCheckQueuedOnStartup = false;
+            return;
+        }
+
+        if (_pluginUpdateCheckQueuedOnStartup) {
+            var now = (timeProvider ?? TimeProvider.System).GetUtcNow();
+            var windowStart = GetWindowStart(now, PluginUpdateInterval);
+            if (now - windowStart >= CheckInterval) {
+                return;
+            }
+        }
+
+        var queue = scope.ServiceProvider.GetRequiredService<IJobQueueService>();
+        if (!await queue.HasPendingAsync(JobType.UpdatePlugins, null, cancellationToken)) {
+            await queue.EnqueueAsync(
+                new EnqueueJobRequest(JobType.UpdatePlugins, TargetLabel: "Automatic plugin updates"),
+                cancellationToken);
+            logger.LogInformation("Scheduled automatic plugin update check.");
+        }
+
+        _pluginUpdateCheckQueuedOnStartup = true;
     }
 
     internal async Task ScheduleAcquisitionMonitorAsync(CancellationToken cancellationToken) {

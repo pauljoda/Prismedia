@@ -49,6 +49,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Entity detail pages no longer report missing-resource errors while checking optional Identify, acquisition, and monitoring state.
 
 ### What's New
+- Installed plugins now update automatically when the worker starts and every six hours. The default-on behavior can be disabled under Settings → Generation Pipeline.
 - Consumption tracking is now shared across watching, listening, reading, and viewing. Prismedia records opens, completions, skips, active time, and timestamped history; daily active-time buckets power richer statistics without repeatedly summing an unbounded event log.
 - Jobs now run as durable dependency graphs with one fair interactive lane per user-selected Entity, a separately configured background pool, shared CPU balancing, durable provider rate limits, restart-safe waits, graph-level progress and cancellation, and a dependency view in Jobs.
 - Prismedia now has real multi-user accounts. A first-run setup wizard creates your administrator, every household member gets their own username and password, and the same credentials sign in to the web app, native Apple apps, and OPDS readers — so reverse-proxy auth middleware is no longer needed in front of Prismedia.

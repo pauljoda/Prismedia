@@ -34,6 +34,7 @@ export const JobType = {
   'refresh-collection': 'refresh-collection',
   'library-maintenance': 'library-maintenance',
   'database-backup': 'database-backup',
+  'update-plugins': 'update-plugins',
   'refresh-entity': 'refresh-entity',
   'identify-search': 'identify-search',
   'identify-provider-call': 'identify-provider-call',

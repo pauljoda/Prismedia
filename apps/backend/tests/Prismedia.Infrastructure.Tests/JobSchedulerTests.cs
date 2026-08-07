@@ -189,6 +189,54 @@ public sealed class JobSchedulerTests {
     }
 
     [Fact]
+    public async Task SchedulePluginUpdatesAsyncQueuesOnWorkerStartupByDefault() {
+        var settings = new SchedulerSettingsPersistence([]);
+        var queue = new SchedulerJobQueue();
+        await using var provider = CreateProvider(settings, queue);
+        var scheduler = CreateScheduler(provider, new DateTimeOffset(2026, 5, 30, 10, 37, 0, TimeSpan.Zero));
+
+        await scheduler.SchedulePluginUpdatesAsync(CancellationToken.None);
+
+        var request = Assert.Single(queue.Enqueued);
+        Assert.Equal(JobType.UpdatePlugins, request.Type);
+        Assert.Equal("Automatic plugin updates", request.TargetLabel);
+    }
+
+    [Fact]
+    public async Task SchedulePluginUpdatesAsyncSkipsWhenDisabled() {
+        var settings = new SchedulerSettingsPersistence([], pluginAutoUpdateEnabled: false);
+        var queue = new SchedulerJobQueue();
+        await using var provider = CreateProvider(settings, queue);
+        var scheduler = CreateScheduler(provider, new DateTimeOffset(2026, 5, 30, 10, 37, 0, TimeSpan.Zero));
+
+        await scheduler.SchedulePluginUpdatesAsync(CancellationToken.None);
+
+        Assert.Empty(queue.Enqueued);
+    }
+
+    [Fact]
+    public async Task SchedulePluginUpdatesAsyncQueuesAgainOnSixHourBoundary() {
+        var settings = new SchedulerSettingsPersistence([]);
+        var queue = new SchedulerJobQueue();
+        await using var provider = CreateProvider(settings, queue);
+        var time = new MutableTimeProvider(new DateTimeOffset(2026, 5, 30, 10, 37, 0, TimeSpan.Zero));
+        var scheduler = CreateScheduler(provider, time);
+
+        await scheduler.SchedulePluginUpdatesAsync(CancellationToken.None);
+        queue.ClearPending(JobType.UpdatePlugins);
+
+        time.UtcNow = new DateTimeOffset(2026, 5, 30, 11, 12, 0, TimeSpan.Zero);
+        await scheduler.SchedulePluginUpdatesAsync(CancellationToken.None);
+        Assert.Single(queue.Enqueued);
+
+        time.UtcNow = new DateTimeOffset(2026, 5, 30, 12, 0, 15, TimeSpan.Zero);
+        await scheduler.SchedulePluginUpdatesAsync(CancellationToken.None);
+
+        Assert.Equal(2, queue.Enqueued.Count);
+        Assert.All(queue.Enqueued, request => Assert.Equal(JobType.UpdatePlugins, request.Type));
+    }
+
+    [Fact]
     public async Task RecoverDownloadedCompletionJobsRoutesOrdinaryAndUpgradeWorkIdempotently() {
         var ordinaryId = Guid.NewGuid();
         var upgradeId = Guid.NewGuid();
@@ -294,6 +342,12 @@ public sealed class JobSchedulerTests {
             NullLogger<JobScheduler>.Instance,
             new FixedTimeProvider(now));
 
+    private static JobScheduler CreateScheduler(ServiceProvider provider, TimeProvider timeProvider) =>
+        new(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            NullLogger<JobScheduler>.Instance,
+            timeProvider);
+
     private static LibraryRoot CreateRoot(Guid id, DateTimeOffset? lastScannedAt) {
         var now = DateTimeOffset.UtcNow;
         return new LibraryRoot(
@@ -314,7 +368,8 @@ public sealed class JobSchedulerTests {
 
     private sealed class SchedulerSettingsPersistence(
         IEnumerable<LibraryRoot> roots,
-        bool collectionAutoRefreshEnabled = true) : ISettingsPersistence {
+        bool collectionAutoRefreshEnabled = true,
+        bool pluginAutoUpdateEnabled = true) : ISettingsPersistence {
         private readonly List<LibraryRoot> _roots = roots.ToList();
 
         public IReadOnlyList<LibraryRoot> Roots => _roots;
@@ -324,6 +379,7 @@ public sealed class JobSchedulerTests {
                 [AppSettings.Scan.AutoScanEnabled.Key] = JsonSerializer.Serialize(true),
                 [AppSettings.Scan.IntervalMinutes.Key] = JsonSerializer.Serialize(60),
                 [AppSettings.Collections.AutoRefreshEnabled.Key] = JsonSerializer.Serialize(collectionAutoRefreshEnabled),
+                [AppSettings.Plugins.AutoUpdateEnabled.Key] = JsonSerializer.Serialize(pluginAutoUpdateEnabled),
             });
 
         public Task SaveSettingOverrideAsync(string key, string valueJson, CancellationToken cancellationToken) =>
@@ -368,6 +424,8 @@ public sealed class JobSchedulerTests {
 
         public List<EnqueueJobRequest> Enqueued { get; } = [];
         public int EnqueueFailuresRemaining { get; set; }
+
+        public void ClearPending(JobType type) => _pending.Remove((type, null));
 
         public Task<bool> HasPendingAsync(JobType type, string? targetEntityId, CancellationToken cancellationToken) =>
             Task.FromResult((type == JobType.RefreshCollection && hasPendingRefresh)
@@ -489,5 +547,11 @@ public sealed class JobSchedulerTests {
 
     private sealed class FixedTimeProvider(DateTimeOffset now) : TimeProvider {
         public override DateTimeOffset GetUtcNow() => now;
+    }
+
+    private sealed class MutableTimeProvider(DateTimeOffset utcNow) : TimeProvider {
+        public DateTimeOffset UtcNow { get; set; } = utcNow;
+
+        public override DateTimeOffset GetUtcNow() => UtcNow;
     }
 }

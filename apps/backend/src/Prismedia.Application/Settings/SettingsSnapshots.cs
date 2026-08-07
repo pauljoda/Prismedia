@@ -76,6 +76,9 @@ public sealed record GenerationSettings(
 /// </summary>
 public sealed record WorkerSettings(int BackgroundConcurrency);
 
+/// <summary>Automatic plugin update scheduling settings.</summary>
+public sealed record PluginUpdateSettings(bool AutoUpdateEnabled);
+
 /// <summary>
 /// Video playback defaults.
 /// </summary>
