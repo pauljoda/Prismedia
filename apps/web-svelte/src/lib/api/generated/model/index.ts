@@ -427,6 +427,7 @@ export * from './rescanFileRootParams';
 export * from './resolveIdentifyQueueCandidateParams';
 export * from './reviewedRequestCommitRequest';
 export * from './reviewedRequestCommitRequestPreset';
+export * from './reviewedRequestCommitRequestSelectedImages';
 export * from './reviewEntityRequestParams';
 export * from './reviewRequestParams';
 export * from './saveIdentifyQueueProposalRequest';

@@ -4,7 +4,7 @@
   import { page } from "$app/state";
   import { ChevronLeft, Loader2, RefreshCw, Send } from "@lucide/svelte";
   import { Button, Select } from "@prismedia/ui-svelte";
-  import { PROBLEM_CODE, REQUEST_COMMIT_OUTCOME, REQUEST_REVIEW_SELECTION } from "$lib/api/generated/codes";
+  import { ENTITY_KIND, PROBLEM_CODE, REQUEST_COMMIT_OUTCOME, REQUEST_REVIEW_SELECTION } from "$lib/api/generated/codes";
   import type {
     MonitorPresetCode,
     RequestMediaKindCode,
@@ -13,8 +13,19 @@
   import { ApiError } from "$lib/api/orval-fetch";
   import { commitReviewedRequest, reviewRequest } from "$lib/api/requests";
   import RequestTargetOptions from "$lib/components/acquisitions/RequestTargetOptions.svelte";
-  import { structuralChildProposals } from "$lib/components/identify-review";
+  import {
+    buildRootReviewApplyPayload,
+    defaultFieldSelectionForReview,
+    defaultImageSelectionForReview,
+    entityKindLabel,
+    proposalHasField,
+    relationshipProposals,
+    reviewDiffFieldKeys,
+    structuralChildProposals,
+  } from "$lib/components/identify-review";
+  import MetadataProposalReview from "$lib/components/review/MetadataProposalReview.svelte";
   import ProposalReviewSummary from "$lib/components/review/ProposalReviewSummary.svelte";
+  import { aspectRatioForKind } from "$lib/entities/entity-thumbnail";
   import { resolveEntityHref } from "$lib/entities/entity-codes";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import {
@@ -30,7 +41,12 @@
     deriveRequestReviewSelection,
     requestReviewTargetForExternalId,
   } from "$lib/requests/request-review-selection";
-  import { proposalTitle } from "$lib/components/identify/identify-review-helpers";
+  import {
+    proposalImageUrl,
+    proposalTitle,
+    selectedProposalImageUrl,
+    tagRelationshipForTitle,
+  } from "$lib/components/identify/identify-review-helpers";
   import type { RequestReviewResponse } from "$lib/api/generated/model";
 
   interface ReviewLoadInput {
@@ -60,12 +76,55 @@
   let error = $state<string | null>(null);
   let reviewChanged = $state(false);
   let proposalPath = $state.raw<EntityMetadataProposal[]>([]);
-  let proposalCache = $state.raw<Record<string, EntityMetadataProposal>>({});
-  let reviewingProposalId = $state<string | null>(null);
+  let selectedFieldsByProposal = $state<Record<string, Record<string, boolean>>>({});
+  let selectedImagesByProposal = $state<Record<string, Record<string, string | null>>>({});
+  let selectedTagsByProposal = $state<Record<string, Record<string, boolean>>>({});
+  let selectedCascade = $state<Record<string, boolean>>({});
 
   const proposal = $derived(review?.proposal as EntityMetadataProposal | undefined);
   const activeProposal = $derived(proposalPath.at(-1) ?? proposal);
   const activeParent = $derived(proposalPath.length > 1 ? proposalPath.at(-2) : proposal);
+  const activeSelectedFields = $derived(
+    activeProposal ? selectedFieldsByProposal[activeProposal.proposalId] ?? {} : {},
+  );
+  const activeSelectedImages = $derived(
+    activeProposal ? selectedImagesByProposal[activeProposal.proposalId] ?? {} : {},
+  );
+  const activeSelectedTags = $derived(
+    activeProposal ? selectedTagsByProposal[activeProposal.proposalId] ?? {} : {},
+  );
+  const activeSelectableProposalIds = $derived.by(() => {
+    if (!activeProposal || !proposal || !selection) return [];
+    return activeProposal.proposalId === proposal.proposalId
+      ? selection.selectableIds
+      : structuralChildProposals(activeProposal).map((child) => child.proposalId);
+  });
+  const activeSelectedProposalIds = $derived.by(() => {
+    if (!activeProposal || !proposal) return [];
+    return activeProposal.proposalId === proposal.proposalId
+      ? selectedProposalIds
+      : activeSelectableProposalIds.filter((proposalId) => selectedCascade[proposalId] !== false);
+  });
+  const activeChildrenTitle = $derived.by(() => {
+    const firstChild = activeProposal ? structuralChildProposals(activeProposal).at(0) : null;
+    return firstChild ? entityKindLabel(firstChild.targetKind) : childrenTitle;
+  });
+  const activeTitle = $derived(activeProposal ? proposalTitle(activeProposal) : "Request");
+  const activeImageShape = $derived.by(() => {
+    if (!activeProposal) return "portrait" as const;
+    const shape = aspectRatioForKind(activeProposal.targetKind);
+    return shape === "square" ? "square" as const : shape === "wide" ? "wide" as const : "portrait" as const;
+  });
+  const activePosterUrl = $derived.by(() => {
+    if (!activeProposal) return null;
+    return selectedProposalImageUrl(
+      activeProposal,
+      ["poster", "thumbnail", "cover", "backdrop"],
+      activeSelectedImages,
+      activeProposal.proposalId,
+      { getReviewImageSelections: (proposalId) => selectedImagesByProposal[proposalId] },
+    ) ?? proposalImageUrl(activeProposal, ["poster", "cover", "thumbnail", "backdrop"]);
+  });
   const selection = $derived(review ? deriveRequestReviewSelection(review) : null);
   const kindInfo = $derived(review ? requestKindInfo(review.kind) : null);
   const childNoun = $derived(kindInfo?.childNoun ?? "item");
@@ -114,8 +173,10 @@
     error = null;
     reviewChanged = false;
     proposalPath = [];
-    proposalCache = {};
-    reviewingProposalId = null;
+    selectedFieldsByProposal = {};
+    selectedImagesByProposal = {};
+    selectedTagsByProposal = {};
+    selectedCascade = {};
     selectedProposalIds = [];
     chosenPreset = DEFAULT_MONITOR_PRESET;
     targetLibraryRootId = null;
@@ -140,12 +201,18 @@
       const nextSelection = deriveRequestReviewSelection(response);
       review = response;
       const rootProposal = response.proposal as EntityMetadataProposal;
+      seedMetadataSelection(rootProposal);
       proposalPath = [rootProposal];
-      proposalCache = { [rootProposal.proposalId]: rootProposal };
       selectionCustomized = false;
-      selectedProposalIds = nextSelection.mode === REQUEST_REVIEW_SELECTION.directChildren
+      const initialIds = nextSelection.mode === REQUEST_REVIEW_SELECTION.directChildren
         ? resolvePresetSelection(chosenPreset, nextSelection.presetChildren)
         : nextSelection.initialRootSelection;
+      selectedProposalIds = initialIds;
+      const picked = new Set(initialIds);
+      selectedCascade = {
+        ...selectedCascade,
+        ...Object.fromEntries(nextSelection.selectableIds.map((proposalId) => [proposalId, picked.has(proposalId)])),
+      };
     } catch (err) {
       if (key !== loadedKey) return;
       error = err instanceof Error ? err.message : "Failed to load request review";
@@ -158,7 +225,17 @@
     if (value === MONITOR_PRESET_CUSTOM || !selection) return;
     chosenPreset = value as MonitorPresetCode;
     selectionCustomized = false;
-    selectedProposalIds = resolvePresetSelection(chosenPreset, selection.presetChildren);
+    setSelectedChildren(resolvePresetSelection(chosenPreset, selection.presetChildren));
+  }
+
+  function setSelectedChildren(ids: string[]) {
+    selectedProposalIds = ids;
+    if (!selection) return;
+    const picked = new Set(ids);
+    selectedCascade = {
+      ...selectedCascade,
+      ...Object.fromEntries(selection.selectableIds.map((proposalId) => [proposalId, picked.has(proposalId)])),
+    };
   }
 
   function toggleProposal(proposalId: string, selected: boolean) {
@@ -167,51 +244,91 @@
     selectedProposalIds = selected
       ? Array.from(new Set([...selectedProposalIds, proposalId]))
       : selectedProposalIds.filter((id) => id !== proposalId);
+    selectedCascade = { ...selectedCascade, [proposalId]: selected };
   }
 
-  async function openProposal(nextProposal: EntityMetadataProposal) {
-    if (!review || reviewingProposalId) return;
+  function seedMetadataSelection(root: EntityMetadataProposal) {
+    const fields: Record<string, Record<string, boolean>> = {};
+    const images: Record<string, Record<string, string | null>> = {};
+    const tags: Record<string, Record<string, boolean>> = {};
+    const cascade: Record<string, boolean> = {};
+    const seen = new Set<string>();
 
-    const cached = proposalCache[nextProposal.proposalId];
-    if (cached) {
-      proposalPath = [...proposalPath, cached];
+    function visit(node: EntityMetadataProposal) {
+      if (seen.has(node.proposalId)) return;
+      seen.add(node.proposalId);
+      fields[node.proposalId] = defaultFieldSelectionForReview(node);
+      images[node.proposalId] = defaultImageSelectionForReview(node);
+      tags[node.proposalId] = Object.fromEntries((node.patch?.tags ?? []).map((tag) => [tag, true]));
+      cascade[node.proposalId] = true;
+      for (const child of [...structuralChildProposals(node), ...relationshipProposals(node)]) visit(child);
+    }
+
+    visit(root);
+    selectedFieldsByProposal = fields;
+    selectedImagesByProposal = images;
+    selectedTagsByProposal = tags;
+    selectedCascade = cascade;
+  }
+
+  function setMetadataField(field: string, selected: boolean) {
+    if (!activeProposal) return;
+    selectedFieldsByProposal = {
+      ...selectedFieldsByProposal,
+      [activeProposal.proposalId]: { ...activeSelectedFields, [field]: selected },
+    };
+  }
+
+  function setAllMetadataFields(selected: boolean) {
+    if (!activeProposal) return;
+    selectedFieldsByProposal = {
+      ...selectedFieldsByProposal,
+      [activeProposal.proposalId]: {
+        ...activeSelectedFields,
+        ...Object.fromEntries(
+          reviewDiffFieldKeys.map((field) => [field, selected && proposalHasField(activeProposal, field)]),
+        ),
+      },
+    };
+  }
+
+  function setMetadataImage(kind: string, url: string | null) {
+    if (!activeProposal) return;
+    selectedImagesByProposal = {
+      ...selectedImagesByProposal,
+      [activeProposal.proposalId]: { ...activeSelectedImages, [kind]: url },
+    };
+  }
+
+  function setMetadataTag(tag: string, selected: boolean) {
+    if (!activeProposal) return;
+    selectedTagsByProposal = {
+      ...selectedTagsByProposal,
+      [activeProposal.proposalId]: { ...activeSelectedTags, [tag]: selected },
+    };
+    const relationship = tagRelationshipForTitle(tag, relationshipProposals(activeProposal));
+    if (relationship) {
+      selectedCascade = { ...selectedCascade, [relationship.proposalId]: selected };
+    }
+  }
+
+  function setMetadataProposal(result: EntityMetadataProposal, selected: boolean) {
+    selectedCascade = { ...selectedCascade, [result.proposalId]: selected };
+    if (result.targetKind === ENTITY_KIND.tag) setMetadataTag(proposalTitle(result), selected);
+  }
+
+  function openProposal(nextProposal: EntityMetadataProposal) {
+    proposalPath = [...proposalPath, nextProposal];
+  }
+
+  function setActiveProposalSelected(proposalId: string, selected: boolean) {
+    if (!activeProposal || !proposal) return;
+    if (activeProposal.proposalId === proposal.proposalId) {
+      toggleProposal(proposalId, selected);
       return;
     }
-
-    if (structuralChildProposals(nextProposal).length > 0) {
-      proposalCache = { ...proposalCache, [nextProposal.proposalId]: nextProposal };
-      proposalPath = [...proposalPath, nextProposal];
-      return;
-    }
-
-    const target = review.targets.find((candidate) => candidate.proposalId === nextProposal.proposalId);
-    if (!target) {
-      proposalCache = { ...proposalCache, [nextProposal.proposalId]: nextProposal };
-      proposalPath = [...proposalPath, nextProposal];
-      return;
-    }
-
-    const requestKey = loadedKey;
-    reviewingProposalId = nextProposal.proposalId;
-    error = null;
-    try {
-      const childReview = await reviewRequest({
-        kind: target.kind,
-        pluginId: review.pluginId,
-        externalIdentity: target.externalIdentity,
-        hideNsfw: nsfw.mode !== "show",
-      });
-      if (requestKey !== loadedKey) return;
-      const resolved = childReview.proposal as EntityMetadataProposal;
-      proposalCache = { ...proposalCache, [nextProposal.proposalId]: resolved };
-      proposalPath = [...proposalPath, resolved];
-    } catch (err) {
-      if (requestKey === loadedKey) {
-        error = err instanceof Error ? err.message : "Failed to load child review";
-      }
-    } finally {
-      if (requestKey === loadedKey) reviewingProposalId = null;
-    }
+    if (!activeSelectableProposalIds.includes(proposalId)) return;
+    selectedCascade = { ...selectedCascade, [proposalId]: selected };
   }
 
   function closeProposal() {
@@ -221,7 +338,7 @@
   }
 
   async function requestSelection() {
-    if (!review || !selection || !kindInfo?.committable) return;
+    if (!review || !proposal || !selection || !kindInfo?.committable) return;
     const selectedIds = selection.mode === REQUEST_REVIEW_SELECTION.directChildren
       ? selectedProposalIds.filter((id) => selection.selectableIds.includes(id))
       : selection.initialRootSelection;
@@ -236,6 +353,19 @@
     error = null;
     reviewChanged = false;
     try {
+      const rootSelectedFields = selectedFieldsByProposal[proposal.proposalId]
+        ?? defaultFieldSelectionForReview(proposal);
+      const rootSelectedImages = selectedImagesByProposal[proposal.proposalId]
+        ?? defaultImageSelectionForReview(proposal);
+      const reviewedPayload = buildRootReviewApplyPayload(proposal, {
+        selectedFields: rootSelectedFields,
+        selectedImages: rootSelectedImages,
+        selectedTags: selectedTagsByProposal[proposal.proposalId] ?? {},
+        selectedCascade,
+        selectedFieldsByProposal,
+        selectedImagesByProposal,
+        selectedTagsByProposal,
+      });
       const response = await commitReviewedRequest(
         {
           kind: review.kind,
@@ -245,6 +375,10 @@
           selectedProposalIds: selectedIds,
           targetLibraryRootId,
           profileId,
+          review,
+          proposal: reviewedPayload.proposal as RequestReviewResponse["proposal"],
+          selectedFields: reviewedPayload.selectedFields,
+          selectedImages: reviewedPayload.selectedImages,
           ...(selection.mode === REQUEST_REVIEW_SELECTION.directChildren ? { preset: chosenPreset } : {}),
         },
         nsfw.mode !== "show",
@@ -327,23 +461,44 @@
       </Button>
     {/if}
 
-    {#if reviewingProposalId}
-      <div class="flex items-center gap-2 text-[0.75rem] text-text-muted" aria-live="polite">
-        <Loader2 class="h-3.5 w-3.5 animate-spin" />
-        Loading child details…
-      </div>
-    {/if}
+    {@render requestOptions()}
+
+    <MetadataProposalReview
+      proposal={activeProposal ?? proposal}
+      title={activeTitle}
+      subtitle={`${review.externalIdentity.namespace}:${review.externalIdentity.value}`}
+      kindLabel={(activeProposal ?? proposal).targetKind}
+      posterUrl={activePosterUrl}
+      imageShape={activeImageShape}
+      selectedFields={activeSelectedFields}
+      selectedImages={activeSelectedImages}
+      selectedTags={activeSelectedTags}
+      currentValue={() => ""}
+      onFieldChange={setMetadataField}
+      onAllFields={setAllMetadataFields}
+      onImageChange={setMetadataImage}
+      onTagChange={setMetadataTag}
+      onProposalSelected={setMetadataProposal}
+      isProposalSelected={(proposalId) => selectedCascade[proposalId] !== false}
+      imageSelectionsForProposal={(proposalId) => selectedImagesByProposal[proposalId]}
+      onActivate={openProposal}
+    />
 
     <ProposalReviewSummary
       proposal={activeProposal ?? proposal}
-      selectedIds={selectedProposalIds}
-      selectableIds={selection.selectableIds}
-      onSelectedChange={toggleProposal}
+      selectedIds={activeSelectedProposalIds}
+      selectableIds={activeSelectableProposalIds}
+      onSelectedChange={setActiveProposalSelected}
       onActivate={openProposal}
-      {childrenTitle}
+      childrenTitle={activeChildrenTitle}
       subtitle={`${review.externalIdentity.namespace}:${review.externalIdentity.value}`}
+      showOverview={false}
+      showRelationships={false}
     />
 
+    {@render requestOptions()}
+
+    {#snippet requestOptions()}
     <section class="space-y-3 rounded-sm border border-border-accent bg-surface-1 p-4" aria-label="Request options">
       <div>
         <h3 class="flex items-center gap-1.5 font-mono text-[0.68rem] font-semibold uppercase tracking-[0.04em] text-text-secondary">
@@ -414,5 +569,6 @@
         </div>
       {/if}
     </section>
+    {/snippet}
   {/if}
 </div>

@@ -4,9 +4,12 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { EntityMetadataProposal } from './entityMetadataProposal';
 import type { ExternalIdentity } from './externalIdentity';
 import type { RequestMediaKind } from './requestMediaKind';
+import type { RequestReviewResponse } from './requestReviewResponse';
 import type { ReviewedRequestCommitRequestPreset } from './reviewedRequestCommitRequestPreset';
+import type { ReviewedRequestCommitRequestSelectedImages } from './reviewedRequestCommitRequestSelectedImages';
 
 export interface ReviewedRequestCommitRequest {
   kind: RequestMediaKind;
@@ -19,4 +22,10 @@ export interface ReviewedRequestCommitRequest {
   /** @nullable */
   profileId?: string | null;
   preset?: ReviewedRequestCommitRequestPreset;
+  review?: null | RequestReviewResponse;
+  proposal?: null | EntityMetadataProposal;
+  /** @nullable */
+  selectedFields?: string[] | null;
+  /** @nullable */
+  selectedImages?: ReviewedRequestCommitRequestSelectedImages;
 }

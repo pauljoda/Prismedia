@@ -518,6 +518,32 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
     }
 
     [Fact]
+    public async Task ReviewExpandsShallowStructuralChildrenBeforeReturningTheCachedTree() {
+        await using var db = await CreateSeriesPluginAsync();
+        var catalog = Catalog(db);
+        var runner = new ShallowSeriesRunner();
+        var source = new PluginRequestMetadataSource(
+            catalog,
+            new PluginIdentityRouter(catalog),
+            new IdentifyRunnerSelector([runner]));
+        var identity = new ExternalIdentity("tmdb", $"Series:{Guid.NewGuid():N}");
+
+        var review = await source.ReviewAsync(
+            new RequestReviewRequest(RequestMediaKind.Series, "series-metadata", identity),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.NotNull(review);
+        var season = Assert.Single(review.Proposal.Children);
+        Assert.Equal("Season 1", season.Patch.Title);
+        Assert.Equal("Episode 1", Assert.Single(season.Children).Patch.Title);
+        Assert.Equal(
+            [EntityKind.VideoSeries, EntityKind.VideoSeason],
+            runner.Calls.Select(call => call.Entity.Kind).ToArray());
+        Assert.Equal(3, review.Targets.Count);
+    }
+
+    [Fact]
     public async Task ReviewRejectsSameKindSiblingsWithTheSameExternalIdentity() {
         await using var db = await CreateSeriesPluginAsync();
         var catalog = Catalog(db);
@@ -848,6 +874,85 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
                 null,
                 [],
                 dates ?? new Dictionary<string, string>(),
+                new Dictionary<string, int>(),
+                positions,
+                null);
+    }
+
+    private sealed class ShallowSeriesRunner : IIdentifyRunner {
+        public List<IdentifyPluginRequest> Calls { get; } = [];
+
+        public string RuntimeCode => DotnetPluginProcessRunner.Code;
+
+        public Task<IdentifyPluginResponse> IdentifyAsync(
+            PluginDescriptor descriptor,
+            IdentifyPluginRequest request,
+            CancellationToken cancellationToken) {
+            Calls.Add(request);
+            var identity = Assert.Single(request.Query.ExternalIds!);
+            var episode = new EntityMetadataProposal(
+                "episode-one",
+                descriptor.Manifest.Id,
+                EntityKind.VideoEpisode,
+                1,
+                "cascade",
+                Patch(
+                    "Episode 1",
+                    new Dictionary<string, string> { ["episode-db"] = "Episode:One" },
+                    new Dictionary<string, int> { [EntityPositionCodes.Episode] = 1 }),
+                [],
+                [],
+                [],
+                null,
+                []);
+            var season = new EntityMetadataProposal(
+                "season-one",
+                descriptor.Manifest.Id,
+                EntityKind.VideoSeason,
+                1,
+                "cascade",
+                Patch(
+                    "Season 1",
+                    new Dictionary<string, string> { ["tvdb"] = "Season:One" },
+                    new Dictionary<string, int> { [EntityPositionCodes.Season] = 1 }),
+                [],
+                request.Entity.Kind == EntityKind.VideoSeason ? [episode] : [],
+                [],
+                null,
+                []);
+            var proposal = request.Entity.Kind == EntityKind.VideoSeason
+                ? season
+                : new EntityMetadataProposal(
+                    "series-root",
+                    descriptor.Manifest.Id,
+                    EntityKind.VideoSeries,
+                    1,
+                    "external-id",
+                    Patch(
+                        "Series",
+                        new Dictionary<string, string> { [identity.Key] = identity.Value },
+                        new Dictionary<string, int>()),
+                    [],
+                    [season],
+                    [],
+                    null,
+                    []);
+            return Task.FromResult(IdentifyPluginResponse.Match(proposal));
+        }
+
+        private static EntityMetadataPatch Patch(
+            string title,
+            IReadOnlyDictionary<string, string> externalIds,
+            IReadOnlyDictionary<string, int> positions) =>
+            new(
+                title,
+                null,
+                externalIds,
+                [],
+                [],
+                null,
+                [],
+                new Dictionary<string, string>(),
                 new Dictionary<string, int>(),
                 positions,
                 null);

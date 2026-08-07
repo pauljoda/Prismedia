@@ -159,6 +159,16 @@ public sealed record RequestCommitRequest(
 /// <param name="TargetLibraryRootId">Optional import-target override.</param>
 /// <param name="ProfileId">Optional acquisition-profile override.</param>
 /// <param name="Preset">Optional container monitoring preset.</param>
+/// <param name="Review">
+/// Complete review response already loaded by the client. When present, commit validates its content
+/// revision locally and never resolves the provider again.
+/// </param>
+/// <param name="Proposal">
+/// User-selected proposal produced by the shared metadata review surface. It must be a filtered subset
+/// of <paramref name="Review"/>'s proposal.
+/// </param>
+/// <param name="SelectedFields">Root field codes selected by the shared metadata review surface.</param>
+/// <param name="SelectedImages">Root artwork selections keyed by image kind.</param>
 public sealed record ReviewedRequestCommitRequest(
     RequestMediaKind Kind,
     string PluginId,
@@ -167,7 +177,11 @@ public sealed record ReviewedRequestCommitRequest(
     IReadOnlyList<string> SelectedProposalIds,
     Guid? TargetLibraryRootId = null,
     Guid? ProfileId = null,
-    MonitorPreset? Preset = null);
+    MonitorPreset? Preset = null,
+    RequestReviewResponse? Review = null,
+    EntityMetadataProposal? Proposal = null,
+    IReadOnlyList<string>? SelectedFields = null,
+    IReadOnlyDictionary<string, string?>? SelectedImages = null);
 
 /// <summary>Per-item outcome of a request commit, linking the created wanted entity and its acquisition.</summary>
 /// <param name="ExternalId">Provider-qualified id of the item this outcome describes.</param>

@@ -4,18 +4,11 @@
     ChevronDown,
     ChevronUp,
     FolderPlus,
-    Images,
     Layers,
     Loader2,
-    Tag,
-    Users,
-    X,
   } from "@lucide/svelte";
-  import { cn } from "@prismedia/ui-svelte";
-  import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
+  import MetadataProposalReview from "$lib/components/review/MetadataProposalReview.svelte";
   import ReviewSection from "$lib/components/review/ReviewSection.svelte";
-  import ProposalContextBar from "$lib/components/review/ProposalContextBar.svelte";
-  import ProposalFieldReviewSection from "$lib/components/review/ProposalFieldReviewSection.svelte";
   import IdentifyTargetPreview from "./IdentifyTargetPreview.svelte";
   import IdentifyChildrenGrid from "./IdentifyChildrenGrid.svelte";
   import IdentifyNewContainersGrid from "./IdentifyNewContainersGrid.svelte";
@@ -25,10 +18,7 @@
     currentFieldValueForReview,
     defaultImageSelectionForReview,
     defaultFieldSelectionForReview,
-    groupReviewImages,
-    isNewRelationshipTitle,
     proposalHasField,
-    reviewImagePreviewUrl,
     structuralChildEntities,
     structuralChildProposals,
     structuralDescendantProposals,
@@ -36,15 +26,12 @@
     adoptedLocalChildIds,
     entityKindLabel,
     relationshipProposals,
-    relationshipTitlesForDetail,
     reviewDiffFieldKeys,
   } from "$lib/components/identify-review";
   import {
     proposalImageUrl,
     selectedProposalImageUrl,
     proposalTitle,
-    relationshipCard,
-    creditCard,
     tagRelationshipForTitle,
   } from "./identify-review-helpers";
   import type { EntityMetadataProposal } from "$lib/api/identify-types";
@@ -72,18 +59,9 @@
 
   const children = $derived(structuralChildProposals(proposal));
   const relationships = $derived(relationshipProposals(proposal));
-  const credits = $derived(relationships.filter((r) => r.targetKind === ENTITY_KIND.person));
-  const nonCreditRelationships = $derived(
-    relationships.filter((r) => r.targetKind !== ENTITY_KIND.person),
-  );
   // De-duplicate tags: the tag chips key their `{#each}` on the tag string, so a
   // provider repeating a tag would crash rendering with `each_key_duplicate`.
   const tags = $derived([...new Set(proposal.patch?.tags ?? [])]);
-  const existingTagTitles = $derived(
-    relationshipTitlesForDetail(detail, ENTITY_KIND.tag),
-  );
-  const looseTags = $derived(tags.filter((tag) => !tagRelationshipForTitle(tag, relationships)));
-  const imageGroups = $derived(groupReviewImages(proposal));
   const selectedTagCount = $derived(Object.values(selectedTags).filter(Boolean).length);
   const selectedRelationshipCount = $derived(
     relationships.filter((relationship) => store.isReviewProposalSelected(relationship.proposalId)).length,
@@ -234,181 +212,27 @@
   <!-- Preview of what we are identifying (collapsed by default) -->
   <IdentifyTargetPreview {entity} />
 
-  <ProposalContextBar
+  <MetadataProposalReview
     {proposal}
     title={contextTitle}
     subtitle={showEntitySubtitle ? entity.title : null}
     kindLabel={entity.kind}
     posterUrl={contextPosterUrl}
     imageShape={coverIsSquare ? "square" : contextImageWide ? "wide" : "portrait"}
-    showReason
-  />
-
-  <ProposalFieldReviewSection
-    {proposal}
+    {detail}
     {selectedFields}
+    {selectedImages}
+    {selectedTags}
     currentValue={(field) => currentFieldValueForReview(entity, detail, field)}
     onFieldChange={setFieldSelected}
     onAllFields={setAllFields}
+    onImageChange={setImageSelected}
+    onTagChange={setTagSelected}
+    onProposalSelected={setRelationshipSelected}
+    isProposalSelected={(proposalId) => store.isReviewProposalSelected(proposalId)}
+    imageSelectionsForProposal={(proposalId) => store.getReviewImageSelections(proposalId)}
+    onActivate={walkChild}
   />
-
-  <!-- Credits -->
-  {#if credits.length > 0}
-    <ReviewSection
-      panelId={`credits-${proposal.proposalId}`}
-      title="Credits"
-      meta={`${credits.filter((credit) => store.isReviewProposalSelected(credit.proposalId)).length} of ${credits.length} selected`}
-      lazy
-    >
-      {#snippet icon()}
-        <Users class="h-3.5 w-3.5 text-text-accent" />
-      {/snippet}
-      <div class="identify-thumbnail-grid p-3.5">
-        {#each credits as credit (credit.proposalId)}
-          <EntityThumbnail
-            card={creditCard(credit, proposal, relationshipTitlesForDetail(detail, credit.targetKind), selectedImages, proposal.proposalId, store)}
-            linkable={false}
-            onActivate={() => walkChild(credit)}
-            selectable
-            selectMode
-            selected={store.isReviewProposalSelected(credit.proposalId)}
-            onSelectedChange={(selected) => setRelationshipSelected(credit, selected)}
-          />
-        {/each}
-      </div>
-    </ReviewSection>
-  {/if}
-
-  <!-- Relationships -->
-  {#if nonCreditRelationships.length > 0}
-    <ReviewSection
-      panelId={`relationships-${proposal.proposalId}`}
-      title="Relationships"
-      meta={`${nonCreditRelationships.filter((relationship) => store.isReviewProposalSelected(relationship.proposalId)).length} of ${nonCreditRelationships.length} selected`}
-      lazy
-    >
-      {#snippet icon()}
-        <Layers class="h-3.5 w-3.5 text-text-accent" />
-      {/snippet}
-      <div class="identify-thumbnail-grid p-3.5">
-        {#each nonCreditRelationships as relationship (relationship.proposalId)}
-          <EntityThumbnail
-            card={relationshipCard(relationship, relationshipTitlesForDetail(detail, relationship.targetKind), selectedImages, proposal.proposalId, store)}
-            linkable={false}
-            onActivate={() => walkChild(relationship)}
-            selectable
-            selectMode
-            selected={store.isReviewProposalSelected(relationship.proposalId)}
-            onSelectedChange={(selected) => setRelationshipSelected(relationship, selected)}
-          />
-        {/each}
-      </div>
-    </ReviewSection>
-  {/if}
-
-  <!-- Artwork — one card per kind -->
-  {#each imageGroups as group (group.kind)}
-    <ReviewSection
-      panelId={`artwork-${group.kind}-${proposal.proposalId}`}
-      title={group.kind.charAt(0).toUpperCase() + group.kind.slice(1)}
-      meta={`${group.images.length} candidate${group.images.length === 1 ? "" : "s"}${selectedImages[group.kind] ? " · 1 selected" : ""}`}
-      lazy
-    >
-      {#snippet icon()}
-        <Images class="h-3.5 w-3.5 text-text-accent" />
-      {/snippet}
-      <div
-        class="identify-artwork-grid p-3.5"
-        data-artwork-kind={group.kind}
-      >
-        {#each group.images as image (image.url)}
-          <button
-            type="button"
-            class={cn(
-              "identify-artwork-tile relative overflow-hidden rounded-xs border bg-surface-3 transition-all",
-              selectedImages[group.kind] === image.url
-                ? "border-border-accent-strong shadow-[0_0_16px_rgba(199, 201, 204,0.2)]"
-                : "border-border-default hover:border-border-accent",
-            )}
-            style="aspect-ratio: {group.kind === 'poster' || group.kind === 'cover'
-              ? (coverIsSquare ? '1/1' : '2/3')
-              : group.kind === 'backdrop' || group.kind === 'thumbnail' || group.kind === 'still'
-                ? '16/9'
-                : '2/1'};"
-            onclick={() => setImageSelected(group.kind, selectedImages[group.kind] === image.url ? null : image.url)}
-          >
-            <img
-              src={reviewImagePreviewUrl(image, proposal.targetKind)}
-              alt=""
-              class="h-full w-full object-cover"
-              loading="lazy"
-              decoding="async"
-              referrerpolicy="no-referrer"
-              fetchpriority="low"
-              onload={(e) => e.currentTarget.closest('.identify-artwork-tile')?.classList.add('is-loaded')}
-            />
-            {#if selectedImages[group.kind] === image.url}
-              <div class="absolute right-1 top-1">
-                <span class="grid h-4 w-4 place-items-center rounded-xs bg-accent-500 text-[#0b0b0c]">
-                  <Check class="h-2.5 w-2.5" />
-                </span>
-              </div>
-            {/if}
-            <div class="absolute bottom-0 left-0 right-0 flex justify-between bg-black/75 px-1.5 py-1">
-              <span class="font-mono text-[0.58rem] text-phosphor-600">{image.source}</span>
-              {#if image.width && image.height}
-                <span class="font-mono text-[0.58rem] text-text-disabled">{image.width}×{image.height}</span>
-              {/if}
-            </div>
-          </button>
-        {/each}
-      </div>
-    </ReviewSection>
-  {/each}
-
-  <!-- Tags -->
-  {#if looseTags.length > 0}
-    <ReviewSection
-      panelId={`tags-${proposal.proposalId}`}
-      title="Tags"
-      meta={`${selectedTagCount} of ${tags.length} selected`}
-    >
-      {#snippet icon()}
-        <Tag class="h-3.5 w-3.5 text-text-accent" />
-      {/snippet}
-      <div class="flex flex-wrap items-center gap-2 p-3.5">
-        {#each looseTags as tag (tag)}
-          {@const isExisting = !isNewRelationshipTitle(tag, existingTagTitles)}
-          <button
-            type="button"
-            class={cn(
-              "inline-flex min-h-8 items-center gap-1.5 rounded-xs border px-2.5 py-1 text-[0.76rem] transition-colors",
-              selectedTags[tag]
-                ? "border-border-accent bg-accent-950/30 text-text-primary"
-                : "border-border-default bg-surface-2 text-text-muted hover:bg-surface-3",
-            )}
-            aria-pressed={selectedTags[tag]}
-            onclick={() => setTagSelected(tag, !selectedTags[tag])}
-          >
-            {#if selectedTags[tag]}
-              <Check class="h-3 w-3 text-text-accent" />
-            {:else}
-              <X class="h-3 w-3 text-text-disabled" />
-            {/if}
-            <span>{tag}</span>
-            <span class={cn(
-              "rounded-xs border px-1.5 py-0.5 font-mono text-[0.58rem]",
-              isExisting
-                ? "border-border-default bg-surface-3 text-text-muted"
-                : "border-border-accent bg-accent-950/40 text-text-accent",
-            )}>
-              {isExisting ? "Merge" : "New"}
-            </span>
-          </button>
-        {/each}
-      </div>
-    </ReviewSection>
-  {/if}
 
   <!-- New structure the provider proposes: children below move in here as they resolve -->
   {#if newContainers.length > 0}
@@ -562,88 +386,8 @@
     padding: 0.875rem;
   }
 
-  .identify-thumbnail-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(min(8rem, 100%), 9.5rem));
-    justify-content: start;
-    gap: 0.5rem;
-    content-visibility: auto;
-    contain-intrinsic-size: auto 28rem;
-  }
-
-  .identify-artwork-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(8rem, 1fr));
-    gap: 0.625rem;
-  }
-
-  .identify-artwork-grid[data-artwork-kind="poster"] {
-    grid-template-columns: repeat(auto-fill, minmax(9rem, 1fr));
-  }
-
-  .identify-artwork-grid[data-artwork-kind="backdrop"],
-  .identify-artwork-grid[data-artwork-kind="thumbnail"],
-  .identify-artwork-grid[data-artwork-kind="still"] {
-    grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
-  }
-
-  .identify-artwork-grid[data-artwork-kind="logo"] {
-    grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
-  }
-
-  @media (min-width: 768px) {
-    .identify-artwork-grid[data-artwork-kind="poster"] {
-      grid-template-columns: repeat(auto-fill, minmax(10rem, 1fr));
-    }
-
-    .identify-artwork-grid[data-artwork-kind="backdrop"],
-    .identify-artwork-grid[data-artwork-kind="thumbnail"],
-    .identify-artwork-grid[data-artwork-kind="still"] {
-      grid-template-columns: repeat(auto-fill, minmax(18rem, 1fr));
-    }
-  }
-
-  .identify-artwork-tile::before {
-    position: absolute;
-    inset: 0;
-    z-index: 0;
-    content: "";
-    pointer-events: none;
-    background:
-      linear-gradient(110deg, transparent 0%, rgb(199 201 204 / 0.12) 42%, transparent 68%),
-      radial-gradient(circle at 50% 45%, rgb(255 255 255 / 0.07), transparent 36%),
-      linear-gradient(135deg, rgb(13 14 16), rgb(27 24 19));
-    background-size: 220% 100%, auto, auto;
-    animation: identify-artwork-shimmer 1.2s ease-in-out infinite;
-  }
-
-  .identify-artwork-tile.is-loaded::before {
-    opacity: 0;
-    animation: none;
-  }
-
-  .identify-artwork-tile img {
-    position: relative;
-    z-index: 1;
-  }
-
-  .identify-artwork-tile > div {
-    z-index: 2;
-  }
-
-  @keyframes identify-artwork-shimmer {
-    from { background-position: 180% 0, 0 0, 0 0; }
-    to { background-position: -80% 0, 0 0, 0 0; }
-  }
-
   .btn-accent-glow {
     background: linear-gradient(135deg, var(--color-accent-overlay-light), var(--color-accent-overlay-faint));
     box-shadow: 0 0 18px var(--color-accent-overlay-subtle);
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .identify-artwork-tile::before {
-      animation: none;
-    }
   }
 </style>

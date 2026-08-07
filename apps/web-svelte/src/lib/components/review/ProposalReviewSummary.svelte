@@ -18,6 +18,8 @@
     onActivate?: ((proposal: EntityMetadataProposal) => void) | null;
     childrenTitle?: string;
     subtitle?: string | null;
+    showOverview?: boolean;
+    showRelationships?: boolean;
   }
 
   let {
@@ -28,6 +30,8 @@
     onActivate = null,
     childrenTitle = "Items",
     subtitle = null,
+    showOverview = true,
+    showRelationships = true,
   }: Props = $props();
 
   const children = $derived(structuralChildProposals(proposal));
@@ -48,17 +52,19 @@
 </script>
 
 <div class="flex flex-col gap-4">
-  <ProposalContextBar
-    {proposal}
-    {title}
-    {subtitle}
-    kindLabel={proposal.targetKind}
-    {posterUrl}
-    imageShape={imageShape === "square" ? "square" : imageShape === "wide" ? "wide" : "portrait"}
-    showReason
-  />
+  {#if showOverview}
+    <ProposalContextBar
+      {proposal}
+      {title}
+      {subtitle}
+      kindLabel={proposal.targetKind}
+      {posterUrl}
+      imageShape={imageShape === "square" ? "square" : imageShape === "wide" ? "wide" : "portrait"}
+      showReason
+    />
 
-  <ProposalFieldReviewSection {proposal} title="Metadata" variant="summary" selectable={false} />
+    <ProposalFieldReviewSection {proposal} title="Metadata" variant="summary" selectable={false} />
+  {/if}
 
   {#if children.length > 0}
     <ReviewSection
@@ -104,7 +110,7 @@
     </ReviewSection>
   {/if}
 
-  {#if relationships.length > 0}
+  {#if showRelationships && relationships.length > 0}
     <ReviewSection
       panelId={`review-relationships-${proposal.proposalId}`}
       title="Related metadata"

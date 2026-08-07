@@ -246,7 +246,18 @@ public sealed class PluginRequestMetadataSource(
             || !IsCompatibleTarget(descriptor, proposal.TargetKind)
             || !MatchesExplicitRoute(proposal, route)
             || !DeclaresLookupIdentity(provider, proposal.TargetKind.ToCode(), route.Identity.Namespace)
-            || !HasUniqueStructuralProposalIds(proposal)) {
+            || !HasUniqueProposalIds(proposal)) {
+            return null;
+        }
+
+        proposal = await ExpandReviewChildrenAsync(
+            provider,
+            descriptor,
+            proposal,
+            hideNsfw,
+            forceRefresh,
+            cancellationToken);
+        if (!HasUniqueProposalIds(proposal)) {
             return null;
         }
 
@@ -263,6 +274,70 @@ public sealed class PluginRequestMetadataSource(
             Proposal: proposal,
             Revision: RequestProposalRevision.Compute(proposal),
             Targets: targets);
+    }
+
+    /// <summary>
+    /// Hydrates shallow structural shells while the review is being built. Providers commonly return a
+    /// series with season identities but leave episodes to the season lookup; resolving those identities
+    /// here gives every client one immutable review tree to edit and later commit without more provider IO.
+    /// Existing nested children are retained and recursively inspected, so providers that already return
+    /// a complete graph do not pay duplicate lookups.
+    /// </summary>
+    private async Task<EntityMetadataProposal> ExpandReviewChildrenAsync(
+        PluginProvider provider,
+        RequestKindDescriptor parentDescriptor,
+        EntityMetadataProposal parent,
+        bool hideNsfw,
+        bool forceRefresh,
+        CancellationToken cancellationToken) {
+        var childDescriptor = RequestKindRegistry.ChildOf(parentDescriptor);
+        if (childDescriptor is null) {
+            return parent;
+        }
+
+        var changed = false;
+        var children = new EntityMetadataProposal[parent.Children.Count];
+        for (var index = 0; index < parent.Children.Count; index++) {
+            var child = parent.Children[index];
+            var expanded = child;
+            if (!child.TargetKind.IsRelationship()
+                && IsCompatibleTarget(childDescriptor, child.TargetKind)) {
+                var structuralChildren = child.Children
+                    .Where(candidate => !candidate.TargetKind.IsRelationship())
+                    .ToArray();
+                if (childDescriptor.ChildKind is not null
+                    && structuralChildren.Length == 0
+                    && DeclaredIdentityFor(provider, child) is { } identity) {
+                    var resolved = await ResolveExplicitProposalAsync(
+                        childDescriptor.PluginEntityKind,
+                        new PluginIdentityRoute(provider.Id, identity),
+                        hideNsfw,
+                        includeChildren: true,
+                        forceRefresh,
+                        cancellationToken);
+                    if (resolved?.Patch is not null
+                        && IsCompatibleTarget(childDescriptor, resolved.TargetKind)
+                        && HasUniqueProposalIds(resolved)) {
+                        expanded = resolved;
+                    }
+                }
+
+                if (expanded.Children.Any(candidate => !candidate.TargetKind.IsRelationship())) {
+                    expanded = await ExpandReviewChildrenAsync(
+                        provider,
+                        childDescriptor,
+                        expanded,
+                        hideNsfw,
+                        forceRefresh,
+                        cancellationToken);
+                }
+            }
+
+            children[index] = expanded;
+            changed |= !ReferenceEquals(expanded, child);
+        }
+
+        return changed ? parent with { Children = children } : parent;
     }
 
     /// <inheritdoc />
@@ -505,7 +580,7 @@ public sealed class PluginRequestMetadataSource(
         return targets;
     }
 
-    private static bool HasUniqueStructuralProposalIds(EntityMetadataProposal proposal) {
+    private static bool HasUniqueProposalIds(EntityMetadataProposal proposal) {
         var ids = new HashSet<string>(StringComparer.Ordinal);
         return Visit(proposal);
 
@@ -514,8 +589,8 @@ public sealed class PluginRequestMetadataSource(
                 return false;
             }
 
-            return node.Children
-                .Where(child => !child.TargetKind.IsRelationship())
+            return (node.Children ?? [])
+                .Concat(node.Relationships ?? [])
                 .All(Visit);
         }
     }

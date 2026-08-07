@@ -30,8 +30,8 @@ export const MONITOR_PRESET_OPTIONS: MonitorPresetOption[] = [
   { value: MONITOR_PRESET.none, label: "Manual selection", description: "Request only the items you select and add nothing automatically." },
 ];
 
-/** The default preset the request dialog opens on — fill the gaps that exist right now. */
-export const DEFAULT_MONITOR_PRESET: MonitorPresetCode = MONITOR_PRESET.missing;
+/** The default preset the request dialog opens on — request every known child and future additions. */
+export const DEFAULT_MONITOR_PRESET: MonitorPresetCode = MONITOR_PRESET.all;
 
 /** One selectable child (a season, a volume) reduced to what the preset deriver needs. */
 export interface MonitorPresetChild {

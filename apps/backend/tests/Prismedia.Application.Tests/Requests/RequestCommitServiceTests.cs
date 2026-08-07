@@ -1284,6 +1284,72 @@ public sealed class RequestCommitServiceTests {
         Assert.Equal("tmdb:Movie:603", Assert.Single(response!.Items).ExternalId);
     }
 
+    [Fact]
+    public async Task ReviewedMovieCommitsTheCachedUserSelectionWithoutResolvingTheProviderAgain() {
+        var identity = new ExternalIdentity("tmdb", "Movie:603");
+        var person = Node(
+            "person:director",
+            "cinema-metadata",
+            EntityKind.Person,
+            "Selected Director",
+            new ExternalIdentity("tmdb", "Person:1"));
+        var reviewedProposal = Node(
+            "movie:603",
+            "cinema-metadata",
+            EntityKind.Movie,
+            "The Matrix",
+            identity) with {
+                Patch = Patch("The Matrix", identity.Value) with {
+                    Description = "Provider overview",
+                    Tags = ["science-fiction", "cyberpunk"]
+                },
+                Images = [
+                    new ImageCandidate("poster", "https://images.test/poster.jpg", "tmdb", 1, null, 1000, 1500),
+                    new ImageCandidate("backdrop", "https://images.test/backdrop.jpg", "tmdb", 1, null, 1920, 1080)
+                ],
+                Relationships = [person]
+            };
+        var review = Review(
+            "cinema-metadata",
+            RequestMediaKind.Movie,
+            identity,
+            reviewedProposal,
+            [Target(reviewedProposal, RequestMediaKind.Movie, identity)]);
+        var selectedProposal = reviewedProposal with {
+            Patch = reviewedProposal.Patch with {
+                Description = null,
+                Tags = ["cyberpunk"]
+            },
+            Images = [reviewedProposal.Images[0]],
+            Relationships = []
+        };
+        var reviews = new FakeReviewSource(_ => throw new InvalidOperationException("Provider review must not run."));
+        var (service, writer, _, _, _) = ReviewedService(reviewedProposal, reviews);
+
+        await service.CommitReviewedAsync(
+            new ReviewedRequestCommitRequest(
+                RequestMediaKind.Movie,
+                review.PluginId,
+                identity,
+                review.Revision,
+                [reviewedProposal.ProposalId],
+                Review: review,
+                Proposal: selectedProposal,
+                SelectedFields: ["title", "tags", "images"],
+                SelectedImages: new Dictionary<string, string?> {
+                    ["poster"] = reviewedProposal.Images[0].Url
+                }),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.Empty(reviews.ReviewCalls);
+        var applied = Assert.Single(writer.Applied).Proposal;
+        Assert.Null(applied.Patch.Description);
+        Assert.Equal(["cyberpunk"], applied.Patch.Tags);
+        Assert.Equal("https://images.test/poster.jpg", Assert.Single(applied.Images).Url);
+        Assert.Empty(applied.Relationships);
+    }
+
     [Theory]
     [InlineData(RequestMediaKind.Audiobook, BookRendition.Ebook, BookRendition.Audiobook)]
     [InlineData(RequestMediaKind.Book, BookRendition.Audiobook, BookRendition.Ebook)]
@@ -1840,16 +1906,6 @@ public sealed class RequestCommitServiceTests {
                 TargetEntityId = matchedLocalSeasonId
             };
         var series = Node("series:one", pluginId, EntityKind.VideoSeries, "Series", seriesIdentity, seasonShell);
-        var seriesReview = Review(
-            pluginId,
-            RequestMediaKind.Series,
-            seriesIdentity,
-            series,
-            [
-                Target(series, RequestMediaKind.Series, seriesIdentity),
-                Target(seasonShell, RequestMediaKind.Season, seasonIdentity, position: 1)
-            ]);
-
         var episode = Node(
             "episode:one",
             pluginId,
@@ -1864,30 +1920,32 @@ public sealed class RequestCommitServiceTests {
             "Season 1",
             seasonIdentity,
             new Dictionary<string, int> { [EntityPositionCodes.Season] = 1 },
-            episode);
-        var seasonReview = Review(
+            episode) with { TargetEntityId = matchedLocalSeasonId };
+        var submittedSeries = series with { Children = [hydratedSeason] };
+        var submittedReview = Review(
             pluginId,
-            RequestMediaKind.Season,
-            seasonIdentity,
-            hydratedSeason,
+            RequestMediaKind.Series,
+            seriesIdentity,
+            submittedSeries,
             [
-                Target(hydratedSeason, RequestMediaKind.Season, seasonIdentity),
+                Target(submittedSeries, RequestMediaKind.Series, seriesIdentity),
+                Target(hydratedSeason, RequestMediaKind.Season, seasonIdentity, position: 1),
                 Target(episode, RequestMediaKind.Episode, episodeIdentity, position: 1)
             ]);
-        var reviews = new FakeReviewSource(request => request.Kind switch {
-            RequestMediaKind.Series when request.ExternalIdentity == seriesIdentity => seriesReview,
-            RequestMediaKind.Season when request.ExternalIdentity == seasonIdentity => seasonReview,
-            _ => null
-        });
-        var (service, writer, acquisitions, _, _) = ReviewedService(series, reviews);
+        var reviews = new FakeReviewSource(_ => throw new InvalidOperationException("Provider review must not run."));
+        var (service, writer, acquisitions, _, _) = ReviewedService(submittedSeries, reviews);
 
         await service.CommitReviewedAsync(
             new ReviewedRequestCommitRequest(
                 RequestMediaKind.Series,
                 pluginId,
                 seriesIdentity,
-                seriesReview.Revision,
-                [seasonShell.ProposalId]),
+                submittedReview.Revision,
+                [seasonShell.ProposalId],
+                Review: submittedReview,
+                Proposal: submittedSeries,
+                SelectedFields: ["title"],
+                SelectedImages: new Dictionary<string, string?>()),
             hideNsfw: false,
             CancellationToken.None);
 
@@ -1908,16 +1966,7 @@ public sealed class RequestCommitServiceTests {
         Assert.Equal(
             FakeWantedEntityWriter.EntityIdFor("Episode:One"),
             Assert.Single(appliedSeason.Proposal.Children).TargetEntityId);
-        Assert.Collection(
-            reviews.ReviewCalls,
-            call => {
-                Assert.Equal(pluginId, call.PluginId);
-                Assert.Equal(seriesIdentity, call.ExternalIdentity);
-            },
-            call => {
-                Assert.Equal(pluginId, call.PluginId);
-                Assert.Equal(seasonIdentity, call.ExternalIdentity);
-            });
+        Assert.Empty(reviews.ReviewCalls);
     }
 
     [Fact]

@@ -332,10 +332,10 @@ public sealed partial class RequestCommitService(
     }
 
     /// <summary>
-    /// Commits a canonical request review. The server-held proposal is resolved through the exact
-    /// plugin route, its revision and complete selection are validated before any write, and selected
-    /// proposal ids are mapped to server-derived identities. The short proposal cache makes an
-    /// immediate review-to-commit transition avoid a redundant provider round-trip.
+    /// Commits a canonical request review. Current clients submit the complete cached review plus the
+    /// filtered proposal produced by the shared metadata review surface; the server validates that
+    /// content locally and writes it without resolving the provider again. Legacy clients retain the
+    /// revision-checked cached review fallback.
     /// </summary>
     public async Task<RequestCommitResponse?> CommitReviewedAsync(
         ReviewedRequestCommitRequest request,
@@ -357,21 +357,31 @@ public sealed partial class RequestCommitService(
             throw new RequestCommitValidationException("Selected proposal ids must be non-empty and unique.");
         }
 
-        var review = await reviews.ReviewAsync(
-            new RequestReviewRequest(request.Kind, request.PluginId, request.RootExternalIdentity),
-            hideNsfw,
-            cancellationToken);
-        if (review is null) {
-            return null;
-        }
-        if (!string.Equals(review.Revision, request.ProposalRevision, StringComparison.Ordinal)) {
-            throw new RequestProposalChangedException();
-        }
-        if (!string.Equals(review.PluginId, request.PluginId, StringComparison.OrdinalIgnoreCase)
-            || review.Kind != request.Kind
-            || review.ExternalIdentity != request.RootExternalIdentity
-            || review.Proposal.Patch is null) {
-            throw new RequestCommitValidationException("The refreshed proposal does not match the reviewed request.");
+        var usesSubmittedReview = request.Review is not null || request.Proposal is not null;
+        RequestReviewResponse? review;
+        if (usesSubmittedReview) {
+            if (request.Review is null || request.Proposal is null) {
+                throw new RequestCommitValidationException(
+                    "The cached review and its selected proposal must be submitted together.");
+            }
+            review = ReviewedRequestProposalValidator.Validate(request, request.Review, request.Proposal);
+        } else {
+            review = await reviews.ReviewAsync(
+                new RequestReviewRequest(request.Kind, request.PluginId, request.RootExternalIdentity),
+                hideNsfw,
+                cancellationToken);
+            if (review is null) {
+                return null;
+            }
+            if (!string.Equals(review.Revision, request.ProposalRevision, StringComparison.Ordinal)) {
+                throw new RequestProposalChangedException();
+            }
+            if (!string.Equals(review.PluginId, request.PluginId, StringComparison.OrdinalIgnoreCase)
+                || review.Kind != request.Kind
+                || review.ExternalIdentity != request.RootExternalIdentity
+                || review.Proposal.Patch is null) {
+                throw new RequestCommitValidationException("The refreshed proposal does not match the reviewed request.");
+            }
         }
 
         var selection = ReviewedRequestSelectionResolver.Resolve(
@@ -379,12 +389,14 @@ public sealed partial class RequestCommitService(
             review,
             request.SelectedProposalIds,
             request.Preset);
-        var preparedDescendants = await PrepareReviewedDescendantsAsync(
-            descriptor,
-            review,
-            selection,
-            hideNsfw,
-            cancellationToken);
+        var preparedDescendants = usesSubmittedReview
+            ? PrepareSubmittedDescendants(descriptor, review, selection)
+            : await PrepareReviewedDescendantsAsync(
+                descriptor,
+                review,
+                selection,
+                hideNsfw,
+                cancellationToken);
         if (preparedDescendants is null) {
             return null;
         }
@@ -423,6 +435,50 @@ public sealed partial class RequestCommitService(
     private sealed record PreparedPhantomDescendants(
         EntityMetadataProposal Proposal,
         IReadOnlyList<ResolvedRequestProposalNode> Children);
+
+    /// <summary>
+    /// Builds nested wanted entities from the already-reviewed proposal tree. An entry is retained even
+    /// when a selected node has no children so the commit path never falls back to a provider lookup.
+    /// </summary>
+    private static IReadOnlyDictionary<ExternalIdentity, PreparedPhantomDescendants> PrepareSubmittedDescendants(
+        RequestKindDescriptor rootDescriptor,
+        RequestReviewResponse review,
+        ReviewedRequestSelection selection) {
+        if (rootDescriptor.DeferChildPhantomHydration) {
+            return new Dictionary<ExternalIdentity, PreparedPhantomDescendants>();
+        }
+
+        var selectedDescriptor = rootDescriptor.IsContainer || !selection.SelectRoot
+            ? RequestKindRegistry.ChildOf(rootDescriptor)
+            : rootDescriptor;
+        if (selectedDescriptor is not { MaterializeChildPhantoms: true }) {
+            return new Dictionary<ExternalIdentity, PreparedPhantomDescendants>();
+        }
+
+        var selectedNodes = selection.SelectRoot
+            ? [new ResolvedRequestProposalNode(review.Proposal, review.ExternalIdentity)]
+            : selection.Nodes;
+        var childDescriptor = RequestKindRegistry.ChildOf(selectedDescriptor)
+            ?? throw new RequestCommitValidationException("The selected proposal has no structural child kind.");
+        var targets = review.Targets.ToDictionary(target => target.ProposalId, StringComparer.Ordinal);
+        var prepared = new Dictionary<ExternalIdentity, PreparedPhantomDescendants>();
+        foreach (var selected in selectedNodes) {
+            var direct = (selected.Proposal.Children ?? [])
+                .Where(node => !node.TargetKind.IsRelationship())
+                .ToArray();
+            var children = ReviewedRequestSelectionResolver.ResolveDirectNodes(
+                direct,
+                childDescriptor,
+                targets,
+                direct.Select(node => node.ProposalId).ToArray());
+            if (!prepared.TryAdd(selected.Identity, new PreparedPhantomDescendants(selected.Proposal, children))) {
+                throw new RequestCommitValidationException(
+                    "The selected proposals contain a duplicate structural identity.");
+            }
+        }
+
+        return prepared;
+    }
 
     /// <summary>
     /// Resolves every selected structural unit that materializes phantoms before the first write. A series

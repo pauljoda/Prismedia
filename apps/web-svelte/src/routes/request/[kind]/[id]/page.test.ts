@@ -111,14 +111,15 @@ describe("reviewed request route", () => {
 
     render(Page);
 
-    await screen.findByText("TV Default");
-    expect(screen.getAllByRole("checkbox")).toHaveLength(2);
+    await screen.findAllByText("TV Default");
+    expect(screen.getByRole("checkbox", { name: "Deselect Season 1" })).toBeChecked();
+    expect(screen.getByRole("checkbox", { name: "Deselect Season 2" })).toBeChecked();
     expect(screen.queryByRole("checkbox", { name: /Episode 1/ })).not.toBeInTheDocument();
     await fireEvent.click(screen.getByRole("checkbox", { name: "Deselect Season 2" }));
-    await fireEvent.click(screen.getByRole("button", { name: "Request 1 season" }));
+    await fireEvent.click(screen.getAllByRole("button", { name: "Request 1 season" })[0]);
 
     await waitFor(() => {
-      expect(mocks.commitReviewedRequest).toHaveBeenCalledWith({
+      expect(mocks.commitReviewedRequest).toHaveBeenCalledWith(expect.objectContaining({
         kind: REQUEST_MEDIA_KIND.series,
         pluginId: "cinema-metadata",
         rootExternalIdentity: {
@@ -129,10 +130,80 @@ describe("reviewed request route", () => {
         selectedProposalIds: ["season-1"],
         targetLibraryRootId: "root-video",
         profileId: "profile-tv",
-        preset: MONITOR_PRESET.missing,
-      }, true);
+        preset: MONITOR_PRESET.all,
+        review,
+        proposal: expect.objectContaining({
+          proposalId: review.proposal.proposalId,
+          children: [expect.objectContaining({ proposalId: "season-1" })],
+        }),
+        selectedFields: expect.arrayContaining(["title", "description"]),
+        selectedImages: {},
+      }), true);
     });
     expect(mocks.goto).toHaveBeenCalledWith("/request");
+  });
+
+  it("uses the identify metadata controls and sends the cached filtered proposal", async () => {
+    const review = movieReview();
+    const person = proposal("person-amy", ENTITY_KIND.person, "Amy Adams");
+    review.proposal.patch.tags = ["Drama", "Science Fiction"];
+    review.proposal.patch.credits = [{
+      name: "Amy Adams",
+      role: "actor",
+      character: "Louise Banks",
+      sortOrder: 1,
+    }];
+    review.proposal.images = [
+      {
+        kind: "poster",
+        url: "https://images.test/one.jpg",
+        source: "tmdb",
+        rank: 1,
+        language: null,
+        width: 1000,
+        height: 1500,
+      },
+      {
+        kind: "poster",
+        url: "https://images.test/two.jpg",
+        source: "tmdb",
+        rank: 2,
+        language: null,
+        width: 1000,
+        height: 1500,
+      },
+    ];
+    review.proposal.relationships = [person];
+    setRoute(
+      REQUEST_MEDIA_KIND.movie,
+      review.externalIdentity.value,
+      `plugin=${review.pluginId}&namespace=${review.externalIdentity.namespace}`,
+    );
+    mocks.reviewRequest.mockResolvedValue(review);
+
+    render(Page);
+
+    expect(await screen.findAllByRole("region", { name: "Request options" })).toHaveLength(2);
+    await fireEvent.click(screen.getByRole("checkbox", { name: "Accept Description" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Deselect tag Drama" }));
+    await fireEvent.click(screen.getByRole("checkbox", { name: "Select Amy Adams" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Select poster artwork from tmdb" }));
+    await fireEvent.click(screen.getAllByRole("button", { name: "Request" })[0]);
+
+    await waitFor(() => expect(mocks.commitReviewedRequest).toHaveBeenCalled());
+    const [payload] = mocks.commitReviewedRequest.mock.calls[0] as [Record<string, unknown>];
+    expect(payload.review).toEqual(review);
+    expect(payload.selectedFields).not.toContain("description");
+    expect(payload.selectedImages).toEqual({ poster: "https://images.test/two.jpg" });
+    expect(payload.proposal).toEqual(expect.objectContaining({
+      patch: expect.objectContaining({
+        description: null,
+        tags: ["Science Fiction"],
+        credits: [],
+      }),
+      images: [expect.objectContaining({ url: "https://images.test/two.jpg" })],
+      relationships: [],
+    }));
   });
 
   it("drills into child proposal details without reloading provider data", async () => {
@@ -157,41 +228,55 @@ describe("reviewed request route", () => {
     expect(screen.getByRole("heading", { name: "Andor" })).toBeInTheDocument();
   });
 
-  it("loads a shallow child once and reuses it while walking the held review", async () => {
+  it("never refetches a shallow child while walking the held review", async () => {
     const rootReview = seriesReview();
     const season = rootReview.proposal.children[0] as EntityMetadataProposal;
     rootReview.proposal.children = [
       { ...season, children: [] },
       rootReview.proposal.children[1] as EntityMetadataProposal,
     ];
-    const childReview = seasonReview(season);
     setRoute(
       REQUEST_MEDIA_KIND.series,
       rootReview.externalIdentity.value,
       `plugin=${rootReview.pluginId}&namespace=${rootReview.externalIdentity.namespace}`,
     );
-    mocks.reviewRequest
-      .mockResolvedValueOnce(rootReview)
-      .mockResolvedValueOnce(childReview);
+    mocks.reviewRequest.mockResolvedValue(rootReview);
 
     render(Page);
 
     await screen.findByRole("heading", { name: "Andor" });
     await fireEvent.click(screen.getByRole("button", { name: "Review Season 1" }));
 
-    expect(await screen.findByText("Episode 1")).toBeInTheDocument();
-    expect(mocks.reviewRequest).toHaveBeenNthCalledWith(2, {
-      kind: REQUEST_MEDIA_KIND.season,
-      pluginId: rootReview.pluginId,
-      externalIdentity: { namespace: EXTERNAL_ID_PROVIDER.tmdb, value: "Show:AbC:01:1" },
-      hideNsfw: true,
-    });
+    expect(screen.getByRole("heading", { name: "Season 1" })).toBeInTheDocument();
+    expect(screen.queryByText("Episode 1")).not.toBeInTheDocument();
+    expect(mocks.reviewRequest).toHaveBeenCalledTimes(1);
 
     await fireEvent.click(screen.getByRole("button", { name: "Back to Andor" }));
     await fireEvent.click(screen.getByRole("button", { name: "Review Season 1" }));
 
-    expect(screen.getByText("Episode 1")).toBeInTheDocument();
-    expect(mocks.reviewRequest).toHaveBeenCalledTimes(2);
+    expect(screen.getByRole("heading", { name: "Season 1" })).toBeInTheDocument();
+    expect(mocks.reviewRequest).toHaveBeenCalledTimes(1);
+  });
+
+  it("lets nested children be selected all or none from the shared review", async () => {
+    const review = seriesReview();
+    setRoute(
+      REQUEST_MEDIA_KIND.series,
+      review.externalIdentity.value,
+      `plugin=${review.pluginId}&namespace=${review.externalIdentity.namespace}`,
+    );
+    mocks.reviewRequest.mockResolvedValue(review);
+
+    render(Page);
+
+    await screen.findByRole("heading", { name: "Andor" });
+    await fireEvent.click(screen.getByRole("button", { name: "Review Season 1" }));
+
+    expect(screen.getByRole("checkbox", { name: "Deselect Episode 1" })).toBeChecked();
+    await fireEvent.click(screen.getByRole("button", { name: "Deselect all Episodes" }));
+    expect(screen.getByRole("checkbox", { name: "Select Episode 1" })).not.toBeChecked();
+    await fireEvent.click(screen.getByRole("button", { name: "Select all Episodes" }));
+    expect(screen.getByRole("checkbox", { name: "Deselect Episode 1" })).toBeChecked();
   });
 
   it("allows a future-only container monitor with no current child selection", async () => {
@@ -209,12 +294,12 @@ describe("reviewed request route", () => {
 
     render(Page);
 
-    await screen.findByText("TV Default");
-    await fireEvent.click(screen.getByRole("button", { name: "Monitor" }));
+    await screen.findAllByText("TV Default");
+    await fireEvent.click(screen.getAllByRole("button", { name: "Monitor" })[0]);
     await fireEvent.click(
       within(screen.getByRole("listbox")).getByRole("option", { name: /future only/i }),
     );
-    const requestButton = await screen.findByRole("button", { name: "Request" });
+    const requestButton = (await screen.findAllByRole("button", { name: "Request" }))[0];
     expect(requestButton).toBeEnabled();
     await fireEvent.click(requestButton);
 
@@ -241,11 +326,13 @@ describe("reviewed request route", () => {
 
     render(Page);
 
-    await screen.findByText("TV Default");
+    await screen.findAllByText("TV Default");
     await fireEvent.click(screen.getByRole("checkbox", { name: "Deselect Season 1" }));
     await fireEvent.click(screen.getByRole("checkbox", { name: "Deselect Season 2" }));
 
-    expect(screen.getByRole("button", { name: "Request" })).toBeDisabled();
+    for (const button of screen.getAllByRole("button", { name: "Request" })) {
+      expect(button).toBeDisabled();
+    }
     expect(mocks.commitReviewedRequest).not.toHaveBeenCalled();
   });
 
@@ -270,12 +357,13 @@ describe("reviewed request route", () => {
 
     render(Page);
 
-    await screen.findByText("Movie Default");
-    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
-    await fireEvent.click(screen.getByRole("button", { name: "Request" }));
+    await screen.findAllByText("Movie Default");
+    expect(screen.getByRole("checkbox", { name: "Accept Title" })).toBeChecked();
+    expect(screen.queryByRole("checkbox", { name: /Official Trailer/ })).not.toBeInTheDocument();
+    await fireEvent.click(screen.getAllByRole("button", { name: "Request" })[0]);
 
     await waitFor(() => {
-      expect(mocks.commitReviewedRequest).toHaveBeenCalledWith({
+      expect(mocks.commitReviewedRequest).toHaveBeenCalledWith(expect.objectContaining({
         kind: REQUEST_MEDIA_KIND.movie,
         pluginId: "cinema-metadata",
         rootExternalIdentity: {
@@ -286,7 +374,11 @@ describe("reviewed request route", () => {
         selectedProposalIds: ["movie-root"],
         targetLibraryRootId: "root-video",
         profileId: "profile-movie",
-      }, true);
+        review,
+        proposal: expect.objectContaining({ proposalId: "movie-root" }),
+        selectedFields: expect.arrayContaining(["title", "description"]),
+        selectedImages: {},
+      }), true);
     });
     expect(mocks.goto).toHaveBeenCalledWith("/movies/movie-entity");
   });
@@ -314,17 +406,17 @@ describe("reviewed request route", () => {
 
     render(Page);
 
-    await screen.findByText("Book Default");
+    await screen.findAllByText("Book Default");
     expect(mocks.reviewRequest).toHaveBeenCalledWith({
       kind: REQUEST_MEDIA_KIND.audiobook,
       pluginId: "open-library",
       externalIdentity: review.externalIdentity,
       hideNsfw: true,
     });
-    await fireEvent.click(screen.getByRole("button", { name: "Request" }));
+    await fireEvent.click(screen.getAllByRole("button", { name: "Request" })[0]);
 
     await waitFor(() => {
-      expect(mocks.commitReviewedRequest).toHaveBeenCalledWith({
+      expect(mocks.commitReviewedRequest).toHaveBeenCalledWith(expect.objectContaining({
         kind: REQUEST_MEDIA_KIND.audiobook,
         pluginId: "open-library",
         rootExternalIdentity: review.externalIdentity,
@@ -332,7 +424,9 @@ describe("reviewed request route", () => {
         selectedProposalIds: ["audiobook-root"],
         targetLibraryRootId: "root-books",
         profileId: "profile-book",
-      }, true);
+        review,
+        proposal: expect.objectContaining({ proposalId: "audiobook-root" }),
+      }), true);
     });
     expect(mocks.goto).toHaveBeenCalledWith("/books/book-entity");
   });
@@ -370,11 +464,11 @@ describe("reviewed request route", () => {
 
     render(Page);
 
-    await screen.findByText("Movie Default");
-    await fireEvent.click(screen.getByRole("button", { name: "Request" }));
+    await screen.findAllByText("Movie Default");
+    await fireEvent.click(screen.getAllByRole("button", { name: "Request" })[0]);
 
-    expect(await screen.findByText(/proposal changed after you reviewed it/i)).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Reload review" })).toBeInTheDocument();
+    expect((await screen.findAllByText(/proposal changed after you reviewed it/i)).length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "Reload review" })).toHaveLength(2);
     expect(mocks.goto).not.toHaveBeenCalled();
   });
 
@@ -390,12 +484,12 @@ describe("reviewed request route", () => {
 
     render(Page);
 
-    await screen.findByText("Movie Default");
-    await fireEvent.click(screen.getByRole("button", { name: "Request" }));
+    await screen.findAllByText("Movie Default");
+    await fireEvent.click(screen.getAllByRole("button", { name: "Request" })[0]);
 
-    expect(await screen.findByText("This rendition is already requested.")).toBeInTheDocument();
-    expect(screen.queryByText(/proposal changed after you reviewed it/i)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Reload review" })).not.toBeInTheDocument();
+    expect((await screen.findAllByText("This rendition is already requested.")).length).toBeGreaterThan(0);
+    expect(screen.queryAllByText(/proposal changed after you reviewed it/i)).toHaveLength(0);
+    expect(screen.queryAllByRole("button", { name: "Reload review" })).toHaveLength(0);
   });
 
   it("requires the plugin and namespace query contract", async () => {
@@ -486,36 +580,6 @@ function movieReview(): RequestReviewResponse {
       externalIdentity,
       requestable: true,
     }],
-  };
-}
-
-function seasonReview(season: EntityMetadataProposal): RequestReviewResponse {
-  const externalIdentity = { namespace: EXTERNAL_ID_PROVIDER.tmdb, value: "Show:AbC:01:1" };
-  return {
-    pluginId: "cinema-metadata",
-    externalIdentity,
-    entityKind: ENTITY_KIND.videoSeason,
-    kind: REQUEST_MEDIA_KIND.season,
-    proposal: season,
-    revision: "season-revision",
-    targets: [
-      {
-        proposalId: season.proposalId,
-        kind: REQUEST_MEDIA_KIND.season,
-        entityKind: ENTITY_KIND.videoSeason,
-        externalIdentity,
-        requestable: true,
-        position: 1,
-      },
-      {
-        proposalId: "episode-1",
-        kind: REQUEST_MEDIA_KIND.episode,
-        entityKind: ENTITY_KIND.videoEpisode,
-        externalIdentity: { namespace: EXTERNAL_ID_PROVIDER.tmdb, value: "Show:AbC:01:1:1" },
-        requestable: true,
-        position: 1,
-      },
-    ],
   };
 }
 
