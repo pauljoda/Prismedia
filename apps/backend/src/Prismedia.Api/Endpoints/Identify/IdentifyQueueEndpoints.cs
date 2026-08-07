@@ -52,6 +52,20 @@ internal static class IdentifyQueueEndpoints {
             .Produces<IdentifyQueueItem>()
             .Produces(StatusCodes.Status204NoContent);
 
+        group.MapGet("/queue/entities/{entityId:guid}/status", async (
+            Guid entityId,
+            IIdentifyQueueService queue,
+            CancellationToken cancellationToken) => {
+                var item = await queue.GetStatusAsync(entityId, cancellationToken);
+                return item is null
+                    ? Results.NoContent()
+                    : Results.Ok(item);
+            })
+            .WithName("GetIdentifyQueueItemStatus")
+            .WithSummary("Gets compact Identify queue lifecycle state without candidates or proposal data.")
+            .Produces<IdentifyQueueItemStatus>()
+            .Produces(StatusCodes.Status204NoContent);
+
         group.MapPost("/queue/entities/{entityId:guid}/search", async (
             Guid entityId,
             IdentifyQueueSearchRequest request,

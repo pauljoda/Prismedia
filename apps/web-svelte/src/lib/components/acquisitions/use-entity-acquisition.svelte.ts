@@ -5,7 +5,10 @@ import type {
   MonitorView,
 } from "$lib/api/generated/model";
 import { canDeleteEntityFiles, firstExternalIdentity, isWanted } from "$lib/api/capabilities";
-import { fetchAcquisitionForEntity } from "$lib/api/acquisitions";
+import {
+  fetchAcquisitionForEntity,
+  fetchAcquisitionSummariesForEntity,
+} from "$lib/api/acquisitions";
 import {
   fetchEntityMonitor,
   fetchMonitorEligibility,
@@ -17,6 +20,7 @@ import { commitEntityRequest, requestMissingChildren, syncContainerRequest } fro
 import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
 import { acquisitionStatusShouldPoll } from "$lib/requests/acquisition-status";
 import { acquisitionStatusDisplay } from "$lib/requests/acquisition-status-display";
+import { ACQUISITION_STATUS } from "$lib/api/generated/codes";
 import {
   monitorHasUnknownStatus,
   monitorIsActive,
@@ -199,6 +203,36 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
     loadedId = id;
   }
 
+  /**
+   * Polls the compact lifecycle projection. Scored candidates are reloaded only when the latest
+   * acquisition identity or status changes, so an idle detail page does not repeatedly transfer the
+   * entire review payload.
+   */
+  async function pollLifecycle(): Promise<void> {
+    const id = options.entityId();
+    if (!id) return;
+    const [summaries, nextMonitor] = await Promise.all([
+      fetchAcquisitionSummariesForEntity(id).catch(() => undefined),
+      fetchEntityMonitor(id).catch(() => undefined),
+    ]);
+    if (options.entityId() !== id) return;
+    if (nextMonitor !== undefined) monitor = nextMonitor;
+    if (summaries === undefined) return;
+
+    const latest = summaries[0] ?? null;
+    const previous = acquisition?.summary ?? null;
+    if (latest === null) {
+      acquisition = null;
+    } else if (previous?.id === latest.id && previous.status === latest.status && acquisition) {
+      acquisition = { ...acquisition, summary: latest };
+    } else {
+      acquisition = await fetchAcquisitionForEntity(id).catch(() =>
+        previous ? { ...acquisition!, summary: latest } : null,
+      );
+    }
+    loadedId = id;
+  }
+
   $effect(() => {
     const id = options.entityId();
     if (!id) {
@@ -222,18 +256,25 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
   // collapsed if work is active) and refreshes the Entity graph only on an imported transition; doing
   // that full owner reload on every tick visibly flashes detail pages and duplicates the same reads.
   $effect(() => {
-    const shouldPoll =
-      !!options.entityId() &&
-      loadedId !== null &&
-      (wanted || monitor !== null || !!eligibility?.canMonitor || acquisition !== null || hasActiveChildAcquisition);
-    if (!shouldPoll) return;
+    if (!options.entityId() || loadedId === null) return;
+    const acquisitionStatus = acquisition?.summary.status;
+    const fastPoll =
+      acquisitionStatusShouldPoll(acquisitionStatus) ||
+      monitorTransitionLocked ||
+      hasActiveChildAcquisition;
+    const slowPoll =
+      acquisitionStatus === ACQUISITION_STATUS.waitingForRelease ||
+      acquisitionStatus === ACQUISITION_STATUS.manualSearchRequired ||
+      (monitorActive && eligibility?.discoversChildren === true);
+    const pollInterval = fastPoll ? 5000 : slowPoll ? 60_000 : null;
+    if (pollInterval === null) return;
     let pollBusy = false;
     const poll = async () => {
       if (pollBusy) return;
       pollBusy = true;
       try {
         const previousStatus = acquisition?.summary.status ?? null;
-        await refresh();
+        await pollLifecycle();
         const nextStatus = acquisition?.summary.status ?? null;
         if (previousStatus !== nextStatus) {
           await options.onStatusChanged?.();
@@ -244,7 +285,7 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
         pollBusy = false;
       }
     };
-    const timer = setInterval(() => void poll(), 5000);
+    const timer = setInterval(() => void poll(), pollInterval);
     return () => clearInterval(timer);
   });
 

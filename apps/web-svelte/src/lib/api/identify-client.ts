@@ -6,6 +6,7 @@ import {
   deleteIdentifyQueueItem as deleteIdentifyQueueItemRequest,
   saveIdentifyQueueProposal as saveIdentifyQueueProposalRequest,
   getIdentifyQueueItem as getIdentifyQueueItemRequest,
+  getGetIdentifyQueueItemStatusUrl,
   getGetIdentifyQueueItemUrl,
   listIdentifyProviders,
   listIdentifyQueue,
@@ -19,6 +20,7 @@ import type {
   IdentifyBulkStartRequest,
   IdentifyQueueSearchRequest,
   IdentifyBulkAcceptedResponse,
+  IdentifyQueueItemStatus,
   ListIdentifyQueueParams,
   SaveIdentifyQueueProposalRequest,
 } from "$lib/api/generated/model";
@@ -96,6 +98,20 @@ export async function fetchOptionalIdentifyQueueItem(
   }
 
   return (await response.json()) as IdentifyQueueItem;
+}
+
+export async function fetchOptionalIdentifyQueueItemStatus(
+  entityId: string,
+  options?: RequestOptions,
+): Promise<IdentifyQueueItemStatus | null> {
+  const response = await fetch(apiPath(getGetIdentifyQueueItemStatusUrl(entityId)), requestInit(options));
+  if (response.status === 204) return null;
+  if (!response.ok) {
+    const body = await response.text();
+    throw new Error(body || `API ${response.status}: ${response.statusText}`);
+  }
+
+  return (await response.json()) as IdentifyQueueItemStatus;
 }
 
 /**

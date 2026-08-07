@@ -16,6 +16,7 @@ using Prismedia.Application.Settings;
 using Prismedia.Application.Health;
 using Prismedia.Application.Audio;
 using Prismedia.Application.Backups;
+using Prismedia.Application.Books;
 using Prismedia.Application.Plugins;
 using Prismedia.Application.Playback;
 using Prismedia.Application.Acquisition;
@@ -32,6 +33,7 @@ using Prismedia.Infrastructure.Entities.Mappers;
 using Prismedia.Infrastructure.Files;
 using Prismedia.Infrastructure.Jobs;
 using Prismedia.Infrastructure.Media.Adapters;
+using Prismedia.Infrastructure.Media.Books;
 using Prismedia.Infrastructure.Media.Persistence;
 using Prismedia.Infrastructure.Media.Processing;
 using Prismedia.Infrastructure.Media.Sidecars;
@@ -283,6 +285,8 @@ public static class DependencyInjection {
         services.AddScoped<ILibraryAccessReader>(provider => provider.GetRequiredService<EfLibraryAccessReader>());
         services.AddScoped<ILibraryAccessStore>(provider => provider.GetRequiredService<EfLibraryAccessReader>());
         services.AddScoped<IEntityFileContentService, EfEntityFileContentService>();
+        services.AddSingleton<EpubBookContentsCache>();
+        services.AddScoped<IBookContentsService, EpubBookContentsService>();
         services.AddScoped<IGridThumbnailService>(provider =>
             new GridThumbnailService(
                 provider.GetRequiredService<PrismediaDbContext>(),

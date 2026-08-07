@@ -20,6 +20,7 @@ import {
   getAcquisitionForEntity,
   getAcquisitionTransfer,
   listAcquisitionHistory,
+  listAcquisitionSummariesForEntity,
   listAcquisitionsForEntity,
   listAcquisitionProfiles,
   listAcquisitions,
@@ -158,6 +159,17 @@ export async function fetchAcquisitionsForEntity(
   return unwrapGenerated(
     await listAcquisitionsForEntity(entityId, requestInit(options)),
     "Failed to load the entity's acquisitions",
+  );
+}
+
+/** Compact lifecycle projections for polling an Entity without transferring release candidates. */
+export async function fetchAcquisitionSummariesForEntity(
+  entityId: string,
+  options?: RequestOptions,
+): Promise<AcquisitionSummary[]> {
+  return unwrapGenerated(
+    await listAcquisitionSummariesForEntity(entityId, requestInit(options)),
+    "Failed to load the entity's acquisition status",
   );
 }
 

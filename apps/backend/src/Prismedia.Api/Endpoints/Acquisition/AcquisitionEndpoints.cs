@@ -151,6 +151,15 @@ public static class AcquisitionEndpoints {
             .WithSummary("Lists every direct acquisition backing a library Entity, including independent ebook and audiobook rows.")
             .Produces<IReadOnlyList<AcquisitionDetail>>();
 
+        group.MapGet("/for-entity/{entityId:guid}/summaries", (
+            Guid entityId,
+            AcquisitionService acquisitions,
+            CancellationToken cancellationToken) =>
+            acquisitions.ListSummariesForEntityAsync(entityId, cancellationToken))
+            .WithName("ListAcquisitionSummariesForEntity")
+            .WithSummary("Lists compact acquisition lifecycle summaries for polling an Entity without re-sending release candidates.")
+            .Produces<IReadOnlyList<AcquisitionSummary>>();
+
         group.MapPost("/for-entity/{entityId:guid}/replacement-search", async (
             Guid entityId,
             ManualReplacementSearchRequest request,

@@ -4,6 +4,7 @@ import {
   fetchIdentifyEntities,
   fetchIdentifyQueue,
   fetchOptionalIdentifyQueueItem,
+  fetchOptionalIdentifyQueueItemStatus,
   requestIdentifySearch,
   resolveIdentifyQueueCandidate,
   startBulkIdentify,
@@ -108,6 +109,28 @@ describe("identify client", () => {
     vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 204 })));
 
     await expect(fetchOptionalIdentifyQueueItem("missing")).resolves.toBeNull();
+  });
+
+  it("uses the compact queue status endpoint for detail actions", async () => {
+    const status = {
+      id: "queue-video-1",
+      entityId: "video-1",
+      state: "proposal",
+      updatedAt: "2026-05-27T00:00:00Z",
+    };
+    const fetchMock = mockFetch(status);
+
+    await expect(fetchOptionalIdentifyQueueItemStatus("video-1")).resolves.toEqual(status);
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/identify/queue/entities/video-1/status",
+      undefined,
+    );
+  });
+
+  it("returns null when an entity has no compact queue status", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response(null, { status: 204 })));
+
+    await expect(fetchOptionalIdentifyQueueItemStatus("missing")).resolves.toBeNull();
   });
 });
 

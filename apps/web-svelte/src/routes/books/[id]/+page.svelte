@@ -19,7 +19,10 @@
   import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
   import { requestableDirectChildCards } from "$lib/requests/requestable-entity-children";
   import { getBookMetadataCapability, getCapability, isWanted } from "$lib/api/capabilities";
-  import { fetchAcquisitionsForEntity } from "$lib/api/acquisitions";
+  import {
+    fetchAcquisitionsForEntity,
+    fetchAcquisitionSummariesForEntity,
+  } from "$lib/api/acquisitions";
   import { fetchEntityMonitors, resumeMonitor, stopMonitor } from "$lib/api/monitors";
   import { commitEntityRequest } from "$lib/api/requests";
   import { updateEntityProgress } from "$lib/api/consumption";
@@ -428,7 +431,7 @@
 
   $effect(() => {
     if (!bookRenditionAcquisitions.some((item) => acquisitionStatusShouldPoll(item.summary.status))) return;
-    const timer = setInterval(() => void refreshBookAcquisitionState().catch(() => {}), 5000);
+    const timer = setInterval(() => void pollBookAcquisitionState().catch(() => {}), 5000);
     return () => clearInterval(timer);
   });
 
@@ -508,7 +511,7 @@
     epubContentsLoading = true;
     try {
       const contents = await loadEpubContents(
-        `/entities/${nextBook.id}/files/source`,
+        nextBook.id,
         currentLocation,
         controller.signal,
         currentFraction,
@@ -541,6 +544,35 @@
     bookRenditionAcquisitions = nextAcquisitions;
     bookRenditionMonitors = nextMonitors;
     await acq.refresh();
+  }
+
+  /**
+   * Polls compact summaries while rendition work is active. Candidate-heavy detail is reloaded only
+   * when an acquisition appears, disappears, or crosses a lifecycle boundary.
+   */
+  async function pollBookAcquisitionState(): Promise<void> {
+    const targetBookId = bookId;
+    if (!targetBookId) return;
+    const [summaries, nextMonitors] = await Promise.all([
+      fetchAcquisitionSummariesForEntity(targetBookId),
+      fetchEntityMonitors(targetBookId),
+    ]);
+    if (bookId !== targetBookId) return;
+
+    const currentById = new Map(
+      bookRenditionAcquisitions.map((detail) => [detail.summary.id, detail]),
+    );
+    const lifecycleChanged = summaries.length !== bookRenditionAcquisitions.length
+      || summaries.some((summary) => currentById.get(summary.id)?.summary.status !== summary.status);
+    const nextAcquisitions = lifecycleChanged
+      ? await fetchAcquisitionsForEntity(targetBookId)
+      : summaries.map((summary) => ({
+          ...currentById.get(summary.id)!,
+          summary,
+        }));
+    if (bookId !== targetBookId) return;
+    bookRenditionAcquisitions = nextAcquisitions;
+    bookRenditionMonitors = nextMonitors;
   }
 
   async function handleBookAcquisitionChanged(): Promise<void> {
@@ -619,7 +651,11 @@
     signal: AbortSignal,
   ): Promise<BookReaderChapter | null> {
     const progress = getCapability(nextBook.capabilities, CAPABILITY_KIND.progress);
-    if (!progress?.currentEntityId || chapters.some((chapter) => chapter.thumbnail.id === progress.currentEntityId)) {
+    if (
+      !progress?.currentEntityId ||
+      progress.currentEntityId === nextBook.id ||
+      chapters.some((chapter) => chapter.thumbnail.id === progress.currentEntityId)
+    ) {
       return null;
     }
 

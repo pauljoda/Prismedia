@@ -19,6 +19,32 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
     private readonly string _tempRoot = Path.Combine(Path.GetTempPath(), $"prismedia-identify-queue-{Guid.NewGuid():N}");
 
     [Fact]
+    public async Task GetStatusAsyncDoesNotReadCandidateOrProposalPayloads() {
+        await using var db = CreateContext();
+        var entityId = Guid.NewGuid();
+        var queueId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        SeedEntity(db, entityId, EntityKind.VideoSeries.ToCode(), "Large queued series");
+        db.IdentifyQueueItems.Add(new IdentifyQueueItemRow {
+            Id = queueId,
+            EntityId = entityId,
+            State = IdentifyQueueState.Proposal,
+            CandidatesJson = "not-json-and-never-read",
+            ProposalJson = "not-json-and-never-read",
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+        var service = CreateQueueService(db, new ThrowingProcessExecutor(), _tempRoot);
+
+        var status = await service.GetStatusAsync(entityId, CancellationToken.None);
+
+        Assert.Equal(queueId, status?.Id);
+        Assert.Equal(IdentifyQueueState.Proposal, status?.State);
+        Assert.Equal(now, status?.UpdatedAt);
+    }
+
+    [Fact]
     public async Task ReidentifyFallsBackToSearchWhenStoredIdLookupFindsNothing() {
         await using var db = CreateContext();
         var entityId = Guid.Parse("33333333-3333-3333-3333-333333333333");

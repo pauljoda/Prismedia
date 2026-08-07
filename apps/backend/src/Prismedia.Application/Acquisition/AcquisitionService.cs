@@ -272,6 +272,15 @@ public sealed partial class AcquisitionService(
         CancellationToken cancellationToken) =>
         store.ListForEntityAsync(entityId, cancellationToken);
 
+    /// <summary>
+    /// Every direct acquisition backing a library Entity without scored release candidates, for
+    /// lightweight status polling by Entity detail surfaces.
+    /// </summary>
+    public Task<IReadOnlyList<AcquisitionSummary>> ListSummariesForEntityAsync(
+        Guid entityId,
+        CancellationToken cancellationToken) =>
+        store.ListSummariesForEntityAsync(entityId, cancellationToken);
+
     /// <inheritdoc />
     public async Task<AcquisitionRemovalEligibility> GetRemovalEligibilityAsync(
         Guid id,

@@ -24,6 +24,7 @@ import type {
   ApplyIdentifyQueueItemRequest,
   BookAcquisitionProfileSaveRequest,
   BookAcquisitionProfileView,
+  BookContentsResponse,
   BrowseLibraryPathParams,
   BrowserSessionResponse,
   BulkJobResponse,
@@ -67,6 +68,7 @@ import type {
   DownloadQueueItemView,
   EntityBulkDeleteRequest,
   EntityCard,
+  EntityChildReferenceBatchResponse,
   EntityChildrenBatchRequest,
   EntityChildrenBatchResponse,
   EntityCreateRequest,
@@ -96,6 +98,7 @@ import type {
   FileRescanRequest,
   FileRootsResponse,
   GetConsumptionStatisticsParams,
+  GetEntityChildReferencesParams,
   GetEntityChildrenParams,
   GetEntityParams,
   GetEntityThumbnailsParams,
@@ -126,6 +129,7 @@ import type {
   IdentifyEntityRequest,
   IdentifyQueueCandidateRequest,
   IdentifyQueueItem,
+  IdentifyQueueItemStatus,
   IdentifyQueueSearchRequest,
   IndexerConfigSaveRequest,
   IndexerConfigSummary,
@@ -2524,6 +2528,58 @@ export const getEntityChildren = async (entityChildrenBatchRequest: EntityChildr
 
 
 
+export type getEntityChildReferencesResponse200 = {
+  data: EntityChildReferenceBatchResponse
+  status: 200
+}
+
+export type getEntityChildReferencesResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type getEntityChildReferencesResponseSuccess = (getEntityChildReferencesResponse200) & {
+  headers: Headers;
+};
+export type getEntityChildReferencesResponseError = (getEntityChildReferencesResponse400) & {
+  headers: Headers;
+};
+
+export type getEntityChildReferencesResponse = (getEntityChildReferencesResponseSuccess | getEntityChildReferencesResponseError)
+
+export const getGetEntityChildReferencesUrl = (params?: GetEntityChildReferencesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/entities/children/references?${stringifiedParams}` : `/api/entities/children/references`
+}
+
+/**
+ * @summary Get compact direct-child identities for multiple parents without thumbnail presentation data.
+ */
+export const getEntityChildReferences = async (entityChildrenBatchRequest: EntityChildrenBatchRequest,
+    params?: GetEntityChildReferencesParams, options?: RequestInit): Promise<getEntityChildReferencesResponse> => {
+
+  return orvalFetch<getEntityChildReferencesResponse>(getGetEntityChildReferencesUrl(params),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      entityChildrenBatchRequest,)
+  }
+);}
+
+
+
 export type uploadEntityImageAssetResponse200 = {
   data: EntityCard
   status: 200
@@ -4032,6 +4088,49 @@ export const getBookPatch = async (id: string,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       entityMetadataUpdateRequest,)
+  }
+);}
+
+
+
+export type getBookContentsResponse200 = {
+  data: BookContentsResponse
+  status: 200
+}
+
+export type getBookContentsResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type getBookContentsResponseSuccess = (getBookContentsResponse200) & {
+  headers: Headers;
+};
+export type getBookContentsResponseError = (getBookContentsResponse404) & {
+  headers: Headers;
+};
+
+export type getBookContentsResponse = (getBookContentsResponseSuccess | getBookContentsResponseError)
+
+export const getGetBookContentsUrl = (id: string,) => {
+
+
+
+
+  return `/api/books/${id}/contents`
+}
+
+/**
+ * @summary Get compact EPUB contents and reading-order ranges.
+ */
+export const getBookContents = async (id: string, options?: RequestInit): Promise<getBookContentsResponse> => {
+
+  return orvalFetch<getBookContentsResponse>(getGetBookContentsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
   }
 );}
 
@@ -8717,6 +8816,47 @@ export const deleteIdentifyQueueItem = async (entityId: string, options?: Reques
 
 
 
+export type getIdentifyQueueItemStatusResponse200 = {
+  data: IdentifyQueueItemStatus
+  status: 200
+}
+
+export type getIdentifyQueueItemStatusResponse204 = {
+  data: void
+  status: 204
+}
+
+export type getIdentifyQueueItemStatusResponseSuccess = (getIdentifyQueueItemStatusResponse200 | getIdentifyQueueItemStatusResponse204) & {
+  headers: Headers;
+};
+;
+
+export type getIdentifyQueueItemStatusResponse = (getIdentifyQueueItemStatusResponseSuccess)
+
+export const getGetIdentifyQueueItemStatusUrl = (entityId: string,) => {
+
+
+
+
+  return `/api/identify/queue/entities/${entityId}/status`
+}
+
+/**
+ * @summary Gets compact Identify queue lifecycle state without candidates or proposal data.
+ */
+export const getIdentifyQueueItemStatus = async (entityId: string, options?: RequestInit): Promise<getIdentifyQueueItemStatusResponse> => {
+
+  return orvalFetch<getIdentifyQueueItemStatusResponse>(getGetIdentifyQueueItemStatusUrl(entityId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
 export type searchIdentifyQueueItemResponse200 = {
   data: IdentifyQueueItem
   status: 200
@@ -10135,6 +10275,42 @@ export const getListAcquisitionsForEntityUrl = (entityId: string,) => {
 export const listAcquisitionsForEntity = async (entityId: string, options?: RequestInit): Promise<listAcquisitionsForEntityResponse> => {
 
   return orvalFetch<listAcquisitionsForEntityResponse>(getListAcquisitionsForEntityUrl(entityId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type listAcquisitionSummariesForEntityResponse200 = {
+  data: AcquisitionSummary[]
+  status: 200
+}
+
+export type listAcquisitionSummariesForEntityResponseSuccess = (listAcquisitionSummariesForEntityResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listAcquisitionSummariesForEntityResponse = (listAcquisitionSummariesForEntityResponseSuccess)
+
+export const getListAcquisitionSummariesForEntityUrl = (entityId: string,) => {
+
+
+
+
+  return `/api/acquisitions/for-entity/${entityId}/summaries`
+}
+
+/**
+ * @summary Lists compact acquisition lifecycle summaries for polling an Entity without re-sending release candidates.
+ */
+export const listAcquisitionSummariesForEntity = async (entityId: string, options?: RequestInit): Promise<listAcquisitionSummariesForEntityResponse> => {
+
+  return orvalFetch<listAcquisitionSummariesForEntityResponse>(getListAcquisitionSummariesForEntityUrl(entityId),
   {
     ...options,
     method: 'GET'

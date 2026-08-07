@@ -1,13 +1,13 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CAPABILITY_KIND, ENTITY_FILE_ROLE, ENTITY_KIND } from "$lib/api/generated/codes";
-import type { EntityCapability } from "$lib/api/generated/model";
+import type { EntityCapability, IdentifyQueueItemStatus } from "$lib/api/generated/model";
 import type { IdentifyQueueItem, PluginProvider } from "$lib/api/identify-types";
 import UseIdentifyDetailActionHarness from "./use-identify-detail-action.test-harness.svelte";
 
 const goto = vi.fn();
 const fetchIdentifyProviders = vi.fn();
-const fetchOptionalIdentifyQueueItem = vi.fn();
+const fetchOptionalIdentifyQueueItemStatus = vi.fn();
 const requestIdentifySearch = vi.fn();
 
 vi.mock("$app/navigation", () => ({
@@ -19,7 +19,7 @@ vi.mock("$lib/api/identify-client", async (importOriginal) => {
   return {
     ...actual,
     fetchIdentifyProviders: (...args: unknown[]) => fetchIdentifyProviders(...args),
-    fetchOptionalIdentifyQueueItem: (...args: unknown[]) => fetchOptionalIdentifyQueueItem(...args),
+    fetchOptionalIdentifyQueueItemStatus: (...args: unknown[]) => fetchOptionalIdentifyQueueItemStatus(...args),
     requestIdentifySearch: (...args: unknown[]) => requestIdentifySearch(...args),
   };
 });
@@ -28,15 +28,15 @@ describe("useIdentifyDetailAction", () => {
   beforeEach(() => {
     goto.mockReset();
     fetchIdentifyProviders.mockReset();
-    fetchOptionalIdentifyQueueItem.mockReset();
+    fetchOptionalIdentifyQueueItemStatus.mockReset();
     requestIdentifySearch.mockReset();
     fetchIdentifyProviders.mockResolvedValue([provider("person")]);
-    fetchOptionalIdentifyQueueItem.mockResolvedValue(null);
+    fetchOptionalIdentifyQueueItemStatus.mockResolvedValue(null);
     requestIdentifySearch.mockResolvedValue(queueItem("person-1", { state: "queued" }));
   });
 
   it("opens an existing queue review instead of starting a new identify flow", async () => {
-    fetchOptionalIdentifyQueueItem.mockResolvedValue(queueItem("person-1", { state: "proposal" }));
+    fetchOptionalIdentifyQueueItemStatus.mockResolvedValue(queueStatus("person-1", { state: "proposal" }));
 
     render(UseIdentifyDetailActionHarness, {
       props: {
@@ -155,7 +155,7 @@ describe("useIdentifyDetailAction", () => {
     });
 
     await waitFor(() => expect(screen.queryByRole("button")).not.toBeInTheDocument());
-    expect(fetchOptionalIdentifyQueueItem).not.toHaveBeenCalled();
+    expect(fetchOptionalIdentifyQueueItemStatus).not.toHaveBeenCalled();
     expect(fetchIdentifyProviders).not.toHaveBeenCalled();
     expect(requestIdentifySearch).not.toHaveBeenCalled();
   });
@@ -198,7 +198,7 @@ describe("useIdentifyDetailAction", () => {
     });
 
     await waitFor(() => expect(screen.queryByRole("button")).not.toBeInTheDocument());
-    expect(fetchOptionalIdentifyQueueItem).not.toHaveBeenCalled();
+    expect(fetchOptionalIdentifyQueueItemStatus).not.toHaveBeenCalled();
     expect(fetchIdentifyProviders).not.toHaveBeenCalled();
     expect(requestIdentifySearch).not.toHaveBeenCalled();
   });
@@ -243,5 +243,17 @@ function queueItem(id: string, options: Partial<IdentifyQueueItem> = {}): Identi
     createdAt: options.createdAt ?? "2026-05-25T00:00:00Z",
     updatedAt: options.updatedAt ?? "2026-05-25T00:00:00Z",
     completedAt: options.completedAt ?? null,
+  };
+}
+
+function queueStatus(
+  id: string,
+  options: Partial<IdentifyQueueItemStatus> = {},
+): IdentifyQueueItemStatus {
+  return {
+    id: options.id ?? `queue-${id}`,
+    entityId: options.entityId ?? id,
+    state: options.state ?? "search",
+    updatedAt: options.updatedAt ?? "2026-05-25T00:00:00Z",
   };
 }

@@ -161,6 +161,16 @@ public interface IEntityReadService {
         Task.FromResult(new EntityChildrenBatchResponse([]));
 
     /// <summary>
+    /// Gets compact direct-child identities for multiple visible parents. Use this for counts,
+    /// structural order, and cursor resolution when no thumbnail presentation data is rendered.
+    /// </summary>
+    Task<EntityChildReferenceBatchResponse> GetChildReferencesAsync(
+        IReadOnlyList<Guid> parentIds,
+        bool hideNsfw,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(new EntityChildReferenceBatchResponse([]));
+
+    /// <summary>
     /// Gets the folder-list context (visible child count, description, dates, lifetime, external
     /// ids) for a batch of container entities. Sized for external catalog list pages: one grouped
     /// query per collection across the whole batch, never a full detail hydration per row.

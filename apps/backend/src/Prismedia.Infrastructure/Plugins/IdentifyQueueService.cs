@@ -94,6 +94,39 @@ public sealed partial class IdentifyQueueService : IIdentifyQueueService {
     }
 
     /// <summary>
+    /// Gets the reconciled queue lifecycle without reading candidate or proposal JSON into the
+    /// detail-page response path.
+    /// </summary>
+    public async Task<IdentifyQueueItemStatus?> GetStatusAsync(
+        Guid entityId,
+        CancellationToken cancellationToken) {
+        var row = await _db.IdentifyQueueItems
+            .AsNoTracking()
+            .Where(item => item.EntityId == entityId)
+            .Select(item => new IdentifyQueueItemRow {
+                Id = item.Id,
+                EntityId = item.EntityId,
+                JobGraphId = item.JobGraphId,
+                State = item.State,
+                Error = item.Error,
+                CascadeJobId = item.CascadeJobId,
+                SearchJobId = item.SearchJobId,
+                CreatedAt = item.CreatedAt,
+                UpdatedAt = item.UpdatedAt,
+                CompletedAt = item.CompletedAt,
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (row is null) {
+            return null;
+        }
+
+        await ReconcileIneligibleTargetsAsync([row], cancellationToken);
+        await ReconcileOrphanedSearchesAsync([row], cancellationToken);
+        await ReconcileOrphanedAppliesAsync([row], cancellationToken);
+        return new IdentifyQueueItemStatus(row.Id, row.EntityId, row.State, row.UpdatedAt);
+    }
+
+    /// <summary>
     /// Retires active queue rows whose entity became Wanted or lost its Source binding after it was
     /// queued. This is the queue-side race boundary for file deletion and stale scan cleanup.
     /// </summary>

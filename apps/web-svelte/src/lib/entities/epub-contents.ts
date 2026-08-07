@@ -1,4 +1,4 @@
-import { apiAssetUrl } from "$lib/api/orval-fetch";
+import { fetchBookContents } from "$lib/api/books";
 
 export interface EpubTocSourceEntry {
   label?: unknown;
@@ -25,12 +25,6 @@ export interface EpubSectionSource {
 export interface EpubBookNavigation {
   resolveHref: (href: string) => { index?: unknown } | null | undefined;
   resolveCFI: (cfi: string) => { index?: unknown } | null | undefined;
-}
-
-interface EpubBook extends EpubBookNavigation {
-  toc?: unknown;
-  sections?: EpubSectionSource[];
-  destroy?: () => void;
 }
 
 /** Adds whole-book fraction bounds to each TOC row using Foliate's section-size model. */
@@ -165,27 +159,34 @@ export function resolveEpubChapterByFraction(
   ) ?? null;
 }
 
-/** Loads just enough of an EPUB with the vendored reader parser to expose its TOC on detail pages. */
+function numberOrNull(value: number | string | null | undefined): number | null {
+  if (value === null || value === undefined || value === "") return null;
+  const numeric = Number(value);
+  return Number.isFinite(numeric) ? numeric : null;
+}
+
+/** Loads the server-projected EPUB TOC without transferring or parsing the source archive. */
 export async function loadEpubContents(
-  sourceUrl: string,
+  bookId: string,
   currentLocation?: string | null,
   signal?: AbortSignal,
   currentFraction?: number | null,
 ): Promise<LoadedEpubContents> {
-  const absoluteUrl = apiAssetUrl(sourceUrl) ?? sourceUrl;
-  const response = await fetch(absoluteUrl, { signal });
-  if (!response.ok) throw new Error(`Failed to load book contents (${response.status})`);
-  const file = new File([await response.blob()], "book.epub", { type: "application/epub+zip" });
-  if (signal?.aborted) throw new DOMException("Aborted", "AbortError");
-
-  const { makeBook } = await import("$lib/vendor/foliate-js/view.js");
-  const book = await makeBook(file) as EpubBook;
-  try {
-    const entries = addEpubChapterRanges(flattenEpubToc(book.toc, book), book.sections ?? []);
-    const current = resolveCurrentEpubChapter(entries, currentLocation, book)
-      ?? resolveEpubChapterByFraction(entries, currentFraction);
-    return { entries, currentChapterId: current?.id ?? null };
-  } finally {
-    book.destroy?.();
-  }
+  const response = await fetchBookContents(bookId, { signal });
+  const entries = response.items.map((entry): EpubContentsEntry => ({
+    id: entry.id,
+    title: entry.title,
+    location: entry.location,
+    depth: numberOrNull(entry.depth) ?? 0,
+    order: numberOrNull(entry.order) ?? 0,
+    sectionIndex: numberOrNull(entry.sectionIndex),
+    startFraction: numberOrNull(entry.startFraction),
+    endFraction: numberOrNull(entry.endFraction),
+  }));
+  const normalizedLocation = currentLocation?.trim() ?? "";
+  const current = normalizedLocation && !normalizedLocation.toLowerCase().startsWith("epubcfi(")
+    ? entries.findLast((entry) => entry.location === normalizedLocation) ?? null
+    : null;
+  const resolvedCurrent = current ?? resolveEpubChapterByFraction(entries, currentFraction);
+  return { entries, currentChapterId: resolvedCurrent?.id ?? null };
 }

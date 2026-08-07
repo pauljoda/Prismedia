@@ -29,6 +29,28 @@ internal static class EntityChildrenEndpoint {
             .Produces<EntityChildrenBatchResponse>()
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
 
+        group.MapPost("/children/references", async (
+            EntityChildrenBatchRequest request,
+            bool? hideNsfw,
+            HttpContext httpContext,
+            IEntityReadService entities,
+            CancellationToken cancellationToken) => {
+                if (request.ParentIds is null || request.ParentIds.Count > EntityChildrenBatchRequest.MaximumParentIds) {
+                    return Results.BadRequest(new ApiProblem(
+                        ApiProblemCodes.RequestInvalid,
+                        $"At most {EntityChildrenBatchRequest.MaximumParentIds} parent Entity identifiers may be requested."));
+                }
+
+                return Results.Ok(await entities.GetChildReferencesAsync(
+                    request.ParentIds,
+                    NsfwVisibility.ShouldHide(hideNsfw, httpContext),
+                    cancellationToken));
+            })
+            .WithName("GetEntityChildReferences")
+            .WithSummary("Get compact direct-child identities for multiple parents without thumbnail presentation data.")
+            .Produces<EntityChildReferenceBatchResponse>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
+
         return group;
     }
 }

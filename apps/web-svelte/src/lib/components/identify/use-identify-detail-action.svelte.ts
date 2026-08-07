@@ -2,13 +2,13 @@ import { goto } from "$app/navigation";
 import { Clock3, ScanSearch } from "@lucide/svelte";
 import {
   fetchIdentifyProviders,
-  fetchOptionalIdentifyQueueItem,
+  fetchOptionalIdentifyQueueItemStatus,
   providerCanIdentifyKind,
   requestIdentifySearch,
 } from "$lib/api/identify-client";
 import { isWanted } from "$lib/api/capabilities";
-import type { EntityCard } from "$lib/api/generated/model";
-import type { IdentifyQueueItem } from "$lib/api/identify-types";
+import { IDENTIFY_QUEUE_STATE } from "$lib/api/generated/codes";
+import type { EntityCard, IdentifyQueueItemStatus } from "$lib/api/generated/model";
 import type { EntityDetailActionButton } from "$lib/components/entities/EntityDetail.svelte";
 
 /**
@@ -18,7 +18,7 @@ import type { EntityDetailActionButton } from "$lib/components/entities/EntityDe
 export function useIdentifyDetailAction(
   entity: () => Pick<EntityCard, "id" | "kind" | "capabilities" | "hasSourceMedia"> | null | undefined,
 ): { readonly action: EntityDetailActionButton | null } {
-  let queuedItem: IdentifyQueueItem | null = $state(null);
+  let queuedItem: IdentifyQueueItemStatus | null = $state(null);
   let hasReadyProvider = $state(false);
   let loading = $state(false);
   let lastLoadKey = "";
@@ -123,7 +123,7 @@ export function useIdentifyDetailAction(
     if (showLoading) loading = true;
 
     const [queueItem, providers] = await Promise.all([
-      fetchOptionalIdentifyQueueItem(id).catch(() => null),
+      fetchOptionalIdentifyQueueItemStatus(id).catch(() => null),
       kind ? fetchIdentifyProviders(kind).catch(() => []) : Promise.resolve(null),
     ]);
     if (currentVersion !== loadVersion) {
@@ -157,6 +157,6 @@ export function useIdentifyDetailAction(
   };
 }
 
-function isActiveQueueState(state: IdentifyQueueItem["state"]): boolean {
-  return state !== "done" && state !== "deleted";
+function isActiveQueueState(state: IdentifyQueueItemStatus["state"]): boolean {
+  return state !== IDENTIFY_QUEUE_STATE.done && state !== IDENTIFY_QUEUE_STATE.deleted;
 }

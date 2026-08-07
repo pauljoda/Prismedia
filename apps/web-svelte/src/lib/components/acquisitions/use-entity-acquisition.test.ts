@@ -15,6 +15,7 @@ import Harness from "./use-entity-acquisition.test-harness.svelte";
 const mocks = vi.hoisted(() => ({
   commitEntityRequest: vi.fn(),
   fetchAcquisitionForEntity: vi.fn(),
+  fetchAcquisitionSummariesForEntity: vi.fn(),
   fetchEntityMonitor: vi.fn(),
   fetchMonitorEligibility: vi.fn(),
   resumeMonitor: vi.fn(),
@@ -25,6 +26,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("$lib/api/acquisitions", () => ({
   fetchAcquisitionForEntity: mocks.fetchAcquisitionForEntity,
+  fetchAcquisitionSummariesForEntity: mocks.fetchAcquisitionSummariesForEntity,
 }));
 
 vi.mock("$lib/api/monitors", () => ({
@@ -44,6 +46,7 @@ vi.mock("$lib/api/requests", () => ({
 describe("useEntityAcquisition", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.fetchAcquisitionSummariesForEntity.mockResolvedValue([]);
     mocks.fetchEntityMonitor.mockResolvedValue(null);
     mocks.fetchMonitorEligibility.mockResolvedValue(null);
     mocks.stopMonitor.mockResolvedValue({ entityPruned: false });
@@ -427,6 +430,9 @@ describe("useEntityAcquisition", () => {
     mocks.fetchAcquisitionForEntity
       .mockResolvedValueOnce(acquisition("acquisition-1", ACQUISITION_STATUS.waitingForRelease))
       .mockResolvedValueOnce(acquisition("acquisition-1", ACQUISITION_STATUS.manualSearchRequired));
+    mocks.fetchAcquisitionSummariesForEntity.mockResolvedValueOnce([
+      acquisition("acquisition-1", ACQUISITION_STATUS.manualSearchRequired).summary,
+    ]);
 
     render(Harness, { entityId: "movie-1", onStatusChanged });
     await vi.waitFor(() => {
@@ -434,9 +440,51 @@ describe("useEntityAcquisition", () => {
     });
     expect(onStatusChanged).not.toHaveBeenCalled();
 
-    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.advanceTimersByTimeAsync(60_000);
 
     expect(onStatusChanged).toHaveBeenCalledOnce();
+  });
+
+  it("polls compact summaries without reloading unchanged release candidates", async () => {
+    vi.useFakeTimers();
+    const initial = acquisition("acquisition-1", ACQUISITION_STATUS.downloading);
+    mocks.fetchAcquisitionForEntity.mockResolvedValue(initial);
+    mocks.fetchAcquisitionSummariesForEntity.mockResolvedValue([{
+      ...initial.summary,
+      progress: 0.42,
+      updatedAt: "2026-07-09T00:01:00Z",
+    }]);
+
+    render(Harness, { entityId: "movie-1" });
+    await vi.waitFor(() => expect(mocks.fetchAcquisitionForEntity).toHaveBeenCalledOnce());
+
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(mocks.fetchAcquisitionSummariesForEntity).toHaveBeenCalledOnce();
+    expect(mocks.fetchAcquisitionForEntity).toHaveBeenCalledOnce();
+  });
+
+  it("does not poll a settled acquisition or a stable leaf monitor", async () => {
+    vi.useFakeTimers();
+    mocks.fetchAcquisitionForEntity.mockResolvedValue(
+      acquisition("acquisition-1", ACQUISITION_STATUS.imported),
+    );
+    mocks.fetchEntityMonitor.mockResolvedValue(activeMonitor("book-1", "acquisition-1"));
+    mocks.fetchMonitorEligibility.mockResolvedValue({
+      canMonitor: true,
+      trackableProviders: ["openlibrary"],
+      discoversChildren: false,
+      canSearchMissingChildren: false,
+      missingChildEntityKind: null,
+    });
+
+    render(Harness, { entityId: "book-1" });
+    await vi.waitFor(() => expect(mocks.fetchAcquisitionForEntity).toHaveBeenCalledOnce());
+
+    await vi.advanceTimersByTimeAsync(120_000);
+
+    expect(mocks.fetchAcquisitionForEntity).toHaveBeenCalledOnce();
+    expect(mocks.fetchEntityMonitor).toHaveBeenCalledOnce();
   });
 });
 

@@ -68,4 +68,10 @@ internal abstract class EntityReadServiceStub : IEntityReadService {
         bool hideNsfw,
         CancellationToken cancellationToken) =>
         Task.FromResult(new EntityChildrenBatchResponse([]));
+
+    public virtual Task<EntityChildReferenceBatchResponse> GetChildReferencesAsync(
+        IReadOnlyList<Guid> parentIds,
+        bool hideNsfw,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(new EntityChildReferenceBatchResponse([]));
 }

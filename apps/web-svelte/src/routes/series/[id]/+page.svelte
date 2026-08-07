@@ -7,7 +7,7 @@
   import { useEntityDetailPage } from "$lib/components/entities/entity-detail-page-controller.svelte";
   import MediaProgressPanel from "$lib/components/MediaProgressPanel.svelte";
   import { PROGRESS_UNIT } from "$lib/api/generated/codes";
-  import { fetchEntity, fetchEntityChildren, type EntityCardFull } from "$lib/api/entities";
+  import { fetchEntity, fetchEntityChildReferences, type EntityCardFull } from "$lib/api/entities";
   import { updateEntityProgress } from "$lib/api/consumption";
   import { getCapability } from "$lib/api/capabilities";
   import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
@@ -181,7 +181,7 @@
       };
     }
 
-    const seasonChildren = await fetchEntityChildren(seasonIds, { signal });
+    const seasonChildren = await fetchEntityChildReferences(seasonIds, { signal });
     const episodeIds = seasonChildren.flatMap((group) =>
       group.items
         .filter((child) => child.kind === ENTITY_KIND.videoEpisode)

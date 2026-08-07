@@ -219,9 +219,13 @@ public sealed class EfAcquisitionStoreTests {
 
         var details = await AcquisitionTestFactory.Store(db)
             .ListForEntityAsync(entityId, CancellationToken.None);
+        var summaries = await AcquisitionTestFactory.Store(db)
+            .ListSummariesForEntityAsync(entityId, CancellationToken.None);
 
         Assert.Equal([newerEbookId, audiobookId, olderEbookId],
             details.Select(detail => detail.Summary.Id).ToArray());
+        Assert.Equal([newerEbookId, audiobookId, olderEbookId],
+            summaries.Select(summary => summary.Id).ToArray());
         Assert.Equal(
             [BookRendition.Ebook, BookRendition.Audiobook, BookRendition.Ebook],
             details.Select(detail => detail.Summary.BookRendition).ToArray());

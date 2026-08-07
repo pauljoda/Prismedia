@@ -1742,12 +1742,25 @@ public sealed class EfEntityReadServiceTests {
             [emptyParentId, populatedParentId, populatedParentId, hiddenParentId, Guid.NewGuid()],
             hideNsfw: true,
             CancellationToken.None);
+        var references = await CreateService(db).GetChildReferencesAsync(
+            [emptyParentId, populatedParentId, populatedParentId, hiddenParentId, Guid.NewGuid()],
+            hideNsfw: true,
+            CancellationToken.None);
 
         Assert.Equal([emptyParentId, populatedParentId], response.Groups.Select(group => group.ParentId));
         Assert.Empty(response.Groups[0].Items);
         Assert.Equal(
             [imageId, firstVideoId, secondVideoId],
             response.Groups[1].Items.Select(item => item.Id));
+        Assert.Equal([emptyParentId, populatedParentId], references.Groups.Select(group => group.ParentId));
+        Assert.Empty(references.Groups[0].Items);
+        Assert.Equal(
+            [
+                (imageId, EntityKind.Image),
+                (firstVideoId, EntityKind.VideoEpisode),
+                (secondVideoId, EntityKind.VideoEpisode),
+            ],
+            references.Groups[1].Items.Select(item => (item.Id, item.Kind)));
     }
 
     [Fact]

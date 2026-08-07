@@ -19,6 +19,17 @@ public interface IIdentifyQueueService {
     Task<IdentifyQueueItem?> GetAsync(Guid entityId, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Gets only the reconciled queue lifecycle state needed by Entity detail actions, without
+    /// candidates or the potentially large metadata proposal.
+    /// </summary>
+    async Task<IdentifyQueueItemStatus?> GetStatusAsync(
+        Guid entityId,
+        CancellationToken cancellationToken) =>
+        await GetAsync(entityId, cancellationToken) is { } item
+            ? new IdentifyQueueItemStatus(item.Id, item.EntityId, item.State, item.UpdatedAt)
+            : null;
+
+    /// <summary>
     /// Requests a provider search for the entity. The item enters the queued state and an interactive
     /// identify-search job runs the provider work; any search or cascade already in flight for the
     /// item is superseded.

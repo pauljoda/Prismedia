@@ -7,6 +7,7 @@ namespace Prismedia.Api.Tests;
 public sealed class OptionalEntityStateEndpointTests {
     [Theory]
     [InlineData("/api/identify/queue/entities/{0}")]
+    [InlineData("/api/identify/queue/entities/{0}/status")]
     [InlineData("/api/acquisitions/for-entity/{0}")]
     [InlineData("/api/monitors/for-entity/{0}")]
     public async Task OptionalEntityStateReturnsNoContentWhenItDoesNotExist(string routeTemplate) {

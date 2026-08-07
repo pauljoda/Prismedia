@@ -171,3 +171,20 @@ public sealed record EntityChildrenBatchGroup(Guid ParentId, IReadOnlyList<Entit
 /// <summary>Batch response preserving the requested order of visible parents.</summary>
 /// <param name="Groups">One group per visible, existing requested parent, including empty groups.</param>
 public sealed record EntityChildrenBatchResponse(IReadOnlyList<EntityChildrenBatchGroup> Groups);
+
+/// <summary>A direct child identity in stable structural order, without thumbnail presentation data.</summary>
+/// <param name="Id">Child Entity identifier.</param>
+/// <param name="Kind">Typed child Entity kind.</param>
+public sealed record EntityChildReference(Guid Id, EntityKind Kind);
+
+/// <summary>Compact direct-child identities for one visible Entity parent.</summary>
+/// <param name="ParentId">Visible parent Entity identifier.</param>
+/// <param name="Items">Direct child identities in stable structural order.</param>
+public sealed record EntityChildReferenceBatchGroup(
+    Guid ParentId,
+    IReadOnlyList<EntityChildReference> Items);
+
+/// <summary>Batch response preserving requested parent order without thumbnail payloads.</summary>
+/// <param name="Groups">One group per visible requested parent, including empty groups.</param>
+public sealed record EntityChildReferenceBatchResponse(
+    IReadOnlyList<EntityChildReferenceBatchGroup> Groups);

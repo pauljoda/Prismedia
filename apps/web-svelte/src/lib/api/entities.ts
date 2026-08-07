@@ -1,5 +1,6 @@
 import {
   getEntity,
+  getEntityChildReferences,
   getEntityChildren,
   getEntityThumbnails,
   listEntities,
@@ -9,6 +10,8 @@ import type {
   EntityCard as GeneratedEntityCard,
   EntityChildrenBatchGroup as GeneratedEntityChildrenBatchGroup,
   EntityChildrenBatchResponse as GeneratedEntityChildrenBatchResponse,
+  EntityChildReferenceBatchGroup as GeneratedEntityChildReferenceBatchGroup,
+  EntityChildReferenceBatchResponse as GeneratedEntityChildReferenceBatchResponse,
   EntityGroup as GeneratedEntityGroup,
   EntityListResponse as GeneratedEntityListResponse,
   EntityRefreshResponse,
@@ -22,6 +25,7 @@ export type EntityCard = GeneratedEntityThumbnail;
 export type EntityDetailCard = GeneratedEntityCard;
 export type EntityCardFull = GeneratedEntityCard;
 export type EntityChildGroup = GeneratedEntityGroup;
+export type EntityChildReferenceGroup = GeneratedEntityChildReferenceBatchGroup;
 export type EntityRelationshipGroup = GeneratedEntityGroup;
 export type EntityThumbnail = GeneratedEntityThumbnail;
 export type EntityListResponse = GeneratedEntityListResponse;
@@ -78,6 +82,34 @@ export async function fetchEntityChildren(
     groups.push(...unwrapGenerated<GeneratedEntityChildrenBatchResponse>(
       response,
       "Failed to fetch Entity children",
+    ).groups);
+  }
+
+  return groups;
+}
+
+/**
+ * Resolves only direct child identities and kinds for structural counts/order. This avoids hydrating
+ * artwork, capabilities, progress, and acquisition badges when the caller will not render cards.
+ */
+export async function fetchEntityChildReferences(
+  parentIds: string[],
+  options?: EntityThumbnailRequestOptions,
+): Promise<GeneratedEntityChildReferenceBatchGroup[]> {
+  const uniqueParentIds = [...new Set(parentIds.filter(Boolean))];
+  if (uniqueParentIds.length === 0) return [];
+
+  const groups: GeneratedEntityChildReferenceBatchGroup[] = [];
+  for (let start = 0; start < uniqueParentIds.length; start += ENTITY_CHILDREN_BATCH_SIZE) {
+    options?.signal?.throwIfAborted();
+    const response = await getEntityChildReferences(
+      { parentIds: uniqueParentIds.slice(start, start + ENTITY_CHILDREN_BATCH_SIZE) },
+      { hideNsfw: options?.hideNsfw },
+      requestInit(options),
+    );
+    groups.push(...unwrapGenerated<GeneratedEntityChildReferenceBatchResponse>(
+      response,
+      "Failed to fetch Entity child references",
     ).groups);
   }
 

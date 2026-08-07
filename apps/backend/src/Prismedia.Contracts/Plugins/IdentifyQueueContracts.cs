@@ -42,6 +42,17 @@ public sealed record IdentifyQueueItem(
     DateTimeOffset? CompletedAt,
     Guid? JobGraphId = null);
 
+/// <summary>Compact Identify queue lifecycle state for Entity detail actions.</summary>
+/// <param name="Id">Stable queue row identifier.</param>
+/// <param name="EntityId">Prismedia Entity represented by the queue row.</param>
+/// <param name="State">Current queue lifecycle state.</param>
+/// <param name="UpdatedAt">When the lifecycle snapshot last changed.</param>
+public sealed record IdentifyQueueItemStatus(
+    Guid Id,
+    Guid EntityId,
+    IdentifyQueueState State,
+    DateTimeOffset UpdatedAt);
+
 /// <summary>
 /// Live progress for applying a reviewed Identify proposal.
 /// </summary>

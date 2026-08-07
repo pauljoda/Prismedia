@@ -911,6 +911,17 @@ public interface IAcquisitionStore : IAcquisitionLifecycleStore {
         CancellationToken cancellationToken) =>
         await GetLatestForEntityAsync(entityId, cancellationToken) is { } detail ? [detail] : [];
 
+    /// <summary>
+    /// Every direct acquisition targeting this library Entity, projected without scored release
+    /// candidates for cheap lifecycle polling.
+    /// </summary>
+    async Task<IReadOnlyList<AcquisitionSummary>> ListSummariesForEntityAsync(
+        Guid entityId,
+        CancellationToken cancellationToken) =>
+        (await ListForEntityAsync(entityId, cancellationToken))
+            .Select(detail => detail.Summary)
+            .ToArray();
+
     /// <summary>Newest acquisition summary per requested Entity id, loaded as one bounded read.</summary>
     async Task<IReadOnlyDictionary<Guid, Contracts.Acquisition.AcquisitionSummary>> ListLatestSummariesForEntityIdsAsync(
         IReadOnlyCollection<Guid> entityIds,
