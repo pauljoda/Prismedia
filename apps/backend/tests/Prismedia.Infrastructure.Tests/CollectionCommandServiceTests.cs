@@ -267,6 +267,58 @@ public sealed class CollectionCommandServiceTests {
     }
 
     [Fact]
+    public async Task AddItemsAsyncAllowsSharedRecipientsWithoutGrantingOwnerControls() {
+        await using var db = CreateContext();
+        var ownerUserId = Guid.Parse("11111111-1111-4111-8111-111111111111");
+        var recipientUserId = Guid.Parse("22222222-2222-4222-8222-222222222222");
+        var collectionId = SeedCollection(
+            db,
+            "Shared",
+            ownerUserId: ownerUserId,
+            isShared: true);
+        var firstId = SeedEntity(db, EntityKind.Video.ToCode(), "First");
+        var secondId = SeedEntity(db, EntityKind.Image.ToCode(), "Second");
+        await db.SaveChangesAsync();
+        var service = CreateService(db, user: TestUserContext.MemberAs(recipientUserId));
+
+        var added = await service.AddItemsAsync(
+            collectionId,
+            new CollectionAddItemsRequest([
+                new CollectionItemReference(EntityKind.Video, firstId),
+            ]),
+            CancellationToken.None);
+
+        Assert.Equal(CollectionCommandStatus.Succeeded, added.Status);
+        Assert.Equal(1, added.Count);
+        var membership = await db.CollectionItemDetails.SingleAsync();
+
+        var removed = await service.RemoveItemsAsync(
+            collectionId,
+            new CollectionRemoveItemsRequest([membership.Id]),
+            CancellationToken.None);
+        var reordered = await service.ReorderItemsAsync(
+            collectionId,
+            new CollectionReorderItemsRequest([membership.Id]),
+            CancellationToken.None);
+
+        Assert.Equal(CollectionCommandStatus.NotFound, removed.Status);
+        Assert.Equal(CollectionCommandStatus.NotFound, reordered.Status);
+        Assert.Equal(firstId, Assert.Single(db.CollectionItemDetails).ItemEntityId);
+
+        (await db.CollectionDetails.SingleAsync()).IsShared = false;
+        await db.SaveChangesAsync();
+        var rejected = await service.AddItemsAsync(
+            collectionId,
+            new CollectionAddItemsRequest([
+                new CollectionItemReference(EntityKind.Image, secondId),
+            ]),
+            CancellationToken.None);
+
+        Assert.Equal(CollectionCommandStatus.NotFound, rejected.Status);
+        Assert.DoesNotContain(db.CollectionItemDetails, row => row.ItemEntityId == secondId);
+    }
+
+    [Fact]
     public async Task AddItemsAsyncAllowsAudioContainersButRejectsNestedCollections() {
         await using var db = CreateContext();
         var collectionId = SeedCollection(db, "Manual");

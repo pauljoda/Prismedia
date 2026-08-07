@@ -29,7 +29,7 @@ public sealed class CollectionItemReadService(
         var items = await (
             from detail in db.CollectionDetails.AsNoTracking()
             join entity in db.Entities.AsNoTracking() on detail.EntityId equals entity.Id
-            where (currentUser.IsSystem || detail.OwnerUserId == userId) &&
+            where (currentUser.IsSystem || detail.OwnerUserId == userId || detail.IsShared) &&
                   detail.Mode != CollectionMode.Dynamic &&
                   (!hideNsfw || !entity.IsNsfw)
             orderby entity.Title, entity.Id

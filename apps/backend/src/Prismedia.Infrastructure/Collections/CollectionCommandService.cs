@@ -127,6 +127,24 @@ public sealed class CollectionCommandPersistence(
     }
 
     /// <inheritdoc />
+    public Task<CollectionMembershipState?> GetMembershipStateAsync(
+        Guid collectionId,
+        CancellationToken cancellationToken) =>
+        db.Entities
+            .Where(entity =>
+                entity.Id == collectionId &&
+                entity.KindCode == EntityKind.Collection.ToCode())
+            .Join(
+                db.CollectionDetails,
+                entity => entity.Id,
+                detail => detail.EntityId,
+                (_, detail) => new CollectionMembershipState(
+                    detail.OwnerUserId,
+                    detail.Mode,
+                    detail.IsShared))
+            .FirstOrDefaultAsync(cancellationToken);
+
+    /// <inheritdoc />
     public async Task<IReadOnlyDictionary<Guid, CollectionItemCandidate>> GetActiveItemsAsync(
         IReadOnlyList<Guid> entityIds,
         CancellationToken cancellationToken) {
@@ -146,10 +164,10 @@ public sealed class CollectionCommandPersistence(
     /// <inheritdoc />
     public async Task<int> AddManualItemsAsync(
         Guid collectionId,
-        Guid ownerUserId,
+        Guid actingUserId,
         IReadOnlyList<Guid> entityIds,
         CancellationToken cancellationToken) {
-        if (!await IsOwnedAsync(collectionId, ownerUserId, cancellationToken)) {
+        if (!await CanContributeAsync(collectionId, actingUserId, cancellationToken)) {
             return 0;
         }
 
@@ -343,5 +361,14 @@ public sealed class CollectionCommandPersistence(
         CancellationToken cancellationToken) =>
         db.CollectionDetails.AnyAsync(
             row => row.EntityId == collectionId && row.OwnerUserId == ownerUserId,
+            cancellationToken);
+
+    private Task<bool> CanContributeAsync(
+        Guid collectionId,
+        Guid actingUserId,
+        CancellationToken cancellationToken) =>
+        db.CollectionDetails.AnyAsync(
+            row => row.EntityId == collectionId &&
+                (row.OwnerUserId == actingUserId || row.IsShared),
             cancellationToken);
 }

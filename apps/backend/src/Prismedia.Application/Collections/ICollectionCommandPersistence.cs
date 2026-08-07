@@ -21,6 +21,11 @@ public interface ICollectionCommandPersistence {
         Guid ownerUserId,
         CancellationToken cancellationToken);
 
+    /// <summary>Returns membership settings for an active collection so the domain can authorize contributions.</summary>
+    Task<CollectionMembershipState?> GetMembershipStateAsync(
+        Guid collectionId,
+        CancellationToken cancellationToken);
+
     /// <summary>Loads active entities by id so the application can validate collection membership.</summary>
     Task<IReadOnlyDictionary<Guid, CollectionItemCandidate>> GetActiveItemsAsync(
         IReadOnlyList<Guid> entityIds,
@@ -29,7 +34,7 @@ public interface ICollectionCommandPersistence {
     /// <summary>Adds manual collection item rows, skipping already-present entity ids.</summary>
     Task<int> AddManualItemsAsync(
         Guid collectionId,
-        Guid ownerUserId,
+        Guid actingUserId,
         IReadOnlyList<Guid> entityIds,
         CancellationToken cancellationToken);
 
@@ -65,6 +70,9 @@ public sealed record CollectionItemCandidate(Guid EntityId, EntityKind EntityKin
 
 /// <summary>Persisted settings needed to authorize and normalize an owner edit.</summary>
 public sealed record CollectionEditState(CollectionMode Mode, bool IsShared);
+
+/// <summary>Persisted ownership and mode needed to authorize manual membership contributions.</summary>
+public sealed record CollectionMembershipState(Guid OwnerUserId, CollectionMode Mode, bool IsShared);
 
 /// <summary>Visible rule match after persistence-level visibility filtering.</summary>
 public sealed record CollectionVisibleRuleMatch(string EntityType, Guid EntityId);

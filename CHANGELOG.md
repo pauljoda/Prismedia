@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Collection thumbnails now use a square frame across web and native apps, and household users can add visible items to shared manual or hybrid collections without receiving a false not-found error.
 - Studio logos now keep their original artwork format and use one API-defined neutral plate across web detail pages, grids, and native apps, preserving scalable SVG quality and readable transparent marks.
 - The web image lightbox now shows original still images directly, falls back visibly when an original file is unavailable, and plays animated GIF, APNG, WebP, MP4, and WebM media instead of leaving an empty or frozen frame.
 - Job Control now hides current, recent, and lane history belonging to NSFW libraries whenever SFW mode is active, preventing hidden library names and activity from appearing in operational history.

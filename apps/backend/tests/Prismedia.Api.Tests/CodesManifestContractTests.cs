@@ -104,6 +104,10 @@ public sealed class CodesManifestContractTests {
         Assert.Equal(
             EntityArtworkSurface.BrandPlate.ToCode(),
             kinds[EntityKind.Studio.ToCode()].ArtworkSurface);
+
+        var collection = kinds[EntityKind.Collection.ToCode()];
+        Assert.Equal(1, collection.ThumbnailWidth);
+        Assert.Equal(1, collection.ThumbnailHeight);
     }
 
     [Fact]

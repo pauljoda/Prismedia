@@ -16,13 +16,16 @@ public sealed class CollectionModelTests {
 
         Assert.True(collection.IsOwnedBy(OwnerUserId));
         Assert.True(collection.CanView(OwnerUserId));
+        Assert.True(collection.CanContributeItems(OwnerUserId));
         Assert.False(collection.CanView(otherUserId));
+        Assert.False(collection.CanContributeItems(otherUserId));
 
         collection.SetSharing(true);
 
         Assert.Equal(OwnerUserId, collection.OwnerUserId);
         Assert.True(collection.IsShared);
         Assert.True(collection.CanView(otherUserId));
+        Assert.True(collection.CanContributeItems(otherUserId));
         Assert.False(collection.IsOwnedBy(otherUserId));
     }
 

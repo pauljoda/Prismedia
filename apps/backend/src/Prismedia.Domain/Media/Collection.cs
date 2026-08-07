@@ -18,8 +18,8 @@ public sealed class CollectionEntityKindDefinition()
         new EntityKindPresentation(
             EntityKindIcon.Collection,
             EntityKindIcon.Collection,
-            16,
-            9,
+            1,
+            1,
             EntityAccentHue.Magenta,
             EntityAccentHue.Red,
             EntityArtworkFit.Cover),
@@ -119,6 +119,9 @@ public sealed class Collection : Entity<CollectionEntityKindDefinition> {
 
     /// <summary>Returns whether the supplied user may view this collection.</summary>
     public bool CanView(Guid userId) => IsShared || IsOwnedBy(userId);
+
+    /// <summary>Returns whether the supplied user may contribute new items to this collection.</summary>
+    public bool CanContributeItems(Guid userId) => IsShared || IsOwnedBy(userId);
 
     /// <summary>Sets whether other household users may view this collection.</summary>
     public void SetSharing(bool isShared) {

@@ -51,8 +51,8 @@ export async function fetchCollections(
   );
 }
 
-/** Lists only collections the current user owns and can mutate. */
-export async function fetchEditableCollections(
+/** Lists manual or hybrid collections the current user may contribute items to. */
+export async function fetchAddableCollections(
   options?: RequestOptions,
 ): Promise<CollectionMembershipOption[]> {
   const response = await listCollectionMembershipOptions(

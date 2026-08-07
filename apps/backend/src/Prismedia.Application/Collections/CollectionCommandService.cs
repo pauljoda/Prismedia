@@ -77,7 +77,11 @@ public sealed class CollectionCommandService(
         Guid collectionId,
         CollectionAddItemsRequest request,
         CancellationToken cancellationToken) {
-        var membership = await ManualMembershipAsync(collectionId, "Dynamic collections are populated by rules.", cancellationToken);
+        var membership = await ManualMembershipAsync(
+            collectionId,
+            allowSharedContribution: true,
+            "Dynamic collections are populated by rules.",
+            cancellationToken);
         if (membership is not null) {
             return membership;
         }
@@ -123,7 +127,11 @@ public sealed class CollectionCommandService(
         Guid collectionId,
         CollectionRemoveItemsRequest request,
         CancellationToken cancellationToken) {
-        var membership = await ManualMembershipAsync(collectionId, "Dynamic collections are changed by refreshing their rules.", cancellationToken);
+        var membership = await ManualMembershipAsync(
+            collectionId,
+            allowSharedContribution: false,
+            "Dynamic collections are changed by refreshing their rules.",
+            cancellationToken);
         if (membership is not null) {
             return membership;
         }
@@ -142,7 +150,11 @@ public sealed class CollectionCommandService(
         Guid collectionId,
         CollectionReorderItemsRequest request,
         CancellationToken cancellationToken) {
-        var membership = await ManualMembershipAsync(collectionId, "Dynamic collections are changed by refreshing their rules.", cancellationToken);
+        var membership = await ManualMembershipAsync(
+            collectionId,
+            allowSharedContribution: false,
+            "Dynamic collections are changed by refreshing their rules.",
+            cancellationToken);
         if (membership is not null) {
             return membership;
         }
@@ -216,11 +228,11 @@ public sealed class CollectionCommandService(
 
     private async Task<CollectionCountResult?> ManualMembershipAsync(
         Guid collectionId,
+        bool allowSharedContribution,
         string invalidMessage,
         CancellationToken cancellationToken) {
-        var state = await persistence.GetEditStateAsync(
+        var state = await persistence.GetMembershipStateAsync(
             collectionId,
-            currentUser.UserId,
             cancellationToken);
         if (state is null) {
             return new CollectionCountResult(CollectionCommandStatus.NotFound, Message: "Collection was not found.");
@@ -229,10 +241,16 @@ public sealed class CollectionCommandService(
         var collection = new Collection(
             collectionId,
             "Collection",
-            currentUser.UserId,
+            state.OwnerUserId,
             state.Mode,
             state.Mode == CollectionMode.Manual ? null : EmptyRuleJson,
             isShared: state.IsShared);
+        var mayChangeMembership = collection.IsOwnedBy(currentUser.UserId) ||
+            (allowSharedContribution && collection.CanContributeItems(currentUser.UserId));
+        if (!mayChangeMembership) {
+            return new CollectionCountResult(CollectionCommandStatus.NotFound, Message: "Collection was not found.");
+        }
+
         return collection.CanEditManualMembership
             ? null
             : new CollectionCountResult(CollectionCommandStatus.Invalid, Message: invalidMessage);

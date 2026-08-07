@@ -48,6 +48,10 @@ describe("entity thumbnail helpers", () => {
     expect(aspectRatioForKind("person")).toEqual({ width: 4, height: 5 });
   });
 
+  it("uses the API-defined square shape for collections", () => {
+    expect(aspectRatioForKind("collection")).toEqual({ width: 1, height: 1 });
+  });
+
   it("selects hover assets by pointer ratio and clamps edge values", () => {
     expect(pickHoverAsset(card, -1)?.src).toBe("/sample/frame-1.jpg");
     expect(pickHoverAsset(card, 0.5)?.src).toBe("/sample/frame-2.jpg");

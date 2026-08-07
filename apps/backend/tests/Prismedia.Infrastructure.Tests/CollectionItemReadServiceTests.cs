@@ -12,14 +12,14 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class CollectionItemReadServiceTests {
     [Fact]
-    public async Task ListMembershipOptionsAsyncReturnsOnlyOwnedMutableVisibleCollections() {
+    public async Task ListMembershipOptionsAsyncReturnsOwnedAndSharedMutableVisibleCollections() {
         await using var db = CreateContext();
         var ownerId = Guid.Parse("11111111-1111-4111-8111-111111111111");
         var otherOwnerId = Guid.Parse("22222222-2222-4222-8222-222222222222");
         var manualId = SeedCollection(db, "Zulu", ownerId, CollectionMode.Manual);
         var hybridId = SeedCollection(db, "Alpha", ownerId, CollectionMode.Hybrid);
         _ = SeedCollection(db, "Rules", ownerId, CollectionMode.Dynamic);
-        _ = SeedCollection(db, "Shared", otherOwnerId, CollectionMode.Manual, isShared: true);
+        var sharedId = SeedCollection(db, "Shared", otherOwnerId, CollectionMode.Manual, isShared: true);
         _ = SeedCollection(db, "Private", otherOwnerId, CollectionMode.Manual);
         var nsfwId = SeedCollection(db, "Hidden", ownerId, CollectionMode.Manual, isNsfw: true);
         await db.SaveChangesAsync();
@@ -27,10 +27,10 @@ public sealed class CollectionItemReadServiceTests {
         var service = CreateService(db, TestUserContext.MemberAs(ownerId));
 
         var safe = await service.ListMembershipOptionsAsync(hideNsfw: true, CancellationToken.None);
-        Assert.Equal([hybridId, manualId], safe.Items.Select(item => item.Id));
+        Assert.Equal([hybridId, sharedId, manualId], safe.Items.Select(item => item.Id));
 
         var all = await service.ListMembershipOptionsAsync(hideNsfw: false, CancellationToken.None);
-        Assert.Equal([hybridId, nsfwId, manualId], all.Items.Select(item => item.Id));
+        Assert.Equal([hybridId, nsfwId, sharedId, manualId], all.Items.Select(item => item.Id));
     }
 
     [Fact]
