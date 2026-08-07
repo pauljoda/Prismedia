@@ -123,7 +123,7 @@ async function main() {
   // presentation, and behavior flags so clients do not rebuild parallel maps for each concern.
   const entityKindFields = [
     "code", "displayName", "groupLabel", "category", "storageShape", "icon", "referenceIcon",
-    "thumbnailWidth", "thumbnailHeight", "primaryAccent", "secondaryAccent", "artworkFit",
+    "thumbnailWidth", "thumbnailHeight", "primaryAccent", "secondaryAccent", "artworkFit", "artworkSurface",
     "navigation", "search", "autoIdentifySelector", "identifyPluginFallbackKind", "containableKinds", "mediaQualityFamily",
     "supportsFileDeletion", "supportsAtomicMediaUpgrade", "supportsManualManagement",
     "manualAcquisition",
@@ -172,7 +172,8 @@ async function main() {
     `storageShape: ${lit(kind.storageShape)}, presentation: { icon: ${lit(kind.icon)}, ` +
     `referenceIcon: ${lit(kind.referenceIcon)}, thumbnailWidth: ${lit(kind.thumbnailWidth)}, ` +
     `thumbnailHeight: ${lit(kind.thumbnailHeight)}, primaryAccent: ${lit(kind.primaryAccent)}, ` +
-    `secondaryAccent: ${lit(kind.secondaryAccent)}, artworkFit: ${lit(kind.artworkFit)} }, ` +
+    `secondaryAccent: ${lit(kind.secondaryAccent)}, artworkFit: ${lit(kind.artworkFit)}, ` +
+    `artworkSurface: ${lit(kind.artworkSurface)} }, ` +
     `navigation: ${lit(kind.navigation)}, search: ${lit(kind.search)}, ` +
     `autoIdentifySelector: ${lit(kind.autoIdentifySelector)}, ` +
     `identifyPluginFallbackKind: ${lit(kind.identifyPluginFallbackKind)}, ` +
@@ -213,6 +214,7 @@ async function main() {
       `  primaryAccent: EntityAccentHueCode;\n` +
       `  secondaryAccent: EntityAccentHueCode;\n` +
       `  artworkFit: EntityArtworkFitCode;\n` +
+      `  artworkSurface: EntityArtworkSurfaceCode;\n` +
       `}\n\n` +
       `export interface EntityKindNavigationManifestEntry {\n` +
       `  canonicalBrowseKind: EntityKindCode;\n` +

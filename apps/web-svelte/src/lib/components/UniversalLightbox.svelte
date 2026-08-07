@@ -20,12 +20,12 @@
   import { positiveNumberValue } from "$lib/utils/format";
   import { createNavigationKeyHandler } from "$lib/keyboard/navigation-keyboard";
   import { portal } from "$lib/actions/portal";
-  import { CAPABILITY_KIND } from "$lib/entities/entity-codes";
+  import { CAPABILITY_KIND, ENTITY_KIND } from "$lib/entities/entity-codes";
   import { PLAYBACK_MODE } from "$lib/api/generated/codes";
   import NsfwBlur from "./nsfw/NsfwBlur.svelte";
   import VideoPlayer, { type VideoPlayerHandle } from "./VideoPlayer.svelte";
   import {
-    buildLightboxImageSource,
+    buildLightboxImageSources,
     buildLightboxPreloadSources,
     buildLightboxVideoSources,
     isLightboxVideoCapable,
@@ -74,17 +74,21 @@
   let ratingOverrides = $state<Record<string, number | null>>({});
   let stageEl: HTMLDivElement | undefined = $state();
   let imageEl: HTMLImageElement | undefined = $state();
+  let nativeVideoEl: HTMLVideoElement | undefined = $state();
   let videoPlayerHandle: VideoPlayerHandle | undefined = $state();
   let videoMuted = $state(true);
   let videoReady = $state(false);
   let videoIntrinsicW = $state(0);
   let videoIntrinsicH = $state(0);
   let warmedImages = $state<Record<string, WarmedImageDimensions>>({});
+  let imageSourceIndex = $state(0);
+  let imageSourcesExhausted = $state(false);
   let stripThumbEls: Array<HTMLButtonElement | undefined> = $state([]);
   let pointerStart: { x: number; y: number; t: number } | null = null;
   let panning = $state(false);
   let lastTapAt = 0;
   let activeMediaKey: string | null = null;
+  let activeEntityId: string | null = null;
   const pendingImageWarmers = new Map<string, HTMLImageElement>();
   // When a swipe over a video is consumed as navigation/dismiss, the browser
   // still fires a trailing click that would otherwise toggle play. This flag
@@ -100,12 +104,14 @@
     const rating = getCapability(current.capabilities, CAPABILITY_KIND.rating)?.value ?? current.rating ?? null;
     return rating == null ? null : Number(rating);
   });
-  const currentImageSource = $derived(current ? buildLightboxImageSource(current) : null);
+  const currentImageSources = $derived(current ? buildLightboxImageSources(current) : []);
+  const currentImageSource = $derived(currentImageSources[imageSourceIndex] ?? null);
   const isCurrentVideo = $derived(current ? isLightboxVideoCapable(current) : false);
   const currentVideoSources = $derived(current ? buildLightboxVideoSources(current, { preferOriginal: true }) : []);
   const primaryVideoSource = $derived(currentVideoSources[0] ?? null);
+  const usesNativeAnimatedVideo = $derived(current?.kind === ENTITY_KIND.image && isCurrentVideo);
   const currentMediaKey = $derived(current ? `${current.id}:${currentImageSource?.src ?? primaryVideoSource?.src ?? ""}` : null);
-  const hasCurrentVideoPlayback = $derived(Boolean(isCurrentVideo && primaryVideoSource));
+  const hasCurrentVideoPlayback = $derived(Boolean(isCurrentVideo && currentVideoSources.length > 0));
   const primaryVideoCodec = $derived(primaryVideoSource?.quality === "original" ? currentTechnical?.codec : null);
   const currentVideoFit = $derived.by(() => {
     const width =
@@ -150,6 +156,11 @@
 
   $effect(() => {
     if (!current) return;
+    if (activeEntityId !== current.id) {
+      activeEntityId = current.id;
+      imageSourceIndex = 0;
+      imageSourcesExhausted = false;
+    }
     if (activeMediaKey === currentMediaKey) return;
     activeMediaKey = currentMediaKey;
 
@@ -168,6 +179,7 @@
     videoIntrinsicW = 0;
     videoIntrinsicH = 0;
     videoPlayerHandle = undefined;
+    nativeVideoEl = undefined;
     if (warmed) {
       scheduleFitForCurrentMedia(currentMediaKey);
     }
@@ -276,11 +288,41 @@
     applyFit();
   }
 
-  function handleVideoCanPlay() {
-    const video = stageEl?.querySelector("video");
+  function handleImageError() {
+    if (imageSourceIndex + 1 < currentImageSources.length) {
+      imageSourceIndex += 1;
+      return;
+    }
+
+    imageSourcesExhausted = true;
+    ready = true;
+  }
+
+  function rememberVideoDimensions(video: HTMLVideoElement | null | undefined) {
     videoIntrinsicW = video?.videoWidth || videoIntrinsicW;
     videoIntrinsicH = video?.videoHeight || videoIntrinsicH;
+  }
+
+  function handleVideoCanPlay() {
+    rememberVideoDimensions(stageEl?.querySelector("video"));
     videoReady = true;
+  }
+
+  async function handleNativeVideoCanPlay(event: Event) {
+    const video = event.currentTarget as HTMLVideoElement;
+    rememberVideoDimensions(video);
+    videoReady = true;
+    if (!video.paused) return;
+    try {
+      await video.play();
+    } catch {
+      // Muted autoplay is requested declaratively as well; native controls remain available
+      // if a browser policy still requires an explicit user gesture.
+    }
+  }
+
+  function handleNativeVolumeChange(event: Event) {
+    videoMuted = (event.currentTarget as HTMLVideoElement).muted;
   }
 
   function zoomBy(delta: number, centerX?: number, centerY?: number) {
@@ -429,6 +471,11 @@
   }
 
   function toggleVideoMute() {
+    if (nativeVideoEl) {
+      nativeVideoEl.muted = !nativeVideoEl.muted;
+      videoMuted = nativeVideoEl.muted;
+      return;
+    }
     videoPlayerHandle?.toggleMute();
     videoMuted = !videoMuted;
   }
@@ -571,7 +618,37 @@
             style:opacity={ready ? 1 : 0}
           >
             <NsfwBlur isNsfw={current.isNsfw === true} class="lightbox-media-guard">
-              {#if isCurrentVideo && primaryVideoSource}
+              {#if usesNativeAnimatedVideo && currentVideoSources.length > 0}
+                <div
+                  class="lightbox-video-shell"
+                  class:has-natural-ratio={Boolean(currentVideoFit)}
+                  class:is-ready={videoReady}
+                  style={`--lightbox-video-aspect-ratio: ${currentVideoFit?.aspectRatio ?? "16 / 9"}; --lightbox-video-width-ratio: ${currentVideoFit?.widthToHeightRatio ?? 1.7777777778};`}
+                >
+                  {#if fallbackPoster}
+                    <img class="lightbox-video-poster" src={fallbackPoster} alt="" aria-hidden="true" />
+                  {/if}
+                  {#key currentMediaKey}
+                    <video
+                      bind:this={nativeVideoEl}
+                      class="lightbox-native-video"
+                      controls
+                      autoplay
+                      loop
+                      playsinline
+                      muted={videoMuted}
+                      poster={fallbackPoster}
+                      onloadedmetadata={handleNativeVideoCanPlay}
+                      oncanplay={handleNativeVideoCanPlay}
+                      onvolumechange={handleNativeVolumeChange}
+                    >
+                      {#each currentVideoSources as source (`${source.quality}:${source.src}`)}
+                        <source src={source.src} type={source.type ?? undefined} />
+                      {/each}
+                    </video>
+                  {/key}
+                </div>
+              {:else if isCurrentVideo && primaryVideoSource}
                 <div
                   class="lightbox-video-shell"
                   class:has-natural-ratio={Boolean(currentVideoFit)}
@@ -605,11 +682,14 @@
                   alt={current.title}
                   class="lightbox-image"
                   referrerpolicy="no-referrer"
-                  style:width="{naturalW || "auto"}px"
-                  style:height="{naturalH || "auto"}px"
+                  style:width={naturalW ? `${naturalW}px` : undefined}
+                  style:height={naturalH ? `${naturalH}px` : undefined}
                   onload={handleImageLoad}
+                  onerror={handleImageError}
                   draggable="false"
                 />
+              {:else if imageSourcesExhausted}
+                <div class="unsupported">The original file and available previews could not be loaded</div>
               {:else if currentImageSource}
                 <img
                   bind:this={imageEl}
@@ -617,9 +697,10 @@
                   alt={current.title}
                   class="lightbox-image"
                   referrerpolicy="no-referrer"
-                  style:width="{naturalW || "auto"}px"
-                  style:height="{naturalH || "auto"}px"
+                  style:width={naturalW ? `${naturalW}px` : undefined}
+                  style:height={naturalH ? `${naturalH}px` : undefined}
                   onload={handleImageLoad}
+                  onerror={handleImageError}
                   draggable="false"
                 />
               {:else}
@@ -694,8 +775,7 @@
     max-height: 100dvh;
     overflow: hidden;
     isolation: isolate;
-    background: rgb(0 0 0 / 0.95);
-    backdrop-filter: blur(var(--glass-blur-sm));
+    background: #000;
     color: var(--color-text-primary, #f2eed8);
   }
 
@@ -894,6 +974,20 @@
     height: auto;
     opacity: 0;
     transition: opacity 160ms ease;
+  }
+
+  .lightbox-native-video {
+    width: 100%;
+    max-width: 100%;
+    height: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    opacity: 0;
+    transition: opacity 160ms ease;
+  }
+
+  .lightbox-video-shell.is-ready .lightbox-native-video {
+    opacity: 1;
   }
 
   .lightbox-video-shell.is-ready :global([data-testid="vidstack-video-player"]) {

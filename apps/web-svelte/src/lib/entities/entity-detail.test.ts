@@ -195,7 +195,7 @@ describe("entity detail view model", () => {
     expect(detail.poster?.src).toBe("/assets/plugins/artwork/book-1/cover.jpg");
   });
 
-  it("uses logo artwork as poster fallback for entities without poster art", () => {
+  it("uses original logo artwork as poster fallback for entities without poster art", () => {
     const detail = entityCardToDetailCard({
       id: "studio-1",
       kind: "studio",
@@ -206,17 +206,17 @@ describe("entity detail view model", () => {
         {
           kind: "images",
           supportedKinds: ["logo"],
-          thumbnailUrl: null,
+          thumbnailUrl: "/assets/studios/hbo-logo.svg",
           thumbnail2xUrl: null,
-          coverUrl: null,
-          items: [{ kind: "logo", path: "/assets/studios/hbo-logo.png", mimeType: "image/png" }],
+          coverUrl: "/assets/studios/hbo-logo.svg",
+          items: [{ kind: "logo", path: "/assets/studios/hbo-logo.svg", mimeType: "image/svg+xml" }],
         },
       ],
       childrenByKind: [],
       relationships: [],
     } satisfies EntityCard);
 
-    expect(detail.poster?.src).toBe("/assets/studios/hbo-logo.png");
+    expect(detail.poster?.src).toBe("/assets/studios/hbo-logo.svg");
   });
 
   it("builds detail poster previews from every child group", () => {

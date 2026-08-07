@@ -1,5 +1,9 @@
 <script lang="ts">
-  import { ENTITY_FILE_ROLE, ENTITY_KIND, THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
+  import {
+    ENTITY_ARTWORK_SURFACE,
+    ENTITY_KIND_DEFINITIONS,
+    THUMBNAIL_HOVER_KIND,
+  } from "$lib/api/generated/codes";
   import { paletteFromImage, type ArtworkPalette } from "$lib/entities/artwork-palette";
   import {
     getThumbnailAsset,
@@ -88,8 +92,9 @@
   const asset = $derived(getThumbnailAsset(card, hoverBroken || isSpriteHover ? null : pointerRatio));
   const aspectRatio = $derived(toAspectRatioValue(card.aspectRatio));
   const imageFit = $derived(card.fit ?? "cover");
-  const isLogoLikeArtwork = $derived(
-    card.cover?.role === ENTITY_FILE_ROLE.logo || card.entity.kind === ENTITY_KIND.studio,
+  const usesBrandPlate = $derived(
+    ENTITY_KIND_DEFINITIONS[card.entity.kind].presentation.artworkSurface ===
+      ENTITY_ARTWORK_SURFACE.brandPlate,
   );
   const placeholderIcon = $derived(iconForKind(card.entity.kind));
   const sequenceRestCover = $derived(
@@ -333,7 +338,7 @@
   bind:this={mediaEl}
   class="media"
   class:has-placeholder={showPlaceholder}
-  class:has-logo-art={isLogoLikeArtwork && !showPlaceholder}
+  class:has-logo-art={usesBrandPlate && !showPlaceholder}
   class:is-compact={density === "compact"}
   class:is-image-loading={showImageLoading}
   class:is-image-only={mediaOnly}

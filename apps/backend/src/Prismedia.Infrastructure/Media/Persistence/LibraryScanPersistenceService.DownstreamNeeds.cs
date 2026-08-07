@@ -142,7 +142,8 @@ public sealed partial class LibraryScanPersistenceService {
                 NeedsSubtitleExtraction: !hasUsableSubtitleState.Contains(id),
                 // Backfill: an existing cover missing either small variant. New entities
                 // (no cover at scan time) get theirs from GeneratePreview instead.
-                NeedsGridThumbnail: hasCover.Contains(id) &&
+                NeedsGridThumbnail: !PreservesOriginalArtwork(kindCode) &&
+                    hasCover.Contains(id) &&
                     (!hasGridThumbnail.Contains(id) || !hasGridThumbnail2x.Contains(id)));
         }
 
@@ -227,6 +228,10 @@ public sealed partial class LibraryScanPersistenceService {
         sourcePaths.TryGetValue(entityId, out var sourcePath) &&
         AnimatedImagePreviewPolicy.RequiresPreviewClip(sourcePath) &&
         !hasPreview.Contains(entityId);
+
+    private static bool PreservesOriginalArtwork(string? kindCode) =>
+        EntityKindRegistry.TryDescribe(kindCode, out var definition) &&
+        definition.Presentation.ArtworkSurface == EntityArtworkSurface.BrandPlate;
 
     public async Task<bool> HasSubtitlesExtractedAsync(Guid entityId, CancellationToken cancellationToken) {
         var detail = await _db.EntitySubtitleStates.AsNoTracking()

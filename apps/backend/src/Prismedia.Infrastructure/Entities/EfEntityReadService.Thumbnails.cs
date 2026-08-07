@@ -205,8 +205,13 @@ public sealed partial class EfEntityReadService {
                 coverSourceId = hoverImages[0].EntityId;
             }
 
-            var coverThumbUrl = gridThumbByEntity.GetValueOrDefault(coverSourceId) ?? coverUrl;
-            var coverThumb2xUrl = gridThumb2xByEntity.GetValueOrDefault(coverSourceId) ?? coverThumbUrl;
+            var preservesOriginalArtwork = PreservesOriginalArtwork(row.KindCode);
+            var coverThumbUrl = preservesOriginalArtwork
+                ? coverUrl
+                : gridThumbByEntity.GetValueOrDefault(coverSourceId) ?? coverUrl;
+            var coverThumb2xUrl = preservesOriginalArtwork
+                ? null
+                : gridThumb2xByEntity.GetValueOrDefault(coverSourceId) ?? coverThumbUrl;
 
             return new EntityThumbnail(
                 row.Id,
@@ -802,6 +807,10 @@ public sealed partial class EfEntityReadService {
     private static bool UsesRepresentativeCover(string kindCode) =>
         EntityKindRegistry.TryDescribe(kindCode, out var definition) &&
         definition.Presentation.UsesRepresentativeChildArtwork;
+
+    private static bool PreservesOriginalArtwork(string kindCode) =>
+        EntityKindRegistry.TryDescribe(kindCode, out var definition) &&
+        definition.Presentation.ArtworkSurface == EntityArtworkSurface.BrandPlate;
 
     private static bool CanBorrowParentCover(string childKindCode, string parentKindCode) =>
         EntityKindRegistry.TryDescribe(childKindCode, out var child) &&

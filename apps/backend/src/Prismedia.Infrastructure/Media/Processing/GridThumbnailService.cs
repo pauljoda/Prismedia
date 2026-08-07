@@ -9,12 +9,11 @@ using Prismedia.Infrastructure.Persistence.Entities;
 namespace Prismedia.Infrastructure.Media.Processing;
 
 /// <summary>
-/// Generates the small grid-card cover variants for an entity by downscaling its
-/// currently resolved cover with SkiaSharp, then records them as
+/// Generates small grid-card cover variants for artwork kinds that benefit from raster
+/// downscaling, then records them as
 /// <see cref="EntityFileRole.GridThumbnail"/> (480w) and
-/// <see cref="EntityFileRole.GridThumbnail2x"/> (960w) files. The variants always
-/// derive from the same cover the read projection picks, so the pair stays
-/// consistent in the frontend <c>srcset</c>.
+/// <see cref="EntityFileRole.GridThumbnail2x"/> (960w) files. Presentation kinds whose
+/// original format must be preserved, such as scalable Studio logos, bypass this service.
 /// </summary>
 public sealed class GridThumbnailService(
     PrismediaDbContext db,
@@ -30,6 +29,15 @@ public sealed class GridThumbnailService(
 
     /// <inheritdoc />
     public async Task EnsureAsync(Guid entityId, CancellationToken cancellationToken) {
+        var kindCode = await db.Entities
+            .AsNoTracking()
+            .Where(entity => entity.Id == entityId)
+            .Select(entity => entity.KindCode)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (PreservesOriginalArtwork(kindCode)) {
+            return;
+        }
+
         var coverFiles = await db.EntityFiles
             .AsNoTracking()
             .Where(file => file.EntityId == entityId && EntityCoverSelection.CoverRoles.Contains(file.Role))
@@ -75,6 +83,11 @@ public sealed class GridThumbnailService(
             .AsNoTracking()
             .Where(file => EntityCoverSelection.CoverRoles.Contains(file.Role))
             .ToListAsync(cancellationToken);
+        var coverEntityIds = coverFiles.Select(file => file.EntityId).Distinct().ToArray();
+        var kindsByEntity = await db.Entities
+            .AsNoTracking()
+            .Where(entity => coverEntityIds.Contains(entity.Id))
+            .ToDictionaryAsync(entity => entity.Id, entity => entity.KindCode, cancellationToken);
 
         var variantsByEntity = (await db.EntityFiles
                 .AsNoTracking()
@@ -84,6 +97,10 @@ public sealed class GridThumbnailService(
 
         var needed = new List<Guid>();
         foreach (var group in coverFiles.GroupBy(file => file.EntityId)) {
+            if (PreservesOriginalArtwork(kindsByEntity.GetValueOrDefault(group.Key))) {
+                continue;
+            }
+
             var cover = EntityCoverSelection.Select(group);
             if (cover is null) {
                 continue;
@@ -120,7 +137,12 @@ public sealed class GridThumbnailService(
         string url,
         int maxWidth,
         CancellationToken cancellationToken) {
-        if (!await imageThumbnails.GenerateAsync(sourcePath, outputPath, maxWidth, GridThumbnailJpegQuality, cancellationToken)) {
+        if (!await imageThumbnails.GenerateAsync(
+                sourcePath,
+                outputPath,
+                maxWidth,
+                GridThumbnailJpegQuality,
+                cancellationToken)) {
             return false;
         }
 
@@ -152,4 +174,8 @@ public sealed class GridThumbnailService(
 
         return true;
     }
+
+    private static bool PreservesOriginalArtwork(string? kindCode) =>
+        EntityKindRegistry.TryDescribe(kindCode, out var definition) &&
+        definition.Presentation.ArtworkSurface == EntityArtworkSurface.BrandPlate;
 }

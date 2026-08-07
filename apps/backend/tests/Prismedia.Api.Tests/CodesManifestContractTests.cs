@@ -90,6 +90,7 @@ public sealed class CodesManifestContractTests {
         Assert.Equal(EntityAccentHue.Red.ToCode(), video.PrimaryAccent);
         Assert.Equal(EntityAccentHue.Orange.ToCode(), video.SecondaryAccent);
         Assert.Equal(EntityArtworkFit.Cover.ToCode(), video.ArtworkFit);
+        Assert.Equal(EntityArtworkSurface.Plain.ToCode(), video.ArtworkSurface);
 
         var author = kinds[EntityKind.BookAuthor.ToCode()];
         Assert.Equal(EntityKindIcon.Author.ToCode(), author.Icon);
@@ -100,6 +101,9 @@ public sealed class CodesManifestContractTests {
         Assert.Equal(
             EntityArtworkFit.Contain.ToCode(),
             kinds[EntityKind.Studio.ToCode()].ArtworkFit);
+        Assert.Equal(
+            EntityArtworkSurface.BrandPlate.ToCode(),
+            kinds[EntityKind.Studio.ToCode()].ArtworkSurface);
     }
 
     [Fact]

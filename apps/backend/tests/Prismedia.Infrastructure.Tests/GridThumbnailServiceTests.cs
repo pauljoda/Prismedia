@@ -25,10 +25,10 @@ public sealed class GridThumbnailServiceTests : IDisposable {
         // Cover lives at the disk path the /assets URL maps to.
         var coverUrl = AssetPathService.VideoThumbnailUrl(entityId);
         WriteImage(_assets.ResolveAssetDiskPath(coverUrl)!, 1280, 720);
-        AddEntityFile(db, entityId, EntityFileRole.Thumbnail, coverUrl, "scan");
+        AddEntityFile(db, entityId, EntityFileRole.Thumbnail, coverUrl, FileSourceKind.Scan.ToCode());
         await db.SaveChangesAsync();
 
-        var service = new GridThumbnailService(db, _assets, Resizer());
+        var service = CreateService(db);
         await service.EnsureAsync(entityId, CancellationToken.None);
 
         var gridPath = _assets.GridThumbnailPath(entityId);
@@ -53,16 +53,16 @@ public sealed class GridThumbnailServiceTests : IDisposable {
 
         var scanUrl = AssetPathService.VideoThumbnailUrl(entityId);
         WriteImage(_assets.ResolveAssetDiskPath(scanUrl)!, 1280, 720);
-        AddEntityFile(db, entityId, EntityFileRole.Thumbnail, scanUrl, "scan");
+        AddEntityFile(db, entityId, EntityFileRole.Thumbnail, scanUrl, FileSourceKind.Scan.ToCode());
 
         // Custom poster artwork should win cover selection, so the grid variant derives from it.
         var customUrl = $"/assets/custom/artwork/{entityId}/poster-1.jpg";
         var customPath = _assets.ResolveAssetDiskPath(customUrl)!;
         WriteImage(customPath, 600, 900); // portrait, distinct aspect ratio
-        AddEntityFile(db, entityId, EntityFileRole.Poster, customUrl, "custom");
+        AddEntityFile(db, entityId, EntityFileRole.Poster, customUrl, FileSourceKind.Custom.ToCode());
         await db.SaveChangesAsync();
 
-        var service = new GridThumbnailService(db, _assets, Resizer());
+        var service = CreateService(db);
         await service.EnsureAsync(entityId, CancellationToken.None);
 
         using var bmp = SKBitmap.Decode(_assets.GridThumbnailPath(entityId));
@@ -78,11 +78,50 @@ public sealed class GridThumbnailServiceTests : IDisposable {
         SeedEntity(db, entityId);
         await db.SaveChangesAsync();
 
-        var service = new GridThumbnailService(db, _assets, Resizer());
+        var service = CreateService(db);
         await service.EnsureAsync(entityId, CancellationToken.None);
 
         Assert.False(File.Exists(_assets.GridThumbnailPath(entityId)));
         Assert.Null(await db.EntityFiles.FirstOrDefaultAsync(f => f.EntityId == entityId && f.Role == EntityFileRole.GridThumbnail));
+    }
+
+    [Fact]
+    public async Task EnsureSkipsKindsThatPreserveOriginalArtwork() {
+        await using var db = CreateContext();
+        var entityId = Guid.NewGuid();
+        SeedEntity(db, entityId, EntityKind.Studio);
+        var logoUrl = $"/assets/plugins/artwork/{entityId}/logo.png";
+        WriteImage(_assets.ResolveAssetDiskPath(logoUrl)!, 600, 240);
+        AddEntityFile(db, entityId, EntityFileRole.Logo, logoUrl, FileSourceKind.Custom.ToCode());
+        await db.SaveChangesAsync();
+
+        await CreateService(db).EnsureAsync(entityId, CancellationToken.None);
+
+        Assert.False(File.Exists(_assets.GridThumbnailPath(entityId)));
+        Assert.False(File.Exists(_assets.GridThumbnail2xPath(entityId)));
+        Assert.DoesNotContain(
+            db.EntityFiles,
+            file => file.EntityId == entityId &&
+                (file.Role == EntityFileRole.GridThumbnail || file.Role == EntityFileRole.GridThumbnail2x));
+    }
+
+    [Fact]
+    public async Task RefreshSkipsKindsThatPreserveOriginalArtwork() {
+        await using var db = CreateContext();
+        var entityId = Guid.NewGuid();
+        SeedEntity(db, entityId, EntityKind.Studio);
+        var coverUrl = AssetPathService.VideoThumbnailUrl(entityId);
+        WriteImage(_assets.ResolveAssetDiskPath(coverUrl)!, 1280, 720);
+        AddEntityFile(db, entityId, EntityFileRole.Thumbnail, coverUrl, FileSourceKind.Scan.ToCode());
+        AddEntityFile(db, entityId, EntityFileRole.GridThumbnail, $"/assets/grid-thumbs/{entityId}.jpg", FileSourceKind.Scan.ToCode());
+        AddEntityFile(db, entityId, EntityFileRole.GridThumbnail2x, $"/assets/grid-thumbs/{entityId}@2x.jpg", FileSourceKind.Scan.ToCode());
+        WriteImage(_assets.GridThumbnailPath(entityId), 480, 270);
+        WriteImage(_assets.GridThumbnail2xPath(entityId), 960, 540);
+        await db.SaveChangesAsync();
+
+        var needed = await CreateService(db).ListEntitiesNeedingRefreshAsync(CancellationToken.None);
+
+        Assert.DoesNotContain(entityId, needed);
     }
 
     public void Dispose() {
@@ -94,6 +133,9 @@ public sealed class GridThumbnailServiceTests : IDisposable {
     private static IImageThumbnailGenerator Resizer() =>
         new ImageThumbnailGenerator(new SkiaImageDownscaler(), new ThumbnailService(new ProcessExecutor()));
 
+    private GridThumbnailService CreateService(PrismediaDbContext db) =>
+        new(db, _assets, Resizer());
+
     private static PrismediaDbContext CreateContext() {
         var options = new DbContextOptionsBuilder<PrismediaDbContext>()
             .UseInMemoryDatabase($"grid-thumb-{Guid.NewGuid():N}")
@@ -101,9 +143,9 @@ public sealed class GridThumbnailServiceTests : IDisposable {
         return new PrismediaDbContext(options);
     }
 
-    private static void SeedEntity(PrismediaDbContext db, Guid id) {
+    private static void SeedEntity(PrismediaDbContext db, Guid id, EntityKind kind = EntityKind.Video) {
         var now = DateTimeOffset.UtcNow;
-        db.Entities.Add(new EntityRow { Id = id, KindCode = "video", Title = "Video", CreatedAt = now, UpdatedAt = now });
+        db.Entities.Add(new EntityRow { Id = id, KindCode = kind.ToCode(), Title = "Video", CreatedAt = now, UpdatedAt = now });
     }
 
     private static void AddEntityFile(PrismediaDbContext db, Guid entityId, EntityFileRole role, string path, string source) {
@@ -131,4 +173,5 @@ public sealed class GridThumbnailServiceTests : IDisposable {
         using var output = File.Create(path);
         data.SaveTo(output);
     }
+
 }

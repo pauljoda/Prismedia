@@ -14,6 +14,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Studio logos now keep their original artwork format and use one API-defined neutral plate across web detail pages, grids, and native apps, preserving scalable SVG quality and readable transparent marks.
+- The web image lightbox now shows original still images directly, falls back visibly when an original file is unavailable, and plays animated GIF, APNG, WebP, MP4, and WebM media instead of leaving an empty or frozen frame.
 - Job Control now hides current, recent, and lane history belonging to NSFW libraries whenever SFW mode is active, preventing hidden library names and activity from appearing in operational history.
 - Monitored release dates, missing items, container updates, and upgrades now drain one search at a time independently of scheduler windows, with durable retry/backoff intent instead of queue-wide bursts or arbitrary attempt caps. Acquisition searches compare and de-duplicate every query variant before selecting globally, prioritizing quality and revision before protocol preference and swarm health; deliberate re-searches also supersede the prior release-review wait without losing or blocking their next durable search.
 - Unchanged library snapshots now remain truly idle instead of re-enqueuing unfinished enrichment across the whole root. Crash-interrupted delete-files and unmonitor claims are resumed by one independent serial recovery worker, with blocked records isolated from the rest of the backlog.

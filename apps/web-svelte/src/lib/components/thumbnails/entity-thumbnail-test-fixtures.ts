@@ -98,6 +98,29 @@ export function galleryCard(): EntityThumbnailCard {
   };
 }
 
+export function studioCard(): EntityThumbnailCard {
+  return {
+    entity: {
+      id: "studio-1",
+      kind: ENTITY_KIND.studio,
+      title: "HBO",
+      parentEntityId: null,
+      sortOrder: null,
+      relationships: [],
+      capabilities: [],
+      childrenByKind: [],
+    },
+    aspectRatio: "wide",
+    cover: {
+      alt: "HBO logo",
+      src: "/assets/studios/hbo-logo.svg",
+      role: "logo",
+    },
+    fit: "contain",
+    hover: { kind: THUMBNAIL_HOVER_KIND.none },
+  };
+}
+
 export function episodeCard(): EntityThumbnailCard {
   return {
     ...spriteCard(),

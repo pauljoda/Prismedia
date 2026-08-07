@@ -133,6 +133,23 @@ describe("UniversalLightbox", () => {
     expect(container.querySelector(".universal-lightbox")).toBeNull();
   });
 
+  it("falls back to the API cover when the original file cannot be loaded", async () => {
+    render(UniversalLightboxHarness, {
+      props: { entities: [still], initialIndex: 0, onClose: vi.fn() },
+    });
+
+    const original = document.querySelector("img.lightbox-image") as HTMLImageElement;
+    expect(original).toHaveAttribute("src", "/api/entities/image-1/files/source");
+
+    await fireEvent.error(original);
+    await tick();
+
+    expect(document.querySelector("img.lightbox-image")).toHaveAttribute(
+      "src",
+      "/assets/images/image-1/thumb.jpg",
+    );
+  });
+
   it("moves through entities with arrow and vim keys", async () => {
     const onIndexChange = vi.fn();
     render(UniversalLightboxHarness, {
@@ -195,13 +212,13 @@ describe("UniversalLightbox", () => {
     expect(screen.queryByText("Dimensions")).not.toBeInTheDocument();
   });
 
-  it("renders video-capable image entities through Vidstack minimal mode", async () => {
+  it("renders video-capable image entities through the browser-native video element", async () => {
     render(UniversalLightboxHarness, {
       props: { entities: [animatedWithPreview], initialIndex: 0, onClose: vi.fn() },
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("vidstack-video-player")).toBeInTheDocument();
+      expect(document.querySelector("video.lightbox-native-video")).toBeInTheDocument();
     });
     expect(screen.queryByRole("button", { name: "Player settings" })).not.toBeInTheDocument();
   });
@@ -211,12 +228,19 @@ describe("UniversalLightbox", () => {
       props: { entities: [animatedWithPreview], initialIndex: 0, onClose: vi.fn() },
     });
 
-    await waitFor(() => {
-      expect(screen.getByTestId("vidstack-video-player")).toBeInTheDocument();
+    const video = await waitFor(() => {
+      const element = document.querySelector("video.lightbox-native-video");
+      expect(element).toBeInTheDocument();
+      return element as HTMLVideoElement;
     });
     expect(screen.getByRole("button", { name: "Unmute" })).toBeInTheDocument();
-    expect(document.querySelector("media-player")).toHaveAttribute("muted");
-    expect(document.querySelector("media-player")).toHaveAttribute("loop");
+    expect(video).toHaveProperty("muted", true);
+    expect(video).toHaveAttribute("autoplay");
+    expect(video).toHaveAttribute("loop");
+    expect(Array.from(video.querySelectorAll("source"), (source) => source.getAttribute("src"))).toEqual([
+      "/api/entities/image-video-1/files/source",
+      "/api/entities/image-video-1/files/preview",
+    ]);
   });
 
   it("uses image-video originals in the full-quality lightbox even without generated previews", async () => {
@@ -225,9 +249,9 @@ describe("UniversalLightbox", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("vidstack-video-player")).toBeInTheDocument();
+      expect(document.querySelector("video.lightbox-native-video")).toBeInTheDocument();
     });
-    expect(document.querySelector("media-player")).toHaveAttribute(
+    expect(document.querySelector("video.lightbox-native-video source")).toHaveAttribute(
       "src",
       "/api/entities/image-video-1/files/source",
     );
@@ -261,10 +285,10 @@ describe("UniversalLightbox", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("vidstack-video-player")).toBeInTheDocument();
+      expect(document.querySelector("video.lightbox-native-video")).toBeInTheDocument();
     });
 
-    const shell = screen.getByTestId("vidstack-video-player").closest(".lightbox-video-shell") as HTMLElement | null;
+    const shell = document.querySelector("video.lightbox-native-video")?.closest(".lightbox-video-shell") as HTMLElement | null;
     expect(shell).toBeInTheDocument();
     expect(shell).toHaveClass("has-natural-ratio");
     expect(shell?.getAttribute("style")).toContain("--lightbox-video-aspect-ratio: 1080 / 1920");
@@ -277,10 +301,10 @@ describe("UniversalLightbox", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("vidstack-video-player")).toBeInTheDocument();
+      expect(document.querySelector("video.lightbox-native-video")).toBeInTheDocument();
     });
 
-    const shell = screen.getByTestId("vidstack-video-player").closest(".lightbox-video-shell") as HTMLElement | null;
+    const shell = document.querySelector("video.lightbox-native-video")?.closest(".lightbox-video-shell") as HTMLElement | null;
     expect(shell).toBeInTheDocument();
     expect(shell).toHaveClass("has-natural-ratio");
     expect(shell?.getAttribute("style")).toContain("--lightbox-video-aspect-ratio: 1080 / 1920");
@@ -293,10 +317,10 @@ describe("UniversalLightbox", () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByTestId("vidstack-video-player")).toBeInTheDocument();
+      expect(document.querySelector("video.lightbox-native-video")).toBeInTheDocument();
     });
 
-    const shell = screen.getByTestId("vidstack-video-player").closest(".lightbox-video-shell") as HTMLElement | null;
+    const shell = document.querySelector("video.lightbox-native-video")?.closest(".lightbox-video-shell") as HTMLElement | null;
     expect(shell).toBeInTheDocument();
     expect(shell).not.toHaveClass("has-natural-ratio");
     expect(document.body.querySelector(".lightbox-media-guard")).toBeInTheDocument();

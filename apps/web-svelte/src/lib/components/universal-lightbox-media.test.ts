@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { EntityCapability, EntityCapabilityImagesCapability } from "$lib/api/generated/model";
 import {
   buildLightboxImageSource,
+  buildLightboxImageSources,
   buildLightboxPreloadSources,
   buildLightboxVideoSources,
   isAnimatedStillImage,
@@ -51,6 +52,11 @@ describe("universal-lightbox-media", () => {
       src: "/api/entities/image-1/files/source",
       role: "source",
     });
+    expect(buildLightboxImageSources(entity())).toEqual([
+      { src: "/api/entities/image-1/files/source", role: "source" },
+      { src: "/assets/images/image-1/cover.jpg", role: "cover" },
+      { src: "/assets/images/image-1/thumb.jpg", role: "thumbnail" },
+    ]);
   });
 
   it("falls back to cover then thumbnail image assets when no source role is present", () => {
@@ -112,6 +118,31 @@ describe("universal-lightbox-media", () => {
 
     expect(isAnimatedStillImage(apng)).toBe(true);
     expect(isLightboxVideoCapable(apng)).toBe(false);
+  });
+
+  it("keeps animated WebP on the browser-native image path", () => {
+    const webp = entity({
+      title: "spark.webp",
+      capabilities: [
+        { kind: "files", items: [{ role: "source", path: "/media/spark.webp", mimeType: "image/webp" }] },
+        {
+          kind: "technical",
+          duration: "00:00:04",
+          width: 640,
+          height: 360,
+          frameRate: null,
+          bitRate: null,
+          sampleRate: null,
+          channels: null,
+          codec: null,
+          container: "webp",
+          format: "webp",
+        },
+      ],
+    });
+
+    expect(isAnimatedStillImage(webp)).toBe(true);
+    expect(isLightboxVideoCapable(webp)).toBe(false);
   });
 
   it("uses generated previews, not original sources, for image-entity animated playback", () => {

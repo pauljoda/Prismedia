@@ -591,6 +591,36 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
+    public async Task GetThumbnailsAsyncKeepsOriginalStudioArtworkInsteadOfRasterVariants() {
+        await using var db = CreateContext();
+        var studioId = Guid.Parse("aaaaaaaa-0000-0000-0000-000000000043");
+        var logo = "/assets/plugins/artwork/studio/logo.svg";
+        var grid = $"/assets/grid-thumbs/{studioId}.jpg";
+        var grid2x = $"/assets/grid-thumbs/{studioId}@2x.jpg";
+        var now = DateTimeOffset.UtcNow;
+
+        db.Entities.Add(new EntityRow {
+            Id = studioId,
+            KindCode = EntityKind.Studio.ToCode(),
+            Title = "Original Logo Studio",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.EntityFiles.AddRange(
+            File(studioId, EntityFileRole.Logo, logo, now),
+            File(studioId, EntityFileRole.GridThumbnail, grid, now.AddSeconds(1)),
+            File(studioId, EntityFileRole.GridThumbnail2x, grid2x, now.AddSeconds(2)));
+        await db.SaveChangesAsync();
+
+        var response = await CreateService(db).GetThumbnailsAsync([studioId], hideNsfw: false, CancellationToken.None);
+
+        var item = Assert.Single(response.Items);
+        Assert.Equal(logo, item.CoverUrl);
+        Assert.Equal(logo, item.CoverThumbUrl);
+        Assert.Null(item.CoverThumb2xUrl);
+    }
+
+    [Fact]
     public async Task GetThumbnailsAsyncIgnoresMissingGridVariantFilesAndFallsBackToCover() {
         var cacheRoot = CreateCacheRoot();
         try {

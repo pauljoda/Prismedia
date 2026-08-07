@@ -24,18 +24,23 @@ internal static class EntityArtworkProjection {
         var assets = OrderedArtworkFiles(entity)
             .Select(file => new ContractEntityImageAsset(file.Role, file.Path, file.MimeType))
             .ToArray();
-        var gridThumbnail = entity.EntityFiles
-            .FirstOrDefault(file => file.Role == EntityFileRole.GridThumbnail)?.Path;
-        var thumbnailUrl = gridThumbnail ?? assets.FirstOrDefault()?.Path;
-        var thumbnail2xUrl = entity.EntityFiles
-            .FirstOrDefault(file => file.Role == EntityFileRole.GridThumbnail2x)?.Path;
+        var originalCoverUrl = assets.FirstOrDefault()?.Path;
+        var preservesOriginalArtwork = EntityKindRegistry.Describe(entity.Kind).Presentation.ArtworkSurface ==
+            EntityArtworkSurface.BrandPlate;
+        var thumbnailUrl = preservesOriginalArtwork
+            ? originalCoverUrl
+            : entity.EntityFiles.FirstOrDefault(file => file.Role == EntityFileRole.GridThumbnail)?.Path
+                ?? originalCoverUrl;
+        var thumbnail2xUrl = preservesOriginalArtwork
+            ? null
+            : entity.EntityFiles.FirstOrDefault(file => file.Role == EntityFileRole.GridThumbnail2x)?.Path;
 
         return new ImagesCapability(
             SupportedManualImageRoles,
             assets,
             thumbnailUrl,
             thumbnail2xUrl,
-            assets.FirstOrDefault()?.Path);
+            originalCoverUrl);
     }
 
     private static IEnumerable<Prismedia.Domain.Entities.EntityFile> OrderedArtworkFiles(Entity entity) =>

@@ -57,6 +57,8 @@ public sealed class EfEntityFileContentService(PrismediaDbContext db, IEntityVis
             ".gif" => MediaContentTypes.ImageGif,
             ".webp" => MediaContentTypes.ImageWebp,
             ".avif" => MediaContentTypes.ImageAvif,
+            ".svg" => MediaContentTypes.ImageSvg,
+            ".apng" => MediaContentTypes.ImageApng,
             ".mp4" or ".m4v" => MediaContentTypes.VideoMp4,
             ".webm" => MediaContentTypes.VideoWebm,
             ".ogg" or ".ogv" => MediaContentTypes.VideoOgg,

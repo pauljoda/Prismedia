@@ -23,6 +23,22 @@ public sealed class EntityCardProjectorContractTests {
     }
 
     [Fact]
+    public void ProjectsOriginalStudioArtworkEvenWhenStaleRasterVariantsExist() {
+        var studio = new Studio(Guid.NewGuid(), "GameChops");
+        studio.AttachFile(EntityFileRole.Logo, "/assets/plugins/artwork/gamechops/logo.webp", "image/webp");
+        studio.AttachFile(EntityFileRole.GridThumbnail, "/assets/grid-thumbs/gamechops.jpg?v=2", "image/jpeg");
+        studio.AttachFile(EntityFileRole.GridThumbnail2x, "/assets/grid-thumbs/gamechops@2x.jpg?v=2", "image/jpeg");
+
+        var images = AssertCapability<ImagesCapability>(
+            EntityCardProjector.ToCard(studio, hasSourceBackedSubtree: false));
+
+        Assert.Equal("/assets/plugins/artwork/gamechops/logo.webp", images.CoverUrl);
+        Assert.Equal("/assets/plugins/artwork/gamechops/logo.webp", images.ThumbnailUrl);
+        Assert.Null(images.Thumbnail2xUrl);
+        Assert.Equal("/assets/plugins/artwork/gamechops/logo.webp", Assert.Single(images.Items).Path);
+    }
+
+    [Fact]
     public void ProjectsFileManagementOnlyForSourceBackedSafeManagedTreeRoots() {
         var emptyMovie = EntityCardProjector.ToCard(new Movie(Guid.NewGuid(), "Wanted Arrival"), hasSourceBackedSubtree: false);
         var sourceBackedMovie = EntityCardProjector.ToCard(new Movie(Guid.NewGuid(), "Arrival"), hasSourceBackedSubtree: true);

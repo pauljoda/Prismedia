@@ -78,6 +78,7 @@ public sealed record AcquisitionProfileManifestEntry(
 /// <param name="PrimaryAccent">Primary shared spectrum hue code.</param>
 /// <param name="SecondaryAccent">Secondary shared spectrum hue code.</param>
 /// <param name="ArtworkFit">Default artwork scaling behavior.</param>
+/// <param name="ArtworkSurface">Client-rendered surface surrounding the original artwork.</param>
 /// <param name="Navigation">Cross-client navigation contract, when reachable.</param>
 /// <param name="Search">Global-search behavior, when included.</param>
 /// <param name="AutoIdentifySelector">Automatic-identification selector family, when directly selectable.</param>
@@ -105,6 +106,7 @@ public sealed record EntityKindManifestEntry(
     string PrimaryAccent,
     string SecondaryAccent,
     string ArtworkFit,
+    string ArtworkSurface,
     EntityKindNavigationManifestEntry? Navigation,
     EntityKindSearchManifestEntry? Search,
     string? AutoIdentifySelector,
@@ -277,6 +279,7 @@ public sealed record CodesManifest(
                 descriptor.Presentation.PrimaryAccent.ToCode(),
                 descriptor.Presentation.SecondaryAccent.ToCode(),
                 descriptor.Presentation.ArtworkFit.ToCode(),
+                descriptor.Presentation.ArtworkSurface.ToCode(),
                 descriptor.Navigation is { } navigation
                     ? new EntityKindNavigationManifestEntry(
                         navigation.CanonicalBrowseKind.ToCode(),

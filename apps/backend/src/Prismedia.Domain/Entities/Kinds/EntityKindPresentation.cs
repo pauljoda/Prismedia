@@ -100,6 +100,15 @@ public enum EntityArtworkFit {
     Contain
 }
 
+/// <summary>Background treatment applied by clients around an Entity's original artwork.</summary>
+public enum EntityArtworkSurface {
+    [Code("plain")]
+    Plain,
+
+    [Code("brand-plate")]
+    BrandPlate
+}
+
 /// <summary>
 /// Platform-neutral presentation facts every Entity kind must define. Exact aspect-ratio values
 /// avoid parallel client shape registries, while semantic icons and hues let each UI retain its
@@ -115,6 +124,7 @@ public sealed record EntityKindPresentation {
         EntityAccentHue primaryAccent,
         EntityAccentHue secondaryAccent,
         EntityArtworkFit artworkFit,
+        EntityArtworkSurface artworkSurface = EntityArtworkSurface.Plain,
         bool usesRepresentativeChildArtwork = false,
         IEnumerable<EntityKind>? borrowArtworkFromParentKinds = null) {
         if (thumbnailWidth <= 0) {
@@ -137,6 +147,7 @@ public sealed record EntityKindPresentation {
         PrimaryAccent = primaryAccent;
         SecondaryAccent = secondaryAccent;
         ArtworkFit = artworkFit;
+        ArtworkSurface = artworkSurface;
         UsesRepresentativeChildArtwork = usesRepresentativeChildArtwork;
         BorrowArtworkFromParentKinds = Array.AsReadOnly(parentKinds);
     }
@@ -164,6 +175,12 @@ public sealed record EntityKindPresentation {
 
     /// <summary>Default scaling behavior for artwork within the thumbnail frame.</summary>
     public EntityArtworkFit ArtworkFit { get; }
+
+    /// <summary>
+    /// Client-rendered surface surrounding the untouched source artwork. This lets transparent
+    /// logos remain in their original format while sharing one readable treatment everywhere.
+    /// </summary>
+    public EntityArtworkSurface ArtworkSurface { get; }
 
     /// <summary>Whether a missing cover falls back to the first representative child image.</summary>
     public bool UsesRepresentativeChildArtwork { get; }

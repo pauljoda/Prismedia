@@ -312,6 +312,42 @@ public sealed class LibraryScanPersistenceServiceTests {
     }
 
     [Fact]
+    public async Task DownstreamDoesNotRequestRasterVariantsForOriginalArtworkKinds() {
+        var cacheRoot = CreateCacheRoot();
+        try {
+            await using var db = CreateContext();
+            var studioId = Guid.Parse("22222222-bbbb-2222-2222-222222222222");
+            var logoPath = $"/assets/custom/artwork/{studioId}/logo.svg";
+            var now = DateTimeOffset.UtcNow;
+            db.Entities.Add(new EntityRow {
+                Id = studioId,
+                KindCode = EntityKind.Studio.ToCode(),
+                Title = "Original Logo Studio",
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+            db.EntityFiles.Add(new EntityFileRow {
+                Id = Guid.NewGuid(),
+                EntityId = studioId,
+                Role = EntityFileRole.Logo,
+                Path = logoPath,
+                MimeType = "image/svg+xml",
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+            await db.SaveChangesAsync();
+            WriteCacheFile(cacheRoot, logoPath);
+
+            var service = new LibraryScanPersistenceService(db, Assets(cacheRoot));
+            var needs = await service.CheckDownstreamNeedsBatchAsync([studioId], CancellationToken.None);
+
+            Assert.False(needs[studioId].NeedsGridThumbnail);
+        } finally {
+            DeleteDirectory(cacheRoot);
+        }
+    }
+
+    [Fact]
     public async Task HasEntityFileAsyncReturnsFalseWhenStoredAssetFileIsMissing() {
         var cacheRoot = CreateCacheRoot();
         try {

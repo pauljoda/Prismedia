@@ -89,8 +89,8 @@ const videoMimeTypes = new Map<string, string>([
   ["ogv", "video/ogg"],
 ]);
 
-const animatedStillExtensions = new Set(["gif", "apng"]);
-const animatedStillMimeTypes = new Set(["image/gif", "image/apng"]);
+const animatedStillExtensions = new Set(["gif", "apng", "webp"]);
+const animatedStillMimeTypes = new Set(["image/gif", "image/apng", "image/webp"]);
 
 export function lightboxEntityFromCard(card: EntityThumbnailCard): UniversalLightboxEntity {
   return {
@@ -119,23 +119,40 @@ function numericAspectRatio(
   return { width: aspectRatio.width, height: aspectRatio.height };
 }
 
-export function buildLightboxImageSource(entity: UniversalLightboxEntity): UniversalLightboxSource | null {
+export function buildLightboxImageSources(entity: UniversalLightboxEntity): UniversalLightboxSource[] {
+  const sources: UniversalLightboxSource[] = [];
+  const seen = new Set<string>();
+
+  function add(src: string | null | undefined, role: string) {
+    if (!src || seen.has(src)) return;
+    seen.add(src);
+    sources.push({ src, role });
+  }
+
   if (hasFileRole(entity, ENTITY_FILE_ROLE.source)) {
-    return { src: entityFileUrl(entity.id, ENTITY_FILE_ROLE.source), role: ENTITY_FILE_ROLE.source };
+    add(entityFileUrl(entity.id, ENTITY_FILE_ROLE.source), ENTITY_FILE_ROLE.source);
   }
 
   const images = getCapability(entity.capabilities, CAPABILITY_KIND.images);
-  const asset =
-    images?.items.find((item) => item.kind === ENTITY_FILE_ROLE.cover) ??
-    images?.items.find((item) => item.kind === ENTITY_FILE_ROLE.poster) ??
-    images?.items.find((item) => item.kind === ENTITY_FILE_ROLE.thumbnail);
-
-  if (asset?.path) {
-    return { src: asset.path, role: String(asset.kind) };
+  for (const role of [
+    ENTITY_FILE_ROLE.cover,
+    ENTITY_FILE_ROLE.poster,
+    ENTITY_FILE_ROLE.thumbnail,
+    ENTITY_FILE_ROLE.logo,
+    ENTITY_FILE_ROLE.backdrop,
+  ]) {
+    const asset = images?.items.find((item) => item.kind === role);
+    add(asset?.path, role);
   }
 
-  const fallback = images?.coverUrl ?? images?.thumbnailUrl ?? entity.coverUrl ?? null;
-  return fallback ? { src: fallback, role: "cover" } : null;
+  add(images?.coverUrl, "cover");
+  add(images?.thumbnailUrl, "thumbnail");
+  add(entity.coverUrl, "cover");
+  return sources;
+}
+
+export function buildLightboxImageSource(entity: UniversalLightboxEntity): UniversalLightboxSource | null {
+  return buildLightboxImageSources(entity)[0] ?? null;
 }
 
 export function buildLightboxVideoSources(

@@ -31,6 +31,12 @@ public static class MediaContentTypes {
     /// <summary>AVIF image.</summary>
     public const string ImageAvif = "image/avif";
 
+    /// <summary>Scalable Vector Graphics image.</summary>
+    public const string ImageSvg = "image/svg+xml";
+
+    /// <summary>Animated PNG image.</summary>
+    public const string ImageApng = "image/apng";
+
     // ── Video ───────────────────────────────────────────────────────────
     /// <summary>MP4 / fragmented MP4 video.</summary>
     public const string VideoMp4 = "video/mp4";

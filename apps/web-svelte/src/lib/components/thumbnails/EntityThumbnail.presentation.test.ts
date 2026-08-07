@@ -7,6 +7,7 @@ import {
   bookPageCard,
   episodeCard,
   personCard,
+  studioCard,
 } from "./entity-thumbnail-test-fixtures";
 
 describe("EntityThumbnail presentation", () => {
@@ -77,6 +78,14 @@ describe("EntityThumbnail presentation", () => {
 
     expect(container.querySelector(".thumbnail-caption")).not.toBeNull();
     expect(container.querySelector(".chips")?.textContent).toContain("Page 12");
+  });
+
+  it("renders original Studio artwork on the definition-owned brand plate", () => {
+    const { container } = render(EntityThumbnail, { props: { card: studioCard() } });
+
+    expect(container.querySelector(".media")).toHaveClass("has-logo-art");
+    expect(container.querySelector("img")).toHaveAttribute("src", "/assets/studios/hbo-logo.svg");
+    expect(container.querySelector("img")).not.toHaveAttribute("srcset");
   });
 
   it("exposes exact structural count units to assistive technology", () => {
