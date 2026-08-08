@@ -148,6 +148,87 @@ public sealed class AcquisitionReleaseTimingServiceTests {
     }
 
     [Fact]
+    public async Task HistoricalSeasonUsesItsOwnPastAirDateWhenEpisodeCoverageIsIncomplete() {
+        var seasonAirDate = new EntityDate(
+            EntityDateType.Air.ToCode(),
+            "1973-11-19",
+            new DateOnly(1973, 11, 19),
+            DatePrecision.Day.ToCode());
+        var latestKnownEpisodeAirDate = new EntityDate(
+            EntityDateType.Air.ToCode(),
+            "1974-04-09",
+            new DateOnly(1974, 4, 9),
+            DatePrecision.Day.ToCode());
+        var service = Create(
+            AcquisitionReleaseTimingPolicy.Immediate,
+            seasonAirDate,
+            new DateTimeOffset(2026, 8, 8, 12, 0, 0, TimeSpan.Zero),
+            new EntityReleaseDateCoverage(130, 41, latestKnownEpisodeAirDate));
+
+        var decision = await service.EvaluateAsync(
+            EntityId,
+            profileId: null,
+            EntityKind.VideoSeason,
+            CancellationToken.None);
+
+        Assert.True(decision.CanSearch);
+        Assert.False(decision.WaitingForMetadata);
+        Assert.False(decision.PreferChildAcquisitions);
+    }
+
+    [Fact]
+    public async Task RecentlyStartedSeasonWithIncompleteCoverageStillSearchesChildren() {
+        var seasonAirDate = new EntityDate(
+            EntityDateType.Air.ToCode(),
+            "2026-07-15",
+            new DateOnly(2026, 7, 15),
+            DatePrecision.Day.ToCode());
+        var service = Create(
+            AcquisitionReleaseTimingPolicy.Immediate,
+            seasonAirDate,
+            new DateTimeOffset(2026, 8, 8, 12, 0, 0, TimeSpan.Zero),
+            new EntityReleaseDateCoverage(10, 3, seasonAirDate));
+
+        var decision = await service.EvaluateAsync(
+            EntityId,
+            profileId: null,
+            EntityKind.VideoSeason,
+            CancellationToken.None);
+
+        Assert.False(decision.CanSearch);
+        Assert.False(decision.WaitingForMetadata);
+        Assert.True(decision.PreferChildAcquisitions);
+        Assert.Equal(new DateOnly(2027, 7, 15), decision.SearchNotBefore);
+        Assert.Contains("Acquiring released episodes individually", decision.Message);
+    }
+
+    [Fact]
+    public async Task FutureSeasonWithIncompleteCoverageWaitsForItsOwnAirDate() {
+        var seasonAirDate = new EntityDate(
+            EntityDateType.Air.ToCode(),
+            "2026-09-15",
+            new DateOnly(2026, 9, 15),
+            DatePrecision.Day.ToCode());
+        var service = Create(
+            AcquisitionReleaseTimingPolicy.Immediate,
+            seasonAirDate,
+            new DateTimeOffset(2026, 8, 8, 12, 0, 0, TimeSpan.Zero),
+            new EntityReleaseDateCoverage(10, 0, LatestDate: null));
+
+        var decision = await service.EvaluateAsync(
+            EntityId,
+            profileId: null,
+            EntityKind.VideoSeason,
+            CancellationToken.None);
+
+        Assert.False(decision.CanSearch);
+        Assert.False(decision.WaitingForMetadata);
+        Assert.True(decision.PreferChildAcquisitions);
+        Assert.Equal(new DateOnly(2026, 9, 15), decision.SearchNotBefore);
+        Assert.Contains("when the season is scheduled to air", decision.Message);
+    }
+
+    [Fact]
     public async Task SeasonWithEveryEpisodeAiredCanSearchAsAWholeUnit() {
         var latestAirDate = new EntityDate(
             EntityDateType.Air.ToCode(),

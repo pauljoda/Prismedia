@@ -104,6 +104,8 @@ public sealed class AcquisitionReleaseTimingService(
     IBookAcquisitionProfileStore profiles,
     IEntityReleaseDateStore dates,
     TimeProvider timeProvider) : IAcquisitionReleaseTimingService {
+    private const int HistoricalSeasonCompletionWindowDays = 365;
+
     public async Task<AcquisitionReleaseTimingDecision> EvaluateAsync(
         Guid? entityId,
         Guid? profileId,
@@ -168,9 +170,10 @@ public sealed class AcquisitionReleaseTimingService(
     }
 
     /// <summary>
-    /// A whole-season release cannot exist before its final episode. Incomplete or partially aired
-    /// seasons therefore acquire their episodes independently: aired episodes can search immediately,
-    /// future episodes wait on their own air dates, and the indexers never receive an impossible pack query.
+    /// A whole-season release cannot exist before its final episode. Incomplete or recently started
+    /// seasons therefore acquire their episodes independently. Once a season's own air date is at least
+    /// one year old, it is safe to treat the season as complete even when a provider omitted some child
+    /// dates; otherwise historical seasons such as long-running daily television remain blocked forever.
     /// </summary>
     private async Task<AcquisitionReleaseTimingDecision> EvaluateVideoSeasonAsync(
         Guid seasonId,
@@ -180,9 +183,42 @@ public sealed class AcquisitionReleaseTimingService(
             EntityKind.VideoEpisode,
             EntityDateType.Air,
             cancellationToken);
+        var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
         if (coverage.TotalChildren == 0
             || coverage.DatedChildren != coverage.TotalChildren
             || coverage.LatestDate?.SortableValue is null) {
+            var seasonAirDate = await dates.GetAsync(
+                seasonId,
+                EntityDateType.Air,
+                cancellationToken);
+            if (seasonAirDate?.SortableValue is { } seasonAirSortable) {
+                var seasonStartedOn = EndOfPrecision(seasonAirSortable, seasonAirDate.Precision);
+                if (seasonStartedOn <= today.AddDays(-HistoricalSeasonCompletionWindowDays)) {
+                    return AcquisitionReleaseTimingDecision.Ready;
+                }
+
+                if (today < seasonStartedOn) {
+                    return new AcquisitionReleaseTimingDecision(
+                        false,
+                        EntityDateType.Air,
+                        seasonAirDate,
+                        seasonStartedOn,
+                        Message: $"Waiting until {seasonStartedOn:yyyy-MM-dd}, when the season is scheduled to air.",
+                        ResolvedDateType: EntityDateType.Air,
+                        PreferChildAcquisitions: true);
+                }
+
+                var wholeSeasonFallback = seasonStartedOn.AddDays(HistoricalSeasonCompletionWindowDays);
+                return new AcquisitionReleaseTimingDecision(
+                    false,
+                    EntityDateType.Air,
+                    seasonAirDate,
+                    wholeSeasonFallback,
+                    Message: $"Acquiring released episodes individually until {wholeSeasonFallback:yyyy-MM-dd}, when a whole-season release is expected to exist.",
+                    ResolvedDateType: EntityDateType.Air,
+                    PreferChildAcquisitions: true);
+            }
+
             return new AcquisitionReleaseTimingDecision(
                 false,
                 EntityDateType.Air,
@@ -195,7 +231,6 @@ public sealed class AcquisitionReleaseTimingService(
         var searchNotBefore = EndOfPrecision(
             coverage.LatestDate.SortableValue.Value,
             coverage.LatestDate.Precision);
-        var today = DateOnly.FromDateTime(timeProvider.GetUtcNow().UtcDateTime);
         if (today >= searchNotBefore) {
             return AcquisitionReleaseTimingDecision.Ready;
         }
