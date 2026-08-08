@@ -10,6 +10,7 @@ namespace Prismedia.Infrastructure.Acquisition;
 /// </summary>
 public sealed class MediaUpgradePayloadInspector(
     IMediaProbe mediaProbe,
+    ISubtitleSidecarDiscovery subtitleSidecars,
     ILogger<MediaUpgradePayloadInspector> logger) : IMediaUpgradePayloadInspector {
     public async Task<MediaUpgradePayloadInspection?> InspectAsync(
         string ownedContentPath,
@@ -26,6 +27,12 @@ public sealed class MediaUpgradePayloadInspector(
             var ownedSubtitles = await mediaProbe.ProbeSubtitleStreamsAsync(ownedFile, cancellationToken);
             var candidateVideo = await mediaProbe.ProbeVideoAsync(candidateFile, cancellationToken);
             var candidateSubtitles = await mediaProbe.ProbeSubtitleStreamsAsync(candidateFile, cancellationToken);
+            var sidecarDiscoveries = await subtitleSidecars.DiscoverAsync(
+                [ownedFile, candidateFile],
+                cancellationToken);
+            if (sidecarDiscoveries.Count != 2 || sidecarDiscoveries.Any(discovery => !discovery.IsComplete)) {
+                return null;
+            }
             var ownedResolution = ResolutionTier(ownedVideo);
             var candidateResolution = ResolutionTier(candidateVideo);
             if (ownedResolution is null || candidateResolution is null) {
@@ -35,8 +42,8 @@ public sealed class MediaUpgradePayloadInspector(
             return new MediaUpgradePayloadInspection(
                 ownedResolution.Value,
                 candidateResolution.Value,
-                ownedSubtitles.Count > 0,
-                candidateSubtitles.Count > 0);
+                ownedSubtitles.Count > 0 || sidecarDiscoveries[0].Candidates.Count > 0,
+                candidateSubtitles.Count > 0 || sidecarDiscoveries[1].Candidates.Count > 0);
         } catch (OperationCanceledException) {
             throw;
         } catch (Exception ex) {

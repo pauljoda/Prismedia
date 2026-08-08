@@ -1,12 +1,13 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Infrastructure.Acquisition;
+using Prismedia.Infrastructure.Media.Sidecars;
 
 namespace Prismedia.Infrastructure.Tests;
 
 public sealed class MediaUpgradePayloadInspectorTests {
     [Fact]
-    public async Task ReadsMeasuredResolutionAndEmbeddedSubtitleFactsFromBothPayloads() {
+    public async Task ReadsMeasuredResolutionAndAdjacentSubtitleFactsFromBothPayloads() {
         var root = Directory.CreateTempSubdirectory("prismedia-upgrade-inspection-");
         try {
             var owned = Directory.CreateDirectory(Path.Combine(root.FullName, "owned"));
@@ -15,14 +16,16 @@ public sealed class MediaUpgradePayloadInspectorTests {
             var candidateFile = Path.Combine(candidate.FullName, "movie.mkv");
             await File.WriteAllBytesAsync(ownedFile, [1]);
             await File.WriteAllBytesAsync(candidateFile, [1]);
+            await File.WriteAllTextAsync(Path.Combine(candidate.FullName, "movie.eng.srt"), "1\n00:00:00,000 --> 00:00:01,000\nHello");
             var probe = new FakeMediaProbe(
                 new Dictionary<string, VideoProbeData> {
                     [ownedFile] = Video(width: 3840, height: 1600),
                     [candidateFile] = Video(width: 1920, height: 800)
                 },
-                subtitleFiles: new HashSet<string> { candidateFile });
+                subtitleFiles: new HashSet<string>());
             var inspector = new MediaUpgradePayloadInspector(
                 probe,
+                new SubtitleSidecarDiscovery(),
                 NullLogger<MediaUpgradePayloadInspector>.Instance);
 
             var result = await inspector.InspectAsync(owned.FullName, candidate.FullName, CancellationToken.None);
@@ -30,8 +33,8 @@ public sealed class MediaUpgradePayloadInspectorTests {
             Assert.NotNull(result);
             Assert.Equal(2160, result.OwnedResolutionTier);
             Assert.Equal(1080, result.CandidateResolutionTier);
-            Assert.False(result.OwnedHasEmbeddedSubtitles);
-            Assert.True(result.CandidateHasEmbeddedSubtitles);
+            Assert.False(result.OwnedHasSubtitles);
+            Assert.True(result.CandidateHasSubtitles);
         } finally {
             root.Delete(recursive: true);
         }
@@ -50,6 +53,7 @@ public sealed class MediaUpgradePayloadInspectorTests {
                 new FakeMediaProbe(
                     new Dictionary<string, VideoProbeData>(),
                     new HashSet<string>()),
+                new SubtitleSidecarDiscovery(),
                 NullLogger<MediaUpgradePayloadInspector>.Instance);
 
             Assert.Null(await inspector.InspectAsync(owned.FullName, candidate.FullName, CancellationToken.None));

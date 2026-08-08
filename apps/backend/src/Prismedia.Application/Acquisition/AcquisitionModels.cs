@@ -435,13 +435,13 @@ public sealed record UpgradeReplaceTarget(
 /// <summary>
 /// Technical facts read from the owned and downloaded video payloads immediately before an automatic
 /// replacement. Resolution tiers come from real stream dimensions rather than release names; subtitle
-/// flags describe embedded streams that survive the atomic video-file swap.
+/// flags include embedded streams and safe adjacent sidecars that survive the atomic video-file swap.
 /// </summary>
 public sealed record MediaUpgradePayloadInspection(
     int OwnedResolutionTier,
     int CandidateResolutionTier,
-    bool OwnedHasEmbeddedSubtitles,
-    bool CandidateHasEmbeddedSubtitles);
+    bool OwnedHasSubtitles,
+    bool CandidateHasSubtitles);
 
 /// <summary>
 /// Outcome of an in-place owned-file replacement. On success the owned file was atomically swapped for the
@@ -458,7 +458,8 @@ public sealed record OwnedFileReplaceResult(bool Succeeded, string? SwappedPath,
 /// file for the kind (a book file for <see cref="Domain.Entities.EntityKind.Book"/>, a video file for a
 /// movie or single episode) under the owned folder and under the new download path, verifies the new file
 /// and that both live on the same filesystem (so the swap is an atomic rename), then renames the owned file
-/// aside to a <c>.prismedia-bak</c> and moves the new file into its exact path. The backup is intentionally
+/// aside to a <c>.prismedia-bak</c> and moves the new file into its exact path. Video replacements also carry
+/// safe adjacent subtitle sidecars onto the owned basename. The backup is intentionally
 /// kept (it is not an importable extension, so the scanner ignores it) so the previous file is always
 /// recoverable. On any failure the owned file is left exactly as it was.
 /// </summary>

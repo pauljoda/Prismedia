@@ -202,8 +202,8 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
             var sameQualityAddsSubtitles = candidatePosition == ownedPosition
                 && !target.ParentHasSubtitles
                 && inspection is {
-                    OwnedHasEmbeddedSubtitles: false,
-                    CandidateHasEmbeddedSubtitles: true
+                    OwnedHasSubtitles: false,
+                    CandidateHasSubtitles: true
                 };
 
             if (actualResolutionDowngrade || payloadContradictsClaimedResolution) {

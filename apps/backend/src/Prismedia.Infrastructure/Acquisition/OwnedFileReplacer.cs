@@ -1,13 +1,15 @@
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Acquisition;
 using Prismedia.Application.Files;
+using Prismedia.Application.Jobs.Ports;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Infrastructure.Acquisition;
 
 /// <summary>
 /// Default <see cref="IOwnedFileReplacer"/>: an in-place, same-path swap of an owned single-file payload for
-/// a strictly-better one. The owned file is renamed aside to a <c>.prismedia-bak</c> (same directory → an
+/// a strictly-better one. Safe adjacent video subtitle sidecars are staged and renamed onto the owned video
+/// basename as part of the same replacement. The owned file is renamed aside to a <c>.prismedia-bak</c> (same directory → an
 /// atomic rename, and the previous file is kept so it is always recoverable; the scanner ignores it because
 /// the extension is not importable), then the new file is moved into the owned file's exact path.
 /// <para>
@@ -19,7 +21,10 @@ namespace Prismedia.Infrastructure.Acquisition;
 /// restores the original from the backup, so the owned file is never lost.
 /// </para>
 /// </summary>
-public sealed class OwnedFileReplacer(IRecycleBin recycleBin, ILogger<OwnedFileReplacer> logger) : IOwnedFileReplacer {
+public sealed class OwnedFileReplacer(
+    IRecycleBin recycleBin,
+    ILogger<OwnedFileReplacer> logger,
+    ISubtitleSidecarDiscovery? subtitleSidecars = null) : IOwnedFileReplacer {
     public Task<OwnedFileReplaceResult> ReplaceAsync(
         string ownedFolder,
         string newContentPath,
@@ -116,6 +121,18 @@ public sealed class OwnedFileReplacer(IRecycleBin recycleBin, ILogger<OwnedFileR
         var evidence = !string.IsNullOrWhiteSpace(incomingEvidencePath)
             ? Path.GetFullPath(incomingEvidencePath)
             : null;
+        IReadOnlyList<StagedSubtitleSidecar> stagedSubtitleSidecars;
+        try {
+            stagedSubtitleSidecars = await StageSubtitleSidecarsAsync(
+                isVideo,
+                incoming,
+                installPath,
+                cancellationToken);
+        } catch (Exception ex) when (ex is not OperationCanceledException) {
+            logger.LogWarning(ex, "OwnedFileReplacer: could not stage subtitle sidecars for {Path}.", owned);
+            return OwnedFileReplaceResult.Failed($"Could not stage the upgrade's subtitle sidecars: {ex.Message}");
+        }
+
         try {
             // Stage the new file beside the owned file FIRST (this is the only possibly-cross-device move, and
             // it never touches the owned file), then preserve the original as a backup COPY, then atomically
@@ -135,14 +152,18 @@ public sealed class OwnedFileReplacer(IRecycleBin recycleBin, ILogger<OwnedFileR
             File.Copy(owned, backup, overwrite: true); // keep the previous file as a recoverable backup
         } catch (Exception ex) when (ex is not OperationCanceledException) {
             logger.LogWarning(ex, "OwnedFileReplacer: could not stage the upgrade for {Path}.", owned);
+            RollBackSubtitleSidecars(stagedSubtitleSidecars);
             if (!retainBackup) {
                 TryDelete(staged);
             }
             return (OwnedFileReplaceResult.Failed($"Could not stage the upgrade: {ex.Message}"));
         }
 
+        var installedNewFile = false;
         try {
+            CommitSubtitleSidecars(stagedSubtitleSidecars);
             File.Move(staged, installPath, overwrite: true); // atomic same-directory install
+            installedNewFile = true;
             var installed = new FileInfo(installPath);
             if (!installed.Exists || installed.Length == 0) {
                 throw new IOException("The installed file is missing or empty after the move.");
@@ -160,6 +181,7 @@ public sealed class OwnedFileReplacer(IRecycleBin recycleBin, ILogger<OwnedFileR
             if (!retainBackup && await recycleBin.TryMoveToBinAsync(backup, cancellationToken) is { } binned) {
                 logger.LogDebug("OwnedFileReplacer: previous file recycled to {Binned}.", binned);
             }
+            await FinalizeSubtitleSidecarsAsync(stagedSubtitleSidecars, CancellationToken.None);
 
             return OwnedFileReplaceResult.Ok(installPath, newFormat);
         } catch (Exception ex) when (ex is not OperationCanceledException) {
@@ -167,19 +189,122 @@ public sealed class OwnedFileReplacer(IRecycleBin recycleBin, ILogger<OwnedFileR
             // The atomic replace either fully succeeded or left the owned file as it was; if it somehow left the
             // owned file missing, restore it from the backup copy. The staged file is discarded.
             try {
-                if (!File.Exists(owned) && File.Exists(backup)) {
-                    File.Copy(backup, owned, overwrite: false);
+                if (File.Exists(backup) && (installedNewFile || !File.Exists(owned))) {
+                    File.Copy(backup, owned, overwrite: true);
+                    if (!FileSystemPathComparison.Equals(installPath, owned)) {
+                        TryDelete(installPath);
+                    }
                 }
             } catch (Exception restoreEx) when (restoreEx is not OperationCanceledException) {
                 logger.LogError(restoreEx, "OwnedFileReplacer: failed to restore the backup at {Backup}; it remains on disk.", backup);
             }
 
+            RollBackSubtitleSidecars(stagedSubtitleSidecars);
             if (!retainBackup) {
                 TryDelete(staged);
             }
             return (OwnedFileReplaceResult.Failed($"The swap failed and the original was kept: {ex.Message}"));
         }
     }
+
+    private async Task<IReadOnlyList<StagedSubtitleSidecar>> StageSubtitleSidecarsAsync(
+        bool isVideo,
+        string incomingVideo,
+        string installVideo,
+        CancellationToken cancellationToken) {
+        if (!isVideo || subtitleSidecars is null) {
+            return [];
+        }
+
+        var discovery = (await subtitleSidecars.DiscoverAsync([incomingVideo], cancellationToken)).SingleOrDefault();
+        if (discovery is null || !discovery.IsComplete) {
+            throw new IOException("Adjacent subtitle discovery could not read the downloaded video's directory reliably.");
+        }
+
+        var incomingStem = Path.GetFileNameWithoutExtension(incomingVideo);
+        var installStem = Path.GetFileNameWithoutExtension(installVideo);
+        var installDirectory = Path.GetDirectoryName(installVideo)
+            ?? throw new IOException("The owned video's directory is unavailable.");
+        var stages = new List<StagedSubtitleSidecar>(discovery.Candidates.Count);
+        var targets = new HashSet<string>(FileSystemPathComparison.Comparer);
+        try {
+            foreach (var candidate in discovery.Candidates) {
+                cancellationToken.ThrowIfCancellationRequested();
+                var candidateName = Path.GetFileName(candidate.Path);
+                if (!candidateName.StartsWith(incomingStem, StringComparison.OrdinalIgnoreCase)) {
+                    throw new IOException("A discovered subtitle sidecar does not belong to the downloaded video filename.");
+                }
+
+                var suffix = candidateName[incomingStem.Length..];
+                var finalPath = Path.Combine(installDirectory, installStem + suffix);
+                if (!targets.Add(finalPath)) {
+                    throw new IOException("Multiple downloaded subtitle sidecars map to the same owned filename.");
+                }
+
+                var stagedPath = finalPath + ".prismedia-staged";
+                var rollbackPath = finalPath + ".prismedia-rollback";
+                TryDelete(stagedPath);
+                TryDelete(rollbackPath);
+                var hadExisting = File.Exists(finalPath);
+                stages.Add(new StagedSubtitleSidecar(stagedPath, finalPath, rollbackPath, hadExisting));
+                File.Copy(candidate.Path, stagedPath, overwrite: false);
+                if (hadExisting) {
+                    File.Copy(finalPath, rollbackPath, overwrite: false);
+                }
+            }
+
+            return stages;
+        } catch {
+            RollBackSubtitleSidecars(stages);
+            throw;
+        }
+    }
+
+    private static void CommitSubtitleSidecars(IReadOnlyList<StagedSubtitleSidecar> stages) {
+        foreach (var stage in stages) {
+            File.Move(stage.StagedPath, stage.FinalPath, overwrite: true);
+        }
+    }
+
+    private static void RollBackSubtitleSidecars(IReadOnlyList<StagedSubtitleSidecar> stages) {
+        foreach (var stage in stages) {
+            try {
+                if (stage.HadExisting && File.Exists(stage.RollbackPath)) {
+                    File.Move(stage.RollbackPath, stage.FinalPath, overwrite: true);
+                } else if (!stage.HadExisting) {
+                    TryDelete(stage.FinalPath);
+                }
+            } catch {
+                // Best-effort restoration mirrors the video rollback; the rollback file remains recoverable.
+            }
+            TryDelete(stage.StagedPath);
+            if (!stage.HadExisting) {
+                TryDelete(stage.RollbackPath);
+            }
+        }
+    }
+
+    private async Task FinalizeSubtitleSidecarsAsync(
+        IReadOnlyList<StagedSubtitleSidecar> stages,
+        CancellationToken cancellationToken) {
+        foreach (var stage in stages.Where(stage => stage.HadExisting && File.Exists(stage.RollbackPath))) {
+            var backupPath = stage.FinalPath + ".prismedia-bak";
+            try {
+                File.Move(stage.RollbackPath, backupPath, overwrite: true);
+                if (await recycleBin.TryMoveToBinAsync(backupPath, cancellationToken) is { } binned) {
+                    logger.LogDebug("OwnedFileReplacer: previous subtitle sidecar recycled to {Binned}.", binned);
+                }
+            } catch (Exception ex) when (ex is not OperationCanceledException) {
+                logger.LogWarning(ex, "OwnedFileReplacer: could not finalize the previous subtitle sidecar backup at {Path}.", stage.RollbackPath);
+            }
+        }
+    }
+
+    private sealed record StagedSubtitleSidecar(
+        string StagedPath,
+        string FinalPath,
+        string RollbackPath,
+        bool HadExisting);
 
     private static void TryDelete(string path) {
         try {

@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Acquisition;
+using Prismedia.Infrastructure.Media.Sidecars;
 
 namespace Prismedia.Infrastructure.Tests;
 
@@ -82,6 +83,33 @@ public sealed class OwnedFileReplacerTests : IDisposable {
         Assert.Equal("new 1080p copy, larger", File.ReadAllText(owned)); // the better file is now at the owned path
         Assert.True(File.Exists(owned + ".prismedia-bak"));               // the original is preserved
         Assert.Equal("old 720p copy", File.ReadAllText(owned + ".prismedia-bak"));
+    }
+
+    [Fact]
+    public async Task VideoUpgradeCarriesAdjacentSubtitleSidecarsOntoTheOwnedBasename() {
+        var library = Dir("library-sidecars");
+        var download = Dir("download-sidecars");
+        WriteFile(library, "Movie (2020).mkv", "old copy");
+        WriteFile(library, "Movie (2020).eng.srt", "old subtitle bytes");
+        WriteFile(download, "Release.1080p.mkv", "new copy");
+        WriteFile(download, "Release.1080p.eng.srt", "subtitle bytes");
+        var replacer = new OwnedFileReplacer(
+            new BinOff(),
+            NullLogger<OwnedFileReplacer>.Instance,
+            new SubtitleSidecarDiscovery());
+
+        var result = await replacer.ReplaceAsync(
+            library,
+            download,
+            BookFormatTier.Unknown,
+            CancellationToken.None,
+            EntityKind.Movie);
+
+        Assert.True(result.Succeeded);
+        var carried = Path.Combine(library, "Movie (2020).eng.srt");
+        Assert.True(File.Exists(carried));
+        Assert.Equal("subtitle bytes", File.ReadAllText(carried));
+        Assert.Equal("old subtitle bytes", File.ReadAllText(carried + ".prismedia-bak"));
     }
 
     [Fact]

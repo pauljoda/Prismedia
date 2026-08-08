@@ -218,7 +218,7 @@ public sealed class MediaUpgradeSpecification(EntityKind kind) : IReleaseSpecifi
         if (candidate == owned) {
             // A title cannot prove that a payload contains usable subtitle streams. When the owned video has
             // none, admit an equal-ladder candidate as a speculative download; the replace handler probes both
-            // files and rejects/removes/blocklists the candidate unless it really adds embedded subtitles.
+            // files and rejects/removes/blocklists the candidate unless it really adds embedded or adjacent subtitles.
             if (MediaQualityLadder.IsVideoKind(kind) && rules.OwnedHasSubtitles == false) {
                 return null;
             }
