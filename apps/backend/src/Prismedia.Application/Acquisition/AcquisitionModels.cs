@@ -143,6 +143,13 @@ public sealed record BookAcquisitionRules(
     public string? TargetTitle { get; init; }
 
     /// <summary>
+    /// The provider-authored title of the sought TV episode, set independently from
+    /// <see cref="TargetTitle"/> (which remains the series identity). Exact SxxEyy/1xYY releases stay
+    /// authoritative; this title admits a marker-less release only after its name identifies the episode.
+    /// </summary>
+    public string? TargetEpisodeTitle { get; init; }
+
+    /// <summary>
     /// The sought work's year identity, set per search by the runner (a movie's release year; a series'
     /// premiere year — the year scene naming appends to disambiguate same-name works). Feeds
     /// <see cref="MediaYearSpecification"/> so a release naming a conflicting title-adjacent year is

@@ -11,6 +11,13 @@ public interface IAcquisitionPolicyModule {
     /// <summary>Builds the ordered, most-specific-first query ladder for one acquisition.</summary>
     IReadOnlyList<string> BuildQueries(AcquisitionSearchInput input);
 
+    /// <summary>
+    /// Builds queries used only when the primary ladder produces no acceptable release. Most naming
+    /// families have no separate fallback; TV episodes use their provider title after exact unit queries
+    /// fail so a title-only release can still be found without adding traffic to successful searches.
+    /// </summary>
+    IReadOnlyList<string> BuildFallbackQueries(AcquisitionSearchInput input) => [];
+
     /// <summary>Narrows an indexer's configured Torznab categories to this module's media range.</summary>
     IReadOnlyList<int> RouteCategories(AcquisitionSearchInput input, IReadOnlyList<int> configuredCategories);
 
@@ -135,6 +142,20 @@ public sealed class TvAcquisitionPolicyModule : AcquisitionPolicyModule {
             tvBase
         ]);
     }
+
+    /// <inheritdoc />
+    public override IReadOnlyList<string> BuildFallbackQueries(AcquisitionSearchInput input) {
+        if (!IsFileUnit(input.Kind)
+            || input.EpisodeNumber is null
+            || string.IsNullOrWhiteSpace(input.Title)) {
+            return [];
+        }
+
+        var tvBase = string.IsNullOrWhiteSpace(input.Series) ? null : input.Series;
+        return AcquisitionPolicyQueries.Normalize([
+            AcquisitionPolicyQueries.JoinDistinct(tvBase, input.Title)
+        ]);
+    }
 }
 
 /// <summary>Shared mechanics for family-owned policy modules.</summary>
@@ -151,6 +172,9 @@ public abstract class AcquisitionPolicyModule : IAcquisitionPolicyModule {
 
     /// <inheritdoc />
     public abstract IReadOnlyList<string> BuildQueries(AcquisitionSearchInput input);
+
+    /// <inheritdoc />
+    public virtual IReadOnlyList<string> BuildFallbackQueries(AcquisitionSearchInput input) => [];
 
     /// <inheritdoc />
     public virtual IReadOnlyList<int> RouteCategories(

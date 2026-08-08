@@ -24,6 +24,15 @@ public sealed class AcquisitionPayloadValidationTests {
     }
 
     [Fact]
+    public void CompleteSeasonIsNotMisclassifiedAsACompleteSeries() {
+        Assert.False(TvReleaseTokens.NamesCompleteSeries(
+            "Sesame.Street.S52.COMPLETE.720p.HMAX.WEBRip.x264-GalaxyTV"));
+        Assert.True(TvReleaseTokens.NamesCompleteSeries("Sesame Street COMPLETE"));
+        Assert.True(TvReleaseTokens.NamesCompleteSeries("Sesame Street complete series"));
+        Assert.True(TvReleaseTokens.NamesCompleteSeries("Sesame Street all seasons"));
+    }
+
+    [Fact]
     public void EpisodeSearchAcceptsAMultiEpisodeReleaseContainingIt() {
         // Live gap: E42's only source was the S01E41E42 double release, which the unit gate rejected.
         var spec = new TvUnitSpecification();

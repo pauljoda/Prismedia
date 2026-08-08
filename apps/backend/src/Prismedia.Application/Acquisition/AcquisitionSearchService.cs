@@ -51,6 +51,7 @@ public sealed class AcquisitionSearchRunner(
 
         var rules = (await profiles.GetRulesAsync(input.ProfileId, input.Kind, cancellationToken)) with {
             TargetTitle = input.WorkTitle,
+            TargetEpisodeTitle = input.EpisodeNumber is null ? null : input.Title,
             TargetYear = input.Year,
             TargetAuthor = input.Author,
             BookRendition = input.BookRendition
@@ -109,28 +110,48 @@ public sealed class AcquisitionSearchRunner(
         var releases = new List<(IndexerRelease Release, Guid? IndexerConfigId, string IndexerName)>();
         var errors = new Dictionary<Guid, IndexerSearchError>();
         var failedIndexers = new HashSet<Guid>();
-        foreach (var text in queries) {
-            var searchable = configs.Where(config => !failedIndexers.Contains(config.Id)).ToArray();
-            if (searchable.Length == 0) {
-                break;
+        async Task SearchQueriesAsync(IEnumerable<string> searchQueries) {
+            foreach (var text in searchQueries) {
+                var searchable = configs.Where(config => !failedIndexers.Contains(config.Id)).ToArray();
+                if (searchable.Length == 0) {
+                    break;
+                }
+
+                var searches = await Task.WhenAll(searchable.Select(config => SearchIndexerAsync(config, text, input, policy, cancellationToken)));
+                await RecordHealthAsync(searches, cancellationToken);
+
+                foreach (var search in searches) {
+                    foreach (var release in search.Found) {
+                        releases.Add((release, search.Config.Id, search.Config.DisplayName));
+                    }
+
+                    if (search.Error is not null) {
+                        errors.TryAdd(
+                            search.Config.Id,
+                            new IndexerSearchError(search.Config.Id, search.Config.DisplayName, search.Error));
+                        // A real failure is not repeated for every broader query in the same operation.
+                        // Rate-limit exhaustion likewise cannot recover inside this query ladder.
+                        failedIndexers.Add(search.Config.Id);
+                    }
+                }
             }
+        }
 
-            var searches = await Task.WhenAll(searchable.Select(config => SearchIndexerAsync(config, text, input, policy, cancellationToken)));
-            await RecordHealthAsync(searches, cancellationToken);
+        await SearchQueriesAsync(queries);
 
-            foreach (var search in searches) {
-                foreach (var release in search.Found) {
-                    releases.Add((release, search.Config.Id, search.Config.DisplayName));
-                }
-
-                if (search.Error is not null) {
-                    errors.TryAdd(
-                        search.Config.Id,
-                        new IndexerSearchError(search.Config.Id, search.Config.DisplayName, search.Error));
-                    // A real failure is not repeated for every broader query in the same operation.
-                    // Rate-limit exhaustion likewise cannot recover inside this query ladder.
-                    failedIndexers.Add(search.Config.Id);
-                }
+        // Episode-title queries are a fallback, not another unconditional rung. Evaluate the complete
+        // exact-unit result set first; only when every candidate is rejected do we spend the extra query
+        // budget on title-only releases. Reviewed custom searches remain exactly the term the user chose.
+        if (string.IsNullOrWhiteSpace(customQuery)) {
+            var fallbackQueries = policy.BuildFallbackQueries(input)
+                .Except(queries, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            var hasAcceptedPrimary = engine.Evaluate(
+                releases.Where(candidate => protocols.Contains(candidate.Release.Protocol)).ToArray(),
+                rules,
+                blocklisted).Any(candidate => candidate.Accepted);
+            if (!hasAcceptedPrimary && fallbackQueries.Length > 0) {
+                await SearchQueriesAsync(fallbackQueries);
             }
         }
 

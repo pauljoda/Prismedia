@@ -203,6 +203,75 @@ public sealed class AcquisitionSearchRunnerTests {
     }
 
     [Fact]
+    public async Task EpisodeTitleQueryRunsOnlyAfterExactUnitQueriesFindNothingAcceptable() {
+        var wrongSeason = new IndexerRelease(
+            "Sesame.Street.S52.COMPLETE.720p.HMAX.WEBRip.x264-GalaxyTV",
+            5_000_000_000, 20, 2, DownloadProtocol.Torrent,
+            "http://dl/wrong", "magnet:?wrong", "wrong-season", null, null, null);
+        var titleOnly = new IndexerRelease(
+            "Sesame Street Episode 0131 720p",
+            500_000_000, 10, 2, DownloadProtocol.Torrent,
+            "http://dl/title", "magnet:?title", "title-only", null, null, null);
+        var client = new QueryAwareIndexerSearchClient(new Dictionary<string, IReadOnlyList<IndexerRelease>>(StringComparer.OrdinalIgnoreCase) {
+            ["Sesame Street S02E01"] = [wrongSeason],
+            ["Sesame Street 2x01"] = [wrongSeason],
+            ["Sesame Street Episode 131"] = [titleOnly]
+        });
+        var runner = new AcquisitionSearchRunner(
+            new FakeIndexerConfigStore(),
+            new FakeClientFactory(client),
+            new FakeProfileStore(),
+            new FakeBlocklistStore("unrelated"),
+            new FakeDownloadClientConfigStore(DownloadProtocol.Torrent),
+            new FakeIndexerStatusStore(),
+            new IndexerQueryWindow(),
+            Policies(new TvAcquisitionPolicyModule()),
+            Settings());
+
+        var outcome = await runner.RunAsync(
+            new AcquisitionSearchInput(
+                Guid.NewGuid(), "Episode 131", null, EntityKind.VideoEpisode,
+                Series: "Sesame Street", SeasonNumber: 2, EpisodeNumber: 1),
+            CancellationToken.None);
+
+        Assert.Equal(
+            ["Sesame Street S02E01", "Sesame Street 2x01", "Sesame Street Episode 131"],
+            client.Queries);
+        Assert.Equal(titleOnly.Title, outcome.Candidates.First(candidate => candidate.Accepted).Release.Title);
+        Assert.False(outcome.Candidates.Single(candidate => candidate.Release.Title == wrongSeason.Title).Accepted);
+    }
+
+    [Fact]
+    public async Task EpisodeTitleQueryIsSkippedWhenAnExactUnitReleaseIsAcceptable() {
+        var exact = new IndexerRelease(
+            "Sesame Street S02E01 720p",
+            500_000_000, 10, 2, DownloadProtocol.Torrent,
+            "http://dl/exact", "magnet:?exact", "exact", null, null, null);
+        var client = new QueryAwareIndexerSearchClient(new Dictionary<string, IReadOnlyList<IndexerRelease>>(StringComparer.OrdinalIgnoreCase) {
+            ["Sesame Street S02E01"] = [exact]
+        });
+        var runner = new AcquisitionSearchRunner(
+            new FakeIndexerConfigStore(),
+            new FakeClientFactory(client),
+            new FakeProfileStore(),
+            new FakeBlocklistStore("unrelated"),
+            new FakeDownloadClientConfigStore(DownloadProtocol.Torrent),
+            new FakeIndexerStatusStore(),
+            new IndexerQueryWindow(),
+            Policies(new TvAcquisitionPolicyModule()),
+            Settings());
+
+        var outcome = await runner.RunAsync(
+            new AcquisitionSearchInput(
+                Guid.NewGuid(), "Episode 131", null, EntityKind.VideoEpisode,
+                Series: "Sesame Street", SeasonNumber: 2, EpisodeNumber: 1),
+            CancellationToken.None);
+
+        Assert.Equal(["Sesame Street S02E01", "Sesame Street 2x01"], client.Queries);
+        Assert.Equal(exact.Title, outcome.Candidates.First(candidate => candidate.Accepted).Release.Title);
+    }
+
+    [Fact]
     public async Task DuplicateReleaseKeepsTheAcceptedParsingBeforeIndexerPriority() {
         var preferredId = Guid.NewGuid();
         var acceptedId = Guid.NewGuid();

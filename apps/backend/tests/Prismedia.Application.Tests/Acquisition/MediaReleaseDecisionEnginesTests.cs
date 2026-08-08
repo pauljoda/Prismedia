@@ -75,6 +75,7 @@ public sealed class MediaReleaseDecisionEnginesTests {
         var episode = new AcquisitionSearchInput(
             Guid.NewGuid(), "Pilot", null, EntityKind.VideoEpisode, Series: "Andor", SeasonNumber: 1, EpisodeNumber: 5);
         Assert.Equal(["Andor S01E05", "Andor 1x05"], policy.BuildQueries(episode));
+        Assert.Equal(["Andor Pilot"], policy.BuildFallbackQueries(episode));
     }
 
     [Fact]
@@ -86,6 +87,8 @@ public sealed class MediaReleaseDecisionEnginesTests {
             (Release("Andor S01 1080p WEB-DL", seeders: 100), null, "Idx"),
             (Release("Andor Season 1 720p", seeders: 100), null, "Idx"),
             (Release("Andor COMPLETE 1080p", seeders: 100), null, "Idx"),
+            (Release("Andor S52 COMPLETE 720p", seeders: 100), null, "Idx"),
+            (Release("Andor Season 1 Poster Part 1", seeders: 100), null, "Idx"),
             (Release("Andor 1080p WEB-DL", seeders: 100), null, "Idx"),
             (Release("Andor S02 1080p WEB-DL", seeders: 100), null, "Idx"),
             (Release("Andor S01E05 1080p WEB-DL", seeders: 100), null, "Idx"),
@@ -95,6 +98,8 @@ public sealed class MediaReleaseDecisionEnginesTests {
         Assert.True(verdicts["Andor S01 1080p WEB-DL"]);
         Assert.True(verdicts["Andor Season 1 720p"]);
         Assert.True(verdicts["Andor COMPLETE 1080p"]);
+        Assert.False(verdicts["Andor S52 COMPLETE 720p"]);
+        Assert.False(verdicts["Andor Season 1 Poster Part 1"]);
         // A marker-less pack passes (judged by the query match), like format-anonymous book titles.
         Assert.True(verdicts["Andor 1080p WEB-DL"]);
         Assert.False(verdicts["Andor S02 1080p WEB-DL"]);
@@ -103,13 +108,19 @@ public sealed class MediaReleaseDecisionEnginesTests {
     }
 
     [Fact]
-    public void EpisodeSearchAcceptsOnlyTheExactUnit() {
+    public void EpisodeSearchAcceptsTheExactUnitOrProviderTitleWithoutACompetingUnit() {
         var engine = new TvReleaseDecisionEngine(EntityKind.VideoEpisode);
-        var rules = BookAcquisitionRules.Default with { SeasonNumber = 1, EpisodeNumber = 5 };
+        var rules = BookAcquisitionRules.Default with {
+            SeasonNumber = 1,
+            EpisodeNumber = 5,
+            TargetEpisodeTitle = "Pilot"
+        };
 
         var scored = engine.Evaluate([
             (Release("Andor S01E05 1080p WEB-DL", seeders: 10), null, "Idx"),
             (Release("Andor 1x05 720p", seeders: 10), null, "Idx"),
+            (Release("Andor Pilot 720p", seeders: 10), null, "Idx"),
+            (Release("Andor S01E06 Pilot 1080p", seeders: 10), null, "Idx"),
             (Release("Andor S01E06 1080p", seeders: 10), null, "Idx"),
             (Release("Andor S01 1080p pack", seeders: 10), null, "Idx"),
         ], rules);
@@ -117,6 +128,8 @@ public sealed class MediaReleaseDecisionEnginesTests {
         var verdicts = scored.ToDictionary(candidate => candidate.Release.Title, candidate => candidate.Accepted);
         Assert.True(verdicts["Andor S01E05 1080p WEB-DL"]);
         Assert.True(verdicts["Andor 1x05 720p"]);
+        Assert.True(verdicts["Andor Pilot 720p"]);
+        Assert.False(verdicts["Andor S01E06 Pilot 1080p"]);
         Assert.False(verdicts["Andor S01E06 1080p"]);
         Assert.False(verdicts["Andor S01 1080p pack"]);
     }

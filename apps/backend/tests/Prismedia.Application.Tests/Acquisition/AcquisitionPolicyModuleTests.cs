@@ -77,6 +77,8 @@ public sealed class AcquisitionPolicyModuleTests {
 
         Assert.Equal(["Andor S01", "Andor Season 1", "Andor complete"], module.BuildQueries(season));
         Assert.Equal(["Andor S01E05", "Andor 1x05"], module.BuildQueries(episode));
+        Assert.Empty(module.BuildFallbackQueries(season));
+        Assert.Equal(["Andor Pilot"], module.BuildFallbackQueries(episode));
     }
 
     [Fact]

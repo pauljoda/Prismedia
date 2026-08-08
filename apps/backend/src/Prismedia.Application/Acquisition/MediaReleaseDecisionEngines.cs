@@ -151,8 +151,19 @@ public sealed class TvUnitSpecification : IReleaseSpecification {
         var declaredEpisodes = TvReleaseTokens.ParseEpisodes(release.Title);
         if (rules.EpisodeNumber is { } episode) {
             // Single episode sought: the release must declare the exact unit — including a multi-episode
-            // release that contains it (a double-episode S01E41E42 file fulfils an E42 search).
-            return declaredEpisodes is { } unit && unit.Season == season && unit.Episodes.Contains(episode)
+            // release that contains it (a double-episode S01E41E42 file fulfils an E42 search). A title-only
+            // release is the safe fallback only when it declares no competing TV unit and names the provider
+            // episode title; the series identity gate independently proves the parent work.
+            if (declaredEpisodes is { } unit) {
+                return unit.Season == season && unit.Episodes.Contains(episode) ? null : Reason;
+            }
+
+            if (TvReleaseTokens.ParseSeason(release.Title) is not null
+                || TvReleaseTokens.NamesCompleteSeries(release.Title)) {
+                return Reason;
+            }
+
+            return ReleaseTitleIdentity.ContainsMeaningfulRun(release.Title, rules.TargetEpisodeTitle)
                 ? null
                 : Reason;
         }
@@ -168,6 +179,31 @@ public sealed class TvUnitSpecification : IReleaseSpecification {
 
         var declaredSeason = TvReleaseTokens.ParseSeason(release.Title);
         return declaredSeason is null || declaredSeason == season ? null : Reason;
+    }
+}
+
+/// <summary>
+/// Rejects a season or series candidate that explicitly advertises artwork instead of playable
+/// video. Broad "Other" indexer categories are intentionally searchable, so this gate keeps a
+/// strongly named poster archive from winning an otherwise valid TV-unit match. Episode searches
+/// remain exempt because a provider episode title may legitimately contain the word "poster".
+/// </summary>
+public sealed class TvNonVideoArtifactSpecification(EntityKind kind) : IReleaseSpecification {
+    private static readonly System.Text.RegularExpressions.Regex PosterTokenRegex = new(
+        @"(?:^|[^a-z0-9])posters?(?:$|[^a-z0-9])",
+        System.Text.RegularExpressions.RegexOptions.IgnoreCase
+        | System.Text.RegularExpressions.RegexOptions.CultureInvariant
+        | System.Text.RegularExpressions.RegexOptions.Compiled);
+
+    public ReleaseRejectionReason Reason => ReleaseRejectionReason.UnsupportedFormat;
+
+    public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) {
+        if (kind == EntityKind.VideoEpisode
+            || ReleaseTitleIdentity.ContainsMeaningfulRun(rules.TargetTitle ?? string.Empty, "poster")) {
+            return null;
+        }
+
+        return PosterTokenRegex.IsMatch(release.Title) ? Reason : null;
     }
 }
 
@@ -294,6 +330,7 @@ public sealed class TvReleaseDecisionEngine(EntityKind kind) : IAcquisitionDecis
         new RequiredTermsSpecification(),
         new IgnoredTermsSpecification(),
         new LanguageSpecification(),
+        new TvNonVideoArtifactSpecification(kind),
         new TvUnitSpecification(),
         new MediaQualityAllowedSpecification(kind),
         new MinFormatScoreSpecification(),

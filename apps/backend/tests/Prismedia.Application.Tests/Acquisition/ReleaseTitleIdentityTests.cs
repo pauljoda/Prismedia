@@ -10,6 +10,17 @@ namespace Prismedia.Application.Tests.Acquisition;
 /// the 2019 reboot's 1080p pack because nothing compared years and quality outranked everything.
 /// </summary>
 public sealed class ReleaseTitleIdentityTests {
+    [Fact]
+    public void MeaningfulRunsTreatZeroPaddedEpisodeNumbersAsTheSameValue() {
+        Assert.True(ReleaseTitleIdentity.ContainsMeaningfulRun(
+            "Sesame Street - Episode 0131 (November 9, 1970)",
+            "Episode 131"));
+        Assert.False(ReleaseTitleIdentity.ContainsMeaningfulRun(
+            "Sesame Street - Episode 0132 (November 10, 1970)",
+            "Episode 131"));
+        Assert.False(ReleaseTitleIdentity.ContainsMeaningfulRun("Anything", "The"));
+    }
+
     [Theory]
     // Exact titles, with unit/quality tails ending the title at a recognized boundary.
     [InlineData("Clifford the Big Red Dog", "Clifford.the.Big.Red.Dog.S02.1080p.PCOK.WEB-DL.AAC.2.0.H.264-Suki", true, null)]

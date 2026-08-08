@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- TV acquisition now distinguishes a complete season from a complete series, rejects poster-only season results, falls back from exact episode-number searches to provider episode titles, imports title-numbered season packs such as `Episode 0131`, and ignores duplicate Internet Archive derivative videos when the original is present.
 - Monitored video upgrades now prefer subtitle-labelled releases at equal quality and may inspect speculative same-quality downloads. Prismedia probes the owned and downloaded files before replacement, carries embedded and adjacent subtitles, refuses measured resolution downgrades or mislabeled quality, and deletes, blocklists, and retries candidates that do not provide the expected subtitle upgrade.
 - Provider season matching now treats zero-padded folder numbers such as `Season 06` as the same season as `Season 6`, preventing monitored series from creating duplicate canonical seasons.
 - Web library grids now restore recent Back navigations without refetching, default to 100 cards per page, skip off-screen rendering and per-card artwork analysis, and migrate the previous 250-card default while preserving larger sizes as an explicit choice.

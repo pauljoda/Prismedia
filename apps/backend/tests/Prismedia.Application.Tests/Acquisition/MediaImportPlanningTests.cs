@@ -352,6 +352,36 @@ public sealed class TvImportPlanBuilderTests {
     }
 
     [Fact]
+    public void TokenlessSeasonPackMapsUniqueProviderEpisodeTitlesIncludingZeroPadding() {
+        var plan = TvImportPlanBuilder.Plan([
+            File("pack/Sesame Street - Episode 0131 (November 9, 1970).mp4"),
+            File("pack/Sesame Street - Episode 0132 (November 10, 1970).mp4"),
+        ], "Sesame Street", seasonNumber: 2, episodeNumber: null, episodeTitles: [
+            new TvEpisodeTitle(1, "Episode 131"),
+            new TvEpisodeTitle(2, "Episode 132")
+        ]);
+
+        Assert.False(plan.Blocked);
+        Assert.Equal(
+            ["Sesame Street/Season 02/Sesame Street - S02E01.mp4", "Sesame Street/Season 02/Sesame Street - S02E02.mp4"],
+            plan.Items.Select(item => item.TargetRelativePath).ToArray());
+    }
+
+    [Fact]
+    public void InternetArchiveDerivativeYieldsToItsOriginalSibling() {
+        var plan = TvImportPlanBuilder.Plan([
+            File("pack/Sesame Street - Episode 0131 (November 9, 1970).ia.mp4"),
+            File("pack/Sesame Street - Episode 0131 (November 9, 1970).mp4"),
+        ], "Sesame Street", seasonNumber: 2, episodeNumber: null, episodeTitles: [
+            new TvEpisodeTitle(1, "Episode 131")
+        ]);
+
+        var item = Assert.Single(plan.Items);
+        Assert.Equal("pack/Sesame Street - Episode 0131 (November 9, 1970).mp4", item.SourceRelativePath);
+        Assert.Equal("Sesame Street/Season 02/Sesame Street - S02E01.mp4", item.TargetRelativePath);
+    }
+
+    [Fact]
     public void SamplesAndNonVideoFilesAreSkipped() {
         var plan = TvImportPlanBuilder.Plan([
             File("pack/Andor.S01E01.sample.mkv"),

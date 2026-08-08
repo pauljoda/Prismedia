@@ -78,7 +78,8 @@ public static partial class ReleaseTitleIdentity {
     /// <summary>
     /// The comparison tokens of a title-like value: separator-normalized, diacritics folded, "&amp;"
     /// spelled out, and articles/connectives dropped — the digit-preserving clean form both sides of the
-    /// identity comparison share.
+    /// identity comparison share. Numeric tokens compare by value, so provider title <c>Episode 131</c>
+    /// matches a release/file spelling it <c>Episode 0131</c> without weakening the number itself.
     /// </summary>
     private static IReadOnlyList<string> ComparableTokens(string? value) {
         if (string.IsNullOrWhiteSpace(value)) {
@@ -87,7 +88,7 @@ public static partial class ReleaseTitleIdentity {
 
         var tokens = new List<string>();
         foreach (var token in ReleaseTitleText.Tokens(value.Replace("&", " and "))) {
-            var folded = FoldDiacritics(token);
+            var folded = NormalizeNumericToken(FoldDiacritics(token));
             if (folded.Length > 0 && !IgnoredWords.Contains(folded)) {
                 tokens.Add(folded);
             }
@@ -108,6 +109,19 @@ public static partial class ReleaseTitleIdentity {
         }
 
         var tokens = ComparableTokens(releaseTitle);
+        return ContainsTokenRun(tokens, target);
+    }
+
+    /// <summary>
+    /// The non-empty variant used when a match is positive evidence rather than an optional filter.
+    /// Empty or normalization-only target titles never match.
+    /// </summary>
+    public static bool ContainsMeaningfulRun(string releaseTitle, string? targetTitle) {
+        var target = ComparableTokens(targetTitle);
+        return target.Count > 0 && ContainsTokenRun(ComparableTokens(releaseTitle), target);
+    }
+
+    private static bool ContainsTokenRun(IReadOnlyList<string> tokens, IReadOnlyList<string> target) {
         for (var start = 0; start <= tokens.Count - target.Count; start++) {
             var matched = true;
             for (var offset = 0; offset < target.Count; offset++) {
@@ -123,6 +137,15 @@ public static partial class ReleaseTitleIdentity {
         }
 
         return false;
+    }
+
+    private static string NormalizeNumericToken(string token) {
+        if (!token.All(char.IsDigit)) {
+            return token;
+        }
+
+        var normalized = token.TrimStart('0');
+        return normalized.Length == 0 ? "0" : normalized;
     }
 
     /// <summary>

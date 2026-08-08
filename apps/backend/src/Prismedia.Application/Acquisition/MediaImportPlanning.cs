@@ -418,9 +418,30 @@ public static partial class TvImportPlanBuilder {
             return TvUnitsPlan.Block(ImportBlockReason.NoSupportedPayload);
         }
 
+        // Internet Archive torrents commonly carry both "Episode.ext" and its lower-fidelity
+        // "Episode.ia.ext" derivative. The exact sibling proves they are alternate encodes of the same
+        // source; prefer the original so later title matching does not see a false duplicate episode.
+        // prism-vocab: external.
+        var videoPaths = videos.Select(file => file.RelativePath).ToHashSet(FileSystemPathComparison.Comparer);
+        videos = videos
+            .Where(file => !HasInternetArchiveOriginalSibling(file.RelativePath, videoPaths))
+            .ToArray();
+
         var units = new List<TvPlanUnit>(videos.Length);
         foreach (var video in videos.OrderBy(file => file.RelativePath, StringComparer.OrdinalIgnoreCase)) {
             var unit = TvReleaseTokens.ParseEpisode(Path.GetFileNameWithoutExtension(video.RelativePath));
+            if (unit is null && seasonNumber is { } titleSeason && episodeTitles is { Count: > 0 }) {
+                var titleMatches = episodeTitles
+                    .Where(candidate => ReleaseTitleIdentity.ContainsMeaningfulRun(
+                        Path.GetFileNameWithoutExtension(video.RelativePath), candidate.Title))
+                    .Select(candidate => candidate.Episode)
+                    .Distinct()
+                    .ToArray();
+                if (titleMatches.Length == 1) {
+                    unit = (titleSeason, titleMatches[0]);
+                }
+            }
+
             // A tokenless file is only placeable when the acquisition itself IS one episode.
             if (unit is null && (videos.Length > 1 || seasonNumber is null || episodeNumber is null)) {
                 continue;
@@ -505,7 +526,7 @@ public static partial class TvImportPlanBuilder {
                 ? []
                 : episodeTitles
                     .Where(candidate => !string.IsNullOrWhiteSpace(candidate.Title) &&
-                        ReleaseTitleIdentity.ContainsRun(tail, candidate.Title))
+                        ReleaseTitleIdentity.ContainsMeaningfulRun(tail, candidate.Title))
                     .Select(candidate => candidate.Episode)
                     .Distinct()
                     .OrderBy(episode => episode)
@@ -537,6 +558,21 @@ public static partial class TvImportPlanBuilder {
         // keep the numeric truth for the whole payload rather than half-applying a guess.
         var slots = realigned.Select(unit => (unit.Season, unit.Episode)).ToArray();
         return slots.Distinct().Count() == slots.Length ? realigned : units;
+    }
+
+    private static bool HasInternetArchiveOriginalSibling(string relativePath, IReadOnlySet<string> videoPaths) {
+        var extension = Path.GetExtension(relativePath);
+        var stem = Path.GetFileNameWithoutExtension(relativePath);
+        if (!stem.EndsWith(".ia", StringComparison.OrdinalIgnoreCase)) {
+            return false;
+        }
+
+        var directory = Path.GetDirectoryName(relativePath);
+        var originalName = stem[..^3] + extension;
+        var originalPath = string.IsNullOrEmpty(directory)
+            ? originalName
+            : Path.Combine(directory, originalName);
+        return videoPaths.Contains(originalPath);
     }
 
     /// <summary>

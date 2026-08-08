@@ -23,8 +23,11 @@ public static partial class TvReleaseTokens {
     [GeneratedRegex(@"(?:^|[\s._\-(\[])(?:[Ss](?<season>\d{1,3})|Season[\s._-]*(?<season>\d{1,3}))(?:\D|$)", RegexOptions.IgnoreCase)]
     private static partial Regex SeasonTokenRegex();
 
-    [GeneratedRegex(@"(?:^|[\s._\-(\[])(?:complete|collection|all[\s._-]*seasons?)(?:\D|$)", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"(?:^|[\s._\-(\[])(?:complete|collection)(?:\D|$)", RegexOptions.IgnoreCase)]
     private static partial Regex CompleteSeriesTokenRegex();
+
+    [GeneratedRegex(@"(?:^|[\s._\-(\[])(?:complete[\s._-]*series|series[\s._-]*collection|all[\s._-]*seasons?)(?:\D|$)", RegexOptions.IgnoreCase)]
+    private static partial Regex ExplicitCompleteSeriesTokenRegex();
 
     /// <summary>The (season, first episode) a name declares via SxxEyy or 1x05 conventions, or null when it names none.</summary>
     public static (int Season, int Episode)? ParseEpisode(string name) =>
@@ -79,8 +82,14 @@ public static partial class TvReleaseTokens {
         return match.Success && int.TryParse(match.Groups["season"].Value, out var season) ? season : null;
     }
 
-    /// <summary>True when the name declares a complete-series pack (which satisfies any season of that series).</summary>
-    public static bool NamesCompleteSeries(string name) => CompleteSeriesTokenRegex().IsMatch(name);
+    /// <summary>
+    /// True when the name declares a complete-series pack (which satisfies any season of that series).
+    /// A season-scoped title such as <c>S52 COMPLETE</c> means that one complete season, never the whole
+    /// series; explicit <c>complete series</c>/<c>all seasons</c> wording remains authoritative.
+    /// </summary>
+    public static bool NamesCompleteSeries(string name) =>
+        ExplicitCompleteSeriesTokenRegex().IsMatch(name)
+        || (ParseSeason(name) is null && CompleteSeriesTokenRegex().IsMatch(name));
 
     /// <summary>
     /// The text AFTER the first episode token — where scene naming puts the episode title(s)
