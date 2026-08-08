@@ -108,6 +108,8 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         var reconciliation = Assert.Single(harness.Queue.Enqueued, request => request.Type == JobType.ReconcileEntity);
         Assert.Equal(EntityKind.VideoSeries.ToCode(), reconciliation.TargetEntityKind);
         Assert.Equal(harness.SeriesId.ToString(), reconciliation.TargetEntityId);
+        var finalization = AcquisitionFinalizeJobPayload.Parse(reconciliation.PayloadJson!);
+        Assert.Equal([harness.WantedEpisodeId], finalization.ImportedEntityIds);
 
         Assert.DoesNotContain(harness.Queue.Enqueued, request => request.Type == JobType.AutoIdentify);
     }

@@ -135,11 +135,13 @@ public sealed class RefreshEntityJobHandlerTests {
         var albumId = Guid.NewGuid();
         var firstTrackId = Guid.NewGuid();
         var secondTrackId = Guid.NewGuid();
+        var unrelatedTrackId = Guid.NewGuid();
         var acquisitionId = Guid.NewGuid();
         var persistence = new RecordingPersistence([
             new EntityRefreshTarget(albumId, EntityKind.AudioLibrary.ToCode(), "Frozen"),
             new EntityRefreshTarget(firstTrackId, EntityKind.AudioTrack.ToCode(), "Frozen Heart", "/media/Frozen/01.flac"),
-            new EntityRefreshTarget(secondTrackId, EntityKind.AudioTrack.ToCode(), "Vuelie", "/media/Frozen/02.flac")
+            new EntityRefreshTarget(secondTrackId, EntityKind.AudioTrack.ToCode(), "Vuelie", "/media/Frozen/02.flac"),
+            new EntityRefreshTarget(unrelatedTrackId, EntityKind.AudioTrack.ToCode(), "Let It Go", "/media/Frozen/05.flac")
         ]) {
             AutoGenerateMetadata = true,
             AutoIdentifyEnabled = true,
@@ -157,7 +159,9 @@ public sealed class RefreshEntityJobHandlerTests {
         var finalization = AcquisitionFinalizeJobPayload.Create(
             acquisitionId,
             BookQualityRank.Floor,
-            "Imported");
+            "Imported") with {
+                ImportedEntityIds = [firstTrackId, secondTrackId]
+            };
         var job = RefreshJob(albumId) with {
             Type = JobType.ReconcileEntity,
             PayloadJson = finalization.ToJson(),
@@ -173,6 +177,8 @@ public sealed class RefreshEntityJobHandlerTests {
 
         var probes = queue.Nodes.Where(node => node.Job.Type == JobType.ProbeAudio).ToArray();
         Assert.Equal(2, probes.Length);
+        Assert.Equal([firstTrackId, secondTrackId], persistence.LastDownstreamEntityIds);
+        Assert.Equal(2, persistence.ClearGeneratedAssetsCalls);
         var finalizer = Assert.Single(queue.Nodes, node => node.Job.Type == JobType.AcquisitionFinalize);
         Assert.All(probes, probe => Assert.Contains(queue.RunIds[probe.NodeKey], finalizer.DependsOn!));
         var identify = Assert.Single(queue.Nodes, node => node.Job.Type == JobType.AutoIdentify);
@@ -239,6 +245,7 @@ public sealed class RefreshEntityJobHandlerTests {
         public List<VideoSubtitleSidecarState> InvalidatedSubtitleStates { get; } = [];
         public int ClearGeneratedAssetsCalls { get; private set; }
         public int DownstreamChecks { get; private set; }
+        public IReadOnlyList<Guid> LastDownstreamEntityIds { get; private set; } = [];
         public bool AutoGenerateMetadata { get; init; }
         public bool AutoIdentifyEnabled { get; init; }
         public bool NeedsProbe { get; init; }
@@ -265,6 +272,7 @@ public sealed class RefreshEntityJobHandlerTests {
             IReadOnlyList<Guid> entityIds,
             CancellationToken cancellationToken) {
             DownstreamChecks++;
+            LastDownstreamEntityIds = entityIds.ToArray();
             return Task.FromResult<IReadOnlyDictionary<Guid, DownstreamNeeds>>(
                 entityIds.ToDictionary(id => id, _ => NoDownstreamWork with {
                     NeedsProbe = NeedsProbe,

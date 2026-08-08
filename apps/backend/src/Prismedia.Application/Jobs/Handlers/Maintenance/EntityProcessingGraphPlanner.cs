@@ -42,23 +42,29 @@ public sealed class EntityProcessingGraphPlanner(
             throw new InvalidOperationException($"Entity '{entityId}' was not found for reconciliation.");
         }
 
-        await context.ReportProgressAsync(10, $"Found {tree.Count} entities to reconcile", cancellationToken);
-        await InvalidateChangedSubtitleSidecarsAsync(tree, cancellationToken);
+        var processingTree = ScopeImportedEntities(tree, finalization);
+        await context.ReportProgressAsync(
+            10,
+            processingTree.Count == tree.Count
+                ? $"Found {tree.Count} entities to reconcile"
+                : $"Found {processingTree.Count} imported entities to reconcile in a {tree.Count}-entity tree",
+            cancellationToken);
+        await InvalidateChangedSubtitleSidecarsAsync(processingTree, cancellationToken);
 
         var settings = await scanRoots.GetSettingsAsync(cancellationToken);
-        foreach (var entity in tree) {
+        foreach (var entity in processingTree) {
             if (EntityKindRegistry.TryGet(entity.KindCode, out var kind)) {
                 await maintenance.ClearGeneratedPreviewAssetsAsync(kind, entity.Id, cancellationToken);
             }
         }
 
         var needs = await downstreamNeeds.CheckDownstreamNeedsBatchAsync(
-            tree.Select(entity => entity.Id).ToArray(),
+            processingTree.Select(entity => entity.Id).ToArray(),
             cancellationToken);
         var requiredReadiness = new List<Guid>();
         var bestEffort = new List<GraphJobNodeRequest>();
 
-        foreach (var entity in tree) {
+        foreach (var entity in processingTree) {
             if (!needs.TryGetValue(entity.Id, out var entityNeeds)
                 || !EntityKindRegistry.TryGet(entity.KindCode, out var kind)) {
                 continue;
@@ -112,7 +118,7 @@ public sealed class EntityProcessingGraphPlanner(
         }
 
         var touchedAncestors = (finalization?.TouchedAncestorIds ?? [])
-            .Where(id => tree.All(entity => entity.Id != id))
+            .Where(id => processingTree.All(entity => entity.Id != id))
             .Distinct()
             .ToArray();
         foreach (var ancestorId in touchedAncestors) {
@@ -157,6 +163,24 @@ public sealed class EntityProcessingGraphPlanner(
             100,
             $"Planned {requiredReadiness.Count + bestEffort.Count + touchedAncestors.Length + (finalization is null ? 0 : 1)} jobs",
             cancellationToken);
+    }
+
+    private static IReadOnlyList<EntityRefreshTarget> ScopeImportedEntities(
+        IReadOnlyList<EntityRefreshTarget> tree,
+        AcquisitionFinalizeJobPayload? finalization) {
+        if (finalization?.ImportedEntityIds is not { Count: > 0 } importedEntityIds) {
+            return tree;
+        }
+
+        var imported = importedEntityIds.ToHashSet();
+        var scoped = tree.Where(entity => imported.Contains(entity.Id)).ToArray();
+        if (scoped.Length != imported.Count) {
+            var missing = imported.Count - scoped.Length;
+            throw new InvalidOperationException(
+                $"Entity reconciliation tree is missing {missing} imported entit{(missing == 1 ? "y" : "ies")}.");
+        }
+
+        return scoped;
     }
 
     private static IEnumerable<EnqueueJobRequest> BestEffortRequests(

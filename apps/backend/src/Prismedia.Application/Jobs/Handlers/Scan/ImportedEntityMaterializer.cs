@@ -79,6 +79,14 @@ public static class ImportedEntityReconciliation {
         var roots = result.ProcessingRoots
             .DistinctBy(entity => entity.Id)
             .ToArray();
+        var scopedFinalization = finalization is null
+            ? null
+            : finalization with {
+                ImportedEntityIds = result.Entities
+                    .Select(entity => entity.Id)
+                    .Distinct()
+                    .ToArray()
+            };
         for (var index = 0; index < roots.Length; index++) {
             var entity = roots[index];
             await context.EnqueueIfNeededAsync(
@@ -87,7 +95,7 @@ public static class ImportedEntityReconciliation {
                     entity.Kind,
                     entity.Id.ToString(),
                     label: null,
-                    payloadJson: index == roots.Length - 1 ? finalization?.ToJson() : null),
+                    payloadJson: index == roots.Length - 1 ? scopedFinalization?.ToJson() : null),
                 cancellationToken);
         }
     }

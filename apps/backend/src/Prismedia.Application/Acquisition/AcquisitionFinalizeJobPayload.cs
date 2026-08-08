@@ -7,6 +7,10 @@ namespace Prismedia.Application.Acquisition;
 /// Durable terminal state carried from exact import materialization to the graph node that publishes the
 /// acquisition as imported. Quality codes use the domain codecs so retries remain independent of enum ordinals.
 /// </summary>
+/// <param name="ImportedEntityIds">
+/// Exact source-owning Entities placed by this import. Reconciliation uses this scope while retaining the
+/// structural root for one post-finalization metadata cascade.
+/// </param>
 public sealed record AcquisitionFinalizeJobPayload(
     Guid AcquisitionId,
     string OwnedSourceTier,
@@ -17,7 +21,8 @@ public sealed record AcquisitionFinalizeJobPayload(
     int OwnedFormatScore = 0,
     Guid? UpgradeParentAcquisitionId = null,
     string? ReplacementBackupPath = null,
-    IReadOnlyList<Guid>? TouchedAncestorIds = null) {
+    IReadOnlyList<Guid>? TouchedAncestorIds = null,
+    IReadOnlyList<Guid>? ImportedEntityIds = null) {
     /// <summary>Creates a payload from the quality values established by the import engine.</summary>
     public static AcquisitionFinalizeJobPayload Create(
         Guid acquisitionId,
