@@ -7,6 +7,7 @@
 import type { AcquisitionStatus } from './acquisitionStatus';
 import type { EntityKind } from './entityKind';
 import type { EntityKindCount } from './entityKindCount';
+import type { EntitySharedSourceEpisode } from './entitySharedSourceEpisode';
 import type { EntityThumbnailAcquisitionStatusesItem } from './entityThumbnailAcquisitionStatusesItem';
 import type { EntityThumbnailHoverImage } from './entityThumbnailHoverImage';
 import type { EntityThumbnailMeta } from './entityThumbnailMeta';
@@ -71,4 +72,5 @@ export interface EntityThumbnail {
   genres?: string[] | null;
   /** @nullable */
   referenceCounts?: EntityKindCount[] | null;
+  sharedSourceEpisodes?: EntitySharedSourceEpisode[];
 }

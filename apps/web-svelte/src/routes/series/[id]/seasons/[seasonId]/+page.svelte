@@ -166,7 +166,10 @@
     signal: AbortSignal,
   ): Promise<EntityThumbnailCard[]> {
     const episodeIds = getChildIds(seasonDetail, ENTITY_KIND.videoEpisode);
-    return thumbnailsToCards(await fetchOrderedEntityThumbnails(episodeIds, { signal }));
+    return thumbnailsToCards(
+      await fetchOrderedEntityThumbnails(episodeIds, { signal }),
+      { groupSharedSourceEpisodes: true },
+    );
   }
 
   function continueSeason() {

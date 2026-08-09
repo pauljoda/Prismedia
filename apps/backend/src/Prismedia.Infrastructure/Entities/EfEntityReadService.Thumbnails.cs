@@ -140,6 +140,11 @@ public sealed partial class EfEntityReadService {
         // badge while filters use plural membership, including child and upgrade work.
         var sourceMediaIds = await _sourceOwnership.ResolveAsync(ids, cancellationToken);
         var acquisitionStatusesByEntity = await _acquisitionStatuses.ResolveAsync(ids, cancellationToken);
+        var sharedSourceEpisodesByEntity = await ProjectSharedSourceEpisodesAsync(
+            rows,
+            hideNsfw,
+            enforceLibraryVisibility,
+            cancellationToken);
 
         // Tag names per entity, resolved through the tag relationship links and their target titles,
         // so list rows can surface tags without a detail load.
@@ -249,6 +254,7 @@ public sealed partial class EfEntityReadService {
                     ? wantedStatus
                     : null,
                 CreatedAt = row.CreatedAt,
+                SharedSourceEpisodes = sharedSourceEpisodesByEntity.GetValueOrDefault(row.Id) ?? [],
                 AccessCount = playbackState?.AccessCount,
                 ResumeSeconds = playbackState is { ResumeSeconds: > 0 }
                     ? playbackState.ResumeSeconds
@@ -292,6 +298,92 @@ public sealed partial class EfEntityReadService {
                 : extraMeta.Concat(thumbnail.Meta).Take(MaxThumbnailMeta).ToArray();
             return thumbnail with { Meta = meta, ReferenceCounts = referenceCounts };
         }).ToArray();
+    }
+
+    private async Task<IReadOnlyDictionary<Guid, IReadOnlyList<EntitySharedSourceEpisode>>> ProjectSharedSourceEpisodesAsync(
+        IReadOnlyList<EntityRow> rows,
+        bool hideNsfw,
+        bool enforceLibraryVisibility,
+        CancellationToken cancellationToken) {
+        var requestedEpisodeIds = rows
+            .Where(row => row.KindCode == EntityKind.VideoEpisode.ToCode())
+            .Select(row => row.Id)
+            .ToArray();
+        if (requestedEpisodeIds.Length == 0) {
+            return new Dictionary<Guid, IReadOnlyList<EntitySharedSourceEpisode>>();
+        }
+
+        var requestedSourcePaths = await _db.EntityFiles.AsNoTracking()
+            .Where(file => requestedEpisodeIds.Contains(file.EntityId) && file.Role == EntityFileRole.Source)
+            .Select(file => file.Path)
+            .Distinct()
+            .ToArrayAsync(cancellationToken);
+        if (requestedSourcePaths.Length == 0) {
+            return new Dictionary<Guid, IReadOnlyList<EntitySharedSourceEpisode>>();
+        }
+
+        var sourceOwners = await _db.EntityFiles.AsNoTracking()
+            .Where(file => requestedSourcePaths.Contains(file.Path) && file.Role == EntityFileRole.Source)
+            .Select(file => new { file.EntityId, file.Path })
+            .Distinct()
+            .ToArrayAsync(cancellationToken);
+        var ownerIds = sourceOwners.Select(owner => owner.EntityId).Distinct().ToArray();
+        var episodeQuery = _db.Entities.AsNoTracking()
+            .Where(entity => ownerIds.Contains(entity.Id) && entity.KindCode == EntityKind.VideoEpisode.ToCode());
+        if (enforceLibraryVisibility) {
+            episodeQuery = ApplyEnabledLibraryVisibility(episodeQuery, EntityKind.VideoEpisode.ToCode());
+        }
+        episodeQuery = ApplyNsfwVisibility(episodeQuery, hideNsfw);
+        var episodes = await episodeQuery.ToArrayAsync(cancellationToken);
+        var visibleEpisodeIds = episodes.Select(episode => episode.Id).ToHashSet();
+
+        var episodeNumberById = await _db.EntityPositions.AsNoTracking()
+            .Where(position => visibleEpisodeIds.Contains(position.EntityId) && position.Code == EntityPositionCodes.Episode)
+            .ToDictionaryAsync(position => position.EntityId, position => (int?)position.Value, cancellationToken);
+        var seasonIds = episodes
+            .Select(episode => episode.ParentEntityId)
+            .Where(parentId => parentId is not null)
+            .Select(parentId => parentId!.Value)
+            .Distinct()
+            .ToArray();
+        var seasonNumberById = seasonIds.Length == 0
+            ? new Dictionary<Guid, int?>()
+            : await _db.Entities.AsNoTracking()
+                .Where(season => seasonIds.Contains(season.Id) && season.KindCode == EntityKind.VideoSeason.ToCode())
+                .ToDictionaryAsync(season => season.Id, season => season.SortOrder, cancellationToken);
+        var episodeById = episodes.ToDictionary(episode => episode.Id);
+        var result = new Dictionary<Guid, IReadOnlyList<EntitySharedSourceEpisode>>();
+
+        foreach (var sourceGroup in sourceOwners
+                     .Where(owner => visibleEpisodeIds.Contains(owner.EntityId))
+                     .GroupBy(owner => new {
+                         owner.Path,
+                         ParentEntityId = episodeById[owner.EntityId].ParentEntityId
+                     })) {
+            var members = sourceGroup
+                .Select(owner => episodeById[owner.EntityId])
+                .DistinctBy(episode => episode.Id)
+                .OrderBy(episode => episodeNumberById.GetValueOrDefault(episode.Id) ?? episode.SortOrder ?? int.MaxValue)
+                .ThenBy(episode => episode.CreatedAt)
+                .ThenBy(episode => episode.Id)
+                .Select(episode => new EntitySharedSourceEpisode(
+                    episode.Id,
+                    episode.Title,
+                    episode.ParentEntityId is { } seasonId
+                        ? seasonNumberById.GetValueOrDefault(seasonId)
+                        : null,
+                    episodeNumberById.GetValueOrDefault(episode.Id) ?? episode.SortOrder))
+                .ToArray();
+            if (members.Length < 2) {
+                continue;
+            }
+
+            foreach (var member in members) {
+                result[member.Id] = members;
+            }
+        }
+
+        return result;
     }
 
     private async Task<IReadOnlyDictionary<Guid, CollectionArtwork>> ProjectCollectionArtworkAsync(

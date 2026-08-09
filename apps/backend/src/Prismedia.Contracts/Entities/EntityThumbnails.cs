@@ -23,6 +23,17 @@ public sealed record EntityThumbnailHoverImage(Guid EntityId, string Title, stri
 /// <param name="Count">Distinct source entities of that kind referencing this entity.</param>
 public sealed record EntityKindCount(EntityKind Kind, int Count);
 
+/// <summary>One provider episode represented by the same physical source file as another episode.</summary>
+/// <param name="Id">Episode entity identifier.</param>
+/// <param name="Title">Provider episode title.</param>
+/// <param name="SeasonNumber">Season number inherited from the structural season parent.</param>
+/// <param name="EpisodeNumber">Provider episode number within the season.</param>
+public sealed record EntitySharedSourceEpisode(
+    Guid Id,
+    string Title,
+    int? SeasonNumber,
+    int? EpisodeNumber);
+
 /// <summary>Lightweight entity shape for grids, thumbnail strips, and relationship previews.</summary>
 public sealed record EntityThumbnail(
     Guid Id,
@@ -133,6 +144,12 @@ public sealed record EntityThumbnail(
     /// concept.
     /// </summary>
     public IReadOnlyList<EntityKindCount>? ReferenceCounts { get; init; }
+
+    /// <summary>
+    /// Provider episodes represented by this episode's physical source file, in episode order.
+    /// Empty for non-episode entities and files that represent only one provider episode.
+    /// </summary>
+    public IReadOnlyList<EntitySharedSourceEpisode> SharedSourceEpisodes { get; init; } = [];
 }
 
 /// <summary>API-facing grouped entities for child and relationship collections.</summary>

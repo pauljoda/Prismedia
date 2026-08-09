@@ -223,6 +223,7 @@ export * from './entityProgressUpdateRequestActivityKind';
 export * from './entityRefreshResponse';
 export * from './entitySearchCandidate';
 export * from './entitySearchCandidateExternalIds';
+export * from './entitySharedSourceEpisode';
 export * from './entitySource';
 export * from './entityStat';
 export * from './entityStorageShape';

@@ -621,6 +621,48 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
+    public async Task GetThumbnailsAsyncProjectsEpisodesThatShareOneSourceInProviderOrder() {
+        await using var db = CreateContext();
+        var seriesId = Guid.Parse("10000000-0000-0000-0000-000000000001");
+        var seasonId = Guid.Parse("10000000-0000-0000-0000-000000000002");
+        var firstEpisodeId = Guid.Parse("10000000-0000-0000-0000-000000000003");
+        var secondEpisodeId = Guid.Parse("10000000-0000-0000-0000-000000000004");
+        var standaloneEpisodeId = Guid.Parse("10000000-0000-0000-0000-000000000005");
+        const string sharedPath = "/media/Shows/Neighborhood/Season 7/Neighborhood - S07E02-E03.mkv";
+        var now = DateTimeOffset.UtcNow;
+
+        db.Entities.AddRange(
+            new EntityRow { Id = seriesId, KindCode = EntityKind.VideoSeries.ToCode(), Title = "Neighborhood", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = seasonId, KindCode = EntityKind.VideoSeason.ToCode(), Title = "Season 7", ParentEntityId = seriesId, SortOrder = 7, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = firstEpisodeId, KindCode = EntityKind.VideoEpisode.ToCode(), Title = "Friends Like", ParentEntityId = seasonId, SortOrder = 2, CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = secondEpisodeId, KindCode = EntityKind.VideoEpisode.ToCode(), Title = "Space Restaurant", ParentEntityId = seasonId, SortOrder = 3, CreatedAt = now.AddSeconds(1), UpdatedAt = now },
+            new EntityRow { Id = standaloneEpisodeId, KindCode = EntityKind.VideoEpisode.ToCode(), Title = "Miss Out", ParentEntityId = seasonId, SortOrder = 4, CreatedAt = now, UpdatedAt = now });
+        db.EntityFiles.AddRange(
+            new EntityFileRow { Id = Guid.NewGuid(), EntityId = firstEpisodeId, Role = EntityFileRole.Source, Path = sharedPath, CreatedAt = now, UpdatedAt = now },
+            new EntityFileRow { Id = Guid.NewGuid(), EntityId = secondEpisodeId, Role = EntityFileRole.Source, Path = sharedPath, CreatedAt = now, UpdatedAt = now },
+            new EntityFileRow { Id = Guid.NewGuid(), EntityId = standaloneEpisodeId, Role = EntityFileRole.Source, Path = "/media/Shows/Neighborhood/Season 7/Neighborhood - S07E04.mkv", CreatedAt = now, UpdatedAt = now });
+        db.EntityPositions.AddRange(
+            new EntityPositionRow { EntityId = firstEpisodeId, Code = EntityPositionCodes.Episode, Value = 2, Label = "Episode 2", UpdatedAt = now },
+            new EntityPositionRow { EntityId = secondEpisodeId, Code = EntityPositionCodes.Episode, Value = 3, Label = "Episode 3", UpdatedAt = now },
+            new EntityPositionRow { EntityId = standaloneEpisodeId, Code = EntityPositionCodes.Episode, Value = 4, Label = "Episode 4", UpdatedAt = now });
+        await db.SaveChangesAsync();
+
+        var response = await CreateService(db).GetThumbnailsAsync(
+            [secondEpisodeId, standaloneEpisodeId, firstEpisodeId],
+            hideNsfw: false,
+            CancellationToken.None);
+
+        var first = Assert.Single(response.Items, item => item.Id == firstEpisodeId);
+        var second = Assert.Single(response.Items, item => item.Id == secondEpisodeId);
+        Assert.Equal(
+            [firstEpisodeId, secondEpisodeId],
+            first.SharedSourceEpisodes.Select(episode => episode.Id).ToArray());
+        Assert.Equal([2, 3], first.SharedSourceEpisodes.Select(episode => episode.EpisodeNumber).ToArray());
+        Assert.Equal(first.SharedSourceEpisodes, second.SharedSourceEpisodes);
+        Assert.Empty(Assert.Single(response.Items, item => item.Id == standaloneEpisodeId).SharedSourceEpisodes);
+    }
+
+    [Fact]
     public async Task GetThumbnailsAsyncIgnoresMissingGridVariantFilesAndFallsBackToCover() {
         var cacheRoot = CreateCacheRoot();
         try {

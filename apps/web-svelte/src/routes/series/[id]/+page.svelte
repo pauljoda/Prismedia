@@ -263,7 +263,7 @@
         hrefFor: (thumbnail) => `/series/${nextSeries.id}/seasons/${thumbnail.id}`,
       }),
       childSeriesCards: thumbnailsToCards(childSeries),
-      episodeCards: thumbnailsToCards(episodes),
+      episodeCards: thumbnailsToCards(episodes, { groupSharedSourceEpisodes: true }),
       relationshipCredits: relationshipCards.credits,
       relationshipStudio: relationshipCards.studio,
       relationshipTags: relationshipCards.relationshipTags,
