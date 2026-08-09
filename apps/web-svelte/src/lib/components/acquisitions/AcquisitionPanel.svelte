@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy } from "svelte";
+  import { onDestroy, onMount } from "svelte";
   import { CalendarClock, CloudDownload, FileText, History, Loader2, PencilLine, RefreshCw, RotateCcw, Search, SearchX, Upload, X } from "@lucide/svelte";
   import { Badge, Button, SearchInput } from "@prismedia/ui-svelte";
   import { goto } from "$app/navigation";
@@ -80,6 +80,7 @@
   let bridgePolls = $state(0);
   let resetConfirmOpen = $state(false);
   let customQuery = $state("");
+  let lastHistoryKey: string | null = null;
 
   const EDIT_QUERY_KEY = "edit";
 
@@ -217,8 +218,18 @@
    * the acquisition targets one, so the section shows every grab/import/failure for that wanted item —
    * including events from acquisitions that were since removed.
    */
-  async function loadHistory(entityId: string) {
-    history = await fetchAcquisitionHistory({ entityId, limit: 50 }).catch(() => history);
+  async function loadHistory(nextDetail: AcquisitionDetail) {
+    const entityId = nextDetail.summary.entityId;
+    if (!entityId) return;
+    const historyKey = `${entityId}:${nextDetail.summary.updatedAt}`;
+    if (historyKey === lastHistoryKey) return;
+    lastHistoryKey = historyKey;
+    try {
+      history = await fetchAcquisitionHistory({ entityId, limit: 50 });
+    } catch {
+      // Let the next genuine detail refresh retry a transient secondary-history failure.
+      if (lastHistoryKey === historyKey) lastHistoryKey = null;
+    }
   }
 
   async function queue(candidate: ReleaseCandidateView) {
@@ -345,14 +356,16 @@
     await load(true);
   }
 
-  $effect(() => {
+  // Every production owner keys this component by acquisition id. Load once for that mounted
+  // identity; publishing the refreshed detail back to the owner must not feed another load.
+  onMount(() => {
     if (acquisitionId) void load();
   });
-  // Load the durable activity log once the acquisition (and thus its entity id) is known. Re-runs when the
-  // entity changes, and after the poll advances the status (a fresh grab/import lands a new event).
+  // Load durable activity once per server revision. Parent-owned detail publication replaces the
+  // object even when its revision is unchanged, so object identity must never drive this request.
   $effect(() => {
-    const entityId = detail?.summary.entityId;
-    if (entityId) void loadHistory(entityId);
+    const nextDetail = detail;
+    if (nextDetail) void loadHistory(nextDetail);
   });
   $effect(() => {
     if (shouldPoll && !pollTimer) {

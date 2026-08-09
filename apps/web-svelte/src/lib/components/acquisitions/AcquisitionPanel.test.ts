@@ -7,6 +7,7 @@ import {
 } from "$lib/api/generated/codes";
 import type { AcquisitionDetail, ReleaseCandidateView } from "$lib/api/generated/model";
 import AcquisitionPanel from "./AcquisitionPanel.svelte";
+import AcquisitionPanelFeedbackTestHarness from "./AcquisitionPanel.feedback-test-harness.svelte";
 
 const mocks = vi.hoisted(() => ({
   fetchAcquisition: vi.fn(),
@@ -100,6 +101,31 @@ describe("AcquisitionPanel", () => {
 
     await waitFor(() => expect(mocks.fetchAcquisition).toHaveBeenCalledOnce());
     expect(onImported).not.toHaveBeenCalled();
+  });
+
+  it("does not reload when refreshed detail is published back through its owner", async () => {
+    const waiting = acquisition(ACQUISITION_STATUS.waitingForDownloadClient);
+    let resolveInitialLoad!: (detail: AcquisitionDetail) => void;
+    mocks.fetchAcquisition
+      .mockImplementationOnce(() => new Promise<AcquisitionDetail>((resolve) => {
+        resolveInitialLoad = resolve;
+      }))
+      // Hold a feedback-triggered second request open so the pre-fix loop remains bounded.
+      .mockImplementation(() => new Promise<AcquisitionDetail>(() => {}));
+
+    render(AcquisitionPanelFeedbackTestHarness, { initialDetail: waiting });
+
+    await waitFor(() => expect(mocks.fetchAcquisition).toHaveBeenCalledOnce());
+    await waitFor(() => expect(mocks.fetchAcquisitionHistory).toHaveBeenCalledOnce());
+
+    resolveInitialLoad({
+      ...waiting,
+      summary: { ...waiting.summary },
+    });
+    await new Promise((resolve) => setTimeout(resolve, 25));
+
+    expect(mocks.fetchAcquisition).toHaveBeenCalledOnce();
+    expect(mocks.fetchAcquisitionHistory).toHaveBeenCalledOnce();
   });
 
   it("keeps polling through Downloaded and reports the following Imported state", async () => {
