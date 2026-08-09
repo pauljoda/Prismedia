@@ -11,6 +11,7 @@ import { getCreditsCapability } from "$lib/api/capabilities";
 import { getRelationshipIds } from "./entity-children";
 import type { EntityDetailCredit, EntityDetailTag } from "./entity-detail";
 import { entityCardToThumbnailCard } from "./entity-grid";
+import { coalesceSharedSourceEpisodes } from "./entity-shared-source-episodes";
 import type { EntityThumbnailCard } from "./entity-thumbnail";
 import {
   ENTITY_KIND,
@@ -54,22 +55,6 @@ export function thumbnailsToCards(
   return displayedThumbnails.map((thumbnail) =>
     entityCardToThumbnailCard(thumbnail, options.hrefFor?.(thumbnail)),
   );
-}
-
-function coalesceSharedSourceEpisodes(thumbnails: EntityThumbnail[]): EntityThumbnail[] {
-  const thumbnailById = new Map(thumbnails.map((thumbnail) => [thumbnail.id, thumbnail]));
-  const emittedGroups = new Set<string>();
-
-  return thumbnails.flatMap((thumbnail) => {
-    const visibleMembers = (thumbnail.sharedSourceEpisodes ?? [])
-      .filter((member) => thumbnailById.has(member.id));
-    if (visibleMembers.length < 2) return [thumbnail];
-
-    const groupKey = visibleMembers.map((member) => member.id).sort().join(":");
-    if (emittedGroups.has(groupKey)) return [];
-    emittedGroups.add(groupKey);
-    return [visibleMembers.map((member) => thumbnailById.get(member.id)).find(Boolean) ?? thumbnail];
-  });
 }
 
 export function tagsFromThumbnails(thumbnails: EntityThumbnail[]): EntityDetailTag[] {

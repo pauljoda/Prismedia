@@ -37,6 +37,10 @@ import {
   type EntityThumbnailMetaIcon,
 } from "./entity-thumbnail";
 import { bookFilterDefinitionFromId } from "./entity-grid-book-filters";
+import {
+  sharedSourceEpisodeDisplayTitle,
+  sharedSourceEpisodeOverlay,
+} from "./entity-shared-source-episodes";
 
 export { BOOK_FORMAT_FILTER_DEFS, BOOK_TYPE_FILTER_DEFS } from "./entity-grid-book-filters";
 
@@ -377,52 +381,17 @@ function primaryPositionValue(entity: EntityGridSourceEntity): number | null {
     numberValue(entity.sortOrder);
 }
 
-function sharedSourceEpisodes(entity: EntityGridSourceEntity) {
-  if (isFullEntityCard(entity)) return [];
-
-  const seen = new Set<string>();
-  return (entity.sharedSourceEpisodes ?? []).filter((episode) => {
-    const episodeNumber = numberValue(episode.episodeNumber);
-    const seasonNumber = numberValue(episode.seasonNumber);
-    const key = `${seasonNumber ?? ""}:${episodeNumber ?? ""}:${episode.title.trim()}`;
-    if (seen.has(key)) return false;
-    seen.add(key);
-    return true;
-  });
-}
-
 function displayTitleForEntity(entity: EntityGridSourceEntity): string {
-  const titles = [...new Set(
-    sharedSourceEpisodes(entity)
-      .map((episode) => episode.title.trim())
-      .filter(Boolean),
-  )];
-  return titles.length > 1 ? titles.join(" + ") : entity.title;
+  return isFullEntityCard(entity)
+    ? entity.title
+    : sharedSourceEpisodeDisplayTitle(entity);
 }
 
 function customOverlayForEntity(entity: EntityGridSourceEntity): EntityThumbnailCard["custom"] {
-  const sharedEpisodes = sharedSourceEpisodes(entity);
-  const sharedEpisodeNumbers = sharedEpisodes
-    .map((item) => numberValue(item.episodeNumber))
-    .filter((value): value is number => value != null);
-  const sharedSeasonNumbers = [...new Set(
-    sharedEpisodes
-      .map((item) => numberValue(item.seasonNumber))
-      .filter((value): value is number => value != null),
-  )];
-  if (entity.kind === ENTITY_KIND.videoEpisode && sharedEpisodeNumbers.length > 1) {
-    const episodeLabel = sharedEpisodeNumbers.map((value) => `E${value}`).join(" + ");
-    const episodeTitle = sharedEpisodeNumbers.join(" + ");
-    const sharedSeason = sharedSeasonNumbers.length === 1 ? sharedSeasonNumbers[0] : null;
-    return {
-      bottomLeft: {
-        label: sharedSeason != null ? `S${sharedSeason} ${episodeLabel}` : episodeLabel,
-        title: sharedSeason != null
-          ? `Season ${sharedSeason}, Episodes ${episodeTitle}`
-          : `Episodes ${episodeTitle}`,
-      },
-    };
-  }
+  const sharedEpisodeOverlay = isFullEntityCard(entity)
+    ? undefined
+    : sharedSourceEpisodeOverlay(entity);
+  if (sharedEpisodeOverlay) return sharedEpisodeOverlay;
 
   const season = positionValue(entity, "season");
   const episode = positionValue(entity, "episode") ?? positionValue(entity, "absolute-episode");
