@@ -10,7 +10,6 @@ namespace Prismedia.Api.Endpoints;
 public static class RequestEndpoints {
     public static RouteGroupBuilder MapRequestEndpoints(this IEndpointRouteBuilder routes) {
         var group = routes.MapGroup("/api/requests")
-            .RequireAdmin()
             .WithTags("Requests");
 
         group.MapPost("/search", async (
@@ -231,6 +230,7 @@ public static class RequestEndpoints {
 
                 return Results.Ok(outcome);
             })
+            .RequireAdmin()
             .WithName("RemoveWanted")
             .WithSummary("Removes wanted placeholders: deletes each (tearing down in-flight downloads) and blacklists it from discovery; requesting it again later clears the blacklist entry.")
             .Produces<WantedRemovalResponse>()
@@ -251,6 +251,7 @@ public static class RequestEndpoints {
 
                 return Results.NoContent();
             })
+            .RequireAdmin()
             .WithName("SyncContainerRequest")
             .WithSummary("Queues an immediate provider re-sync for one monitored container Entity, surfacing newly discovered children as wanted placeholders.")
             .Produces(StatusCodes.Status204NoContent)

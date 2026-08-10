@@ -225,8 +225,6 @@ public sealed class AuthEndpointTests {
     [InlineData("/api/settings")]
     [InlineData("/api/files/detail?rootId=00000000-0000-0000-0000-000000000001")]
     [InlineData("/api/identify/queue")]
-    [InlineData("/api/plugins")]
-    [InlineData("/api/libraries")]
     public async Task AdminSurfacesRejectMembersWithForbidden(string path) {
         using var factory = CreateFactory();
         using var admin = factory.CreateAuthenticatedClient();
@@ -246,6 +244,30 @@ public sealed class AuthEndpointTests {
         using var response = await client.SendAsync(request);
 
         Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [Fact]
+    public async Task MemberReadableRequestInputsDoNotOpenAdministrativeMutations() {
+        using var factory = CreateFactory();
+        using var admin = factory.CreateAuthenticatedClient();
+        using var createResponse = await admin.PostAsJsonAsync(
+            "/api/users",
+            new UserCreateRequest("request-member", "member-password"), CodecJson);
+        createResponse.EnsureSuccessStatusCode();
+
+        using var client = factory.CreateClient();
+        using var login = await client.PostAsJsonAsync(
+            "/api/auth/login",
+            new LoginRequest("request-member", "member-password"));
+        var auth = await login.Content.ReadFromJsonAsync<LoginResponse>(CodecJson);
+        client.DefaultRequestHeaders.Authorization = new("Bearer", auth!.AccessToken);
+
+        using var removePlugin = await client.DeleteAsync("/api/plugins/not-installed");
+        using var removeProfile = await client.DeleteAsync(
+            $"/api/acquisitions/profiles/{Guid.NewGuid():D}");
+
+        Assert.Equal(HttpStatusCode.Forbidden, removePlugin.StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, removeProfile.StatusCode);
     }
 
     private static WebApplicationFactory<Program> CreateFactory() =>

@@ -8,17 +8,18 @@ namespace Prismedia.Api.Endpoints;
 
 public static class PluginEndpoints {
     public static RouteGroupBuilder MapPluginEndpoints(this IEndpointRouteBuilder routes) {
-        var group = routes.MapGroup("/api/plugins")
-            .RequireAdmin()
-            .WithTags("Plugins");
-
-        group.MapGet("/", async (
+        routes.MapGet("/api/plugins", async (
             IPluginCatalogService plugins,
             CancellationToken cancellationToken) =>
             Results.Ok(await plugins.ListProvidersAsync(cancellationToken)))
+            .WithTags("Plugins")
             .WithName("ListPlugins")
             .WithSummary("Lists compatible community plugins discovered from installed and local development sources.")
             .Produces<IReadOnlyList<PluginProvider>>();
+
+        var group = routes.MapGroup("/api/plugins")
+            .RequireAdmin()
+            .WithTags("Plugins");
 
         group.MapGet("/stash-scrapers", async (
             IPluginCatalogService plugins,

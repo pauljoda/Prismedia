@@ -13,7 +13,7 @@ import {
 import type {
   BookAcquisitionProfileView,
   EntityMetadataProposal,
-  LibraryRoot,
+  LibraryRootSummary,
   RequestReviewResponse,
 } from "$lib/api/generated/model";
 import { ApiError } from "$lib/api/orval-fetch";
@@ -24,7 +24,7 @@ const mocks = vi.hoisted(() => ({
   commitReviewedRequest: vi.fn(),
   fetchRequestReview: vi.fn(),
   fetchAcquisitionProfiles: vi.fn(),
-  fetchLibraryRoots: vi.fn(),
+  fetchAccessibleLibraryRoots: vi.fn(),
   goto: vi.fn(async () => {}),
   reviewRequest: vi.fn(),
 }));
@@ -42,7 +42,7 @@ vi.mock("$lib/api/acquisitions", async (importOriginal) => ({
 
 vi.mock("$lib/api/settings", async (importOriginal) => ({
   ...await importOriginal<typeof import("$lib/api/settings")>(),
-  fetchLibraryRoots: mocks.fetchLibraryRoots,
+  fetchAccessibleLibraryRoots: mocks.fetchAccessibleLibraryRoots,
 }));
 
 vi.mock("$app/navigation", () => ({
@@ -60,7 +60,7 @@ describe("reviewed request route", () => {
     vi.clearAllMocks();
     page.params = {};
     page.url = new URL("http://localhost/request") as unknown as typeof page.url;
-    mocks.fetchLibraryRoots.mockResolvedValue([videoRoot()]);
+    mocks.fetchAccessibleLibraryRoots.mockResolvedValue([videoRoot()]);
     mocks.fetchAcquisitionProfiles.mockResolvedValue([tvProfile(), movieProfile()]);
     mocks.commitReviewedRequest.mockResolvedValue({ containerEntityId: null, items: [] });
   });
@@ -451,7 +451,7 @@ describe("reviewed request route", () => {
       `plugin=${review.pluginId}&namespace=${review.externalIdentity.namespace}`,
     );
     mocks.reviewRequest.mockResolvedValue(review);
-    mocks.fetchLibraryRoots.mockResolvedValue([bookRoot()]);
+    mocks.fetchAccessibleLibraryRoots.mockResolvedValue([bookRoot()]);
     mocks.fetchAcquisitionProfiles.mockResolvedValue([bookProfile()]);
     mocks.commitReviewedRequest.mockResolvedValue({
       containerEntityId: null,
@@ -736,39 +736,27 @@ function proposal(
   };
 }
 
-function videoRoot(): LibraryRoot {
+function videoRoot(): LibraryRootSummary {
   return {
     id: "root-video",
-    path: "/media/video",
     label: "Video Library",
-    enabled: true,
-    recursive: true,
     scanVideos: true,
     scanImages: false,
     scanAudio: false,
     scanBooks: false,
     isNsfw: false,
-    lastScannedAt: null,
-    createdAt: "2026-07-09T00:00:00Z",
-    updatedAt: "2026-07-09T00:00:00Z",
   };
 }
 
-function bookRoot(): LibraryRoot {
+function bookRoot(): LibraryRootSummary {
   return {
     id: "root-books",
-    path: "/media/books",
     label: "Book Library",
-    enabled: true,
-    recursive: true,
     scanVideos: false,
     scanImages: false,
     scanAudio: false,
     scanBooks: true,
     isNsfw: false,
-    lastScannedAt: null,
-    createdAt: "2026-07-09T00:00:00Z",
-    updatedAt: "2026-07-09T00:00:00Z",
   };
 }
 

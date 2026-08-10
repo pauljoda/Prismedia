@@ -11,6 +11,16 @@ namespace Prismedia.Api.Endpoints;
 public static class AcquisitionEndpoints {
     private const long AcquisitionUploadLimitBytes = 250L * 1024 * 1024 * 1024;
     public static RouteGroupBuilder MapAcquisitionEndpoints(this IEndpointRouteBuilder routes) {
+        routes.MapGet("/api/acquisitions/profiles", (
+            HttpContext httpContext,
+            BookAcquisitionProfileCommandService profiles,
+            CancellationToken cancellationToken) =>
+            profiles.ListAsync(NsfwVisibility.ShouldHide(null, httpContext), cancellationToken))
+            .WithTags("Acquisitions")
+            .WithName("ListAcquisitionProfiles")
+            .WithSummary("Lists acquisition profiles whose import targets are visible to the current viewer.")
+            .Produces<IReadOnlyList<BookAcquisitionProfileView>>();
+
         var group = routes.MapGroup("/api/acquisitions")
             .RequireAdmin()
             .WithTags("Acquisitions");
@@ -482,15 +492,6 @@ public static class AcquisitionEndpoints {
             .WithSummary("Tests connectivity for a download client configuration.")
             .Produces<DownloadClientTestResponse>()
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
-
-        group.MapGet("/profiles", (
-            HttpContext httpContext,
-            BookAcquisitionProfileCommandService profiles,
-            CancellationToken cancellationToken) =>
-            profiles.ListAsync(NsfwVisibility.ShouldHide(null, httpContext), cancellationToken))
-            .WithName("ListAcquisitionProfiles")
-            .WithSummary("Lists acquisition profiles whose import targets are visible to the current viewer.")
-            .Produces<IReadOnlyList<BookAcquisitionProfileView>>();
 
         group.MapPost("/profiles", async (
             BookAcquisitionProfileSaveRequest request,

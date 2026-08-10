@@ -48,6 +48,7 @@ public static class DependencyInjection {
         services.AddScoped<EntitySourcePathMutationCoordinator>();
         services.AddScoped<RequestPluginSearchService>();
         services.AddScoped<RequestEntityReviewService>();
+        services.AddScoped<RequestTargetResolver>();
         services.AddScoped<IRequestAcquisitionFanoutScheduler, RequestAcquisitionFanoutScheduler>();
         services.AddScoped<RequestCommitService>();
         services.AddScoped<IMonitoredEntityRecovery>(sp => sp.GetRequiredService<RequestCommitService>());

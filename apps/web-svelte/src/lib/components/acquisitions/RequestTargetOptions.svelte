@@ -10,7 +10,7 @@
   import { FolderOpen, SlidersHorizontal } from "@lucide/svelte";
   import { Select } from "@prismedia/ui-svelte";
   import { fetchAcquisitionProfiles } from "$lib/api/acquisitions";
-  import { fetchLibraryRoots, type LibraryRoot } from "$lib/api/settings";
+  import { fetchAccessibleLibraryRoots, type LibraryRootSummary } from "$lib/api/settings";
   import { ENTITY_KIND } from "$lib/api/generated/codes";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import type { BookAcquisitionProfileView } from "$lib/api/generated/model";
@@ -27,7 +27,7 @@
 
   const nsfw = useNsfw();
 
-  let roots = $state<LibraryRoot[]>([]);
+  let roots = $state<LibraryRootSummary[]>([]);
   let profiles = $state<BookAcquisitionProfileView[]>([]);
   let loaded = $state(false);
 
@@ -36,7 +36,6 @@
   const suitableRoots = $derived(
     roots.filter(
       (root) =>
-        root.enabled &&
         kindInfo.rootFlag !== null &&
         root[kindInfo.rootFlag] &&
         (nsfw.mode === "show" || !root.isNsfw),
@@ -57,7 +56,7 @@
           : "book",
   );
   const kindProfiles = $derived(profiles.filter((profile) => profile.kind === kindInfo.profileKind));
-  const rootOptions = $derived(suitableRoots.map((root) => ({ value: root.id, label: root.label || root.path })));
+  const rootOptions = $derived(suitableRoots.map((root) => ({ value: root.id, label: root.label })));
   const profileOptions = $derived(kindProfiles.map((profile) => ({ value: profile.id, label: profile.displayName })));
 
   /** The library the given profile targets when it suits this kind, else the first regular suitable library. */
@@ -65,7 +64,7 @@
     const profileRoot = suitableRoots.find((root) => root.id === profile?.targetLibraryRootId);
     if (profileRoot) return profileRoot.id;
     const sorted = [...suitableRoots].sort(
-      (a, b) => Number(a.isNsfw) - Number(b.isNsfw) || (a.label || a.path).localeCompare(b.label || b.path),
+      (a, b) => Number(a.isNsfw) - Number(b.isNsfw) || a.label.localeCompare(b.label),
     );
     return sorted[0]?.id ?? null;
   }
@@ -79,7 +78,7 @@
 
   onMount(async () => {
     try {
-      [roots, profiles] = await Promise.all([fetchLibraryRoots(), fetchAcquisitionProfiles()]);
+      [roots, profiles] = await Promise.all([fetchAccessibleLibraryRoots(), fetchAcquisitionProfiles()]);
       const defaultProfile = kindProfiles.find((profile) => profile.isDefault) ?? kindProfiles[0] ?? null;
       if (!profileId && defaultProfile) {
         profileId = defaultProfile.id;

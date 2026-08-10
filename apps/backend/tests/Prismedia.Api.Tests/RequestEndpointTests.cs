@@ -5,11 +5,14 @@ using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.DependencyInjection.Extensions;
+using Prismedia.Application.Acquisition;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Plugins;
 using Prismedia.Application.Requests;
+using Prismedia.Contracts.Acquisition;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Contracts.Requests;
+using Prismedia.Contracts.Security;
 using Prismedia.Contracts.System;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Serialization;
@@ -139,7 +142,7 @@ public sealed class RequestEndpointTests {
     }
 
     [Fact]
-    public async Task EntityReviewRequiresAnAuthenticatedAdmin() {
+    public async Task EntityReviewRequiresAuthentication() {
         using var factory = CreateFactory();
         using var client = factory.CreateClient();
 
@@ -151,6 +154,30 @@ public sealed class RequestEndpointTests {
 
         Assert.Equal(HttpStatusCode.Unauthorized, response.StatusCode);
         Assert.Equal(ApiProblemCodes.AuthenticationRequired, problem!.Code);
+    }
+
+    [Fact]
+    public async Task MemberCanReviewContentAndLoadRequestConfiguration() {
+        var reviews = new NestedReviewSource();
+        using var factory = CreateFactory(
+            reviews,
+            pluginCatalog: new EndpointPluginCatalog(),
+            profileStore: new EndpointProfileStore());
+        using var client = await CreateMemberClientAsync(factory);
+
+        using var reviewResponse = await client.PostAsJsonAsync(
+            "/api/requests/review",
+            new RequestReviewRequest(
+                RequestMediaKind.Series,
+                "cinema-metadata",
+                new ExternalIdentity("tmdb", "series:603")),
+            CodecJson);
+        using var pluginsResponse = await client.GetAsync("/api/plugins");
+        using var profilesResponse = await client.GetAsync("/api/acquisitions/profiles");
+
+        Assert.Equal(HttpStatusCode.OK, reviewResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, pluginsResponse.StatusCode);
+        Assert.Equal(HttpStatusCode.OK, profilesResponse.StatusCode);
     }
 
     [Fact]
@@ -274,7 +301,9 @@ public sealed class RequestEndpointTests {
         IPluginRequestReviewSource? reviewSource = null,
         IPluginRequestSearchSource? searchSource = null,
         IEntityExternalIdentityStore? identityStore = null,
-        IPluginIdentityRouter? identityRouter = null) =>
+        IPluginIdentityRouter? identityRouter = null,
+        IPluginCatalogService? pluginCatalog = null,
+        IBookAcquisitionProfileStore? profileStore = null) =>
         new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder => {
                 builder.ConfigureServices(services => {
@@ -301,9 +330,95 @@ public sealed class RequestEndpointTests {
                         services.RemoveAll<IPluginIdentityRouter>();
                         services.AddSingleton(identityRouter);
                     }
+                    if (pluginCatalog is not null) {
+                        services.RemoveAll<IPluginCatalogService>();
+                        services.AddSingleton(pluginCatalog);
+                    }
+                    if (profileStore is not null) {
+                        services.RemoveAll<IBookAcquisitionProfileStore>();
+                        services.AddSingleton(profileStore);
+                    }
                 });
             })
             .WithTestAuth();
+
+    private static async Task<HttpClient> CreateMemberClientAsync(
+        WebApplicationFactory<Program> factory) {
+        using var admin = factory.CreateAuthenticatedClient();
+        using var createResponse = await admin.PostAsJsonAsync(
+            "/api/users",
+            new UserCreateRequest("request-member", "member-password"),
+            CodecJson);
+        createResponse.EnsureSuccessStatusCode();
+
+        var client = factory.CreateClient();
+        using var login = await client.PostAsJsonAsync(
+            "/api/auth/login",
+            new LoginRequest("request-member", "member-password"),
+            CodecJson);
+        login.EnsureSuccessStatusCode();
+        var auth = await login.Content.ReadFromJsonAsync<LoginResponse>(CodecJson);
+        client.DefaultRequestHeaders.Authorization = new("Bearer", auth!.AccessToken);
+        return client;
+    }
+
+    private sealed class EndpointPluginCatalog : IPluginCatalogService {
+        public Task<IReadOnlyList<PluginProvider>> ListProvidersAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<PluginProvider>>([]);
+
+        public Task<IReadOnlyList<PluginProvider>> ListInstalledProvidersAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<PluginProvider>>([]);
+
+        public Task<PluginProvider?> InstallAsync(string providerId, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<PluginProvider?> UpdateAsync(string providerId, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<bool> RemoveAsync(string providerId, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<bool> SaveAuthAsync(
+            string providerId,
+            IReadOnlyDictionary<string, string?> values,
+            CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<StashScraperListing>> ListStashScrapersAsync(CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+    }
+
+    private sealed class EndpointProfileStore : IBookAcquisitionProfileStore {
+        public Task<IReadOnlyList<BookAcquisitionProfileView>> ListAsync(
+            bool hideNsfw,
+            IReadOnlySet<Guid>? allowedRootIds,
+            CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<BookAcquisitionProfileView>>([]);
+
+        public Task<BookAcquisitionRules> GetRulesAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<BookImportProfile?> GetImportProfileAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<bool> GetAutoPickAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<bool> GetAutoRedownloadAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<string?> GetDownloadCategoryAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<BookAcquisitionProfileView?> GetAsync(Guid id, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<BookAcquisitionProfileView> SaveAsync(BookAcquisitionProfileSaveCommand command, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+    }
 
     private sealed class EndpointReviewPreparationService(
         IPluginRequestReviewSource source) : IRequestReviewPreparationService {

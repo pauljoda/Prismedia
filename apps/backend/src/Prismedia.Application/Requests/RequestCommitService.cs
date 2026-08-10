@@ -319,7 +319,8 @@ public sealed partial class RequestCommitService(
     IWantedSuppressionStore suppressions,
     IEntityGiveUpService entityGiveUp,
     IRequestAcquisitionFanoutScheduler? fanout = null,
-    IAcquisitionReleaseTimingService? releaseTiming = null) :
+    IAcquisitionReleaseTimingService? releaseTiming = null,
+    RequestTargetResolver? targetResolver = null) :
     IMonitoredEntityRecovery,
     IRequestChildHydrator,
     IRequestGraphAcquisitionStarter,
@@ -339,6 +340,16 @@ public sealed partial class RequestCommitService(
         if (identity is null) {
             return null;
         }
+
+        var targeting = await ResolveInteractiveTargetingAsync(
+            descriptor,
+            TargetingOf(request),
+            hideNsfw,
+            cancellationToken);
+        request = request with {
+            TargetLibraryRootId = targeting.TargetLibraryRootId,
+            ProfileId = targeting.ProfileId
+        };
 
         return descriptor.IsContainer
             ? await CommitContainerAsync(descriptor, request, identity, hideNsfw, cancellationToken)
@@ -370,6 +381,12 @@ public sealed partial class RequestCommitService(
             || request.SelectedProposalIds.Distinct(StringComparer.Ordinal).Count() != request.SelectedProposalIds.Count) {
             throw new RequestCommitValidationException("Selected proposal ids must be non-empty and unique.");
         }
+
+        var targeting = await ResolveInteractiveTargetingAsync(
+            descriptor,
+            new AcquisitionTargeting(request.TargetLibraryRootId, request.ProfileId),
+            hideNsfw,
+            cancellationToken);
 
         var usesSubmittedReview = request.Review is not null || request.Proposal is not null;
         RequestReviewResponse? review;
@@ -415,7 +432,6 @@ public sealed partial class RequestCommitService(
             return null;
         }
 
-        var targeting = new AcquisitionTargeting(request.TargetLibraryRootId, request.ProfileId);
         if (descriptor.IsContainer) {
             return await CommitContainerCoreAsync(
                 descriptor,
@@ -651,6 +667,11 @@ public sealed partial class RequestCommitService(
         if (targeting is null || targeting.IsEmpty) {
             targeting = await InheritedTargetingAsync(entity, cancellationToken);
         }
+        targeting = await ResolveInteractiveTargetingAsync(
+            descriptor,
+            targeting,
+            hideNsfw,
+            cancellationToken);
 
         // TV units carry their search context on their ancestors (the series name, the season number),
         // and their providers cannot resolve them standalone — they acquire from the Entity graph
@@ -704,6 +725,15 @@ public sealed partial class RequestCommitService(
 
         return await RequestFromEntityGraphAsync(descriptor, entity, targeting, hideNsfw, cancellationToken);
     }
+
+    private Task<AcquisitionTargeting> ResolveInteractiveTargetingAsync(
+        RequestKindDescriptor descriptor,
+        AcquisitionTargeting targeting,
+        bool hideNsfw,
+        CancellationToken cancellationToken) =>
+        targetResolver is null
+            ? Task.FromResult(targeting)
+            : targetResolver.ResolveAsync(descriptor, targeting, hideNsfw, cancellationToken);
 
     /// <summary>
     /// Maintains an Entity-only monitor. Containers run provider child discovery and fill every current

@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Household members can now discover and request content using the installed metadata sources, their accessible libraries, and the acquisition profiles available to them; plugin and profile administration remain restricted to administrators.
 - TV downloads held for manual import now open an expected-episode review: Prismedia prefills unambiguous matches, lets each episode choose a downloaded video, supports one video satisfying several episodes, and keeps the complete payload in a collapsed audit list. A held release can also be rejected to remove its download data, blocklist it, and immediately search again.
 
 ### Removed
