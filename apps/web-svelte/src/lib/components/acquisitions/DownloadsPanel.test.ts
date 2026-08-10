@@ -50,6 +50,7 @@ vi.mock("$lib/components/entities/ConfirmDialog.svelte", async () => ({
 describe("DownloadsPanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    localStorage.clear();
     mocks.fetchDownloadQueue.mockResolvedValue([
       { acquisitionId: "download-1", entityId: null },
       { acquisitionId: "download-2", entityId: null },
@@ -101,5 +102,17 @@ describe("DownloadsPanel", () => {
     expect(idlePoll.run).not.toBeNull();
     idlePoll.run?.();
     await waitFor(() => expect(mocks.fetchDownloadQueue).toHaveBeenCalledTimes(2));
+  });
+
+  it("resizes the detail pane from the keyboard and persists the chosen share", async () => {
+    render(DownloadsPanel);
+
+    const splitter = screen.getByRole("separator", { name: "Resize transfer details" });
+    expect(splitter).toHaveAttribute("aria-valuenow", "40");
+
+    await fireEvent.keyDown(splitter, { key: "ArrowUp" });
+
+    expect(splitter).toHaveAttribute("aria-valuenow", "45");
+    expect(Number(localStorage.getItem("prismedia.downloads.detail-share"))).toBeCloseTo(0.45);
   });
 });

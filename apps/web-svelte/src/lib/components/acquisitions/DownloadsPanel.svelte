@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { SvelteMap } from "svelte/reactivity";
-  import { ExternalLink, HardDriveDownload, Trash2 } from "@lucide/svelte";
+  import { ExternalLink, GripHorizontal, HardDriveDownload, Trash2 } from "@lucide/svelte";
   import { Badge, Button } from "@prismedia/ui-svelte";
   import type { DownloadQueueItemView, EntityThumbnail } from "$lib/api/generated/model";
   import { deleteAcquisition, fetchDownloadQueue, reSearchAcquisition } from "$lib/api/acquisitions";
@@ -13,6 +13,11 @@
   import { downloadToListItem } from "$lib/requests/acquisition-list-item";
   import { acquisitionStatusShouldPoll } from "$lib/requests/acquisition-status";
   import { createSerializedRefresh } from "$lib/async/serialized-refresh";
+  import {
+    DEFAULT_DOWNLOAD_DETAIL_SHARE,
+    clampDownloadDetailShare,
+    downloadDetailShareForHeight,
+  } from "./download-pane-layout";
   import type { DownloadManagerEntry } from "./download-tree";
 
   /**
@@ -25,11 +30,19 @@
   let error = $state<string | null>(null);
   let acting = $state(false);
   let selectedId = $state<string | null>(null);
+  let detailShare = $state(DEFAULT_DOWNLOAD_DETAIL_SHARE);
+  let resizingPanes = $state(false);
+  let workbenchElement = $state<HTMLElement | null>(null);
+  let inspectorElement = $state<HTMLElement | null>(null);
+  let resizeStartY = 0;
+  let resizeStartDetailHeight = 0;
   let thumbnailEntityKey = "";
 
   const ACTIVE_POLL_INTERVAL_MS = 4_000;
   const IDLE_POLL_INTERVAL_MS = 15_000;
   const MAX_ENTITY_TREE_DEPTH = 8;
+  const DETAIL_SHARE_STORAGE_KEY = "prismedia.downloads.detail-share";
+  const KEYBOARD_RESIZE_PX = 24;
 
   let pendingRemoveIds = $state<string[]>([]);
   let confirmOpen = $state(false);
@@ -49,6 +62,9 @@
     ),
   })));
   const selectedEntry = $derived(entries.find((entry) => entry.item.id === selectedId) ?? null);
+  const paneTemplate = $derived(
+    `minmax(13rem, ${1 - detailShare}fr) 0.75rem minmax(12rem, ${detailShare}fr)`,
+  );
 
   /** Fetches the queue's Entities, then walks parent ids until every available ancestor is resolved. */
   async function fetchThumbnailHierarchy(entityIds: string[]): Promise<Map<string, EntityThumbnail>> {
@@ -149,6 +165,17 @@
 
   onMount(load);
 
+  onMount(() => {
+    try {
+      const stored = Number(localStorage.getItem(DETAIL_SHARE_STORAGE_KEY));
+      if (Number.isFinite(stored) && stored > 0) {
+        detailShare = clampDownloadDetailShare(stored, workbenchElement?.clientHeight ?? 0);
+      }
+    } catch {
+      // Keep the balanced default when browser storage is unavailable or malformed.
+    }
+  });
+
   function refreshWhenVisible() {
     if (document.visibilityState === "visible") void load();
   }
@@ -157,13 +184,71 @@
     if (selectedEntry?.item.href) window.location.assign(selectedEntry.item.href);
   }
 
+  function persistDetailShare() {
+    try {
+      localStorage.setItem(DETAIL_SHARE_STORAGE_KEY, String(detailShare));
+    } catch {
+      // Pane resizing remains usable when browser storage is unavailable.
+    }
+  }
+
+  function startPaneResize(event: PointerEvent) {
+    event.preventDefault();
+    resizeStartY = event.clientY;
+    resizeStartDetailHeight = inspectorElement?.getBoundingClientRect().height ?? 0;
+    resizingPanes = true;
+  }
+
+  function continuePaneResize(event: PointerEvent) {
+    if (!resizingPanes || !workbenchElement) return;
+    const nextDetailHeight = resizeStartDetailHeight + resizeStartY - event.clientY;
+    detailShare = downloadDetailShareForHeight(nextDetailHeight, workbenchElement.clientHeight);
+  }
+
+  function finishPaneResize() {
+    if (!resizingPanes) return;
+    resizingPanes = false;
+    persistDetailShare();
+  }
+
+  function nudgePaneResize(event: KeyboardEvent) {
+    if (event.key !== "ArrowUp" && event.key !== "ArrowDown") return;
+    event.preventDefault();
+    const totalHeight = workbenchElement?.clientHeight ?? 0;
+    const currentHeight = inspectorElement?.getBoundingClientRect().height ?? 0;
+    if (totalHeight > 0 && currentHeight > 0) {
+      const delta = event.key === "ArrowUp" ? KEYBOARD_RESIZE_PX : -KEYBOARD_RESIZE_PX;
+      detailShare = downloadDetailShareForHeight(currentHeight + delta, totalHeight);
+    } else {
+      detailShare = clampDownloadDetailShare(
+        detailShare + (event.key === "ArrowUp" ? 0.05 : -0.05),
+        0,
+      );
+    }
+    persistDetailShare();
+  }
+
+  function resetPaneResize() {
+    detailShare = DEFAULT_DOWNLOAD_DETAIL_SHARE;
+    persistDetailShare();
+  }
+
   const removeCount = $derived(pendingRemoveIds.length);
 </script>
 
-<svelte:window onfocus={() => void load()} />
+<svelte:window
+  onfocus={() => void load()}
+  onpointermove={continuePaneResize}
+  onpointerup={finishPaneResize}
+  onpointercancel={finishPaneResize}
+/>
 <svelte:document onvisibilitychange={refreshWhenVisible} />
 
-<div class="downloads-workbench">
+<div
+  bind:this={workbenchElement}
+  class={["downloads-workbench", resizingPanes && "is-resizing"]}
+  style:grid-template-rows={paneTemplate}
+>
   <DownloadManagerTable
     {entries}
     {thumbnails}
@@ -175,7 +260,25 @@
     onRemove={requestRemove}
   />
 
-  <section class="download-inspector" aria-label="Selected download details">
+  <Button
+    type="button"
+    variant="ghost"
+    class="pane-splitter"
+    role="separator"
+    aria-label="Resize transfer details"
+    aria-orientation="horizontal"
+    aria-valuemin="15"
+    aria-valuemax="85"
+    aria-valuenow={Math.round(detailShare * 100)}
+    title="Drag to resize details; double-click to reset"
+    onpointerdown={startPaneResize}
+    onkeydown={nudgePaneResize}
+    ondblclick={resetPaneResize}
+  >
+    <span class="splitter-grip" aria-hidden="true"><GripHorizontal class="h-3.5 w-3.5" /></span>
+  </Button>
+
+  <section bind:this={inspectorElement} class="download-inspector" aria-label="Selected download details">
     {#if selectedEntry}
       <header class="inspector-header">
         <div class="inspector-identity">
@@ -258,7 +361,47 @@
     height: 100%;
     min-width: 0;
     min-height: 0;
-    grid-template-rows: minmax(13rem, 3fr) minmax(12rem, 2fr);
+  }
+  .downloads-workbench.is-resizing { cursor: row-resize; user-select: none; }
+  :global(.pane-splitter) {
+    position: relative;
+    z-index: 6;
+    display: grid;
+    width: 100%;
+    height: 0.75rem;
+    min-height: 0;
+    place-items: center;
+    padding: 0;
+    border: 0;
+    border-inline: 1px solid var(--color-border-subtle);
+    border-radius: 0;
+    background: rgb(10 10 11 / 0.98);
+    color: var(--color-text-disabled);
+    cursor: row-resize;
+    touch-action: none;
+  }
+  :global(.pane-splitter)::before {
+    position: absolute;
+    inset-inline: 0;
+    top: 50%;
+    height: 1px;
+    background: var(--color-border-default);
+    content: "";
+  }
+  :global(.pane-splitter:hover),
+  :global(.pane-splitter:focus-visible),
+  .downloads-workbench.is-resizing :global(.pane-splitter) {
+    color: var(--color-text-secondary);
+    background: color-mix(in srgb, var(--color-accent-500) 7%, rgb(10 10 11));
+  }
+  .splitter-grip {
+    position: relative;
+    z-index: 1;
+    display: grid;
+    width: 2rem;
+    height: 0.75rem;
+    place-items: center;
+    background: rgb(10 10 11 / 0.98);
   }
   .download-inspector {
     display: flex;
