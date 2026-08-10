@@ -74,4 +74,19 @@ describe("audio playback diagnostic reporter", () => {
       pauseSource: null,
     }));
   });
+
+  it("keeps timing a recoverable media error while play intent remains active", () => {
+    const send = vi.fn();
+    let now = 1_000;
+    const reporter = new AudioPlaybackDiagnosticReporter(send, () => now);
+
+    reporter.report(AUDIO_PLAYBACK_DIAGNOSTIC_EVENT.error, snapshot({ playIntent: true }));
+    now = 2_250;
+    reporter.report(AUDIO_PLAYBACK_DIAGNOSTIC_EVENT.playing, snapshot({ playIntent: true }));
+
+    expect(send).toHaveBeenLastCalledWith(expect.objectContaining({
+      event: AUDIO_PLAYBACK_DIAGNOSTIC_EVENT.playing,
+      interruptionMilliseconds: 1_250,
+    }));
+  });
 });

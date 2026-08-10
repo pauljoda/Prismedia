@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Web music playback now reconnects an interrupted media request at the current playhead instead of waiting indefinitely for the browser's slow stream recovery, while preserving deliberate pause behavior.
 - Web music playback now persists lightweight track progress while listening instead of resending and rebuilding the entire saved queue every five seconds, preventing large queues from flooding the API during a stream.
 - Provider episodes carried by one physical video now appear as one combined episode card across web and native clients, while retaining each provider episode identity for metadata, deep links, and acquisition matching.
 - Acquisition detail panels no longer enter a reactive refresh loop that can flood the API and database with detail and history requests.

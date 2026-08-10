@@ -66,7 +66,11 @@ export class AudioPlaybackDiagnosticReporter {
       }
     } else if (event === AUDIO_PLAYBACK_DIAGNOSTIC_EVENT.error) {
       this.pendingPauseSource = null;
-      this.interruptionStartedAt = null;
+      if (snapshot.playIntent) {
+        this.interruptionStartedAt ??= this.now();
+      } else {
+        this.interruptionStartedAt = null;
+      }
     }
 
     this.send({

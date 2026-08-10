@@ -48,6 +48,7 @@
     type AudioPlaybackPauseSourceCode,
   } from "$lib/api/generated/codes";
   import { createAudioTabCoordinator, type AudioTabCoordinator } from "$lib/player/audio-tab-coordinator";
+  import { AudioStreamRecoveryController } from "$lib/player/audio-stream-recovery";
   import { AudioPlaybackDiagnosticReporter } from "$lib/player/audio-playback-diagnostics";
   import {
     MusicConsumptionReporter,
@@ -79,8 +80,10 @@
   let timelineDraggingRef = false;
   let currentSrcTrackId: string | null = null;
   let audioStartedInThisSession = false;
+  let currentTrackHasPlayed = false;
   let pendingInitialSeekSeconds: number | null = null;
   let pendingAutoplay: { trackId: string; deferWhenHidden: boolean } | null = null;
+  let streamRecoverySequence = 0;
   let tabCoordinator: AudioTabCoordinator | null = null;
   let currentTrackRequestedAtMs: number | null = null;
   let lastAudiobookProgressSeconds: number | null = null;
@@ -94,6 +97,9 @@
   }));
   const playbackDiagnostics = new AudioPlaybackDiagnosticReporter((diagnostic) => {
     void sendAudioPlaybackDiagnostic(diagnostic).catch(() => {});
+  });
+  const streamRecovery = new AudioStreamRecoveryController(({ trackId, positionSeconds }) => {
+    recoverInterruptedStream(trackId, positionSeconds);
   });
 
   const activeTrack = $derived(playback.currentTrack);
@@ -287,6 +293,9 @@
     }
     const resumeTime = Math.max(0, playback.currentTime);
     currentSrcTrackId = track.id;
+    currentTrackHasPlayed = false;
+    streamRecovery.reset();
+    streamRecoverySequence = 0;
     currentTrackRequestedAtMs = Date.now();
     musicConsumption.open(track.id);
     audioEl.src = nextSrc;
@@ -301,6 +310,46 @@
       }
     }
     return true;
+  }
+
+  function recoverInterruptedStream(trackId: string, interruptedAtSeconds: number) {
+    const audio = audioEl;
+    const track = activeTrack;
+    if (!audio || !track || track.id !== trackId || currentSrcTrackId !== trackId) return;
+    if (!playback.playIntent || audio.ended) return;
+
+    const progressedSinceSignal = audio.currentTime > interruptedAtSeconds + 0.5;
+    if (!audio.error && progressedSinceSignal && audio.readyState >= HTMLMediaElement.HAVE_FUTURE_DATA) {
+      return;
+    }
+
+    const resumeTime = Math.max(0, audio.currentTime, playback.currentTime);
+    streamRecoverySequence += 1;
+    const nextSrc = apiAssetUrl(
+      `/audio-stream/${trackId}`,
+      `stream-recovery-${streamRecoverySequence}`,
+    );
+    if (!nextSrc) return;
+
+    pendingInitialSeekSeconds = resumeTime;
+    pendingAutoplay = { trackId, deferWhenHidden: false };
+    audio.src = nextSrc;
+    audio.load();
+    try {
+      audio.currentTime = resumeTime;
+    } catch {
+      // loadedmetadata applies the same seek once the replacement request is ready.
+    }
+  }
+
+  function scheduleStreamRecovery(audio: HTMLAudioElement, terminalError = false) {
+    const trackId = currentSrcTrackId;
+    if (!trackId || !playback.playIntent || audio.ended) return;
+    if (!terminalError && !currentTrackHasPlayed) return;
+    streamRecovery.interrupt(
+      { trackId, positionSeconds: Math.max(audio.currentTime, playback.currentTime) },
+      terminalError,
+    );
   }
 
   function canAttemptPlayback(options?: { deferWhenHidden?: boolean }): boolean {
@@ -326,8 +375,13 @@
       void playPromise.catch((error: unknown) => {
         console.error("Audio play failed:", error);
         if (expectedTrackId === currentSrcTrackId && audioEl?.paused) {
-          playback.playIntent = false;
           playback.playing = false;
+          if (error instanceof DOMException && error.name === "NotAllowedError") {
+            playback.playIntent = false;
+            streamRecovery.reset();
+          } else if (playback.playIntent) {
+            scheduleStreamRecovery(audioEl, true);
+          }
         }
       });
     }
@@ -377,7 +431,10 @@
     options: { clearPlayIntent?: boolean } = {},
   ) {
     const audio = audioEl;
-    if (options.clearPlayIntent ?? true) playback.playIntent = false;
+    if (options.clearPlayIntent ?? true) {
+      playback.playIntent = false;
+      streamRecovery.reset();
+    }
     if (!audio || audio.paused) return;
     playbackDiagnostics.markPauseSource(source);
     audio.pause();
@@ -451,6 +508,7 @@
     }
     playback.playIntent = false;
     playback.playing = false;
+    streamRecovery.reset();
     tabCoordinator?.releasePlayback();
   }
 
@@ -540,6 +598,8 @@
     const track = activeTrack;
     if (!track) {
       currentSrcTrackId = null;
+      currentTrackHasPlayed = false;
+      streamRecovery.reset();
       currentTrackRequestedAtMs = null;
       audioEl.removeAttribute("src");
       audioEl.load();
@@ -714,13 +774,17 @@
       else musicConsumption.start();
     };
     const handlePlaying = () => {
+      currentTrackHasPlayed = true;
+      streamRecovery.playing();
       reportAudioDiagnostic(AUDIO_PLAYBACK_DIAGNOSTIC_EVENT.playing, audio);
     };
     const handleWaiting = () => {
       reportAudioDiagnostic(AUDIO_PLAYBACK_DIAGNOSTIC_EVENT.waiting, audio);
+      scheduleStreamRecovery(audio);
     };
     const handleStalled = () => {
       reportAudioDiagnostic(AUDIO_PLAYBACK_DIAGNOSTIC_EVENT.stalled, audio);
+      scheduleStreamRecovery(audio);
     };
     const handlePause = () => {
       reportAudioDiagnostic(AUDIO_PLAYBACK_DIAGNOSTIC_EVENT.pause, audio);
@@ -745,9 +809,9 @@
     };
     const handleError = () => {
       reportAudioDiagnostic(AUDIO_PLAYBACK_DIAGNOSTIC_EVENT.error, audio);
-      playback.playIntent = false;
       playback.playing = false;
       console.error("Audio element error:", audio.error);
+      if (playback.playIntent) scheduleStreamRecovery(audio, true);
     };
     const handleVisibilityChange = () => {
       if (document.visibilityState !== "visible") return;
@@ -805,6 +869,7 @@
       audio.removeEventListener("ended", handleEnded);
       audio.removeEventListener("error", handleError);
       window.clearInterval(activityTimer);
+      streamRecovery.reset();
       musicConsumption.close();
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       detachController();
