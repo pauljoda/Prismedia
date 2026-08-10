@@ -252,9 +252,18 @@
 />
 
 <style>
-  .downloads-workbench { display: flex; min-width: 0; flex-direction: column; }
+  .downloads-workbench {
+    display: grid;
+    width: 100%;
+    height: 100%;
+    min-width: 0;
+    min-height: 0;
+    grid-template-rows: minmax(13rem, 3fr) minmax(12rem, 2fr);
+  }
   .download-inspector {
-    min-height: 18rem;
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
     overflow: hidden;
     border: 1px solid var(--color-border-subtle);
     border-top-color: var(--color-border-default);
@@ -273,8 +282,8 @@
   .inspector-copy > span:last-child { overflow: hidden; color: var(--color-text-muted); font-size: 0.7rem; text-overflow: ellipsis; white-space: nowrap; }
   .inspector-kicker { color: var(--color-text-muted); font-family: var(--font-mono, "JetBrains Mono", monospace); font-size: 0.58rem !important; letter-spacing: 0.1em; text-transform: uppercase; }
   .inspector-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 0.45rem; }
-  .inspector-detail { min-width: 0; padding: 1rem; }
-  .inspector-empty { display: flex; min-height: 18rem; align-items: center; justify-content: center; flex-direction: column; gap: 0.4rem; color: var(--color-text-muted); text-align: center; }
+  .inspector-detail { min-width: 0; min-height: 0; flex: 1 1 auto; overflow: auto; padding: 1rem; }
+  .inspector-empty { display: flex; min-height: 0; flex: 1 1 auto; align-items: center; justify-content: center; flex-direction: column; gap: 0.4rem; color: var(--color-text-muted); text-align: center; }
   .inspector-empty strong { color: var(--color-text-secondary); font-family: var(--font-heading, "Geist", sans-serif); font-size: 0.9rem; }
   .inspector-empty span { max-width: 28rem; font-size: 0.72rem; }
 

@@ -1,9 +1,24 @@
 <script lang="ts">
-  import { ChevronsDownUp, ChevronsUpDown, HardDriveDownload, Loader2, Trash2 } from "@lucide/svelte";
-  import { Button, Checkbox, SearchInput, Select, cn } from "@prismedia/ui-svelte";
+  import { onMount } from "svelte";
+  import { browser as isBrowser } from "$app/environment";
+  import { ChevronsDownUp, ChevronsUpDown, Columns3, HardDriveDownload, Loader2, Trash2 } from "@lucide/svelte";
+  import { Button, Checkbox, SearchInput, cn } from "@prismedia/ui-svelte";
   import { SvelteSet } from "svelte/reactivity";
   import { formatSpeed, numberValue } from "$lib/utils/format";
   import DownloadTreeRows from "./DownloadTreeRows.svelte";
+  import DownloadTableHeader from "./DownloadTableHeader.svelte";
+  import {
+    DEFAULT_DOWNLOAD_COLUMN_WIDTHS,
+    DOWNLOAD_TABLE_COLUMN_KEYS,
+    DOWNLOAD_TABLE_COLUMNS,
+    clampDownloadColumnWidth,
+    downloadColumnTemplate,
+    downloadTableWidth,
+    sortDownloadTree,
+    type DownloadColumnKey,
+    type DownloadColumnWidths,
+    type DownloadSortDirection,
+  } from "./download-table";
   import {
     buildDownloadTree,
     expandableDownloadNodeKeys,
@@ -33,40 +48,43 @@
 
   let query = $state("");
   let activeStatus = $state("all");
-  let sortBy = $state("activity");
+  let sortKey = $state<DownloadColumnKey>("updated");
+  let sortDirection = $state<DownloadSortDirection>("desc");
+  let columnWidths = $state<DownloadColumnWidths>({ ...DEFAULT_DOWNLOAD_COLUMN_WIDTHS });
+  let resizing = $state<{
+    key: DownloadColumnKey;
+    adjacentKey: DownloadColumnKey | null;
+    startX: number;
+    startWidth: number;
+    startAdjacentWidth: number;
+  } | null>(null);
   const expanded = new SvelteSet<string>();
   const checkedIds = new SvelteSet<string>();
+  const DOWNLOAD_COLUMN_WIDTHS_STORAGE_KEY = "prismedia.downloads.column-widths";
 
   const statusFilters = [
     { value: "all", label: "All", match: () => true },
     { value: "active", label: "Active", match: (entry: DownloadManagerEntry) => ["downloading", "searching", "queued"].includes(entry.item.tone) },
+    { value: "waiting", label: "Waiting", match: (entry: DownloadManagerEntry) => entry.item.tone === "muted" },
     { value: "attention", label: "Attention", match: (entry: DownloadManagerEntry) => ["attention", "failed"].includes(entry.item.tone) },
     { value: "cleanup", label: "Cleaning up", match: (entry: DownloadManagerEntry) => entry.item.tone === "cleanup" },
-  ];
-
-  const sortOptions = [
-    { value: "activity", label: "Recent activity" },
-    { value: "title", label: "Title A–Z" },
-    { value: "progress", label: "Progress" },
   ];
 
   const visibleEntries = $derived.by(() => {
     const normalizedQuery = query.trim().toLocaleLowerCase();
     const statusFilter = statusFilters.find((filter) => filter.value === activeStatus) ?? statusFilters[0];
-    const matched = entries.filter((entry) => {
+    return entries.filter((entry) => {
       if (!statusFilter.match(entry)) return false;
       if (!normalizedQuery) return true;
       return [entry.item.title, entry.item.subtitle, entry.item.clientLabel, entry.row.transferState]
         .filter(Boolean)
         .some((value) => value!.toLocaleLowerCase().includes(normalizedQuery));
     });
-    if (sortBy === "title") return [...matched].sort((a, b) => a.item.title.localeCompare(b.item.title, undefined, { numeric: true }));
-    if (sortBy === "progress") return [...matched].sort((a, b) => (b.item.progress ?? -1) - (a.item.progress ?? -1));
-    return matched;
   });
 
   const entriesById = $derived(new Map(visibleEntries.map((entry) => [entry.item.id, entry])));
-  const tree = $derived(buildDownloadTree(visibleEntries, thumbnails));
+  const unsortedTree = $derived(buildDownloadTree(visibleEntries, thumbnails));
+  const tree = $derived(sortDownloadTree(unsortedTree, entriesById, sortKey, sortDirection));
   const expandableKeys = $derived(expandableDownloadNodeKeys(tree));
   const filtering = $derived(query.trim().length > 0 || activeStatus !== "all");
   const effectiveExpanded = $derived(filtering ? new Set(expandableKeys) : expanded);
@@ -75,6 +93,8 @@
   const safeCheckedIds = $derived(new Set([...checkedIds].filter((id) => availableIds.has(id))));
   const allVisibleChecked = $derived(visibleSelectableIds.length > 0 && visibleSelectableIds.every((id) => safeCheckedIds.has(id)));
   const aggregateSpeed = $derived(entries.reduce((sum, entry) => sum + (numberValue(entry.row.downloadSpeedBytesPerSecond) ?? 0), 0));
+  const gridTemplate = $derived(downloadColumnTemplate(columnWidths));
+  const gridWidth = $derived(downloadTableWidth(columnWidths));
 
   function toggleExpanded(key: string) {
     if (expanded.has(key)) expanded.delete(key);
@@ -98,9 +118,144 @@
     }
     expandableKeys.forEach((key) => expanded.add(key));
   }
+
+  function sortColumn(key: DownloadColumnKey) {
+    if (sortKey === key) {
+      sortDirection = sortDirection === "asc" ? "desc" : "asc";
+      return;
+    }
+    sortKey = key;
+    sortDirection = key === "entity" || key === "status" ? "asc" : "desc";
+  }
+
+  function persistColumnWidths() {
+    if (!isBrowser) return;
+    try {
+      localStorage.setItem(DOWNLOAD_COLUMN_WIDTHS_STORAGE_KEY, JSON.stringify(columnWidths));
+    } catch {
+      // Column resizing remains usable when browser storage is unavailable.
+    }
+  }
+
+  function resizeColumn(key: DownloadColumnKey, width: number) {
+    columnWidths = { ...columnWidths, [key]: clampDownloadColumnWidth(key, width) };
+  }
+
+  function nextColumnKey(key: DownloadColumnKey): DownloadColumnKey | null {
+    const index = DOWNLOAD_TABLE_COLUMN_KEYS.indexOf(key);
+    return DOWNLOAD_TABLE_COLUMN_KEYS[index + 1] ?? null;
+  }
+
+  function headerWidth(event: Event): number | null {
+    const handle = event.currentTarget;
+    if (!(handle instanceof HTMLElement)) return null;
+    return handle.parentElement?.getBoundingClientRect().width ?? null;
+  }
+
+  function adjacentHeaderWidth(event: Event): number | null {
+    const handle = event.currentTarget;
+    if (!(handle instanceof HTMLElement)) return null;
+    return handle.parentElement?.nextElementSibling?.getBoundingClientRect().width ?? null;
+  }
+
+  function resizeColumnPair(
+    key: DownloadColumnKey,
+    adjacentKey: DownloadColumnKey | null,
+    startWidth: number,
+    startAdjacentWidth: number,
+    requestedDelta: number,
+  ) {
+    if (!adjacentKey) {
+      resizeColumn(key, startWidth + requestedDelta);
+      return;
+    }
+    const definition = DOWNLOAD_TABLE_COLUMNS[key];
+    const adjacentDefinition = DOWNLOAD_TABLE_COLUMNS[adjacentKey];
+    const minimumDelta = Math.max(
+      definition.minWidth - startWidth,
+      startAdjacentWidth - adjacentDefinition.maxWidth,
+    );
+    const maximumDelta = Math.min(
+      definition.maxWidth - startWidth,
+      startAdjacentWidth - adjacentDefinition.minWidth,
+    );
+    const delta = Math.max(minimumDelta, Math.min(maximumDelta, requestedDelta));
+    columnWidths = {
+      ...columnWidths,
+      [key]: Math.round(startWidth + delta),
+      [adjacentKey]: Math.round(startAdjacentWidth - delta),
+    };
+  }
+
+  function startColumnResize(event: PointerEvent, key: DownloadColumnKey) {
+    event.preventDefault();
+    event.stopPropagation();
+    const adjacentKey = nextColumnKey(key);
+    resizing = {
+      key,
+      adjacentKey,
+      startX: event.clientX,
+      startWidth: headerWidth(event) ?? columnWidths[key],
+      startAdjacentWidth: adjacentHeaderWidth(event) ?? (adjacentKey ? columnWidths[adjacentKey] : 0),
+    };
+  }
+
+  function continueColumnResize(event: PointerEvent) {
+    if (!resizing) return;
+    resizeColumnPair(
+      resizing.key,
+      resizing.adjacentKey,
+      resizing.startWidth,
+      resizing.startAdjacentWidth,
+      event.clientX - resizing.startX,
+    );
+  }
+
+  function finishColumnResize() {
+    if (!resizing) return;
+    resizing = null;
+    persistColumnWidths();
+  }
+
+  function nudgeColumnWidth(event: KeyboardEvent, key: DownloadColumnKey, delta: number) {
+    const adjacentKey = nextColumnKey(key);
+    resizeColumnPair(
+      key,
+      adjacentKey,
+      headerWidth(event) ?? columnWidths[key],
+      adjacentHeaderWidth(event) ?? (adjacentKey ? columnWidths[adjacentKey] : 0),
+      delta,
+    );
+    persistColumnWidths();
+  }
+
+  function resetColumnWidth(key: DownloadColumnKey) {
+    resizeColumn(key, DOWNLOAD_TABLE_COLUMNS[key].defaultWidth);
+    persistColumnWidths();
+  }
+
+  function resetColumnWidths() {
+    columnWidths = { ...DEFAULT_DOWNLOAD_COLUMN_WIDTHS };
+    persistColumnWidths();
+  }
+
+  onMount(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem(DOWNLOAD_COLUMN_WIDTHS_STORAGE_KEY) ?? "null") as Partial<DownloadColumnWidths> | null;
+      if (!stored) return;
+      columnWidths = Object.fromEntries(Object.keys(DOWNLOAD_TABLE_COLUMNS).map((rawKey) => {
+        const key = rawKey as DownloadColumnKey;
+        return [key, clampDownloadColumnWidth(key, stored[key] ?? DEFAULT_DOWNLOAD_COLUMN_WIDTHS[key])];
+      })) as DownloadColumnWidths;
+    } catch {
+      // Ignore malformed or unavailable local preferences and keep the design defaults.
+    }
+  });
 </script>
 
-<section class="manager-shell" aria-label="Download manager">
+<svelte:window onpointermove={continueColumnResize} onpointerup={finishColumnResize} onpointercancel={finishColumnResize} />
+
+<section class={cn("manager-shell", resizing && "is-resizing")} aria-label="Download manager">
   <header class="manager-toolbar">
     <div class="manager-title">
       <span class="manager-mark"><HardDriveDownload class="h-4 w-4" /></span>
@@ -133,14 +288,9 @@
           </Button>
         {/each}
       </div>
-      <Select
-        value={sortBy}
-        options={sortOptions}
-        size="sm"
-        ariaLabel="Sort downloads"
-        class="download-sort"
-        onchange={(value) => (sortBy = value)}
-      />
+      <Button variant="ghost" size="sm" class="columns-reset" onclick={resetColumnWidths} title="Reset all column widths">
+        <Columns3 class="h-3.5 w-3.5" /> Reset columns
+      </Button>
     </div>
   </header>
 
@@ -196,18 +346,16 @@
   {/if}
 
   <div class="table-scroll">
-    <div class="downloads-grid" role="treegrid" aria-label="Downloads">
-      <div class="table-head" role="row">
-        <div role="columnheader" aria-label="Select"></div>
-        <div role="columnheader">Entity</div>
-        <div role="columnheader" class="numeric-head">Size</div>
-        <div role="columnheader">Progress</div>
-        <div role="columnheader">Status</div>
-        <div role="columnheader" class="numeric-head">Speed</div>
-        <div role="columnheader" class="numeric-head">ETA</div>
-        <div role="columnheader" class="numeric-head">Seeds / Peers</div>
-        <div role="columnheader" class="numeric-head">Updated</div>
-      </div>
+    <div class="downloads-grid" role="treegrid" aria-label="Downloads" style:min-width={`${gridWidth}px`}>
+      <DownloadTableHeader
+        columnTemplate={gridTemplate}
+        {sortKey}
+        {sortDirection}
+        onSort={sortColumn}
+        onResizeStart={startColumnResize}
+        onResizeNudge={nudgeColumnWidth}
+        onResizeReset={resetColumnWidth}
+      />
 
       {#if tree.length > 0}
         <DownloadTreeRows
@@ -216,6 +364,7 @@
           expanded={effectiveExpanded}
           {selectedId}
           checkedIds={safeCheckedIds}
+          columnTemplate={gridTemplate}
           onToggleExpanded={toggleExpanded}
           {onSelect}
           onToggleChecked={toggleChecked}
@@ -235,6 +384,9 @@
 
 <style>
   .manager-shell {
+    display: flex;
+    min-height: 0;
+    flex-direction: column;
     overflow: hidden;
     border: 1px solid var(--color-border-subtle);
     border-radius: var(--radius-md, 8px) var(--radius-md, 8px) 0 0;
@@ -243,6 +395,7 @@
       var(--color-surface-1);
     box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.025), 0 12px 35px rgb(0 0 0 / 0.16);
   }
+  .manager-shell.is-resizing { cursor: col-resize; user-select: none; }
 
   .manager-toolbar {
     display: flex;
@@ -265,9 +418,9 @@
   :global(.download-search) { width: min(18rem, 28vw); min-height: 2rem; padding-block: 0.35rem; border-radius: var(--radius-xs, 4px); }
   .status-filters { display: flex; align-items: center; gap: 0.15rem; }
   :global(.filter-button) { height: 1.85rem; padding-inline: 0.55rem; font-size: 0.68rem; }
-  :global(.filter-button.is-active) { border-color: var(--color-border-default); color: var(--color-text-primary); box-shadow: inset 2px 0 0 var(--color-accent-400); }
+  :global(.filter-button.is-active) { border-color: var(--color-border-default); color: var(--color-text-primary); box-shadow: inset 0 -2px 0 var(--color-accent-400); }
   .filter-count { min-width: 1rem; padding: 0.05rem 0.25rem; border-radius: var(--radius-xs, 4px); background: rgb(255 255 255 / 0.055); font-family: var(--font-mono, "JetBrains Mono", monospace); font-size: 0.59rem; }
-  :global(.download-sort) { width: 9rem; }
+  :global(.columns-reset) { height: 1.85rem; white-space: nowrap; font-size: 0.68rem; }
 
   .selection-bar { display: flex; min-height: 2.35rem; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.3rem 0.7rem; border-bottom: 1px solid var(--color-border-subtle); color: var(--color-text-muted); background: rgb(255 255 255 / 0.012); font-size: 0.68rem; }
   .selection-bar.has-selection { background: color-mix(in srgb, var(--color-accent-500) 5%, var(--color-surface-1)); }
@@ -275,12 +428,8 @@
   :global(.selection-actions button) { height: 1.75rem; font-size: 0.66rem; }
 
   .manager-error { border-bottom: 1px solid rgb(225 80 80 / 0.25); border-left: 2px solid var(--color-error); padding: 0.55rem 0.8rem; background: var(--color-error-muted); color: var(--color-error-text); font-size: 0.76rem; }
-  .table-scroll { max-height: clamp(19rem, 43vh, 35rem); overflow: auto; scrollbar-gutter: stable; }
-  .downloads-grid { min-width: 70rem; }
-  .table-head { position: sticky; top: 0; z-index: 5; display: grid; grid-template-columns: 2.25rem minmax(18rem, 1.8fr) 7.5rem minmax(10rem, 0.9fr) minmax(9rem, 0.85fr) 7rem 5.5rem 5.5rem 4.5rem; min-width: 70rem; border-bottom: 1px solid var(--color-border-default); background: rgb(12 12 13 / 0.98); box-shadow: 0 2px 8px rgb(0 0 0 / 0.28); }
-  [role="columnheader"] { padding: 0.42rem 0.7rem; border-right: 1px solid rgb(255 255 255 / 0.045); color: var(--color-text-muted); font-family: var(--font-mono, "JetBrains Mono", monospace); font-size: 0.58rem; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; }
-  [role="columnheader"]:last-child { border-right: 0; }
-  .numeric-head { text-align: right; }
+  .table-scroll { min-height: 0; flex: 1 1 auto; overflow: auto; scrollbar-gutter: stable; }
+  .downloads-grid { width: 100%; }
   .manager-state { display: flex; min-height: 10rem; align-items: center; justify-content: center; gap: 0.5rem; color: var(--color-text-muted); font-size: 0.78rem; }
   .empty-state { flex-direction: column; gap: 0.35rem; }
   .empty-state strong { color: var(--color-text-secondary); font-family: var(--font-heading, "Geist", sans-serif); font-size: 0.88rem; }

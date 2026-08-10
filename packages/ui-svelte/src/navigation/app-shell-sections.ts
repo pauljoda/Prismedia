@@ -70,6 +70,7 @@ export const appShellSections = [
       { label: "Files", href: "/files", icon: "folder-tree" },
       { label: "Identify", href: "/identify", icon: "scan-search" },
       { label: "Request", href: "/request", icon: "send" },
+      { label: "Downloads", href: "/downloads", icon: "hard-drive-download" },
       { label: "Calendar", href: "/calendar", icon: "calendar-days" },
       { label: "Plugins", href: "/plugins", icon: "puzzle" },
       { label: "Jobs", href: "/jobs", icon: "activity" },

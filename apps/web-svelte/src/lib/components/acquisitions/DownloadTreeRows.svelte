@@ -15,6 +15,7 @@
     expanded,
     selectedId,
     checkedIds,
+    columnTemplate,
     depth = 0,
     onToggleExpanded,
     onSelect,
@@ -25,6 +26,7 @@
     expanded: ReadonlySet<string>;
     selectedId: string | null;
     checkedIds: ReadonlySet<string>;
+    columnTemplate: string;
     depth?: number;
     onToggleExpanded: (key: string) => void;
     onSelect: (id: string) => void;
@@ -113,9 +115,12 @@
   <div
     role="row"
     aria-selected={entry?.item.id === selectedId}
-    class="download-row"
-    class:is-selected={entry?.item.id === selectedId}
-    class:is-group={!entry}
+    class={[
+      "download-row",
+      entry?.item.id === selectedId && "is-selected",
+      !entry && "is-group",
+    ]}
+    style:grid-template-columns={columnTemplate}
     style:--tree-depth={rowDepth}
   >
     <Button
@@ -216,6 +221,7 @@
       {expanded}
       {selectedId}
       {checkedIds}
+      {columnTemplate}
       depth={depth + 1}
       {onToggleExpanded}
       {onSelect}
@@ -228,8 +234,7 @@
   .download-row {
     position: relative;
     display: grid;
-    grid-template-columns: 2.25rem minmax(18rem, 1.8fr) 7.5rem minmax(10rem, 0.9fr) minmax(9rem, 0.85fr) 7rem 5.5rem 5.5rem 4.5rem;
-    min-width: 70rem;
+    min-width: 100%;
     min-height: 3.5rem;
     align-items: stretch;
     border-bottom: 1px solid var(--color-border-subtle);
@@ -241,7 +246,7 @@
   .download-row.is-group { background: rgb(255 255 255 / 0.014); }
   .download-row.is-selected {
     background: color-mix(in srgb, var(--color-accent-500, #c7c9cc) 8%, var(--color-surface-1));
-    box-shadow: inset 2px 0 0 var(--color-accent-400, #c7c9cc);
+    box-shadow: inset 0 -2px 0 var(--color-accent-400, #c7c9cc);
   }
 
   :global(.row-hit) {

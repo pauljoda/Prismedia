@@ -33,6 +33,9 @@ describe("defaultNavPrefs", () => {
     const audio = prefs.sections.find((s) => s.id === "audio");
     expect(audio?.items).toEqual(["/audio", "/artists", "/tracks"]);
 
+    const operate = prefs.sections.find((s) => s.id === "operate");
+    expect(operate?.items).toContain("/downloads");
+
     expect(prefs.mobileFavorites).toEqual(["/files", "/videos", "/galleries", "/people"]);
   });
 });

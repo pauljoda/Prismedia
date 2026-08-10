@@ -68,7 +68,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Entity detail pages no longer report missing-resource errors while checking optional Identify, acquisition, and monitoring state.
 
 ### What's New
-- Downloads now use an Entity-grouped manager with expandable series, season, and episode hierarchy, a dense live transfer table, bulk cleanup, and a persistent selected-item detail pane for controls, files, peers, and history.
+- Downloads are now a dedicated navigation destination with an Entity-grouped, viewport-filling manager: expandable series, season, and episode hierarchy, a dense sortable and resizable live transfer table, bulk cleanup, and a persistent selected-item detail pane for controls, files, peers, and history.
 - Installed plugins now update automatically when the worker starts and every six hours. The default-on behavior can be disabled under Settings → Generation Pipeline.
 - Consumption tracking is now shared across watching, listening, reading, and viewing. Prismedia records opens, completions, skips, active time, and timestamped history; daily active-time buckets power richer statistics without repeatedly summing an unbounded event log.
 - Jobs now run as durable dependency graphs with one fair interactive lane per user-selected Entity, a separately configured background pool, shared CPU balancing, durable provider rate limits, restart-safe waits, graph-level progress and cancellation, and a dependency view in Jobs.

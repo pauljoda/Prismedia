@@ -60,6 +60,7 @@
   const bareShell = $derived(
     page.url.pathname === "/login" || page.url.pathname.startsWith("/setup"),
   );
+  const downloadsWorkspace = $derived(page.url.pathname === "/downloads");
 
   // Defense-in-depth for client-side navigations after boot: the root load guard only
   // runs on full loads, so mid-session transitions check the in-memory session.
@@ -291,14 +292,15 @@
       bind:this={mainScroller}
       class={cn(
         "flex flex-1 flex-col transition-[margin-left] duration-moderate",
-        "h-[calc(100dvh-var(--prismedia-mobile-nav-height))] overflow-y-auto [scrollbar-gutter:stable] md:h-dvh",
+        "h-[calc(100dvh-var(--prismedia-mobile-nav-height))] [scrollbar-gutter:stable] md:h-dvh",
+        downloadsWorkspace ? "overflow-hidden" : "overflow-y-auto",
         chrome.sidebarCollapsed ? "md:ml-14" : "md:ml-60",
       )}
       style:transition-timing-function="var(--ease-mechanical)"
       style:padding-bottom="var(--prismedia-bottom-dock-padding)"
     >
       <CanvasHeader />
-      <div class="flex-1 p-5">
+      <div class={cn("flex-1 p-5", downloadsWorkspace && "min-h-0 overflow-hidden")}>
         {@render pageContent()}
       </div>
     </main>

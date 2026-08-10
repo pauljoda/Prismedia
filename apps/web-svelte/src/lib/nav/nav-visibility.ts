@@ -1,7 +1,7 @@
 import type { SessionStore } from "$lib/stores/session.svelte";
 
 /** Nav hrefs restricted to admins (server-operating surfaces). */
-const ADMIN_ONLY_HREFS = new Set(["/files", "/identify", "/request", "/plugins", "/jobs"]);
+const ADMIN_ONLY_HREFS = new Set(["/files", "/identify", "/request", "/downloads", "/plugins", "/jobs"]);
 
 /**
  * Whether a nav item is visible to the current session. Settings shows for anyone who
