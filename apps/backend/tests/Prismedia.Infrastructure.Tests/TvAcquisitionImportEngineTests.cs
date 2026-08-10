@@ -50,6 +50,32 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
     }
 
     [Fact]
+    public async Task ReviewedMappingImportsATokenlessFileIntoTheChosenEpisode() {
+        await using var db = CreateContext();
+        var harness = await HarnessAsync(
+            db,
+            ownedEpisodeName: "Show - s01e01 720p WEB.mkv",
+            payloadFiles: ["mystery-video.mkv"],
+            releaseTitle: "Show Season 1 1080p WEB-DL");
+
+        await harness.Engine.ImportAsync(
+            harness.Context,
+            harness.Import with {
+                ManualFileMappings = [
+                    new ManualImportFileMapping("mystery-video.mkv", harness.WantedEpisodeId, 1, 2)
+                ]
+            },
+            CancellationToken.None);
+
+        var target = Path.Combine(harness.SeasonFolder, "Show - S01E02.mkv");
+        Assert.True(File.Exists(target));
+        var source = await db.EntityFiles.AsNoTracking().SingleAsync(row =>
+            row.EntityId == harness.WantedEpisodeId && row.Role == EntityFileRole.Source);
+        Assert.Equal(target, source.Path);
+        Assert.Equal(AcquisitionStatus.Importing, await StatusOf(db, harness.Import.Id));
+    }
+
+    [Fact]
     public async Task CompleteSeriesPayloadImportsOnlyTheRequestedSeason() {
         await using var db = CreateContext();
         var harness = await HarnessAsync(

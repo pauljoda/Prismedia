@@ -180,6 +180,41 @@ public sealed record AcquisitionFilesView(
     AcquisitionImportPhase? Phase = null,
     bool? ImportInformationUnavailable = null);
 
+/// <summary>One downloaded file offered for explicit user mapping during a held import.</summary>
+/// <param name="SourceRelativePath">Stable payload-relative path submitted back with the chosen target.</param>
+/// <param name="Name">User-facing file name.</param>
+/// <param name="SizeBytes">Downloaded file size.</param>
+/// <param name="CanMap">Whether this payload item is supported media that can be assigned to a target.</param>
+/// <param name="SuggestedTargetEntityId">Prismedia's best unambiguous target inference, or null when it could not decide.</param>
+public sealed record AcquisitionManualImportFile(
+    string SourceRelativePath,
+    string Name,
+    long SizeBytes,
+    bool CanMap,
+    Guid? SuggestedTargetEntityId = null);
+
+/// <summary>One Entity the current held acquisition permits a downloaded file to satisfy.</summary>
+/// <param name="EntityId">Stable target Entity identity used by the submission contract.</param>
+/// <param name="Title">Provider-authored target title.</param>
+/// <param name="Position">Display position within the requested container, such as an episode number.</param>
+public sealed record AcquisitionManualImportTarget(Guid EntityId, string Title, int? Position = null);
+
+/// <summary>
+/// Read-only mapping review for an acquisition held at manual import. Files retain the payload's relative
+/// paths, targets retain stable Entity ids, and safe automatic inferences are returned as suggestions.
+/// </summary>
+public sealed record AcquisitionManualImportReview(
+    bool Available,
+    IReadOnlyList<AcquisitionManualImportFile> Files,
+    IReadOnlyList<AcquisitionManualImportTarget> Targets,
+    string? Message = null);
+
+/// <summary>Maps one downloaded file onto one allowed Entity target.</summary>
+public sealed record AcquisitionManualImportSelection(string SourceRelativePath, Guid TargetEntityId);
+
+/// <summary>Submits the user's explicit per-file mapping for a held acquisition.</summary>
+public sealed record AcquisitionManualImportRequest(IReadOnlyList<AcquisitionManualImportSelection> Selections);
+
 /// <summary>
 /// Re-runs the import for a downloaded or manual-import-held acquisition.
 /// <see cref="AllowFormatChange"/> is the user's explicit consent for a genuine upgrade to replace the

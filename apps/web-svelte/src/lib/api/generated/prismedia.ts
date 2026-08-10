@@ -14,6 +14,8 @@ import type {
   AcquisitionFilesView,
   AcquisitionHistoryView,
   AcquisitionImportRetryRequest,
+  AcquisitionManualImportRequest,
+  AcquisitionManualImportReview,
   AcquisitionQueueRequest,
   AcquisitionSearchRequest,
   AcquisitionSummary,
@@ -10753,6 +10755,99 @@ export const retryAcquisitionImport = async (id: string,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       acquisitionImportRetryRequest,)
+  }
+);}
+
+
+
+export type getAcquisitionManualImportReviewResponse200 = {
+  data: AcquisitionManualImportReview
+  status: 200
+}
+
+export type getAcquisitionManualImportReviewResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type getAcquisitionManualImportReviewResponseSuccess = (getAcquisitionManualImportReviewResponse200) & {
+  headers: Headers;
+};
+export type getAcquisitionManualImportReviewResponseError = (getAcquisitionManualImportReviewResponse404) & {
+  headers: Headers;
+};
+
+export type getAcquisitionManualImportReviewResponse = (getAcquisitionManualImportReviewResponseSuccess | getAcquisitionManualImportReviewResponseError)
+
+export const getGetAcquisitionManualImportReviewUrl = (id: string,) => {
+
+
+
+
+  return `/api/acquisitions/${id}/manual-import`
+}
+
+/**
+ * @summary Lists a held download's files, allowed Entity targets, and safe inferred mappings for explicit review.
+ */
+export const getAcquisitionManualImportReview = async (id: string, options?: RequestInit): Promise<getAcquisitionManualImportReviewResponse> => {
+
+  return orvalFetch<getAcquisitionManualImportReviewResponse>(getGetAcquisitionManualImportReviewUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type submitAcquisitionManualImportResponse200 = {
+  data: AcquisitionDetail
+  status: 200
+}
+
+export type submitAcquisitionManualImportResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type submitAcquisitionManualImportResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type submitAcquisitionManualImportResponseSuccess = (submitAcquisitionManualImportResponse200) & {
+  headers: Headers;
+};
+export type submitAcquisitionManualImportResponseError = (submitAcquisitionManualImportResponse400 | submitAcquisitionManualImportResponse404) & {
+  headers: Headers;
+};
+
+export type submitAcquisitionManualImportResponse = (submitAcquisitionManualImportResponseSuccess | submitAcquisitionManualImportResponseError)
+
+export const getSubmitAcquisitionManualImportUrl = (id: string,) => {
+
+
+
+
+  return `/api/acquisitions/${id}/manual-import`
+}
+
+/**
+ * @summary Validates explicit per-file Entity mappings and queues the held payload through the crash-safe importer.
+ */
+export const submitAcquisitionManualImport = async (id: string,
+    acquisitionManualImportRequest: AcquisitionManualImportRequest, options?: RequestInit): Promise<submitAcquisitionManualImportResponse> => {
+
+  return orvalFetch<submitAcquisitionManualImportResponse>(getSubmitAcquisitionManualImportUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      acquisitionManualImportRequest,)
   }
 );}
 

@@ -1336,6 +1336,65 @@ public sealed class AcquisitionServiceTests {
     }
 
     [Fact]
+    public async Task ManualTvImportReviewPrefillsOnlyUnambiguousFilesAndQueuesExactMappings() {
+        var firstEpisodeId = Guid.NewGuid();
+        var secondEpisodeId = Guid.NewGuid();
+        var payloads = new FixedDownloadPayloadReader(new DownloadPayload("/downloads/sesame", [
+            new ImportCandidateFile("pack/Sesame Street - S09E01.mp4", 1_000),
+            new ImportCandidateFile("pack/unlabeled.mp4", 2_000),
+            new ImportCandidateFile("pack/poster.jpg", 300),
+        ]));
+        var targets = new FixedImportTargetIndex([
+            new TvEpisodeTitle(1, "First Day", firstEpisodeId),
+            new TvEpisodeTitle(2, "Second Day", secondEpisodeId),
+        ]);
+        var harness = Harness(
+            TransferInfo(RecordedClientId, AcquisitionStatus.ManualImportRequired),
+            manualImportPayloads: payloads,
+            manualImportTargets: targets);
+        harness.Store.ImportContext = new AcquisitionImportContext(
+            AcquisitionId,
+            "Season 9",
+            Author: null,
+            Series: "Sesame Street",
+            Year: 1977,
+            PosterUrl: null,
+            ExternalIdentity: null,
+            ProfileId: null,
+            ContentPath: "/downloads/sesame",
+            ClientItemId,
+            RecordedClientId,
+            EntityKind.VideoSeason,
+            EntityId: WantedEntityId,
+            SeasonNumber: 9);
+
+        var review = await harness.Service.GetManualImportReviewAsync(AcquisitionId, CancellationToken.None);
+
+        Assert.True(review.Available);
+        Assert.Equal(firstEpisodeId, review.Files[0].SuggestedTargetEntityId);
+        Assert.Null(review.Files[1].SuggestedTargetEntityId);
+        Assert.False(review.Files[2].CanMap);
+        Assert.Equal([firstEpisodeId, secondEpisodeId], review.Targets.Select(target => target.EntityId).ToArray());
+
+        await harness.Service.SubmitManualImportAsync(
+            AcquisitionId,
+            new AcquisitionManualImportRequest([
+                new AcquisitionManualImportSelection("pack/Sesame Street - S09E01.mp4", firstEpisodeId),
+                new AcquisitionManualImportSelection("pack/unlabeled.mp4", secondEpisodeId),
+            ]),
+            CancellationToken.None);
+
+        var queued = Assert.Single(harness.Queue.Requests);
+        Assert.Equal(JobType.AcquisitionImport, queued.Type);
+        var jobPayload = AcquisitionJobPayload.Parse(queued.PayloadJson!);
+        Assert.True(jobPayload.ManualRetry);
+        Assert.Equal([
+            new ManualImportFileMapping("pack/Sesame Street - S09E01.mp4", firstEpisodeId, 9, 1),
+            new ManualImportFileMapping("pack/unlabeled.mp4", secondEpisodeId, 9, 2),
+        ], jobPayload.ManualFileMappings);
+    }
+
+    [Fact]
     public async Task DeleteAsyncUsesDefaultClientOnlyForLegacyTransfersWithoutRecordedClient() {
         var harness = Harness(TransferInfo(downloadClientConfigId: null));
 
@@ -1400,7 +1459,9 @@ public sealed class AcquisitionServiceTests {
         AcquisitionTransferInfo transfer,
         bool includeRecordedClient = true,
         IAcquisitionSearchResourcePolicy? searchResources = null,
-        IAcquisitionReleaseTimingService? releaseTiming = null) {
+        IAcquisitionReleaseTimingService? releaseTiming = null,
+        IDownloadPayloadReader? manualImportPayloads = null,
+        IImportTargetIndex? manualImportTargets = null) {
         var store = new FakeAcquisitionStore(transfer);
         var downloads = new RecordingDownloadClientFactory();
         var configs = new FakeDownloadClientConfigStore(includeRecordedClient);
@@ -1424,7 +1485,9 @@ public sealed class AcquisitionServiceTests {
             lifecycle,
             importCleanup,
             searchResources: searchResources,
-            releaseTiming: releaseTiming);
+            releaseTiming: releaseTiming,
+            manualImportPayloads: manualImportPayloads,
+            manualImportTargets: manualImportTargets);
 
         return new TestHarness(service, store, downloads, history, monitors, queue, jobCleanup, lifecycle, importCleanup);
     }
@@ -2036,6 +2099,23 @@ public sealed class AcquisitionServiceTests {
 
     private sealed class EmptyImportedFilesReader : IImportedFilesReader {
         public IReadOnlyList<DownloadItemFile> List(string path) => [];
+    }
+
+    private sealed class FixedDownloadPayloadReader(DownloadPayload payload) : IDownloadPayloadReader {
+        public DownloadPayload? Read(string contentPath) => payload;
+    }
+
+    private sealed class FixedImportTargetIndex(IReadOnlyList<TvEpisodeTitle> episodes) : IImportTargetIndex {
+        public Task<TvSeriesDiskLayout?> GetTvLayoutAsync(Guid entityId, CancellationToken cancellationToken) =>
+            Task.FromResult<TvSeriesDiskLayout?>(null);
+        public Task<IReadOnlyList<TvEpisodeTitle>> GetSeasonEpisodeTitlesAsync(
+            Guid entityId,
+            int seasonNumber,
+            CancellationToken cancellationToken) => Task.FromResult(episodes);
+        public Task<MovieDiskTarget?> GetMovieTargetAsync(Guid entityId, CancellationToken cancellationToken) =>
+            Task.FromResult<MovieDiskTarget?>(null);
+        public Task<AlbumDiskTarget?> GetAlbumTargetAsync(Guid entityId, CancellationToken cancellationToken) =>
+            Task.FromResult<AlbumDiskTarget?>(null);
     }
 
     private sealed class NullAcquisitionProfileStore : IBookAcquisitionProfileStore {

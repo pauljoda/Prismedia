@@ -306,6 +306,32 @@ public static class AcquisitionEndpoints {
             .Produces<AcquisitionDetail>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
+        group.MapGet("/{id:guid}/manual-import", async (
+            Guid id,
+            AcquisitionService acquisitions,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await acquisitions.GetManualImportReviewAsync(id, cancellationToken)))
+            .WithName("GetAcquisitionManualImportReview")
+            .WithSummary("Lists a held download's files, allowed Entity targets, and safe inferred mappings for explicit review.")
+            .Produces<AcquisitionManualImportReview>()
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
+        group.MapPost("/{id:guid}/manual-import", async (
+            Guid id,
+            AcquisitionManualImportRequest request,
+            AcquisitionService acquisitions,
+            CancellationToken cancellationToken) => {
+                var detail = await acquisitions.SubmitManualImportAsync(id, request, cancellationToken);
+                return detail is null
+                    ? Results.NotFound(new ApiProblem(ApiProblemCodes.AcquisitionNotFound, "Acquisition was not found."))
+                    : Results.Ok(detail);
+            })
+            .WithName("SubmitAcquisitionManualImport")
+            .WithSummary("Validates explicit per-file Entity mappings and queues the held payload through the crash-safe importer.")
+            .Produces<AcquisitionDetail>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
         group.MapPost("/{id:guid}/cancel", async (
             Guid id,
             AcquisitionService acquisitions,

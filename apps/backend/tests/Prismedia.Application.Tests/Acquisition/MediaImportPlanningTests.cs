@@ -352,6 +352,43 @@ public sealed class TvImportPlanBuilderTests {
     }
 
     [Fact]
+    public void ManualMappingsPlaceTokenlessFilesAtTheirReviewedEpisodes() {
+        var firstTarget = Guid.NewGuid();
+        var secondTarget = Guid.NewGuid();
+        var plan = TvImportPlanBuilder.PlanManualUnits([
+            File("pack/video-a.mp4"),
+            File("pack/video-b.mp4"),
+            File("pack/poster.jpg"),
+        ], [
+            new ManualImportFileMapping("pack/video-a.mp4", firstTarget, 9, 3),
+            new ManualImportFileMapping("pack/video-b.mp4", secondTarget, 9, 1),
+        ], "Sesame Street");
+
+        Assert.False(plan.Blocked);
+        Assert.Equal(
+            [
+                ("pack/video-a.mp4", "Sesame Street/Season 09/Sesame Street - S09E03.mp4"),
+                ("pack/video-b.mp4", "Sesame Street/Season 09/Sesame Street - S09E01.mp4"),
+            ],
+            plan.Units.Select(unit => (unit.SourceRelativePath, unit.TargetRelativePath)).ToArray());
+    }
+
+    [Fact]
+    public void ManualMappingsRejectTwoFilesForTheSameEpisode() {
+        var target = Guid.NewGuid();
+        var plan = TvImportPlanBuilder.PlanManualUnits([
+            File("pack/video-a.mp4"),
+            File("pack/video-b.mp4"),
+        ], [
+            new ManualImportFileMapping("pack/video-a.mp4", target, 9, 1),
+            new ManualImportFileMapping("pack/video-b.mp4", target, 9, 1),
+        ], "Sesame Street");
+
+        Assert.True(plan.Blocked);
+        Assert.Equal(ImportBlockReason.AmbiguousMultiplePrimaries, plan.BlockReason);
+    }
+
+    [Fact]
     public void TokenlessSeasonPackMapsUniqueProviderEpisodeTitlesIncludingZeroPadding() {
         var plan = TvImportPlanBuilder.Plan([
             File("pack/Sesame Street - Episode 0131 (November 9, 1970).mp4"),

@@ -1114,14 +1114,21 @@ public sealed class TvAcquisitionImportEngine(
         }
 
         var series = SeriesOf(import);
-        var unitsPlan = TvImportPlanBuilder.PlanUnits(
-            payload.Files,
-            series,
-            import.SeasonNumber,
-            import.EpisodeNumber,
-            profile?.PathTemplate,
-            ownedMediaQuality,
-            await EpisodeTitlesForAsync(import, cancellationToken));
+        var unitsPlan = import.ManualFileMappings is { Count: > 0 } manualMappings
+            ? TvImportPlanBuilder.PlanManualUnits(
+                payload.Files,
+                manualMappings,
+                series,
+                profile?.PathTemplate,
+                ownedMediaQuality)
+            : TvImportPlanBuilder.PlanUnits(
+                payload.Files,
+                series,
+                import.SeasonNumber,
+                import.EpisodeNumber,
+                profile?.PathTemplate,
+                ownedMediaQuality,
+                await EpisodeTitlesForAsync(import, cancellationToken));
         var plan = unitsPlan.Blocked
             ? ResolvedImportPlan.Block(unitsPlan.BlockReason!.Value)
             : ImportTargetResolver.Resolve(
@@ -1190,9 +1197,16 @@ public sealed class TvAcquisitionImportEngine(
         string? qualityCode,
         CancellationToken cancellationToken) {
         var series = SeriesOf(import);
-        var unitsPlan = TvImportPlanBuilder.PlanUnits(
-            payload.Files, series, import.SeasonNumber, import.EpisodeNumber, profile?.PathTemplate, qualityCode,
-            await EpisodeTitlesForAsync(import, cancellationToken));
+        var unitsPlan = import.ManualFileMappings is { Count: > 0 } manualMappings
+            ? TvImportPlanBuilder.PlanManualUnits(
+                payload.Files,
+                manualMappings,
+                series,
+                profile?.PathTemplate,
+                qualityCode)
+            : TvImportPlanBuilder.PlanUnits(
+                payload.Files, series, import.SeasonNumber, import.EpisodeNumber, profile?.PathTemplate, qualityCode,
+                await EpisodeTitlesForAsync(import, cancellationToken));
         if (unitsPlan.Blocked) {
             await acquisitions.SetStatusAsync(import.Id, AcquisitionStatus.ManualImportRequired, BlockMessage(unitsPlan.BlockReason), cancellationToken);
             return;

@@ -45,8 +45,11 @@ public sealed record TvPlanUnit(string SourceRelativePath, int Season, int Episo
     public IReadOnlyList<int> ExtraEpisodes { get; init; } = [];
 }
 
-/// <summary>One provider episode of the season being imported: its number and title, for title-based file alignment.</summary>
-public sealed record TvEpisodeTitle(int Episode, string Title);
+/// <summary>
+/// One provider episode of the season being imported: its number and title for filename alignment, plus
+/// its stable Entity identity when the caller is building a user-facing manual mapping review.
+/// </summary>
+public sealed record TvEpisodeTitle(int Episode, string Title, Guid? EntityId = null);
 
 /// <summary>The unit-level TV plan: either blocked (same reasons as <see cref="ImportPlan"/>) or the placeable units.</summary>
 public sealed record TvUnitsPlan(bool Blocked, ImportBlockReason? BlockReason, IReadOnlyList<TvPlanUnit> Units) {
@@ -373,6 +376,75 @@ public static partial class TvImportPlanBuilder {
     public static bool IsVideoFile(string path) => VideoExtensions.Contains(Path.GetExtension(path));
 
     /// <summary>
+    /// Infers one file's episode from explicit numbering or one unambiguous provider-title match. This is
+    /// shared by automatic planning and the manual review projection so the prefilled dropdown never claims
+    /// a mapping the importer itself would not recognize.
+    /// </summary>
+    public static (int Season, int Episode)? InferEpisode(
+        string sourceRelativePath,
+        int? requestedSeason,
+        IReadOnlyList<TvEpisodeTitle> episodeTitles) {
+        var unit = TvReleaseTokens.ParseEpisode(Path.GetFileNameWithoutExtension(sourceRelativePath));
+        if (unit is null && requestedSeason is { } titleSeason && episodeTitles.Count > 0) {
+            var titleMatches = episodeTitles
+                .Where(candidate => ReleaseTitleIdentity.ContainsMeaningfulRun(
+                    Path.GetFileNameWithoutExtension(sourceRelativePath), candidate.Title))
+                .Select(candidate => candidate.Episode)
+                .Distinct()
+                .ToArray();
+            if (titleMatches.Length == 1) {
+                unit = (titleSeason, titleMatches[0]);
+            }
+        }
+
+        return unit is { } inferred
+            && (requestedSeason is null || inferred.Season == requestedSeason)
+                ? inferred
+                : null;
+    }
+
+    /// <summary>
+    /// Builds exact placement units from a user-reviewed mapping. Unselected payload files are deliberately
+    /// omitted; every selected source and episode slot must be unique.
+    /// </summary>
+    public static TvUnitsPlan PlanManualUnits(
+        IReadOnlyList<ImportCandidateFile> files,
+        IReadOnlyList<ManualImportFileMapping> mappings,
+        string series,
+        string? template = null,
+        string? quality = null) {
+        var candidates = files
+            .Where(file => IsVideoFile(file.RelativePath))
+            .ToDictionary(file => file.RelativePath, FileSystemPathComparison.Comparer);
+        var units = new List<TvPlanUnit>(mappings.Count);
+        var sources = new HashSet<string>(FileSystemPathComparison.Comparer);
+        var targets = new HashSet<(int Season, int Episode)>();
+        foreach (var mapping in mappings) {
+            if (!candidates.ContainsKey(mapping.SourceRelativePath)
+                || !sources.Add(mapping.SourceRelativePath)
+                || !targets.Add((mapping.SeasonNumber, mapping.EpisodeNumber))) {
+                return TvUnitsPlan.Block(ImportBlockReason.AmbiguousMultiplePrimaries);
+            }
+
+            var naming = NamingContext(
+                series,
+                mapping.SeasonNumber,
+                mapping.EpisodeNumber,
+                quality,
+                Path.GetExtension(mapping.SourceRelativePath));
+            units.Add(new TvPlanUnit(
+                mapping.SourceRelativePath,
+                mapping.SeasonNumber,
+                mapping.EpisodeNumber,
+                MediaNamingTemplates.RenderTvPath(template, naming)));
+        }
+
+        return units.Count > 0
+            ? TvUnitsPlan.For(units)
+            : TvUnitsPlan.Block(ImportBlockReason.NoSupportedPayload);
+    }
+
+    /// <summary>
     /// Plans the import of a downloaded TV release. <paramref name="series"/> names the series folder;
     /// <paramref name="seasonNumber"/>/<paramref name="episodeNumber"/> are the acquisition's unit,
     /// used when a file names no unit of its own. <paramref name="template"/> defaults to
@@ -429,18 +501,7 @@ public static partial class TvImportPlanBuilder {
 
         var units = new List<TvPlanUnit>(videos.Length);
         foreach (var video in videos.OrderBy(file => file.RelativePath, StringComparer.OrdinalIgnoreCase)) {
-            var unit = TvReleaseTokens.ParseEpisode(Path.GetFileNameWithoutExtension(video.RelativePath));
-            if (unit is null && seasonNumber is { } titleSeason && episodeTitles is { Count: > 0 }) {
-                var titleMatches = episodeTitles
-                    .Where(candidate => ReleaseTitleIdentity.ContainsMeaningfulRun(
-                        Path.GetFileNameWithoutExtension(video.RelativePath), candidate.Title))
-                    .Select(candidate => candidate.Episode)
-                    .Distinct()
-                    .ToArray();
-                if (titleMatches.Length == 1) {
-                    unit = (titleSeason, titleMatches[0]);
-                }
-            }
+            var unit = InferEpisode(video.RelativePath, seasonNumber, episodeTitles ?? []);
 
             // A tokenless file is only placeable when the acquisition itself IS one episode.
             if (unit is null && (videos.Length > 1 || seasonNumber is null || episodeNumber is null)) {

@@ -82,7 +82,7 @@ public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIn
         return await db.Entities.AsNoTracking()
             .Where(episode => episode.ParentEntityId == seasonId && episode.KindCode == episodeCode && episode.SortOrder != null)
             .OrderBy(episode => episode.SortOrder)
-            .Select(episode => new TvEpisodeTitle(episode.SortOrder!.Value, episode.Title))
+            .Select(episode => new TvEpisodeTitle(episode.SortOrder!.Value, episode.Title, episode.Id))
             .ToListAsync(cancellationToken);
     }
 

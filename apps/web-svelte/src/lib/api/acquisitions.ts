@@ -17,6 +17,7 @@ import {
   deleteRemotePathMapping as deleteRemotePathMappingRequest,
   getAcquisition as getAcquisitionRequest,
   getAcquisitionFiles,
+  getAcquisitionManualImportReview,
   getAcquisitionForEntity,
   getAcquisitionTransfer,
   listAcquisitionHistory,
@@ -32,6 +33,7 @@ import {
   reSearchAcquisition as reSearchAcquisitionRequest,
   searchManualReplacement as searchManualReplacementRequest,
   retryAcquisitionImport as retryAcquisitionImportRequest,
+  submitAcquisitionManualImport as submitAcquisitionManualImportRequest,
   retryIndexerNow as retryIndexerNowRequest,
   saveAcquisitionProfile as saveAcquisitionProfileRequest,
   saveDownloadClient,
@@ -54,6 +56,8 @@ import type {
   AcquisitionDetail,
   AcquisitionFilesView,
   AcquisitionHistoryView,
+  AcquisitionManualImportReview,
+  AcquisitionManualImportSelection,
   AcquisitionSummary,
   AcquisitionTransferView,
   BookAcquisitionProfileSaveRequest,
@@ -277,6 +281,22 @@ export async function fetchAcquisitionTransfer(id: string): Promise<AcquisitionT
 
 export async function fetchAcquisitionFiles(id: string): Promise<AcquisitionFilesView> {
   return unwrapGenerated(await getAcquisitionFiles(id), "Failed to load files");
+}
+
+/** Loads the downloaded files, allowed Entity targets, and safe inferred choices for a held import. */
+export async function fetchAcquisitionManualImportReview(id: string): Promise<AcquisitionManualImportReview> {
+  return unwrapGenerated(await getAcquisitionManualImportReview(id), "Failed to load manual import review");
+}
+
+/** Submits explicit file-to-Entity choices through the existing crash-safe importer. */
+export async function submitAcquisitionManualImport(
+  id: string,
+  selections: AcquisitionManualImportSelection[],
+): Promise<AcquisitionDetail> {
+  return unwrapGenerated(
+    await submitAcquisitionManualImportRequest(id, { selections }),
+    "Failed to import mapped files",
+  );
 }
 
 export async function uploadManualTorrent(id: string, file: File): Promise<AcquisitionDetail> {

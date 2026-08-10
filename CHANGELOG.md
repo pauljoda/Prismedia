@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Added
+
+- TV downloads held for manual import now open a per-file review: Prismedia shows the completed payload, prefills unambiguous episode matches, lets each video be assigned to a specific episode or left out, and imports only the reviewed mappings.
+
 ### Removed
 
 - Deprecated kind-specific Entity detail reads have been removed; use `GET /api/entities/{id}` for every Entity kind.

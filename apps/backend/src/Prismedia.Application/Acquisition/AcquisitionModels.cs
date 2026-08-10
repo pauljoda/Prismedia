@@ -693,7 +693,23 @@ public sealed record AcquisitionImportContext(
     /// job payload only; automatic imports never set it.
     /// </summary>
     public bool AllowFormatChange { get; init; }
+
+    /// <summary>
+    /// Exact user-reviewed file-to-Entity choices for a held bundle import. Null means ordinary automatic
+    /// planning; a populated list is authoritative and intentionally leaves every unselected payload file behind.
+    /// </summary>
+    public IReadOnlyList<ManualImportFileMapping>? ManualFileMappings { get; init; }
 }
+
+/// <summary>
+/// Queue-safe structural form of one reviewed file mapping. The target Entity id is retained for audit and
+/// the season/episode coordinates are captured at submission so the import job never guesses from a filename.
+/// </summary>
+public sealed record ManualImportFileMapping(
+    string SourceRelativePath,
+    Guid TargetEntityId,
+    int SeasonNumber,
+    int EpisodeNumber);
 
 /// <summary>
 /// Durable, kind-neutral placement plan for a book, movie, album, or audio-track import. The plan reserves every

@@ -120,6 +120,9 @@ public sealed class AcquisitionImportJobHandler(
             // consent to import an executable payload.
             import = import with { AllowFormatChange = true };
         }
+        if (payload.ManualFileMappings is { Count: > 0 } manualFileMappings) {
+            import = import with { ManualFileMappings = manualFileMappings };
+        }
 
         var payloadFiles = string.IsNullOrWhiteSpace(import.ContentPath)
             ? []

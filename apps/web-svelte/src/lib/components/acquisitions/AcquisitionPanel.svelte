@@ -7,6 +7,7 @@
   import { page } from "$app/state";
   import type { PathnameWithSearchOrHash } from "$app/types";
   import AcquisitionHistoryList from "$lib/components/acquisitions/AcquisitionHistoryList.svelte";
+  import ManualImportReview from "$lib/components/acquisitions/ManualImportReview.svelte";
   import ConfirmDialog from "$lib/components/entities/ConfirmDialog.svelte";
   import PieceStateBar from "$lib/components/acquisitions/PieceStateBar.svelte";
   import ReleaseTable from "$lib/components/acquisitions/ReleaseTable.svelte";
@@ -18,6 +19,8 @@
     AcquisitionDetail,
     AcquisitionFilesView,
     AcquisitionHistoryView,
+    AcquisitionManualImportReview,
+    AcquisitionManualImportSelection,
     AcquisitionTransferView,
     ReleaseCandidateView,
   } from "$lib/api/generated/model";
@@ -30,8 +33,10 @@
     fetchAcquisition,
     fetchAcquisitionFiles,
     fetchAcquisitionHistory,
+    fetchAcquisitionManualImportReview,
     fetchAcquisitionTransfer,
     queueAcquisitionCandidate,
+    submitAcquisitionManualImport,
     uploadManualTorrent,
   } from "$lib/api/acquisitions";
   import {
@@ -74,6 +79,8 @@
   let transfer = $state<AcquisitionTransferView | null>(null);
   let files = $state<AcquisitionFilesView | null>(null);
   let history = $state<AcquisitionHistoryView[]>([]);
+  let manualImportReview = $state<AcquisitionManualImportReview | null>(null);
+  let manualAssignments = $state<Record<string, string>>({});
   let error = $state<string | null>(null);
   let busy = $state(false);
   let pollTimer: ReturnType<typeof setInterval> | null = null;
@@ -92,7 +99,6 @@
   const hasResumableImport = $derived(detail?.summary.hasResumableImport === true);
   const canRetryImport = $derived(
     status === ACQUISITION_STATUS.downloaded ||
-      status === ACQUISITION_STATUS.manualImportRequired ||
       (status === ACQUISITION_STATUS.failed && hasResumableImport),
   );
   const canStartOver = $derived(hasResumableImport && status !== ACQUISITION_STATUS.stopping);
@@ -196,6 +202,21 @@
       if (isDownloading || isDone) {
         files = await fetchAcquisitionFiles(acquisitionId);
       }
+      if (status === ACQUISITION_STATUS.manualImportRequired) {
+        const nextReview = await fetchAcquisitionManualImportReview(acquisitionId);
+        manualImportReview = nextReview;
+        const allowedTargets = new Set(nextReview.targets.map((target) => target.entityId));
+        manualAssignments = Object.fromEntries(nextReview.files.map((file) => {
+          const current = manualAssignments[file.sourceRelativePath];
+          const target = current && allowedTargets.has(current)
+            ? current
+            : file.suggestedTargetEntityId ?? "";
+          return [file.sourceRelativePath, target];
+        }));
+      } else {
+        manualImportReview = null;
+        manualAssignments = {};
+      }
       pollFailures = 0;
       if (!background) error = null;
     } catch (err) {
@@ -285,6 +306,17 @@
           bridgePolls = 8;
         },
       },
+    );
+  }
+
+  async function importMappedFiles() {
+    const selections: AcquisitionManualImportSelection[] = Object.entries(manualAssignments)
+      .filter((entry): entry is [string, string] => Boolean(entry[1]))
+      .map(([sourceRelativePath, targetEntityId]) => ({ sourceRelativePath, targetEntityId }));
+    await runDetailAction(
+      () => submitAcquisitionManualImport(acquisitionId, selections),
+      "Failed to import mapped files",
+      { afterSuccess: () => { bridgePolls = 8; } },
     );
   }
 
@@ -408,15 +440,13 @@
             variant="primary"
             class="gap-1.5"
             disabled={busy}
-            onclick={() => void retryImport(status === ACQUISITION_STATUS.manualImportRequired)}
-            title={status === ACQUISITION_STATUS.manualImportRequired
-              ? "Import the downloaded files now. A genuine upgrade may replace the existing file even when the format differs; the previous file is kept recoverable."
-              : status === ACQUISITION_STATUS.downloaded
+            onclick={() => void retryImport(false)}
+            title={status === ACQUISITION_STATUS.downloaded
                 ? "Queue import again without removing the completed download."
                 : "Resume the exact durable import plan from its last completed file."}
           >
             <CloudDownload class="h-3.5 w-3.5" />
-            {status === ACQUISITION_STATUS.manualImportRequired ? "Import anyway" : "Retry import"}
+            Retry import
           </Button>
         {/if}
         {#if canStartOver}
@@ -489,6 +519,17 @@
         title="Waiting for download client"
         description={detail?.summary.statusMessage ?? "Prismedia will resume automatically when the download client is healthy."}
         busy
+      />
+
+    {:else if status === ACQUISITION_STATUS.manualImportRequired}
+      <ManualImportReview
+        review={manualImportReview}
+        assignments={manualAssignments}
+        {busy}
+        onAssignmentChange={(sourceRelativePath, targetEntityId) => {
+          manualAssignments[sourceRelativePath] = targetEntityId;
+        }}
+        onImport={() => void importMappedFiles()}
       />
 
     {:else if isDownloading}

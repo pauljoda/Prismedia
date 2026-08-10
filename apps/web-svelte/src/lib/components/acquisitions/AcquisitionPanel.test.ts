@@ -13,7 +13,9 @@ const mocks = vi.hoisted(() => ({
   fetchAcquisition: vi.fn(),
   fetchAcquisitionFiles: vi.fn(),
   fetchAcquisitionHistory: vi.fn(),
+  fetchAcquisitionManualImportReview: vi.fn(),
   retryAcquisitionImport: vi.fn(),
+  submitAcquisitionManualImport: vi.fn(),
   reSearchAcquisition: vi.fn(),
   queueAcquisitionCandidate: vi.fn(),
   deleteAcquisition: vi.fn(),
@@ -30,10 +32,12 @@ vi.mock("$lib/api/acquisitions", () => ({
   fetchAcquisition: mocks.fetchAcquisition,
   fetchAcquisitionFiles: mocks.fetchAcquisitionFiles,
   fetchAcquisitionHistory: mocks.fetchAcquisitionHistory,
+  fetchAcquisitionManualImportReview: mocks.fetchAcquisitionManualImportReview,
   fetchAcquisitionTransfer: vi.fn(),
   queueAcquisitionCandidate: mocks.queueAcquisitionCandidate,
   reSearchAcquisition: mocks.reSearchAcquisition,
   retryAcquisitionImport: mocks.retryAcquisitionImport,
+  submitAcquisitionManualImport: mocks.submitAcquisitionManualImport,
   uploadManualTorrent: vi.fn(),
 }));
 
@@ -49,6 +53,12 @@ describe("AcquisitionPanel", () => {
     poll = null;
     mocks.fetchAcquisitionFiles.mockResolvedValue({ imported: false, files: [] });
     mocks.fetchAcquisitionHistory.mockResolvedValue([]);
+    mocks.fetchAcquisitionManualImportReview.mockResolvedValue({
+      available: false,
+      files: [],
+      targets: [],
+      message: "File mapping is unavailable.",
+    });
     const originalSetInterval = globalThis.setInterval;
     vi.spyOn(globalThis, "setInterval").mockImplementation((handler, timeout) => {
       if (timeout === 3000) {
@@ -161,6 +171,44 @@ describe("AcquisitionPanel", () => {
     await fireEvent.click(retry);
 
     expect(mocks.retryAcquisitionImport).toHaveBeenCalledWith("acquisition-1", false);
+  });
+
+  it("reviews every held file and submits only explicit per-episode mappings", async () => {
+    const held = acquisition(ACQUISITION_STATUS.manualImportRequired);
+    held.summary.statusMessage = "The download's files carry no recognizable episode numbering; import manually.";
+    mocks.fetchAcquisition.mockResolvedValue(held);
+    mocks.fetchAcquisitionManualImportReview.mockResolvedValue({
+      available: true,
+      message: "Review every downloaded file and choose the episode it contains. Leave extras unassigned.",
+      files: [
+        { sourceRelativePath: "pack/video-a.mp4", name: "video-a.mp4", sizeBytes: 1_000, canMap: true, suggestedTargetEntityId: "episode-1" },
+        { sourceRelativePath: "pack/video-b.mp4", name: "video-b.mp4", sizeBytes: 2_000, canMap: true, suggestedTargetEntityId: null },
+        { sourceRelativePath: "pack/poster.jpg", name: "poster.jpg", sizeBytes: 300, canMap: false, suggestedTargetEntityId: null },
+      ],
+      targets: [
+        { entityId: "episode-1", title: "First Day", position: 1 },
+        { entityId: "episode-2", title: "Second Day", position: 2 },
+      ],
+    });
+    mocks.submitAcquisitionManualImport.mockResolvedValue(acquisition(ACQUISITION_STATUS.importing));
+
+    const view = render(AcquisitionPanel, { acquisitionId: "acquisition-1", detail: held });
+
+    expect(await view.findByText("Review downloaded files")).toBeInTheDocument();
+    expect(await view.findByText("pack/video-a.mp4")).toBeInTheDocument();
+    expect(view.getByText("pack/video-b.mp4")).toBeInTheDocument();
+    expect(view.getByText("pack/poster.jpg")).toBeInTheDocument();
+    expect(view.getByText("Not importable")).toBeInTheDocument();
+    expect(view.queryByRole("button", { name: "Import anyway" })).toBeNull();
+
+    await fireEvent.click(view.getByRole("button", { name: "Entity mapping for video-b.mp4" }));
+    await fireEvent.click(await view.findByRole("option", { name: "Episode 02 · Second Day" }));
+    await fireEvent.click(view.getByRole("button", { name: "Import mapped files" }));
+
+    expect(mocks.submitAcquisitionManualImport).toHaveBeenCalledWith("acquisition-1", [
+      { sourceRelativePath: "pack/video-a.mp4", targetEntityId: "episode-1" },
+      { sourceRelativePath: "pack/video-b.mp4", targetEntityId: "episode-2" },
+    ]);
   });
 
   it("reports Imported when the bound detail is advanced by its owner", async () => {

@@ -10,25 +10,29 @@ namespace Prismedia.Application.Acquisition;
 /// wrong-content hold (the user reviewed the payload) but never the dangerous-file hold.
 /// <see cref="ManualReview"/> prevents a user-triggered search from auto-queueing a result, while
 /// <see cref="CustomQuery"/> replaces the generated query ladder with the exact reviewed term.
+/// <see cref="ManualFileMappings"/> carries exact reviewed file-to-Entity choices into the import worker.
 /// </summary>
 public sealed record AcquisitionJobPayload(
     Guid AcquisitionId,
     bool AllowFormatChange = false,
     bool ManualRetry = false,
     bool ManualReview = false,
-    string? CustomQuery = null) {
+    string? CustomQuery = null,
+    IReadOnlyList<ManualImportFileMapping>? ManualFileMappings = null) {
     public static string Serialize(
         Guid acquisitionId,
         bool allowFormatChange = false,
         bool manualRetry = false,
         bool manualReview = false,
-        string? customQuery = null) =>
+        string? customQuery = null,
+        IReadOnlyList<ManualImportFileMapping>? manualFileMappings = null) =>
         JsonSerializer.Serialize(new AcquisitionJobPayload(
             acquisitionId,
             allowFormatChange,
             manualRetry,
             manualReview,
-            string.IsNullOrWhiteSpace(customQuery) ? null : customQuery.Trim()));
+            string.IsNullOrWhiteSpace(customQuery) ? null : customQuery.Trim(),
+            manualFileMappings));
 
     public static AcquisitionJobPayload Parse(string payloadJson) =>
         JsonSerializer.Deserialize<AcquisitionJobPayload>(payloadJson)
