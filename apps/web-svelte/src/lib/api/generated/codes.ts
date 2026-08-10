@@ -121,6 +121,29 @@ export const ACQUISITION_TEARDOWN_INTENT = {
 
 export type AcquisitionTeardownIntentCode = (typeof ACQUISITION_TEARDOWN_INTENT)[keyof typeof ACQUISITION_TEARDOWN_INTENT];
 
+// source: enum AudioPlaybackDiagnosticEvent
+export const AUDIO_PLAYBACK_DIAGNOSTIC_EVENT = {
+  playing: "playing",
+  pause: "pause",
+  waiting: "waiting",
+  stalled: "stalled",
+  error: "error",
+} as const;
+
+export type AudioPlaybackDiagnosticEventCode = (typeof AUDIO_PLAYBACK_DIAGNOSTIC_EVENT)[keyof typeof AUDIO_PLAYBACK_DIAGNOSTIC_EVENT];
+
+// source: enum AudioPlaybackPauseSource
+export const AUDIO_PLAYBACK_PAUSE_SOURCE = {
+  userControl: "user-control",
+  mediaSession: "media-session",
+  tabDisplaced: "tab-displaced",
+  dismiss: "dismiss",
+  trackChange: "track-change",
+  browser: "browser",
+} as const;
+
+export type AudioPlaybackPauseSourceCode = (typeof AUDIO_PLAYBACK_PAUSE_SOURCE)[keyof typeof AUDIO_PLAYBACK_PAUSE_SOURCE];
+
 // source: enum AudioQuality
 export const AUDIO_QUALITY = {
   unknown: "unknown",

@@ -22,6 +22,7 @@ import type {
   ApiProblem,
   ApplyIdentifyProposalRequest,
   ApplyIdentifyQueueItemRequest,
+  AudioPlaybackDiagnosticRequest,
   BookAcquisitionProfileSaveRequest,
   BookAcquisitionProfileView,
   BookContentsResponse,
@@ -6239,6 +6240,43 @@ export const updateMusicPlayerProgress = async (updateMusicPlayerProgressRequest
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       updateMusicPlayerProgressRequest,)
+  }
+);}
+
+
+
+export type reportAudioPlaybackDiagnosticResponse204 = {
+  data: void
+  status: 204
+}
+
+export type reportAudioPlaybackDiagnosticResponseSuccess = (reportAudioPlaybackDiagnosticResponse204) & {
+  headers: Headers;
+};
+;
+
+export type reportAudioPlaybackDiagnosticResponse = (reportAudioPlaybackDiagnosticResponseSuccess)
+
+export const getReportAudioPlaybackDiagnosticUrl = () => {
+
+
+
+
+  return `/api/music-player/diagnostics`
+}
+
+/**
+ * @summary Reports a browser audio lifecycle transition for intermittent-stall diagnostics.
+ */
+export const reportAudioPlaybackDiagnostic = async (audioPlaybackDiagnosticRequest: AudioPlaybackDiagnosticRequest, options?: RequestInit): Promise<reportAudioPlaybackDiagnosticResponse> => {
+
+  return orvalFetch<reportAudioPlaybackDiagnosticResponse>(getReportAudioPlaybackDiagnosticUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      audioPlaybackDiagnosticRequest,)
   }
 );}
 

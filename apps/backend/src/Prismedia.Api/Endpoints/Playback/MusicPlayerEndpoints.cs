@@ -1,5 +1,6 @@
 using Prismedia.Application.Playback;
 using Prismedia.Contracts.Playback;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Api.Endpoints;
 
@@ -59,6 +60,33 @@ public static class MusicPlayerEndpoints {
         })
             .WithName("ClearMusicPlayerState")
             .WithSummary("Clears the browser-scoped music player queue state.")
+            .Produces(StatusCodes.Status204NoContent);
+
+        group.MapPost("/diagnostics", (
+            AudioPlaybackDiagnosticRequest request,
+            ILoggerFactory loggerFactory) => {
+            var logger = loggerFactory.CreateLogger("Prismedia.AudioPlaybackDiagnostics");
+            logger.LogInformation(
+                "Audio playback {Event} track={TrackId} position={PositionSeconds:F3}s duration={DurationSeconds} bufferedAhead={BufferedAheadSeconds:F3}s readyState={ReadyState} networkState={NetworkState} paused={Paused} ended={Ended} playIntent={PlayIntent} visible={DocumentVisible} focused={DocumentHasFocus} pauseSource={PauseSource} interruptionMs={InterruptionMilliseconds} mediaError={MediaErrorCode}",
+                request.Event.ToCode(),
+                request.TrackId,
+                request.PositionSeconds,
+                request.DurationSeconds,
+                request.BufferedAheadSeconds,
+                request.ReadyState,
+                request.NetworkState,
+                request.Paused,
+                request.Ended,
+                request.PlayIntent,
+                request.DocumentVisible,
+                request.DocumentHasFocus,
+                request.PauseSource?.ToCode(),
+                request.InterruptionMilliseconds,
+                request.MediaErrorCode);
+            return Results.NoContent();
+        })
+            .WithName("ReportAudioPlaybackDiagnostic")
+            .WithSummary("Reports a browser audio lifecycle transition for intermittent-stall diagnostics.")
             .Produces(StatusCodes.Status204NoContent);
 
         return group;

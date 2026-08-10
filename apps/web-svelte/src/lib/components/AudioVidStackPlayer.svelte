@@ -21,6 +21,7 @@
   import { cn } from "@prismedia/ui-svelte";
   import { formatDuration } from "$lib/utils/format";
   import { recordEntityConsumptionEvent, updateEntityProgress } from "$lib/api/consumption";
+  import { sendAudioPlaybackDiagnostic } from "$lib/api/audio-playback-diagnostics";
   import { apiAssetUrl, assetUrl } from "$lib/api/orval-fetch";
   import { paletteFromImage, type ArtworkPalette } from "$lib/entities/artwork-palette";
   import { resolveEntityHref } from "$lib/entities/entity-codes";
@@ -36,8 +37,18 @@
     useAudioPlayback,
   } from "$lib/stores/audio-playback.svelte";
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
-  import { ENTITY_KIND, MUSIC_PLAYER_MINI_SIDE, MUSIC_PLAYER_REPEAT_MODE, CONSUMPTION_EVENT_KIND } from "$lib/api/generated/codes";
+  import {
+    AUDIO_PLAYBACK_DIAGNOSTIC_EVENT,
+    AUDIO_PLAYBACK_PAUSE_SOURCE,
+    CONSUMPTION_EVENT_KIND,
+    ENTITY_KIND,
+    MUSIC_PLAYER_MINI_SIDE,
+    MUSIC_PLAYER_REPEAT_MODE,
+    type AudioPlaybackDiagnosticEventCode,
+    type AudioPlaybackPauseSourceCode,
+  } from "$lib/api/generated/codes";
   import { createAudioTabCoordinator, type AudioTabCoordinator } from "$lib/player/audio-tab-coordinator";
+  import { AudioPlaybackDiagnosticReporter } from "$lib/player/audio-playback-diagnostics";
   import {
     MusicConsumptionReporter,
     recordAudioConsumptionAccess,
@@ -81,6 +92,9 @@
     positionSeconds: playback.currentTime,
     durationSeconds: playback.duration || activeTrack?.duration || null,
   }));
+  const playbackDiagnostics = new AudioPlaybackDiagnosticReporter((diagnostic) => {
+    void sendAudioPlaybackDiagnostic(diagnostic).catch(() => {});
+  });
 
   const activeTrack = $derived(playback.currentTrack);
   const ctx = $derived(playback.context);
@@ -157,7 +171,7 @@
 
   function dismiss() {
     saveAudiobookProgress({ completed: false });
-    if (audioEl) audioEl.pause();
+    pauseAudio(AUDIO_PLAYBACK_PAUSE_SOURCE.dismiss);
     tabCoordinator?.releasePlayback();
     playback.clear();
     window.dispatchEvent(new Event(AUDIO_PLAYBACK_SAVE_EVENT));
@@ -268,6 +282,9 @@
     if (!nextSrc) return false;
 
     musicConsumption.close();
+    if (!audioEl.paused) {
+      playbackDiagnostics.markPauseSource(AUDIO_PLAYBACK_PAUSE_SOURCE.trackChange);
+    }
     const resumeTime = Math.max(0, playback.currentTime);
     currentSrcTrackId = track.id;
     currentTrackRequestedAtMs = Date.now();
@@ -352,10 +369,18 @@
   function togglePlay() {
     if (!audioEl || !activeTrack) return;
     if (audioEl.paused) requestPlay();
-    else {
-      playback.playIntent = false;
-      audioEl.pause();
-    }
+    else pauseAudio(AUDIO_PLAYBACK_PAUSE_SOURCE.userControl);
+  }
+
+  function pauseAudio(
+    source: AudioPlaybackPauseSourceCode,
+    options: { clearPlayIntent?: boolean } = {},
+  ) {
+    const audio = audioEl;
+    if (options.clearPlayIntent ?? true) playback.playIntent = false;
+    if (!audio || audio.paused) return;
+    playbackDiagnostics.markPauseSource(source);
+    audio.pause();
   }
 
   function recordCurrentTrackSkip(track: AudioTrackListItemDto | null = activeTrack) {
@@ -628,6 +653,39 @@
     });
   }
 
+  function bufferedAheadSeconds(audio: HTMLAudioElement): number {
+    for (let index = 0; index < audio.buffered.length; index += 1) {
+      const start = audio.buffered.start(index);
+      const end = audio.buffered.end(index);
+      if (audio.currentTime >= start && audio.currentTime <= end) {
+        return Math.max(0, end - audio.currentTime);
+      }
+    }
+    return 0;
+  }
+
+  function reportAudioDiagnostic(
+    event: AudioPlaybackDiagnosticEventCode,
+    audio: HTMLAudioElement,
+  ) {
+    const trackId = currentSrcTrackId;
+    if (!trackId) return;
+    playbackDiagnostics.report(event, {
+      trackId,
+      positionSeconds: audio.currentTime,
+      durationSeconds: Number.isFinite(audio.duration) ? audio.duration : null,
+      bufferedAheadSeconds: bufferedAheadSeconds(audio),
+      readyState: audio.readyState,
+      networkState: audio.networkState,
+      paused: audio.paused,
+      ended: audio.ended,
+      playIntent: playback.playIntent,
+      documentVisible: document.visibilityState === "visible",
+      documentHasFocus: document.hasFocus(),
+      mediaErrorCode: audio.error?.code ?? null,
+    });
+  }
+
   onMount(() => {
     const audio = audioEl;
     if (!audio) return;
@@ -655,7 +713,17 @@
       if (isAudiobook) startAudiobookConsumption();
       else musicConsumption.start();
     };
+    const handlePlaying = () => {
+      reportAudioDiagnostic(AUDIO_PLAYBACK_DIAGNOSTIC_EVENT.playing, audio);
+    };
+    const handleWaiting = () => {
+      reportAudioDiagnostic(AUDIO_PLAYBACK_DIAGNOSTIC_EVENT.waiting, audio);
+    };
+    const handleStalled = () => {
+      reportAudioDiagnostic(AUDIO_PLAYBACK_DIAGNOSTIC_EVENT.stalled, audio);
+    };
     const handlePause = () => {
+      reportAudioDiagnostic(AUDIO_PLAYBACK_DIAGNOSTIC_EVENT.pause, audio);
       saveAudiobookProgress({
         completed: audio.ended && isFinalAudiobookPart(),
         stopActivity: true,
@@ -676,6 +744,7 @@
       window.dispatchEvent(new Event(AUDIO_PLAYBACK_SAVE_EVENT));
     };
     const handleError = () => {
+      reportAudioDiagnostic(AUDIO_PLAYBACK_DIAGNOSTIC_EVENT.error, audio);
       playback.playIntent = false;
       playback.playing = false;
       console.error("Audio element error:", audio.error);
@@ -686,8 +755,7 @@
       requestPlay(currentSrcTrackId, { stealActiveTab: false });
     };
     const detachDisplaced = coordinator.onDisplaced(() => {
-      if (!audio.paused) audio.pause();
-      playback.playIntent = false;
+      pauseAudio(AUDIO_PLAYBACK_PAUSE_SOURCE.tabDisplaced);
       playback.playing = false;
     });
 
@@ -695,6 +763,9 @@
     audio.addEventListener("loadedmetadata", handleDurationChange);
     audio.addEventListener("durationchange", handleDurationChange);
     audio.addEventListener("play", handlePlay);
+    audio.addEventListener("playing", handlePlaying);
+    audio.addEventListener("waiting", handleWaiting);
+    audio.addEventListener("stalled", handleStalled);
     audio.addEventListener("pause", handlePause);
     audio.addEventListener("ended", handleEnded);
     audio.addEventListener("error", handleError);
@@ -715,7 +786,7 @@
     // lock-screen scrubber without hiding next/previous.
     const detachMediaSession = setMediaSessionHandlers({
       play: requestPlay,
-      pause: () => audio.pause(),
+      pause: () => pauseAudio(AUDIO_PLAYBACK_PAUSE_SOURCE.mediaSession),
       previoustrack: handlePrev,
       nexttrack: handleNext,
       seekto: handleSeek,
@@ -727,6 +798,9 @@
       audio.removeEventListener("loadedmetadata", handleDurationChange);
       audio.removeEventListener("durationchange", handleDurationChange);
       audio.removeEventListener("play", handlePlay);
+      audio.removeEventListener("playing", handlePlaying);
+      audio.removeEventListener("waiting", handleWaiting);
+      audio.removeEventListener("stalled", handleStalled);
       audio.removeEventListener("pause", handlePause);
       audio.removeEventListener("ended", handleEnded);
       audio.removeEventListener("error", handleError);

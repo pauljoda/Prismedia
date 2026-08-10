@@ -86,6 +86,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Release operations are now ready for channel publishing: the root package version is the source of truth, Docker builds validate the release metadata, pushes to `main` publish only the dev image, and alpha/beta/release images are published manually.
 
 ### Changed
+- Web music playback now records browser buffer stalls, media errors, recovery time, buffer depth, and the owning source of every intentional pause in server logs, without adding noisy queue-state writes.
 - First-party clients now use the centralized `/api/consumption/statistics` and `/api/entities/{id}/consumption` contracts. Entity browsing uses canonical `last-active`, `date-added`, `sortDirection`, and `engaged` values instead of media-specific playback aliases.
 - Series, seasons, albums, books, and other structural works now roll up their leaf activity. Resume follows the most recently active episode, track, or chapter—even when returning to an earlier item—while the separate watched/read/listened percentage preserves overall coverage.
 - Movies and TV episodes now own their playable files directly. Upgrades preserve unambiguous legacy Movie and episode identities, references, folder provenance, subtitles, and custom artwork, while stopping safely for ambiguous or active data.
