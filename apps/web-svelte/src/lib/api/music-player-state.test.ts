@@ -1,11 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const getMusicPlayerState = vi.hoisted(() => vi.fn());
+const updateMusicPlayerProgress = vi.hoisted(() => vi.fn());
 const updateMusicPlayerState = vi.hoisted(() => vi.fn());
 const clearMusicPlayerState = vi.hoisted(() => vi.fn());
 
 vi.mock("$lib/api/generated/prismedia", () => ({
   getMusicPlayerState,
+  updateMusicPlayerProgress,
   updateMusicPlayerState,
   clearMusicPlayerState,
 }));
@@ -18,12 +20,13 @@ vi.mock("$lib/entities/audio-track-items", () => ({
   }),
 }));
 
-import { fetchMusicPlayerState, saveMusicPlayerState } from "./music-player-state";
+import { fetchMusicPlayerState, saveMusicPlayerProgress, saveMusicPlayerState } from "./music-player-state";
 import { MUSIC_PLAYER_MINI_SIDE, MUSIC_PLAYER_REPEAT_MODE } from "$lib/api/generated/codes";
 
 describe("music player state API", () => {
   beforeEach(() => {
     getMusicPlayerState.mockReset();
+    updateMusicPlayerProgress.mockReset().mockResolvedValue({ data: null });
     updateMusicPlayerState.mockReset().mockResolvedValue({ data: null });
     clearMusicPlayerState.mockReset().mockResolvedValue({ data: null });
   });
@@ -70,6 +73,31 @@ describe("music player state API", () => {
 
     expect(updateMusicPlayerState).toHaveBeenCalledWith(expect.objectContaining({ currentTime: 17 }));
     expect(clearMusicPlayerState).not.toHaveBeenCalled();
+  });
+
+  it("sends only current-track progress for a periodic update", async () => {
+    await saveMusicPlayerProgress({
+      queueTrackIds: ["track-1", "track-2"],
+      order: [1, 0],
+      position: 0,
+      currentTime: 17,
+      playing: true,
+      shuffle: true,
+      repeat: MUSIC_PLAYER_REPEAT_MODE.all,
+      volume: 0.4,
+      muted: false,
+      collapsed: false,
+      collapsedSide: MUSIC_PLAYER_MINI_SIDE.left,
+      context: { albumTitle: "Large queue context" },
+    });
+
+    expect(updateMusicPlayerProgress).toHaveBeenCalledWith({
+      currentTrackId: "track-2",
+      position: 0,
+      currentTime: 17,
+      playing: true,
+    });
+    expect(updateMusicPlayerState).not.toHaveBeenCalled();
   });
 
   it("round-trips the logical playback owner for an audiobook queue", async () => {

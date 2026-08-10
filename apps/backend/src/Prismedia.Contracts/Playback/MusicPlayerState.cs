@@ -110,3 +110,20 @@ public sealed record UpdateMusicPlayerStateRequest(
     bool Collapsed,
     MusicPlayerMiniSide CollapsedSide,
     MusicPlayerContext? Context);
+
+/// <summary>
+/// Request body used to advance transport progress without replacing or returning the
+/// persisted browser-scoped music queue.
+/// </summary>
+/// <param name="CurrentTrackId">
+/// Track expected at <paramref name="Position"/>. Stale progress is ignored when it no
+/// longer matches the persisted queue.
+/// </param>
+/// <param name="Position">Index into the persisted play order for the current track.</param>
+/// <param name="CurrentTime">Current playback time in seconds for the current track.</param>
+/// <param name="Playing">Whether the client intends playback to be running.</param>
+public sealed record UpdateMusicPlayerProgressRequest(
+    Guid CurrentTrackId,
+    int Position,
+    double CurrentTime,
+    bool Playing);

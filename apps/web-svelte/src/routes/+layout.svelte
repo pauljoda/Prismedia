@@ -24,6 +24,7 @@
   import { AUDIO_PLAYBACK_SAVE_EVENT, provideAudioPlayback } from "$lib/stores/audio-playback.svelte";
   import {
     fetchMusicPlayerState,
+    saveMusicPlayerProgress,
     saveMusicPlayerState,
     type PersistMusicPlayerState,
   } from "$lib/api/music-player-state";
@@ -86,6 +87,7 @@
   let musicPlayerPersistenceReady = $state(false);
   let lastMusicPlayerSnapshot = "";
   let lastMusicPlayerTimeSnapshot = "";
+  let musicPlayerPersistence = Promise.resolve();
 
   function musicPlayerState(): PersistMusicPlayerState {
     return {
@@ -108,8 +110,6 @@
     return JSON.stringify({
       queueTrackIds: state.queueTrackIds,
       order: state.order,
-      position: state.position,
-      playing: state.playing,
       shuffle: state.shuffle,
       repeat: state.repeat,
       volume: state.volume,
@@ -125,8 +125,9 @@
   }
 
   function musicPlayerTimeSnapshotFromState(state: PersistMusicPlayerState): string {
+    const queueIndex = state.order[state.position];
     return JSON.stringify({
-      queueTrackIds: state.queueTrackIds,
+      currentTrackId: queueIndex === undefined ? null : state.queueTrackIds[queueIndex] ?? null,
       position: state.position,
       currentTime: Math.floor(state.currentTime),
       playing: state.playing,
@@ -138,7 +139,31 @@
     const state = musicPlayerState();
     lastMusicPlayerSnapshot = musicPlayerSnapshotFromState(state);
     lastMusicPlayerTimeSnapshot = musicPlayerTimeSnapshotFromState(state);
-    void saveMusicPlayerState(state).catch(() => {});
+    enqueueMusicPlayerPersistence(() => saveMusicPlayerState(state));
+  }
+
+  function persistMusicPlayerProgress() {
+    if (!musicPlayerPersistenceReady || playback.queue.length === 0) return;
+    const state = musicPlayerState();
+    lastMusicPlayerTimeSnapshot = musicPlayerTimeSnapshotFromState(state);
+    enqueueMusicPlayerPersistence(() => saveMusicPlayerProgress(state));
+  }
+
+  function enqueueMusicPlayerPersistence(operation: () => Promise<void>) {
+    musicPlayerPersistence = musicPlayerPersistence
+      .catch(() => undefined)
+      .then(operation)
+      .catch(() => undefined);
+  }
+
+  function persistMusicPlayerEvent() {
+    if (!musicPlayerPersistenceReady) return;
+    const state = musicPlayerState();
+    if (musicPlayerSnapshotFromState(state) !== lastMusicPlayerSnapshot) {
+      persistMusicPlayerState();
+      return;
+    }
+    persistMusicPlayerProgress();
   }
 
   function persistMusicPlayerTimeIfChanged() {
@@ -146,7 +171,7 @@
     const state = musicPlayerState();
     const snapshot = musicPlayerTimeSnapshotFromState(state);
     if (snapshot === lastMusicPlayerTimeSnapshot) return;
-    persistMusicPlayerState();
+    persistMusicPlayerProgress();
   }
 
   function scrollMainToTop() {
@@ -163,8 +188,8 @@
 
   onMount(() => {
     window.addEventListener(MAIN_SCROLL_TOP_EVENT, scrollMainToTop);
-    window.addEventListener(AUDIO_PLAYBACK_SAVE_EVENT, persistMusicPlayerState);
-    window.addEventListener("pagehide", persistMusicPlayerState);
+    window.addEventListener(AUDIO_PLAYBACK_SAVE_EVENT, persistMusicPlayerEvent);
+    window.addEventListener("pagehide", persistMusicPlayerEvent);
     const timePersistInterval = window.setInterval(persistMusicPlayerTimeIfChanged, 5000);
     const controller = new AbortController();
     // Music-player persistence needs a session; pre-login boots (login/setup) skip it.
@@ -183,8 +208,8 @@
     return () => {
       controller.abort();
       window.removeEventListener(MAIN_SCROLL_TOP_EVENT, scrollMainToTop);
-      window.removeEventListener(AUDIO_PLAYBACK_SAVE_EVENT, persistMusicPlayerState);
-      window.removeEventListener("pagehide", persistMusicPlayerState);
+      window.removeEventListener(AUDIO_PLAYBACK_SAVE_EVENT, persistMusicPlayerEvent);
+      window.removeEventListener("pagehide", persistMusicPlayerEvent);
       window.clearInterval(timePersistInterval);
     };
   });

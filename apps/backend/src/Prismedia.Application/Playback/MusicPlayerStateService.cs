@@ -64,7 +64,7 @@ public sealed class MusicPlayerStateService {
     /// Replaces the browser-scoped player state. Empty queues clear only the playback
     /// queue state so browser audio-output preferences survive closing the player.
     /// </summary>
-    public async Task<MusicPlayerStateResponse> SaveAsync(
+    public async Task SaveAsync(
         Guid browserSessionId,
         UpdateMusicPlayerStateRequest request,
         CancellationToken cancellationToken) {
@@ -95,8 +95,48 @@ public sealed class MusicPlayerStateService {
             deletes,
             _timeProvider.GetUtcNow(),
             cancellationToken);
+    }
 
-        return playback is null ? Empty(output) : await HydrateAsync(playback, output, cancellationToken);
+    /// <summary>
+    /// Advances only the current transport position for an existing persisted queue. The
+    /// supplied track identity prevents a delayed browser heartbeat from moving a newer queue.
+    /// </summary>
+    /// <returns>True when the stored queue still matched and its progress was updated.</returns>
+    public async Task<bool> UpdateProgressAsync(
+        Guid browserSessionId,
+        UpdateMusicPlayerProgressRequest request,
+        CancellationToken cancellationToken) {
+        var settings = await _sessions.LoadSettingsAsync(
+            browserSessionId,
+            [BrowserSessionConstants.AudioPlaybackStateSettingKey],
+            cancellationToken);
+        if (!settings.TryGetValue(BrowserSessionConstants.AudioPlaybackStateSettingKey, out var rawJson) ||
+            string.IsNullOrWhiteSpace(rawJson)) {
+            return false;
+        }
+
+        var stored = DeserializeOrNull<StoredMusicPlayerPlaybackState>(
+            rawJson,
+            "Stored music player playback state is invalid JSON and progress will be ignored.");
+        if (stored is null || !ProgressMatchesStoredQueue(stored, request)) {
+            return false;
+        }
+
+        var updated = stored with {
+            Position = request.Position,
+            CurrentTime = Math.Max(0, FiniteOrDefault(request.CurrentTime, 0)),
+            Playing = request.Playing
+        };
+        await _sessions.ReplaceSettingsAsync(
+            browserSessionId,
+            new Dictionary<string, string>(StringComparer.Ordinal) {
+                [BrowserSessionConstants.AudioPlaybackStateSettingKey] =
+                    JsonSerializer.Serialize(updated, SerializerOptions)
+            },
+            [],
+            _timeProvider.GetUtcNow(),
+            cancellationToken);
+        return true;
     }
 
     /// <summary>
@@ -256,6 +296,21 @@ public sealed class MusicPlayerStateService {
             ?.Duration
             ?.TotalSeconds;
         return duration is > 0 ? Math.Min(currentTime, duration.Value) : currentTime;
+    }
+
+    private static bool ProgressMatchesStoredQueue(
+        StoredMusicPlayerPlaybackState stored,
+        UpdateMusicPlayerProgressRequest request) {
+        if (request.CurrentTrackId == Guid.Empty ||
+            request.Position < 0 ||
+            request.Position >= stored.Order.Count) {
+            return false;
+        }
+
+        var queueIndex = stored.Order[request.Position];
+        return queueIndex >= 0 &&
+            queueIndex < stored.QueueTrackIds.Count &&
+            stored.QueueTrackIds[queueIndex] == request.CurrentTrackId;
     }
 
     private static double FiniteOrDefault(double value, double fallback) =>

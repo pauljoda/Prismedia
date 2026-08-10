@@ -170,6 +170,62 @@ public sealed class MusicPlayerStateServiceTests {
         Assert.Equal(4000, mapping.EndIndex);
     }
 
+    [Fact]
+    public async Task SaveAndProgressUpdateDoNotHydrateQueue() {
+        var browserSessionId = Guid.NewGuid();
+        var track1 = Guid.NewGuid();
+        var track2 = Guid.NewGuid();
+        var track3 = Guid.NewGuid();
+        var settings = new InMemoryBrowserSessionPersistence();
+        var entities = new FakeEntityReadService(track1, track2, track3);
+        var service = new MusicPlayerStateService(settings, entities);
+        var state = Request(track1, 1) with {
+            QueueTrackIds = [track1, track2, track3],
+            Order = [2, 0, 1],
+            Position = 0,
+            CurrentTime = 4,
+            Playing = true
+        };
+
+        await service.SaveAsync(browserSessionId, state, CancellationToken.None);
+        var updated = await service.UpdateProgressAsync(
+            browserSessionId,
+            new UpdateMusicPlayerProgressRequest(track1, Position: 1, CurrentTime: 19, Playing: false),
+            CancellationToken.None);
+
+        Assert.True(updated);
+        Assert.Equal(0, entities.GetCount);
+
+        var loaded = await service.GetAsync(browserSessionId, CancellationToken.None);
+        Assert.Equal(3, entities.GetCount);
+        Assert.Equal(1, loaded.Position);
+        Assert.Equal(19, loaded.CurrentTime);
+        Assert.False(loaded.Playing);
+    }
+
+    [Fact]
+    public async Task ProgressUpdateIgnoresTrackThatNoLongerMatchesStoredQueue() {
+        var browserSessionId = Guid.NewGuid();
+        var currentTrack = Guid.NewGuid();
+        var staleTrack = Guid.NewGuid();
+        var settings = new InMemoryBrowserSessionPersistence();
+        var service = new MusicPlayerStateService(settings, new FakeEntityReadService(currentTrack));
+        await service.SaveAsync(
+            browserSessionId,
+            Request(currentTrack, 1) with { CurrentTime = 4 },
+            CancellationToken.None);
+
+        var updated = await service.UpdateProgressAsync(
+            browserSessionId,
+            new UpdateMusicPlayerProgressRequest(staleTrack, Position: 0, CurrentTime: 99, Playing: true),
+            CancellationToken.None);
+        var loaded = await service.GetAsync(browserSessionId, CancellationToken.None);
+
+        Assert.False(updated);
+        Assert.Equal(4, loaded.CurrentTime);
+        Assert.False(loaded.Playing);
+    }
+
     private static UpdateMusicPlayerStateRequest Request(Guid trackId, double volume) =>
         new(
             QueueTrackIds: [trackId],
@@ -253,6 +309,8 @@ public sealed class MusicPlayerStateServiceTests {
     private sealed class FakeEntityReadService : IEntityReadService {
         private readonly IReadOnlyDictionary<Guid, EntityCard> _tracks;
 
+        public int GetCount { get; private set; }
+
         public FakeEntityReadService(params Guid[] trackIds)
             : this(new HashSet<Guid>(), trackIds) {
         }
@@ -304,8 +362,10 @@ public sealed class MusicPlayerStateServiceTests {
             AcquisitionStatus? acquisitionStatus = null) =>
             throw new NotSupportedException();
 
-        public Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken) =>
-            Task.FromResult<EntityCard?>(_tracks.GetValueOrDefault(id));
+        public Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken) {
+            GetCount += 1;
+            return Task.FromResult<EntityCard?>(_tracks.GetValueOrDefault(id));
+        }
 
         public Task<EntityThumbnailBatchResponse> GetThumbnailsAsync(
             IReadOnlyList<Guid> ids,

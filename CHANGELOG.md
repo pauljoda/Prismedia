@@ -14,6 +14,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Web music playback now persists lightweight track progress while listening instead of resending and rebuilding the entire saved queue every five seconds, preventing large queues from flooding the API during a stream.
 - Provider episodes carried by one physical video now appear as one combined episode card across web and native clients, while retaining each provider episode identity for metadata, deep links, and acquisition matching.
 - Acquisition detail panels no longer enter a reactive refresh loop that can flood the API and database with detail and history requests.
 - TV acquisition now distinguishes a complete season from a complete series, rejects poster-only season results, falls back from exact episode-number searches to provider episode titles, imports title-numbered season packs such as `Episode 0131`, ignores duplicate Internet Archive derivative videos when the original is present, and limits post-import media processing to the files that acquisition actually placed.

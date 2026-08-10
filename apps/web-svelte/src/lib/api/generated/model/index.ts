@@ -463,6 +463,7 @@ export * from './subtitleProviderTestResponse';
 export * from './thumbnailHoverKind';
 export * from './transcodeCacheStatusResponse';
 export * from './updateCheckResponse';
+export * from './updateMusicPlayerProgressRequest';
 export * from './updateMusicPlayerStateRequest';
 export * from './updateOpenSubtitlesConfigurationRequest';
 export * from './updateOwnProfileRequest';

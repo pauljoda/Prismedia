@@ -236,6 +236,7 @@ import type {
   SubtitleProviderTestResponse,
   TranscodeCacheStatusResponse,
   UpdateCheckResponse,
+  UpdateMusicPlayerProgressRequest,
   UpdateMusicPlayerStateRequest,
   UpdateOpenSubtitlesConfigurationRequest,
   UpdateOwnProfileRequest,
@@ -6133,12 +6134,12 @@ export const getMusicPlayerState = async ( options?: RequestInit): Promise<getMu
 
 
 
-export type updateMusicPlayerStateResponse200 = {
-  data: MusicPlayerStateResponse
-  status: 200
+export type updateMusicPlayerStateResponse204 = {
+  data: void
+  status: 204
 }
 
-export type updateMusicPlayerStateResponseSuccess = (updateMusicPlayerStateResponse200) & {
+export type updateMusicPlayerStateResponseSuccess = (updateMusicPlayerStateResponse204) & {
   headers: Headers;
 };
 ;
@@ -6201,6 +6202,43 @@ export const clearMusicPlayerState = async ( options?: RequestInit): Promise<cle
     method: 'DELETE'
 
 
+  }
+);}
+
+
+
+export type updateMusicPlayerProgressResponse204 = {
+  data: void
+  status: 204
+}
+
+export type updateMusicPlayerProgressResponseSuccess = (updateMusicPlayerProgressResponse204) & {
+  headers: Headers;
+};
+;
+
+export type updateMusicPlayerProgressResponse = (updateMusicPlayerProgressResponseSuccess)
+
+export const getUpdateMusicPlayerProgressUrl = () => {
+
+
+
+
+  return `/api/music-player/state/progress`
+}
+
+/**
+ * @summary Updates progress for the persisted browser-scoped music queue.
+ */
+export const updateMusicPlayerProgress = async (updateMusicPlayerProgressRequest: UpdateMusicPlayerProgressRequest, options?: RequestInit): Promise<updateMusicPlayerProgressResponse> => {
+
+  return orvalFetch<updateMusicPlayerProgressResponse>(getUpdateMusicPlayerProgressUrl(),
+  {
+    ...options,
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateMusicPlayerProgressRequest,)
   }
 );}
 

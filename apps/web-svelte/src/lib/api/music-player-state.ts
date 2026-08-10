@@ -1,10 +1,12 @@
 import {
   clearMusicPlayerState,
   getMusicPlayerState,
+  updateMusicPlayerProgress,
   updateMusicPlayerState,
 } from "$lib/api/generated/prismedia";
 import type {
   MusicPlayerStateResponse,
+  UpdateMusicPlayerProgressRequest,
   UpdateMusicPlayerStateRequest,
 } from "$lib/api/generated/model";
 import { entityCardToAudioTrackListItem } from "$lib/entities/audio-track-items";
@@ -126,6 +128,20 @@ export async function saveMusicPlayerState(state: PersistMusicPlayerState): Prom
   }
 
   await updateMusicPlayerState(toRequest(state));
+}
+
+export async function saveMusicPlayerProgress(state: PersistMusicPlayerState): Promise<void> {
+  const queueIndex = state.order[state.position];
+  const currentTrackId = queueIndex === undefined ? undefined : state.queueTrackIds[queueIndex];
+  if (!currentTrackId) return;
+
+  const request: UpdateMusicPlayerProgressRequest = {
+    currentTrackId,
+    position: state.position,
+    currentTime: state.currentTime,
+    playing: state.playing,
+  };
+  await updateMusicPlayerProgress(request);
 }
 
 export async function clearPersistedMusicPlayerState(): Promise<void> {

@@ -27,11 +27,26 @@ public static class MusicPlayerEndpoints {
             MusicPlayerStateService playerState,
             CancellationToken cancellationToken) => {
             var browserSession = await BrowserSessionHttp.EnsureAsync(httpContext, sessions, cancellationToken);
-            return await playerState.SaveAsync(browserSession.SessionId, request, cancellationToken);
+            await playerState.SaveAsync(browserSession.SessionId, request, cancellationToken);
+            return Results.NoContent();
         })
             .WithName("UpdateMusicPlayerState")
             .WithSummary("Saves the browser-scoped music player state.")
-            .Produces<MusicPlayerStateResponse>();
+            .Produces(StatusCodes.Status204NoContent);
+
+        group.MapPatch("/state/progress", async (
+            HttpContext httpContext,
+            UpdateMusicPlayerProgressRequest request,
+            BrowserSessionService sessions,
+            MusicPlayerStateService playerState,
+            CancellationToken cancellationToken) => {
+            var browserSession = await BrowserSessionHttp.EnsureAsync(httpContext, sessions, cancellationToken);
+            await playerState.UpdateProgressAsync(browserSession.SessionId, request, cancellationToken);
+            return Results.NoContent();
+        })
+            .WithName("UpdateMusicPlayerProgress")
+            .WithSummary("Updates progress for the persisted browser-scoped music queue.")
+            .Produces(StatusCodes.Status204NoContent);
 
         group.MapDelete("/state", async (
             HttpContext httpContext,
