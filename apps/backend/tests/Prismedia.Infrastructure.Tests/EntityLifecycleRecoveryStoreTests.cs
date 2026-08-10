@@ -18,6 +18,10 @@ public sealed class EntityLifecycleRecoveryStoreTests {
         var orphanedDeletingMonitorId = Guid.NewGuid();
         var stoppingMonitorId = Guid.NewGuid();
         var ownedDeletingMonitorId = Guid.NewGuid();
+        var orphanedStoppingAcquisitionId = Guid.NewGuid();
+        var reacquireAcquisitionId = Guid.NewGuid();
+        var ownedStoppingAcquisitionId = Guid.NewGuid();
+        var ownedEntityId = Guid.NewGuid();
         db.Entities.Add(new EntityRow {
             Id = deletingEntityId,
             KindCode = EntityKind.Movie.ToCode(),
@@ -28,6 +32,17 @@ public sealed class EntityLifecycleRecoveryStoreTests {
             CreatedAt = now.AddDays(-1),
             UpdatedAt = now.AddHours(-2)
         });
+        db.Entities.Add(new EntityRow {
+            Id = ownedEntityId,
+            KindCode = EntityKind.AudioTrack.ToCode(),
+            Title = "Owned track",
+            CreatedAt = now.AddDays(-1),
+            UpdatedAt = now
+        });
+        db.Acquisitions.AddRange(
+            NewAcquisition(orphanedStoppingAcquisitionId, Guid.NewGuid(), AcquisitionTeardownIntent.Remove, now.AddMinutes(-3)),
+            NewAcquisition(reacquireAcquisitionId, Guid.NewGuid(), AcquisitionTeardownIntent.Reacquire, now.AddMinutes(-2)),
+            NewAcquisition(ownedStoppingAcquisitionId, ownedEntityId, AcquisitionTeardownIntent.Remove, now.AddMinutes(-1)));
         db.Monitors.AddRange(
             NewMonitor(orphanedDeletingMonitorId, MonitorStatus.DeletingFiles, Guid.NewGuid(), now.AddHours(-1)),
             NewMonitor(stoppingMonitorId, MonitorStatus.Stopping, Guid.NewGuid(), now),
@@ -40,6 +55,7 @@ public sealed class EntityLifecycleRecoveryStoreTests {
         Assert.Equal([deletingEntityId], batch.DeletingEntityIds);
         Assert.Equal([orphanedDeletingMonitorId], batch.OrphanedDeletingMonitorIds);
         Assert.Equal([stoppingMonitorId], batch.StoppingMonitorIds);
+        Assert.Equal([orphanedStoppingAcquisitionId], batch.OrphanedStoppingAcquisitionIds);
         Assert.True(await store.CompleteOrphanedDeletionAsync(
             orphanedDeletingMonitorId,
             CancellationToken.None));
@@ -49,6 +65,23 @@ public sealed class EntityLifecycleRecoveryStoreTests {
         Assert.Null(await db.Monitors.FindAsync(orphanedDeletingMonitorId));
         Assert.NotNull(await db.Monitors.FindAsync(ownedDeletingMonitorId));
     }
+
+    private static AcquisitionRow NewAcquisition(
+        Guid id,
+        Guid entityId,
+        AcquisitionTeardownIntent intent,
+        DateTimeOffset updatedAt) =>
+        new() {
+            Id = id,
+            Kind = EntityKind.AudioTrack,
+            EntityId = entityId,
+            Status = AcquisitionStatus.Stopping,
+            TeardownIntent = intent,
+            TeardownOriginalStatus = AcquisitionStatus.Searching,
+            Title = "Track",
+            CreatedAt = updatedAt,
+            UpdatedAt = updatedAt
+        };
 
     private static MonitorRow NewMonitor(
         Guid id,

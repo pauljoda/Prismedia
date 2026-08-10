@@ -85,6 +85,24 @@ public sealed class QBittorrentDownloadClientTests {
         Assert.Contains("category", broken.Message, StringComparison.OrdinalIgnoreCase);
     }
 
+    [Fact]
+    public async Task ListingCarriesTelemetryWithoutPerTorrentPropertiesRequests() {
+        var handler = new StubHandler();
+        handler.CategoryListings.Enqueue(
+            """[{"hash":"abc","name":"Frozen","progress":0.5,"state":"downloading","save_path":"/save","content_path":"/save/Frozen","total_size":1234,"dlspeed":456,"upspeed":78,"eta":90,"num_seeds":4,"num_leechs":5,"ratio":1.25,"seeding_time":67}]""");
+
+        var item = Assert.Single(await NewClient(handler).ListItemsAsync(Connection, CancellationToken.None));
+
+        Assert.Equal(1234, item.Properties?.TotalSizeBytes);
+        Assert.Equal(456, item.Properties?.DownloadSpeedBytesPerSecond);
+        Assert.Equal(78, item.Properties?.UploadSpeedBytesPerSecond);
+        Assert.Equal(90, item.Properties?.EtaSeconds);
+        Assert.Equal(4, item.Properties?.Seeds);
+        Assert.Equal(5, item.Properties?.Peers);
+        Assert.Equal(1.25, item.Properties?.Ratio);
+        Assert.Equal(67, item.Properties?.SeedingTimeSeconds);
+    }
+
     private static QBittorrentDownloadClient NewClient(StubHandler handler) =>
         new(new HttpClient(handler)) { AddPollDelay = TimeSpan.FromMilliseconds(1) };
 

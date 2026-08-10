@@ -68,6 +68,7 @@ public static class DependencyInjection {
         services.AddScoped<Acquisition.AcquisitionService>();
         services.AddScoped<Acquisition.IAcquisitionRequestService>(sp => sp.GetRequiredService<Acquisition.AcquisitionService>());
         services.AddScoped<Acquisition.IAcquisitionGraphCancellation>(sp => sp.GetRequiredService<Acquisition.AcquisitionService>());
+        services.AddScoped<Acquisition.IAcquisitionTeardownRecovery>(sp => sp.GetRequiredService<Acquisition.AcquisitionService>());
         services.AddScoped<Acquisition.AcquisitionQueueService>();
         services.AddScoped<Acquisition.IAcquisitionQueueService>(sp => sp.GetRequiredService<Acquisition.AcquisitionQueueService>());
         services.AddScoped<Acquisition.MonitorService>();

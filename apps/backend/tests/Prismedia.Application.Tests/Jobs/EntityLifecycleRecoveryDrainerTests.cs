@@ -11,24 +11,27 @@ public sealed class EntityLifecycleRecoveryDrainerTests {
         var firstDelete = Guid.NewGuid();
         var secondDelete = Guid.NewGuid();
         var stoppingMonitor = Guid.NewGuid();
+        var orphanedAcquisition = Guid.NewGuid();
         var activity = new RecoveryActivity();
         var drainer = new EntityLifecycleRecoveryDrainer(
             new FixedRecoveryReader(new EntityLifecycleRecoveryBatch(
                 [firstDelete, secondDelete],
                 [],
-                [stoppingMonitor])),
+                [stoppingMonitor],
+                [orphanedAcquisition])),
             new RecordingDeletionService(activity, firstDelete),
             new RecordingUnmonitorService(activity),
+            new RecordingAcquisitionRecovery(activity),
             NullLogger<EntityLifecycleRecoveryDrainer>.Instance);
 
         var result = await drainer.DrainBatchAsync(10, CancellationToken.None);
 
-        Assert.Equal(3, result.Attempted);
-        Assert.Equal(2, result.Resolved);
+        Assert.Equal(4, result.Attempted);
+        Assert.Equal(3, result.Resolved);
         Assert.Equal(1, result.Failed);
         Assert.Equal(1, activity.MaximumConcurrency);
         Assert.Equal(
-            [$"delete:{firstDelete}", $"delete:{secondDelete}", $"stop:{stoppingMonitor}"],
+            [$"delete:{firstDelete}", $"delete:{secondDelete}", $"stop:{stoppingMonitor}", $"acquisition:{orphanedAcquisition}"],
             activity.Order);
     }
 
@@ -63,6 +66,16 @@ public sealed class EntityLifecycleRecoveryDrainerTests {
         public async Task<MonitorStopResult> StopAsync(Guid monitorId, CancellationToken cancellationToken) {
             await activity.RecordAsync($"stop:{monitorId}", cancellationToken);
             return new MonitorStopResult(true, true);
+        }
+    }
+
+    private sealed class RecordingAcquisitionRecovery(RecoveryActivity activity)
+        : IAcquisitionTeardownRecovery {
+        public async Task<bool> CompleteOrphanedEntityRemovalAsync(
+            Guid acquisitionId,
+            CancellationToken cancellationToken) {
+            await activity.RecordAsync($"acquisition:{acquisitionId}", cancellationToken);
+            return true;
         }
     }
 

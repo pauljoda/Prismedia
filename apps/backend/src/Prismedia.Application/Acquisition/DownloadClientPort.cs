@@ -47,7 +47,12 @@ public sealed record DownloadItemStatus(
     /// </summary>
     bool IsFailed = false,
     /// <summary>The client's failure explanation when <see cref="IsFailed"/> is set, for the recovery record.</summary>
-    string? FailureMessage = null);
+    string? FailureMessage = null,
+    /// <summary>
+    /// Live telemetry already included by a client's bulk listing. Callers use this before falling back to
+    /// a per-item properties request, avoiding request fan-out for clients such as qBittorrent.
+    /// </summary>
+    DownloadItemProperties? Properties = null);
 
 /// <summary>Result of probing a download client connection.</summary>
 public sealed record DownloadClientConnectionTest(bool Connected, string? Message);

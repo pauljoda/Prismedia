@@ -41,7 +41,7 @@ internal sealed class EfEntityFileDeletionRecoveryProjection(PrismediaDbContext 
         int limit,
         CancellationToken cancellationToken) {
         if (limit <= 0) {
-            return new EntityLifecycleRecoveryBatch([], [], []);
+            return new EntityLifecycleRecoveryBatch([], [], [], []);
         }
 
         var claimedEntityIds = await db.Entities.AsNoTracking()
@@ -108,10 +108,24 @@ internal sealed class EfEntityFileDeletionRecoveryProjection(PrismediaDbContext 
                 .Take(remaining)
                 .ToListAsync(cancellationToken);
 
+        remaining -= stoppingMonitorIds.Count;
+        var orphanedStoppingAcquisitionIds = remaining <= 0
+            ? []
+            : await db.Acquisitions.AsNoTracking()
+                .Where(acquisition => acquisition.Status == AcquisitionStatus.Stopping
+                    && acquisition.TeardownIntent == AcquisitionTeardownIntent.Remove
+                    && acquisition.EntityId != null)
+                .Where(acquisition => !db.Entities.Any(entity => entity.Id == acquisition.EntityId!.Value))
+                .OrderBy(acquisition => acquisition.UpdatedAt)
+                .Select(acquisition => acquisition.Id)
+                .Take(remaining)
+                .ToListAsync(cancellationToken);
+
         return new EntityLifecycleRecoveryBatch(
             claimedEntityIds,
             orphanedMonitorIds,
-            stoppingMonitorIds);
+            stoppingMonitorIds,
+            orphanedStoppingAcquisitionIds);
     }
 
     /// <inheritdoc />

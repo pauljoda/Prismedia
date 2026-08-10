@@ -93,6 +93,31 @@ public sealed class AcquisitionServiceTests {
     }
 
     [Fact]
+    public async Task DownloadsUseTelemetryFromTheClientListingWithoutPerItemRequests() {
+        var harness = Harness(TransferInfo(RecordedClientId));
+        harness.Store.ActiveTransfers.Add(new ActiveTransfer(
+            Guid.NewGuid(), AcquisitionId, RecordedClientId, ClientItemId,
+            AcquisitionStatus.Downloading, 0.25, DateTimeOffset.UtcNow));
+        harness.Downloads.Items.Add(new DownloadItemStatus(
+            ClientItemId,
+            "Dune",
+            0.5,
+            "downloading",
+            false,
+            "/save",
+            "/save/Dune",
+            Properties: new DownloadItemProperties(1234, 456, 78, 90, 4, 5, "/save")));
+
+        var item = Assert.Single(await harness.Service.ListDownloadsAsync(CancellationToken.None));
+
+        Assert.Equal(1234, item.TotalSizeBytes);
+        Assert.Equal(456, item.DownloadSpeedBytesPerSecond);
+        Assert.Equal(4, item.Seeds);
+        Assert.Equal(5, item.Peers);
+        Assert.Equal(0, harness.Downloads.PropertiesCalls);
+    }
+
+    [Fact]
     public async Task CreateNormalizesTheNamespaceAndPreservesAnOpaqueColonIdentityValue() {
         var harness = Harness(TransferInfo(RecordedClientId));
 
@@ -1558,6 +1583,7 @@ public sealed class AcquisitionServiceTests {
         public int BeginTransferAddCalls { get; private set; }
         public AcquisitionImportContext? ImportContext { get; set; }
         public int ClearedPlacementCheckpoints { get; private set; }
+        public List<ActiveTransfer> ActiveTransfers { get; } = [];
 
         public Task<AcquisitionDetail?> GetAsync(Guid id, CancellationToken cancellationToken) =>
             Task.FromResult<AcquisitionDetail?>(id == AcquisitionId
@@ -1689,7 +1715,10 @@ public sealed class AcquisitionServiceTests {
             });
         }
         public Task<IReadOnlyList<Guid>> ListStaleSearchingAsync(TimeSpan olderThan, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<IReadOnlyList<AcquisitionSummary>> ListAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<AcquisitionSummary>> ListAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<AcquisitionSummary>>([
+                _summary with { Status = Status ?? _summary.Status }
+            ]);
         public Task<AcquisitionSearchInput?> GetSearchInputAsync(Guid id, CancellationToken cancellationToken) =>
             Task.FromResult(id == AcquisitionId ? SearchInput : null);
         public Task<AcquisitionStatus?> GetStatusAsync(Guid id, CancellationToken cancellationToken) =>
@@ -1791,7 +1820,8 @@ public sealed class AcquisitionServiceTests {
         public Task<IReadOnlyList<SeedingTransfer>> ListSeedingTransfersAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> MarkTransferSeedingAsync(Guid acquisitionId, DateTimeOffset since, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task ClearTransferSeedingAsync(Guid transferId, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<IReadOnlyList<ActiveTransfer>> ListActiveTransfersAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<ActiveTransfer>> ListActiveTransfersAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<ActiveTransfer>>(ActiveTransfers.ToArray());
         public Task<bool> HasActiveTransfersAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task UpdateTransferAsync(Guid transferId, double progress, string? state, string? contentPath, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task MarkTransferStalledAsync(Guid transferId, DateTimeOffset? stalledSince, CancellationToken cancellationToken) => throw new NotSupportedException();
@@ -1866,6 +1896,7 @@ public sealed class AcquisitionServiceTests {
         public Action? OnAdd { get => _client.OnAdd; set => _client.OnAdd = value; }
         public List<DownloadItemStatus> Items => _client.Items;
         public List<DownloadItemFile> Files => _client.Files;
+        public int PropertiesCalls => _client.PropertiesCalls;
         public IDownloadClient Get(DownloadClientKind kind) => _client;
     }
 
@@ -1881,6 +1912,7 @@ public sealed class AcquisitionServiceTests {
         public Action? OnAdd { get; set; }
         public Exception? AddFailure { get; set; }
         public int AddCount { get; private set; }
+        public int PropertiesCalls { get; private set; }
         public List<DownloadItemStatus> Items { get; } = [];
         public List<DownloadItemFile> Files { get; } = [];
 
@@ -1929,10 +1961,12 @@ public sealed class AcquisitionServiceTests {
             Task.FromResult<IReadOnlyList<DownloadItemStatus>>(Items.ToArray());
         public Task<IReadOnlyList<DownloadItemFile>> GetFilesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyList<DownloadItemFile>>(Files.ToArray());
-        public Task<DownloadItemProperties?> GetPropertiesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) =>
-            PropertiesFailure is null
+        public Task<DownloadItemProperties?> GetPropertiesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) {
+            PropertiesCalls++;
+            return PropertiesFailure is null
                 ? Task.FromResult<DownloadItemProperties?>(null)
                 : Task.FromException<DownloadItemProperties?>(PropertiesFailure);
+        }
         public Task<byte[]> GetPieceStatesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) =>
             PiecesFailure is null
                 ? Task.FromResult(Array.Empty<byte>())

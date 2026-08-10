@@ -61,7 +61,10 @@ describe("DownloadsPanel", () => {
       .mockResolvedValueOnce(undefined);
   });
 
-  afterEach(cleanup);
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
 
   it("continues bulk removal after a failure, reloads, and reports the partial result", async () => {
     render(DownloadsPanel);
@@ -81,10 +84,14 @@ describe("DownloadsPanel", () => {
   });
 
   it("keeps polling attention-only rows so external reconciliation clears stale downloads", async () => {
+    const nativeSetTimeout = globalThis.setTimeout;
     const idlePoll: { run: (() => void) | null } = { run: null };
-    vi.spyOn(globalThis, "setInterval").mockImplementation((handler, delay) => {
-      if (delay === 15_000) idlePoll.run = handler as () => void;
-      return 1 as never;
+    vi.spyOn(globalThis, "setTimeout").mockImplementation((handler, delay, ...args) => {
+      if (delay === 15_000) {
+        idlePoll.run = handler as () => void;
+        return 1 as never;
+      }
+      return nativeSetTimeout(handler, delay, ...args);
     });
     mocks.fetchDownloadQueue
       .mockResolvedValueOnce([
@@ -102,6 +109,57 @@ describe("DownloadsPanel", () => {
     expect(idlePoll.run).not.toBeNull();
     idlePoll.run?.();
     await waitFor(() => expect(mocks.fetchDownloadQueue).toHaveBeenCalledTimes(2));
+  });
+
+  it("publishes queue rows only after their Entity hierarchy is ready", async () => {
+    let resolveThumbnails!: (value: never[]) => void;
+    mocks.fetchDownloadQueue.mockResolvedValueOnce([
+      { acquisitionId: "frozen", entityId: "frozen-track" },
+    ]);
+    mocks.fetchEntityThumbnails.mockReturnValueOnce(new Promise((resolve) => {
+      resolveThumbnails = resolve;
+    }));
+
+    render(DownloadsPanel);
+
+    await waitFor(() => expect(mocks.fetchDownloadQueue).toHaveBeenCalledOnce());
+    expect(screen.getByTestId("entry-count")).toHaveTextContent("0");
+    expect(screen.getByRole("button", { name: "Select all downloads" })).toBeDisabled();
+
+    resolveThumbnails([]);
+    await waitFor(() => expect(screen.getByTestId("entry-count")).toHaveTextContent("1"));
+  });
+
+  it("waits for a slow refresh to finish before scheduling the next active poll", async () => {
+    const nativeSetTimeout = globalThis.setTimeout;
+    const scheduledPolls: Array<{ delay: number; run: () => void }> = [];
+    let resolveRefresh!: (value: never[]) => void;
+    vi.spyOn(globalThis, "setTimeout").mockImplementation((handler, delay, ...args) => {
+      if (delay === 4_000 || delay === 15_000) {
+        scheduledPolls.push({ delay, run: handler as () => void });
+        return scheduledPolls.length as never;
+      }
+      return nativeSetTimeout(handler, delay, ...args);
+    });
+    mocks.fetchDownloadQueue
+      .mockResolvedValueOnce([
+        { acquisitionId: "active", entityId: null, status: ACQUISITION_STATUS.downloading },
+      ])
+      .mockReturnValueOnce(new Promise((resolve) => {
+        resolveRefresh = resolve;
+      }));
+
+    render(DownloadsPanel);
+
+    await waitFor(() => expect(scheduledPolls.some((poll) => poll.delay === 4_000)).toBe(true));
+    const activePoll = scheduledPolls.findLast((poll) => poll.delay === 4_000)!;
+    const scheduledBeforeRefresh = scheduledPolls.length;
+    activePoll.run();
+    await waitFor(() => expect(mocks.fetchDownloadQueue).toHaveBeenCalledTimes(2));
+    expect(scheduledPolls).toHaveLength(scheduledBeforeRefresh);
+
+    resolveRefresh([]);
+    await waitFor(() => expect(scheduledPolls).toHaveLength(scheduledBeforeRefresh + 1));
   });
 
   it("resizes the detail pane from the keyboard and persists the chosen share", async () => {

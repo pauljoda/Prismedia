@@ -217,6 +217,11 @@ public static class QBittorrentProtocol {
     public const string Peers = "peers";
     public const string ShareRatio = "share_ratio";
     public const string SeedingTime = "seeding_time";
+    public const string InfoDownloadSpeed = "dlspeed";
+    public const string InfoUploadSpeed = "upspeed";
+    public const string InfoSeeds = "num_seeds";
+    public const string InfoPeers = "num_leechs";
+    public const string InfoRatio = "ratio";
 
     // qBittorrent state values that mean a download is stuck and won't progress without intervention.
     // prism-vocab: external — qBittorrent state strings, matched only at this boundary.

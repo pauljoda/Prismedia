@@ -83,23 +83,26 @@
   async function loadOnce() {
     try {
       const nextRows = await fetchDownloadQueue();
-      rows = nextRows;
-      if (selectedId && !nextRows.some((row) => row.acquisitionId === selectedId)) {
-        selectedId = null;
-      }
-      error = null;
-      loading = false;
-
       const ids = [...new Set(nextRows.map((row) => row.entityId).filter((id): id is string => !!id))].sort();
       const nextThumbnailEntityKey = ids.join("\u0000");
+      let nextThumbnails = thumbnails;
       if (nextThumbnailEntityKey !== thumbnailEntityKey) {
         try {
-          thumbnails = await fetchThumbnailHierarchy(ids);
+          nextThumbnails = await fetchThumbnailHierarchy(ids);
           thumbnailEntityKey = nextThumbnailEntityKey;
         } catch {
           // The transfer list remains usable without artwork/hierarchy; the next queue poll retries it.
         }
       }
+
+      // Publish one coherent snapshot. Rendering thousands of queue rows before their hierarchy arrives
+      // briefly creates a flat fallback tree, then discards it and builds the grouped tree again.
+      thumbnails = nextThumbnails;
+      rows = nextRows;
+      if (selectedId && !nextRows.some((row) => row.acquisitionId === selectedId)) {
+        selectedId = null;
+      }
+      error = null;
     } catch (err) {
       error = err instanceof Error ? err.message : "Failed to load downloads";
     } finally {
@@ -159,8 +162,22 @@
   );
 
   $effect(() => {
-    const timer = setInterval(load, pollIntervalMs);
-    return () => clearInterval(timer);
+    const delay = pollIntervalMs;
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+
+    function schedule() {
+      timer = setTimeout(async () => {
+        await load();
+        if (!cancelled) schedule();
+      }, delay);
+    }
+
+    schedule();
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
   });
 
   onMount(load);
@@ -267,8 +284,8 @@
     role="separator"
     aria-label="Resize transfer details"
     aria-orientation="horizontal"
-    aria-valuemin="15"
-    aria-valuemax="85"
+    aria-valuemin={15}
+    aria-valuemax={85}
     aria-valuenow={Math.round(detailShare * 100)}
     title="Drag to resize details; double-click to reset"
     onpointerdown={startPaneResize}

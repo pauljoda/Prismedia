@@ -17,6 +17,7 @@ public sealed class EntityLifecycleRecoveryDrainer(
     IEntityLifecycleRecoveryStore recovery,
     IMediaEntityDeletionService deletion,
     IEntityUnmonitorService unmonitor,
+    IAcquisitionTeardownRecovery acquisitionRecovery,
     ILogger<EntityLifecycleRecoveryDrainer> logger) {
     /// <summary>Processes at most <paramref name="limit"/> durable claims, strictly one at a time.</summary>
     public async Task<EntityLifecycleRecoveryResult> DrainBatchAsync(
@@ -60,6 +61,27 @@ public sealed class EntityLifecycleRecoveryDrainer(
                     "Lifecycle recovery could not resume stopping monitor {MonitorId}: {Reason}",
                     monitorId,
                     result.Message ?? "unknown conflict");
+            }
+        }
+
+        foreach (var acquisitionId in batch.OrphanedStoppingAcquisitionIds) {
+            try {
+                if (await acquisitionRecovery.CompleteOrphanedEntityRemovalAsync(acquisitionId, cancellationToken)) {
+                    resolved++;
+                } else {
+                    failed++;
+                    logger.LogWarning(
+                        "Lifecycle recovery could not complete orphaned stopping acquisition {AcquisitionId}",
+                        acquisitionId);
+                }
+            } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) {
+                throw;
+            } catch (Exception exception) {
+                failed++;
+                logger.LogWarning(
+                    exception,
+                    "Lifecycle recovery failed to complete orphaned stopping acquisition {AcquisitionId}",
+                    acquisitionId);
             }
         }
 

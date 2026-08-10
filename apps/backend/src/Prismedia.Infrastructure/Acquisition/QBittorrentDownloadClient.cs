@@ -165,7 +165,17 @@ public sealed class QBittorrentDownloadClient(HttpClient http) : IDownloadClient
             Text(item, QBittorrentProtocol.SavePathJson),
             Text(item, QBittorrentProtocol.ContentPathJson),
             // A completed transfer is never stalled, even if the client briefly reports an awkward state.
-            IsStalled: !complete && QBittorrentProtocol.IsStalledState(state));
+            IsStalled: !complete && QBittorrentProtocol.IsStalledState(state),
+            Properties: new DownloadItemProperties(
+                Long(item, QBittorrentProtocol.TotalSize) ?? 0,
+                Long(item, QBittorrentProtocol.InfoDownloadSpeed) ?? 0,
+                Long(item, QBittorrentProtocol.InfoUploadSpeed) ?? 0,
+                Long(item, QBittorrentProtocol.Eta) ?? 0,
+                Int(item, QBittorrentProtocol.InfoSeeds) ?? 0,
+                Int(item, QBittorrentProtocol.InfoPeers) ?? 0,
+                Text(item, QBittorrentProtocol.SavePathJson),
+                Double(item, QBittorrentProtocol.InfoRatio),
+                Long(item, QBittorrentProtocol.SeedingTime)));
     }
 
     public async Task<string> AddTorrentFileAsync(DownloadClientConnection connection, string fileName, byte[] torrent, CancellationToken cancellationToken) {

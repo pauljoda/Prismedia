@@ -223,6 +223,16 @@ public interface IAcquisitionGraphCancellation {
 }
 
 /// <summary>
+/// Completes a durable removal claim whose owning Entity has already disappeared. This narrow recovery
+/// seam is reserved for the lifecycle worker; ordinary acquisition removal still uses the user-facing
+/// teardown workflows.
+/// </summary>
+public interface IAcquisitionTeardownRecovery {
+    /// <summary>Best-effort removes any surviving transfer, then deletes the locally claimed acquisition.</summary>
+    Task<bool> CompleteOrphanedEntityRemovalAsync(Guid acquisitionId, CancellationToken cancellationToken);
+}
+
+/// <summary>
 /// Removes filesystem and catalog artifacts owned by an interrupted import checkpoint. This is the
 /// explicit destructive escape hatch used only when the user chooses to discard the attempt and start over.
 /// </summary>
@@ -255,7 +265,7 @@ public sealed partial class AcquisitionService(
     IAcquisitionUploadStorage? uploads = null,
     IAcquisitionSearchResourcePolicy? searchResources = null,
     IAcquisitionReleaseTimingService? releaseTiming = null,
-    IJobGraphService? graphs = null) : IAcquisitionRequestService, IAcquisitionGraphCancellation {
+    IJobGraphService? graphs = null) : IAcquisitionRequestService, IAcquisitionGraphCancellation, IAcquisitionTeardownRecovery {
     public Task<IReadOnlyList<AcquisitionSummary>> ListAsync(CancellationToken cancellationToken) =>
         store.ListAsync(cancellationToken);
 
@@ -415,7 +425,8 @@ public sealed partial class AcquisitionService(
     /// <summary>
     /// The global Downloads view: every active acquisition (not imported, not cancelled) with live
     /// download-client telemetry where a transfer is in flight. Telemetry is collected with one item
-    /// listing per download client plus one properties read per transfer; an unreachable client degrades
+    /// listing per download client; adapters may carry telemetry in that listing, while older adapters fall
+    /// back to one properties read per transfer. An unreachable client degrades
     /// its rows to the last persisted progress instead of failing the view.
     /// </summary>
     public async Task<IReadOnlyList<DownloadQueueItemView>> ListDownloadsAsync(CancellationToken cancellationToken) {
@@ -485,13 +496,15 @@ public sealed partial class AcquisitionService(
                     continue;
                 }
 
-                DownloadItemProperties? properties = null;
-                try {
-                    properties = await download.GetPropertiesAsync(connection, transfer.ClientItemId, cancellationToken);
-                } catch (OperationCanceledException) {
-                    throw;
-                } catch (Exception) {
-                    // Properties are enrichment; the listing's progress/state still renders the row.
+                var properties = status.Properties;
+                if (properties is null) {
+                    try {
+                        properties = await download.GetPropertiesAsync(connection, transfer.ClientItemId, cancellationToken);
+                    } catch (OperationCanceledException) {
+                        throw;
+                    } catch (Exception) {
+                        // Properties are enrichment; the listing's progress/state still renders the row.
+                    }
                 }
 
                 telemetry[transfer.AcquisitionId] = new LiveTransferTelemetry(
@@ -680,6 +693,17 @@ public sealed partial class AcquisitionService(
     /// <inheritdoc />
     public Task DiscardTransferForEntityDeletionAsync(Guid id, CancellationToken cancellationToken) =>
         RemoveTransferDataAsync(id, cancellationToken);
+
+    /// <inheritdoc />
+    public async Task<bool> CompleteOrphanedEntityRemovalAsync(
+        Guid acquisitionId,
+        CancellationToken cancellationToken) {
+        await DiscardTransferForEntityDeletionAsync(acquisitionId, cancellationToken);
+        return await CompleteTeardownAsync(
+            acquisitionId,
+            AcquisitionTeardownIntent.Remove,
+            cancellationToken);
+    }
 
     /// <inheritdoc />
     public async Task<bool> CompleteTeardownAsync(

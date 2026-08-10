@@ -46,7 +46,11 @@ public interface IEntityLifecycleRecoveryStore {
 public sealed record EntityLifecycleRecoveryBatch(
     IReadOnlyList<Guid> DeletingEntityIds,
     IReadOnlyList<Guid> OrphanedDeletingMonitorIds,
-    IReadOnlyList<Guid> StoppingMonitorIds) {
+    IReadOnlyList<Guid> StoppingMonitorIds,
+    IReadOnlyList<Guid> OrphanedStoppingAcquisitionIds) {
     /// <summary>Total candidates in the batch.</summary>
-    public int Count => DeletingEntityIds.Count + OrphanedDeletingMonitorIds.Count + StoppingMonitorIds.Count;
+    public int Count => DeletingEntityIds.Count
+        + OrphanedDeletingMonitorIds.Count
+        + StoppingMonitorIds.Count
+        + OrphanedStoppingAcquisitionIds.Count;
 }
