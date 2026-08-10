@@ -21,12 +21,26 @@ vi.mock("$lib/api/entities", () => ({
 }));
 
 vi.mock("$lib/requests/acquisition-list-item", () => ({
-  downloadToListItem: (row: { acquisitionId: string }) => ({ id: row.acquisitionId }),
-  Trash2: vi.fn(),
+  downloadToListItem: (row: { acquisitionId: string; title?: string }) => ({
+    id: row.acquisitionId,
+    title: row.title ?? row.acquisitionId,
+    tone: "downloading",
+    thumbnail: {},
+    statusLabel: "Downloading",
+    selectable: true,
+  }),
 }));
 
-vi.mock("./AcquisitionListShell.svelte", async () => ({
-  default: (await import("./AcquisitionListShell.test-stub.svelte")).default,
+vi.mock("./DownloadManagerTable.svelte", async () => ({
+  default: (await import("./DownloadManagerTable.test-stub.svelte")).default,
+}));
+
+vi.mock("./AcquisitionPanel.svelte", async () => ({
+  default: (await import("./DownloadsAcquisitionPanel.test-stub.svelte")).default,
+}));
+
+vi.mock("$lib/components/thumbnails/EntityThumbnail.svelte", async () => ({
+  default: (await import("./EntityThumbnail.test-stub.svelte")).default,
 }));
 
 vi.mock("$lib/components/entities/ConfirmDialog.svelte", async () => ({

@@ -154,7 +154,7 @@
   </div>
 
   {#if activeTab === "downloads"}
-    <!-- ── Global downloads: every active acquisition in one shared card list, live telemetry included ── -->
+    <!-- ── Entity-grouped download workbench: hierarchy table above, selected transfer inspector below ── -->
     <DownloadsPanel />
   {:else if activeTab === "missing"}
     <WantedList variant="missing" kindOptions={wantedKindOptions} />
