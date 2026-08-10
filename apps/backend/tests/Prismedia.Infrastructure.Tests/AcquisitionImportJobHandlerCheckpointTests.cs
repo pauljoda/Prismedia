@@ -202,6 +202,73 @@ public sealed class AcquisitionImportJobHandlerCheckpointTests : IDisposable {
     }
 
     [Fact]
+    public async Task ReviewedSafeMappingCanImportMediaBesideADangerousCompanionFile() {
+        await using var db = CreateContext();
+        var acquisitionId = Guid.NewGuid();
+        var targetEntityId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        var contentRoot = Directory.CreateDirectory(Path.Combine(_root, "reviewed-dangerous-download")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(contentRoot, "Show.S03E01.mkv"), "episode");
+        await File.WriteAllTextAsync(Path.Combine(contentRoot, "RARBG_DO_NOT_MIRROR.exe"), "dangerous-companion");
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId,
+            Status = AcquisitionStatus.ManualImportRequired,
+            Kind = EntityKind.VideoSeason,
+            Title = "Season 03",
+            Series = "Show",
+            SeasonNumber = 3,
+            ExternalIdsJson = "{}",
+            SourceUrlsJson = "[]",
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        db.DownloadTransfers.Add(new DownloadTransferRow {
+            Id = Guid.NewGuid(),
+            AcquisitionId = acquisitionId,
+            ClientItemId = "transfer-reviewed-dangerous",
+            ContentPath = contentRoot,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+        var engine = new RecordingEngine();
+        var handler = new AcquisitionImportJobHandler(
+            store,
+            new SingleEngineFactory(engine),
+            new DownloadPayloadReader(),
+            new EfAcquisitionHistoryStore(db),
+            NullLogger<AcquisitionImportJobHandler>.Instance);
+        var mappings = new[] {
+            new ManualImportFileMapping("Show.S03E01.mkv", targetEntityId, 3, 1),
+        };
+        var job = new JobRunSnapshot(
+            Guid.NewGuid(),
+            JobType.AcquisitionImport,
+            JobRunStatus.Running,
+            0,
+            null,
+            AcquisitionJobPayload.Serialize(
+                acquisitionId,
+                manualRetry: true,
+                manualFileMappings: mappings),
+            null,
+            null,
+            null,
+            now,
+            now,
+            null);
+
+        await handler.HandleAsync(
+            new JobContext(job, new MergedImportTestSupport.RecordingJobQueue()),
+            CancellationToken.None);
+
+        Assert.True(engine.Called);
+        Assert.Equal(mappings, engine.LastImport?.ManualFileMappings);
+        Assert.Equal(AcquisitionStatus.Importing, await store.GetStatusAsync(acquisitionId, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task BookPlacementCheckpointIsClaimedAndDispatchedWithoutReplanningConsumedPayload() {
         await using var db = CreateContext();
         var acquisitionId = Guid.NewGuid();

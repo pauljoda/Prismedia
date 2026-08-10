@@ -13,4 +13,5 @@ export interface AcquisitionManualImportFile {
   canMap: boolean;
   /** @nullable */
   suggestedTargetEntityId?: string | null;
+  isDangerous?: boolean;
 }

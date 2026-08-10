@@ -88,12 +88,14 @@
   let bridgePolls = $state(0);
   let resetConfirmOpen = $state(false);
   let rejectConfirmOpen = $state(false);
+  let unsafeImportConfirmOpen = $state(false);
   let customQuery = $state("");
   let lastHistoryKey: string | null = null;
 
   const EDIT_QUERY_KEY = "edit";
 
   const status = $derived(detail?.summary.status ?? null);
+  const manualImportWarning = $derived(manualImportReview?.warning ?? null);
   const releaseDateMetadataUnavailable = $derived(
     detail?.summary.releaseDateMetadataUnavailable === true ||
       status === ACQUISITION_STATUS.manualSearchRequired,
@@ -327,6 +329,15 @@
     );
   }
 
+  function requestMappedImport() {
+    if (manualImportWarning) {
+      unsafeImportConfirmOpen = true;
+      return;
+    }
+
+    void importMappedFiles();
+  }
+
   async function rejectManualImport() {
     if (busy) return;
     busy = true;
@@ -452,7 +463,7 @@
         <Badge variant={status === ACQUISITION_STATUS.imported ? "success" : status === ACQUISITION_STATUS.failed ? "error" : "accent"}>
           {acquisitionStatusLabel(detail.summary.status)}
         </Badge>
-        {#if detail.summary.statusMessage}
+        {#if detail.summary.statusMessage && !manualImportWarning}
           <span class="text-sm text-text-muted">{detail.summary.statusMessage}</span>
         {/if}
       </div>
@@ -552,7 +563,7 @@
         onAssignmentChange={(targetEntityId, sourceRelativePath) => {
           manualAssignments[targetEntityId] = sourceRelativePath;
         }}
-        onImport={() => void importMappedFiles()}
+        onImport={requestMappedImport}
         onReject={() => (rejectConfirmOpen = true)}
       />
 
@@ -716,6 +727,16 @@
   danger
   onConfirm={startOver}
   onClose={() => (resetConfirmOpen = false)}
+/>
+
+<ConfirmDialog
+  open={unsafeImportConfirmOpen}
+  title="Import from this potentially unsafe download?"
+  message={`${manualImportWarning ?? "This payload contains a potentially dangerous file."} Only the episode files you mapped will be imported. Confirm only after verifying that those media files are expected.`}
+  confirmLabel="Import mapped episodes"
+  danger
+  onConfirm={importMappedFiles}
+  onClose={() => (unsafeImportConfirmOpen = false)}
 />
 
 <ConfirmDialog

@@ -1468,6 +1468,122 @@ export const getChangelog = async ( options?: RequestInit): Promise<getChangelog
 
 
 
+export type listPluginsResponse200 = {
+  data: PluginProvider[]
+  status: 200
+}
+
+export type listPluginsResponseSuccess = (listPluginsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listPluginsResponse = (listPluginsResponseSuccess)
+
+export const getListPluginsUrl = () => {
+
+
+
+
+  return `/api/plugins`
+}
+
+/**
+ * @summary Lists compatible community plugins discovered from installed and local development sources.
+ */
+export const listPlugins = async ( options?: RequestInit): Promise<listPluginsResponse> => {
+
+  return orvalFetch<listPluginsResponse>(getListPluginsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type listAcquisitionProfilesResponse200 = {
+  data: BookAcquisitionProfileView[]
+  status: 200
+}
+
+export type listAcquisitionProfilesResponseSuccess = (listAcquisitionProfilesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listAcquisitionProfilesResponse = (listAcquisitionProfilesResponseSuccess)
+
+export const getListAcquisitionProfilesUrl = () => {
+
+
+
+
+  return `/api/acquisitions/profiles`
+}
+
+/**
+ * @summary Lists acquisition profiles whose import targets are visible to the current viewer.
+ */
+export const listAcquisitionProfiles = async ( options?: RequestInit): Promise<listAcquisitionProfilesResponse> => {
+
+  return orvalFetch<listAcquisitionProfilesResponse>(getListAcquisitionProfilesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type saveAcquisitionProfileResponse200 = {
+  data: BookAcquisitionProfileView
+  status: 200
+}
+
+export type saveAcquisitionProfileResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type saveAcquisitionProfileResponseSuccess = (saveAcquisitionProfileResponse200) & {
+  headers: Headers;
+};
+export type saveAcquisitionProfileResponseError = (saveAcquisitionProfileResponse400) & {
+  headers: Headers;
+};
+
+export type saveAcquisitionProfileResponse = (saveAcquisitionProfileResponseSuccess | saveAcquisitionProfileResponseError)
+
+export const getSaveAcquisitionProfileUrl = () => {
+
+
+
+
+  return `/api/acquisitions/profiles`
+}
+
+/**
+ * @summary Creates or updates a book acquisition profile.
+ */
+export const saveAcquisitionProfile = async (bookAcquisitionProfileSaveRequest: BookAcquisitionProfileSaveRequest, options?: RequestInit): Promise<saveAcquisitionProfileResponse> => {
+
+  return orvalFetch<saveAcquisitionProfileResponse>(getSaveAcquisitionProfileUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      bookAcquisitionProfileSaveRequest,)
+  }
+);}
+
+
+
 export type getSetupStatusResponse200 = {
   data: SetupStatusResponse
   status: 200
@@ -8316,42 +8432,6 @@ export const headFileContent = async (params: HeadFileContentParams, options?: R
 
 
 
-export type listPluginsResponse200 = {
-  data: PluginProvider[]
-  status: 200
-}
-
-export type listPluginsResponseSuccess = (listPluginsResponse200) & {
-  headers: Headers;
-};
-;
-
-export type listPluginsResponse = (listPluginsResponseSuccess)
-
-export const getListPluginsUrl = () => {
-
-
-
-
-  return `/api/plugins`
-}
-
-/**
- * @summary Lists compatible community plugins discovered from installed and local development sources.
- */
-export const listPlugins = async ( options?: RequestInit): Promise<listPluginsResponse> => {
-
-  return orvalFetch<listPluginsResponse>(getListPluginsUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
 export type listStashScrapersResponse200 = {
   data: StashScraperListing[]
   status: 200
@@ -11280,86 +11360,6 @@ export const testDownloadClient = async (downloadClientTestRequest: DownloadClie
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       downloadClientTestRequest,)
-  }
-);}
-
-
-
-export type listAcquisitionProfilesResponse200 = {
-  data: BookAcquisitionProfileView[]
-  status: 200
-}
-
-export type listAcquisitionProfilesResponseSuccess = (listAcquisitionProfilesResponse200) & {
-  headers: Headers;
-};
-;
-
-export type listAcquisitionProfilesResponse = (listAcquisitionProfilesResponseSuccess)
-
-export const getListAcquisitionProfilesUrl = () => {
-
-
-
-
-  return `/api/acquisitions/profiles`
-}
-
-/**
- * @summary Lists acquisition profiles whose import targets are visible to the current viewer.
- */
-export const listAcquisitionProfiles = async ( options?: RequestInit): Promise<listAcquisitionProfilesResponse> => {
-
-  return orvalFetch<listAcquisitionProfilesResponse>(getListAcquisitionProfilesUrl(),
-  {
-    ...options,
-    method: 'GET'
-
-
-  }
-);}
-
-
-
-export type saveAcquisitionProfileResponse200 = {
-  data: BookAcquisitionProfileView
-  status: 200
-}
-
-export type saveAcquisitionProfileResponse400 = {
-  data: ApiProblem
-  status: 400
-}
-
-export type saveAcquisitionProfileResponseSuccess = (saveAcquisitionProfileResponse200) & {
-  headers: Headers;
-};
-export type saveAcquisitionProfileResponseError = (saveAcquisitionProfileResponse400) & {
-  headers: Headers;
-};
-
-export type saveAcquisitionProfileResponse = (saveAcquisitionProfileResponseSuccess | saveAcquisitionProfileResponseError)
-
-export const getSaveAcquisitionProfileUrl = () => {
-
-
-
-
-  return `/api/acquisitions/profiles`
-}
-
-/**
- * @summary Creates or updates a book acquisition profile.
- */
-export const saveAcquisitionProfile = async (bookAcquisitionProfileSaveRequest: BookAcquisitionProfileSaveRequest, options?: RequestInit): Promise<saveAcquisitionProfileResponse> => {
-
-  return orvalFetch<saveAcquisitionProfileResponse>(getSaveAcquisitionProfileUrl(),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(
-      bookAcquisitionProfileSaveRequest,)
   }
 );}
 

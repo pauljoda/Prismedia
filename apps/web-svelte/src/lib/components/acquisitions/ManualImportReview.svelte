@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Ban, Check, FileQuestion, FileText, Files } from "@lucide/svelte";
+  import { Ban, Check, FileQuestion, FileText, Files, ShieldAlert } from "@lucide/svelte";
   import { Button, Select, type SelectOption } from "@prismedia/ui-svelte";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import type { AcquisitionManualImportReview } from "$lib/api/generated/model";
@@ -25,7 +25,7 @@
   const sourceOptions = $derived<SelectOption[]>([
     { value: "", label: "No file selected" },
     ...(review?.files ?? [])
-      .filter((file) => file.canMap)
+      .filter((file) => file.canMap && !file.isDangerous)
       .map((file) => ({
         value: file.sourceRelativePath,
         label: file.sourceRelativePath,
@@ -37,8 +37,9 @@
     return `${prefix}${title}`;
   }
 
-  function fileKindLabel(canMap: boolean): string {
-    return canMap ? "Available for mapping" : "Other downloaded file";
+  function fileKindLabel(file: AcquisitionManualImportReview["files"][number]): string {
+    if (file.isDangerous) return "Blocked — potentially dangerous";
+    return file.canMap ? "Available for mapping" : "Other downloaded file";
   }
 </script>
 
@@ -49,6 +50,16 @@
       {review?.message ?? "Choose which downloaded file contains each expected episode."}
     </p>
   </div>
+
+  {#if review?.warning}
+    <div role="alert" class="flex items-start gap-3 rounded-sm border border-warning/30 bg-warning-muted px-3 py-2.5 text-warning-text">
+      <ShieldAlert class="mt-0.5 h-4 w-4 shrink-0" />
+      <div class="min-w-0">
+        <p class="text-sm font-medium">Potentially unsafe download</p>
+        <p class="mt-0.5 whitespace-normal text-sm [overflow-wrap:anywhere]">{review.warning}</p>
+      </div>
+    </div>
+  {/if}
 
   {#if review?.available}
     <div class="overflow-hidden rounded-sm border border-border-subtle bg-surface-1">
@@ -129,10 +140,18 @@
         {#each review.files as file (file.sourceRelativePath)}
           <div class="flex min-w-0 items-start justify-between gap-3 border-b border-border-subtle px-3 py-2.5 last:border-b-0">
             <span class="flex min-w-0 items-start gap-2.5">
-              <FileText class="mt-0.5 h-3.5 w-3.5 shrink-0 text-text-muted" />
+              {#if file.isDangerous}
+                <ShieldAlert class="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning-text" />
+              {:else}
+                <FileText class="mt-0.5 h-3.5 w-3.5 shrink-0 text-text-muted" />
+              {/if}
               <span class="min-w-0">
-                <span class="block whitespace-normal text-sm text-text-primary [overflow-wrap:anywhere]">{file.sourceRelativePath}</span>
-                <span class="mt-0.5 block text-[0.68rem] text-text-muted">{fileKindLabel(file.canMap)}</span>
+                <span class={file.isDangerous
+                  ? "block whitespace-normal text-sm text-warning-text [overflow-wrap:anywhere]"
+                  : "block whitespace-normal text-sm text-text-primary [overflow-wrap:anywhere]"}>{file.sourceRelativePath}</span>
+                <span class={file.isDangerous
+                  ? "mt-0.5 block text-[0.68rem] text-warning-text"
+                  : "mt-0.5 block text-[0.68rem] text-text-muted"}>{fileKindLabel(file)}</span>
               </span>
             </span>
             <span class="shrink-0 font-mono text-[0.68rem] text-text-muted">{formatBytes(Number(file.sizeBytes))}</span>

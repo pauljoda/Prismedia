@@ -175,17 +175,19 @@ describe("AcquisitionPanel", () => {
     expect(mocks.retryAcquisitionImport).toHaveBeenCalledWith("acquisition-1", false);
   });
 
-  it("maps expected episodes to files and allows one file to satisfy several episodes", async () => {
+  it("blocks dangerous files while allowing reviewed media to satisfy several episodes", async () => {
     const held = acquisition(ACQUISITION_STATUS.manualImportRequired);
     held.summary.statusMessage = "The download's files carry no recognizable episode numbering; import manually.";
     mocks.fetchAcquisition.mockResolvedValue(held);
     mocks.fetchAcquisitionManualImportReview.mockResolvedValue({
       available: true,
       message: "Choose the downloaded file that contains each expected episode.",
+      warning: "This download contains a potentially dangerous file: pack/RARBG_DO_NOT_MIRROR.exe. Verify the media before continuing.",
       files: [
-        { sourceRelativePath: "pack/video-a.mp4", name: "video-a.mp4", sizeBytes: 1_000, canMap: true, suggestedTargetEntityId: "episode-1" },
-        { sourceRelativePath: "pack/video-b.mp4", name: "video-b.mp4", sizeBytes: 2_000, canMap: true, suggestedTargetEntityId: null },
-        { sourceRelativePath: "pack/poster.jpg", name: "poster.jpg", sizeBytes: 300, canMap: false, suggestedTargetEntityId: null },
+        { sourceRelativePath: "pack/video-a.mp4", name: "video-a.mp4", sizeBytes: 1_000, canMap: true, suggestedTargetEntityId: "episode-1", isDangerous: false },
+        { sourceRelativePath: "pack/video-b.mp4", name: "video-b.mp4", sizeBytes: 2_000, canMap: true, suggestedTargetEntityId: null, isDangerous: false },
+        { sourceRelativePath: "pack/poster.jpg", name: "poster.jpg", sizeBytes: 300, canMap: false, suggestedTargetEntityId: null, isDangerous: false },
+        { sourceRelativePath: "pack/RARBG_DO_NOT_MIRROR.exe", name: "RARBG_DO_NOT_MIRROR.exe", sizeBytes: 400, canMap: false, suggestedTargetEntityId: null, isDangerous: true },
       ],
       targets: [
         { entityId: "episode-1", title: "First Day", position: 1 },
@@ -203,11 +205,18 @@ describe("AcquisitionPanel", () => {
     expect(view.getAllByText("pack/video-b.mp4").length).toBeGreaterThan(0);
     expect(view.getByText("pack/poster.jpg")).toBeInTheDocument();
     expect(view.getByText("Other downloaded file")).toBeInTheDocument();
+    expect(view.getByRole("alert")).toHaveTextContent("Potentially unsafe download");
+    expect(view.getByText("Blocked — potentially dangerous")).toBeInTheDocument();
     expect(view.queryByRole("button", { name: "Import anyway" })).toBeNull();
 
     await fireEvent.click(view.getByRole("button", { name: "Downloaded file for Episode 02 · Second Day" }));
+    expect(view.queryByRole("option", { name: "pack/RARBG_DO_NOT_MIRROR.exe" })).toBeNull();
     await fireEvent.click(await view.findByRole("option", { name: "pack/video-a.mp4" }));
     await fireEvent.click(view.getByRole("button", { name: "Import mapped episodes" }));
+
+    expect(mocks.submitAcquisitionManualImport).not.toHaveBeenCalled();
+    expect(view.getByRole("dialog", { name: "Import from this potentially unsafe download?" })).toBeInTheDocument();
+    await fireEvent.click(view.getByRole("button", { name: "Confirm Import mapped episodes" }));
 
     expect(mocks.submitAcquisitionManualImport).toHaveBeenCalledWith("acquisition-1", [
       { sourceRelativePath: "pack/video-a.mp4", targetEntityId: "episode-1" },

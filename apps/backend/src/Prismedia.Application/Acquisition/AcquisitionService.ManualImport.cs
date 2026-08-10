@@ -88,12 +88,6 @@ public sealed partial class AcquisitionService {
                 visibleFiles);
         }
 
-        if (DangerousFileDetection.FindDangerousFile(payload.Files.Select(file => file.RelativePath)) is { } dangerous) {
-            return Unavailable(
-                $"This download contains a potentially dangerous file ({Path.GetFileName(dangerous)}) and cannot be imported. Block the release and search again.",
-                visibleFiles);
-        }
-
         if (import.EntityId is not { } entityId || import.SeasonNumber is not { } seasonNumber) {
             return Unavailable(
                 "This acquisition has no season episode list to map against.",
@@ -150,11 +144,22 @@ public sealed partial class AcquisitionService {
                 episode.Title,
                 episode.Episode))
             .ToArray();
+        var dangerousNames = payload.Files
+            .Where(file => DangerousFileDetection.IsDangerousFile(file.RelativePath))
+            .Select(file => Path.GetFileName(file.RelativePath))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        var dangerousFileLabel = dangerousNames.Length == 1 ? "file" : "files";
+        var warning = dangerousNames.Length == 0
+            ? null
+            : $"This download contains potentially dangerous {dangerousFileLabel}: {string.Join(", ", dangerousNames)}. "
+                + "Those files are blocked from mapping. Continue only if you have verified that the selectable media is the expected content.";
         return new AcquisitionManualImportReview(
             true,
             files,
             targets,
-            "Choose the downloaded file that contains each expected episode. One file may satisfy several episodes; leave episodes unassigned when they are not present.");
+            "Choose the downloaded file that contains each expected episode. One file may satisfy several episodes; leave episodes unassigned when they are not present.",
+            warning);
     }
 
     /// <summary>
@@ -225,11 +230,15 @@ public sealed partial class AcquisitionService {
     private static IReadOnlyList<AcquisitionManualImportFile> ToReviewFiles(
         DownloadPayload payload,
         bool canMapVideos) => payload.Files
-        .Select(file => new AcquisitionManualImportFile(
-            file.RelativePath,
-            Path.GetFileName(file.RelativePath),
-            file.SizeBytes,
-            canMapVideos && TvImportPlanBuilder.IsVideoFile(file.RelativePath)))
+        .Select(file => {
+            var isDangerous = DangerousFileDetection.IsDangerousFile(file.RelativePath);
+            return new AcquisitionManualImportFile(
+                file.RelativePath,
+                Path.GetFileName(file.RelativePath),
+                file.SizeBytes,
+                canMapVideos && !isDangerous && TvImportPlanBuilder.IsVideoFile(file.RelativePath),
+                IsDangerous: isDangerous);
+        })
         .ToArray();
 
     private static AcquisitionManualImportReview Unavailable(

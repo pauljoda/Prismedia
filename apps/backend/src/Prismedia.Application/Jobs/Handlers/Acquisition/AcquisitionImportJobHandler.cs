@@ -9,9 +9,10 @@ namespace Prismedia.Application.Jobs.Handlers;
 /// <summary>
 /// Imports a completed acquisition by dispatching to the media kind's <see cref="IAcquisitionImportEngine"/>
 /// (books, movies, music — each owns its planning, placement, hint, and scan chaining). A payload carrying
-/// an executable or dangerous file is held for manual review before any engine runs. A kind with no
-/// registered engine stays Downloaded (files intact in the client) with an honest status instead of being
-/// pushed through the wrong pipeline.
+/// an executable or dangerous file is held for manual review before any engine runs. A reviewed mapping
+/// may explicitly select safe media from that payload; dangerous paths themselves remain blocked. A kind
+/// with no registered engine stays Downloaded (files intact in the client) with an honest status instead
+/// of being pushed through the wrong pipeline.
 /// </summary>
 [JobDefinition(JobType.AcquisitionImport)]
 public sealed class AcquisitionImportJobHandler(
@@ -116,8 +117,8 @@ public sealed class AcquisitionImportJobHandler(
 
         if (payload.AllowFormatChange) {
             // The user's explicit "import anyway": genuine upgrades may replace the owned file across
-            // formats. The dangerous-file hold below still applies — consent to a format change is not
-            // consent to import an executable payload.
+            // formats. The dangerous-file hold below still applies unless the user separately reviewed
+            // exact safe media mappings.
             import = import with { AllowFormatChange = true };
         }
         if (payload.ManualFileMappings is { Count: > 0 } manualFileMappings) {
@@ -130,11 +131,15 @@ public sealed class AcquisitionImportJobHandler(
 
         // The dangerous-file hold runs before ANY engine: a release whose payload carries an executable
         // (the classic fake-release .scr) is never imported automatically and never silently skipped —
-        // it waits, visibly, for the user to review, blocklist, or import manually. Deliberately NOT
-        // bypassed by a manual retry.
-        if (DangerousFileDetection.FindDangerousFile(payloadFiles) is { } dangerous) {
+        // it waits, visibly, for the user to review or blocklist. An exact reviewed mapping is the only
+        // override: the mapped paths must all be non-dangerous and the engine receives only those choices.
+        // A generic manual retry never bypasses this gate.
+        var hasReviewedSafeMappings = payload.ManualFileMappings is { Count: > 0 } reviewedMappings
+            && reviewedMappings.All(mapping => !DangerousFileDetection.IsDangerousFile(mapping.SourceRelativePath));
+        if (!hasReviewedSafeMappings
+            && DangerousFileDetection.FindDangerousFile(payloadFiles) is { } dangerous) {
             logger.LogWarning("AcquisitionImport: dangerous file {File} held for acquisition {Id}", dangerous, payload.AcquisitionId);
-            var holdMessage = $"The download contains a potentially dangerous file (\"{Path.GetFileName(dangerous)}\") and was not imported. Review it, or block this release and search again.";
+            var holdMessage = $"The download contains a potentially dangerous file (\"{Path.GetFileName(dangerous)}\") and was not imported automatically. Review and map only verified media, or block this release and search again.";
             await acquisitions.SetStatusAsync(payload.AcquisitionId, AcquisitionStatus.ManualImportRequired, holdMessage, cancellationToken);
             await RecordImportFailedAsync(import, holdMessage, cancellationToken);
             return;

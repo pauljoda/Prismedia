@@ -186,12 +186,14 @@ public sealed record AcquisitionFilesView(
 /// <param name="SizeBytes">Downloaded file size.</param>
 /// <param name="CanMap">Whether this payload item is supported media that can be assigned to a target.</param>
 /// <param name="SuggestedTargetEntityId">Prismedia's best unambiguous target inference, or null when it could not decide.</param>
+/// <param name="IsDangerous">Whether the file is explicitly blocked because its extension may execute code.</param>
 public sealed record AcquisitionManualImportFile(
     string SourceRelativePath,
     string Name,
     long SizeBytes,
     bool CanMap,
-    Guid? SuggestedTargetEntityId = null);
+    Guid? SuggestedTargetEntityId = null,
+    bool IsDangerous = false);
 
 /// <summary>One expected Entity that the current held acquisition permits a downloaded file to satisfy.</summary>
 /// <param name="EntityId">Stable target Entity identity used by the submission contract.</param>
@@ -202,13 +204,15 @@ public sealed record AcquisitionManualImportTarget(Guid EntityId, string Title, 
 /// <summary>
 /// Read-only mapping review for an acquisition held at manual import. Targets are the primary review rows;
 /// files retain payload-relative paths for selection and payload auditing, and safe automatic inferences
-/// are returned as suggestions.
+/// are returned as suggestions. <paramref name="Warning"/> describes payload-level risk that the client
+/// must put behind explicit confirmation while still allowing verified safe files to be mapped.
 /// </summary>
 public sealed record AcquisitionManualImportReview(
     bool Available,
     IReadOnlyList<AcquisitionManualImportFile> Files,
     IReadOnlyList<AcquisitionManualImportTarget> Targets,
-    string? Message = null);
+    string? Message = null,
+    string? Warning = null);
 
 /// <summary>
 /// Maps one expected Entity target onto a downloaded file. Several targets may intentionally select the

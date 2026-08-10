@@ -1363,13 +1363,14 @@ public sealed class AcquisitionServiceTests {
     }
 
     [Fact]
-    public async Task ManualTvImportReviewPrefillsOnlyUnambiguousFilesAndQueuesExactMappings() {
+    public async Task ManualTvImportReviewBlocksDangerousFilesWhileQueuingExactSafeMappings() {
         var firstEpisodeId = Guid.NewGuid();
         var secondEpisodeId = Guid.NewGuid();
         var payloads = new FixedDownloadPayloadReader(new DownloadPayload("/downloads/sesame", [
             new ImportCandidateFile("pack/Sesame Street - S09E01.mp4", 1_000),
             new ImportCandidateFile("pack/unlabeled.mp4", 2_000),
             new ImportCandidateFile("pack/poster.jpg", 300),
+            new ImportCandidateFile("pack/RARBG_DO_NOT_MIRROR.exe", 400),
         ]));
         var targets = new FixedImportTargetIndex([
             new TvEpisodeTitle(1, "First Day", firstEpisodeId),
@@ -1401,7 +1402,20 @@ public sealed class AcquisitionServiceTests {
         Assert.Equal(firstEpisodeId, review.Files[0].SuggestedTargetEntityId);
         Assert.Null(review.Files[1].SuggestedTargetEntityId);
         Assert.False(review.Files[2].CanMap);
+        Assert.False(review.Files[3].CanMap);
+        Assert.True(review.Files[3].IsDangerous);
+        Assert.NotNull(review.Warning);
+        Assert.Contains("RARBG_DO_NOT_MIRROR.exe", review.Warning);
         Assert.Equal([firstEpisodeId, secondEpisodeId], review.Targets.Select(target => target.EntityId).ToArray());
+
+        await Assert.ThrowsAsync<AcquisitionConfigurationException>(() =>
+            harness.Service.SubmitManualImportAsync(
+                AcquisitionId,
+                new AcquisitionManualImportRequest([
+                    new AcquisitionManualImportSelection("pack/RARBG_DO_NOT_MIRROR.exe", firstEpisodeId),
+                ]),
+                CancellationToken.None));
+        Assert.Empty(harness.Queue.Requests);
 
         await harness.Service.SubmitManualImportAsync(
             AcquisitionId,

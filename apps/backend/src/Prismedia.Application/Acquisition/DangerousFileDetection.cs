@@ -2,9 +2,9 @@ namespace Prismedia.Application.Acquisition;
 
 /// <summary>
 /// Detects executable / dangerous files in a completed download's payload. A payload carrying one is
-/// held for manual review instead of imported — a release whose "video" is a <c>.scr</c> is malware,
-/// and silently importing (or silently skipping) it would either endanger the library host or leave
-/// the acquisition stuck with no explanation. Extension lists mirror Sonarr's, which this gate was
+/// held for manual review instead of imported automatically — a release whose "video" is a <c>.scr</c>
+/// is malware. A reviewed mapping may deliberately import separate media from the same payload, but a
+/// dangerous path itself is never selectable. Extension lists mirror Sonarr's, which this gate was
 /// modeled on.
 /// </summary>
 public static class DangerousFileDetection {
@@ -17,7 +17,11 @@ public static class DangerousFileDetection {
 
     /// <summary>The first dangerous file among the payload paths, or null when the payload is clean.</summary>
     public static string? FindDangerousFile(IEnumerable<string> filePaths) =>
-        filePaths.FirstOrDefault(path => DangerousExtensions.Contains(Path.GetExtension(path)));
+        filePaths.FirstOrDefault(IsDangerousFile);
+
+    /// <summary>Whether one payload path uses an executable or otherwise dangerous extension.</summary>
+    public static bool IsDangerousFile(string filePath) =>
+        DangerousExtensions.Contains(Path.GetExtension(filePath));
 
     /// <summary>
     /// True when a release TITLE already names a dangerous file (e.g. "Some Book.epub.exe") — the

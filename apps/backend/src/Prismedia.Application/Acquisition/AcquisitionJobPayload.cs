@@ -10,7 +10,9 @@ namespace Prismedia.Application.Acquisition;
 /// wrong-content hold (the user reviewed the payload) but never the dangerous-file hold.
 /// <see cref="ManualReview"/> prevents a user-triggered search from auto-queueing a result, while
 /// <see cref="CustomQuery"/> replaces the generated query ladder with the exact reviewed term.
-/// <see cref="ManualFileMappings"/> carries exact reviewed file-to-Entity choices into the import worker.
+/// <see cref="ManualFileMappings"/> carries exact reviewed file-to-Entity choices into the import worker;
+/// unlike a generic retry, non-empty mappings may import verified safe media from a payload that also
+/// contains a dangerous companion file, while the dangerous path itself remains blocked.
 /// </summary>
 public sealed record AcquisitionJobPayload(
     Guid AcquisitionId,

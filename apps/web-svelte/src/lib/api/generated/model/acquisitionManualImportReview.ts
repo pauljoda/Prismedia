@@ -13,4 +13,6 @@ export interface AcquisitionManualImportReview {
   targets: AcquisitionManualImportTarget[];
   /** @nullable */
   message?: string | null;
+  /** @nullable */
+  warning?: string | null;
 }
