@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { EntityThumbnail } from "$lib/api/generated/model";
 import type { DownloadManagerEntry } from "./download-tree";
-import { buildDownloadTree, expandableDownloadNodeKeys } from "./download-tree";
+import { buildDownloadTree, expandableDownloadNodeKeys, findDownloadTreeNode } from "./download-tree";
 
 function thumbnail(id: string, title: string, parentEntityId: string | null, sortOrder: number): EntityThumbnail {
   return { id, title, parentEntityId, sortOrder } as EntityThumbnail;
@@ -37,6 +37,7 @@ describe("buildDownloadTree", () => {
       "Hospital",
     ]);
     expect(expandableDownloadNodeKeys(tree)).toEqual(["entity:series", "entity:season-1"]);
+    expect(findDownloadTreeNode(tree, "entity:season-1")?.title).toBe("Season 1");
   });
 
   it("keeps an acquisition usable when it has not been bound to an Entity", () => {

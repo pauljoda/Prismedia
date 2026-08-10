@@ -9,16 +9,22 @@
   import ConfirmDialog from "$lib/components/entities/ConfirmDialog.svelte";
   import EntityThumbnailView from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import AcquisitionPanel from "$lib/components/acquisitions/AcquisitionPanel.svelte";
+  import DownloadGroupInspector from "$lib/components/acquisitions/DownloadGroupInspector.svelte";
   import DownloadManagerTable from "$lib/components/acquisitions/DownloadManagerTable.svelte";
   import { downloadToListItem } from "$lib/requests/acquisition-list-item";
   import { acquisitionStatusShouldPoll } from "$lib/requests/acquisition-status";
   import { createSerializedRefresh } from "$lib/async/serialized-refresh";
+  import { resolveEntityHref } from "$lib/entities/entity-codes";
   import {
     DEFAULT_DOWNLOAD_DETAIL_SHARE,
     clampDownloadDetailShare,
     downloadDetailShareForHeight,
   } from "./download-pane-layout";
-  import type { DownloadManagerEntry } from "./download-tree";
+  import {
+    buildDownloadTree,
+    findDownloadTreeNode,
+    type DownloadManagerEntry,
+  } from "./download-tree";
 
   /**
    * The global Downloads workbench. Active acquisitions are grouped through their real Entity ancestry
@@ -29,7 +35,7 @@
   let loading = $state(true);
   let error = $state<string | null>(null);
   let acting = $state(false);
-  let selectedId = $state<string | null>(null);
+  let selectedKey = $state<string | null>(null);
   let detailShare = $state(DEFAULT_DOWNLOAD_DETAIL_SHARE);
   let resizingPanes = $state(false);
   let workbenchElement = $state<HTMLElement | null>(null);
@@ -61,7 +67,23 @@
       acting,
     ),
   })));
-  const selectedEntry = $derived(entries.find((entry) => entry.item.id === selectedId) ?? null);
+  const entriesById = $derived(new Map(entries.map((entry) => [entry.item.id, entry])));
+  const hierarchy = $derived(buildDownloadTree(entries, thumbnails));
+  const selectedEntry = $derived(entriesById.get(selectedKey ?? "") ?? null);
+  const selectedNode = $derived(findDownloadTreeNode(hierarchy, selectedKey));
+  const selectedNodeEntries = $derived(
+    selectedNode?.descendantEntryIds
+      .map((id) => entriesById.get(id))
+      .filter((entry): entry is DownloadManagerEntry => entry !== undefined) ?? [],
+  );
+  const selectedNodeHref = $derived.by(() => {
+    const thumbnail = selectedNode?.thumbnail;
+    if (!selectedNode?.entityId || !thumbnail) return undefined;
+    const parent = thumbnail.parentEntityId && thumbnail.parentKind
+      ? { id: thumbnail.parentEntityId, kind: thumbnail.parentKind }
+      : undefined;
+    return resolveEntityHref(thumbnail.kind, selectedNode.entityId, parent);
+  });
   const paneTemplate = $derived(
     `minmax(13rem, ${1 - detailShare}fr) 0.75rem minmax(12rem, ${detailShare}fr)`,
   );
@@ -99,8 +121,8 @@
       // briefly creates a flat fallback tree, then discards it and builds the grouped tree again.
       thumbnails = nextThumbnails;
       rows = nextRows;
-      if (selectedId && !nextRows.some((row) => row.acquisitionId === selectedId)) {
-        selectedId = null;
+      if (selectedKey && !selectedKey.startsWith("entity:") && !nextRows.some((row) => row.acquisitionId === selectedKey)) {
+        selectedKey = null;
       }
       error = null;
     } catch (err) {
@@ -272,8 +294,8 @@
     {loading}
     {error}
     {acting}
-    {selectedId}
-    onSelect={(id) => (selectedId = id)}
+    {selectedKey}
+    onSelect={(key) => (selectedKey = key)}
     onRemove={requestRemove}
   />
 
@@ -296,7 +318,14 @@
   </Button>
 
   <section bind:this={inspectorElement} class="download-inspector" aria-label="Selected download details">
-    {#if selectedEntry}
+    {#if selectedNode}
+      <DownloadGroupInspector
+        node={selectedNode}
+        entries={selectedNodeEntries}
+        href={selectedNodeHref}
+        onSelectItem={(key) => (selectedKey = key)}
+      />
+    {:else if selectedEntry}
       <header class="inspector-header">
         <div class="inspector-identity">
           <span class="inspector-artwork">

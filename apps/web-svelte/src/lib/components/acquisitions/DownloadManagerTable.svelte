@@ -32,7 +32,7 @@
     loading = false,
     error = null,
     acting = false,
-    selectedId = null,
+    selectedKey = null,
     onSelect,
     onRemove,
   }: {
@@ -41,7 +41,7 @@
     loading?: boolean;
     error?: string | null;
     acting?: boolean;
-    selectedId?: string | null;
+    selectedKey?: string | null;
     onSelect: (id: string) => void;
     onRemove: (ids: string[]) => void;
   } = $props();
@@ -101,9 +101,11 @@
     else expanded.add(key);
   }
 
-  function toggleChecked(id: string) {
-    if (checkedIds.has(id)) checkedIds.delete(id);
-    else checkedIds.add(id);
+  function setChecked(ids: string[], checked: boolean) {
+    ids.forEach((id) => {
+      if (checked) checkedIds.add(id);
+      else checkedIds.delete(id);
+    });
   }
 
   function toggleAllVisible() {
@@ -362,12 +364,12 @@
           nodes={tree}
           {entriesById}
           expanded={effectiveExpanded}
-          {selectedId}
+          {selectedKey}
           checkedIds={safeCheckedIds}
           columnTemplate={gridTemplate}
           onToggleExpanded={toggleExpanded}
           {onSelect}
-          onToggleChecked={toggleChecked}
+          onSetChecked={setChecked}
         />
       {:else if loading}
         <div class="manager-state"><Loader2 class="h-4 w-4 animate-spin" /> Loading downloads…</div>

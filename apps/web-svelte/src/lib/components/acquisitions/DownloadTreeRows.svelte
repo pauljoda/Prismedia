@@ -13,24 +13,24 @@
     nodes,
     entriesById,
     expanded,
-    selectedId,
+    selectedKey,
     checkedIds,
     columnTemplate,
     depth = 0,
     onToggleExpanded,
     onSelect,
-    onToggleChecked,
+    onSetChecked,
   }: {
     nodes: DownloadTreeNode[];
     entriesById: ReadonlyMap<string, DownloadManagerEntry>;
     expanded: ReadonlySet<string>;
-    selectedId: string | null;
+    selectedKey: string | null;
     checkedIds: ReadonlySet<string>;
     columnTemplate: string;
     depth?: number;
     onToggleExpanded: (key: string) => void;
     onSelect: (id: string) => void;
-    onToggleChecked: (id: string) => void;
+    onSetChecked: (ids: string[], checked: boolean) => void;
   } = $props();
 
   interface NodeSummary {
@@ -97,7 +97,14 @@
 {#snippet managerRow(node: DownloadTreeNode, entry: DownloadManagerEntry | null, rowDepth: number, extra = false)}
   {@const summary = summaryFor(node)}
   {@const hasChildren = !extra && (node.children.length > 0 || node.directEntryIds.length > 1)}
+  {@const isGroupRow = hasChildren}
   {@const isExpanded = expanded.has(node.key)}
+  {@const selectionKey = isGroupRow ? node.key : entry?.item.id ?? node.key}
+  {@const selectableIds = isGroupRow
+    ? node.descendantEntryIds.filter((id) => entriesById.get(id)?.item.selectable !== false)
+    : entry?.item.selectable !== false && entry ? [entry.item.id] : []}
+  {@const allChecked = selectableIds.length > 0 && selectableIds.every((id) => checkedIds.has(id))}
+  {@const someChecked = selectableIds.some((id) => checkedIds.has(id))}
   {@const thumbnail = entryThumbnail(node, entry)}
   {@const progress = entry?.item.progress ?? summary.progress}
   {@const percent = progress === null ? null : Math.round(Math.min(1, Math.max(0, progress)) * 100)}
@@ -114,11 +121,11 @@
 
   <div
     role="row"
-    aria-selected={entry?.item.id === selectedId}
+    aria-selected={selectionKey === selectedKey}
     class={[
       "download-row",
-      entry?.item.id === selectedId && "is-selected",
-      !entry && "is-group",
+      selectionKey === selectedKey && "is-selected",
+      isGroupRow && "is-group",
     ]}
     style:grid-template-columns={columnTemplate}
     style:--tree-depth={rowDepth}
@@ -126,17 +133,18 @@
     <Button
       variant="ghost"
       class="row-hit"
-      aria-label={entry ? `Inspect ${entry.item.title}` : `${isExpanded ? "Collapse" : "Expand"} ${node.title}`}
-      onclick={() => entry ? onSelect(entry.item.id) : onToggleExpanded(node.key)}
+      aria-label={isGroupRow ? `Inspect ${node.title} downloads` : `Inspect ${entry?.item.title ?? node.title}`}
+      onclick={() => onSelect(selectionKey)}
     />
 
     <div role="gridcell" class="select-cell interactive-cell">
-      {#if entry && entry.item.selectable !== false}
+      {#if selectableIds.length > 0}
         <Checkbox
           size="md"
-          checked={checkedIds.has(entry.item.id)}
-          onchange={() => onToggleChecked(entry.item.id)}
-          aria-label={`Select ${entry.item.title}`}
+          checked={allChecked}
+          indeterminate={someChecked && !allChecked}
+          onchange={() => onSetChecked(selectableIds, !allChecked)}
+          aria-label={isGroupRow ? `Select all ${node.title} downloads` : `Select ${entry?.item.title ?? node.title}`}
         />
       {/if}
     </div>
@@ -208,24 +216,25 @@
   {@const directEntries = node.directEntryIds
     .map((id) => entriesById.get(id))
     .filter((entry): entry is DownloadManagerEntry => entry !== undefined)}
-  {@const primaryEntry = directEntries[0] ?? null}
+  {@const nodeIsGroup = node.children.length > 0 || directEntries.length > 1}
+  {@const primaryEntry = nodeIsGroup ? null : directEntries[0] ?? null}
   {@render managerRow(node, primaryEntry, depth)}
 
   {#if expanded.has(node.key)}
-    {#each directEntries.slice(1) as entry (entry.item.id)}
+    {#each (nodeIsGroup ? directEntries : directEntries.slice(1)) as entry (entry.item.id)}
       {@render managerRow(node, entry, depth + 1, true)}
     {/each}
     <Self
       nodes={node.children}
       {entriesById}
       {expanded}
-      {selectedId}
+      {selectedKey}
       {checkedIds}
       {columnTemplate}
       depth={depth + 1}
       {onToggleExpanded}
       {onSelect}
-      {onToggleChecked}
+      {onSetChecked}
     />
   {/if}
 {/each}

@@ -128,3 +128,17 @@ export function expandableDownloadNodeKeys(nodes: DownloadTreeNode[]): string[] 
     ...expandableDownloadNodeKeys(node.children),
   ]);
 }
+
+/** Finds a stable Entity selection in the current live hierarchy. */
+export function findDownloadTreeNode(
+  nodes: DownloadTreeNode[],
+  key: string | null,
+): DownloadTreeNode | null {
+  if (!key) return null;
+  for (const node of nodes) {
+    if (node.key === key) return node;
+    const child = findDownloadTreeNode(node.children, key);
+    if (child) return child;
+  }
+  return null;
+}

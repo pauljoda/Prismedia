@@ -1,6 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ACQUISITION_STATUS } from "$lib/api/generated/codes";
+import { ACQUISITION_STATUS, ENTITY_KIND, THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
+import type { EntityThumbnail, EntityKind } from "$lib/api/generated/model";
 import DownloadsPanel from "./DownloadsPanel.svelte";
 
 const mocks = vi.hoisted(() => ({
@@ -9,6 +10,34 @@ const mocks = vi.hoisted(() => ({
   fetchEntityThumbnails: vi.fn(),
   reSearchAcquisition: vi.fn(),
 }));
+
+function hierarchyThumbnail(
+  id: string,
+  title: string,
+  kind: EntityKind,
+  parentEntityId: string | null,
+  parentKind: EntityKind | null,
+  sortOrder: number,
+): EntityThumbnail {
+  return {
+    id,
+    title,
+    kind,
+    parentEntityId,
+    parentKind,
+    sortOrder,
+    coverUrl: null,
+    coverThumbUrl: null,
+    hoverKind: THUMBNAIL_HOVER_KIND.none,
+    hoverUrl: null,
+    hoverImages: [],
+    meta: [],
+    rating: null,
+    isFavorite: false,
+    isNsfw: false,
+    isOrganized: true,
+  };
+}
 
 vi.mock("$lib/api/acquisitions", () => ({
   deleteAcquisition: mocks.deleteAcquisition,
@@ -25,6 +54,7 @@ vi.mock("$lib/requests/acquisition-list-item", () => ({
     id: row.acquisitionId,
     title: row.title ?? row.acquisitionId,
     tone: "downloading",
+    progress: null,
     thumbnail: {},
     statusLabel: "Downloading",
     selectable: true,
@@ -172,5 +202,27 @@ describe("DownloadsPanel", () => {
 
     expect(splitter).toHaveAttribute("aria-valuenow", "45");
     expect(Number(localStorage.getItem("prismedia.downloads.detail-share"))).toBeCloseTo(0.45);
+  });
+
+  it("shows the aggregate detail inspector when an Entity group is selected", async () => {
+    mocks.fetchDownloadQueue.mockResolvedValue([
+      { acquisitionId: "episode-download", entityId: "episode", title: "Elmo's World" },
+    ]);
+    mocks.fetchEntityThumbnails.mockImplementation(async (ids: string[]) => ids.flatMap((id) => {
+      if (id === "episode") return [hierarchyThumbnail(id, "Elmo's World", ENTITY_KIND.videoEpisode, "season", ENTITY_KIND.videoSeason, 1)];
+      if (id === "season") return [hierarchyThumbnail(id, "Season 1", ENTITY_KIND.videoSeason, "series", ENTITY_KIND.videoSeries, 1)];
+      if (id === "series") return [hierarchyThumbnail(id, "Sesame Street", ENTITY_KIND.videoSeries, null, null, 0)];
+      return [];
+    }));
+
+    render(DownloadsPanel);
+    await waitFor(() => expect(mocks.fetchEntityThumbnails).toHaveBeenCalledTimes(3));
+    await fireEvent.click(screen.getByRole("button", { name: "Inspect series downloads" }));
+
+    expect(await screen.findByText("Sesame Street")).toBeInTheDocument();
+    expect(screen.getByText("1 transfer across this Entity")).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Inspect Season 1" }));
+    expect(await screen.findByText("Season 1")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Inspect Elmo's World" })).toBeInTheDocument();
   });
 });

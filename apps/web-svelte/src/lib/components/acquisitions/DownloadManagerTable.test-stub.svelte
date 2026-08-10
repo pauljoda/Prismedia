@@ -5,10 +5,12 @@
     entries,
     error = null,
     onRemove,
+    onSelect,
   }: {
     entries: DownloadManagerEntry[];
     error?: string | null;
     onRemove: (ids: string[]) => void;
+    onSelect: (key: string) => void;
   } = $props();
 </script>
 
@@ -21,4 +23,7 @@
   aria-label="Select all downloads"
 >
   Select all downloads
+</button>
+<button type="button" onclick={() => onSelect("entity:series")} aria-label="Inspect series downloads">
+  Inspect series downloads
 </button>
