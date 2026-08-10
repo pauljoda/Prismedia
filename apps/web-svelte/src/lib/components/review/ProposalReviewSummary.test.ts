@@ -45,6 +45,20 @@ describe("ProposalReviewSummary", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Deselect all Seasons" }));
     expect(onSelectedChange).toHaveBeenCalledWith("season-1", false);
   });
+
+  it("shows identifying status supplied by the shared review lifecycle", () => {
+    const root = proposal();
+    render(ProposalReviewSummary, {
+      props: {
+        proposal: root,
+        selectedIds: [],
+        selectableIds: ["season-1"],
+        statusLabel: (node: EntityMetadataProposal) => node.proposalId === "season-1" ? "Identifying…" : null,
+      },
+    });
+
+    expect(screen.getAllByText("Identifying…").length).toBeGreaterThan(0);
+  });
 });
 
 function proposal(): EntityMetadataProposal {

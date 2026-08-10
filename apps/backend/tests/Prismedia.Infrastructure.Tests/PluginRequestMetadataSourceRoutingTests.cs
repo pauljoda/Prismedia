@@ -518,7 +518,7 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
     }
 
     [Fact]
-    public async Task ReviewExpandsShallowStructuralChildrenBeforeReturningTheCachedTree() {
+    public async Task ProgressiveReviewReturnsTheRootAndDirectShellsBeforeExpandingThem() {
         await using var db = await CreateSeriesPluginAsync();
         var catalog = Catalog(db);
         var runner = new ShallowSeriesRunner();
@@ -528,7 +528,7 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
             new IdentifyRunnerSelector([runner]));
         var identity = new ExternalIdentity("tmdb", $"Series:{Guid.NewGuid():N}");
 
-        var review = await source.ReviewAsync(
+        var review = await source.StartReviewAsync(
             new RequestReviewRequest(RequestMediaKind.Series, "series-metadata", identity),
             hideNsfw: false,
             CancellationToken.None);
@@ -536,11 +536,57 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
         Assert.NotNull(review);
         var season = Assert.Single(review.Proposal.Children);
         Assert.Equal("Season 1", season.Patch.Title);
-        Assert.Equal("Episode 1", Assert.Single(season.Children).Patch.Title);
+        Assert.Empty(season.Children);
+        var person = Assert.Single(review.Proposal.Relationships);
+        Assert.Equal("Person shell", person.Patch.Title);
+        Assert.Null(person.Patch.Description);
+        Assert.Equal([EntityKind.VideoSeries], runner.Calls.Select(call => call.Entity.Kind).ToArray());
+        Assert.Equal(2, review.Targets.Count);
+    }
+
+    [Fact]
+    public async Task ProgressiveReviewPublishesEachRelationshipAndDirectChildAsItFinishes() {
+        await using var db = await CreateSeriesPluginAsync();
+        var catalog = Catalog(db);
+        var runner = new ShallowSeriesRunner();
+        var source = new PluginRequestMetadataSource(
+            catalog,
+            new PluginIdentityRouter(catalog),
+            new IdentifyRunnerSelector([runner]));
+        var identity = new ExternalIdentity("tmdb", $"Series:{Guid.NewGuid():N}");
+        var seed = await source.StartReviewAsync(
+            new RequestReviewRequest(RequestMediaKind.Series, "series-metadata", identity),
+            hideNsfw: false,
+            CancellationToken.None);
+        Assert.NotNull(seed);
+        var updates = new List<RequestReviewProgressUpdate>();
+
+        var completed = await source.EnrichReviewAsync(
+            seed,
+            hideNsfw: false,
+            (update, _) => {
+                updates.Add(update);
+                return Task.CompletedTask;
+            },
+            CancellationToken.None);
+
+        Assert.Collection(
+            updates,
+            update => {
+                Assert.Equal("person-one", update.CompletedProposalId);
+                Assert.Equal("Hydrated person", Assert.Single(update.Review.Proposal.Relationships).Patch.Title);
+                Assert.Empty(Assert.Single(update.Review.Proposal.Children).Children);
+            },
+            update => {
+                Assert.Equal("season-one", update.CompletedProposalId);
+                Assert.Equal("Episode 1", Assert.Single(Assert.Single(update.Review.Proposal.Children).Children).Patch.Title);
+            });
+        Assert.Equal("Hydrated person", Assert.Single(completed.Proposal.Relationships).Patch.Title);
+        Assert.Equal("Episode 1", Assert.Single(Assert.Single(completed.Proposal.Children).Children).Patch.Title);
         Assert.Equal(
-            [EntityKind.VideoSeries, EntityKind.VideoSeason],
+            [EntityKind.VideoSeries, EntityKind.Person, EntityKind.VideoSeason],
             runner.Calls.Select(call => call.Entity.Kind).ToArray());
-        Assert.Equal(3, review.Targets.Count);
+        Assert.Equal(3, completed.Targets.Count);
     }
 
     [Fact]
@@ -714,6 +760,11 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
                   "entityKind": "video",
                   "actions": ["lookup-id"],
                   "identityNamespaces": ["episode-db"]
+                },
+                {
+                  "entityKind": "person",
+                  "actions": ["lookup-id"],
+                  "identityNamespaces": ["tmdb"]
                 }
               ]
             }
@@ -999,9 +1050,33 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
                 [],
                 null,
                 []);
-            var proposal = request.Entity.Kind == EntityKind.VideoSeason
-                ? season
-                : new EntityMetadataProposal(
+            var person = new EntityMetadataProposal(
+                "person-one",
+                descriptor.Manifest.Id,
+                EntityKind.Person,
+                1,
+                "relationship",
+                new EntityMetadataPatch(
+                    request.Entity.Kind == EntityKind.Person ? "Hydrated person" : "Person shell",
+                    request.Entity.Kind == EntityKind.Person ? "Biography" : null,
+                    new Dictionary<string, string> { ["tmdb"] = "Person:One" },
+                    [],
+                    [],
+                    null,
+                    [],
+                    new Dictionary<string, string>(),
+                    new Dictionary<string, int>(),
+                    new Dictionary<string, int>(),
+                    null),
+                [],
+                [],
+                [],
+                null,
+                []);
+            var proposal = request.Entity.Kind switch {
+                EntityKind.VideoSeason => season,
+                EntityKind.Person => person,
+                _ => new EntityMetadataProposal(
                     "series-root",
                     descriptor.Manifest.Id,
                     EntityKind.VideoSeries,
@@ -1015,7 +1090,8 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
                     [season],
                     [],
                     null,
-                    []);
+                    [person])
+            };
             return Task.FromResult(IdentifyPluginResponse.Match(proposal));
         }
 

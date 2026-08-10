@@ -92,6 +92,14 @@ export interface IdentifyReviewSelectionState {
   selectedCascade: Record<string, boolean>;
 }
 
+export type ProgressiveReviewSelectionState = Pick<
+  IdentifyReviewSelectionState,
+  | "selectedFieldsByProposal"
+  | "selectedImagesByProposal"
+  | "selectedTagsByProposal"
+  | "selectedCascade"
+>;
+
 export interface IdentifyRelationshipTitles {
   tags: string[];
   credits: string[];
@@ -282,6 +290,83 @@ export function groupReviewImages(result: EntityMetadataProposal): Array<{ kind:
 
 export function defaultFieldSelectionForReview(result: EntityMetadataProposal): Record<string, boolean> {
   return Object.fromEntries(fieldKeys.map((field) => [field, proposalHasField(result, field)]));
+}
+
+/**
+ * Adds defaults introduced by a progressive proposal replacement without resetting choices the user
+ * could already make. Stable proposal ids let request and identify-style cascades use this for shell
+ * nodes that gain fields, tags, artwork, and descendants as provider lookups complete.
+ */
+export function mergeProgressiveReviewSelectionDefaults(
+  previousProposal: EntityMetadataProposal | null,
+  proposal: EntityMetadataProposal,
+  selection: ProgressiveReviewSelectionState,
+): ProgressiveReviewSelectionState {
+  const previousById = proposalMap(previousProposal);
+  const selectedFieldsByProposal = { ...selection.selectedFieldsByProposal };
+  const selectedImagesByProposal = { ...selection.selectedImagesByProposal };
+  const selectedTagsByProposal = { ...selection.selectedTagsByProposal };
+  const selectedCascade = { ...selection.selectedCascade };
+
+  for (const node of proposalMap(proposal).values()) {
+    const previous = previousById.get(node.proposalId);
+    const fieldDefaults = defaultFieldSelectionForReview(node);
+    const imageDefaults = defaultImageSelectionForReview(node);
+    const tagDefaults = Object.fromEntries((node.patch?.tags ?? []).map((tag) => [tag, true]));
+
+    if (!previous) {
+      selectedFieldsByProposal[node.proposalId] ??= fieldDefaults;
+      selectedImagesByProposal[node.proposalId] ??= imageDefaults;
+      selectedTagsByProposal[node.proposalId] ??= tagDefaults;
+      selectedCascade[node.proposalId] ??= true;
+      continue;
+    }
+
+    const previousFieldDefaults = defaultFieldSelectionForReview(previous);
+    const fields = { ...(selectedFieldsByProposal[node.proposalId] ?? previousFieldDefaults) };
+    for (const [field, selected] of Object.entries(fieldDefaults)) {
+      if (selected && previousFieldDefaults[field] !== true) fields[field] = true;
+    }
+    selectedFieldsByProposal[node.proposalId] = fields;
+
+    const previousImageDefaults = defaultImageSelectionForReview(previous);
+    const images = { ...(selectedImagesByProposal[node.proposalId] ?? previousImageDefaults) };
+    for (const [kind, url] of Object.entries(imageDefaults)) {
+      if (!Object.hasOwn(previousImageDefaults, kind)) {
+        if (!Object.hasOwn(images, kind)) images[kind] = url;
+      } else if (images[kind] === previousImageDefaults[kind]) {
+        images[kind] = url;
+      }
+    }
+    selectedImagesByProposal[node.proposalId] = images;
+
+    const previousTags = new Set(previous.patch?.tags ?? []);
+    const tags = { ...(selectedTagsByProposal[node.proposalId] ?? {}) };
+    for (const tag of node.patch?.tags ?? []) {
+      if (!previousTags.has(tag) && !Object.hasOwn(tags, tag)) tags[tag] = true;
+    }
+    selectedTagsByProposal[node.proposalId] = tags;
+  }
+
+  return {
+    selectedFieldsByProposal,
+    selectedImagesByProposal,
+    selectedTagsByProposal,
+    selectedCascade,
+  };
+}
+
+function proposalMap(proposal: EntityMetadataProposal | null): Map<string, EntityMetadataProposal> {
+  const proposals = new Map<string, EntityMetadataProposal>();
+  if (!proposal) return proposals;
+  const pending = [proposal];
+  while (pending.length > 0) {
+    const node = pending.pop();
+    if (!node || proposals.has(node.proposalId)) continue;
+    proposals.set(node.proposalId, node);
+    pending.push(...structuralChildProposals(node), ...relationshipProposals(node));
+  }
+  return proposals;
 }
 
 export function proposalHasField(result: EntityMetadataProposal, field: string): boolean {

@@ -2,6 +2,7 @@ import type { BookRenditionCode, RequestMediaKindCode } from "$lib/api/generated
 import {
   commitEntityRequest as commitEntityRequestRequest,
   commitReviewedRequest as commitReviewedRequestRequest,
+  getRequestReview,
   commitMissingChildrenRequest,
   removeWanted as removeWantedRequest,
   reviewEntityRequest as reviewEntityRequestRequest,
@@ -34,6 +35,14 @@ export async function searchRequestsByPlugin(params: {
       { hideNsfw: params.hideNsfw },
     ),
     "Failed to search the selected plugin",
+  );
+}
+
+/** Gets the latest immutable snapshot for a progressively enriching request review. */
+export async function fetchRequestReview(reviewId: string): Promise<RequestReviewResponse> {
+  return unwrapGenerated(
+    await getRequestReview(reviewId),
+    "Failed to refresh the request review",
   );
 }
 

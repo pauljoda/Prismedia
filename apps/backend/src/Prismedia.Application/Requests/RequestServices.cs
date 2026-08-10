@@ -58,6 +58,42 @@ public interface IPluginRequestReviewSource {
         CancellationToken cancellationToken);
 }
 
+/// <summary>One immutable proposal replacement published during request-review enrichment.</summary>
+public sealed record RequestReviewProgressUpdate(
+    string CompletedProposalId,
+    RequestReviewResponse Review);
+
+/// <summary>
+/// Runs the same shallow-seed then child/relationship cascade used by interactive Identify, without
+/// requiring a library entity to exist before the request is committed.
+/// </summary>
+public interface IPluginRequestProgressiveReviewSource {
+    /// <summary>Returns the core root proposal plus direct child and relationship shells.</summary>
+    Task<RequestReviewResponse?> StartReviewAsync(
+        RequestReviewRequest request,
+        bool hideNsfw,
+        CancellationToken cancellationToken);
+
+    /// <summary>Enriches the seed and publishes each stable proposal-card replacement as it completes.</summary>
+    Task<RequestReviewResponse> EnrichReviewAsync(
+        RequestReviewResponse seed,
+        bool hideNsfw,
+        Func<RequestReviewProgressUpdate, CancellationToken, Task> publish,
+        CancellationToken cancellationToken);
+}
+
+/// <summary>Owns transient progressive request-review sessions across HTTP requests.</summary>
+public interface IRequestReviewPreparationService {
+    /// <summary>Starts or reuses a review for the selected plugin identity.</summary>
+    Task<RequestReviewResponse?> StartAsync(
+        RequestReviewRequest request,
+        bool hideNsfw,
+        CancellationToken cancellationToken);
+
+    /// <summary>Gets the latest immutable snapshot for a progressive review.</summary>
+    RequestReviewResponse? Get(Guid reviewId);
+}
+
 /// <summary>An expected reviewed-commit validation failure that maps to request_invalid.</summary>
 public sealed class RequestCommitValidationException(string message) : ArgumentException(message);
 

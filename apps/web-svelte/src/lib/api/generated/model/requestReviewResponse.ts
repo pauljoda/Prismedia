@@ -8,6 +8,7 @@ import type { EntityKind } from './entityKind';
 import type { EntityMetadataProposal } from './entityMetadataProposal';
 import type { ExternalIdentity } from './externalIdentity';
 import type { RequestMediaKind } from './requestMediaKind';
+import type { RequestReviewEnrichment } from './requestReviewEnrichment';
 import type { RequestReviewTarget } from './requestReviewTarget';
 
 export interface RequestReviewResponse {
@@ -18,4 +19,5 @@ export interface RequestReviewResponse {
   proposal: EntityMetadataProposal;
   revision: string;
   targets: RequestReviewTarget[];
+  enrichment?: null | RequestReviewEnrichment;
 }

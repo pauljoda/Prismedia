@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
-  import { Check, Images, Layers, Tag, Users, X } from "@lucide/svelte";
+  import { Check, Images, Layers, Loader2, Tag, Users, X } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
   import type { EntityMetadataProposal } from "$lib/api/identify-types";
   import type { EntityDetailCard } from "$lib/api/entities";
@@ -43,6 +43,7 @@
     onTagChange: (tag: string, selected: boolean) => void;
     onProposalSelected: (proposal: EntityMetadataProposal, selected: boolean) => void;
     onActivate?: ((proposal: EntityMetadataProposal) => void) | null;
+    statusLabel?: (proposal: EntityMetadataProposal) => string | null;
     structure?: Snippet;
   }
 
@@ -66,6 +67,7 @@
     onTagChange,
     onProposalSelected,
     onActivate = null,
+    statusLabel = () => null,
     structure,
   }: Props = $props();
 
@@ -112,22 +114,28 @@
     {#snippet icon()}<Users class="h-3.5 w-3.5 text-text-accent" />{/snippet}
     <div class="identify-thumbnail-grid p-3.5">
       {#each credits as credit (credit.proposalId)}
-        <EntityThumbnail
-          card={creditCard(
-            credit,
-            proposal,
-            relationshipTitlesForDetail(detail, credit.targetKind),
-            selectedImages,
-            proposal.proposalId,
-            imageSelectionStore,
-          )}
-          linkable={false}
-          onActivate={onActivate ? () => onActivate?.(credit) : undefined}
-          selectable
-          selectMode
-          selected={isProposalSelected(credit.proposalId)}
-          onSelectedChange={(selected) => onProposalSelected(credit, selected)}
-        />
+        {@const status = statusLabel(credit)}
+        <div class="relative">
+          <EntityThumbnail
+            card={creditCard(
+              credit,
+              proposal,
+              relationshipTitlesForDetail(detail, credit.targetKind),
+              selectedImages,
+              proposal.proposalId,
+              imageSelectionStore,
+            )}
+            linkable={false}
+            onActivate={onActivate ? () => onActivate?.(credit) : undefined}
+            selectable
+            selectMode
+            selected={isProposalSelected(credit.proposalId)}
+            onSelectedChange={(selected) => onProposalSelected(credit, selected)}
+          />
+          {#if status}
+            <span class="identifying-label"><Loader2 class="h-3 w-3 animate-spin" />{status}</span>
+          {/if}
+        </div>
       {/each}
     </div>
   </ReviewSection>
@@ -143,21 +151,27 @@
     {#snippet icon()}<Layers class="h-3.5 w-3.5 text-text-accent" />{/snippet}
     <div class="identify-thumbnail-grid p-3.5">
       {#each nonCreditRelationships as relationship (relationship.proposalId)}
-        <EntityThumbnail
-          card={relationshipCard(
-            relationship,
-            relationshipTitlesForDetail(detail, relationship.targetKind),
-            selectedImages,
-            proposal.proposalId,
-            imageSelectionStore,
-          )}
-          linkable={false}
-          onActivate={onActivate ? () => onActivate?.(relationship) : undefined}
-          selectable
-          selectMode
-          selected={isProposalSelected(relationship.proposalId)}
-          onSelectedChange={(selected) => onProposalSelected(relationship, selected)}
-        />
+        {@const status = statusLabel(relationship)}
+        <div class="relative">
+          <EntityThumbnail
+            card={relationshipCard(
+              relationship,
+              relationshipTitlesForDetail(detail, relationship.targetKind),
+              selectedImages,
+              proposal.proposalId,
+              imageSelectionStore,
+            )}
+            linkable={false}
+            onActivate={onActivate ? () => onActivate?.(relationship) : undefined}
+            selectable
+            selectMode
+            selected={isProposalSelected(relationship.proposalId)}
+            onSelectedChange={(selected) => onProposalSelected(relationship, selected)}
+          />
+          {#if status}
+            <span class="identifying-label"><Loader2 class="h-3 w-3 animate-spin" />{status}</span>
+          {/if}
+        </div>
       {/each}
     </div>
   </ReviewSection>
@@ -269,6 +283,24 @@
     gap: 0.5rem;
     content-visibility: auto;
     contain-intrinsic-size: auto 28rem;
+  }
+
+  .identifying-label {
+    position: absolute;
+    top: 0.4rem;
+    left: 0.4rem;
+    z-index: 4;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    border: 1px solid var(--color-border-accent);
+    border-radius: var(--radius-xs);
+    padding: 0.25rem 0.4rem;
+    background: rgb(11 11 12 / 0.88);
+    color: var(--color-text-accent);
+    font-family: var(--font-mono);
+    font-size: 0.6rem;
+    pointer-events: none;
   }
 
   .identify-artwork-grid {

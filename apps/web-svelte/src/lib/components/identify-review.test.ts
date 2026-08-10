@@ -11,6 +11,7 @@ import {
   findRelationshipImage,
   groupProposalRows,
   groupReviewImages,
+  mergeProgressiveReviewSelectionDefaults,
   isNewRelationshipTitle,
   proposalFieldValue,
   reviewDiffFieldKeys,
@@ -29,6 +30,50 @@ import {
 } from "./identify-review";
 
 describe("identify review helpers", () => {
+  it("merges newly identified defaults without resetting existing review choices", () => {
+    const shell = proposal("series", "video-series", {
+      children: [proposal("season-1", "video-season", { title: "Season 1" })],
+      relationships: [proposal("person-1", "person", { title: "Actor" })],
+    });
+    const enriched = proposal("series", "video-series", {
+      children: [
+        proposal("season-1", "video-season", {
+          title: "Season 1",
+          description: "Full season metadata",
+          imageKind: "poster",
+          imageUrl: "https://example.test/season.jpg",
+          children: [proposal("episode-1", "video-episode", { title: "Episode 1" })],
+        }),
+      ],
+      relationships: [
+        proposal("person-1", "person", {
+          title: "Actor",
+          description: "Full person metadata",
+          tags: ["Lead"],
+        }),
+      ],
+    });
+    const merged = mergeProgressiveReviewSelectionDefaults(shell, enriched, {
+      selectedFieldsByProposal: {
+        "season-1": { ...defaultFieldSelectionForReview(shell.children[0]), title: false },
+        "person-1": defaultFieldSelectionForReview(shell.relationships[0]),
+      },
+      selectedImagesByProposal: { "season-1": {} },
+      selectedTagsByProposal: { "person-1": {} },
+      selectedCascade: { "season-1": false },
+    });
+
+    expect(merged.selectedFieldsByProposal["season-1"].title).toBe(false);
+    expect(merged.selectedFieldsByProposal["season-1"].description).toBe(true);
+    expect(merged.selectedFieldsByProposal["person-1"].description).toBe(true);
+    expect(merged.selectedImagesByProposal["season-1"].poster).toBe(
+      "https://example.test/season.jpg",
+    );
+    expect(merged.selectedTagsByProposal["person-1"].Lead).toBe(true);
+    expect(merged.selectedCascade["season-1"]).toBe(false);
+    expect(merged.selectedCascade["episode-1"]).toBe(true);
+  });
+
   it("separates structural children from related entity proposals", () => {
     const root = proposal("series", "video-series", {
       children: [
@@ -534,6 +579,7 @@ function proposal(
   targetKind: EntityMetadataProposal["targetKind"],
   options: {
     title?: string;
+    description?: string;
     imageKind?: string;
     imageUrl?: string;
     studio?: string;
@@ -552,7 +598,7 @@ function proposal(
     matchReason: "test",
     patch: {
       title: options.title ?? null,
-      description: null,
+      description: options.description ?? null,
       externalIds: {},
       urls: [],
       tags: options.tags ?? [],

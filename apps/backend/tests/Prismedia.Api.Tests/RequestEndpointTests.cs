@@ -30,6 +30,7 @@ public sealed class RequestEndpointTests {
 
         Assert.True(search.TryGetProperty("post", out _));
         Assert.False(search.TryGetProperty("get", out _));
+        Assert.True(paths.GetProperty("/api/requests/review/{reviewId}").TryGetProperty("get", out _));
         Assert.DoesNotContain(paths.EnumerateObject(), path =>
             path.Name.StartsWith("/api/requests/details/", StringComparison.Ordinal));
     }
@@ -284,6 +285,9 @@ public sealed class RequestEndpointTests {
                     if (reviewSource is not null) {
                         services.RemoveAll<IPluginRequestReviewSource>();
                         services.AddSingleton(reviewSource);
+                        services.RemoveAll<IRequestReviewPreparationService>();
+                        services.AddSingleton<IRequestReviewPreparationService>(
+                            new EndpointReviewPreparationService(reviewSource));
                     }
                     if (searchSource is not null) {
                         services.RemoveAll<IPluginRequestSearchSource>();
@@ -300,6 +304,30 @@ public sealed class RequestEndpointTests {
                 });
             })
             .WithTestAuth();
+
+    private sealed class EndpointReviewPreparationService(
+        IPluginRequestReviewSource source) : IRequestReviewPreparationService {
+        private readonly Dictionary<Guid, RequestReviewResponse> _reviews = [];
+
+        public async Task<RequestReviewResponse?> StartAsync(
+            RequestReviewRequest request,
+            bool hideNsfw,
+            CancellationToken cancellationToken) {
+            var review = await source.ReviewAsync(request, hideNsfw, cancellationToken);
+            if (review is null) {
+                return null;
+            }
+
+            var id = Guid.NewGuid();
+            review = review with {
+                Enrichment = new RequestReviewEnrichment(id, false, [], null, DateTimeOffset.UtcNow)
+            };
+            _reviews[id] = review;
+            return review;
+        }
+
+        public RequestReviewResponse? Get(Guid reviewId) => _reviews.GetValueOrDefault(reviewId);
+    }
 
     private sealed class EndpointIdentityStore(
         Guid expectedEntityId,

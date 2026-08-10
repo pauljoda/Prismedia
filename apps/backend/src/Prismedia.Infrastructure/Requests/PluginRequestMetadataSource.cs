@@ -20,6 +20,7 @@ public sealed class PluginRequestMetadataSource(
     IPluginIdentityRouter identityRouter,
     IdentifyRunnerSelector runners)
     : IPluginRequestSearchSource, IRequestMetadataEnricher, IPluginRequestReviewSource,
+      IPluginRequestProgressiveReviewSource,
       IPluginRequestProposalSource {
     private static readonly string SearchAction = IdentifyAction.Search.ToCode();
     private static readonly string LookupIdAction = IdentifyAction.LookupId.ToCode();
@@ -225,6 +226,84 @@ public sealed class PluginRequestMetadataSource(
             cancellationToken);
     }
 
+    /// <inheritdoc />
+    public async Task<RequestReviewResponse?> StartReviewAsync(
+        RequestReviewRequest request,
+        bool hideNsfw,
+        CancellationToken cancellationToken) {
+        var descriptor = RequestKindRegistry.Find(request.Kind);
+        if (descriptor is null || string.IsNullOrWhiteSpace(request.PluginId) || request.ExternalIdentity is null) {
+            return null;
+        }
+
+        return await ResolveReviewAsync(
+            descriptor,
+            new PluginIdentityRoute(request.PluginId, request.ExternalIdentity),
+            hideNsfw,
+            forceRefresh: false,
+            expandStructuralChildren: false,
+            cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<RequestReviewResponse> EnrichReviewAsync(
+        RequestReviewResponse seed,
+        bool hideNsfw,
+        Func<RequestReviewProgressUpdate, CancellationToken, Task> publish,
+        CancellationToken cancellationToken) {
+        var descriptor = RequestKindRegistry.Find(seed.Kind)
+            ?? throw new InvalidOperationException("The request review kind is no longer supported.");
+        var route = new PluginIdentityRoute(seed.PluginId, seed.ExternalIdentity);
+        var provider = await ValidateExplicitRouteAsync(
+            descriptor.PluginEntityKind,
+            route,
+            hideNsfw,
+            cancellationToken)
+            ?? throw new InvalidOperationException("The selected request plugin is no longer available.");
+        var plugin = await catalog.FindProviderAsync(provider.Id, descriptor.PluginKindCode, cancellationToken)
+            ?? throw new InvalidOperationException("The selected request plugin no longer supports this kind.");
+        var auth = await catalog.GetAuthAsync(plugin.Manifest, cancellationToken);
+        var proposal = seed.Proposal;
+
+        var relationships = EntityMetadataProposalTraversal.Relationships(proposal)
+            .Concat((proposal.Children ?? []).Where(child => child.TargetKind.IsRelationship()))
+            .GroupBy(child => child.ProposalId, StringComparer.Ordinal)
+            .Select(group => group.First())
+            .ToArray();
+        foreach (var relationship in relationships) {
+            var hydrated = await PluginRelationshipProposalHydrator.HydrateAsync(
+                relationship,
+                plugin,
+                auth,
+                includeNsfw: !hideNsfw,
+                runners,
+                cancellationToken);
+            proposal = ReplaceRelationship(proposal, hydrated);
+            var current = BuildReviewResponse(provider, descriptor, route.Identity, proposal);
+            await publish(new RequestReviewProgressUpdate(relationship.ProposalId, current), cancellationToken);
+        }
+
+        var structuralChildren = EntityMetadataProposalTraversal.StructuralChildren(proposal).ToArray();
+        foreach (var child in structuralChildren) {
+            var expanded = await ExpandReviewChildAsync(
+                provider,
+                descriptor,
+                child,
+                hideNsfw,
+                forceRefresh: false,
+                cancellationToken);
+            proposal = proposal with {
+                Children = (proposal.Children ?? [])
+                    .Select(candidate => candidate.ProposalId == child.ProposalId ? expanded : candidate)
+                    .ToArray()
+            };
+            var current = BuildReviewResponse(provider, descriptor, route.Identity, proposal);
+            await publish(new RequestReviewProgressUpdate(child.ProposalId, current), cancellationToken);
+        }
+
+        return BuildReviewResponse(provider, descriptor, route.Identity, proposal);
+    }
+
     private async Task<RequestReviewResponse?> ResolveReviewAsync(
         RequestKindDescriptor descriptor,
         PluginIdentityRoute route,
@@ -270,15 +349,34 @@ public sealed class PluginRequestMetadataSource(
             return null;
         }
 
-        return new RequestReviewResponse(
+        return BuildReviewResponse(provider, descriptor, route.Identity, proposal);
+    }
+
+    private static RequestReviewResponse BuildReviewResponse(
+        PluginProvider provider,
+        RequestKindDescriptor descriptor,
+        ExternalIdentity identity,
+        EntityMetadataProposal proposal) =>
+        new(
             PluginId: provider.Id,
-            ExternalIdentity: route.Identity,
+            ExternalIdentity: identity,
             EntityKind: proposal.TargetKind,
             Kind: descriptor.Kind,
             Proposal: proposal,
             Revision: RequestProposalRevision.Compute(proposal),
-            Targets: targets);
-    }
+            Targets: BuildReviewTargets(provider, descriptor, identity, proposal));
+
+    private static EntityMetadataProposal ReplaceRelationship(
+        EntityMetadataProposal proposal,
+        EntityMetadataProposal replacement) =>
+        proposal with {
+            Relationships = (proposal.Relationships ?? [])
+                .Select(candidate => candidate.ProposalId == replacement.ProposalId ? replacement : candidate)
+                .ToArray(),
+            Children = (proposal.Children ?? [])
+                .Select(candidate => candidate.ProposalId == replacement.ProposalId ? replacement : candidate)
+                .ToArray()
+        };
 
     /// <summary>
     /// Hydrates shallow structural shells while the review is being built. Providers commonly return a
@@ -303,45 +401,70 @@ public sealed class PluginRequestMetadataSource(
         var children = new EntityMetadataProposal[parent.Children.Count];
         for (var index = 0; index < parent.Children.Count; index++) {
             var child = parent.Children[index];
-            var expanded = child;
-            if (!child.TargetKind.IsRelationship()
-                && IsCompatibleTarget(childDescriptor, child.TargetKind)) {
-                var structuralChildren = child.Children
-                    .Where(candidate => !candidate.TargetKind.IsRelationship())
-                    .ToArray();
-                if (childDescriptor.ChildKind is not null
-                    && structuralChildren.Length == 0
-                    && DeclaredIdentityFor(provider, child) is { } identity) {
-                    var resolved = await ResolveExplicitProposalAsync(
-                        childDescriptor.PluginEntityKind,
-                        new PluginIdentityRoute(provider.Id, identity),
-                        hideNsfw,
-                        includeChildren: true,
-                        forceRefresh,
-                        cancellationToken);
-                    if (resolved?.Patch is not null
-                        && IsCompatibleTarget(childDescriptor, resolved.TargetKind)
-                        && HasUniqueStructuralProposalIds(resolved)) {
-                        expanded = resolved;
-                    }
-                }
-
-                if (expanded.Children.Any(candidate => !candidate.TargetKind.IsRelationship())) {
-                    expanded = await ExpandReviewChildrenAsync(
-                        provider,
-                        childDescriptor,
-                        expanded,
-                        hideNsfw,
-                        forceRefresh,
-                        cancellationToken);
-                }
-            }
+            var expanded = await ExpandReviewChildAsync(
+                provider,
+                parentDescriptor,
+                child,
+                hideNsfw,
+                forceRefresh,
+                cancellationToken);
 
             children[index] = expanded;
             changed |= !ReferenceEquals(expanded, child);
         }
 
         return changed ? parent with { Children = children } : parent;
+    }
+
+    private async Task<EntityMetadataProposal> ExpandReviewChildAsync(
+        PluginProvider provider,
+        RequestKindDescriptor parentDescriptor,
+        EntityMetadataProposal child,
+        bool hideNsfw,
+        bool forceRefresh,
+        CancellationToken cancellationToken) {
+        var childDescriptor = RequestKindRegistry.ChildOf(parentDescriptor);
+        if (childDescriptor is null
+            || child.TargetKind.IsRelationship()
+            || !IsCompatibleTarget(childDescriptor, child.TargetKind)) {
+            return child;
+        }
+
+        var expanded = child;
+        var structuralChildren = child.Children
+            .Where(candidate => !candidate.TargetKind.IsRelationship())
+            .ToArray();
+        if (childDescriptor.ChildKind is not null
+            && structuralChildren.Length == 0
+            && DeclaredIdentityFor(provider, child) is { } identity) {
+            var resolved = await ResolveExplicitProposalAsync(
+                childDescriptor.PluginEntityKind,
+                new PluginIdentityRoute(provider.Id, identity),
+                hideNsfw,
+                includeChildren: true,
+                forceRefresh,
+                cancellationToken);
+            if (resolved?.Patch is not null
+                && IsCompatibleTarget(childDescriptor, resolved.TargetKind)
+                && HasUniqueStructuralProposalIds(resolved)) {
+                expanded = resolved with {
+                    ProposalId = child.ProposalId,
+                    TargetEntityId = child.TargetEntityId
+                };
+            }
+        }
+
+        if (expanded.Children.Any(candidate => !candidate.TargetKind.IsRelationship())) {
+            expanded = await ExpandReviewChildrenAsync(
+                provider,
+                childDescriptor,
+                expanded,
+                hideNsfw,
+                forceRefresh,
+                cancellationToken);
+        }
+
+        return expanded;
     }
 
     /// <inheritdoc />

@@ -426,6 +426,7 @@ export * from './requestPluginSearchRequest';
 export * from './requestPluginSearchRequestFields';
 export * from './requestProviderHealth';
 export * from './requestProviderKind';
+export * from './requestReviewEnrichment';
 export * from './requestReviewRequest';
 export * from './requestReviewResponse';
 export * from './requestReviewTarget';

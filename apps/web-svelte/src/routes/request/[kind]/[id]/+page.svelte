@@ -11,13 +11,14 @@
   } from "$lib/api/generated/codes";
   import type { EntityMetadataProposal } from "$lib/api/identify-types";
   import { ApiError } from "$lib/api/orval-fetch";
-  import { commitReviewedRequest, reviewRequest } from "$lib/api/requests";
+  import { commitReviewedRequest, fetchRequestReview, reviewRequest } from "$lib/api/requests";
   import RequestTargetOptions from "$lib/components/acquisitions/RequestTargetOptions.svelte";
   import {
     buildRootReviewApplyPayload,
     defaultFieldSelectionForReview,
     defaultImageSelectionForReview,
     entityKindLabel,
+    mergeProgressiveReviewSelectionDefaults,
     proposalHasField,
     relationshipProposals,
     reviewDiffFieldKeys,
@@ -74,16 +75,21 @@
   let loading = $state(true);
   let submitting = $state(false);
   let error = $state<string | null>(null);
+  let enrichmentError = $state<string | null>(null);
   let reviewChanged = $state(false);
-  let proposalPath = $state.raw<EntityMetadataProposal[]>([]);
+  let proposalPath = $state<string[]>([]);
   let selectedFieldsByProposal = $state<Record<string, Record<string, boolean>>>({});
   let selectedImagesByProposal = $state<Record<string, Record<string, string | null>>>({});
   let selectedTagsByProposal = $state<Record<string, Record<string, boolean>>>({});
   let selectedCascade = $state<Record<string, boolean>>({});
 
   const proposal = $derived(review?.proposal as EntityMetadataProposal | undefined);
-  const activeProposal = $derived(proposalPath.at(-1) ?? proposal);
-  const activeParent = $derived(proposalPath.length > 1 ? proposalPath.at(-2) : proposal);
+  const activeProposal = $derived(proposal ? proposalAtPath(proposal, proposalPath) ?? proposal : undefined);
+  const activeParent = $derived(proposal && proposalPath.length > 1
+    ? proposalAtPath(proposal, proposalPath.slice(0, -1)) ?? proposal
+    : proposal);
+  const enrichmentRunning = $derived(review?.enrichment?.running === true);
+  const pendingProposalIds = $derived(new Set(review?.enrichment?.pendingProposalIds ?? []));
   const activeSelectedFields = $derived(
     activeProposal ? selectedFieldsByProposal[activeProposal.proposalId] ?? {} : {},
   );
@@ -171,6 +177,7 @@
     loading = true;
     review = null;
     error = null;
+    enrichmentError = null;
     reviewChanged = false;
     proposalPath = [];
     selectedFieldsByProposal = {};
@@ -201,8 +208,8 @@
       const nextSelection = deriveRequestReviewSelection(response);
       review = response;
       const rootProposal = response.proposal as EntityMetadataProposal;
-      seedMetadataSelection(rootProposal);
-      proposalPath = [rootProposal];
+      mergeMetadataSelection(rootProposal, null);
+      proposalPath = [rootProposal.proposalId];
       selectionCustomized = false;
       const initialIds = nextSelection.mode === REQUEST_REVIEW_SELECTION.directChildren
         ? resolvePresetSelection(chosenPreset, nextSelection.presetChildren)
@@ -213,6 +220,9 @@
         ...selectedCascade,
         ...Object.fromEntries(nextSelection.selectableIds.map((proposalId) => [proposalId, picked.has(proposalId)])),
       };
+      if (response.enrichment?.running) {
+        void pollEnrichment(key, response.enrichment.reviewId);
+      }
     } catch (err) {
       if (key !== loadedKey) return;
       error = err instanceof Error ? err.message : "Failed to load request review";
@@ -247,28 +257,41 @@
     selectedCascade = { ...selectedCascade, [proposalId]: selected };
   }
 
-  function seedMetadataSelection(root: EntityMetadataProposal) {
-    const fields: Record<string, Record<string, boolean>> = {};
-    const images: Record<string, Record<string, string | null>> = {};
-    const tags: Record<string, Record<string, boolean>> = {};
-    const cascade: Record<string, boolean> = {};
-    const seen = new Set<string>();
+  function mergeMetadataSelection(
+    root: EntityMetadataProposal,
+    previousRoot: EntityMetadataProposal | null,
+  ) {
+    const merged = mergeProgressiveReviewSelectionDefaults(previousRoot, root, {
+      selectedFieldsByProposal,
+      selectedImagesByProposal,
+      selectedTagsByProposal,
+      selectedCascade,
+    });
+    selectedFieldsByProposal = merged.selectedFieldsByProposal;
+    selectedImagesByProposal = merged.selectedImagesByProposal;
+    selectedTagsByProposal = merged.selectedTagsByProposal;
+    selectedCascade = merged.selectedCascade;
+  }
 
-    function visit(node: EntityMetadataProposal) {
-      if (seen.has(node.proposalId)) return;
-      seen.add(node.proposalId);
-      fields[node.proposalId] = defaultFieldSelectionForReview(node);
-      images[node.proposalId] = defaultImageSelectionForReview(node);
-      tags[node.proposalId] = Object.fromEntries((node.patch?.tags ?? []).map((tag) => [tag, true]));
-      cascade[node.proposalId] = true;
-      for (const child of [...structuralChildProposals(node), ...relationshipProposals(node)]) visit(child);
+  async function pollEnrichment(key: string, reviewId: string) {
+    while (key === loadedKey) {
+      try {
+        const response = await fetchRequestReview(reviewId);
+        if (key !== loadedKey || response.enrichment?.reviewId !== reviewId) return;
+        const previousRoot = proposal ?? null;
+        review = response;
+        mergeMetadataSelection(response.proposal as EntityMetadataProposal, previousRoot);
+        enrichmentError = response.enrichment.error;
+        if (!response.enrichment.running) return;
+      } catch (err) {
+        if (key === loadedKey) {
+          enrichmentError = err instanceof Error ? err.message : "Failed to refresh request details";
+        }
+        await new Promise((resolveRetry) => setTimeout(resolveRetry, 1_500));
+        continue;
+      }
+      await new Promise((resolvePoll) => setTimeout(resolvePoll, 750));
     }
-
-    visit(root);
-    selectedFieldsByProposal = fields;
-    selectedImagesByProposal = images;
-    selectedTagsByProposal = tags;
-    selectedCascade = cascade;
   }
 
   function setMetadataField(field: string, selected: boolean) {
@@ -318,7 +341,7 @@
   }
 
   function openProposal(nextProposal: EntityMetadataProposal) {
-    proposalPath = [...proposalPath, nextProposal];
+    proposalPath = [...proposalPath, nextProposal.proposalId];
   }
 
   function setActiveProposalSelected(proposalId: string, selected: boolean) {
@@ -338,7 +361,7 @@
   }
 
   async function requestSelection() {
-    if (!review || !proposal || !selection || !kindInfo?.committable) return;
+    if (enrichmentRunning || !review || !proposal || !selection || !kindInfo?.committable) return;
     const selectedIds = selection.mode === REQUEST_REVIEW_SELECTION.directChildren
       ? selectedProposalIds.filter((id) => selection.selectableIds.includes(id))
       : selection.initialRootSelection;
@@ -427,6 +450,25 @@
   function capitalize(value: string): string {
     return value ? `${value.charAt(0).toUpperCase()}${value.slice(1)}` : value;
   }
+
+  function proposalAtPath(
+    root: EntityMetadataProposal,
+    path: string[],
+  ): EntityMetadataProposal | null {
+    if (path.length === 0 || path[0] !== root.proposalId) return null;
+    let current = root;
+    for (const proposalId of path.slice(1)) {
+      const next = [...structuralChildProposals(current), ...relationshipProposals(current)]
+        .find((candidate) => candidate.proposalId === proposalId);
+      if (!next) return null;
+      current = next;
+    }
+    return current;
+  }
+
+  function identifyingStatus(node: EntityMetadataProposal): string | null {
+    return pendingProposalIds.has(node.proposalId) ? "Identifying…" : null;
+  }
 </script>
 
 <svelte:head><title>{activeProposal ? proposalTitle(activeProposal) : "Request"} · Prismedia</title></svelte:head>
@@ -482,6 +524,7 @@
       isProposalSelected={(proposalId) => selectedCascade[proposalId] !== false}
       imageSelectionsForProposal={(proposalId) => selectedImagesByProposal[proposalId]}
       onActivate={openProposal}
+      statusLabel={identifyingStatus}
     />
 
     <ProposalReviewSummary
@@ -494,6 +537,7 @@
       subtitle={`${review.externalIdentity.namespace}:${review.externalIdentity.value}`}
       showOverview={false}
       showRelationships={false}
+      statusLabel={identifyingStatus}
     />
 
     {@render requestOptions()}
@@ -532,8 +576,10 @@
               type="button"
               variant="primary"
               class="shrink-0 gap-2"
-              disabled={submitting || !hasRequestIntent}
-              title={!hasRequestIntent
+              disabled={submitting || enrichmentRunning || !hasRequestIntent}
+              title={enrichmentRunning
+                ? "Identifying children and relationships"
+                : !hasRequestIntent
                 ? selectsChildren
                   ? `Select ${childNoun}s to request`
                   : "This proposal is not requestable"
@@ -557,9 +603,16 @@
         </RequestTargetOptions>
       {/if}
 
-      {#if error}
+      {#if enrichmentRunning}
+        <p class="flex items-center gap-1.5 font-mono text-[0.7rem] text-text-muted" aria-live="polite">
+          <Loader2 class="h-3.5 w-3.5 animate-spin" />
+          Identifying children and relationships… Request unlocks when finished.
+        </p>
+      {/if}
+
+      {#if error || enrichmentError}
         <div class="flex flex-wrap items-center justify-between gap-3 rounded-xs border border-error/30 bg-error/5 p-3">
-          <p class="text-[0.75rem] leading-relaxed text-error-text">{error}</p>
+          <p class="text-[0.75rem] leading-relaxed text-error-text">{error ?? enrichmentError}</p>
           {#if reviewChanged}
             <Button type="button" variant="secondary" size="sm" class="gap-1.5" onclick={reloadReview}>
               <RefreshCw class="h-3.5 w-3.5" />

@@ -84,11 +84,12 @@ public sealed partial class IdentifyPluginService {
                     break;
                 }
 
-                var hydrated = await HydrateRelationshipProposalAsync(
+                var hydrated = await PluginRelationshipProposalHydrator.HydrateAsync(
                     relationship,
                     descriptor,
                     auth,
                     includeNsfw,
+                    _runners,
                     cancellationToken);
                 hydratedRelationships.Add(hydrated);
 
@@ -282,67 +283,6 @@ public sealed partial class IdentifyPluginService {
 
         var response = await _runners.Resolve(descriptor).IdentifyAsync(descriptor, request, cancellationToken);
         return response.Ok && response.Result?.Patch is not null ? response.Result : null;
-    }
-
-    private async Task<EntityMetadataProposal> HydrateRelationshipProposalAsync(
-        EntityMetadataProposal relationship,
-        PluginDescriptor descriptor,
-        IReadOnlyDictionary<string, string> auth,
-        bool includeNsfw,
-        CancellationToken cancellationToken) {
-        if (!SupportsKind(descriptor.Manifest, relationship.TargetKind.ToCode())) {
-            return relationship;
-        }
-
-        var patch = relationship.Patch;
-        var externalIds = patch.ExternalIds ?? new Dictionary<string, string>();
-        var urls = patch.Urls ?? [];
-        var title = patch.Title?.Trim() ?? relationship.TargetKind.ToCode();
-        var action = externalIds.Count > 0
-            ? IdentifyAction.LookupId
-            : urls.Count > 0
-                ? IdentifyAction.LookupUrl
-                : IdentifyAction.Search;
-        var query = action switch {
-            IdentifyAction.LookupId => new IdentifyQuery(null, null, externalIds),
-            IdentifyAction.LookupUrl => new IdentifyQuery(null, urls.FirstOrDefault(), null),
-            _ => new IdentifyQuery(title, null, null)
-        };
-        var request = new IdentifyPluginRequest(
-            ProtocolVersion: PluginProtocol.CurrentVersion,
-            Action: action,
-            Auth: auth,
-            Entity: new IdentifyEntitySnapshot(
-                Guid.Empty,
-                relationship.TargetKind,
-                title,
-                externalIds,
-                urls),
-            Query: query,
-            Hints: new IdentifyMatchHints(externalIds, urls, title, null),
-            StructuralContext: null,
-            IncludeNsfw: includeNsfw,
-            IncludeRelationshipDetails: false,
-            IncludeStructuralChildren: false);
-
-        try {
-            var response = await _runners.Resolve(descriptor).IdentifyAsync(descriptor, request, cancellationToken);
-            if (response.Ok && response.Result?.Patch is not null) {
-                return response.Result with {
-                    TargetEntityId = relationship.TargetEntityId,
-                    // Preserve the shell's id so selection state and card identity remain stable while
-                    // the hydrated relationship replaces the lightweight base node in-place.
-                    ProposalId = relationship.ProposalId
-                };
-            }
-        } catch (OperationCanceledException) {
-            throw;
-        } catch {
-            // Relationship hydration is best-effort: keep the base shell so the root proposal still
-            // applies credits/studio/tags even if one related entity detail lookup fails.
-        }
-
-        return relationship;
     }
 
     private static IReadOnlyList<EntityMetadataProposal> RelationshipChildren(EntityMetadataProposal proposal) =>

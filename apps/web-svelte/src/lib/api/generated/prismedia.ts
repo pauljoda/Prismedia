@@ -9359,7 +9359,7 @@ export const getReviewRequestUrl = (params?: ReviewRequestParams,) => {
 }
 
 /**
- * @summary Gets the complete plugin proposal and independently identifiable targets for request review.
+ * @summary Gets the core plugin proposal immediately and starts progressive child and relationship identification.
  */
 export const reviewRequest = async (requestReviewRequest: RequestReviewRequest,
     params?: ReviewRequestParams, options?: RequestInit): Promise<reviewRequestResponse> => {
@@ -9371,6 +9371,49 @@ export const reviewRequest = async (requestReviewRequest: RequestReviewRequest,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       requestReviewRequest,)
+  }
+);}
+
+
+
+export type getRequestReviewResponse200 = {
+  data: RequestReviewResponse
+  status: 200
+}
+
+export type getRequestReviewResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type getRequestReviewResponseSuccess = (getRequestReviewResponse200) & {
+  headers: Headers;
+};
+export type getRequestReviewResponseError = (getRequestReviewResponse404) & {
+  headers: Headers;
+};
+
+export type getRequestReviewResponse = (getRequestReviewResponseSuccess | getRequestReviewResponseError)
+
+export const getGetRequestReviewUrl = (reviewId: string,) => {
+
+
+
+
+  return `/api/requests/review/${reviewId}`
+}
+
+/**
+ * @summary Gets the latest progressively enriched request-review proposal snapshot.
+ */
+export const getRequestReview = async (reviewId: string, options?: RequestInit): Promise<getRequestReviewResponse> => {
+
+  return orvalFetch<getRequestReviewResponse>(getGetRequestReviewUrl(reviewId),
+  {
+    ...options,
+    method: 'GET'
+
+
   }
 );}
 

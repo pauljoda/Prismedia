@@ -22,6 +22,7 @@ import Page from "./+page.svelte";
 
 const mocks = vi.hoisted(() => ({
   commitReviewedRequest: vi.fn(),
+  fetchRequestReview: vi.fn(),
   fetchAcquisitionProfiles: vi.fn(),
   fetchLibraryRoots: vi.fn(),
   goto: vi.fn(async () => {}),
@@ -30,6 +31,7 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("$lib/api/requests", () => ({
   commitReviewedRequest: mocks.commitReviewedRequest,
+  fetchRequestReview: mocks.fetchRequestReview,
   reviewRequest: mocks.reviewRequest,
 }));
 
@@ -87,6 +89,64 @@ describe("reviewed request route", () => {
         value: "Show:AbC:01",
       },
       hideNsfw: true,
+    });
+  });
+
+  it("shows the shallow proposal immediately and identifies child cards until enrichment finishes", async () => {
+    const completed = seriesReview();
+    const reviewId = "11111111-1111-1111-1111-111111111111";
+    const initial = {
+      ...completed,
+      proposal: {
+        ...completed.proposal,
+        children: completed.proposal.children.map((child) => ({ ...child, children: [] })),
+      },
+      targets: completed.targets.filter((target) => target.proposalId !== "episode-1"),
+      enrichment: {
+        reviewId,
+        running: true,
+        pendingProposalIds: ["season-1", "season-2"],
+        error: null,
+        updatedAt: "2026-08-09T20:00:00Z",
+      },
+    } as RequestReviewResponse;
+    let finishEnrichment!: (value: RequestReviewResponse) => void;
+    mocks.reviewRequest.mockResolvedValue(initial);
+    mocks.fetchRequestReview
+      .mockRejectedValueOnce(new Error("Temporary refresh failure"))
+      .mockImplementationOnce(() => new Promise((resolve) => {
+        finishEnrichment = resolve;
+      }));
+    setRoute(
+      REQUEST_MEDIA_KIND.series,
+      initial.externalIdentity.value,
+      `plugin=${initial.pluginId}&namespace=${initial.externalIdentity.namespace}`,
+    );
+
+    render(Page);
+
+    await screen.findByRole("heading", { name: "Andor" });
+    expect(screen.getAllByText("Identifying…").length).toBeGreaterThan(0);
+    expect(screen.getAllByRole("button", { name: "Request 2 seasons" })[0]).toBeDisabled();
+    expect(mocks.fetchRequestReview).toHaveBeenCalledWith(reviewId);
+    expect((await screen.findAllByText("Temporary refresh failure")).length).toBeGreaterThan(0);
+    await waitFor(() => expect(mocks.fetchRequestReview).toHaveBeenCalledTimes(2), {
+      timeout: 2_500,
+    });
+
+    finishEnrichment({
+      ...completed,
+      enrichment: {
+        ...initial.enrichment,
+        running: false,
+        pendingProposalIds: [],
+        updatedAt: "2026-08-09T20:00:02Z",
+      },
+    } as RequestReviewResponse);
+
+    await waitFor(() => {
+      expect(screen.queryByText("Identifying…")).not.toBeInTheDocument();
+      expect(screen.getAllByRole("button", { name: "Request 2 seasons" })[0]).toBeEnabled();
     });
   });
 

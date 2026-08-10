@@ -37,7 +37,7 @@ public static class RequestEndpoints {
             RequestReviewRequest request,
             bool? hideNsfw,
             HttpContext httpContext,
-            IPluginRequestReviewSource reviews,
+            IRequestReviewPreparationService reviews,
             CancellationToken cancellationToken) => {
                 if (string.IsNullOrWhiteSpace(request.PluginId)
                     || request.ExternalIdentity is null
@@ -47,7 +47,7 @@ public static class RequestEndpoints {
                         "A known request kind and plugin id are required."));
                 }
 
-                var review = await reviews.ReviewAsync(
+                var review = await reviews.StartAsync(
                     request,
                     NsfwVisibility.ShouldHide(hideNsfw, httpContext),
                     cancellationToken);
@@ -56,9 +56,20 @@ public static class RequestEndpoints {
                     : Results.Ok(review);
             })
             .WithName("ReviewRequest")
-            .WithSummary("Gets the complete plugin proposal and independently identifiable targets for request review.")
+            .WithSummary("Gets the core plugin proposal immediately and starts progressive child and relationship identification.")
             .Produces<RequestReviewResponse>()
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
+        group.MapGet("/review/{reviewId:guid}", (
+            Guid reviewId,
+            IRequestReviewPreparationService reviews) =>
+                reviews.Get(reviewId) is { } review
+                    ? Results.Ok(review)
+                    : Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "Request review was not found.")))
+            .WithName("GetRequestReview")
+            .WithSummary("Gets the latest progressively enriched request-review proposal snapshot.")
+            .Produces<RequestReviewResponse>()
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
         group.MapPost("/review-entity", async (

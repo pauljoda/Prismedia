@@ -400,10 +400,18 @@ public static class DependencyInjection {
         // Prismedia fulfils all requests itself through its plugin-backed acquisition pipeline; the
         // request layer is the kind-registry-driven selected-plugin search + proposal review that feeds
         // acquisitions. One source class serves every requestable kind.
-        services.AddScoped<IPluginRequestSearchSource, PluginRequestMetadataSource>();
-        services.AddScoped<IRequestMetadataEnricher, PluginRequestMetadataSource>();
-        services.AddScoped<IPluginRequestReviewSource, PluginRequestMetadataSource>();
-        services.AddScoped<IPluginRequestProposalSource, PluginRequestMetadataSource>();
+        services.AddScoped<PluginRequestMetadataSource>();
+        services.AddScoped<IPluginRequestSearchSource>(provider =>
+            provider.GetRequiredService<PluginRequestMetadataSource>());
+        services.AddScoped<IRequestMetadataEnricher>(provider =>
+            provider.GetRequiredService<PluginRequestMetadataSource>());
+        services.AddScoped<IPluginRequestReviewSource>(provider =>
+            provider.GetRequiredService<PluginRequestMetadataSource>());
+        services.AddScoped<IPluginRequestProgressiveReviewSource>(provider =>
+            provider.GetRequiredService<PluginRequestMetadataSource>());
+        services.AddScoped<IPluginRequestProposalSource>(provider =>
+            provider.GetRequiredService<PluginRequestMetadataSource>());
+        services.AddSingleton<IRequestReviewPreparationService, RequestReviewPreparationService>();
         services.AddScoped<IWantedEntityWriter, WantedEntityWriter>();
         services.AddScoped<IWantedSuppressionStore, EfWantedSuppressionStore>();
         services.AddScoped<IProviderTrackingCatalog, PluginProviderTrackingCatalog>();

@@ -20,6 +20,7 @@
     subtitle?: string | null;
     showOverview?: boolean;
     showRelationships?: boolean;
+    statusLabel?: (proposal: EntityMetadataProposal) => string | null;
   }
 
   let {
@@ -32,6 +33,7 @@
     subtitle = null,
     showOverview = true,
     showRelationships = true,
+    statusLabel = () => null,
   }: Props = $props();
 
   const children = $derived(structuralChildProposals(proposal));
@@ -104,6 +106,7 @@
           {selectableIds}
           {onSelectedChange}
           {onActivate}
+          {statusLabel}
           selectionMode={selectableCount > 0}
         />
       </div>
@@ -125,6 +128,7 @@
           selectableIds={[]}
           onSelectedChange={() => undefined}
           {onActivate}
+          {statusLabel}
           selectionMode={false}
         />
       </div>

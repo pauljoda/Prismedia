@@ -81,9 +81,10 @@ public sealed record RequestEntityReviewRequest(
 /// <param name="ExternalIdentity">Primary persistent identity used for the lookup.</param>
 /// <param name="EntityKind">Actual entity kind targeted by the root proposal.</param>
 /// <param name="Kind">Request-flow kind selected by the user.</param>
-/// <param name="Proposal">Complete proposal, including nested structural children and relationships.</param>
+/// <param name="Proposal">Current proposal snapshot. Direct child and relationship shells can be progressively enriched.</param>
 /// <param name="Revision">Deterministic SHA-256 digest of the canonical proposal content.</param>
 /// <param name="Targets">Requestable root and structural child targets represented by the proposal.</param>
+/// <param name="Enrichment">Transient progressive-enrichment state for an interactive request review.</param>
 public sealed record RequestReviewResponse(
     string PluginId,
     ExternalIdentity ExternalIdentity,
@@ -91,7 +92,21 @@ public sealed record RequestReviewResponse(
     RequestMediaKind Kind,
     EntityMetadataProposal Proposal,
     string Revision,
-    IReadOnlyList<RequestReviewTarget> Targets);
+    IReadOnlyList<RequestReviewTarget> Targets,
+    RequestReviewEnrichment? Enrichment = null);
+
+/// <summary>Progress state for a request proposal that is enriching child and relationship shells.</summary>
+/// <param name="ReviewId">Opaque id used to poll the current proposal snapshot.</param>
+/// <param name="Running">True while provider lookups are still running.</param>
+/// <param name="PendingProposalIds">Stable proposal ids whose cards are still being identified.</param>
+/// <param name="Error">Best-effort background failure, while preserving the last usable proposal snapshot.</param>
+/// <param name="UpdatedAt">Time the proposal snapshot last changed.</param>
+public sealed record RequestReviewEnrichment(
+    Guid ReviewId,
+    bool Running,
+    IReadOnlyList<string> PendingProposalIds,
+    string? Error,
+    DateTimeOffset UpdatedAt);
 
 /// <summary>One independently identifiable root or structural child in a request review proposal.</summary>
 /// <param name="ProposalId">Plugin-owned proposal id used by the review UI.</param>
