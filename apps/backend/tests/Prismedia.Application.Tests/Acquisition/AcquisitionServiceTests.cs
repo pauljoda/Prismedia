@@ -497,6 +497,33 @@ public sealed class AcquisitionServiceTests {
     }
 
     [Fact]
+    public async Task RejectManualImportBlocklistsSelectedReleaseAndStartsFreshSearch() {
+        var harness = Harness(TransferInfo(RecordedClientId, AcquisitionStatus.ManualImportRequired));
+        var replacementId = Guid.NewGuid();
+        var selected = new SelectedRelease(
+            "Sesame Street Season 9",
+            "Prowlarr",
+            "ABC123");
+        harness.Store.CloneResult = replacementId;
+        await harness.Store.SetSelectedReleaseAsync(AcquisitionId, selected, CancellationToken.None);
+
+        Assert.True(await harness.Service.RejectManualImportAsync(AcquisitionId, CancellationToken.None));
+
+        var rejected = Assert.Single(harness.Blocklist.Requests);
+        Assert.Equal(selected.Identity, rejected.Identity);
+        Assert.Equal(BlocklistReason.Manual, rejected.Reason);
+        Assert.Equal(AcquisitionId, rejected.AcquisitionId);
+        Assert.Equal("Rejected during manual import review.", rejected.Message);
+        Assert.Equal([(RecordedClientId, ClientItemId, true)], harness.Downloads.Removals);
+        Assert.Equal([(AcquisitionId, replacementId)], harness.Monitors.Retargets);
+        Assert.Equal(AcquisitionStatus.Searching, harness.Store.ReplacementStatus);
+        var search = Assert.Single(harness.Queue.Requests);
+        Assert.Equal(JobType.AcquisitionSearch, search.Type);
+        Assert.Equal(replacementId.ToString(), search.TargetEntityId);
+        Assert.True(harness.Store.Deleted);
+    }
+
+    [Fact]
     public async Task PreserveWantedDeleteCanStopAndClearAStuckImportingAttempt() {
         var harness = Harness(TransferInfo(RecordedClientId, AcquisitionStatus.Importing));
         var import = PartialBookImportContext();
@@ -1380,7 +1407,7 @@ public sealed class AcquisitionServiceTests {
             AcquisitionId,
             new AcquisitionManualImportRequest([
                 new AcquisitionManualImportSelection("pack/Sesame Street - S09E01.mp4", firstEpisodeId),
-                new AcquisitionManualImportSelection("pack/unlabeled.mp4", secondEpisodeId),
+                new AcquisitionManualImportSelection("pack/Sesame Street - S09E01.mp4", secondEpisodeId),
             ]),
             CancellationToken.None);
 
@@ -1390,7 +1417,7 @@ public sealed class AcquisitionServiceTests {
         Assert.True(jobPayload.ManualRetry);
         Assert.Equal([
             new ManualImportFileMapping("pack/Sesame Street - S09E01.mp4", firstEpisodeId, 9, 1),
-            new ManualImportFileMapping("pack/unlabeled.mp4", secondEpisodeId, 9, 2),
+            new ManualImportFileMapping("pack/Sesame Street - S09E01.mp4", secondEpisodeId, 9, 2),
         ], jobPayload.ManualFileMappings);
     }
 
@@ -1471,9 +1498,10 @@ public sealed class AcquisitionServiceTests {
         var jobCleanup = new RecordingAcquisitionJobCleanup();
         var lifecycle = new RecordingEntityLifecycleLease();
         var importCleanup = new RecordingImportResetCleanup();
+        var blocklist = new RecordingBlocklistStore();
         var service = new AcquisitionService(
             store,
-            new ThrowingBlocklistStore(),
+            blocklist,
             queue,
             configs,
             downloads,
@@ -1489,7 +1517,7 @@ public sealed class AcquisitionServiceTests {
             manualImportPayloads: manualImportPayloads,
             manualImportTargets: manualImportTargets);
 
-        return new TestHarness(service, store, downloads, history, monitors, queue, jobCleanup, lifecycle, importCleanup);
+        return new TestHarness(service, store, downloads, history, monitors, queue, jobCleanup, lifecycle, importCleanup, blocklist);
     }
 
     private static void PrepareQueueCandidate(FakeAcquisitionStore store) {
@@ -1534,7 +1562,8 @@ public sealed class AcquisitionServiceTests {
         RecordingJobQueue Queue,
         RecordingAcquisitionJobCleanup JobCleanup,
         RecordingEntityLifecycleLease Lifecycle,
-        RecordingImportResetCleanup ImportCleanup);
+        RecordingImportResetCleanup ImportCleanup,
+        RecordingBlocklistStore Blocklist);
 
     private sealed class RecordingEntityLifecycleLease : IEntityLifecycleMutationLease {
         public bool Allow { get; set; } = true;
@@ -2174,6 +2203,24 @@ public sealed class AcquisitionServiceTests {
         public Task<IReadOnlyList<AcquisitionBlocklistEntry>> ListAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task AddAsync(BlocklistAddRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class RecordingBlocklistStore : IAcquisitionBlocklistStore {
+        public List<BlocklistAddRequest> Requests { get; } = [];
+
+        public Task<IReadOnlySet<string>> GetIdentitiesAsync(CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlySet<string>>(new HashSet<string>(StringComparer.OrdinalIgnoreCase));
+
+        public Task AddAsync(BlocklistAddRequest request, CancellationToken cancellationToken) {
+            Requests.Add(request);
+            return Task.CompletedTask;
+        }
+
+        public Task<IReadOnlyList<AcquisitionBlocklistEntry>> ListAsync(CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 
     private sealed class RecordingJobQueue : IJobQueueService {

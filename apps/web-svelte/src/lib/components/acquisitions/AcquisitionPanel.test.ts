@@ -18,6 +18,7 @@ const mocks = vi.hoisted(() => ({
   submitAcquisitionManualImport: vi.fn(),
   reSearchAcquisition: vi.fn(),
   queueAcquisitionCandidate: vi.fn(),
+  rejectAcquisitionManualImport: vi.fn(),
   deleteAcquisition: vi.fn(),
   goto: vi.fn(),
 }));
@@ -35,6 +36,7 @@ vi.mock("$lib/api/acquisitions", () => ({
   fetchAcquisitionManualImportReview: mocks.fetchAcquisitionManualImportReview,
   fetchAcquisitionTransfer: vi.fn(),
   queueAcquisitionCandidate: mocks.queueAcquisitionCandidate,
+  rejectAcquisitionManualImport: mocks.rejectAcquisitionManualImport,
   reSearchAcquisition: mocks.reSearchAcquisition,
   retryAcquisitionImport: mocks.retryAcquisitionImport,
   submitAcquisitionManualImport: mocks.submitAcquisitionManualImport,
@@ -173,13 +175,13 @@ describe("AcquisitionPanel", () => {
     expect(mocks.retryAcquisitionImport).toHaveBeenCalledWith("acquisition-1", false);
   });
 
-  it("reviews every held file and submits only explicit per-episode mappings", async () => {
+  it("maps expected episodes to files and allows one file to satisfy several episodes", async () => {
     const held = acquisition(ACQUISITION_STATUS.manualImportRequired);
     held.summary.statusMessage = "The download's files carry no recognizable episode numbering; import manually.";
     mocks.fetchAcquisition.mockResolvedValue(held);
     mocks.fetchAcquisitionManualImportReview.mockResolvedValue({
       available: true,
-      message: "Review every downloaded file and choose the episode it contains. Leave extras unassigned.",
+      message: "Choose the downloaded file that contains each expected episode.",
       files: [
         { sourceRelativePath: "pack/video-a.mp4", name: "video-a.mp4", sizeBytes: 1_000, canMap: true, suggestedTargetEntityId: "episode-1" },
         { sourceRelativePath: "pack/video-b.mp4", name: "video-b.mp4", sizeBytes: 2_000, canMap: true, suggestedTargetEntityId: null },
@@ -194,21 +196,52 @@ describe("AcquisitionPanel", () => {
 
     const view = render(AcquisitionPanel, { acquisitionId: "acquisition-1", detail: held });
 
-    expect(await view.findByText("Review downloaded files")).toBeInTheDocument();
-    expect(await view.findByText("pack/video-a.mp4")).toBeInTheDocument();
-    expect(view.getByText("pack/video-b.mp4")).toBeInTheDocument();
+    expect(await view.findByText("Map expected episodes")).toBeInTheDocument();
+    expect(await view.findByText("Episode 01 · First Day")).toBeInTheDocument();
+    expect(view.getByText("Episode 02 · Second Day")).toBeInTheDocument();
+    expect((await view.findAllByText("pack/video-a.mp4")).length).toBeGreaterThan(0);
+    expect(view.getAllByText("pack/video-b.mp4").length).toBeGreaterThan(0);
     expect(view.getByText("pack/poster.jpg")).toBeInTheDocument();
-    expect(view.getByText("Not importable")).toBeInTheDocument();
+    expect(view.getByText("Other downloaded file")).toBeInTheDocument();
     expect(view.queryByRole("button", { name: "Import anyway" })).toBeNull();
 
-    await fireEvent.click(view.getByRole("button", { name: "Entity mapping for video-b.mp4" }));
-    await fireEvent.click(await view.findByRole("option", { name: "Episode 02 · Second Day" }));
-    await fireEvent.click(view.getByRole("button", { name: "Import mapped files" }));
+    await fireEvent.click(view.getByRole("button", { name: "Downloaded file for Episode 02 · Second Day" }));
+    await fireEvent.click(await view.findByRole("option", { name: "pack/video-a.mp4" }));
+    await fireEvent.click(view.getByRole("button", { name: "Import mapped episodes" }));
 
     expect(mocks.submitAcquisitionManualImport).toHaveBeenCalledWith("acquisition-1", [
       { sourceRelativePath: "pack/video-a.mp4", targetEntityId: "episode-1" },
-      { sourceRelativePath: "pack/video-b.mp4", targetEntityId: "episode-2" },
+      { sourceRelativePath: "pack/video-a.mp4", targetEntityId: "episode-2" },
     ]);
+  });
+
+  it("confirms rejection before removing, blocklisting, and resetting the held release", async () => {
+    const held = acquisition(ACQUISITION_STATUS.manualImportRequired);
+    const onReset = vi.fn();
+    mocks.fetchAcquisition.mockResolvedValue(held);
+    mocks.fetchAcquisitionManualImportReview.mockResolvedValue({
+      available: true,
+      message: "Choose the downloaded file that contains each expected episode.",
+      files: [
+        { sourceRelativePath: "pack/video.mp4", name: "video.mp4", sizeBytes: 1_000, canMap: true, suggestedTargetEntityId: null },
+      ],
+      targets: [{ entityId: "episode-1", title: "First Day", position: 1 }],
+    });
+    mocks.rejectAcquisitionManualImport.mockResolvedValue(undefined);
+
+    const view = render(AcquisitionPanel, {
+      acquisitionId: "acquisition-1",
+      detail: held,
+      onReset,
+    });
+
+    await fireEvent.click(await view.findByRole("button", { name: "Reject" }));
+    const dialog = view.getByRole("dialog", { name: "Reject this downloaded release?" });
+    expect(within(dialog).getByText(/blocklists this exact release/i)).toBeInTheDocument();
+    await fireEvent.click(within(dialog).getByRole("button", { name: "Confirm Reject" }));
+
+    await waitFor(() => expect(mocks.rejectAcquisitionManualImport).toHaveBeenCalledWith("acquisition-1"));
+    expect(onReset).toHaveBeenCalledOnce();
   });
 
   it("reports Imported when the bound detail is advanced by its owner", async () => {

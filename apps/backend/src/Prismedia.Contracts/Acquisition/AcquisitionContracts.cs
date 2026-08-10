@@ -193,15 +193,16 @@ public sealed record AcquisitionManualImportFile(
     bool CanMap,
     Guid? SuggestedTargetEntityId = null);
 
-/// <summary>One Entity the current held acquisition permits a downloaded file to satisfy.</summary>
+/// <summary>One expected Entity that the current held acquisition permits a downloaded file to satisfy.</summary>
 /// <param name="EntityId">Stable target Entity identity used by the submission contract.</param>
 /// <param name="Title">Provider-authored target title.</param>
 /// <param name="Position">Display position within the requested container, such as an episode number.</param>
 public sealed record AcquisitionManualImportTarget(Guid EntityId, string Title, int? Position = null);
 
 /// <summary>
-/// Read-only mapping review for an acquisition held at manual import. Files retain the payload's relative
-/// paths, targets retain stable Entity ids, and safe automatic inferences are returned as suggestions.
+/// Read-only mapping review for an acquisition held at manual import. Targets are the primary review rows;
+/// files retain payload-relative paths for selection and payload auditing, and safe automatic inferences
+/// are returned as suggestions.
 /// </summary>
 public sealed record AcquisitionManualImportReview(
     bool Available,
@@ -209,10 +210,13 @@ public sealed record AcquisitionManualImportReview(
     IReadOnlyList<AcquisitionManualImportTarget> Targets,
     string? Message = null);
 
-/// <summary>Maps one downloaded file onto one allowed Entity target.</summary>
+/// <summary>
+/// Maps one expected Entity target onto a downloaded file. Several targets may intentionally select the
+/// same source when one physical video contains multiple episodes.
+/// </summary>
 public sealed record AcquisitionManualImportSelection(string SourceRelativePath, Guid TargetEntityId);
 
-/// <summary>Submits the user's explicit per-file mapping for a held acquisition.</summary>
+/// <summary>Submits the user's explicit expected-Entity mappings for a held acquisition.</summary>
 public sealed record AcquisitionManualImportRequest(IReadOnlyList<AcquisitionManualImportSelection> Selections);
 
 /// <summary>

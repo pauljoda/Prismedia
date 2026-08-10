@@ -10853,6 +10853,54 @@ export const submitAcquisitionManualImport = async (id: string,
 
 
 
+export type rejectAcquisitionManualImportResponse204 = {
+  data: void
+  status: 204
+}
+
+export type rejectAcquisitionManualImportResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type rejectAcquisitionManualImportResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type rejectAcquisitionManualImportResponseSuccess = (rejectAcquisitionManualImportResponse204) & {
+  headers: Headers;
+};
+export type rejectAcquisitionManualImportResponseError = (rejectAcquisitionManualImportResponse400 | rejectAcquisitionManualImportResponse404) & {
+  headers: Headers;
+};
+
+export type rejectAcquisitionManualImportResponse = (rejectAcquisitionManualImportResponseSuccess | rejectAcquisitionManualImportResponseError)
+
+export const getRejectAcquisitionManualImportUrl = (id: string,) => {
+
+
+
+
+  return `/api/acquisitions/${id}/manual-import/reject`
+}
+
+/**
+ * @summary Blocklists a held download's exact release, removes its transfer and data, and starts a fresh search.
+ */
+export const rejectAcquisitionManualImport = async (id: string, options?: RequestInit): Promise<rejectAcquisitionManualImportResponse> => {
+
+  return orvalFetch<rejectAcquisitionManualImportResponse>(getRejectAcquisitionManualImportUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
 export type cancelAcquisitionResponse200 = {
   data: AcquisitionDetail
   status: 200

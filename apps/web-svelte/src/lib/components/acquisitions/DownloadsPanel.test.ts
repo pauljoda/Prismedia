@@ -50,13 +50,13 @@ vi.mock("$lib/api/entities", () => ({
 }));
 
 vi.mock("$lib/requests/acquisition-list-item", () => ({
-  downloadToListItem: (row: { acquisitionId: string; title?: string }) => ({
+  downloadToListItem: (row: { acquisitionId: string; title?: string; statusLabel?: string }) => ({
     id: row.acquisitionId,
     title: row.title ?? row.acquisitionId,
     tone: "downloading",
     progress: null,
     thumbnail: {},
-    statusLabel: "Downloading",
+    statusLabel: row.statusLabel ?? "Downloading",
     selectable: true,
   }),
 }));
@@ -207,6 +207,7 @@ describe("DownloadsPanel", () => {
   it("shows the aggregate detail inspector when an Entity group is selected", async () => {
     mocks.fetchDownloadQueue.mockResolvedValue([
       { acquisitionId: "episode-download", entityId: "episode", title: "Elmo's World" },
+      { acquisitionId: "season-download", entityId: "season", title: "Season 1", statusLabel: "Manual import" },
     ]);
     mocks.fetchEntityThumbnails.mockImplementation(async (ids: string[]) => ids.flatMap((id) => {
       if (id === "episode") return [hierarchyThumbnail(id, "Elmo's World", ENTITY_KIND.videoEpisode, "season", ENTITY_KIND.videoSeason, 1)];
@@ -216,13 +217,19 @@ describe("DownloadsPanel", () => {
     }));
 
     render(DownloadsPanel);
-    await waitFor(() => expect(mocks.fetchEntityThumbnails).toHaveBeenCalledTimes(3));
+    await waitFor(() => expect(mocks.fetchEntityThumbnails).toHaveBeenCalledTimes(2));
     await fireEvent.click(screen.getByRole("button", { name: "Inspect series downloads" }));
 
     expect(await screen.findByText("Sesame Street")).toBeInTheDocument();
-    expect(screen.getByText("1 transfer across this Entity")).toBeInTheDocument();
+    expect(screen.getByText("2 transfers across this Entity")).toBeInTheDocument();
     await fireEvent.click(screen.getByRole("button", { name: "Inspect Season 1" }));
-    expect(await screen.findByText("Season 1")).toBeInTheDocument();
+    expect((await screen.findAllByText("Season 1")).length).toBeGreaterThan(0);
+    const ownSection = screen.getByRole("region", { name: "Season 1 direct transfers" });
+    const childSection = screen.getByRole("region", { name: "Season 1 child transfers" });
+    expect(ownSection).toHaveTextContent("This season");
+    expect(ownSection).toHaveTextContent("Manual import");
+    expect(childSection).toHaveTextContent("Children");
     expect(screen.getByRole("button", { name: "Inspect Elmo's World" })).toBeInTheDocument();
+    expect(ownSection.compareDocumentPosition(childSection) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 });

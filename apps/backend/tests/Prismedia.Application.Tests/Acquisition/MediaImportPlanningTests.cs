@@ -389,6 +389,27 @@ public sealed class TvImportPlanBuilderTests {
     }
 
     [Fact]
+    public void ManualMappingsBindSeveralEpisodesToOnePlacedFile() {
+        var firstTarget = Guid.NewGuid();
+        var secondTarget = Guid.NewGuid();
+        var plan = TvImportPlanBuilder.PlanManualUnits([
+            File("pack/shared-video.mp4"),
+        ], [
+            new ManualImportFileMapping("pack/shared-video.mp4", firstTarget, 9, 3),
+            new ManualImportFileMapping("pack/shared-video.mp4", secondTarget, 9, 4),
+        ], "Daniel Tiger's Neighborhood");
+
+        Assert.False(plan.Blocked);
+        var unit = Assert.Single(plan.Units);
+        Assert.Equal("pack/shared-video.mp4", unit.SourceRelativePath);
+        Assert.Equal(3, unit.Episode);
+        Assert.Equal([4], unit.ExtraEpisodes);
+        Assert.Equal(
+            "Daniel Tiger's Neighborhood/Season 09/Daniel Tiger's Neighborhood - S09E03.mp4",
+            unit.TargetRelativePath);
+    }
+
+    [Fact]
     public void TokenlessSeasonPackMapsUniqueProviderEpisodeTitlesIncludingZeroPadding() {
         var plan = TvImportPlanBuilder.Plan([
             File("pack/Sesame Street - Episode 0131 (November 9, 1970).mp4"),

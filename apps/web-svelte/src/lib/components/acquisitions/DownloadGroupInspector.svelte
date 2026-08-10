@@ -1,9 +1,9 @@
 <script lang="ts">
-  import { ChevronRight, ExternalLink, Layers3 } from "@lucide/svelte";
+  import { ChevronRight, Download, ExternalLink, Layers3 } from "@lucide/svelte";
   import { Badge, Button, type BadgeVariant } from "@prismedia/ui-svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import { entityCardToThumbnailCard } from "$lib/entities/entity-grid";
-  import { displayNameForEntityKind } from "$lib/entities/entity-codes";
+  import { displayNameForEntityKind, shortDisplayNameForEntityKind } from "$lib/entities/entity-codes";
   import { formatBytes, formatEta, formatSpeed, numberValue } from "$lib/utils/format";
   import type { AcquisitionItemTone } from "$lib/requests/acquisition-list-item";
   import type { DownloadManagerEntry, DownloadTreeNode } from "./download-tree";
@@ -64,7 +64,9 @@
       subtitle: entry.item.subtitle ?? "Transfer",
       entries: [entry],
     })));
-  const containedRows = $derived([...childRows, ...directRows]);
+  const directSectionLabel = $derived(
+    `This ${node.thumbnail ? shortDisplayNameForEntityKind(node.thumbnail.kind).toLocaleLowerCase() : "Entity"}`,
+  );
 
   function averageProgress(rowEntries: DownloadManagerEntry[]): number | null {
     const values = rowEntries
@@ -145,13 +147,50 @@
     <span><small>Longest ETA</small><strong>{formatEta(longestEta)}</strong></span>
   </div>
 
-  <section class="contained-transfers" aria-label={`${node.title} contained transfers`}>
-    <header class="contained-header">
-      <span><Layers3 class="h-3.5 w-3.5" /> Contained transfers</span>
-      <small>Select a child Entity or transfer to drill into its details.</small>
-    </header>
-    <div class="transfer-list">
-      {#each containedRows as row (row.key)}
+  {#if directRows.length > 0}
+    <section class="transfer-section" aria-label={`${node.title} direct transfers`}>
+      <header class="transfer-header">
+        <span><Download class="h-3.5 w-3.5" /> {directSectionLabel}</span>
+        <small>Transfers attached directly to the selected Entity.</small>
+      </header>
+      <div class="transfer-list">
+        {#each directRows as row (row.key)}
+          {@const rowProgress = averageProgress(row.entries)}
+          {@const tone = rowTone(row.entries)}
+          {@const singleEntry = row.entries.length === 1 ? row.entries[0] : null}
+          <Button
+            variant="ghost"
+            class="group-transfer-row"
+            aria-label={`Inspect ${row.title}`}
+            onclick={() => onSelectItem(row.key)}
+          >
+            <span class="transfer-identity">
+              <strong>{row.title}</strong>
+              <small>{row.subtitle} · {row.entries.length} {row.entries.length === 1 ? "transfer" : "transfers"}</small>
+            </span>
+            <span class="transfer-progress">
+              <span class="mini-track" aria-hidden="true">
+                <span style:width={`${Math.round((rowProgress ?? 0) * 100)}%`}></span>
+              </span>
+              <small>{rowProgress === null ? "—" : `${Math.round(rowProgress * 100)}%`}</small>
+            </span>
+            <Badge variant={badgeVariant(tone)}>{singleEntry?.item.statusLabel ?? `${row.entries.length} transfers`}</Badge>
+            <span class="transfer-speed">{formatSpeed(rowSpeed(row.entries))}</span>
+            <ChevronRight class="h-3.5 w-3.5 text-text-disabled" />
+          </Button>
+        {/each}
+      </div>
+    </section>
+  {/if}
+
+  {#if childRows.length > 0}
+    <section class="transfer-section" aria-label={`${node.title} child transfers`}>
+      <header class="transfer-header">
+        <span><Layers3 class="h-3.5 w-3.5" /> Children</span>
+        <small>Select a child Entity to drill into its transfers.</small>
+      </header>
+      <div class="transfer-list">
+        {#each childRows as row (row.key)}
         {@const rowProgress = averageProgress(row.entries)}
         {@const tone = rowTone(row.entries)}
         {@const singleEntry = row.entries.length === 1 ? row.entries[0] : null}
@@ -175,9 +214,10 @@
           <span class="transfer-speed">{formatSpeed(rowSpeed(row.entries))}</span>
           <ChevronRight class="h-3.5 w-3.5 text-text-disabled" />
         </Button>
-      {/each}
-    </div>
-  </section>
+        {/each}
+      </div>
+    </section>
+  {/if}
 </div>
 
 <style>
@@ -193,11 +233,11 @@
   .group-metrics { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); border: 1px solid var(--color-border-subtle); background: rgb(255 255 255 / 0.012); }
   .group-metrics > span { display: flex; min-width: 0; flex-direction: column; gap: 0.16rem; padding: 0.58rem 0.7rem; border-right: 1px solid var(--color-border-subtle); }
   .group-metrics > span:last-child { border-right: 0; }
-  .group-metrics small, .contained-header small, .transfer-identity small, .transfer-progress small { color: var(--color-text-muted); font-size: 0.62rem; }
+  .group-metrics small, .transfer-header small, .transfer-identity small, .transfer-progress small { color: var(--color-text-muted); font-size: 0.62rem; }
   .group-metrics strong { overflow: hidden; color: var(--color-text-secondary); font-family: var(--font-mono, "JetBrains Mono", monospace); font-size: 0.74rem; font-weight: 500; text-overflow: ellipsis; white-space: nowrap; }
-  .contained-transfers { margin-top: 0.7rem; border: 1px solid var(--color-border-subtle); }
-  .contained-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.5rem 0.65rem; border-bottom: 1px solid var(--color-border-subtle); background: rgb(255 255 255 / 0.012); }
-  .contained-header > span { display: flex; align-items: center; gap: 0.4rem; color: var(--color-text-secondary); font-family: var(--font-heading, "Geist", sans-serif); font-size: 0.72rem; font-weight: 600; }
+  .transfer-section { margin-top: 0.7rem; border: 1px solid var(--color-border-subtle); }
+  .transfer-header { display: flex; align-items: center; justify-content: space-between; gap: 1rem; padding: 0.5rem 0.65rem; border-bottom: 1px solid var(--color-border-subtle); background: rgb(255 255 255 / 0.012); }
+  .transfer-header > span { display: flex; align-items: center; gap: 0.4rem; color: var(--color-text-secondary); font-family: var(--font-heading, "Geist", sans-serif); font-size: 0.72rem; font-weight: 600; }
   .transfer-list { display: flex; flex-direction: column; }
   :global(.group-transfer-row) { display: grid; width: 100%; min-height: 2.75rem; grid-template-columns: minmax(12rem, 1fr) minmax(8rem, 0.45fr) minmax(7rem, auto) 6rem 1rem; align-items: center; gap: 0.7rem; padding: 0.42rem 0.65rem; border-bottom: 1px solid var(--color-border-subtle); border-radius: 0; text-align: left; }
   :global(.group-transfer-row:last-child) { border-bottom: 0; }
@@ -214,6 +254,6 @@
     .group-metrics > span { border-bottom: 1px solid var(--color-border-subtle); }
     :global(.group-transfer-row) { grid-template-columns: minmax(9rem, 1fr) auto 1rem; }
     .transfer-progress, .transfer-speed { display: none; }
-    .contained-header small { display: none; }
+    .transfer-header small { display: none; }
   }
 </style>

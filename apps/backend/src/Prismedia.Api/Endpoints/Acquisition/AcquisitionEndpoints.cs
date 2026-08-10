@@ -332,6 +332,24 @@ public static class AcquisitionEndpoints {
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
+        group.MapPost("/{id:guid}/manual-import/reject", async (
+            Guid id,
+            AcquisitionService acquisitions,
+            CancellationToken cancellationToken) => {
+                try {
+                    return await acquisitions.RejectManualImportAsync(id, cancellationToken)
+                        ? Results.NoContent()
+                        : Results.NotFound(new ApiProblem(ApiProblemCodes.AcquisitionNotFound, "Acquisition was not found."));
+                } catch (AcquisitionConfigurationException ex) {
+                    return Results.BadRequest(new ApiProblem(ex.Code, ex.Message));
+                }
+            })
+            .WithName("RejectAcquisitionManualImport")
+            .WithSummary("Blocklists a held download's exact release, removes its transfer and data, and starts a fresh search.")
+            .Produces(StatusCodes.Status204NoContent)
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
         group.MapPost("/{id:guid}/cancel", async (
             Guid id,
             AcquisitionService acquisitions,

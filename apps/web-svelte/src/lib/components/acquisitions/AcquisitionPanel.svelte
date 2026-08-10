@@ -36,6 +36,7 @@
     fetchAcquisitionManualImportReview,
     fetchAcquisitionTransfer,
     queueAcquisitionCandidate,
+    rejectAcquisitionManualImport,
     submitAcquisitionManualImport,
     uploadManualTorrent,
   } from "$lib/api/acquisitions";
@@ -86,6 +87,7 @@
   let pollTimer: ReturnType<typeof setInterval> | null = null;
   let bridgePolls = $state(0);
   let resetConfirmOpen = $state(false);
+  let rejectConfirmOpen = $state(false);
   let customQuery = $state("");
   let lastHistoryKey: string | null = null;
 
@@ -205,13 +207,18 @@
       if (status === ACQUISITION_STATUS.manualImportRequired) {
         const nextReview = await fetchAcquisitionManualImportReview(acquisitionId);
         manualImportReview = nextReview;
-        const allowedTargets = new Set(nextReview.targets.map((target) => target.entityId));
-        manualAssignments = Object.fromEntries(nextReview.files.map((file) => {
-          const current = manualAssignments[file.sourceRelativePath];
-          const target = current && allowedTargets.has(current)
+        const allowedSources = new Set(nextReview.files
+          .filter((file) => file.canMap)
+          .map((file) => file.sourceRelativePath));
+        const suggestedSourceByTarget = new Map(nextReview.files
+          .filter((file) => file.suggestedTargetEntityId && file.canMap)
+          .map((file) => [file.suggestedTargetEntityId!, file.sourceRelativePath]));
+        manualAssignments = Object.fromEntries(nextReview.targets.map((target) => {
+          const current = manualAssignments[target.entityId];
+          const source = current && allowedSources.has(current)
             ? current
-            : file.suggestedTargetEntityId ?? "";
-          return [file.sourceRelativePath, target];
+            : suggestedSourceByTarget.get(target.entityId) ?? "";
+          return [target.entityId, source];
         }));
       } else {
         manualImportReview = null;
@@ -312,12 +319,28 @@
   async function importMappedFiles() {
     const selections: AcquisitionManualImportSelection[] = Object.entries(manualAssignments)
       .filter((entry): entry is [string, string] => Boolean(entry[1]))
-      .map(([sourceRelativePath, targetEntityId]) => ({ sourceRelativePath, targetEntityId }));
+      .map(([targetEntityId, sourceRelativePath]) => ({ sourceRelativePath, targetEntityId }));
     await runDetailAction(
       () => submitAcquisitionManualImport(acquisitionId, selections),
       "Failed to import mapped files",
       { afterSuccess: () => { bridgePolls = 8; } },
     );
+  }
+
+  async function rejectManualImport() {
+    if (busy) return;
+    busy = true;
+    error = null;
+    try {
+      await rejectAcquisitionManualImport(acquisitionId);
+      commitDetail(null);
+      await onReset?.();
+    } catch (err) {
+      error = err instanceof Error ? err.message : "Failed to reject downloaded release";
+      throw err;
+    } finally {
+      busy = false;
+    }
   }
 
   async function runDetailAction(
@@ -526,10 +549,11 @@
         review={manualImportReview}
         assignments={manualAssignments}
         {busy}
-        onAssignmentChange={(sourceRelativePath, targetEntityId) => {
-          manualAssignments[sourceRelativePath] = targetEntityId;
+        onAssignmentChange={(targetEntityId, sourceRelativePath) => {
+          manualAssignments[targetEntityId] = sourceRelativePath;
         }}
         onImport={() => void importMappedFiles()}
+        onReject={() => (rejectConfirmOpen = true)}
       />
 
     {:else if isDownloading}
@@ -692,6 +716,16 @@
   danger
   onConfirm={startOver}
   onClose={() => (resetConfirmOpen = false)}
+/>
+
+<ConfirmDialog
+  open={rejectConfirmOpen}
+  title="Reject this downloaded release?"
+  message="This removes the download and its data, blocklists this exact release so Prismedia will not grab it again, and immediately starts a fresh search for the still-Wanted item."
+  confirmLabel="Reject"
+  danger
+  onConfirm={rejectManualImport}
+  onClose={() => (rejectConfirmOpen = false)}
 />
 
 {#snippet stat(label: string, value: string)}

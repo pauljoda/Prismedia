@@ -405,7 +405,8 @@ public static partial class TvImportPlanBuilder {
 
     /// <summary>
     /// Builds exact placement units from a user-reviewed mapping. Unselected payload files are deliberately
-    /// omitted; every selected source and episode slot must be unique.
+    /// omitted; every episode slot must be unique, while several episodes may intentionally share one source.
+    /// Shared selections become one placement unit whose covered episodes bind to the same library file.
     /// </summary>
     public static TvUnitsPlan PlanManualUnits(
         IReadOnlyList<ImportCandidateFile> files,
@@ -416,27 +417,42 @@ public static partial class TvImportPlanBuilder {
         var candidates = files
             .Where(file => IsVideoFile(file.RelativePath))
             .ToDictionary(file => file.RelativePath, FileSystemPathComparison.Comparer);
-        var units = new List<TvPlanUnit>(mappings.Count);
-        var sources = new HashSet<string>(FileSystemPathComparison.Comparer);
         var targets = new HashSet<(int Season, int Episode)>();
         foreach (var mapping in mappings) {
             if (!candidates.ContainsKey(mapping.SourceRelativePath)
-                || !sources.Add(mapping.SourceRelativePath)
                 || !targets.Add((mapping.SeasonNumber, mapping.EpisodeNumber))) {
                 return TvUnitsPlan.Block(ImportBlockReason.AmbiguousMultiplePrimaries);
             }
+        }
 
+        var units = new List<TvPlanUnit>(mappings.Count);
+        foreach (var sourceGroup in mappings.GroupBy(
+                     mapping => mapping.SourceRelativePath,
+                     FileSystemPathComparison.Comparer)) {
+            var coveredTargets = sourceGroup
+                .OrderBy(mapping => mapping.SeasonNumber)
+                .ThenBy(mapping => mapping.EpisodeNumber)
+                .ToArray();
+            var primary = coveredTargets[0];
+            if (coveredTargets.Any(mapping => mapping.SeasonNumber != primary.SeasonNumber)) {
+                return TvUnitsPlan.Block(ImportBlockReason.AmbiguousMultiplePrimaries);
+            }
             var naming = NamingContext(
                 series,
-                mapping.SeasonNumber,
-                mapping.EpisodeNumber,
+                primary.SeasonNumber,
+                primary.EpisodeNumber,
                 quality,
-                Path.GetExtension(mapping.SourceRelativePath));
+                Path.GetExtension(primary.SourceRelativePath));
             units.Add(new TvPlanUnit(
-                mapping.SourceRelativePath,
-                mapping.SeasonNumber,
-                mapping.EpisodeNumber,
-                MediaNamingTemplates.RenderTvPath(template, naming)));
+                primary.SourceRelativePath,
+                primary.SeasonNumber,
+                primary.EpisodeNumber,
+                MediaNamingTemplates.RenderTvPath(template, naming)) {
+                ExtraEpisodes = coveredTargets
+                    .Skip(1)
+                    .Select(mapping => mapping.EpisodeNumber)
+                    .ToArray()
+            });
         }
 
         return units.Count > 0

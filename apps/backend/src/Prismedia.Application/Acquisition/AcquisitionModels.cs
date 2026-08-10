@@ -695,8 +695,9 @@ public sealed record AcquisitionImportContext(
     public bool AllowFormatChange { get; init; }
 
     /// <summary>
-    /// Exact user-reviewed file-to-Entity choices for a held bundle import. Null means ordinary automatic
-    /// planning; a populated list is authoritative and intentionally leaves every unselected payload file behind.
+    /// Exact user-reviewed Entity-to-file choices for a held bundle import. Null means ordinary automatic
+    /// planning; a populated list is authoritative and intentionally leaves every unselected payload file
+    /// behind. Multiple Entities may share one source when one video covers several episodes.
     /// </summary>
     public IReadOnlyList<ManualImportFileMapping>? ManualFileMappings { get; init; }
 }

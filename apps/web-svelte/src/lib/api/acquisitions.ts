@@ -31,6 +31,7 @@ import {
   queueManualReplacement as queueManualReplacementRequest,
   queueAcquisition as queueAcquisitionRequest,
   reSearchAcquisition as reSearchAcquisitionRequest,
+  rejectAcquisitionManualImport as rejectAcquisitionManualImportRequest,
   searchManualReplacement as searchManualReplacementRequest,
   retryAcquisitionImport as retryAcquisitionImportRequest,
   submitAcquisitionManualImport as submitAcquisitionManualImportRequest,
@@ -296,6 +297,15 @@ export async function submitAcquisitionManualImport(
   return unwrapGenerated(
     await submitAcquisitionManualImportRequest(id, { selections }),
     "Failed to import mapped files",
+  );
+}
+
+/** Rejects a held payload, blocklists its exact release, removes its data, and starts a fresh search. */
+export async function rejectAcquisitionManualImport(id: string): Promise<void> {
+  unwrapGenerated(
+    await rejectAcquisitionManualImportRequest(id),
+    "Failed to reject downloaded release",
+    [204],
   );
 }
 

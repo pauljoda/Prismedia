@@ -9,6 +9,45 @@ namespace Prismedia.Application.Acquisition;
 /// <summary>Manual import review and submission use cases.</summary>
 public sealed partial class AcquisitionService {
     /// <summary>
+    /// Rejects the exact release currently held for manual import, removes its transfer and downloaded
+    /// data, and replaces the acquisition with a fresh monitored search. The selected-release snapshot is
+    /// the authority for the blocklist identity, so a similarly titled candidate is never guessed from the
+    /// current search results.
+    /// </summary>
+    public async Task<bool> RejectManualImportAsync(
+        Guid id,
+        CancellationToken cancellationToken) {
+        var detail = await store.GetAsync(id, cancellationToken);
+        if (detail is null) {
+            return false;
+        }
+
+        var canResumeRejection = detail.Summary.Status == AcquisitionStatus.Stopping
+            && await store.GetTeardownClaimAsync(id, cancellationToken) is {
+                Intent: AcquisitionTeardownIntent.Reacquire,
+                OriginalStatus: AcquisitionStatus.ManualImportRequired
+            };
+        if (detail.Summary.Status != AcquisitionStatus.ManualImportRequired && !canResumeRejection) {
+            throw InvalidManualMapping("Only a download held for manual import can be rejected here.");
+        }
+
+        var selected = await store.GetSelectedReleaseAsync(id, cancellationToken)
+            ?? throw InvalidManualMapping("The downloaded release identity is no longer available. Remove the acquisition to start over without blocklisting it.");
+        await blocklist.AddAsync(
+            new BlocklistAddRequest(
+                selected.Identity,
+                BlocklistReason.Manual,
+                selected.Title,
+                selected.IndexerName,
+                selected.InfoHash,
+                id,
+                "Rejected during manual import review."),
+            cancellationToken);
+
+        return await DeleteAsync(id, cancellationToken, preserveWantedLoop: true);
+    }
+
+    /// <summary>
     /// Builds a file-to-Entity mapping review for a television acquisition held for manual import.
     /// Automatic numbering and title matches are suggestions only; ambiguous rows stay unselected.
     /// </summary>
@@ -115,7 +154,7 @@ public sealed partial class AcquisitionService {
             true,
             files,
             targets,
-            "Review every downloaded file and choose the episode it contains. Leave extras unassigned.");
+            "Choose the downloaded file that contains each expected episode. One file may satisfy several episodes; leave episodes unassigned when they are not present.");
     }
 
     /// <summary>
@@ -146,18 +185,16 @@ public sealed partial class AcquisitionService {
             .Where(file => file.CanMap)
             .ToDictionary(file => file.SourceRelativePath, FileSystemPathComparison.Comparer);
         var targets = review.Targets.ToDictionary(target => target.EntityId);
-        var usedSources = new HashSet<string>(FileSystemPathComparison.Comparer);
         var usedTargets = new HashSet<Guid>();
         var mappings = new List<ManualImportFileMapping>(selections.Count);
         foreach (var selection in selections) {
-            if (!files.TryGetValue(selection.SourceRelativePath, out var file)
-                || !usedSources.Add(file.SourceRelativePath)) {
+            if (!files.TryGetValue(selection.SourceRelativePath, out var file)) {
                 throw InvalidManualMapping("One or more selected files are not available in this download.");
             }
             if (!targets.TryGetValue(selection.TargetEntityId, out var target)
                 || target.Position is not { } episodeNumber
                 || !usedTargets.Add(selection.TargetEntityId)) {
-                throw InvalidManualMapping("Each selected file must map to a different episode from this season.");
+                throw InvalidManualMapping("Each episode may be mapped only once and must belong to this season.");
             }
             mappings.Add(new ManualImportFileMapping(
                 file.SourceRelativePath,

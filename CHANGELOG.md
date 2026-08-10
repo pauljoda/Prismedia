@@ -8,7 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
-- TV downloads held for manual import now open a per-file review: Prismedia shows the completed payload, prefills unambiguous episode matches, lets each video be assigned to a specific episode or left out, and imports only the reviewed mappings.
+- TV downloads held for manual import now open an expected-episode review: Prismedia prefills unambiguous matches, lets each episode choose a downloaded video, supports one video satisfying several episodes, and keeps the complete payload in a collapsed audit list. A held release can also be rejected to remove its download data, blocklist it, and immediately search again.
 
 ### Removed
 
@@ -18,6 +18,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Grouped Downloads detail now separates an Entity's own transfers from its children, keeping a season-level review above its episode transfers instead of burying it at the bottom.
 - Downloads now completes crash-interrupted Entity-removal cleanup automatically, builds large grouped queues without a flat intermediate render, spaces polls after slow responses, and reuses qBittorrent's bulk telemetry instead of issuing one follow-up request per transfer.
 - Web music playback now reconnects an interrupted media request at the current playhead instead of waiting indefinitely for the browser's slow stream recovery, while preserving deliberate pause behavior.
 - Web music playback now persists lightweight track progress while listening instead of resending and rebuilding the entire saved queue every five seconds, preventing large queues from flooding the API during a stream.
