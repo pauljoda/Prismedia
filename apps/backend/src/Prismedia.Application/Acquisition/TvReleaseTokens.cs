@@ -23,6 +23,9 @@ public static partial class TvReleaseTokens {
     [GeneratedRegex(@"(?:^|[\s._\-(\[])(?:[Ss](?<season>\d{1,3})|Season[\s._-]*(?<season>\d{1,3}))(?:\D|$)", RegexOptions.IgnoreCase)]
     private static partial Regex SeasonTokenRegex();
 
+    [GeneratedRegex(@"(?:^|[\s._\-(\[])(?:the[\s._-]+)?(?<ordinal>\d{1,3}(?:st|nd|rd|th)|first|second|third|fourth|fifth|sixth|seventh|eighth|ninth|tenth|eleventh|twelfth|thirteenth|fourteenth|fifteenth|sixteenth|seventeenth|eighteenth|nineteenth|twentieth|thirtieth|fortieth|fiftieth|sixtieth|seventieth|eightieth|ninetieth|(?:twenty|thirty|forty|fifty|sixty|seventy|eighty|ninety)[\s._-]+(?:first|second|third|fourth|fifth|sixth|seventh|eighth|ninth))[\s._-]+season(?:\D|$)", RegexOptions.IgnoreCase)]
+    private static partial Regex OrdinalSeasonTokenRegex();
+
     [GeneratedRegex(@"(?:^|[\s._\-(\[])(?:complete|collection)(?:\D|$)", RegexOptions.IgnoreCase)]
     private static partial Regex CompleteSeriesTokenRegex();
 
@@ -72,14 +75,95 @@ public static partial class TvReleaseTokens {
         return (season, episodes);
     }
 
-    /// <summary>The season a name declares via S01 or "Season 1" conventions (episode tokens also declare their season), or null.</summary>
+    /// <summary>
+    /// The season a name declares via S01, "Season 1", "3rd Season", or English ordinal conventions
+    /// such as "The Complete Third Season" (episode tokens also declare their season), or null.
+    /// </summary>
     public static int? ParseSeason(string name) {
         if (ParseEpisode(name) is { } episode) {
             return episode.Season;
         }
 
         var match = SeasonTokenRegex().Match(name);
-        return match.Success && int.TryParse(match.Groups["season"].Value, out var season) ? season : null;
+        if (match.Success && int.TryParse(match.Groups["season"].Value, out var season)) {
+            return season;
+        }
+
+        var ordinal = OrdinalSeasonTokenRegex().Match(name);
+        return ordinal.Success ? ParseOrdinal(ordinal.Groups["ordinal"].Value) : null;
+    }
+
+    private static int? ParseOrdinal(string value) {
+        var digitCount = value.TakeWhile(char.IsDigit).Count();
+        if (digitCount > 0 && int.TryParse(value[..digitCount], out var numeric)) {
+            return numeric;
+        }
+
+        var words = value
+            .Split([' ', '.', '_', '-'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Select(word => word.ToLowerInvariant())
+            .ToArray();
+        if (words.Length == 1) {
+            return words[0] switch {
+                "first" => 1,
+                "second" => 2,
+                "third" => 3,
+                "fourth" => 4,
+                "fifth" => 5,
+                "sixth" => 6,
+                "seventh" => 7,
+                "eighth" => 8,
+                "ninth" => 9,
+                "tenth" => 10,
+                "eleventh" => 11,
+                "twelfth" => 12,
+                "thirteenth" => 13,
+                "fourteenth" => 14,
+                "fifteenth" => 15,
+                "sixteenth" => 16,
+                "seventeenth" => 17,
+                "eighteenth" => 18,
+                "nineteenth" => 19,
+                "twentieth" => 20,
+                "thirtieth" => 30,
+                "fortieth" => 40,
+                "fiftieth" => 50,
+                "sixtieth" => 60,
+                "seventieth" => 70,
+                "eightieth" => 80,
+                "ninetieth" => 90,
+                _ => null
+            };
+        }
+
+        if (words.Length != 2) {
+            return null;
+        }
+
+        var tens = words[0] switch {
+            "twenty" => 20,
+            "thirty" => 30,
+            "forty" => 40,
+            "fifty" => 50,
+            "sixty" => 60,
+            "seventy" => 70,
+            "eighty" => 80,
+            "ninety" => 90,
+            _ => 0
+        };
+        var ones = words[1] switch {
+            "first" => 1,
+            "second" => 2,
+            "third" => 3,
+            "fourth" => 4,
+            "fifth" => 5,
+            "sixth" => 6,
+            "seventh" => 7,
+            "eighth" => 8,
+            "ninth" => 9,
+            _ => 0
+        };
+        return tens > 0 && ones > 0 ? tens + ones : null;
     }
 
     /// <summary>

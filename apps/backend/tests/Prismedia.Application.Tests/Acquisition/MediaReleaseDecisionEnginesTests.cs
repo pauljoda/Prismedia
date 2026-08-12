@@ -88,6 +88,7 @@ public sealed class MediaReleaseDecisionEnginesTests {
             (Release("Andor Season 1 720p", seeders: 100), null, "Idx"),
             (Release("Andor COMPLETE 1080p", seeders: 100), null, "Idx"),
             (Release("Andor S52 COMPLETE 720p", seeders: 100), null, "Idx"),
+            (Release("Andor The Complete Third Season", seeders: 100), null, "Idx"),
             (Release("Andor Season 1 Poster Part 1", seeders: 100), null, "Idx"),
             (Release("Andor 1080p WEB-DL", seeders: 100), null, "Idx"),
             (Release("Andor S02 1080p WEB-DL", seeders: 100), null, "Idx"),
@@ -99,6 +100,7 @@ public sealed class MediaReleaseDecisionEnginesTests {
         Assert.True(verdicts["Andor Season 1 720p"]);
         Assert.True(verdicts["Andor COMPLETE 1080p"]);
         Assert.False(verdicts["Andor S52 COMPLETE 720p"]);
+        Assert.False(verdicts["Andor The Complete Third Season"]);
         Assert.False(verdicts["Andor Season 1 Poster Part 1"]);
         // A marker-less pack passes (judged by the query match), like format-anonymous book titles.
         Assert.True(verdicts["Andor 1080p WEB-DL"]);

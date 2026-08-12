@@ -27,6 +27,10 @@ public sealed class AcquisitionPayloadValidationTests {
     public void CompleteSeasonIsNotMisclassifiedAsACompleteSeries() {
         Assert.False(TvReleaseTokens.NamesCompleteSeries(
             "Sesame.Street.S52.COMPLETE.720p.HMAX.WEBRip.x264-GalaxyTV"));
+        Assert.Equal(3, TvReleaseTokens.ParseSeason("Sesame Street - The Complete Third Season"));
+        Assert.Equal(3, TvReleaseTokens.ParseSeason("Sesame Street 3rd Season"));
+        Assert.Equal(23, TvReleaseTokens.ParseSeason("Sesame Street Twenty-Third Season"));
+        Assert.False(TvReleaseTokens.NamesCompleteSeries("Sesame Street - The Complete Third Season"));
         Assert.True(TvReleaseTokens.NamesCompleteSeries("Sesame Street COMPLETE"));
         Assert.True(TvReleaseTokens.NamesCompleteSeries("Sesame Street complete series"));
         Assert.True(TvReleaseTokens.NamesCompleteSeries("Sesame Street all seasons"));
