@@ -1611,6 +1611,8 @@ public sealed class AcquisitionServiceTests {
 
         public Task<IAcquisitionTransferAddLease?> AcquireAsync(
             Guid acquisitionId,
+            Guid downloadClientConfigId,
+            string category,
             CancellationToken cancellationToken) {
             AcquireCount++;
             OnAcquire?.Invoke();

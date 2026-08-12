@@ -535,15 +535,20 @@ public interface IReleaseLinkResolver {
 
 /// <summary>
 /// Serializes one remote download-client Add with persistence of its transfer pointer. The production
-/// implementation holds the acquisition row lock until the pointer commits, so teardown either wins before
-/// Add starts or waits and then observes the exact remote item it must remove.
+/// implementation holds the acquisition row lock until the pointer commits and a client/category correlation
+/// lock while the remote id is discovered, so teardown waits for the exact pointer and parallel no-id adds
+/// cannot claim one another's download-client item.
 /// </summary>
 public interface IAcquisitionTransferAddCoordinator {
     /// <summary>
     /// Acquires ownership only while the acquisition is still in the queue-preparation state; null means a
     /// concurrent lifecycle operation won and no remote Add may be attempted.
     /// </summary>
-    Task<IAcquisitionTransferAddLease?> AcquireAsync(Guid acquisitionId, CancellationToken cancellationToken);
+    Task<IAcquisitionTransferAddLease?> AcquireAsync(
+        Guid acquisitionId,
+        Guid downloadClientConfigId,
+        string category,
+        CancellationToken cancellationToken);
 }
 
 /// <summary>One acquisition-row lock spanning remote Add through durable transfer-pointer commit.</summary>

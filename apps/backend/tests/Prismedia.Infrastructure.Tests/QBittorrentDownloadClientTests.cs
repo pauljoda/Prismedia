@@ -10,7 +10,8 @@ namespace Prismedia.Infrastructure.Tests;
 /// Covers the qBittorrent adapter's add-correlation behavior against a stubbed WebUI: a fresh no-hash
 /// add resolves by category diff, a duplicate add (accepted but nothing created) resolves to the
 /// already-present torrent by normalized name, an uncorrelatable duplicate throws a duplicate error —
-/// never a category error — and the connection test validates the category explicitly.
+/// never a category error — concurrent adds cannot steal one another's hash, and the connection test
+/// validates the category explicitly.
 /// </summary>
 public sealed class QBittorrentDownloadClientTests {
     private static readonly DownloadClientConnection Connection =
@@ -62,6 +63,26 @@ public sealed class QBittorrentDownloadClientTests {
     }
 
     [Fact]
+    public async Task ConcurrentNoHashAddsAreSerializedAcrossScopedClientInstances() {
+        var handler = new ConcurrentAddHandler();
+        var first = NewClient(handler);
+        var second = NewClient(handler);
+
+        var hashes = await Task.WhenAll(
+            first.AddAsync(
+                Connection,
+                new DownloadAddRequest("http://indexer/first", InfoHash: null, "prismedia", "First Release"),
+                CancellationToken.None),
+            second.AddAsync(
+                Connection,
+                new DownloadAddRequest("http://indexer/second", InfoHash: null, "prismedia", "Second Release"),
+                CancellationToken.None));
+
+        Assert.Equal(2, hashes.Distinct(StringComparer.OrdinalIgnoreCase).Count());
+        Assert.Equal(1, handler.MaxConcurrentAdds);
+    }
+
+    [Fact]
     public async Task CategorylessConnectionTestChecksConnectivityOnly() {
         // A pre-save test carries no category; posting createCategory with an empty name would be
         // rejected by qBittorrent and misread as a connection/auth failure.
@@ -103,7 +124,7 @@ public sealed class QBittorrentDownloadClientTests {
         Assert.Equal(67, item.Properties?.SeedingTimeSeconds);
     }
 
-    private static QBittorrentDownloadClient NewClient(StubHandler handler) =>
+    private static QBittorrentDownloadClient NewClient(HttpMessageHandler handler) =>
         new(new HttpClient(handler)) { AddPollDelay = TimeSpan.FromMilliseconds(1) };
 
     /// <summary>
@@ -134,6 +155,60 @@ public sealed class QBittorrentDownloadClientTests {
 
             // createCategory, add, version, and any other call simply succeed.
             return Json(path.EndsWith("/app/version", StringComparison.Ordinal) ? "\"v5.0.0\"" : string.Empty);
+        }
+
+        private static Task<HttpResponseMessage> Json(string body) =>
+            Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) {
+                Content = new StringContent(body, Encoding.UTF8, "application/json")
+            });
+    }
+
+    private sealed class ConcurrentAddHandler : HttpMessageHandler {
+        private readonly object _sync = new();
+        private readonly List<(string Hash, string Name)> _torrents = [];
+        private int _activeAdds;
+        private int _addCount;
+        private int _maxConcurrentAdds;
+
+        public int MaxConcurrentAdds => Volatile.Read(ref _maxConcurrentAdds);
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) {
+            var path = request.RequestUri!.AbsolutePath;
+            if (path.EndsWith("/torrents/info", StringComparison.Ordinal)) {
+                string listing;
+                lock (_sync) {
+                    listing = "[" + string.Join(',', _torrents.Select(torrent =>
+                        $"{{\"hash\":\"{torrent.Hash}\",\"name\":\"{torrent.Name}\"}}")) + "]";
+                }
+
+                return await Json(listing);
+            }
+
+            if (path.EndsWith("/torrents/add", StringComparison.Ordinal)) {
+                var active = Interlocked.Increment(ref _activeAdds);
+                UpdateMaximum(ref _maxConcurrentAdds, active);
+                try {
+                    await Task.Delay(20, cancellationToken);
+                    var ordinal = Interlocked.Increment(ref _addCount);
+                    lock (_sync) {
+                        _torrents.Add(ordinal == 1 ? ("aaa", "First Release") : ("bbb", "Second Release"));
+                    }
+                } finally {
+                    Interlocked.Decrement(ref _activeAdds);
+                }
+            }
+
+            return await Json(path.EndsWith("/app/version", StringComparison.Ordinal) ? "\"v5.0.0\"" : string.Empty);
+        }
+
+        private static void UpdateMaximum(ref int maximum, int candidate) {
+            int observed;
+            do {
+                observed = Volatile.Read(ref maximum);
+                if (candidate <= observed) {
+                    return;
+                }
+            } while (Interlocked.CompareExchange(ref maximum, candidate, observed) != observed);
         }
 
         private static Task<HttpResponseMessage> Json(string body) =>

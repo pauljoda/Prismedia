@@ -124,7 +124,11 @@ public sealed class AcquisitionQueueService(
             createdPlaceholder = true;
         }
 
-        var acquiredLease = await transferAdds.AcquireAsync(acquisitionId, cancellationToken);
+        var acquiredLease = await transferAdds.AcquireAsync(
+            acquisitionId,
+            client.Id,
+            attemptCategory,
+            cancellationToken);
         if (acquiredLease is null) {
             if (createdPlaceholder) {
                 await acquisitions.AbandonTransferAddAsync(
@@ -327,7 +331,11 @@ public sealed class AcquisitionQueueService(
             createdPlaceholder = true;
         }
 
-        var acquiredLease = await transferAdds.AcquireAsync(acquisitionId, cancellationToken);
+        var acquiredLease = await transferAdds.AcquireAsync(
+            acquisitionId,
+            client.Id,
+            attemptCategory,
+            cancellationToken);
         if (acquiredLease is null) {
             if (createdPlaceholder) {
                 await acquisitions.AbandonTransferAddAsync(

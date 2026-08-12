@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Net;
 using System.Text.Json;
 using Prismedia.Application.Acquisition;
@@ -12,12 +13,17 @@ namespace Prismedia.Infrastructure.Acquisition;
 /// the torrent info feed.
 /// </summary>
 public sealed class QBittorrentDownloadClient(HttpClient http) : IDownloadClient {
+    private static readonly ConcurrentDictionary<(Guid ClientId, string Category), SemaphoreSlim> AddGates = new();
+
     public DownloadClientKind Kind => DownloadClientKind.QBittorrent;
 
     /// <summary>Delay between add-correlation polls. Internal so tests don't wait out the real cadence.</summary>
     internal TimeSpan AddPollDelay { get; init; } = TimeSpan.FromSeconds(1);
 
-    public async Task<string> AddAsync(DownloadClientConnection connection, DownloadAddRequest request, CancellationToken cancellationToken) {
+    public Task<string> AddAsync(DownloadClientConnection connection, DownloadAddRequest request, CancellationToken cancellationToken) =>
+        SerializeAddAsync(connection, () => AddUrlCoreAsync(connection, request, cancellationToken), cancellationToken);
+
+    private async Task<string> AddUrlCoreAsync(DownloadClientConnection connection, DownloadAddRequest request, CancellationToken cancellationToken) {
         var session = await LoginAsync(connection, cancellationToken);
 
         // Ensure the category exists; qBittorrent returns a conflict when it already does, which is fine.
@@ -178,7 +184,10 @@ public sealed class QBittorrentDownloadClient(HttpClient http) : IDownloadClient
                 Long(item, QBittorrentProtocol.SeedingTime)));
     }
 
-    public async Task<string> AddTorrentFileAsync(DownloadClientConnection connection, string fileName, byte[] torrent, CancellationToken cancellationToken) {
+    public Task<string> AddTorrentFileAsync(DownloadClientConnection connection, string fileName, byte[] torrent, CancellationToken cancellationToken) =>
+        SerializeAddAsync(connection, () => AddTorrentFileCoreAsync(connection, fileName, torrent, cancellationToken), cancellationToken);
+
+    private async Task<string> AddTorrentFileCoreAsync(DownloadClientConnection connection, string fileName, byte[] torrent, CancellationToken cancellationToken) {
         var session = await LoginAsync(connection, cancellationToken);
         await PostAsync(connection, session, QBittorrentProtocol.CreateCategoryEndpoint, new Dictionary<string, string> {
             [QBittorrentProtocol.CategoryField] = connection.Category
@@ -214,6 +223,25 @@ public sealed class QBittorrentDownloadClient(HttpClient http) : IDownloadClient
 
         throw new DownloadClientAddUnresolvedException(
             "qBittorrent accepted the upload but created no new torrent — the torrent is likely already present in the client (duplicate add).");
+    }
+
+    /// <summary>
+    /// qBittorrent's add endpoint returns no native id, so no-hash adds discover their torrent by diffing
+    /// one category before and after the request. Serialize that observation per configured client and
+    /// category across scoped adapter instances; otherwise concurrent adds can both claim the first hash
+    /// that appears and permanently attach one acquisition to another acquisition's payload.
+    /// </summary>
+    private static async Task<string> SerializeAddAsync(
+        DownloadClientConnection connection,
+        Func<Task<string>> add,
+        CancellationToken cancellationToken) {
+        var gate = AddGates.GetOrAdd((connection.Id, connection.Category), static _ => new SemaphoreSlim(1, 1));
+        await gate.WaitAsync(cancellationToken);
+        try {
+            return await add();
+        } finally {
+            gate.Release();
+        }
     }
 
     public async Task<IReadOnlyList<DownloadItemFile>> GetFilesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) {

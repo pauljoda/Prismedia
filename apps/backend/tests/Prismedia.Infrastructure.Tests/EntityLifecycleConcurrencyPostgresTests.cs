@@ -800,7 +800,7 @@ public sealed class EntityLifecycleConcurrencyPostgresTests {
             seedGoal: null,
             CancellationToken.None));
         await using var lease = await new EfAcquisitionTransferAddCoordinator(addContext)
-            .AcquireAsync(acquisitionId, CancellationToken.None);
+            .AcquireAsync(acquisitionId, clientId, "prismedia", CancellationToken.None);
         Assert.NotNull(lease);
 
         await using var teardownContext = database.CreateContext();
@@ -837,6 +837,58 @@ public sealed class EntityLifecycleConcurrencyPostgresTests {
         Assert.Equal(
             AcquisitionStatus.Stopping,
             (await verification.Acquisitions.AsNoTracking().SingleAsync()).Status);
+    }
+
+    [Fact]
+    [Trait("Category", "PostgreSQL")]
+    public async Task TransferAddLeaseSerializesCorrelationAcrossAcquisitionsInOneClientCategory() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var firstAcquisitionId = Guid.NewGuid();
+        var secondAcquisitionId = Guid.NewGuid();
+        var clientId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        await using (var setup = database.CreateContext()) {
+            setup.Acquisitions.AddRange(
+                new AcquisitionRow {
+                    Id = firstAcquisitionId,
+                    Status = AcquisitionStatus.Queued,
+                    Title = "First",
+                    ExternalIdsJson = "{}",
+                    SourceUrlsJson = "[]",
+                    CreatedAt = now,
+                    UpdatedAt = now
+                },
+                new AcquisitionRow {
+                    Id = secondAcquisitionId,
+                    Status = AcquisitionStatus.Queued,
+                    Title = "Second",
+                    ExternalIdsJson = "{}",
+                    SourceUrlsJson = "[]",
+                    CreatedAt = now,
+                    UpdatedAt = now
+                });
+            await setup.SaveChangesAsync();
+        }
+
+        await using var firstContext = database.CreateContext();
+        var firstLease = await new EfAcquisitionTransferAddCoordinator(firstContext)
+            .AcquireAsync(firstAcquisitionId, clientId, "prismedia", CancellationToken.None);
+        Assert.NotNull(firstLease);
+
+        await using var secondContext = database.CreateContext();
+        var secondLeaseTask = new EfAcquisitionTransferAddCoordinator(secondContext)
+            .AcquireAsync(secondAcquisitionId, clientId, "prismedia", CancellationToken.None);
+        Assert.NotSame(
+            secondLeaseTask,
+            await Task.WhenAny(secondLeaseTask, Task.Delay(TimeSpan.FromMilliseconds(200))));
+
+        await firstLease!.CommitAsync(CancellationToken.None);
+        await firstLease.DisposeAsync();
+
+        var secondLease = await secondLeaseTask.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.NotNull(secondLease);
+        await secondLease!.CommitAsync(CancellationToken.None);
+        await secondLease.DisposeAsync();
     }
 
     [Fact]
@@ -878,7 +930,7 @@ public sealed class EntityLifecycleConcurrencyPostgresTests {
             seedGoal: null,
             CancellationToken.None));
         var lease = await new EfAcquisitionTransferAddCoordinator(addContext)
-            .AcquireAsync(acquisitionId, CancellationToken.None);
+            .AcquireAsync(acquisitionId, clientId, "prismedia", CancellationToken.None);
         Assert.NotNull(lease);
 
         await using var teardownContext = database.CreateContext();
