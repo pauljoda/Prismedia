@@ -8,6 +8,9 @@ public enum ImportBlockReason {
     /// <summary>The payload contained no supported book files.</summary>
     NoSupportedPayload,
 
+    /// <summary>The payload contained supported video, but its positive TV identifiers did not agree with the requested unit.</summary>
+    NoMatchingTvUnit,
+
     /// <summary>The payload contained multiple standalone books, so the correct one is ambiguous.</summary>
     AmbiguousMultiplePrimaries,
 

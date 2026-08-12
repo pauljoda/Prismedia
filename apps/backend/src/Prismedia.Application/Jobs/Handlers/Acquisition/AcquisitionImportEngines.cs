@@ -1867,9 +1867,11 @@ public sealed class TvAcquisitionImportEngine(
         return candidate.StartsWith(normalized, FileSystemPathComparison.Comparison);
     }
 
-    private static string BlockMessage(ImportBlockReason? reason) => reason == ImportBlockReason.NoSupportedPayload
-        ? "The download contains no supported video files."
-        : "The download's files carry no recognizable episode numbering; import manually.";
+    private static string BlockMessage(ImportBlockReason? reason) => reason switch {
+        ImportBlockReason.NoSupportedPayload => "The download contains no supported video files.",
+        ImportBlockReason.NoMatchingTvUnit => "The download contains video files, but their season, episode, and title identifiers do not agree with the expected episode. Review the files manually.",
+        _ => "The download's files carry no recognizable episode numbering; import manually."
+    };
 
     private Task Fail(Guid acquisitionId, string message, CancellationToken cancellationToken) =>
         acquisitions.SetStatusAsync(acquisitionId, AcquisitionStatus.Failed, message, cancellationToken);

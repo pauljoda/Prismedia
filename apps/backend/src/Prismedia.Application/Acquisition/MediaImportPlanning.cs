@@ -370,6 +370,10 @@ public static class MusicImportPlanBuilder {
 /// rather than guessing episode order.
 /// </summary>
 public static partial class TvImportPlanBuilder {
+    private readonly record struct EpisodeInference(
+        (int Season, int Episode)? Unit,
+        bool RecognizedDifferentSeason = false);
+
     /// <summary>Video extensions the TV importer accepts. Mirrors scan discovery's video set.</summary>
     private static readonly IReadOnlySet<string> VideoExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
         ".mp4", ".m4v", ".mkv", ".mov", ".webm", ".avi", ".wmv", ".flv", ".ts", ".m2ts", ".mpg", ".mpeg"
@@ -392,30 +396,58 @@ public static partial class TvImportPlanBuilder {
     public static (int Season, int Episode)? InferEpisode(
         string sourceRelativePath,
         int? requestedSeason,
+        IReadOnlyList<TvEpisodeTitle> episodeTitles) =>
+        InferEpisodeEvidence(sourceRelativePath, requestedSeason, episodeTitles).Unit;
+
+    private static EpisodeInference InferEpisodeEvidence(
+        string sourceRelativePath,
+        int? requestedSeason,
         IReadOnlyList<TvEpisodeTitle> episodeTitles) {
         var sourceName = Path.GetFileNameWithoutExtension(sourceRelativePath);
         var unit = TvReleaseTokens.ParseEpisode(sourceName);
         var declaredSeason = unit?.Season ?? TvReleaseTokens.ParseSeason(sourceName);
+
+        // A structured unit and a strong title/absolute identifier are independent evidence. A unique
+        // provider-title match re-identifies the episode instead of silently trusting a contradictory
+        // scene number. Multi-title tails remain the established bundled-episode case and are realigned
+        // as a group later.
+        if (unit is { } structured
+            && (requestedSeason is null || structured.Season == requestedSeason)
+            && TvReleaseTokens.EpisodeTitleTail(sourceName) is { } tail) {
+            var tailMatches = MatchingEpisodeNumbers(tail, episodeTitles);
+            if (tailMatches.Length == 1 && tailMatches[0] != structured.Episode) {
+                unit = (structured.Season, tailMatches[0]);
+            }
+        }
+
         if (unit is null
             && requestedSeason is { } titleSeason
             && (declaredSeason is null || declaredSeason == titleSeason)
             && episodeTitles.Count > 0) {
-            var titleMatches = episodeTitles
-                .Where(candidate => EpisodeIdentifiers(candidate).Any(identifier =>
-                    ReleaseTitleIdentity.ContainsMeaningfulRun(sourceName, identifier)))
-                .Select(candidate => candidate.Episode)
-                .Distinct()
-                .ToArray();
+            var titleMatches = MatchingEpisodeNumbers(sourceName, episodeTitles);
             if (titleMatches.Length == 1) {
                 unit = (titleSeason, titleMatches[0]);
             }
         }
 
-        return unit is { } inferred
-            && (requestedSeason is null || inferred.Season == requestedSeason)
-                ? inferred
-                : null;
+        var recognizedDifferentSeason = unit is { } recognized
+            && requestedSeason is { } expectedSeason
+            && recognized.Season != expectedSeason;
+        var inferred = unit is { } candidate && !recognizedDifferentSeason
+            ? ((int Season, int Episode)?)candidate
+            : null;
+        return new EpisodeInference(inferred, recognizedDifferentSeason);
     }
+
+    private static int[] MatchingEpisodeNumbers(
+        string sourceName,
+        IReadOnlyList<TvEpisodeTitle> episodeTitles) =>
+        episodeTitles
+            .Where(candidate => EpisodeIdentifiers(candidate).Any(identifier =>
+                ReleaseTitleIdentity.ContainsMeaningfulRun(sourceName, identifier)))
+            .Select(candidate => candidate.Episode)
+            .Distinct()
+            .ToArray();
 
     /// <summary>
     /// Every metadata identifier that can positively align a tokenless filename. The authored title is
@@ -552,8 +584,11 @@ public static partial class TvImportPlanBuilder {
             .ToArray();
 
         var units = new List<TvPlanUnit>(videos.Length);
+        var hasRecognizedDifferentUnit = false;
         foreach (var video in videos.OrderBy(file => file.RelativePath, StringComparer.OrdinalIgnoreCase)) {
-            var unit = InferEpisode(video.RelativePath, seasonNumber, episodeTitles ?? []);
+            var inference = InferEpisodeEvidence(video.RelativePath, seasonNumber, episodeTitles ?? []);
+            hasRecognizedDifferentUnit |= inference.RecognizedDifferentSeason;
+            var unit = inference.Unit;
 
             // A tokenless file is only placeable when the acquisition itself IS one episode.
             if (unit is null && (videos.Length > 1 || seasonNumber is null || episodeNumber is null)) {
@@ -562,6 +597,7 @@ public static partial class TvImportPlanBuilder {
 
             var (season, episode) = unit ?? (seasonNumber!.Value, episodeNumber!.Value);
             if (seasonNumber is { } requestedSeason && season != requestedSeason) {
+                hasRecognizedDifferentUnit = true;
                 continue;
             }
             var naming = NamingContext(series, season, episode, quality, Path.GetExtension(video.RelativePath));
@@ -572,7 +608,9 @@ public static partial class TvImportPlanBuilder {
         // No file declared a placeable unit — importing by guesswork would scatter episodes; stop for
         // a human instead.
         if (units.Count == 0) {
-            return TvUnitsPlan.Block(ImportBlockReason.AmbiguousMultiplePrimaries);
+            return TvUnitsPlan.Block(hasRecognizedDifferentUnit
+                ? ImportBlockReason.NoMatchingTvUnit
+                : ImportBlockReason.AmbiguousMultiplePrimaries);
         }
 
         if (episodeTitles is { Count: > 0 }) {
@@ -590,7 +628,7 @@ public static partial class TvImportPlanBuilder {
                 .Where(unit => unit.Episode == requestedEpisode || unit.ExtraEpisodes.Contains(requestedEpisode))
                 .ToList();
             if (units.Count == 0) {
-                return TvUnitsPlan.Block(ImportBlockReason.NoSupportedPayload);
+                return TvUnitsPlan.Block(ImportBlockReason.NoMatchingTvUnit);
             }
         }
 

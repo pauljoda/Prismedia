@@ -76,6 +76,25 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
     }
 
     [Fact]
+    public async Task EpisodePayloadForAnotherUnitReportsAnIdentifierMismatch() {
+        await using var db = CreateContext();
+        var harness = await HarnessAsync(
+            db,
+            ownedEpisodeName: "Show - s01e01 720p WEB.mkv",
+            payloadFiles: ["Show.S01E03.Other.Episode.mkv"],
+            releaseTitle: "Show S01E03 1080p WEB-DL");
+
+        await harness.Engine.ImportAsync(
+            harness.Context,
+            harness.Import with { Kind = EntityKind.VideoEpisode, EpisodeNumber = 2 },
+            CancellationToken.None);
+
+        var acquisition = await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == harness.Import.Id);
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, acquisition.Status);
+        Assert.Contains("identifiers do not agree", acquisition.StatusMessage, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public async Task CompleteSeriesPayloadImportsOnlyTheRequestedSeason() {
         await using var db = CreateContext();
         var harness = await HarnessAsync(

@@ -1436,6 +1436,43 @@ public sealed class AcquisitionServiceTests {
     }
 
     [Fact]
+    public async Task ManualTvImportReviewUsesUniqueProviderTitleToCorrectSceneNumbering() {
+        var numberedEpisodeId = Guid.NewGuid();
+        var titledEpisodeId = Guid.NewGuid();
+        var payloads = new FixedDownloadPayloadReader(new DownloadPayload("/downloads/sesame", [
+            new ImportCandidateFile("Sesame Street S42E19 The Flood 1080i.ts", 1_000),
+        ]));
+        var targets = new FixedImportTargetIndex([
+            new TvEpisodeTitle(19, "Super Maria", numberedEpisodeId),
+            new TvEpisodeTitle(20, "The Flood", titledEpisodeId),
+        ]);
+        var harness = Harness(
+            TransferInfo(RecordedClientId, AcquisitionStatus.ManualImportRequired),
+            manualImportPayloads: payloads,
+            manualImportTargets: targets);
+        harness.Store.ImportContext = new AcquisitionImportContext(
+            AcquisitionId,
+            "Super Maria",
+            Author: null,
+            Series: "Sesame Street",
+            Year: 2011,
+            PosterUrl: null,
+            ExternalIdentity: null,
+            ProfileId: null,
+            ContentPath: "/downloads/sesame",
+            ClientItemId,
+            RecordedClientId,
+            EntityKind.VideoEpisode,
+            EntityId: WantedEntityId,
+            SeasonNumber: 42,
+            EpisodeNumber: 19);
+
+        var review = await harness.Service.GetManualImportReviewAsync(AcquisitionId, CancellationToken.None);
+
+        Assert.Equal(titledEpisodeId, Assert.Single(review.Files).SuggestedTargetEntityId);
+    }
+
+    [Fact]
     public async Task DeleteAsyncUsesDefaultClientOnlyForLegacyTransfersWithoutRecordedClient() {
         var harness = Harness(TransferInfo(downloadClientConfigId: null));
 

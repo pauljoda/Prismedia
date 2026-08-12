@@ -965,17 +965,46 @@ public sealed class TvEpisodeTitleAlignmentTests {
     }
 
     [Fact]
-    public void ConflictingRealignmentFallsBackToNumericForTheWholePayload() {
-        // Both files' tails claim episode 1 — unreliable evidence, so numeric wins everywhere.
+    public void UniqueTitleIdentifierReidentifiesButDoesNotSatisfyTheWrongRequestedEpisode() {
+        var titles = new[] {
+            new TvEpisodeTitle(19, "Super Maria"),
+            new TvEpisodeTitle(20, "The Flood"),
+        };
+
+        var inferred = TvImportPlanBuilder.InferEpisode(
+            "Sesame Street S42E19 The Flood 1080i.ts",
+            requestedSeason: 42,
+            titles);
+        var plan = TvImportPlanBuilder.PlanUnits([
+            File("Sesame Street S42E19 The Flood 1080i.ts"),
+        ], "Sesame Street", seasonNumber: 42, episodeNumber: 19, episodeTitles: titles);
+
+        Assert.Equal((42, 20), inferred);
+        Assert.True(plan.Blocked);
+        Assert.Equal(ImportBlockReason.NoMatchingTvUnit, plan.BlockReason);
+    }
+
+    [Fact]
+    public void DifferentStructuredEpisodeUsesTheMatchingUnitHoldReason() {
+        var plan = TvImportPlanBuilder.PlanUnits([
+            File("Daniel.Tigers.Neighborhood.S00E03.Wont.You.Sing.Along.With.Me.mkv"),
+        ], "Daniel Tiger's Neighborhood", seasonNumber: 0, episodeNumber: 2);
+
+        Assert.True(plan.Blocked);
+        Assert.Equal(ImportBlockReason.NoMatchingTvUnit, plan.BlockReason);
+    }
+
+    [Fact]
+    public void ConflictingRealignmentIsHeldInsteadOfFallingBackToNumeric() {
+        // Both files' tails claim episode 1. Numeric and title evidence disagree for the second file,
+        // so importing either interpretation would risk cataloging the wrong content.
         var plan = TvImportPlanBuilder.PlanUnits([
             File("Pack/Show_S01E01_MY BEST FRIEND.mkv"),
             File("Pack/Show_S01E02_MY BEST FRIEND.mkv"),
         ], "Show", seasonNumber: 1, episodeNumber: null, episodeTitles: CliffordTitles);
 
-        var units = plan.Units.OrderBy(unit => unit.Episode).ToArray();
-        Assert.Equal(1, units[0].Episode);
-        Assert.Equal(2, units[1].Episode);
-        Assert.All(units, unit => Assert.Empty(unit.ExtraEpisodes));
+        Assert.True(plan.Blocked);
+        Assert.Equal(ImportBlockReason.AmbiguousMultiplePrimaries, plan.BlockReason);
     }
 
     [Fact]
