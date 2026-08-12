@@ -32,6 +32,7 @@
   export interface SelectOption {
     value: string;
     label: string;
+    annotation?: string;
     disabled?: boolean;
   }
 </script>
@@ -230,7 +231,7 @@
           onclick={() => select(option)}
           onmouseenter={() => (focusedIndex = i)}
           class={cn(
-            "flex w-full items-center px-3 py-2 text-sm text-left transition-colors duration-fast",
+            "flex w-full items-center gap-2 px-3 py-2 text-sm text-left transition-colors duration-fast",
             option.disabled && "opacity-40 cursor-not-allowed",
             i === focusedIndex
               ? "bg-surface-4 text-text-primary"
@@ -238,7 +239,12 @@
             option.value === value && "text-text-accent",
           )}
         >
-          {option.label}
+          <span class="min-w-0 flex-1 [overflow-wrap:anywhere]">{option.label}</span>
+          {#if option.annotation}
+            <span class="shrink-0 rounded-xs border border-border-subtle bg-surface-3 px-1.5 py-0.5 font-mono text-[0.62rem] uppercase tracking-wide text-text-muted">
+              {option.annotation}
+            </span>
+          {/if}
         </button>
       {/each}
     </div>

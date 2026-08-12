@@ -22,6 +22,7 @@
   } = $props();
 
   const mappedEpisodeCount = $derived(Object.values(assignments).filter(Boolean).length);
+  const mappedSourcePaths = $derived(new Set(Object.values(assignments).filter(Boolean)));
   const sourceOptions = $derived<SelectOption[]>([
     { value: "", label: "No file selected" },
     ...(review?.files ?? [])
@@ -29,6 +30,7 @@
       .map((file) => ({
         value: file.sourceRelativePath,
         label: file.sourceRelativePath,
+        annotation: mappedSourcePaths.has(file.sourceRelativePath) ? "Mapped" : undefined,
       })),
   ]);
 
@@ -62,8 +64,8 @@
   {/if}
 
   {#if review?.available}
-    <div class="overflow-hidden rounded-sm border border-border-subtle bg-surface-1">
-      <div class="hidden grid-cols-[minmax(0,1fr)_minmax(16rem,0.72fr)] gap-4 border-b border-border-subtle bg-surface-2 px-3 py-2 text-label text-text-muted md:grid">
+    <div class="overflow-visible rounded-sm border border-border-subtle bg-surface-1">
+      <div class="hidden grid-cols-[minmax(0,1fr)_minmax(16rem,0.72fr)] gap-4 rounded-t-sm border-b border-border-subtle bg-surface-2 px-3 py-2 text-label text-text-muted md:grid">
         <span>Expected episode</span>
         <span>Downloaded file</span>
       </div>

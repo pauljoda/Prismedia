@@ -211,7 +211,9 @@ describe("AcquisitionPanel", () => {
 
     await fireEvent.click(view.getByRole("button", { name: "Downloaded file for Episode 02 · Second Day" }));
     expect(view.queryByRole("option", { name: "pack/RARBG_DO_NOT_MIRROR.exe" })).toBeNull();
-    await fireEvent.click(await view.findByRole("option", { name: "pack/video-a.mp4" }));
+    const alreadyMappedFile = await view.findByRole("option", { name: "pack/video-a.mp4 Mapped" });
+    expect(alreadyMappedFile).toBeEnabled();
+    await fireEvent.click(alreadyMappedFile);
     await fireEvent.click(view.getByRole("button", { name: "Import mapped episodes" }));
 
     expect(mocks.submitAcquisitionManualImport).not.toHaveBeenCalled();
