@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Prismedia.Application.Files;
 
@@ -46,10 +47,15 @@ public sealed record TvPlanUnit(string SourceRelativePath, int Season, int Episo
 }
 
 /// <summary>
-/// One provider episode of the season being imported: its number and title for filename alignment, plus
-/// its stable Entity identity when the caller is building a user-facing manual mapping review.
+/// One provider episode of the season being imported: its season-relative number, title, and optional
+/// absolute number for filename alignment, plus its stable Entity identity when the caller is building a
+/// user-facing manual mapping review.
 /// </summary>
-public sealed record TvEpisodeTitle(int Episode, string Title, Guid? EntityId = null);
+public sealed record TvEpisodeTitle(
+    int Episode,
+    string Title,
+    Guid? EntityId = null,
+    int? AbsoluteEpisode = null);
 
 /// <summary>The unit-level TV plan: either blocked (same reasons as <see cref="ImportPlan"/>) or the placeable units.</summary>
 public sealed record TvUnitsPlan(bool Blocked, ImportBlockReason? BlockReason, IReadOnlyList<TvPlanUnit> Units) {
@@ -384,11 +390,16 @@ public static partial class TvImportPlanBuilder {
         string sourceRelativePath,
         int? requestedSeason,
         IReadOnlyList<TvEpisodeTitle> episodeTitles) {
-        var unit = TvReleaseTokens.ParseEpisode(Path.GetFileNameWithoutExtension(sourceRelativePath));
-        if (unit is null && requestedSeason is { } titleSeason && episodeTitles.Count > 0) {
+        var sourceName = Path.GetFileNameWithoutExtension(sourceRelativePath);
+        var unit = TvReleaseTokens.ParseEpisode(sourceName);
+        var declaredSeason = unit?.Season ?? TvReleaseTokens.ParseSeason(sourceName);
+        if (unit is null
+            && requestedSeason is { } titleSeason
+            && (declaredSeason is null || declaredSeason == titleSeason)
+            && episodeTitles.Count > 0) {
             var titleMatches = episodeTitles
-                .Where(candidate => ReleaseTitleIdentity.ContainsMeaningfulRun(
-                    Path.GetFileNameWithoutExtension(sourceRelativePath), candidate.Title))
+                .Where(candidate => EpisodeIdentifiers(candidate).Any(identifier =>
+                    ReleaseTitleIdentity.ContainsMeaningfulRun(sourceName, identifier)))
                 .Select(candidate => candidate.Episode)
                 .Distinct()
                 .ToArray();
@@ -402,6 +413,17 @@ public static partial class TvImportPlanBuilder {
                 ? inferred
                 : null;
     }
+
+    /// <summary>
+    /// Every metadata identifier that can positively align a tokenless filename. The authored title is
+    /// primary; an absolute episode number is an exact numeric-token fallback for archive/anime naming
+    /// such as <c>Show 1316 Season 11</c>. Season-relative bare numbers are deliberately excluded because
+    /// they are too easily confused with a season token.
+    /// </summary>
+    private static IReadOnlyList<string> EpisodeIdentifiers(TvEpisodeTitle candidate) =>
+        candidate.AbsoluteEpisode is { } absoluteEpisode
+            ? [candidate.Title, absoluteEpisode.ToString(CultureInfo.InvariantCulture)]
+            : [candidate.Title];
 
     /// <summary>
     /// Builds exact placement units from a user-reviewed mapping. Unselected payload files are deliberately

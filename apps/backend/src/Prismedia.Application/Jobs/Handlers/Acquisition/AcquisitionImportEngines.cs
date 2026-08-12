@@ -1722,9 +1722,9 @@ public sealed class TvAcquisitionImportEngine(
     }
 
     /// <summary>
-    /// The provider episode list of the season being imported (numbers + titles from the linked
-    /// entity's graph), for title-based file alignment. Empty for unlinked acquisitions or when the
-    /// season isn't materialized yet — the plan then keeps its numeric placement.
+    /// The provider episode list of the season being imported (season-relative numbers, absolute
+    /// numbers, and titles from the linked entity's graph), for filename alignment. Empty for unlinked
+    /// acquisitions or when the season isn't materialized yet — the plan then keeps numeric placement.
     /// </summary>
     private async Task<IReadOnlyList<TvEpisodeTitle>> EpisodeTitlesForAsync(
         AcquisitionImportContext import, CancellationToken cancellationToken) =>

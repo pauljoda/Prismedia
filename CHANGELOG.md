@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- TV season imports now match tokenless filenames against persisted absolute episode numbers as well as provider titles, so archive-style files such as `Show 1316 Season 11` can map automatically without weakening structured season/episode matching.
 - Keep manual episode-mapping file menus above adjacent sections and mark files that are already mapped without preventing reuse.
 - Grouped Downloads detail now separates an Entity's own transfers from its children, keeping a season-level review above its episode transfers instead of burying it at the bottom.
 - Downloads now completes crash-interrupted Entity-removal cleanup automatically, builds large grouped queues without a flat intermediate render, spaces polls after slow responses, and reuses qBittorrent's bulk telemetry instead of issuing one follow-up request per transfer.

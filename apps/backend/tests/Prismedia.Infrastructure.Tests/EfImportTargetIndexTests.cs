@@ -46,6 +46,29 @@ public sealed class EfImportTargetIndexTests {
     }
 
     [Fact]
+    public async Task EpisodeTargetsCarryTheirAbsoluteEpisodeNumber() {
+        await using var db = CreateContext();
+        var ids = SeedSeries(db, "/media/tv/Sesame Street");
+        db.Entities.Local.Single(entity => entity.Id == ids.EpisodeId).Title = "Episode 1316";
+        db.EntityPositions.Add(new EntityPositionRow {
+            EntityId = ids.EpisodeId,
+            Code = EntityPositionCodes.AbsoluteEpisode,
+            Value = 1316,
+            Label = "1316",
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var episodes = await new EfImportTargetIndex(db)
+            .GetSeasonEpisodeTitlesAsync(ids.SeriesId, 1, CancellationToken.None);
+
+        var episode = Assert.Single(episodes, episode => episode.EntityId == ids.EpisodeId);
+        Assert.Equal(1, episode.Episode);
+        Assert.Equal("Episode 1316", episode.Title);
+        Assert.Equal(1316, episode.AbsoluteEpisode);
+    }
+
+    [Fact]
     public async Task ResolvesTheMovieFolderAndOwnedFile() {
         await using var db = CreateContext();
         var movieId = AddEntity(db, EntityKind.Movie.ToCode(), parent: null, sortOrder: null, sourcePath: "/media/movies/Film (2020)/film.mkv");

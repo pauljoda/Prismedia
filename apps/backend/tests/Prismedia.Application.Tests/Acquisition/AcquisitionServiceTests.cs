@@ -1368,13 +1368,13 @@ public sealed class AcquisitionServiceTests {
         var secondEpisodeId = Guid.NewGuid();
         var payloads = new FixedDownloadPayloadReader(new DownloadPayload("/downloads/sesame", [
             new ImportCandidateFile("pack/Sesame Street - S09E01.mp4", 1_000),
-            new ImportCandidateFile("pack/unlabeled.mp4", 2_000),
+            new ImportCandidateFile("pack/Sesame Street 1317 Season 9.mp4", 2_000),
             new ImportCandidateFile("pack/poster.jpg", 300),
             new ImportCandidateFile("pack/RARBG_DO_NOT_MIRROR.exe", 400),
         ]));
         var targets = new FixedImportTargetIndex([
             new TvEpisodeTitle(1, "First Day", firstEpisodeId),
-            new TvEpisodeTitle(2, "Second Day", secondEpisodeId),
+            new TvEpisodeTitle(2, "Second Day", secondEpisodeId, AbsoluteEpisode: 1317),
         ]);
         var harness = Harness(
             TransferInfo(RecordedClientId, AcquisitionStatus.ManualImportRequired),
@@ -1400,7 +1400,7 @@ public sealed class AcquisitionServiceTests {
 
         Assert.True(review.Available);
         Assert.Equal(firstEpisodeId, review.Files[0].SuggestedTargetEntityId);
-        Assert.Null(review.Files[1].SuggestedTargetEntityId);
+        Assert.Equal(secondEpisodeId, review.Files[1].SuggestedTargetEntityId);
         Assert.False(review.Files[2].CanMap);
         Assert.False(review.Files[3].CanMap);
         Assert.True(review.Files[3].IsDangerous);
