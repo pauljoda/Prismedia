@@ -41,6 +41,7 @@
   import { cn } from "../lib/utils";
   import { ChevronDown } from "@lucide/svelte";
   import { tick } from "svelte";
+  import type { Attachment } from "svelte/attachments";
 
   interface Props {
     options: SelectOption[];
@@ -70,8 +71,10 @@
   let focusedIndex = $state(-1);
   let triggerEl: HTMLButtonElement | undefined = $state();
   let listEl: HTMLDivElement | undefined = $state();
-  let dropUp = $state(false);
   let maxHeight = $state(240);
+  let dropdownLeft = $state(0);
+  let dropdownTop = $state(0);
+  let dropdownWidth = $state(0);
 
   const selectedOption = $derived(options.find((o) => o.value === value));
   const enabledOptions = $derived(options.filter((o) => !o.disabled));
@@ -113,18 +116,36 @@
   function positionDropdown() {
     if (!triggerEl) return;
     const rect = triggerEl.getBoundingClientRect();
-    const spaceBelow = window.innerHeight - rect.bottom - 8;
-    const spaceAbove = rect.top - 8;
+    const viewportPadding = 8;
+    const menuGap = 4;
+    const spaceBelow = Math.max(window.innerHeight - rect.bottom - menuGap - viewportPadding, 0);
+    const spaceAbove = Math.max(rect.top - menuGap - viewportPadding, 0);
     const menuHeight = Math.min(options.length * 36 + 8, 240);
 
-    if (spaceBelow >= menuHeight || spaceBelow >= spaceAbove) {
-      dropUp = false;
-      maxHeight = Math.max(Math.min(spaceBelow, 240), 120);
-    } else {
-      dropUp = true;
-      maxHeight = Math.max(Math.min(spaceAbove, 240), 120);
-    }
+    const dropUp = spaceBelow < menuHeight && spaceAbove > spaceBelow;
+    maxHeight = Math.min(menuHeight, dropUp ? spaceAbove : spaceBelow);
+    dropdownWidth = Math.min(rect.width, Math.max(window.innerWidth - viewportPadding * 2, 0));
+    dropdownLeft = Math.min(
+      Math.max(rect.left, viewportPadding),
+      Math.max(window.innerWidth - dropdownWidth - viewportPadding, viewportPadding),
+    );
+    dropdownTop = dropUp
+      ? Math.max(rect.top - menuGap - maxHeight, viewportPadding)
+      : Math.min(rect.bottom + menuGap, window.innerHeight - viewportPadding);
   }
+
+  const portalDropdown: Attachment<HTMLDivElement> = (node) => {
+    document.body.appendChild(node);
+    const updatePosition = () => positionDropdown();
+    window.addEventListener("resize", updatePosition);
+    document.addEventListener("scroll", updatePosition, true);
+
+    return () => {
+      window.removeEventListener("resize", updatePosition);
+      document.removeEventListener("scroll", updatePosition, true);
+      node.remove();
+    };
+  };
 
   function onKeydown(e: KeyboardEvent) {
     switch (e.key) {
@@ -208,17 +229,17 @@
   {#if open}
     <div
       bind:this={listEl}
+      {@attach portalDropdown}
       role="listbox"
       tabindex="-1"
       aria-activedescendant={focusedIndex >= 0 ? `opt-${focusedIndex}` : undefined}
       onkeydown={onKeydown}
       class={cn(
-        "absolute left-0 right-0 z-50 overflow-y-auto",
+        "fixed z-[200] overflow-y-auto",
         "floating-surface",
         "py-1",
-        dropUp ? "bottom-full mb-1" : "top-full mt-1",
       )}
-      style="max-height: {maxHeight}px"
+      style="left: {dropdownLeft}px; top: {dropdownTop}px; width: {dropdownWidth}px; max-height: {maxHeight}px"
     >
       {#each options as option, i (option.value)}
         <button

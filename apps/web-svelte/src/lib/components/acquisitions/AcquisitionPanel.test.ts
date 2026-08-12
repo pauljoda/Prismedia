@@ -210,6 +210,9 @@ describe("AcquisitionPanel", () => {
     expect(view.queryByRole("button", { name: "Import anyway" })).toBeNull();
 
     await fireEvent.click(view.getByRole("button", { name: "Downloaded file for Episode 02 · Second Day" }));
+    const fileMenu = view.getByRole("listbox");
+    expect(fileMenu.parentElement).toBe(document.body);
+    expect(fileMenu).toHaveClass("fixed");
     expect(view.queryByRole("option", { name: "pack/RARBG_DO_NOT_MIRROR.exe" })).toBeNull();
     const alreadyMappedFile = await view.findByRole("option", { name: "pack/video-a.mp4 Mapped" });
     expect(alreadyMappedFile).toBeEnabled();

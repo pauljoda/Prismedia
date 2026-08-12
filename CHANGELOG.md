@@ -23,7 +23,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Concurrent qBittorrent handoffs now resolve one at a time per client category, preventing simultaneous acquisitions without known info hashes from attaching themselves to another download's torrent and files.
 - TV season searches now understand numeric and English ordinal season names such as `3rd Season` and `The Complete Third Season`, preventing a specific season pack from being mistaken for a complete-series download.
 - TV season imports now match tokenless filenames against provider titles, persisted absolute episode numbers, and numeric generic titles such as `Episode 1316`, so archive-style files such as `Show 1316 Season 11` can map automatically without weakening structured season/episode matching.
-- Keep manual episode-mapping file menus above adjacent sections and mark files that are already mapped without preventing reuse.
+- Manual episode-mapping file menus now escape scrolling detail panes, stay above adjacent sections, and mark files that are already mapped without preventing reuse.
 - Grouped Downloads detail now separates an Entity's own transfers from its children, keeping a season-level review above its episode transfers instead of burying it at the bottom.
 - Downloads now completes crash-interrupted Entity-removal cleanup automatically, builds large grouped queues without a flat intermediate render, spaces polls after slow responses, and reuses qBittorrent's bulk telemetry instead of issuing one follow-up request per transfer.
 - Web music playback now reconnects an interrupted media request at the current playhead instead of waiting indefinitely for the browser's slow stream recovery, while preserving deliberate pause behavior.
