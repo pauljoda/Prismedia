@@ -378,6 +378,9 @@ public static partial class TvImportPlanBuilder {
     [GeneratedRegex(@"(?:^|[\s._\-\[(])sample(?:$|[\s._\-\])])", RegexOptions.IgnoreCase)]
     private static partial Regex SampleTokenRegex();
 
+    [GeneratedRegex(@"^\s*episode[\s._-]*0*(?<number>\d{1,6})\s*$", RegexOptions.IgnoreCase)]
+    private static partial Regex GenericEpisodeTitleRegex();
+
     /// <summary>Whether a payload path is supported TV media.</summary>
     public static bool IsVideoFile(string path) => VideoExtensions.Contains(Path.GetExtension(path));
 
@@ -416,14 +419,25 @@ public static partial class TvImportPlanBuilder {
 
     /// <summary>
     /// Every metadata identifier that can positively align a tokenless filename. The authored title is
-    /// primary; an absolute episode number is an exact numeric-token fallback for archive/anime naming
-    /// such as <c>Show 1316 Season 11</c>. Season-relative bare numbers are deliberately excluded because
-    /// they are too easily confused with a season token.
+    /// primary; a persisted absolute episode number or the number from an exact generic title such as
+    /// <c>Episode 1316</c> is an exact numeric-token fallback for archive/anime naming such as
+    /// <c>Show 1316 Season 11</c>. Season-relative bare numbers are deliberately excluded because they are
+    /// too easily confused with a season token.
     /// </summary>
-    private static IReadOnlyList<string> EpisodeIdentifiers(TvEpisodeTitle candidate) =>
-        candidate.AbsoluteEpisode is { } absoluteEpisode
-            ? [candidate.Title, absoluteEpisode.ToString(CultureInfo.InvariantCulture)]
-            : [candidate.Title];
+    private static IReadOnlyList<string> EpisodeIdentifiers(TvEpisodeTitle candidate) {
+        var identifiers = new List<string> { candidate.Title };
+        if (candidate.AbsoluteEpisode is { } absoluteEpisode) {
+            identifiers.Add(absoluteEpisode.ToString(CultureInfo.InvariantCulture));
+        }
+
+        var genericTitle = GenericEpisodeTitleRegex().Match(candidate.Title);
+        if (genericTitle.Success
+            && int.TryParse(genericTitle.Groups["number"].Value, CultureInfo.InvariantCulture, out var titleNumber)) {
+            identifiers.Add(titleNumber.ToString(CultureInfo.InvariantCulture));
+        }
+
+        return identifiers.Distinct(StringComparer.Ordinal).ToArray();
+    }
 
     /// <summary>
     /// Builds exact placement units from a user-reviewed mapping. Unselected payload files are deliberately

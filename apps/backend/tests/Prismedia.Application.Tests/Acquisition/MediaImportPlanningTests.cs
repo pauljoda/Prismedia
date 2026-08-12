@@ -426,19 +426,29 @@ public sealed class TvImportPlanBuilderTests {
     }
 
     [Fact]
-    public void TokenlessSeasonPackFallsBackToAbsoluteEpisodeNumberTokens() {
+    public void TokenlessSeasonPackFallsBackToGenericEpisodeTitleNumberTokens() {
         var plan = TvImportPlanBuilder.Plan([
             File("pack/Sesame Street 1316 Season 11 - American Archive.mp4"),
             File("pack/Sesame Street 1317 Season 11 - American Archive.mp4"),
         ], "Sesame Street", seasonNumber: 11, episodeNumber: null, episodeTitles: [
-            new TvEpisodeTitle(1, "Episode 1316", AbsoluteEpisode: 1316),
-            new TvEpisodeTitle(2, "Episode 1317", AbsoluteEpisode: 1317)
+            new TvEpisodeTitle(1, "Episode 1316"),
+            new TvEpisodeTitle(2, "Episode 1317")
         ]);
 
         Assert.False(plan.Blocked);
         Assert.Equal(
             ["Sesame Street/Season 11/Sesame Street - S11E01.mp4", "Sesame Street/Season 11/Sesame Street - S11E02.mp4"],
             plan.Items.Select(item => item.TargetRelativePath).ToArray());
+    }
+
+    [Fact]
+    public void AuthoredTitleNumbersDoNotBecomeBareEpisodeIdentifiers() {
+        var inferred = TvImportPlanBuilder.InferEpisode(
+            "pack/Sesame Street 1316 Season 11.mp4",
+            requestedSeason: 11,
+            [new TvEpisodeTitle(1, "1316 Candles")]);
+
+        Assert.Null(inferred);
     }
 
     [Fact]
