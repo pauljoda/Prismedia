@@ -497,7 +497,9 @@ public sealed class AcquisitionMonitorJobHandler(
                 input.Year,
                 input.SeasonNumber,
                 input.EpisodeNumber,
-                TvReleaseTokens.NamesCompleteSeries(selected.Title));
+                TvReleaseTokens.NamesCompleteSeries(selected.Title),
+                input.Title,
+                input.AbsoluteEpisodeNumber);
         } catch (OperationCanceledException) {
             throw;
         } catch (Exception ex) {

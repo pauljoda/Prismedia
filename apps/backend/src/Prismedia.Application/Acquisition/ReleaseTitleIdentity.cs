@@ -76,6 +76,36 @@ public static partial class ReleaseTitleIdentity {
     }
 
     /// <summary>
+    /// Matches the work title while also allowing one known episode identity to begin immediately after
+    /// it. This keeps strict leading-series identity for archive releases such as
+    /// <c>Sesame Street 1316 Season 11</c> without making arbitrary numeric sequels match their base work.
+    /// The TV unit specification separately proves that the boundary identity is the sought episode.
+    /// </summary>
+    public static Result MatchWithEpisodeIdentifiers(
+        string releaseTitle,
+        string? targetTitle,
+        TvEpisodeIdentifierSet episodeIdentifiers) {
+        var ordinary = Match(releaseTitle, targetTitle);
+        if (ordinary.TitleMatched) {
+            return ordinary;
+        }
+
+        var target = ComparableTokens(targetTitle);
+        var release = ComparableTokens(releaseTitle);
+        if (target.Count == 0 || release.Count < target.Count
+            || !release.Take(target.Count).SequenceEqual(target, StringComparer.Ordinal)) {
+            return ordinary;
+        }
+
+        var tail = release.Skip(target.Count).ToArray();
+        var boundaryMatched = episodeIdentifiers.All
+            .Select(ComparableTokens)
+            .Where(identifier => identifier.Count > 0 && identifier.Count <= tail.Length)
+            .Any(identifier => tail.Take(identifier.Count).SequenceEqual(identifier, StringComparer.Ordinal));
+        return boundaryMatched ? new Result(true, null) : ordinary;
+    }
+
+    /// <summary>
     /// The comparison tokens of a title-like value: separator-normalized, diacritics folded, "&amp;"
     /// spelled out, and articles/connectives dropped — the digit-preserving clean form both sides of the
     /// identity comparison share. Numeric tokens compare by value, so provider title <c>Episode 131</c>

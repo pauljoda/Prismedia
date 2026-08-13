@@ -73,12 +73,12 @@ public sealed class AcquisitionPolicyModuleTests {
             Series: "Andor", SeasonNumber: 1);
         var episode = new AcquisitionSearchInput(
             Guid.NewGuid(), "Pilot", null, EntityKind.VideoEpisode,
-            Series: "Andor", SeasonNumber: 1, EpisodeNumber: 5);
+            Series: "Andor", SeasonNumber: 1, EpisodeNumber: 5, AbsoluteEpisodeNumber: 1316);
 
         Assert.Equal(["Andor S01", "Andor Season 1", "Andor complete"], module.BuildQueries(season));
         Assert.Equal(["Andor S01E05", "Andor 1x05"], module.BuildQueries(episode));
         Assert.Empty(module.BuildFallbackQueries(season));
-        Assert.Equal(["Andor Pilot"], module.BuildFallbackQueries(episode));
+        Assert.Equal(["Andor Pilot", "Andor 1316"], module.BuildFallbackQueries(episode));
     }
 
     [Fact]

@@ -235,10 +235,37 @@ public sealed class AcquisitionSearchRunnerTests {
             CancellationToken.None);
 
         Assert.Equal(
-            ["Sesame Street S02E01", "Sesame Street 2x01", "Sesame Street Episode 131"],
+            ["Sesame Street S02E01", "Sesame Street 2x01", "Sesame Street Episode 131", "Sesame Street 131"],
             client.Queries);
         Assert.Equal(titleOnly.Title, outcome.Candidates.First(candidate => candidate.Accepted).Release.Title);
         Assert.False(outcome.Candidates.Single(candidate => candidate.Release.Title == wrongSeason.Title).Accepted);
+    }
+
+    [Fact]
+    public async Task AbsoluteEpisodeQueryFindsAndAcceptsAnArchiveStyleSingleFileRelease() {
+        var absoluteOnly = new IndexerRelease(
+            "Sesame Street 1316 Season 11 720p",
+            500_000_000, 10, 2, DownloadProtocol.Torrent,
+            "http://dl/absolute", "magnet:?absolute", "absolute", null, null, null);
+        var client = new QueryAwareIndexerSearchClient(new Dictionary<string, IReadOnlyList<IndexerRelease>>(StringComparer.OrdinalIgnoreCase) {
+            ["Sesame Street 1316"] = [absoluteOnly]
+        });
+        var runner = Runner(client, Settings(), DownloadProtocol.Torrent);
+
+        var outcome = await runner.RunAsync(
+            new AcquisitionSearchInput(
+                Guid.NewGuid(), "A Visit from Sally Ride", null, EntityKind.VideoEpisode,
+                Series: "Sesame Street", SeasonNumber: 11, EpisodeNumber: 95,
+                AbsoluteEpisodeNumber: 1316),
+            CancellationToken.None);
+
+        Assert.Equal([
+            "Sesame Street S11E95",
+            "Sesame Street 11x95",
+            "Sesame Street A Visit from Sally Ride",
+            "Sesame Street 1316"
+        ], client.Queries);
+        Assert.Equal(absoluteOnly.Title, Assert.Single(outcome.Candidates, candidate => candidate.Accepted).Release.Title);
     }
 
     [Fact]

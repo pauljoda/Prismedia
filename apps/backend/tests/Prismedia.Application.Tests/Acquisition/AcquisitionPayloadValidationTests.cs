@@ -121,6 +121,29 @@ public sealed class AcquisitionPayloadValidationTests {
     }
 
     [Fact]
+    public void AbsoluteEpisodeFileNameProvesTheSoughtSingleEpisode() {
+        Assert.Null(AcquisitionPayloadValidation.FindConflict(
+            ["Sesame Street 1316 Season 11/Sesame Street 1316 Season 11.mp4"],
+            EntityKind.VideoEpisode,
+            "Sesame Street",
+            expectedYear: 1979,
+            seasonNumber: 11,
+            episodeNumber: 95,
+            episodeTitle: "A Visit from Sally Ride",
+            absoluteEpisodeNumber: 1316));
+
+        Assert.NotNull(AcquisitionPayloadValidation.FindConflict(
+            ["Sesame Street 1316 Season 12/Sesame Street 1316 Season 12.mp4"],
+            EntityKind.VideoEpisode,
+            "Sesame Street",
+            expectedYear: 1979,
+            seasonNumber: 11,
+            episodeNumber: 95,
+            episodeTitle: "A Visit from Sally Ride",
+            absoluteEpisodeNumber: 1316));
+    }
+
+    [Fact]
     public void NonVideoKindsAndEmptyPayloadsAreNeverValidated() {
         Assert.Null(AcquisitionPayloadValidation.FindConflict(
             ["Author - Other Book (2019)/book.epub"], EntityKind.Book, "Some Book", 2000));

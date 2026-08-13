@@ -143,10 +143,19 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         var year = row.EntityId is { } entityId && MediaQualityLadder.IsVideoKind(row.Kind)
             ? await ResolveWorkYearAsync(entityId, cancellationToken) ?? row.Year
             : row.Year;
+        var absoluteEpisodeNumber = row.EntityId is { } targetEntityId
+            && row.Kind == EntityKind.VideoEpisode
+                ? await db.EntityPositions.AsNoTracking()
+                    .Where(position => position.EntityId == targetEntityId
+                        && position.Code == EntityPositionCodes.AbsoluteEpisode)
+                    .Select(position => (int?)position.Value)
+                    .SingleOrDefaultAsync(cancellationToken)
+                : null;
 
         return new AcquisitionSearchInput(
             row.Id, row.Title, row.Author, row.Kind, row.EntityId, year, row.ProfileId,
-            row.Series, row.SeasonNumber, row.EpisodeNumber, row.VolumeNumber, row.BookRendition);
+            row.Series, row.SeasonNumber, row.EpisodeNumber, row.VolumeNumber, row.BookRendition,
+            absoluteEpisodeNumber);
     }
 
     /// <summary>

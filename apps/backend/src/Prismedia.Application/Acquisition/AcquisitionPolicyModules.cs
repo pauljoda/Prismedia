@@ -152,9 +152,10 @@ public sealed class TvAcquisitionPolicyModule : AcquisitionPolicyModule {
         }
 
         var tvBase = string.IsNullOrWhiteSpace(input.Series) ? null : input.Series;
-        return AcquisitionPolicyQueries.Normalize([
-            AcquisitionPolicyQueries.JoinDistinct(tvBase, input.Title)
-        ]);
+        return AcquisitionPolicyQueries.Normalize(
+            TvEpisodeIdentifiers.Create(input.Title, input.AbsoluteEpisodeNumber)
+                .All
+                .Select(identifier => AcquisitionPolicyQueries.JoinDistinct(tvBase, identifier)));
     }
 }
 

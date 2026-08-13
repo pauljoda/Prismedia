@@ -6,6 +6,46 @@ using Prismedia.Infrastructure.Persistence.Entities;
 namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EfAcquisitionSearchInputTests {
+    [Fact]
+    public async Task CarriesTheLinkedEpisodesAbsolutePositionIntoSearch() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var episodeId = Guid.NewGuid();
+        var acquisitionId = Guid.NewGuid();
+        db.Entities.Add(new EntityRow {
+            Id = episodeId,
+            KindCode = EntityKind.VideoEpisode.ToCode(),
+            Title = "A Visit from Sally Ride",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.EntityPositions.Add(new EntityPositionRow {
+            EntityId = episodeId,
+            Code = EntityPositionCodes.AbsoluteEpisode,
+            Value = 1316,
+            UpdatedAt = now
+        });
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId,
+            EntityId = episodeId,
+            Kind = EntityKind.VideoEpisode,
+            Status = AcquisitionStatus.Pending,
+            Title = "A Visit from Sally Ride",
+            SeasonNumber = 11,
+            EpisodeNumber = 95,
+            ExternalIdsJson = "{}",
+            SourceUrlsJson = "[]",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        var search = await AcquisitionTestFactory.Store(db)
+            .GetSearchInputAsync(acquisitionId, CancellationToken.None);
+
+        Assert.Equal(1316, search?.AbsoluteEpisodeNumber);
+    }
+
     [Theory]
     [InlineData(EntityDateType.FirstAir, 2023)]
     [InlineData(EntityDateType.Air, 2024)]

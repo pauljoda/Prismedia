@@ -107,8 +107,15 @@ public sealed class MusicTitleIdentitySpecification : IReleaseSpecification {
 public sealed class TitleIdentitySpecification : IReleaseSpecification {
     public ReleaseRejectionReason Reason => ReleaseRejectionReason.TitleMismatch;
 
-    public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) =>
-        ReleaseTitleIdentity.Match(release.Title, rules.TargetTitle).TitleMatched ? null : Reason;
+    public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) {
+        var identity = rules.EpisodeNumber is not null
+            ? ReleaseTitleIdentity.MatchWithEpisodeIdentifiers(
+                release.Title,
+                rules.TargetTitle,
+                TvEpisodeIdentifiers.Create(rules.TargetEpisodeTitle, rules.TargetAbsoluteEpisodeNumber))
+            : ReleaseTitleIdentity.Match(release.Title, rules.TargetTitle);
+        return identity.TitleMatched ? null : Reason;
+    }
 }
 
 /// <summary>
@@ -158,12 +165,18 @@ public sealed class TvUnitSpecification : IReleaseSpecification {
                 return unit.Season == season && unit.Episodes.Contains(episode) ? null : Reason;
             }
 
-            if (TvReleaseTokens.ParseSeason(release.Title) is not null
-                || TvReleaseTokens.NamesCompleteSeries(release.Title)) {
+            if (TvReleaseTokens.NamesCompleteSeries(release.Title)) {
                 return Reason;
             }
 
-            return ReleaseTitleIdentity.ContainsMeaningfulRun(release.Title, rules.TargetEpisodeTitle)
+            var episodeDeclaredSeason = TvReleaseTokens.ParseSeason(release.Title);
+            if (episodeDeclaredSeason is not null && episodeDeclaredSeason != season) {
+                return Reason;
+            }
+
+            return TvEpisodeIdentifiers
+                .Create(rules.TargetEpisodeTitle, rules.TargetAbsoluteEpisodeNumber)
+                .Matches(release.Title)
                 ? null
                 : Reason;
         }
@@ -316,6 +329,8 @@ public sealed class TvReleaseDecisionEngine(EntityKind kind) : IAcquisitionDecis
     /// </summary>
     private const double ExactUnitBoost = 10_000_000;
     private const double CompleteSeriesBoost = 5_000_000;
+    private const double AbsoluteEpisodeBoost = 7_500_000;
+    private const double ProviderEpisodeTitleBoost = 5_000_000;
 
     public EntityKind Kind => kind;
 
@@ -353,12 +368,22 @@ public sealed class TvReleaseDecisionEngine(EntityKind kind) : IAcquisitionDecis
 
         if (rules.EpisodeNumber is { } episode) {
             // Single episode sought: a release declaring the exact unit — alone or within a multi-episode
-            // span — earns the boost (other units are rejected by the unit specification; a marker-less
-            // single file ranks last).
-            return TvReleaseTokens.ParseEpisodes(release.Title) is { } unit
-                && unit.Season == season && unit.Episodes.Contains(episode)
-                    ? ExactUnitBoost
-                    : 0;
+            // span — wins first, followed by absolute numbering and then provider-title-only evidence.
+            if (TvReleaseTokens.ParseEpisodes(release.Title) is { } unit
+                && unit.Season == season && unit.Episodes.Contains(episode)) {
+                return ExactUnitBoost;
+            }
+
+            var identifiers = TvEpisodeIdentifiers.Create(
+                rules.TargetEpisodeTitle,
+                rules.TargetAbsoluteEpisodeNumber);
+            if (identifiers.MatchesNumeric(release.Title)) {
+                return AbsoluteEpisodeBoost;
+            }
+
+            return identifiers.MatchesProviderTitle(release.Title)
+                ? ProviderEpisodeTitleBoost
+                : 0;
         }
 
         if (TvReleaseTokens.ParseSeason(release.Title) == season) {

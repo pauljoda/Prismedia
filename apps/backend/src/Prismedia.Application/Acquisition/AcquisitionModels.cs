@@ -150,6 +150,12 @@ public sealed record BookAcquisitionRules(
     public string? TargetEpisodeTitle { get; init; }
 
     /// <summary>
+    /// The provider-authored absolute episode position of the sought TV episode. Search release titles
+    /// may use this instead of season-relative numbering, especially for archive and anime posts.
+    /// </summary>
+    public int? TargetAbsoluteEpisodeNumber { get; init; }
+
+    /// <summary>
     /// The sought work's year identity, set per search by the runner (a movie's release year; a series'
     /// premiere year — the year scene naming appends to disambiguate same-name works). Feeds
     /// <see cref="MediaYearSpecification"/> so a release naming a conflicting title-adjacent year is
@@ -244,12 +250,14 @@ public sealed record AcquisitionMetadata(
 /// <param name="Series">Series context for TV units — the query ladder leads every rung with it.</param>
 /// <param name="SeasonNumber">Season number for TV units; builds the S01 / Season 1 rungs.</param>
 /// <param name="EpisodeNumber">Episode number for a single-episode acquisition; builds the S01E05 rungs.</param>
+/// <param name="AbsoluteEpisodeNumber">Provider-authored absolute episode position used by archive/anime release names.</param>
 /// <param name="VolumeNumber">Volume number for a volume-scoped book/comic acquisition; gates wrong-volume releases.</param>
 public sealed record AcquisitionSearchInput(
     Guid Id, string Title, string? Author, EntityKind Kind, Guid? EntityId = null,
     int? Year = null, Guid? ProfileId = null, string? Series = null, int? SeasonNumber = null, int? EpisodeNumber = null,
     int? VolumeNumber = null,
-    BookRendition? BookRendition = null) {
+    BookRendition? BookRendition = null,
+    int? AbsoluteEpisodeNumber = null) {
     /// <summary>
     /// The title of the WORK this acquisition belongs to — the series for TV units (a season or episode
     /// acquisition's own Title is "Season 1" or the episode name), the author-qualified title for music,

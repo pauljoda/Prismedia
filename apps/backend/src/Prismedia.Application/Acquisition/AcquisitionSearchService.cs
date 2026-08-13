@@ -52,6 +52,7 @@ public sealed class AcquisitionSearchRunner(
         var rules = (await profiles.GetRulesAsync(input.ProfileId, input.Kind, cancellationToken)) with {
             TargetTitle = input.WorkTitle,
             TargetEpisodeTitle = input.EpisodeNumber is null ? null : input.Title,
+            TargetAbsoluteEpisodeNumber = input.EpisodeNumber is null ? null : input.AbsoluteEpisodeNumber,
             TargetYear = input.Year,
             TargetAuthor = input.Author,
             BookRendition = input.BookRendition

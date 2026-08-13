@@ -136,6 +136,39 @@ public sealed class MediaReleaseDecisionEnginesTests {
         Assert.False(verdicts["Andor S01 1080p pack"]);
     }
 
+    [Theory]
+    [InlineData(DownloadProtocol.Torrent)]
+    [InlineData(DownloadProtocol.Usenet)]
+    public void EpisodeSearchUsesAbsoluteIdentityForTorrentAndUsenetTitles(DownloadProtocol protocol) {
+        var engine = new TvReleaseDecisionEngine(EntityKind.VideoEpisode);
+        var rules = BookAcquisitionRules.Default with {
+            TargetTitle = "Sesame Street",
+            SeasonNumber = 11,
+            EpisodeNumber = 95,
+            TargetEpisodeTitle = "A Visit from Sally Ride",
+            TargetAbsoluteEpisodeNumber = 1316,
+            AllowedProtocols = [protocol]
+        };
+
+        var scored = engine.Evaluate([
+            (Release("Sesame Street S11E95 720p", 2, protocol), null, "Idx"),
+            (Release("Sesame Street 1316 Season 11 1080p", 20, protocol), null, "Idx"),
+            (Release("Sesame Street A Visit from Sally Ride 2160p", 200, protocol), null, "Idx"),
+            (Release("Sesame Street 1316 Season 12 1080p", 20, protocol), null, "Idx"),
+            (Release("Sesame Street S11E96 Episode 1316 1080p", 20, protocol), null, "Idx")
+        ], rules);
+
+        Assert.Equal(
+            [
+                "Sesame Street S11E95 720p",
+                "Sesame Street 1316 Season 11 1080p",
+                "Sesame Street A Visit from Sally Ride 2160p"
+            ],
+            scored.Where(candidate => candidate.Accepted).Select(candidate => candidate.Release.Title).ToArray());
+        Assert.False(scored.Single(candidate => candidate.Release.Title.Contains("Season 12")).Accepted);
+        Assert.False(scored.Single(candidate => candidate.Release.Title.Contains("S11E96")).Accepted);
+    }
+
     [Fact]
     public void MusicEngineRanksLosslessAboveHighBitrateLossy() {
         var engine = new MusicReleaseDecisionEngine();

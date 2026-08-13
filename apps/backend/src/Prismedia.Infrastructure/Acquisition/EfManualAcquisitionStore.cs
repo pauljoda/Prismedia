@@ -53,7 +53,7 @@ public sealed class EfManualAcquisitionStore(
             return null;
         }
 
-        var (author, series, seasonNumber, episodeNumber) = await ResolveManualContextAsync(
+        var (author, series, seasonNumber, episodeNumber, absoluteEpisodeNumber) = await ResolveManualContextAsync(
             entity,
             kind,
             cancellationToken);
@@ -66,7 +66,8 @@ public sealed class EfManualAcquisitionStore(
             Series: series,
             SeasonNumber: seasonNumber,
             EpisodeNumber: episodeNumber,
-            BookRendition: kind == EntityKind.Book ? BookRendition.Ebook : null);
+            BookRendition: kind == EntityKind.Book ? BookRendition.Ebook : null,
+            AbsoluteEpisodeNumber: absoluteEpisodeNumber);
         var hasEntitySubtitles = MediaQualityLadder.IsVideoKind(kind)
             && await db.EntitySubtitles.AsNoTracking().AnyAsync(row => row.EntityId == entityId, cancellationToken);
         var owned = MediaQualityLadder.IsUpgradeCapableKind(kind) || MediaQualityLadder.IsAudioKind(kind)
@@ -321,7 +322,7 @@ public sealed class EfManualAcquisitionStore(
         }
     }
 
-    private async Task<(string? Author, string? Series, int? SeasonNumber, int? EpisodeNumber)> ResolveManualContextAsync(
+    private async Task<(string? Author, string? Series, int? SeasonNumber, int? EpisodeNumber, int? AbsoluteEpisodeNumber)> ResolveManualContextAsync(
         EntityRow entity,
         EntityKind kind,
         CancellationToken cancellationToken) {
@@ -329,19 +330,24 @@ public sealed class EfManualAcquisitionStore(
             var artist = entity.ParentEntityId is { } artistId
                 ? await db.Entities.AsNoTracking().FirstOrDefaultAsync(row => row.Id == artistId, cancellationToken)
                 : null;
-            return (artist?.Title, null, null, null);
+            return (artist?.Title, null, null, null, null);
         }
 
         if (kind != EntityKindRegistry.PlayableVideoKindFor(PlayableVideoScanPlacement.Episode)
             || entity.ParentEntityId is not { } seasonId) {
-            return (null, null, null, null);
+            return (null, null, null, null, null);
         }
 
         var season = await db.Entities.AsNoTracking().FirstOrDefaultAsync(row => row.Id == seasonId, cancellationToken);
         var series = season?.ParentEntityId is { } seriesId
             ? await db.Entities.AsNoTracking().FirstOrDefaultAsync(row => row.Id == seriesId, cancellationToken)
             : null;
-        return (null, series?.Title, season?.SortOrder, entity.SortOrder);
+        var absoluteEpisodeNumber = await db.EntityPositions.AsNoTracking()
+            .Where(position => position.EntityId == entity.Id
+                && position.Code == EntityPositionCodes.AbsoluteEpisode)
+            .Select(position => (int?)position.Value)
+            .SingleOrDefaultAsync(cancellationToken);
+        return (null, series?.Title, season?.SortOrder, entity.SortOrder, absoluteEpisodeNumber);
     }
 
     private static UpgradeOwnedQuality OwnedQuality(AcquisitionRow parent, bool hasSubtitles) =>

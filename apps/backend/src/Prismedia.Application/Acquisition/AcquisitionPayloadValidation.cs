@@ -27,6 +27,8 @@ public static class AcquisitionPayloadValidation {
     /// <param name="seasonNumber">The sought season for TV units; null elsewhere.</param>
     /// <param name="episodeNumber">The sought episode for a single-episode acquisition; null elsewhere.</param>
     /// <param name="completeSeriesSelected">True when the selected release names a complete-series pack, which legitimately spans seasons.</param>
+    /// <param name="episodeTitle">Provider-authored episode title used as independent single-file evidence.</param>
+    /// <param name="absoluteEpisodeNumber">Provider-authored absolute episode position used as independent single-file evidence.</param>
     public static string? FindConflict(
         IReadOnlyList<string> filePaths,
         Domain.Entities.EntityKind kind,
@@ -34,7 +36,9 @@ public static class AcquisitionPayloadValidation {
         int? expectedYear,
         int? seasonNumber = null,
         int? episodeNumber = null,
-        bool completeSeriesSelected = false) {
+        bool completeSeriesSelected = false,
+        string? episodeTitle = null,
+        int? absoluteEpisodeNumber = null) {
         if (filePaths.Count == 0 || !MediaQualityLadder.IsVideoKind(kind)) {
             return null;
         }
@@ -51,7 +55,12 @@ public static class AcquisitionPayloadValidation {
         }
 
         if (seasonNumber is { } season) {
-            return FindTvUnitConflict(filePaths, season, episodeNumber, completeSeriesSelected);
+            return FindTvUnitConflict(
+                filePaths,
+                season,
+                episodeNumber,
+                completeSeriesSelected,
+                TvEpisodeIdentifiers.Create(episodeTitle, absoluteEpisodeNumber));
         }
 
         return null;
@@ -64,7 +73,11 @@ public static class AcquisitionPayloadValidation {
     /// complete-series selection legitimately spans every season.
     /// </summary>
     private static string? FindTvUnitConflict(
-        IReadOnlyList<string> filePaths, int season, int? episodeNumber, bool completeSeriesSelected) {
+        IReadOnlyList<string> filePaths,
+        int season,
+        int? episodeNumber,
+        bool completeSeriesSelected,
+        TvEpisodeIdentifierSet episodeIdentifiers) {
         var coversSought = false;
         var contrary = default(string?);
         foreach (var path in filePaths) {
@@ -73,11 +86,21 @@ public static class AcquisitionPayloadValidation {
             }
 
             var name = Path.GetFileNameWithoutExtension(path);
-            var declared = TvReleaseTokens.ParseEpisodes(name) is { } unit
+            var declaredEpisodes = TvReleaseTokens.ParseEpisodes(name);
+            var declared = declaredEpisodes is { } unit
                 ? unit
                 : TvReleaseTokens.ParseSeason(name) is { } bareSeason
                     ? (Season: bareSeason, Episodes: (IReadOnlyList<int>)[])
                     : default((int Season, IReadOnlyList<int> Episodes)?);
+
+            if (episodeNumber is not null
+                && declaredEpisodes is null
+                && episodeIdentifiers.Matches(name)
+                && (declared is null || declared.Value.Season == season)) {
+                coversSought = true;
+                break;
+            }
+
             if (declared is not { } markers) {
                 continue;
             }
