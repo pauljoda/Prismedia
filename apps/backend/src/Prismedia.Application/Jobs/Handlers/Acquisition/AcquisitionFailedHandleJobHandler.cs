@@ -20,6 +20,7 @@ public sealed class AcquisitionFailedHandleJobHandler(
     IAcquisitionHistoryStore history,
     IDownloadClientConfigStore downloadClients,
     SettingsService settings,
+    DownloadClientCleanupService cleanup,
     ILogger<AcquisitionFailedHandleJobHandler> logger) : IJobHandler {
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var payload = AcquisitionFailedPayload.Parse(context.Job.PayloadJson);
@@ -50,6 +51,13 @@ public sealed class AcquisitionFailedHandleJobHandler(
                 "AcquisitionFailedHandle: acquisition {AcquisitionId} was removed after recovery was claimed; skipping recovery side effects.",
                 acquisitionId);
             return;
+        }
+
+        // A failed item has no useful seeding life. Remove its exact recorded queue/history entry and
+        // payload before choosing another release; an unavailable client becomes durable cleanup-pending
+        // work instead of leaving a stale failed/completed item forever.
+        if (await acquisitions.GetImportContextAsync(acquisitionId, cancellationToken) is { } failedTransfer) {
+            await cleanup.RemoveNowOrScheduleRetryAsync(failedTransfer, cancellationToken);
         }
 
         await RecordFailedAsync(acquisitionId, input, AcquisitionHistoryEvent.DownloadFailed, selected?.Title, selected?.IndexerName, failureMessage, cancellationToken);

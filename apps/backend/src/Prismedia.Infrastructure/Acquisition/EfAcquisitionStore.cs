@@ -1114,8 +1114,9 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
 
     public async Task<bool> MarkTransferSeedingAsync(Guid acquisitionId, DateTimeOffset since, CancellationToken cancellationToken) {
         var row = await db.DownloadTransfers.FirstOrDefaultAsync(transfer => transfer.AcquisitionId == acquisitionId, cancellationToken);
-        // No goal captured at grab time means the client's own rules govern this torrent — no watch.
-        if (row is null || (row.SeedGoalRatio is null && row.SeedGoalTimeMinutes is null)) {
+        // The watch also represents cleanup pending after import/failure. A transfer without a seed goal
+        // is removed on the monitor's next pass instead of being left to client defaults forever.
+        if (row is null) {
             return false;
         }
 

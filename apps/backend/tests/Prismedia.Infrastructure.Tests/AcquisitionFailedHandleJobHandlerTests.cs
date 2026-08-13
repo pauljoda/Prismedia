@@ -47,6 +47,47 @@ public sealed class AcquisitionFailedHandleJobHandlerTests {
     }
 
     [Fact]
+    public async Task FailedDownloadRemovesItsRecordedClientItem() {
+        await using var db = CreateContext();
+        var (acquisitionId, candidateA, _) = await SeedTwoCandidatesAsync(db, autoRedownload: false);
+        var clientId = Guid.NewGuid();
+        db.DownloadClientConfigs.Add(new DownloadClientConfigRow {
+            Id = clientId,
+            Kind = DownloadClientKind.QBittorrent,
+            DisplayName = "qBittorrent",
+            BaseUrl = "http://download-client",
+            Category = "prismedia",
+            Enabled = true,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+        await store.CreateTransferAsync(
+            acquisitionId,
+            clientId,
+            candidateA.InfoHash!,
+            "prismedia",
+            CancellationToken.None);
+        var client = new RecordingDownloadClient();
+        var cleanup = new DownloadClientCleanupService(
+            store,
+            new EfDownloadClientConfigStore(db),
+            new RecordingDownloadClientFactory(client),
+            NullLogger<DownloadClientCleanupService>.Instance);
+
+        await RunAsync(
+            db,
+            new RecordingQueueService(),
+            acquisitionId,
+            Selected(candidateA),
+            cleanup);
+
+        Assert.Equal(candidateA.InfoHash, client.RemovedClientItemId);
+        Assert.True(client.DeletedData);
+    }
+
+    [Fact]
     public async Task FailsWhenNoAlternativeRemains() {
         await using var db = CreateContext();
         var (acquisitionId, candidateA, _) = await SeedTwoCandidatesAsync(db, autoRedownload: true, includeSecond: false);
@@ -205,22 +246,34 @@ public sealed class AcquisitionFailedHandleJobHandlerTests {
     private static async Task<AcquisitionStatus> StatusOf(PrismediaDbContext db, Guid acquisitionId) =>
         await db.Acquisitions.AsNoTracking().Where(row => row.Id == acquisitionId).Select(row => row.Status).FirstAsync();
 
-    private static async Task RunAsync(PrismediaDbContext db, IAcquisitionQueueService queue, Guid acquisitionId, SelectedRelease? selected) {
+    private static async Task RunAsync(
+        PrismediaDbContext db,
+        IAcquisitionQueueService queue,
+        Guid acquisitionId,
+        SelectedRelease? selected,
+        DownloadClientCleanupService? cleanup = null) {
+        var store = AcquisitionTestFactory.Store(db);
+        var downloadClientConfigs = new EfDownloadClientConfigStore(db);
         if (selected is not null) {
-            await AcquisitionTestFactory.Store(db).SetSelectedReleaseAsync(
+            await store.SetSelectedReleaseAsync(
                 acquisitionId,
                 selected,
                 CancellationToken.None);
         }
 
         var handler = new AcquisitionFailedHandleJobHandler(
-            AcquisitionTestFactory.Store(db),
+            store,
             new EfAcquisitionBlocklistStore(db),
             new EfBookAcquisitionProfileStore(db),
             queue,
             new EfAcquisitionHistoryStore(db),
-            new EfDownloadClientConfigStore(db),
+            downloadClientConfigs,
             new SettingsService(new EfSettingsPersistence(db)),
+            cleanup ?? new DownloadClientCleanupService(
+                store,
+                downloadClientConfigs,
+                new MergedImportTestSupport.ThrowingClientFactory(),
+                NullLogger<DownloadClientCleanupService>.Instance),
             NullLogger<AcquisitionFailedHandleJobHandler>.Instance);
         await handler.HandleAsync(new JobContext(Job(acquisitionId, selected), new ThrowingJobQueue()), CancellationToken.None);
     }
@@ -302,6 +355,36 @@ public sealed class AcquisitionFailedHandleJobHandlerTests {
 
             return null;
         }
+    }
+
+    private sealed class RecordingDownloadClientFactory(IDownloadClient client) : IDownloadClientFactory {
+        public IDownloadClient Get(DownloadClientKind kind) => client;
+    }
+
+    private sealed class RecordingDownloadClient : IDownloadClient {
+        public DownloadClientKind Kind => DownloadClientKind.QBittorrent;
+        public string? RemovedClientItemId { get; private set; }
+        public bool DeletedData { get; private set; }
+
+        public Task RemoveAsync(
+            DownloadClientConnection connection,
+            string clientItemId,
+            bool deleteData,
+            CancellationToken cancellationToken) {
+            RemovedClientItemId = clientItemId;
+            DeletedData = deleteData;
+            return Task.CompletedTask;
+        }
+
+        public Task<DownloadItemStatus?> GetItemAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) =>
+            Task.FromResult<DownloadItemStatus?>(null);
+        public Task<string> AddAsync(DownloadClientConnection connection, DownloadAddRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<string> AddTorrentFileAsync(DownloadClientConnection connection, string fileName, byte[] torrent, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<DownloadItemStatus>> ListItemsAsync(DownloadClientConnection connection, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<DownloadItemFile>> GetFilesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<DownloadItemProperties?> GetPropertiesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<byte[]> GetPieceStatesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<DownloadClientConnectionTest> TestAsync(DownloadClientConnection connection, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
     private sealed class ThrowingJobQueue : IJobQueueService {

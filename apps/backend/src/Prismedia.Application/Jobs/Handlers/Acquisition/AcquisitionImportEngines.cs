@@ -196,79 +196,6 @@ internal static class ImportPlacementExecution {
 }
 
 /// <summary>
-/// Ends or hands off an imported acquisition's life in the download client. A move-mode import removes
-/// the torrent (and its data) — the payload left the download dir, so it cannot seed. A hardlink/copy
-/// import instead puts the transfer under seeding watch when a seed goal was captured at grab time; the
-/// monitor removes it once the goal is met. Shared by every import engine; a cleanup failure never
-/// fails the import — the media is already in the library.
-/// </summary>
-public sealed class ImportedTorrentRemover(
-    IAcquisitionStore acquisitions,
-    IDownloadClientConfigStore downloadClients,
-    IDownloadClientFactory clients,
-    ILogger<ImportedTorrentRemover> logger,
-    IAcquisitionUploadStorage? uploads = null) {
-    /// <summary>Move → remove now; hardlink/copy → seeding watch (or leave to the client's own rules when no goal is set).</summary>
-    public Task HandleImportedAsync(
-        AcquisitionImportContext import,
-        ImportMode mode,
-        CancellationToken cancellationToken) =>
-        HandleImportedAsync(import, mode, discardRemainingPayload: false, cancellationToken);
-
-    /// <summary>
-    /// Finishes transfer cleanup, forcing immediate data removal when the importer kept only a requested
-    /// subset. A partial payload cannot remain a trustworthy seeding source after its extras are discarded.
-    /// </summary>
-    public async Task HandleImportedAsync(
-        AcquisitionImportContext import,
-        ImportMode mode,
-        bool discardRemainingPayload,
-        CancellationToken cancellationToken) {
-        if (uploads?.Owns(import.ClientItemId) == true) {
-            await uploads.DeleteAsync(import.ClientItemId!, cancellationToken);
-            return;
-        }
-        if (mode == ImportMode.Move || discardRemainingPayload) {
-            await RemoveAsync(import, cancellationToken);
-            return;
-        }
-
-        try {
-            if (await acquisitions.MarkTransferSeedingAsync(import.Id, DateTimeOffset.UtcNow, cancellationToken)) {
-                logger.LogDebug("AcquisitionImport: acquisition {Id} handed to seeding watch.", import.Id);
-            }
-        } catch (OperationCanceledException) {
-            throw;
-        } catch (Exception ex) {
-            logger.LogWarning(ex, "AcquisitionImport: failed to start seeding watch for acquisition {Id}", import.Id);
-        }
-    }
-
-    public async Task RemoveAsync(AcquisitionImportContext import, CancellationToken cancellationToken) {
-        if (string.IsNullOrWhiteSpace(import.ClientItemId)) {
-            return;
-        }
-
-        var client = import.DownloadClientConfigId is { } id
-            ? await downloadClients.GetAsync(id, cancellationToken) ?? await downloadClients.GetDefaultAsync(cancellationToken)
-            : await downloadClients.GetDefaultAsync(cancellationToken);
-        if (client is null) {
-            return;
-        }
-
-        try {
-            var connection = new DownloadClientConnection(client.Id, client.Kind, client.BaseUrl, client.Username, client.Password, client.Category, client.ApiKey, client.DownloadDirectory);
-            await clients.Get(client.Kind).RemoveAsync(connection, import.ClientItemId, deleteData: true, cancellationToken);
-        } catch (OperationCanceledException) {
-            throw;
-        } catch (Exception ex) {
-            // The media is already imported; a failure cleaning up the torrent should not fail the import.
-            logger.LogWarning(ex, "AcquisitionImport: failed to remove torrent for acquisition {Id}", import.Id);
-        }
-    }
-}
-
-/// <summary>
 /// Book import engine: the profile-driven flow — plan supported book files against the profile's target
 /// root and path template, move them, capture the owned quality for the upgrade loop, write the identify
 /// hint, and chain a book scan. Ambiguous payloads stop at manual-import-required instead of guessing.
@@ -281,7 +208,7 @@ public sealed class BookAcquisitionImportEngine(
     IAcquisitionImportPlanner planner,
     IImportFileMover mover,
     IImportedEntityMaterializer materializer,
-    ImportedTorrentRemover torrents,
+    DownloadClientCleanupService torrents,
     ILogger<BookAcquisitionImportEngine> logger) : IAcquisitionImportEngine {
 
     public async Task ImportAsync(JobContext context, AcquisitionImportContext import, CancellationToken cancellationToken) {
@@ -558,7 +485,7 @@ internal static class MergedImportExecution {
         IAcquisitionStore acquisitions,
         IAcquisitionBlocklistStore blocklist,
         IAcquisitionHistoryStore history,
-        ImportedTorrentRemover torrents,
+        DownloadClientCleanupService torrents,
         ILogger logger,
         AcquisitionImportContext import,
         SelectedRelease? selected,
@@ -583,7 +510,7 @@ internal static class MergedImportExecution {
                 Message: $"Blocklisted ({BlocklistReason.NoImportableFiles.ToCode()})."), cancellationToken);
         }
 
-        await torrents.RemoveAsync(import, cancellationToken);
+        await torrents.RemoveNowOrScheduleRetryAsync(import, cancellationToken);
         await history.SafeAddAsync(logger, new AcquisitionHistoryEntry(
             import.Id, import.EntityId, import.Kind, AcquisitionHistoryEvent.ImportFailed, import.Title,
             selected?.Title, selected?.IndexerName, Message: message), cancellationToken);
@@ -658,7 +585,7 @@ public sealed class MovieAcquisitionImportEngine(
     ILibraryScanRootPersistence roots,
     IDownloadPayloadReader payloads,
     IImportFileMover mover,
-    ImportedTorrentRemover torrents,
+    DownloadClientCleanupService torrents,
     IImportTargetIndex targets,
     IAcquisitionBlocklistStore blocklist,
     IAcquisitionHistoryStore history,
@@ -1022,7 +949,7 @@ public sealed class TvAcquisitionImportEngine(
     ILibraryScanRootPersistence roots,
     IDownloadPayloadReader payloads,
     IImportFileMover mover,
-    ImportedTorrentRemover torrents,
+    DownloadClientCleanupService torrents,
     IImportTargetIndex targets,
     IOwnedFileReplacer replacer,
     IAcquisitionBlocklistStore blocklist,

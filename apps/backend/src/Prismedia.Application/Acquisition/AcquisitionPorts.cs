@@ -697,7 +697,7 @@ public interface IAcquisitionStore : IAcquisitionLifecycleStore {
     /// <summary>Transfers under seeding watch (imported by hardlink/copy, waiting for their seed goal).</summary>
     Task<IReadOnlyList<SeedingTransfer>> ListSeedingTransfersAsync(CancellationToken cancellationToken);
 
-    /// <summary>Puts an imported acquisition's transfer under seeding watch (no-op when it carries no seed goal).</summary>
+    /// <summary>Puts a terminal transfer under post-transfer watch; no seed goal means remove it on the next monitor pass.</summary>
     Task<bool> MarkTransferSeedingAsync(Guid acquisitionId, DateTimeOffset since, CancellationToken cancellationToken);
 
     /// <summary>Ends a transfer's seeding watch (goal met or the torrent is gone).</summary>

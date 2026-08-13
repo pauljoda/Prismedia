@@ -691,6 +691,46 @@ public sealed class AcquisitionServiceTests {
     }
 
     [Fact]
+    public async Task QueueOpensTransferWaitBeforeResolvingTheLastReviewSignal() {
+        var harness = Harness(new AcquisitionTransferInfo(
+            AcquisitionStatus.AwaitingSelection,
+            null,
+            null,
+            null));
+        PrepareQueueCandidate(harness.Store);
+        var graphId = Guid.NewGuid();
+        harness.Store.JobGraphId = graphId;
+        var graphs = new RecordingHandoffGraph(graphId, AcquisitionId);
+
+        var detail = await QueueService(harness, new RecordingTransferAddCoordinator(), graphs)
+            .QueueAsync(AcquisitionId, CandidateId, CancellationToken.None);
+
+        Assert.Equal(AcquisitionStatus.Queued, detail?.Summary.Status);
+        Assert.Equal(["open:external-transfer", "resolve:review"], graphs.Operations);
+        Assert.Equal(1, harness.Downloads.AddCount);
+    }
+
+    [Fact]
+    public async Task TerminalLinkedGraphDoesNotTurnADurableHandoffIntoAClientOutage() {
+        var harness = Harness(new AcquisitionTransferInfo(
+            AcquisitionStatus.AwaitingSelection,
+            null,
+            null,
+            null));
+        PrepareQueueCandidate(harness.Store);
+        var graphId = Guid.NewGuid();
+        harness.Store.JobGraphId = graphId;
+        var graphs = new RecordingHandoffGraph(graphId, AcquisitionId, JobGraphStatus.Completed);
+
+        var detail = await QueueService(harness, new RecordingTransferAddCoordinator(), graphs)
+            .QueueAsync(AcquisitionId, CandidateId, CancellationToken.None);
+
+        Assert.Equal(AcquisitionStatus.Queued, detail?.Summary.Status);
+        Assert.Empty(graphs.Operations);
+        Assert.Equal("new-client-item", harness.Store.TransferPointer?.ClientItemId);
+    }
+
+    [Fact]
     public async Task QueueRetainsACrashRecoveryPointerWhenTeardownWinsBeforeItsRecoveryLease() {
         var harness = Harness(new AcquisitionTransferInfo(
             AcquisitionStatus.Queued,
@@ -1591,7 +1631,8 @@ public sealed class AcquisitionServiceTests {
 
     private static AcquisitionQueueService QueueService(
         TestHarness harness,
-        IAcquisitionTransferAddCoordinator transferAdds) =>
+        IAcquisitionTransferAddCoordinator transferAdds,
+        IJobGraphService? graphs = null) =>
         new(
             harness.Store,
             new ThrowingBlocklistStore(),
@@ -1602,7 +1643,8 @@ public sealed class AcquisitionServiceTests {
             new NullReleaseLinkResolver(),
             transferAdds,
             harness.History,
-            NullLogger<AcquisitionQueueService>.Instance);
+            NullLogger<AcquisitionQueueService>.Instance,
+            graphs: graphs);
 
     private sealed record TestHarness(
         AcquisitionService Service,
@@ -1729,14 +1771,19 @@ public sealed class AcquisitionServiceTests {
         public AcquisitionImportContext? ImportContext { get; set; }
         public int ClearedPlacementCheckpoints { get; private set; }
         public List<ActiveTransfer> ActiveTransfers { get; } = [];
+        public Guid? JobGraphId { get; set; }
 
         public Task<AcquisitionDetail?> GetAsync(Guid id, CancellationToken cancellationToken) =>
             Task.FromResult<AcquisitionDetail?>(id == AcquisitionId
                 ? new AcquisitionDetail(_summary with {
                     Status = Status ?? _summary.Status,
                     HasResumableImport = HasResumableImport,
+                    JobGraphId = JobGraphId,
                 }, [])
                 : null);
+
+        public Task<Guid?> GetJobGraphIdAsync(Guid id, CancellationToken cancellationToken) =>
+            Task.FromResult(id == AcquisitionId ? JobGraphId : null);
 
         public Task SetStatusAsync(Guid id, AcquisitionStatus status, string? message, CancellationToken cancellationToken) {
             StatusChanges.Add((id, status, message));
@@ -2003,6 +2050,73 @@ public sealed class AcquisitionServiceTests {
                 ? GetAsync(AcquisitionId, cancellationToken)
                 : Task.FromResult<AcquisitionDetail?>(null);
         public Task<IReadOnlyList<Guid>> ListIdsForEntityAsync(Guid entityId, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class RecordingHandoffGraph(
+        Guid graphId,
+        Guid acquisitionId,
+        JobGraphStatus status = JobGraphStatus.Waiting) : IJobGraphService {
+        private readonly DateTimeOffset _now = DateTimeOffset.UtcNow;
+        private readonly string _reviewKey = AcquisitionGraphSignals.Review(acquisitionId);
+        private bool _externalOpen;
+
+        public List<string> Operations { get; } = [];
+
+        public Task<JobGraphDetailSnapshot?> GetAsync(Guid id, CancellationToken cancellationToken) =>
+            Task.FromResult<JobGraphDetailSnapshot?>(id == graphId
+                ? new JobGraphDetailSnapshot(
+                    Snapshot(),
+                    [],
+                    [],
+                    [new JobGraphSignalSnapshot(
+                        Guid.NewGuid(), graphId, _reviewKey, JobGraphSignalKind.IdentifyReview,
+                        acquisitionId.ToString(), "Choose release", _now, null, null)])
+                : null);
+
+        public Task<JobGraphSignalSnapshot> OpenSignalAsync(
+            Guid id,
+            string key,
+            JobGraphSignalKind kind,
+            string? correlationId,
+            string? message,
+            CancellationToken cancellationToken) {
+            Assert.Equal(graphId, id);
+            _externalOpen = true;
+            Operations.Add("open:external-transfer");
+            return Task.FromResult(new JobGraphSignalSnapshot(
+                Guid.NewGuid(), id, key, kind, correlationId, message, _now, null, null));
+        }
+
+        public Task<JobGraphSignalSnapshot> ResolveSignalAsync(
+            Guid id,
+            string key,
+            IReadOnlyList<GraphJobNodeRequest> continuationNodes,
+            CancellationToken cancellationToken) {
+            Assert.True(_externalOpen, "Resolving the last review signal before opening transfer wait would terminalize the graph.");
+            Assert.Equal(_reviewKey, key);
+            Operations.Add("resolve:review");
+            return Task.FromResult(new JobGraphSignalSnapshot(
+                Guid.NewGuid(), id, key, JobGraphSignalKind.IdentifyReview,
+                acquisitionId.ToString(), "Choose release", _now, _now, null));
+        }
+
+        private JobGraphSnapshot Snapshot() => new(
+            graphId,
+            graphId,
+            JobGraphOrigin.Interactive,
+            status,
+            "Acquisition",
+            Guid.NewGuid(),
+            null,
+            null,
+            acquisitionId.ToString(),
+            _now,
+            _now);
+
+        public Task<JobGraphSnapshot> StartAsync(StartJobGraphRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<JobRunSnapshot> AppendNodeAsync(Guid id, GraphJobNodeRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<JobGraphSnapshot>> ListAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> CancelAsync(Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
     private sealed class FakeDownloadClientConfigStore(bool includeRecordedClient) : IDownloadClientConfigStore {

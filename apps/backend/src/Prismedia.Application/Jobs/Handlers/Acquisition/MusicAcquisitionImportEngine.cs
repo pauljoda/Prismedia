@@ -20,7 +20,7 @@ public sealed partial class MusicAcquisitionImportEngine(
     ILibraryScanRootPersistence roots,
     IDownloadPayloadReader payloads,
     IImportFileMover mover,
-    ImportedTorrentRemover torrents,
+    DownloadClientCleanupService torrents,
     IImportTargetIndex targets,
     IAcquisitionBlocklistStore blocklist,
     IAcquisitionHistoryStore history,

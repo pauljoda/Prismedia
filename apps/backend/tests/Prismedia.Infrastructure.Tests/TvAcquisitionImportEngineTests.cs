@@ -994,7 +994,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
             rootPersistence,
             new DownloadPayloadReader(),
             importFileMover,
-            new ImportedTorrentRemover(store, new MergedImportTestSupport.ThrowingClientConfigStore(), new MergedImportTestSupport.ThrowingClientFactory(), NullLogger<ImportedTorrentRemover>.Instance),
+            new DownloadClientCleanupService(store, new MergedImportTestSupport.ThrowingClientConfigStore(), new MergedImportTestSupport.ThrowingClientFactory(), NullLogger<DownloadClientCleanupService>.Instance),
             new EfImportTargetIndex(db),
             ownedFileReplacer,
             new EfAcquisitionBlocklistStore(db),

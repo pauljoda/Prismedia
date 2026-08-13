@@ -886,11 +886,11 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
 
     private static FileDiscoveryAdapter Discovery() => new(new FileDiscoveryService());
 
-    private static ImportedTorrentRemover Torrents(IAcquisitionStore store) => new(
+    private static DownloadClientCleanupService Torrents(IAcquisitionStore store) => new(
         store,
         new MergedImportTestSupport.ThrowingClientConfigStore(),
         new MergedImportTestSupport.ThrowingClientFactory(),
-        NullLogger<ImportedTorrentRemover>.Instance);
+        NullLogger<DownloadClientCleanupService>.Instance);
 
     private static async Task<Guid> SeedWantedAcquisitionAsync(
         PrismediaDbContext db,

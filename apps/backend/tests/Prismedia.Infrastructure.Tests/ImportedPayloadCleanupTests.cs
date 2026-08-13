@@ -11,6 +11,66 @@ namespace Prismedia.Infrastructure.Tests;
 /// <summary>Selective imports must remove unwanted transfer data even when the profile normally seeds.</summary>
 public sealed class ImportedPayloadCleanupTests {
     [Fact]
+    public async Task HardlinkImportWithoutASeedGoalSchedulesClientCleanup() {
+        await using var db = new PrismediaDbContext(
+            new DbContextOptionsBuilder<PrismediaDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options);
+        var clientId = Guid.NewGuid();
+        var store = AcquisitionTestFactory.Store(db);
+        var acquisition = await store.CreateAsync(
+            new AcquisitionMetadata("Frozen", null, null, 2013, null, null, EntityKind.AudioLibrary),
+            CancellationToken.None);
+        await store.CreateTransferAsync(
+            acquisition.Id,
+            clientId,
+            "frozen-transfer",
+            "prismedia",
+            CancellationToken.None);
+        var downloadClient = new RecordingDownloadClient();
+        var cleanup = Cleanup(store, clientId, downloadClient);
+
+        await cleanup.HandleImportedAsync(
+            Import(acquisition.Id, clientId),
+            ImportMode.Hardlink,
+            CancellationToken.None);
+
+        var watch = Assert.Single(await store.ListSeedingTransfersAsync(CancellationToken.None));
+        Assert.Null(watch.GoalRatio);
+        Assert.Null(watch.GoalTimeMinutes);
+        Assert.Null(downloadClient.RemovedClientItemId);
+    }
+
+    [Fact]
+    public async Task MissingRecordedClientNeverFallsBackToAnotherClientForCleanup() {
+        await using var db = new PrismediaDbContext(
+            new DbContextOptionsBuilder<PrismediaDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options);
+        var recordedClientId = Guid.NewGuid();
+        var fallbackClientId = Guid.NewGuid();
+        var store = AcquisitionTestFactory.Store(db);
+        var acquisition = await store.CreateAsync(
+            new AcquisitionMetadata("Frozen", null, null, 2013, null, null, EntityKind.AudioLibrary),
+            CancellationToken.None);
+        await store.CreateTransferAsync(
+            acquisition.Id,
+            recordedClientId,
+            "frozen-transfer",
+            "prismedia",
+            CancellationToken.None);
+        var downloadClient = new RecordingDownloadClient();
+        var cleanup = Cleanup(store, fallbackClientId, downloadClient);
+
+        await cleanup.RemoveNowOrScheduleRetryAsync(
+            Import(acquisition.Id, recordedClientId),
+            CancellationToken.None);
+
+        Assert.Null(downloadClient.RemovedClientItemId);
+        Assert.Single(await store.ListSeedingTransfersAsync(CancellationToken.None));
+    }
+
+    [Fact]
     public async Task SelectiveHardlinkImportRemovesTheTransferAndItsRemainingData() {
         await using var db = new PrismediaDbContext(
             new DbContextOptionsBuilder<PrismediaDbContext>()
@@ -18,7 +78,7 @@ public sealed class ImportedPayloadCleanupTests {
                 .Options);
         var clientId = Guid.NewGuid();
         var downloadClient = new RecordingDownloadClient();
-        var remover = new ImportedTorrentRemover(
+        var remover = new DownloadClientCleanupService(
             AcquisitionTestFactory.Store(db),
             new SingleDownloadClientConfigStore(new DownloadClientDetail(
                 clientId,
@@ -31,7 +91,7 @@ public sealed class ImportedPayloadCleanupTests {
                 HasPassword: false,
                 Password: null)),
             new SingleDownloadClientFactory(downloadClient),
-            NullLogger<ImportedTorrentRemover>.Instance);
+            NullLogger<DownloadClientCleanupService>.Instance);
         var import = new AcquisitionImportContext(
             Guid.NewGuid(),
             "Frozen",
@@ -56,6 +116,40 @@ public sealed class ImportedPayloadCleanupTests {
         Assert.True(downloadClient.DeletedData);
     }
 
+    private static DownloadClientCleanupService Cleanup(
+        IAcquisitionStore store,
+        Guid clientId,
+        RecordingDownloadClient downloadClient) =>
+        new(
+            store,
+            new SingleDownloadClientConfigStore(new DownloadClientDetail(
+                clientId,
+                DownloadClientKind.QBittorrent,
+                "Downloads",
+                "http://download-client",
+                Username: null,
+                Category: "prismedia",
+                Enabled: true,
+                HasPassword: false,
+                Password: null)),
+            new SingleDownloadClientFactory(downloadClient),
+            NullLogger<DownloadClientCleanupService>.Instance);
+
+    private static AcquisitionImportContext Import(Guid acquisitionId, Guid clientId) =>
+        new(
+            acquisitionId,
+            "Frozen",
+            Author: "Various Artists",
+            Series: null,
+            Year: 2013,
+            PosterUrl: null,
+            ExternalIdentity: null,
+            ProfileId: null,
+            ContentPath: "/downloads/frozen-deluxe",
+            ClientItemId: "frozen-transfer",
+            DownloadClientConfigId: clientId,
+            Kind: EntityKind.AudioLibrary);
+
     private sealed class SingleDownloadClientFactory(IDownloadClient client) : IDownloadClientFactory {
         public IDownloadClient Get(DownloadClientKind kind) => client;
     }
@@ -77,7 +171,8 @@ public sealed class ImportedPayloadCleanupTests {
 
         public Task<string> AddAsync(DownloadClientConnection connection, DownloadAddRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<string> AddTorrentFileAsync(DownloadClientConnection connection, string fileName, byte[] torrent, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<DownloadItemStatus?> GetItemAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<DownloadItemStatus?> GetItemAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) =>
+            Task.FromResult<DownloadItemStatus?>(null);
         public Task<IReadOnlyList<DownloadItemStatus>> ListItemsAsync(DownloadClientConnection connection, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<DownloadItemFile>> GetFilesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<DownloadItemProperties?> GetPropertiesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) => throw new NotSupportedException();

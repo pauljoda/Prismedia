@@ -23,6 +23,53 @@ public sealed class AcquisitionMonitorJobHandlerTests {
     private static readonly Guid ClientId = Guid.NewGuid();
 
     [Fact]
+    public async Task PostImportWatchWithoutASeedGoalRemovesTheClientItem() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var acquisitionId = Guid.NewGuid();
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId,
+            Status = AcquisitionStatus.Imported,
+            Title = "Imported book",
+            ExternalIdsJson = "{}",
+            SourceUrlsJson = "[]",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.DownloadTransfers.Add(new DownloadTransferRow {
+            Id = Guid.NewGuid(),
+            AcquisitionId = acquisitionId,
+            DownloadClientConfigId = ClientId,
+            ClientItemId = "cleanup-me",
+            Progress = 1,
+            SeedingSince = now,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+        var removed = false;
+
+        await RunAsync(
+            db,
+            new RecordingJobQueue(),
+            listing: [],
+            directLookup: null,
+            acquisitionId,
+            properties: new DownloadItemProperties(1, 0, 0, 0, 0, 0, "/downloads"),
+            onRemove: (clientItemId, deleteData) => {
+                Assert.Equal("cleanup-me", clientItemId);
+                Assert.True(deleteData);
+                removed = true;
+            });
+
+        Assert.True(removed);
+        Assert.Null(await db.DownloadTransfers.AsNoTracking()
+            .Where(row => row.AcquisitionId == acquisitionId)
+            .Select(row => row.SeedingSince)
+            .SingleAsync());
+    }
+
+    [Fact]
     public async Task OldTransferlessReviewedClaimReturnsToReusableSelection() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow.AddMinutes(-10);
@@ -477,7 +524,9 @@ public sealed class AcquisitionMonitorJobHandlerTests {
         IMonitorStore? monitors = null,
         IDownloadClientConfigStore? downloadClientConfigs = null,
         DownloadClientConnectionTest? health = null,
-        Exception? listingFailure = null) {
+        Exception? listingFailure = null,
+        DownloadItemProperties? properties = null,
+        Action<string, bool>? onRemove = null) {
         var handler = new AcquisitionMonitorJobHandler(
             AcquisitionTestFactory.Store(db),
             recovery ?? new RecordingAcquisitionQueueService(),
@@ -488,7 +537,9 @@ public sealed class AcquisitionMonitorJobHandlerTests {
                 directLookup,
                 beforePayloadInspection,
                 health,
-                listingFailure)),
+                listingFailure,
+                properties,
+                onRemove)),
             new RemotePathMapper(new NoRemotePathMappings()),
             new EfAcquisitionHistoryStore(db),
             NullLogger<AcquisitionMonitorJobHandler>.Instance);
@@ -570,7 +621,9 @@ public sealed class AcquisitionMonitorJobHandlerTests {
         DownloadItemStatus? directLookup,
         Func<Task>? beforePayloadInspection = null,
         DownloadClientConnectionTest? health = null,
-        Exception? listingFailure = null) : IDownloadClient {
+        Exception? listingFailure = null,
+        DownloadItemProperties? properties = null,
+        Action<string, bool>? onRemove = null) : IDownloadClient {
         public DownloadClientKind Kind => DownloadClientKind.QBittorrent;
         public Task<IReadOnlyList<DownloadItemStatus>> ListItemsAsync(DownloadClientConnection connection, CancellationToken cancellationToken) {
             if (listingFailure is not null) {
@@ -593,9 +646,16 @@ public sealed class AcquisitionMonitorJobHandlerTests {
 
             return [];
         }
-        public Task<DownloadItemProperties?> GetPropertiesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<DownloadItemProperties?> GetPropertiesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) =>
+            Task.FromResult(properties);
         public Task<byte[]> GetPieceStatesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task RemoveAsync(DownloadClientConnection connection, string clientItemId, bool deleteData, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task RemoveAsync(DownloadClientConnection connection, string clientItemId, bool deleteData, CancellationToken cancellationToken) {
+            if (onRemove is null) {
+                throw new NotSupportedException();
+            }
+            onRemove(clientItemId, deleteData);
+            return Task.CompletedTask;
+        }
         public Task<DownloadClientConnectionTest> TestAsync(DownloadClientConnection connection, CancellationToken cancellationToken) =>
             Task.FromResult(health ?? new DownloadClientConnectionTest(true, "Connected."));
     }

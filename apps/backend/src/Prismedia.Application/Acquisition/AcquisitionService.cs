@@ -267,7 +267,8 @@ public sealed partial class AcquisitionService(
     IAcquisitionReleaseTimingService? releaseTiming = null,
     IJobGraphService? graphs = null,
     IDownloadPayloadReader? manualImportPayloads = null,
-    IImportTargetIndex? manualImportTargets = null) : IAcquisitionRequestService, IAcquisitionGraphCancellation, IAcquisitionTeardownRecovery {
+    IImportTargetIndex? manualImportTargets = null,
+    DownloadClientCleanupService? downloadCleanup = null) : IAcquisitionRequestService, IAcquisitionGraphCancellation, IAcquisitionTeardownRecovery {
     public Task<IReadOnlyList<AcquisitionSummary>> ListAsync(CancellationToken cancellationToken) =>
         store.ListAsync(cancellationToken);
 
@@ -571,7 +572,12 @@ public sealed partial class AcquisitionService(
             throw LifecycleChangedConflict();
         }
 
-        await RemoveTransferDataAsync(id, cancellationToken);
+        if (downloadCleanup is not null
+            && await store.GetImportContextAsync(id, cancellationToken) is { } cancelledTransfer) {
+            await downloadCleanup.RemoveNowOrScheduleRetryAsync(cancelledTransfer, cancellationToken);
+        } else {
+            await RemoveTransferDataAsync(id, cancellationToken);
+        }
 
         await RecordRemovedAsync(detail.Summary, "Cancelled by user.", cancellationToken);
 

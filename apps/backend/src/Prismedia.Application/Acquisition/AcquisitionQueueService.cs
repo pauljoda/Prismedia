@@ -41,6 +41,13 @@ public sealed class AcquisitionQueueService(
 
         var existingAttempt = await acquisitions.GetTransferInfoAsync(acquisitionId, cancellationToken);
         if (await IsCompletedAttemptAsync(acquisitionId, candidate, existingAttempt, cancellationToken)) {
+            await acquisitions.TryTransitionStatusAsync(
+                acquisitionId,
+                [AcquisitionStatus.WaitingForDownloadClient],
+                AcquisitionStatus.Queued,
+                "Sent to download client.",
+                CancellationToken.None);
+            await MoveGraphToTransferWaitAsync(acquisitionId, CancellationToken.None);
             return await acquisitions.GetAsync(acquisitionId, cancellationToken);
         }
 
@@ -208,8 +215,6 @@ public sealed class AcquisitionQueueService(
                     "The acquisition changed while the download-client handoff was finalizing. Any newly accepted client item was removed; refresh before retrying.");
             }
             await addLease.CommitAsync(CancellationToken.None);
-            await RecordGrabbedAsync(acquisitionId, candidate.Title, candidate.IndexerName, client.DisplayName, cancellationToken);
-            await MoveGraphToTransferWaitAsync(acquisitionId, cancellationToken);
         } catch (DownloadClientAddUnresolvedException ex) {
             // qBittorrent proved this call created no new torrent and could not correlate a pre-existing
             // one. Keeping the Adding placeholder would turn a rejected candidate into permanent
@@ -245,26 +250,58 @@ public sealed class AcquisitionQueueService(
                 $"The download-client handoff did not finish: {ex.Message}. Retry the same release; cleanup remains safely blocked until it is reconciled.");
         }
 
+        // The client item and its local ownership pointer are durable now. History and graph projection
+        // are best-effort follow-up work; neither may be reported as a failed remote handoff.
+        await RecordGrabbedAsync(acquisitionId, candidate.Title, candidate.IndexerName, client.DisplayName, CancellationToken.None);
+        await MoveGraphToTransferWaitAsync(acquisitionId, CancellationToken.None);
+
         return await acquisitions.GetAsync(acquisitionId, cancellationToken);
     }
 
     private async Task MoveGraphToTransferWaitAsync(Guid acquisitionId, CancellationToken cancellationToken) {
-        if (graphs is null || await acquisitions.GetJobGraphIdAsync(acquisitionId, cancellationToken) is not { } graphId) {
-            return;
-        }
+        try {
+            if (graphs is null || await acquisitions.GetJobGraphIdAsync(acquisitionId, cancellationToken) is not { } graphId) {
+                return;
+            }
 
-        var detail = await graphs.GetAsync(graphId, cancellationToken);
-        var reviewKey = AcquisitionGraphSignals.Review(acquisitionId);
-        if (detail?.Signals.Any(signal => signal.Key == reviewKey && signal.ResolvedAt is null && signal.CancelledAt is null) == true) {
-            await graphs.ResolveSignalAsync(graphId, reviewKey, [], cancellationToken);
+            var detail = await graphs.GetAsync(graphId, cancellationToken);
+            if (detail?.Graph.Status is not (JobGraphStatus.Queued or JobGraphStatus.Running or JobGraphStatus.Waiting)) {
+                logger.LogWarning(
+                    "AcquisitionQueue: transfer for acquisition {AcquisitionId} is durable, but linked graph {GraphId} is terminal; completion will publish a recovery graph.",
+                    acquisitionId,
+                    graphId);
+                return;
+            }
+
+            // Open the successor wait before resolving review. Resolving the graph's last open signal can
+            // terminalize it immediately, which previously made the following OpenSignal call fail with
+            // "job graph is already terminal" after the download client had already accepted the item.
+            var transferKey = AcquisitionGraphSignals.ExternalTransfer(acquisitionId);
+            var priorTransferSignal = detail.Signals.FirstOrDefault(signal => signal.Key == transferKey);
+            if (priorTransferSignal is null) {
+                await graphs.OpenSignalAsync(
+                    graphId,
+                    transferKey,
+                    JobGraphSignalKind.ExternalTransfer,
+                    acquisitionId.ToString(),
+                    "Waiting for download",
+                    cancellationToken);
+            } else if (priorTransferSignal.ResolvedAt is not null || priorTransferSignal.CancelledAt is not null) {
+                // Signal keys are graph-unique and cannot be reopened. This is a later transfer attempt in
+                // the same recovery graph, so retain the review wait as its durable completion signal.
+                return;
+            }
+
+            var reviewKey = AcquisitionGraphSignals.Review(acquisitionId);
+            if (detail.Signals.Any(signal => signal.Key == reviewKey && signal.ResolvedAt is null && signal.CancelledAt is null)) {
+                await graphs.ResolveSignalAsync(graphId, reviewKey, [], cancellationToken);
+            }
+        } catch (Exception ex) when (ex is not OperationCanceledException) {
+            logger.LogWarning(
+                ex,
+                "AcquisitionQueue: transfer for acquisition {AcquisitionId} is durable, but its graph could not move to the external-transfer wait; completion will recover through a fresh graph if needed.",
+                acquisitionId);
         }
-        await graphs.OpenSignalAsync(
-            graphId,
-            AcquisitionGraphSignals.ExternalTransfer(acquisitionId),
-            JobGraphSignalKind.ExternalTransfer,
-            acquisitionId.ToString(),
-            "Waiting for download",
-            cancellationToken);
     }
 
     /// <summary>Queues an acquisition from a user-supplied .torrent file (the manual fallback for linkless releases).</summary>
@@ -414,9 +451,6 @@ public sealed class AcquisitionQueueService(
                     "The acquisition changed while the manual download handoff was finalizing. Any newly accepted client item was removed; refresh before retrying.");
             }
             await addLease.CommitAsync(CancellationToken.None);
-            // A manual .torrent has no grab indexer; the uploaded file name stands in for the release title.
-            await RecordGrabbedAsync(acquisitionId, fileName, indexerName: null, client.DisplayName, cancellationToken);
-            await MoveGraphToTransferWaitAsync(acquisitionId, cancellationToken);
         } catch (DownloadClientAddUnresolvedException ex) {
             await acquisitions.AbandonTransferAddAsync(
                 acquisitionId,
@@ -444,6 +478,10 @@ public sealed class AcquisitionQueueService(
                 ApiProblemCodes.DownloadClientUnreachable,
                 $"The manual download handoff did not finish: {ex.Message}. Retry the same file; cleanup remains safely blocked until it is reconciled.");
         }
+
+        // A manual .torrent has no grab indexer; the uploaded file name stands in for the release title.
+        await RecordGrabbedAsync(acquisitionId, fileName, indexerName: null, client.DisplayName, CancellationToken.None);
+        await MoveGraphToTransferWaitAsync(acquisitionId, CancellationToken.None);
 
         return await acquisitions.GetAsync(acquisitionId, cancellationToken);
     }
@@ -782,22 +820,29 @@ public sealed class AcquisitionQueueService(
     /// the file lands, so it is left to the Imported event).
     /// </summary>
     private async Task RecordGrabbedAsync(Guid acquisitionId, string releaseTitle, string? indexerName, string downloadClientName, CancellationToken cancellationToken) {
-        var input = await acquisitions.GetSearchInputAsync(acquisitionId, cancellationToken);
-        if (input is null) {
-            return;
-        }
+        try {
+            var input = await acquisitions.GetSearchInputAsync(acquisitionId, cancellationToken);
+            if (input is null) {
+                return;
+            }
 
-        await history.SafeAddAsync(logger, new AcquisitionHistoryEntry(
-            acquisitionId,
-            input.EntityId,
-            input.Kind,
-            AcquisitionHistoryEvent.Grabbed,
-            input.Title,
-            releaseTitle,
-            indexerName,
-            downloadClientName,
-            DetectGrabbedQualityCode(input.Kind, releaseTitle)),
-            cancellationToken);
+            await history.SafeAddAsync(logger, new AcquisitionHistoryEntry(
+                acquisitionId,
+                input.EntityId,
+                input.Kind,
+                AcquisitionHistoryEvent.Grabbed,
+                input.Title,
+                releaseTitle,
+                indexerName,
+                downloadClientName,
+                DetectGrabbedQualityCode(input.Kind, releaseTitle)),
+                cancellationToken);
+        } catch (Exception ex) when (ex is not OperationCanceledException) {
+            logger.LogWarning(
+                ex,
+                "AcquisitionQueue: transfer for acquisition {AcquisitionId} is durable, but its Grabbed history event could not be recorded.",
+                acquisitionId);
+        }
     }
 
     /// <summary>The release title's detected quality code for the log: a video/audio ladder code for media kinds, the source tier code for books.</summary>

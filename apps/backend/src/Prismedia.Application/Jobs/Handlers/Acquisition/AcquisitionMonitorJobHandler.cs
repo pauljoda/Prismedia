@@ -169,19 +169,29 @@ public sealed class AcquisitionMonitorJobHandler(
                 return;
             }
 
+            var cleanupImmediately = watch.GoalRatio is null && watch.GoalTimeMinutes is null;
             var ratioMet = watch.GoalRatio is { } goalRatio && properties.Ratio is { } ratio && ratio >= goalRatio;
             var timeMet = watch.GoalTimeMinutes is { } goalMinutes
                 && (properties.SeedingTimeSeconds is { } seconds
                     ? seconds >= goalMinutes * 60L
                     : DateTimeOffset.UtcNow - watch.SeedingSince >= TimeSpan.FromMinutes(goalMinutes));
-            if (!ratioMet && !timeMet) {
+            if (!cleanupImmediately && !ratioMet && !timeMet) {
                 return;
             }
 
-            logger.LogInformation(
-                "AcquisitionMonitor: seed goal met for {ItemId} (ratio {Ratio}, seeded {Seconds}s); removing from the client.",
-                watch.ClientItemId, properties.Ratio, properties.SeedingTimeSeconds);
+            if (cleanupImmediately) {
+                logger.LogInformation(
+                    "AcquisitionMonitor: removing terminal transfer {ItemId}; no seed goal is pending.",
+                    watch.ClientItemId);
+            } else {
+                logger.LogInformation(
+                    "AcquisitionMonitor: seed goal met for {ItemId} (ratio {Ratio}, seeded {Seconds}s); removing from the client.",
+                    watch.ClientItemId, properties.Ratio, properties.SeedingTimeSeconds);
+            }
             await downloadClient.RemoveAsync(connection, watch.ClientItemId, deleteData: true, cancellationToken);
+            if (await downloadClient.GetItemAsync(connection, watch.ClientItemId, cancellationToken) is not null) {
+                throw new IOException("The transfer is still present after the client acknowledged removal.");
+            }
             await acquisitions.ClearTransferSeedingAsync(watch.TransferId, cancellationToken);
         } catch (OperationCanceledException) {
             throw;
