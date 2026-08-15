@@ -1,4 +1,3 @@
-using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Requests;
 using Prismedia.Application.Security;
@@ -9,9 +8,9 @@ using Prismedia.Infrastructure.Persistence.Entities;
 namespace Prismedia.Infrastructure.Entities;
 
 /// <summary>
-/// Scoped, EF-translatable library visibility filter. It resolves only the small hidden-root set
-/// once per caller scope and keeps entity ownership and wanted-target checks inside each database
-/// query, avoiding a large per-request hidden-entity materialization for members.
+/// Scoped, EF-translatable library visibility filter. It resolves the small hidden-root and
+/// wanted-target sets once per caller scope while keeping physical Entity ownership in indexed
+/// database subqueries, avoiding both large identifier snapshots and repeated request-target plans.
 /// </summary>
 public sealed class EfEntityLibraryVisibilityFilter(
     PrismediaDbContext db,
@@ -94,91 +93,112 @@ public sealed class EfEntityLibraryVisibilityFilter(
         }
 
         var hidden = await hiddenRootIds.ToArrayAsync(cancellationToken);
-        return new VisibilityScope(hidden);
+        if (hidden.Length == 0) return new VisibilityScope([], []);
+
+        // Wanted-target visibility is a comparatively small, request-owned projection, but its
+        // acquisition/monitor/default-profile plan is expensive when EF inlines it repeatedly into
+        // Entity lists and hierarchy checks. Resolve it once for this request. Physical ownership
+        // remains query-backed below so Entities imported later in the scope cannot become visible.
+        var hiddenWantedEntityIds = await ResolveHiddenRequestTargetedWantedEntityIdsAsync(
+            hidden,
+            cancellationToken);
+        return new VisibilityScope(hidden, hiddenWantedEntityIds);
     }
 
-    private IQueryable<Guid> HiddenLibraryTargetedEntityIds(Guid[] hiddenRootIds) {
+    private IQueryable<Guid> HiddenLibraryTargetedEntityIds(VisibilityScope scope) =>
+        BuildHiddenEntityIdsQuery(db, scope.HiddenRootIds, scope.HiddenWantedEntityIds);
+
+    /// <summary>
+    /// Builds the small indexed ownership predicate embedded in Entity reads after request-target
+    /// visibility has already been resolved for the caller scope.
+    /// </summary>
+    internal static IQueryable<Guid> BuildHiddenEntityIdsQuery(
+        PrismediaDbContext db,
+        Guid[] hiddenRootIds,
+        Guid[] hiddenWantedEntityIds) {
         var rootedEntityIds = db.EntityLibraryRoots
             .Where(root => root.LibraryRootId != null && hiddenRootIds.Contains(root.LibraryRootId.Value))
             .Select(root => root.EntityId);
-        return rootedEntityIds.Concat(HiddenRequestTargetedWantedEntityIds(hiddenRootIds));
+        if (hiddenWantedEntityIds.Length == 0) return rootedEntityIds;
+
+        var wantedEntityIds = db.Entities
+            .Where(entity => hiddenWantedEntityIds.Contains(entity.Id))
+            .Select(entity => entity.Id);
+        return rootedEntityIds.Concat(wantedEntityIds);
     }
 
-    private IQueryable<Guid> HiddenRequestTargetedWantedEntityIds(Guid[] hiddenRootIds) {
+    private async Task<Guid[]> ResolveHiddenRequestTargetedWantedEntityIdsAsync(
+        Guid[] hiddenRootIds,
+        CancellationToken cancellationToken) {
+        var targetVisibility = await BuildRequestTargetVisibilityQuery(db, hiddenRootIds)
+            .ToArrayAsync(cancellationToken);
+        var targetedEntityIds = targetVisibility.Select(target => target.EntityId).ToArray();
+        var explicitlyHiddenEntityIds = targetVisibility
+            .Where(target => target.HasHiddenTarget && !target.HasVisibleTarget)
+            .Select(target => target.EntityId)
+            .ToArray();
         var profiles = db.BookAcquisitionProfiles;
-        var hiddenAcquisitions = db.Acquisitions
-            .Where(row => row.EntityId != null && (
-                row.TargetLibraryRootId != null && hiddenRootIds.Contains(row.TargetLibraryRootId.Value) ||
-                row.TargetLibraryRootId == null && row.ProfileId != null && profiles.Any(profile =>
-                    profile.Id == row.ProfileId.Value && hiddenRootIds.Contains(profile.TargetLibraryRootId))))
-            .Select(row => row.EntityId!.Value);
-        var visibleAcquisitions = db.Acquisitions
-            .Where(row => row.EntityId != null && (
-                row.TargetLibraryRootId != null && !hiddenRootIds.Contains(row.TargetLibraryRootId.Value) ||
-                row.TargetLibraryRootId == null && row.ProfileId != null && profiles.Any(profile =>
-                    profile.Id == row.ProfileId.Value && !hiddenRootIds.Contains(profile.TargetLibraryRootId))))
-            .Select(row => row.EntityId!.Value);
-        var hiddenMonitors = db.Monitors
-            .Where(row => row.EntityId != null && (
-                row.TargetLibraryRootId != null && hiddenRootIds.Contains(row.TargetLibraryRootId.Value) ||
-                row.TargetLibraryRootId == null && row.ProfileId != null && profiles.Any(profile =>
-                    profile.Id == row.ProfileId.Value && hiddenRootIds.Contains(profile.TargetLibraryRootId))))
-            .Select(row => row.EntityId!.Value);
-        var visibleMonitors = db.Monitors
-            .Where(row => row.EntityId != null && (
-                row.TargetLibraryRootId != null && !hiddenRootIds.Contains(row.TargetLibraryRootId.Value) ||
-                row.TargetLibraryRootId == null && row.ProfileId != null && profiles.Any(profile =>
-                    profile.Id == row.ProfileId.Value && !hiddenRootIds.Contains(profile.TargetLibraryRootId))))
-            .Select(row => row.EntityId!.Value);
-        var directlyTargeted = hiddenAcquisitions
-            .Concat(visibleAcquisitions)
-            .Concat(hiddenMonitors)
-            .Concat(visibleMonitors);
-        var hiddenProfiles = profiles
-            .Where(profile => profile.IsDefault && hiddenRootIds.Contains(profile.TargetLibraryRootId))
-            .Select(profile => profile.Kind);
-        var visibleProfiles = profiles
-            .Where(profile => profile.IsDefault && !hiddenRootIds.Contains(profile.TargetLibraryRootId))
-            .Select(profile => profile.Kind);
-        var defaultHidden = db.Entities
-            .Where(entity => entity.IsWanted && !directlyTargeted.Contains(entity.Id))
-            .Where(DefaultProfileVisibilityExpression(hiddenProfiles, visibleProfiles))
-            .Select(entity => entity.Id);
-        var explicitlyHidden = db.Entities.Where(entity => entity.IsWanted &&
-                (hiddenAcquisitions.Contains(entity.Id) || hiddenMonitors.Contains(entity.Id)) &&
-                !visibleAcquisitions.Contains(entity.Id) && !visibleMonitors.Contains(entity.Id))
-            .Select(entity => entity.Id);
-        return explicitlyHidden.Concat(defaultHidden);
+        var defaultProfiles = await profiles.AsNoTracking()
+            .Where(profile => profile.IsDefault)
+            .Select(profile => new { profile.Kind, profile.TargetLibraryRootId })
+            .ToArrayAsync(cancellationToken);
+        var hiddenProfileKinds = defaultProfiles
+            .Where(profile => hiddenRootIds.Contains(profile.TargetLibraryRootId))
+            .Select(profile => profile.Kind)
+            .ToHashSet();
+        var visibleProfileKinds = defaultProfiles
+            .Where(profile => !hiddenRootIds.Contains(profile.TargetLibraryRootId))
+            .Select(profile => profile.Kind)
+            .ToHashSet();
+        var hiddenDefaultEntityKindCodes = RequestKindRegistry.WantedEntityKindsByProfile
+            .Where(entry => hiddenProfileKinds.Contains(entry.Key) && !visibleProfileKinds.Contains(entry.Key))
+            .SelectMany(entry => entry.Value)
+            .Select(kind => kind.ToCode())
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
+
+        return await db.Entities.AsNoTracking()
+            .Where(entity => entity.IsWanted && (
+                explicitlyHiddenEntityIds.Contains(entity.Id) ||
+                !targetedEntityIds.Contains(entity.Id) && hiddenDefaultEntityKindCodes.Contains(entity.KindCode)))
+            .Select(entity => entity.Id)
+            .ToArrayAsync(cancellationToken);
     }
 
-    internal static Expression<Func<EntityRow, bool>> DefaultProfileVisibilityExpression(
-        IQueryable<EntityKind> hiddenProfileKinds,
-        IQueryable<EntityKind> visibleProfileKinds) {
-        var entity = Expression.Parameter(typeof(EntityRow), "entity");
-        Expression Match(IQueryable<EntityKind> kinds) {
-            Expression result = Expression.Constant(false);
-            foreach (var (profileKind, wantedKinds) in RequestKindRegistry.WantedEntityKindsByProfile) {
-                var active = Expression.Call(
-                    typeof(Queryable),
-                    nameof(Queryable.Contains),
-                    [typeof(EntityKind)],
-                    kinds.Expression,
-                    Expression.Constant(profileKind));
-                var entityMatches = Expression.Call(
-                    typeof(Enumerable),
-                    nameof(Enumerable.Contains),
-                    [typeof(string)],
-                    Expression.Constant(wantedKinds.Select(kind => kind.ToCode()).ToArray()),
-                    Expression.Property(entity, nameof(EntityRow.KindCode)));
-                result = Expression.OrElse(result, Expression.AndAlso(active, entityMatches));
-            }
-            return result;
-        }
-        return Expression.Lambda<Func<EntityRow, bool>>(
-            Expression.AndAlso(
-                Match(hiddenProfileKinds),
-                Expression.Not(Match(visibleProfileKinds))),
-            entity);
+    /// <summary>
+    /// Reduces acquisition and monitor targets to one visibility row per wanted Entity before the
+    /// result is embedded in ordinary Entity reads.
+    /// </summary>
+    internal static IQueryable<RequestTargetVisibility> BuildRequestTargetVisibilityQuery(
+        PrismediaDbContext db,
+        Guid[] hiddenRootIds) {
+        var profiles = db.BookAcquisitionProfiles;
+        var acquisitionTargets = db.Acquisitions
+            .Where(row => row.EntityId != null)
+            .Select(row => new {
+                EntityId = row.EntityId!.Value,
+                LibraryRootId = row.TargetLibraryRootId ?? profiles
+                    .Where(profile => row.ProfileId != null && profile.Id == row.ProfileId.Value)
+                    .Select(profile => (Guid?)profile.TargetLibraryRootId)
+                    .FirstOrDefault()
+            });
+        var monitorTargets = db.Monitors
+            .Where(row => row.EntityId != null)
+            .Select(row => new {
+                EntityId = row.EntityId!.Value,
+                LibraryRootId = row.TargetLibraryRootId ?? profiles
+                    .Where(profile => row.ProfileId != null && profile.Id == row.ProfileId.Value)
+                    .Select(profile => (Guid?)profile.TargetLibraryRootId)
+                    .FirstOrDefault()
+            });
+        return acquisitionTargets
+            .Concat(monitorTargets)
+            .Where(target => target.LibraryRootId != null)
+            .GroupBy(target => target.EntityId)
+            .Select(group => new RequestTargetVisibility(
+                group.Key,
+                group.Count(target => hiddenRootIds.Contains(target.LibraryRootId!.Value)) > 0,
+                group.Count(target => !hiddenRootIds.Contains(target.LibraryRootId!.Value)) > 0));
     }
 
     private IQueryable<EntityRow> ApplyVisibility(
@@ -187,7 +207,7 @@ public sealed class EfEntityLibraryVisibilityFilter(
         string? knownKindCode = null) {
         if (!scope.RequiresFiltering) return query;
         var entities = db.Entities;
-        var hidden = HiddenLibraryTargetedEntityIds(scope.HiddenRootIds);
+        var hidden = HiddenLibraryTargetedEntityIds(scope);
         if (!EntityKindRegistry.TryDescribe(knownKindCode, out var definition)) {
             query = ApplyInherited(query, entities, hidden);
             foreach (var descendantDefinition in DescendantLibraryRootDefinitions) {
@@ -270,7 +290,12 @@ public sealed class EfEntityLibraryVisibilityFilter(
                 grandparent.Id == parent.ParentEntityId && entities.Any(rootParent =>
                     rootParent.Id == grandparent.ParentEntityId && hidden.Contains(rootParent.Id)))));
 
-    private sealed record VisibilityScope(Guid[] HiddenRootIds) {
+    private sealed record VisibilityScope(Guid[] HiddenRootIds, Guid[] HiddenWantedEntityIds) {
         public bool RequiresFiltering => HiddenRootIds.Length > 0;
     }
+
+    internal sealed record RequestTargetVisibility(
+        Guid EntityId,
+        bool HasHiddenTarget,
+        bool HasVisibleTarget);
 }

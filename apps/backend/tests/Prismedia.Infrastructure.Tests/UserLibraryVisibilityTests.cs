@@ -41,7 +41,7 @@ public sealed class UserLibraryVisibilityTests {
     }
 
     [Fact]
-    public async Task ResolvedMemberScopeKeepsHiddenEntityFilteringInTheDatabaseQuery() {
+    public async Task ResolvedMemberScopeKeepsPhysicalOwnershipFilteringInTheDatabaseQuery() {
         await using var db = CreateContext();
         await SeedTwoRootedVideosAsync(db);
         var filter = new EfEntityLibraryVisibilityFilter(db, TestUserContext.Member(GrantedRootId));
@@ -293,26 +293,44 @@ public sealed class UserLibraryVisibilityTests {
     }
 
     [Fact]
-    public void DefinitionDerivedDefaultProfileVisibilityTranslatesForPostgres() {
+    public void ResolvedVisibilityQueryDoesNotRepeatRequestTargetJoins() {
         var options = new DbContextOptionsBuilder<PrismediaDbContext>()
             .UseNpgsql("Host=localhost;Database=prismedia;Username=prismedia;Password=prismedia")
             .Options;
         using var db = new PrismediaDbContext(options);
-        var hiddenRootIds = new[] { RestrictedRootId };
-        var profiles = db.BookAcquisitionProfiles;
-        var hiddenKinds = profiles
-            .Where(profile => profile.IsDefault && hiddenRootIds.Contains(profile.TargetLibraryRootId))
-            .Select(profile => profile.Kind);
-        var visibleKinds = profiles
-            .Where(profile => profile.IsDefault && !hiddenRootIds.Contains(profile.TargetLibraryRootId))
-            .Select(profile => profile.Kind);
+        var hidden = EfEntityLibraryVisibilityFilter.BuildHiddenEntityIdsQuery(
+            db,
+            [RestrictedRootId],
+            [RestrictedWantedBookId]);
 
         var sql = db.Entities
-            .Where(EfEntityLibraryVisibilityFilter.DefaultProfileVisibilityExpression(hiddenKinds, visibleKinds))
+            .Where(entity => !hidden.Contains(entity.Id))
             .ToQueryString();
 
-        Assert.Contains("SELECT", sql, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains(EntityKind.AudioTrack.ToCode(), sql, StringComparison.Ordinal);
+        Assert.Contains("entity_library_roots", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("acquisitions", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("monitors", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("book_acquisition_profiles", sql, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void RequestTargetsTranslateToOneGroupedPostgresQuery() {
+        var options = new DbContextOptionsBuilder<PrismediaDbContext>()
+            .UseNpgsql("Host=localhost;Database=prismedia;Username=prismedia;Password=prismedia")
+            .Options;
+        using var db = new PrismediaDbContext(options);
+
+        var sql = EfEntityLibraryVisibilityFilter.BuildRequestTargetVisibilityQuery(
+                db,
+                [RestrictedRootId])
+            .ToQueryString();
+
+        Assert.Contains("acquisitions", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("monitors", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("UNION ALL", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("GROUP BY", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(1, sql.Split("FROM acquisitions", StringSplitOptions.None).Length - 1);
+        Assert.Equal(1, sql.Split("FROM monitors", StringSplitOptions.None).Length - 1);
     }
 
     [Fact]
