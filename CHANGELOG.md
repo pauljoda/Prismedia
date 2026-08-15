@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Import workflows whose graphs ended before publishing their terminal state now resume durable checkpoints automatically; attempts without a safe checkpoint fail visibly with recovery guidance instead of remaining in Importing forever.
 - Household member requests now resolve library grants from the small root set and keep Entity visibility filtering in PostgreSQL, avoiding the thousands-of-identifiers permission preflight that made member API responses much slower than administrator responses.
 - Multiple episode, album, or other bundle imports that share one structural Entity now retain an acquisition-specific reconciliation and finalization step, preventing later downloads in the same job graph from remaining in Importing after their files are playable.
 - Download-client handoffs no longer misreport a terminal job graph as a client outage after the client has already accepted the release. Failed downloads and completed imports now remove their exact recorded client items, retain torrents only for explicit seed goals, and retry cleanup durably when a client is temporarily unavailable.

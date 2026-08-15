@@ -741,6 +741,8 @@ public sealed partial class JobQueueService : IJobQueueService {
             await ReconcileGraphStateAsync(graphId, cancellationToken);
         }
 
+        await RecoverStrandedImportsAsync(cutoff, cancellationToken);
+
         return rows.Count;
     }
 

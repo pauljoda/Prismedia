@@ -551,6 +551,142 @@ public sealed class JobQueueServiceTests {
     }
 
     [Fact]
+    public async Task RecoveryResumesAStrandedDurableImportOnAFreshGraph() {
+        await using var db = CreateContext();
+        var service = new JobQueueService(db);
+        var acquisitionId = Guid.NewGuid();
+        var original = await service.EnqueueAsync(
+            new EnqueueJobRequest(
+                JobType.AcquisitionImport,
+                PayloadJson: AcquisitionJobPayload.Serialize(acquisitionId),
+                TargetEntityId: acquisitionId.ToString(),
+                Origin: JobGraphOrigin.Interactive),
+            CancellationToken.None);
+        var originalRun = await db.JobRuns.SingleAsync(run => run.Id == original.Id);
+        originalRun.Status = JobRunStatus.Completed;
+        originalRun.FinishedAt = DateTimeOffset.UtcNow.AddMinutes(-10);
+        var originalGraph = await db.JobGraphs.SingleAsync(graph => graph.Id == original.GraphId);
+        originalGraph.Status = JobGraphStatus.Completed;
+        originalGraph.FinishedAt = originalRun.FinishedAt;
+        var acquisition = new AcquisitionRow {
+            Id = acquisitionId,
+            Kind = EntityKind.VideoEpisode,
+            Title = "Stranded episode",
+            Status = AcquisitionStatus.Importing,
+            ImportCheckpointJson = "{}",
+            JobGraphId = original.GraphId,
+            CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-20),
+            UpdatedAt = DateTimeOffset.UtcNow.AddMinutes(-10),
+        };
+        db.Acquisitions.Add(acquisition);
+        await db.SaveChangesAsync();
+
+        await service.RecoverStaleRunningAsync(
+            "worker-live",
+            TimeSpan.FromMinutes(2),
+            CancellationToken.None);
+
+        db.ChangeTracker.Clear();
+        var recovered = await db.Acquisitions.SingleAsync(row => row.Id == acquisitionId);
+        var retry = await db.JobRuns.SingleAsync(run => run.Id != original.Id);
+        Assert.Equal(AcquisitionStatus.Failed, recovered.Status);
+        Assert.Contains("resuming", recovered.StatusMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.NotEqual(original.GraphId, recovered.JobGraphId);
+        Assert.Equal(recovered.JobGraphId, retry.GraphId);
+        Assert.Equal(JobRunStatus.Queued, retry.Status);
+        Assert.Equal(
+            JobGraphOrigin.Interactive,
+            (await db.JobGraphs.SingleAsync(graph => graph.Id == retry.GraphId)).Origin);
+        Assert.True(AcquisitionJobPayload.Parse(retry.PayloadJson!).ManualRetry);
+    }
+
+    [Fact]
+    public async Task RecoveryExplainsAStrandedImportWithoutADurableCheckpoint() {
+        await using var db = CreateContext();
+        var service = new JobQueueService(db);
+        var acquisitionId = Guid.NewGuid();
+        var original = await service.EnqueueAsync(
+            new EnqueueJobRequest(
+                JobType.AcquisitionImport,
+                PayloadJson: AcquisitionJobPayload.Serialize(acquisitionId),
+                TargetEntityId: acquisitionId.ToString(),
+                Origin: JobGraphOrigin.Interactive),
+            CancellationToken.None);
+        var originalRun = await db.JobRuns.SingleAsync(run => run.Id == original.Id);
+        originalRun.Status = JobRunStatus.Completed;
+        originalRun.FinishedAt = DateTimeOffset.UtcNow.AddMinutes(-10);
+        var originalGraph = await db.JobGraphs.SingleAsync(graph => graph.Id == original.GraphId);
+        originalGraph.Status = JobGraphStatus.Completed;
+        originalGraph.FinishedAt = originalRun.FinishedAt;
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId,
+            Kind = EntityKind.VideoEpisode,
+            Title = "Unrecoverable episode",
+            Status = AcquisitionStatus.Importing,
+            JobGraphId = original.GraphId,
+            CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-20),
+            UpdatedAt = DateTimeOffset.UtcNow.AddMinutes(-10),
+        });
+        await db.SaveChangesAsync();
+
+        await service.RecoverStaleRunningAsync(
+            "worker-live",
+            TimeSpan.FromMinutes(2),
+            CancellationToken.None);
+
+        db.ChangeTracker.Clear();
+        var recovered = await db.Acquisitions.SingleAsync(row => row.Id == acquisitionId);
+        Assert.Equal(AcquisitionStatus.Failed, recovered.Status);
+        Assert.Contains("before a resumable checkpoint", recovered.StatusMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(original.GraphId, recovered.JobGraphId);
+        Assert.Single(await db.JobRuns.ToArrayAsync());
+    }
+
+    [Fact]
+    public async Task RecoveryDoesNotRestartAnExplicitlyCancelledImportGraph() {
+        await using var db = CreateContext();
+        var service = new JobQueueService(db);
+        var acquisitionId = Guid.NewGuid();
+        var original = await service.EnqueueAsync(
+            new EnqueueJobRequest(
+                JobType.AcquisitionImport,
+                PayloadJson: AcquisitionJobPayload.Serialize(acquisitionId),
+                TargetEntityId: acquisitionId.ToString(),
+                Origin: JobGraphOrigin.Interactive),
+            CancellationToken.None);
+        var originalRun = await db.JobRuns.SingleAsync(run => run.Id == original.Id);
+        originalRun.Status = JobRunStatus.Cancelled;
+        originalRun.FinishedAt = DateTimeOffset.UtcNow.AddMinutes(-10);
+        var originalGraph = await db.JobGraphs.SingleAsync(graph => graph.Id == original.GraphId);
+        originalGraph.Status = JobGraphStatus.Cancelled;
+        originalGraph.CancellationRequested = true;
+        originalGraph.FinishedAt = originalRun.FinishedAt;
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = acquisitionId,
+            Kind = EntityKind.VideoEpisode,
+            Title = "Cancelled episode",
+            Status = AcquisitionStatus.Importing,
+            ImportCheckpointJson = "{}",
+            JobGraphId = original.GraphId,
+            CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-20),
+            UpdatedAt = DateTimeOffset.UtcNow.AddMinutes(-10),
+        });
+        await db.SaveChangesAsync();
+
+        await service.RecoverStaleRunningAsync(
+            "worker-live",
+            TimeSpan.FromMinutes(2),
+            CancellationToken.None);
+
+        db.ChangeTracker.Clear();
+        var recovered = await db.Acquisitions.SingleAsync(row => row.Id == acquisitionId);
+        Assert.Equal(AcquisitionStatus.Failed, recovered.Status);
+        Assert.Contains("explicit retry", recovered.StatusMessage, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(original.GraphId, recovered.JobGraphId);
+        Assert.Single(await db.JobRuns.ToArrayAsync());
+    }
+
+    [Fact]
     public async Task PruneHistoryRetainsTerminalNodesWhileTheirGraphIsStillActive() {
         await using var db = CreateContext();
         var service = new JobQueueService(db);
