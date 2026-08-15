@@ -86,6 +86,7 @@ import type {
   EntityMonitorStateView,
   EntityProgressUpdateRequest,
   EntityRefreshResponse,
+  EntityShelfResponse,
   EntityThumbnailBatchRequest,
   EntityThumbnailBatchResponse,
   ExcludeFileParams,
@@ -162,6 +163,7 @@ import type {
   ListCollectionsParams,
   ListCutoffUnmetWantedParams,
   ListEntitiesParams,
+  ListEntityShelfParams,
   ListFileChildrenParams,
   ListFileRootsParams,
   ListGalleriesParams,
@@ -2325,6 +2327,56 @@ export const getListEntitiesUrl = (params?: ListEntitiesParams,) => {
 export const listEntities = async (params?: ListEntitiesParams, options?: RequestInit): Promise<listEntitiesResponse> => {
 
   return orvalFetch<listEntitiesResponse>(getListEntitiesUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type listEntityShelfResponse200 = {
+  data: EntityShelfResponse
+  status: 200
+}
+
+export type listEntityShelfResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type listEntityShelfResponseSuccess = (listEntityShelfResponse200) & {
+  headers: Headers;
+};
+export type listEntityShelfResponseError = (listEntityShelfResponse400) & {
+  headers: Headers;
+};
+
+export type listEntityShelfResponse = (listEntityShelfResponseSuccess | listEntityShelfResponseError)
+
+export const getListEntityShelfUrl = (params?: ListEntityShelfParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/entities/shelf?${stringifiedParams}` : `/api/entities/shelf`
+}
+
+/**
+ * @summary List a compact, count-free Entity shelf.
+ */
+export const listEntityShelf = async (params?: ListEntityShelfParams, options?: RequestInit): Promise<listEntityShelfResponse> => {
+
+  return orvalFetch<listEntityShelfResponse>(getListEntityShelfUrl(params),
   {
     ...options,
     method: 'GET'

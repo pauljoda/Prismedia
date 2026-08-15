@@ -18,7 +18,7 @@ namespace Prismedia.Infrastructure.Tests;
 /// </summary>
 public sealed class EfEntitySourceOwnershipReadTests {
     [Fact]
-    public async Task PostgreSqlFilterKeepsTheRecursiveOwnershipProjectionServerSide() {
+    public async Task PostgreSqlFilterReadsThePersistedSourceOwnershipSnapshot() {
         await using var db = new PrismediaDbContext(
             new DbContextOptionsBuilder<PrismediaDbContext>()
                 .UseNpgsql("Host=localhost;Database=prismedia;Username=prismedia;Password=prismedia")
@@ -31,9 +31,9 @@ public sealed class EfEntitySourceOwnershipReadTests {
             CancellationToken.None);
         var sql = filtered.ToQueryString();
 
-        Assert.Contains("WITH RECURSIVE source_backed", sql, StringComparison.Ordinal);
-        Assert.Contains("child.parent_entity_id = parent.id", sql, StringComparison.Ordinal);
-        Assert.Contains("file.entity_id = entity.id", sql, StringComparison.Ordinal);
+        Assert.Contains("has_source_media", sql, StringComparison.Ordinal);
+        Assert.DoesNotContain("WITH RECURSIVE", sql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("entity_files", sql, StringComparison.OrdinalIgnoreCase);
     }
 
     [Fact]

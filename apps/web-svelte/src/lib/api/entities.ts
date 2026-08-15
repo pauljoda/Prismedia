@@ -3,6 +3,7 @@ import {
   getEntityChildReferences,
   getEntityChildren,
   getEntityThumbnails,
+  listEntityShelf,
   listEntities,
   refreshEntity as refreshEntityRequest,
 } from "$lib/api/generated/prismedia";
@@ -14,10 +15,12 @@ import type {
   EntityChildReferenceBatchResponse as GeneratedEntityChildReferenceBatchResponse,
   EntityGroup as GeneratedEntityGroup,
   EntityListResponse as GeneratedEntityListResponse,
+  EntityShelfResponse as GeneratedEntityShelfResponse,
   EntityRefreshResponse,
   EntityThumbnail as GeneratedEntityThumbnail,
   EntityThumbnailBatchResponse as GeneratedEntityThumbnailBatchResponse,
   ListEntitiesParams,
+  ListEntityShelfParams,
 } from "$lib/api/generated/model";
 import { requestInit, unwrapGenerated, type RequestOptions } from "$lib/api/generated-response";
 
@@ -29,6 +32,7 @@ export type EntityChildReferenceGroup = GeneratedEntityChildReferenceBatchGroup;
 export type EntityRelationshipGroup = GeneratedEntityGroup;
 export type EntityThumbnail = GeneratedEntityThumbnail;
 export type EntityListResponse = GeneratedEntityListResponse;
+export type EntityShelfResponse = GeneratedEntityShelfResponse;
 
 const ENTITY_CHILDREN_BATCH_SIZE = 250;
 
@@ -42,6 +46,19 @@ export function fetchEntities(
 ): Promise<EntityListResponse> {
   return listEntities(params, requestInit(options)).then((r) =>
     unwrapGenerated(r, "Failed to list entities"),
+  );
+}
+
+/**
+ * Loads a bounded dashboard-style shelf without the full-library count or expensive aggregate
+ * thumbnail metadata used by paginated browse grids.
+ */
+export function fetchEntityShelf(
+  params?: ListEntityShelfParams,
+  options?: RequestOptions,
+): Promise<EntityShelfResponse> {
+  return listEntityShelf(params, requestInit(options)).then((r) =>
+    unwrapGenerated(r, "Failed to list Entity shelf"),
   );
 }
 

@@ -14,6 +14,7 @@ public sealed class PrismediaDbContextModelTests {
     [Theory]
     [InlineData(typeof(EntityKindRow), "entity_kinds")]
     [InlineData(typeof(EntityRow), "entities")]
+    [InlineData(typeof(EntityAvailabilityRow), "entity_availability")]
     [InlineData(typeof(EntityDescriptionRow), "entity_descriptions")]
     [InlineData(typeof(EntityRelationshipLinkRow), "entity_relationship_links")]
     [InlineData(typeof(UserEntityStateRow), "user_entity_states")]

@@ -65,6 +65,8 @@ internal static class BaseEntityModelConfiguration {
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
             entity.HasIndex(row => new { row.KindCode, row.Title });
             entity.HasIndex(row => new { row.KindCode, row.SortName });
+            entity.HasIndex(row => new { row.KindCode, row.CreatedAt, row.Id })
+                .IsDescending(false, true, true);
             entity.HasIndex(row => row.ParentEntityId);
             entity.HasOne<EntityKindRow>()
                 .WithMany()
@@ -74,6 +76,24 @@ internal static class BaseEntityModelConfiguration {
                 .WithMany()
                 .HasForeignKey(row => row.ParentEntityId)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<EntityAvailabilityRow>(entity => {
+            entity.ToTable("entity_availability");
+            entity.HasKey(row => row.EntityId);
+            entity.Property(row => row.EntityId).HasColumnName("entity_id").ValueGeneratedNever();
+            entity.Property(row => row.HasSourceMedia).HasColumnName("has_source_media");
+            entity.Property(row => row.LatestAcquisitionStatusCode)
+                .HasColumnName("latest_acquisition_status")
+                .HasMaxLength(64);
+            entity.Property(row => row.AcquisitionStatusCodes)
+                .HasColumnName("acquisition_status_codes");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.HasIndex(row => row.HasSourceMedia);
+            entity.HasOne<EntityRow>()
+                .WithOne()
+                .HasForeignKey<EntityAvailabilityRow>(row => row.EntityId)
+                .OnDelete(DeleteBehavior.Cascade);
         });
 
     }

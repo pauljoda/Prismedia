@@ -19,7 +19,7 @@
     History,
   } from "@lucide/svelte";
   import { buttonVariants, cn } from "@prismedia/ui-svelte";
-  import { fetchEntities, type EntityCard } from "$lib/api/entities";
+  import { fetchEntityShelf, type EntityCard } from "$lib/api/entities";
   import { entityCardToThumbnailCard } from "$lib/entities/entity-grid";
   import { entityKindIcon } from "$lib/entities/entity-kind-icons";
   import { resolveEntityHref } from "$lib/entities/entity-routes";
@@ -117,7 +117,7 @@
   async function loadActivity() {
     const hideNsfw = nsfw.mode === "off";
     const [continueItems, recentItems] = await Promise.all([
-      fetchEntities({
+      fetchEntityShelf({
         status: "in-progress",
         sort: ENTITY_LIST_SORT.lastActive,
         sortDirection: ENTITY_SORT_DIRECTION.descending,
@@ -126,7 +126,7 @@
       })
         .then((r) => r.items)
         .catch(() => [] as EntityCard[]),
-      fetchEntities({
+      fetchEntityShelf({
         status: "watched",
         sort: ENTITY_LIST_SORT.lastActive,
         sortDirection: ENTITY_SORT_DIRECTION.descending,
@@ -155,7 +155,7 @@
     sections[index] = { ...sections[index], status: "loading" };
 
     try {
-      const response = await fetchEntities({
+      const response = await fetchEntityShelf({
         kind,
         sort: ENTITY_LIST_SORT.dateAdded,
         sortDirection: ENTITY_SORT_DIRECTION.descending,

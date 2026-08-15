@@ -93,7 +93,89 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         bool? orphaned = null,
         bool? wanted = null,
         AcquisitionStatus? acquisitionStatus = null) {
+        var page = await ListPageAsync(
+            new EntityListQuery {
+                Kind = kind,
+                Query = query,
+                Cursor = cursor,
+                HideNsfw = hideNsfw,
+                Limit = limit,
+                ReferencedBy = referencedBy,
+                RelationshipCode = relationshipCode,
+                Sort = sort,
+                SortDirection = sortDirection,
+                Seed = seed,
+                Favorite = favorite,
+                Organized = organized,
+                RatingMin = ratingMin,
+                RatingMax = ratingMax,
+                Unrated = unrated,
+                Status = status,
+                BookType = bookType,
+                BookFormat = bookFormat,
+                Nsfw = nsfw,
+                HasFile = hasFile,
+                Engaged = engaged,
+                Orphaned = orphaned,
+                Wanted = wanted,
+                AcquisitionStatus = acquisitionStatus,
+            },
+            includeTotalCount: true,
+            ThumbnailProjectionMode.Full,
+            cancellationToken);
+        return new EntityListResponse(
+            page.Items,
+            page.NextCursor,
+            page.TotalCount ?? throw new InvalidOperationException("A browse list must include its total count."));
+    }
+
+    /// <inheritdoc />
+    public async Task<EntityShelfResponse> ListShelfAsync(
+        EntityListQuery request,
+        CancellationToken cancellationToken) {
+        var page = await ListPageAsync(
+            request,
+            includeTotalCount: false,
+            ThumbnailProjectionMode.Compact,
+            cancellationToken);
+        return new EntityShelfResponse(page.Items, page.NextCursor);
+    }
+
+    private async Task<EntityListPage> ListPageAsync(
+        EntityListQuery request,
+        bool includeTotalCount,
+        ThumbnailProjectionMode projectionMode,
+        CancellationToken cancellationToken) {
+        var kind = request.Kind;
+        var query = request.Query;
+        var cursor = request.Cursor;
+        var hideNsfw = request.HideNsfw;
+        var limit = request.Limit;
+        var referencedBy = request.ReferencedBy;
+        var relationshipCode = request.RelationshipCode;
+        var sort = request.Sort;
+        var sortDirection = request.SortDirection;
+        var seed = request.Seed;
+        var favorite = request.Favorite;
+        var organized = request.Organized;
+        var ratingMin = request.RatingMin;
+        var ratingMax = request.RatingMax;
+        var unrated = request.Unrated;
+        var status = request.Status;
+        var bookType = request.BookType;
+        var bookFormat = request.BookFormat;
+        var nsfw = request.Nsfw;
+        var hasFile = request.HasFile;
+        var engaged = request.Engaged;
+        var orphaned = request.Orphaned;
+        var wanted = request.Wanted;
+        var acquisitionStatus = request.AcquisitionStatus;
         var pageSize = Math.Clamp(limit ?? DefaultPageSize, 1, MaxPageSize);
+        var sortKey = sort ?? EntityListSort.Title;
+        var activityShelfStatus = projectionMode == ThumbnailProjectionMode.Compact &&
+            sortKey == EntityListSort.LastActive
+                ? ParseActivityShelfStatus(status)
+                : null;
         var kindCodes = ParseKindCodes(kind);
         var normalizedRelationshipCode = string.IsNullOrWhiteSpace(relationshipCode)
             ? null
@@ -144,17 +226,31 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             entityQuery = ApplyEnabledLibraryVisibility(entityQuery, knownKindCode);
         }
         entityQuery = ApplyNsfwVisibility(entityQuery, hideNsfw == true);
-        entityQuery = ApplyListFilters(entityQuery, favorite, organized, ratingMin, ratingMax, unrated, status, bookType, bookFormat, nsfw, engaged, orphaned, wanted);
+        entityQuery = ApplyListFilters(
+            entityQuery,
+            favorite,
+            organized,
+            ratingMin,
+            ratingMax,
+            unrated,
+            activityShelfStatus is null ? status : null,
+            bookType,
+            bookFormat,
+            nsfw,
+            engaged,
+            orphaned,
+            wanted);
         entityQuery = await _acquisitionStatuses.ApplyFilterAsync(entityQuery, acquisitionStatus, cancellationToken);
         entityQuery = await _sourceOwnershipFilter.ApplyFilterAsync(entityQuery, hasFile, cancellationToken);
 
         // Snapshot the unbounded filtered total before applying the cursor; this is what
         // drives the client's page-of-pages and seek-to-end behaviour and must stay
         // independent of where in the cursor sequence we currently are.
-        var totalCount = await entityQuery.CountAsync(cancellationToken);
+        var totalCount = includeTotalCount
+            ? await entityQuery.CountAsync(cancellationToken)
+            : (int?)null;
 
         var offset = DecodeOffsetCursor(cursor);
-        var sortKey = sort ?? EntityListSort.Title;
         var descending = sortDirection == EntitySortDirection.Descending;
 
         EntityRow[] rows;
@@ -179,7 +275,10 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                 .Select(id => rowsById[id])
                 .ToArray();
         } else if (sortKey == EntityListSort.LastActive) {
-            rows = await ApplyLastActiveOrdering(entityQuery, descending)
+            var ordered = activityShelfStatus is { } shelfStatus
+                ? ApplyActivityShelfOrdering(entityQuery, shelfStatus, descending)
+                : ApplyLastActiveOrdering(entityQuery, descending);
+            rows = await ordered
                 .Skip(offset)
                 .Take(pageSize + 1)
                 .ToArrayAsync(cancellationToken);
@@ -196,10 +295,33 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         }
 
         var page = rows.Take(pageSize).ToArray();
-        var thumbnails = await ProjectThumbnailsAsync(page, hideNsfw == true, enforceLibraryVisibility, cancellationToken);
+        var thumbnails = await ProjectThumbnailsAsync(
+            page,
+            hideNsfw == true,
+            enforceLibraryVisibility,
+            cancellationToken,
+            projectionMode: projectionMode);
         var nextCursor = rows.Length > pageSize ? EncodeOffsetCursor(offset + pageSize) : null;
-        return new EntityListResponse(thumbnails, nextCursor, totalCount);
+        return new EntityListPage(thumbnails, nextCursor, totalCount);
     }
+
+    private sealed record EntityListPage(
+        IReadOnlyList<EntityThumbnail> Items,
+        string? NextCursor,
+        int? TotalCount);
+
+    private enum ActivityShelfStatus {
+        Completed,
+        InProgress,
+    }
+
+    private static ActivityShelfStatus? ParseActivityShelfStatus(string? status) =>
+        status?.Trim().ToLowerInvariant() switch {
+            "watched" or "read" or "completed" or "finished" => ActivityShelfStatus.Completed,
+            "in-progress" or "inprogress" or "in_progress" or "reading" or "watching" =>
+                ActivityShelfStatus.InProgress,
+            _ => null,
+        };
 
     /// <summary>
     /// Parses a comma-separated list of stable enum codes into the recognized enum values,
@@ -277,16 +399,20 @@ public sealed partial class EfEntityReadService : IEntityReadService {
     private IQueryable<EntityRow> ApplyLastActiveOrdering(IQueryable<EntityRow> query, bool descending) {
         var states = _db.UserEntityStates;
         var userId = CurrentUserId;
-        var keyed = query.Select(entity => new {
-            entity,
-            recency = states
-                .Where(state => state.UserId == userId && state.EntityId == entity.Id)
-                .Select(state => state.LastActiveAt ??
-                    (state.ProgressCurrentEntityId != null || state.ProgressIndex > 0 || state.ProgressCompletedAt != null
-                        ? state.ProgressUpdatedAt ?? state.UpdatedAt
-                        : null))
-                .FirstOrDefault()
-        });
+        var keyed =
+            from entity in query
+            join state in states.Where(state => state.UserId == userId)
+                on entity.Id equals state.EntityId into stateRows
+            from state in stateRows.DefaultIfEmpty()
+            select new {
+                entity,
+                recency = state == null
+                    ? null
+                    : state.LastActiveAt ??
+                        (state.ProgressCurrentEntityId != null || state.ProgressIndex > 0 || state.ProgressCompletedAt != null
+                            ? state.ProgressUpdatedAt ?? state.UpdatedAt
+                            : null)
+            };
 
         var ordered = descending
             ? keyed.OrderByDescending(item => item.recency != null)
@@ -298,6 +424,45 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                 .ThenBy(item => item.entity.CreatedAt)
                 .ThenBy(item => item.entity.Id);
 
+        return ordered.Select(item => item.entity);
+    }
+
+    /// <summary>
+    /// Drives compact activity shelves from the current user's small state set. The ordinary browse
+    /// pipeline applies the status predicate and recency order separately, which joins the same wide
+    /// state row twice. A shelf has a recognized activity status and never needs untouched entities,
+    /// so one filtered inner join can both select and order the candidates.
+    /// </summary>
+    private IQueryable<EntityRow> ApplyActivityShelfOrdering(
+        IQueryable<EntityRow> query,
+        ActivityShelfStatus status,
+        bool descending) {
+        var userId = CurrentUserId;
+        var states = _db.UserEntityStates.Where(state => state.UserId == userId);
+        states = status == ActivityShelfStatus.Completed
+            ? states.Where(state => state.CompletedAt != null || state.ProgressCompletedAt != null)
+            : states.Where(state =>
+                state.CompletedAt == null && state.ResumeSeconds > 0 ||
+                state.ProgressCompletedAt == null &&
+                (state.ProgressCurrentEntityId != null || state.ProgressIndex > 0) &&
+                state.ProgressIndex < state.ProgressTotal);
+        var keyed =
+            from state in states
+            join entity in query on state.EntityId equals entity.Id
+            select new {
+                entity,
+                recency = state.LastActiveAt ??
+                    (state.ProgressCurrentEntityId != null || state.ProgressIndex > 0 || state.ProgressCompletedAt != null
+                        ? state.ProgressUpdatedAt ?? state.UpdatedAt
+                        : (DateTimeOffset?)null)
+            };
+        var ordered = descending
+            ? keyed.OrderByDescending(item => item.recency)
+                .ThenByDescending(item => item.entity.CreatedAt)
+                .ThenBy(item => item.entity.Id)
+            : keyed.OrderBy(item => item.recency)
+                .ThenBy(item => item.entity.CreatedAt)
+                .ThenBy(item => item.entity.Id);
         return ordered.Select(item => item.entity);
     }
 
@@ -380,17 +545,13 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         }
 
         if (engaged is { } wantsEngaged) {
+            var engagedStates = states.Where(state =>
+                state.UserId == userId &&
+                (state.CompletedAt != null || state.AccessCount > 0 || state.ResumeSeconds > 0 ||
+                 state.ProgressCompletedAt != null || state.ProgressCurrentEntityId != null || state.ProgressIndex > 0));
             query = wantsEngaged
-                ? query.Where(entity =>
-                    states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
-                        (state.CompletedAt != null || state.AccessCount > 0 || state.ResumeSeconds > 0)) ||
-                    states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
-                        (state.ProgressCompletedAt != null || state.ProgressCurrentEntityId != null || state.ProgressIndex > 0)))
-                : query.Where(entity =>
-                    !states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
-                        (state.CompletedAt != null || state.AccessCount > 0 || state.ResumeSeconds > 0)) &&
-                    !states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
-                        (state.ProgressCompletedAt != null || state.ProgressCurrentEntityId != null || state.ProgressIndex > 0)));
+                ? query.Join(engagedStates, entity => entity.Id, state => state.EntityId, (entity, _) => entity)
+                : query.Where(entity => !engagedStates.Any(state => state.EntityId == entity.Id));
         }
 
         var bookTypes = ParseCodeList<BookType>(bookType);
@@ -435,23 +596,27 @@ public sealed partial class EfEntityReadService : IEntityReadService {
 
         return normalizedStatus switch {
             "watched" or "read" or "completed" or "finished" =>
-                query.Where(entity =>
-                    states.Any(state => state.UserId == userId && state.EntityId == entity.Id && state.CompletedAt != null) ||
-                    states.Any(state => state.UserId == userId && state.EntityId == entity.Id && state.ProgressCompletedAt != null)),
+                query.Join(
+                    states.Where(state => state.UserId == userId &&
+                        (state.CompletedAt != null || state.ProgressCompletedAt != null)),
+                    entity => entity.Id,
+                    state => state.EntityId,
+                    (entity, _) => entity),
             "unwatched" or "unread" or "unstarted" or "new" =>
                 query.Where(entity =>
                     !states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
-                        (state.CompletedAt != null || state.AccessCount > 0 || state.ResumeSeconds > 0)) &&
-                    !states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
-                        (state.ProgressCompletedAt != null || state.ProgressCurrentEntityId != null || state.ProgressIndex > 0))),
+                        (state.CompletedAt != null || state.AccessCount > 0 || state.ResumeSeconds > 0 ||
+                         state.ProgressCompletedAt != null || state.ProgressCurrentEntityId != null || state.ProgressIndex > 0))),
             "in-progress" or "inprogress" or "in_progress" or "reading" or "watching" =>
-                query.Where(entity =>
-                    states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
-                        state.CompletedAt == null && state.ResumeSeconds > 0) ||
-                    states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
-                        state.ProgressCompletedAt == null &&
-                        (state.ProgressCurrentEntityId != null || state.ProgressIndex > 0) &&
-                        state.ProgressIndex < state.ProgressTotal)),
+                query.Join(
+                    states.Where(state => state.UserId == userId &&
+                        (state.CompletedAt == null && state.ResumeSeconds > 0 ||
+                         state.ProgressCompletedAt == null &&
+                         (state.ProgressCurrentEntityId != null || state.ProgressIndex > 0) &&
+                         state.ProgressIndex < state.ProgressTotal)),
+                    entity => entity.Id,
+                    state => state.EntityId,
+                    (entity, _) => entity),
             _ => query,
         };
     }

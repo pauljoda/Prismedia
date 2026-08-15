@@ -110,3 +110,13 @@ public sealed record EntityListResponse(
     IReadOnlyList<EntityThumbnail> Items,
     string? NextCursor,
     int TotalCount);
+
+/// <summary>
+/// Count-free thumbnail page for shelves and other bounded surfaces. Unlike a browse response,
+/// this contract deliberately does not scan the complete matching set.
+/// </summary>
+/// <param name="Items">Current bounded thumbnail page.</param>
+/// <param name="NextCursor">Cursor for another bounded page, or null when complete.</param>
+public sealed record EntityShelfResponse(
+    IReadOnlyList<EntityThumbnail> Items,
+    string? NextCursor);

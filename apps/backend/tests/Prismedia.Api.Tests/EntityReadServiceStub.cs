@@ -37,6 +37,11 @@ internal abstract class EntityReadServiceStub : IEntityReadService {
         AcquisitionStatus? acquisitionStatus = null) =>
         Task.FromResult(new EntityListResponse([], null, 0));
 
+    public virtual Task<EntityShelfResponse> ListShelfAsync(
+        EntityListQuery query,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(new EntityShelfResponse([], null));
+
     public virtual Task<EntityCard?> GetAsync(
         Guid id,
         bool hideNsfw,

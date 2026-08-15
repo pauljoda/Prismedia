@@ -9,8 +9,8 @@ namespace Prismedia.Infrastructure.Entities;
 /// <summary>
 /// Projects physical source ownership through the canonical <see cref="EntityRow.ParentEntityId"/>
 /// hierarchy. An entity is source-backed when it or any structural descendant owns a Source file.
-/// PostgreSQL resolves the transitive closure in one recursive query; other providers use an
-/// equivalent in-memory parent walk so infrastructure tests exercise the same semantics.
+/// PostgreSQL reads the trigger-maintained availability snapshot; other providers use an equivalent
+/// in-memory parent walk so infrastructure tests exercise the same semantics.
 /// </summary>
 internal sealed class EfEntitySourceOwnershipProjection(PrismediaDbContext db)
     : IEntitySourceOwnershipReader {
@@ -27,7 +27,9 @@ internal sealed class EfEntitySourceOwnershipProjection(PrismediaDbContext db)
         }
 
         if (_db.Database.IsNpgsql()) {
-            var sourceBackedIds = PostgreSqlSourceBackedIds();
+            var sourceBackedIds = _db.EntityAvailability
+                .Where(availability => availability.HasSourceMedia)
+                .Select(availability => availability.EntityId);
             return wantsSourceMedia
                 ? query.Where(entity => sourceBackedIds.Contains(entity.Id))
                 : query.Where(entity => !sourceBackedIds.Contains(entity.Id));
@@ -51,69 +53,14 @@ internal sealed class EfEntitySourceOwnershipProjection(PrismediaDbContext db)
 
         var distinctIds = entityIds.Distinct().ToArray();
         if (_db.Database.IsNpgsql()) {
-            return await PostgreSqlSourceBackedIds(distinctIds)
+            return await _db.EntityAvailability.AsNoTracking()
+                .Where(availability => distinctIds.Contains(availability.EntityId) && availability.HasSourceMedia)
+                .Select(availability => availability.EntityId)
                 .ToHashSetAsync(cancellationToken);
         }
 
         var sourceBackedIds = await NonRelationalSourceBackedIdsAsync(cancellationToken);
         return distinctIds.Where(sourceBackedIds.Contains).ToHashSet();
-    }
-
-    private IQueryable<Guid> PostgreSqlSourceBackedIds() {
-        var sourceRole = EntityFileRole.Source.ToCode();
-        return _db.Database.SqlQuery<Guid>($"""
-            WITH RECURSIVE source_backed("Value", parent_entity_id) AS (
-                SELECT entity.id AS "Value", entity.parent_entity_id
-                FROM entities AS entity
-                WHERE EXISTS (
-                    SELECT 1
-                    FROM entity_files AS file
-                    WHERE file.entity_id = entity.id
-                      AND file.role = {sourceRole}
-                )
-                UNION
-                SELECT parent.id AS "Value", parent.parent_entity_id
-                FROM entities AS parent
-                INNER JOIN source_backed AS child
-                    ON child.parent_entity_id = parent.id
-            )
-            SELECT "Value"
-            FROM source_backed
-            """);
-    }
-
-    /// <summary>
-    /// Resolves a bounded batch by walking down only from the requested roots. The list and detail APIs
-    /// frequently ask for tens of cards from a library containing millions of files; computing the global
-    /// source-backed closure and filtering it afterward made each thumbnail poll scan the entire library.
-    /// </summary>
-    private IQueryable<Guid> PostgreSqlSourceBackedIds(Guid[] rootIds) {
-        var sourceRole = EntityFileRole.Source.ToCode();
-        return _db.Database.SqlQuery<Guid>($"""
-            WITH RECURSIVE requested_roots(root_id, entity_id, path) AS (
-                SELECT entity.id, entity.id, ARRAY[entity.id]
-                FROM entities AS entity
-                WHERE entity.id = ANY ({rootIds})
-            ),
-            entity_tree(root_id, entity_id, path) AS (
-                SELECT root_id, entity_id, path
-                FROM requested_roots
-                UNION ALL
-                SELECT tree.root_id, child.id, tree.path || child.id
-                FROM entity_tree AS tree
-                INNER JOIN entities AS child ON child.parent_entity_id = tree.entity_id
-                WHERE NOT child.id = ANY (tree.path)
-            )
-            SELECT tree.root_id AS "Value"
-            FROM entity_tree AS tree
-            WHERE EXISTS (
-                SELECT 1
-                FROM entity_files AS file
-                WHERE file.entity_id = tree.entity_id
-                  AND file.role = {sourceRole}
-            )
-            GROUP BY tree.root_id
-            """);
     }
 
     private async Task<IReadOnlySet<Guid>> NonRelationalSourceBackedIdsAsync(

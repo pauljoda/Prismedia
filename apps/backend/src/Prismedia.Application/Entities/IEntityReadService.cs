@@ -119,6 +119,18 @@ public interface IEntityReadService {
             query.AcquisitionStatus);
 
     /// <summary>
+    /// Reads one bounded, count-free shelf using the compact thumbnail projection. Dashboard and
+    /// recommendation surfaces use this path because they neither paginate by total nor render
+    /// expensive aggregate metadata.
+    /// </summary>
+    async Task<EntityShelfResponse> ListShelfAsync(
+        EntityListQuery query,
+        CancellationToken cancellationToken) {
+        var response = await ListAsync(query, cancellationToken);
+        return new EntityShelfResponse(response.Items, response.NextCursor);
+    }
+
+    /// <summary>
     /// Gets one active entity as the shared entity card read model.
     /// </summary>
     Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken);

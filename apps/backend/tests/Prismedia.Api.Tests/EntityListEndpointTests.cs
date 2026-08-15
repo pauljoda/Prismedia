@@ -99,6 +99,25 @@ public sealed class EntityListEndpointTests {
     }
 
     [Fact]
+    public async Task ShelfUsesCompactReadContractWithCanonicalFilters() {
+        var entityReadService = new CapturingEntityReadService();
+        using var factory = CreateFactory(entityReadService);
+        using var client = factory.CreateAuthenticatedClient();
+
+        using var response = await client.GetAsync(
+            "/api/entities/shelf?kind=book&status=in-progress&sort=last-active&sortDirection=desc&limit=20");
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal(1, entityReadService.ShelfCallCount);
+        Assert.Equal(EntityKind.Book.ToCode(), entityReadService.ShelfQuery?.Kind);
+        Assert.Equal("in-progress", entityReadService.ShelfQuery?.Status);
+        Assert.Equal(EntityListSort.LastActive, entityReadService.ShelfQuery?.Sort);
+        Assert.Equal(EntitySortDirection.Descending, entityReadService.ShelfQuery?.SortDirection);
+        Assert.Equal(20, entityReadService.ShelfQuery?.Limit);
+        Assert.Equal(0, entityReadService.ListCallCount);
+    }
+
+    [Fact]
     public async Task RemovedLastPlayedSortCodeIsRejected() {
         var entityReadService = new CapturingEntityReadService();
         using var factory = CreateFactory(entityReadService);
@@ -128,6 +147,8 @@ public sealed class EntityListEndpointTests {
         public EntityListSort? Sort { get; private set; }
         public EntitySortDirection? SortDirection { get; private set; }
         public bool? Engaged { get; private set; }
+        public int ShelfCallCount { get; private set; }
+        public EntityListQuery? ShelfQuery { get; private set; }
 
         public override Task<EntityListResponse> ListAsync(
             string? kind,
@@ -163,6 +184,14 @@ public sealed class EntityListEndpointTests {
             SortDirection = sortDirection;
             Engaged = engaged;
             return Task.FromResult(new EntityListResponse([], null, 0));
+        }
+
+        public override Task<EntityShelfResponse> ListShelfAsync(
+            EntityListQuery query,
+            CancellationToken cancellationToken) {
+            ShelfCallCount++;
+            ShelfQuery = query;
+            return Task.FromResult(new EntityShelfResponse([], null));
         }
 
     }

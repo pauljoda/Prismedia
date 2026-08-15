@@ -19,6 +19,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Dashboard shelves now use a compact, count-free Entity read path backed by persisted source and acquisition availability, avoiding live hierarchy walks and aggregate thumbnail calculations on every card.
+- Entity availability now updates automatically when files, acquisitions, upgrades, or hierarchy links change, with periodic background reconciliation to repair any projection drift without delaying ordinary list requests.
 - Import workflows whose graphs ended before publishing their terminal state now resume durable checkpoints automatically; attempts without a safe checkpoint fail visibly with recovery guidance instead of remaining in Importing forever.
 - Household member requests now resolve library grants and request-target visibility once per request while keeping physical library ownership in indexed PostgreSQL checks, avoiding both the thousands-of-identifiers permission preflight and repeated query plans that could stall member API responses.
 - Multiple episode, album, or other bundle imports that share one structural Entity now retain an acquisition-specific reconciliation and finalization step, preventing later downloads in the same job graph from remaining in Importing after their files are playable.

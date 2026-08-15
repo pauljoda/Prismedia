@@ -19,6 +19,17 @@ internal static class EntityListEndpoint {
             .Produces<EntityListResponse>()
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
 
+        group.MapGet("/shelf", async (
+            [AsParameters] EntityListParameters request,
+            HttpContext httpContext,
+            IEntityReadService entities,
+            CancellationToken cancellationToken) =>
+            await ShelfAsync(request, httpContext, entities, cancellationToken))
+            .WithName("ListEntityShelf")
+            .WithSummary("List a compact, count-free Entity shelf.")
+            .Produces<EntityShelfResponse>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
+
         return group;
     }
 
@@ -48,6 +59,38 @@ internal static class EntityListEndpoint {
         }
 
         return Results.Ok(await entities.ListAsync(
+            request.ToQuery(
+                resolvedKinds,
+                NsfwVisibility.ShouldHide(request.HideNsfw, httpContext),
+                sort,
+                sortDirection,
+                acquisitionStatus),
+            cancellationToken));
+    }
+
+    internal static async Task<IResult> ShelfAsync(
+        EntityListParameters request,
+        HttpContext httpContext,
+        IEntityReadService entities,
+        CancellationToken cancellationToken) {
+        if (!TryGetKinds(request.Kind, out var resolvedKinds, out var error)) {
+            return error;
+        }
+        if (!TryGetAcquisitionStatus(request.AcquisitionStatus, out var acquisitionStatus, out var statusError)) {
+            return statusError;
+        }
+        if (!TryGetOptionalCode(request.Sort, "sort", out EntityListSort? sort, out var sortError)) {
+            return sortError;
+        }
+        if (!TryGetOptionalCode(
+                request.SortDirection,
+                "sort direction",
+                out EntitySortDirection? sortDirection,
+                out var sortDirectionError)) {
+            return sortDirectionError;
+        }
+
+        return Results.Ok(await entities.ListShelfAsync(
             request.ToQuery(
                 resolvedKinds,
                 NsfwVisibility.ShouldHide(request.HideNsfw, httpContext),

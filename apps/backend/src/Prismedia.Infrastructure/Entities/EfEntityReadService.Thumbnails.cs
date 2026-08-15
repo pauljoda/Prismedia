@@ -15,12 +15,18 @@ namespace Prismedia.Infrastructure.Entities;
 /// Thumbnail, cover, and hover-image projection helpers for <see cref="EfEntityReadService"/>.
 /// </summary>
 public sealed partial class EfEntityReadService {
+    private enum ThumbnailProjectionMode {
+        Full,
+        Compact,
+    }
+
     private async Task<IReadOnlyList<EntityThumbnail>> ProjectThumbnailsAsync(
         IReadOnlyList<EntityRow> rows,
         bool hideNsfw,
         bool enforceLibraryVisibility,
         CancellationToken cancellationToken,
-        bool resolveCollectionArtwork = true) {
+        bool resolveCollectionArtwork = true,
+        ThumbnailProjectionMode projectionMode = ThumbnailProjectionMode.Full) {
         if (rows.Count == 0) {
             return [];
         }
@@ -69,20 +75,25 @@ public sealed partial class EfEntityReadService {
         var coverByParent = coverParentIds.Length == 0
             ? new Dictionary<Guid, string>()
             : await LoadCoverPathsAsync(coverParentIds, cancellationToken);
-        var hoverFiles = await _db.EntityFiles.AsNoTracking()
-            .Where(file => ids.Contains(file.EntityId) && file.Role == EntityFileRole.Trickplay)
-            .Where(file => file.Path.EndsWith(".m3u8") || file.Path.EndsWith(".vtt"))
-            .OrderByDescending(file => file.Path.EndsWith(".m3u8"))
-            .ThenBy(file => file.CreatedAt)
-            .ToArrayAsync(cancellationToken);
+        var isCompact = projectionMode == ThumbnailProjectionMode.Compact;
+        var hoverFiles = isCompact
+            ? []
+            : await _db.EntityFiles.AsNoTracking()
+                .Where(file => ids.Contains(file.EntityId) && file.Role == EntityFileRole.Trickplay)
+                .Where(file => file.Path.EndsWith(".m3u8") || file.Path.EndsWith(".vtt"))
+                .OrderByDescending(file => file.Path.EndsWith(".m3u8"))
+                .ThenBy(file => file.CreatedAt)
+                .ToArrayAsync(cancellationToken);
         var hoverByEntity = hoverFiles
             .GroupBy(file => file.EntityId)
             .ToDictionary(group => group.Key, group => group.First().Path);
-        var hoverImagesByEntity = await ProjectHoverImagesAsync(rows, hideNsfw, enforceLibraryVisibility, cancellationToken);
+        var hoverImagesByEntity = isCompact
+            ? new Dictionary<Guid, IReadOnlyList<EntityThumbnailHoverImage>>()
+            : await ProjectHoverImagesAsync(rows, hideNsfw, enforceLibraryVisibility, cancellationToken);
         var collectionRowsNeedingArtwork = rows
             .Where(row => row.KindCode == EntityKind.Collection.ToCode() && !coverByEntity.ContainsKey(row.Id))
             .ToArray();
-        var collectionArtworkByEntity = resolveCollectionArtwork
+        var collectionArtworkByEntity = resolveCollectionArtwork && !isCompact
             ? await ProjectCollectionArtworkAsync(collectionRowsNeedingArtwork, hideNsfw, enforceLibraryVisibility, cancellationToken)
             : new Dictionary<Guid, CollectionArtwork>();
         var technicalByEntity = await _db.EntityTechnical.AsNoTracking()
@@ -138,22 +149,39 @@ public sealed partial class EfEntityReadService {
         // Compact availability facts for this page: physical source-media truth plus acquisition state
         // projected through every structural subtree. The singular direct status remains for the existing
         // badge while filters use plural membership, including child and upgrade work.
-        var sourceMediaIds = await _sourceOwnership.ResolveAsync(ids, cancellationToken);
-        var acquisitionStatusesByEntity = await _acquisitionStatuses.ResolveAsync(ids, cancellationToken);
-        var sharedSourceEpisodesByEntity = await ProjectSharedSourceEpisodesAsync(
-            rows,
-            hideNsfw,
-            enforceLibraryVisibility,
-            cancellationToken);
+        var readsPersistedAvailability = _db.Database.IsNpgsql();
+        var persistedAvailability = readsPersistedAvailability
+            ? await _db.EntityAvailability.AsNoTracking()
+                .Where(availability => ids.Contains(availability.EntityId))
+                .ToDictionaryAsync(availability => availability.EntityId, cancellationToken)
+            : new Dictionary<Guid, EntityAvailabilityRow>();
+        var sourceMediaIds = readsPersistedAvailability
+            ? persistedAvailability.Values
+                .Where(availability => availability.HasSourceMedia)
+                .Select(availability => availability.EntityId)
+                .ToHashSet()
+            : await _sourceOwnership.ResolveAsync(ids, cancellationToken);
+        var acquisitionStatusesByEntity = readsPersistedAvailability
+            ? persistedAvailability.ToDictionary(pair => pair.Key, pair => ProjectPersistedAcquisitionStatus(pair.Value))
+            : await _acquisitionStatuses.ResolveAsync(ids, cancellationToken);
+        var sharedSourceEpisodesByEntity = isCompact
+            ? new Dictionary<Guid, IReadOnlyList<EntitySharedSourceEpisode>>()
+            : await ProjectSharedSourceEpisodesAsync(
+                rows,
+                hideNsfw,
+                enforceLibraryVisibility,
+                cancellationToken);
 
         // Tag names per entity, resolved through the tag relationship links and their target titles,
         // so list rows can surface tags without a detail load.
         var tagsCode = RelationshipKind.Tags.ToCode();
-        var tagLinks = await _db.EntityRelationshipLinks.AsNoTracking()
-            .Where(link => ids.Contains(link.EntityId) && link.RelationshipCode == tagsCode)
-            .OrderBy(link => link.SortOrder)
-            .Select(link => new { link.EntityId, link.TargetEntityId })
-            .ToArrayAsync(cancellationToken);
+        var tagLinks = isCompact
+            ? []
+            : await _db.EntityRelationshipLinks.AsNoTracking()
+                .Where(link => ids.Contains(link.EntityId) && link.RelationshipCode == tagsCode)
+                .OrderBy(link => link.SortOrder)
+                .Select(link => new { link.EntityId, link.TargetEntityId })
+                .ToArrayAsync(cancellationToken);
         var tagTitleById = tagLinks.Length == 0
             ? new Dictionary<Guid, string>()
             : await _db.Entities.AsNoTracking()
@@ -271,7 +299,7 @@ public sealed partial class EfEntityReadService {
         // Recursive collection-artwork projection needs only cover/hover data. Skipping contributors
         // here prevents collection members that are themselves containers from adding aggregate
         // queries to the outer thumbnail page.
-        if (!resolveCollectionArtwork) {
+        if (!resolveCollectionArtwork || isCompact) {
             return baseThumbnails;
         }
 
@@ -298,6 +326,23 @@ public sealed partial class EfEntityReadService {
                 : extraMeta.Concat(thumbnail.Meta).Take(MaxThumbnailMeta).ToArray();
             return thumbnail with { Meta = meta, ReferenceCounts = referenceCounts };
         }).ToArray();
+    }
+
+    private static EntityAcquisitionStatusSnapshot ProjectPersistedAcquisitionStatus(EntityAvailabilityRow availability) {
+        var latest = availability.LatestAcquisitionStatusCode is { } latestCode
+            && latestCode.TryDecodeAs<AcquisitionStatus>(out var latestStatus)
+                ? latestStatus
+                : (AcquisitionStatus?)null;
+        var statuses = availability.AcquisitionStatusCodes
+            .Select(code => code.TryDecodeAs<AcquisitionStatus>(out var status)
+                ? status
+                : (AcquisitionStatus?)null)
+            .Where(status => status is not null)
+            .Select(status => status!.Value)
+            .Distinct()
+            .OrderBy(status => status)
+            .ToArray();
+        return new EntityAcquisitionStatusSnapshot(latest, statuses);
     }
 
     private async Task<IReadOnlyDictionary<Guid, IReadOnlyList<EntitySharedSourceEpisode>>> ProjectSharedSourceEpisodesAsync(
