@@ -38,6 +38,49 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
     }
 
     [Fact]
+    public async Task ReconciliationUsesAcquisitionScopedNodeKeysForSharedStructuralRoots() {
+        var seriesId = Guid.NewGuid();
+        var firstEpisodeId = Guid.NewGuid();
+        var secondEpisodeId = Guid.NewGuid();
+        var firstAcquisitionId = Guid.NewGuid();
+        var secondAcquisitionId = Guid.NewGuid();
+        var graphId = Guid.NewGuid();
+        var queue = new MergedImportTestSupport.RecordingJobQueue();
+
+        await ImportedEntityReconciliation.EnqueueAsync(
+            JobContext(Guid.NewGuid(), queue, graphId),
+            new ImportedEntityMaterializationResult(
+                [new ImportedEntityReference(firstEpisodeId, EntityKind.VideoEpisode)],
+                [],
+                [],
+                [],
+                [],
+                [new ImportedEntityReference(seriesId, EntityKind.VideoSeries)]),
+            AcquisitionFinalizeJobPayload.Create(firstAcquisitionId, BookQualityRank.Floor, null),
+            CancellationToken.None);
+        await ImportedEntityReconciliation.EnqueueAsync(
+            JobContext(Guid.NewGuid(), queue, graphId),
+            new ImportedEntityMaterializationResult(
+                [new ImportedEntityReference(secondEpisodeId, EntityKind.VideoEpisode)],
+                [],
+                [],
+                [],
+                [],
+                [new ImportedEntityReference(seriesId, EntityKind.VideoSeries)]),
+            AcquisitionFinalizeJobPayload.Create(secondAcquisitionId, BookQualityRank.Floor, null),
+            CancellationToken.None);
+
+        var reconciliations = queue.Enqueued
+            .Where(request => request.Type == JobType.ReconcileEntity)
+            .ToArray();
+        Assert.Equal(2, reconciliations.Length);
+        Assert.All(reconciliations, request => Assert.Equal(seriesId.ToString(), request.TargetEntityId));
+        Assert.NotEqual(reconciliations[0].NodeKey, reconciliations[1].NodeKey);
+        Assert.Contains(firstAcquisitionId.ToString(), reconciliations[0].NodeKey, StringComparison.Ordinal);
+        Assert.Contains(secondAcquisitionId.ToString(), reconciliations[1].NodeKey, StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task BookImportBindsWantedEntityBeforeImported() {
         await using var db = CreateContext();
         var rootPath = Directory.CreateDirectory(Path.Combine(_workRoot, "books")).FullName;
@@ -1037,12 +1080,15 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             queue ?? new MergedImportTestSupport.RecordingJobQueue());
     }
 
-    private static JobContext JobContext(Guid jobId, IJobQueueService? queue = null) {
+    private static JobContext JobContext(
+        Guid jobId,
+        IJobQueueService? queue = null,
+        Guid? graphId = null) {
         var now = DateTimeOffset.UtcNow;
         return new JobContext(
             new JobRunSnapshot(
                 jobId, JobType.AcquisitionImport, JobRunStatus.Running, 0, null, "{}",
-                null, null, null, now, now, null),
+                null, null, null, now, now, null, GraphId: graphId),
             queue ?? new MergedImportTestSupport.RecordingJobQueue());
     }
 

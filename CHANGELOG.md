@@ -19,6 +19,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Household member requests now resolve library grants from the small root set and keep Entity visibility filtering in PostgreSQL, avoiding the thousands-of-identifiers permission preflight that made member API responses much slower than administrator responses.
+- Multiple episode, album, or other bundle imports that share one structural Entity now retain an acquisition-specific reconciliation and finalization step, preventing later downloads in the same job graph from remaining in Importing after their files are playable.
 - Download-client handoffs no longer misreport a terminal job graph as a client outage after the client has already accepted the release. Failed downloads and completed imports now remove their exact recorded client items, retain torrents only for explicit seed goals, and retry cleanup durably when a client is temporarily unavailable.
 - Manual TV mapping now combines structured season/episode tokens, absolute episode numbers, and provider titles as independent evidence; a unique provider-title match can correct contradictory scene numbering, duplicate claims stay held, and downloads for a different expected episode report an identifier mismatch instead of claiming the payload contains no video.
 - Concurrent qBittorrent handoffs now resolve one at a time per client category, preventing simultaneous acquisitions without known info hashes from attaching themselves to another download's torrent and files.

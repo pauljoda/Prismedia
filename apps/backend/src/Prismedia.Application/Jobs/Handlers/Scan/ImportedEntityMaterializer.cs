@@ -89,13 +89,19 @@ public static class ImportedEntityReconciliation {
             };
         for (var index = 0; index < roots.Length; index++) {
             var entity = roots[index];
+            var request = EnqueueJobRequest.ForEntity(
+                JobType.ReconcileEntity,
+                entity.Kind,
+                entity.Id.ToString(),
+                label: null,
+                payloadJson: index == roots.Length - 1 ? scopedFinalization?.ToJson() : null);
+            if (scopedFinalization is not null) {
+                request = request with {
+                    NodeKey = $"{JobType.ReconcileEntity.ToCode()}:{entity.Id}:acquisition:{scopedFinalization.AcquisitionId}"
+                };
+            }
             await context.EnqueueIfNeededAsync(
-                EnqueueJobRequest.ForEntity(
-                    JobType.ReconcileEntity,
-                    entity.Kind,
-                    entity.Id.ToString(),
-                    label: null,
-                    payloadJson: index == roots.Length - 1 ? scopedFinalization?.ToJson() : null),
+                request,
                 cancellationToken);
         }
     }

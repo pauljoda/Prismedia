@@ -41,6 +41,37 @@ public sealed class UserLibraryVisibilityTests {
     }
 
     [Fact]
+    public async Task ResolvedMemberScopeKeepsHiddenEntityFilteringInTheDatabaseQuery() {
+        await using var db = CreateContext();
+        await SeedTwoRootedVideosAsync(db);
+        var filter = new EfEntityLibraryVisibilityFilter(db, TestUserContext.Member(GrantedRootId));
+        Assert.True(await filter.RequiresCurrentUserVisibilityAsync(CancellationToken.None));
+
+        var lateRestrictedVideoId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.Entities.Add(new EntityRow {
+            Id = lateRestrictedVideoId,
+            KindCode = EntityKind.Video.ToCode(),
+            Title = "Late restricted video",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.EntityLibraryRoots.Add(new EntityLibraryRootRow {
+            EntityId = lateRestrictedVideoId,
+            LibraryRootId = RestrictedRootId
+        });
+        await db.SaveChangesAsync();
+
+        var visibleIds = await filter.ApplyCurrentUserVisibility(
+                db.Entities.AsNoTracking(),
+                EntityKind.Video.ToCode())
+            .Select(entity => entity.Id)
+            .ToArrayAsync();
+
+        Assert.DoesNotContain(lateRestrictedVideoId, visibleIds);
+    }
+
+    [Fact]
     public async Task ExplicitMemberVisibilityFiltersGrantedRestrictedAndDisabledRoots() {
         await using var db = CreateContext();
         await SeedTwoRootedVideosAsync(db);

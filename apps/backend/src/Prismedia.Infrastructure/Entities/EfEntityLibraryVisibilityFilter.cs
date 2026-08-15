@@ -9,9 +9,9 @@ using Prismedia.Infrastructure.Persistence.Entities;
 namespace Prismedia.Infrastructure.Entities;
 
 /// <summary>
-/// Scoped, EF-translatable library visibility filter. It materializes the small hidden-root and
-/// targeted-wanted sets once per caller scope so every consumer shares the same disabled-root,
-/// member-grant, and effective-request-target behavior.
+/// Scoped, EF-translatable library visibility filter. It resolves only the small hidden-root set
+/// once per caller scope and keeps entity ownership and wanted-target checks inside each database
+/// query, avoiding a large per-request hidden-entity materialization for members.
 /// </summary>
 public sealed class EfEntityLibraryVisibilityFilter(
     PrismediaDbContext db,
@@ -80,24 +80,21 @@ public sealed class EfEntityLibraryVisibilityFilter(
     private async Task<VisibilityScope> CreateScopeAsync(
         IReadOnlySet<Guid>? allowedRootIds,
         CancellationToken cancellationToken) {
-        var hidden = (await db.LibraryRoots.AsNoTracking()
-            .Where(root => !root.Enabled)
-            .Select(root => root.Id)
-            .ToArrayAsync(cancellationToken))
-            .ToHashSet();
-        if (allowedRootIds is not null) {
-            var allRootIds = await db.LibraryRoots.AsNoTracking()
-                .Select(root => root.Id)
-                .ToArrayAsync(cancellationToken);
-            hidden.UnionWith(allRootIds.Where(rootId => !allowedRootIds.Contains(rootId)));
+        var roots = db.LibraryRoots.AsNoTracking();
+        IQueryable<Guid> hiddenRootIds;
+        if (allowedRootIds is null) {
+            hiddenRootIds = roots
+                .Where(root => !root.Enabled)
+                .Select(root => root.Id);
+        } else {
+            var allowed = allowedRootIds.ToArray();
+            hiddenRootIds = roots
+                .Where(root => !root.Enabled || !allowed.Contains(root.Id))
+                .Select(root => root.Id);
         }
 
-        if (hidden.Count == 0) return new VisibilityScope([], HasHiddenRoots: false);
-        var hiddenRootIds = hidden.ToArray();
-        var hiddenEntityIds = await HiddenLibraryTargetedEntityIds(hiddenRootIds)
-            .Distinct()
-            .ToArrayAsync(cancellationToken);
-        return new VisibilityScope(hiddenEntityIds, HasHiddenRoots: true);
+        var hidden = await hiddenRootIds.ToArrayAsync(cancellationToken);
+        return new VisibilityScope(hidden);
     }
 
     private IQueryable<Guid> HiddenLibraryTargetedEntityIds(Guid[] hiddenRootIds) {
@@ -190,7 +187,7 @@ public sealed class EfEntityLibraryVisibilityFilter(
         string? knownKindCode = null) {
         if (!scope.RequiresFiltering) return query;
         var entities = db.Entities;
-        var hidden = scope.HiddenEntityIds;
+        var hidden = HiddenLibraryTargetedEntityIds(scope.HiddenRootIds);
         if (!EntityKindRegistry.TryDescribe(knownKindCode, out var definition)) {
             query = ApplyInherited(query, entities, hidden);
             foreach (var descendantDefinition in DescendantLibraryRootDefinitions) {
@@ -211,7 +208,7 @@ public sealed class EfEntityLibraryVisibilityFilter(
     private static IQueryable<EntityRow> ApplyDescendant(
         IQueryable<EntityRow> query,
         IQueryable<EntityRow> entities,
-        Guid[] hidden,
+        IQueryable<Guid> hidden,
         EntityKindDefinition definition,
         bool applyOnlyToKind) {
         var policy = definition.LibraryVisibility;
@@ -241,7 +238,7 @@ public sealed class EfEntityLibraryVisibilityFilter(
         IQueryable<EntityRow> entities,
         string descendantCode,
         int maximumDepth,
-        Guid[] hidden,
+        IQueryable<Guid> hidden,
         bool visibleOnly) {
         var descendants = entities.Where(entity =>
             entity.KindCode == descendantCode &&
@@ -263,7 +260,7 @@ public sealed class EfEntityLibraryVisibilityFilter(
     private static IQueryable<EntityRow> ApplyInherited(
         IQueryable<EntityRow> query,
         IQueryable<EntityRow> entities,
-        Guid[] hidden) =>
+        IQueryable<Guid> hidden) =>
         query.Where(entity =>
             !hidden.Contains(entity.Id) &&
             !entities.Any(parent => parent.Id == entity.ParentEntityId && hidden.Contains(parent.Id)) &&
@@ -273,7 +270,7 @@ public sealed class EfEntityLibraryVisibilityFilter(
                 grandparent.Id == parent.ParentEntityId && entities.Any(rootParent =>
                     rootParent.Id == grandparent.ParentEntityId && hidden.Contains(rootParent.Id)))));
 
-    private sealed record VisibilityScope(Guid[] HiddenEntityIds, bool HasHiddenRoots) {
-        public bool RequiresFiltering => HasHiddenRoots;
+    private sealed record VisibilityScope(Guid[] HiddenRootIds) {
+        public bool RequiresFiltering => HiddenRootIds.Length > 0;
     }
 }
