@@ -19,6 +19,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Favorites and dashboard shelves now use compact, count-free reads in the native apps, and reader/player progress reports acknowledge persistence without rebuilding full Entity details. EPUB-to-audio continuation now honors the exact saved position within a chapter instead of restarting that chapter.
 - Dashboard shelves now use a compact, count-free Entity read path backed by persisted source and acquisition availability, avoiding live hierarchy walks and aggregate thumbnail calculations on every card.
 - Entity availability now updates automatically when files, acquisitions, upgrades, or hierarchy links change, with periodic background reconciliation to repair any projection drift without delaying ordinary list requests.
 - Import workflows whose graphs ended before publishing their terminal state now resume durable checkpoints automatically; attempts without a safe checkpoint fail visibly with recovery guidance instead of remaining in Importing forever.

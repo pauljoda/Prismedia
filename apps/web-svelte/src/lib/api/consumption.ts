@@ -60,8 +60,8 @@ export async function updateEntityProgress(
     utcOffsetMinutes?: number | null;
   },
   options?: RequestOptions,
-): Promise<EntityCard> {
-  return unwrapGenerated(
+): Promise<void> {
+  unwrapGenerated<void>(
     await updateEntityProgressRequest(
       id,
       {
@@ -77,9 +77,13 @@ export async function updateEntityProgress(
         activityKind: payload.activityKind,
         utcOffsetMinutes: payload.utcOffsetMinutes ?? localUtcOffsetMinutes(),
       } as EntityProgressUpdateRequest,
-      requestInit(options),
+      {
+        ...requestInit(options),
+        headers: { Prefer: "return=minimal" },
+      },
     ),
     `Failed to update progress for ${id}`,
+    [204],
   );
 }
 

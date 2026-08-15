@@ -42,7 +42,7 @@ describe("playback API", () => {
   });
 
   it("updates entity progress through the generated route", async () => {
-    const fetchMock = mockFetch(entityCard("book-1"));
+    const fetchMock = mockFetch(undefined, 204);
 
     await updateEntityProgress("book-1", {
       currentEntityId: "chapter-1",
@@ -74,6 +74,8 @@ describe("playback API", () => {
         }),
       }),
     );
+    const [, request] = fetchMock.mock.calls[0] as unknown as [string, RequestInit];
+    expect(new Headers(request.headers).get("Prefer")).toBe("return=minimal");
   });
 
   it("updates completed state through the entity consumption route", async () => {

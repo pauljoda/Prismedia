@@ -15,7 +15,7 @@ namespace Prismedia.Application.Entities;
 /// the response contract directly, or <c>null</c> when no active entity exists for the
 /// identifier.
 /// </summary>
-public sealed class EntityCapabilityService {
+public sealed partial class EntityCapabilityService {
     private readonly IEntityWriteRepository _entities;
     private readonly IEntityReadService _entityReads;
     private readonly IEntityProgressTopologyResolver _progressTopology;
@@ -426,40 +426,7 @@ public sealed class EntityCapabilityService {
         }, cancellationToken, normalizedSessionId);
     }
 
-    /// <summary>
-    /// Updates a non-time progress cursor such as the current chapter and page for books.
-    /// </summary>
-    public async Task<EntityCard?> UpdateProgressAsync(
-        Guid id,
-        Guid currentEntityId,
-        ProgressUnit unit,
-        int index,
-        int total,
-        ReaderMode? mode,
-        bool? completed,
-        bool reset,
-        string? location,
-        double? activitySeconds,
-        ConsumptionActivityKind? activityKind,
-        CancellationToken cancellationToken) {
-        return await UpdateProgressAsync(
-            id,
-            currentEntityId,
-            unit,
-            index,
-            total,
-            mode,
-            completed,
-            reset,
-            location,
-            activitySeconds,
-            activityKind,
-            utcOffsetMinutes: null,
-            cancellationToken);
-    }
-
-    /// <summary>Updates the last-active cursor and independent consumed-unit coverage.</summary>
-    public async Task<EntityCard?> UpdateProgressAsync(
+    private async Task<Guid?> UpdateProgressOwnerAsync(
         Guid id,
         Guid currentEntityId,
         ProgressUnit unit,
@@ -477,7 +444,7 @@ public sealed class EntityCapabilityService {
         // stable while every retry reloads topology and latest-cursor state from the database.
         var occurredAt = _timeProvider.GetUtcNow();
         return await ExecuteWriteAttemptAsync(
-            attemptCancellationToken => UpdateProgressAttemptAsync(
+            attemptCancellationToken => UpdateProgressOwnerAttemptAsync(
                 id,
                 currentEntityId,
                 unit,
@@ -495,7 +462,7 @@ public sealed class EntityCapabilityService {
             cancellationToken);
     }
 
-    private async Task<EntityCard?> UpdateProgressAttemptAsync(
+    private async Task<Guid?> UpdateProgressOwnerAttemptAsync(
         Guid id,
         Guid currentEntityId,
         ProgressUnit unit,
@@ -567,7 +534,7 @@ public sealed class EntityCapabilityService {
             if (progress.TryMarkIncomplete(occurredAt) || hasActivity) {
                 await SaveProgressStateAsync(entity, cancellationToken);
             }
-            return await ReadCardAsync(entity, cancellationToken);
+            return entity.Id;
         }
 
         var normalizedTotal = Math.Max(0, total);
@@ -607,7 +574,7 @@ public sealed class EntityCapabilityService {
                     consumedCount: 0) || hasActivity) {
                 await SaveProgressStateAsync(entity, cancellationToken);
             }
-            return await ReadCardAsync(entity, cancellationToken);
+            return entity.Id;
         }
 
         if (!progress.TryMoveTo(
@@ -623,7 +590,7 @@ public sealed class EntityCapabilityService {
             if (hasActivity) {
                 await SaveProgressStateAsync(entity, cancellationToken);
             }
-            return await ReadCardAsync(entity, cancellationToken);
+            return entity.Id;
         }
 
         ConsumptionEventAppend? completedEvent = null;
@@ -640,7 +607,7 @@ public sealed class EntityCapabilityService {
         }
         await SaveProgressStateAsync(entity, cancellationToken);
 
-        return await ReadCardAsync(entity, cancellationToken);
+        return entity.Id;
     }
 
     private async Task<bool> AccumulateConsumptionActivityAsync(

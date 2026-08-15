@@ -3130,12 +3130,17 @@ export type updateEntityProgressResponse200 = {
   status: 200
 }
 
+export type updateEntityProgressResponse204 = {
+  data: void
+  status: 204
+}
+
 export type updateEntityProgressResponse404 = {
   data: ApiProblem
   status: 404
 }
 
-export type updateEntityProgressResponseSuccess = (updateEntityProgressResponse200) & {
+export type updateEntityProgressResponseSuccess = (updateEntityProgressResponse200 | updateEntityProgressResponse204) & {
   headers: Headers;
 };
 export type updateEntityProgressResponseError = (updateEntityProgressResponse404) & {

@@ -92,6 +92,32 @@ public sealed class EntityPatchEndpointTests {
     }
 
     [Fact]
+    public async Task EntityProgressPatchPreferMinimalSkipsEntityProjection() {
+        using var factory = CreateProgressFactory();
+        using var client = factory.CreateAuthenticatedClient();
+        using var request = new HttpRequestMessage(
+            HttpMethod.Patch,
+            $"/api/entities/{EntityId}/progress") {
+            Content = JsonContent.Create(
+                new EntityProgressUpdateRequest(
+                    ChapterId,
+                    ProgressUnit.Page,
+                    7,
+                    24,
+                    ReaderMode.Webtoon,
+                    Completed: null),
+                options: CodecJson)
+        };
+        request.Headers.TryAddWithoutValidation("Prefer", "return=minimal");
+
+        using var response = await client.SendAsync(request);
+        var reads = factory.Services.GetRequiredService<FakeEntityReadService>();
+
+        Assert.Equal(HttpStatusCode.NoContent, response.StatusCode);
+        Assert.Equal(0, reads.GetInvocationCount);
+    }
+
+    [Fact]
     public async Task EntityRatingPatchStoresSharedRatingCapability() {
         using var factory = CreateProgressFactory();
         using var client = factory.CreateAuthenticatedClient();
@@ -291,7 +317,9 @@ public sealed class EntityPatchEndpointTests {
                     services.AddScoped<IEntityWriteRepository>(provider =>
                         provider.GetRequiredService<FakeEntityWriteRepository>());
                     services.RemoveAll<IEntityReadService>();
-                    services.AddScoped<IEntityReadService, FakeEntityReadService>();
+                    services.AddSingleton<FakeEntityReadService>();
+                    services.AddScoped<IEntityReadService>(provider =>
+                        provider.GetRequiredService<FakeEntityReadService>());
                     services.AddScoped<IConsumptionEventStore>(provider =>
                         provider.GetRequiredService<RecordingPlaybackEventStore>());
                     services.RemoveAll<IEntityProgressTopologyResolver>();
@@ -320,11 +348,21 @@ public sealed class EntityPatchEndpointTests {
     }
 
     private sealed class FakeEntityReadService : EntityReadServiceStub {
+        public int GetInvocationCount { get; private set; }
+
         public override Task<EntityCard?> GetAsync(Guid id, bool hideNsfw, CancellationToken cancellationToken) =>
-            Task.FromResult<EntityCard?>(Card(id, EntityKind.Video, "Updated Title"));
+            ReadAsync(Card(id, EntityKind.Video, "Updated Title"));
 
         public override Task<EntityCard?> GetAsync(Guid id, string kind, bool hideNsfw, CancellationToken cancellationToken) =>
-            Task.FromResult<EntityCard?>(Card(id, kind.DecodeAs<EntityKind>(), kind == EntityKind.Video.ToCode() ? "Video Title" : "Updated Title"));
+            ReadAsync(Card(
+                id,
+                kind.DecodeAs<EntityKind>(),
+                kind == EntityKind.Video.ToCode() ? "Video Title" : "Updated Title"));
+
+        private Task<EntityCard?> ReadAsync(EntityCard card) {
+            GetInvocationCount++;
+            return Task.FromResult<EntityCard?>(card);
+        }
 
         private static EntityCard Card(Guid id, EntityKind kind, string title) =>
             new() {
