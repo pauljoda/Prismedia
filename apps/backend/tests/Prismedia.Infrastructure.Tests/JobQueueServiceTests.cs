@@ -550,8 +550,12 @@ public sealed class JobQueueServiceTests {
         Assert.Equal(JobRunStatus.Running, currentWorker.Status);
     }
 
-    [Fact]
-    public async Task RecoveryResumesAStrandedDurableImportOnAFreshGraph() {
+    [Theory]
+    [InlineData(JobGraphStatus.Completed, false)]
+    [InlineData(JobGraphStatus.Waiting, true)]
+    public async Task RecoveryResumesAStrandedDurableImportOnAFreshGraph(
+        JobGraphStatus originalGraphStatus,
+        bool keepGraphOpen) {
         await using var db = CreateContext();
         var service = new JobQueueService(db);
         var acquisitionId = Guid.NewGuid();
@@ -566,8 +570,17 @@ public sealed class JobQueueServiceTests {
         originalRun.Status = JobRunStatus.Completed;
         originalRun.FinishedAt = DateTimeOffset.UtcNow.AddMinutes(-10);
         var originalGraph = await db.JobGraphs.SingleAsync(graph => graph.Id == original.GraphId);
-        originalGraph.Status = JobGraphStatus.Completed;
-        originalGraph.FinishedAt = originalRun.FinishedAt;
+        originalGraph.Status = originalGraphStatus;
+        originalGraph.FinishedAt = keepGraphOpen ? null : originalRun.FinishedAt;
+        if (keepGraphOpen) {
+            db.JobGraphSignals.Add(new JobGraphSignalRow {
+                Id = Guid.NewGuid(),
+                GraphId = originalGraph.Id,
+                Key = "unrelated-acquisition-review",
+                Kind = JobGraphSignalKind.DomainEvent,
+                CreatedAt = DateTimeOffset.UtcNow.AddMinutes(-10),
+            });
+        }
         var acquisition = new AcquisitionRow {
             Id = acquisitionId,
             Kind = EntityKind.VideoEpisode,

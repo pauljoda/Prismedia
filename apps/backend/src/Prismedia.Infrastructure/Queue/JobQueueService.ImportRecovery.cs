@@ -15,7 +15,8 @@ public sealed partial class JobQueueService {
     private async Task RecoverStrandedImportsAsync(
         DateTimeOffset staleBefore,
         CancellationToken cancellationToken) {
-        var terminalStatuses = new[] {
+        var strandedGraphStatuses = new[] {
+            JobGraphStatus.Waiting,
             JobGraphStatus.Completed,
             JobGraphStatus.CompletedWithWarnings,
             JobGraphStatus.Failed,
@@ -28,7 +29,7 @@ public sealed partial class JobQueueService {
                 && (acquisition.JobGraphId == null
                     || _db.JobGraphs.Any(graph =>
                         graph.Id == acquisition.JobGraphId
-                        && terminalStatuses.Contains(graph.Status))))
+                        && strandedGraphStatuses.Contains(graph.Status))))
             .ToArrayAsync(cancellationToken);
         if (candidates.Length == 0) {
             return;
@@ -59,6 +60,23 @@ public sealed partial class JobQueueService {
         var graphStatuses = await _db.JobGraphs.AsNoTracking()
             .Where(graph => graphIds.Contains(graph.Id))
             .ToDictionaryAsync(graph => graph.Id, graph => graph.Status, cancellationToken);
+        var completedImportTargets = (await _db.JobRuns.AsNoTracking()
+                .Where(run =>
+                    run.Type == JobType.AcquisitionImport
+                    && run.Status == JobRunStatus.Completed
+                    && run.TargetEntityId != null
+                    && targetIds.Contains(run.TargetEntityId))
+                .Select(run => run.TargetEntityId!)
+                .ToArrayAsync(cancellationToken))
+            .ToHashSet(StringComparer.Ordinal);
+        var finalizerTargets = (await _db.JobRuns.AsNoTracking()
+                .Where(run =>
+                    run.Type == JobType.AcquisitionFinalize
+                    && run.TargetEntityId != null
+                    && targetIds.Contains(run.TargetEntityId))
+                .Select(run => run.TargetEntityId!)
+                .ToArrayAsync(cancellationToken))
+            .ToHashSet(StringComparer.Ordinal);
 
         const string resumeMessage =
             "The prior post-import graph ended before finalization. Prismedia is resuming the saved import checkpoint automatically.";
@@ -70,16 +88,24 @@ public sealed partial class JobQueueService {
         var now = DateTimeOffset.UtcNow;
         foreach (var acquisition in stranded) {
             acquisition.Status = AcquisitionStatus.Failed;
-            var graphCompleted = acquisition.JobGraphId is { } graphId
+            var graphStatusKnown = acquisition.JobGraphId is { } graphId
                 && graphStatuses.TryGetValue(graphId, out var graphStatus)
-                && graphStatus is JobGraphStatus.Completed or JobGraphStatus.CompletedWithWarnings;
+                ? graphStatus
+                : (JobGraphStatus?)null;
+            var targetId = acquisition.Id.ToString();
+            var finalizationWasDropped = graphStatusKnown == JobGraphStatus.Waiting
+                && completedImportTargets.Contains(targetId)
+                && !finalizerTargets.Contains(targetId);
+            var canResumeAutomatically = graphStatusKnown is
+                    JobGraphStatus.Completed or JobGraphStatus.CompletedWithWarnings
+                || finalizationWasDropped;
             acquisition.StatusMessage = acquisition.ImportCheckpointJson is null
                 ? reviewMessage
-                : graphCompleted
+                : canResumeAutomatically
                     ? resumeMessage
                     : interruptedMessage;
             acquisition.UpdatedAt = now;
-            if (acquisition.ImportCheckpointJson is not null && graphCompleted) {
+            if (acquisition.ImportCheckpointJson is not null && canResumeAutomatically) {
                 resumable.Add(acquisition);
             }
         }
