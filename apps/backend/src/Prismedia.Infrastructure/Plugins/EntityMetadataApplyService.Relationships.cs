@@ -135,6 +135,17 @@ public sealed partial class EntityMetadataApplyService {
     }
 
     private async Task ReplaceTagsAsync(Guid entityId, IReadOnlyList<string> tags, DateTimeOffset now, bool markNsfw, CancellationToken cancellationToken) {
+        // Remember the previously linked tags: after a successful apply, any of them left with
+        // zero references is deleted inline (see RemoveOrphanedTagCandidatesAsync).
+        var tagsCode = RelationshipKind.Tags.ToCode();
+        var previousTagIds = await _db.EntityRelationshipLinks.AsNoTracking()
+            .Where(link => link.EntityId == entityId && link.RelationshipCode == tagsCode)
+            .Select(link => link.TargetEntityId)
+            .ToArrayAsync(cancellationToken);
+        foreach (var tagId in previousTagIds) {
+            _removedTagCandidateIds.Add(tagId);
+        }
+
         await RemoveRelationshipAsync(entityId, RelationshipKind.Tags.ToCode(), cancellationToken);
 
         var order = 0;

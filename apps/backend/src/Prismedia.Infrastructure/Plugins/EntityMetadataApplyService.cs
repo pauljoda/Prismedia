@@ -40,6 +40,11 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
     private readonly ICurrentUserContext? _currentUser;
     private readonly IAcquisitionReleaseDateChangeHandler? _releaseDateChanges;
     private readonly EntityStructurePlacementValidator _structurePlacement;
+    private readonly Prismedia.Application.Settings.SettingsService? _settings;
+
+    // Tags this apply unlinked; checked for orphanhood after a successful save so an untag
+    // removes its now-unreferenced tag immediately instead of waiting for the deep scan net.
+    private readonly HashSet<Guid> _removedTagCandidateIds = [];
 
     /// <summary>
     /// Creates an apply service over EF Core rows and optional artwork downloading.
@@ -65,8 +70,10 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         IPluginIdentityRouter? identityRouter = null,
         IEntityLifecycleMutationLease? lifecycle = null,
         ICurrentUserContext? currentUser = null,
-        IAcquisitionReleaseDateChangeHandler? releaseDateChanges = null) {
+        IAcquisitionReleaseDateChangeHandler? releaseDateChanges = null,
+        Prismedia.Application.Settings.SettingsService? settings = null) {
         _db = db;
+        _settings = settings;
         _externalIdentities = externalIdentities ?? new EfEntityExternalIdentityStore(db, TimeProvider.System);
         _providerIdentities = providerIdentities;
         _identityRouter = identityRouter;
@@ -153,6 +160,7 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         if (accepted && result == EntityMetadataPatchResult.Applied) {
             _artwork.CommitStagedWrites();
             await RefreshGridThumbnailsForDownloadedArtworkAsync(cancellationToken);
+            await RemoveOrphanedTagCandidatesAsync(cancellationToken);
             if (_releaseDateChanges is not null && fields.Contains(MetadataPatchField.Dates.ToCode())) {
                 await _releaseDateChanges.HandleAsync(entityId, cancellationToken);
             }
@@ -160,6 +168,35 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
             _artwork.RollbackStagedWrites();
         }
         return accepted ? result : EntityMetadataPatchResult.NotFound;
+    }
+
+    /// <summary>
+    /// Deletes tags this apply unlinked when nothing references them anymore and the
+    /// remove-orphan-tags setting is on. One indexed existence check per affected tag keeps
+    /// untagging tidy without the library-wide sweep, which now runs only on deep scans.
+    /// </summary>
+    private async Task RemoveOrphanedTagCandidatesAsync(CancellationToken cancellationToken) {
+        if (_removedTagCandidateIds.Count == 0 || _settings is null) {
+            return;
+        }
+
+        var candidateIds = _removedTagCandidateIds.ToArray();
+        _removedTagCandidateIds.Clear();
+        if (!await _settings.GetRemoveOrphanTagsAsync(cancellationToken)) {
+            return;
+        }
+
+        var tagCode = EntityKind.Tag.ToCode();
+        var links = _db.EntityRelationshipLinks;
+        var orphans = await _db.Entities
+            .Where(entity => candidateIds.Contains(entity.Id) &&
+                entity.KindCode == tagCode &&
+                !links.Any(link => link.TargetEntityId == entity.Id))
+            .ToListAsync(cancellationToken);
+        if (orphans.Count > 0) {
+            _db.Entities.RemoveRange(orphans);
+            await _db.SaveChangesAsync(cancellationToken);
+        }
     }
 
     private async Task<bool> CanEditCollectionAsync(Guid entityId, CancellationToken cancellationToken) {
