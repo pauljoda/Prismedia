@@ -1228,6 +1228,7 @@ export const SETTING_KEYS = {
   playbackShowCastControls: "playback.showCastControls",
   pluginsAutoUpdateEnabled: "plugins.autoUpdateEnabled",
   scanAutoScanEnabled: "scan.autoScanEnabled",
+  scanIntegrityIntervalHours: "scan.integrityIntervalHours",
   scanIntervalMinutes: "scan.intervalMinutes",
   subtitlesAutoDownloadEnabled: "subtitles.autoDownloadEnabled",
   subtitlesAutoDownloadLanguages: "subtitles.autoDownloadLanguages",

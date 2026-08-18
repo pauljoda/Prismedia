@@ -157,8 +157,13 @@ public sealed partial class SettingsService {
     /// Returns scan scheduling settings.
     /// </summary>
     public async Task<ScanSettings> GetScanSettingsAsync(CancellationToken cancellationToken) {
-        var values = await GetValueMapAsync([AppSettings.Scan.AutoScanEnabled, AppSettings.Scan.IntervalMinutes], cancellationToken);
-        return new ScanSettings(Read(values, AppSettings.Scan.AutoScanEnabled), Read(values, AppSettings.Scan.IntervalMinutes));
+        var values = await GetValueMapAsync(
+            [AppSettings.Scan.AutoScanEnabled, AppSettings.Scan.IntervalMinutes, AppSettings.Scan.IntegrityIntervalHours],
+            cancellationToken);
+        return new ScanSettings(
+            Read(values, AppSettings.Scan.AutoScanEnabled),
+            Read(values, AppSettings.Scan.IntervalMinutes),
+            Read(values, AppSettings.Scan.IntegrityIntervalHours));
     }
 
     /// <summary>Returns the cadence settings for re-searching monitored items.</summary>

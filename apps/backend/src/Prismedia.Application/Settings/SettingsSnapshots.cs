@@ -8,7 +8,7 @@ public sealed record VisibilitySettings(string DefaultMode);
 /// <summary>
 /// Recurring scan scheduling settings.
 /// </summary>
-public sealed record ScanSettings(bool AutoScanEnabled, int IntervalMinutes);
+public sealed record ScanSettings(bool AutoScanEnabled, int IntervalMinutes, int IntegrityIntervalHours = 168);
 
 /// <summary>
 /// Recurring collection refresh scheduling settings.

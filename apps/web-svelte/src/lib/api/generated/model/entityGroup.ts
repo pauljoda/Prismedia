@@ -13,4 +13,9 @@ export interface EntityGroup {
   label: string;
   entities: EntityThumbnail[];
   code?: null | RelationshipKind;
+  /**
+     * @nullable
+     * @pattern ^-?(?:0|[1-9]\d*)$
+     */
+  totalCount?: number | string | null;
 }

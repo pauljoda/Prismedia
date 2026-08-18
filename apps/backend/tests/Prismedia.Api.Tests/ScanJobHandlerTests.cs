@@ -198,9 +198,27 @@ public sealed class ScanJobHandlerTests {
         await handler.HandleAsync(
             new JobContext(OrphanCleanupJob, new RecordingJobQueue()), CancellationToken.None);
 
-        // Cleanup runs once per scan job via AfterScanAsync, so it fires even though this root has
-        // no files and the detailed pass does nothing.
+        // Library-wide cleanup is reserved for deep integrity scans; it fires even though this
+        // root has no files and the detailed pass does nothing.
         Assert.Equal(1, persistence.RemoveOrphanTagsCalls);
+    }
+
+    [Fact]
+    public async Task RoutineVideoScanSkipsLibraryWideCleanup() {
+        // Ordinary root scans stay scoped to their delta; the outside-root and orphan-tag
+        // sweeps run only on deep integrity scans.
+        var persistence = new FakeScanPersistence([OrphanCleanupRoot]) {
+            Settings = OrphanCleanupSettings(removeOrphanTags: true),
+        };
+        var handler = OrphanCleanupHandler(persistence);
+        var routineJob = OrphanCleanupJob with {
+            PayloadJson = $$"""{"libraryRootId":"{{OrphanCleanupRoot.Id}}"}"""
+        };
+
+        await handler.HandleAsync(
+            new JobContext(routineJob, new RecordingJobQueue()), CancellationToken.None);
+
+        Assert.Equal(0, persistence.RemoveOrphanTagsCalls);
     }
 
     [Fact]
@@ -249,7 +267,7 @@ public sealed class ScanJobHandlerTests {
         JobRunStatus.Running,
         Progress: 0,
         Message: null,
-        PayloadJson: $$"""{"libraryRootId":"{{OrphanCleanupRoot.Id}}"}""",
+        PayloadJson: $$"""{"libraryRootId":"{{OrphanCleanupRoot.Id}}","deep":true}""",
         TargetEntityKind: "library-root",
         TargetEntityId: OrphanCleanupRoot.Id.ToString(),
         TargetLabel: OrphanCleanupRoot.Label,

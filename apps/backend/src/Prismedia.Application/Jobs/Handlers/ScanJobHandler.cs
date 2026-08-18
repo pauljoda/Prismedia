@@ -40,6 +40,10 @@ public abstract class ScanJobHandler(
         var rootFailures = 0;
         string? firstRootError = null;
         var scannedRoots = 0;
+        // Library-wide cleanups (outside-root removal, orphan pruning) run on deep integrity
+        // scans and legacy all-roots scans only. Routine and change-driven scans stay scoped to
+        // their delta; targeted mutation paths handle their own orphan checks inline.
+        var runLibraryWideCleanup = true;
 
         if (!ScanRootPayload.TryParse(context.Job.PayloadJson, out var payload)) {
             IReadOnlyList<LibraryRootData> enabledRoots;
@@ -105,6 +109,7 @@ public abstract class ScanJobHandler(
             }
 
             scannedRoots = 1;
+            runLibraryWideCleanup = payload.Deep;
             using (timer.Phase("root-scan")) {
                 await ScanRootWithSnapshotAsync(context, root, payload.ChangesOnly, cancellationToken);
             }
@@ -116,15 +121,16 @@ public abstract class ScanJobHandler(
             }
         }
 
-        // Runs once per scan job after every root is processed — including when every root's detailed
-        // pass was skipped by the incremental fast path — so global cleanup that does not depend on
-        // file changes (e.g. deleted library roots and orphaned taxonomy) still happens on an
-        // otherwise no-op rescan.
-        using (timer.Phase("cleanup-outside-roots")) {
-            await RemoveEntitiesOutsideConfiguredRootsAsync(context.Job.Type, cancellationToken);
-        }
-        using (timer.Phase("cleanup-orphan-tags")) {
-            await RemoveOrphanTagsIfEnabledAsync(context.Job.Type, cancellationToken);
+        // Library-wide cleanup previously ran after every scan job — including no-op rescans —
+        // which made even a single touched file pay several whole-table sweeps. It now runs only
+        // on deep integrity scans (and legacy all-roots scans), where a full pass is the point.
+        if (runLibraryWideCleanup) {
+            using (timer.Phase("cleanup-outside-roots")) {
+                await RemoveEntitiesOutsideConfiguredRootsAsync(context.Job.Type, cancellationToken);
+            }
+            using (timer.Phase("cleanup-orphan-tags")) {
+                await RemoveOrphanTagsIfEnabledAsync(context.Job.Type, cancellationToken);
+            }
         }
 
         LogJobMetrics(context.Job.Type, scannedRoots, rootFailures, timer.Finish());

@@ -39,6 +39,16 @@ public static class AppSettings {
         public static readonly SettingDefinition<int> IntervalMinutes = Int(
             Group, "scan.intervalMinutes", "Scan interval",
             "Minutes between automatic scans.", 60, 20, min: 5, max: 1440, step: 5);
+        public static readonly SettingDefinition<int> IntegrityIntervalHours = Int(
+            Group, "scan.integrityIntervalHours", "Deep integrity interval",
+            "Hours between deep integrity scans, which run the library-wide orphan and " +
+            "outside-root cleanups that ordinary scans skip.", 168, 30, min: 24, max: 720, step: 24);
+
+        /// <summary>
+        /// Reserved persistence key for the last completed deep integrity sweep. Written by the
+        /// scheduler, never surfaced as an editable setting.
+        /// </summary>
+        public const string LastIntegritySweepAtKey = "scan.lastIntegritySweepAt";
     }
 
     public static class Collections {

@@ -57,19 +57,21 @@ public sealed class JobSchedulerTests {
     }
 
     [Fact]
-    public async Task ScheduleRecurringScansAsyncSkipsRootAwayFromScheduleBoundary() {
+    public async Task ScheduleRecurringScansAsyncSkipsRootScannedWithinInterval() {
+        // Age-based due check: a root scanned half an interval ago is not due, regardless of
+        // where "now" falls relative to interval boundaries (restarts can no longer skip cycles).
         var rootId = Guid.NewGuid();
+        var now = new DateTimeOffset(2026, 5, 30, 10, 37, 0, TimeSpan.Zero);
         var settings = new SchedulerSettingsPersistence([
-            CreateRoot(rootId, lastScannedAt: null)
+            CreateRoot(rootId, lastScannedAt: now.AddMinutes(-30))
         ]);
         var queue = new SchedulerJobQueue();
         await using var provider = CreateProvider(settings, queue);
-        var scheduler = CreateScheduler(provider, new DateTimeOffset(2026, 5, 30, 10, 37, 0, TimeSpan.Zero));
+        var scheduler = CreateScheduler(provider, now);
 
         await scheduler.ScheduleRecurringScansAsync(CancellationToken.None);
 
         Assert.Empty(queue.Enqueued);
-        Assert.Null(settings.Roots.Single().LastScannedAt);
     }
 
     [Fact]

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -51,6 +52,7 @@ public sealed class JobScheduler(
     internal async Task ScheduleRecurringScansAsync(CancellationToken cancellationToken) {
         await using var scope = scopeFactory.CreateAsyncScope();
         var settings = scope.ServiceProvider.GetRequiredService<SettingsService>();
+        var settingsPersistence = scope.ServiceProvider.GetRequiredService<ISettingsPersistence>();
         var queue = scope.ServiceProvider.GetRequiredService<IJobQueueService>();
 
         var scanSettings = await settings.GetScanSettingsAsync(cancellationToken);
@@ -61,12 +63,24 @@ public sealed class JobScheduler(
         var roots = await settings.ListLibraryRootsAsync(cancellationToken);
         var scanInterval = TimeSpan.FromMinutes(scanSettings.IntervalMinutes);
         var now = (timeProvider ?? TimeProvider.System).GetUtcNow();
-        var windowStart = GetWindowStart(now, scanInterval);
-        if (now - windowStart >= CheckInterval) {
-            return;
+
+        // Deep integrity scans carry the library-wide cleanups on their own, much rarer cadence.
+        // The marker is written only when jobs were actually queued so a swallowed attempt
+        // retries on the next tick instead of silently skipping a whole interval. An absent
+        // marker (fresh install or first deploy of this cadence) initializes to now instead of
+        // triggering an immediate library-wide sweep.
+        var integrityInterval = TimeSpan.FromHours(Math.Max(1, scanSettings.IntegrityIntervalHours));
+        var lastSweepAt = await ReadLastIntegritySweepAsync(settingsPersistence, cancellationToken);
+        if (lastSweepAt is null) {
+            await settingsPersistence.SaveSettingOverrideAsync(
+                AppSettings.Scan.LastIntegritySweepAtKey,
+                JsonSerializer.Serialize(now),
+                cancellationToken);
         }
+        var integrityDue = lastSweepAt is not null && now - lastSweepAt >= integrityInterval;
 
         var queued = 0;
+        var deepQueued = 0;
         var dueRootCount = 0;
 
         foreach (var root in roots) {
@@ -83,7 +97,21 @@ public sealed class JobScheduler(
                 continue;
             }
 
-            if (root.LastScannedAt is not null && root.LastScannedAt >= windowStart) {
+            if (integrityDue) {
+                deepQueued += await LibraryScanJobs.QueueDeepScansForRootAsync(
+                    queue,
+                    root.Id,
+                    root.Label,
+                    rootSelection,
+                    cancellationToken);
+                dueRootCount++;
+                await settings.MarkLibraryRootScanTriggeredAsync(root.Id, now, cancellationToken);
+                continue;
+            }
+
+            // Age-based due check: a scan is due once its root has gone a full interval without
+            // one, so a restart can no longer skip a cycle by missing the interval's first minute.
+            if (root.LastScannedAt is not null && now - root.LastScannedAt < scanInterval) {
                 continue;
             }
 
@@ -97,11 +125,34 @@ public sealed class JobScheduler(
             await settings.MarkLibraryRootScanTriggeredAsync(root.Id, now, cancellationToken);
         }
 
-        if (queued > 0) {
+        if (integrityDue && deepQueued > 0) {
+            await settingsPersistence.SaveSettingOverrideAsync(
+                AppSettings.Scan.LastIntegritySweepAtKey,
+                JsonSerializer.Serialize(now),
+                cancellationToken);
+        }
+
+        if (queued > 0 || deepQueued > 0) {
             logger.LogInformation(
-                "Scheduled {Count} root-scoped scan job(s) across {Roots} due root(s); scan execution is serialized.",
+                "Scheduled {Count} routine and {Deep} deep scan job(s) across {Roots} due root(s); scan execution is serialized.",
                 queued,
+                deepQueued,
                 dueRootCount);
+        }
+    }
+
+    private static async Task<DateTimeOffset?> ReadLastIntegritySweepAsync(
+        ISettingsPersistence persistence,
+        CancellationToken cancellationToken) {
+        var overrides = await persistence.LoadSettingOverridesAsync(cancellationToken);
+        if (!overrides.TryGetValue(AppSettings.Scan.LastIntegritySweepAtKey, out var json)) {
+            return null;
+        }
+
+        try {
+            return JsonSerializer.Deserialize<DateTimeOffset>(json);
+        } catch (JsonException) {
+            return null;
         }
     }
 
