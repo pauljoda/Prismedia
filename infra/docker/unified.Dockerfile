@@ -115,9 +115,10 @@ WORKDIR /app
 # Build identity baked in by CI so the running app knows its channel/version/commit and can
 # ask GHCR whether a newer image exists on the same channel.
 ARG PRISMEDIA_CHANNEL=dev
-# Local/dev builds should remain compatible with bundled community plugins even
-# when CI does not inject an exact release version. Release builds override this.
-ARG PRISMEDIA_VERSION=1.0.0
+# CI injects the exact release version; builds that omit the arg leave this
+# empty and the entrypoint derives the version from the packaged package.json,
+# so no build can ship a stale placeholder version.
+ARG PRISMEDIA_VERSION=
 ARG PRISMEDIA_COMMIT=unknown
 ENV PRISMEDIA_CHANNEL=${PRISMEDIA_CHANNEL}
 ENV PRISMEDIA_VERSION=${PRISMEDIA_VERSION}

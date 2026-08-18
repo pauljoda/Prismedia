@@ -27,6 +27,17 @@ if [ -z "$PRISMEDIA_SECRET" ]; then
 fi
 export PRISMEDIA_SECRET
 
+# ── Resolve PRISMEDIA_VERSION ───────────────────────────────────────
+# The root package.json is the build version's single source of truth. CI
+# injects PRISMEDIA_VERSION as a build arg; builds that skip the arg (local
+# and server-side hotfix builds) derive it here from the packaged manifest so
+# the running app never reports a placeholder version.
+if [ -z "$PRISMEDIA_VERSION" ]; then
+  PRISMEDIA_VERSION="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' /app/package.json | head -n 1)"
+  echo "[prismedia] PRISMEDIA_VERSION not provided at build time; using ${PRISMEDIA_VERSION} from package.json"
+fi
+export PRISMEDIA_VERSION
+
 # ── Initialize PostgreSQL if fresh ────────────────────────────────
 if [ ! -f "$PGDATA/PG_VERSION" ]; then
   echo "[prismedia] Initializing PostgreSQL database..."
