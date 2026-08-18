@@ -65,13 +65,8 @@ public sealed class JobService {
 
     /// <summary>Lists durable logical lanes with aggregate node progress and blocking reason.</summary>
     public async Task<JobGraphListResponse> ListGraphsAsync(bool hideNsfw, CancellationToken cancellationToken) {
-        var graphs = await _graphs.ListAsync(hideNsfw, cancellationToken);
-        var results = new List<JobGraphSummary>(graphs.Count);
-        foreach (var graph in graphs) {
-            var detail = await _graphs.GetAsync(graph.Id, hideNsfw, cancellationToken);
-            if (detail is not null) results.Add(ToSummary(detail));
-        }
-        return new JobGraphListResponse(results);
+        var details = await _graphs.ListDetailsAsync(hideNsfw, cancellationToken);
+        return new JobGraphListResponse(details.Select(ToSummary).ToArray());
     }
 
     /// <summary>Returns one expanded graph, or null when it does not exist.</summary>

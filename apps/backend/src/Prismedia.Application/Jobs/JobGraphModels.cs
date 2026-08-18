@@ -107,6 +107,25 @@ public interface IJobGraphService {
         CancellationToken cancellationToken) =>
         ListAsync(cancellationToken);
 
+    /// <summary>
+    /// Lists graphs with their nodes, dependencies, and signals in a bounded number of set
+    /// queries. The Jobs page polls this; the default falls back to one detail read per graph
+    /// for implementations that have not batched it.
+    /// </summary>
+    async Task<IReadOnlyList<JobGraphDetailSnapshot>> ListDetailsAsync(
+        bool hideNsfw,
+        CancellationToken cancellationToken) {
+        var graphs = await ListAsync(hideNsfw, cancellationToken);
+        var details = new List<JobGraphDetailSnapshot>(graphs.Count);
+        foreach (var graph in graphs) {
+            if (await GetAsync(graph.Id, hideNsfw, cancellationToken) is { } detail) {
+                details.Add(detail);
+            }
+        }
+
+        return details;
+    }
+
     Task<JobGraphDetailSnapshot?> GetAsync(Guid graphId, CancellationToken cancellationToken);
 
     /// <summary>Gets a graph only when its entity- or library-root-backed work is visible under the active NSFW policy.</summary>

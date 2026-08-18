@@ -23,6 +23,67 @@ public sealed partial class JobGraphService {
         return rows.Select(ToSnapshot).ToArray();
     }
 
+    /// <inheritdoc cref="IJobGraphService.ListDetailsAsync" />
+    public async Task<IReadOnlyList<JobGraphDetailSnapshot>> ListDetailsAsync(
+        bool hideNsfw,
+        CancellationToken cancellationToken) {
+        var rows = await db.JobGraphs.AsNoTracking()
+            .OrderBy(graph => graph.Status == Domain.Entities.JobGraphStatus.Running ? 0 : 1)
+            .ThenByDescending(graph => graph.UpdatedAt)
+            .Take(200)
+            .ToArrayAsync(cancellationToken);
+        if (hideNsfw && rows.Length > 0) {
+            var hiddenGraphIds = await HiddenGraphIdsAsync(rows, cancellationToken);
+            rows = rows.Where(graph => !hiddenGraphIds.Contains(graph.Id)).ToArray();
+        }
+
+        if (rows.Length == 0) {
+            return [];
+        }
+
+        // Three set queries replace one node/dependency/signal load per graph — the Jobs page
+        // previously issued several hundred queries per poll.
+        var graphIds = rows.Select(graph => graph.Id).ToArray();
+        var originByGraph = rows.ToDictionary(graph => graph.Id, graph => graph.Origin);
+        var nodesByGraph = (await db.JobRuns.AsNoTracking()
+                .Where(run => run.GraphId != null && graphIds.Contains(run.GraphId.Value))
+                .OrderBy(run => run.Sequence)
+                .ToArrayAsync(cancellationToken))
+            .ToLookup(run => run.GraphId!.Value);
+        var dependenciesByGraph = (await db.JobDependencies.AsNoTracking()
+                .Where(edge => graphIds.Contains(edge.GraphId))
+                .Select(edge => new { edge.GraphId, edge.PredecessorJobRunId, edge.SuccessorJobRunId })
+                .ToArrayAsync(cancellationToken))
+            .ToLookup(edge => edge.GraphId);
+        var signalsByGraph = (await db.JobGraphSignals.AsNoTracking()
+                .Where(signal => graphIds.Contains(signal.GraphId))
+                .OrderBy(signal => signal.CreatedAt)
+                .ToArrayAsync(cancellationToken))
+            .ToLookup(signal => signal.GraphId);
+
+        return rows.Select(graph => new JobGraphDetailSnapshot(
+            ToSnapshot(graph),
+            nodesByGraph[graph.Id]
+                .Select(run => JobQueueService.ToSnapshot(run, originByGraph[graph.Id]))
+                .ToArray(),
+            dependenciesByGraph[graph.Id]
+                .Select(edge => new JobGraphDependencySnapshot(edge.PredecessorJobRunId, edge.SuccessorJobRunId))
+                .ToArray(),
+            signalsByGraph[graph.Id]
+                .Select(signal => new JobGraphSignalSnapshot(
+                    signal.Id,
+                    signal.GraphId,
+                    signal.Key,
+                    signal.Kind,
+                    signal.CorrelationId,
+                    signal.Message,
+                    signal.CreatedAt,
+                    signal.ResolvedAt,
+                    signal.CancelledAt))
+                .ToArray()))
+            .ToArray();
+    }
+
     public Task<JobGraphDetailSnapshot?> GetAsync(Guid graphId, CancellationToken cancellationToken) =>
         GetAsync(graphId, hideNsfw: false, cancellationToken);
 
