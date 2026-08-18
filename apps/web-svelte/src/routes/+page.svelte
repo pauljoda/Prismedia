@@ -19,7 +19,8 @@
     History,
   } from "@lucide/svelte";
   import { buttonVariants, cn } from "@prismedia/ui-svelte";
-  import { fetchEntityShelf, type EntityCard } from "$lib/api/entities";
+  import type { EntityCard } from "$lib/api/entities";
+  import { fetchEntityShelfCached } from "$lib/entities/shelf-cache";
   import { entityCardToThumbnailCard } from "$lib/entities/entity-grid";
   import { entityKindIcon } from "$lib/entities/entity-kind-icons";
   import { resolveEntityHref } from "$lib/entities/entity-routes";
@@ -116,25 +117,36 @@
 
   async function loadActivity() {
     const hideNsfw = nsfw.mode === "off";
+    const continueRead = fetchEntityShelfCached({
+      status: "in-progress",
+      sort: ENTITY_LIST_SORT.lastActive,
+      sortDirection: ENTITY_SORT_DIRECTION.descending,
+      hideNsfw,
+      limit: ACTIVITY_LIMIT,
+    });
+    const recentRead = fetchEntityShelfCached({
+      status: "watched",
+      sort: ENTITY_LIST_SORT.lastActive,
+      sortDirection: ENTITY_SORT_DIRECTION.descending,
+      hideNsfw,
+      limit: ACTIVITY_LIMIT,
+    });
+
+    // Returning to the dashboard renders the last-known shelves instantly; the
+    // background refresh replaces them the moment current data lands.
+    if (continueRead.stale && recentRead.stale) {
+      continueCards = toCards(continueRead.stale.items);
+      recentCards = toCards(recentRead.stale.items);
+      activityReady = true;
+    }
+
     const [continueItems, recentItems] = await Promise.all([
-      fetchEntityShelf({
-        status: "in-progress",
-        sort: ENTITY_LIST_SORT.lastActive,
-        sortDirection: ENTITY_SORT_DIRECTION.descending,
-        hideNsfw,
-        limit: ACTIVITY_LIMIT,
-      })
+      continueRead.fresh
         .then((r) => r.items)
-        .catch(() => [] as EntityCard[]),
-      fetchEntityShelf({
-        status: "watched",
-        sort: ENTITY_LIST_SORT.lastActive,
-        sortDirection: ENTITY_SORT_DIRECTION.descending,
-        hideNsfw,
-        limit: ACTIVITY_LIMIT,
-      })
+        .catch(() => (continueRead.stale?.items ?? []) as EntityCard[]),
+      recentRead.fresh
         .then((r) => r.items)
-        .catch(() => [] as EntityCard[]),
+        .catch(() => (recentRead.stale?.items ?? []) as EntityCard[]),
     ]);
 
     continueCards = toCards(continueItems);
@@ -152,19 +164,25 @@
   async function loadSection(kind: string) {
     const index = sections.findIndex((s) => s.kind === kind);
     if (index < 0) return;
-    sections[index] = { ...sections[index], status: "loading" };
+
+    const read = fetchEntityShelfCached({
+      kind,
+      sort: ENTITY_LIST_SORT.dateAdded,
+      sortDirection: ENTITY_SORT_DIRECTION.descending,
+      hideNsfw: nsfw.mode === "off",
+      limit: SECTION_LIMIT,
+    });
+    sections[index] = read.stale
+      ? { ...sections[index], status: "ready", cards: toCards(read.stale.items) }
+      : { ...sections[index], status: "loading" };
 
     try {
-      const response = await fetchEntityShelf({
-        kind,
-        sort: ENTITY_LIST_SORT.dateAdded,
-        sortDirection: ENTITY_SORT_DIRECTION.descending,
-        hideNsfw: nsfw.mode === "off",
-        limit: SECTION_LIMIT,
-      });
+      const response = await read.fresh;
       sections[index] = { ...sections[index], status: "ready", cards: toCards(response.items) };
     } catch {
-      sections[index] = { ...sections[index], status: "ready", cards: [] };
+      if (!read.stale) {
+        sections[index] = { ...sections[index], status: "ready", cards: [] };
+      }
     }
   }
 

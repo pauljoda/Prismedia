@@ -1,4 +1,5 @@
 import { redirect } from "@sveltejs/kit";
+import { browser } from "$app/environment";
 import type { LayoutLoad } from "./$types";
 import { fetchCurrentUser, fetchSetupStatusWithRetry, type AuthUser } from "$lib/api/auth";
 import { fetchSettingsValues } from "$lib/api/settings";
@@ -56,8 +57,13 @@ export const load: LayoutLoad = async ({ url, untrack }) => {
     redirect(307, untrack(() => safeReturnTo(url)));
   }
 
+  // The NSFW store prefers the device cookie; the server default only matters on a
+  // device's first visit. Skipping the fetch when the cookie exists removes a blocking
+  // round trip from every returning session's cold load.
+  const hasNsfwCookie =
+    browser && document.cookie.match(/(?:^|;\s*)prismedia-nsfw-mode=([^;]*)/) !== null;
   let initialNsfwMode: NsfwMode | undefined;
-  if (user) {
+  if (user && !hasNsfwCookie) {
     try {
       initialNsfwMode = valuesToLibrarySettings(
         (await fetchSettingsValues([settingKeys.visibilityDefaultMode])).values,

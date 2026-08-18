@@ -267,6 +267,10 @@ export class EntityIndexPageState {
     const next = Math.max(1, Math.floor(pageSize));
     if (next === this.pageSize) return;
     this.pageSize = next;
+    // During mount the grid announces its persisted page size before its initial
+    // request-change event. Fetching here too would issue the page's most expensive
+    // query twice back to back; the imminent initial load picks the new size up.
+    if (!this.#loadStarted) return;
     void this.loadInitial();
   }
 }

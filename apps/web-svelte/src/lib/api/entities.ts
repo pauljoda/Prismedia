@@ -88,21 +88,24 @@ export async function fetchEntityChildren(
   const uniqueParentIds = [...new Set(parentIds.filter(Boolean))];
   if (uniqueParentIds.length === 0) return [];
 
-  const groups: GeneratedEntityChildrenBatchGroup[] = [];
+  // Batches run concurrently: sequential awaits turned large libraries' child hydration
+  // into a self-inflicted waterfall. Results are flattened in batch order either way.
+  const batches: string[][] = [];
   for (let start = 0; start < uniqueParentIds.length; start += ENTITY_CHILDREN_BATCH_SIZE) {
-    options?.signal?.throwIfAborted();
-    const response = await getEntityChildren(
-      { parentIds: uniqueParentIds.slice(start, start + ENTITY_CHILDREN_BATCH_SIZE) },
+    batches.push(uniqueParentIds.slice(start, start + ENTITY_CHILDREN_BATCH_SIZE));
+  }
+  options?.signal?.throwIfAborted();
+  const responses = await Promise.all(batches.map((parentBatch) =>
+    getEntityChildren(
+      { parentIds: parentBatch },
       { hideNsfw: options?.hideNsfw },
       requestInit(options),
-    );
-    groups.push(...unwrapGenerated<GeneratedEntityChildrenBatchResponse>(
+    )));
+  return responses.flatMap((response) =>
+    unwrapGenerated<GeneratedEntityChildrenBatchResponse>(
       response,
       "Failed to fetch Entity children",
     ).groups);
-  }
-
-  return groups;
 }
 
 /**
@@ -116,21 +119,22 @@ export async function fetchEntityChildReferences(
   const uniqueParentIds = [...new Set(parentIds.filter(Boolean))];
   if (uniqueParentIds.length === 0) return [];
 
-  const groups: GeneratedEntityChildReferenceBatchGroup[] = [];
+  const batches: string[][] = [];
   for (let start = 0; start < uniqueParentIds.length; start += ENTITY_CHILDREN_BATCH_SIZE) {
-    options?.signal?.throwIfAborted();
-    const response = await getEntityChildReferences(
-      { parentIds: uniqueParentIds.slice(start, start + ENTITY_CHILDREN_BATCH_SIZE) },
+    batches.push(uniqueParentIds.slice(start, start + ENTITY_CHILDREN_BATCH_SIZE));
+  }
+  options?.signal?.throwIfAborted();
+  const responses = await Promise.all(batches.map((parentBatch) =>
+    getEntityChildReferences(
+      { parentIds: parentBatch },
       { hideNsfw: options?.hideNsfw },
       requestInit(options),
-    );
-    groups.push(...unwrapGenerated<GeneratedEntityChildReferenceBatchResponse>(
+    )));
+  return responses.flatMap((response) =>
+    unwrapGenerated<GeneratedEntityChildReferenceBatchResponse>(
       response,
       "Failed to fetch Entity child references",
     ).groups);
-  }
-
-  return groups;
 }
 
 export function fetchEntity(id: string, options?: RequestOptions): Promise<EntityCardFull> {
