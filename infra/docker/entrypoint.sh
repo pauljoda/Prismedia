@@ -79,6 +79,9 @@ gosu postgres psql -h 127.0.0.1 -tc "SELECT 1 FROM pg_database WHERE datname = '
 # backoff avoids a tight crash loop while the cause clears.
 echo "[prismedia] Starting background worker (supervised)..."
 (
+  # Run from the worker's own directory so its content root contains its packaged
+  # appsettings.json (logging thresholds); started from /app they are silently skipped.
+  cd /app/worker
   while true; do
     DATABASE_URL="postgresql://postgres@127.0.0.1:5432/prismedia" \
     PRISMEDIA_CACHE_DIR="$CACHE_DIR" \
@@ -93,6 +96,9 @@ echo "[prismedia] Starting background worker (supervised)..."
 # ── Start .NET API (foreground — keeps container alive) ───────────
 echo "[prismedia] Starting .NET API and web frontend on port 8008..."
 echo "[prismedia] Ready — http://localhost:8008"
+# Run from the API's own directory so its content root contains its packaged
+# appsettings.json; started from /app the logging configuration is silently skipped.
+cd /app/api
 exec env \
   DATABASE_URL="postgresql://postgres@127.0.0.1:5432/prismedia" \
   PRISMEDIA_CACHE_DIR="$CACHE_DIR" \

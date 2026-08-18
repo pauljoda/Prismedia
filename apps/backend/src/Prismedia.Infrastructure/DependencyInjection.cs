@@ -3,6 +3,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
+using Prismedia.Infrastructure.Diagnostics;
 using Prismedia.Application.Collections;
 using Prismedia.Application.Consumption;
 using Prismedia.Domain.Entities;
@@ -98,8 +99,12 @@ public static class DependencyInjection {
 
     private static void RegisterPersistence(IServiceCollection services, string connectionString) {
         services.AddSingleton(_ => NpgsqlDataSource.Create(connectionString));
-        services.AddDbContext<PrismediaDbContext>((provider, options) =>
-            options.UseNpgsql(provider.GetRequiredService<NpgsqlDataSource>()));
+        // Pooled contexts avoid per-request context + change-tracker allocation. The context's
+        // only constructor dependency is its options, which is what pooling requires.
+        services.AddDbContextPool<PrismediaDbContext>((provider, options) =>
+            options
+                .UseNpgsql(provider.GetRequiredService<NpgsqlDataSource>())
+                .AddInterceptors(DbCommandCountingInterceptor.Instance));
     }
 
     private static void RegisterMediaProcessing(
@@ -276,6 +281,7 @@ public static class DependencyInjection {
         services.AddScoped<EfEntityProgressTopologyResolver>();
         services.AddScoped<IEntityProgressTopologyResolver>(provider => provider.GetRequiredService<EfEntityProgressTopologyResolver>());
         // Read, statistics, and collection projections share this scoped hidden-roots memoization.
+        services.AddSingleton<VisibilityScopeCache>();
         services.AddScoped<EfEntityLibraryVisibilityFilter>();
         services.AddScoped<EfEntityCatalogQuery>();
         services.AddScoped<EfEntityReadService>();
@@ -391,7 +397,12 @@ public static class DependencyInjection {
         services.AddScoped<IDatabaseBackupService, DatabaseBackupService>();
         services.AddScoped<IJobQueueService, JobQueueService>();
         services.AddScoped<IJobGraphService, JobGraphService>();
-        services.AddScoped<ISettingsPersistence, EfSettingsPersistence>();
+        services.AddSingleton<SettingsSnapshotCache>();
+        services.AddScoped<EfSettingsPersistence>();
+        services.AddScoped<ISettingsPersistence>(provider => new CachedSettingsPersistence(
+            provider.GetRequiredService<EfSettingsPersistence>(),
+            provider.GetRequiredService<SettingsSnapshotCache>(),
+            provider.GetService<VisibilityScopeCache>()));
         services.AddScoped<IBrowserSessionPersistence, EfBrowserSessionPersistence>();
         services.AddScoped<ISecurityPersistence, EfSecurityPersistence>();
         services.AddSingleton<IPasswordHasher, IdentityPasswordHasher>();

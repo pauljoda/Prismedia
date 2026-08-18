@@ -9,10 +9,12 @@ public static class PostgresConnectionString {
     /// PostgreSQL's max_connections on its own — and the API and worker each run a pool against the
     /// same server, so a job burst (e.g. a season's worth of acquisition searches) exhausted the
     /// server and every request 500'd with "sorry, too many clients already". Two processes at this
-    /// cap stay comfortably inside even the original 40-connection server limit. Explicit pool
-    /// settings in the configured connection string are respected untouched.
+    /// cap (80 total) stay inside the bundled server's max_connections of 120 with headroom for
+    /// psql/maintenance sessions. The previous cap of 16 made the pool itself the queue under a
+    /// grid page's request fan-out. Explicit pool settings in the configured connection string are
+    /// respected untouched.
     /// </summary>
-    private const int DefaultMaxPoolSize = 16;
+    private const int DefaultMaxPoolSize = 40;
 
     /// <summary>Seconds an idle pooled connection is kept before being closed, so bursts drain back down.</summary>
     private const int DefaultConnectionIdleLifetimeSeconds = 60;

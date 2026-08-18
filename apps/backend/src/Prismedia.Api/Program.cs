@@ -101,6 +101,7 @@ builder.Services.AddHostedService<TranscodeReaperService>();
 var app = builder.Build();
 
 app.UseResponseCompression();
+app.UseMiddleware<Prismedia.Api.Diagnostics.RequestTimingMiddleware>();
 
 if (app.Environment.IsDevelopment()) {
     app.MapOpenApi();
