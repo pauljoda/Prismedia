@@ -286,25 +286,50 @@ public sealed partial class JobQueueService : IJobQueueService {
         JobRunSnapshot parent,
         IReadOnlyList<EnqueueJobRequest> requests,
         CancellationToken cancellationToken) {
-        var added = 0;
-        foreach (var request in requests) {
-            var before = parent.GraphId is null
-                ? await _db.JobRuns.CountAsync(cancellationToken)
-                : await _db.JobRuns.CountAsync(
-                    run => run.GraphId == parent.GraphId && run.NodeKey == (request.NodeKey ?? DefaultNodeKey(request)),
-                    cancellationToken);
-            await EnqueueChildAsync(parent, request, cancellationToken);
-            var after = parent.GraphId is null
-                ? await _db.JobRuns.CountAsync(cancellationToken)
-                : await _db.JobRuns.CountAsync(
-                    run => run.GraphId == parent.GraphId && run.NodeKey == (request.NodeKey ?? DefaultNodeKey(request)),
-                    cancellationToken);
-            if (after > before) {
-                added++;
-            }
+        if (requests.Count == 0) {
+            return 0;
         }
 
-        return added;
+        // Graphless parents are the legacy path; graph children append as one batch under a
+        // single graph lock instead of one lock, sequence read, and save per child (previously
+        // the dominant phase of large scans, plus two count queries per request just to learn
+        // whether a node was new).
+        if (parent.GraphId is not { } graphId) {
+            var added = 0;
+            foreach (var request in requests) {
+                var nodeKey = request.NodeKey ?? DefaultNodeKey(request);
+                var before = await _db.JobRuns.CountAsync(
+                    run => run.NodeKey == nodeKey && run.Type == request.Type,
+                    cancellationToken);
+                await EnqueueChildAsync(parent, request, cancellationToken);
+                var after = await _db.JobRuns.CountAsync(
+                    run => run.NodeKey == nodeKey && run.Type == request.Type,
+                    cancellationToken);
+                if (after > before) {
+                    added++;
+                }
+            }
+
+            return added;
+        }
+
+        var nodes = new List<GraphJobNodeRequest>(requests.Count);
+        foreach (var request in requests) {
+            nodes.Add(new GraphJobNodeRequest(
+                request.NodeKey ?? DefaultNodeKey(request),
+                request,
+                ParentRunId: parent.Id,
+                DependsOn: [parent.Id],
+                Importance: request.Importance ?? JobDefinitionRegistry.Importance(request.Type),
+                ResourceClass: request.ResourceClass ?? JobDefinitionRegistry.ResourceClass(request.Type),
+                ResourceKey: request.ResourceKey ?? EntityResourceKey(request)));
+        }
+
+        foreach (var resourceKey in nodes.Select(node => node.ResourceKey).Distinct(StringComparer.Ordinal)) {
+            await EnsureEntityResourceDeclaredAsync(resourceKey, cancellationToken);
+        }
+
+        return await new JobGraphService(_db).AppendNodesBatchAsync(graphId, nodes, cancellationToken);
     }
 
     public async Task<int> EnqueueBatchAsync(IReadOnlyList<EnqueueJobRequest> requests, CancellationToken cancellationToken) {

@@ -12,14 +12,39 @@ public sealed partial class JobQueueService {
         if (mutation is null) return;
         var graph = mutation.Graph;
 
-        var runs = await _db.JobRuns
+        // One grouped aggregate replaces materializing and tracking every node row on every
+        // transition — on a scan graph with thousands of downstream nodes that made each node's
+        // completion cost proportional to the whole graph.
+        var counts = await _db.JobRuns
             .Where(run => run.GraphId == id)
-            .ToArrayAsync(cancellationToken);
-        var requiredFailures = runs
-            .Where(run => run.Status == JobRunStatus.Failed && run.Importance == JobNodeImportance.Required)
-            .Select(run => run.Id)
-            .ToHashSet();
-        if (requiredFailures.Count > 0) {
+            .GroupBy(run => 1)
+            .Select(group => new {
+                Total = group.Count(),
+                Running = group.Count(run => run.Status == JobRunStatus.Running),
+                Queued = group.Count(run => run.Status == JobRunStatus.Queued),
+                Cancelled = group.Count(run => run.Status == JobRunStatus.Cancelled),
+                Failed = group.Count(run => run.Status == JobRunStatus.Failed),
+                RequiredFailed = group.Count(run =>
+                    run.Status == JobRunStatus.Failed && run.Importance == JobNodeImportance.Required),
+            })
+            .FirstOrDefaultAsync(cancellationToken);
+        var total = counts?.Total ?? 0;
+        var running = counts?.Running ?? 0;
+        var queued = counts?.Queued ?? 0;
+        var cancelled = counts?.Cancelled ?? 0;
+        var failed = counts?.Failed ?? 0;
+        var requiredFailed = counts?.RequiredFailed ?? 0;
+
+        // The dependency-cascade skip is the rare path (a required node failed while others are
+        // still queued); only then does the full node/edge graph need materializing.
+        if (requiredFailed > 0 && queued > 0) {
+            var runs = await _db.JobRuns
+                .Where(run => run.GraphId == id)
+                .ToArrayAsync(cancellationToken);
+            var requiredFailures = runs
+                .Where(run => run.Status == JobRunStatus.Failed && run.Importance == JobNodeImportance.Required)
+                .Select(run => run.Id)
+                .ToHashSet();
             var dependencies = await _db.JobDependencies
                 .Where(edge => edge.GraphId == id)
                 .ToArrayAsync(cancellationToken);
@@ -40,29 +65,31 @@ public sealed partial class JobQueueService {
                 descendant.Status = JobRunStatus.Cancelled;
                 descendant.Message = "Skipped because a required dependency failed.";
                 descendant.FinishedAt = now;
+                queued--;
+                cancelled++;
             }
         }
 
-        var hasActiveNodes = runs.Any(run => run.Status is JobRunStatus.Queued or JobRunStatus.Running);
+        var hasActiveNodes = running > 0 || queued > 0;
         var hasOpenSignals = await _db.JobGraphSignals.AnyAsync(
             signal => signal.GraphId == id && signal.ResolvedAt == null && signal.CancelledAt == null,
             cancellationToken);
         var nowUtc = DateTimeOffset.UtcNow;
         if (hasActiveNodes) {
-            graph.Status = runs.Any(run => run.Status == JobRunStatus.Running)
+            graph.Status = running > 0
                 ? JobGraphStatus.Running
                 : JobGraphStatus.Queued;
             graph.FinishedAt = null;
         } else if (hasOpenSignals) {
             graph.Status = JobGraphStatus.Waiting;
             graph.FinishedAt = null;
-        } else if (graph.CancellationRequested || runs.All(run => run.Status == JobRunStatus.Cancelled)) {
+        } else if (graph.CancellationRequested || cancelled == total) {
             graph.Status = JobGraphStatus.Cancelled;
             graph.FinishedAt = nowUtc;
-        } else if (runs.Any(run => run.Status == JobRunStatus.Failed && run.Importance == JobNodeImportance.Required)) {
+        } else if (requiredFailed > 0) {
             graph.Status = JobGraphStatus.Failed;
             graph.FinishedAt = nowUtc;
-        } else if (runs.Any(run => run.Status == JobRunStatus.Failed)) {
+        } else if (failed > 0) {
             graph.Status = JobGraphStatus.CompletedWithWarnings;
             graph.FinishedAt = nowUtc;
         } else {

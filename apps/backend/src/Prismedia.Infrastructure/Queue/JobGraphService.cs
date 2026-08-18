@@ -116,6 +116,91 @@ public sealed partial class JobGraphService(PrismediaDbContext db) : IJobGraphSe
         return JobQueueService.ToSnapshot(row, graph.Origin);
     }
 
+    /// <summary>
+    /// Appends several nodes to one graph under a single scheduling lock, sequence read, and
+    /// save. Node keys that already exist are skipped idempotently; the return value is the
+    /// number of nodes actually created. Appending one child at a time made downstream
+    /// enqueueing the dominant phase of large scans — each child paid its own lock, max-sequence
+    /// scan, and save.
+    /// </summary>
+    public async Task<int> AppendNodesBatchAsync(
+        Guid graphId,
+        IReadOnlyList<GraphJobNodeRequest> requests,
+        CancellationToken cancellationToken) {
+        if (requests.Count == 0) {
+            return 0;
+        }
+
+        foreach (var request in requests) {
+            ValidateNodeRequest(request);
+        }
+
+        await using var mutation = await JobGraphMutationScope.AcquireAsync(db, graphId, cancellationToken)
+            ?? throw new InvalidOperationException($"Job graph '{graphId}' was not found.");
+        var graph = mutation.Graph;
+        if (graph.Status is JobGraphStatus.Completed or JobGraphStatus.CompletedWithWarnings
+            or JobGraphStatus.Failed or JobGraphStatus.Cancelled) {
+            throw new InvalidOperationException($"Job graph '{graphId}' is already terminal.");
+        }
+
+        var requestedKeys = requests.Select(request => request.NodeKey.Trim()).ToArray();
+        var existingKeys = (await db.JobRuns.AsNoTracking()
+                .Where(run => run.GraphId == graphId && requestedKeys.Contains(run.NodeKey))
+                .Select(run => run.NodeKey)
+                .ToArrayAsync(cancellationToken))
+            .ToHashSet(StringComparer.Ordinal);
+        var fresh = requests
+            .Where(request => !existingKeys.Contains(request.NodeKey.Trim()))
+            .DistinctBy(request => request.NodeKey.Trim(), StringComparer.Ordinal)
+            .ToArray();
+        if (fresh.Length == 0) {
+            await mutation.CommitAsync(cancellationToken);
+            return 0;
+        }
+
+        var references = fresh
+            .SelectMany(request => (request.DependsOn ?? Array.Empty<Guid>())
+                .Concat(request.ParentRunId is { } parentRunId ? [parentRunId] : Array.Empty<Guid>()))
+            .Distinct()
+            .ToArray();
+        if (references.Length > 0) {
+            var validCount = await db.JobRuns.CountAsync(
+                run => run.GraphId == graphId && references.Contains(run.Id),
+                cancellationToken);
+            if (validCount != references.Length) {
+                throw new InvalidOperationException("Graph node parents and dependencies must belong to the same graph.");
+            }
+        }
+
+        foreach (var resourceKey in fresh
+                     .Select(JobResourceDeclaration.Resolve)
+                     .Where(key => key is not null)
+                     .Distinct(StringComparer.Ordinal)) {
+            await JobResourceDeclaration.EnsureImplicitAsync(db, resourceKey, cancellationToken);
+        }
+
+        var sequence = await db.JobRuns
+            .Where(run => run.GraphId == graphId)
+            .Select(run => (long?)run.Sequence)
+            .MaxAsync(cancellationToken) ?? -1;
+        var now = DateTimeOffset.UtcNow;
+        foreach (var request in fresh) {
+            var row = CreateRun(graphId, Guid.NewGuid(), request, ++sequence, now);
+            db.JobRuns.Add(row);
+            AddDependencies(graphId, row.Id, request.DependsOn);
+        }
+
+        if (graph.Status == JobGraphStatus.Waiting) {
+            graph.Status = JobGraphStatus.Queued;
+            graph.FinishedAt = null;
+        }
+
+        graph.UpdatedAt = now;
+        await db.SaveChangesAsync(cancellationToken);
+        await mutation.CommitAsync(cancellationToken);
+        return fresh.Length;
+    }
+
     private static void ValidateGraphRequest(StartJobGraphRequest request) {
         ArgumentNullException.ThrowIfNull(request);
         if (string.IsNullOrWhiteSpace(request.DisplayName)) {
