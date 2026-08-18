@@ -111,26 +111,44 @@ public sealed partial class JobGraphService {
     }
 
     public async Task<bool> CancelAsync(Guid graphId, CancellationToken cancellationToken) {
-        await using var mutation = await JobGraphMutationScope.AcquireAsync(db, graphId, cancellationToken);
-        if (mutation is null || mutation.Graph.Status is JobGraphStatus.Completed or JobGraphStatus.CompletedWithWarnings
-            or JobGraphStatus.Failed or JobGraphStatus.Cancelled) return false;
-        var graph = mutation.Graph;
-
         var now = DateTimeOffset.UtcNow;
         if (db.Database.IsRelational()) {
-            // Set-based cancellation: tracking every active node made cancelling a large scan
-            // graph race the claim loop (a node claimed between load and save fails the whole
-            // SaveChanges with a concurrency conflict). These statements are atomic per row, so
-            // concurrent claims either land before (and get cancelled) or observe the cancel.
-            await db.JobRuns
-                .Where(run => run.GraphId == graphId &&
-                    (run.Status == JobRunStatus.Queued || run.Status == JobRunStatus.Running))
-                .ExecuteUpdateAsync(setters => setters
-                    .SetProperty(run => run.Status, JobRunStatus.Cancelled)
-                    .SetProperty(run => run.Message, "Cancelled with graph.")
-                    .SetProperty(run => run.LockedAt, (DateTimeOffset?)null)
-                    .SetProperty(run => run.LockedBy, (string?)null)
-                    .SetProperty(run => run.FinishedAt, now), cancellationToken);
+            // Phase 1: publish the cancellation intent alone and commit. The claim loop skips
+            // graphs with CancellationRequested, so no new nodes of this graph get dispatched
+            // while the sweep below runs.
+            {
+                await using var mutation = await JobGraphMutationScope.AcquireAsync(db, graphId, cancellationToken);
+                if (mutation is null || mutation.Graph.Status is JobGraphStatus.Completed
+                    or JobGraphStatus.CompletedWithWarnings or JobGraphStatus.Failed
+                    or JobGraphStatus.Cancelled) return false;
+                mutation.Graph.CancellationRequested = true;
+                mutation.Graph.UpdatedAt = now;
+                await db.SaveChangesAsync(cancellationToken);
+                await mutation.CommitAsync(cancellationToken);
+            }
+
+            // Phase 2: sweep active nodes set-based, OUTSIDE the graph lock. Claims lock the
+            // run row first and the graph row second; a sweep holding the graph lock while
+            // updating run rows deadlocks against them (observed live on a 9k-node scan
+            // graph). Each statement here runs in its own transaction, and claims already in
+            // flight when phase 1 committed are absorbed by a short deadlock retry.
+            for (var attempt = 1; ; attempt++) {
+                try {
+                    await db.JobRuns
+                        .Where(run => run.GraphId == graphId &&
+                            (run.Status == JobRunStatus.Queued || run.Status == JobRunStatus.Running))
+                        .ExecuteUpdateAsync(setters => setters
+                            .SetProperty(run => run.Status, JobRunStatus.Cancelled)
+                            .SetProperty(run => run.Message, "Cancelled with graph.")
+                            .SetProperty(run => run.LockedAt, (DateTimeOffset?)null)
+                            .SetProperty(run => run.LockedBy, (string?)null)
+                            .SetProperty(run => run.FinishedAt, now), cancellationToken);
+                    break;
+                } catch (Exception exception) when (attempt < 4 && IsDeadlock(exception)) {
+                    await Task.Delay(TimeSpan.FromMilliseconds(100 * attempt), cancellationToken);
+                }
+            }
+
             await db.JobResourceLeases
                 .Where(lease => db.JobRuns.Any(run => run.Id == lease.JobRunId && run.GraphId == graphId))
                 .ExecuteDeleteAsync(cancellationToken);
@@ -138,34 +156,67 @@ public sealed partial class JobGraphService {
                 .Where(signal => signal.GraphId == graphId && signal.ResolvedAt == null && signal.CancelledAt == null)
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(signal => signal.CancelledAt, (DateTimeOffset?)now), cancellationToken);
-        } else {
-            var runs = await db.JobRuns
-                .Where(run => run.GraphId == graphId && (run.Status == JobRunStatus.Queued || run.Status == JobRunStatus.Running))
-                .ToArrayAsync(cancellationToken);
-            foreach (var run in runs) {
-                run.Status = JobRunStatus.Cancelled;
-                run.Message = "Cancelled with graph.";
-                run.LockedAt = null;
-                run.LockedBy = null;
-                run.FinishedAt = now;
+
+            // Phase 3: finalize the graph under the lock again.
+            {
+                await using var mutation = await JobGraphMutationScope.AcquireAsync(db, graphId, cancellationToken);
+                if (mutation is null) return false;
+                mutation.Graph.CancellationRequested = true;
+                mutation.Graph.Status = JobGraphStatus.Cancelled;
+                mutation.Graph.UpdatedAt = now;
+                mutation.Graph.FinishedAt = now;
+                await db.SaveChangesAsync(cancellationToken);
+                await mutation.CommitAsync(cancellationToken);
             }
-            var signals = await db.JobGraphSignals
-                .Where(signal => signal.GraphId == graphId && signal.ResolvedAt == null && signal.CancelledAt == null)
-                .ToArrayAsync(cancellationToken);
-            foreach (var signal in signals) signal.CancelledAt = now;
-            var runIds = runs.Select(run => run.Id).ToArray();
-            var leases = await db.JobResourceLeases
-                .Where(lease => runIds.Contains(lease.JobRunId))
-                .ToArrayAsync(cancellationToken);
-            db.JobResourceLeases.RemoveRange(leases);
+
+            return true;
         }
+
+        await using var tracked = await JobGraphMutationScope.AcquireAsync(db, graphId, cancellationToken);
+        if (tracked is null || tracked.Graph.Status is JobGraphStatus.Completed or JobGraphStatus.CompletedWithWarnings
+            or JobGraphStatus.Failed or JobGraphStatus.Cancelled) return false;
+        var graph = tracked.Graph;
+        var runs = await db.JobRuns
+            .Where(run => run.GraphId == graphId && (run.Status == JobRunStatus.Queued || run.Status == JobRunStatus.Running))
+            .ToArrayAsync(cancellationToken);
+        foreach (var run in runs) {
+            run.Status = JobRunStatus.Cancelled;
+            run.Message = "Cancelled with graph.";
+            run.LockedAt = null;
+            run.LockedBy = null;
+            run.FinishedAt = now;
+        }
+        var signals = await db.JobGraphSignals
+            .Where(signal => signal.GraphId == graphId && signal.ResolvedAt == null && signal.CancelledAt == null)
+            .ToArrayAsync(cancellationToken);
+        foreach (var signal in signals) signal.CancelledAt = now;
+        var runIds = runs.Select(run => run.Id).ToArray();
+        var leases = await db.JobResourceLeases
+            .Where(lease => runIds.Contains(lease.JobRunId))
+            .ToArrayAsync(cancellationToken);
+        db.JobResourceLeases.RemoveRange(leases);
         graph.CancellationRequested = true;
         graph.Status = JobGraphStatus.Cancelled;
         graph.UpdatedAt = now;
         graph.FinishedAt = now;
         await db.SaveChangesAsync(cancellationToken);
-        await mutation.CommitAsync(cancellationToken);
+        await tracked.CommitAsync(cancellationToken);
         return true;
+    }
+
+    /// <summary>Matches Postgres deadlock aborts (SQLSTATE 40P01) anywhere in the exception chain.</summary>
+    private static bool IsDeadlock(Exception exception) {
+        for (var current = exception; current is not null; current = current.InnerException!) {
+            if (current is Npgsql.PostgresException { SqlState: "40P01" }) {
+                return true;
+            }
+
+            if (current.InnerException is null) {
+                break;
+            }
+        }
+
+        return false;
     }
 
     private static JobGraphSignalSnapshot ToSnapshot(JobGraphSignalRow signal) =>
