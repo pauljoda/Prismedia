@@ -628,6 +628,120 @@ internal static class EntityRollupProjectionSql {
         SELECT prismedia_reconcile_entity_rollups();
         """;
 
+    /// <summary>
+    /// Replaces the reference/collection count refresh bodies with guarded upserts plus stale-row
+    /// pruning. The original delete-and-reinsert shape rewrote every row on each refresh, which
+    /// churned identical rows and inflated the reconcile function's repaired-row count — the
+    /// 6-hourly self-heal would have warned about tens of thousands of "repairs" that were
+    /// byte-identical rewrites. With the guards, the repaired count reports only real drift.
+    /// Applied by a follow-up migration; the original creation SQL above stays byte-stable
+    /// because its migration is published history.
+    /// </summary>
+    internal const string GuardedCountRefresh = """
+        CREATE OR REPLACE FUNCTION prismedia_refresh_entity_reference_counts(target_ids uuid[])
+        RETURNS integer
+        LANGUAGE plpgsql
+        AS $function$
+        DECLARE
+            refreshed integer;
+        BEGIN
+            IF target_ids IS NULL OR cardinality(target_ids) = 0 THEN
+                RETURN 0;
+            END IF;
+
+            WITH fresh AS (
+                SELECT
+                    link.target_entity_id AS entity_id,
+                    source.kind_code AS source_kind_code,
+                    COALESCE(context.effective_library_root_id, '00000000-0000-0000-0000-000000000000'::uuid) AS library_root_id,
+                    COUNT(DISTINCT link.entity_id)::integer AS count_total,
+                    (COUNT(DISTINCT link.entity_id) FILTER (WHERE COALESCE(context.effective_is_nsfw, source.is_nsfw)))::integer AS count_nsfw
+                FROM entity_relationship_links AS link
+                INNER JOIN entities AS source ON source.id = link.entity_id
+                LEFT JOIN entity_rollups AS context ON context.entity_id = source.id
+                WHERE link.target_entity_id = ANY (target_ids)
+                  AND NOT source.is_wanted
+                GROUP BY 1, 2, 3
+            ),
+            upserted AS (
+                INSERT INTO entity_reference_counts (
+                    entity_id, source_kind_code, library_root_id, count_total, count_nsfw)
+                SELECT entity_id, source_kind_code, library_root_id, count_total, count_nsfw
+                FROM fresh
+                ON CONFLICT (entity_id, source_kind_code, library_root_id) DO UPDATE
+                SET count_total = EXCLUDED.count_total,
+                    count_nsfw = EXCLUDED.count_nsfw
+                WHERE entity_reference_counts.count_total IS DISTINCT FROM EXCLUDED.count_total
+                   OR entity_reference_counts.count_nsfw IS DISTINCT FROM EXCLUDED.count_nsfw
+                RETURNING 1
+            ),
+            stale AS (
+                DELETE FROM entity_reference_counts AS counts
+                WHERE counts.entity_id = ANY (target_ids)
+                  AND NOT EXISTS (
+                    SELECT 1 FROM fresh
+                    WHERE fresh.entity_id = counts.entity_id
+                      AND fresh.source_kind_code = counts.source_kind_code
+                      AND fresh.library_root_id = counts.library_root_id)
+                RETURNING 1
+            )
+            SELECT (SELECT COUNT(*) FROM upserted) + (SELECT COUNT(*) FROM stale)
+            INTO refreshed;
+            RETURN refreshed;
+        END;
+        $function$;
+
+        CREATE OR REPLACE FUNCTION prismedia_refresh_entity_collection_counts(collection_ids uuid[])
+        RETURNS integer
+        LANGUAGE plpgsql
+        AS $function$
+        DECLARE
+            refreshed integer;
+        BEGIN
+            IF collection_ids IS NULL OR cardinality(collection_ids) = 0 THEN
+                RETURN 0;
+            END IF;
+
+            WITH fresh AS (
+                SELECT
+                    item.collection_entity_id AS entity_id,
+                    COALESCE(context.effective_library_root_id, '00000000-0000-0000-0000-000000000000'::uuid) AS library_root_id,
+                    COUNT(DISTINCT item.item_entity_id)::integer AS count_total,
+                    (COUNT(DISTINCT item.item_entity_id) FILTER (WHERE COALESCE(context.effective_is_nsfw, member.is_nsfw)))::integer AS count_nsfw
+                FROM collection_item_details AS item
+                INNER JOIN entities AS member ON member.id = item.item_entity_id
+                LEFT JOIN entity_rollups AS context ON context.entity_id = member.id
+                WHERE item.collection_entity_id = ANY (collection_ids)
+                GROUP BY 1, 2
+            ),
+            upserted AS (
+                INSERT INTO entity_collection_member_counts (
+                    entity_id, library_root_id, count_total, count_nsfw)
+                SELECT entity_id, library_root_id, count_total, count_nsfw
+                FROM fresh
+                ON CONFLICT (entity_id, library_root_id) DO UPDATE
+                SET count_total = EXCLUDED.count_total,
+                    count_nsfw = EXCLUDED.count_nsfw
+                WHERE entity_collection_member_counts.count_total IS DISTINCT FROM EXCLUDED.count_total
+                   OR entity_collection_member_counts.count_nsfw IS DISTINCT FROM EXCLUDED.count_nsfw
+                RETURNING 1
+            ),
+            stale AS (
+                DELETE FROM entity_collection_member_counts AS counts
+                WHERE counts.entity_id = ANY (collection_ids)
+                  AND NOT EXISTS (
+                    SELECT 1 FROM fresh
+                    WHERE fresh.entity_id = counts.entity_id
+                      AND fresh.library_root_id = counts.library_root_id)
+                RETURNING 1
+            )
+            SELECT (SELECT COUNT(*) FROM upserted) + (SELECT COUNT(*) FROM stale)
+            INTO refreshed;
+            RETURN refreshed;
+        END;
+        $function$;
+        """;
+
     internal const string Drop = """
         DROP TRIGGER IF EXISTS prismedia_entity_rollups_insert ON entities;
         DROP TRIGGER IF EXISTS prismedia_entity_rollups_update ON entities;
