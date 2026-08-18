@@ -27,6 +27,14 @@ public sealed class EfEntityLibraryVisibilityFilter(
     internal async Task<bool> RequiresCurrentUserVisibilityAsync(CancellationToken cancellationToken) =>
         (await GetCurrentScopeAsync(cancellationToken)).RequiresFiltering;
 
+    /// <summary>
+    /// Library roots hidden from the active request user (disabled roots plus denied grants);
+    /// empty when the caller is unrestricted. Rollup-backed chip reads filter their root-keyed
+    /// count rows with this set instead of embedding ownership subqueries.
+    /// </summary>
+    internal async Task<Guid[]> GetCurrentHiddenRootIdsAsync(CancellationToken cancellationToken) =>
+        (await GetCurrentScopeAsync(cancellationToken)).HiddenRootIds;
+
     /// <summary>Applies the active request user's already-resolved visibility scope.</summary>
     internal IQueryable<EntityRow> ApplyCurrentUserVisibility(
         IQueryable<EntityRow> query,

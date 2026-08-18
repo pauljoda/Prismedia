@@ -114,13 +114,10 @@ public sealed partial class EfEntityReadService {
                 (file.Role == EntityFileRole.GridThumbnail || file.Role == EntityFileRole.GridThumbnail2x))
             .Select(file => new { file.EntityId, file.Role, file.Path })
             .ToArrayAsync(cancellationToken);
-        var usableGridThumbRows = gridThumbRows
-            .Where(file => HasUsableAssetPath(file.Path))
-            .ToArray();
-        var gridThumbByEntity = usableGridThumbRows
+        var gridThumbByEntity = gridThumbRows
             .Where(file => file.Role == EntityFileRole.GridThumbnail)
             .ToDictionary(file => file.EntityId, file => file.Path);
-        var gridThumb2xByEntity = usableGridThumbRows
+        var gridThumb2xByEntity = gridThumbRows
             .Where(file => file.Role == EntityFileRole.GridThumbnail2x)
             .ToDictionary(file => file.EntityId, file => file.Path);
         var currentUserId = CurrentUserId;
@@ -307,7 +304,14 @@ public sealed partial class EfEntityReadService {
         // counts) over the whole page. Each self-filters and runs at most one batched query, and
         // they share the scoped DbContext so they run sequentially. Contributed identity/count chips
         // lead lower-value technical chips so useful counts survive the five-chip cap.
-        var contributions = new ThumbnailContributions(rows, visibleContributionEntities);
+        var contributions = new ThumbnailContributions(
+            rows,
+            visibleContributionEntities,
+            readsPersistedRollups: readsPersistedAvailability,
+            hideNsfw: hideNsfw,
+            hiddenLibraryRootIds: enforceLibraryVisibility
+                ? await _libraryVisibility.GetCurrentHiddenRootIdsAsync(cancellationToken)
+                : []);
         foreach (var contributor in _thumbnailContributors
                      .OrderBy(contributor => contributor.MetaPriority)
                      .ThenBy(contributor => contributor.GetType().FullName, StringComparer.Ordinal)) {
@@ -735,28 +739,13 @@ public sealed partial class EfEntityReadService {
                 file.Role == EntityFileRole.Backdrop)
             .ToArrayAsync(cancellationToken);
 
+        // Rows are trusted as-is: producers write files before rows and the background asset-row
+        // sweep removes rows whose files vanished, so no per-card filesystem checks run here.
         return covers
-            .Where(HasUsableAssetPath)
             .GroupBy(file => file.EntityId)
             .ToDictionary(
                 group => group.Key,
                 group => EntityCoverSelection.Select(group)!.Path);
-    }
-
-    private bool HasUsableAssetPath(EntityFileRow file) =>
-        HasUsableAssetPath(file.Path);
-
-    private bool HasUsableAssetPath(string path) {
-        if (!path.StartsWith(AssetPaths.AssetsUrlPrefix, StringComparison.Ordinal)) {
-            return true;
-        }
-
-        if (_assets is null) {
-            return true;
-        }
-
-        var diskPath = _assets.ResolveAssetDiskPath(path);
-        return diskPath is not null && File.Exists(diskPath);
     }
 
     private static IReadOnlyList<EntityThumbnailMeta> ProjectThumbnailMeta(

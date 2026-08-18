@@ -124,6 +124,7 @@ public static class DependencyInjection {
         services.AddHostedService<MonitoredSearchWorker>();
         services.AddHostedService<LibraryFileChangeMonitor>();
         services.AddHostedService<EntityAvailabilityReconciliationWorker>();
+        services.AddHostedService<EntityAssetRowSweepWorker>();
 
         return services;
     }

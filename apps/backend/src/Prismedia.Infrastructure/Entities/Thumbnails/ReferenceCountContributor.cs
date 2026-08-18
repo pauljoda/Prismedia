@@ -33,23 +33,44 @@ internal sealed class ReferenceCountContributor(PrismediaDbContext db) : IThumbn
             return;
         }
 
-        // Distinct source entities per (target, source kind). The join to entities resolves the
-        // source kind; a source linked under several relationship codes (e.g. cast and director)
-        // counts once per kind via COUNT(DISTINCT source id).
-        var grouped = await db.EntityRelationshipLinks.AsNoTracking()
-            .Where(link => targetIds.Contains(link.TargetEntityId))
-            .Join(
-                contributions.VisibleEntities,
-                link => link.EntityId,
-                source => source.Id,
-                (link, source) => new { link.TargetEntityId, source.KindCode, source.Id })
-            .GroupBy(row => new { row.TargetEntityId, row.KindCode })
-            .Select(group => new {
-                group.Key.TargetEntityId,
-                group.Key.KindCode,
-                Count = group.Select(row => row.Id).Distinct().Count()
-            })
-            .ToArrayAsync(cancellationToken);
+        var grouped = contributions.ReadsPersistedRollups
+            // Root-keyed rows from the trigger-maintained reference-count projection, summed over
+            // the viewer's allowed roots with NSFW sub-counts subtracted for NSFW-hiding viewers.
+            ? (await db.EntityReferenceCounts.AsNoTracking()
+                .Where(count => targetIds.Contains(count.EntityId) &&
+                    !contributions.HiddenLibraryRootIds.Contains(count.LibraryRootId))
+                .GroupBy(count => new { count.EntityId, count.SourceKindCode })
+                .Select(group => new {
+                    TargetEntityId = group.Key.EntityId,
+                    KindCode = group.Key.SourceKindCode,
+                    Total = group.Sum(count => count.CountTotal),
+                    Nsfw = group.Sum(count => count.CountNsfw)
+                })
+                .ToArrayAsync(cancellationToken))
+                .Select(row => new {
+                    row.TargetEntityId,
+                    row.KindCode,
+                    Count = contributions.HideNsfw ? row.Total - row.Nsfw : row.Total
+                })
+                .Where(row => row.Count > 0)
+                .ToArray()
+            // Live fallback: distinct source entities per (target, source kind). The join to
+            // entities resolves the source kind; a source linked under several relationship codes
+            // (e.g. cast and director) counts once per kind via COUNT(DISTINCT source id).
+            : await db.EntityRelationshipLinks.AsNoTracking()
+                .Where(link => targetIds.Contains(link.TargetEntityId))
+                .Join(
+                    contributions.VisibleEntities,
+                    link => link.EntityId,
+                    source => source.Id,
+                    (link, source) => new { link.TargetEntityId, source.KindCode, source.Id })
+                .GroupBy(row => new { row.TargetEntityId, row.KindCode })
+                .Select(group => new {
+                    group.Key.TargetEntityId,
+                    group.Key.KindCode,
+                    Count = group.Select(row => row.Id).Distinct().Count()
+                })
+                .ToArrayAsync(cancellationToken);
 
         foreach (var perTarget in grouped.GroupBy(row => row.TargetEntityId)) {
             var counts = perTarget

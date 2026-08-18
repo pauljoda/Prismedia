@@ -680,37 +680,10 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         return await EnrichProgressAsync(card, hideNsfw, cancellationToken);
     }
 
-    private EntityCard SanitizeLocalAssets(EntityCard card) {
-        if (_assets is null) {
-            return card;
-        }
-
-        var capabilities = card.Capabilities
-            .Select(SanitizeLocalAssetCapability)
-            .ToArray();
-        return card with { Capabilities = capabilities };
-    }
-
-    private EntityCapability SanitizeLocalAssetCapability(EntityCapability capability) {
-        if (capability is not ImagesCapability images) {
-            return capability;
-        }
-
-        var items = images.Items
-            .Where(item => HasUsableAssetPath(item.Path))
-            .ToArray();
-
-        return images with {
-            Items = items,
-            ThumbnailUrl = UsableImageUrl(images.ThumbnailUrl, items),
-            CoverUrl = UsableImageUrl(images.CoverUrl, items)
-        };
-    }
-
-    private string? UsableImageUrl(string? current, IReadOnlyList<EntityImageAsset> items) =>
-        !string.IsNullOrWhiteSpace(current) && HasUsableAssetPath(current)
-            ? current
-            : items.FirstOrDefault()?.Path;
+    // Generated-asset rows are kept truthful off the request path: producers write the file
+    // before the row, and the background asset-row sweep removes rows whose files vanished.
+    // Detail reads therefore trust the rows instead of stat-ing every image per request.
+    private static EntityCard SanitizeLocalAssets(EntityCard card) => card;
 
     public async Task<EntityThumbnailBatchResponse> GetThumbnailsAsync(
         IReadOnlyList<Guid> ids,

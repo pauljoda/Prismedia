@@ -496,7 +496,7 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
-    public async Task ListAsyncSkipsMissingLocalArtworkAndUsesGeneratedThumbnail() {
+    public async Task ListAsyncUsesGeneratedThumbnailAfterSweepRemovesMissingArtworkRows() {
         var cacheRoot = CreateCacheRoot();
         try {
             await using var db = CreateContext();
@@ -517,6 +517,10 @@ public sealed class EfEntityReadServiceTests {
             await db.SaveChangesAsync();
             WriteCacheFile(cacheRoot, thumbPath);
 
+            // The read path trusts file rows; the background sweep removes rows whose generated
+            // asset is missing on disk, so stale artwork stops being offered after one pass.
+            await SweepAssetRowsAsync(db, cacheRoot);
+
             var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
             var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db), new EfEntityProgressTopologyResolver(db), Assets(cacheRoot));
 
@@ -530,7 +534,7 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
-    public async Task GetAsyncSkipsMissingLocalArtworkAndUsesGeneratedThumbnail() {
+    public async Task GetAsyncUsesGeneratedThumbnailAfterSweepRemovesMissingArtworkRows() {
         var cacheRoot = CreateCacheRoot();
         try {
             await using var db = CreateContext();
@@ -550,6 +554,8 @@ public sealed class EfEntityReadServiceTests {
                 File(videoId, EntityFileRole.Poster, posterPath, now.AddSeconds(1)));
             await db.SaveChangesAsync();
             WriteCacheFile(cacheRoot, thumbPath);
+
+            await SweepAssetRowsAsync(db, cacheRoot);
 
             var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
             var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db), new EfEntityProgressTopologyResolver(db), Assets(cacheRoot));
@@ -663,7 +669,7 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
-    public async Task GetThumbnailsAsyncIgnoresMissingGridVariantFilesAndFallsBackToCover() {
+    public async Task GetThumbnailsAsyncFallsBackToCoverAfterSweepRemovesMissingGridVariantRows() {
         var cacheRoot = CreateCacheRoot();
         try {
             await using var db = CreateContext();
@@ -687,6 +693,8 @@ public sealed class EfEntityReadServiceTests {
             await db.SaveChangesAsync();
             WriteCacheFile(cacheRoot, poster);
 
+            await SweepAssetRowsAsync(db, cacheRoot);
+
             var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
             var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db), new EfEntityProgressTopologyResolver(db), Assets(cacheRoot));
 
@@ -702,7 +710,7 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
-    public async Task GetThumbnailsAsyncUsesEpisodeRepresentativeWhenSeriesPosterIsMissing() {
+    public async Task GetThumbnailsAsyncUsesEpisodeRepresentativeAfterSweepRemovesMissingSeriesPoster() {
         var cacheRoot = CreateCacheRoot();
         try {
             await using var db = CreateContext();
@@ -741,6 +749,8 @@ public sealed class EfEntityReadServiceTests {
                 File(episodeId, EntityFileRole.Thumbnail, episodeThumb, now));
             await db.SaveChangesAsync();
             WriteCacheFile(cacheRoot, episodeThumb);
+
+            await SweepAssetRowsAsync(db, cacheRoot);
 
             var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
             var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db), new EfEntityProgressTopologyResolver(db), Assets(cacheRoot));
@@ -3357,6 +3367,13 @@ public sealed class EfEntityReadServiceTests {
         var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
         return new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db), new EfEntityProgressTopologyResolver(db));
     }
+
+    private static async Task SweepAssetRowsAsync(PrismediaDbContext db, string cacheRoot) =>
+        await new EfEntityAssetRowSweeper(
+                db,
+                Assets(cacheRoot),
+                Microsoft.Extensions.Logging.Abstractions.NullLogger<EfEntityAssetRowSweeper>.Instance)
+            .SweepAsync(CancellationToken.None);
 
     private static PrismediaDbContext CreateContext() =>
         new(new DbContextOptionsBuilder<PrismediaDbContext>()

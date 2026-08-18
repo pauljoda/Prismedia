@@ -26,8 +26,13 @@ internal sealed class StructuralCountContributor : IThumbnailContributor {
         .Distinct(StringComparer.Ordinal)
         .ToArray();
 
+    private readonly PrismediaDbContext _db;
+
     /// <summary>Creates the contributor for the scoped persistence context.</summary>
-    public StructuralCountContributor(PrismediaDbContext db) => ArgumentNullException.ThrowIfNull(db);
+    public StructuralCountContributor(PrismediaDbContext db) {
+        ArgumentNullException.ThrowIfNull(db);
+        _db = db;
+    }
 
     /// <inheritdoc />
     public int MetaPriority => -100;
@@ -40,6 +45,11 @@ internal sealed class StructuralCountContributor : IThumbnailContributor {
             .Where(row => RootKindCodes.Contains(row.KindCode, StringComparer.Ordinal))
             .ToArray();
         if (roots.Length == 0) {
+            return;
+        }
+
+        if (contributions.ReadsPersistedRollups) {
+            await ContributeFromRollupsAsync(contributions, roots, cancellationToken);
             return;
         }
 
@@ -64,6 +74,40 @@ internal sealed class StructuralCountContributor : IThumbnailContributor {
                 var count = Enumerable.Range(1, metric.MaximumDepth)
                     .Sum(depth => AtDepth(descendantCode, depth));
                 AddCount(contributions, rootId, metric.Icon, count);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Reads the chips from the trigger-maintained descendant-count projection: one indexed lookup
+    /// over root-keyed rows, summed across the viewer's allowed roots, with NSFW sub-counts
+    /// subtracted for NSFW-hiding viewers. Structure policies cap nesting at the metric depths, so
+    /// the projection's all-descendant totals equal the live depth-bounded aggregate.
+    /// </summary>
+    private async Task ContributeFromRollupsAsync(
+        ThumbnailContributions contributions,
+        EntityRow[] roots,
+        CancellationToken cancellationToken) {
+        var rootIds = roots.Select(row => row.Id).ToArray();
+        var hiddenRoots = contributions.HiddenLibraryRootIds;
+        var counts = await _db.EntityDescendantCounts.AsNoTracking()
+            .Where(count => rootIds.Contains(count.EntityId) && !hiddenRoots.Contains(count.LibraryRootId))
+            .GroupBy(count => new { count.EntityId, count.DescendantKindCode })
+            .Select(group => new {
+                group.Key.EntityId,
+                group.Key.DescendantKindCode,
+                Total = group.Sum(count => count.CountTotal),
+                Nsfw = group.Sum(count => count.CountNsfw)
+            })
+            .ToArrayAsync(cancellationToken);
+        var countByRootAndKind = counts.ToDictionary(
+            count => (count.EntityId, count.DescendantKindCode),
+            count => contributions.HideNsfw ? count.Total - count.Nsfw : count.Total);
+
+        foreach (var root in roots) {
+            foreach (var metric in DefinitionsByRootCode[root.KindCode].StructuralThumbnailCounts) {
+                var count = countByRootAndKind.GetValueOrDefault((root.Id, metric.DescendantKind.ToCode()));
+                AddCount(contributions, root.Id, metric.Icon, count);
             }
         }
     }

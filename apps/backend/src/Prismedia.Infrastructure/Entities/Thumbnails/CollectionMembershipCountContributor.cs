@@ -27,8 +27,26 @@ internal sealed class CollectionMembershipCountContributor(PrismediaDbContext db
             return;
         }
 
-        var counts = await BuildQuery(db, contributions.VisibleEntities, collectionIds)
-            .ToArrayAsync(cancellationToken);
+        var counts = contributions.ReadsPersistedRollups
+            // Root-keyed rows from the trigger-maintained membership projection, summed over the
+            // viewer's allowed roots with NSFW sub-counts subtracted for NSFW-hiding viewers.
+            ? (await db.EntityCollectionMemberCounts.AsNoTracking()
+                .Where(count => collectionIds.Contains(count.EntityId) &&
+                    !contributions.HiddenLibraryRootIds.Contains(count.LibraryRootId))
+                .GroupBy(count => count.EntityId)
+                .Select(group => new {
+                    EntityId = group.Key,
+                    Total = group.Sum(count => count.CountTotal),
+                    Nsfw = group.Sum(count => count.CountNsfw)
+                })
+                .ToArrayAsync(cancellationToken))
+                .Select(row => new CollectionMembershipCount(
+                    row.EntityId,
+                    contributions.HideNsfw ? row.Total - row.Nsfw : row.Total))
+                .Where(count => count.Count > 0)
+                .ToArray()
+            : await BuildQuery(db, contributions.VisibleEntities, collectionIds)
+                .ToArrayAsync(cancellationToken);
         foreach (var count in counts) {
             contributions.AddMeta(
                 count.CollectionEntityId,

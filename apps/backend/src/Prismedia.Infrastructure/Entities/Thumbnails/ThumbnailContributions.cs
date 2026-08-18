@@ -23,9 +23,15 @@ public sealed class ThumbnailContributions {
     /// </param>
     public ThumbnailContributions(
         IReadOnlyList<EntityRow> rows,
-        IQueryable<EntityRow> visibleEntities) {
+        IQueryable<EntityRow> visibleEntities,
+        bool readsPersistedRollups = false,
+        bool hideNsfw = false,
+        Guid[]? hiddenLibraryRootIds = null) {
         Rows = rows;
         VisibleEntities = visibleEntities;
+        ReadsPersistedRollups = readsPersistedRollups;
+        HideNsfw = hideNsfw;
+        HiddenLibraryRootIds = hiddenLibraryRootIds ?? [];
     }
 
     /// <summary>The entity rows being projected for the current page.</summary>
@@ -33,9 +39,26 @@ public sealed class ThumbnailContributions {
 
     /// <summary>
     /// Query root for caller-visible, non-wanted entities. Contributors compose grouped aggregates
-    /// over this query and must not enumerate it as entity rows.
+    /// over this query and must not enumerate it as entity rows. This is the live fallback path;
+    /// when <see cref="ReadsPersistedRollups"/> is set, contributors should read the rollup tables
+    /// filtered by <see cref="HiddenLibraryRootIds"/> and <see cref="HideNsfw"/> instead.
     /// </summary>
     public IQueryable<EntityRow> VisibleEntities { get; }
+
+    /// <summary>
+    /// True when the trigger-maintained rollup projections are available (PostgreSQL) and
+    /// contributors should read root-keyed count rows instead of live aggregates.
+    /// </summary>
+    public bool ReadsPersistedRollups { get; }
+
+    /// <summary>Whether the viewer hides NSFW; rollup readers subtract the NSFW sub-counts.</summary>
+    public bool HideNsfw { get; }
+
+    /// <summary>
+    /// Library roots hidden from the viewer; rollup readers exclude count rows keyed to them.
+    /// Empty for unrestricted viewers.
+    /// </summary>
+    public Guid[] HiddenLibraryRootIds { get; }
 
     /// <summary>
     /// Appends a meta chip to an entity. No-op when <paramref name="label"/> is blank so contributors
