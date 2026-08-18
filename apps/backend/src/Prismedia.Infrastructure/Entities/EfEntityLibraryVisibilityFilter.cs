@@ -224,6 +224,10 @@ public sealed class EfEntityLibraryVisibilityFilter(
         VisibilityScope scope,
         string? knownKindCode = null) {
         if (!scope.RequiresFiltering) return query;
+        if (db.Database.IsNpgsql()) {
+            return ApplyVisibilityFromRollups(query, scope, knownKindCode);
+        }
+
         var entities = db.Entities;
         var hidden = HiddenLibraryTargetedEntityIds(scope);
         if (!EntityKindRegistry.TryDescribe(knownKindCode, out var definition)) {
@@ -241,6 +245,52 @@ public sealed class EfEntityLibraryVisibilityFilter(
             EntityLibraryVisibilityMode.DescendantRoot => ApplyDescendant(query, entities, hidden, definition, applyOnlyToKind: false),
             _ => query
         };
+    }
+
+    /// <summary>
+    /// Rollup-backed visibility predicate: the trigger-maintained per-entity effective library
+    /// root replaces the multi-level ancestor climbs, and root-keyed descendant counts replace
+    /// the descendant-owner unions. Each term is a primary-key-indexed EXISTS with the small
+    /// hidden-root/wanted arrays as parameters, instead of whole-table correlated subqueries
+    /// embedded in every read. Entities without a rollup row (drift repaired by reconciliation)
+    /// default to visible, matching rootless taxonomy.
+    /// </summary>
+    private IQueryable<EntityRow> ApplyVisibilityFromRollups(
+        IQueryable<EntityRow> query,
+        VisibilityScope scope,
+        string? knownKindCode) {
+        var hiddenRootIds = scope.HiddenRootIds;
+        var hiddenWantedIds = scope.HiddenWantedEntityIds;
+        var rollups = db.EntityRollups;
+        query = query.Where(entity =>
+            !hiddenWantedIds.Contains(entity.Id) &&
+            !rollups.Any(rollup => rollup.EntityId == entity.Id &&
+                rollup.EffectiveLibraryRootId != null &&
+                hiddenRootIds.Contains(rollup.EffectiveLibraryRootId.Value)));
+
+        // Descendant-rooted containers (series/season/author) stay visible while any of their
+        // structural descendants of the policy kind live in a visible root; a container whose
+        // rooted descendants are all hidden disappears with them.
+        var counts = db.EntityDescendantCounts;
+        var descendantDefinitions = EntityKindRegistry.TryDescribe(knownKindCode, out var definition)
+            ? definition.LibraryVisibility.Mode == EntityLibraryVisibilityMode.DescendantRoot
+                ? [definition]
+                : Array.Empty<EntityKindDefinition>()
+            : DescendantLibraryRootDefinitions;
+        foreach (var descendantDefinition in descendantDefinitions) {
+            var ownerCode = descendantDefinition.Code;
+            var descendantCode = EntityKindRegistry
+                .Describe(descendantDefinition.LibraryVisibility.DescendantKind!.Value)
+                .Code;
+            query = query.Where(entity => entity.KindCode != ownerCode ||
+                !counts.Any(count => count.EntityId == entity.Id &&
+                    count.DescendantKindCode == descendantCode) ||
+                counts.Any(count => count.EntityId == entity.Id &&
+                    count.DescendantKindCode == descendantCode &&
+                    !hiddenRootIds.Contains(count.LibraryRootId)));
+        }
+
+        return query;
     }
 
     private static IQueryable<EntityRow> ApplyDescendant(
