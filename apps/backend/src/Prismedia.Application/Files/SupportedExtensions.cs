@@ -1,6 +1,6 @@
 using Prismedia.Contracts.Media;
 
-namespace Prismedia.Infrastructure.Media.Processing;
+namespace Prismedia.Application.Files;
 
 /// <summary>
 /// Canonical file-extension sets for each media category, used by file discovery and scan handlers.

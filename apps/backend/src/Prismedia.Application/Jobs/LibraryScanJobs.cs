@@ -46,9 +46,32 @@ public static class LibraryScanJobs {
     }
 
     /// <summary>
-    /// Durably records exact filesystem paths for every enabled media-family scan, then ensures one
-    /// change-only job per kind is queued. New observations remain in the ledger even when a matching
-    /// job is already running; the filesystem monitor will queue the continuation after it completes.
+    /// Enqueues deep integrity scans for one root: a full reconciliation plus the library-wide
+    /// orphan and outside-root cleanups that ordinary scans skip. Scheduled on the integrity
+    /// cadence rather than the routine scan interval.
+    /// </summary>
+    public static async Task<int> QueueDeepScansForRootAsync(
+        IJobQueueService queue,
+        Guid rootId,
+        string rootLabel,
+        LibraryScanSelection selection,
+        CancellationToken cancellationToken) {
+        return await QueueRootJobsAsync(
+            queue,
+            rootId,
+            rootLabel,
+            selection,
+            changesOnly: false,
+            cancellationToken,
+            deep: true);
+    }
+
+    /// <summary>
+    /// Durably records each observed filesystem path for the scan kinds whose media families can
+    /// own it (see <see cref="MediaScanKindRouter"/>), then ensures one change-only job per routed
+    /// kind is queued. A touched video therefore queues only the video scan instead of one job per
+    /// enabled family. New observations remain in the ledger even when a matching job is already
+    /// running; the filesystem monitor will queue the continuation after it completes.
     /// </summary>
     public static async Task<int> QueueChangedPathsForRootAsync(
         IJobQueueService queue,
@@ -62,18 +85,23 @@ public static class LibraryScanJobs {
             return 0;
         }
 
-        foreach (var type in ScanJobTypesFor(selection)) {
+        var routed = MediaScanKindRouter.Route(selection, absolutePaths);
+        if (routed.Count == 0) {
+            return 0;
+        }
+
+        foreach (var (type, paths) in routed) {
             await changes.RecordAsync(
                 rootId,
                 type.ToCode(),
-                absolutePaths,
+                paths,
                 cancellationToken);
         }
         return await QueueRootJobsAsync(
             queue,
             rootId,
             rootLabel,
-            selection,
+            MediaScanKindRouter.SelectionFor(routed),
             changesOnly: true,
             cancellationToken);
     }
@@ -109,7 +137,8 @@ public static class LibraryScanJobs {
         string rootLabel,
         LibraryScanSelection selection,
         bool changesOnly,
-        CancellationToken cancellationToken) {
+        CancellationToken cancellationToken,
+        bool deep = false) {
         await queue.DeclareResourceAsync(
             JobResourceKeys.LibraryScan,
             maxConcurrency: 1,
@@ -117,7 +146,7 @@ public static class LibraryScanJobs {
             cancellationToken);
 
         var targetId = rootId.ToString();
-        var payloadJson = new ScanRootPayload(rootId, changesOnly).ToJson();
+        var payloadJson = new ScanRootPayload(rootId, changesOnly, deep).ToJson();
         var queued = 0;
         foreach (var type in ScanJobTypesFor(selection)) {
             if (await queue.HasPendingAsync(type, targetId, cancellationToken)) {

@@ -1,3 +1,4 @@
+using Prismedia.Application.Files;
 using Prismedia.Infrastructure.Media.Processing;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Jobs.Scanning;

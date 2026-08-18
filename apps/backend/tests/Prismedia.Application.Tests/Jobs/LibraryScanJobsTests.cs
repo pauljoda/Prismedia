@@ -75,9 +75,11 @@ public sealed class LibraryScanJobsTests {
             paths,
             CancellationToken.None);
 
-        Assert.Equal(2, queued);
+        // A touched video routes only to the scan kinds that can own it: the enabled audio
+        // family never sees the path, so one file change queues one job instead of one per family.
+        Assert.Equal(1, queued);
         Assert.Equal(
-            [JobType.ScanLibrary.ToCode(), JobType.ScanAudio.ToCode()],
+            [JobType.ScanLibrary.ToCode()],
             intake.Records.Select(record => record.ScanKind));
         Assert.All(intake.Records, record => Assert.Equal(paths, record.Paths));
         Assert.All(queue.Enqueued, request => Assert.True(AssertPayload(request).ChangesOnly));
