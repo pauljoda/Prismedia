@@ -77,6 +77,7 @@ import type {
   EntityCreateRequest,
   EntityDeleteResponse,
   EntityFlagsUpdateRequest,
+  EntityHoverImagesResponse,
   EntityListResponse,
   EntityMarkerWriteRequest,
   EntityMetadataProposal,
@@ -104,6 +105,7 @@ import type {
   GetConsumptionStatisticsParams,
   GetEntityChildReferencesParams,
   GetEntityChildrenParams,
+  GetEntityHoverImagesParams,
   GetEntityParams,
   GetEntityThumbnailsParams,
   GetFileContentParams,
@@ -2637,6 +2639,51 @@ export const getEntityThumbnails = async (entityThumbnailBatchRequest: EntityThu
     params?: GetEntityThumbnailsParams, options?: RequestInit): Promise<getEntityThumbnailsResponse> => {
 
   return orvalFetch<getEntityThumbnailsResponse>(getGetEntityThumbnailsUrl(params),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      entityThumbnailBatchRequest,)
+  }
+);}
+
+
+
+export type getEntityHoverImagesResponse200 = {
+  data: EntityHoverImagesResponse
+  status: 200
+}
+
+export type getEntityHoverImagesResponseSuccess = (getEntityHoverImagesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type getEntityHoverImagesResponse = (getEntityHoverImagesResponseSuccess)
+
+export const getGetEntityHoverImagesUrl = (params?: GetEntityHoverImagesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/entities/hover-images?${stringifiedParams}` : `/api/entities/hover-images`
+}
+
+/**
+ * @summary Get sampled child-artwork hover previews for entities.
+ */
+export const getEntityHoverImages = async (entityThumbnailBatchRequest: EntityThumbnailBatchRequest,
+    params?: GetEntityHoverImagesParams, options?: RequestInit): Promise<getEntityHoverImagesResponse> => {
+
+  return orvalFetch<getEntityHoverImagesResponse>(getGetEntityHoverImagesUrl(params),
   {
     ...options,
     method: 'POST',

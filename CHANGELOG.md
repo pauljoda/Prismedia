@@ -19,6 +19,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Library grids, shelves, and collections now read episode/season/page/track counts, taxonomy usage counts, and collection sizes from automatically maintained projections instead of recomputing them from every child row on every page, and no longer check the filesystem for each card's artwork. List pages that previously took seconds now answer in tens of milliseconds.
+- Per-user library boundaries are enforced through the same projections: chips and lists count exactly the entities each member may see, hidden libraries never leak into a visible container's badge, and the visibility check itself no longer embeds whole-table subqueries into every read.
+- Hover previews on cards now load on first hover instead of being computed for every row of every page; covers and grid thumbnails load in a single query per page.
+- The dashboard now reappears instantly with its last-known shelves while refreshing in the background, returning sessions skip a blocking settings round trip, and grid pages no longer fire their initial query twice.
 - API responses now carry `Server-Timing` headers and the server logs slow requests with their database command counts, making page-load latency directly observable.
 - Every API request no longer pays repeated database reads for session validation, app settings, and library-visibility scope; these are now cached in-process with immediate invalidation on sign-out, revocation, user edits, setting writes, and library changes.
 - OPDS reading clients no longer trigger a full password verification on every request (including each cover image); recently verified credentials are reused for a short window, keeping catalog browsing responsive.

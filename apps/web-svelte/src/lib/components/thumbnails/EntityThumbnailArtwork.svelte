@@ -14,6 +14,10 @@
     type EntityThumbnailAsset,
     type EntityThumbnailCard,
   } from "$lib/entities/entity-thumbnail";
+  import {
+    lazyHoverAssetsFor,
+    requestLazyHoverAssets,
+  } from "$lib/entities/hover-image-loader.svelte";
   import { loadTrickplayFrames, type TrickplayFrame } from "@prismedia/ui-svelte";
   import { onDestroy } from "svelte";
   import EntityThumbnailIcon from "./EntityThumbnailIcon.svelte";
@@ -42,7 +46,7 @@
 
   let {
     artworkReactive,
-    card,
+    card: cardProp,
     density,
     focusActive,
     hoverPreviewsEnabled,
@@ -60,6 +64,20 @@
     selected,
     showWantedBadge,
   }: Props = $props();
+
+  // Cards no longer arrive with sampled child artwork inline; when this card has no hover
+  // model, its hover intent requests the assets lazily and the card upgrades in place the
+  // moment they land. Every existing derived keeps reading `card` untouched.
+  const lazyAssets = $derived(
+    cardProp.hover.kind === THUMBNAIL_HOVER_KIND.none && cardProp.entity.id
+      ? lazyHoverAssetsFor(cardProp.entity.id)
+      : undefined,
+  );
+  const card = $derived(
+    lazyAssets !== undefined && lazyAssets.length > 0
+      ? { ...cardProp, hover: { kind: THUMBNAIL_HOVER_KIND.imageSequence, assets: lazyAssets } }
+      : cardProp,
+  );
 
   let pointerRatio = $state<number | null>(null);
   let imageFailed = $state(false);
@@ -200,6 +218,9 @@
 
   function handlePointerEnter(event: PointerEvent) {
     if (!canUseHoverPreviews()) return;
+    if (cardProp.hover.kind === THUMBNAIL_HOVER_KIND.none && cardProp.entity.id) {
+      requestLazyHoverAssets(cardProp.entity.id);
+    }
     updatePointerRatio(event);
     clearHoverIntentTimer();
     hoverIntentTimer = window.setTimeout(() => {
