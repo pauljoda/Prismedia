@@ -23,6 +23,7 @@ public sealed class AcquisitionQueueService(
     IIndexerConfigStore indexers,
     IReleaseLinkResolver linkResolver,
     IAcquisitionTransferAddCoordinator transferAdds,
+    IAcquisitionImportResetCleanup importResetCleanup,
     IAcquisitionHistoryStore history,
     ILogger<AcquisitionQueueService> logger,
     VideoScanConcurrencyGate? scanGate = null,
@@ -98,10 +99,12 @@ public sealed class AcquisitionQueueService(
             client = await ResolveAttemptOwnerAsync(existingAttempt, cancellationToken);
             attemptCategory = existingAttempt.Category ?? client.Category;
         } else {
-            queueOrigin = await ClaimQueueLifecycleAsync(
+            var queueClaim = await ClaimQueueLifecycleAsync(
                 acquisitionId,
                 requiredStatus,
+                manualPick,
                 cancellationToken);
+            queueOrigin = queueClaim.PriorStatus;
             // Re-queueing supersedes any prior download. Its exact pointer stays intact unless strict
             // removal succeeds; only then is it replaced by the durable pre-Add ownership placeholder.
             await RemovePriorDownloadOrRestoreQueueStateAsync(
@@ -109,6 +112,9 @@ public sealed class AcquisitionQueueService(
                 queueOrigin.Value,
                 eligible[0],
                 cancellationToken);
+            if (queueClaim.InterruptedImport is { } interruptedImport) {
+                await DiscardInterruptedImportAsync(acquisitionId, interruptedImport);
+            }
             client = eligible[0];
             attemptCategory = category ?? client.Category;
             var seedGoal = ResolveSeedGoal(candidate, client, indexerSeedGoal);
@@ -337,10 +343,12 @@ public sealed class AcquisitionQueueService(
             client = await ResolveAttemptOwnerAsync(existingAttempt, cancellationToken);
             attemptCategory = existingAttempt.Category ?? client.Category;
         } else {
-            queueOrigin = await ClaimQueueLifecycleAsync(
+            var queueClaim = await ClaimQueueLifecycleAsync(
                 acquisitionId,
                 requiredStatus: null,
+                manualPick: false,
                 cancellationToken);
+            queueOrigin = queueClaim.PriorStatus;
             await RemovePriorDownloadOrRestoreQueueStateAsync(
                 acquisitionId,
                 queueOrigin.Value,
@@ -546,9 +554,10 @@ public sealed class AcquisitionQueueService(
         AcquisitionStatus.ManualImportRequired,
     ];
 
-    private async Task<AcquisitionStatus> ClaimQueueLifecycleAsync(
+    private async Task<QueueLifecycleClaim> ClaimQueueLifecycleAsync(
         Guid acquisitionId,
         AcquisitionStatus? requiredStatus,
+        bool manualPick,
         CancellationToken cancellationToken) {
         var status = await acquisitions.GetStatusAsync(acquisitionId, cancellationToken);
         var isExpected = status is { } current
@@ -573,29 +582,83 @@ public sealed class AcquisitionQueueService(
                 ApiProblemCodes.AcquisitionInvalid,
                 ImportCheckpointLifecycle.CorruptCheckpointMessage);
         }
-        if (import is { TvImportCheckpoint: not null } or { ImportPlacementCheckpoint: not null }
-            && !await ImportCheckpointLifecycle.TryAbandonAsync(
+        AcquisitionImportContext? interruptedImport = null;
+        if (import is { TvImportCheckpoint: not null } or { ImportPlacementCheckpoint: not null }) {
+            var abandoned = await ImportCheckpointLifecycle.TryAbandonAsync(
                 acquisitions,
                 import,
                 cancellationToken,
-                scanGate)) {
-            throw new AcquisitionConfigurationException(
-                ApiProblemCodes.AcquisitionInvalid,
-                ImportCheckpointLifecycle.CheckpointMustFinishMessage);
+                scanGate);
+            if (!abandoned) {
+                if (!manualPick) {
+                    throw new AcquisitionConfigurationException(
+                        ApiProblemCodes.AcquisitionInvalid,
+                        ImportCheckpointLifecycle.CheckpointMustFinishMessage);
+                }
+
+                interruptedImport = import;
+            }
         }
 
         if (!await acquisitions.TryTransitionStatusAsync(
                 acquisitionId,
                 [status!.Value],
                 AcquisitionStatus.Queued,
-                "Preparing the selected release for the download client.",
+                interruptedImport is null
+                    ? "Preparing the selected release for the download client."
+                    : "Clearing the interrupted import before downloading the selected release.",
                 cancellationToken)) {
             throw new AcquisitionConfigurationException(
                 ApiProblemCodes.AcquisitionInvalid,
                 "The acquisition changed while this release was being prepared. Refresh and try again.");
         }
 
-        return status.Value;
+        return new QueueLifecycleClaim(status.Value, interruptedImport);
+    }
+
+    /// <summary>
+    /// Applies the user's explicit release override after the queue lifecycle and old transfer are both
+    /// claimed. Artifact cleanup is best effort, matching Start over; the exact checkpoint clear remains
+    /// compare-and-swap protected and must succeed before a new download can be handed off.
+    /// </summary>
+    private async Task DiscardInterruptedImportAsync(
+        Guid acquisitionId,
+        AcquisitionImportContext import) {
+        try {
+            await importResetCleanup.CleanupAsync(import, CancellationToken.None);
+        } catch (Exception exception) when (exception is not OperationCanceledException) {
+            logger.LogWarning(
+                exception,
+                "AcquisitionQueue: manual release override could not remove every partial import artifact for acquisition {AcquisitionId}.",
+                acquisitionId);
+        }
+
+        var cleared = import.CheckpointProtocol switch {
+            AcquisitionCheckpointProtocol.Television when import.TelevisionCheckpoint is { } checkpoint =>
+                await acquisitions.TryClearTvImportCheckpointAsync(
+                    acquisitionId,
+                    checkpoint,
+                    CancellationToken.None),
+            AcquisitionCheckpointProtocol.Placement when import.PlacementCheckpoint is { } checkpoint =>
+                await acquisitions.TryClearImportPlacementCheckpointAsync(
+                    acquisitionId,
+                    checkpoint,
+                    CancellationToken.None),
+            _ => true,
+        };
+        if (cleared) {
+            return;
+        }
+
+        await acquisitions.TryTransitionStatusAsync(
+            acquisitionId,
+            [AcquisitionStatus.Queued],
+            AcquisitionStatus.Failed,
+            "The interrupted import changed while it was being cleared; no replacement was queued.",
+            CancellationToken.None);
+        throw new AcquisitionConfigurationException(
+            ApiProblemCodes.AcquisitionInvalid,
+            "The interrupted import changed while it was being cleared. No replacement was queued; refresh and try again.");
     }
 
     /// <summary>
@@ -624,6 +687,10 @@ public sealed class AcquisitionQueueService(
     private static bool IsAdding(AcquisitionTransferInfo? transfer) =>
         transfer?.State == TransferOwnershipState.Adding.ToCode()
         && !string.IsNullOrWhiteSpace(transfer.ClientItemId);
+
+    private sealed record QueueLifecycleClaim(
+        AcquisitionStatus PriorStatus,
+        AcquisitionImportContext? InterruptedImport);
 
     private async Task<bool> IsCompletedAttemptAsync(
         Guid acquisitionId,

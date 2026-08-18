@@ -234,7 +234,8 @@ public interface IAcquisitionTeardownRecovery {
 
 /// <summary>
 /// Removes filesystem and catalog artifacts owned by an interrupted import checkpoint. This is the
-/// explicit destructive escape hatch used only when the user chooses to discard the attempt and start over.
+/// explicit destructive escape hatch used only when the user chooses to discard the attempt by starting
+/// over or manually selecting a replacement release.
 /// </summary>
 public interface IAcquisitionImportResetCleanup {
     /// <summary>
@@ -1137,12 +1138,12 @@ public sealed partial class AcquisitionService(
             "The acquisition changed while this action was being prepared. Refresh and try again.");
 
     /// <summary>
-    /// Re-runs the import for a downloaded or manual-import-held acquisition on demand — the hold's
-    /// "Import anyway". <paramref name="allowFormatChange"/> carries the user's explicit consent for a
-    /// genuine upgrade to replace the owned file across formats (e.g. mkv → mp4, recycling the old
-    /// file); without it the import re-runs under the ordinary rules. Any other status returns the
-    /// detail unchanged (nothing enqueued); null when the acquisition no longer exists. The
-    /// dangerous-file hold is enforced by the import job regardless of the flag.
+    /// Re-runs an import for a completed download/manual-import hold, or resumes an exact durable
+    /// checkpoint from a passive review/failure state. <paramref name="allowFormatChange"/> carries the
+    /// user's explicit consent for a genuine upgrade to replace the owned file across formats (e.g.
+    /// mkv → mp4, recycling the old file); without it the import re-runs under the ordinary rules. Any
+    /// other status returns the detail unchanged (nothing enqueued); null when the acquisition no longer
+    /// exists. The dangerous-file hold is enforced by the import job regardless of the flag.
     /// </summary>
     public async Task<AcquisitionDetail?> RetryImportAsync(Guid id, bool allowFormatChange, CancellationToken cancellationToken) {
         var detail = await store.GetAsync(id, cancellationToken);
@@ -1150,8 +1151,13 @@ public sealed partial class AcquisitionService(
             return null;
         }
 
+        var canResumeCheckpoint = detail.Summary.HasResumableImport
+            && detail.Summary.Status is (
+                AcquisitionStatus.AwaitingSelection
+                or AcquisitionStatus.Failed
+                or AcquisitionStatus.Cancelled);
         if (detail.Summary.Status is not (AcquisitionStatus.Downloaded or AcquisitionStatus.ManualImportRequired)
-            && !(detail.Summary.Status == AcquisitionStatus.Failed && detail.Summary.HasResumableImport)) {
+            && !canResumeCheckpoint) {
             return detail;
         }
 

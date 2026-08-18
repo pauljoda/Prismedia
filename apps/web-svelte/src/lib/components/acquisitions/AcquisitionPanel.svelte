@@ -89,6 +89,7 @@
   let resetConfirmOpen = $state(false);
   let rejectConfirmOpen = $state(false);
   let unsafeImportConfirmOpen = $state(false);
+  let overrideCandidate = $state<ReleaseCandidateView | null>(null);
   let customQuery = $state("");
   let lastHistoryKey: string | null = null;
 
@@ -103,7 +104,11 @@
   const hasResumableImport = $derived(detail?.summary.hasResumableImport === true);
   const canRetryImport = $derived(
     status === ACQUISITION_STATUS.downloaded ||
-      (status === ACQUISITION_STATUS.failed && hasResumableImport),
+      (hasResumableImport && (
+        status === ACQUISITION_STATUS.awaitingSelection ||
+        status === ACQUISITION_STATUS.failed ||
+        status === ACQUISITION_STATUS.cancelled
+      )),
   );
   const canStartOver = $derived(hasResumableImport && status !== ACQUISITION_STATUS.stopping);
   const isActive = $derived(status ? ACTIVE_ACQUISITION_STATUSES.includes(status) : false);
@@ -113,17 +118,21 @@
       !acquisitionStatusIsKnown(status)
     ),
   );
-  const canCancel = $derived(isActive && !transitionLocked);
-  const canChoose = $derived(status === ACQUISITION_STATUS.awaitingSelection);
+  const canCancel = $derived(
+    (isActive || status === ACQUISITION_STATUS.awaitingSelection)
+      && !transitionLocked
+      && !hasResumableImport,
+  );
   // A release can still be (re)selected after a failed or cancelled attempt — picking one re-queues it.
   // A manual-import hold (ambiguous payload or a dangerous file) also reopens the picker so the user
   // can block the bad release and grab a different one.
   const canPickRelease = $derived(
-      status === ACQUISITION_STATUS.awaitingSelection ||
-      (status === ACQUISITION_STATUS.failed && !hasResumableImport) ||
+    status === ACQUISITION_STATUS.awaitingSelection ||
+      status === ACQUISITION_STATUS.failed ||
       status === ACQUISITION_STATUS.cancelled ||
       status === ACQUISITION_STATUS.manualImportRequired,
   );
+  const canSearchReleases = $derived(canPickRelease && !hasResumableImport);
   const isDownloading = $derived(status === ACQUISITION_STATUS.queued || status === ACQUISITION_STATUS.downloading);
   const isDone = $derived(
     status === ACQUISITION_STATUS.downloaded ||
@@ -263,11 +272,25 @@
   }
 
   async function queue(candidate: ReleaseCandidateView) {
+    if (hasResumableImport) {
+      overrideCandidate = candidate;
+      return;
+    }
+
+    await queueCandidate(candidate);
+  }
+
+  async function queueCandidate(candidate: ReleaseCandidateView, rethrowOnFailure = false) {
     await runDetailAction(
       () => queueAcquisitionCandidate(acquisitionId, candidate.id),
       "Failed to queue release",
-      { refreshOnFailure: true },
+      { refreshOnFailure: true, rethrowOnFailure },
     );
+  }
+
+  async function confirmReleaseOverride() {
+    if (!overrideCandidate) return;
+    await queueCandidate(overrideCandidate, true);
   }
 
   async function blocklist(candidate: ReleaseCandidateView) {
@@ -360,6 +383,7 @@
     options: {
       afterSuccess?: () => void | Promise<void>;
       refreshOnFailure?: boolean;
+      rethrowOnFailure?: boolean;
     } = {},
   ) {
     if (busy) return;
@@ -373,6 +397,7 @@
       // A failed remote-client handoff can still change durable server state. Re-read it while
       // retaining the actionable error instead of leaving a stale card or flashing the error away.
       if (options.refreshOnFailure) await load(true);
+      if (options.rethrowOnFailure) throw err;
     } finally {
       busy = false;
     }
@@ -408,7 +433,7 @@
   // Waiting-for-release renders its own explicit Manual search action. The toolbar action remains for
   // review, failed-search, and manual-import states where searching for another release is a way out.
   const canReSearch = $derived(
-    status === ACQUISITION_STATUS.awaitingSelection ||
+    (status === ACQUISITION_STATUS.awaitingSelection && !hasResumableImport) ||
       (status === ACQUISITION_STATUS.failed && !hasResumableImport) ||
       status === ACQUISITION_STATUS.manualImportRequired,
   );
@@ -502,7 +527,7 @@
             Search again
           </Button>
         {/if}
-        {#if canCancel || canChoose}
+        {#if canCancel}
           <Button type="button" variant="danger" class="gap-1.5" disabled={busy} onclick={() => void cancel()}>
             <X class="h-3.5 w-3.5" />
             Cancel
@@ -654,7 +679,7 @@
           <span class="ml-1.5 font-mono text-[0.68rem] font-normal text-text-muted">{detail.candidates.length}</span>
         </h2>
 
-        {#if canPickRelease}
+        {#if canSearchReleases}
           <form
             class="flex flex-col gap-2 sm:flex-row"
             onsubmit={(event) => {
@@ -686,7 +711,7 @@
           <ReleaseTable candidates={detail.candidates} canChoose={canPickRelease} {busy} onQueue={queue} onBlocklist={blocklist} />
         {/if}
 
-        {#if canPickRelease}
+        {#if canSearchReleases}
           <!-- ── Manual .torrent fallback ── -->
           <div class="flex flex-wrap items-center gap-3 rounded-sm border border-dashed border-border-subtle bg-surface-1 p-3">
             <div class="min-w-0 flex-1">
@@ -718,6 +743,18 @@
     {/if}
   </div>
 {/if}
+
+<ConfirmDialog
+  open={overrideCandidate !== null}
+  title="Replace the interrupted import?"
+  message={overrideCandidate
+    ? `Choosing “${overrideCandidate.title}” clears its partial files and current download, then downloads this selected release as your explicit override.`
+    : ""}
+  confirmLabel="Replace and download"
+  danger
+  onConfirm={confirmReleaseOverride}
+  onClose={() => (overrideCandidate = null)}
+/>
 
 <ConfirmDialog
   open={resetConfirmOpen}

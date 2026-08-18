@@ -514,8 +514,6 @@ public sealed class ScanBookJobHandler(
                 if (!bestEffortHousekeeping) {
                     await QueueBookAutoIdentifyAsync(context, settings, bookId, title, cancellationToken);
                 }
-            } else if (acquisitionId is not null && acquisitionHints is not null) {
-                await acquisitionHints.ApplyAsync(bookId, sourcePath, cancellationToken);
             }
 
             var tracks = group
@@ -532,6 +530,9 @@ public sealed class ScanBookJobHandler(
                     root.IsNsfw))
                 .ToArray();
             var trackIds = await audio.UpsertAudioTracksBatchAsync(tracks, cancellationToken);
+            if (acquisitionId is not null && acquisitionHints is not null) {
+                await acquisitionHints.ApplyAsync(bookId, sourcePath, cancellationToken);
+            }
             validAudioPathsByBook[bookId] = tracks
                 .Select(track => track.FilePath)
                 .ToHashSet(FileSystemPathComparison.Comparer);

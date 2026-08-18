@@ -119,6 +119,55 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
     }
 
     [Fact]
+    public async Task AudiobookImportFulfillsAnExistingReadableBookBeforeReadiness() {
+        await using var db = CreateContext();
+        var rootPath = Directory.CreateDirectory(Path.Combine(_workRoot, "mixed-book")).FullName;
+        var bookFolder = Directory.CreateDirectory(Path.Combine(rootPath, "Author", "Novel")).FullName;
+        var readablePath = Path.Combine(bookFolder, "Novel.epub");
+        await File.WriteAllTextAsync(readablePath, "epub-bytes");
+        var payloadPath = Directory.CreateDirectory(Path.Combine(_workRoot, "audiobook-download")).FullName;
+        var audiobookPath = Path.Combine(payloadPath, "Novel.m4b");
+        await File.WriteAllTextAsync(audiobookPath, "audiobook-bytes");
+        var root = new RootPersistence(rootPath, scanBooks: true);
+        AddLibraryRoot(db, root.Root);
+        var bookId = AddSourceEntity(db, EntityKind.Book, "Novel", readablePath);
+        db.Entities.Local.Single(entity => entity.Id == bookId).IsWanted = true;
+        var acquisitionId = await AddAcquisitionAsync(db, EntityKind.Book, bookId, "Novel");
+        db.Acquisitions.Local.Single(acquisition => acquisition.Id == acquisitionId).BookRendition = BookRendition.Audiobook;
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+        var engine = new BookAcquisitionImportEngine(
+            store,
+            new EfBookAcquisitionProfileStore(db),
+            root,
+            new SingleBookPlanner(audiobookPath),
+            new ImportFileMover(),
+            BookMaterializer(db, root),
+            Torrents(store),
+            NullLogger<BookAcquisitionImportEngine>.Instance);
+        var import = ImportContext(db, EntityKind.Book, bookId, "Novel", payloadPath, author: "Author") with {
+            BookRendition = BookRendition.Audiobook
+        };
+
+        var queue = new MergedImportTestSupport.RecordingJobQueue();
+        await engine.ImportAsync(JobContext(db, import.Id, queue), import, CancellationToken.None);
+
+        var book = await db.Entities.AsNoTracking().SingleAsync(entity => entity.Id == bookId);
+        Assert.False(book.IsWanted);
+        var audiobookTrackIds = await db.Entities.AsNoTracking()
+            .Where(entity => entity.ParentEntityId == bookId && entity.KindCode == EntityKind.AudioTrack.ToCode())
+            .Select(entity => entity.Id)
+            .ToArrayAsync();
+        Assert.NotEmpty(audiobookTrackIds);
+        Assert.True(await db.EntityFiles.AsNoTracking().AnyAsync(file =>
+            audiobookTrackIds.Contains(file.EntityId)
+            && file.Role == EntityFileRole.Source
+            && file.Path.EndsWith(".m4b", StringComparison.OrdinalIgnoreCase)));
+        Assert.Contains(queue.Enqueued, request => request.Type == JobType.ReconcileEntity);
+        Assert.Equal(AcquisitionStatus.Importing, await StatusOfAsync(db, import.Id));
+    }
+
+    [Fact]
     public async Task MovieImportBindsTheDirectPlayableMovieWithoutQueueingAFullLibraryScan() {
         await using var db = CreateContext();
         var rootPath = Directory.CreateDirectory(Path.Combine(_workRoot, "movies")).FullName;
@@ -865,7 +914,8 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             root,
             persistence,
             persistence,
-            acquisitionHints: hints);
+            acquisitionHints: hints,
+            audio: persistence);
         return Materializer(db, new ImportedBookMaterializationPolicy(scan));
     }
 
@@ -1109,7 +1159,10 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
                 BlockReason: null,
                 [new ResolvedImportItem(
                     sourcePath,
-                    Path.Combine(libraryRootPath, context.Author ?? "Unknown Author", "Novel.epub"))]));
+                    Path.Combine(
+                        libraryRootPath,
+                        context.Author ?? "Unknown Author",
+                        $"Novel{Path.GetExtension(sourcePath)}"))]));
     }
 
     private sealed class FailingMaterializer : IImportedEntityMaterializer {

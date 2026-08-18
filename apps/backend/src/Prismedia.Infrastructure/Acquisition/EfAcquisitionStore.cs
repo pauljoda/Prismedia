@@ -1352,6 +1352,8 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             AcquisitionStatus.Failed,
             AcquisitionStatus.Cancelled,
             AcquisitionStatus.ManualImportRequired,
+            // A manual release override first claims Queued so Retry/import cannot race its cleanup.
+            AcquisitionStatus.Queued,
         };
         var now = DateTimeOffset.UtcNow;
         int affected;
@@ -1570,6 +1572,8 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             AcquisitionStatus.Failed,
             AcquisitionStatus.Cancelled,
             AcquisitionStatus.ManualImportRequired,
+            // A manual release override first claims Queued so Retry/import cannot race its cleanup.
+            AcquisitionStatus.Queued,
         };
         var now = DateTimeOffset.UtcNow;
         int affected;

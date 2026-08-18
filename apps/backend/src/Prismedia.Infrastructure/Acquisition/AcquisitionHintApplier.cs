@@ -137,6 +137,16 @@ public sealed partial class AcquisitionHintApplier(
         await StampExternalIdsAsync(entityId, match, cancellationToken);
         await MarkReadyForPostImportIdentifyAsync(entityId, cancellationToken);
 
+        // ApplyAsync is reached only from the exact acquisition hint after the imported source rows
+        // exist. That acquisition-specific evidence fulfills Books with parallel ebook/audiobook
+        // renditions without teaching generic source-subtree readiness that either rendition is enough.
+        var entity = db.Entities.Local.FirstOrDefault(row => row.Id == entityId)
+            ?? await db.Entities.FirstOrDefaultAsync(row => row.Id == entityId, cancellationToken);
+        if (entity is not null && entity.IsWanted) {
+            entity.IsWanted = false;
+            entity.UpdatedAt = DateTimeOffset.UtcNow;
+        }
+
         // Record the owned source tier on the book's detail row (the format tier is derived from the row's
         // Format, never stored). This is the provenance half of the owned quality the upgrade loop compares
         // against. The scan creates the detail row before hints are applied, so it is expected to exist.

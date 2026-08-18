@@ -909,6 +909,61 @@ public sealed class AcquisitionServiceTests {
     }
 
     [Fact]
+    public async Task ManualReleasePickDiscardsPartialImportBeforeQueueingTheOverride() {
+        var harness = Harness(new AcquisitionTransferInfo(
+            AcquisitionStatus.AwaitingSelection,
+            FinalSourcePath: null,
+            ClientItemId,
+            RecordedClientId));
+        PrepareQueueCandidate(harness.Store);
+        var import = PartialBookImportContext();
+        harness.Store.ImportContext = import;
+        harness.Store.HasResumableImport = true;
+
+        var detail = await QueueService(harness, new RecordingTransferAddCoordinator())
+            .QueueAsync(
+                AcquisitionId,
+                CandidateId,
+                CancellationToken.None,
+                manualPick: true);
+
+        Assert.Equal(AcquisitionStatus.Queued, detail?.Summary.Status);
+        Assert.Equal([import], harness.ImportCleanup.Cleaned);
+        Assert.Equal(1, harness.Store.ClearedPlacementCheckpoints);
+        Assert.Equal([(RecordedClientId, ClientItemId, true)], harness.Downloads.Removals);
+        Assert.Equal(1, harness.Downloads.AddCount);
+        Assert.Equal("Dune.2021.1080p", harness.Store.SelectedRelease?.Title);
+        Assert.True(harness.Store.SelectedRelease?.ManualPick);
+    }
+
+    [Fact]
+    public async Task AutomaticQueueStillRefusesToSupersedeAPartialImport() {
+        var harness = Harness(new AcquisitionTransferInfo(
+            AcquisitionStatus.AwaitingSelection,
+            FinalSourcePath: null,
+            ClientItemId,
+            RecordedClientId));
+        PrepareQueueCandidate(harness.Store);
+        harness.Store.ImportContext = PartialBookImportContext();
+        harness.Store.HasResumableImport = true;
+
+        var exception = await Assert.ThrowsAsync<AcquisitionConfigurationException>(() =>
+            QueueService(harness, new RecordingTransferAddCoordinator())
+                .QueueAsync(
+                    AcquisitionId,
+                    CandidateId,
+                    CancellationToken.None,
+                    manualPick: false));
+
+        Assert.Contains("partially applied import", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(harness.ImportCleanup.Cleaned);
+        Assert.Equal(0, harness.Store.ClearedPlacementCheckpoints);
+        Assert.Empty(harness.Downloads.Removals);
+        Assert.Equal(0, harness.Downloads.AddCount);
+        Assert.Equal(AcquisitionStatus.AwaitingSelection, harness.Store.Status);
+    }
+
+    [Fact]
     public async Task QueueRecoveryDoesNotAddAgainWhenTheOriginalHandoffFinishesWhileItWaitsForTheLease() {
         var harness = Harness(new AcquisitionTransferInfo(
             AcquisitionStatus.Queued,
@@ -1403,6 +1458,24 @@ public sealed class AcquisitionServiceTests {
     }
 
     [Fact]
+    public async Task ReviewedDurableImportCanEnqueueAnExplicitResume() {
+        var harness = Harness(TransferInfo(RecordedClientId, AcquisitionStatus.AwaitingSelection));
+        harness.Store.HasResumableImport = true;
+
+        var detail = await harness.Service.RetryImportAsync(
+            AcquisitionId,
+            allowFormatChange: false,
+            CancellationToken.None);
+
+        Assert.True(detail?.Summary.HasResumableImport);
+        var retry = Assert.Single(harness.Queue.Requests);
+        Assert.Equal(JobType.AcquisitionImport, retry.Type);
+        var payload = AcquisitionJobPayload.Parse(retry.PayloadJson!);
+        Assert.Equal(AcquisitionId, payload.AcquisitionId);
+        Assert.True(payload.ManualRetry);
+    }
+
+    [Fact]
     public async Task ManualTvImportReviewBlocksDangerousFilesWhileQueuingExactSafeMappings() {
         var firstEpisodeId = Guid.NewGuid();
         var secondEpisodeId = Guid.NewGuid();
@@ -1642,6 +1715,7 @@ public sealed class AcquisitionServiceTests {
             new NullIndexerConfigStore(),
             new NullReleaseLinkResolver(),
             transferAdds,
+            harness.ImportCleanup,
             harness.History,
             NullLogger<AcquisitionQueueService>.Instance,
             graphs: graphs);

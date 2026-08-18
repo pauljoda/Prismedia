@@ -1431,6 +1431,48 @@ public sealed class EfAcquisitionStoreTests {
     }
 
     [Fact]
+    public async Task ManualOverrideCanClearExactPlacementCheckpointAfterClaimingQueued() {
+        await using var db = CreateContext();
+        var acquisitionId = AddCheckpointAcquisition(db, EntityKind.Movie);
+        await db.SaveChangesAsync();
+        var checkpoint = new ImportPlacementCheckpoint(
+            EntityKind.Movie,
+            Guid.NewGuid(),
+            "/library/movies",
+            "/downloads/film",
+            ImportMode.Move,
+            "/library/movies",
+            "/library/movies",
+            "Imported.",
+            [new ImportPlacementCheckpointUnit(
+                "Film.mkv",
+                "/downloads/film/Film.mkv",
+                "/library/movies/Film.mkv",
+                IsMedia: true,
+                FinalPath: "/library/movies/Film.mkv")],
+            AttemptId: Guid.NewGuid(),
+            ClaimJobId: Guid.NewGuid());
+        db.Acquisitions.Local.Single(row => row.Id == acquisitionId).ImportClaimJobId = checkpoint.ClaimJobId;
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+        Assert.True(await store.TryCreateImportPlacementCheckpointAsync(
+            acquisitionId,
+            checkpoint,
+            CancellationToken.None));
+        db.Acquisitions.Local.Single(row => row.Id == acquisitionId).Status = AcquisitionStatus.Queued;
+        await db.SaveChangesAsync();
+
+        Assert.True(await store.TryClearImportPlacementCheckpointAsync(
+            acquisitionId,
+            checkpoint,
+            CancellationToken.None));
+
+        var context = await store.GetImportContextAsync(acquisitionId, CancellationToken.None);
+        Assert.Null(context?.ImportPlacementCheckpoint);
+        Assert.Equal(AcquisitionStatus.Queued, await store.GetStatusAsync(acquisitionId, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task MovieRejectsTelevisionCheckpointJsonInsteadOfInferringItsProtocolFromThePayloadShape() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;

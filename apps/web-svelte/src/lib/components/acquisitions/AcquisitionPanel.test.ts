@@ -312,6 +312,48 @@ describe("AcquisitionPanel", () => {
     expect(mocks.retryAcquisitionImport).toHaveBeenCalledWith("acquisition-1", false);
   });
 
+  it("offers exact import resume instead of search or cancel for a reviewed durable checkpoint", async () => {
+    const awaiting = acquisition(ACQUISITION_STATUS.awaitingSelection, true);
+    mocks.fetchAcquisition.mockResolvedValue(awaiting);
+    mocks.retryAcquisitionImport.mockResolvedValue(awaiting);
+
+    const view = render(AcquisitionPanel, {
+      acquisitionId: "acquisition-1",
+      detail: awaiting,
+    });
+
+    const retry = await view.findByRole("button", { name: "Retry import" });
+    expect(view.queryByRole("button", { name: "Search again" })).toBeNull();
+    expect(view.queryByRole("button", { name: "Cancel" })).toBeNull();
+    await fireEvent.click(retry);
+    expect(mocks.retryAcquisitionImport).toHaveBeenCalledWith("acquisition-1", false);
+  });
+
+  it("confirms that a manual release pick replaces the interrupted import", async () => {
+    const awaiting = acquisition(ACQUISITION_STATUS.awaitingSelection, true);
+    awaiting.candidates = [candidate()];
+    mocks.fetchAcquisition.mockResolvedValue(awaiting);
+    mocks.queueAcquisitionCandidate.mockResolvedValue(acquisition(ACQUISITION_STATUS.queued));
+
+    const view = render(AcquisitionPanel, {
+      acquisitionId: "acquisition-1",
+      detail: awaiting,
+    });
+
+    await fireEvent.click((await view.findAllByRole("button", { name: "Download" }))[0]);
+
+    expect(mocks.queueAcquisitionCandidate).not.toHaveBeenCalled();
+    const dialog = view.getByRole("dialog", { name: "Replace the interrupted import?" });
+    expect(within(dialog).getByText(/clears its partial files and current download/i)).toBeInTheDocument();
+    expect(within(dialog).getByText(/Avatar: The Last Airbender/i)).toBeInTheDocument();
+    await fireEvent.click(within(dialog).getByRole("button", { name: "Confirm Replace and download" }));
+
+    await waitFor(() => expect(mocks.queueAcquisitionCandidate).toHaveBeenCalledWith(
+      "acquisition-1",
+      "release-1",
+    ));
+  });
+
   it("offers a confirmed destructive start-over for a failed durable checkpoint", async () => {
     const failed = acquisition(ACQUISITION_STATUS.failed, true);
     const onReset = vi.fn();
