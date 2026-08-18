@@ -75,6 +75,36 @@ public interface IScanMetadataPersistence {
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Applies one scan batch of video sidecar metadata with the same apply-if-missing semantics
+    /// as the single-entity overload. Implementations preload the batch's persisted state in a
+    /// handful of set queries and save once, instead of several reads and one save per video —
+    /// the dominant cost of large library scans. The default falls back to per-item application.
+    /// </summary>
+    /// <param name="items">Batch of videos with their sidecar metadata.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    async Task ApplyVideoSidecarMetadataBatchAsync(
+        IReadOnlyList<VideoSidecarApplyItem> items,
+        CancellationToken cancellationToken) {
+        foreach (var item in items) {
+            await ApplyVideoSidecarMetadataAsync(
+                item.EntityId,
+                item.Metadata,
+                item.FallbackTitle,
+                item.MarkNsfw,
+                cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// Marks the end of one scan persistence batch. Implementations backed by a job-lifetime
+    /// unit of work release accumulated tracked state here so throughput stays flat across a
+    /// large scan instead of degrading as the tracked graph grows. Callers invoke it only after
+    /// the batch's writes have been saved. The default is a no-op.
+    /// </summary>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    Task CompleteScanBatchAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <summary>
     /// Applies ComicInfo.xml metadata without clearing existing user or provider metadata.
     /// </summary>
     /// <param name="bookEntityId">Book/comic entity receiving metadata.</param>
@@ -87,6 +117,17 @@ public interface IScanMetadataPersistence {
         bool markNsfw,
         CancellationToken cancellationToken);
 }
+
+/// <summary>One video in a sidecar-metadata apply batch.</summary>
+/// <param name="EntityId">Video entity receiving metadata.</param>
+/// <param name="Metadata">Sidecar metadata discovered for the video.</param>
+/// <param name="FallbackTitle">Title inferred from the source path before sidecar metadata was considered.</param>
+/// <param name="MarkNsfw">Whether linked taxonomy should be marked NSFW.</param>
+public sealed record VideoSidecarApplyItem(
+    Guid EntityId,
+    VideoSidecarMetadata Metadata,
+    string FallbackTitle,
+    bool MarkNsfw);
 
 /// <summary>
 /// Metadata read from video NFO and JSON sidecars.

@@ -29,9 +29,17 @@ public sealed class EfScanSnapshotStore(PrismediaDbContext db) : IScanSnapshotSt
         }
 
         var now = DateTimeOffset.UtcNow;
-        var existingRows = delta.Changed.Count > 0 || delta.Removed.Count > 0
+
+        // Only the delta's own rows are loaded: a one-file change previously materialized and
+        // tracked the entire root snapshot (thousands of rows) just to touch one of them.
+        var affectedPaths = delta.Changed
+            .Concat(delta.Removed)
+            .Select(signature => signature.Path)
+            .ToArray();
+        var existingRows = affectedPaths.Length > 0
             ? await db.ScannedFiles
-                .Where(row => row.LibraryRootId == rootId && row.ScanKind == scanKind)
+                .Where(row => row.LibraryRootId == rootId && row.ScanKind == scanKind &&
+                    affectedPaths.Contains(row.Path))
                 .ToArrayAsync(cancellationToken)
             : [];
 

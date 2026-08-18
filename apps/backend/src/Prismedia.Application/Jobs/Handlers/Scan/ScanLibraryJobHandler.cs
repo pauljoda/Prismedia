@@ -83,12 +83,13 @@ public sealed class ScanLibraryJobHandler(
         await using var scanLease = scanGate is null ? null : await scanGate.EnterAsync(cancellationToken);
         var files = placedPaths.Select(Path.GetFullPath).ToArray();
         var seriesSeasonFolders = BuildSeriesSeasonFolderIndex(root.Path, files);
+        var importIndex = VideoRootFileIndex.Build(files);
         var items = new List<VideoUpsertItem>(files.Length);
         foreach (var filePath in files) {
             var sidecar = sidecars is null
                 ? null
                 : await sidecars.ReadAsync(filePath, cancellationToken);
-            var item = BuildVideoUpsertItem(filePath, root, files, seriesSeasonFolders, sidecar);
+            var item = BuildVideoUpsertItem(filePath, root, importIndex, seriesSeasonFolders, sidecar);
             await VideoWantedBinding.BindAsync(
                 acquisitionHints,
                 item,
@@ -107,18 +108,20 @@ public sealed class ScanLibraryJobHandler(
         }
 
         if (scanMetadata is not null) {
+            var applyItems = new List<VideoSidecarApplyItem>(persistedItems.Count);
             for (var index = 0; index < persistedItems.Count; index++) {
                 if (persistedItems[index].Metadata is not { } metadata) {
                     continue;
                 }
 
-                await scanMetadata.ApplyVideoSidecarMetadataAsync(
+                applyItems.Add(new VideoSidecarApplyItem(
                     entityIds[index],
                     metadata,
                     Path.GetFileNameWithoutExtension(persistedItems[index].FilePath),
-                    persistedItems[index].IsNsfw,
-                    cancellationToken);
+                    persistedItems[index].IsNsfw));
             }
+
+            await scanMetadata.ApplyVideoSidecarMetadataBatchAsync(applyItems, cancellationToken);
         }
 
         if (acquisitionHints is not null) {
@@ -236,12 +239,15 @@ public sealed class ScanLibraryJobHandler(
         var persistedScanItems = new List<VideoUpsertItem>(files.Count);
         var failedPaths = new List<string>();
         var validPaths = new HashSet<string>(classificationFiles, FileSystemPathComparison.Comparer);
+        // One pass groups files by directory; every classification below is then O(directory)
+        // instead of scanning the whole root's file list per file (~N^2 on large roots).
+        var fileIndex = VideoRootFileIndex.Build(classificationFiles);
         var validMovieFolders = new HashSet<string>(FileSystemPathComparison.Comparer);
         foreach (var currentFile in classificationFiles) {
             if (BuildVideoUpsertItem(
                     currentFile,
                     root,
-                    classificationFiles,
+                    fileIndex,
                     seriesSeasonFolders).Movie is { } movie) {
                 validMovieFolders.Add(movie.FolderPath);
             }
@@ -262,7 +268,7 @@ public sealed class ScanLibraryJobHandler(
 
                 VideoUpsertItem item;
                 using (timer.Phase("classify")) {
-                    item = BuildVideoUpsertItem(filePath, root, classificationFiles, seriesSeasonFolders, sidecar);
+                    item = BuildVideoUpsertItem(filePath, root, fileIndex, seriesSeasonFolders, sidecar);
                     if (item.Movie is { } movie) {
                         validMovieFolders.Add(movie.FolderPath);
                     }
@@ -286,22 +292,32 @@ public sealed class ScanLibraryJobHandler(
 
             using (timer.Phase("sidecar-metadata")) {
                 if (scanMetadata is not null) {
+                    var applyItems = new List<VideoSidecarApplyItem>(persistedItems.Count);
                     for (var i = 0; i < persistedItems.Count && i < entityIds.Count; i++) {
                         if (persistedItems[i].Metadata is not { } metadata) {
                             continue;
                         }
 
-                        await scanMetadata.ApplyVideoSidecarMetadataAsync(
+                        applyItems.Add(new VideoSidecarApplyItem(
                             entityIds[i],
                             metadata,
                             Path.GetFileNameWithoutExtension(persistedItems[i].FilePath),
-                            persistedItems[i].IsNsfw,
-                            cancellationToken);
+                            persistedItems[i].IsNsfw));
                     }
+
+                    await scanMetadata.ApplyVideoSidecarMetadataBatchAsync(applyItems, cancellationToken);
                 }
             }
             allEntityIds.AddRange(entityIds);
             persistedScanItems.AddRange(persistedItems);
+
+            // Everything this batch wrote is saved; release the tracked graph so throughput
+            // stays flat instead of degrading as the job-lifetime context accumulates rows.
+            using (timer.Phase("batch-complete")) {
+                if (scanMetadata is not null) {
+                    await scanMetadata.CompleteScanBatchAsync(cancellationToken);
+                }
+            }
 
             using (timer.Phase("progress-write")) {
                 await context.ReportProgressAsync(
@@ -529,7 +545,7 @@ public sealed class ScanLibraryJobHandler(
     private static VideoUpsertItem BuildVideoUpsertItem(
         string filePath,
         LibraryRootData root,
-        IReadOnlyList<string> allFiles,
+        VideoRootFileIndex fileIndex,
         IReadOnlyDictionary<string, SeriesSeasonFolderInfo> seriesSeasonFolders,
         VideoSidecarMetadata? metadata = null) {
         var fallbackTitle = Path.GetFileNameWithoutExtension(filePath);
@@ -538,7 +554,7 @@ public sealed class ScanLibraryJobHandler(
             filePath,
             title,
             root,
-            allFiles,
+            fileIndex,
             seriesSeasonFolders,
             metadata,
             ParseEpisodeToken(fallbackTitle),
@@ -565,7 +581,7 @@ public sealed class ScanLibraryJobHandler(
         return TryGetMovieFolderInfo(
             context.FilePath,
             context.Root.Path,
-            context.AllFiles,
+            context.FileIndex,
             out var folderPath,
             out var folderName)
             ? context.CreateMovie(folderPath, folderName)
@@ -630,7 +646,7 @@ public sealed class ScanLibraryJobHandler(
     private static VideoUpsertItem? ClassifyLooseFolderSeries(VideoScanClassificationContext context) {
         if (context.ParentFolder is not { } parentFolder ||
             SamePath(parentFolder, context.Root.Path) ||
-            !TryGetFolderSeriesPosition(context.FilePath, parentFolder, context.AllFiles, out var folderSortOrder)) {
+            !TryGetFolderSeriesPosition(context.FilePath, parentFolder, context.FileIndex, out var folderSortOrder)) {
             return null;
         }
 
@@ -645,7 +661,7 @@ public sealed class ScanLibraryJobHandler(
         string FilePath,
         string Title,
         LibraryRootData Root,
-        IReadOnlyList<string> AllFiles,
+        VideoRootFileIndex FileIndex,
         IReadOnlyDictionary<string, SeriesSeasonFolderInfo> SeriesSeasonFolders,
         VideoSidecarMetadata? Metadata,
         EpisodeToken? EpisodeToken,
@@ -791,25 +807,16 @@ public sealed class ScanLibraryJobHandler(
     private static bool TryGetFolderSeriesPosition(
         string filePath,
         string parentFolder,
-        IReadOnlyList<string> allFiles,
+        VideoRootFileIndex fileIndex,
         out int sortOrder) {
         sortOrder = 0;
 
-        var siblings = new List<string>();
-        foreach (var candidate in allFiles) {
-            var candidateParent = Path.GetDirectoryName(candidate);
-            if (!string.IsNullOrWhiteSpace(candidateParent) && SamePath(candidateParent, parentFolder)) {
-                siblings.Add(candidate);
-            }
-        }
-
+        var siblings = fileIndex.DirectFiles(parentFolder);
         if (siblings.Count < 2) {
             return false;
         }
 
-        siblings.Sort(static (left, right) => string.Compare(
-            Path.GetFileName(left), Path.GetFileName(right), StringComparison.OrdinalIgnoreCase));
-        var index = siblings.FindIndex(path => SamePath(path, filePath));
+        var index = siblings.ToList().FindIndex(path => SamePath(path, filePath));
         sortOrder = index < 0 ? 0 : index;
         return true;
     }
@@ -817,7 +824,7 @@ public sealed class ScanLibraryJobHandler(
     private static bool TryGetMovieFolderInfo(
         string filePath,
         string rootPath,
-        IReadOnlyList<string> allFiles,
+        VideoRootFileIndex fileIndex,
         out string movieFolderPath,
         out string movieFolderName) {
         movieFolderPath = string.Empty;
@@ -848,24 +855,11 @@ public sealed class ScanLibraryJobHandler(
             return false;
         }
 
-        var directFilesInFolder = 0;
-        foreach (var candidate in allFiles) {
-            var candidateParent = Path.GetDirectoryName(candidate);
-            if (string.IsNullOrWhiteSpace(candidateParent)) {
-                continue;
-            }
-
-            if (SamePath(candidateParent, parentFolder)) {
-                directFilesInFolder++;
-                continue;
-            }
-
-            if (IsPathUnderRoot(candidate, parentFolder)) {
-                return false;
-            }
+        if (fileIndex.HasDeepFiles(parentFolder)) {
+            return false;
         }
 
-        if (directFilesInFolder != 1) {
+        if (fileIndex.DirectFiles(parentFolder).Count != 1) {
             return false;
         }
 
@@ -909,6 +903,70 @@ public sealed class ScanLibraryJobHandler(
             int.TryParse(match.Groups["episode"].Value, out var episodeNumber)
             ? new EpisodeToken(seasonNumber, episodeNumber)
             : null;
+    }
+
+    /// <summary>
+    /// One-pass index over a reconcile's classification file list: direct files per directory
+    /// (sorted by filename for deterministic sibling positions) and which directories have files
+    /// somewhere below their direct children. Classification rules read it in O(directory)
+    /// instead of scanning the whole root's file list once per file.
+    /// </summary>
+    private sealed class VideoRootFileIndex {
+        private readonly Dictionary<string, List<string>> _filesByDirectory;
+        private readonly HashSet<string> _directoriesWithDeepFiles;
+
+        private VideoRootFileIndex(
+            Dictionary<string, List<string>> filesByDirectory,
+            HashSet<string> directoriesWithDeepFiles) {
+            _filesByDirectory = filesByDirectory;
+            _directoriesWithDeepFiles = directoriesWithDeepFiles;
+        }
+
+        public static VideoRootFileIndex Build(IReadOnlyList<string> allFiles) {
+            var byDirectory = new Dictionary<string, List<string>>(FileSystemPathComparison.Comparer);
+            var deep = new HashSet<string>(FileSystemPathComparison.Comparer);
+            foreach (var file in allFiles) {
+                var parent = Path.GetDirectoryName(file);
+                if (string.IsNullOrWhiteSpace(parent)) {
+                    continue;
+                }
+
+                parent = Path.TrimEndingDirectorySeparator(parent);
+                if (!byDirectory.TryGetValue(parent, out var list)) {
+                    list = [];
+                    byDirectory[parent] = list;
+                }
+
+                list.Add(file);
+
+                // Every ancestor above the parent has this file strictly below its direct
+                // children. Stop climbing at the first already-marked ancestor: its own
+                // ancestors were marked by the walk that marked it.
+                var ancestor = Path.GetDirectoryName(parent);
+                while (!string.IsNullOrWhiteSpace(ancestor)) {
+                    if (!deep.Add(Path.TrimEndingDirectorySeparator(ancestor))) {
+                        break;
+                    }
+
+                    ancestor = Path.GetDirectoryName(ancestor);
+                }
+            }
+
+            foreach (var list in byDirectory.Values) {
+                list.Sort(static (left, right) => string.Compare(
+                    Path.GetFileName(left), Path.GetFileName(right), StringComparison.OrdinalIgnoreCase));
+            }
+
+            return new VideoRootFileIndex(byDirectory, deep);
+        }
+
+        /// <summary>Direct files of a directory, sorted by filename; empty when none.</summary>
+        public IReadOnlyList<string> DirectFiles(string directory) =>
+            _filesByDirectory.GetValueOrDefault(Path.TrimEndingDirectorySeparator(directory)) ?? [];
+
+        /// <summary>Whether any indexed file lives below the directory's direct children.</summary>
+        public bool HasDeepFiles(string directory) =>
+            _directoriesWithDeepFiles.Contains(Path.TrimEndingDirectorySeparator(directory));
     }
 
     private static bool SamePath(string left, string right) =>
