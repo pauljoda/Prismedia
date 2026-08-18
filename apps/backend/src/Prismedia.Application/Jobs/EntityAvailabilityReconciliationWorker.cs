@@ -6,9 +6,10 @@ using Prismedia.Application.Entities;
 namespace Prismedia.Application.Jobs;
 
 /// <summary>
-/// Periodic safety net for the trigger-maintained Entity availability projection. The first pass is
-/// delayed so deployment startup and migrations retain priority; ordinary mutations remain current
-/// immediately through database triggers.
+/// Periodic safety net for the trigger-maintained Entity read projections (availability and
+/// rollups). The first pass is delayed so deployment startup and migrations retain priority;
+/// ordinary mutations remain current immediately through database triggers. Repairs are logged
+/// as warnings so persistent drift is visible instead of silently patched.
 /// </summary>
 public sealed class EntityAvailabilityReconciliationWorker(
     IServiceScopeFactory scopeFactory,
@@ -33,10 +34,18 @@ public sealed class EntityAvailabilityReconciliationWorker(
                         "Repaired {Count} drifted Entity availability snapshot(s).",
                         repaired);
                 }
+
+                var rollups = scope.ServiceProvider.GetRequiredService<IEntityRollupReconciler>();
+                var repairedRollups = await rollups.ReconcileAsync(stoppingToken);
+                if (repairedRollups > 0) {
+                    logger.LogWarning(
+                        "Repaired {Count} drifted Entity rollup row(s).",
+                        repairedRollups);
+                }
             } catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) {
                 break;
             } catch (Exception exception) {
-                logger.LogError(exception, "Entity availability reconciliation failed.");
+                logger.LogError(exception, "Entity projection reconciliation failed.");
             }
 
             try {

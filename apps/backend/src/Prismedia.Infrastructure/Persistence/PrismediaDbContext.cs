@@ -21,6 +21,14 @@ public sealed class PrismediaDbContext : DbContext {
 
     public DbSet<EntityAvailabilityRow> EntityAvailability => Set<EntityAvailabilityRow>();
 
+    public DbSet<EntityRollupRow> EntityRollups => Set<EntityRollupRow>();
+
+    public DbSet<EntityDescendantCountRow> EntityDescendantCounts => Set<EntityDescendantCountRow>();
+
+    public DbSet<EntityReferenceCountRow> EntityReferenceCounts => Set<EntityReferenceCountRow>();
+
+    public DbSet<EntityCollectionMemberCountRow> EntityCollectionMemberCounts => Set<EntityCollectionMemberCountRow>();
+
     public DbSet<EntityDescriptionRow> EntityDescriptions => Set<EntityDescriptionRow>();
 
     public DbSet<EntityRelationshipLinkRow> EntityRelationshipLinks => Set<EntityRelationshipLinkRow>();

@@ -96,5 +96,60 @@ internal static class BaseEntityModelConfiguration {
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        modelBuilder.Entity<EntityRollupRow>(entity => {
+            entity.ToTable("entity_rollups");
+            entity.HasKey(row => row.EntityId);
+            entity.Property(row => row.EntityId).HasColumnName("entity_id").ValueGeneratedNever();
+            entity.Property(row => row.EffectiveLibraryRootId).HasColumnName("effective_library_root_id");
+            entity.Property(row => row.EffectiveIsNsfw).HasColumnName("effective_is_nsfw");
+            entity.Property(row => row.DirectChildCount).HasColumnName("direct_child_count");
+            entity.Property(row => row.LatestDescendantCreatedAt).HasColumnName("latest_descendant_created_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.HasOne<EntityRow>()
+                .WithOne()
+                .HasForeignKey<EntityRollupRow>(row => row.EntityId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<EntityDescendantCountRow>(entity => {
+            entity.ToTable("entity_descendant_counts");
+            entity.HasKey(row => new { row.EntityId, row.DescendantKindCode, row.LibraryRootId });
+            entity.Property(row => row.EntityId).HasColumnName("entity_id");
+            entity.Property(row => row.DescendantKindCode).HasColumnName("descendant_kind_code").HasMaxLength(64);
+            entity.Property(row => row.LibraryRootId).HasColumnName("library_root_id");
+            entity.Property(row => row.CountTotal).HasColumnName("count_total");
+            entity.Property(row => row.CountNsfw).HasColumnName("count_nsfw");
+            entity.HasOne<EntityRow>()
+                .WithMany()
+                .HasForeignKey(row => row.EntityId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<EntityReferenceCountRow>(entity => {
+            entity.ToTable("entity_reference_counts");
+            entity.HasKey(row => new { row.EntityId, row.SourceKindCode, row.LibraryRootId });
+            entity.Property(row => row.EntityId).HasColumnName("entity_id");
+            entity.Property(row => row.SourceKindCode).HasColumnName("source_kind_code").HasMaxLength(64);
+            entity.Property(row => row.LibraryRootId).HasColumnName("library_root_id");
+            entity.Property(row => row.CountTotal).HasColumnName("count_total");
+            entity.Property(row => row.CountNsfw).HasColumnName("count_nsfw");
+            entity.HasOne<EntityRow>()
+                .WithMany()
+                .HasForeignKey(row => row.EntityId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<EntityCollectionMemberCountRow>(entity => {
+            entity.ToTable("entity_collection_member_counts");
+            entity.HasKey(row => new { row.EntityId, row.LibraryRootId });
+            entity.Property(row => row.EntityId).HasColumnName("entity_id");
+            entity.Property(row => row.LibraryRootId).HasColumnName("library_root_id");
+            entity.Property(row => row.CountTotal).HasColumnName("count_total");
+            entity.Property(row => row.CountNsfw).HasColumnName("count_nsfw");
+            entity.HasOne<EntityRow>()
+                .WithMany()
+                .HasForeignKey(row => row.EntityId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
     }
 }

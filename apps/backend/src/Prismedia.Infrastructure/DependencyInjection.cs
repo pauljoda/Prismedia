@@ -287,6 +287,7 @@ public static class DependencyInjection {
         services.AddScoped<EfEntityReadService>();
         services.AddScoped<IEntityReadService>(provider => provider.GetRequiredService<EfEntityReadService>());
         services.AddScoped<IEntityAvailabilityReconciler, EfEntityAvailabilityReconciler>();
+        services.AddScoped<IEntityRollupReconciler, EfEntityRollupReconciler>();
         services.AddScoped<IEntityVisibilityChecker, EfEntityVisibilityChecker>();
         services.AddScoped<EfLibraryAccessReader>();
         services.AddScoped<ILibraryAccessReader>(provider => provider.GetRequiredService<EfLibraryAccessReader>());
