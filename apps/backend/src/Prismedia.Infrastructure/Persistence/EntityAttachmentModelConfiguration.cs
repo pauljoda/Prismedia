@@ -96,6 +96,10 @@ internal static class EntityAttachmentModelConfiguration {
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
             entity.HasIndex(row => new { row.EntityId, row.Role }).IsUnique();
+            // Scan wanted-binding and shared-source lookups resolve owners by exact path within a
+            // role; without this index they sequential-scan the whole table (measured at 66% of
+            // scan database time on a rich library).
+            entity.HasIndex(row => new { row.Role, row.Path });
             entity.HasOne<EntityRow>()
                 .WithMany()
                 .HasForeignKey(row => row.EntityId)

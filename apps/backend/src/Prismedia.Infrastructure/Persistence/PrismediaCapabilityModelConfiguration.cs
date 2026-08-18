@@ -153,6 +153,9 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.Code).HasColumnName("code").HasMaxLength(64).IsRequired();
             entity.Property(row => row.Value).HasColumnName("value").IsRequired();
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            // Folder-source staleness checks resolve owners by (code, value) — e.g. every movie
+            // folder under a root — which otherwise sequential-scans the table on each scan.
+            entity.HasIndex(row => new { row.Code, row.Value });
             entity.HasOne<EntityRow>().WithMany().HasForeignKey(row => row.EntityId).OnDelete(DeleteBehavior.Cascade);
         });
 
