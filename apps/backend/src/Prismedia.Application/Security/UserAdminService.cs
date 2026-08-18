@@ -11,11 +11,25 @@ public sealed class UserAdminService {
     private readonly ISecurityPersistence _persistence;
     private readonly IPasswordHasher _hasher;
     private readonly ILibraryAccessStore? _libraryAccess;
+    private readonly SessionResolutionCache? _sessionCache;
+    private readonly BasicCredentialCache? _credentialCache;
 
-    public UserAdminService(ISecurityPersistence persistence, IPasswordHasher hasher, ILibraryAccessStore? libraryAccess = null) {
+    public UserAdminService(
+        ISecurityPersistence persistence,
+        IPasswordHasher hasher,
+        ILibraryAccessStore? libraryAccess = null,
+        SessionResolutionCache? sessionCache = null,
+        BasicCredentialCache? credentialCache = null) {
         _persistence = persistence;
         _hasher = hasher;
         _libraryAccess = libraryAccess;
+        _sessionCache = sessionCache;
+        _credentialCache = credentialCache;
+    }
+
+    private void InvalidateCachedIdentity(Guid userId) {
+        _sessionCache?.InvalidateUser(userId);
+        _credentialCache?.InvalidateUser(userId);
     }
 
     /// <summary>Lists all user accounts including disabled ones.</summary>
@@ -99,6 +113,10 @@ public sealed class UserAdminService {
             await _libraryAccess.RevokeNsfwAccessAsync(userId, cancellationToken);
         }
 
+        if (updated is not null) {
+            InvalidateCachedIdentity(userId);
+        }
+
         return updated;
     }
 
@@ -110,6 +128,7 @@ public sealed class UserAdminService {
         }
 
         await _persistence.InvalidateSessionsAsync(userId, keepSessionId: null, cancellationToken);
+        InvalidateCachedIdentity(userId);
         return true;
     }
 
@@ -124,7 +143,12 @@ public sealed class UserAdminService {
             await EnsureAnotherEnabledAdminExistsAsync(cancellationToken);
         }
 
-        return await _persistence.DeleteUserAsync(userId, cancellationToken);
+        var deleted = await _persistence.DeleteUserAsync(userId, cancellationToken);
+        if (deleted) {
+            InvalidateCachedIdentity(userId);
+        }
+
+        return deleted;
     }
 
     private async Task EnsureUsernameAvailableAsync(

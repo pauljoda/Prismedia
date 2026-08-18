@@ -19,6 +19,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- API responses now carry `Server-Timing` headers and the server logs slow requests with their database command counts, making page-load latency directly observable.
+- Every API request no longer pays repeated database reads for session validation, app settings, and library-visibility scope; these are now cached in-process with immediate invalidation on sign-out, revocation, user edits, setting writes, and library changes.
+- OPDS reading clients no longer trigger a full password verification on every request (including each cover image); recently verified credentials are reused for a short window, keeping catalog browsing responsive.
+- Title search and scan file lookups are now index-backed: substring title search uses a trigram index instead of scanning every entity, and file-path resolution during scans no longer reads the whole file table.
+- The bundled container now starts the API and worker with their packaged configuration, restoring production logging thresholds that previously logged every database command.
 - Favorites and dashboard shelves now use compact, count-free reads in the native apps, and reader/player progress reports acknowledge persistence without rebuilding full Entity details. EPUB-to-audio continuation now honors the exact saved position within a chapter instead of restarting that chapter.
 - Dashboard shelves now use a compact, count-free Entity read path backed by persisted source and acquisition availability, avoiding live hierarchy walks and aggregate thumbnail calculations on every card.
 - Entity availability now updates automatically when files, acquisitions, upgrades, or hierarchy links change, with periodic background reconciliation to repair any projection drift without delaying ordinary list requests.

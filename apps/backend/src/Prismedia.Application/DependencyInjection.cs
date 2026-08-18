@@ -39,6 +39,8 @@ public static class DependencyInjection {
         services.AddScoped<NavLayoutService>();
         services.AddScoped<UserAuthService>();
         services.AddScoped<UserAdminService>();
+        services.AddSingleton<SessionResolutionCache>();
+        services.AddSingleton<BasicCredentialCache>();
         services.AddScoped<CurrentUserContextHolder>();
         services.AddScoped<ICurrentUserContext>(sp => sp.GetRequiredService<CurrentUserContextHolder>());
         services.AddScoped<BrowserSessionService>();

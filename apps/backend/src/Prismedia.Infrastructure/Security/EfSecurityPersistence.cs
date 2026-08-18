@@ -237,15 +237,32 @@ public sealed class EfSecurityPersistence : ISecurityPersistence {
                 session.LastSeenAt > expiryFloor &&
                 user.Enabled
             select new { Session = session, User = user })
+            .AsNoTracking()
             .FirstOrDefaultAsync(cancellationToken);
         if (result is null) {
             return null;
         }
 
+        // This runs on every authenticated request; tracking two entities and running change
+        // detection just to refresh a timestamp at most once per staleness window is wasted
+        // work, so the touch is a targeted update instead. The in-memory test provider cannot
+        // translate ExecuteUpdate, so it takes the tracked path.
         var touched = now - result.Session.LastSeenAt > touchStaleness;
         if (touched) {
+            if (_db.Database.IsRelational()) {
+                await _db.UserSessions
+                    .Where(session => session.Id == result.Session.Id)
+                    .ExecuteUpdateAsync(
+                        setters => setters.SetProperty(session => session.LastSeenAt, now),
+                        cancellationToken);
+            } else {
+                var tracked = await _db.UserSessions
+                    .FirstAsync(session => session.Id == result.Session.Id, cancellationToken);
+                tracked.LastSeenAt = now;
+                await _db.SaveChangesAsync(cancellationToken);
+            }
+
             result.Session.LastSeenAt = now;
-            await _db.SaveChangesAsync(cancellationToken);
         }
 
         return new UserSessionResolution(ToSession(result.Session), ToUser(result.User), touched);

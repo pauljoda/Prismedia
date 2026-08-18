@@ -14,7 +14,8 @@ namespace Prismedia.Infrastructure.Entities;
 /// </summary>
 public sealed class EfEntityLibraryVisibilityFilter(
     PrismediaDbContext db,
-    ICurrentUserContext currentUser) {
+    ICurrentUserContext currentUser,
+    VisibilityScopeCache? scopeCache = null) {
     private static readonly EntityKindDefinition[] DescendantLibraryRootDefinitions = EntityKindRegistry.All
         .Where(definition => definition.LibraryVisibility.Mode == EntityLibraryVisibilityMode.DescendantRoot)
         .ToArray();
@@ -79,6 +80,11 @@ public sealed class EfEntityLibraryVisibilityFilter(
     private async Task<VisibilityScope> CreateScopeAsync(
         IReadOnlySet<Guid>? allowedRootIds,
         CancellationToken cancellationToken) {
+        var cacheKey = VisibilityScopeCache.KeyFor(allowedRootIds);
+        if (scopeCache?.TryGet(cacheKey) is { } cached) {
+            return new VisibilityScope(cached.HiddenRootIds, cached.HiddenWantedEntityIds);
+        }
+
         var roots = db.LibraryRoots.AsNoTracking();
         IQueryable<Guid> hiddenRootIds;
         if (allowedRootIds is null) {
@@ -93,7 +99,10 @@ public sealed class EfEntityLibraryVisibilityFilter(
         }
 
         var hidden = await hiddenRootIds.ToArrayAsync(cancellationToken);
-        if (hidden.Length == 0) return new VisibilityScope([], []);
+        if (hidden.Length == 0) {
+            scopeCache?.Set(cacheKey, [], []);
+            return new VisibilityScope([], []);
+        }
 
         // Wanted-target visibility is a comparatively small, request-owned projection, but its
         // acquisition/monitor/default-profile plan is expensive when EF inlines it repeatedly into
@@ -102,6 +111,7 @@ public sealed class EfEntityLibraryVisibilityFilter(
         var hiddenWantedEntityIds = await ResolveHiddenRequestTargetedWantedEntityIdsAsync(
             hidden,
             cancellationToken);
+        scopeCache?.Set(cacheKey, hidden, hiddenWantedEntityIds);
         return new VisibilityScope(hidden, hiddenWantedEntityIds);
     }
 

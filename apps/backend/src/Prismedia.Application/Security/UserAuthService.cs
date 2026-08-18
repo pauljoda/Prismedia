@@ -32,14 +32,20 @@ public sealed class UserAuthService {
     private readonly ISecurityPersistence _persistence;
     private readonly IPasswordHasher _hasher;
     private readonly AuthAttemptThrottle _throttle;
+    private readonly SessionResolutionCache? _sessionCache;
+    private readonly BasicCredentialCache? _credentialCache;
 
     public UserAuthService(
         ISecurityPersistence persistence,
         IPasswordHasher hasher,
-        AuthAttemptThrottle throttle) {
+        AuthAttemptThrottle throttle,
+        SessionResolutionCache? sessionCache = null,
+        BasicCredentialCache? credentialCache = null) {
         _persistence = persistence;
         _hasher = hasher;
         _throttle = throttle;
+        _sessionCache = sessionCache;
+        _credentialCache = credentialCache;
     }
 
     /// <summary>
@@ -84,6 +90,13 @@ public sealed class UserAuthService {
         string? password,
         string bucket,
         CancellationToken cancellationToken) {
+        // OPDS clients re-send Basic credentials on every request — including one per cover
+        // image — and each PBKDF2 verification costs hundreds of milliseconds of CPU. Recently
+        // verified credentials short-circuit both the hash and the user lookup.
+        if (_credentialCache?.TryGet(username, password) is { } cachedUser) {
+            return new CredentialVerificationResult(false, cachedUser);
+        }
+
         if (_throttle.IsThrottled(bucket)) {
             return new CredentialVerificationResult(true, null);
         }
@@ -103,22 +116,39 @@ public sealed class UserAuthService {
         }
 
         _throttle.RecordSuccess(bucket);
+        _credentialCache?.Set(username, password, candidate.User);
         return new CredentialVerificationResult(false, candidate.User);
     }
 
     /// <summary>Resolves an active session token to its session and user.</summary>
-    public Task<UserSessionResolution?> ResolveSessionAsync(string token, CancellationToken cancellationToken) =>
-        string.IsNullOrWhiteSpace(token)
-            ? Task.FromResult<UserSessionResolution?>(null)
-            : _persistence.ResolveSessionAsync(
-                HashToken(token),
-                SessionSlidingWindow,
-                SessionTouchStaleness,
-                cancellationToken);
+    public async Task<UserSessionResolution?> ResolveSessionAsync(string token, CancellationToken cancellationToken) {
+        if (string.IsNullOrWhiteSpace(token)) {
+            return null;
+        }
+
+        var tokenHash = HashToken(token);
+        if (_sessionCache?.TryGet(tokenHash) is { } cached) {
+            // Cached hits report Touched=false so cookie refreshes keep their database cadence.
+            return cached with { Touched = false };
+        }
+
+        var resolution = await _persistence.ResolveSessionAsync(
+            tokenHash,
+            SessionSlidingWindow,
+            SessionTouchStaleness,
+            cancellationToken);
+        if (resolution is not null) {
+            _sessionCache?.Set(tokenHash, resolution);
+        }
+
+        return resolution;
+    }
 
     /// <summary>Invalidates the current session (sign out).</summary>
-    public Task<bool> LogoutAsync(Guid sessionId, Guid userId, CancellationToken cancellationToken) =>
-        _persistence.InvalidateSessionAsync(sessionId, userId, cancellationToken);
+    public Task<bool> LogoutAsync(Guid sessionId, Guid userId, CancellationToken cancellationToken) {
+        _sessionCache?.InvalidateSession(sessionId);
+        return _persistence.InvalidateSessionAsync(sessionId, userId, cancellationToken);
+    }
 
     /// <summary>Reports whether first-run setup (creating an admin) is still required.</summary>
     public async Task<SetupStatus> GetSetupStatusAsync(CancellationToken cancellationToken) {
@@ -208,6 +238,8 @@ public sealed class UserAuthService {
 
         await _persistence.SetPasswordHashAsync(userId, _hasher.Hash(newPassword), cancellationToken);
         await _persistence.InvalidateSessionsAsync(userId, keepSessionId: currentSessionId, cancellationToken);
+        _sessionCache?.InvalidateUser(userId);
+        _credentialCache?.InvalidateUser(userId);
         return true;
     }
 
@@ -220,7 +252,7 @@ public sealed class UserAuthService {
                 "Display name must be between 1 and 128 characters.");
         }
 
-        return await _persistence.UpdateUserAsync(
+        var updated = await _persistence.UpdateUserAsync(
             userId,
             username: null,
             displayName: trimmed,
@@ -229,6 +261,8 @@ public sealed class UserAuthService {
             canCreateLibraries: null,
             enabled: null,
             cancellationToken);
+        _sessionCache?.InvalidateUser(userId);
+        return updated;
     }
 
     /// <summary>Lists the caller's active sessions.</summary>
@@ -236,8 +270,10 @@ public sealed class UserAuthService {
         _persistence.ListSessionsAsync(userId, cancellationToken);
 
     /// <summary>Revokes one of the caller's sessions.</summary>
-    public Task<bool> RevokeOwnSessionAsync(Guid userId, Guid sessionId, CancellationToken cancellationToken) =>
-        _persistence.InvalidateSessionAsync(sessionId, userId, cancellationToken);
+    public Task<bool> RevokeOwnSessionAsync(Guid userId, Guid sessionId, CancellationToken cancellationToken) {
+        _sessionCache?.InvalidateSession(sessionId);
+        return _persistence.InvalidateSessionAsync(sessionId, userId, cancellationToken);
+    }
 
     /// <summary>Validates and normalizes a username; 1-64 characters after trimming.</summary>
     public static string ValidateUsername(string? username) {
