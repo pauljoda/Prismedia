@@ -173,6 +173,19 @@ public sealed record EntityThumbnailBatchRequest(IReadOnlyList<Guid> Ids);
 /// <param name="Items">Resolved thumbnails in requested order where possible.</param>
 public sealed record EntityThumbnailBatchResponse(IReadOnlyList<EntityThumbnail> Items);
 
+/// <summary>
+/// Batch hover-image response body. Hover previews are sampled child artwork; clients request
+/// them lazily (for example on first pointer hover) instead of every list row paying for the
+/// sampling walk up front.
+/// </summary>
+/// <param name="Items">Hover image sets for the requested entities that have any.</param>
+public sealed record EntityHoverImagesResponse(IReadOnlyList<EntityHoverImageSet> Items);
+
+/// <summary>Sampled hover images for one Entity.</summary>
+/// <param name="EntityId">Entity the images preview.</param>
+/// <param name="Images">Representative child artwork in display order.</param>
+public sealed record EntityHoverImageSet(Guid EntityId, IReadOnlyList<EntityThumbnailHoverImage> Images);
+
 /// <summary>Batch request for direct children of multiple Entity roots.</summary>
 /// <param name="ParentIds">Parent Entity identifiers to resolve in caller order.</param>
 public sealed record EntityChildrenBatchRequest(IReadOnlyList<Guid> ParentIds) {

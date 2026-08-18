@@ -163,6 +163,16 @@ public interface IEntityReadService {
         CancellationToken cancellationToken);
 
     /// <summary>
+    /// Gets sampled child-artwork hover previews for the requested visible entities. Served
+    /// lazily so list pages do not pay the sampling walk for rows the user never hovers.
+    /// </summary>
+    Task<EntityHoverImagesResponse> GetHoverImagesAsync(
+        IReadOnlyList<Guid> ids,
+        bool hideNsfw,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(new EntityHoverImagesResponse([]));
+
+    /// <summary>
     /// Gets direct child thumbnails for multiple visible Entity parents through one bounded read
     /// projection. Parent groups and children retain deterministic caller/display order.
     /// </summary>

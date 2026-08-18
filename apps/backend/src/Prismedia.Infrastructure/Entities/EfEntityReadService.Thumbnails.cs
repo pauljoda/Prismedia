@@ -71,27 +71,55 @@ public sealed partial class EfEntityReadService {
             .Select(row => row.ParentEntityId!.Value)
             .Distinct()
             .ToArray();
-        var coverByEntity = await LoadCoverPathsAsync(ids, cancellationToken);
-        var coverByParent = coverParentIds.Length == 0
-            ? new Dictionary<Guid, string>()
-            : await LoadCoverPathsAsync(coverParentIds, cancellationToken);
         var isCompact = projectionMode == ThumbnailProjectionMode.Compact;
-        var hoverFiles = isCompact
-            ? []
-            : await _db.EntityFiles.AsNoTracking()
-                .Where(file => ids.Contains(file.EntityId) && file.Role == EntityFileRole.Trickplay)
-                .Where(file => file.Path.EndsWith(".m3u8") || file.Path.EndsWith(".vtt"))
-                .OrderByDescending(file => file.Path.EndsWith(".m3u8"))
-                .ThenBy(file => file.CreatedAt)
-                .ToArrayAsync(cancellationToken);
-        var hoverByEntity = hoverFiles
+        // One round-trip loads every file fact a card can need for the page and its
+        // cover-lending parents: cover-role artwork, grid variants, and trickplay hover sprites.
+        // Rows are trusted as written — producers write files before rows and the background
+        // asset-row sweep removes rows whose files vanished — so no filesystem checks run here.
+        var pageFileOwnerIds = ids.Concat(coverParentIds).Distinct().ToArray();
+        var pageFiles = await _db.EntityFiles.AsNoTracking()
+            .Where(file => pageFileOwnerIds.Contains(file.EntityId) && (
+                file.Role == EntityFileRole.Thumbnail ||
+                file.Role == EntityFileRole.Poster ||
+                file.Role == EntityFileRole.Cover ||
+                file.Role == EntityFileRole.Logo ||
+                file.Role == EntityFileRole.Backdrop ||
+                file.Role == EntityFileRole.GridThumbnail ||
+                file.Role == EntityFileRole.GridThumbnail2x ||
+                file.Role == EntityFileRole.Trickplay))
+            .ToArrayAsync(cancellationToken);
+        var coverByOwner = pageFiles
+            .Where(file => EntityCoverSelection.CoverRoles.Contains(file.Role))
             .GroupBy(file => file.EntityId)
-            .ToDictionary(group => group.Key, group => group.First().Path);
-        var hoverImagesByEntity = isCompact
+            .ToDictionary(group => group.Key, group => EntityCoverSelection.Select(group.ToArray())!.Path);
+        var coverByEntity = coverByOwner;
+        var coverByParent = coverByOwner;
+        var hoverByEntity = isCompact
+            ? new Dictionary<Guid, string>()
+            : pageFiles
+                .Where(file => file.Role == EntityFileRole.Trickplay &&
+                    (file.Path.EndsWith(".m3u8", StringComparison.Ordinal) ||
+                     file.Path.EndsWith(".vtt", StringComparison.Ordinal)))
+                .GroupBy(file => file.EntityId)
+                .ToDictionary(
+                    group => group.Key,
+                    group => group
+                        .OrderByDescending(file => file.Path.EndsWith(".m3u8", StringComparison.Ordinal))
+                        .ThenBy(file => file.CreatedAt)
+                        .First().Path);
+        // Child-artwork sampling is reserved for kinds whose cover IS a representative child
+        // (for example galleries) that lack their own artwork. General hover previews are served
+        // by the lazy hover-images endpoint instead of being computed for every page row.
+        var representativeRows = isCompact
+            ? []
+            : rows
+                .Where(row => UsesRepresentativeCover(row.KindCode) && !coverByOwner.ContainsKey(row.Id))
+                .ToArray();
+        var hoverImagesByEntity = representativeRows.Length == 0
             ? new Dictionary<Guid, IReadOnlyList<EntityThumbnailHoverImage>>()
-            : await ProjectHoverImagesAsync(rows, hideNsfw, enforceLibraryVisibility, cancellationToken);
+            : await ProjectHoverImagesAsync(representativeRows, hideNsfw, enforceLibraryVisibility, cancellationToken);
         var collectionRowsNeedingArtwork = rows
-            .Where(row => row.KindCode == EntityKind.Collection.ToCode() && !coverByEntity.ContainsKey(row.Id))
+            .Where(row => row.KindCode == EntityKind.Collection.ToCode() && !coverByOwner.ContainsKey(row.Id))
             .ToArray();
         var collectionArtworkByEntity = resolveCollectionArtwork && !isCompact
             ? await ProjectCollectionArtworkAsync(collectionRowsNeedingArtwork, hideNsfw, enforceLibraryVisibility, cancellationToken)
@@ -99,27 +127,35 @@ public sealed partial class EfEntityReadService {
         var technicalByEntity = await _db.EntityTechnical.AsNoTracking()
             .Where(technical => ids.Contains(technical.EntityId))
             .ToDictionaryAsync(technical => technical.EntityId, cancellationToken);
-        // Grid variants are loaded for the page's entities plus every entity whose cover a
-        // row can borrow (definition-approved parents and representative-cover children for
-        // galleries and collections), so a card that inherits another entity's cover also
-        // inherits that entity's small variants instead of downloading the full original.
-        var borrowableCoverSourceIds = ids
-            .Concat(coverParentIds)
-            .Concat(hoverImagesByEntity.Values.SelectMany(images => images.Select(image => image.EntityId)))
-            .Concat(collectionArtworkByEntity.Values.SelectMany(artwork => artwork.HoverImages.Select(image => image.EntityId)))
-            .Distinct()
-            .ToArray();
-        var gridThumbRows = await _db.EntityFiles.AsNoTracking()
-            .Where(file => borrowableCoverSourceIds.Contains(file.EntityId) &&
-                (file.Role == EntityFileRole.GridThumbnail || file.Role == EntityFileRole.GridThumbnail2x))
-            .Select(file => new { file.EntityId, file.Role, file.Path })
-            .ToArrayAsync(cancellationToken);
-        var gridThumbByEntity = gridThumbRows
+        var gridThumbByEntity = pageFiles
             .Where(file => file.Role == EntityFileRole.GridThumbnail)
             .ToDictionary(file => file.EntityId, file => file.Path);
-        var gridThumb2xByEntity = gridThumbRows
+        var gridThumb2xByEntity = pageFiles
             .Where(file => file.Role == EntityFileRole.GridThumbnail2x)
             .ToDictionary(file => file.EntityId, file => file.Path);
+        // A card that displays representative child artwork inherits that child's grid variants;
+        // those sources sit outside the page set, so load them in one supplemental query that
+        // only fires when representative artwork was actually resolved.
+        var extraCoverSourceIds = hoverImagesByEntity.Values
+            .SelectMany(images => images.Select(image => image.EntityId))
+            .Concat(collectionArtworkByEntity.Values.SelectMany(artwork => artwork.HoverImages.Select(image => image.EntityId)))
+            .Distinct()
+            .Where(id => !gridThumbByEntity.ContainsKey(id) && !pageFileOwnerIds.Contains(id))
+            .ToArray();
+        if (extraCoverSourceIds.Length > 0) {
+            var extraGridRows = await _db.EntityFiles.AsNoTracking()
+                .Where(file => extraCoverSourceIds.Contains(file.EntityId) &&
+                    (file.Role == EntityFileRole.GridThumbnail || file.Role == EntityFileRole.GridThumbnail2x))
+                .Select(file => new { file.EntityId, file.Role, file.Path })
+                .ToArrayAsync(cancellationToken);
+            foreach (var file in extraGridRows) {
+                if (file.Role == EntityFileRole.GridThumbnail) {
+                    gridThumbByEntity[file.EntityId] = file.Path;
+                } else {
+                    gridThumb2xByEntity[file.EntityId] = file.Path;
+                }
+            }
+        }
         var currentUserId = CurrentUserId;
         var stateByEntity = currentUserId == Guid.Empty
             ? new Dictionary<Guid, UserEntityStateRow>()
@@ -169,29 +205,27 @@ public sealed partial class EfEntityReadService {
                 enforceLibraryVisibility,
                 cancellationToken);
 
-        // Tag names per entity, resolved through the tag relationship links and their target titles,
-        // so list rows can surface tags without a detail load.
+        // Tag names per entity, resolved through the tag relationship links joined to their target
+        // titles in one query, so list rows can surface tags without a detail load.
         var tagsCode = RelationshipKind.Tags.ToCode();
-        var tagLinks = isCompact
+        var tagRows = isCompact
             ? []
             : await _db.EntityRelationshipLinks.AsNoTracking()
                 .Where(link => ids.Contains(link.EntityId) && link.RelationshipCode == tagsCode)
-                .OrderBy(link => link.SortOrder)
-                .Select(link => new { link.EntityId, link.TargetEntityId })
+                .Join(
+                    _db.Entities.AsNoTracking(),
+                    link => link.TargetEntityId,
+                    tag => tag.Id,
+                    (link, tag) => new { link.EntityId, link.SortOrder, tag.Title })
                 .ToArrayAsync(cancellationToken);
-        var tagTitleById = tagLinks.Length == 0
-            ? new Dictionary<Guid, string>()
-            : await _db.Entities.AsNoTracking()
-                .Where(entity => tagLinks.Select(link => link.TargetEntityId).Contains(entity.Id))
-                .ToDictionaryAsync(entity => entity.Id, entity => entity.Title, cancellationToken);
-        var tagsByEntity = tagLinks
-            .GroupBy(link => link.EntityId)
+        var tagsByEntity = tagRows
+            .GroupBy(row => row.EntityId)
             .ToDictionary(
                 group => group.Key,
                 group => (IReadOnlyList<string>)group
-                    .Select(link => tagTitleById.GetValueOrDefault(link.TargetEntityId))
+                    .OrderBy(row => row.SortOrder)
+                    .Select(row => row.Title)
                     .Where(title => !string.IsNullOrWhiteSpace(title))
-                    .Select(title => title!)
                     .ToArray());
 
         var baseThumbnails = rows.Select(row => {

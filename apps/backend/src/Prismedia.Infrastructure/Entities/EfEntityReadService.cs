@@ -704,6 +704,52 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         return new EntityThumbnailBatchResponse(ids.Where(byId.ContainsKey).Select(id => byId[id]).ToArray());
     }
 
+    /// <inheritdoc />
+    public async Task<EntityHoverImagesResponse> GetHoverImagesAsync(
+        IReadOnlyList<Guid> ids,
+        bool hideNsfw,
+        CancellationToken cancellationToken) {
+        if (ids.Count == 0) {
+            return new EntityHoverImagesResponse([]);
+        }
+
+        var query = _db.Entities.AsNoTracking()
+            .Where(entity => ids.Contains(entity.Id));
+        query = ApplyCollectionVisibility(query);
+        var enforceLibraryVisibility = await RequiresLibraryVisibilityAsync(cancellationToken);
+        if (enforceLibraryVisibility) {
+            query = ApplyEnabledLibraryVisibility(query);
+        }
+        query = ApplyNsfwVisibility(query, hideNsfw);
+        var rows = await query.ToArrayAsync(cancellationToken);
+        if (rows.Length == 0) {
+            return new EntityHoverImagesResponse([]);
+        }
+
+        var collectionCode = EntityKind.Collection.ToCode();
+        var collectionRows = rows.Where(row => row.KindCode == collectionCode).ToArray();
+        var structuralRows = rows.Where(row => row.KindCode != collectionCode).ToArray();
+        var byEntity = new Dictionary<Guid, IReadOnlyList<EntityThumbnailHoverImage>>();
+        if (structuralRows.Length > 0) {
+            foreach (var pair in await ProjectHoverImagesAsync(
+                         structuralRows, hideNsfw, enforceLibraryVisibility, cancellationToken)) {
+                byEntity[pair.Key] = pair.Value;
+            }
+        }
+
+        if (collectionRows.Length > 0) {
+            foreach (var pair in await ProjectCollectionArtworkAsync(
+                         collectionRows, hideNsfw, enforceLibraryVisibility, cancellationToken)) {
+                byEntity[pair.Key] = pair.Value.HoverImages;
+            }
+        }
+
+        return new EntityHoverImagesResponse(ids
+            .Where(id => byEntity.TryGetValue(id, out var images) && images.Count > 0)
+            .Select(id => new EntityHoverImageSet(id, byEntity[id]))
+            .ToArray());
+    }
+
     private async Task<EntityFileManagementState> ResolveFileManagementStateAsync(
         Guid entityId,
         CancellationToken cancellationToken) {

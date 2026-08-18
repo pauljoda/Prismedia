@@ -1133,10 +1133,17 @@ public sealed class EfEntityReadServiceTests {
         var result = await service.ListAsync(EntityKind.Book.ToCode(), null, null, null, null, CancellationToken.None);
         var item = Assert.Single(result.Items);
 
+        // A row with its own cover no longer pays the child-artwork sampling walk inline;
+        // hover previews come from the lazy hover-images read instead.
         Assert.Equal("/assets/books/custom-cover.jpg", item.CoverUrl);
-        Assert.Equal(5, item.HoverImages.Count);
-        Assert.Equal("/assets/book-pages/page-1.jpg", item.HoverImages[0].Path);
-        Assert.Equal("/assets/book-pages/page-6.jpg", item.HoverImages[^1].Path);
+        Assert.Empty(item.HoverImages);
+
+        var hover = await service.GetHoverImagesAsync([bookId], hideNsfw: false, CancellationToken.None);
+        var set = Assert.Single(hover.Items);
+        Assert.Equal(bookId, set.EntityId);
+        Assert.Equal(5, set.Images.Count);
+        Assert.Equal("/assets/book-pages/page-1.jpg", set.Images[0].Path);
+        Assert.Equal("/assets/book-pages/page-6.jpg", set.Images[^1].Path);
     }
 
     [Fact]
