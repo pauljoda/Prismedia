@@ -32,7 +32,8 @@ public sealed class MediaEntityDeletionService(
     IEntityHierarchyReader hierarchy,
     ILogger<MediaEntityDeletionService> logger,
     EntityAssetCleanupService? sharedAssetCleanup = null,
-    IJobGraphService? graphs = null) : IMediaEntityDeletionService {
+    IJobGraphService? graphs = null,
+    Prismedia.Application.Jobs.Ports.ILibraryFileChangeIntake? changeIntake = null) : IMediaEntityDeletionService {
     private readonly EntityAssetCleanupService entityAssetCleanup =
         sharedAssetCleanup ?? new EntityAssetCleanupService(assets, logger);
     private readonly EfEntityPhysicalManagedPathProjection physicalManagedPaths = new(db);
@@ -396,7 +397,7 @@ public sealed class MediaEntityDeletionService(
 
         // Scans observe the reconciled model, never the physical/local half-state. Queue only after source
         // rows, Entities, acquisitions, and monitors have all been removed successfully.
-        await QueueReconciliationScansAsync(physicalDeletion.TouchedRoots);
+        await QueueReconciliationScansAsync(physicalDeletion);
 
         logger.LogInformation(
             "MediaEntityDeletion: removed \"{Title}\" ({Kind}) — {Removed} Entities and {Files} on-disk paths removed.",
@@ -904,14 +905,15 @@ public sealed class MediaEntityDeletionService(
             return expected.SetEquals(other.Plan.Targets.Select(target => (target.Root.Id, target.Path)));
         }
 
-        public PhysicalDeletionResult ToResult() => new(0, Failures, []);
+        public PhysicalDeletionResult ToResult() => new(0, Failures, [], []);
     }
 
     private sealed record PhysicalDeletionResult(
         int PathsDeleted,
         IReadOnlyList<PhysicalDeletionFailure> Failures,
-        IReadOnlyList<FileLibraryRoot> TouchedRoots) {
-        public static PhysicalDeletionResult Success { get; } = new(0, [], []);
+        IReadOnlyList<FileLibraryRoot> TouchedRoots,
+        IReadOnlyList<(FileLibraryRoot Root, string Path)> DeletedPaths) {
+        public static PhysicalDeletionResult Success { get; } = new(0, [], [], []);
         public bool Succeeded => Failures.Count == 0;
     }
 
@@ -962,9 +964,8 @@ public sealed class MediaEntityDeletionService(
         return true;
     }
 
-    private async Task QueueReconciliationScansAsync(
-        IReadOnlyList<FileLibraryRoot> touchedRoots) {
-        var scanRoots = touchedRoots
+    private async Task QueueReconciliationScansAsync(PhysicalDeletionResult physicalDeletion) {
+        var scanRoots = physicalDeletion.TouchedRoots
             .GroupBy(root => root.Id)
             .Select(group => group.First())
             .Where(root => root.Enabled)
@@ -973,20 +974,43 @@ public sealed class MediaEntityDeletionService(
             return;
         }
 
+        var deletedPathsByRoot = physicalDeletion.DeletedPaths
+            .GroupBy(entry => entry.Root.Id)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyCollection<string>)group.Select(entry => entry.Path).Distinct().ToArray());
+
         try {
             // Everything destructive has already committed. Caller cancellation or a transient queue
             // failure cannot truthfully turn the completed deletion into a failed HTTP operation; the
             // regular scan schedule can reconcile later, while the user receives the real success state.
             foreach (var root in scanRoots) {
+                var selection = new LibraryScanSelection(
+                    Videos: root.ScanVideos,
+                    Images: root.ScanImages,
+                    Audio: root.ScanAudio,
+                    Books: root.ScanBooks);
+                // Deletions know their exact removed paths, so reconcile surgically through the
+                // change ledger instead of rematerializing the whole root.
+                if (changeIntake is not null &&
+                    deletedPathsByRoot.TryGetValue(root.Id, out var deletedPaths) &&
+                    deletedPaths.Count > 0) {
+                    await LibraryScanJobs.QueueChangedPathsForRootAsync(
+                        jobs,
+                        changeIntake,
+                        root.Id,
+                        root.Label,
+                        selection,
+                        deletedPaths,
+                        CancellationToken.None);
+                    continue;
+                }
+
                 await LibraryScanJobs.QueueScansForRootAsync(
                     jobs,
                     root.Id,
                     root.Label,
-                    new LibraryScanSelection(
-                        Videos: root.ScanVideos,
-                        Images: root.ScanImages,
-                        Audio: root.ScanAudio,
-                        Books: root.ScanBooks),
+                    selection,
                     CancellationToken.None);
             }
         } catch (Exception exception) {
@@ -1078,6 +1102,7 @@ public sealed class MediaEntityDeletionService(
         CancellationToken cancellationToken) {
         var deleted = 0;
         var touchedRoots = new List<FileLibraryRoot>();
+        var deletedPaths = new List<(FileLibraryRoot Root, string Path)>();
         var failures = new List<PhysicalDeletionFailure>();
         foreach (var target in plan.Targets) {
             try {
@@ -1089,24 +1114,28 @@ public sealed class MediaEntityDeletionService(
                     cancellationToken);
                 deleted++;
                 touchedRoots.Add(target.Root);
+                deletedPaths.Add((target.Root, target.Path));
             } catch (OperationCanceledException) {
                 throw;
             } catch (FileNotFoundException) {
                 deleted++;
                 touchedRoots.Add(target.Root);
+                deletedPaths.Add((target.Root, target.Path));
             } catch (DirectoryNotFoundException) {
                 deleted++;
                 touchedRoots.Add(target.Root);
+                deletedPaths.Add((target.Root, target.Path));
             } catch (FileOperationException exception) when (exception.Code == ApiProblemCodes.NotFound) {
                 deleted++;
                 touchedRoots.Add(target.Root);
+                deletedPaths.Add((target.Root, target.Path));
             } catch (Exception ex) {
                 logger.LogWarning(ex, "MediaEntityDeletion: failed to delete \"{Path}\".", target.Path);
                 failures.Add(new PhysicalDeletionFailure(target.Path, ex.Message));
             }
         }
 
-        return new PhysicalDeletionResult(deleted, failures, touchedRoots);
+        return new PhysicalDeletionResult(deleted, failures, touchedRoots, deletedPaths);
     }
 
     /// <summary>Drops paths contained in another listed path, so a folder delete isn't repeated for its children.</summary>
