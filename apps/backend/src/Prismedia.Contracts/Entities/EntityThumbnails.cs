@@ -163,6 +163,12 @@ public sealed record EntityGroup(EntityKind Kind, string Label, IReadOnlyList<En
     /// is already fully described by <see cref="Kind"/>.
     /// </summary>
     public RelationshipKind? Code { get; init; }
+
+    /// <summary>
+    /// Total members in this group when it is larger than the projected page. Null when the
+    /// group is complete. Clients load the remainder through the children batch reads.
+    /// </summary>
+    public int? TotalCount { get; init; }
 }
 
 /// <summary>Batch thumbnail request body.</summary>

@@ -21,6 +21,7 @@ namespace Prismedia.Infrastructure.Entities;
 public sealed partial class EfEntityReadService : IEntityReadService {
     private const int DefaultPageSize = 250;
     private const int MaxPageSize = 1000;
+    private const int DetailChildPageSize = 250;
     private const int MaxHoverImages = 5;
     private const int MaxHoverImageSearchDepth = 3;
     private const int MaxThumbnailMeta = 5;
@@ -1034,7 +1035,17 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             .Select(link => targetRows.GetValueOrDefault(link.TargetEntityId))
             .Where(row => row is not null)
             .Select(row => row!);
-        var thumbnailRows = childRows
+        // Large containers project only the first page of each child kind through the thumbnail
+        // pipeline; the group's TotalCount tells clients to load the remainder through the
+        // children batch reads instead of the detail paying for every member up front.
+        var pagedChildRows = childRows
+            .GroupBy(row => row.KindCode)
+            .SelectMany(group => group.Take(DetailChildPageSize))
+            .ToArray();
+        var childTotalsByKind = childRows
+            .GroupBy(row => row.KindCode)
+            .ToDictionary(group => group.Key, group => group.Count());
+        var thumbnailRows = pagedChildRows
             .Concat(relationshipRows)
             .DistinctBy(row => row.Id)
             .ToArray();
@@ -1048,15 +1059,19 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                 .ToDictionary(thumbnail => thumbnail.Id);
 
         var children = new List<EntityGroup>();
-        foreach (var group in childRows.GroupBy(row => row.KindCode)) {
+        foreach (var group in pagedChildRows.GroupBy(row => row.KindCode)) {
             if (!group.Key.TryDecodeAs<EntityKind>(out var childKind)) {
                 continue;
             }
 
+            var totalCount = childTotalsByKind.GetValueOrDefault(group.Key);
+            var thumbnails = MapProjectedThumbnails(group, thumbnailsById);
             children.Add(new EntityGroup(
                 childKind,
                 EntityKindRegistry.Describe(childKind).GroupLabel,
-                MapProjectedThumbnails(group, thumbnailsById)));
+                thumbnails) {
+                TotalCount = totalCount > thumbnails.Count ? totalCount : null
+            });
         }
 
         var relationships = new List<EntityGroup>();

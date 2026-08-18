@@ -16,6 +16,12 @@ public sealed class EfEntityProgressTopologyResolver(
     ICurrentUserContext? currentUser = null) : IEntityProgressTopologyResolver {
     private const int MaximumStructuralDepth = 32;
 
+    // Progress resolution repeatedly touches the same rows (owner, cursor, ancestors) across
+    // its entry points within one request; a per-instance memo turns those repeats into
+    // dictionary hits. The resolver is scoped per request, so the snapshot cannot go stale
+    // within its lifetime.
+    private readonly Dictionary<Guid, EntityRow?> _rowsById = [];
+
     /// <inheritdoc />
     public async Task<ProgressOwnerResolution?> ResolveOwnerAsync(
         Guid requestedEntityId,
@@ -275,10 +281,70 @@ public sealed class EfEntityProgressTopologyResolver(
         return nested.SelectMany(row => byParent.GetValueOrDefault(row.Id) ?? []).ToArray();
     }
 
-    private async Task<EntityRow?> FindRowAsync(Guid id, CancellationToken cancellationToken) =>
-        await db.Entities.AsNoTracking().FirstOrDefaultAsync(row => row.Id == id, cancellationToken);
+    private async Task<EntityRow?> FindRowAsync(Guid id, CancellationToken cancellationToken) {
+        if (_rowsById.TryGetValue(id, out var cached)) {
+            return cached;
+        }
+
+        var row = await db.Entities.AsNoTracking().FirstOrDefaultAsync(row => row.Id == id, cancellationToken);
+        _rowsById[id] = row;
+        return row;
+    }
+
+    /// <summary>Batch-loads rows for the given ids, feeding the per-request memo.</summary>
+    private async Task<IReadOnlyDictionary<Guid, EntityRow>> LoadRowsAsync(
+        IReadOnlyCollection<Guid> ids,
+        CancellationToken cancellationToken) {
+        var missing = ids.Where(id => !_rowsById.ContainsKey(id)).Distinct().ToArray();
+        if (missing.Length > 0) {
+            var loaded = await db.Entities.AsNoTracking()
+                .Where(row => missing.Contains(row.Id))
+                .ToArrayAsync(cancellationToken);
+            foreach (var row in loaded) {
+                _rowsById[row.Id] = row;
+            }
+            foreach (var id in missing) {
+                _rowsById.TryAdd(id, null);
+            }
+        }
+
+        return ids
+            .Select(id => _rowsById.GetValueOrDefault(id))
+            .Where(row => row is not null)
+            .Select(row => row!)
+            .DistinctBy(row => row.Id)
+            .ToDictionary(row => row.Id);
+    }
 
     private async Task<IReadOnlyList<EntityRow>> LoadAncestorsAsync(EntityRow start, CancellationToken cancellationToken) {
+        // One recursive CTE resolves the whole chain instead of one round-trip per level.
+        if (db.Database.IsNpgsql()) {
+            var lineageIds = await db.Database
+                .SqlQueryRaw<Guid>(
+                    """
+                    WITH RECURSIVE lineage(id, parent_entity_id, depth, path) AS (
+                        SELECT entity.id, entity.parent_entity_id, 0, ARRAY[entity.id]
+                        FROM entities AS entity
+                        WHERE entity.id = {0}
+                        UNION ALL
+                        SELECT parent.id, parent.parent_entity_id, lineage.depth + 1, lineage.path || parent.id
+                        FROM lineage
+                        INNER JOIN entities AS parent ON parent.id = lineage.parent_entity_id
+                        WHERE NOT parent.id = ANY (lineage.path) AND lineage.depth < {1}
+                    )
+                    SELECT id AS "Value" FROM lineage ORDER BY depth
+                    """,
+                    start.Id,
+                    MaximumStructuralDepth)
+                .ToArrayAsync(cancellationToken);
+            var rowById = await LoadRowsAsync(lineageIds, cancellationToken);
+            return lineageIds
+                .Select(id => rowById.GetValueOrDefault(id))
+                .Where(row => row is not null)
+                .Select(row => row!)
+                .ToArray();
+        }
+
         var rows = new List<EntityRow> { start };
         var seen = new HashSet<Guid> { start.Id };
         var parentId = start.ParentEntityId;
@@ -296,6 +362,35 @@ public sealed class EfEntityProgressTopologyResolver(
     }
 
     private async Task<IReadOnlyList<EntityRow>> LoadDescendantsAsync(Guid ownerId, CancellationToken cancellationToken) {
+        // One recursive CTE resolves the subtree ids, then one batch load hydrates the rows,
+        // instead of one round-trip per structural depth.
+        if (db.Database.IsNpgsql()) {
+            var descendantIds = await db.Database
+                .SqlQueryRaw<Guid>(
+                    """
+                    WITH RECURSIVE subtree(id, depth, path) AS (
+                        SELECT entity.id, 0, ARRAY[entity.id]
+                        FROM entities AS entity
+                        WHERE entity.id = {0}
+                        UNION ALL
+                        SELECT child.id, subtree.depth + 1, subtree.path || child.id
+                        FROM subtree
+                        INNER JOIN entities AS child ON child.parent_entity_id = subtree.id
+                        WHERE NOT child.id = ANY (subtree.path) AND subtree.depth < {1}
+                    )
+                    SELECT id AS "Value" FROM subtree WHERE depth > 0
+                    """,
+                    ownerId,
+                    MaximumStructuralDepth)
+                .ToArrayAsync(cancellationToken);
+            var rowById = await LoadRowsAsync(descendantIds, cancellationToken);
+            return descendantIds
+                .Select(id => rowById.GetValueOrDefault(id))
+                .Where(row => row is not null)
+                .Select(row => row!)
+                .ToArray();
+        }
+
         var all = new List<EntityRow>();
         var parents = new[] { ownerId };
         var seen = new HashSet<Guid> { ownerId };
