@@ -117,25 +117,48 @@ public sealed partial class JobGraphService {
         var graph = mutation.Graph;
 
         var now = DateTimeOffset.UtcNow;
-        var runs = await db.JobRuns
-            .Where(run => run.GraphId == graphId && (run.Status == JobRunStatus.Queued || run.Status == JobRunStatus.Running))
-            .ToArrayAsync(cancellationToken);
-        foreach (var run in runs) {
-            run.Status = JobRunStatus.Cancelled;
-            run.Message = "Cancelled with graph.";
-            run.LockedAt = null;
-            run.LockedBy = null;
-            run.FinishedAt = now;
+        if (db.Database.IsRelational()) {
+            // Set-based cancellation: tracking every active node made cancelling a large scan
+            // graph race the claim loop (a node claimed between load and save fails the whole
+            // SaveChanges with a concurrency conflict). These statements are atomic per row, so
+            // concurrent claims either land before (and get cancelled) or observe the cancel.
+            await db.JobRuns
+                .Where(run => run.GraphId == graphId &&
+                    (run.Status == JobRunStatus.Queued || run.Status == JobRunStatus.Running))
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(run => run.Status, JobRunStatus.Cancelled)
+                    .SetProperty(run => run.Message, "Cancelled with graph.")
+                    .SetProperty(run => run.LockedAt, (DateTimeOffset?)null)
+                    .SetProperty(run => run.LockedBy, (string?)null)
+                    .SetProperty(run => run.FinishedAt, now), cancellationToken);
+            await db.JobResourceLeases
+                .Where(lease => db.JobRuns.Any(run => run.Id == lease.JobRunId && run.GraphId == graphId))
+                .ExecuteDeleteAsync(cancellationToken);
+            await db.JobGraphSignals
+                .Where(signal => signal.GraphId == graphId && signal.ResolvedAt == null && signal.CancelledAt == null)
+                .ExecuteUpdateAsync(setters => setters
+                    .SetProperty(signal => signal.CancelledAt, (DateTimeOffset?)now), cancellationToken);
+        } else {
+            var runs = await db.JobRuns
+                .Where(run => run.GraphId == graphId && (run.Status == JobRunStatus.Queued || run.Status == JobRunStatus.Running))
+                .ToArrayAsync(cancellationToken);
+            foreach (var run in runs) {
+                run.Status = JobRunStatus.Cancelled;
+                run.Message = "Cancelled with graph.";
+                run.LockedAt = null;
+                run.LockedBy = null;
+                run.FinishedAt = now;
+            }
+            var signals = await db.JobGraphSignals
+                .Where(signal => signal.GraphId == graphId && signal.ResolvedAt == null && signal.CancelledAt == null)
+                .ToArrayAsync(cancellationToken);
+            foreach (var signal in signals) signal.CancelledAt = now;
+            var runIds = runs.Select(run => run.Id).ToArray();
+            var leases = await db.JobResourceLeases
+                .Where(lease => runIds.Contains(lease.JobRunId))
+                .ToArrayAsync(cancellationToken);
+            db.JobResourceLeases.RemoveRange(leases);
         }
-        var signals = await db.JobGraphSignals
-            .Where(signal => signal.GraphId == graphId && signal.ResolvedAt == null && signal.CancelledAt == null)
-            .ToArrayAsync(cancellationToken);
-        foreach (var signal in signals) signal.CancelledAt = now;
-        var runIds = runs.Select(run => run.Id).ToArray();
-        var leases = await db.JobResourceLeases
-            .Where(lease => runIds.Contains(lease.JobRunId))
-            .ToArrayAsync(cancellationToken);
-        db.JobResourceLeases.RemoveRange(leases);
         graph.CancellationRequested = true;
         graph.Status = JobGraphStatus.Cancelled;
         graph.UpdatedAt = now;
