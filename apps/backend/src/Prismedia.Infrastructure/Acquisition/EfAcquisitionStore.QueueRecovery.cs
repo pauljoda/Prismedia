@@ -85,7 +85,11 @@ public sealed partial class EfAcquisitionStore {
             join acquisition in db.Acquisitions.AsNoTracking() on transfer.AcquisitionId equals acquisition.Id
             where active.Contains(acquisition.Status) || transfer.SeedingSince != null
             select transfer.Id).AnyAsync(cancellationToken);
-        return hasTransfer || await db.Acquisitions.AsNoTracking().AnyAsync(
+        if (hasTransfer || await db.DetachedDownloadCleanups.AsNoTracking().AnyAsync(cancellationToken)) {
+            return true;
+        }
+
+        return await db.Acquisitions.AsNoTracking().AnyAsync(
             row => (row.Status == AcquisitionStatus.Queued
                     && row.SelectedReleaseJson == null
                     && !db.DownloadTransfers.Any(transfer => transfer.AcquisitionId == row.Id))

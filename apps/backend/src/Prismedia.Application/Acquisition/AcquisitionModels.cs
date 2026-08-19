@@ -347,6 +347,17 @@ public sealed record SeedingTransfer(
     DateTimeOffset SeedingSince);
 
 /// <summary>
+/// An exact prior client item detached from an acquisition so a user-selected replacement can proceed
+/// while cleanup continues independently against the recorded owning client.
+/// </summary>
+public sealed record DetachedDownloadCleanup(
+    Guid Id,
+    Guid? AcquisitionId,
+    Guid DownloadClientConfigId,
+    string ClientItemId,
+    DateTimeOffset CreatedAt);
+
+/// <summary>
 /// Snapshot of the release an acquisition was last sent to download, persisted so a later failure can
 /// blocklist exactly that release. The <see cref="Identity"/> is computed the same way future search
 /// candidates are, so the blocklist recognizes the release when it reappears.

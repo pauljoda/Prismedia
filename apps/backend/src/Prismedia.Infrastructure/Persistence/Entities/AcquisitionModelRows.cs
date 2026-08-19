@@ -463,6 +463,19 @@ public sealed class DownloadTransferRow {
 }
 
 /// <summary>
+/// Exact prior download-client ownership retained after an explicit replacement detaches it from the
+/// acquisition's single active transfer slot. The owning client remains required until cleanup finishes.
+/// </summary>
+public sealed class DetachedDownloadCleanupRow {
+    public Guid Id { get; set; }
+    public Guid? SourceAcquisitionId { get; set; }
+    public Guid DownloadClientConfigId { get; set; }
+    public string ClientItemId { get; set; } = string.Empty;
+    public DateTimeOffset CreatedAt { get; set; }
+    public DateTimeOffset UpdatedAt { get; set; }
+}
+
+/// <summary>
 /// Path-keyed identity hint written just before a completed acquisition enqueues a book scan. The
 /// scan stamps these external identities onto the newly created book entity so the existing
 /// auto-identify pipeline resolves it ID-first instead of re-discovering what the request already knew.

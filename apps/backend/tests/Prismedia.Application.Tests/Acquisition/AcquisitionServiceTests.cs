@@ -17,6 +17,7 @@ public sealed class AcquisitionServiceTests {
     private static readonly Guid DefaultClientId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid RecordedClientId = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly Guid CandidateId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+    private static readonly Guid UsenetClientId = Guid.Parse("44444444-4444-4444-4444-444444444444");
     private const string ClientItemId = "download-owned-by-recorded-client";
 
     [Fact]
@@ -1113,6 +1114,65 @@ public sealed class AcquisitionServiceTests {
     }
 
     [Fact]
+    public async Task ManualUsenetPickDetachesUnavailableTorrentCleanupAndQueuesReplacement() {
+        var harness = Harness(new AcquisitionTransferInfo(
+            AcquisitionStatus.Failed, null, ClientItemId, RecordedClientId));
+        PrepareQueueCandidate(harness.Store);
+        harness.Store.QueueCandidate = harness.Store.QueueCandidate! with {
+            Protocol = DownloadProtocol.Usenet
+        };
+        harness.Downloads.RemoveFailure = new IOException("torrent client offline");
+        var detachedCleanups = new RecordingDetachedDownloadCleanupStore();
+        var queue = QueueService(
+            harness,
+            new RecordingTransferAddCoordinator(),
+            detachedCleanups: detachedCleanups);
+
+        var detail = await queue.QueueAsync(
+            AcquisitionId,
+            CandidateId,
+            CancellationToken.None,
+            manualPick: true);
+
+        var detached = Assert.Single(detachedCleanups.Detachments);
+        Assert.Equal((AcquisitionId, RecordedClientId, ClientItemId), detached);
+        Assert.Equal(AcquisitionStatus.Queued, detail?.Summary.Status);
+        Assert.Equal(UsenetClientId, harness.Store.TransferPointer?.DownloadClientConfigId);
+        Assert.Equal("new-client-item", harness.Store.TransferPointer?.ClientItemId);
+        Assert.Equal(1, harness.Downloads.AddCount);
+    }
+
+    [Fact]
+    public async Task ManualPickDetachFailureRestoresPriorStateAndDoesNotQueueReplacement() {
+        var harness = Harness(new AcquisitionTransferInfo(
+            AcquisitionStatus.Failed, null, ClientItemId, RecordedClientId));
+        PrepareQueueCandidate(harness.Store);
+        harness.Store.QueueCandidate = harness.Store.QueueCandidate! with {
+            Protocol = DownloadProtocol.Usenet
+        };
+        harness.Downloads.RemoveFailure = new IOException("torrent client offline");
+        var detachedCleanups = new RecordingDetachedDownloadCleanupStore {
+            Failure = new IOException("database unavailable")
+        };
+        var queue = QueueService(
+            harness,
+            new RecordingTransferAddCoordinator(),
+            detachedCleanups: detachedCleanups);
+
+        await Assert.ThrowsAsync<IOException>(() => queue.QueueAsync(
+            AcquisitionId,
+            CandidateId,
+            CancellationToken.None,
+            manualPick: true));
+
+        Assert.Single(detachedCleanups.Detachments);
+        Assert.Equal(AcquisitionStatus.Failed, harness.Store.Status);
+        Assert.Equal(RecordedClientId, harness.Store.TransferPointer?.DownloadClientConfigId);
+        Assert.Equal(ClientItemId, harness.Store.TransferPointer?.ClientItemId);
+        Assert.Equal(0, harness.Downloads.AddCount);
+    }
+
+    [Fact]
     public async Task ReacquireEligibilityRejectsAnActiveAcquisitionWithoutSideEffects() {
         var harness = Harness(TransferInfo(RecordedClientId, AcquisitionStatus.Downloading));
 
@@ -1705,7 +1765,8 @@ public sealed class AcquisitionServiceTests {
     private static AcquisitionQueueService QueueService(
         TestHarness harness,
         IAcquisitionTransferAddCoordinator transferAdds,
-        IJobGraphService? graphs = null) =>
+        IJobGraphService? graphs = null,
+        IDetachedDownloadCleanupStore? detachedCleanups = null) =>
         new(
             harness.Store,
             new ThrowingBlocklistStore(),
@@ -1716,6 +1777,7 @@ public sealed class AcquisitionServiceTests {
             new NullReleaseLinkResolver(),
             transferAdds,
             harness.ImportCleanup,
+            detachedCleanups ?? new RecordingDetachedDownloadCleanupStore(),
             harness.History,
             NullLogger<AcquisitionQueueService>.Instance,
             graphs: graphs);
@@ -2198,6 +2260,8 @@ public sealed class AcquisitionServiceTests {
             DefaultClientId, DownloadClientKind.QBittorrent, "Default qBittorrent", "http://qbit", "admin", "prismedia", true, true, "secret");
         private static readonly DownloadClientDetail Recorded = new(
             RecordedClientId, DownloadClientKind.Transmission, "Recorded Transmission", "http://transmission", "user", "prismedia", true, true, "secret");
+        private static readonly DownloadClientDetail Usenet = new(
+            UsenetClientId, DownloadClientKind.Sabnzbd, "SABnzbd", "http://sabnzbd", null, "prismedia", true, false, null, ApiKey: "secret");
 
         public Task<DownloadClientDetail?> GetAsync(Guid id, CancellationToken cancellationToken) =>
             Task.FromResult<DownloadClientDetail?>(includeRecordedClient && id == RecordedClientId ? Recorded : null);
@@ -2209,10 +2273,35 @@ public sealed class AcquisitionServiceTests {
         public Task<IReadOnlyList<DownloadClientDetail>> ListDetailsAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<DownloadClientDetail?> GetDefaultAsync(DownloadProtocol protocol, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<IReadOnlyList<DownloadClientDetail>> ListEnabledAsync(DownloadProtocol protocol, CancellationToken cancellationToken) =>
-            Task.FromResult<IReadOnlyList<DownloadClientDetail>>(includeRecordedClient ? [Recorded] : [Default]);
+            Task.FromResult<IReadOnlyList<DownloadClientDetail>>(protocol == DownloadProtocol.Usenet
+                ? [Usenet]
+                : includeRecordedClient ? [Recorded] : [Default]);
         public Task<IReadOnlyList<DownloadProtocol>> GetEnabledProtocolsAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<DownloadClientSummary> SaveAsync(DownloadClientSaveCommand command, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class RecordingDetachedDownloadCleanupStore : IDetachedDownloadCleanupStore {
+        public List<(Guid AcquisitionId, Guid DownloadClientConfigId, string ClientItemId)> Detachments { get; } = [];
+        public Exception? Failure { get; init; }
+        public bool DetachResult { get; init; } = true;
+
+        public Task<bool> DetachAsync(
+            Guid acquisitionId,
+            Guid downloadClientConfigId,
+            string clientItemId,
+            CancellationToken cancellationToken) {
+            Detachments.Add((acquisitionId, downloadClientConfigId, clientItemId));
+            return Failure is null
+                ? Task.FromResult(DetachResult)
+                : Task.FromException<bool>(Failure);
+        }
+
+        public Task<IReadOnlyList<DetachedDownloadCleanup>> ListAsync(CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task CompleteAsync(Guid cleanupId, CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
     }
 
     private sealed class RecordingDownloadClientFactory : IDownloadClientFactory {

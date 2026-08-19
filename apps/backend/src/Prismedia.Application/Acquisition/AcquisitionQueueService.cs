@@ -24,6 +24,7 @@ public sealed class AcquisitionQueueService(
     IReleaseLinkResolver linkResolver,
     IAcquisitionTransferAddCoordinator transferAdds,
     IAcquisitionImportResetCleanup importResetCleanup,
+    IDetachedDownloadCleanupStore detachedCleanups,
     IAcquisitionHistoryStore history,
     ILogger<AcquisitionQueueService> logger,
     VideoScanConcurrencyGate? scanGate = null,
@@ -111,6 +112,7 @@ public sealed class AcquisitionQueueService(
                 acquisitionId,
                 queueOrigin.Value,
                 eligible[0],
+                manualPick,
                 cancellationToken);
             if (queueClaim.InterruptedImport is { } interruptedImport) {
                 await DiscardInterruptedImportAsync(acquisitionId, interruptedImport);
@@ -353,6 +355,7 @@ public sealed class AcquisitionQueueService(
                 acquisitionId,
                 queueOrigin.Value,
                 eligible[0],
+                manualPick: true,
                 cancellationToken);
             client = eligible[0];
             attemptCategory = category ?? client.Category;
@@ -662,27 +665,62 @@ public sealed class AcquisitionQueueService(
     }
 
     /// <summary>
-    /// Removes an old remote transfer only after the queue lifecycle is claimed. If strict removal fails,
-    /// restores the exact prior queueable state with a non-cancellable compare-and-set; a concurrent
-    /// teardown that already moved to Stopping wins and keeps its durable claim instead.
+    /// Resolves an old remote transfer only after the queue lifecycle is claimed. Automatic replacement
+    /// remains strict; an explicit pick may atomically detach the exact pointer into independent cleanup.
+    /// If neither path succeeds, restores the prior queueable state with a non-cancellable compare-and-set;
+    /// a concurrent teardown that already moved to Stopping wins and keeps its durable claim instead.
     /// </summary>
     private async Task RemovePriorDownloadOrRestoreQueueStateAsync(
         Guid acquisitionId,
         AcquisitionStatus priorStatus,
         DownloadClientDetail fallbackClient,
+        bool manualPick,
         CancellationToken cancellationToken) {
+        var prior = await acquisitions.GetTransferInfoAsync(acquisitionId, cancellationToken);
+        var priorClientItemId = prior?.ClientItemId;
+        if (prior is null || string.IsNullOrWhiteSpace(priorClientItemId)) {
+            return;
+        }
+
         try {
-            await RemovePriorDownloadAsync(acquisitionId, fallbackClient, cancellationToken);
+            await RemovePriorDownloadAsync(prior, priorClientItemId, fallbackClient, cancellationToken);
+            return;
+        } catch (OperationCanceledException) {
+            await RestorePriorQueueStateAsync(acquisitionId, priorStatus);
+            throw;
+        } catch when (manualPick && prior.DownloadClientConfigId is { } ownerId) {
+            try {
+                if (await detachedCleanups.DetachAsync(
+                        acquisitionId,
+                        ownerId,
+                        priorClientItemId,
+                        CancellationToken.None)) {
+                    logger.LogWarning(
+                        "AcquisitionQueue: detached prior client item {ClientItemId} for independent cleanup before manual replacement {AcquisitionId}.",
+                        priorClientItemId,
+                        acquisitionId);
+                    return;
+                }
+            } catch {
+                await RestorePriorQueueStateAsync(acquisitionId, priorStatus);
+                throw;
+            }
+
+            await RestorePriorQueueStateAsync(acquisitionId, priorStatus);
+            throw;
         } catch {
-            await acquisitions.TryTransitionStatusAsync(
-                acquisitionId,
-                [AcquisitionStatus.Queued],
-                priorStatus,
-                "The prior download could not be removed; no replacement was queued.",
-                CancellationToken.None);
+            await RestorePriorQueueStateAsync(acquisitionId, priorStatus);
             throw;
         }
     }
+
+    private async Task RestorePriorQueueStateAsync(Guid acquisitionId, AcquisitionStatus priorStatus) =>
+        await acquisitions.TryTransitionStatusAsync(
+            acquisitionId,
+            [AcquisitionStatus.Queued],
+            priorStatus,
+            "The prior download could not be removed; no replacement was queued.",
+            CancellationToken.None);
 
     private static bool IsAdding(AcquisitionTransferInfo? transfer) =>
         transfer?.State == TransferOwnershipState.Adding.ToCode()
@@ -768,14 +806,13 @@ public sealed class AcquisitionQueueService(
     /// live in a different client than the new grab (e.g. a usenet retry after a torrent failure), so it
     /// is removed through its own recorded client, falling back to the new grab's first candidate for
     /// legacy transfers that recorded none. Re-queue must stop while this pointer is still live: replacing
-    /// it with the new transfer would make the old client item unreachable to later teardown.
+    /// it directly with the new transfer would make the old client item unreachable to later teardown.
     /// </summary>
-    private async Task RemovePriorDownloadAsync(Guid acquisitionId, DownloadClientDetail fallbackClient, CancellationToken cancellationToken) {
-        var prior = await acquisitions.GetTransferInfoAsync(acquisitionId, cancellationToken);
-        if (prior is null || string.IsNullOrWhiteSpace(prior.ClientItemId)) {
-            return;
-        }
-
+    private async Task RemovePriorDownloadAsync(
+        AcquisitionTransferInfo prior,
+        string priorClientItemId,
+        DownloadClientDetail fallbackClient,
+        CancellationToken cancellationToken) {
         var owner = prior.DownloadClientConfigId is { } priorClientId
             ? await downloadClients.GetAsync(priorClientId, cancellationToken)
             : fallbackClient;
@@ -788,12 +825,12 @@ public sealed class AcquisitionQueueService(
         try {
             var download = clients.Get(owner.Kind);
             var connection = ConnectionFor(owner);
-            if (await download.GetItemAsync(connection, prior.ClientItemId, cancellationToken) is null) {
+            if (await download.GetItemAsync(connection, priorClientItemId, cancellationToken) is null) {
                 return;
             }
 
-            await download.RemoveAsync(connection, prior.ClientItemId, deleteData: true, cancellationToken);
-            if (await download.GetItemAsync(connection, prior.ClientItemId, cancellationToken) is not null) {
+            await download.RemoveAsync(connection, priorClientItemId, deleteData: true, cancellationToken);
+            if (await download.GetItemAsync(connection, priorClientItemId, cancellationToken) is not null) {
                 throw new IOException("The prior transfer is still present after the client acknowledged removal.");
             }
         } catch (OperationCanceledException) {

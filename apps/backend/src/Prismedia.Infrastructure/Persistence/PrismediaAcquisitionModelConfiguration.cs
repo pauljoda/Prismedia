@@ -340,6 +340,21 @@ internal static partial class PrismediaModelConfiguration {
             entity.HasOne<DownloadClientConfigRow>().WithMany().HasForeignKey(row => row.DownloadClientConfigId).OnDelete(DeleteBehavior.SetNull);
         });
 
+        modelBuilder.Entity<DetachedDownloadCleanupRow>(entity => {
+            entity.ToTable("detached_download_cleanups");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.SourceAcquisitionId).HasColumnName("source_acquisition_id");
+            entity.Property(row => row.DownloadClientConfigId).HasColumnName("download_client_config_id");
+            entity.Property(row => row.ClientItemId).HasColumnName("client_item_id").HasMaxLength(256).IsRequired();
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.HasIndex(row => row.SourceAcquisitionId);
+            entity.HasIndex(row => row.DownloadClientConfigId);
+            entity.HasOne<AcquisitionRow>().WithMany().HasForeignKey(row => row.SourceAcquisitionId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne<DownloadClientConfigRow>().WithMany().HasForeignKey(row => row.DownloadClientConfigId).OnDelete(DeleteBehavior.Restrict);
+        });
+
         modelBuilder.Entity<AcquisitionImportHintRow>(entity => {
             entity.ToTable("acquisition_import_hints");
             entity.HasKey(row => row.Id);

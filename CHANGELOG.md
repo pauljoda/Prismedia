@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Explicitly selected release replacements no longer depend on the prior download client remaining healthy: Prismedia detaches the exact old client item into durable cleanup, queues the new release through its own protocol client, and removes the old item when its original client recovers.
 - Direct Play video pages now pre-load only the source metadata needed for faster startup and cancel that request immediately when the player closes, while adaptive streams remain dormant until Play to avoid abandoned remux or transcode work.
 - Web video playback now honors negotiated HEVC support instead of unnecessarily switching compatible MP4 files to HLS, avoiding avoidable startup and seek delays. Playback status also reports Transcoding when adaptive HLS is re-encoding the video instead of labeling it Direct Stream.
 - Audiobook chapter mapping and playback now ignore aggregate track records that do not own playable source media.

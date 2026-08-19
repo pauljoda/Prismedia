@@ -14,6 +14,7 @@ namespace Prismedia.Application.Jobs.Handlers;
 [JobDefinition(JobType.AcquisitionMonitor)]
 public sealed class AcquisitionMonitorJobHandler(
     IAcquisitionStore acquisitions,
+    IDetachedDownloadCleanupStore detachedCleanups,
     IAcquisitionQueueService queueService,
     IMonitorStore monitors,
     IDownloadClientConfigStore downloadClients,
@@ -114,7 +115,8 @@ public sealed class AcquisitionMonitorJobHandler(
 
         var transfers = await acquisitions.ListActiveTransfersAsync(cancellationToken);
         var seeding = await acquisitions.ListSeedingTransfersAsync(cancellationToken);
-        if (transfers.Count == 0 && seeding.Count == 0) {
+        var detached = await detachedCleanups.ListAsync(cancellationToken);
+        if (transfers.Count == 0 && seeding.Count == 0 && detached.Count == 0) {
             return;
         }
 
@@ -140,6 +142,58 @@ public sealed class AcquisitionMonitorJobHandler(
         foreach (var watch in seeding) {
             cancellationToken.ThrowIfCancellationRequested();
             await AdvanceSeedingAsync(watch, clientCache, cancellationToken);
+        }
+
+        foreach (var cleanup in detached) {
+            cancellationToken.ThrowIfCancellationRequested();
+            await AdvanceDetachedCleanupAsync(cleanup, clientCache, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// Removes one prior client item that an explicit replacement detached from its active acquisition
+    /// pointer. A missing or unreachable owner leaves the record durable for a later pass.
+    /// </summary>
+    private async Task AdvanceDetachedCleanupAsync(
+        DetachedDownloadCleanup cleanup,
+        Dictionary<Guid, Contracts.Acquisition.DownloadClientDetail?> clientCache,
+        CancellationToken cancellationToken) {
+        var client = await ResolveClientAsync(cleanup.DownloadClientConfigId, clientCache, cancellationToken);
+        if (client is null) {
+            return;
+        }
+
+        try {
+            var connection = new DownloadClientConnection(
+                client.Id,
+                client.Kind,
+                client.BaseUrl,
+                client.Username,
+                client.Password,
+                client.Category,
+                client.ApiKey,
+                client.DownloadDirectory);
+            var downloadClient = clients.Get(client.Kind);
+            if (await downloadClient.GetItemAsync(connection, cleanup.ClientItemId, cancellationToken) is { }) {
+                await downloadClient.RemoveAsync(
+                    connection,
+                    cleanup.ClientItemId,
+                    deleteData: true,
+                    cancellationToken);
+                if (await downloadClient.GetItemAsync(connection, cleanup.ClientItemId, cancellationToken) is not null) {
+                    throw new IOException("The detached transfer is still present after the client acknowledged removal.");
+                }
+            }
+
+            await detachedCleanups.CompleteAsync(cleanup.Id, cancellationToken);
+        } catch (OperationCanceledException) {
+            throw;
+        } catch (Exception ex) {
+            logger.LogWarning(
+                ex,
+                "AcquisitionMonitor: failed detached cleanup {CleanupId} for client item {ClientItemId}.",
+                cleanup.Id,
+                cleanup.ClientItemId);
         }
     }
 

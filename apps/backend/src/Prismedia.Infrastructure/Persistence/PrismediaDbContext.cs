@@ -166,6 +166,8 @@ public sealed class PrismediaDbContext : DbContext {
 
     public DbSet<DownloadTransferRow> DownloadTransfers => Set<DownloadTransferRow>();
 
+    public DbSet<DetachedDownloadCleanupRow> DetachedDownloadCleanups => Set<DetachedDownloadCleanupRow>();
+
     public DbSet<AcquisitionImportHintRow> AcquisitionImportHints => Set<AcquisitionImportHintRow>();
 
     public DbSet<AcquisitionBlocklistRow> AcquisitionBlocklist => Set<AcquisitionBlocklistRow>();

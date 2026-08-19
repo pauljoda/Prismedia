@@ -23,6 +23,96 @@ public sealed class AcquisitionMonitorJobHandlerTests {
     private static readonly Guid ClientId = Guid.NewGuid();
 
     [Fact]
+    public async Task DetachedCleanupCompletesWhenThePriorClientItemIsAlreadyGone() {
+        await using var db = CreateContext();
+        var cleanupId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.DetachedDownloadCleanups.Add(new DetachedDownloadCleanupRow {
+            Id = cleanupId,
+            DownloadClientConfigId = ClientId,
+            ClientItemId = "old-gone-hash",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        await RunAsync(
+            db,
+            new RecordingJobQueue(),
+            listing: [],
+            directLookup: null,
+            acquisitionId: Guid.NewGuid());
+
+        Assert.False(await db.DetachedDownloadCleanups.AsNoTracking()
+            .AnyAsync(row => row.Id == cleanupId));
+    }
+
+    [Fact]
+    public async Task DetachedCleanupRemovesPresentPriorItemAndCompletes() {
+        await using var db = CreateContext();
+        var cleanupId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.DetachedDownloadCleanups.Add(new DetachedDownloadCleanupRow {
+            Id = cleanupId,
+            DownloadClientConfigId = ClientId,
+            ClientItemId = "old-present-hash",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+        var removed = false;
+
+        await RunAsync(
+            db,
+            new RecordingJobQueue(),
+            listing: [],
+            directLookup: new DownloadItemStatus(
+                "old-present-hash",
+                "Old",
+                0.5,
+                "downloading",
+                IsComplete: false,
+                "/downloads",
+                "/downloads/old"),
+            acquisitionId: Guid.NewGuid(),
+            onRemove: (clientItemId, deleteData) => {
+                Assert.Equal("old-present-hash", clientItemId);
+                Assert.True(deleteData);
+                removed = true;
+            });
+
+        Assert.True(removed);
+        Assert.False(await db.DetachedDownloadCleanups.AsNoTracking()
+            .AnyAsync(row => row.Id == cleanupId));
+    }
+
+    [Fact]
+    public async Task DetachedCleanupRemainsDurableWhileItsRecordedClientIsUnavailable() {
+        await using var db = CreateContext();
+        var cleanupId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.DetachedDownloadCleanups.Add(new DetachedDownloadCleanupRow {
+            Id = cleanupId,
+            DownloadClientConfigId = ClientId,
+            ClientItemId = "old-retry-hash",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        await RunAsync(
+            db,
+            new RecordingJobQueue(),
+            listing: [],
+            directLookup: null,
+            acquisitionId: Guid.NewGuid(),
+            downloadClientConfigs: new FakeDownloadClientConfigStore(clientExists: false));
+
+        Assert.True(await db.DetachedDownloadCleanups.AsNoTracking()
+            .AnyAsync(row => row.Id == cleanupId));
+    }
+
+    [Fact]
     public async Task PostImportWatchWithoutASeedGoalRemovesTheClientItem() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
@@ -529,6 +619,7 @@ public sealed class AcquisitionMonitorJobHandlerTests {
         Action<string, bool>? onRemove = null) {
         var handler = new AcquisitionMonitorJobHandler(
             AcquisitionTestFactory.Store(db),
+            new EfDetachedDownloadCleanupStore(db),
             recovery ?? new RecordingAcquisitionQueueService(),
             monitors ?? new EfMonitorStore(db),
             downloadClientConfigs ?? new FakeDownloadClientConfigStore(),
@@ -624,6 +715,8 @@ public sealed class AcquisitionMonitorJobHandlerTests {
         Exception? listingFailure = null,
         DownloadItemProperties? properties = null,
         Action<string, bool>? onRemove = null) : IDownloadClient {
+        private bool _removed;
+
         public DownloadClientKind Kind => DownloadClientKind.QBittorrent;
         public Task<IReadOnlyList<DownloadItemStatus>> ListItemsAsync(DownloadClientConnection connection, CancellationToken cancellationToken) {
             if (listingFailure is not null) {
@@ -633,7 +726,7 @@ public sealed class AcquisitionMonitorJobHandlerTests {
             return Task.FromResult(listing);
         }
         public Task<DownloadItemStatus?> GetItemAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) =>
-            Task.FromResult(directLookup);
+            Task.FromResult(_removed ? null : directLookup);
         public Task<string> AddAsync(DownloadClientConnection connection, DownloadAddRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<string> AddTorrentFileAsync(DownloadClientConnection connection, string fileName, byte[] torrent, CancellationToken cancellationToken) => throw new NotSupportedException();
         public async Task<IReadOnlyList<DownloadItemFile>> GetFilesAsync(
@@ -654,6 +747,7 @@ public sealed class AcquisitionMonitorJobHandlerTests {
                 throw new NotSupportedException();
             }
             onRemove(clientItemId, deleteData);
+            _removed = true;
             return Task.CompletedTask;
         }
         public Task<DownloadClientConnectionTest> TestAsync(DownloadClientConnection connection, CancellationToken cancellationToken) =>
