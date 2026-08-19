@@ -45,11 +45,6 @@ public sealed partial class HlsAssetService {
     // rounding artefact in the probe cannot be mistaken for real leading pictures.
     private const double IndependenceEpsilonSeconds = 0.001;
 
-    // How much of the source the bounded independence probe reads. Long enough to cover several GOPs of
-    // any realistic encode (so an open-GOP source cannot look closed by luck), short enough to stay a
-    // sub-second read on the request thread — unlike the whole-file walk it replaces for this purpose.
-    private const int IndependenceProbeSeconds = 60;
-
     /// <summary>
     /// Computes the exact per-segment boundaries the stream-copy remux will produce for one source.
     /// </summary>
@@ -79,104 +74,15 @@ public sealed partial class HlsAssetService {
         return keyframes;
     }
 
-    /// <summary>
-    /// Resolves whole-file segment boundaries from the Matroska Cues index, or null when that index is
-    /// unusable for this source.
-    /// </summary>
-    /// <remarks>
-    /// Cues list keyframe positions only — they say nothing about leading pictures — so they can describe
-    /// a source's real timeline only when it has none. An open-GOP source returns null and falls through
-    /// to the background whole-file walk rather than being described by a playlist that cannot account
-    /// for its RASL leads.
-    /// </remarks>
-    /// <param name="source">The source file whose Cues index is read.</param>
-    /// <param name="leadingPictureSeconds">
-    /// The lead measured by <see cref="ProbeLeadingPictureSecondsAsync"/>, or null when unmeasured.
-    /// </param>
-    private IReadOnlyList<RemuxKeyframe>? TryCuesKeyframes(
-        VideoSourceFile source,
-        double? leadingPictureSeconds) {
-        if (leadingPictureSeconds is not { } lead || lead > IndependenceEpsilonSeconds) {
-            return null;
-        }
+    // Deliberately NO cheap whole-file shortcut. A previous attempt certified a source as closed-GOP
+    // from a bounded 60-second probe and then trusted the Matroska Cues index (which lists keyframe
+    // times but knows nothing about leading pictures) for the whole file. That is unsound, and real
+    // content breaks it: an encode can mix IDR scene-cut keyframes with periodic CRA keyframes, so a
+    // window containing only scene cuts measures a zero lead while later boundaries carry a real one.
+    // One observed 1080p10 HEVC episode had leads of 0ms through the first 60s, then 167ms at 60.761s
+    // and 100ms at 69.102s — variable, so not even a single measured constant would have described it.
+    // Leading pictures are a per-boundary fact, so the only sound source is the whole-file packet walk.
 
-        return MatroskaKeyframeReader.TryReadKeyframeTimes(source.Path, _logger) is { Count: > 1 } cues
-            ? ClosedGopKeyframes(cues)
-            : null;
-    }
-
-    /// <summary>
-    /// Reads a bounded window of the source and measures how far before its own keyframe a segment
-    /// actually starts presenting.
-    /// </summary>
-    /// <remarks>
-    /// Zero means a closed GOP: every segment presents exactly at its keyframe and may be described from
-    /// keyframe times alone. A non-zero result is the open-GOP RASL lead, and is deliberately the MAXIMUM
-    /// seen in the window — understating it would leave part of the hole this exists to close.
-    /// </remarks>
-    /// <returns>The lead in seconds, or null when the probe could not run or saw too few keyframes.</returns>
-    private async Task<double?> ProbeLeadingPictureSecondsAsync(
-        string sourcePath,
-        HlsAssetServiceOptions options,
-        CancellationToken cancellationToken) {
-        var sampled = await ProbeVideoKeyframesAsync(
-            sourcePath,
-            options,
-            cancellationToken,
-            IndependenceProbeSeconds);
-        if (sampled is not { Count: > 1 }) {
-            return null;
-        }
-
-        // Skip the first boundary: it is the start of the stream, which has nothing decodable before it
-        // and so never carries leading pictures regardless of the GOP structure.
-        return sampled.Skip(1).Max(keyframe => keyframe.KeyframePts - keyframe.PresentationStartPts);
-    }
-
-    /// <summary>
-    /// Shifts a growing <c>EVENT</c> playlist onto the presentation timeline by shortening its first
-    /// segment by the source's leading-picture lead.
-    /// </summary>
-    /// <remarks>
-    /// Only the first <c>EXTINF</c> needs correcting. Every segment after the first starts its lead
-    /// earlier than its keyframe, so in the difference between two consecutive starts the lead cancels
-    /// and the interior durations ffmpeg wrote are already right; only the gap between segment zero
-    /// (which has no lead) and segment one is overstated. This keeps the transient playlist honest during
-    /// the seconds before the exact VOD playlist lands, using the lead the bounded probe already
-    /// measured. It assumes a constant lead — true of a fixed GOP structure such as x265's — and the
-    /// whole-file walk that replaces this playlist does not.
-    /// </remarks>
-    /// <param name="playlist">ffmpeg's event playlist text.</param>
-    /// <param name="leadingPictureSeconds">Measured lead in seconds; zero or less leaves the text alone.</param>
-    /// <returns>The playlist with its first segment duration corrected.</returns>
-    internal static string CorrectEventPlaylistLead(string playlist, double leadingPictureSeconds) {
-        if (leadingPictureSeconds <= IndependenceEpsilonSeconds || string.IsNullOrEmpty(playlist)) {
-            return playlist;
-        }
-
-        const string marker = "#EXTINF:";
-        var lines = playlist.Replace("\r\n", "\n").Split('\n');
-        for (var index = 0; index < lines.Length; index++) {
-            if (!lines[index].StartsWith(marker, StringComparison.Ordinal)) {
-                continue;
-            }
-
-            var value = lines[index][marker.Length..].TrimEnd(',');
-            if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var duration)) {
-                return playlist;
-            }
-
-            var corrected = duration - leadingPictureSeconds;
-            if (corrected <= 0) {
-                return playlist;
-            }
-
-            lines[index] = string.Format(CultureInfo.InvariantCulture, "{0}{1:0.000000},", marker, corrected);
-            return string.Join('\n', lines);
-        }
-
-        return playlist;
-    }
 
     // Durable per-video keyframe cache, stored OUTSIDE the evictable transcode cache roots
     // (hlsv/hls/hls2) so the transcode-cache size cap cannot delete it. Keyed by video id and
@@ -235,10 +141,11 @@ public sealed partial class HlsAssetService {
         }
     }
 
-    // Bumped when the cached shape changes so older entries recompute instead of being misread. Version 2
-    // added each segment's presentation start alongside its keyframe time; a version 1 entry holds
-    // keyframe times only and cannot describe an open-GOP source.
-    private const int KeyframeCacheFormatVersion = 2;
+    // Bumped when the cached shape or its trustworthiness changes so older entries recompute instead of
+    // being misread. Version 2 added each segment's presentation start, but could be written from the
+    // Matroska Cues index, which cannot see leading pictures — so a v2 entry may claim every segment is
+    // independent on a source where that is false. Version 3 is only ever written from the whole-file walk.
+    private const int KeyframeCacheFormatVersion = 3;
 
     private sealed record DurableKeyframeCache(
         int FormatVersion,
@@ -262,21 +169,17 @@ public sealed partial class HlsAssetService {
     /// <param name="sourcePath">Absolute path to the source file.</param>
     /// <param name="options">Transcoder options carrying the ffprobe path.</param>
     /// <param name="cancellationToken">Token cancelling the probe.</param>
-    /// <param name="limitSeconds">When set, read only this many seconds from the start of the source.</param>
     private async Task<IReadOnlyList<RemuxKeyframe>?> ProbeVideoKeyframesAsync(
         string sourcePath,
         HlsAssetServiceOptions options,
-        CancellationToken cancellationToken,
-        int? limitSeconds = null) {
+        CancellationToken cancellationToken) {
         if (_processes is null) {
             return null;
         }
 
+        // Reads the WHOLE file on purpose. Bounding this read is what previously let a mixed-GOP source
+        // be mistaken for a closed-GOP one; see the note above ComputeRemuxKeyframesAsync.
         var arguments = new List<string> { "-v", "error" };
-        if (limitSeconds is { } window) {
-            arguments.AddRange(["-read_intervals", $"%+{window.ToString(CultureInfo.InvariantCulture)}"]);
-        }
-
         arguments.AddRange([
             "-select_streams", "v:0",
             "-show_entries", "packet=pts_time,flags",
@@ -366,24 +269,6 @@ public sealed partial class HlsAssetService {
     /// <c>seg_NNNNN</c> filenames as ffmpeg's real output but with mismatched durations, corrupting
     /// seeking and cutting the buffer short of the true end.
     /// </remarks>
-    internal static IReadOnlyList<double> BuildRemuxSegmentDurations(
-        IReadOnlyList<double> keyframeTimes,
-        double totalDuration) =>
-        BuildRemuxSegmentDurations(ClosedGopKeyframes(keyframeTimes), totalDuration);
-
-    /// <summary>
-    /// Reads plain keyframe times as closed-GOP boundaries, where each segment presents at its keyframe.
-    /// </summary>
-    /// <remarks>
-    /// Valid only for a source already established to have no leading pictures — a keyframe time on its
-    /// own cannot reveal an open GOP's RASL lead. Callers reach this after
-    /// <see cref="ProbeSegmentsAreIndependentAsync"/> has confirmed it.
-    /// </remarks>
-    /// <param name="keyframeTimes">Keyframe presentation timestamps in decode order.</param>
-    /// <returns>Boundaries whose presentation start equals their keyframe.</returns>
-    internal static IReadOnlyList<RemuxKeyframe> ClosedGopKeyframes(IReadOnlyList<double> keyframeTimes) =>
-        keyframeTimes.Select(time => new RemuxKeyframe(time, time)).ToArray();
-
     /// <summary>
     /// Builds presentation-accurate segment durations from probed boundaries.
     /// </summary>

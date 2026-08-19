@@ -81,9 +81,10 @@ public sealed class HlsAssetServiceTests : IDisposable {
         // GOPs each, the first keyframe at/after every 6s mark) plus a short final segment.
         const double gop = 2.002;
         const double totalDuration = 1951.296;
-        var keyframes = new List<double>();
+        var keyframes = new List<HlsAssetService.RemuxKeyframe>();
         for (var t = 0.0; t < totalDuration; t += gop) {
-            keyframes.Add(Math.Round(t, 6));
+            var pts = Math.Round(t, 6);
+            keyframes.Add(new HlsAssetService.RemuxKeyframe(pts, pts));
         }
 
         var durations = HlsAssetService.BuildRemuxSegmentDurations(keyframes, totalDuration);
@@ -102,7 +103,7 @@ public sealed class HlsAssetServiceTests : IDisposable {
         // 12s cut lands on the keyframe at 12.813 — giving a 5.839s second segment. A rule that instead
         // waits 6s past the PREVIOUS cut (6.974) would require >= 12.974 and skip 12.813, drifting to a
         // longer 6.740s segment and, cumulatively, fewer/misaligned segments than ffmpeg writes.
-        var keyframes = new List<double> { 0.0, 4.972, 5.339, 6.974, 10.444, 11.645, 12.813, 13.714, 20.721 };
+        var keyframes = ClosedGop(0.0, 4.972, 5.339, 6.974, 10.444, 11.645, 12.813, 13.714, 20.721);
 
         var durations = HlsAssetService.BuildRemuxSegmentDurations(keyframes, 25.0);
 
@@ -120,7 +121,7 @@ public sealed class HlsAssetServiceTests : IDisposable {
         // jump the threshold past the keyframe that triggered the cut. Verified empirically against
         // Keyframes [0,19,20,25] over a 30s source produce FOUR segments [19,1,5,5].
         // (Jumping the threshold past the cut would skip the keyframe at 20 and wrongly produce [19,6,5].)
-        var keyframes = new List<double> { 0.0, 19.0, 20.0, 25.0 };
+        var keyframes = ClosedGop(0.0, 19.0, 20.0, 25.0);
 
         var durations = HlsAssetService.BuildRemuxSegmentDurations(keyframes, 30.0);
 
@@ -206,6 +207,41 @@ public sealed class HlsAssetServiceTests : IDisposable {
     }
 
     [Fact]
+    public void RemuxKeyframeProbeDetectsLeadingPicturesThatAppearOnlyLaterInTheFile() {
+        // The bug that shipped: a real 1080p10 HEVC episode mixes IDR scene-cut keyframes with periodic
+        // CRA keyframes. Its first 60s held only scene cuts (lead 0), so a bounded probe certified the whole
+        // file as closed-GOP — and the playlist then dated every later segment from its keyframe, which is
+        // the discrepancy WebKit stalls on. Verbatim ffprobe output from that file around 49-73s.
+        const string probeOutput = """
+            49.216000,K__
+            49.249000,___
+            50.284000,K__
+            51.285000,K__
+            52.419000,K__
+            52.452000,___
+            60.761000,K__
+            60.594000,___
+            60.627000,___
+            69.102000,K__
+            69.002000,___
+            72.472000,K__
+            72.505000,___
+            """;
+
+        var keyframes = HlsAssetService.ParseRemuxKeyframes(probeOutput);
+
+        // The early scene cuts really are independent...
+        Assert.True(keyframes[1].IsIndependent); // 50.284
+        Assert.True(keyframes[3].IsIndependent); // 52.419
+        // ...but the periodic keyframes carry leading pictures, with DIFFERENT leads, so no single measured
+        // constant could describe this file either.
+        Assert.Equal(60.594, keyframes[4].PresentationStartPts, 3);
+        Assert.Equal(0.167, keyframes[4].KeyframePts - keyframes[4].PresentationStartPts, 3);
+        Assert.Equal(0.100, keyframes[5].KeyframePts - keyframes[5].PresentationStartPts, 3);
+        Assert.False(HlsAssetService.SegmentsAreIndependent(keyframes));
+    }
+
+    [Fact]
     public void RemuxVodPlaylistOmitsIndependentSegmentsWhenBoundariesAreNot() {
         var openGop = HlsAssetService.BuildRemuxVodPlaylist([6.0, 6.0], independentSegments: false);
         var closedGop = HlsAssetService.BuildRemuxVodPlaylist([6.0, 6.0], independentSegments: true);
@@ -214,43 +250,6 @@ public sealed class HlsAssetServiceTests : IDisposable {
         // a hard decode point and fail there.
         Assert.DoesNotContain("#EXT-X-INDEPENDENT-SEGMENTS", openGop);
         Assert.Contains("#EXT-X-INDEPENDENT-SEGMENTS", closedGop);
-    }
-
-    [Fact]
-    public void EventPlaylistLeadCorrectionShortensOnlyTheFirstSegment() {
-        // ffmpeg's growing EVENT playlist dates segments from their keyframes, so on an open-GOP source it
-        // overstates where segment one begins. Only the FIRST duration is wrong: every later segment starts
-        // its lead early too, so the lead cancels in the difference between consecutive starts.
-        const string eventPlaylist = """
-            #EXTM3U
-            #EXT-X-VERSION:7
-            #EXT-X-PLAYLIST-TYPE:EVENT
-            #EXT-X-MAP:URI="init.mp4"
-            #EXTINF:10.000000,
-            seg_00000.m4s
-            #EXTINF:5.000000,
-            seg_00001.m4s
-            """;
-
-        var corrected = HlsAssetService.CorrectEventPlaylistLead(eventPlaylist, 0.125);
-
-        Assert.Contains("#EXTINF:9.875000,\nseg_00000.m4s", corrected);
-        Assert.Contains("#EXTINF:5.000000,\nseg_00001.m4s", corrected);
-    }
-
-    [Fact]
-    public void EventPlaylistLeadCorrectionLeavesClosedGopPlaylistsAlone() {
-        const string eventPlaylist = """
-            #EXTM3U
-            #EXTINF:6.000000,
-            seg_00000.m4s
-            """;
-
-        // A closed-GOP source measures a zero lead, and re-applying the correction on each poll of a
-        // growing playlist must never compound.
-        Assert.Equal(eventPlaylist, HlsAssetService.CorrectEventPlaylistLead(eventPlaylist, 0));
-        var once = HlsAssetService.CorrectEventPlaylistLead(eventPlaylist, 0.125);
-        Assert.Equal(once, HlsAssetService.CorrectEventPlaylistLead(eventPlaylist, 0.125));
     }
 
     [Fact]
@@ -695,7 +694,9 @@ public sealed class HlsAssetServiceTests : IDisposable {
 
         Assert.NotNull(asset);
         var metadata = await File.ReadAllTextAsync(Path.Combine(virtualRoot, "metadata.json"));
-        Assert.Contains("\"FormatVersion\": 13", metadata);
+        // Asserted against the stale version rather than the current one, so bumping the format to discard
+        // bad cached output does not require editing this test.
+        Assert.DoesNotContain("\"FormatVersion\": 12", metadata);
         Assert.False(File.Exists(Path.Combine(virtualRoot, "v", "720p", "seg_00000.ts")));
     }
 
@@ -1338,6 +1339,9 @@ public sealed class HlsAssetServiceTests : IDisposable {
             UpdatedAt = now,
         };
     }
+
+    private static List<HlsAssetService.RemuxKeyframe> ClosedGop(params double[] times) =>
+        times.Select(time => new HlsAssetService.RemuxKeyframe(time, time)).ToList();
 
     private sealed class FakeVideoSourceService : IVideoSourceService {
         private readonly VideoSourceFile _source;

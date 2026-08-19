@@ -177,28 +177,11 @@ public sealed partial class HlsAssetService {
                 cancellationToken);
         }
 
-        // Measure, from a bounded read, how far before its keyframe a segment starts presenting. Zero means
-        // a closed GOP, whose timeline the near-instant Matroska Cues index can describe exactly; non-zero
-        // is an open GOP's RASL lead, which Cues cannot express.
-        var leadingPictureSeconds = await ProbeLeadingPictureSecondsAsync(source.Path, options, cancellationToken);
-
-        if (source.DurationSeconds is > 0 &&
-            TryCuesKeyframes(source, leadingPictureSeconds) is { Count: > 1 } cuesKeyframes) {
-            TryWriteDurableKeyframes(id, source, cuesKeyframes);
-            return await WriteRemuxVodAsync(
-                remuxDir,
-                cuesKeyframes,
-                source.DurationSeconds.Value,
-                audioStreamIndex,
-                copyAudio,
-                cancellationToken);
-        }
-
-        // No usable fast index — a container with no keyframe index, an .mkv missing Cues, or an open-GOP
-        // source whose leading pictures Cues cannot describe: kick the whole-file keyframe probe + VOD
-        // build onto a background task (deduped per remux key; it persists the durable keyframe cache so
-        // the next play is instant) and serve the growing event playlist now, bounded so a stalled ffmpeg
-        // can never re-introduce the manifest hang. The full VOD takes over once the build lands.
+        // Cold: kick the whole-file keyframe probe + VOD build onto a background task (deduped per remux
+        // key; it persists the durable keyframe cache so the next play is instant) and serve the growing
+        // event playlist now, bounded so a stalled ffmpeg can never re-introduce the manifest hang. There
+        // is deliberately no cheap alternative — only the full walk knows where each segment really starts
+        // presenting, and guessing that from a sample is what broke WebKit playback before.
         EnsureRemuxVodComputationStarted(
             id,
             source,
@@ -213,17 +196,17 @@ public sealed partial class HlsAssetService {
             return null;
         }
 
-        // Correct the event playlist too. It is transient, but it is what the player uses for the seconds
-        // before the whole-file walk lands — and on a long source that window covers the first boundaries,
-        // which is exactly where the stall was reported.
+        // Served as ffmpeg wrote it. Its EXTINF values are keyframe-dated, so on an open-GOP source they
+        // are slightly wrong until the exact VOD playlist replaces them — but a single measured lead cannot
+        // fix that, because leads are a per-boundary fact and vary within one file. The playlist is
+        // transient and carries no independence claim, and the walk that replaces it is cached durably.
         return await WriteRemuxServedPlaylistAsync(
             legacyPath,
             remuxDir,
             audioStreamIndex,
             copyAudio,
             "no-cache",
-            cancellationToken,
-            leadingPictureSeconds ?? 0);
+            cancellationToken);
     }
 
     /// <summary>Writes the remux VOD playlist atomically and returns it as a cacheable asset.</summary>
@@ -255,13 +238,9 @@ public sealed partial class HlsAssetService {
         int? audioStreamIndex,
         bool copyAudio,
         string cacheControl,
-        CancellationToken cancellationToken,
-        double leadingPictureSeconds = 0) {
+        CancellationToken cancellationToken) {
         var servedPath = Path.Combine(remuxDir, "index.served.m3u8");
         var playlist = await File.ReadAllTextAsync(sourcePath, cancellationToken);
-        // Always re-read and re-correct ffmpeg's own text, so applying this on every poll of a growing
-        // playlist stays idempotent. The VOD playlist passes no lead: it is already exact.
-        playlist = CorrectEventPlaylistLead(playlist, leadingPictureSeconds);
         var rewritten = RewriteRemuxPlaylistUris(playlist, audioStreamIndex, copyAudio);
         await File.WriteAllTextAsync(servedPath, rewritten, cancellationToken);
         return new HlsAsset(servedPath, MediaContentTypes.HlsPlaylist, cacheControl);
