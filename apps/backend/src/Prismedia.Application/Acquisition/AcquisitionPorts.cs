@@ -586,8 +586,9 @@ public interface IAcquisitionStore : IAcquisitionLifecycleStore {
     Task SetStatusAsync(Guid id, AcquisitionStatus status, string? message, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Atomically claims a fresh import, or lets the same queue job recover the narrow
-    /// Importing-without-checkpoint crash window. A different job can never steal that active claim.
+    /// Atomically claims a fresh import, lets the same queue job recover the narrow
+    /// Importing-without-checkpoint crash window, or accepts an explicit manual retry when a failed import
+    /// still owns its completed payload. A different job can never steal an active import claim.
     /// </summary>
     Task<bool> TryClaimInitialImportAsync(
         Guid id,

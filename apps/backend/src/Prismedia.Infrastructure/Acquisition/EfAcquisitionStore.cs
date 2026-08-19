@@ -110,7 +110,13 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         var visibleRows = await ExcludeFulfilledPassiveAcquisitionsAsync(rows, cancellationToken);
         var ids = visibleRows.Select(row => row.Id).ToArray();
         var progress = await LatestProgressAsync(ids, cancellationToken);
-        return visibleRows.Select(row => ToSummary(row, progress.GetValueOrDefault(row.Id))).ToArray();
+        var resumablePayloads = await ResumablePayloadAcquisitionIdsAsync(visibleRows, cancellationToken);
+        return visibleRows
+            .Select(row => ToSummary(
+                row,
+                progress.GetValueOrDefault(row.Id),
+                resumablePayloads.Contains(row.Id)))
+            .ToArray();
     }
 
     public async Task<AcquisitionDetail?> GetAsync(Guid id, CancellationToken cancellationToken) {
@@ -126,8 +132,13 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             .ThenByDescending(candidate => candidate.Score)
             .ToArrayAsync(cancellationToken);
         var progress = (await LatestProgressAsync([id], cancellationToken)).GetValueOrDefault(id);
+        var hasResumablePayload = row.Status == AcquisitionStatus.Failed
+            && row.ImportCheckpointJson is null
+            && await HasCompletedPayloadAsync(id, cancellationToken);
 
-        return new AcquisitionDetail(ToSummary(row, progress), candidates.Select(ToView).ToArray());
+        return new AcquisitionDetail(
+            ToSummary(row, progress, hasResumablePayload),
+            candidates.Select(ToView).ToArray());
     }
 
     public async Task<AcquisitionSearchInput?> GetSearchInputAsync(Guid id, CancellationToken cancellationToken) {
@@ -535,7 +546,15 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
                         || (allowManualRetry && row.Status == AcquisitionStatus.ManualImportRequired)
                         || ((row.Status == AcquisitionStatus.Importing || row.Status == AcquisitionStatus.Failed)
                             && row.ImportCheckpointJson == null
-                            && row.ImportClaimJobId == claimJobId)))
+                            && row.ImportClaimJobId == claimJobId)
+                        || (allowManualRetry
+                            && row.Status == AcquisitionStatus.Failed
+                            && row.ImportCheckpointJson == null
+                            && db.DownloadTransfers.Any(transfer =>
+                                transfer.AcquisitionId == id
+                                && transfer.Progress >= 1
+                                && transfer.ContentPath != null
+                                && transfer.ContentPath != ""))))
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(row => row.Status, AcquisitionStatus.Importing)
                     .SetProperty(row => row.StatusMessage, (string?)null)
@@ -545,12 +564,17 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         }
 
         var row = await db.Acquisitions.FirstOrDefaultAsync(value => value.Id == id, cancellationToken);
+        var canRetryCompletedPayload = allowManualRetry
+            && row?.Status == AcquisitionStatus.Failed
+            && row.ImportCheckpointJson is null
+            && await HasCompletedPayloadAsync(id, cancellationToken);
         if (row is null
             || (row.Status != AcquisitionStatus.Downloaded
                 && !(allowManualRetry && row.Status == AcquisitionStatus.ManualImportRequired)
                 && !((row.Status == AcquisitionStatus.Importing || row.Status == AcquisitionStatus.Failed)
                     && row.ImportCheckpointJson is null
-                    && row.ImportClaimJobId == claimJobId))) {
+                    && row.ImportClaimJobId == claimJobId)
+                && !canRetryCompletedPayload)) {
             return false;
         }
 
@@ -1708,10 +1732,15 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         return transfers.ToDictionary(transfer => transfer.AcquisitionId, transfer => (double?)transfer.Progress);
     }
 
-    private static AcquisitionSummary ToSummary(AcquisitionRow row, double? progress) =>
+    private static AcquisitionSummary ToSummary(
+        AcquisitionRow row,
+        double? progress,
+        bool hasResumablePayload = false) =>
         new(row.Id, row.Status, row.StatusMessage, row.Title, row.Author, row.Series, row.Year, row.PosterUrl,
             progress, row.CreatedAt, row.UpdatedAt, row.Description, row.Kind, row.EntityId,
-            HasResumableImport: row.ImportCheckpointJson is not null, row.BookRendition, row.JobGraphId,
+            HasResumableImport: row.ImportCheckpointJson is not null || hasResumablePayload,
+            row.BookRendition,
+            row.JobGraphId,
             row.ReleaseDateMetadataUnavailable);
 
     private static ReleaseCandidateView ToView(ReleaseCandidateRow row) =>

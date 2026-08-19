@@ -1138,8 +1138,9 @@ public sealed partial class AcquisitionService(
             "The acquisition changed while this action was being prepared. Refresh and try again.");
 
     /// <summary>
-    /// Re-runs an import for a completed download/manual-import hold, or resumes an exact durable
-    /// checkpoint from a passive review/failure state. <paramref name="allowFormatChange"/> carries the
+    /// Re-runs an import for a completed download/manual-import hold, reuses an intact completed payload
+    /// after an initial import failure, or resumes an exact durable checkpoint from a passive review/failure
+    /// state. <paramref name="allowFormatChange"/> carries the
     /// user's explicit consent for a genuine upgrade to replace the owned file across formats (e.g.
     /// mkv → mp4, recycling the old file); without it the import re-runs under the ordinary rules. Any
     /// other status returns the detail unchanged (nothing enqueued); null when the acquisition no longer
@@ -1151,13 +1152,13 @@ public sealed partial class AcquisitionService(
             return null;
         }
 
-        var canResumeCheckpoint = detail.Summary.HasResumableImport
+        var canResumeImport = detail.Summary.HasResumableImport
             && detail.Summary.Status is (
                 AcquisitionStatus.AwaitingSelection
                 or AcquisitionStatus.Failed
                 or AcquisitionStatus.Cancelled);
         if (detail.Summary.Status is not (AcquisitionStatus.Downloaded or AcquisitionStatus.ManualImportRequired)
-            && !canResumeCheckpoint) {
+            && !canResumeImport) {
             return detail;
         }
 

@@ -1671,6 +1671,35 @@ public sealed class EfAcquisitionStoreTests {
     }
 
     [Fact]
+    public async Task FailedInitialImportWithCompletedPayloadStaysManuallyRetryable() {
+        await using var db = CreateContext();
+        var acquisitionId = AddCheckpointAcquisition(db);
+        var row = db.Acquisitions.Local.Single(value => value.Id == acquisitionId);
+        row.Status = AcquisitionStatus.Failed;
+        row.ImportClaimJobId = Guid.NewGuid();
+        db.DownloadTransfers.Add(new DownloadTransferRow {
+            Id = Guid.NewGuid(),
+            AcquisitionId = acquisitionId,
+            ClientItemId = "completed-download",
+            ContentPath = "/downloads/completed-book",
+            Progress = 1,
+            State = SabnzbdProtocol.StatusCompleted,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
+        });
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+        var retryJobId = Guid.NewGuid();
+
+        Assert.True((await store.GetAsync(acquisitionId, CancellationToken.None))?.Summary.HasResumableImport);
+        Assert.False(await store.TryClaimInitialImportAsync(
+            acquisitionId, retryJobId, allowManualRetry: false, CancellationToken.None));
+        Assert.True(await store.TryClaimInitialImportAsync(
+            acquisitionId, retryJobId, allowManualRetry: true, CancellationToken.None));
+        Assert.Equal(AcquisitionStatus.Importing, await store.GetStatusAsync(acquisitionId, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task CheckpointClaimIsExclusiveWhileImportingButMayMoveToANewRetryJobAfterFailure() {
         await using var db = CreateContext();
         var acquisitionId = AddCheckpointAcquisition(db);
