@@ -9,6 +9,10 @@
 - Use Keep a Changelog sections: `What's New`, `Added`, `Changed`, `Fixed`, `Removed`, and `Docs`.
 - The root `package.json` version is the build version and the single source of truth. All workspace package versions must match it exactly.
 - Do not change the build version while publishing a channel image. Move the version forward when a new body of work starts, then let dev, alpha, beta, and release images publish that decided version.
+- The first release-note-worthy commit in a new body of work MUST include the appropriate SemVer bump in the root and every workspace package manifest. Do not commit user-facing work against the previous body's version.
+- Before choosing that bump, inspect every commit since the last manifest-version change and use the highest SemVer impact in the accumulated unreleased body: breaking change = MAJOR, feature = MINOR, fix-only = PATCH.
+- Later commits in the same unreleased body keep the already-decided version; versions advance once per body of work, not once per commit. The version-bump commit message or body must state the SemVer reason.
+- Before handing off any release-note-worthy commit, run `pnpm release:check` and report the resulting version.
 - Suggested commit style:
   - `chore: bootstrap workspace`
   - `docs: define repo contract`
