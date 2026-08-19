@@ -271,7 +271,8 @@ public sealed class JobScheduler(
         foreach (var completion in work) {
             var jobType = Acquisition.AcquisitionCompletionService.CompletionJobType(
                 completion.Kind,
-                completion.IsUpgrade);
+                completion.IsUpgrade,
+                completion.BookRendition);
             if (jobType == JobType.AcquisitionImport && importEngines.Find(completion.Kind) is null) {
                 continue;
             }

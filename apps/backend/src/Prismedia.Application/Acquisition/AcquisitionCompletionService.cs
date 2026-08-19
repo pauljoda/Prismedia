@@ -25,7 +25,10 @@ public sealed class AcquisitionCompletionService(
         }
 
         var isUpgrade = await acquisitions.GetUpgradeOwnedQualityAsync(acquisitionId, cancellationToken) is not null;
-        var jobType = CompletionJobType(detail.Summary.Kind, isUpgrade);
+        var jobType = CompletionJobType(
+            detail.Summary.Kind,
+            isUpgrade,
+            detail.Summary.BookRendition);
         var request = new EnqueueJobRequest(
                 jobType,
                 PayloadJson: AcquisitionJobPayload.Serialize(acquisitionId),
@@ -78,11 +81,17 @@ public sealed class AcquisitionCompletionService(
     }
 
     /// <summary>
-    /// Entity definitions decide whether an upgrade can atomically replace one owned file. Multi-file
-    /// and structural units continue through their family import engine's durable placement plan.
+    /// Entity definitions decide whether an upgrade can atomically replace one owned file. A Book's
+    /// rendition refines that definition: ebooks remain atomic files, while audiobooks and other
+    /// multi-file or structural units continue through their family import engine's durable placement plan.
     /// </summary>
-    public static JobType CompletionJobType(EntityKind kind, bool isUpgrade) =>
-        isUpgrade && EntityKindRegistry.Describe(kind).UpgradeMode != EntityUpgradeMode.Import
+    public static JobType CompletionJobType(
+        EntityKind kind,
+        bool isUpgrade,
+        BookRendition? bookRendition) =>
+        isUpgrade
+            && bookRendition != BookRendition.Audiobook
+            && EntityKindRegistry.Describe(kind).UpgradeMode != EntityUpgradeMode.Import
             ? JobType.AcquisitionUpgradeReplace
             : JobType.AcquisitionImport;
 }

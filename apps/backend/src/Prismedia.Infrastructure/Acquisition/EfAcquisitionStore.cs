@@ -51,12 +51,17 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             .Select(row => new {
                 row.Id,
                 row.Kind,
+                row.BookRendition,
                 IsUpgrade = row.UpgradeOfAcquisitionId != null,
             })
             .ToArrayAsync(cancellationToken);
 
         return rows
-            .Select(row => new DownloadedAcquisitionCompletion(row.Id, row.Kind, row.IsUpgrade))
+            .Select(row => new DownloadedAcquisitionCompletion(
+                row.Id,
+                row.Kind,
+                row.IsUpgrade,
+                row.BookRendition))
             .ToArray();
     }
 

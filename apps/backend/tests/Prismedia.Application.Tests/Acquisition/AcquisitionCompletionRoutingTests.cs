@@ -34,19 +34,22 @@ public sealed class AcquisitionCompletionRoutingTests {
     }
 
     [Theory]
-    [InlineData(EntityKind.Book, true, JobType.AcquisitionUpgradeReplace)]
-    [InlineData(EntityKind.Movie, true, JobType.AcquisitionUpgradeReplace)]
-    [InlineData(EntityKind.Video, true, JobType.AcquisitionUpgradeReplace)]
-    [InlineData(EntityKind.VideoEpisode, true, JobType.AcquisitionUpgradeReplace)]
-    [InlineData(EntityKind.VideoSeason, true, JobType.AcquisitionImport)]
-    [InlineData(EntityKind.AudioLibrary, true, JobType.AcquisitionImport)]
-    [InlineData(EntityKind.AudioTrack, true, JobType.AcquisitionImport)]
-    [InlineData(EntityKind.AudioLibrary, false, JobType.AcquisitionImport)]
+    [InlineData(EntityKind.Book, true, null, JobType.AcquisitionUpgradeReplace)]
+    [InlineData(EntityKind.Book, true, BookRendition.Ebook, JobType.AcquisitionUpgradeReplace)]
+    [InlineData(EntityKind.Book, true, BookRendition.Audiobook, JobType.AcquisitionImport)]
+    [InlineData(EntityKind.Movie, true, null, JobType.AcquisitionUpgradeReplace)]
+    [InlineData(EntityKind.Video, true, null, JobType.AcquisitionUpgradeReplace)]
+    [InlineData(EntityKind.VideoEpisode, true, null, JobType.AcquisitionUpgradeReplace)]
+    [InlineData(EntityKind.VideoSeason, true, null, JobType.AcquisitionImport)]
+    [InlineData(EntityKind.AudioLibrary, true, null, JobType.AcquisitionImport)]
+    [InlineData(EntityKind.AudioTrack, true, null, JobType.AcquisitionImport)]
+    [InlineData(EntityKind.AudioLibrary, false, null, JobType.AcquisitionImport)]
     public void RoutesSingleFileAndAlbumCompletionsToTheirOwningWorkflow(
         EntityKind kind,
         bool isUpgrade,
+        BookRendition? bookRendition,
         JobType expected) {
-        Assert.Equal(expected, AcquisitionCompletionService.CompletionJobType(kind, isUpgrade));
+        Assert.Equal(expected, AcquisitionCompletionService.CompletionJobType(kind, isUpgrade, bookRendition));
     }
 
     [Fact]
@@ -62,8 +65,26 @@ public sealed class AcquisitionCompletionRoutingTests {
             var expected = definition.UpgradeMode == EntityUpgradeMode.Import
                 ? JobType.AcquisitionImport
                 : JobType.AcquisitionUpgradeReplace;
-            Assert.Equal(expected, AcquisitionCompletionService.CompletionJobType(kind, isUpgrade: true));
+            Assert.Equal(expected, AcquisitionCompletionService.CompletionJobType(kind, isUpgrade: true, bookRendition: null));
         }
+    }
+
+    [Fact]
+    public async Task DownloadedAudiobookUpgradeSchedulesItsMultipartImportEngine() {
+        var acquisitionId = Guid.NewGuid();
+        var entityId = Guid.NewGuid();
+        var store = DispatchProxy.Create<IAcquisitionStore, CompletionAcquisitionStore>();
+        var storeProxy = (CompletionAcquisitionStore)(object)store;
+        storeProxy.Detail = DownloadedBook(acquisitionId, entityId, BookRendition.Audiobook);
+        storeProxy.UpgradeOwnedQuality = new UpgradeOwnedQuality(
+            new BookQualityRank(BookSourceTier.Retail, BookFormatTier.Unknown),
+            MediaQualityCode: null);
+        var queue = new CompletionJobQueue(Guid.NewGuid());
+        var service = new AcquisitionCompletionService(store, queue, new RejectingCompletionGraph(Guid.NewGuid(), JobGraphStatus.Completed));
+
+        await service.ScheduleAsync(acquisitionId, CancellationToken.None, JobGraphOrigin.Interactive);
+
+        Assert.Equal(JobType.AcquisitionImport, Assert.Single(queue.Requests).Type);
     }
 
     private static AcquisitionDetail DownloadedAlbum(Guid acquisitionId, Guid entityId, Guid graphId) =>
@@ -85,13 +106,36 @@ public sealed class AcquisitionCompletionRoutingTests {
                 JobGraphId: graphId),
             []);
 
+    private static AcquisitionDetail DownloadedBook(
+        Guid acquisitionId,
+        Guid entityId,
+        BookRendition rendition) =>
+        new(
+            new AcquisitionSummary(
+                acquisitionId,
+                AcquisitionStatus.Downloaded,
+                "Download complete; importing.",
+                "Book",
+                "Author",
+                null,
+                2000,
+                null,
+                1,
+                DateTimeOffset.UtcNow,
+                DateTimeOffset.UtcNow,
+                Kind: EntityKind.Book,
+                EntityId: entityId,
+                BookRendition: rendition),
+            []);
+
     public class CompletionAcquisitionStore : DispatchProxy {
         public AcquisitionDetail? Detail { get; set; }
+        public UpgradeOwnedQuality? UpgradeOwnedQuality { get; set; }
 
         protected override object? Invoke(MethodInfo? targetMethod, object?[]? args) =>
             targetMethod?.Name switch {
                 nameof(IAcquisitionStore.GetAsync) => Task.FromResult(Detail),
-                nameof(IAcquisitionStore.GetUpgradeOwnedQualityAsync) => Task.FromResult<UpgradeOwnedQuality?>(null),
+                nameof(IAcquisitionStore.GetUpgradeOwnedQualityAsync) => Task.FromResult(UpgradeOwnedQuality),
                 nameof(IAcquisitionStore.SetJobGraphIdAsync) => Task.CompletedTask,
                 _ => throw new NotSupportedException(targetMethod?.Name)
             };

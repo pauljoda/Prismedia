@@ -279,36 +279,53 @@ public sealed class EfAcquisitionStoreTests {
         var ordinaryId = Guid.NewGuid();
         var parentId = Guid.NewGuid();
         var upgradeId = Guid.NewGuid();
+        var audiobookUpgradeId = Guid.NewGuid();
         var importingId = Guid.NewGuid();
         db.Acquisitions.AddRange(
             CompletionRow(ordinaryId, EntityKind.Movie, AcquisitionStatus.Downloaded),
             CompletionRow(parentId, EntityKind.Book, AcquisitionStatus.Imported),
             CompletionRow(upgradeId, EntityKind.Video, AcquisitionStatus.Downloaded, parentId),
+            CompletionRow(
+                audiobookUpgradeId,
+                EntityKind.Book,
+                AcquisitionStatus.Downloaded,
+                parentId,
+                BookRendition.Audiobook),
             CompletionRow(importingId, EntityKind.AudioLibrary, AcquisitionStatus.Importing));
         await db.SaveChangesAsync();
 
         var work = await AcquisitionTestFactory.Store(db)
             .ListDownloadedCompletionWorkAsync(CancellationToken.None);
 
-        Assert.Equal(2, work.Count);
+        Assert.Equal(3, work.Count);
         AssertCompletion(
             Assert.Single(work, item => item.AcquisitionId == ordinaryId),
             ordinaryId,
             EntityKind.Movie,
-            isUpgrade: false);
+            isUpgrade: false,
+            bookRendition: null);
         AssertCompletion(
             Assert.Single(work, item => item.AcquisitionId == upgradeId),
             upgradeId,
             EntityKind.Video,
-            isUpgrade: true);
+            isUpgrade: true,
+            bookRendition: null);
+        AssertCompletion(
+            Assert.Single(work, item => item.AcquisitionId == audiobookUpgradeId),
+            audiobookUpgradeId,
+            EntityKind.Book,
+            isUpgrade: true,
+            BookRendition.Audiobook);
 
         AcquisitionRow CompletionRow(
             Guid id,
             EntityKind kind,
             AcquisitionStatus status,
-            Guid? upgradeOfAcquisitionId = null) => new() {
+            Guid? upgradeOfAcquisitionId = null,
+            BookRendition? bookRendition = null) => new() {
                 Id = id,
                 Kind = kind,
+                BookRendition = bookRendition,
                 Status = status,
                 UpgradeOfAcquisitionId = upgradeOfAcquisitionId,
                 Title = kind.ToCode(),
@@ -322,10 +339,12 @@ public sealed class EfAcquisitionStoreTests {
             DownloadedAcquisitionCompletion item,
             Guid id,
             EntityKind kind,
-            bool isUpgrade) {
+            bool isUpgrade,
+            BookRendition? bookRendition) {
             Assert.Equal(id, item.AcquisitionId);
             Assert.Equal(kind, item.Kind);
             Assert.Equal(isUpgrade, item.IsUpgrade);
+            Assert.Equal(bookRendition, item.BookRendition);
         }
     }
 

@@ -201,7 +201,7 @@ internal static class ImportPlacementExecution {
 /// hint, and chain a book scan. Ambiguous payloads stop at manual-import-required instead of guessing.
 /// </summary>
 [AcquisitionStrategy(AcquisitionNamingFamily.Book)]
-public sealed class BookAcquisitionImportEngine(
+public sealed partial class BookAcquisitionImportEngine(
     IAcquisitionStore acquisitions,
     IBookAcquisitionProfileStore profiles,
     ILibraryScanRootPersistence roots,
@@ -209,6 +209,7 @@ public sealed class BookAcquisitionImportEngine(
     IImportFileMover mover,
     IImportedEntityMaterializer materializer,
     DownloadClientCleanupService torrents,
+    IAcquisitionHistoryStore history,
     ILogger<BookAcquisitionImportEngine> logger) : IAcquisitionImportEngine {
 
     public async Task ImportAsync(JobContext context, AcquisitionImportContext import, CancellationToken cancellationToken) {
@@ -233,12 +234,16 @@ public sealed class BookAcquisitionImportEngine(
                 return;
             }
 
-            var resumed = await ImportPlacementExecution.ExecuteAsync(
-                acquisitions,
-                mover,
-                import.Id,
-                durableCheckpoint,
-                cancellationToken);
+            var replacementAlreadySwapped = IsAudiobookReplacement(import)
+                && AudiobookReplacementAlreadySwapped(durableCheckpoint);
+            var resumed = replacementAlreadySwapped
+                ? durableCheckpoint
+                : await ImportPlacementExecution.ExecuteAsync(
+                    acquisitions,
+                    mover,
+                    import.Id,
+                    durableCheckpoint,
+                    cancellationToken);
             if (resumed is null) {
                 return;
             }
@@ -247,15 +252,53 @@ public sealed class BookAcquisitionImportEngine(
                 checkpointRoot.Id,
                 MediaNamingTemplates.BookDefault,
                 durableCheckpoint.ImportMode);
+            if (IsAudiobookReplacement(import)) {
+                await FinalizeAudiobookReplacementAsync(
+                    context,
+                    import,
+                    profile,
+                    checkpointRoot,
+                    resumed,
+                    cancellationToken);
+                return;
+            }
+
             await FinalizeAsync(context, import, profile, checkpointRoot, resumed, cancellationToken);
             return;
         }
 
-        // A request-time library choice overrides the profile's target; an unsuitable choice falls back.
-        var root = await ImportRootResolution.ResolveAsync(
-            roots, import.TargetLibraryRootId, profile?.TargetLibraryRootId, static candidate => candidate.ScanBooks, cancellationToken);
+        var isAudiobookReplacement = IsAudiobookReplacement(import);
+        var audiobookReplacement = isAudiobookReplacement
+            ? await acquisitions.GetUpgradeReplaceTargetAsync(import.Id, cancellationToken)
+            : null;
+        if (isAudiobookReplacement && audiobookReplacement is null) {
+            await Fail(
+                import.Id,
+                "The owned audiobook folder could not be resolved for replacement.",
+                cancellationToken);
+            return;
+        }
+        // An upgrade stays in the root that already owns its audiobook folder. Ordinary imports retain
+        // the request/profile/default precedence promised by the request UI.
+        var root = audiobookReplacement?.ParentFinalSourcePath is { } ownedFolder
+            ? await ImportRootResolution.ResolveOwningAsync(
+                roots,
+                ownedFolder,
+                static candidate => candidate.ScanBooks,
+                cancellationToken)
+            : await ImportRootResolution.ResolveAsync(
+                roots,
+                import.TargetLibraryRootId,
+                profile?.TargetLibraryRootId,
+                static candidate => candidate.ScanBooks,
+                cancellationToken);
         if (root is null) {
-            await Fail(import.Id, "The target library root is missing or not book-enabled.", cancellationToken);
+            await Fail(
+                import.Id,
+                audiobookReplacement is null
+                    ? "The target library root is missing or not book-enabled."
+                    : "The existing audiobook is outside every enabled book library root.",
+                cancellationToken);
             return;
         }
 
@@ -279,6 +322,18 @@ public sealed class BookAcquisitionImportEngine(
             cancellationToken);
         if (plan.Blocked) {
             await acquisitions.SetStatusAsync(import.Id, AcquisitionStatus.ManualImportRequired, BlockMessage(plan.BlockReason), cancellationToken);
+            return;
+        }
+
+        if (audiobookReplacement is not null) {
+            await ReplaceExistingAudiobookAsync(
+                context,
+                import,
+                profile,
+                root,
+                audiobookReplacement,
+                plan,
+                cancellationToken);
             return;
         }
 

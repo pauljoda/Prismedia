@@ -56,6 +56,7 @@ public sealed class ScanBookJobHandler(
             bookFiles,
             audiobookFiles,
             reconcile: true,
+            reconcileAudiobookTracks: false,
             acquisitionId: null,
             acquisitionTargetBookId: null,
             bestEffortHousekeeping: false,
@@ -72,7 +73,8 @@ public sealed class ScanBookJobHandler(
         Guid acquisitionId,
         LibraryRootData root,
         IReadOnlyList<string> placedPaths,
-        CancellationToken cancellationToken) {
+        CancellationToken cancellationToken,
+        IReadOnlyList<string>? removedSourcePaths = null) {
         if (!root.Enabled || !root.ScanBooks) {
             throw new InvalidOperationException("The imported books no longer belong to an enabled book library root.");
         }
@@ -82,6 +84,9 @@ public sealed class ScanBookJobHandler(
         var audiobookFiles = placedPaths.Where(IsAudiobookPath).ToArray();
         if (archiveFiles.Length + bookFiles.Length + audiobookFiles.Length != placedPaths.Count) {
             throw new InvalidOperationException("The book import contains a file the book scanner does not support.");
+        }
+        if (removedSourcePaths?.Any(path => !IsAudiobookPath(path)) == true) {
+            throw new InvalidOperationException("A narrow book import can retire only audiobook source files.");
         }
 
         var acquisitionTargetBookId = acquisitionHints is null
@@ -95,6 +100,7 @@ public sealed class ScanBookJobHandler(
             bookFiles,
             audiobookFiles,
             reconcile: false,
+            reconcileAudiobookTracks: removedSourcePaths is { Count: > 0 },
             acquisitionId,
             acquisitionTargetBookId,
             bestEffortHousekeeping: true,
@@ -108,6 +114,7 @@ public sealed class ScanBookJobHandler(
         IReadOnlyList<string> bookFiles,
         IReadOnlyList<string> audiobookFiles,
         bool reconcile,
+        bool reconcileAudiobookTracks,
         Guid? acquisitionId,
         Guid? acquisitionTargetBookId,
         bool bestEffortHousekeeping,
@@ -272,7 +279,7 @@ public sealed class ScanBookJobHandler(
             audiobookFiles,
             readableBooksByDirectory,
             validBookPaths,
-            reconcile,
+            reconcile || reconcileAudiobookTracks,
             acquisitionId,
             acquisitionTargetBookId,
             bestEffortHousekeeping,

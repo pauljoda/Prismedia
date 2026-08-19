@@ -242,22 +242,28 @@ public sealed class JobSchedulerTests {
     public async Task RecoverDownloadedCompletionJobsRoutesOrdinaryAndUpgradeWorkIdempotently() {
         var ordinaryId = Guid.NewGuid();
         var upgradeId = Guid.NewGuid();
+        var audiobookUpgradeId = Guid.NewGuid();
         var queue = new SchedulerJobQueue();
         var acquisitions = new SchedulerAcquisitionLifecycleStore([
             new DownloadedAcquisitionCompletion(ordinaryId, EntityKind.Movie, IsUpgrade: false),
             new DownloadedAcquisitionCompletion(upgradeId, EntityKind.Book, IsUpgrade: true),
+            new DownloadedAcquisitionCompletion(
+                audiobookUpgradeId,
+                EntityKind.Book,
+                IsUpgrade: true,
+                BookRendition.Audiobook),
         ]);
         await using var provider = CreateProvider(
             new SchedulerSettingsPersistence([]),
             queue,
             acquisitions: acquisitions,
-            importEngines: new SchedulerImportEngineFactory([EntityKind.Movie]));
+            importEngines: new SchedulerImportEngineFactory([EntityKind.Movie, EntityKind.Book]));
         var scheduler = CreateScheduler(provider, DateTimeOffset.UtcNow);
 
         await scheduler.RecoverDownloadedCompletionJobsAsync(CancellationToken.None);
         await scheduler.RecoverDownloadedCompletionJobsAsync(CancellationToken.None);
 
-        Assert.Equal(2, queue.Enqueued.Count);
+        Assert.Equal(3, queue.Enqueued.Count);
         AssertCompletionRequest(
             Assert.Single(queue.Enqueued, request => request.TargetEntityId == ordinaryId.ToString()),
             ordinaryId,
@@ -266,6 +272,10 @@ public sealed class JobSchedulerTests {
             Assert.Single(queue.Enqueued, request => request.TargetEntityId == upgradeId.ToString()),
             upgradeId,
             JobType.AcquisitionUpgradeReplace);
+        AssertCompletionRequest(
+            Assert.Single(queue.Enqueued, request => request.TargetEntityId == audiobookUpgradeId.ToString()),
+            audiobookUpgradeId,
+            JobType.AcquisitionImport);
     }
 
     [Fact]

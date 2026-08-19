@@ -370,9 +370,9 @@ public sealed class AcquisitionMonitorJobHandler(
             }
 
             if (status.IsComplete) {
-                // An upgrade child does not import beside the owned book — it routes to the replace job, which
-                // verifies the new file and atomically swaps it in. Multi-file album replacements route through
-                // the music import engine, which owns their durable folder-placement plan.
+                // An atomic upgrade child does not import beside the owned file — it routes to the replace job,
+                // which verifies and swaps that file. Multi-file albums and audiobooks instead route through
+                // their family import engine, which owns the durable folder-placement plan.
                 var isUpgrade = await acquisitions.GetUpgradeOwnedQualityAsync(transfer.AcquisitionId, cancellationToken) is not null;
                 var detail = completion is null
                     ? await acquisitions.GetAsync(transfer.AcquisitionId, cancellationToken)
@@ -385,7 +385,10 @@ public sealed class AcquisitionMonitorJobHandler(
                 }
 
                 var completionJob = completion is null
-                    ? AcquisitionCompletionService.CompletionJobType(detail!.Summary.Kind, isUpgrade)
+                    ? AcquisitionCompletionService.CompletionJobType(
+                        detail!.Summary.Kind,
+                        isUpgrade,
+                        detail.Summary.BookRendition)
                     : (JobType?)null;
                 if (transfer.AcquisitionStatus != AcquisitionStatus.Downloaded) {
                     if (!await acquisitions.TryTransitionStatusAsync(

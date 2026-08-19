@@ -300,7 +300,12 @@ public sealed class ImportedBookMaterializationPolicy(ScanBookJobHandler scan)
         ImportedEntityMaterializationRequest request,
         CancellationToken cancellationToken) =>
         scan.MaterializeImportedPathsAsync(
-            context, request.AcquisitionId, request.Root, request.PlacedMediaPaths, cancellationToken);
+            context,
+            request.AcquisitionId,
+            request.Root,
+            request.PlacedMediaPaths,
+            cancellationToken,
+            request.RemovedSourcePaths);
 }
 
 /// <summary>Movie import policy backed by the video scanner's exact-path materialization seam.</summary>

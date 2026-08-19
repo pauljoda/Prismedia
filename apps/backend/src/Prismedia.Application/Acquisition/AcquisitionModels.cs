@@ -637,12 +637,14 @@ public sealed record TransferlessQueueClaim(
 /// <summary>
 /// Durable completion ticket for an acquisition whose download finished before its import or replacement
 /// job was safely queued. <see cref="Kind"/> determines whether an ordinary acquisition has a registered
-/// import engine; <see cref="IsUpgrade"/> routes upgrade children to the in-place replacement workflow.
+/// import engine; <see cref="IsUpgrade"/> and <see cref="BookRendition"/> route upgrade children to either
+/// atomic replacement or their family import engine's multi-file replacement workflow.
 /// </summary>
 public sealed record DownloadedAcquisitionCompletion(
     Guid AcquisitionId,
     EntityKind Kind,
-    bool IsUpgrade);
+    bool IsUpgrade,
+    BookRendition? BookRendition = null);
 
 /// <summary>Everything the import job needs: the captured metadata, the chosen profile, and the completed download's location.</summary>
 /// <param name="Kind">The media kind being acquired; drives per-kind enrichment and import dispatch.</param>

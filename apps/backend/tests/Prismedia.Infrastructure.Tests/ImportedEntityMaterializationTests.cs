@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Prismedia.Application.Acquisition;
@@ -102,6 +103,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             new ImportFileMover(),
             materializer,
             Torrents(store),
+            new EfAcquisitionHistoryStore(db),
             NullLogger<BookAcquisitionImportEngine>.Instance);
         var import = ImportContext(db, EntityKind.Book, wantedId, "Novel", payloadPath, author: "Author");
 
@@ -144,6 +146,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             new ImportFileMover(),
             BookMaterializer(db, root),
             Torrents(store),
+            new EfAcquisitionHistoryStore(db),
             NullLogger<BookAcquisitionImportEngine>.Instance);
         var import = ImportContext(db, EntityKind.Book, bookId, "Novel", payloadPath, author: "Author") with {
             BookRendition = BookRendition.Audiobook
@@ -165,6 +168,162 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             && file.Path.EndsWith(".m4b", StringComparison.OrdinalIgnoreCase)));
         Assert.Contains(queue.Enqueued, request => request.Type == JobType.ReconcileEntity);
         Assert.Equal(AcquisitionStatus.Importing, await StatusOfAsync(db, import.Id));
+    }
+
+    [Fact]
+    public async Task ReviewedAudiobookUpgradeReplacesTheOwnedTrackFolderAsOneRendition() {
+        await using var db = CreateContext();
+        var rootPath = Directory.CreateDirectory(Path.Combine(_workRoot, "audiobook-replacement")).FullName;
+        var bookFolder = Directory.CreateDirectory(Path.Combine(rootPath, "Author", "Novel")).FullName;
+        var oldFirst = Path.Combine(bookFolder, "01 - Old.mp3");
+        var oldSecond = Path.Combine(bookFolder, "02 - Removed.mp3");
+        var readableEdition = Path.Combine(bookFolder, "Novel.epub");
+        await File.WriteAllTextAsync(oldFirst, "old-one");
+        await File.WriteAllTextAsync(oldSecond, "old-two");
+        await File.WriteAllTextAsync(readableEdition, "readable-edition");
+        var payloadPath = Directory.CreateDirectory(Path.Combine(_workRoot, "audiobook-replacement-download")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(payloadPath, "01 - New.mp3"), "new-one");
+        await File.WriteAllTextAsync(Path.Combine(payloadPath, "02 - New.mp3"), "new-two");
+
+        var root = new RootPersistence(rootPath, scanBooks: true);
+        AddLibraryRoot(db, root.Root);
+        var bookId = AddWantedEntity(db, EntityKind.Book, "Novel");
+        db.Entities.Local.Single(entity => entity.Id == bookId).IsWanted = false;
+        db.EntitySources.Add(new EntitySourceRow {
+            EntityId = bookId,
+            Code = EntitySourceCode.Folder.ToCode(),
+            Value = bookFolder,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        var oldFirstId = AddSourceEntity(db, EntityKind.AudioTrack, "Old one", oldFirst, bookId);
+        var oldSecondId = AddSourceEntity(db, EntityKind.AudioTrack, "Old two", oldSecond, bookId);
+        var now = DateTimeOffset.UtcNow;
+        var parentId = Guid.NewGuid();
+        var childId = Guid.NewGuid();
+        db.Acquisitions.AddRange(
+            new AcquisitionRow {
+                Id = parentId,
+                EntityId = bookId,
+                Kind = EntityKind.Book,
+                BookRendition = BookRendition.Audiobook,
+                Status = AcquisitionStatus.Imported,
+                Title = "Novel",
+                Author = "Author",
+                FinalSourcePath = bookFolder,
+                ExternalIdsJson = "{}",
+                SourceUrlsJson = "[]",
+                UpgradeQualityCaptured = true,
+                CreatedAt = now.AddDays(-1),
+                UpdatedAt = now.AddDays(-1)
+            },
+            new AcquisitionRow {
+                Id = childId,
+                EntityId = bookId,
+                Kind = EntityKind.Book,
+                BookRendition = BookRendition.Audiobook,
+                Status = AcquisitionStatus.Importing,
+                Title = "Novel",
+                Author = "Author",
+                UpgradeOfAcquisitionId = parentId,
+                SelectedReleaseJson = JsonSerializer.Serialize(
+                    new SelectedRelease("Reviewed audiobook", "Indexer", "release", ManualPick: true)),
+                ExternalIdsJson = "{}",
+                SourceUrlsJson = "[]",
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        db.DownloadTransfers.Add(new DownloadTransferRow {
+            Id = Guid.NewGuid(),
+            AcquisitionId = childId,
+            ClientItemId = "release",
+            ContentPath = payloadPath,
+            Progress = 1,
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        var store = AcquisitionTestFactory.Store(db);
+        var engine = new BookAcquisitionImportEngine(
+            store,
+            new EfBookAcquisitionProfileStore(db),
+            root,
+            new AcquisitionImportPlanner(),
+            new ImportFileMover(),
+            new FailingMaterializer(),
+            Torrents(store),
+            new EfAcquisitionHistoryStore(db),
+            NullLogger<BookAcquisitionImportEngine>.Instance);
+        var import = new AcquisitionImportContext(
+            childId,
+            "Novel",
+            "Author",
+            Series: null,
+            Year: null,
+            PosterUrl: null,
+            ExternalIdentity: null,
+            ProfileId: null,
+            ContentPath: payloadPath,
+            ClientItemId: null,
+            DownloadClientConfigId: null,
+            Kind: EntityKind.Book,
+            EntityId: bookId,
+            BookRendition: BookRendition.Audiobook,
+            UpgradeOfAcquisitionId: parentId);
+        var queue = new MergedImportTestSupport.RecordingJobQueue();
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            engine.ImportAsync(JobContext(db, childId, queue), import, CancellationToken.None));
+
+        Assert.Equal("old-one", await File.ReadAllTextAsync(oldFirst));
+        Assert.Equal("old-two", await File.ReadAllTextAsync(oldSecond));
+        Assert.False(File.Exists(Path.Combine(bookFolder, "01 - New.mp3")));
+        Assert.Equal("readable-edition", await File.ReadAllTextAsync(readableEdition));
+        Assert.Single(Directory.GetDirectories(Path.GetDirectoryName(bookFolder)!, "*.prismedia-new-*"));
+        Assert.Empty(Directory.GetDirectories(Path.GetDirectoryName(bookFolder)!, "*.prismedia-bak-*"));
+
+        var persisted = Assert.IsType<ImportPlacementCheckpoint>(
+            (await store.GetImportContextAsync(childId, CancellationToken.None))?.ImportPlacementCheckpoint);
+        await store.SetStatusAsync(
+            childId,
+            AcquisitionStatus.Failed,
+            "Synthetic materialization failure.",
+            CancellationToken.None);
+        var retryJobId = Guid.NewGuid();
+        Assert.True(await store.TryClaimImportPlacementCheckpointAsync(
+            childId,
+            persisted,
+            retryJobId,
+            CancellationToken.None));
+        var retryEngine = new BookAcquisitionImportEngine(
+            store,
+            new EfBookAcquisitionProfileStore(db),
+            root,
+            new AcquisitionImportPlanner(),
+            new ImportFileMover(),
+            BookMaterializer(db, root),
+            Torrents(store),
+            new EfAcquisitionHistoryStore(db),
+            NullLogger<BookAcquisitionImportEngine>.Instance);
+
+        await retryEngine.ImportAsync(
+            JobContext(retryJobId, queue),
+            import with { ImportPlacementCheckpoint = persisted with { ClaimJobId = retryJobId } },
+            CancellationToken.None);
+
+        Assert.False(File.Exists(oldFirst));
+        Assert.False(File.Exists(oldSecond));
+        Assert.Equal("new-one", await File.ReadAllTextAsync(Path.Combine(bookFolder, "01 - New.mp3")));
+        Assert.Equal("new-two", await File.ReadAllTextAsync(Path.Combine(bookFolder, "02 - New.mp3")));
+        Assert.Equal("readable-edition", await File.ReadAllTextAsync(readableEdition));
+        Assert.Single(Directory.GetDirectories(Path.GetDirectoryName(bookFolder)!, "*.prismedia-bak-*"));
+        Assert.False(await db.Entities.AsNoTracking().AnyAsync(entity =>
+            entity.Id == oldFirstId || entity.Id == oldSecondId));
+        var reconciliation = Assert.Single(queue.Enqueued, request =>
+            request.Type == JobType.ReconcileEntity && request.PayloadJson is not null);
+        var finalization = AcquisitionFinalizeJobPayload.Parse(reconciliation.PayloadJson!);
+        Assert.Equal(parentId, finalization.UpgradeParentAcquisitionId);
+        Assert.Equal(childId, finalization.AcquisitionId);
     }
 
     [Fact]
@@ -786,6 +945,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             new ImportFileMover(),
             new FailingMaterializer(),
             Torrents(store),
+            new EfAcquisitionHistoryStore(db),
             NullLogger<BookAcquisitionImportEngine>.Instance);
         var import = ImportContext(db, EntityKind.Book, wantedId, "Novel", payloadPath, author: "Author");
 
@@ -818,6 +978,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             new ImportFileMover(),
             BookMaterializer(db, root),
             Torrents(store),
+            new EfAcquisitionHistoryStore(db),
             NullLogger<BookAcquisitionImportEngine>.Instance);
 
         await retryEngine.ImportAsync(
