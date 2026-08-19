@@ -91,6 +91,30 @@ describe("book chapter list", () => {
     expect(rows.map((row) => row.audioTrack?.id)).toEqual(["audio-1", "audio-2"]);
   });
 
+  it("uses a delimited trailing chapter number from the audio title", () => {
+    const rows = buildBookChapterRows({
+      readableChapters: [
+        readable("chapter-1", "Chapter 1", 0),
+        readable("chapter-2", "Chapter 2", 1),
+      ],
+      audioTracks: [
+        audioTrack("audio-2", "George R. R. Martin - SFI03 Storm of Swords - 2", 0),
+        audioTrack("audio-1", "George R. R. Martin - SFI03 Storm of Swords - 1", 1),
+      ],
+    });
+
+    expect(rows.map((row) => row.audioTrack?.id)).toEqual(["audio-1", "audio-2"]);
+  });
+
+  it("does not mistake a book number at the end of a title for a chapter", () => {
+    const rows = buildBookChapterRows({
+      readableChapters: [readable("chapter-3", "Chapter 3", 0)],
+      audioTracks: [audioTrack("book-title", "A Storm of Swords: A Song of Ice and Fire, Book 3", 0)],
+    });
+
+    expect(rows[0]?.audioTrack).toBeNull();
+  });
+
   it("does not infer chapter numbers from audio sort order", () => {
     const rows = buildBookChapterRows({
       readableChapters: [

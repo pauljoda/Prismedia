@@ -40,7 +40,8 @@ interface BuildBookChapterRowsOptions {
 function chapterNumber(value: string): number | null {
   const named = /\b(?:chapter|ch\.?|track|part)\s*0*(\d+)\b/i.exec(value);
   const leading = /^\s*0*(\d+)\s*(?:[.\-–—:_]|\s)/.exec(value);
-  const parsed = Number(named?.[1] ?? leading?.[1]);
+  const trailing = /(?:^|\s)[.\-–—:_]\s*0*(\d+)\s*$/.exec(value);
+  const parsed = Number(named?.[1] ?? leading?.[1] ?? trailing?.[1]);
   return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
