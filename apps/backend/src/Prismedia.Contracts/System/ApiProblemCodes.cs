@@ -130,6 +130,9 @@ public static class ApiProblemCodes {
     /// <summary>Problem code <c>invalid_collection_rules</c>.</summary>
     public const string InvalidCollectionRules = "invalid_collection_rules";
 
+    /// <summary>Problem code <c>invalid_book_chapter_mapping</c>.</summary>
+    public const string InvalidBookChapterMapping = "invalid_book_chapter_mapping";
+
     /// <summary>Problem code <c>invalid_entity</c>.</summary>
     public const string InvalidEntity = "invalid_entity";
 

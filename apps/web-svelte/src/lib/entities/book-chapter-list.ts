@@ -1,4 +1,5 @@
 import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
+import type { BookChapterAudioMapping } from "$lib/api/generated/model";
 
 export type BookReadTarget =
   | {
@@ -33,16 +34,9 @@ export interface BookChapterRow {
 interface BuildBookChapterRowsOptions {
   readableChapters: readonly ReadableBookChapter[];
   audioTracks: readonly AudioTrackListItemDto[];
+  chapterMappings?: readonly BookChapterAudioMapping[];
   currentReadableId?: string | null;
   currentAudioTrackId?: string | null;
-}
-
-function chapterNumber(value: string): number | null {
-  const named = /\b(?:chapter|ch\.?|track|part)\s*0*(\d+)\b/i.exec(value);
-  const leading = /^\s*0*(\d+)\s*(?:[.\-–—:_]|\s)/.exec(value);
-  const trailing = /(?:^|\s)[.\-–—:_]\s*0*(\d+)\s*$/.exec(value);
-  const parsed = Number(named?.[1] ?? leading?.[1] ?? trailing?.[1]);
-  return Number.isFinite(parsed) && parsed > 0 ? parsed : null;
 }
 
 /** Stable comparison key for common EPUB/audio filename chapter labels. */
@@ -70,8 +64,8 @@ function takeFirstMatch<T>(
 }
 
 /**
- * Builds one ordered reading/listening surface. Matches come only from normalized title text or an
- * explicit chapter number in that text; sort order controls presentation, never chapter identity.
+ * Builds one ordered reading/listening surface. Persisted user mappings win, then normalized title
+ * text can supply safe automatic matches. Numbers and sort order never determine chapter identity.
  */
 export function buildBookChapterRows(options: BuildBookChapterRowsOptions): BookChapterRow[] {
   const readable = [...options.readableChapters].sort(
@@ -83,25 +77,26 @@ export function buildBookChapterRows(options: BuildBookChapterRowsOptions): Book
   const consumedTracks = new Set<number>();
   const matches = new Map<string, number>();
 
+  const readableIds = new Set(readable.map((chapter) => chapter.id));
+  const trackIndexById = new Map(tracks.map((track, index) => [track.id, index]));
+  for (const mapping of options.chapterMappings ?? []) {
+    if (!readableIds.has(mapping.readableChapterKey) || matches.has(mapping.readableChapterKey)) {
+      continue;
+    }
+    const trackIndex = trackIndexById.get(mapping.audioTrackId);
+    if (trackIndex === undefined || consumedTracks.has(trackIndex)) continue;
+    consumedTracks.add(trackIndex);
+    matches.set(mapping.readableChapterKey, trackIndex);
+  }
+
   for (const chapter of readable) {
+    if (matches.has(chapter.id)) continue;
     const key = chapterMatchKey(chapter.title);
     if (!key) continue;
     const trackIndex = takeFirstMatch(
       tracks,
       consumedTracks,
       (track) => chapterMatchKey(track.title) === key,
-    );
-    if (trackIndex !== null) matches.set(chapter.id, trackIndex);
-  }
-
-  for (const chapter of readable) {
-    if (matches.has(chapter.id)) continue;
-    const number = chapterNumber(chapter.title);
-    if (number === null) continue;
-    const trackIndex = takeFirstMatch(
-      tracks,
-      consumedTracks,
-      (track) => chapterNumber(track.title) === number,
     );
     if (trackIndex !== null) matches.set(chapter.id, trackIndex);
   }
@@ -138,4 +133,27 @@ export function buildBookChapterRows(options: BuildBookChapterRowsOptions): Book
   });
 
   return rows;
+}
+
+/** Creates the editable one-to-one map produced by the "Mark first chapter" workflow. */
+export function sequentialBookChapterMappings(
+  readableChapters: readonly ReadableBookChapter[],
+  audioTracks: readonly AudioTrackListItemDto[],
+  firstReadableChapterKey: string,
+): BookChapterAudioMapping[] {
+  const readable = [...readableChapters].sort(
+    (a, b) => a.order - b.order || a.title.localeCompare(b.title) || a.id.localeCompare(b.id),
+  );
+  const tracks = [...audioTracks].sort(
+    (a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title) || a.id.localeCompare(b.id),
+  );
+  const firstIndex = readable.findIndex((chapter) => chapter.id === firstReadableChapterKey);
+  if (firstIndex < 0) return [];
+
+  return tracks
+    .slice(0, Math.max(0, readable.length - firstIndex))
+    .map((track, index) => ({
+      readableChapterKey: readable[firstIndex + index].id,
+      audioTrackId: track.id,
+    }));
 }

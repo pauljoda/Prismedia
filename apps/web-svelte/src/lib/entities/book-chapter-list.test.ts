@@ -3,6 +3,7 @@ import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
 import {
   buildBookChapterRows,
   chapterMatchKey,
+  sequentialBookChapterMappings,
   type ReadableBookChapter,
 } from "./book-chapter-list";
 
@@ -76,7 +77,7 @@ describe("book chapter list", () => {
     expect(rows[1]).toMatchObject({ isCurrentAudio: false, isCurrentReading: true });
   });
 
-  it("uses chapter numbers when text and audio titles differ", () => {
+  it("does not use chapter numbers when the text titles differ", () => {
     const rows = buildBookChapterRows({
       readableChapters: [
         readable("chapter-1", "Chapter 1: An Unexpected Party", 0),
@@ -88,10 +89,10 @@ describe("book chapter list", () => {
       ],
     });
 
-    expect(rows.map((row) => row.audioTrack?.id)).toEqual(["audio-1", "audio-2"]);
+    expect(rows.slice(0, 2).map((row) => row.audioTrack)).toEqual([null, null]);
   });
 
-  it("uses a delimited trailing chapter number from the audio title", () => {
+  it("does not use delimited trailing numbers from audio filenames", () => {
     const rows = buildBookChapterRows({
       readableChapters: [
         readable("chapter-1", "Chapter 1", 0),
@@ -103,7 +104,7 @@ describe("book chapter list", () => {
       ],
     });
 
-    expect(rows.map((row) => row.audioTrack?.id)).toEqual(["audio-1", "audio-2"]);
+    expect(rows.slice(0, 2).map((row) => row.audioTrack)).toEqual([null, null]);
   });
 
   it("does not mistake a book number at the end of a title for a chapter", () => {
@@ -128,6 +129,48 @@ describe("book chapter list", () => {
     });
 
     expect(rows.slice(0, 2).map((row) => row.audioTrack)).toEqual([null, null]);
+  });
+
+  it("uses explicit mappings before normalized title matches", () => {
+    const rows = buildBookChapterRows({
+      readableChapters: [
+        readable("prologue", "Prologue", 0),
+        readable("chapter-1", "Chapter 1", 1),
+      ],
+      audioTracks: [
+        audioTrack("audio-1", "Chapter 1", 0),
+        audioTrack("audio-2", "Prologue", 1),
+      ],
+      chapterMappings: [
+        { readableChapterKey: "prologue", audioTrackId: "audio-1" },
+        { readableChapterKey: "chapter-1", audioTrackId: "audio-2" },
+      ],
+    });
+
+    expect(rows.slice(0, 2).map((row) => row.audioTrack?.id)).toEqual(["audio-1", "audio-2"]);
+  });
+
+  it("maps ordered audio files sequentially from the chapter the user marks first", () => {
+    const mappings = sequentialBookChapterMappings(
+      [
+        readable("title", "Title page", 0),
+        readable("prologue", "Prologue", 1),
+        readable("chapter-1", "Chapter 1", 2),
+        readable("chapter-2", "Chapter 2", 3),
+      ],
+      [
+        audioTrack("audio-2", "File 2", 1),
+        audioTrack("audio-1", "File 1", 0),
+        audioTrack("audio-3", "File 3", 2),
+      ],
+      "prologue",
+    );
+
+    expect(mappings).toEqual([
+      { readableChapterKey: "prologue", audioTrackId: "audio-1" },
+      { readableChapterKey: "chapter-1", audioTrackId: "audio-2" },
+      { readableChapterKey: "chapter-2", audioTrackId: "audio-3" },
+    ]);
   });
 
   it("keeps unmatched audio visible instead of attaching it to the wrong chapter", () => {

@@ -61,6 +61,29 @@ internal static partial class PrismediaModelConfiguration {
             entity.HasOne<EntityRow>().WithOne().HasForeignKey<BookChapterDetailRow>(row => row.EntityId).OnDelete(DeleteBehavior.Cascade);
         });
 
+        modelBuilder.Entity<BookChapterAudioMappingRow>(entity => {
+            entity.ToTable("book_chapter_audio_mappings");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.BookId).HasColumnName("book_id");
+            entity.Property(row => row.ReadableChapterKey)
+                .HasColumnName("readable_chapter_key")
+                .HasMaxLength(2048)
+                .IsRequired();
+            entity.Property(row => row.AudioTrackEntityId).HasColumnName("audio_track_entity_id");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.HasIndex(row => new { row.BookId, row.ReadableChapterKey }).IsUnique();
+            entity.HasIndex(row => new { row.BookId, row.AudioTrackEntityId }).IsUnique();
+            entity.HasOne<EntityRow>()
+                .WithMany()
+                .HasForeignKey(row => row.BookId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<EntityRow>()
+                .WithMany()
+                .HasForeignKey(row => row.AudioTrackEntityId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
     }
 
     private static void ConfigureAudio(ModelBuilder modelBuilder) {

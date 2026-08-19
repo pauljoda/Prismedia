@@ -1280,6 +1280,7 @@ export const PROBLEM_CODE = {
   identifyTargetNotEligible: "identify_target_not_eligible",
   indexerInvalid: "indexer_invalid",
   indexerUnreachable: "indexer_unreachable",
+  invalidBookChapterMapping: "invalid_book_chapter_mapping",
   invalidCollection: "invalid_collection",
   invalidCollectionItems: "invalid_collection_items",
   invalidCollectionRules: "invalid_collection_rules",

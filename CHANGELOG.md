@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Books that have both readable and audiobook renditions now include a Chapter Mapping tab. Mark the readable chapter where the first audiobook file begins to fill the map sequentially, override individual files when needed, and save the alignment for web and native clients.
 - Household members can now discover and request content using the installed metadata sources, their accessible libraries, and the acquisition profiles available to them; plugin and profile administration remain restricted to administrators.
 - TV downloads held for manual import now open an expected-episode review: Prismedia prefills unambiguous matches, lets each episode choose a downloaded video, supports one video satisfying several episodes, and keeps the complete payload in a collapsed audit list. Potentially dangerous companion files are blocked from selection while verified media remains mappable behind an explicit safety confirmation. A held release can also be rejected to remove its download data, blocklist it, and immediately search again.
 
@@ -19,7 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
-- Book chapter lists now match audiobook parts from title text, including explicit labels such as `Chapter 01` and delimited filename suffixes such as `- 01`, without treating audio-track sort order or a volume label such as `Book 3` as chapter identity.
+- Book chapter lists no longer infer alignment from chapter-like filename numbers, which could shift an entire audiobook when files begin with a prologue or other front matter. Unmapped files now fall back only to normalized title matches.
 - Interrupted acquisitions now offer their exact Retry import action from release review, and explicitly choosing another listed release confirms a destructive override that clears the partial import and prior download before queueing the new selection. Audiobooks imported onto an existing readable Book now fulfill that rendition before readiness validation instead of becoming stuck in a partial-import loop.
 - Library grids, shelves, and collections now read episode/season/page/track counts, taxonomy usage counts, and collection sizes from automatically maintained projections instead of recomputing them from every child row on every page, and no longer check the filesystem for each card's artwork. List pages that previously took seconds now answer in tens of milliseconds.
 - Per-user library boundaries are enforced through the same projections: chips and lists count exactly the entities each member may see, hidden libraries never leak into a visible container's badge, and the visibility check itself no longer embeds whole-table subqueries into every read.

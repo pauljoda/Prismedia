@@ -1,0 +1,468 @@
+<script lang="ts">
+  import { ArrowDownToLine, Check, FileAudio, Link2Off } from "@lucide/svelte";
+  import { Button, Select, type SelectOption } from "@prismedia/ui-svelte";
+  import type { BookChapterAudioMapping } from "$lib/api/generated/model";
+  import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
+  import {
+    buildBookChapterRows,
+    sequentialBookChapterMappings,
+    type ReadableBookChapter,
+  } from "$lib/entities/book-chapter-list";
+
+  interface Props {
+    resetKey: string;
+    readableChapters: readonly ReadableBookChapter[];
+    audioTracks: readonly AudioTrackListItemDto[];
+    mappings: readonly BookChapterAudioMapping[];
+    loadError?: string | null;
+    onSave: (mappings: readonly BookChapterAudioMapping[]) => Promise<readonly BookChapterAudioMapping[]>;
+  }
+
+  let {
+    resetKey,
+    readableChapters,
+    audioTracks,
+    mappings,
+    loadError = null,
+    onSave,
+  }: Props = $props();
+
+  let draft = $state.raw<BookChapterAudioMapping[]>([]);
+  let sourceSignature = $state("");
+  let firstReadableChapterKey = $state("");
+  let loadedResetKey = $state<string | null>(null);
+  let saving = $state(false);
+  let actionError = $state<string | null>(null);
+  let saved = $state(false);
+
+  const orderedReadable = $derived([...readableChapters].sort(
+    (a, b) => a.order - b.order || a.title.localeCompare(b.title) || a.id.localeCompare(b.id),
+  ));
+  const orderedTracks = $derived([...audioTracks].sort(
+    (a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title) || a.id.localeCompare(b.id),
+  ));
+  const readableOptions = $derived<SelectOption[]>(orderedReadable.map((chapter, index) => ({
+    value: chapter.id,
+    label: chapter.title,
+    annotation: `Chapter ${index + 1}`,
+  })));
+  const mappingByTrack = $derived(new Map(draft.map((mapping) => [mapping.audioTrackId, mapping])));
+  const automaticTitleByTrack = $derived.by(() => {
+    const rows = buildBookChapterRows({ readableChapters, audioTracks });
+    return new Map(rows
+      .filter((row) => row.readTarget && row.audioTrack)
+      .map((row) => [row.audioTrack!.id, row.title]));
+  });
+  const draftSignature = $derived(mappingSignature(draft));
+  const dirty = $derived(draftSignature !== sourceSignature);
+  const mappedCount = $derived(draft.length);
+  const displayedError = $derived(actionError ?? loadError);
+
+  // The editor stays mounted while its parent route changes data. Reset only for a new Book or a
+  // genuinely new persisted map; local draft changes remain untouched until save or clear.
+  $effect(() => {
+    const nextSignature = mappingSignature(mappings);
+    if (loadedResetKey === resetKey && nextSignature === sourceSignature) return;
+    loadedResetKey = resetKey;
+    sourceSignature = nextSignature;
+    draft = mappings.map((mapping) => ({ ...mapping }));
+    firstReadableChapterKey = initialFirstChapterKey(
+      readableChapters,
+      audioTracks,
+      mappings,
+    );
+    saved = false;
+    actionError = null;
+  });
+
+  function mappingSignature(items: readonly BookChapterAudioMapping[]): string {
+    return [...items]
+      .sort((a, b) =>
+        a.audioTrackId.localeCompare(b.audioTrackId)
+          || a.readableChapterKey.localeCompare(b.readableChapterKey),
+      )
+      .map((mapping) => `${mapping.audioTrackId}:${mapping.readableChapterKey}`)
+      .join("|");
+  }
+
+  function initialFirstChapterKey(
+    chapters: readonly ReadableBookChapter[],
+    tracks: readonly AudioTrackListItemDto[],
+    existingMappings: readonly BookChapterAudioMapping[],
+  ): string {
+    const firstTrackId = [...tracks]
+      .sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title) || a.id.localeCompare(b.id))[0]
+      ?.id;
+    const mappedChapterKey = existingMappings.find((mapping) =>
+      mapping.audioTrackId === firstTrackId,
+    )?.readableChapterKey;
+    if (mappedChapterKey && chapters.some((chapter) => chapter.id === mappedChapterKey)) {
+      return mappedChapterKey;
+    }
+    return [...chapters]
+      .sort((a, b) => a.order - b.order || a.title.localeCompare(b.title) || a.id.localeCompare(b.id))[0]
+      ?.id ?? "";
+  }
+
+  function selectionOptions(trackId: string): SelectOption[] {
+    const automaticTitle = automaticTitleByTrack.get(trackId);
+    return [
+      {
+        value: "",
+        label: automaticTitle ? `Automatic: ${automaticTitle}` : "No explicit mapping",
+      },
+      ...readableOptions,
+    ];
+  }
+
+  function updateTrackMapping(trackId: string, readableChapterKey: string): void {
+    saved = false;
+    actionError = null;
+    draft = draft.filter((mapping) =>
+      mapping.audioTrackId !== trackId &&
+      (!readableChapterKey || mapping.readableChapterKey !== readableChapterKey),
+    );
+    if (readableChapterKey) {
+      draft = [...draft, { audioTrackId: trackId, readableChapterKey }];
+    }
+  }
+
+  function markFirstChapter(): void {
+    if (!firstReadableChapterKey) return;
+    draft = sequentialBookChapterMappings(
+      readableChapters,
+      audioTracks,
+      firstReadableChapterKey,
+    );
+    saved = false;
+    actionError = null;
+  }
+
+  function clearOverrides(): void {
+    draft = [];
+    saved = false;
+    actionError = null;
+  }
+
+  async function save(): Promise<void> {
+    if (!dirty || saving) return;
+    saving = true;
+    actionError = null;
+    saved = false;
+    try {
+      const persisted = await onSave(draft);
+      draft = persisted.map((mapping) => ({ ...mapping }));
+      sourceSignature = mappingSignature(persisted);
+      saved = true;
+    } catch (error) {
+      actionError = error instanceof Error ? error.message : "Failed to save chapter mappings.";
+    } finally {
+      saving = false;
+    }
+  }
+</script>
+
+<section class="mapping-editor" aria-labelledby="chapter-mapping-heading">
+  <div class="mapping-header">
+    <div>
+      <p class="eyebrow">Audiobook alignment</p>
+      <h2 id="chapter-mapping-heading">Map files to readable chapters</h2>
+      <p class="mapping-intro">
+        Choose where the first audiobook file begins, then Prismedia fills the remaining files in order.
+        You can override any file below before saving.
+      </p>
+    </div>
+    <div class="mapping-count" aria-label={`${mappedCount} explicit mappings`}>
+      <strong>{mappedCount}</strong>
+      <span>mapped</span>
+    </div>
+  </div>
+
+  <div class="first-chapter-card">
+    <div class="first-file">
+      <span class="file-icon"><FileAudio class="h-5 w-5" /></span>
+      <div>
+        <span class="field-label">First audiobook file</span>
+        <strong>{orderedTracks[0]?.title ?? "No audiobook files"}</strong>
+      </div>
+    </div>
+    <div class="first-chapter-control">
+      <label for="first-readable-chapter">Starts at readable chapter</label>
+      <Select
+        value={firstReadableChapterKey}
+        options={readableOptions}
+        ariaLabel="Readable chapter for the first audiobook file"
+        disabled={saving || orderedReadable.length === 0}
+        onchange={(value) => (firstReadableChapterKey = value)}
+      />
+    </div>
+    <Button
+      variant="primary"
+      size="lg"
+      disabled={saving || !firstReadableChapterKey || orderedTracks.length === 0}
+      onclick={markFirstChapter}
+    >
+      <ArrowDownToLine class="h-4 w-4" />
+      Mark first chapter
+    </Button>
+  </div>
+
+  <div class="mapping-list" aria-label="Audiobook file chapter overrides">
+    {#each orderedTracks as track, index (track.id)}
+      <div class="mapping-row">
+        <span class="track-number">{String(index + 1).padStart(2, "0")}</span>
+        <div class="track-title">
+          <strong>{track.title}</strong>
+          <span>{mappingByTrack.has(track.id) ? "Explicit mapping" : "Automatic title matching"}</span>
+        </div>
+        <Select
+          value={mappingByTrack.get(track.id)?.readableChapterKey ?? ""}
+          options={selectionOptions(track.id)}
+          ariaLabel={`Readable chapter for ${track.title}`}
+          disabled={saving}
+          onchange={(value) => updateTrackMapping(track.id, value)}
+        />
+      </div>
+    {/each}
+  </div>
+
+  <div class="mapping-footer">
+    <div class="mapping-status" aria-live="polite">
+      {#if displayedError}
+        <span class="error" role="alert">{displayedError}</span>
+      {:else if saved}
+        <span class="success"><Check class="h-3.5 w-3.5" /> Chapter mapping saved</span>
+      {:else if dirty}
+        <span>Unsaved mapping changes</span>
+      {:else}
+        <span>Mappings are up to date</span>
+      {/if}
+    </div>
+    <div class="mapping-actions">
+      <Button variant="ghost" disabled={saving || draft.length === 0} onclick={clearOverrides}>
+        <Link2Off class="h-4 w-4" />
+        Clear overrides
+      </Button>
+      <Button variant="primary" disabled={saving || !dirty} onclick={() => void save()}>
+        {saving ? "Saving…" : "Save mapping"}
+      </Button>
+    </div>
+  </div>
+</section>
+
+<style>
+  .mapping-editor {
+    display: grid;
+    gap: 1.25rem;
+    min-width: 0;
+  }
+
+  .mapping-header,
+  .mapping-footer,
+  .first-chapter-card,
+  .mapping-row {
+    display: flex;
+    align-items: center;
+  }
+
+  .mapping-header {
+    justify-content: space-between;
+    gap: 2rem;
+  }
+
+  .eyebrow,
+  .field-label,
+  .first-chapter-control label {
+    font-family: var(--font-mono);
+    font-size: 0.66rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--color-text-muted);
+  }
+
+  h2 {
+    margin: 0.25rem 0 0;
+    font-family: var(--font-heading);
+    font-size: clamp(1.15rem, 2vw, 1.55rem);
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+
+  .mapping-intro {
+    max-width: 48rem;
+    margin: 0.45rem 0 0;
+    font-size: 0.86rem;
+    line-height: 1.55;
+    color: var(--color-text-secondary);
+  }
+
+  .mapping-count {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    min-width: 4.5rem;
+    min-height: 4.5rem;
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-1);
+  }
+
+  .mapping-count strong {
+    font-family: var(--font-mono);
+    font-size: 1.15rem;
+    color: var(--color-text-primary);
+  }
+
+  .mapping-count span {
+    margin-top: -0.65rem;
+    font-size: 0.67rem;
+    color: var(--color-text-muted);
+  }
+
+  .first-chapter-card {
+    display: grid;
+    grid-template-columns: minmax(12rem, 1fr) minmax(16rem, 1.25fr) auto;
+    gap: 1rem;
+    padding: 1rem;
+    border: 1px solid var(--color-border-accent);
+    border-radius: var(--radius-lg);
+    background:
+      linear-gradient(110deg, color-mix(in srgb, var(--color-accent-500) 8%, transparent), transparent 52%),
+      var(--color-surface-1);
+  }
+
+  .first-file {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    min-width: 0;
+  }
+
+  .file-icon {
+    display: grid;
+    place-items: center;
+    flex: 0 0 auto;
+    width: 2.5rem;
+    height: 2.5rem;
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-sm);
+    color: var(--color-text-secondary);
+    background: var(--color-surface-2);
+  }
+
+  .first-file div,
+  .track-title {
+    display: grid;
+    min-width: 0;
+  }
+
+  .first-file strong,
+  .track-title strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--color-text-primary);
+  }
+
+  .first-chapter-control {
+    display: grid;
+    gap: 0.4rem;
+    min-width: 0;
+  }
+
+  .mapping-list {
+    overflow: hidden;
+    border: 1px solid var(--color-border-subtle);
+    border-radius: var(--radius-md);
+    background: var(--color-surface-1);
+  }
+
+  .mapping-row {
+    display: grid;
+    grid-template-columns: 2.5rem minmax(12rem, 1fr) minmax(15rem, 0.8fr);
+    gap: 0.9rem;
+    min-height: 4.25rem;
+    padding: 0.65rem 0.85rem;
+    border-bottom: 1px solid var(--color-border-subtle);
+  }
+
+  .mapping-row:last-child {
+    border-bottom: 0;
+  }
+
+  .track-number {
+    font-family: var(--font-mono);
+    font-size: 0.72rem;
+    color: var(--color-text-disabled);
+  }
+
+  .track-title span {
+    margin-top: 0.2rem;
+    font-size: 0.7rem;
+    color: var(--color-text-muted);
+  }
+
+  .mapping-footer {
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .mapping-status {
+    min-width: 0;
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+  }
+
+  .mapping-status .success {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: var(--color-success-text);
+  }
+
+  .mapping-status .error {
+    color: var(--color-error-text);
+  }
+
+  .mapping-actions {
+    display: flex;
+    justify-content: flex-end;
+    gap: 0.5rem;
+  }
+
+  @media (max-width: 800px) {
+    .mapping-header {
+      align-items: flex-start;
+    }
+
+    .mapping-count {
+      min-width: 3.75rem;
+      min-height: 3.75rem;
+    }
+
+    .first-chapter-card {
+      grid-template-columns: 1fr;
+    }
+
+    .mapping-row {
+      grid-template-columns: 2rem minmax(0, 1fr);
+    }
+
+    .mapping-row :global(.relative) {
+      grid-column: 1 / -1;
+    }
+
+    .mapping-footer {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .mapping-actions {
+      justify-content: stretch;
+    }
+
+    .mapping-actions :global(button) {
+      flex: 1;
+    }
+  }
+</style>

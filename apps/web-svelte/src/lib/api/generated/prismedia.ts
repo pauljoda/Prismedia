@@ -27,6 +27,7 @@ import type {
   AudioPlaybackDiagnosticRequest,
   BookAcquisitionProfileSaveRequest,
   BookAcquisitionProfileView,
+  BookChapterMappingsResponse,
   BookContentsResponse,
   BrowseLibraryPathParams,
   BrowserSessionResponse,
@@ -213,6 +214,7 @@ import type {
   RemotePathMappingView,
   RemoveFileExclusionParams,
   RenameFileParams,
+  ReplaceBookChapterMappingsRequest,
   RequestCommitRequest,
   RequestCommitResponse,
   RequestEntityCommitRequest,
@@ -4355,6 +4357,99 @@ export const getBookContents = async (id: string, options?: RequestInit): Promis
     method: 'GET'
 
 
+  }
+);}
+
+
+
+export type getBookChapterMappingsResponse200 = {
+  data: BookChapterMappingsResponse
+  status: 200
+}
+
+export type getBookChapterMappingsResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type getBookChapterMappingsResponseSuccess = (getBookChapterMappingsResponse200) & {
+  headers: Headers;
+};
+export type getBookChapterMappingsResponseError = (getBookChapterMappingsResponse404) & {
+  headers: Headers;
+};
+
+export type getBookChapterMappingsResponse = (getBookChapterMappingsResponseSuccess | getBookChapterMappingsResponseError)
+
+export const getGetBookChapterMappingsUrl = (id: string,) => {
+
+
+
+
+  return `/api/books/${id}/chapter-mappings`
+}
+
+/**
+ * @summary Get the Book's explicit audiobook-to-readable-chapter map.
+ */
+export const getBookChapterMappings = async (id: string, options?: RequestInit): Promise<getBookChapterMappingsResponse> => {
+
+  return orvalFetch<getBookChapterMappingsResponse>(getGetBookChapterMappingsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type replaceBookChapterMappingsResponse200 = {
+  data: BookChapterMappingsResponse
+  status: 200
+}
+
+export type replaceBookChapterMappingsResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type replaceBookChapterMappingsResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type replaceBookChapterMappingsResponseSuccess = (replaceBookChapterMappingsResponse200) & {
+  headers: Headers;
+};
+export type replaceBookChapterMappingsResponseError = (replaceBookChapterMappingsResponse400 | replaceBookChapterMappingsResponse404) & {
+  headers: Headers;
+};
+
+export type replaceBookChapterMappingsResponse = (replaceBookChapterMappingsResponseSuccess | replaceBookChapterMappingsResponseError)
+
+export const getReplaceBookChapterMappingsUrl = (id: string,) => {
+
+
+
+
+  return `/api/books/${id}/chapter-mappings`
+}
+
+/**
+ * @summary Replace the Book's explicit audiobook-to-readable-chapter map.
+ */
+export const replaceBookChapterMappings = async (id: string,
+    replaceBookChapterMappingsRequest: ReplaceBookChapterMappingsRequest, options?: RequestInit): Promise<replaceBookChapterMappingsResponse> => {
+
+  return orvalFetch<replaceBookChapterMappingsResponse>(getReplaceBookChapterMappingsUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      replaceBookChapterMappingsRequest,)
   }
 );}
 

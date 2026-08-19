@@ -297,6 +297,7 @@ public static class DependencyInjection {
         services.AddScoped<IEntityFileContentService, EfEntityFileContentService>();
         services.AddSingleton<EpubBookContentsCache>();
         services.AddScoped<IBookContentsService, EpubBookContentsService>();
+        services.AddScoped<IBookChapterMappingService, EfBookChapterMappingService>();
         services.AddScoped<IGridThumbnailService>(provider =>
             new GridThumbnailService(
                 provider.GetRequiredService<PrismediaDbContext>(),

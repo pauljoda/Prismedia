@@ -10,7 +10,7 @@
   import { onDestroy } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { BookOpen, CloudDownload, Headphones, Info, Play, SlidersHorizontal, Users } from "@lucide/svelte";
+  import { BookOpen, CloudDownload, Headphones, Info, ListOrdered, Play, SlidersHorizontal, Users } from "@lucide/svelte";
   import EntityDetailPageState from "$lib/components/entities/EntityDetailPageState.svelte";
   import { useEntityDetailPage } from "$lib/components/entities/entity-detail-page-controller.svelte";
   import MediaProgressPanel from "$lib/components/MediaProgressPanel.svelte";
@@ -26,7 +26,16 @@
   import { fetchEntityMonitors, resumeMonitor, stopMonitor } from "$lib/api/monitors";
   import { commitEntityRequest } from "$lib/api/requests";
   import { updateEntityProgress } from "$lib/api/consumption";
-  import type { AcquisitionDetail, EntityThumbnail, MonitorView } from "$lib/api/generated/model";
+  import type {
+    AcquisitionDetail,
+    BookChapterAudioMapping,
+    EntityThumbnail,
+    MonitorView,
+  } from "$lib/api/generated/model";
+  import {
+    fetchBookChapterMappings,
+    saveBookChapterMappings,
+  } from "$lib/api/books";
   import { fetchEntity, fetchEntityChildren, type EntityCardFull } from "$lib/api/entities";
   import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
   import { entityCardToDetailCard, type EntityDetailCardFull, type EntityDetailCredit, type EntityDetailTag } from "$lib/entities/entity-detail";
@@ -56,6 +65,7 @@
   import EntityGridSection from "$lib/components/entities/EntityGridSection.svelte";
   import BookCombinedProgressCard from "$lib/components/books/BookCombinedProgressCard.svelte";
   import BookChapterList from "$lib/components/books/BookChapterList.svelte";
+  import BookChapterMappingEditor from "$lib/components/books/BookChapterMappingEditor.svelte";
   import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
   import { isHiddenEntityNotFoundError } from "$lib/nsfw/hidden-entity";
   import type { AppBreadcrumb } from "$lib/stores/app-chrome.svelte";
@@ -115,6 +125,8 @@
   let currentEpubChapterId = $state<string | null>(null);
   let epubContentsLoading = $state(false);
   let artworkPalette = $state.raw<ArtworkPalette | null>(null);
+  let chapterMappings = $state.raw<BookChapterAudioMapping[]>([]);
+  let chapterMappingLoadError = $state<string | null>(null);
   let loadedEpubKey: string | null = null;
   let epubContentsAbort: AbortController | null = null;
 
@@ -213,6 +225,7 @@
   const baseChapterRows = $derived(buildBookChapterRows({
     readableChapters,
     audioTracks: audiobookTracks,
+    chapterMappings,
     currentReadableId: bookMetadata?.format === BOOK_FORMAT.epub
       ? currentEpubChapterId
       : progressDisplay?.isComplete
@@ -301,6 +314,7 @@
     resolveBookCombinedResume(chapterRows, bookReadingPosition),
   );
   const hasCombinedContent = $derived(chapterRows.some((row) => row.readTarget && row.audioTrack));
+  const canMapBookChapters = $derived(readableChapters.length > 0 && audiobookTracks.length > 0);
   const fallbackBookPalette = entityAccentForKind(ENTITY_KIND.book);
   const chapterPalette = $derived(artworkPalette ?? {
     primary: fallbackBookPalette.primary,
@@ -404,12 +418,18 @@
       label: peopleLabel,
       icon: Users,
     },
+    {
+      id: "chapter-mapping",
+      label: "Chapter Mapping",
+      icon: ListOrdered,
+      hidden: !canMapBookChapters,
+    },
     { id: "acquisition" },
   ]);
 
   const detailTabs = $derived.by((): EntityDetailTab[] => {
     if (!card) return [];
-    return [
+    const tabs: EntityDetailTab[] = [
       {
         id: "details",
         label: "Details",
@@ -423,8 +443,17 @@
         sections: ["stats", "dates", "classification", "source", "links"],
         layout: "grid",
       },
-      { id: "acquisition", label: "Acquisition", icon: CloudDownload, sections: ["acquisition"] },
     ];
+    if (canMapBookChapters) {
+      tabs.push({
+        id: "chapter-mapping",
+        label: "Chapter Mapping",
+        icon: ListOrdered,
+        sections: ["chapter-mapping"],
+      });
+    }
+    tabs.push({ id: "acquisition", label: "Acquisition", icon: CloudDownload, sections: ["acquisition"] });
+    return tabs;
   });
 
   onDestroy(() => epubContentsAbort?.abort());
@@ -436,7 +465,7 @@
   });
 
   async function loadBook(targetBookId: string, signal: AbortSignal): Promise<EntityCardFull> {
-    const [nextBook, nextAcquisitions, nextMonitors] = await Promise.all([
+    const [nextBook, nextAcquisitions, nextMonitors, nextMappingState] = await Promise.all([
       fetchEntity(targetBookId, { signal }),
       fetchAcquisitionsForEntity(targetBookId, { signal }).catch(() => {
         signal.throwIfAborted();
@@ -446,6 +475,15 @@
         signal.throwIfAborted();
         return [];
       }),
+      fetchBookChapterMappings(targetBookId, { signal })
+        .then((response) => ({ mappings: response.mappings, error: null }))
+        .catch((error) => {
+          signal.throwIfAborted();
+          return {
+            mappings: [],
+            error: error instanceof Error ? error.message : "Failed to load chapter mappings.",
+          };
+        }),
     ]);
     const parentId = nextBook.parentEntityId;
     const [relationships, chapters, parentThumbs] = await Promise.all([
@@ -461,6 +499,8 @@
       currentEpubChapterId = null;
       loadedEpubKey = null;
       artworkPalette = null;
+      chapterMappings = [];
+      chapterMappingLoadError = null;
     }
 
     // A book scanned under an Author/ folder is parented to a book-author; surface it as a back-link.
@@ -480,6 +520,8 @@
     relationshipTags = relationships.relationshipTags;
     bookRenditionAcquisitions = nextAcquisitions;
     bookRenditionMonitors = nextMonitors;
+    chapterMappings = nextMappingState.mappings;
+    chapterMappingLoadError = nextMappingState.error;
 
     const nextProgress = bookEntityProgressDisplay(nextBook, combineChapterSummaries(chapters, progressSummary));
     selectedChapterId = nextProgress?.chapterId ?? chapters[0]?.thumbnail.id ?? null;
@@ -544,6 +586,16 @@
     bookRenditionAcquisitions = nextAcquisitions;
     bookRenditionMonitors = nextMonitors;
     await acq.refresh();
+  }
+
+  async function saveChapterMappingDraft(
+    mappings: readonly BookChapterAudioMapping[],
+  ): Promise<readonly BookChapterAudioMapping[]> {
+    if (!book) return [];
+    const response = await saveBookChapterMappings(book.id, mappings);
+    chapterMappings = response.mappings;
+    chapterMappingLoadError = null;
+    return response.mappings;
   }
 
   /**
@@ -1067,7 +1119,18 @@
       {/snippet}
 
       {#snippet sectionContent(section)}
-        {#if section.id === "acquisition"}
+        {#if section.id === "chapter-mapping"}
+          {#key book.id}
+            <BookChapterMappingEditor
+              resetKey={book.id}
+              {readableChapters}
+              audioTracks={audiobookTracks}
+              mappings={chapterMappings}
+              loadError={chapterMappingLoadError}
+              onSave={saveChapterMappingDraft}
+            />
+          {/key}
+        {:else if section.id === "acquisition"}
           <EntityAcquisitionCard
             {acq}
             entity={book}
