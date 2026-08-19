@@ -72,9 +72,16 @@ public sealed class TranscodeReaperService : BackgroundService {
     }
 
     private async Task SweepAsync(CancellationToken cancellationToken) {
-        var liveItemIds = _sessions.LiveItemIds(SessionTtl);
+        // Viewer liveness has two independent signals and needs both. The session heartbeat stops
+        // arriving whenever the client stops progressing — including while it is stalled and retrying a
+        // segment, which is exactly when its cached output must survive. An in-flight asset request
+        // proves a viewer on its own, so protect the union: reaping or evicting an item a client is
+        // still fetching turns a recoverable stall into an unrecoverable 404 loop.
+        var protectedItemIds = new HashSet<Guid>(_sessions.LiveItemIds(SessionTtl));
+        protectedItemIds.UnionWith(HlsAssetService.RecentlyRequestedItemIds(SessionTtl));
+
         var staleSessions = _sessions.ReapStaleSessions(SessionTtl);
-        var reapedJobs = HlsAssetService.ReapOrphanedJobs(liveItemIds, IdleGrace, MaxLifetime);
+        var reapedJobs = HlsAssetService.ReapOrphanedJobs(protectedItemIds, IdleGrace, MaxLifetime);
         if (staleSessions > 0 || reapedJobs > 0) {
             _logger.LogInformation(
                 "Transcode reaper cleared {StaleSessions} abandoned session(s) and cancelled {ReapedJobs} orphaned or expired ffmpeg job(s).",
@@ -84,7 +91,7 @@ public sealed class TranscodeReaperService : BackgroundService {
 
         var maxBytes = await ResolveCacheLimitBytesAsync(cancellationToken);
         if (maxBytes > 0) {
-            _cache.PruneToLimit(maxBytes, liveItemIds);
+            _cache.PruneToLimit(maxBytes, protectedItemIds);
         }
     }
 

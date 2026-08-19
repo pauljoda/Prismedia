@@ -118,6 +118,9 @@
   let resumeApplied = false;
   let playbackUpdateTimer: ReturnType<typeof setInterval> | null = null;
   let lastReportedTime = 0;
+  // True between the player's play and pause events. A stall does not pause the player, so this
+  // stays true while playback is wedged — which is exactly when the session must keep pinging.
+  let playbackActive = false;
   const viewingActivityClock = new ConsumptionActivityClock();
   // Tracks which video id the playback session belongs to. Used so a same-video metadata
   // refresh (e.g. onTracksChanged) does not reset playback tracking and kill the update timer.
@@ -394,6 +397,7 @@
     trackedVideoId = nextId;
     playTracked = false;
     resumeApplied = false;
+    playbackActive = false;
     selectedAudioStreamIndex = null;
     lastReportedTime = 0;
     hydratedSubtitlePrefsKey = "";
@@ -552,6 +556,7 @@
     if (!playbackUpdateTimer) {
       const videoId = video.id;
       playbackUpdateTimer = setInterval(() => {
+        if (!playerProps) return;
         if (currentTime > 0 && Math.abs(currentTime - lastReportedTime) > 3) {
           lastReportedTime = currentTime;
           const activitySeconds = viewingActivityClock.take();
@@ -562,16 +567,34 @@
             durationSeconds: playerProps.duration,
             activitySeconds,
           }).catch(() => {});
+          return;
         }
+
+        // The playhead has not moved far enough to be worth a progress write. If the player still
+        // intends to play, it is stalled — buffering, or retrying a segment — and it is precisely
+        // then that the server must not treat the viewer as gone: a lapsed session drops the item
+        // out of the reaper's live set, which cancels its ffmpeg job and lets cache eviction delete
+        // the segments the player is still fetching, turning a recoverable stall into a 404 loop.
+        // A ping refreshes session liveness without touching resume or watch state. A deliberately
+        // paused player is genuinely idle, so it is left to expire as before.
+        if (!playbackActive) return;
+        void reportVideoPlayback("ping", {
+          entityId: videoId,
+          sessionId: playerProps.sessionId,
+          positionSeconds: currentTime,
+          durationSeconds: playerProps.duration,
+        }).catch(() => {});
       }, 10_000);
     }
   }
 
   function handlePlaybackActive() {
+    playbackActive = true;
     viewingActivityClock.start();
   }
 
   function handlePlaybackPaused() {
+    playbackActive = false;
     if (!playTracked || !video || !playerProps) return;
     const activitySeconds = viewingActivityClock.stop();
     if (!activitySeconds) return;
@@ -585,6 +608,7 @@
   }
 
   async function handleVideoEnded() {
+    playbackActive = false;
     if (!video || !playerProps) return;
     if (playbackUpdateTimer) {
       clearInterval(playbackUpdateTimer);

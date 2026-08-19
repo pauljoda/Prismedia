@@ -43,7 +43,7 @@ public sealed class TranscodeCacheServiceTests : IDisposable {
         var (_, oldDir) = WriteCachedItem("hlsv", 1000, now.AddHours(-2));
         var (_, newDir) = WriteCachedItem("hlsv", 1000, now);
 
-        var evicted = Service().PruneToLimit(maxBytes: 1000, liveItemIds: new HashSet<Guid>());
+        var evicted = Service().PruneToLimit(maxBytes: 1000, protectedItemIds: new HashSet<Guid>());
 
         Assert.Equal(1, evicted);
         Assert.False(Directory.Exists(oldDir)); // older item evicted first
@@ -57,7 +57,7 @@ public sealed class TranscodeCacheServiceTests : IDisposable {
         var (_, newDir) = WriteCachedItem("hlsv", 1000, now);
 
         // The oldest item is live, so the next-oldest is evicted instead — never the playing one.
-        var evicted = Service().PruneToLimit(maxBytes: 1000, liveItemIds: new HashSet<Guid> { oldId });
+        var evicted = Service().PruneToLimit(maxBytes: 1000, protectedItemIds: new HashSet<Guid> { oldId });
 
         Assert.Equal(1, evicted);
         Assert.True(Directory.Exists(oldDir));
@@ -72,7 +72,7 @@ public sealed class TranscodeCacheServiceTests : IDisposable {
         WriteCachedItemWithId(id, "hlsv", 1000, now);
         WriteCachedItemWithId(id, "hls", 500, now);
 
-        var evicted = Service().PruneToLimit(maxBytes: 1000, liveItemIds: new HashSet<Guid>());
+        var evicted = Service().PruneToLimit(maxBytes: 1000, protectedItemIds: new HashSet<Guid>());
 
         Assert.Equal(1, evicted);
         Assert.Equal(0, Service().ComputeSizeBytes());
@@ -81,7 +81,7 @@ public sealed class TranscodeCacheServiceTests : IDisposable {
     [Fact]
     public void PruneWithUnlimitedLeavesEverything() {
         WriteCachedItem("hlsv", 1000, DateTime.UtcNow);
-        Assert.Equal(0, Service().PruneToLimit(maxBytes: 0, liveItemIds: new HashSet<Guid>()));
+        Assert.Equal(0, Service().PruneToLimit(maxBytes: 0, protectedItemIds: new HashSet<Guid>()));
     }
 
     [Fact]

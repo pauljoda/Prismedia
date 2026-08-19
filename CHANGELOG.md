@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Stalled video playback no longer becomes unrecoverable. A player that is buffering or retrying a segment keeps its playback session alive even though its position is not advancing, and cached stream output is now protected from cleanup while a client is still fetching it, so a brief stall can no longer escalate into missing segments and a failed stream.
 - Manual audiobook upgrades now replace the owned multi-file rendition as one crash-safe folder operation while preserving any co-located ebook files and artwork.
 - Explicitly selected release replacements no longer depend on the prior download client remaining healthy: Prismedia detaches the exact old client item into durable cleanup, queues the new release through its own protocol client, and removes the old item when its original client recovers.
 - Direct Play video pages now pre-load only the source metadata needed for faster startup and cancel that request immediately when the player closes, while adaptive streams remain dormant until Play to avoid abandoned remux or transcode work.

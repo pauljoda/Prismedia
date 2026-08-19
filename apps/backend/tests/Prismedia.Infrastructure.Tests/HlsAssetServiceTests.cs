@@ -53,6 +53,28 @@ public sealed class HlsAssetServiceTests : IDisposable {
     }
 
     [Fact]
+    public async Task ServingAnAssetMarksTheItemRecentlyRequested() {
+        var videoId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        var service = new HlsAssetService(new HlsAssetServiceOptions(_cacheRoot));
+
+        // A miss still counts: the client is fetching, so its cached output must not be evicted even
+        // while it retries a segment that is not there yet.
+        await service.GetAssetAsync(videoId, "index.m3u8", null, CancellationToken.None);
+
+        Assert.Contains(videoId, HlsAssetService.RecentlyRequestedItemIds(TimeSpan.FromMinutes(2)));
+    }
+
+    [Fact]
+    public async Task RecentlyRequestedItemsExpireOutsideTheWindow() {
+        var videoId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        var service = new HlsAssetService(new HlsAssetServiceOptions(_cacheRoot));
+
+        await service.GetAssetAsync(videoId, "index.m3u8", null, CancellationToken.None);
+
+        Assert.DoesNotContain(videoId, HlsAssetService.RecentlyRequestedItemIds(TimeSpan.Zero));
+    }
+
+    [Fact]
     public void RemuxSegmentDurationsMatchFfmpegStreamCopyBoundaries() {
         // Models a 1080p source with a 2.002s GOP (keyframe every 2.002s) over ~1951.296s, which is
         // exactly what ffmpeg's stream-copy HLS muxer cuts into 325 segments: 324 of 6.006s (three

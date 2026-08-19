@@ -28,7 +28,12 @@ public interface ITranscodeCacheService {
     /// <paramref name="maxBytes"/>. Items currently playing are never evicted.
     /// </summary>
     /// <param name="maxBytes">The size ceiling in bytes; 0 or negative means unlimited (no eviction).</param>
-    /// <param name="liveItemIds">Items with a live playback session, kept regardless of age.</param>
+    /// <param name="protectedItemIds">
+    /// Items with a live viewer, kept regardless of age. This must be the union of recently-pinged
+    /// playback sessions and items whose assets were recently requested: a stalled client stops sending
+    /// heartbeats while it retries a segment, and evicting its segments then turns a recoverable stall
+    /// into an unrecoverable 404 loop.
+    /// </param>
     /// <returns>The number of cached items evicted.</returns>
-    int PruneToLimit(long maxBytes, IReadOnlySet<Guid> liveItemIds);
+    int PruneToLimit(long maxBytes, IReadOnlySet<Guid> protectedItemIds);
 }

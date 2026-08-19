@@ -40,6 +40,13 @@ public sealed partial class HlsAssetService : IHlsAssetService {
     // collapses onto one forward transcode instead of each racing to spawn its own.
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> VirtualGenerationLocks = new();
 
+    // Last time any generated asset of an item was requested, keyed by item id. A client that is
+    // actively fetching playlists or segments is a live viewer even when its playback-session
+    // heartbeat has lapsed — the situation while playback is stalled and the player is retrying one
+    // segment. Job reaping and cache eviction both consult this so neither can cancel or delete work
+    // a client is still reading out from under it.
+    private static readonly ConcurrentDictionary<Guid, DateTimeOffset> ItemLastRequestedUtc = new();
+
     private readonly HlsAssetServiceOptions _options;
     private readonly IVideoSourceService? _sources;
     private readonly ProcessExecutor? _processes;
@@ -102,6 +109,10 @@ public sealed partial class HlsAssetService : IHlsAssetService {
         if (normalizedAssetPath is null) {
             return null;
         }
+
+        // Record the request before serving, so an actively-fetched item is protected from reaping and
+        // eviction even if this particular request goes on to fail or time out.
+        ItemLastRequestedUtc[id] = DateTimeOffset.UtcNow;
 
         var virtualAsset = await TryGetVirtualAssetAsync(
             id,
@@ -469,22 +480,52 @@ public sealed partial class HlsAssetService : IHlsAssetService {
     }
 
     /// <summary>
+    /// Reports the ids of items whose generated assets were requested within <paramref name="within"/>.
+    /// </summary>
+    /// <remarks>
+    /// This is the second, independent half of viewer liveness. The first half is the playback session
+    /// heartbeat, which stops arriving whenever the client stops progressing — including while it is
+    /// stalled and retrying a segment, the one moment its cached output must be preserved. An in-flight
+    /// asset request proves a viewer regardless of heartbeats, so both the reaper and cache eviction take
+    /// the union of the two rather than trusting sessions alone.
+    /// </remarks>
+    /// <param name="within">How recently an asset request must have arrived to count as live.</param>
+    /// <returns>Item ids with a recent asset request.</returns>
+    internal static IReadOnlySet<Guid> RecentlyRequestedItemIds(TimeSpan within) {
+        var now = DateTimeOffset.UtcNow;
+        var live = new HashSet<Guid>();
+        foreach (var (id, requestedAt) in ItemLastRequestedUtc) {
+            if (now - requestedAt <= within) {
+                live.Add(id);
+            } else {
+                // Drop stale entries as we go so the map cannot grow with every item ever played.
+                ItemLastRequestedUtc.TryRemove(id, out _);
+            }
+        }
+
+        return live;
+    }
+
+    /// <summary>
     /// Cancels transcode and remux jobs that no longer have a live viewer, or that have run past a
-    /// hard lifetime ceiling. A job is reaped when its owning item is absent from <paramref name="liveItemIds"/>
+    /// hard lifetime ceiling. A job is reaped when its owning item is absent from <paramref name="protectedItemIds"/>
     /// and it has been running longer than <paramref name="idleGrace"/> (a startup guard), or
     /// unconditionally once it exceeds <paramref name="maxLifetime"/>. Already-produced segments stay in
     /// the cache, so a reaped session resumes from cache and only re-encodes from the frontier.
     /// </summary>
-    /// <param name="liveItemIds">Item ids whose playback session pinged within the liveness window.</param>
+    /// <param name="protectedItemIds">
+    /// Item ids with a live viewer — the union of recently-pinged playback sessions and
+    /// <see cref="RecentlyRequestedItemIds"/>.
+    /// </param>
     /// <param name="idleGrace">Minimum job age before an orphaned job becomes eligible for reaping.</param>
     /// <param name="maxLifetime">Absolute age after which any job is cancelled, even a live one.</param>
     /// <returns>The number of jobs cancelled.</returns>
-    internal static int ReapOrphanedJobs(IReadOnlySet<Guid> liveItemIds, TimeSpan idleGrace, TimeSpan maxLifetime) {
+    internal static int ReapOrphanedJobs(IReadOnlySet<Guid> protectedItemIds, TimeSpan idleGrace, TimeSpan maxLifetime) {
         var now = DateTimeOffset.UtcNow;
         var reaped = 0;
 
         foreach (var (key, generation) in ActiveRenditions) {
-            if (ShouldReapJob(generation.EntityId, generation.StartedAtUtc, now, liveItemIds, idleGrace, maxLifetime) &&
+            if (ShouldReapJob(generation.EntityId, generation.StartedAtUtc, now, protectedItemIds, idleGrace, maxLifetime) &&
                 ActiveRenditions.TryRemove(key, out var removed)) {
                 removed.Cancellation.Cancel();
                 reaped++;
@@ -505,7 +546,7 @@ public sealed partial class HlsAssetService : IHlsAssetService {
             }
 
             if (!remux.Task.IsCompleted &&
-                ShouldReapJob(remux.EntityId, remux.StartedAtUtc, now, liveItemIds, idleGrace, maxLifetime) &&
+                ShouldReapJob(remux.EntityId, remux.StartedAtUtc, now, protectedItemIds, idleGrace, maxLifetime) &&
                 RemuxGenerations.TryRemove(key, out var removed)) {
                 removed.Cancellation.Cancel();
                 RemuxLastRequestedUtc.TryRemove(key, out _);
@@ -525,7 +566,7 @@ public sealed partial class HlsAssetService : IHlsAssetService {
         Guid entityId,
         DateTimeOffset startedAtUtc,
         DateTimeOffset now,
-        IReadOnlySet<Guid> liveItemIds,
+        IReadOnlySet<Guid> protectedItemIds,
         TimeSpan idleGrace,
         TimeSpan maxLifetime) {
         var age = now - startedAtUtc;
@@ -533,7 +574,7 @@ public sealed partial class HlsAssetService : IHlsAssetService {
             return true;
         }
 
-        return age > idleGrace && !liveItemIds.Contains(entityId);
+        return age > idleGrace && !protectedItemIds.Contains(entityId);
     }
 
     private static string? NormalizeAssetPath(string assetPath) {

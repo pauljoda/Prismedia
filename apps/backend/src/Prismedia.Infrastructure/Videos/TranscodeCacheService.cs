@@ -54,7 +54,7 @@ public sealed class TranscodeCacheService : ITranscodeCacheService {
     }
 
     /// <inheritdoc />
-    public int PruneToLimit(long maxBytes, IReadOnlySet<Guid> liveItemIds) {
+    public int PruneToLimit(long maxBytes, IReadOnlySet<Guid> protectedItemIds) {
         if (maxBytes <= 0) {
             return 0;
         }
@@ -71,7 +71,7 @@ public sealed class TranscodeCacheService : ITranscodeCacheService {
                 break;
             }
 
-            if (liveItemIds.Contains(item.Id)) {
+            if (protectedItemIds.Contains(item.Id)) {
                 continue;
             }
 
