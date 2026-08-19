@@ -1606,6 +1606,19 @@
     ontouchstart={surfaceControls}
   >
     {#if playerSrc && mediaMounted}
+      <!--
+        preferNativeHLS reorders vidstack's loaders so the plain <video> element is tried before
+        hls.js. Only Safari/WebKit can play application/vnd.apple.mpegurl natively, so that is the
+        only place it changes anything; Chromium and Firefox still get hls.js.
+
+        This is a correctness fix, not a preference. Stream-copied HEVC keeps the source's GOP
+        structure, and most HEVC encodes are open-GOP: many segments begin on a CRA picture whose
+        RASL leading pictures present before it and reference the previous segment. hls.js appends
+        such a fragment on its own and WebKit's MSE decoder fails on it, producing a stall, a buffer
+        flush, and an endless re-fetch of that one segment. Native HLS handles the same bytes
+        correctly — measured: on a seek into a CRA segment AVFoundation fetches the PRECEDING segment
+        first to recover the references, then plays through without a single repeat request.
+      -->
       <!-- svelte-ignore a11y_click_events_have_key_events -->
       <media-player
         class="prismedia-media-engine"
@@ -1616,6 +1629,7 @@
         streamType="on-demand"
         crossOrigin
         playsInline
+        preferNativeHLS
         load={mediaLoadStrategy}
         preload="metadata"
         posterLoad="eager"
