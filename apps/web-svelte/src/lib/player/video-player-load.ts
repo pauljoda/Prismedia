@@ -1,4 +1,10 @@
-import type { PlaybackModeCode } from "$lib/api/generated/codes";
+import {
+  PLAYBACK_MODE,
+  VIDEO_PLAYBACK_METHOD,
+  type PlaybackModeCode,
+  type VideoPlaybackMethodCode,
+} from "$lib/api/generated/codes";
+import { canPlayHevcMp4 } from "$lib/player/browser-device-profile";
 
 export type QualityMode = "auto" | "direct" | number | `seed:${string}`;
 export type VideoPlaybackMode = PlaybackModeCode;
@@ -142,13 +148,6 @@ export function isHevcCodec(codec: string | null | undefined): boolean {
   return normalized === "hevc" || normalized === "h265" || normalized === "h.265";
 }
 
-function supportsAnyMime(canPlayType: CanPlayType, candidates: readonly string[]): boolean {
-  return candidates.some((mime) => {
-    const result = canPlayType(mime);
-    return result === "probably" || result === "maybe";
-  });
-}
-
 export function canUseDirectPlayback({
   directSrc,
   codec,
@@ -162,12 +161,23 @@ export function canUseDirectPlayback({
   if (!isHevcCodec(codec)) return true;
   if (!canPlayType) return false;
 
-  return supportsAnyMime(canPlayType, [
-    'video/mp4; codecs="hvc1"',
-    'video/mp4; codecs="hev1"',
-    'video/mp4; codecs="hvc1, mp4a.40.2"',
-    'video/mp4; codecs="hev1, mp4a.40.2"',
-  ]);
+  return canPlayHevcMp4(canPlayType);
+}
+
+/** Resolves the delivery method from the source the player actually selected, not only negotiation. */
+export function resolveEffectivePlaybackMethod({
+  effectiveMode,
+  negotiatedMethod,
+  forcedTranscode,
+}: {
+  effectiveMode: VideoPlaybackMode;
+  negotiatedMethod: VideoPlaybackMethodCode;
+  forcedTranscode: boolean;
+}): VideoPlaybackMethodCode {
+  if (forcedTranscode) return VIDEO_PLAYBACK_METHOD.transcode;
+  if (effectiveMode === PLAYBACK_MODE.direct) return VIDEO_PLAYBACK_METHOD.direct;
+  if (negotiatedMethod === VIDEO_PLAYBACK_METHOD.remux) return VIDEO_PLAYBACK_METHOD.remux;
+  return VIDEO_PLAYBACK_METHOD.transcode;
 }
 
 export function computeVideoLoadState({

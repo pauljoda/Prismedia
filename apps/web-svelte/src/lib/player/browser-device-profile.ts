@@ -25,17 +25,16 @@ interface CodecProbe {
   readonly mimes: readonly string[];
 }
 
+const HevcMp4Mimes = [
+  'video/mp4; codecs="hvc1.1.6.L93.B0"',
+  'video/mp4; codecs="hev1.1.6.L93.B0"',
+  'video/mp4; codecs="hvc1"',
+  'video/mp4; codecs="hev1"',
+] as const;
+
 const Mp4VideoCodecs: readonly CodecProbe[] = [
   { codec: "h264", mimes: ['video/mp4; codecs="avc1.640029"', 'video/mp4; codecs="avc1.42E01E"'] },
-  {
-    codec: "hevc",
-    mimes: [
-      'video/mp4; codecs="hvc1.1.6.L93.B0"',
-      'video/mp4; codecs="hev1.1.6.L93.B0"',
-      'video/mp4; codecs="hvc1"',
-      'video/mp4; codecs="hev1"',
-    ],
-  },
+  { codec: "hevc", mimes: HevcMp4Mimes },
   { codec: "av1", mimes: ['video/mp4; codecs="av01.0.05M.08"'] },
 ];
 
@@ -59,15 +58,22 @@ const WebmAudioCodecs: readonly CodecProbe[] = [
   { codec: "vorbis", mimes: ['audio/webm; codecs="vorbis"'] },
 ];
 
+function supportsAnyMime(canPlayType: CanPlayType, mimes: readonly string[]): boolean {
+  return mimes.some((mime) => {
+    const result = canPlayType(mime);
+    return result === "probably" || result === "maybe";
+  });
+}
+
 function supportedCodecs(canPlayType: CanPlayType, probes: readonly CodecProbe[]): string[] {
   return probes
-    .filter((probe) =>
-      probe.mimes.some((mime) => {
-        const result = canPlayType(mime);
-        return result === "probably" || result === "maybe";
-      }),
-    )
+    .filter((probe) => supportsAnyMime(canPlayType, probe.mimes))
     .map((probe) => probe.codec);
+}
+
+/** Uses the canonical MP4 capability probes to decide whether this browser can direct-play HEVC. */
+export function canPlayHevcMp4(canPlayType: CanPlayType): boolean {
+  return supportsAnyMime(canPlayType, HevcMp4Mimes);
 }
 
 /**

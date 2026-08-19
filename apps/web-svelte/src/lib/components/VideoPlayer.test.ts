@@ -227,6 +227,20 @@ describe("VideoPlayer", () => {
     });
   });
 
+  it("labels an adaptive rendition as transcoding when the negotiated source was direct", () => {
+    render(VideoPlayer, {
+      props: {
+        src: "/api/playback/videos/video-1/hls/v/master.m3u8",
+        directSrc: "/api/playback/videos/video-1/stream",
+        defaultPlaybackMode: "hls",
+        streamMethod: "direct",
+      },
+    });
+
+    expect(screen.getByTestId("playback-method-chip")).toHaveTextContent("Transcoding");
+    expect(screen.getByTestId("playback-method-chip")).not.toHaveTextContent("Direct Stream");
+  });
+
   it("hides the full playback chrome in minimal mode", async () => {
     render(VideoPlayer, {
       props: {

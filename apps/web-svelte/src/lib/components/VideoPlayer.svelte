@@ -59,6 +59,7 @@
     fallbackPlaybackModeForError,
     hlsStatusUrlForSrc,
     normalizeInitialPlaybackTime,
+    resolveEffectivePlaybackMethod,
   } from "$lib/player/video-player-load";
   import { playbackMethodBadge, resolutionBadge, type StreamMethod } from "$lib/player/media-badges";
   import {
@@ -368,17 +369,14 @@
   const sourceResolutionLabel = $derived(formatDimensions(sourceWidth, sourceHeight));
   // Prefer the negotiated tier, but stay self-sufficient by deriving it from the raw dimensions.
   const resolutionBadgeLabel = $derived(resolutionLabel ?? resolutionBadge(sourceWidth, sourceHeight));
-  // What is actually happening to the stream right now: a forced recovery transcode wins, then the
-  // player's own direct/HLS choice, otherwise the server's negotiated plan. A server "direct" plan
-  // while the player is on HLS still means the picture is copied (stream-copy), i.e. "Direct Stream".
+  // Report what the selected player source is actually doing. A direct negotiation that the client
+  // routes through an adaptive rendition is transcoding; only a negotiated remux is Direct Stream.
   const playbackMethod = $derived<StreamMethod>(
-    forcedTranscodeSrc
-      ? VIDEO_PLAYBACK_METHOD.transcode
-      : effectiveMode === "direct"
-        ? VIDEO_PLAYBACK_METHOD.direct
-        : streamMethod === VIDEO_PLAYBACK_METHOD.direct
-          ? VIDEO_PLAYBACK_METHOD.remux
-          : streamMethod,
+    resolveEffectivePlaybackMethod({
+      effectiveMode,
+      negotiatedMethod: streamMethod,
+      forcedTranscode: Boolean(forcedTranscodeSrc),
+    }),
   );
   const playbackMethodLabel = $derived(playbackMethodBadge(playbackMethod).label);
   const playbackMethodHint = $derived(playbackMethodBadge(playbackMethod).hint);

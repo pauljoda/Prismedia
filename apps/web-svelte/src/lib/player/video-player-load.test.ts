@@ -6,6 +6,7 @@ import {
   canUseDirectPlayback,
   chooseInitialPlaybackMode,
   computeVideoLoadState,
+  resolveEffectivePlaybackMethod,
   fallbackPlaybackModeForError,
   hlsStatusUrlForSrc,
   normalizeInitialPlaybackTime,
@@ -44,7 +45,7 @@ describe("video-player-load", () => {
     );
   });
 
-  it("requires browser HEVC support before direct-playing HEVC sources", () => {
+  it("requires the same detailed browser HEVC support used during playback negotiation", () => {
     const unsupported = canUseDirectPlayback({
       directSrc: "/api/video-stream/video-1/source",
       codec: "HEVC",
@@ -54,11 +55,43 @@ describe("video-player-load", () => {
     const supported = canUseDirectPlayback({
       directSrc: "/api/video-stream/video-1/source",
       codec: "h265",
-      canPlayType: (mime) => (mime.includes("hvc1") ? "probably" : ""),
+      canPlayType: (mime) =>
+        mime === 'video/mp4; codecs="hvc1.1.6.L93.B0"' ? "probably" : "",
     });
 
     expect(unsupported).toBe(false);
     expect(supported).toBe(true);
+  });
+
+  it("reports the delivery method of the effective player source", () => {
+    expect(
+      resolveEffectivePlaybackMethod({
+        effectiveMode: "direct",
+        negotiatedMethod: "direct",
+        forcedTranscode: false,
+      }),
+    ).toBe("direct");
+    expect(
+      resolveEffectivePlaybackMethod({
+        effectiveMode: "hls",
+        negotiatedMethod: "direct",
+        forcedTranscode: false,
+      }),
+    ).toBe("transcode");
+    expect(
+      resolveEffectivePlaybackMethod({
+        effectiveMode: "hls",
+        negotiatedMethod: "remux",
+        forcedTranscode: false,
+      }),
+    ).toBe("remux");
+    expect(
+      resolveEffectivePlaybackMethod({
+        effectiveMode: "hls",
+        negotiatedMethod: "remux",
+        forcedTranscode: true,
+      }),
+    ).toBe("transcode");
   });
 
   it("starts HEVC sources in adaptive mode when direct playback is unsupported", () => {

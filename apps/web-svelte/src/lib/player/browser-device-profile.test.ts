@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildBrowserDeviceProfile } from "./browser-device-profile";
+import { buildBrowserDeviceProfile, canPlayHevcMp4 } from "./browser-device-profile";
 
 /** Builds a canPlayType stub that returns "probably" for MIME strings containing any allowed token. */
 function canPlayTypeFor(allowedTokens: string[]): (mime: string) => string {
@@ -30,6 +30,17 @@ describe("buildBrowserDeviceProfile", () => {
 
     const mp4 = profile.directPlayProfiles?.find((p) => p.container === "mp4");
     expect(mp4?.videoCodec).toBe("h264,hevc,av1");
+  });
+
+  it("uses the detailed HEVC probe accepted by Chromium for both negotiation and playback", () => {
+    const canPlayType = (mime: string) =>
+      mime === 'video/mp4; codecs="hvc1.1.6.L93.B0"' ? "probably" : "";
+
+    const profile = buildBrowserDeviceProfile(canPlayType);
+    const mp4 = profile.directPlayProfiles?.find((entry) => entry.container === "mp4");
+
+    expect(mp4?.videoCodec).toBe("hevc");
+    expect(canPlayHevcMp4(canPlayType)).toBe(true);
   });
 
   it("never advertises MKV, so Matroska sources always transcode", () => {
