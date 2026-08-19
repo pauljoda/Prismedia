@@ -7,6 +7,7 @@ import {
   chooseInitialPlaybackMode,
   computeVideoLoadState,
   resolveEffectivePlaybackMethod,
+  resolveMediaLoadStrategy,
   fallbackPlaybackModeForError,
   hlsStatusUrlForSrc,
   normalizeInitialPlaybackTime,
@@ -92,6 +93,18 @@ describe("video-player-load", () => {
         forcedTranscode: true,
       }),
     ).toBe("transcode");
+  });
+
+  it("pre-warms direct metadata without starting an idle adaptive source", () => {
+    expect(
+      resolveMediaLoadStrategy({ effectiveMode: "direct", hasPlayIntent: false }),
+    ).toBe("eager");
+    expect(
+      resolveMediaLoadStrategy({ effectiveMode: "hls", hasPlayIntent: false }),
+    ).toBe("play");
+    expect(
+      resolveMediaLoadStrategy({ effectiveMode: "hls", hasPlayIntent: true }),
+    ).toBe("eager");
   });
 
   it("starts HEVC sources in adaptive mode when direct playback is unsupported", () => {

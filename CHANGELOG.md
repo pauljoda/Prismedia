@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Direct Play video pages now pre-load only the source metadata needed for faster startup and cancel that request immediately when the player closes, while adaptive streams remain dormant until Play to avoid abandoned remux or transcode work.
 - Web video playback now honors negotiated HEVC support instead of unnecessarily switching compatible MP4 files to HLS, avoiding avoidable startup and seek delays. Playback status also reports Transcoding when adaptive HLS is re-encoding the video instead of labeling it Direct Stream.
 - Audiobook chapter mapping and playback now ignore aggregate track records that do not own playable source media.
 - Book chapter lists no longer infer alignment from chapter-like filename numbers, which could shift an entire audiobook when files begin with a prologue or other front matter. Unmapped files now fall back only to normalized title matches.

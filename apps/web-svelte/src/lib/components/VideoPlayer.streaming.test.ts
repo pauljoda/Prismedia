@@ -39,6 +39,58 @@ afterEach(() => {
 });
 
 describe("VideoPlayer streaming recovery", () => {
+  it("pre-warms only direct media metadata", async () => {
+    const direct = render(VideoPlayer, {
+      props: {
+        directSrc: "/api/playback/videos/video-1/stream",
+        defaultPlaybackMode: "direct",
+      },
+    });
+
+    await waitFor(() => {
+      const player = document.querySelector("media-player");
+      expect(player).toHaveAttribute("load", "eager");
+      expect(player).toHaveAttribute("preload", "metadata");
+    });
+    direct.unmount();
+
+    render(VideoPlayer, {
+      props: {
+        src: "/api/playback/videos/video-1/hls/v/master.m3u8",
+        defaultPlaybackMode: "hls",
+      },
+    });
+
+    await waitFor(() => {
+      expect(document.querySelector("media-player")).toHaveAttribute("load", "play");
+    });
+  });
+
+  it("aborts a direct metadata request when the player unmounts", async () => {
+    const { unmount } = render(VideoPlayer, {
+      props: {
+        directSrc: "/api/playback/videos/video-1/stream",
+        defaultPlaybackMode: "direct",
+      },
+    });
+    const player = await waitFor(() => {
+      const element = document.querySelector("media-player");
+      expect(element).toBeInTheDocument();
+      return element!;
+    });
+    const video = document.createElement("video");
+    video.src = "/api/playback/videos/video-1/stream";
+    const pause = vi.spyOn(video, "pause").mockImplementation(() => undefined);
+    const load = vi.spyOn(video, "load").mockImplementation(() => undefined);
+    player.append(video);
+
+    unmount();
+
+    expect(pause).toHaveBeenCalledOnce();
+    expect(load).toHaveBeenCalledOnce();
+    expect(video).not.toHaveAttribute("src");
+  });
+
   it("shows the loading status on a cold play before the first segment is renderable", async () => {
     render(VideoPlayer, {
       props: {

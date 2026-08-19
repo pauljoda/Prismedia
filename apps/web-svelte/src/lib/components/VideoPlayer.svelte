@@ -54,12 +54,14 @@
   } from "$lib/fullscreen";
   import { buildMediaArtwork } from "$lib/media-session";
   import {
+    abortVideoElementLoad,
     adaptiveHlsBufferConfig,
     canUseDirectPlayback,
     fallbackPlaybackModeForError,
     hlsStatusUrlForSrc,
     normalizeInitialPlaybackTime,
     resolveEffectivePlaybackMethod,
+    resolveMediaLoadStrategy,
   } from "$lib/player/video-player-load";
   import { playbackMethodBadge, resolutionBadge, type StreamMethod } from "$lib/player/media-badges";
   import {
@@ -325,6 +327,9 @@
   const effectiveHlsSrc = $derived(forcedTranscodeSrc ?? selectedRungUrl ?? src);
   const requestedPlayerSrc = $derived(effectiveMode === "direct" ? directSrc : effectiveHlsSrc);
   const playerSrc = $derived(requestedPlayerSrc === hlsReadySrc ? requestedPlayerSrc : undefined);
+  const mediaLoadStrategy = $derived(
+    resolveMediaLoadStrategy({ effectiveMode, hasPlayIntent: autoPlay || pendingAutoPlay || playing }),
+  );
   const hasFilmStrip = $derived(Boolean(trickplayPlaylist && duration > 0));
   const markerChapterCues = $derived(buildTimelineChapterCues(markers, duration));
   const timelinePreviewFrame = $derived.by(() => {
@@ -1433,6 +1438,7 @@
       window.addEventListener("keydown", handleKey);
     }
     return () => {
+      abortVideoElementLoad(mediaElement());
       clearControlsTimer();
       clearSettingsCloseTimer();
       clearInitialMutedSync();
@@ -1610,7 +1616,8 @@
         streamType="on-demand"
         crossOrigin
         playsInline
-        load={autoPlay || pendingAutoPlay || playing ? "eager" : "play"}
+        load={mediaLoadStrategy}
+        preload="metadata"
         posterLoad="eager"
         autoPlay={autoPlay}
         loop={autoRepeat}

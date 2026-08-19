@@ -9,6 +9,14 @@ import { canPlayHevcMp4 } from "$lib/player/browser-device-profile";
 export type QualityMode = "auto" | "direct" | number | `seed:${string}`;
 export type VideoPlaybackMode = PlaybackModeCode;
 
+const MEDIA_LOAD_STRATEGY = {
+  eager: "eager",
+  onPlay: "play",
+} as const;
+
+export type MediaLoadStrategy =
+  (typeof MEDIA_LOAD_STRATEGY)[keyof typeof MEDIA_LOAD_STRATEGY];
+
 type CanPlayType = (mime: string) => CanPlayTypeResult | string;
 
 export interface VideoLoadStateInput {
@@ -178,6 +186,32 @@ export function resolveEffectivePlaybackMethod({
   if (effectiveMode === PLAYBACK_MODE.direct) return VIDEO_PLAYBACK_METHOD.direct;
   if (negotiatedMethod === VIDEO_PLAYBACK_METHOD.remux) return VIDEO_PLAYBACK_METHOD.remux;
   return VIDEO_PLAYBACK_METHOD.transcode;
+}
+
+/**
+ * Allows the browser to pre-load only metadata for direct files while keeping adaptive sources
+ * dormant until playback is requested. Eagerly attaching an HLS source could start an on-demand
+ * remux or transcode for a video the viewer never plays.
+ */
+export function resolveMediaLoadStrategy({
+  effectiveMode,
+  hasPlayIntent,
+}: {
+  effectiveMode: VideoPlaybackMode;
+  hasPlayIntent: boolean;
+}): MediaLoadStrategy {
+  return effectiveMode === PLAYBACK_MODE.direct || hasPlayIntent
+    ? MEDIA_LOAD_STRATEGY.eager
+    : MEDIA_LOAD_STRATEGY.onPlay;
+}
+
+/** Stops the browser's current media request before its owning player is removed. */
+export function abortVideoElementLoad(video: HTMLVideoElement | null): void {
+  if (!video) return;
+  video.pause();
+  video.removeAttribute("src");
+  // Resetting the element after clearing src terminates any outstanding metadata range request.
+  video.load();
 }
 
 export function computeVideoLoadState({
