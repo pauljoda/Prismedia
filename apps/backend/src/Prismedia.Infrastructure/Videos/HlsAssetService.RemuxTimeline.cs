@@ -80,44 +80,42 @@ public sealed partial class HlsAssetService {
     }
 
     /// <summary>
-    /// Resolves segment boundaries without reading the whole file, or null when that is not possible.
+    /// Resolves whole-file segment boundaries from the Matroska Cues index, or null when that index is
+    /// unusable for this source.
     /// </summary>
     /// <remarks>
-    /// Two cheap sources exist: the durable per-video cache (already exact), and the Matroska Cues index.
-    /// Cues list keyframe positions only — they say nothing about leading pictures — so they are trusted
-    /// only once a bounded probe has established that this source's segments really do start on IDR
-    /// pictures. An open-GOP source falls through to the background whole-file walk instead of being
-    /// described by a playlist that cannot account for its RASL leads.
+    /// Cues list keyframe positions only — they say nothing about leading pictures — so they can describe
+    /// a source's real timeline only when it has none. An open-GOP source returns null and falls through
+    /// to the background whole-file walk rather than being described by a playlist that cannot account
+    /// for its RASL leads.
     /// </remarks>
-    private async Task<IReadOnlyList<RemuxKeyframe>?> TryFastKeyframesAsync(
-        Guid id,
+    /// <param name="source">The source file whose Cues index is read.</param>
+    /// <param name="leadingPictureSeconds">
+    /// The lead measured by <see cref="ProbeLeadingPictureSecondsAsync"/>, or null when unmeasured.
+    /// </param>
+    private IReadOnlyList<RemuxKeyframe>? TryCuesKeyframes(
         VideoSourceFile source,
-        HlsAssetServiceOptions options,
-        CancellationToken cancellationToken) {
-        if (TryReadDurableKeyframes(id, source) is { Count: > 0 } cached) {
-            return cached;
-        }
-
-        if (MatroskaKeyframeReader.TryReadKeyframeTimes(source.Path, _logger) is not { Count: > 1 } cues) {
+        double? leadingPictureSeconds) {
+        if (leadingPictureSeconds is not { } lead || lead > IndependenceEpsilonSeconds) {
             return null;
         }
 
-        if (await ProbeSegmentsAreIndependentAsync(source.Path, options, cancellationToken) is not true) {
-            return null;
-        }
-
-        return ClosedGopKeyframes(cues);
+        return MatroskaKeyframeReader.TryReadKeyframeTimes(source.Path, _logger) is { Count: > 1 } cues
+            ? ClosedGopKeyframes(cues)
+            : null;
     }
 
     /// <summary>
-    /// Reads a bounded window of the source and reports whether every keyframe in it starts a segment
-    /// that presents at the keyframe itself (a closed GOP).
+    /// Reads a bounded window of the source and measures how far before its own keyframe a segment
+    /// actually starts presenting.
     /// </summary>
-    /// <returns>
-    /// True when no leading pictures were seen, false when any were, and null when the probe could not
-    /// run or the window held too few keyframes to judge.
-    /// </returns>
-    private async Task<bool?> ProbeSegmentsAreIndependentAsync(
+    /// <remarks>
+    /// Zero means a closed GOP: every segment presents exactly at its keyframe and may be described from
+    /// keyframe times alone. A non-zero result is the open-GOP RASL lead, and is deliberately the MAXIMUM
+    /// seen in the window — understating it would leave part of the hole this exists to close.
+    /// </remarks>
+    /// <returns>The lead in seconds, or null when the probe could not run or saw too few keyframes.</returns>
+    private async Task<double?> ProbeLeadingPictureSecondsAsync(
         string sourcePath,
         HlsAssetServiceOptions options,
         CancellationToken cancellationToken) {
@@ -132,7 +130,52 @@ public sealed partial class HlsAssetService {
 
         // Skip the first boundary: it is the start of the stream, which has nothing decodable before it
         // and so never carries leading pictures regardless of the GOP structure.
-        return sampled.Skip(1).All(keyframe => keyframe.IsIndependent);
+        return sampled.Skip(1).Max(keyframe => keyframe.KeyframePts - keyframe.PresentationStartPts);
+    }
+
+    /// <summary>
+    /// Shifts a growing <c>EVENT</c> playlist onto the presentation timeline by shortening its first
+    /// segment by the source's leading-picture lead.
+    /// </summary>
+    /// <remarks>
+    /// Only the first <c>EXTINF</c> needs correcting. Every segment after the first starts its lead
+    /// earlier than its keyframe, so in the difference between two consecutive starts the lead cancels
+    /// and the interior durations ffmpeg wrote are already right; only the gap between segment zero
+    /// (which has no lead) and segment one is overstated. This keeps the transient playlist honest during
+    /// the seconds before the exact VOD playlist lands, using the lead the bounded probe already
+    /// measured. It assumes a constant lead — true of a fixed GOP structure such as x265's — and the
+    /// whole-file walk that replaces this playlist does not.
+    /// </remarks>
+    /// <param name="playlist">ffmpeg's event playlist text.</param>
+    /// <param name="leadingPictureSeconds">Measured lead in seconds; zero or less leaves the text alone.</param>
+    /// <returns>The playlist with its first segment duration corrected.</returns>
+    internal static string CorrectEventPlaylistLead(string playlist, double leadingPictureSeconds) {
+        if (leadingPictureSeconds <= IndependenceEpsilonSeconds || string.IsNullOrEmpty(playlist)) {
+            return playlist;
+        }
+
+        const string marker = "#EXTINF:";
+        var lines = playlist.Replace("\r\n", "\n").Split('\n');
+        for (var index = 0; index < lines.Length; index++) {
+            if (!lines[index].StartsWith(marker, StringComparison.Ordinal)) {
+                continue;
+            }
+
+            var value = lines[index][marker.Length..].TrimEnd(',');
+            if (!double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var duration)) {
+                return playlist;
+            }
+
+            var corrected = duration - leadingPictureSeconds;
+            if (corrected <= 0) {
+                return playlist;
+            }
+
+            lines[index] = string.Format(CultureInfo.InvariantCulture, "{0}{1:0.000000},", marker, corrected);
+            return string.Join('\n', lines);
+        }
+
+        return playlist;
     }
 
     // Durable per-video keyframe cache, stored OUTSIDE the evictable transcode cache roots

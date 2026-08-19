@@ -164,17 +164,30 @@ public sealed partial class HlsAssetService {
                 cancellationToken);
         }
 
-        // Fast path: resolve the boundaries cheaply — from the durable cache, or from the Matroska Cues
-        // index once a bounded probe has confirmed the source's segments really are independent
-        // (near-instant either way; no whole-file ffprobe walk). When available, build the full VOD
-        // playlist synchronously so the player gets the whole seekable timeline on the FIRST request,
-        // even though the segment cache was evicted.
+        // Fast path: a previous exact walk is cached durably, so the whole seekable timeline is available
+        // immediately even though the segment cache was evicted.
         if (source.DurationSeconds is > 0 &&
-            await TryFastKeyframesAsync(id, source, options, cancellationToken) is { Count: > 1 } fastKeyframes) {
-            TryWriteDurableKeyframes(id, source, fastKeyframes);
+            TryReadDurableKeyframes(id, source) is { Count: > 1 } cachedKeyframes) {
             return await WriteRemuxVodAsync(
                 remuxDir,
-                fastKeyframes,
+                cachedKeyframes,
+                source.DurationSeconds.Value,
+                audioStreamIndex,
+                copyAudio,
+                cancellationToken);
+        }
+
+        // Measure, from a bounded read, how far before its keyframe a segment starts presenting. Zero means
+        // a closed GOP, whose timeline the near-instant Matroska Cues index can describe exactly; non-zero
+        // is an open GOP's RASL lead, which Cues cannot express.
+        var leadingPictureSeconds = await ProbeLeadingPictureSecondsAsync(source.Path, options, cancellationToken);
+
+        if (source.DurationSeconds is > 0 &&
+            TryCuesKeyframes(source, leadingPictureSeconds) is { Count: > 1 } cuesKeyframes) {
+            TryWriteDurableKeyframes(id, source, cuesKeyframes);
+            return await WriteRemuxVodAsync(
+                remuxDir,
+                cuesKeyframes,
                 source.DurationSeconds.Value,
                 audioStreamIndex,
                 copyAudio,
@@ -200,13 +213,17 @@ public sealed partial class HlsAssetService {
             return null;
         }
 
+        // Correct the event playlist too. It is transient, but it is what the player uses for the seconds
+        // before the whole-file walk lands — and on a long source that window covers the first boundaries,
+        // which is exactly where the stall was reported.
         return await WriteRemuxServedPlaylistAsync(
             legacyPath,
             remuxDir,
             audioStreamIndex,
             copyAudio,
             "no-cache",
-            cancellationToken);
+            cancellationToken,
+            leadingPictureSeconds ?? 0);
     }
 
     /// <summary>Writes the remux VOD playlist atomically and returns it as a cacheable asset.</summary>
@@ -238,9 +255,13 @@ public sealed partial class HlsAssetService {
         int? audioStreamIndex,
         bool copyAudio,
         string cacheControl,
-        CancellationToken cancellationToken) {
+        CancellationToken cancellationToken,
+        double leadingPictureSeconds = 0) {
         var servedPath = Path.Combine(remuxDir, "index.served.m3u8");
         var playlist = await File.ReadAllTextAsync(sourcePath, cancellationToken);
+        // Always re-read and re-correct ffmpeg's own text, so applying this on every poll of a growing
+        // playlist stays idempotent. The VOD playlist passes no lead: it is already exact.
+        playlist = CorrectEventPlaylistLead(playlist, leadingPictureSeconds);
         var rewritten = RewriteRemuxPlaylistUris(playlist, audioStreamIndex, copyAudio);
         await File.WriteAllTextAsync(servedPath, rewritten, cancellationToken);
         return new HlsAsset(servedPath, MediaContentTypes.HlsPlaylist, cacheControl);

@@ -217,6 +217,43 @@ public sealed class HlsAssetServiceTests : IDisposable {
     }
 
     [Fact]
+    public void EventPlaylistLeadCorrectionShortensOnlyTheFirstSegment() {
+        // ffmpeg's growing EVENT playlist dates segments from their keyframes, so on an open-GOP source it
+        // overstates where segment one begins. Only the FIRST duration is wrong: every later segment starts
+        // its lead early too, so the lead cancels in the difference between consecutive starts.
+        const string eventPlaylist = """
+            #EXTM3U
+            #EXT-X-VERSION:7
+            #EXT-X-PLAYLIST-TYPE:EVENT
+            #EXT-X-MAP:URI="init.mp4"
+            #EXTINF:10.000000,
+            seg_00000.m4s
+            #EXTINF:5.000000,
+            seg_00001.m4s
+            """;
+
+        var corrected = HlsAssetService.CorrectEventPlaylistLead(eventPlaylist, 0.125);
+
+        Assert.Contains("#EXTINF:9.875000,\nseg_00000.m4s", corrected);
+        Assert.Contains("#EXTINF:5.000000,\nseg_00001.m4s", corrected);
+    }
+
+    [Fact]
+    public void EventPlaylistLeadCorrectionLeavesClosedGopPlaylistsAlone() {
+        const string eventPlaylist = """
+            #EXTM3U
+            #EXTINF:6.000000,
+            seg_00000.m4s
+            """;
+
+        // A closed-GOP source measures a zero lead, and re-applying the correction on each poll of a
+        // growing playlist must never compound.
+        Assert.Equal(eventPlaylist, HlsAssetService.CorrectEventPlaylistLead(eventPlaylist, 0));
+        var once = HlsAssetService.CorrectEventPlaylistLead(eventPlaylist, 0.125);
+        Assert.Equal(once, HlsAssetService.CorrectEventPlaylistLead(eventPlaylist, 0.125));
+    }
+
+    [Fact]
     public void RemuxVodPlaylistIsCompleteAndSeekable() {
         var durations = new List<double> { 6.006, 6.006, 4.2 };
 
