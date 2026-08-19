@@ -189,7 +189,16 @@ public sealed partial class HlsAssetService {
 
         ProcessExecutionResult result;
         try {
-            result = await _processes.RunAsync(options.FfprobePath, arguments, environment: null, cancellationToken);
+            // Low priority: this reads the whole source while the stream copy is reading it too and the
+            // API is serving segments off the same disk. It is never on the critical path — the copy is
+            // paced at RemuxReadRate× realtime, so it finishes long after this walk does, and a segment
+            // cannot be seeked to before the copy has produced it — so it must yield rather than compete.
+            result = await _processes.RunAsync(
+                options.FfprobePath,
+                arguments,
+                environment: null,
+                cancellationToken,
+                lowPriority: true);
         } catch (Exception ex) when (ex is not OperationCanceledException) {
             _logger?.LogWarning(ex, "ffprobe keyframe probe could not run for {Source}.", sourcePath);
             return null;
