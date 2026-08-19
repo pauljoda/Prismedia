@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Safari, iPadOS/iOS, and Apple TV clients no longer stall, spin, and drop their buffer part-way through HEVC videos played as Direct Stream. Most HEVC files use open GOPs, where every stream segment after the first begins a fraction of a second earlier than the stream description claimed, and Apple's player stops at that discrepancy while Chrome silently compensates. Prismedia now describes the stream from the video that is actually there, and no longer advertises segments as independently decodable when they are not.
 - Stalled video playback no longer becomes unrecoverable. A player that is buffering or retrying a segment keeps its playback session alive even though its position is not advancing, and cached stream output is now protected from cleanup while a client is still fetching it, so a brief stall can no longer escalate into missing segments and a failed stream.
 - Manual audiobook upgrades now replace the owned multi-file rendition as one crash-safe folder operation while preserving any co-located ebook files and artwork.
 - Explicitly selected release replacements no longer depend on the prior download client remaining healthy: Prismedia detaches the exact old client item into durable cleanup, queues the new release through its own protocol client, and removes the old item when its original client recovers.

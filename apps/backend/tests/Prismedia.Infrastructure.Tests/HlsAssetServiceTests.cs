@@ -128,6 +128,95 @@ public sealed class HlsAssetServiceTests : IDisposable {
     }
 
     [Fact]
+    public void RemuxKeyframeProbeFindsOpenGopLeadingPictures() {
+        // Verbatim ffprobe "packet=pts_time,flags" output (decode order) from an x265 encode across a
+        // CRA boundary. The keyframe presents at 5.000, but the three RASL pictures that decode after it
+        // present at 4.875-4.958 — so the segment starting there really begins at 4.875, an eighth of a
+        // second before its own keyframe. Open GOP is x265's DEFAULT, so this is the common case.
+        const string probeOutput = """
+            0.000000,K__
+            0.042000,___
+            0.083000,___
+            4.750000,___
+            4.792000,___
+            5.000000,K__
+            4.917000,___
+            4.875000,___
+            4.958000,___
+            5.042000,___
+            10.000000,K__
+            9.917000,___
+            9.875000,___
+            """;
+
+        var keyframes = HlsAssetService.ParseRemuxKeyframes(probeOutput);
+
+        Assert.Equal(3, keyframes.Count);
+        // The stream's first segment has nothing decodable before it, so it presents at its keyframe.
+        Assert.Equal(0.0, keyframes[0].PresentationStartPts, 3);
+        Assert.True(keyframes[0].IsIndependent);
+        Assert.Equal(5.0, keyframes[1].KeyframePts, 3);
+        Assert.Equal(4.875, keyframes[1].PresentationStartPts, 3);
+        Assert.False(keyframes[1].IsIndependent);
+        Assert.Equal(9.875, keyframes[2].PresentationStartPts, 3);
+        Assert.False(HlsAssetService.SegmentsAreIndependent(keyframes));
+    }
+
+    [Fact]
+    public void RemuxKeyframeProbeTreatsClosedGopAsIndependent() {
+        // A closed GOP (x264's default) never presents a picture before its keyframe, so every segment
+        // starts exactly where the playlist says and the independence claim is earned.
+        const string probeOutput = """
+            0.000000,K__
+            0.042000,___
+            5.000000,K__
+            5.042000,___
+            """;
+
+        var keyframes = HlsAssetService.ParseRemuxKeyframes(probeOutput);
+
+        Assert.Equal(2, keyframes.Count);
+        Assert.Equal(5.0, keyframes[1].PresentationStartPts, 3);
+        Assert.True(HlsAssetService.SegmentsAreIndependent(keyframes));
+    }
+
+    [Fact]
+    public void RemuxSegmentDurationsMeasureFromPresentationStartsNotKeyframes() {
+        // Open-GOP boundaries: ffmpeg cuts in decode order at the keyframe, but each segment after the
+        // first presents 0.125s earlier at its leading pictures. Dating the segments from their keyframes
+        // (10.000 - 0.000 = 10.000) leaves a hole at every boundary, because the media actually there
+        // starts at 9.875. WebKit stalls and re-fetches on that hole; hls.js silently re-aligns.
+        const double lead = 0.125;
+        var keyframes = new List<HlsAssetService.RemuxKeyframe> {
+            new(0.0, 0.0),
+            new(5.0, 5.0 - lead),
+            new(10.0, 10.0 - lead),
+            new(15.0, 15.0 - lead),
+        };
+
+        var durations = HlsAssetService.BuildRemuxSegmentDurations(keyframes, 20.0);
+
+        // Cuts still land on the 6s grid (first keyframe >= 6 is 10.0, then >= 12 is 15.0).
+        Assert.Equal(3, durations.Count);
+        Assert.Equal(9.875, durations[0], 3); // 0.000 -> 9.875, not 0 -> 10.000
+        Assert.Equal(5.0, durations[1], 3); // 9.875 -> 14.875
+        Assert.Equal(5.125, durations[2], 3); // 14.875 -> end
+        // No gaps and no overlaps: the declared timeline covers exactly the media that exists.
+        Assert.Equal(20.0, durations.Sum(), 3);
+    }
+
+    [Fact]
+    public void RemuxVodPlaylistOmitsIndependentSegmentsWhenBoundariesAreNot() {
+        var openGop = HlsAssetService.BuildRemuxVodPlaylist([6.0, 6.0], independentSegments: false);
+        var closedGop = HlsAssetService.BuildRemuxVodPlaylist([6.0, 6.0], independentSegments: true);
+
+        // Claiming independence for CRA-start segments is what makes strict clients treat the boundary as
+        // a hard decode point and fail there.
+        Assert.DoesNotContain("#EXT-X-INDEPENDENT-SEGMENTS", openGop);
+        Assert.Contains("#EXT-X-INDEPENDENT-SEGMENTS", closedGop);
+    }
+
+    [Fact]
     public void RemuxVodPlaylistIsCompleteAndSeekable() {
         var durations = new List<double> { 6.006, 6.006, 4.2 };
 

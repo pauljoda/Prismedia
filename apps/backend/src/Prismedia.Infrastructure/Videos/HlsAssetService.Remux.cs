@@ -164,27 +164,28 @@ public sealed partial class HlsAssetService {
                 cancellationToken);
         }
 
-        // Fast path: get the keyframe times cheaply — from the durable cache, or by reading the
-        // Matroska Cues index directly (near-instant; no whole-file ffprobe walk). When available,
-        // build the full VOD playlist synchronously so the player gets the whole seekable timeline on
-        // the FIRST request, even though the segment cache was evicted. This is the common case for the
-        // .mkv movies that remux.
+        // Fast path: resolve the boundaries cheaply — from the durable cache, or from the Matroska Cues
+        // index once a bounded probe has confirmed the source's segments really are independent
+        // (near-instant either way; no whole-file ffprobe walk). When available, build the full VOD
+        // playlist synchronously so the player gets the whole seekable timeline on the FIRST request,
+        // even though the segment cache was evicted.
         if (source.DurationSeconds is > 0 &&
-            TryFastKeyframes(id, source) is { Count: > 1 } fastKeyframes) {
+            await TryFastKeyframesAsync(id, source, options, cancellationToken) is { Count: > 1 } fastKeyframes) {
             TryWriteDurableKeyframes(id, source, fastKeyframes);
             return await WriteRemuxVodAsync(
                 remuxDir,
-                BuildRemuxSegmentDurations(fastKeyframes, source.DurationSeconds.Value),
+                fastKeyframes,
+                source.DurationSeconds.Value,
                 audioStreamIndex,
                 copyAudio,
                 cancellationToken);
         }
 
-        // No fast index (e.g. a container with no keyframe index, or an .mkv missing Cues): kick the
-        // whole-file keyframe probe + VOD build onto a background task (deduped per remux key; it
-        // persists the durable keyframe cache so the next play is instant) and serve the growing event
-        // playlist now, bounded so a stalled ffmpeg can never re-introduce the manifest hang. The full
-        // VOD takes over once the build lands.
+        // No usable fast index — a container with no keyframe index, an .mkv missing Cues, or an open-GOP
+        // source whose leading pictures Cues cannot describe: kick the whole-file keyframe probe + VOD
+        // build onto a background task (deduped per remux key; it persists the durable keyframe cache so
+        // the next play is instant) and serve the growing event playlist now, bounded so a stalled ffmpeg
+        // can never re-introduce the manifest hang. The full VOD takes over once the build lands.
         EnsureRemuxVodComputationStarted(
             id,
             source,
@@ -211,7 +212,8 @@ public sealed partial class HlsAssetService {
     /// <summary>Writes the remux VOD playlist atomically and returns it as a cacheable asset.</summary>
     private async Task<HlsAsset> WriteRemuxVodAsync(
         string remuxDir,
-        IReadOnlyList<double> durations,
+        IReadOnlyList<RemuxKeyframe> keyframes,
+        double totalDuration,
         int? audioStreamIndex,
         bool copyAudio,
         CancellationToken cancellationToken) {
@@ -220,7 +222,11 @@ public sealed partial class HlsAssetService {
         var tempPath = vodPath + "." + Path.GetRandomFileName();
         await File.WriteAllTextAsync(
             tempPath,
-            BuildRemuxVodPlaylist(durations, audioStreamIndex, copyAudio),
+            BuildRemuxVodPlaylist(
+                BuildRemuxSegmentDurations(keyframes, totalDuration),
+                audioStreamIndex,
+                copyAudio,
+                SegmentsAreIndependent(keyframes)),
             cancellationToken);
         File.Move(tempPath, vodPath, overwrite: true);
         return new HlsAsset(vodPath, MediaContentTypes.HlsPlaylist, CacheControlForExtension(".m3u8"));
@@ -292,15 +298,21 @@ public sealed partial class HlsAssetService {
                 : CancellationToken.None;
 
             // Probes (and persists the durable keyframe cache) then writes the VOD playlist.
-            var durations = await ComputeRemuxSegmentDurationsAsync(id, source, options, token);
-            if (durations is null || durations.Count == 0) {
+            var keyframes = await ComputeRemuxKeyframesAsync(id, source, options, token);
+            if (keyframes is null || keyframes.Count == 0) {
                 _logger?.LogWarning(
                     "Remux keyframe probe produced no segments for {VideoId}; keeping the event playlist.",
                     id);
                 return;
             }
 
-            await WriteRemuxVodAsync(remuxDir, durations, audioStreamIndex, copyAudio, token);
+            await WriteRemuxVodAsync(
+                remuxDir,
+                keyframes,
+                source.DurationSeconds!.Value,
+                audioStreamIndex,
+                copyAudio,
+                token);
         } catch (OperationCanceledException) {
             // Playback stopped; the next play recomputes from scratch.
         } catch (Exception ex) {
@@ -465,8 +477,13 @@ public sealed partial class HlsAssetService {
             "init.mp4",
             "-hls_playlist_type",
             "event",
+            // Deliberately NOT independent_segments. ffmpeg cuts a stream copy at any IRAP picture, and
+            // an open-GOP HEVC source (x265's default) starts every GOP after the first on a CRA with
+            // RASL leading pictures rather than an IDR — so most segments are not independently
+            // decodable and must not be advertised as such. Our own VOD playlist re-adds the tag when
+            // the probe proves every boundary is a true IDR. See BuildRemuxVodPlaylist.
             "-hls_flags",
-            "independent_segments+temp_file",
+            "temp_file",
             "-hls_list_size",
             "0",
             "-hls_segment_filename",
@@ -592,240 +609,6 @@ public sealed partial class HlsAssetService {
 
             await Task.Delay(SegmentPollInterval, cancellationToken);
         }
-    }
-
-    /// <summary>
-    /// Computes the exact per-segment durations the stream-copy remux will produce for one source.
-    /// </summary>
-    /// <returns>
-    /// Segment durations in playlist order, or null when the source duration or keyframe layout
-    /// cannot be probed (in which case the caller falls back to ffmpeg's own playlist).
-    /// </returns>
-    private async Task<IReadOnlyList<double>?> ComputeRemuxSegmentDurationsAsync(
-        Guid id,
-        VideoSourceFile source,
-        HlsAssetServiceOptions options,
-        CancellationToken cancellationToken) {
-        if (source.DurationSeconds is not > 0) {
-            return null;
-        }
-
-        // Prefer the fast keyframe sources (durable cache, then the Matroska Cues index); only fall back
-        // to the slow whole-file ffprobe walk when neither is available, and persist whatever we get.
-        var keyframes = TryFastKeyframes(id, source)
-            ?? await ProbeVideoKeyframeTimesAsync(source.Path, options, cancellationToken);
-        if (keyframes is { Count: > 0 }) {
-            TryWriteDurableKeyframes(id, source, keyframes);
-        } else {
-            return null;
-        }
-
-        return BuildRemuxSegmentDurations(keyframes, source.DurationSeconds.Value);
-    }
-
-    // Fast, non-blocking keyframe sources: the durable per-video cache, then a direct read of the
-    // Matroska Cues index. Returns null when neither is available (the caller then runs the slow
-    // ffprobe scan in the background). Never touches the source's full data, so it is safe to call
-    // synchronously on the request thread.
-    private IReadOnlyList<double>? TryFastKeyframes(Guid id, VideoSourceFile source) =>
-        TryReadDurableKeyframes(id, source) ?? MatroskaKeyframeReader.TryReadKeyframeTimes(source.Path, _logger);
-
-    // Durable per-video keyframe cache, stored OUTSIDE the evictable transcode cache roots
-    // (hlsv/hls/hls2) so the transcode-cache size cap cannot delete it. Keyed by video id and
-    // validated against the source's path/size/modified time so a replaced file recomputes.
-    private string KeyframeCachePath(Guid id) =>
-        Path.Combine(Path.GetFullPath(_options.CacheRoot), "keyframes", $"{id}.json");
-
-    private IReadOnlyList<double>? TryReadDurableKeyframes(Guid id, VideoSourceFile source) {
-        var path = KeyframeCachePath(id);
-        if (!File.Exists(path)) {
-            return null;
-        }
-
-        try {
-            var info = new FileInfo(source.Path);
-            if (!info.Exists) {
-                return null;
-            }
-
-            var cache = JsonSerializer.Deserialize<DurableKeyframeCache>(File.ReadAllText(path));
-            if (cache is null ||
-                !string.Equals(cache.SourcePath, source.Path, StringComparison.Ordinal) ||
-                cache.SourceSize != info.Length ||
-                cache.SourceModifiedUtc != info.LastWriteTimeUtc) {
-                return null;
-            }
-
-            return cache.KeyframeTimes;
-        } catch {
-            return null;
-        }
-    }
-
-    private void TryWriteDurableKeyframes(Guid id, VideoSourceFile source, IReadOnlyList<double> keyframes) {
-        try {
-            var info = new FileInfo(source.Path);
-            if (!info.Exists) {
-                return;
-            }
-
-            var path = KeyframeCachePath(id);
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            var payload = JsonSerializer.Serialize(
-                new DurableKeyframeCache(source.Path, info.Length, info.LastWriteTimeUtc, keyframes));
-            var tempPath = path + "." + Path.GetRandomFileName();
-            File.WriteAllText(tempPath, payload);
-            File.Move(tempPath, path, overwrite: true);
-        } catch (Exception ex) {
-            _logger?.LogWarning(ex, "Failed to persist the keyframe cache for {VideoId}.", id);
-        }
-    }
-
-    private sealed record DurableKeyframeCache(
-        string SourcePath,
-        long SourceSize,
-        DateTime SourceModifiedUtc,
-        IReadOnlyList<double> KeyframeTimes);
-
-    /// <summary>
-    /// Reads the presentation timestamps of every video keyframe packet from the source.
-    /// </summary>
-    /// <remarks>
-    /// Uses packet-level probing (no decode) so it stays fast on long files. These timestamps are
-    /// exactly what ffmpeg's HLS muxer sees when deciding stream-copy segment boundaries.
-    /// </remarks>
-    private async Task<IReadOnlyList<double>?> ProbeVideoKeyframeTimesAsync(
-        string sourcePath,
-        HlsAssetServiceOptions options,
-        CancellationToken cancellationToken) {
-        if (_processes is null) {
-            return null;
-        }
-
-        var arguments = new[]
-        {
-            "-v", "error",
-            "-select_streams", "v:0",
-            "-show_entries", "packet=pts_time,flags",
-            "-of", "csv=print_section=0",
-            sourcePath,
-        };
-
-        ProcessExecutionResult result;
-        try {
-            result = await _processes.RunAsync(options.FfprobePath, arguments, environment: null, cancellationToken);
-        } catch (Exception ex) when (ex is not OperationCanceledException) {
-            _logger?.LogWarning(ex, "ffprobe keyframe probe could not run for {Source}.", sourcePath);
-            return null;
-        }
-
-        if (result.ExitCode != 0) {
-            _logger?.LogWarning(
-                "ffprobe keyframe probe failed for {Source}: {Error}",
-                sourcePath,
-                result.StandardError);
-            return null;
-        }
-
-        var times = new List<double>();
-        foreach (var line in result.StandardOutput.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)) {
-            var comma = line.IndexOf(',');
-            if (comma <= 0) {
-                continue;
-            }
-
-            // ffprobe emits the keyframe flag as a leading 'K' in the packet flags field.
-            if (line[(comma + 1)..].IndexOf('K') < 0) {
-                continue;
-            }
-
-            if (double.TryParse(line[..comma], NumberStyles.Float, CultureInfo.InvariantCulture, out var pts) &&
-                double.IsFinite(pts) && pts >= 0) {
-                times.Add(pts);
-            }
-        }
-
-        times.Sort();
-        return times;
-    }
-
-    /// <summary>
-    /// Replicates ffmpeg's stream-copy HLS boundary rule: it advances a cut threshold by exactly one
-    /// <see cref="SegmentDurationSeconds" /> at a time (<c>6s, 12s, 18s, …</c> from the first keyframe)
-    /// and cuts at the first keyframe at or after the current threshold, then steps the threshold on by
-    /// one. The final segment runs from the last boundary to the end of the source.
-    /// </summary>
-    /// <remarks>
-    /// The threshold advances by a single step per cut — it is NOT jumped forward past the keyframe that
-    /// triggered the cut. That distinction only matters when a long GOP carries a keyframe well past the
-    /// threshold: ffmpeg then leaves the threshold one step on, so the very next keyframe (which may be
-    /// only a moment later) is cut immediately, producing a short segment. Verified against
-    /// For example, keyframes <c>[0,19,20,25]</c> over a 30s source produce <c>[19,1,5,5]</c> (four
-    /// segments). Jumping the threshold past the cut instead skips the keyframe at 20 and yields
-    /// <c>[19,6,5]</c> (three segments) — so the VOD playlist we hand the player would reference the same
-    /// <c>seg_NNNNN</c> filenames as ffmpeg's real output but with mismatched durations, corrupting
-    /// seeking and cutting the buffer short of the true end.
-    /// </remarks>
-    internal static IReadOnlyList<double> BuildRemuxSegmentDurations(
-        IReadOnlyList<double> keyframeTimes,
-        double totalDuration) {
-        var durations = new List<double>();
-        var first = keyframeTimes[0];
-        var segmentStart = first;
-        var target = first + SegmentDurationSeconds;
-        foreach (var keyframe in keyframeTimes) {
-            if (keyframe < target) {
-                continue;
-            }
-
-            durations.Add(keyframe - segmentStart);
-            segmentStart = keyframe;
-            // Step the threshold on by one segment from its PREVIOUS value, never past the cut keyframe,
-            // so a keyframe landing just beyond a late cut still triggers the next cut (see remarks).
-            target += SegmentDurationSeconds;
-        }
-
-        var lastDuration = totalDuration - segmentStart;
-        if (lastDuration > 0.0001) {
-            durations.Add(lastDuration);
-        } else if (durations.Count == 0) {
-            durations.Add(totalDuration);
-        }
-
-        return durations;
-    }
-
-    /// <summary>
-    /// Builds a complete fMP4 <c>VOD</c> media playlist for the remux segments, mirroring the tags
-    /// ffmpeg writes (version, init map, independent segments) but listing every segment up front and
-    /// terminating with <c>#EXT-X-ENDLIST</c> so the player treats the whole duration as seekable.
-    /// </summary>
-    internal static string BuildRemuxVodPlaylist(
-        IReadOnlyList<double> segmentDurations,
-        int? audioStreamIndex = null,
-        bool copyAudio = false) {
-        var targetDuration = segmentDurations.Count == 0
-            ? SegmentDurationSeconds
-            : Math.Max(1, (int)Math.Round(segmentDurations.Max(), MidpointRounding.AwayFromZero));
-        var lines = new List<string>
-        {
-            "#EXTM3U",
-            "#EXT-X-VERSION:7",
-            $"#EXT-X-TARGETDURATION:{targetDuration}",
-            "#EXT-X-MEDIA-SEQUENCE:0",
-            "#EXT-X-PLAYLIST-TYPE:VOD",
-            "#EXT-X-INDEPENDENT-SEGMENTS",
-            $"#EXT-X-MAP:URI=\"{AppendPlaybackQuery("init.mp4", audioStreamIndex, copyAudio)}\"",
-        };
-
-        for (var index = 0; index < segmentDurations.Count; index++) {
-            lines.Add(string.Format(CultureInfo.InvariantCulture, "#EXTINF:{0:0.000000},", segmentDurations[index]));
-            lines.Add(AppendPlaybackQuery($"seg_{index:00000}.m4s", audioStreamIndex, copyAudio));
-        }
-
-        lines.Add("#EXT-X-ENDLIST");
-        lines.Add(string.Empty);
-        return string.Join('\n', lines);
     }
 
     internal static string RewriteRemuxPlaylistUris(
