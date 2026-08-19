@@ -24,9 +24,11 @@ function trackDuration(
 export function audiobookTrackItems(
   book: Pick<EntityCard, "id" | "childrenByKind">,
 ): AudioTrackListItemDto[] {
-  return orderedBookChildren(book, ENTITY_KIND.audioTrack).map((thumbnail) =>
-    entityThumbnailToTrackItem(thumbnail, book.id, { libraryId: book.id }),
-  );
+  return orderedBookChildren(book, ENTITY_KIND.audioTrack)
+    .filter((thumbnail) => thumbnail.hasSourceMedia === true)
+    .map((thumbnail) =>
+      entityThumbnailToTrackItem(thumbnail, book.id, { libraryId: book.id }),
+    );
 }
 
 /** Total known runtime, including browser-learned durations for parts awaiting a probe. */

@@ -74,6 +74,7 @@ describe("audiobook playback positions", () => {
         kind: "audio-track",
         label: "Audio Tracks",
         entities: [
+          thumbnail("aggregate", "The Whole Book", 0, "47:32:34", false),
           thumbnail("part-2", "Part 2", 2, "2:00"),
           thumbnail("part-1", "Part 1", 1, "1:30"),
         ],
@@ -86,7 +87,13 @@ describe("audiobook playback positions", () => {
   });
 });
 
-function thumbnail(id: string, title: string, sortOrder: number, duration: string): EntityThumbnail {
+function thumbnail(
+  id: string,
+  title: string,
+  sortOrder: number,
+  duration: string,
+  hasSourceMedia = true,
+): EntityThumbnail {
   return {
     id,
     kind: "audio-track",
@@ -101,6 +108,7 @@ function thumbnail(id: string, title: string, sortOrder: number, duration: strin
     isFavorite: false,
     isOrganized: true,
     isNsfw: false,
+    hasSourceMedia,
     rating: null,
     accessCount: 0,
     meta: [{ icon: "duration", label: duration }],

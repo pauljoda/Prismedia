@@ -51,13 +51,17 @@ internal sealed class EfBookChapterMappingService(
             .CountAsync(row =>
                 trackIds.Contains(row.Id) &&
                 row.ParentEntityId == bookId &&
-                row.KindCode == EntityKind.AudioTrack.ToCode(),
+                row.KindCode == EntityKind.AudioTrack.ToCode() &&
+                !row.IsWanted &&
+                db.EntityFiles.Any(file =>
+                    file.EntityId == row.Id &&
+                    file.Role == EntityFileRole.Source),
                 cancellationToken);
         if (validTrackCount != trackIds.Length) {
             return new BookChapterMappingSaveResult(
                 BookChapterMappingSaveStatus.Invalid,
                 null,
-                "Every mapped audiobook file must belong directly to this Book.");
+                "Every mapped audiobook file must be a playable source owned directly by this Book.");
         }
 
         IDbContextTransaction? transaction = null;

@@ -16,6 +16,8 @@ public sealed class EfBookChapterMappingServiceTests {
         var bookId = AddEntity(db, EntityKind.Book, "Book");
         var firstTrackId = AddEntity(db, EntityKind.AudioTrack, "Part 1", bookId, 0);
         var secondTrackId = AddEntity(db, EntityKind.AudioTrack, "Part 2", bookId, 1);
+        AddSource(db, firstTrackId);
+        AddSource(db, secondTrackId);
         await db.SaveChangesAsync();
         var service = new EfBookChapterMappingService(db, new VisibleEntityScope());
 
@@ -48,6 +50,8 @@ public sealed class EfBookChapterMappingServiceTests {
         var otherBookId = AddEntity(db, EntityKind.Book, "Other Book");
         var ownedTrackId = AddEntity(db, EntityKind.AudioTrack, "Owned Part", bookId, 0);
         var foreignTrackId = AddEntity(db, EntityKind.AudioTrack, "Foreign Part", otherBookId, 0);
+        AddSource(db, ownedTrackId);
+        AddSource(db, foreignTrackId);
         await db.SaveChangesAsync();
         var service = new EfBookChapterMappingService(db, new VisibleEntityScope());
 
@@ -67,6 +71,25 @@ public sealed class EfBookChapterMappingServiceTests {
 
         Assert.Equal(BookChapterMappingSaveStatus.Invalid, duplicate.Status);
         Assert.Equal(BookChapterMappingSaveStatus.Invalid, foreign.Status);
+        Assert.Empty(db.BookChapterAudioMappings);
+    }
+
+    [Fact]
+    public async Task RejectsAggregateTracksWithoutSourceMedia() {
+        await using var db = CreateContext();
+        var bookId = AddEntity(db, EntityKind.Book, "Book");
+        var aggregateTrackId = AddEntity(db, EntityKind.AudioTrack, "Book", bookId, 0);
+        await db.SaveChangesAsync();
+        var service = new EfBookChapterMappingService(db, new VisibleEntityScope());
+
+        var result = await service.ReplaceAsync(
+            bookId,
+            new ReplaceBookChapterMappingsRequest([
+                new BookChapterAudioMapping("Text/prologue.xhtml", aggregateTrackId)
+            ]),
+            CancellationToken.None);
+
+        Assert.Equal(BookChapterMappingSaveStatus.Invalid, result.Status);
         Assert.Empty(db.BookChapterAudioMappings);
     }
 
@@ -110,6 +133,17 @@ public sealed class EfBookChapterMappingServiceTests {
             UpdatedAt = DateTimeOffset.UtcNow
         });
         return id;
+    }
+
+    private static void AddSource(PrismediaDbContext db, Guid entityId) {
+        db.EntityFiles.Add(new EntityFileRow {
+            Id = Guid.NewGuid(),
+            EntityId = entityId,
+            Role = EntityFileRole.Source,
+            Path = $"/media/{entityId:N}.mp3",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
     }
 
     private sealed class VisibleEntityScope : IEntityVisibilityChecker {

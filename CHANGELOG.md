@@ -20,6 +20,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Audiobook chapter mapping and playback now ignore aggregate track records that do not own playable source media.
 - Book chapter lists no longer infer alignment from chapter-like filename numbers, which could shift an entire audiobook when files begin with a prologue or other front matter. Unmapped files now fall back only to normalized title matches.
 - Interrupted acquisitions now offer their exact Retry import action from release review, and explicitly choosing another listed release confirms a destructive override that clears the partial import and prior download before queueing the new selection. Audiobooks imported onto an existing readable Book now fulfill that rendition before readiness validation instead of becoming stuck in a partial-import loop.
 - Library grids, shelves, and collections now read episode/season/page/track counts, taxonomy usage counts, and collection sizes from automatically maintained projections instead of recomputing them from every child row on every page, and no longer check the filesystem for each card's artwork. List pages that previously took seconds now answer in tens of milliseconds.
