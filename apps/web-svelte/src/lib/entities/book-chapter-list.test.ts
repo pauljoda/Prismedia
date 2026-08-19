@@ -83,12 +83,27 @@ describe("book chapter list", () => {
         readable("chapter-2", "Chapter 2: Roast Mutton", 1),
       ],
       audioTracks: [
-        audioTrack("audio-1", "Track 1", 0),
-        audioTrack("audio-2", "Track 2", 1),
+        audioTrack("audio-2", "A Storm of Swords — Chapter 02", 0),
+        audioTrack("audio-1", "A Storm of Swords — Chapter 01", 1),
       ],
     });
 
     expect(rows.map((row) => row.audioTrack?.id)).toEqual(["audio-1", "audio-2"]);
+  });
+
+  it("does not infer chapter numbers from audio sort order", () => {
+    const rows = buildBookChapterRows({
+      readableChapters: [
+        readable("chapter-1", "Chapter 1", 0),
+        readable("chapter-2", "Chapter 2", 1),
+      ],
+      audioTracks: [
+        audioTrack("audio-1", "Bran", 0),
+        audioTrack("audio-2", "Catelyn", 1),
+      ],
+    });
+
+    expect(rows.slice(0, 2).map((row) => row.audioTrack)).toEqual([null, null]);
   });
 
   it("keeps unmatched audio visible instead of attaching it to the wrong chapter", () => {
@@ -108,14 +123,5 @@ describe("book chapter list", () => {
       "appendix",
       "interview",
     ]);
-  });
-
-  it("pairs remaining rows by order only when the counts agree", () => {
-    const rows = buildBookChapterRows({
-      readableChapters: [readable("one", "First movement", 0), readable("two", "Second movement", 1)],
-      audioTracks: [audioTrack("audio-a", "Part A", 0), audioTrack("audio-b", "Part B", 1)],
-    });
-
-    expect(rows.map((row) => row.audioTrack?.id)).toEqual(["audio-a", "audio-b"]);
   });
 });

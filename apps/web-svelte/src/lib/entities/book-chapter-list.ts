@@ -69,8 +69,8 @@ function takeFirstMatch<T>(
 }
 
 /**
- * Builds one ordered reading/listening surface. Confident title and chapter-number matches win;
- * position is used only when every still-unmatched readable row has one remaining audio part.
+ * Builds one ordered reading/listening surface. Matches come only from normalized title text or an
+ * explicit chapter number in that text; sort order controls presentation, never chapter identity.
  */
 export function buildBookChapterRows(options: BuildBookChapterRowsOptions): BookChapterRow[] {
   const readable = [...options.readableChapters].sort(
@@ -103,18 +103,6 @@ export function buildBookChapterRows(options: BuildBookChapterRowsOptions): Book
       (track) => chapterNumber(track.title) === number,
     );
     if (trackIndex !== null) matches.set(chapter.id, trackIndex);
-  }
-
-  const unmatchedChapters = readable.filter((chapter) => !matches.has(chapter.id));
-  const unmatchedTrackIndexes = tracks
-    .map((_, index) => index)
-    .filter((index) => !consumedTracks.has(index));
-  if (unmatchedChapters.length > 0 && unmatchedChapters.length === unmatchedTrackIndexes.length) {
-    unmatchedChapters.forEach((chapter, index) => {
-      const trackIndex = unmatchedTrackIndexes[index]!;
-      matches.set(chapter.id, trackIndex);
-      consumedTracks.add(trackIndex);
-    });
   }
 
   const rows: BookChapterRow[] = readable.map((chapter) => {
