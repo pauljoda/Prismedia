@@ -303,6 +303,65 @@ public sealed class PlaybackSessionServiceTests {
     }
 
     [Fact]
+    public async Task ProgressAtPositionZeroKeepsResume() {
+        const double runtimeSeconds = 1000;
+        var state = await RunAsync(
+            async (sessions, _) => {
+                await sessions.ProgressAsync(
+                    new VideoPlaybackSessionCommand { EntityId = VideoId, PositionSeconds = 500 },
+                    CancellationToken.None);
+                // A player that stalls while opening a resume reports position zero. That report
+                // must not be treated as "the user is back at the beginning".
+                await sessions.ProgressAsync(
+                    new VideoPlaybackSessionCommand { EntityId = VideoId, PositionSeconds = 0 },
+                    CancellationToken.None);
+            },
+            runtimeSeconds);
+
+        Assert.Equal(TimeSpan.FromSeconds(500), state!.ResumeTime);
+    }
+
+    [Fact]
+    public async Task StopAtPositionZeroKeepsResumeAndRecordsActivity() {
+        const double runtimeSeconds = 1000;
+        var state = await RunAsync(
+            async (sessions, _) => {
+                await sessions.ProgressAsync(
+                    new VideoPlaybackSessionCommand { EntityId = VideoId, PositionSeconds = 500 },
+                    CancellationToken.None);
+                // Quitting out of a stalled resume attempt stops the session at position zero.
+                await sessions.StopAsync(
+                    new VideoPlaybackSessionCommand {
+                        EntityId = VideoId,
+                        PositionSeconds = 0,
+                        ActivitySeconds = 30
+                    },
+                    CancellationToken.None);
+            },
+            runtimeSeconds);
+
+        Assert.Equal(TimeSpan.FromSeconds(500), state!.ResumeTime);
+        Assert.Equal(TimeSpan.FromSeconds(30), state.ActiveDuration);
+    }
+
+    [Fact]
+    public async Task StopWithoutPositionKeepsResume() {
+        const double runtimeSeconds = 1000;
+        var state = await RunAsync(
+            async (sessions, _) => {
+                await sessions.ProgressAsync(
+                    new VideoPlaybackSessionCommand { EntityId = VideoId, PositionSeconds = 500 },
+                    CancellationToken.None);
+                await sessions.StopAsync(
+                    new VideoPlaybackSessionCommand { EntityId = VideoId },
+                    CancellationToken.None);
+            },
+            runtimeSeconds);
+
+        Assert.Equal(TimeSpan.FromSeconds(500), state!.ResumeTime);
+    }
+
+    [Fact]
     public async Task RepeatedStartForOneSessionRecordsOneAccess() {
         var (state, events) = await RunWithEventsAsync(async (sessions, _) => {
             var request = new VideoPlaybackSessionCommand {
