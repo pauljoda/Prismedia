@@ -43,8 +43,10 @@ public sealed class SettingsServiceTests {
                 IsNsfw: false),
             CancellationToken.None);
 
-        // A books-only library must queue a book scan and nothing else.
-        Assert.Equal([JobType.ScanBook], queue.Enqueued.Select(request => request.Type));
+        // The user-facing book family fans out to independent prose and serialized-comic scans.
+        Assert.Equal(
+            [JobType.ScanBook, JobType.ScanComic],
+            queue.Enqueued.Select(request => request.Type));
     }
 
     [Theory]
@@ -475,7 +477,7 @@ public sealed class SettingsServiceTests {
         new() {
             { false, true, false, false, [JobType.ScanGallery] },
             { false, false, true, false, [JobType.ScanAudio] },
-            { false, true, true, true, [JobType.ScanGallery, JobType.ScanAudio, JobType.ScanBook] },
+            { false, true, true, true, [JobType.ScanGallery, JobType.ScanAudio, JobType.ScanBook, JobType.ScanComic] },
         };
 
     /// <summary>

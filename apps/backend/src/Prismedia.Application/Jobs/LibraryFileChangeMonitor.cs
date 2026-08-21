@@ -184,7 +184,7 @@ internal sealed class LibraryFileChangeMonitor(
     }
 
     private static LibraryScanSelection Selection(FileLibraryRoot root) =>
-        new(root.ScanVideos, root.ScanImages, root.ScanAudio, root.ScanBooks);
+        new(root.ScanVideos, root.ScanImages, root.ScanAudio, root.ScanBooks, root.ScanBooks);
 
     private sealed class WatchedRoot(FileLibraryRoot root, FileSystemWatcher watcher) {
         public FileLibraryRoot Root { get; set; } = root;

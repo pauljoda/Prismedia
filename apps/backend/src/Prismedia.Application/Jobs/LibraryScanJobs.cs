@@ -7,8 +7,8 @@ namespace Prismedia.Application.Jobs;
 /// Maps a library root's per-kind scan flags to the scan job types that cover them and
 /// enqueues those scans. This is the single source of truth shared by library creation,
 /// file mutations, and the recurring scheduler so every root-scoped entry point queues exactly the
-/// kinds a root has enabled (for example a books-only root yields only
-/// <see cref="JobType.ScanBook"/>).
+/// kinds a root has enabled. The existing book-library setting enables both the prose-book and
+/// serialized-comic scanners while keeping their snapshots and materialization contracts separate.
 /// </summary>
 public static class LibraryScanJobs {
     /// <summary>Target entity kind recorded on root-scoped scan jobs for dashboard display and deduplication.</summary>
@@ -24,6 +24,7 @@ public static class LibraryScanJobs {
         if (selection.Images) yield return JobType.ScanGallery;
         if (selection.Audio) yield return JobType.ScanAudio;
         if (selection.Books) yield return JobType.ScanBook;
+        if (selection.Comics) yield return JobType.ScanComic;
     }
 
     /// <summary>
@@ -118,7 +119,8 @@ public static class LibraryScanJobs {
             Videos: selection.Videos && await changes.HasPendingAsync(rootId, JobType.ScanLibrary.ToCode(), cancellationToken),
             Images: selection.Images && await changes.HasPendingAsync(rootId, JobType.ScanGallery.ToCode(), cancellationToken),
             Audio: selection.Audio && await changes.HasPendingAsync(rootId, JobType.ScanAudio.ToCode(), cancellationToken),
-            Books: selection.Books && await changes.HasPendingAsync(rootId, JobType.ScanBook.ToCode(), cancellationToken));
+            Books: selection.Books && await changes.HasPendingAsync(rootId, JobType.ScanBook.ToCode(), cancellationToken),
+            Comics: selection.Comics && await changes.HasPendingAsync(rootId, JobType.ScanComic.ToCode(), cancellationToken));
         if (pendingSelection.IsEmpty) {
             return 0;
         }

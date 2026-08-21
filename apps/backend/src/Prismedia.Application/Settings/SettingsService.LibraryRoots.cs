@@ -106,7 +106,8 @@ public sealed partial class SettingsService {
                     Videos: created.ScanVideos,
                     Images: created.ScanImages,
                     Audio: created.ScanAudio,
-                    Books: created.ScanBooks),
+                    Books: created.ScanBooks,
+                    Comics: created.ScanBooks),
                 cancellationToken);
             _logger?.LogInformation(
                 "Queued {Count} scan job(s) after adding library root '{Label}'.",

@@ -336,27 +336,27 @@ public sealed partial class LibraryScanPersistenceService {
     }
 
     public async Task ApplyComicInfoMetadataAsync(
-        Guid bookEntityId,
+        Guid entityId,
         ComicInfoMetadata metadata,
         bool markNsfw,
         CancellationToken cancellationToken) {
         var now = DateTimeOffset.UtcNow;
-        var entity = await _db.Entities.FirstOrDefaultAsync(row => row.Id == bookEntityId, cancellationToken);
+        var entity = await _db.Entities.FirstOrDefaultAsync(row => row.Id == entityId, cancellationToken);
         if (entity is null) {
             return;
         }
 
-        await UpsertDescriptionIfMissingAsync(bookEntityId, metadata.Summary, now, cancellationToken);
+        await UpsertDescriptionIfMissingAsync(entityId, metadata.Summary, now, cancellationToken);
         await UpsertDateIfMissingAsync(
-            bookEntityId,
+            entityId,
             EntityDateType.Release.ToCode(),
             metadata.Date,
             now,
             cancellationToken);
-        await AddUrlsAsync(bookEntityId, metadata.Urls, now, cancellationToken);
-        await AddTagsAsync(bookEntityId, metadata.Tags, now, markNsfw, cancellationToken);
-        await SetStudioIfMissingAsync(bookEntityId, metadata.Publisher, now, markNsfw, cancellationToken);
-        await AddCreditsAsync(bookEntityId, metadata.Creators, CreditRole.Creator, now, markNsfw, cancellationToken);
+        await AddUrlsAsync(entityId, metadata.Urls, now, cancellationToken);
+        await AddTagsAsync(entityId, metadata.Tags, now, markNsfw, cancellationToken);
+        await SetStudioIfMissingAsync(entityId, metadata.Publisher, now, markNsfw, cancellationToken);
+        await AddCreditsAsync(entityId, metadata.Creators, CreditRole.Creator, now, markNsfw, cancellationToken);
 
         if (markNsfw && !entity.IsNsfw) {
             entity.IsNsfw = true;

@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Media.Sidecars;
 
 namespace Prismedia.Infrastructure.Tests;
@@ -115,6 +116,10 @@ public sealed class SidecarMetadataReaderTests {
                           <Tags>Noir</Tags>
                           <AgeRating>Adults Only 18+</AgeRating>
                           <Web>https://example.test/comic</Web>
+                          <Pages>
+                            <Page Image="0" Type="FrontCover" ImageWidth="1200" ImageHeight="1800" />
+                            <Page Image="1" Type="Story" DoublePage="True" ImageWidth="2400" ImageHeight="1800" />
+                          </Pages>
                         </ComicInfo>
                         """);
                 }
@@ -136,6 +141,22 @@ public sealed class SidecarMetadataReaderTests {
             Assert.Equal(["Drama", "Mystery", "Noir", "Adults Only 18+"], metadata.Tags);
             Assert.Equal(["https://example.test/comic"], metadata.Urls);
             Assert.True(metadata.MarksNsfw);
+            Assert.Collection(
+                metadata.Pages,
+                page => {
+                    Assert.Equal(0, page.ImageOrdinal);
+                    Assert.Equal(PageType.FrontCover, page.PageType);
+                    Assert.False(page.IsDoublePage);
+                    Assert.Equal(1200, page.Width);
+                    Assert.Equal(1800, page.Height);
+                },
+                page => {
+                    Assert.Equal(1, page.ImageOrdinal);
+                    Assert.Equal(PageType.Story, page.PageType);
+                    Assert.True(page.IsDoublePage);
+                    Assert.Equal(2400, page.Width);
+                    Assert.Equal(1800, page.Height);
+                });
         } finally {
             dir.Delete(recursive: true);
         }

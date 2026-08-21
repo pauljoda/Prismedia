@@ -105,14 +105,15 @@ public interface IScanMetadataPersistence {
     Task CompleteScanBatchAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     /// <summary>
-    /// Applies ComicInfo.xml metadata without clearing existing user or provider metadata.
+    /// Applies ComicInfo.xml metadata to its owning book or serialized-comic Entity without
+    /// clearing existing user or provider metadata.
     /// </summary>
-    /// <param name="bookEntityId">Book/comic entity receiving metadata.</param>
+    /// <param name="entityId">Book, comic-series, or comic-installment Entity receiving metadata.</param>
     /// <param name="metadata">ComicInfo.xml metadata discovered for the book.</param>
     /// <param name="markNsfw">Whether linked taxonomy should be marked NSFW.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     Task ApplyComicInfoMetadataAsync(
-        Guid bookEntityId,
+        Guid entityId,
         ComicInfoMetadata metadata,
         bool markNsfw,
         CancellationToken cancellationToken);
@@ -212,4 +213,20 @@ public sealed record ComicInfoMetadata {
 
     /// <summary>True when ComicInfo.xml indicates adult-oriented content.</summary>
     public bool MarksNsfw { get; init; }
+
+    /// <summary>Optional per-page facts keyed by the archive's natural image ordinal.</summary>
+    public IReadOnlyList<ComicInfoPageMetadata> Pages { get; init; } = [];
 }
+
+/// <summary>Normalized ComicInfo.xml facts for one page in archive order.</summary>
+/// <param name="ImageOrdinal">Zero-based image ordinal named by ComicInfo.xml.</param>
+/// <param name="PageType">Normalized semantic page role.</param>
+/// <param name="IsDoublePage">Whether the source declares an intentional two-page spread.</param>
+/// <param name="Width">Declared pixel width, when present and valid.</param>
+/// <param name="Height">Declared pixel height, when present and valid.</param>
+public sealed record ComicInfoPageMetadata(
+    int ImageOrdinal,
+    Prismedia.Domain.Entities.PageType PageType,
+    bool IsDoublePage,
+    int? Width,
+    int? Height);

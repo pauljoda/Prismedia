@@ -807,6 +807,7 @@ export const JOB_TYPE = {
   scanLibrary: "scan-library",
   scanGallery: "scan-gallery",
   scanBook: "scan-book",
+  scanComic: "scan-comic",
   scanAudio: "scan-audio",
   reconcileEntity: "reconcile-entity",
   probeVideo: "probe-video",

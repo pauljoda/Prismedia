@@ -9,12 +9,13 @@ public readonly record struct LibraryScanSelection(
     bool Videos,
     bool Images,
     bool Audio,
-    bool Books) {
+    bool Books,
+    bool Comics) {
     /// <summary>Represents a selection that does not request any scan work.</summary>
     public static LibraryScanSelection None => new();
 
     /// <summary>Gets whether this selection does not include any media family.</summary>
-    public bool IsEmpty => !Videos && !Images && !Audio && !Books;
+    public bool IsEmpty => !Videos && !Images && !Audio && !Books && !Comics;
 
     /// <summary>
     /// Combines this selection with another selection, retaining every media family enabled by either.
@@ -25,5 +26,6 @@ public readonly record struct LibraryScanSelection(
         Videos: Videos || other.Videos,
         Images: Images || other.Images,
         Audio: Audio || other.Audio,
-        Books: Books || other.Books);
+        Books: Books || other.Books,
+        Comics: Comics || other.Comics);
 }

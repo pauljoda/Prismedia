@@ -236,6 +236,8 @@ public static class DependencyInjection {
             provider.GetRequiredService<LibraryScanPersistenceService>());
         services.AddScoped<IBookScanPersistence>(provider =>
             provider.GetRequiredService<LibraryScanPersistenceService>());
+        services.AddScoped<IComicScanPersistence>(provider =>
+            provider.GetRequiredService<LibraryScanPersistenceService>());
         services.AddScoped<IDownstreamNeedsPersistence>(provider =>
             provider.GetRequiredService<LibraryScanPersistenceService>());
         services.AddScoped<IImportedEntityReadinessPersistence, EfImportedEntityReadinessPersistence>();

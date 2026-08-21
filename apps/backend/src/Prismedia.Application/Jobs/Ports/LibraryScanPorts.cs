@@ -293,6 +293,51 @@ public interface IBookScanPersistence {
     Task<int> RemoveEmptyBookAuthorsAsync(CancellationToken cancellationToken);
 }
 
+/// <summary>
+/// Serialized-comic scan persistence. Installments own source archives; series and optional volumes
+/// are structural catalog entities and never masquerade as readable source files.
+/// </summary>
+public interface IComicScanPersistence {
+    /// <summary>Upserts one comic title/run, using a real grouping folder when one exists.</summary>
+    Task<Guid> UpsertComicSeriesAsync(
+        string? folderPath,
+        string title,
+        Guid libraryRootId,
+        bool isNsfw,
+        CancellationToken cancellationToken);
+
+    /// <summary>Upserts an optional collected volume under a comic series.</summary>
+    Task<Guid> UpsertComicVolumeAsync(
+        Guid seriesEntityId,
+        string title,
+        int volumeNumber,
+        bool isNsfw,
+        CancellationToken cancellationToken);
+
+    /// <summary>Upserts one independently released archive-backed installment.</summary>
+    Task<Guid> UpsertComicInstallmentAsync(
+        string archivePath,
+        string title,
+        Guid libraryRootId,
+        Guid parentEntityId,
+        int sortOrder,
+        int position,
+        string positionLabel,
+        ComicInstallmentKind installmentKind,
+        long? sizeBytes,
+        bool isNsfw,
+        CancellationToken cancellationToken);
+
+    /// <summary>Removes source-backed installments whose archives disappeared from the root.</summary>
+    Task<int> RemoveStaleComicInstallmentsInRootAsync(
+        Guid rootId,
+        IReadOnlySet<string> validArchivePaths,
+        CancellationToken cancellationToken);
+
+    /// <summary>Prunes now-empty derived comic volume and series containers.</summary>
+    Task<int> RemoveEmptyComicContainersAsync(CancellationToken cancellationToken);
+}
+
 /// <summary>Reads downstream processing state used to decide which jobs are still needed.</summary>
 public interface IDownstreamNeedsPersistence {
     /// <summary>

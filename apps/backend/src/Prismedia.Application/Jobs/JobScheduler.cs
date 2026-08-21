@@ -92,7 +92,8 @@ public sealed class JobScheduler(
                 Videos: root.ScanVideos,
                 Images: root.ScanImages,
                 Audio: root.ScanAudio,
-                Books: root.ScanBooks);
+                Books: root.ScanBooks,
+                Comics: root.ScanBooks);
             if (rootSelection.IsEmpty) {
                 continue;
             }

@@ -13,6 +13,7 @@ export const JobType = {
   'scan-library': 'scan-library',
   'scan-gallery': 'scan-gallery',
   'scan-book': 'scan-book',
+  'scan-comic': 'scan-comic',
   'scan-audio': 'scan-audio',
   'reconcile-entity': 'reconcile-entity',
   'probe-video': 'probe-video',

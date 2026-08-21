@@ -10,7 +10,7 @@ namespace Prismedia.Application.Tests.Jobs;
 /// unrecognized paths route nowhere.
 /// </summary>
 public sealed class MediaScanKindRouterTests {
-    private static readonly LibraryScanSelection AllEnabled = new(true, true, true, true);
+    private static readonly LibraryScanSelection AllEnabled = new(true, true, true, true, true);
 
     [Fact]
     public void RoutesVideoFileToVideoAndGalleryScansOnly() {
@@ -31,11 +31,14 @@ public sealed class MediaScanKindRouterTests {
     }
 
     [Fact]
-    public void RoutesBookFormatsToBookScanOnly() {
+    public void RoutesProseAndComicFormatsToIndependentScans() {
         var routed = MediaScanKindRouter.Route(AllEnabled, ["/media/books/novel.epub", "/media/comics/issue.cbz"]);
 
-        Assert.Equal([JobType.ScanBook], routed.Keys.ToArray());
-        Assert.Equal(2, routed[JobType.ScanBook].Count);
+        Assert.Equal(
+            [JobType.ScanBook, JobType.ScanComic],
+            routed.Keys.OrderBy(type => type.ToCode()).ToArray());
+        Assert.Equal(["/media/books/novel.epub"], routed[JobType.ScanBook]);
+        Assert.Equal(["/media/comics/issue.cbz"], routed[JobType.ScanComic]);
     }
 
     [Fact]
@@ -49,7 +52,12 @@ public sealed class MediaScanKindRouterTests {
 
     [Fact]
     public void DropsKindsDisabledOnTheRoot() {
-        var videosOnly = new LibraryScanSelection(Videos: true, Images: false, Audio: false, Books: false);
+        var videosOnly = new LibraryScanSelection(
+            Videos: true,
+            Images: false,
+            Audio: false,
+            Books: false,
+            Comics: false);
         var routed = MediaScanKindRouter.Route(videosOnly, ["/media/shows/S01E05.mkv", "/media/books/novel.epub"]);
 
         Assert.Equal([JobType.ScanLibrary], routed.Keys.ToArray());
@@ -69,7 +77,7 @@ public sealed class MediaScanKindRouterTests {
         // former contents are unknown, so every enabled kind re-checks its subtree.
         var routed = MediaScanKindRouter.Route(AllEnabled, ["/media/shows/Season 02"]);
 
-        Assert.Equal(4, routed.Count);
+        Assert.Equal(5, routed.Count);
     }
 
     [Fact]
@@ -81,5 +89,6 @@ public sealed class MediaScanKindRouterTests {
         Assert.False(selection.Videos);
         Assert.False(selection.Images);
         Assert.False(selection.Books);
+        Assert.False(selection.Comics);
     }
 }

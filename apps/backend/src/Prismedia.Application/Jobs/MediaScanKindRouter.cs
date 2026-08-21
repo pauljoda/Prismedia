@@ -60,10 +60,13 @@ public static class MediaScanKindRouter {
             }
 
             if (selection.Books &&
-                (SupportedExtensions.ComicArchive.Contains(extension) ||
-                 SupportedExtensions.Book.Contains(extension) ||
+                (SupportedExtensions.Book.Contains(extension) ||
                  SupportedExtensions.Audiobook.Contains(extension))) {
                 Add(JobType.ScanBook, path);
+            }
+
+            if (selection.Comics && SupportedExtensions.ComicArchive.Contains(extension)) {
+                Add(JobType.ScanComic, path);
             }
         }
 
@@ -78,5 +81,6 @@ public static class MediaScanKindRouter {
             Videos: routed.ContainsKey(JobType.ScanLibrary),
             Images: routed.ContainsKey(JobType.ScanGallery),
             Audio: routed.ContainsKey(JobType.ScanAudio),
-            Books: routed.ContainsKey(JobType.ScanBook));
+            Books: routed.ContainsKey(JobType.ScanBook),
+            Comics: routed.ContainsKey(JobType.ScanComic));
 }

@@ -10,8 +10,8 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Application.Jobs.Handlers.Scan;
 
 /// <summary>
-/// Discovers comic book archives (CBZ/ZIP), creates book/chapter/page entities,
-/// and chains downstream thumbnail jobs for pages.
+/// Discovers prose books and audiobook sources. Serialized comics use the independent
+/// <see cref="ScanComicJobHandler"/> so released installments never become prose chapters.
 /// </summary>
 [JobDefinition(JobType.ScanBook, SingletonBehavior = JobSingletonBehavior.QueueWideWhenUntargeted, BlocksAutoIdentify = true)]
 public sealed class ScanBookJobHandler(
@@ -36,25 +36,21 @@ public sealed class ScanBookJobHandler(
     protected override bool IsEligibleRoot(LibraryRootData root) => root.ScanBooks;
 
     protected override IReadOnlyList<MediaCategory> ScanCategories =>
-        [MediaCategory.ComicArchive, MediaCategory.Book, MediaCategory.Audiobook];
+        [MediaCategory.Book, MediaCategory.Audiobook];
 
     protected override async Task<ScanRootOutcome> ScanRootCoreAsync(JobContext context, LibraryRootData root, CancellationToken cancellationToken) {
-        logger.LogInformation("ScanBook: discovering archives in {Path}", root.Path);
+        logger.LogInformation("ScanBook: discovering prose and audiobook sources in {Path}", root.Path);
         var excludedPaths = await Roots.GetExcludedPathsForRootAsync(root.Id, cancellationToken);
 
-        var archiveFiles = await FileDiscovery.DiscoverFilesAsync(
-            root.Path, MediaCategory.ComicArchive, root.Recursive, excludedPaths, cancellationToken);
         var bookFiles = await FileDiscovery.DiscoverFilesAsync(
             root.Path, MediaCategory.Book, root.Recursive, excludedPaths, cancellationToken);
         var audiobookFiles = await FileDiscovery.DiscoverFilesAsync(
             root.Path, MediaCategory.Audiobook, root.Recursive, excludedPaths, cancellationToken);
 
-        logger.LogInformation("ScanBook: found {Count} archive files in {Label}", archiveFiles.Count, root.Label);
-
         return await MaterializeBookPathsAsync(
             context,
             root,
-            archiveFiles,
+            archiveFiles: [],
             bookFiles,
             audiobookFiles,
             reconcile: true,

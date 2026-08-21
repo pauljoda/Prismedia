@@ -111,15 +111,17 @@ public sealed class JobSchedulerTests {
 
         await scheduler.ScheduleRecurringScansAsync(CancellationToken.None);
 
-        // One scan per enabled kind and exact root: video from the first, image + book from the second.
+        // One scan per internal kind and exact root: the book-family root gets independent prose
+        // and serialized-comic jobs in addition to its image scan.
         var types = queue.Enqueued.Select(request => request.Type).ToHashSet();
-        Assert.Equal(3, queue.Enqueued.Count);
+        Assert.Equal(4, queue.Enqueued.Count);
         Assert.Contains(JobType.ScanLibrary, types);
         Assert.Contains(JobType.ScanGallery, types);
         Assert.Contains(JobType.ScanBook, types);
+        Assert.Contains(JobType.ScanComic, types);
         Assert.DoesNotContain(JobType.ScanAudio, types);
         Assert.Single(queue.Enqueued, request => request.TargetEntityId == videoRoot.Id.ToString());
-        Assert.Equal(2, queue.Enqueued.Count(request => request.TargetEntityId == imageBookRoot.Id.ToString()));
+        Assert.Equal(3, queue.Enqueued.Count(request => request.TargetEntityId == imageBookRoot.Id.ToString()));
         Assert.All(queue.Enqueued, request => Assert.Equal(JobResourceKeys.LibraryScan, request.ResourceKey));
         Assert.All(settings.Roots, root => Assert.NotNull(root.LastScannedAt));
     }

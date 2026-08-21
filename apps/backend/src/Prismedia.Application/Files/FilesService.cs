@@ -440,7 +440,8 @@ public sealed class FilesService(
                 Videos: root.ScanVideos,
                 Images: root.ScanImages,
                 Audio: root.ScanAudio,
-                Books: root.ScanBooks),
+                Books: root.ScanBooks,
+                Comics: root.ScanBooks),
                 cancellationToken);
         }
 
@@ -462,7 +463,8 @@ public sealed class FilesService(
                     Videos: root.ScanVideos,
                     Images: root.ScanImages,
                     Audio: root.ScanAudio,
-                    Books: root.ScanBooks),
+                    Books: root.ScanBooks,
+                    Comics: root.ScanBooks),
                 absolutePaths,
                 cancellationToken);
 

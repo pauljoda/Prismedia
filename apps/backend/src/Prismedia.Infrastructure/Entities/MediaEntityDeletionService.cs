@@ -989,7 +989,8 @@ public sealed class MediaEntityDeletionService(
                     Videos: root.ScanVideos,
                     Images: root.ScanImages,
                     Audio: root.ScanAudio,
-                    Books: root.ScanBooks);
+                    Books: root.ScanBooks,
+                    Comics: root.ScanBooks);
                 // Deletions know their exact removed paths, so reconcile surgically through the
                 // change ledger instead of rematerializing the whole root.
                 if (changeIntake is not null &&

@@ -18,9 +18,13 @@ public enum JobType {
     [Code("scan-gallery")]
     ScanGallery,
 
-    /// <summary>Discovers comic books in a library root.</summary>
+    /// <summary>Discovers prose books and audiobook sources in a library root.</summary>
     [Code("scan-book")]
     ScanBook,
+
+    /// <summary>Discovers serialized comic installments and their page manifests in a library root.</summary>
+    [Code("scan-comic")]
+    ScanComic,
 
     /// <summary>Discovers audio tracks in a library root.</summary>
     [Code("scan-audio")]

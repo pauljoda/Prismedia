@@ -85,8 +85,71 @@ public sealed class ComicInfoMetadataReader : IComicInfoMetadataReader {
             AgeRating = ageRating,
             Creators = creators,
             Tags = tags,
-            MarksNsfw = MarksNsfw(ageRating, manga, tags)
+            MarksNsfw = MarksNsfw(ageRating, manga, tags),
+            Pages = Pages(document)
         };
+    }
+
+    private static IReadOnlyList<ComicInfoPageMetadata> Pages(XDocument document) {
+        var pages = new List<ComicInfoPageMetadata>();
+        var seen = new HashSet<int>();
+        foreach (var element in Elements(document, "Page")) {
+            var imageOrdinal = AttributeNumber(element, "Image");
+            if (imageOrdinal is null || !seen.Add(imageOrdinal.Value)) {
+                continue;
+            }
+
+            pages.Add(new ComicInfoPageMetadata(
+                imageOrdinal.Value,
+                PageType(AttributeValue(element, "Type")),
+                AttributeBoolean(element, "DoublePage"),
+                AttributeNumber(element, "ImageWidth"),
+                AttributeNumber(element, "ImageHeight")));
+        }
+
+        return pages.OrderBy(page => page.ImageOrdinal).ToArray();
+    }
+
+    private static Prismedia.Domain.Entities.PageType PageType(string? value) {
+        // prism-vocab: external ComicInfo.xml Page Type values are normalized at this parse boundary.
+        if (value?.Equals("FrontCover", StringComparison.OrdinalIgnoreCase) == true) {
+            return Prismedia.Domain.Entities.PageType.FrontCover;
+        }
+        if (value?.Equals("BackCover", StringComparison.OrdinalIgnoreCase) == true) {
+            return Prismedia.Domain.Entities.PageType.BackCover;
+        }
+        if (value?.Equals("Advertisement", StringComparison.OrdinalIgnoreCase) == true) {
+            return Prismedia.Domain.Entities.PageType.Advertisement;
+        }
+        if (value?.Equals("Letters", StringComparison.OrdinalIgnoreCase) == true) {
+            return Prismedia.Domain.Entities.PageType.Letters;
+        }
+        if (value?.Equals("Story", StringComparison.OrdinalIgnoreCase) == true ||
+            string.IsNullOrWhiteSpace(value)) {
+            return Prismedia.Domain.Entities.PageType.Story;
+        }
+        return Prismedia.Domain.Entities.PageType.Other;
+    }
+
+    private static string? AttributeValue(XElement element, string name) =>
+        element.Attributes()
+            .FirstOrDefault(attribute => attribute.Name.LocalName.Equals(
+                name,
+                StringComparison.OrdinalIgnoreCase))
+            ?.Value;
+
+    private static int? AttributeNumber(XElement element, string name) {
+        var value = Clean(AttributeValue(element, name));
+        return int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var parsed) && parsed >= 0
+            ? parsed
+            : null;
+    }
+
+    private static bool AttributeBoolean(XElement element, string name) {
+        var value = Clean(AttributeValue(element, name));
+        return bool.TryParse(value, out var parsed)
+            ? parsed
+            : value == "1";
     }
 
     private static IEnumerable<XElement> Elements(XDocument document, string name) =>

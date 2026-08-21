@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Comic archives now scan through an independent serialized-media pipeline that groups released installments beneath titles and optional volumes, preserves ComicInfo release metadata and reading direction, and builds generic page manifests without creating one Entity per page.
 - Readable Entities can now expose a generic ordered page manifest and stream pages through shared Entity reader routes, with exact archive-member ordering and no page-Entity expansion.
 - Serialized comics now have separate series, optional volume, and installment entity contracts, preserving the distinction between an independently released chapter or issue and a prose book's internal chapter markers.
 - Entity details now advertise ordered-sequence participation and directly playable audio through generated capabilities, giving every client one shared contract for sequence interactions and audio playback without media-kind checks.

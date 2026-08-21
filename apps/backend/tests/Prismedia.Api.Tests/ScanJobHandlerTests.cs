@@ -1,11 +1,13 @@
 using System.IO.Compression;
 using Microsoft.Extensions.Logging.Abstractions;
+using Prismedia.Application.Entities;
 using Prismedia.Application.Jobs;
 using Prismedia.Application.Jobs.Handlers;
 using Prismedia.Application.Jobs.Handlers.Scan;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Jobs.Scanning;
 using Prismedia.Domain.Entities;
+using Prismedia.Domain.Media;
 
 namespace Prismedia.Api.Tests;
 
@@ -2057,7 +2059,7 @@ public sealed class ScanJobHandlerTests {
     }
 
     [Fact]
-    public async Task BookScanMaterializesFolderVolumesChaptersAndPages() {
+    public async Task ComicScanMaterializesSeriesVolumesInstallmentsAndPageManifests() {
         var tempRoot = Directory.CreateTempSubdirectory("prismedia-book-scan-");
         try {
             var rootPath = tempRoot.FullName;
@@ -2099,15 +2101,17 @@ public sealed class ScanJobHandlerTests {
                     NeedsSubtitleExtraction: false,
                     NeedsGridThumbnail: false)
             };
-            var handler = new ScanBookJobHandler(
-                NullLogger<ScanBookJobHandler>.Instance,
+            var manifests = new RecordingPageManifestStore();
+            var handler = new ScanComicJobHandler(
+                NullLogger<ScanComicJobHandler>.Instance,
                 new RecordingFileDiscovery([chapterTwoPath, chapterOnePath]),
                 persistence,
                 persistence,
+                manifests,
                 persistence);
             var job = new JobRunSnapshot(
                 Guid.NewGuid(),
-                JobType.ScanBook,
+                JobType.ScanComic,
                 JobRunStatus.Running,
                 Progress: 0,
                 Message: null,
@@ -2122,46 +2126,45 @@ public sealed class ScanJobHandlerTests {
             var queue = new RecordingJobQueue();
             await handler.HandleAsync(new JobContext(job, queue), CancellationToken.None);
 
-            var book = Assert.Single(persistence.UpsertedBooks);
-            Assert.Equal(Path.Combine(rootPath, "Promised Neverland"), book.SourcePath);
-            Assert.Equal("Promised Neverland", book.Title);
+            var series = Assert.Single(persistence.UpsertedComicSeries);
+            Assert.Equal(Path.Combine(rootPath, "Promised Neverland"), series.FolderPath);
+            Assert.Equal("Promised Neverland", series.Title);
 
-            var volume = Assert.Single(persistence.UpsertedBookVolumes);
-            Assert.Equal(volumePath, volume.SourcePath);
+            var volume = Assert.Single(persistence.UpsertedComicVolumes);
             Assert.Equal("Volume 01", volume.Title);
-            Assert.Equal(book.Id, volume.BookEntityId);
-            Assert.Equal(0, volume.SortOrder);
+            Assert.Equal(series.Id, volume.SeriesEntityId);
+            Assert.Equal(1, volume.VolumeNumber);
 
             Assert.Collection(
-                persistence.UpsertedBookChapters,
-                chapter => {
-                    Assert.Equal(chapterOnePath, chapter.SourcePath);
-                    Assert.Equal("Promised Neverland Ch.1", chapter.Title);
-                    Assert.Equal(volume.Id, chapter.ParentEntityId);
-                    Assert.Equal(0, chapter.SortOrder);
-                    Assert.Equal(2, chapter.PageCount);
+                persistence.UpsertedComicInstallments,
+                installment => {
+                    Assert.Equal(chapterOnePath, installment.ArchivePath);
+                    Assert.Equal("Promised Neverland Ch.1", installment.Title);
+                    Assert.Equal(volume.Id, installment.ParentEntityId);
+                    Assert.Equal(0, installment.SortOrder);
+                    Assert.Equal(1, installment.Position);
                 },
-                chapter => {
-                    Assert.Equal(chapterTwoPath, chapter.SourcePath);
-                    Assert.Equal("Promised Neverland Ch.2", chapter.Title);
-                    Assert.Equal(volume.Id, chapter.ParentEntityId);
-                    Assert.Equal(1, chapter.SortOrder);
-                    Assert.Equal(1, chapter.PageCount);
+                installment => {
+                    Assert.Equal(chapterTwoPath, installment.ArchivePath);
+                    Assert.Equal("Promised Neverland Ch.2", installment.Title);
+                    Assert.Equal(volume.Id, installment.ParentEntityId);
+                    Assert.Equal(1, installment.SortOrder);
+                    Assert.Equal(2, installment.Position);
                 });
 
-            Assert.Equal(
-                [
-                    $"{chapterOnePath}::001.jpg",
-                    $"{chapterOnePath}::002.jpg",
-                    $"{chapterTwoPath}::001.jpg"
-                ],
-                persistence.UpsertedBookPages.Select(page => page.SourcePath).ToArray());
-            Assert.All(persistence.UpsertedBookPages, page => Assert.Equal(book.Id, page.BookEntityId));
-            Assert.Equal(2, persistence.BookPageBatchCalls);
-            Assert.Equal(3, queue.Enqueued.Count(request => request.Type == JobType.GenerateBookPageThumbnail));
-            Assert.Equal([Path.Combine(rootPath, "Promised Neverland")], persistence.ValidBookPaths);
-            Assert.Equal([volumePath], persistence.ValidBookVolumePaths);
-            Assert.Equal([chapterOnePath, chapterTwoPath], persistence.ValidBookChapterPaths);
+            Assert.Collection(
+                manifests.Manifests.OrderBy(manifest => manifest.Pages.Count),
+                manifest => Assert.Equal(["001.jpg"], manifest.Pages.Select(page => page.ArchiveMember)),
+                manifest => Assert.Equal(["001.jpg", "002.jpg"], manifest.Pages.Select(page => page.ArchiveMember)));
+            Assert.All(manifests.Manifests, manifest => {
+                Assert.Equal(PageReadingDirection.LeftToRight, manifest.Direction);
+                Assert.Equal(ReaderMode.Paged, manifest.DefaultMode);
+                Assert.Equal(0, manifest.CoverOrdinal);
+            });
+            Assert.Empty(persistence.UpsertedBooks);
+            Assert.Empty(persistence.UpsertedBookChapters);
+            Assert.Empty(persistence.UpsertedBookPages);
+            Assert.Equal([chapterOnePath, chapterTwoPath], persistence.ValidComicArchivePaths);
             Assert.Equal([root.Id], persistence.LastScannedRootIds);
         } finally {
             tempRoot.Delete(recursive: true);
@@ -2169,7 +2172,7 @@ public sealed class ScanJobHandlerTests {
     }
 
     [Fact]
-    public async Task BookScanSkipsAlreadyOrganizedAutoIdentifyRootsWhenUnorganizedOnly() {
+    public async Task ComicScanSkipsAlreadyOrganizedAutoIdentifyRootsWhenUnorganizedOnly() {
         var tempRoot = Directory.CreateTempSubdirectory("prismedia-book-auto-skip-");
         try {
             var rootPath = tempRoot.FullName;
@@ -2201,20 +2204,21 @@ public sealed class ScanJobHandlerTests {
                     ThumbnailQuality: 2,
                     TrickplayQuality: 2,
                     AutoIdentifyEnabled: true,
-                    AutoIdentifyKinds: ["book"],
+                    AutoIdentifyKinds: ["comic-series"],
                     AutoIdentifyUnorganizedOnly: true),
                 OrganizedSourcePaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { bookPath }
             };
             var queue = new RecordingJobQueue();
-            var handler = new ScanBookJobHandler(
-                NullLogger<ScanBookJobHandler>.Instance,
+            var handler = new ScanComicJobHandler(
+                NullLogger<ScanComicJobHandler>.Instance,
                 new RecordingFileDiscovery([archivePath]),
                 persistence,
                 persistence,
+                new RecordingPageManifestStore(),
                 persistence);
             var job = new JobRunSnapshot(
                 Guid.NewGuid(),
-                JobType.ScanBook,
+                JobType.ScanComic,
                 JobRunStatus.Running,
                 Progress: 0,
                 Message: null,
@@ -2235,7 +2239,7 @@ public sealed class ScanJobHandlerTests {
     }
 
     [Fact]
-    public async Task BookScanReadsComicInfoForTitlesAndMetadata() {
+    public async Task ComicScanReadsComicInfoForHierarchyMetadataAndDirection() {
         var tempRoot = Directory.CreateTempSubdirectory("prismedia-comicinfo-scan-");
         try {
             var rootPath = tempRoot.FullName;
@@ -2250,6 +2254,15 @@ public sealed class ScanJobHandlerTests {
                 Tags = ["Drama"],
                 Creators = ["Ada Writer"],
                 Date = "2026-05",
+                Number = "12",
+                Volume = 3,
+                Manga = "YesAndRightToLeft",
+                Pages = [new ComicInfoPageMetadata(
+                    0,
+                    PageType.BackCover,
+                    IsDoublePage: true,
+                    Width: 2200,
+                    Height: 1600)],
                 MarksNsfw = true
             };
             CreateZip(archivePath, ["001.jpg"]);
@@ -2269,17 +2282,19 @@ public sealed class ScanJobHandlerTests {
                 Settings = DisabledGeneratedWorkSettings
             };
             var metadataPersistence = new RecordingScanMetadataPersistence();
-            var handler = new ScanBookJobHandler(
-                NullLogger<ScanBookJobHandler>.Instance,
+            var manifests = new RecordingPageManifestStore();
+            var handler = new ScanComicJobHandler(
+                NullLogger<ScanComicJobHandler>.Instance,
                 new RecordingFileDiscovery([archivePath]),
                 persistence,
                 persistence,
+                manifests,
                 persistence,
                 comicInfoReader: new StubComicInfoMetadataReader(metadata),
                 scanMetadata: metadataPersistence);
             var job = new JobRunSnapshot(
                 Guid.NewGuid(),
-                JobType.ScanBook,
+                JobType.ScanComic,
                 JobRunStatus.Running,
                 Progress: 0,
                 Message: null,
@@ -2293,14 +2308,36 @@ public sealed class ScanJobHandlerTests {
 
             await handler.HandleAsync(new JobContext(job, new RecordingJobQueue()), CancellationToken.None);
 
-            var book = Assert.Single(persistence.UpsertedBooks);
-            Assert.Equal("Metadata Series", book.Title);
-            var chapter = Assert.Single(persistence.UpsertedBookChapters);
-            Assert.Equal("Metadata Chapter", chapter.Title);
-            var applied = Assert.Single(metadataPersistence.AppliedComics);
-            Assert.Equal(book.Id, applied.EntityId);
-            Assert.Same(metadata, applied.Metadata);
-            Assert.True(applied.MarkNsfw);
+            var series = Assert.Single(persistence.UpsertedComicSeries);
+            Assert.Equal("Metadata Series", series.Title);
+            var volume = Assert.Single(persistence.UpsertedComicVolumes);
+            Assert.Equal(3, volume.VolumeNumber);
+            var installment = Assert.Single(persistence.UpsertedComicInstallments);
+            Assert.Equal("Metadata Chapter", installment.Title);
+            Assert.Equal(volume.Id, installment.ParentEntityId);
+            Assert.Equal(12, installment.Position);
+            Assert.Equal("12", installment.PositionLabel);
+            Assert.Equal(ComicInstallmentKind.Chapter, installment.InstallmentKind);
+            Assert.Collection(
+                metadataPersistence.AppliedComics,
+                applied => {
+                    Assert.Equal(series.Id, applied.EntityId);
+                    Assert.Null(applied.Metadata.Summary);
+                    Assert.True(applied.MarkNsfw);
+                },
+                applied => {
+                    Assert.Equal(installment.Id, applied.EntityId);
+                    Assert.Same(metadata, applied.Metadata);
+                    Assert.True(applied.MarkNsfw);
+                });
+            var manifest = Assert.Single(manifests.Manifests);
+            Assert.Equal(PageReadingDirection.RightToLeft, manifest.Direction);
+            var page = Assert.Single(manifest.Pages);
+            Assert.Equal(PageType.BackCover, page.PageType);
+            Assert.True(page.IsDoublePage);
+            Assert.Equal(2200, page.Width);
+            Assert.Equal(1600, page.Height);
+            Assert.Equal(0, manifest.CoverOrdinal);
         } finally {
             tempRoot.Delete(recursive: true);
         }
@@ -3251,7 +3288,7 @@ public sealed class ScanJobHandlerTests {
         }
     }
 
-    private sealed class FakeScanPersistence(IReadOnlyList<LibraryRootData> roots) : ILibraryScanRootPersistence, IVideoScanPersistence, IDownstreamNeedsPersistence, IImageGalleryScanPersistence, IAudioScanPersistence, IBookScanPersistence {
+    private sealed class FakeScanPersistence(IReadOnlyList<LibraryRootData> roots) : ILibraryScanRootPersistence, IVideoScanPersistence, IDownstreamNeedsPersistence, IImageGalleryScanPersistence, IAudioScanPersistence, IBookScanPersistence, IComicScanPersistence {
         public List<Guid> LoadedRootIds { get; } = [];
         public List<Guid> LastScannedRootIds { get; } = [];
         public bool LoadedEnabledRoots { get; private set; }
@@ -3292,6 +3329,9 @@ public sealed class ScanJobHandlerTests {
         public List<BookVolumeRecord> UpsertedBookVolumes { get; } = [];
         public List<BookChapterRecord> UpsertedBookChapters { get; } = [];
         public List<BookPageRecord> UpsertedBookPages { get; } = [];
+        public List<ComicSeriesRecord> UpsertedComicSeries { get; } = [];
+        public List<ComicVolumeRecord> UpsertedComicVolumes { get; } = [];
+        public List<ComicInstallmentRecord> UpsertedComicInstallments { get; } = [];
         public int GalleryBatchCalls { get; private set; }
         public int ImageBatchCalls { get; private set; }
         public int MusicArtistBatchCalls { get; private set; }
@@ -3309,6 +3349,7 @@ public sealed class ScanJobHandlerTests {
         public IReadOnlyList<string> ValidBookPaths { get; private set; } = [];
         public IReadOnlyList<string> ValidBookVolumePaths { get; private set; } = [];
         public IReadOnlyList<string> ValidBookChapterPaths { get; private set; } = [];
+        public IReadOnlyList<string> ValidComicArchivePaths { get; private set; } = [];
         public IReadOnlyDictionary<Guid, IReadOnlySet<string>> ExcludedPathsByRoot { get; init; } =
             new Dictionary<Guid, IReadOnlySet<string>>();
         public IReadOnlySet<Guid> DeletedRootIds { get; init; } = new HashSet<Guid>();
@@ -3545,6 +3586,72 @@ public sealed class ScanJobHandlerTests {
             return ids;
         }
 
+        public Task<Guid> UpsertComicSeriesAsync(
+            string? folderPath,
+            string title,
+            Guid libraryRootId,
+            bool isNsfw,
+            CancellationToken cancellationToken) {
+            var id = IdFor($"comic-series:{folderPath ?? title}");
+            if (folderPath is not null) MarkOrganizedIfNeeded(id, folderPath);
+            UpsertedComicSeries.Add(new ComicSeriesRecord(
+                id, folderPath, title, libraryRootId, isNsfw));
+            return Task.FromResult(id);
+        }
+
+        public Task<Guid> UpsertComicVolumeAsync(
+            Guid seriesEntityId,
+            string title,
+            int volumeNumber,
+            bool isNsfw,
+            CancellationToken cancellationToken) {
+            var id = IdFor($"comic-volume:{seriesEntityId}:{volumeNumber}");
+            UpsertedComicVolumes.Add(new ComicVolumeRecord(
+                id, seriesEntityId, title, volumeNumber, isNsfw));
+            return Task.FromResult(id);
+        }
+
+        public Task<Guid> UpsertComicInstallmentAsync(
+            string archivePath,
+            string title,
+            Guid libraryRootId,
+            Guid parentEntityId,
+            int sortOrder,
+            int position,
+            string positionLabel,
+            ComicInstallmentKind installmentKind,
+            long? sizeBytes,
+            bool isNsfw,
+            CancellationToken cancellationToken) {
+            var id = IdFor($"comic-installment:{archivePath}");
+            UpsertedComicInstallments.Add(new ComicInstallmentRecord(
+                id,
+                archivePath,
+                title,
+                libraryRootId,
+                parentEntityId,
+                sortOrder,
+                position,
+                positionLabel,
+                installmentKind,
+                sizeBytes,
+                isNsfw));
+            return Task.FromResult(id);
+        }
+
+        public Task<int> RemoveStaleComicInstallmentsInRootAsync(
+            Guid rootId,
+            IReadOnlySet<string> validArchivePaths,
+            CancellationToken cancellationToken) {
+            ValidComicArchivePaths = validArchivePaths
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            return Task.FromResult(0);
+        }
+
+        public Task<int> RemoveEmptyComicContainersAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(0);
+
         public Task<int> RemoveStalePlayableVideosByRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) =>
             Task.FromResult(0);
 
@@ -3766,6 +3873,45 @@ public sealed class ScanJobHandlerTests {
     private sealed record BookVolumeRecord(Guid Id, string SourcePath, string Title, Guid BookEntityId, int SortOrder);
     private sealed record BookChapterRecord(Guid Id, string SourcePath, string Title, Guid ParentEntityId, int SortOrder, int PageCount);
     private sealed record BookPageRecord(Guid Id, string SourcePath, string Title, Guid BookEntityId, Guid ChapterEntityId, int SortOrder);
+    private sealed record ComicSeriesRecord(
+        Guid Id,
+        string? FolderPath,
+        string Title,
+        Guid LibraryRootId,
+        bool IsNsfw);
+    private sealed record ComicVolumeRecord(
+        Guid Id,
+        Guid SeriesEntityId,
+        string Title,
+        int VolumeNumber,
+        bool IsNsfw);
+    private sealed record ComicInstallmentRecord(
+        Guid Id,
+        string ArchivePath,
+        string Title,
+        Guid LibraryRootId,
+        Guid ParentEntityId,
+        int SortOrder,
+        int Position,
+        string PositionLabel,
+        ComicInstallmentKind InstallmentKind,
+        long? SizeBytes,
+        bool IsNsfw);
+
+    private sealed class RecordingPageManifestStore : IEntityPageManifestStore {
+        public List<EntityPageManifest> Manifests { get; } = [];
+
+        public Task<bool> ReplaceAsync(
+            EntityPageManifest manifest,
+            CancellationToken cancellationToken) {
+            Manifests.RemoveAll(existing => existing.EntityId == manifest.EntityId);
+            Manifests.Add(manifest);
+            return Task.FromResult(true);
+        }
+
+        public Task<bool> RemoveAsync(Guid entityId, CancellationToken cancellationToken) =>
+            Task.FromResult(Manifests.RemoveAll(manifest => manifest.EntityId == entityId) > 0);
+    }
 
     private sealed class StubVideoSidecarMetadataReader(VideoSidecarMetadata? metadata) : IVideoSidecarMetadataReader {
         public Task<VideoSidecarMetadata?> ReadAsync(string videoFilePath, CancellationToken cancellationToken) =>

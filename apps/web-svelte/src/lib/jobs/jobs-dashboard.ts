@@ -43,7 +43,13 @@ const _JOB_DEFINITIONS = [
     type: JOB_TYPE.scanBook,
     queueName: "book-scan",
     label: "Book Scan",
-    description: "Discovers comic books in configured library roots.",
+    description: "Discovers prose books and audiobook sources in configured library roots.",
+  },
+  {
+    type: JOB_TYPE.scanComic,
+    queueName: "book-scan",
+    label: "Comic Scan",
+    description: "Discovers serialized comic titles, volumes, installments, and readable pages.",
   },
   {
     type: JOB_TYPE.scanAudio,

@@ -24,6 +24,7 @@ public sealed partial class LibraryScanPersistenceService(
     IImageGalleryScanPersistence,
     IAudioScanPersistence,
     IBookScanPersistence,
+    IComicScanPersistence,
     IDownstreamNeedsPersistence,
     IMediaProcessingStatePersistence,
     IEntityRefreshTreePersistence,
