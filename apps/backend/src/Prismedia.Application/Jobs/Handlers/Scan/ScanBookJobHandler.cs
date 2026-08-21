@@ -1,6 +1,7 @@
 using Prismedia.Application.Jobs.Handlers;
 using System.IO.Compression;
 using Microsoft.Extensions.Logging;
+using Prismedia.Application.Books;
 using Prismedia.Application.Files;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Jobs.Scanning;
@@ -25,7 +26,8 @@ public sealed class ScanBookJobHandler(
     IBookFileMetadataReader? bookFileMetadata = null,
     Acquisition.IAcquisitionHintApplier? acquisitionHints = null,
     IAudioScanPersistence? audio = null,
-    ILibraryFileChangeIntake? changeIntake = null) : ScanJobHandler(logger, fileDiscovery, roots, snapshots, changeIntake: changeIntake) {
+    ILibraryFileChangeIntake? changeIntake = null,
+    IBookChapterMapService? chapterMap = null) : ScanJobHandler(logger, fileDiscovery, roots, snapshots, changeIntake: changeIntake) {
     private static readonly HashSet<string> ImageExtensions = new(StringComparer.OrdinalIgnoreCase)
     {
         ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif"
@@ -550,6 +552,11 @@ public sealed class ScanBookJobHandler(
                 }
             }
 
+            if (!bestEffortHousekeeping) {
+                await QueueChapterMapAsync(
+                    context, bookId, hasExistingBook ? null : title, cancellationToken);
+            }
+
             if (reconcile && !hasReadableBook) {
                 await audio.RemoveStaleAudioTracksInLibraryAsync(
                     bookId,
@@ -565,6 +572,11 @@ public sealed class ScanBookJobHandler(
                     validAudioPathsByBook.GetValueOrDefault(readableBook.EntityId) ??
                         new HashSet<string>(FileSystemPathComparison.Comparer),
                     cancellationToken);
+                // A removed track frees its chapter, and a replaced EPUB rewrites chapter keys —
+                // both invalidate the signature the map service checks here.
+                if (!bestEffortHousekeeping) {
+                    await QueueChapterMapAsync(context, readableBook.EntityId, null, cancellationToken);
+                }
             }
         }
     }
@@ -618,6 +630,29 @@ public sealed class ScanBookJobHandler(
             ? Path.GetFileNameWithoutExtension(firstSourcePath)
             : Path.GetFileName(groupKey);
 
+    /// <summary>
+    /// Enqueues the chapter-map refresh only when its persisted signatures are stale, so routine
+    /// verification scans of unchanged books enqueue nothing. The job re-projects the EPUB table
+    /// of contents and recomputes the automatic audiobook chapter map.
+    /// </summary>
+    private async Task QueueChapterMapAsync(
+        JobContext context,
+        Guid bookId,
+        string? title,
+        CancellationToken cancellationToken) {
+        if (chapterMap is null || !await chapterMap.IsRefreshNeededAsync(bookId, cancellationToken)) {
+            return;
+        }
+
+        await context.EnqueueIfNeededAsync(
+            EnqueueJobRequest.ForEntity(
+                JobType.MapBookChapters,
+                EntityKind.Book,
+                bookId.ToString(),
+                title),
+            cancellationToken);
+    }
+
     private async Task QueueBookAutoIdentifyAsync(
         JobContext context,
         LibrarySettingsData settings,
@@ -653,6 +688,7 @@ public sealed class ScanBookJobHandler(
         }
 
         await QueueBookAutoIdentifyAsync(context, settings, bookId, title, cancellationToken);
+        await QueueChapterMapAsync(context, bookId, title, cancellationToken);
     }
 
     private async Task QueueBookPageJobsAsync(

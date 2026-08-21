@@ -71,6 +71,12 @@ internal static partial class PrismediaModelConfiguration {
                 .HasMaxLength(2048)
                 .IsRequired();
             entity.Property(row => row.AudioTrackEntityId).HasColumnName("audio_track_entity_id");
+            entity.Property(row => row.Origin)
+                .HasColumnName("origin")
+                .HasMaxLength(32)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<BookChapterMappingOrigin>())
+                .HasDefaultValue(BookChapterMappingOrigin.Manual)
+                .IsRequired();
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
             entity.HasIndex(row => new { row.BookId, row.ReadableChapterKey }).IsUnique();
             entity.HasIndex(row => new { row.BookId, row.AudioTrackEntityId }).IsUnique();
@@ -84,6 +90,39 @@ internal static partial class PrismediaModelConfiguration {
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        modelBuilder.Entity<BookReadingChapterRow>(entity => {
+            entity.ToTable("book_reading_chapters");
+            entity.HasKey(row => new { row.BookId, row.ChapterKey });
+            entity.Property(row => row.BookId).HasColumnName("book_id");
+            entity.Property(row => row.ChapterKey)
+                .HasColumnName("chapter_key")
+                .HasMaxLength(2048)
+                .IsRequired();
+            entity.Property(row => row.Title).HasColumnName("title").IsRequired();
+            entity.Property(row => row.Depth).HasColumnName("depth");
+            entity.Property(row => row.DisplayOrder).HasColumnName("display_order");
+            entity.Property(row => row.SectionIndex).HasColumnName("section_index");
+            entity.Property(row => row.StartFraction).HasColumnName("start_fraction");
+            entity.Property(row => row.EndFraction).HasColumnName("end_fraction");
+            entity.HasIndex(row => new { row.BookId, row.DisplayOrder });
+            entity.HasOne<EntityRow>()
+                .WithMany()
+                .HasForeignKey(row => row.BookId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<BookContentStateRow>(entity => {
+            entity.ToTable("book_content_states");
+            entity.HasKey(row => row.BookId);
+            entity.Property(row => row.BookId).HasColumnName("book_id");
+            entity.Property(row => row.SourceSignature).HasColumnName("source_signature").HasMaxLength(256);
+            entity.Property(row => row.MappingSignature).HasColumnName("mapping_signature").HasMaxLength(256);
+            entity.Property(row => row.RefreshedAt).HasColumnName("refreshed_at");
+            entity.HasOne<EntityRow>()
+                .WithOne()
+                .HasForeignKey<BookContentStateRow>(row => row.BookId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
     }
 
     private static void ConfigureAudio(ModelBuilder modelBuilder) {

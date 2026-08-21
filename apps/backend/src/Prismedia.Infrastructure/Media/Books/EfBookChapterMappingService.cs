@@ -14,7 +14,8 @@ namespace Prismedia.Infrastructure.Media.Books;
 /// </summary>
 internal sealed class EfBookChapterMappingService(
     PrismediaDbContext db,
-    IEntityVisibilityChecker visibility) : IBookChapterMappingService {
+    IEntityVisibilityChecker visibility,
+    IBookChapterMapService chapterMap) : IBookChapterMappingService {
     private const int MaximumReadableChapterKeyLength = 2048;
 
     /// <inheritdoc />
@@ -83,6 +84,7 @@ internal sealed class EfBookChapterMappingService(
                     BookId = bookId,
                     ReadableChapterKey = mapping.ReadableChapterKey,
                     AudioTrackEntityId = mapping.AudioTrackId,
+                    Origin = BookChapterMappingOrigin.Manual,
                     UpdatedAt = now
                 }));
             await db.SaveChangesAsync(cancellationToken);
@@ -90,16 +92,19 @@ internal sealed class EfBookChapterMappingService(
             if (transaction is not null) {
                 await transaction.CommitAsync(cancellationToken);
             }
-
-            return new BookChapterMappingSaveResult(
-                BookChapterMappingSaveStatus.Saved,
-                new BookChapterMappingsResponse(normalized.Mappings),
-                null);
         } finally {
             if (transaction is not null) {
                 await transaction.DisposeAsync();
             }
         }
+
+        // The saved manual pairs consume chapters and tracks, so the automatic layer is stale by
+        // definition; refill it inline so the response is the complete merged map.
+        await chapterMap.RefreshAsync(bookId, cancellationToken);
+        return new BookChapterMappingSaveResult(
+            BookChapterMappingSaveStatus.Saved,
+            await ReadAsync(bookId, cancellationToken),
+            null);
     }
 
     private async Task<bool> IsVisibleBookAsync(Guid bookId, CancellationToken cancellationToken) =>
@@ -111,15 +116,18 @@ internal sealed class EfBookChapterMappingService(
     private async Task<BookChapterMappingsResponse> ReadAsync(
         Guid bookId,
         CancellationToken cancellationToken) {
-        var mappings = await db.BookChapterAudioMappings
+        var rows = await db.BookChapterAudioMappings
             .AsNoTracking()
             .Where(row => row.BookId == bookId)
             .OrderBy(row => row.ReadableChapterKey)
+            .Select(row => new { row.ReadableChapterKey, row.AudioTrackEntityId, row.Origin })
+            .ToArrayAsync(cancellationToken);
+        return new BookChapterMappingsResponse(rows
             .Select(row => new BookChapterAudioMapping(
                 row.ReadableChapterKey,
-                row.AudioTrackEntityId))
-            .ToArrayAsync(cancellationToken);
-        return new BookChapterMappingsResponse(mappings);
+                row.AudioTrackEntityId,
+                row.Origin.ToCode()))
+            .ToArray());
     }
 
     private static NormalizedMappings Normalize(IReadOnlyList<BookChapterAudioMapping>? mappings) {

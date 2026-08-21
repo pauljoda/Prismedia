@@ -77,6 +77,10 @@ public enum JobType {
     [Code("generate-book-cover-thumbnail")]
     GenerateBookCoverThumbnail,
 
+    /// <summary>Persists a Book's readable chapter list and recomputes its automatic audiobook chapter map.</summary>
+    [Code("map-book-chapters")]
+    MapBookChapters,
+
     /// <summary>Generates waveform peak data for audio playback visualization.</summary>
     [Code("generate-audio-waveform")]
     GenerateAudioWaveform,

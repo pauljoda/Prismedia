@@ -1,38 +1,135 @@
 using System.Collections.Concurrent;
+using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Books;
 using Prismedia.Application.Entities;
 using Prismedia.Contracts.Books;
 using Prismedia.Domain.Entities;
+using Prismedia.Infrastructure.Persistence;
 using VersOne.Epub;
 
 namespace Prismedia.Infrastructure.Media.Books;
 
 /// <summary>
-/// Extracts EPUB navigation and section weights from the server-side archive. The reference reader
-/// opens only package/navigation metadata; chapter bodies never cross the API merely to render a TOC.
+/// Serves the readable chapter list for one Book. EPUB books read the scan-persisted projection in
+/// <c>book_reading_chapters</c> (falling back to a cached archive parse until the first mapping job
+/// lands); paged books serve chapter-entity summaries with page counts in one grouped query, so no
+/// caller has to fan out per chapter.
 /// </summary>
 internal sealed class EpubBookContentsService(
     IEntityFileContentService files,
-    EpubBookContentsCache cache) : IBookContentsService {
+    EpubBookContentsCache cache,
+    PrismediaDbContext db,
+    IEntityVisibilityChecker visibility) : IBookContentsService {
     /// <inheritdoc />
     public async Task<BookContentsResponse?> GetAsync(Guid bookId, CancellationToken cancellationToken) {
         var source = await files.GetContentAsync(
             bookId,
             EntityFileRole.Source.ToCode(),
             cancellationToken);
-        if (source is null ||
-            !string.Equals(Path.GetExtension(source.Path), ".epub", StringComparison.OrdinalIgnoreCase)) {
+        if (source is not null &&
+            string.Equals(Path.GetExtension(source.Path), ".epub", StringComparison.OrdinalIgnoreCase)) {
+            var info = new FileInfo(source.Path);
+            if (!info.Exists) {
+                return null;
+            }
+
+            var persisted = await GetPersistedAsync(bookId, info, cancellationToken);
+            if (persisted is not null) {
+                return persisted;
+            }
+
+            return await cache.GetAsync(
+                new EpubBookContentsCacheKey(info.FullName, info.Length, info.LastWriteTimeUtc.Ticks),
+                cancellationToken);
+        }
+
+        return await GetChapterEntitySummariesAsync(bookId, cancellationToken);
+    }
+
+    /// <summary>Serves the scan-owned projection only while its signature still matches the file.</summary>
+    private async Task<BookContentsResponse?> GetPersistedAsync(
+        Guid bookId,
+        FileInfo info,
+        CancellationToken cancellationToken) {
+        var state = await db.BookContentStates.AsNoTracking()
+            .SingleOrDefaultAsync(row => row.BookId == bookId, cancellationToken);
+        if (state?.SourceSignature is null ||
+            !state.SourceSignature.StartsWith($"epub:{info.Length}:{info.LastWriteTimeUtc.Ticks}:", StringComparison.Ordinal)) {
             return null;
         }
 
-        var info = new FileInfo(source.Path);
-        if (!info.Exists) {
+        var rows = await db.BookReadingChapters.AsNoTracking()
+            .Where(row => row.BookId == bookId)
+            .OrderBy(row => row.DisplayOrder)
+            .ToArrayAsync(cancellationToken);
+        if (rows.Length == 0) {
             return null;
         }
 
-        return await cache.GetAsync(
-            new EpubBookContentsCacheKey(info.FullName, info.Length, info.LastWriteTimeUtc.Ticks),
+        return new BookContentsResponse(rows
+            .Select(row => new BookContentsEntry(
+                row.ChapterKey,
+                row.Title,
+                row.ChapterKey,
+                row.Depth,
+                row.DisplayOrder,
+                row.SectionIndex,
+                row.StartFraction,
+                row.EndFraction))
+            .ToArray());
+    }
+
+    /// <summary>
+    /// Chapter-entity books (comics/manga) list their direct chapters with page counts from one
+    /// grouped query — previously every client counted pages by fetching each chapter's children.
+    /// </summary>
+    private async Task<BookContentsResponse?> GetChapterEntitySummariesAsync(
+        Guid bookId,
+        CancellationToken cancellationToken) {
+        if (!await visibility.IsVisibleAsync(bookId, cancellationToken)) {
+            return null;
+        }
+
+        var isBook = await db.Entities.AsNoTracking().AnyAsync(
+            row => row.Id == bookId && row.KindCode == EntityKind.Book.ToCode(),
             cancellationToken);
+        if (!isBook) {
+            return null;
+        }
+
+        var chapterKind = EntityKind.BookChapter.ToCode();
+        var chapters = await db.Entities.AsNoTracking()
+            .Where(row => row.ParentEntityId == bookId && row.KindCode == chapterKind && !row.IsWanted)
+            .Select(row => new { row.Id, row.Title, row.SortOrder })
+            .ToArrayAsync(cancellationToken);
+        if (chapters.Length == 0) {
+            return new BookContentsResponse([]);
+        }
+
+        var chapterIds = chapters.Select(chapter => chapter.Id).ToArray();
+        var pageKind = EntityKind.BookPage.ToCode();
+        var pageCounts = await db.Entities.AsNoTracking()
+            .Where(row => row.ParentEntityId != null &&
+                chapterIds.Contains(row.ParentEntityId.Value) &&
+                row.KindCode == pageKind)
+            .GroupBy(row => row.ParentEntityId!.Value)
+            .Select(group => new { ChapterId = group.Key, Count = group.Count() })
+            .ToDictionaryAsync(group => group.ChapterId, group => group.Count, cancellationToken);
+
+        return new BookContentsResponse(chapters
+            .OrderBy(chapter => chapter.SortOrder ?? int.MaxValue)
+            .ThenBy(chapter => chapter.Title, StringComparer.Ordinal)
+            .Select((chapter, order) => new BookContentsEntry(
+                chapter.Id.ToString("D"),
+                chapter.Title,
+                chapter.Id.ToString("D"),
+                Depth: 0,
+                Order: order,
+                SectionIndex: null,
+                StartFraction: null,
+                EndFraction: null,
+                PageCount: pageCounts.GetValueOrDefault(chapter.Id)))
+            .ToArray());
     }
 }
 

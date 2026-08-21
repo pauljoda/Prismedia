@@ -1,8 +1,10 @@
 using System.IO.Compression;
+using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Entities;
 using Prismedia.Contracts.Media;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Media.Books;
+using Prismedia.Infrastructure.Persistence;
 
 namespace Prismedia.Infrastructure.Tests;
 
@@ -20,9 +22,12 @@ public sealed class EpubBookContentsServiceTests : IDisposable {
         var bookId = Guid.NewGuid();
         var path = Path.Combine(_tempDirectory, "book.epub");
         await CreateEpubAsync(path);
+        await using var db = CreateContext();
         var service = new EpubBookContentsService(
             new FakeEntityFileContentService(bookId, path),
-            new EpubBookContentsCache());
+            new EpubBookContentsCache(),
+            db,
+            new VisibleEntityScope());
 
         var response = await service.GetAsync(bookId, CancellationToken.None);
 
@@ -50,9 +55,12 @@ public sealed class EpubBookContentsServiceTests : IDisposable {
         var bookId = Guid.NewGuid();
         var path = Path.Combine(_tempDirectory, "book.pdf");
         await File.WriteAllTextAsync(path, "not an epub");
+        await using var db = CreateContext();
         var service = new EpubBookContentsService(
             new FakeEntityFileContentService(bookId, path),
-            new EpubBookContentsCache());
+            new EpubBookContentsCache(),
+            db,
+            new VisibleEntityScope());
 
         var response = await service.GetAsync(bookId, CancellationToken.None);
 
@@ -63,6 +71,16 @@ public sealed class EpubBookContentsServiceTests : IDisposable {
         if (Directory.Exists(_tempDirectory)) {
             Directory.Delete(_tempDirectory, recursive: true);
         }
+    }
+
+    private static PrismediaDbContext CreateContext() =>
+        new(new DbContextOptionsBuilder<PrismediaDbContext>()
+            .UseInMemoryDatabase($"epub-contents-{Guid.NewGuid():N}")
+            .Options);
+
+    private sealed class VisibleEntityScope : IEntityVisibilityChecker {
+        public Task<bool> IsVisibleAsync(Guid entityId, CancellationToken cancellationToken) =>
+            Task.FromResult(true);
     }
 
     private static async Task CreateEpubAsync(string path) {

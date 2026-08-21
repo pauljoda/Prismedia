@@ -1,11 +1,15 @@
 namespace Prismedia.Contracts.Books;
 
 /// <summary>
-/// Explicitly associates one readable chapter location with one audiobook track Entity.
+/// Associates one readable chapter location with one audiobook track Entity.
 /// </summary>
 /// <param name="ReadableChapterKey">Stable location key from the readable book contents.</param>
 /// <param name="AudioTrackId">Identifier of the audiobook track Entity.</param>
-public sealed record BookChapterAudioMapping(string ReadableChapterKey, Guid AudioTrackId);
+/// <param name="Origin">
+/// Mapping provenance code (<c>manual</c> or <c>auto</c>). Ignored on save requests, where every
+/// submitted pair is manual by definition.
+/// </param>
+public sealed record BookChapterAudioMapping(string ReadableChapterKey, Guid AudioTrackId, string? Origin = null);
 
 /// <summary>
 /// Persisted audiobook-to-readable-chapter associations for one Book.

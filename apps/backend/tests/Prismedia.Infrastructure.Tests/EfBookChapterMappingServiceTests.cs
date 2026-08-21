@@ -19,7 +19,7 @@ public sealed class EfBookChapterMappingServiceTests {
         AddSource(db, firstTrackId);
         AddSource(db, secondTrackId);
         await db.SaveChangesAsync();
-        var service = new EfBookChapterMappingService(db, new VisibleEntityScope());
+        var service = CreateService(db, new VisibleEntityScope());
 
         var firstSave = await service.ReplaceAsync(
             bookId,
@@ -53,7 +53,7 @@ public sealed class EfBookChapterMappingServiceTests {
         AddSource(db, ownedTrackId);
         AddSource(db, foreignTrackId);
         await db.SaveChangesAsync();
-        var service = new EfBookChapterMappingService(db, new VisibleEntityScope());
+        var service = CreateService(db, new VisibleEntityScope());
 
         var duplicate = await service.ReplaceAsync(
             bookId,
@@ -80,7 +80,7 @@ public sealed class EfBookChapterMappingServiceTests {
         var bookId = AddEntity(db, EntityKind.Book, "Book");
         var aggregateTrackId = AddEntity(db, EntityKind.AudioTrack, "Book", bookId, 0);
         await db.SaveChangesAsync();
-        var service = new EfBookChapterMappingService(db, new VisibleEntityScope());
+        var service = CreateService(db, new VisibleEntityScope());
 
         var result = await service.ReplaceAsync(
             bookId,
@@ -98,8 +98,8 @@ public sealed class EfBookChapterMappingServiceTests {
         await using var db = CreateContext();
         var videoId = AddEntity(db, EntityKind.Video, "Video");
         await db.SaveChangesAsync();
-        var hiddenService = new EfBookChapterMappingService(db, new HiddenEntityScope());
-        var visibleService = new EfBookChapterMappingService(db, new VisibleEntityScope());
+        var hiddenService = CreateService(db, new HiddenEntityScope());
+        var visibleService = CreateService(db, new VisibleEntityScope());
 
         var hidden = await hiddenService.GetAsync(videoId, CancellationToken.None);
         var nonBook = await visibleService.ReplaceAsync(
@@ -115,6 +115,11 @@ public sealed class EfBookChapterMappingServiceTests {
         new(new DbContextOptionsBuilder<PrismediaDbContext>()
             .UseInMemoryDatabase($"book-chapter-mapping-{Guid.NewGuid():N}")
             .Options);
+
+    private static EfBookChapterMappingService CreateService(
+        PrismediaDbContext db,
+        IEntityVisibilityChecker visibility) =>
+        new(db, visibility, new EfBookChapterMapService(db, new EpubBookContentsCache()));
 
     private static Guid AddEntity(
         PrismediaDbContext db,
