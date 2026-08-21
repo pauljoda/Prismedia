@@ -67,4 +67,42 @@ public sealed class SerializedComicEntityKindTests {
         Assert.Equal("releasing", seriesCapability.Status);
         Assert.Equal(ComicInstallmentKind.Chapter, installmentCapability.InstallmentKind);
     }
+
+    [Fact]
+    public void SerializedComicRequestsAllowCollectedAndDirectInstallmentChildren() {
+        var seriesRequest = Assert.Single(EntityKindRegistry.Describe(EntityKind.ComicSeries).RequestKinds);
+        var volumeRequest = Assert.Single(EntityKindRegistry.Describe(EntityKind.ComicVolume).RequestKinds);
+        var installmentRequest = Assert.Single(EntityKindRegistry.Describe(EntityKind.ComicInstallment).RequestKinds);
+
+        Assert.Equal(RequestMediaKind.ComicSeries, seriesRequest.Kind);
+        Assert.Equal(
+            [RequestMediaKind.ComicVolume, RequestMediaKind.ComicInstallment],
+            seriesRequest.ChildKinds);
+        Assert.Equal(RequestReviewSelection.DirectChildren, seriesRequest.ReviewSelection);
+        Assert.Equal(EntityKind.ComicVolume, seriesRequest.AcquisitionKind);
+
+        Assert.Equal(RequestMediaKind.ComicVolume, volumeRequest.Kind);
+        Assert.Equal([RequestMediaKind.ComicInstallment], volumeRequest.ChildKinds);
+        Assert.True(volumeRequest.MaterializeChildPhantoms);
+        Assert.True(volumeRequest.AcquireFromEntity);
+        Assert.True(EntityKindRegistry.Describe(EntityKind.ComicVolume).IsFulfilledBySourceBackedSubtree);
+
+        Assert.Equal(RequestMediaKind.ComicInstallment, installmentRequest.Kind);
+        Assert.Empty(installmentRequest.ChildKinds);
+        Assert.True(installmentRequest.AcquireFromEntity);
+        Assert.Equal(1, EntityKindRegistry.Describe(EntityKind.ComicInstallment).AutomaticImportFileLimit);
+        Assert.Null(EntityKindRegistry.Describe(EntityKind.Book).AutomaticImportFileLimit);
+    }
+
+    [Fact]
+    public void SerializedComicAcquisitionProfileUsesArchivePlacementAndComicScanning() {
+        var profile = EntityKindRegistry.Describe(EntityKind.ComicSeries).AcquisitionProfile;
+
+        Assert.NotNull(profile);
+        Assert.Equal(AcquisitionNamingFamily.Book, profile.NamingFamily);
+        Assert.Equal(AcquisitionCheckpointProtocol.Placement, profile.CheckpointProtocol);
+        Assert.Equal(JobType.ScanComic, profile.ImportScanJobType);
+        Assert.Contains(EntityDateType.Publication, profile.SupportedReleaseDateTypes);
+        Assert.Equal("{Series}/{VolumeFolder}/{Title}.{ext}", profile.DefaultNamingTemplate);
+    }
 }

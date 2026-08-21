@@ -48,6 +48,24 @@ public sealed class RequestServicesTests {
     }
 
     [Fact]
+    public void ComicSeriesExposeVolumesAndUncollectedInstallmentsThroughOneGenericContract() {
+        var series = RequestKindRegistry.Find(RequestMediaKind.ComicSeries)!;
+
+        Assert.Equal(
+            [RequestMediaKind.ComicVolume, RequestMediaKind.ComicInstallment],
+            RequestKindRegistry.ChildrenOf(series).Select(child => child.Kind));
+        Assert.Equal(
+            [EntityKind.ComicVolume, EntityKind.ComicInstallment],
+            RequestKindRegistry.MissingChildEntityKinds(series));
+        Assert.Equal(
+            RequestMediaKind.ComicVolume,
+            RequestKindRegistry.ChildOf(series, EntityKind.ComicVolume)?.Kind);
+        Assert.Equal(
+            RequestMediaKind.ComicInstallment,
+            RequestKindRegistry.ChildOf(series, EntityKind.ComicInstallment)?.Kind);
+    }
+
+    [Fact]
     public async Task PluginSearchRoutesOneDiscoverableKindAndExactPluginFields() {
         var source = new FakePluginSearchSource();
         var service = new RequestPluginSearchService(source);
@@ -123,10 +141,12 @@ public sealed class RequestServicesTests {
             // A committable container must fan out into a committable child kind, or a commit could
             // never start an acquisition for it.
             if (descriptor is { IsContainer: true, Committable: true }) {
-                var child = RequestKindRegistry.ChildOf(descriptor);
-                Assert.NotNull(child);
-                Assert.True(child!.Committable, $"{descriptor.Kind} fans out into non-committable {child.Kind}");
-                Assert.False(child.IsContainer, $"{descriptor.Kind}'s child {child.Kind} must be a leaf");
+                var children = RequestKindRegistry.ChildrenOf(descriptor);
+                Assert.NotEmpty(children);
+                Assert.All(children, child => {
+                    Assert.True(child.Committable, $"{descriptor.Kind} fans out into non-committable {child.Kind}");
+                    Assert.False(child.IsContainer, $"{descriptor.Kind}'s child {child.Kind} must be a leaf");
+                });
             }
 
             if (descriptor.MaterializeChildPhantoms) {

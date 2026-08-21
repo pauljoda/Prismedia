@@ -128,12 +128,11 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
       || card.acquisitionStatuses?.some(acquisitionStatusShouldPoll) === true,
     ),
   );
-  // Only the server-declared request child kind contributes to the visible gap count. Mixed direct
-  // children remain independently monitorable, but a series' loose videos/sub-series cannot inflate its
-  // season count and an album with child discs cannot invent a missing-search capability.
+  // Only server-declared request child kinds contribute to the visible gap count. Mixed direct children
+  // are supported without treating unrelated structural children as missing releases.
   const missingChildCount = $derived(
     childCards.filter(
-      (card) => card.entity.kind === eligibility?.missingChildEntityKind
+      (card) => eligibility?.missingChildEntityKinds.includes(card.entity.kind) === true
         && isWanted(card.entity.capabilities) &&
         acquisitionStatusDisplay(card.wantedStatus).tone === "wanted",
     ).length,

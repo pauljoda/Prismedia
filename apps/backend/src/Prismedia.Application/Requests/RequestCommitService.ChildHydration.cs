@@ -147,67 +147,84 @@ public sealed partial class RequestCommitService {
 
         var descriptor = RequestKindRegistry.All.FirstOrDefault(candidate =>
             candidate is { Committable: true } && candidate.WantedEntityKind == entity.Kind);
-        var child = descriptor is null ? null : RequestKindRegistry.ChildOf(descriptor);
-        if (child is not { Committable: true }) {
+        var children = descriptor is null
+            ? []
+            : RequestKindRegistry.ChildrenOf(descriptor).Where(child => child.Committable).ToArray();
+        if (children.Length == 0) {
             return new MissingChildRequestResult(0, 0, []);
         }
 
-        var missing = await wanted.ListWantedChildIdsAsync(entityId, child.WantedEntityKind, cancellationToken);
-        if (missing.Count == 0 && descriptor!.MaterializeChildPhantoms) {
+        var missingByKind = new Dictionary<RequestMediaKind, IReadOnlyList<Guid>>();
+        foreach (var child in children) {
+            missingByKind[child.Kind] = await wanted.ListWantedChildIdsAsync(
+                entityId,
+                child.WantedEntityKind,
+                cancellationToken);
+        }
+        if (missingByKind.Values.All(missing => missing.Count == 0) && descriptor!.MaterializeChildPhantoms) {
             await HydrateAsync(entityId, hideNsfw: true, cancellationToken);
-            missing = await wanted.ListWantedChildIdsAsync(entityId, child.WantedEntityKind, cancellationToken);
+            foreach (var child in children) {
+                missingByKind[child.Kind] = await wanted.ListWantedChildIdsAsync(
+                    entityId,
+                    child.WantedEntityKind,
+                    cancellationToken);
+            }
         }
 
         var covered = 0;
+        var total = 0;
         var items = new List<RequestCommitItem>();
-        foreach (var childId in missing) {
-            if (await acquisitions.EnsureOpenEntitySearchAsync(
+        foreach (var child in children) {
+            var missing = missingByKind[child.Kind];
+            total += missing.Count;
+            foreach (var childId in missing) {
+                if (await acquisitions.EnsureOpenEntitySearchAsync(
+                        childId,
+                        child.BookRendition,
+                        parentContext,
+                        origin,
+                        cancellationToken)) {
+                    covered++;
+                    continue;
+                }
+
+                var response = await RequestEntityFromGraphAsync(
                     childId,
+                    hideNsfw: true,
+                    cancellationToken,
+                    targeting: null,
                     child.BookRendition,
+                    hydrateChildren: true,
+                    parentContext,
+                    origin);
+                if (response is { Items.Count: > 0 }) {
+                    covered++;
+                    items.AddRange(response.Items);
+                }
+            }
+
+            if (!RequestKindRegistry.ChildrenOf(child).Any(grandchild => grandchild.Committable)) {
+                continue;
+            }
+
+            var wantedSet = missing.ToHashSet();
+            foreach (var ownedChildId in await wanted.ListChildIdsAsync(
+                         entityId,
+                         child.WantedEntityKind,
+                         cancellationToken)) {
+                if (wantedSet.Contains(ownedChildId)) {
+                    continue;
+                }
+
+                var descendants = await RequestMissingChildItemsAsync(
+                    ownedChildId,
                     parentContext,
                     origin,
-                    cancellationToken)) {
-                covered++;
-                continue;
+                    cancellationToken);
+                covered += descendants.Covered;
+                total += descendants.Missing;
+                items.AddRange(descendants.Items);
             }
-
-            var response = await RequestEntityFromGraphAsync(
-                childId,
-                hideNsfw: true,
-                cancellationToken,
-                targeting: null,
-                child.BookRendition,
-                hydrateChildren: true,
-                parentContext,
-                origin);
-            if (response is { Items.Count: > 0 }) {
-                covered++;
-                items.AddRange(response.Items);
-            }
-        }
-
-        var total = missing.Count;
-        if (RequestKindRegistry.ChildOf(child) is not { Committable: true }) {
-            return new MissingChildRequestResult(covered, total, items);
-        }
-
-        var wantedSet = missing.ToHashSet();
-        foreach (var ownedChildId in await wanted.ListChildIdsAsync(
-                     entityId,
-                     child.WantedEntityKind,
-                     cancellationToken)) {
-            if (wantedSet.Contains(ownedChildId)) {
-                continue;
-            }
-
-            var descendants = await RequestMissingChildItemsAsync(
-                ownedChildId,
-                parentContext,
-                origin,
-                cancellationToken);
-            covered += descendants.Covered;
-            total += descendants.Missing;
-            items.AddRange(descendants.Items);
         }
 
         return new MissingChildRequestResult(covered, total, items);

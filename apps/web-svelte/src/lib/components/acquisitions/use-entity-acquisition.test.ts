@@ -275,7 +275,7 @@ describe("useEntityAcquisition", () => {
       trackableProviders: ["tmdb"],
       discoversChildren: true,
       canSearchMissingChildren: true,
-      missingChildEntityKind: ENTITY_KIND.videoSeason,
+      missingChildEntityKinds: [ENTITY_KIND.videoSeason],
     });
 
     render(Harness, { entityId: "series-1" });
@@ -351,7 +351,7 @@ describe("useEntityAcquisition", () => {
       trackableProviders: ["tmdb"],
       discoversChildren: false,
       canSearchMissingChildren: true,
-      missingChildEntityKind: ENTITY_KIND.videoEpisode,
+      missingChildEntityKinds: [ENTITY_KIND.videoEpisode],
     });
 
     render(Harness, { entityId: "season-1" });
@@ -367,7 +367,7 @@ describe("useEntityAcquisition", () => {
       trackableProviders: ["tmdb"],
       discoversChildren: true,
       canSearchMissingChildren: true,
-      missingChildEntityKind: ENTITY_KIND.videoSeason,
+      missingChildEntityKinds: [ENTITY_KIND.videoSeason],
     });
 
     render(Harness, {
@@ -383,6 +383,30 @@ describe("useEntityAcquisition", () => {
     expect(screen.getByTestId("show-search-missing")).toHaveTextContent("yes");
   });
 
+  it("counts volumes and uncollected installments for a serialized comic series", async () => {
+    mocks.fetchAcquisitionForEntity.mockResolvedValue(null);
+    mocks.fetchEntityMonitor.mockResolvedValue(activeMonitor("comic-series-1", null));
+    mocks.fetchMonitorEligibility.mockResolvedValue({
+      canMonitor: true,
+      trackableProviders: ["mangadex"],
+      discoversChildren: true,
+      canSearchMissingChildren: true,
+      missingChildEntityKinds: [ENTITY_KIND.comicVolume, ENTITY_KIND.comicInstallment],
+    });
+
+    render(Harness, {
+      entityId: "comic-series-1",
+      childCards: [
+        wantedChild("volume-1", ENTITY_KIND.comicVolume, "comic-series-1"),
+        wantedChild("chapter-11", ENTITY_KIND.comicInstallment, "comic-series-1"),
+        wantedChild("cover", ENTITY_KIND.image, "comic-series-1"),
+      ],
+    });
+
+    await waitFor(() => expect(screen.getByTestId("missing-count")).toHaveTextContent("2"));
+    expect(screen.getByTestId("show-search-missing")).toHaveTextContent("yes");
+  });
+
   it("keeps audio child monitoring without inventing Search Missing for albums", async () => {
     mocks.fetchAcquisitionForEntity.mockResolvedValue(null);
     mocks.fetchEntityMonitor.mockResolvedValue(activeMonitor("album-1", null));
@@ -391,7 +415,7 @@ describe("useEntityAcquisition", () => {
       trackableProviders: ["musicbrainz"],
       discoversChildren: false,
       canSearchMissingChildren: false,
-      missingChildEntityKind: null,
+      missingChildEntityKinds: [],
     });
 
     render(Harness, {
@@ -475,7 +499,7 @@ describe("useEntityAcquisition", () => {
       trackableProviders: ["openlibrary"],
       discoversChildren: false,
       canSearchMissingChildren: false,
-      missingChildEntityKind: null,
+      missingChildEntityKinds: [],
     });
 
     render(Harness, { entityId: "book-1" });

@@ -22,26 +22,26 @@ public sealed class MonitorEndpointTests {
             ["books-metadata"],
             DiscoversChildren: false,
             CanSearchMissingChildren: true,
-            MissingChildEntityKind: EntityKind.Book);
+            MissingChildEntityKinds: [EntityKind.Book]);
         var album = new MonitorEligibilityView(
             true,
             ["music-metadata"],
             DiscoversChildren: false,
             CanSearchMissingChildren: false,
-            MissingChildEntityKind: null);
+            MissingChildEntityKinds: []);
         var grouping = new MonitorEligibilityView(
             true,
             ["books-metadata"],
             DiscoversChildren: true,
             CanSearchMissingChildren: true,
-            MissingChildEntityKind: EntityKind.Book);
+            MissingChildEntityKinds: [EntityKind.Book]);
 
         Assert.False(book.DiscoversChildren);
         Assert.True(book.CanSearchMissingChildren);
-        Assert.Equal(EntityKind.Book, book.MissingChildEntityKind);
+        Assert.Equal([EntityKind.Book], book.MissingChildEntityKinds);
         Assert.False(album.DiscoversChildren);
         Assert.False(album.CanSearchMissingChildren);
-        Assert.Null(album.MissingChildEntityKind);
+        Assert.Empty(album.MissingChildEntityKinds);
         Assert.True(grouping.DiscoversChildren);
         Assert.True(grouping.CanSearchMissingChildren);
         Assert.Equal(book.CanMonitor, grouping.CanMonitor);

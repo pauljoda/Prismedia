@@ -180,16 +180,17 @@ public sealed class ImportedEntityMaterializer(
     IImportedEntityReadinessPersistence readiness,
     IScanSnapshotStore? snapshots = null,
     IDownstreamNeedsPersistence? processingRoots = null) : IImportedEntityMaterializer {
-    private readonly IReadOnlyDictionary<AcquisitionNamingFamily, IImportedEntityMaterializationPolicy> _byFamily =
-        policies.ToDictionary(AcquisitionStrategyRegistration.FamilyOf);
+    private readonly IReadOnlyDictionary<JobType, IImportedEntityMaterializationPolicy> _byScanJobType =
+        policies.ToDictionary(policy => policy.ScanJobType);
 
     public async Task<ImportedEntityMaterializationResult> MaterializeAsync(
         EntityKind kind,
         JobContext context,
         ImportedEntityMaterializationRequest request,
         CancellationToken cancellationToken) {
-        var family = AcquisitionStrategyRegistration.TryGetNamingFamily(kind);
-        if (family is null || !_byFamily.TryGetValue(family.Value, out var policy)) {
+        var profileKind = AcquisitionProfileKinds.For(kind);
+        var scanJobType = EntityKindRegistry.Describe(profileKind).AcquisitionProfile?.ImportScanJobType;
+        if (scanJobType is null || !_byScanJobType.TryGetValue(scanJobType.Value, out var policy)) {
             throw new InvalidOperationException($"No imported Entity materializer is registered for {kind.ToCode()}.");
         }
 
@@ -290,7 +291,6 @@ public sealed class ImportedEntityMaterializer(
 }
 
 /// <summary>Book import policy backed by the book scanner's exact-path materialization seam.</summary>
-[AcquisitionStrategy(AcquisitionNamingFamily.Book)]
 public sealed class ImportedBookMaterializationPolicy(ScanBookJobHandler scan)
     : IImportedEntityMaterializationPolicy {
     public JobType ScanJobType => JobType.ScanBook;
@@ -309,7 +309,6 @@ public sealed class ImportedBookMaterializationPolicy(ScanBookJobHandler scan)
 }
 
 /// <summary>Movie import policy backed by the video scanner's exact-path materialization seam.</summary>
-[AcquisitionStrategy(AcquisitionNamingFamily.Movie)]
 public sealed class ImportedMovieMaterializationPolicy(ScanLibraryJobHandler scan)
     : IImportedEntityMaterializationPolicy {
     public JobType ScanJobType => JobType.ScanLibrary;
@@ -323,7 +322,6 @@ public sealed class ImportedMovieMaterializationPolicy(ScanLibraryJobHandler sca
 }
 
 /// <summary>Album import policy backed by the audio scanner's exact-path materialization seam.</summary>
-[AcquisitionStrategy(AcquisitionNamingFamily.Music)]
 public sealed class ImportedAlbumMaterializationPolicy(ScanAudioJobHandler scan)
     : IImportedEntityMaterializationPolicy {
     public JobType ScanJobType => JobType.ScanAudio;
@@ -339,4 +337,21 @@ public sealed class ImportedAlbumMaterializationPolicy(ScanAudioJobHandler scan)
             request.PlacedMediaPaths,
             cancellationToken,
             request.RequestedAudioTrackIdsByPath);
+}
+
+/// <summary>Serialized-comic import policy backed by the comic scanner's exact-path seam.</summary>
+public sealed class ImportedComicMaterializationPolicy(ScanComicJobHandler scan)
+    : IImportedEntityMaterializationPolicy {
+    public JobType ScanJobType => JobType.ScanComic;
+
+    public Task MaterializeAsync(
+        JobContext context,
+        ImportedEntityMaterializationRequest request,
+        CancellationToken cancellationToken) =>
+        scan.MaterializeImportedPathsAsync(
+            context,
+            request.AcquisitionId,
+            request.Root,
+            request.PlacedMediaPaths,
+            cancellationToken);
 }

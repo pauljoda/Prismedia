@@ -1301,7 +1301,7 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             row.Id, row.Title, row.Author, row.Series, row.Year, row.PosterUrl, externalIdentity,
             row.ProfileId, transfer?.ContentPath, transfer?.ClientItemId, transfer?.DownloadClientConfigId, row.Kind,
             row.Description, row.TargetLibraryRootId, row.SeasonNumber, row.EpisodeNumber, row.EntityId, row.FinalSourcePath,
-            tvImportCheckpoint, importPlacementCheckpoint, row.BookRendition, row.UpgradeOfAcquisitionId);
+            tvImportCheckpoint, importPlacementCheckpoint, row.BookRendition, row.UpgradeOfAcquisitionId, row.VolumeNumber);
         context.EnsureCheckpointApplicability();
         return context;
     }

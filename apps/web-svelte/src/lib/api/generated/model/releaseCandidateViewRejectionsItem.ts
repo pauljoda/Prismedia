@@ -27,4 +27,5 @@ export const ReleaseCandidateViewRejectionsItem = {
   'title-mismatch': 'title-mismatch',
   'wrong-year': 'wrong-year',
   'wrong-volume': 'wrong-volume',
+  'wrong-installment': 'wrong-installment',
 } as const;

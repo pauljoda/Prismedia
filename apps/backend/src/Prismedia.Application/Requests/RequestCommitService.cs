@@ -478,27 +478,25 @@ public sealed partial class RequestCommitService(
             return new Dictionary<ExternalIdentity, PreparedPhantomDescendants>();
         }
 
-        var selectedDescriptor = rootDescriptor.IsContainer || !selection.SelectRoot
-            ? RequestKindRegistry.ChildOf(rootDescriptor)
-            : rootDescriptor;
-        if (selectedDescriptor is not { MaterializeChildPhantoms: true }) {
-            return new Dictionary<ExternalIdentity, PreparedPhantomDescendants>();
-        }
-
         var selectedNodes = selection.SelectRoot
             ? [new ResolvedRequestProposalNode(review.Proposal, review.ExternalIdentity)]
             : selection.Nodes;
-        var childDescriptor = RequestKindRegistry.ChildOf(selectedDescriptor)
-            ?? throw new RequestCommitValidationException("The selected proposal has no structural child kind.");
         var targets = review.Targets.ToDictionary(target => target.ProposalId, StringComparer.Ordinal);
         var prepared = new Dictionary<ExternalIdentity, PreparedPhantomDescendants>();
         foreach (var selected in selectedNodes) {
+            var selectedDescriptor = selection.SelectRoot
+                ? rootDescriptor
+                : RequestKindRegistry.ChildOf(rootDescriptor, selected.Proposal.TargetKind);
+            if (selectedDescriptor is not { MaterializeChildPhantoms: true }) {
+                continue;
+            }
+
             var direct = (selected.Proposal.Children ?? [])
                 .Where(node => !node.TargetKind.IsRelationship())
                 .ToArray();
-            var children = ReviewedRequestSelectionResolver.ResolveDirectNodes(
+            var children = ReviewedRequestSelectionResolver.ResolveMixedDirectNodes(
                 direct,
-                childDescriptor,
+                selectedDescriptor,
                 targets,
                 direct.Select(node => node.ProposalId).ToArray());
             if (!prepared.TryAdd(selected.Identity, new PreparedPhantomDescendants(selected.Proposal, children))) {
@@ -525,23 +523,19 @@ public sealed partial class RequestCommitService(
             return new Dictionary<ExternalIdentity, PreparedPhantomDescendants>();
         }
 
-        var selectedDescriptor = rootDescriptor.IsContainer || !selection.SelectRoot
-            ? RequestKindRegistry.ChildOf(rootDescriptor)
-            : rootDescriptor;
-        if (selectedDescriptor is not { MaterializeChildPhantoms: true }) {
-            return new Dictionary<ExternalIdentity, PreparedPhantomDescendants>();
-        }
-
         var selectedNodes = selection.SelectRoot
             ? [new ResolvedRequestProposalNode(rootReview.Proposal, rootReview.ExternalIdentity)]
             : selection.Nodes;
-        var childDescriptor = RequestKindRegistry.ChildOf(selectedDescriptor);
-        if (childDescriptor is null) {
-            throw new RequestCommitValidationException("The selected proposal has no structural child kind.");
-        }
 
         var prepared = new Dictionary<ExternalIdentity, PreparedPhantomDescendants>();
         foreach (var selected in selectedNodes) {
+            var selectedDescriptor = selection.SelectRoot
+                ? rootDescriptor
+                : RequestKindRegistry.ChildOf(rootDescriptor, selected.Proposal.TargetKind);
+            if (selectedDescriptor is not { MaterializeChildPhantoms: true }) {
+                continue;
+            }
+
             var review = await reviews.ReviewAsync(
                 new RequestReviewRequest(selectedDescriptor.Kind, rootReview.PluginId, selected.Identity),
                 hideNsfw,
@@ -573,9 +567,9 @@ public sealed partial class RequestCommitService(
             var direct = review.Proposal.Children
                 .Where(node => !node.TargetKind.IsRelationship())
                 .ToArray();
-            var children = ReviewedRequestSelectionResolver.ResolveDirectNodes(
+            var children = ReviewedRequestSelectionResolver.ResolveMixedDirectNodes(
                 direct,
-                childDescriptor,
+                selectedDescriptor,
                 targets,
                 direct.Select(node => node.ProposalId).ToArray());
             if (!prepared.TryAdd(selected.Identity, new PreparedPhantomDescendants(review.Proposal, children))) {
@@ -850,17 +844,24 @@ public sealed partial class RequestCommitService(
         MonitorableEntity entity, bool hideNsfw, CancellationToken cancellationToken) {
         var descriptor = RequestKindRegistry.All.FirstOrDefault(candidate =>
             candidate is { IsContainer: true, Committable: true } && candidate.WantedEntityKind == entity.Kind);
-        var child = descriptor is null ? null : RequestKindRegistry.ChildOf(descriptor);
-        if (child is not { Committable: true }) {
+        var children = descriptor is null
+            ? []
+            : RequestKindRegistry.ChildrenOf(descriptor).Where(child => child.Committable).ToArray();
+        if (children.Length == 0) {
             return null;
         }
 
-        var missing = await wanted.ListWantedChildIdsAsync(entity.EntityId, child.WantedEntityKind, cancellationToken);
         var items = new List<RequestCommitItem>();
-        foreach (var childId in missing) {
-            var response = await RequestEntityAsync(childId, hideNsfw, cancellationToken);
-            if (response is not null) {
-                items.AddRange(response.Items);
+        foreach (var child in children) {
+            var missing = await wanted.ListWantedChildIdsAsync(
+                entity.EntityId,
+                child.WantedEntityKind,
+                cancellationToken);
+            foreach (var childId in missing) {
+                var response = await RequestEntityAsync(childId, hideNsfw, cancellationToken);
+                if (response is not null) {
+                    items.AddRange(response.Items);
+                }
             }
         }
 
@@ -904,7 +905,6 @@ public sealed partial class RequestCommitService(
         string? exactPluginId,
         IReadOnlyDictionary<ExternalIdentity, PreparedPhantomDescendants>? preparedDescendants,
         CancellationToken cancellationToken) {
-        var child = RequestKindRegistry.ChildOf(descriptor)!;
         var containerTitle = TitleOr(proposal.Patch.Title, rootIdentity.Value);
         // The container's definition decides how its title contributes to child acquisition searches.
         var (creatorContext, seriesContext) = EntityKindRegistry.Describe(descriptor.WantedEntityKind)
@@ -936,7 +936,6 @@ public sealed partial class RequestCommitService(
                 exactPluginId,
                 preparedDescendants,
                 container,
-                child,
                 containerTitle,
                 creatorContext,
                 seriesContext,
@@ -967,7 +966,6 @@ public sealed partial class RequestCommitService(
         string? exactPluginId,
         IReadOnlyDictionary<ExternalIdentity, PreparedPhantomDescendants>? preparedDescendants,
         WantedEntityResult container,
-        RequestKindDescriptor child,
         string containerTitle,
         string? creatorContext,
         string? seriesContext,
@@ -983,25 +981,26 @@ public sealed partial class RequestCommitService(
                 .ToArray();
         }
 
-        var picks = await EnsurePicksAsync(
-            child,
+        var picks = await EnsureContainerPicksAsync(
+            descriptor,
             selectedChildren,
             container.EntityId,
             cancellationToken,
-            requestOwnedEntity: explicitRequest && requestOwnedChildren && child.AcquireFromEntity);
+            requestOwnedEntity: explicitRequest && requestOwnedChildren);
 
         var useDeferredAcquisitionFanout = fanout is not null
             && startAcquisitions
             && explicitRequest;
 
-        var anythingNew = picks.Any(pick => pick.Outcome == RequestCommitOutcome.Requested);
+        var anythingNew = picks.Any(item => item.Pick.Outcome == RequestCommitOutcome.Requested);
         var prepareReviewedDescendantsForFanout = useDeferredAcquisitionFanout
             && !descriptor.DeferChildPhantomHydration;
         var reviewedChildProposals = new Dictionary<Guid, EntityMetadataProposal>();
         if (prepareReviewedDescendantsForFanout) {
-            foreach (var pick in picks) {
+            foreach (var item in picks) {
+                var pick = item.Pick;
                 var reviewedChildProposal = await PreparePhantomDescendantsProposalAsync(
-                    child,
+                    item.Descriptor,
                     pick.Identity,
                     pick.Entity.EntityId,
                     exactPluginId,
@@ -1026,6 +1025,7 @@ public sealed partial class RequestCommitService(
         if (container.Created || anythingNew || useDeferredAcquisitionFanout) {
             var applyChildren = proposal.Children.Where(node => node.TargetKind.IsRelationship())
                 .Concat(picks
+                    .Select(item => item.Pick)
                     .Where(pick => !pick.Entity.HasFile && (
                         pick.Outcome == RequestCommitOutcome.Requested
                         || useDeferredAcquisitionFanout
@@ -1047,7 +1047,8 @@ public sealed partial class RequestCommitService(
             var providerRoutes = new Dictionary<Guid, PluginIdentityRoute> {
                 [container.EntityId] = new(exactPluginId, rootIdentity)
             };
-            foreach (var pick in picks) {
+            foreach (var item in picks) {
+                var pick = item.Pick;
                 providerRoutes[pick.Entity.EntityId] = new PluginIdentityRoute(exactPluginId, pick.Identity);
             }
 
@@ -1074,7 +1075,7 @@ public sealed partial class RequestCommitService(
             || preset == MonitorPreset.All
             || !explicitRequest;
         var fanoutPicks = useDeferredAcquisitionFanout
-            ? picks.Where(pick => pick.Outcome is
+            ? picks.Where(item => item.Pick.Outcome is
                 RequestCommitOutcome.Requested or RequestCommitOutcome.AlreadyRequested).ToArray()
             : [];
         if (useDeferredAcquisitionFanout) {
@@ -1083,20 +1084,22 @@ public sealed partial class RequestCommitService(
             // by metadata persistence instead of every search/monitor/job round-trip. The same batch path
             // handles repeat commits without taking one lifecycle lease per already-requested child.
             await suppressions.ClearAsync(
-                picks.SelectMany(IdentitiesOf).Distinct().ToArray(),
+                picks.SelectMany(item => IdentitiesOf(item.Pick)).Distinct().ToArray(),
                 cancellationToken);
             await monitors.StartForEntitiesAsync(
-                fanoutPicks.Select(pick => new EntityMonitorStart(
-                    pick.Entity.EntityId,
-                    child.AcquisitionKind,
-                    pick.Title,
+                fanoutPicks.Select(item => new EntityMonitorStart(
+                    item.Pick.Entity.EntityId,
+                    item.Descriptor.AcquisitionKind,
+                    item.Pick.Title,
                     targeting,
                     Preset: null)).ToArray(),
                 cancellationToken);
         }
 
         var items = new List<RequestCommitItem>();
-        foreach (var pick in picks) {
+        foreach (var item in picks) {
+            var pick = item.Pick;
+            var child = item.Descriptor;
             var needsOwnedEntityMonitor = pick.Outcome == RequestCommitOutcome.AlreadyOwned
                 && attachOwnedEntityMonitor;
             if (useDeferredAcquisitionFanout && !needsOwnedEntityMonitor) {
@@ -1155,15 +1158,15 @@ public sealed partial class RequestCommitService(
                     TargetEntityId = container.EntityId,
                     Children = proposal.Children.Where(node => node.TargetKind.IsRelationship())
                         .Concat(fanoutPicks
-                            .Where(pick => reviewedChildProposals.ContainsKey(pick.Entity.EntityId))
-                            .Select(pick => reviewedChildProposals[pick.Entity.EntityId]))
+                            .Where(item => reviewedChildProposals.ContainsKey(item.Pick.Entity.EntityId))
+                            .Select(item => reviewedChildProposals[item.Pick.Entity.EntityId]))
                         .ToArray()
                 };
             fanoutGraphId = await fanout!.ScheduleAsync(
                 container.EntityId,
                 descriptor.WantedEntityKind,
                 containerTitle,
-                fanoutPicks.Select(pick => pick.Entity.EntityId).ToArray(),
+                fanoutPicks.Select(item => item.Pick.Entity.EntityId).ToArray(),
                 targeting,
                 hideNsfw,
                 descriptor.DeferChildPhantomHydration,
@@ -1497,198 +1500,6 @@ public sealed partial class RequestCommitService(
         }
 
         return new RequestCommitResponse(null, items);
-    }
-
-    /// <summary>One picked work resolved to its wanted entity and commit outcome.</summary>
-    private sealed record CommitPick(
-        EntityMetadataProposal Proposal,
-        ExternalIdentity Identity,
-        string Title,
-        WantedEntityResult Entity,
-        RequestCommitOutcome Outcome);
-
-    /// <summary>Ensures the wanted entity for one server-resolved proposal node and decides its outcome.</summary>
-    private async Task<CommitPick?> EnsurePickAsync(
-        RequestKindDescriptor descriptor,
-        ResolvedRequestProposalNode node,
-        Guid? parentEntityId,
-        CancellationToken cancellationToken, bool requestOwnedEntity = false) {
-        var title = TitleOr(node.Proposal.Patch?.Title, node.Identity.Value);
-        var entity = await wanted.EnsureAsync(
-            descriptor.WantedEntityKind, node.Identity, title, parentEntityId,
-            matchTitleKindWide: descriptor.IsContainer, cancellationToken, descriptor.BookRendition);
-        var outcome = entity.HasRequestedRendition && !requestOwnedEntity
-            ? RequestCommitOutcome.AlreadyOwned
-            : !entity.Created && await acquisitions.AnyOpenForEntityAsync(
-                entity.EntityId, descriptor.BookRendition, cancellationToken)
-                ? RequestCommitOutcome.AlreadyRequested
-                : RequestCommitOutcome.Requested;
-        return new CommitPick(node.Proposal, node.Identity, title, entity, outcome);
-    }
-
-    /// <summary>
-    /// Starts the acquisition for a requested pick and shapes its response item. An in-flight pick is a
-    /// no-op. A container child that is already owned can instead attach stable Entity monitor intent
-    /// without creating acquisition work; this is how All/Future discovery remembers accepted on-disk
-    /// children while child-off suppression remains authoritative.
-    /// </summary>
-    private async Task<RequestCommitItem> StartAcquisitionAsync(
-        CommitPick pick, EntityKind acquisitionKind, BookRendition? bookRendition, string? author, string? series,
-        AcquisitionTargeting targeting, CancellationToken cancellationToken,
-        bool attachOwnedEntityMonitor = false,
-        PluginIdentityRoute? ownedEntityProviderRoute = null) {
-        Guid? acquisitionId = null;
-        Guid? acquisitionGraphId = null;
-        var lifecycleAccepted = await monitors.ExecuteIfEntityLifecycleMutableAsync(
-            pick.Entity.EntityId,
-            async leaseCancellationToken => {
-                if (pick.Outcome == RequestCommitOutcome.AlreadyOwned && attachOwnedEntityMonitor) {
-                    // Owned metadata is deliberately excluded from ApplyProposal. Bind only the exact
-                    // coordinator-selected plugin route, through the metadata-neutral writer seam, before
-                    // publishing monitor intent. Missing/untrusted authority fails closed.
-                    if (ownedEntityProviderRoute is null
-                        || !await wanted.BindProviderIdentityAsync(
-                            pick.Entity.EntityId,
-                            ownedEntityProviderRoute,
-                            leaseCancellationToken)) {
-                        throw new RequestCommitValidationException(
-                            $"'{pick.Title}' could not be monitored because its exact plugin identity route is unavailable.");
-                    }
-
-                    await suppressions.ClearAsync(IdentitiesOf(pick), leaseCancellationToken);
-                    await monitors.StartForEntityAsync(
-                        pick.Entity.EntityId,
-                        acquisitionKind,
-                        pick.Title,
-                        targeting,
-                        preset: null,
-                        cancellationToken: leaseCancellationToken);
-                    return;
-                }
-
-                // Clearing the discovery suppression is part of the explicit-intent transaction. A
-                // claim-first child-off cannot be accidentally un-blacklisted when acquisition creation
-                // and monitor attachment are correctly rejected.
-                await suppressions.ClearAsync(IdentitiesOf(pick), leaseCancellationToken);
-
-                if (pick.Outcome != RequestCommitOutcome.Requested) {
-                    return;
-                }
-
-                var patch = pick.Proposal.Patch;
-                var summary = await acquisitions.CreateAndSearchWithinEntityLifecycleAsync(
-                    new AcquisitionCreateRequest(
-                        pick.Title,
-                        author,
-                        series,
-                        patch is null ? null : RequestProposalReading.YearFromDates(patch),
-                        RequestProposalReading.BestImage(pick.Proposal),
-                        pick.Identity.Namespace,
-                        pick.Identity.Value,
-                        patch?.Description,
-                        acquisitionKind,
-                        pick.Entity.EntityId,
-                        targeting.ProfileId,
-                        targeting.TargetLibraryRootId,
-                        patch is null ? null : RequestProposalReading.SeasonNumberOf(patch),
-                        patch is null ? null : RequestProposalReading.EpisodeNumberOf(patch),
-                        patch is null ? null : RequestProposalReading.VolumeNumberOf(patch),
-                        bookRendition),
-                    leaseCancellationToken);
-                acquisitionId = summary.Id;
-                acquisitionGraphId = summary.JobGraphId;
-                await StartMonitorOrRollbackAcquisitionAsync(
-                    summary.Id,
-                    acquisitionKind,
-                    pick.Title,
-                    author,
-                    leaseCancellationToken);
-            },
-            cancellationToken);
-        if (!lifecycleAccepted) {
-            throw LifecycleConflict();
-        }
-
-        return new RequestCommitItem(
-            RequestProposalReading.FormatQualifiedIdentity(pick.Identity),
-            pick.Title,
-            pick.Outcome,
-            pick.Entity.EntityId,
-            acquisitionId,
-            acquisitionGraphId);
-    }
-
-    private static AcquisitionConfigurationException LifecycleConflict() =>
-        new(
-            Prismedia.Contracts.System.ApiProblemCodes.AcquisitionInvalid,
-            "This Entity is being cleaned up. Wait for that operation to finish, then request it again.");
-
-    /// <summary>
-    /// Attaches new acquisition work to stable Entity intent. The surrounding Entity lifecycle lease is
-    /// the primary exclusion boundary; rollback remains defense in depth if a storage implementation cannot
-    /// hold that lease transaction through monitor attachment.
-    /// </summary>
-    private async Task StartMonitorOrRollbackAcquisitionAsync(
-        Guid acquisitionId,
-        EntityKind kind,
-        string title,
-        string? author,
-        CancellationToken cancellationToken) {
-        try {
-            await monitors.StartAsync(acquisitionId, kind, title, author, cancellationToken);
-        } catch (AcquisitionConfigurationException) {
-            await acquisitions.DeleteForUnmonitorAsync(acquisitionId, cancellationToken);
-            throw;
-        }
-    }
-
-    /// <summary>
-    /// Removes wanted placeholders the user no longer wants through the shared durable Entity give-up
-    /// boundary. That boundary atomically suppresses provider rediscovery, freezes/removes every monitor,
-    /// and strictly tears down remote acquisitions before pruning fileless Entity branches. Entities with a
-    /// real source file are left untouched — on-disk items aren't "wanted" to remove. Returns a typed
-    /// per-Entity outcome so a client outage or source/import race can remain visible and selected with the
-    /// coordinator's actionable reason instead of looking like a successful no-op.
-    /// </summary>
-    public async Task<WantedRemovalResponse> RemoveWantedAsync(
-        IReadOnlyList<Guid> entityIds,
-        CancellationToken cancellationToken) {
-        var removed = 0;
-        var failures = new List<WantedRemovalFailure>();
-        foreach (var entityId in entityIds.Distinct()) {
-            var entity = await wanted.GetEntityAsync(entityId, cancellationToken);
-            if (entity is null) {
-                // Idempotent success: the selected placeholder is already absent, which is the requested
-                // end state and should let a stale grid card disappear.
-                removed++;
-                continue;
-            }
-            if (entity.HasSourceFile) {
-                failures.Add(new WantedRemovalFailure(
-                    entityId,
-                    $"{entity.Title} now has files on disk and is no longer only a wanted placeholder."));
-                continue;
-            }
-
-            var result = await entityGiveUp.GiveUpEntityAsync(entityId, cancellationToken);
-            if (!result.Stopped) {
-                failures.Add(new WantedRemovalFailure(
-                    entityId,
-                    result.Message ?? "The wanted Entity could not be removed safely. Retry after its acquisition cleanup is available."));
-                continue;
-            }
-
-            if (await wanted.GetEntityAsync(entityId, cancellationToken) is null) {
-                removed++;
-                continue;
-            }
-
-            failures.Add(new WantedRemovalFailure(
-                entityId,
-                $"{entity.Title} gained files on disk while removal was in progress, so it was kept in the library."));
-        }
-
-        return new WantedRemovalResponse(removed, failures);
     }
 
 }

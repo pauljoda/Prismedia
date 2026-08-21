@@ -213,7 +213,10 @@ public sealed partial class BookAcquisitionImportEngine(
     ILogger<BookAcquisitionImportEngine> logger) : IAcquisitionImportEngine {
 
     public async Task ImportAsync(JobContext context, AcquisitionImportContext import, CancellationToken cancellationToken) {
-        var profile = await profiles.GetImportProfileAsync(import.ProfileId, EntityKind.Book, cancellationToken);
+        var profileKind = AcquisitionProfileKinds.For(import.Kind);
+        var defaultTemplate = EntityKindRegistry.Describe(profileKind).AcquisitionProfile?.DefaultNamingTemplate
+            ?? throw new InvalidOperationException($"The {import.Kind.ToCode()} import has no acquisition profile.");
+        var profile = await profiles.GetImportProfileAsync(import.ProfileId, import.Kind, cancellationToken);
 
         if (import.ImportPlacementCheckpoint is { } durableCheckpoint) {
             var checkpointRoot = await ResolveCheckpointRootAsync(durableCheckpoint, cancellationToken);
@@ -250,7 +253,7 @@ public sealed partial class BookAcquisitionImportEngine(
 
             profile ??= new BookImportProfile(
                 checkpointRoot.Id,
-                MediaNamingTemplates.BookDefault,
+                defaultTemplate,
                 durableCheckpoint.ImportMode);
             if (IsAudiobookReplacement(import)) {
                 await FinalizeAudiobookReplacementAsync(
@@ -305,14 +308,19 @@ public sealed partial class BookAcquisitionImportEngine(
         // No profile configured: degrade to the defaults the request UI promises ("permissive defaults
         // apply") — the resolved library, the default naming template, and a move import — matching how
         // the movie/TV/music engines already behave instead of failing the import.
-        profile ??= new BookImportProfile(root.Id, MediaNamingTemplates.BookDefault, ImportMode.Move);
+        profile ??= new BookImportProfile(root.Id, defaultTemplate, ImportMode.Move);
 
         if (string.IsNullOrWhiteSpace(import.ContentPath)) {
             await Fail(import.Id, "The completed download reported no content path.", cancellationToken);
             return;
         }
 
-        var templateContext = new ImportTemplateContext(import.Title, import.Author, import.Year);
+        var templateContext = new ImportTemplateContext(
+            import.Title,
+            import.Author,
+            import.Year,
+            import.Series,
+            import.VolumeNumber);
         var plan = await planner.PlanAsync(
             import.ContentPath,
             root.Path,
@@ -320,6 +328,27 @@ public sealed partial class BookAcquisitionImportEngine(
             templateContext,
             import.BookRendition ?? BookRendition.Ebook,
             cancellationToken);
+        if (!plan.Blocked
+            && profileKind == EntityKind.ComicSeries
+            && plan.Items.Any(item => Path.GetExtension(item.SourceAbsolutePath).ToLowerInvariant() is not ".cbz" and not ".zip")) {
+            await acquisitions.SetStatusAsync(
+                import.Id,
+                AcquisitionStatus.ManualImportRequired,
+                "The serialized-comic download does not contain only supported CBZ/ZIP archives.",
+                cancellationToken);
+            return;
+        }
+        var importFileLimit = EntityKindRegistry.Describe(import.Kind).AutomaticImportFileLimit;
+        if (!plan.Blocked
+            && importFileLimit is { } maximumFiles
+            && plan.Items.Count > maximumFiles) {
+            await acquisitions.SetStatusAsync(
+                import.Id,
+                AcquisitionStatus.ManualImportRequired,
+                "An independently released comic installment must resolve to exactly one CBZ/ZIP archive.",
+                cancellationToken);
+            return;
+        }
         if (plan.Blocked) {
             await acquisitions.SetStatusAsync(import.Id, AcquisitionStatus.ManualImportRequired, BlockMessage(plan.BlockReason), cancellationToken);
             return;
@@ -342,14 +371,17 @@ public sealed partial class BookAcquisitionImportEngine(
             plan.Items.Select(item => (item, IsMedia: true)).ToArray(),
             mover);
         var hintFolder = Path.GetDirectoryName(units[0].TargetAbsolutePath) ?? Path.GetFullPath(root.Path);
+        var sourceBoundary = importFileLimit == 1
+            ? units[0].TargetAbsolutePath
+            : hintFolder;
         var checkpoint = new ImportPlacementCheckpoint(
             import.Kind,
             root.Id,
             Path.GetFullPath(root.Path),
             ImportPlacementExecution.PayloadRootPath(import.ContentPath),
             profile.ImportMode,
-            hintFolder,
-            hintFolder,
+            sourceBoundary,
+            sourceBoundary,
             "Imported into the library.",
             units,
             string.IsNullOrWhiteSpace(import.ClientItemId) ? null : import.ClientItemId,
@@ -395,7 +427,7 @@ public sealed partial class BookAcquisitionImportEngine(
             BookFormatDetection.FormatTierFromExtension(finalPaths[0]));
         // The owned custom-format score is the selected release scored against this profile's formats, so the
         // upgrade loop's same-quality format-score cutoff has a baseline. Null-safe: no selected release → 0.
-        var ownedFormatScore = await OwnedFormatScore.ComputeAsync(profiles, import.ProfileId, EntityKind.Book, selected, cancellationToken);
+        var ownedFormatScore = await OwnedFormatScore.ComputeAsync(profiles, import.ProfileId, import.Kind, selected, cancellationToken);
 
         await acquisitions.WriteImportHintAsync(import.Id, checkpoint.HintPath, import, ownedQuality, cancellationToken);
         await acquisitions.SetFinalSourcePathAsync(import.Id, checkpoint.FinalSourcePath, cancellationToken);

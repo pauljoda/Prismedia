@@ -128,6 +128,13 @@ public abstract class EntityKindDefinition {
     /// </summary>
     public virtual bool IsFulfilledBySourceBackedSubtree => false;
 
+    /// <summary>
+    /// Maximum number of media files one automatic acquisition import may bind to this Entity, or null
+    /// when the Entity can own a multi-file rendition or structural pack. Importers use this definition
+    /// fact for cardinality and exact-file hint boundaries without branching on Entity kind.
+    /// </summary>
+    public virtual int? AutomaticImportFileLimit => null;
+
     /// <summary>Browser upload and reviewed-replacement behavior owned by this kind.</summary>
     public EntityManualAcquisitionPolicy ManualAcquisition => Behavior.ManualAcquisition;
 
@@ -415,6 +422,7 @@ public sealed record EntityStructuralCountDefinition {
 /// <param name="NamingHint">User-facing token and layout guidance for the template.</param>
 /// <param name="NamingFamily">Application renderer and validator family for the template.</param>
 /// <param name="CheckpointProtocol">Durable import checkpoint shape selected by this profile.</param>
+/// <param name="ImportScanJobType">Scanner protocol used to materialize exact placed files, or null for a dedicated importer.</param>
 public sealed record AcquisitionProfileDefinition {
     /// <summary>Validates immutable acquisition-profile policy owned by an Entity kind definition.</summary>
     public AcquisitionProfileDefinition(
@@ -425,7 +433,8 @@ public sealed record AcquisitionProfileDefinition {
         string defaultNamingTemplate,
         string namingHint,
         AcquisitionNamingFamily namingFamily,
-        AcquisitionCheckpointProtocol checkpointProtocol) {
+        AcquisitionCheckpointProtocol checkpointProtocol,
+        JobType? importScanJobType = null) {
         Label = RequireText(label, nameof(label));
         DisplayOrder = displayOrder < 0
             ? throw new ArgumentOutOfRangeException(nameof(displayOrder), "Acquisition profile display order cannot be negative.")
@@ -436,6 +445,7 @@ public sealed record AcquisitionProfileDefinition {
         NamingHint = RequireText(namingHint, nameof(namingHint));
         NamingFamily = namingFamily;
         CheckpointProtocol = checkpointProtocol;
+        ImportScanJobType = importScanJobType;
     }
 
     /// <summary>User-facing profile label.</summary>
@@ -461,6 +471,9 @@ public sealed record AcquisitionProfileDefinition {
 
     /// <summary>Durable import checkpoint shape selected by this acquisition profile.</summary>
     public AcquisitionCheckpointProtocol CheckpointProtocol { get; }
+
+    /// <summary>Scanner job protocol that owns exact imported-file catalog materialization.</summary>
+    public JobType? ImportScanJobType { get; }
 
     private static string RequireText(string value, string parameterName) =>
         string.IsNullOrWhiteSpace(value)

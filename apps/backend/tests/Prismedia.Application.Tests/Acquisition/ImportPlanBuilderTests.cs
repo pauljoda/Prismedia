@@ -79,6 +79,27 @@ public sealed class ImportPlanBuilderTests {
     }
 
     [Fact]
+    public void ComicArchiveRendersSeriesAndOptionalVolumeFolder() {
+        var template = "{Series}/{VolumeFolder}/{Title}.{ext}";
+
+        var collected = ImportPlanBuilder.Plan(
+            ["Chapter 10.cbz"],
+            new ImportTemplateContext("Chapter 10", null, 2026, "Witch Hat Atelier", 4),
+            template);
+        var uncollected = ImportPlanBuilder.Plan(
+            ["Chapter 83.cbz"],
+            new ImportTemplateContext("Chapter 83", null, 2026, "Witch Hat Atelier"),
+            template);
+
+        Assert.Equal(
+            "Witch Hat Atelier/Volume 04/Chapter 10.cbz",
+            Assert.Single(collected.Items).TargetRelativePath);
+        Assert.Equal(
+            "Witch Hat Atelier/Chapter 83.cbz",
+            Assert.Single(uncollected.Items).TargetRelativePath);
+    }
+
+    [Fact]
     public void NoSupportedFilesBlocks() {
         var plan = ImportPlanBuilder.Plan(["readme.txt", "cover.jpg"], Context(), Template);
 

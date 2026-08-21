@@ -280,6 +280,10 @@ public sealed record AcquisitionSearchInput(
                     : AcquisitionPolicyQueries.JoinDistinct(Author, Title);
             }
 
+            if (namingFamily == AcquisitionNamingFamily.Book && !string.IsNullOrWhiteSpace(Series)) {
+                return AcquisitionPolicyQueries.JoinDistinct(Series, Title);
+            }
+
             return Title;
         }
     }
@@ -676,7 +680,8 @@ public sealed record AcquisitionImportContext(
     TvImportCheckpoint? TvImportCheckpoint = null,
     ImportPlacementCheckpoint? ImportPlacementCheckpoint = null,
     BookRendition? BookRendition = null,
-    Guid? UpgradeOfAcquisitionId = null) {
+    Guid? UpgradeOfAcquisitionId = null,
+    int? VolumeNumber = null) {
     /// <summary>Checkpoint protocol selected by this acquisition's governing profile definition.</summary>
     public AcquisitionCheckpointProtocol CheckpointProtocol => AcquisitionProfileKinds.CheckpointProtocolFor(Kind);
 

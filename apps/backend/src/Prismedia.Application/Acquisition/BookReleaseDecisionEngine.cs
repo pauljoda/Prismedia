@@ -67,7 +67,26 @@ public sealed class BookTitleIdentitySpecification : IReleaseSpecification {
         // known, the volume gate is the real identity check — accept on volume agreement instead.
         return rules.VolumeNumber is { } volume && BookReleaseTokens.ParseVolume(release.Title) == volume
             ? null
-            : Reason;
+            : rules.Kind == EntityKind.ComicInstallment
+                && BookReleaseTokens.ParseInstallment(rules.TargetTitle ?? string.Empty) is { } installment
+                && BookReleaseTokens.ParseInstallment(release.Title) == installment
+                    ? null
+                    : Reason;
+    }
+}
+
+/// <summary>Rejects a serialized-comic release that explicitly names a different chapter or issue.</summary>
+public sealed class ComicInstallmentSpecification : IReleaseSpecification {
+    public ReleaseRejectionReason Reason => ReleaseRejectionReason.WrongInstallment;
+
+    public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) {
+        if (rules.Kind != EntityKind.ComicInstallment
+            || BookReleaseTokens.ParseInstallment(rules.TargetTitle ?? string.Empty) is not { } expected) {
+            return null;
+        }
+
+        var declared = BookReleaseTokens.ParseInstallment(release.Title);
+        return declared is null || declared == expected ? null : Reason;
     }
 }
 
@@ -109,6 +128,10 @@ public sealed class FormatSpecification : IReleaseSpecification {
 
         if (rules.BookRendition == BookRendition.Audiobook) {
             return detected.Contains(BookFormat.Audio) ? null : Reason;
+        }
+
+        if (rules.Kind is EntityKind.ComicVolume or EntityKind.ComicInstallment) {
+            return detected.SetEquals([BookFormat.ImageArchive]) ? null : Reason;
         }
 
         if (rules.BookRendition == BookRendition.Ebook) {
@@ -334,6 +357,7 @@ public sealed class BookReleaseDecisionEngine(EntityKind kind = EntityKind.Book)
         new DangerousContentSpecification(),
         new BookTitleIdentitySpecification(),
         new BookUnitSpecification(),
+        new ComicInstallmentSpecification(),
         new ProtocolSpecification(),
         new DownloadLinkSpecification(),
         new FormatSpecification(),

@@ -24,6 +24,7 @@ namespace Prismedia.Domain.Entities;
 /// <param name="DeferChildPhantomHydration">Whether selected child expansion runs after commit.</param>
 /// <param name="BookRendition">Requested book rendition, or null for non-book entries.</param>
 /// <param name="IsDefaultEntityRequest">Whether this descriptor handles an Entity request when no specific rendition is selected.</param>
+/// <param name="AdditionalChildKinds">Additional direct child request kinds for mixed structural topologies.</param>
 public sealed record RequestKindDescriptor(
     RequestMediaKind Kind,
     string Label,
@@ -42,7 +43,16 @@ public sealed record RequestKindDescriptor(
     bool MaterializeChildPhantoms = false,
     bool DeferChildPhantomHydration = false,
     BookRendition? BookRendition = null,
-    bool IsDefaultEntityRequest = true) {
+    bool IsDefaultEntityRequest = true,
+    IReadOnlyList<RequestMediaKind>? AdditionalChildKinds = null) {
     /// <summary>The plugin-protocol code for <see cref="PluginEntityKind"/>.</summary>
     public string PluginKindCode => PluginEntityKind.ToCode();
+
+    /// <summary>
+    /// Every requestable direct child kind in stable preference order. Existing single-child media keep
+    /// using <see cref="ChildKind"/>; mixed structures add only their other legal direct child kinds.
+    /// </summary>
+    public IReadOnlyList<RequestMediaKind> ChildKinds => ChildKind is not { } primary
+        ? []
+        : [primary, .. AdditionalChildKinds ?? []];
 }

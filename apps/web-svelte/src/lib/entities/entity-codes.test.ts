@@ -37,7 +37,11 @@ describe("code registries", () => {
 
   it("keeps every collection member kind navigable through its definition", () => {
     for (const kind of ENTITY_KIND_DEFINITIONS[ENTITY_KIND.collection].containableKinds) {
-      expect(resolveEntityHref(kind, "entity-1")).toMatch(/^\//);
+      const requiredAncestorKind = ENTITY_KIND_DEFINITIONS[kind].navigation?.requiredAncestorKind;
+      const context = requiredAncestorKind
+        ? { kind: requiredAncestorKind, id: "parent-1" }
+        : undefined;
+      expect(resolveEntityHref(kind, "entity-1", context)).toMatch(/^\//);
     }
   });
 

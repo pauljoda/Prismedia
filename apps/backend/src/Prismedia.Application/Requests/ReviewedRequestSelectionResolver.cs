@@ -46,7 +46,7 @@ internal static class ReviewedRequestSelectionResolver {
             throw new RequestCommitValidationException("The reviewed root is not a valid request target.");
         }
 
-        var childDescriptor = RequestKindRegistry.ChildOf(descriptor);
+        var childDescriptors = RequestKindRegistry.ChildrenOf(descriptor);
         var direct = review.Proposal.Children
             .Where(node => !node.TargetKind.IsRelationship())
             .ToArray();
@@ -58,7 +58,7 @@ internal static class ReviewedRequestSelectionResolver {
         }
 
         if (descriptor.IsContainer) {
-            if (childDescriptor is null) {
+            if (childDescriptors.Count == 0) {
                 throw new RequestCommitValidationException("This container has no requestable child kind.");
             }
 
@@ -72,19 +72,23 @@ internal static class ReviewedRequestSelectionResolver {
                 selectedIds = MonitorPresetSelection.Resolve(
                     preset.Value,
                     direct.Select(node => {
-                        var target = TargetFor(node, childDescriptor, targets);
+                        var target = TargetFor(
+                            node,
+                            ChildDescriptorFor(descriptor, node),
+                            targets);
                         return new MonitorPresetCandidate(target.ProposalId, Owned: false);
                     }).ToArray());
             }
 
             return new ReviewedRequestSelection(
                 SelectRoot: false,
-                ResolveDirectNodes(direct, childDescriptor, targets, selectedIds));
+                ResolveMixedDirectNodes(direct, descriptor, targets, selectedIds));
         }
 
         // A book proposal can represent a series shell whose direct Book children are the actual sibling
         // volumes. That is a fan-out selection, not structural phantom materialization.
         if (descriptor.ChildKind is not null && !descriptor.MaterializeChildPhantoms && direct.Length > 0) {
+            var childDescriptor = RequestKindRegistry.ChildOf(descriptor);
             if (childDescriptor is null || selectedProposalIds.Count == 0) {
                 throw new RequestCommitValidationException("Select at least one reviewed child proposal.");
             }
@@ -124,6 +128,37 @@ internal static class ReviewedRequestSelectionResolver {
 
         return selected;
     }
+
+    /// <summary>
+    /// Resolves a mixed direct-child selection by matching each proposal's Entity kind to one of the
+    /// parent descriptor's declared child request kinds.
+    /// </summary>
+    public static IReadOnlyList<ResolvedRequestProposalNode> ResolveMixedDirectNodes(
+        IReadOnlyList<EntityMetadataProposal> direct,
+        RequestKindDescriptor parentDescriptor,
+        IReadOnlyDictionary<string, RequestReviewTarget> targets,
+        IReadOnlyList<string> selectedIds) {
+        var picked = selectedIds.ToHashSet(StringComparer.Ordinal);
+        var selected = direct
+            .Where(node => picked.Contains(node.ProposalId))
+            .Select(node => new ResolvedRequestProposalNode(
+                node,
+                TargetFor(node, ChildDescriptorFor(parentDescriptor, node), targets).ExternalIdentity))
+            .ToArray();
+        if (selected.Length != picked.Count) {
+            throw new RequestCommitValidationException(
+                "Every selected proposal must be a requestable direct child of the reviewed root.");
+        }
+
+        return selected;
+    }
+
+    private static RequestKindDescriptor ChildDescriptorFor(
+        RequestKindDescriptor parentDescriptor,
+        EntityMetadataProposal node) =>
+        RequestKindRegistry.ChildOf(parentDescriptor, node.TargetKind)
+        ?? throw new RequestCommitValidationException(
+            $"Proposal '{node.ProposalId}' has no declared direct-child request kind.");
 
     private static RequestReviewTarget TargetFor(
         EntityMetadataProposal node,

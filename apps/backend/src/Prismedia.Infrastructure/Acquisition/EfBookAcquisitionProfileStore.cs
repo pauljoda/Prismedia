@@ -19,7 +19,7 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
             return BookAcquisitionRules.Default with { Kind = kind };
         }
 
-        return ToRules(row, await ResolveCustomFormatsAsync(row, cancellationToken));
+        return ToRules(row, await ResolveCustomFormatsAsync(row, cancellationToken)) with { Kind = kind };
     }
 
     public async Task<BookImportProfile?> GetImportProfileAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken) {

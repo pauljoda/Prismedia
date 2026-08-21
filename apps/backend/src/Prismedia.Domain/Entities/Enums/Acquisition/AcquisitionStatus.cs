@@ -172,7 +172,11 @@ public enum ReleaseRejectionReason {
 
     /// <summary>A book search: the release names a different volume than the one sought.</summary>
     [Code("wrong-volume")]
-    WrongVolume
+    WrongVolume,
+
+    /// <summary>A serialized-comic search: the release names a different chapter or issue.</summary>
+    [Code("wrong-installment")]
+    WrongInstallment
 }
 
 /// <summary>

@@ -59,6 +59,7 @@ public sealed class BookAcquisitionPolicyModule : AcquisitionPolicyModule {
     /// <inheritdoc />
     public override IReadOnlyList<string> BuildQueries(AcquisitionSearchInput input) =>
         AcquisitionPolicyQueries.FromTitle(input, [
+            AcquisitionPolicyQueries.JoinDistinct(input.Series, input.Title, input.Author),
             AcquisitionPolicyQueries.Join(input.Title, input.Author),
             input.Title
         ]);
@@ -67,9 +68,11 @@ public sealed class BookAcquisitionPolicyModule : AcquisitionPolicyModule {
     public override IReadOnlyList<int> RouteCategories(
         AcquisitionSearchInput input,
         IReadOnlyList<int> configuredCategories) {
-        var category = input.BookRendition == BookRendition.Audiobook
-            ? TorznabCategory.AudioAudiobook
-            : TorznabCategory.BooksEbook;
+        var category = AcquisitionProfileKinds.For(input.Kind) == EntityKind.ComicSeries
+            ? TorznabCategory.BooksComics
+            : input.BookRendition == BookRendition.Audiobook
+                ? TorznabCategory.AudioAudiobook
+                : TorznabCategory.BooksEbook;
         return [category, .. TorznabCategoryRange.OtherCategories(configuredCategories)];
     }
 }
@@ -246,6 +249,7 @@ internal static class TorznabCategory {
     // prism-vocab: external (Torznab/Newznab category standard).
     public const int AudioAudiobook = 3030;
     public const int BooksEbook = 7020;
+    public const int BooksComics = 7030;
 }
 
 /// <summary>Formatting and duplicate-collapse mechanics shared by per-kind query builders.</summary>

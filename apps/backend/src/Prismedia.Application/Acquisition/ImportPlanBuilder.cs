@@ -33,8 +33,13 @@ public sealed record ImportPlan(bool Blocked, ImportBlockReason? BlockReason, IR
     public static ImportPlan For(IReadOnlyList<ImportPlanItem> items) => new(false, null, items);
 }
 
-/// <summary>Book metadata available for rendering target paths.</summary>
-public sealed record ImportTemplateContext(string Title, string? Author, int? Year);
+/// <summary>Publication metadata available for rendering target paths.</summary>
+public sealed record ImportTemplateContext(
+    string Title,
+    string? Author,
+    int? Year,
+    string? Series = null,
+    int? VolumeNumber = null);
 
 /// <summary>
 /// Pure import planning: decides which downloaded files are the book payload and renders their target
@@ -59,7 +64,7 @@ public static partial class ImportPlanBuilder {
 
     // Optional template tokens that embed connector text (e.g. "{ - Volume}"). v1 does not parse volume,
     // so these are dropped wholesale along with their connectors rather than left as literal braces.
-    [GeneratedRegex(@"\{[^{}]*Volume[^{}]*\}", RegexOptions.IgnoreCase)]
+    [GeneratedRegex(@"\{[^{}]*\bVolume\b[^{}]*\}", RegexOptions.IgnoreCase)]
     private static partial Regex OptionalVolumeTokenRegex();
 
     /// <summary>The book file extensions the importer recognizes.</summary>
@@ -157,6 +162,11 @@ public static partial class ImportPlanBuilder {
     private static string ReplaceTokens(string segment, ImportTemplateContext context, string extension) {
         var result = OptionalVolumeTokenRegex().Replace(segment, string.Empty)
             .Replace("{Author}", context.Author ?? string.Empty, StringComparison.Ordinal)
+            .Replace("{Series}", context.Series ?? context.Title, StringComparison.Ordinal)
+            .Replace(
+                "{VolumeFolder}",
+                context.VolumeNumber is { } volume ? $"Volume {volume:00}" : string.Empty,
+                StringComparison.Ordinal)
             .Replace("{Title}", context.Title, StringComparison.Ordinal)
             .Replace("{Year}", context.Year?.ToString() ?? string.Empty, StringComparison.Ordinal)
             .Replace("{ext}", extension.TrimStart('.'), StringComparison.Ordinal);

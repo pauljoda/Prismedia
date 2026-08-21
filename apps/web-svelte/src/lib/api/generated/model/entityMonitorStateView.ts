@@ -5,7 +5,7 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { AcquisitionSummary } from './acquisitionSummary';
-import type { EntityKind } from './entityKind';
+import type { EntityMonitorStateViewMissingChildEntityKindsItem } from './entityMonitorStateViewMissingChildEntityKindsItem';
 import type { MonitorView } from './monitorView';
 
 export interface EntityMonitorStateView {
@@ -15,7 +15,7 @@ export interface EntityMonitorStateView {
   trackableProviders: string[];
   discoversChildren: boolean;
   canSearchMissingChildren: boolean;
-  missingChildEntityKind: null | EntityKind;
+  missingChildEntityKinds: EntityMonitorStateViewMissingChildEntityKindsItem[];
   monitor: null | MonitorView;
   latestAcquisition: null | AcquisitionSummary;
 }

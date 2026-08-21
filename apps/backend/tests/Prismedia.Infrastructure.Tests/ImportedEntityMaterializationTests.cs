@@ -1,7 +1,9 @@
 using System.Text.Json;
+using System.IO.Compression;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Entities;
 using Prismedia.Application.Jobs;
 using Prismedia.Application.Jobs.Handlers;
 using Prismedia.Application.Jobs.Handlers.Probe;
@@ -9,6 +11,7 @@ using Prismedia.Application.Jobs.Handlers.Scan;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Jobs.Scanning;
 using Prismedia.Domain.Entities;
+using Prismedia.Domain.Media;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Media;
 using Prismedia.Infrastructure.Acquisition;
@@ -118,6 +121,100 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         Assert.Contains(queue.Enqueued, request =>
             request.Type == JobType.ReconcileEntity && request.TargetEntityId == wantedId.ToString());
         Assert.Equal(AcquisitionStatus.Importing, await StatusOfAsync(db, import.Id));
+    }
+
+    [Fact]
+    public async Task ComicInstallmentImportBindsTheExactWantedArchiveThroughComicScanning() {
+        await using var db = CreateContext();
+        var rootPath = Directory.CreateDirectory(Path.Combine(_workRoot, "comics")).FullName;
+        var payloadPath = Directory.CreateDirectory(Path.Combine(_workRoot, "comic-download")).FullName;
+        var sourcePath = Path.Combine(payloadPath, "Chapter 83.cbz");
+        CreateComicArchive(sourcePath);
+        var root = new RootPersistence(rootPath, scanBooks: true);
+        AddLibraryRoot(db, root.Root);
+        var seriesId = AddWantedEntity(db, EntityKind.ComicSeries, "Witch Hat Atelier");
+        db.Entities.Local.Single(entity => entity.Id == seriesId).IsWanted = false;
+        var installmentId = AddWantedEntity(
+            db,
+            EntityKind.ComicInstallment,
+            "Chapter 83",
+            parentId: seriesId,
+            sortOrder: 83);
+        await AddAcquisitionAsync(db, EntityKind.ComicInstallment, installmentId, "Chapter 83");
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+        var engine = new BookAcquisitionImportEngine(
+            store,
+            new EfBookAcquisitionProfileStore(db),
+            root,
+            new SingleTargetPlanner(sourcePath, Path.Combine("Witch Hat Atelier", "Chapter 83.cbz")),
+            new ImportFileMover(),
+            ComicMaterializer(db, root),
+            Torrents(store),
+            new EfAcquisitionHistoryStore(db),
+            NullLogger<BookAcquisitionImportEngine>.Instance);
+        var import = ImportContext(
+            db,
+            EntityKind.ComicInstallment,
+            installmentId,
+            "Chapter 83",
+            payloadPath,
+            series: "Witch Hat Atelier");
+
+        var queue = new MergedImportTestSupport.RecordingJobQueue();
+        await engine.ImportAsync(JobContext(db, import.Id, queue), import, CancellationToken.None);
+
+        var installments = await db.Entities.AsNoTracking()
+            .Where(entity => entity.KindCode == EntityKind.ComicInstallment.ToCode())
+            .ToArrayAsync();
+        var installment = Assert.Single(installments);
+        Assert.Equal(installmentId, installment.Id);
+        Assert.Equal(seriesId, installment.ParentEntityId);
+        Assert.False(installment.IsWanted);
+        Assert.True(await db.EntityFiles.AsNoTracking().AnyAsync(file =>
+            file.EntityId == installmentId
+            && file.Role == EntityFileRole.Source
+            && file.Path.EndsWith("Chapter 83.cbz", StringComparison.Ordinal)));
+        Assert.Contains(queue.Enqueued, request =>
+            request.Type == JobType.ReconcileEntity
+            && request.TargetEntityId == seriesId.ToString());
+        Assert.Equal(AcquisitionStatus.Importing, await StatusOfAsync(db, import.Id));
+    }
+
+    [Fact]
+    public async Task ComicInstallmentImportHoldsMultipleArchivesForManualReview() {
+        await using var db = CreateContext();
+        var rootPath = Directory.CreateDirectory(Path.Combine(_workRoot, "comic-ambiguous-library")).FullName;
+        var payloadPath = Directory.CreateDirectory(Path.Combine(_workRoot, "comic-ambiguous-download")).FullName;
+        var first = Path.Combine(payloadPath, "Chapter 83.cbz");
+        var second = Path.Combine(payloadPath, "Chapter 84.cbz");
+        CreateComicArchive(first);
+        CreateComicArchive(second);
+        var root = new RootPersistence(rootPath, scanBooks: true);
+        var installmentId = await SeedWantedAcquisitionAsync(db, EntityKind.ComicInstallment, "Chapter 83");
+        var store = AcquisitionTestFactory.Store(db);
+        var engine = new BookAcquisitionImportEngine(
+            store,
+            new EfBookAcquisitionProfileStore(db),
+            root,
+            new MultipleTargetPlanner(first, second),
+            new ImportFileMover(),
+            new FailingMaterializer(),
+            Torrents(store),
+            new EfAcquisitionHistoryStore(db),
+            NullLogger<BookAcquisitionImportEngine>.Instance);
+        var import = ImportContext(
+            db,
+            EntityKind.ComicInstallment,
+            installmentId,
+            "Chapter 83",
+            payloadPath,
+            series: "Witch Hat Atelier");
+
+        await engine.ImportAsync(JobContext(db, import.Id), import, CancellationToken.None);
+
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, await StatusOfAsync(db, import.Id));
+        Assert.False(Directory.Exists(Path.Combine(rootPath, "Witch Hat Atelier")));
     }
 
     [Fact]
@@ -1128,6 +1225,21 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         return Materializer(db, new ImportedAlbumMaterializationPolicy(scan), persistence);
     }
 
+    private static IImportedEntityMaterializer ComicMaterializer(
+        PrismediaDbContext db,
+        RootPersistence root) {
+        var persistence = new LibraryScanPersistenceService(db);
+        var scan = new ScanComicJobHandler(
+            NullLogger<ScanComicJobHandler>.Instance,
+            Discovery(),
+            root,
+            persistence,
+            new RecordingPageManifestStore(),
+            persistence,
+            acquisitionHints: new AcquisitionHintApplier(db));
+        return Materializer(db, new ImportedComicMaterializationPolicy(scan), persistence);
+    }
+
     private static IImportedEntityMaterializer Materializer(
         PrismediaDbContext db,
         IImportedEntityMaterializationPolicy policy,
@@ -1244,13 +1356,14 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         string title,
         string payloadPath,
         string? author = null,
-        int? year = null) {
+        int? year = null,
+        string? series = null) {
         var acquisition = db.Acquisitions.Local.Single(row => row.EntityId == entityId);
         return new AcquisitionImportContext(
             acquisition.Id,
             title,
             author,
-            Series: null,
+            Series: series,
             year,
             PosterUrl: null,
             ExternalIdentity: null,
@@ -1324,6 +1437,51 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
                         libraryRootPath,
                         context.Author ?? "Unknown Author",
                         $"Novel{Path.GetExtension(sourcePath)}"))]));
+    }
+
+    private sealed class SingleTargetPlanner(string sourcePath, string targetRelativePath) : IAcquisitionImportPlanner {
+        public Task<ResolvedImportPlan> PlanAsync(
+            string contentPath,
+            string libraryRootPath,
+            BookImportProfile profile,
+            ImportTemplateContext context,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new ResolvedImportPlan(
+                Blocked: false,
+                BlockReason: null,
+                [new ResolvedImportItem(
+                    sourcePath,
+                    Path.Combine(libraryRootPath, targetRelativePath))]));
+    }
+
+    private sealed class MultipleTargetPlanner(string first, string second) : IAcquisitionImportPlanner {
+        public Task<ResolvedImportPlan> PlanAsync(
+            string contentPath,
+            string libraryRootPath,
+            BookImportProfile profile,
+            ImportTemplateContext context,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new ResolvedImportPlan(
+                Blocked: false,
+                BlockReason: null,
+                [
+                    new ResolvedImportItem(first, Path.Combine(libraryRootPath, "Witch Hat Atelier", "Chapter 83.cbz")),
+                    new ResolvedImportItem(second, Path.Combine(libraryRootPath, "Witch Hat Atelier", "Chapter 84.cbz"))
+                ]));
+    }
+
+    private sealed class RecordingPageManifestStore : IEntityPageManifestStore {
+        public Task<bool> ReplaceAsync(EntityPageManifest manifest, CancellationToken cancellationToken) =>
+            Task.FromResult(true);
+
+        public Task<bool> RemoveAsync(Guid entityId, CancellationToken cancellationToken) =>
+            Task.FromResult(true);
+    }
+
+    private static void CreateComicArchive(string path) {
+        using var archive = ZipFile.Open(path, ZipArchiveMode.Create);
+        using var page = archive.CreateEntry("001.jpg").Open();
+        page.Write([0xff, 0xd8, 0xff, 0xd9]);
     }
 
     private sealed class FailingMaterializer : IImportedEntityMaterializer {

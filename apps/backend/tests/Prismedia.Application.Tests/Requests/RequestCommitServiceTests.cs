@@ -2143,6 +2143,87 @@ public sealed class RequestCommitServiceTests {
     }
 
     [Fact]
+    public async Task ReviewedComicSeriesCommitsVolumesAndDirectInstallmentsWithoutInventingAVolume() {
+        const string pluginId = "mangadex";
+        var seriesIdentity = new ExternalIdentity("mangadex", "series-1");
+        var volumeIdentity = new ExternalIdentity("mangadexvolume", "series-1:volume:4");
+        var chapterIdentity = new ExternalIdentity("mangadexchapter", "chapter-83");
+        var volume = Node(
+            "comic-volume:4",
+            pluginId,
+            EntityKind.ComicVolume,
+            "Volume 4",
+            volumeIdentity,
+            new Dictionary<string, int> { [EntityPositionCodes.Volume] = 4 });
+        var chapter = Node(
+            "comic-chapter:83",
+            pluginId,
+            EntityKind.ComicInstallment,
+            "Chapter 83",
+            chapterIdentity,
+            new Dictionary<string, int> { [EntityPositionCodes.Chapter] = 83 });
+        var series = Node(
+            "comic-series:1",
+            pluginId,
+            EntityKind.ComicSeries,
+            "Witch Hat Atelier",
+            seriesIdentity,
+            volume,
+            chapter);
+        var seriesReview = Review(
+            pluginId,
+            RequestMediaKind.ComicSeries,
+            seriesIdentity,
+            series,
+            [
+                Target(series, RequestMediaKind.ComicSeries, seriesIdentity),
+                Target(volume, RequestMediaKind.ComicVolume, volumeIdentity, position: 4),
+                Target(chapter, RequestMediaKind.ComicInstallment, chapterIdentity, position: 83)
+            ]);
+        var volumeReview = Review(
+            pluginId,
+            RequestMediaKind.ComicVolume,
+            volumeIdentity,
+            volume,
+            [Target(volume, RequestMediaKind.ComicVolume, volumeIdentity, position: 4)]);
+        var reviews = new FakeReviewSource(request => request.Kind switch {
+            RequestMediaKind.ComicSeries => seriesReview,
+            RequestMediaKind.ComicVolume => volumeReview,
+            _ => null
+        });
+        var (service, writer, acquisitions, _, _) = ReviewedService(series, reviews);
+
+        var response = await service.CommitReviewedAsync(
+            new ReviewedRequestCommitRequest(
+                RequestMediaKind.ComicSeries,
+                pluginId,
+                seriesIdentity,
+                seriesReview.Revision,
+                [volume.ProposalId, chapter.ProposalId]),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.NotNull(response);
+        var seriesId = FakeWantedEntityWriter.EntityIdFor(seriesIdentity.Value);
+        Assert.Contains(writer.Ensured, call =>
+            call.Kind == EntityKind.ComicVolume && call.ParentEntityId == seriesId);
+        Assert.Contains(writer.Ensured, call =>
+            call.Kind == EntityKind.ComicInstallment && call.ParentEntityId == seriesId);
+        Assert.Collection(
+            acquisitions.Created,
+            collected => {
+                Assert.Equal(EntityKind.ComicVolume, collected.Kind);
+                Assert.Equal("Witch Hat Atelier", collected.Series);
+                Assert.Equal(4, collected.VolumeNumber);
+            },
+            uncollected => {
+                Assert.Equal(EntityKind.ComicInstallment, uncollected.Kind);
+                Assert.Equal("Witch Hat Atelier", uncollected.Series);
+                Assert.Null(uncollected.VolumeNumber);
+            });
+    }
+
+    [Fact]
     public async Task ReviewedBookVolumeSelectionCreatesStandaloneWantedVolume() {
         var rootIdentity = new ExternalIdentity("openlibrary", "series:1");
         var volumeIdentity = new ExternalIdentity("openlibrary-work", "OL:Work:2");

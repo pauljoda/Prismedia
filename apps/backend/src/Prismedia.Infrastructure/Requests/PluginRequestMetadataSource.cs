@@ -392,8 +392,7 @@ public sealed class PluginRequestMetadataSource(
         bool hideNsfw,
         bool forceRefresh,
         CancellationToken cancellationToken) {
-        var childDescriptor = RequestKindRegistry.ChildOf(parentDescriptor);
-        if (childDescriptor is null) {
+        if (RequestKindRegistry.ChildrenOf(parentDescriptor).Count == 0) {
             return parent;
         }
 
@@ -423,7 +422,7 @@ public sealed class PluginRequestMetadataSource(
         bool hideNsfw,
         bool forceRefresh,
         CancellationToken cancellationToken) {
-        var childDescriptor = RequestKindRegistry.ChildOf(parentDescriptor);
+        var childDescriptor = RequestKindRegistry.ChildOf(parentDescriptor, child.TargetKind);
         if (childDescriptor is null
             || child.TargetKind.IsRelationship()
             || !IsCompatibleTarget(childDescriptor, child.TargetKind)) {
@@ -434,7 +433,7 @@ public sealed class PluginRequestMetadataSource(
         var structuralChildren = child.Children
             .Where(candidate => !candidate.TargetKind.IsRelationship())
             .ToArray();
-        if (childDescriptor.ChildKind is not null
+        if (childDescriptor.ChildKinds.Count > 0
             && structuralChildren.Length == 0
             && DeclaredIdentityFor(provider, child) is { } identity) {
             var resolved = await ResolveExplicitProposalAsync(
@@ -759,13 +758,13 @@ public sealed class PluginRequestMetadataSource(
         EntityMetadataProposal parent,
         RequestKindDescriptor parentDescriptor,
         ICollection<RequestReviewTarget> targets) {
-        var childDescriptor = RequestKindRegistry.ChildOf(parentDescriptor);
-        if (childDescriptor is null) {
+        if (RequestKindRegistry.ChildrenOf(parentDescriptor).Count == 0) {
             return;
         }
 
         foreach (var child in parent.Children.Where(node => !node.TargetKind.IsRelationship())) {
-            if (!IsCompatibleTarget(childDescriptor, child.TargetKind)) {
+            var childDescriptor = RequestKindRegistry.ChildOf(parentDescriptor, child.TargetKind);
+            if (childDescriptor is null || !IsCompatibleTarget(childDescriptor, child.TargetKind)) {
                 continue;
             }
 

@@ -529,13 +529,17 @@ public sealed class EntityKindMetadataTests {
             .ToDictionary(definition => definition.Kind, definition => definition.AcquisitionProfile!);
 
         Assert.Equal(
-            [EntityKind.AudioLibrary, EntityKind.Book, EntityKind.Movie, EntityKind.VideoSeries],
+            [EntityKind.AudioLibrary, EntityKind.Book, EntityKind.ComicSeries, EntityKind.Movie, EntityKind.VideoSeries],
             profiles.Keys.Order().ToArray());
         Assert.Equal("TV (series)", profiles[EntityKind.VideoSeries].Label);
+        Assert.Equal("Comics (serialized)", profiles[EntityKind.ComicSeries].Label);
         Assert.Equal(0, profiles[EntityKind.Book].DisplayOrder);
         Assert.Equal(3, profiles[EntityKind.AudioLibrary].DisplayOrder);
+        Assert.Equal(4, profiles[EntityKind.ComicSeries].DisplayOrder);
         Assert.Equal(LibraryRootMediaCapability.ScanBooks, profiles[EntityKind.Book].LibraryRootMediaCapability);
+        Assert.Equal(LibraryRootMediaCapability.ScanBooks, profiles[EntityKind.ComicSeries].LibraryRootMediaCapability);
         Assert.Equal(AcquisitionCheckpointProtocol.Placement, profiles[EntityKind.Book].CheckpointProtocol);
+        Assert.Equal(AcquisitionCheckpointProtocol.Placement, profiles[EntityKind.ComicSeries].CheckpointProtocol);
         Assert.Equal(AcquisitionCheckpointProtocol.Placement, profiles[EntityKind.Movie].CheckpointProtocol);
         Assert.Equal(AcquisitionCheckpointProtocol.Placement, profiles[EntityKind.AudioLibrary].CheckpointProtocol);
         Assert.Equal(AcquisitionCheckpointProtocol.Television, profiles[EntityKind.VideoSeries].CheckpointProtocol);
@@ -543,6 +547,8 @@ public sealed class EntityKindMetadataTests {
             [EntityDateType.Release, EntityDateType.DigitalRelease, EntityDateType.PhysicalRelease],
             profiles[EntityKind.AudioLibrary].SupportedReleaseDateTypes);
         Assert.Equal(AcquisitionNamingFamily.Book, profiles[EntityKind.Book].NamingFamily);
+        Assert.Equal(AcquisitionNamingFamily.Book, profiles[EntityKind.ComicSeries].NamingFamily);
+        Assert.Equal(JobType.ScanComic, profiles[EntityKind.ComicSeries].ImportScanJobType);
     }
 
     [Fact]

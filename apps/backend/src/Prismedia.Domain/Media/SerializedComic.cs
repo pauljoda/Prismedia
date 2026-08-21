@@ -60,6 +60,42 @@ public sealed class ComicSeriesEntityKindDefinition() : EntityKindDefinition<Com
     ];
 
     /// <inheritdoc />
+    public override IReadOnlyList<RequestKindDescriptor> RequestKinds =>
+    [
+        new(
+            RequestMediaKind.ComicSeries,
+            "Comic Series",
+            "Comic Series",
+            "release",
+            EntityKind.ComicSeries,
+            EntityKind.ComicSeries,
+            ProfileEntityKind: EntityKind.ComicSeries,
+            ReviewSelection: RequestReviewSelection.DirectChildren,
+            IsContainer: true,
+            ChildKind: RequestMediaKind.ComicVolume,
+            Committable: true,
+            AcquisitionKind: EntityKind.ComicVolume,
+            AdditionalChildKinds: [RequestMediaKind.ComicInstallment])
+    ];
+
+    /// <inheritdoc />
+    public override AcquisitionProfileDefinition AcquisitionProfile { get; } = new(
+        "Comics (serialized)",
+        4,
+        LibraryRootMediaCapability.ScanBooks,
+        [
+            EntityDateType.Publication,
+            EntityDateType.DigitalRelease,
+            EntityDateType.PhysicalRelease,
+            EntityDateType.Release
+        ],
+        "{Series}/{VolumeFolder}/{Title}.{ext}",
+        "{Series} {VolumeFolder} {Title} {Year} {ext} — series/optional volume/archive layout",
+        AcquisitionNamingFamily.Book,
+        AcquisitionCheckpointProtocol.Placement,
+        JobType.ScanComic);
+
+    /// <inheritdoc />
     public override IReadOnlyList<Type> ProjectedCapabilityTypes => [typeof(SeriesMetadataDocumentCapability)];
 
     /// <inheritdoc />
@@ -137,8 +173,32 @@ public sealed class ComicVolumeEntityKindDefinition() : RootEntityKindDefinition
     public override bool OwnsMetadataRelationships => true;
 
     /// <inheritdoc />
+    public override bool IsFulfilledBySourceBackedSubtree => true;
+
+    /// <inheritdoc />
     public override IReadOnlyList<EntityStructuralCountDefinition> StructuralThumbnailCounts =>
         [new(EntityKind.ComicInstallment, 1, ThumbnailMetaIcons.Chapter)];
+
+    /// <inheritdoc />
+    public override IReadOnlyList<RequestKindDescriptor> RequestKinds =>
+    [
+        new(
+            RequestMediaKind.ComicVolume,
+            "Comic Volume",
+            "Comic Volumes",
+            "installment",
+            EntityKind.ComicVolume,
+            EntityKind.ComicVolume,
+            ProfileEntityKind: EntityKind.ComicSeries,
+            ReviewSelection: RequestReviewSelection.Root,
+            IsContainer: false,
+            ChildKind: RequestMediaKind.ComicInstallment,
+            Committable: true,
+            AcquisitionKind: EntityKind.ComicVolume,
+            Discoverable: false,
+            AcquireFromEntity: true,
+            MaterializeChildPhantoms: true)
+    ];
 }
 
 /// <summary>Defines an independently released comic chapter, issue, special, or one-shot.</summary>
@@ -206,6 +266,9 @@ public sealed class ComicInstallmentEntityKindDefinition() : EntityKindDefinitio
     public override bool OwnsMetadataRelationships => true;
 
     /// <inheritdoc />
+    public override int? AutomaticImportFileLimit => 1;
+
+    /// <inheritdoc />
     public override IReadOnlyList<Type> ProjectedCapabilityTypes =>
         [typeof(ComicInstallmentMetadataDocumentCapability)];
 
@@ -214,6 +277,26 @@ public sealed class ComicInstallmentEntityKindDefinition() : EntityKindDefinitio
         ComicInstallment entity,
         EntityKindProjectionContext context) =>
         [new ComicInstallmentMetadataDocumentCapability(entity.InstallmentKind)];
+
+    /// <inheritdoc />
+    public override IReadOnlyList<RequestKindDescriptor> RequestKinds =>
+    [
+        new(
+            RequestMediaKind.ComicInstallment,
+            "Comic Installment",
+            "Comic Installments",
+            null,
+            EntityKind.ComicInstallment,
+            EntityKind.ComicInstallment,
+            ProfileEntityKind: EntityKind.ComicSeries,
+            ReviewSelection: RequestReviewSelection.Root,
+            IsContainer: false,
+            ChildKind: null,
+            Committable: true,
+            AcquisitionKind: EntityKind.ComicInstallment,
+            Discoverable: false,
+            AcquireFromEntity: true)
+    ];
 }
 
 /// <summary>Serialized-comic title or western comic run.</summary>

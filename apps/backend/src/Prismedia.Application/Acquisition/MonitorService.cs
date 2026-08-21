@@ -169,15 +169,15 @@ public sealed class MonitorService(
             ? null
             : RequestKindRegistry.All.FirstOrDefault(candidate =>
                 candidate.Committable && candidate.WantedEntityKind == entity.Kind);
-        var childDescriptor = descriptor is null ? null : RequestKindRegistry.ChildOf(descriptor);
-        var canSearchMissingChildren = descriptor is not null
-            && RequestKindRegistry.CanSearchMissingChildren(descriptor);
+        var missingChildEntityKinds = descriptor is null
+            ? []
+            : RequestKindRegistry.MissingChildEntityKinds(descriptor);
         return new MonitorEligibilityView(
             descriptor is not null && trackable.Count > 0,
             trackable,
             descriptor?.IsContainer ?? false,
-            canSearchMissingChildren,
-            canSearchMissingChildren ? childDescriptor!.WantedEntityKind : null);
+            missingChildEntityKinds.Count > 0,
+            missingChildEntityKinds);
     }
 
     /// <summary>
@@ -220,9 +220,9 @@ public sealed class MonitorService(
             cancellationToken);
         return requestedIds.Select(entityId => {
             var descriptor = descriptors.GetValueOrDefault(entityId);
-            var childDescriptor = descriptor is null ? null : RequestKindRegistry.ChildOf(descriptor);
-            var canSearchMissingChildren = descriptor is not null
-                && RequestKindRegistry.CanSearchMissingChildren(descriptor);
+            var missingChildEntityKinds = descriptor is null
+                ? []
+                : RequestKindRegistry.MissingChildEntityKinds(descriptor);
             var eligibilityEntity = eligibilityEntities.GetValueOrDefault(entityId);
             var trackable = trackableByEntity.GetValueOrDefault(entityId) ?? [];
             return new EntityMonitorStateView(
@@ -231,8 +231,8 @@ public sealed class MonitorService(
                 eligibilityEntity?.IsWanted == true && descriptor?.Committable == true,
                 trackable,
                 descriptor?.IsContainer ?? false,
-                canSearchMissingChildren,
-                canSearchMissingChildren ? childDescriptor!.WantedEntityKind : null,
+                missingChildEntityKinds.Count > 0,
+                missingChildEntityKinds,
                 monitorByEntity.GetValueOrDefault(entityId),
                 acquisitionByEntity.GetValueOrDefault(entityId));
         }).ToArray();

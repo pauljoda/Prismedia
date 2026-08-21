@@ -135,14 +135,14 @@ public sealed class MonitorServiceTests {
         Assert.True(tracked.CanMonitor);
         Assert.True(tracked.DiscoversChildren);
         Assert.True(tracked.CanSearchMissingChildren);
-        Assert.Equal(EntityKind.Book, tracked.MissingChildEntityKind);
+        Assert.Equal([EntityKind.Book], tracked.MissingChildEntityKinds);
         Assert.Equal(["openlibrary"], tracked.TrackableProviders);
 
         var orphan = await service.GetEligibilityAsync(orphanId, CancellationToken.None);
         Assert.False(orphan.CanMonitor);
         Assert.True(orphan.DiscoversChildren);
         Assert.True(orphan.CanSearchMissingChildren);
-        Assert.Equal(EntityKind.Book, orphan.MissingChildEntityKind);
+        Assert.Equal([EntityKind.Book], orphan.MissingChildEntityKinds);
         Assert.Empty(orphan.TrackableProviders);
     }
 
@@ -213,12 +213,33 @@ public sealed class MonitorServiceTests {
         Assert.True(book.CanMonitor);
         Assert.False(book.DiscoversChildren);
         Assert.True(book.CanSearchMissingChildren);
-        Assert.Equal(EntityKind.Book, book.MissingChildEntityKind);
+        Assert.Equal([EntityKind.Book], book.MissingChildEntityKinds);
         Assert.True(album.CanMonitor);
         Assert.False(album.DiscoversChildren);
         Assert.True(album.CanSearchMissingChildren);
-        Assert.Equal(EntityKind.AudioTrack, album.MissingChildEntityKind);
+        Assert.Equal([EntityKind.AudioTrack], album.MissingChildEntityKinds);
         Assert.False((await service.GetEligibilityAsync(Guid.NewGuid(), CancellationToken.None)).CanMonitor);
+    }
+
+    [Fact]
+    public async Task ComicSeriesEligibilityExposesCollectedAndDirectInstallmentKinds() {
+        await using var db = CreateContext();
+        var seriesId = SeedContainerEntity(
+            db,
+            "Witch Hat Atelier",
+            provider: "mangadex",
+            kind: EntityKind.ComicSeries);
+        await db.SaveChangesAsync();
+        var service = Service(db, trackableProviders: ["mangadex"]);
+
+        var series = await service.GetEligibilityAsync(seriesId, CancellationToken.None);
+
+        Assert.True(series.CanMonitor);
+        Assert.True(series.DiscoversChildren);
+        Assert.True(series.CanSearchMissingChildren);
+        Assert.Equal(
+            [EntityKind.ComicVolume, EntityKind.ComicInstallment],
+            series.MissingChildEntityKinds);
     }
 
     [Fact]
@@ -256,7 +277,7 @@ public sealed class MonitorServiceTests {
         Assert.True(book.CanRequest);
         Assert.False(book.DiscoversChildren);
         Assert.True(book.CanSearchMissingChildren);
-        Assert.Equal(EntityKind.Book, book.MissingChildEntityKind);
+        Assert.Equal([EntityKind.Book], book.MissingChildEntityKinds);
         Assert.NotNull(book.Monitor);
         Assert.Equal(acquisitionId, book.LatestAcquisition?.Id);
         var author = states[1];
@@ -264,7 +285,7 @@ public sealed class MonitorServiceTests {
         Assert.False(author.CanRequest);
         Assert.True(author.DiscoversChildren);
         Assert.True(author.CanSearchMissingChildren);
-        Assert.Equal(EntityKind.Book, author.MissingChildEntityKind);
+        Assert.Equal([EntityKind.Book], author.MissingChildEntityKinds);
         Assert.NotNull(author.Monitor);
         Assert.Null(author.LatestAcquisition);
         var season = states[2];
@@ -272,12 +293,12 @@ public sealed class MonitorServiceTests {
         Assert.True(season.CanRequest);
         Assert.False(season.DiscoversChildren);
         Assert.True(season.CanSearchMissingChildren);
-        Assert.Equal(EntityKind.VideoEpisode, season.MissingChildEntityKind);
+        Assert.Equal([EntityKind.VideoEpisode], season.MissingChildEntityKinds);
         var missing = states[3];
         Assert.False(missing.CanMonitor);
         Assert.False(missing.CanRequest);
         Assert.False(missing.CanSearchMissingChildren);
-        Assert.Null(missing.MissingChildEntityKind);
+        Assert.Empty(missing.MissingChildEntityKinds);
         Assert.Empty(missing.TrackableProviders);
         Assert.Null(missing.Monitor);
         Assert.Null(missing.LatestAcquisition);

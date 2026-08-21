@@ -98,6 +98,10 @@ public static class RequestProposalReading {
     public static int? EpisodeNumberOf(EntityMetadataPatch patch) =>
         PositionOf(patch, EntityPositionCodes.Episode, "episodeNumber");
 
+    /// <summary>The chapter/issue position a serialized comic installment declares, or null.</summary>
+    public static int? ChapterNumberOf(EntityMetadataPatch patch) =>
+        PositionOf(patch, EntityPositionCodes.Chapter, "chapterNumber");
+
     /// <summary>
     /// Ordering number for a request child option in the vocabulary its parent selector understands:
     /// season children use seasonNumber (but season 0 / Specials is unnumbered for presets), book
@@ -108,6 +112,8 @@ public static class RequestProposalReading {
             RequestMediaKind.Season => SeasonNumberOf(patch),
             RequestMediaKind.Episode => EpisodeNumberOf(patch),
             RequestMediaKind.Book => VolumeNumberOf(patch),
+            RequestMediaKind.ComicVolume => VolumeNumberOf(patch),
+            RequestMediaKind.ComicInstallment => ChapterNumberOf(patch),
             _ => PositionOf(patch, EntityPositionCodes.Sort, "sortOrder"),
         };
 

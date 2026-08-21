@@ -73,13 +73,39 @@ public static class RequestKindRegistry {
     public static RequestKindDescriptor? ChildOf(RequestKindDescriptor descriptor) =>
         descriptor.ChildKind is { } childKind ? Find(childKind) : null;
 
+    /// <summary>Every direct child request descriptor declared by a structural container.</summary>
+    public static IReadOnlyList<RequestKindDescriptor> ChildrenOf(RequestKindDescriptor descriptor) =>
+        descriptor.ChildKinds
+            .Select(Find)
+            .Where(child => child is not null)
+            .Select(child => child!)
+            .ToArray();
+
+    /// <summary>Resolves the direct child descriptor compatible with one proposal Entity kind.</summary>
+    public static RequestKindDescriptor? ChildOf(
+        RequestKindDescriptor descriptor,
+        EntityKind targetKind) =>
+        ChildrenOf(descriptor).SingleOrDefault(child =>
+            EntityKindRegistry.Describe(child.WantedEntityKind).AcceptsPluginKind(targetKind));
+
     /// <summary>
     /// Whether the descriptor exposes a direct child kind the request flow can actually commit. This is
     /// deliberately independent of <see cref="RequestKindDescriptor.IsContainer"/>: books, seasons, and
     /// albums can search missing children without running provider-container discovery.
     /// </summary>
     public static bool CanSearchMissingChildren(RequestKindDescriptor descriptor) =>
-        ChildOf(descriptor) is { Committable: true };
+        ChildrenOf(descriptor).Any(child => child.Committable);
+
+    /// <summary>
+    /// Every direct Entity kind eligible for missing-child search, preserving descriptor preference
+    /// order while collapsing rendition aliases that resolve to the same Entity kind.
+    /// </summary>
+    public static IReadOnlyList<EntityKind> MissingChildEntityKinds(RequestKindDescriptor descriptor) =>
+        ChildrenOf(descriptor)
+            .Where(child => child.Committable)
+            .Select(child => child.WantedEntityKind)
+            .Distinct()
+            .ToArray();
 
     /// <summary>
     /// Resolves a structural acquisition unit whose import must be checked for still-wanted direct
@@ -90,7 +116,7 @@ public static class RequestKindRegistry {
         All.FirstOrDefault(descriptor =>
             descriptor.MaterializeChildPhantoms
             && descriptor.WantedEntityKind == entityKind
-            && ChildOf(descriptor) is { Committable: true });
+            && ChildrenOf(descriptor).Any(child => child.Committable));
 
     private static IReadOnlyList<RequestKindDescriptor> Discover() {
         var entries = EntityKindRegistry.All
@@ -117,6 +143,16 @@ public static class RequestKindRegistry {
         if (duplicates.Length > 0) {
             throw new InvalidOperationException(
                 $"Request kinds have multiple Entity definitions: {string.Join(", ", duplicates)}.");
+        }
+
+        var invalidChildDeclarations = descriptors
+            .Where(descriptor => descriptor.ChildKinds.Count != descriptor.ChildKinds.Distinct().Count()
+                || descriptor.AdditionalChildKinds is { Count: > 0 } && descriptor.ChildKind is null)
+            .Select(descriptor => descriptor.Kind)
+            .ToArray();
+        if (invalidChildDeclarations.Length > 0) {
+            throw new InvalidOperationException(
+                $"Request kinds have invalid direct-child declarations: {string.Join(", ", invalidChildDeclarations)}.");
         }
 
         var expected = Enum.GetValues<RequestMediaKind>().Except([RequestMediaKind.Plugin]);

@@ -288,4 +288,45 @@ public sealed partial class RequestCommitService {
             return new CommitPick(node.Proposal, node.Identity, titles[index], entity, outcome);
         }).ToArray();
     }
+
+    /// <summary>
+    /// Materializes a mixed direct-child selection in bounded same-kind batches, then restores the
+    /// provider's proposal order. Most containers have one child kind; serialized comics can expose
+    /// collected volumes beside direct, not-yet-collected installments.
+    /// </summary>
+    private async Task<IReadOnlyList<DescribedCommitPick>> EnsureContainerPicksAsync(
+        RequestKindDescriptor parentDescriptor,
+        IReadOnlyList<ResolvedRequestProposalNode> nodes,
+        Guid parentEntityId,
+        CancellationToken cancellationToken,
+        bool requestOwnedEntity) {
+        if (nodes.Count == 0) {
+            return [];
+        }
+
+        var described = nodes.Select(node => (
+            Node: node,
+            Descriptor: RequestKindRegistry.ChildOf(parentDescriptor, node.Proposal.TargetKind)
+                ?? throw new RequestCommitValidationException(
+                    $"Proposal '{node.Proposal.ProposalId}' has no declared direct-child request kind.")))
+            .ToArray();
+        var byProposalId = new Dictionary<string, DescribedCommitPick>(StringComparer.Ordinal);
+        foreach (var group in described.GroupBy(item => item.Descriptor.Kind)) {
+            var descriptor = group.First().Descriptor;
+            var groupNodes = group.Select(item => item.Node).ToArray();
+            var picks = await EnsurePicksAsync(
+                descriptor,
+                groupNodes,
+                parentEntityId,
+                cancellationToken,
+                requestOwnedEntity && descriptor.AcquireFromEntity);
+            foreach (var pick in picks) {
+                byProposalId.Add(
+                    pick.Proposal.ProposalId,
+                    new DescribedCommitPick(descriptor, pick));
+            }
+        }
+
+        return nodes.Select(node => byProposalId[node.Proposal.ProposalId]).ToArray();
+    }
 }

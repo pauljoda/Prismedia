@@ -35,7 +35,7 @@ public static class AcquisitionStrategyRegistration {
         var strategies = Discover();
         ValidateCoverage(strategies);
         Register<IAcquisitionImportEngine>(services, strategies, ServiceLifetime.Scoped);
-        Register<IImportedEntityMaterializationPolicy>(services, strategies, ServiceLifetime.Scoped);
+        RegisterImplementations<IImportedEntityMaterializationPolicy>(services, ServiceLifetime.Scoped);
     }
 
     /// <summary>Validates the discovered application strategies without constructing their dependencies.</summary>
@@ -101,15 +101,19 @@ public static class AcquisitionStrategyRegistration {
         }
     }
 
+    private static void RegisterImplementations<TService>(
+        IServiceCollection services,
+        ServiceLifetime lifetime) where TService : class {
+        foreach (var implementation in typeof(DependencyInjection).Assembly.GetTypes().Where(type =>
+                     type is { IsAbstract: false, IsInterface: false }
+                     && typeof(TService).IsAssignableFrom(type))) {
+            services.Add(new ServiceDescriptor(typeof(TService), implementation, lifetime));
+        }
+    }
+
     private static void ValidateCoverage(IReadOnlyList<Type> strategies) {
         ValidateCoverage<IAcquisitionPolicyModule>(strategies, "search policy", static _ => true);
         ValidateCoverage<IAcquisitionImportEngine>(strategies, "import engine", static _ => true);
-        // TV has a deliberately different exact-placement materializer (IImportedVideoMaterializer),
-        // rather than the scanner-backed IImportedEntityMaterializationPolicy contract.
-        ValidateCoverage<IImportedEntityMaterializationPolicy>(
-            strategies,
-            "materialization policy",
-            kind => TryGetNamingFamily(kind) != AcquisitionNamingFamily.Television);
     }
 
     private static void ValidateCoverage<TService>(

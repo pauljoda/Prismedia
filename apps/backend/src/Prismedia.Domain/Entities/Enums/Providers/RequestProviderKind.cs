@@ -61,6 +61,18 @@ public enum RequestMediaKind {
     [Code("episode")]
     Episode,
 
+    /// <summary>Serialized comic title/run whose volumes and direct installments can be selected.</summary>
+    [Code("comic-series")]
+    ComicSeries,
+
+    /// <summary>Optional collected comic volume, used as a monitored installment-pack unit.</summary>
+    [Code("comic-volume")]
+    ComicVolume,
+
+    /// <summary>Independently released comic chapter, issue, special, or one-shot.</summary>
+    [Code("comic-installment")]
+    ComicInstallment,
+
     /// <summary>
     /// Music artist request target: a container kind that surfaces the artist's albums as toggleable
     /// children, each fanned out into its own <see cref="Album"/> acquisition.

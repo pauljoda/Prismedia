@@ -38,6 +38,8 @@ public sealed class AcquisitionPolicyModuleTests {
         var registry = BuiltInRegistry();
 
         Assert.IsType<BookAcquisitionPolicyModule>(registry.Get(EntityKind.Book));
+        Assert.IsType<BookAcquisitionPolicyModule>(registry.Get(EntityKind.ComicVolume));
+        Assert.IsType<BookAcquisitionPolicyModule>(registry.Get(EntityKind.ComicInstallment));
         Assert.IsType<MovieAcquisitionPolicyModule>(registry.Get(EntityKind.Movie));
         Assert.IsType<MusicAcquisitionPolicyModule>(registry.Get(EntityKind.AudioLibrary));
         Assert.IsType<MusicAcquisitionPolicyModule>(registry.Get(EntityKind.AudioTrack));
@@ -57,12 +59,18 @@ public sealed class AcquisitionPolicyModuleTests {
         var movie = new AcquisitionSearchInput(
             Guid.NewGuid(), "Dune", null, EntityKind.Movie, Year: 2021);
         var movieWithoutYear = movie with { Year = null };
+        var comic = new AcquisitionSearchInput(
+            Guid.NewGuid(), "Chapter 83", null, EntityKind.ComicInstallment,
+            Series: "Witch Hat Atelier");
 
         Assert.Equal(["Book Author", "Book"], registry.Get(book.Kind).BuildQueries(book));
         Assert.Equal(["Daft Punk Discovery", "Discovery"], registry.Get(album.Kind).BuildQueries(album));
         Assert.Equal(["Game of Thrones complete", "Game of Thrones"], registry.Get(series.Kind).BuildQueries(series));
         Assert.Equal(["Dune 2021", "Dune"], registry.Get(movie.Kind).BuildQueries(movie));
         Assert.Equal(["Dune"], registry.Get(movieWithoutYear.Kind).BuildQueries(movieWithoutYear));
+        Assert.Equal(
+            ["Witch Hat Atelier Chapter 83", "Chapter 83"],
+            registry.Get(comic.Kind).BuildQueries(comic));
     }
 
     [Fact]
@@ -107,6 +115,7 @@ public sealed class AcquisitionPolicyModuleTests {
 
         Assert.Equal([7020], book.RouteCategories(new AcquisitionSearchInput(Guid.NewGuid(), "Book", null, EntityKind.Book, BookRendition: BookRendition.Ebook), [7000, 7020, 7030, 3030]));
         Assert.Equal([3030], book.RouteCategories(new AcquisitionSearchInput(Guid.NewGuid(), "Book", null, EntityKind.Book, BookRendition: BookRendition.Audiobook), [3000, 3030, 7020]));
+        Assert.Equal([7030], book.RouteCategories(new AcquisitionSearchInput(Guid.NewGuid(), "Chapter 83", null, EntityKind.ComicInstallment), [7000, 7020, 7030]));
         Assert.Equal([2000], movie.RouteCategories(new AcquisitionSearchInput(Guid.NewGuid(), "Movie", null, EntityKind.Movie), [7000, 7030]));
         Assert.Equal([3000], music.RouteCategories(new AcquisitionSearchInput(Guid.NewGuid(), "Album", null, EntityKind.AudioLibrary), []));
         Assert.Equal([5000], tv.RouteCategories(new AcquisitionSearchInput(Guid.NewGuid(), "Series", null, EntityKind.VideoSeries), [7000]));

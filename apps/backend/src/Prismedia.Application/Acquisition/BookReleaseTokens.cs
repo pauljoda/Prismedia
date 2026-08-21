@@ -15,9 +15,22 @@ public static partial class BookReleaseTokens {
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex VolumeTokenRegex();
 
+    [GeneratedRegex(
+        @"(?:^|[\s._\-(\[])(?:ch(?:apter)?|issue|ep(?:isode)?|#)\.?[\s._-]*(?<installment>\d{1,5})(?:\D|$)",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex InstallmentTokenRegex();
+
     /// <summary>The volume number a name declares, or null when it names none.</summary>
     public static int? ParseVolume(string name) {
         var match = VolumeTokenRegex().Match(name);
         return match.Success && int.TryParse(match.Groups["volume"].Value, out var volume) ? volume : null;
+    }
+
+    /// <summary>The independently released chapter/issue number a comic name declares, or null.</summary>
+    public static int? ParseInstallment(string name) {
+        var match = InstallmentTokenRegex().Match(name);
+        return match.Success && int.TryParse(match.Groups["installment"].Value, out var installment)
+            ? installment
+            : null;
     }
 }

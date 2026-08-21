@@ -34,6 +34,7 @@ describe("acquisition profile release timing", () => {
       { value: ENTITY_KIND.movie, label: "Movies" },
       { value: ENTITY_KIND.videoSeries, label: "TV (series)" },
       { value: ENTITY_KIND.audioLibrary, label: "Music (albums)" },
+      { value: ENTITY_KIND.comicSeries, label: "Comics (serialized)" },
     ]);
   });
 });

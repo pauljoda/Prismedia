@@ -4,6 +4,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.Extensions.Logging;
+using Prismedia.Application.Acquisition;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Files;
 using Prismedia.Application.Jobs.Handlers;
@@ -31,7 +32,8 @@ public sealed class ScanComicJobHandler(
     IComicInfoMetadataReader? comicInfoReader = null,
     IScanMetadataPersistence? scanMetadata = null,
     ILibraryFileChangeIntake? changeIntake = null,
-    IComicFolderNormalizer? folderNormalizer = null)
+    IComicFolderNormalizer? folderNormalizer = null,
+    IAcquisitionHintApplier? acquisitionHints = null)
     : ScanJobHandler(logger, fileDiscovery, roots, snapshots, changeIntake: changeIntake) {
     private static readonly Regex FirstInteger = new(@"\d+", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
@@ -75,11 +77,6 @@ public sealed class ScanComicJobHandler(
                 root.Label);
         }
 
-        var settings = await Roots.GetSettingsAsync(cancellationToken);
-        if (!root.AutoIdentify) {
-            settings = settings with { AutoIdentifyEnabled = false };
-        }
-
         var sources = archivePaths
             .Select(path => new ComicArchiveSource(path, path, null))
             .Concat(normalized.Archives.Select(archive => new ComicArchiveSource(
@@ -88,6 +85,82 @@ public sealed class ScanComicJobHandler(
                 new ComicSourceProvenance(archive.OriginFolderPath, archive.OriginSignature))))
             .OrderBy(source => source.ClassificationPath, NaturalPathComparer.Instance)
             .ToArray();
+        var validArchivePaths = await MaterializeArchiveSourcesAsync(
+            context,
+            root,
+            sources,
+            acquisitionId: null,
+            cancellationToken);
+
+        if (folderNormalizer is not null && !normalized.HasFailures) {
+            await folderNormalizer.PruneAsync(
+                root.Id,
+                normalized.Archives
+                    .Select(archive => archive.ArchivePath)
+                    .ToHashSet(FileSystemPathComparison.Comparer),
+                cancellationToken);
+        }
+        await comics.RemoveStaleComicInstallmentsInRootAsync(
+            root.Id,
+            validArchivePaths,
+            cancellationToken);
+        await comics.RemoveEmptyComicContainersAsync(cancellationToken);
+        await Roots.RemoveEntitiesInExcludedPathsAsync(root.Id, cancellationToken);
+        return normalized.HasFailures
+            ? new ScanRootOutcome(normalized.FailedPaths)
+            : ScanRootOutcome.Success;
+    }
+
+    /// <summary>
+    /// Materializes only one import's exact comic archives through canonical grouping, wanted binding,
+    /// metadata, and page manifests. It performs no root-wide stale cleanup.
+    /// </summary>
+    public async Task MaterializeImportedPathsAsync(
+        JobContext context,
+        Guid acquisitionId,
+        LibraryRootData root,
+        IReadOnlyList<string> placedPaths,
+        CancellationToken cancellationToken) {
+        if (!root.Enabled || !root.ScanBooks) {
+            throw new InvalidOperationException(
+                "The imported comics no longer belong to an enabled book/comic library root.");
+        }
+
+        var sources = placedPaths
+            .Select(Path.GetFullPath)
+            .Select(path => {
+                if (!File.Exists(path)
+                    || !SupportedExtensions.ComicArchive.Contains(Path.GetExtension(path))) {
+                    throw new InvalidOperationException(
+                        "The comic import contains a file the comic scanner does not support.");
+                }
+                return new ComicArchiveSource(path, path, null);
+            })
+            .OrderBy(source => source.ClassificationPath, NaturalPathComparer.Instance)
+            .ToArray();
+        var valid = await MaterializeArchiveSourcesAsync(
+            context,
+            root,
+            sources,
+            acquisitionId,
+            cancellationToken);
+        if (valid.Count != sources.Length) {
+            throw new InvalidDataException(
+                "At least one imported comic archive had no safe readable pages.");
+        }
+    }
+
+    private async Task<IReadOnlySet<string>> MaterializeArchiveSourcesAsync(
+        JobContext context,
+        LibraryRootData root,
+        IReadOnlyList<ComicArchiveSource> sources,
+        Guid? acquisitionId,
+        CancellationToken cancellationToken) {
+        var settings = await Roots.GetSettingsAsync(cancellationToken);
+        if (!root.AutoIdentify) {
+            settings = settings with { AutoIdentifyEnabled = false };
+        }
+
         var items = new List<ComicArchiveItem>();
         foreach (var source in sources) {
             var archivePath = source.ArchivePath;
@@ -119,6 +192,13 @@ public sealed class ScanComicJobHandler(
             .OrderBy(group => group.Key, NaturalPathComparer.Instance)) {
             var seriesFirst = seriesGroup.First();
             var seriesIsNsfw = root.IsNsfw || seriesGroup.Any(item => item.MarksNsfw);
+            if (acquisitionHints is not null && seriesFirst.SeriesFolderPath is { } seriesFolderPath) {
+                await acquisitionHints.BindWantedParentFolderAsync(
+                    EntityKind.ComicSeries,
+                    seriesFolderPath,
+                    cancellationToken,
+                    acquisitionId);
+            }
             var seriesId = await comics.UpsertComicSeriesAsync(
                 seriesFirst.SeriesFolderPath,
                 seriesFirst.SeriesTitle,
@@ -140,6 +220,14 @@ public sealed class ScanComicJobHandler(
                 .OrderBy(item => item.ArchivePath, NaturalPathComparer.Instance)
                 .ToArray();
             for (var index = 0; index < direct.Length; index++) {
+                if (acquisitionHints is not null) {
+                    await acquisitionHints.BindWantedFileAsync(
+                        EntityKind.ComicInstallment,
+                        direct[index].ArchivePath,
+                        cancellationToken,
+                        acquisitionId,
+                        requireExactPath: acquisitionId is not null);
+                }
                 await MaterializeInstallmentAsync(
                     direct[index],
                     root,
@@ -161,6 +249,19 @@ public sealed class ScanComicJobHandler(
                 var volumeFirst = volumeGroup.First();
                 var volumeNumber = volumeFirst.VolumeNumber ?? volumeIndex + 1;
                 var volumeTitle = volumeFirst.VolumeTitle ?? $"Volume {volumeNumber}";
+                if (acquisitionHints is not null && volumeFirst.VolumeFolderPath is { } volumeFolderPath) {
+                    await acquisitionHints.BindWantedFolderAsync(
+                        EntityKind.ComicVolume,
+                        volumeFolderPath,
+                        cancellationToken,
+                        acquisitionId,
+                        requireExactPath: acquisitionId is not null);
+                    await acquisitionHints.BindWantedParentFolderAsync(
+                        EntityKind.ComicVolume,
+                        volumeFolderPath,
+                        cancellationToken,
+                        acquisitionId);
+                }
                 var volumeId = await comics.UpsertComicVolumeAsync(
                     seriesId,
                     volumeTitle,
@@ -172,6 +273,22 @@ public sealed class ScanComicJobHandler(
                     .OrderBy(item => item.ArchivePath, NaturalPathComparer.Instance)
                     .ToArray();
                 for (var index = 0; index < installments.Length; index++) {
+                    if (acquisitionHints is not null && volumeFirst.VolumeFolderPath is { } installmentFolderPath) {
+                        await acquisitionHints.BindWantedChildFileBySortOrderAsync(
+                            EntityKind.ComicInstallment,
+                            installmentFolderPath,
+                            index,
+                            installments[index].ArchivePath,
+                            cancellationToken);
+                    }
+                    if (acquisitionHints is not null) {
+                        await acquisitionHints.BindWantedFileAsync(
+                            EntityKind.ComicInstallment,
+                            installments[index].ArchivePath,
+                            cancellationToken,
+                            acquisitionId,
+                            requireExactPath: acquisitionId is not null);
+                    }
                     await MaterializeInstallmentAsync(
                         installments[index],
                         root,
@@ -195,23 +312,7 @@ public sealed class ScanComicJobHandler(
             }
         }
 
-        if (folderNormalizer is not null && !normalized.HasFailures) {
-            await folderNormalizer.PruneAsync(
-                root.Id,
-                normalized.Archives
-                    .Select(archive => archive.ArchivePath)
-                    .ToHashSet(FileSystemPathComparison.Comparer),
-                cancellationToken);
-        }
-        await comics.RemoveStaleComicInstallmentsInRootAsync(
-            root.Id,
-            validArchivePaths,
-            cancellationToken);
-        await comics.RemoveEmptyComicContainersAsync(cancellationToken);
-        await Roots.RemoveEntitiesInExcludedPathsAsync(root.Id, cancellationToken);
-        return normalized.HasFailures
-            ? new ScanRootOutcome(normalized.FailedPaths)
-            : ScanRootOutcome.Success;
+        return validArchivePaths;
     }
 
     private async Task MaterializeInstallmentAsync(
@@ -420,6 +521,7 @@ public sealed class ScanComicJobHandler(
         string? SeriesFolderPath,
         string SeriesTitle,
         string? VolumeKey,
+        string? VolumeFolderPath,
         int? VolumeNumber,
         string? VolumeTitle,
         string InstallmentTitle,
@@ -477,6 +579,7 @@ public sealed class ScanComicJobHandler(
                 seriesFolderPath,
                 seriesTitle,
                 volumeKey,
+                volumeFolderPath,
                 volumeNumber,
                 volumeTitle,
                 installmentTitle,

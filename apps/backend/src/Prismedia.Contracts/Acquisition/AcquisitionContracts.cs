@@ -514,7 +514,7 @@ public sealed record WantedPageView(IReadOnlyList<WantedListItemView> Items, int
 /// its provider identity must be re-resolvable by an enabled metadata plugin. Groupings then discover
 /// children while leaves attach transient acquisition work to this same Entity intent.
 /// <see cref="DiscoversChildren"/> means provider sync; <see cref="CanSearchMissingChildren"/> means the
-/// request registry exposes the committable direct <see cref="MissingChildEntityKind"/>. They are
+/// request registry exposes at least one committable direct <see cref="MissingChildEntityKinds"/> entry. They are
 /// deliberately independent.
 /// <see cref="TrackableProviders"/> names the provider routes available to the UI.
 /// </summary>
@@ -523,7 +523,7 @@ public sealed record MonitorEligibilityView(
     IReadOnlyList<string> TrackableProviders,
     bool DiscoversChildren,
     bool CanSearchMissingChildren,
-    EntityKind? MissingChildEntityKind);
+    IReadOnlyList<EntityKind> MissingChildEntityKinds);
 
 /// <summary>Bounded batch request for direct Entity monitoring state.</summary>
 public sealed record EntityMonitorStateRequest(IReadOnlyList<Guid> EntityIds);
@@ -540,7 +540,7 @@ public sealed record EntityMonitorStateView(
     IReadOnlyList<string> TrackableProviders,
     bool DiscoversChildren,
     bool CanSearchMissingChildren,
-    EntityKind? MissingChildEntityKind,
+    IReadOnlyList<EntityKind> MissingChildEntityKinds,
     MonitorView? Monitor,
     AcquisitionSummary? LatestAcquisition);
 
