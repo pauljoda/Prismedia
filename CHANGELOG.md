@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Comics now have dedicated title, volume, and installment catalogs on the web, with capability-driven reading, right-to-left spreads, double-page handling, and sequence-aware continuation across ordered releases.
 - Loose comic-page folders can now become verified, naturally ordered managed CBZ sources at explicit comic boundaries. Prismedia keeps the original pages as protected provenance, rebuilds only when their content changes, and prunes only its own generated copies.
 - Comic archives now scan through an independent serialized-media pipeline that groups released installments beneath titles and optional volumes, preserves ComicInfo release metadata and reading direction, and builds generic page manifests without creating one Entity per page.
 - Serialized comic requests can now discover and monitor both collected volumes and independently released chapters or issues, search comic indexer categories with installment-aware matching, and import verified CBZ/ZIP payloads into the exact wanted Entity without folding uncollected releases into invented volumes.

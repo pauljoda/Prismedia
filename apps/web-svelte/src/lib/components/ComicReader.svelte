@@ -1,5 +1,9 @@
 <script lang="ts">
-  import { READER_MODE } from "$lib/api/generated/codes";
+  import {
+    PAGE_READING_DIRECTION,
+    READER_MODE,
+    type PageReadingDirectionCode,
+  } from "$lib/api/generated/codes";
   import { browser } from "$app/environment";
   import { tick, untrack, type Snippet } from "svelte";
   import {
@@ -10,7 +14,7 @@
     ChevronRight,
     Image as ImageIcon,
   } from "@lucide/svelte";
-  import { apiAssetUrl as toApiUrl } from "$lib/api/orval-fetch";
+  import { apiAssetUrl as toApiUrl, apiPath } from "$lib/api/orval-fetch";
   import type { ImageListItemDto } from "$lib/entities/media-view-models";
   import ReaderShell from "$lib/components/reader/ReaderShell.svelte";
   import NsfwBlur from "./nsfw/NsfwBlur.svelte";
@@ -36,6 +40,9 @@
     images: ImageListItemDto[];
     initialIndex: number;
     initialMode?: ReaderMode;
+    readingDirection?: PageReadingDirectionCode;
+    coverOrdinal?: number | null;
+    doublePageOrdinals?: readonly number[];
     title?: string;
     nextChapterLabel?: string | null;
     presentation?: "overlay" | "page";
@@ -52,6 +59,9 @@
     images,
     initialIndex,
     initialMode = READER_MODE.paged,
+    readingDirection = PAGE_READING_DIRECTION.leftToRight,
+    coverOrdinal,
+    doublePageOrdinals = [],
     title = "Comic",
     nextChapterLabel = null,
     presentation = "overlay",
@@ -66,7 +76,7 @@
   let shell = $state<ReturnType<typeof ReaderShell>>();
   let readerMode = $state<ReaderMode>(untrack(() => initialMode));
   let pageMode = $state<ComicPageMode>("single");
-  let firstPageIsCover = $state(true);
+  let firstPageIsCover = $state(untrack(() => coverOrdinal === undefined || coverOrdinal === 0));
   let index = $state(untrack(() => initialIndex));
   let webtoonStage: HTMLElement | undefined = $state();
   let programmaticWebtoonScroll = false;
@@ -74,6 +84,15 @@
   let readerPointerGesture: ReaderPointerGesture | null = null;
   const warmedImages = new Map<string, HTMLImageElement>();
 
+  const rightToLeft = $derived(readingDirection === PAGE_READING_DIRECTION.rightToLeft);
+  const readerOptions = $derived({
+    pageMode,
+    firstPageIsCover,
+    singlePageIndexes: [...new Set([
+      ...doublePageOrdinals,
+      ...(coverOrdinal == null ? [] : [coverOrdinal]),
+    ])],
+  });
   const hasNextChapter = $derived(Boolean(onNextChapter));
   const hasEndAction = $derived(images.length > 0);
   const nextChapterTitle = $derived(nextChapterLabel?.trim() ? nextChapterLabel : "Next chapter");
@@ -86,8 +105,9 @@
   const spread = $derived(
     showingChapterEndPage
       ? []
-      : comicSpreadForIndex(index, images.length, { pageMode, firstPageIsCover }),
+      : comicSpreadForIndex(index, images.length, readerOptions),
   );
+  const displayedSpread = $derived(rightToLeft ? [...spread].reverse() : spread);
   const counterText = $derived(
     showingChapterEndPage
       ? chapterEndTitle
@@ -96,7 +116,7 @@
       : `${Math.min(index + 1, images.length)} / ${images.length}`,
   );
   const preloadSources = $derived(
-    comicPreloadIndexes(index, images.length, { pageMode, firstPageIsCover })
+    comicPreloadIndexes(index, images.length, readerOptions)
       .map((pageIndex) => images[pageIndex])
       .map((image) => (image ? imageSrc(image) : ""))
       .filter(Boolean),
@@ -140,7 +160,7 @@
       setReaderIndex(finalPageIndex);
       return;
     }
-    setReaderIndex(nextComicIndex(index, images.length, { pageMode, firstPageIsCover }));
+    setReaderIndex(nextComicIndex(index, images.length, readerOptions));
   }
 
   function goPrev() {
@@ -148,7 +168,7 @@
       setReaderIndex(lastReadableIndex());
       return;
     }
-    setReaderIndex(previousComicIndex(index, images.length, { pageMode, firstPageIsCover }));
+    setReaderIndex(previousComicIndex(index, images.length, readerOptions));
   }
 
   function lastReadableIndex() {
@@ -157,7 +177,7 @@
 
   function isLastReadableSpread() {
     if (images.length <= 0) return true;
-    const visibleSpread = comicSpreadForIndex(index, images.length, { pageMode, firstPageIsCover });
+    const visibleSpread = comicSpreadForIndex(index, images.length, readerOptions);
     return (visibleSpread.at(-1) ?? index) >= images.length - 1;
   }
 
@@ -192,7 +212,9 @@
   }
 
   function imageSrc(image: ImageListItemDto) {
-    return toApiUrl(image.fullPath ?? image.thumbnailPath) ?? "";
+    const path = image.fullPath ?? image.thumbnailPath;
+    if (path?.startsWith("/api/")) return apiPath(path);
+    return toApiUrl(path) ?? "";
   }
 
   function warmImage(src: string) {
@@ -270,7 +292,7 @@
         Math.max(absX, absY) > READER_SWIPE_THRESHOLD
       ) {
         if (absX > absY * 1.3) {
-          if (dx < 0) goNext();
+          if ((dx < 0) !== rightToLeft) goNext();
           else goPrev();
           return;
         }
@@ -292,8 +314,8 @@
       if (zone === "controls") shell?.toggleControls();
       return;
     }
-    if (zone === "previous") goPrev();
-    else if (zone === "next") goNext();
+    if (zone === "previous") rightToLeft ? goNext() : goPrev();
+    else if (zone === "next") rightToLeft ? goPrev() : goNext();
     else shell?.toggleControls();
   }
 
@@ -362,8 +384,8 @@
   {presentation}
   {closeIcon}
   {onClose}
-  onPrev={goPrev}
-  onNext={goNext}
+  onPrev={rightToLeft ? goNext : goPrev}
+  onNext={rightToLeft ? goPrev : goNext}
   onActivate={goNext}
 >
   {#snippet counter()}{counterText}{/snippet}
@@ -486,21 +508,21 @@
       {#if images.length > 1 || hasEndAction}
         <button
           type="button"
-          onclick={goPrev}
+          onclick={rightToLeft ? goNext : goPrev}
           data-reader-control
           class="reader-nav-button left-2 sm:left-3"
-          aria-label="Previous page"
-          title="Previous (←)"
+          aria-label={rightToLeft ? "Next page" : "Previous page"}
+          title={rightToLeft ? "Next (←)" : "Previous (←)"}
         >
           <ChevronLeft class="h-6 w-6" />
         </button>
         <button
           type="button"
-          onclick={goNext}
+          onclick={rightToLeft ? goPrev : goNext}
           data-reader-control
           class="reader-nav-button right-2 sm:right-3"
-          aria-label="Next page"
-          title="Next (→)"
+          aria-label={rightToLeft ? "Previous page" : "Next page"}
+          title={rightToLeft ? "Previous (→)" : "Next (→)"}
         >
           <ChevronRight class="h-6 w-6" />
         </button>
@@ -530,7 +552,7 @@
             </button>
           </div>
         {:else}
-          {#each spread as pageIndex (pageIndex)}
+          {#each displayedSpread as pageIndex (pageIndex)}
             {@const image = images[pageIndex]}
             {#if image}
               <NsfwBlur isNsfw={false} class="flex h-full min-w-0 flex-1 items-center justify-center">

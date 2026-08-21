@@ -3,6 +3,7 @@ import { tick } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import ComicReader from "./ComicReader.svelte";
 import type { ImageListItemDto } from "$lib/entities/media-view-models";
+import { PAGE_READING_DIRECTION } from "$lib/api/generated/codes";
 
 vi.mock("$lib/nsfw/store.svelte", () => ({
   useNsfw: () => ({ mode: "show" }),
@@ -96,6 +97,24 @@ describe("ComicReader", () => {
 
     const root = readerRoot(container);
     expect(root.querySelector(".reader-bottom-layer")).toBeNull();
+  });
+
+  it("places a right-to-left double spread in manifest reading order", async () => {
+    const { container, getByLabelText } = render(ComicReader, {
+      props: {
+        images,
+        initialIndex: 0,
+        title: "Manga",
+        readingDirection: PAGE_READING_DIRECTION.rightToLeft,
+        coverOrdinal: null,
+        onClose: vi.fn(),
+      },
+    });
+
+    await fireEvent.click(getByLabelText("Toggle one or two pages"));
+
+    const visiblePages = [...readerRoot(container).querySelectorAll<HTMLImageElement>(".reader-stage-paged img")];
+    expect(visiblePages.map((image) => image.alt)).toEqual(["Page 2", "Page 1"]);
   });
 
   it("keeps controls hidden while navigating with side taps", async () => {

@@ -25,6 +25,18 @@ describe("comic reader page math", () => {
     expect(comicSpreadForIndex(7, 8, { pageMode: "double", firstPageIsCover: true })).toEqual([7]);
   });
 
+  it("keeps manifest-declared double pages out of paired spreads", () => {
+    const options = {
+      pageMode: "double" as const,
+      firstPageIsCover: false,
+      singlePageIndexes: [2],
+    };
+
+    expect(comicSpreadForIndex(0, 6, options)).toEqual([0, 1]);
+    expect(comicSpreadForIndex(2, 6, options)).toEqual([2]);
+    expect(comicSpreadForIndex(3, 6, options)).toEqual([3, 4]);
+  });
+
   it("moves by spreads in double-page mode", () => {
     const opts = { pageMode: "double" as const, firstPageIsCover: true };
     expect(nextComicIndex(0, 8, opts)).toBe(1);

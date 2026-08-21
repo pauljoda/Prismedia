@@ -4,6 +4,8 @@ export type ComicTapZone = "previous" | "controls" | "next";
 export interface ComicReaderOptions {
   pageMode: ComicPageMode;
   firstPageIsCover: boolean;
+  /** Manifest ordinals that must occupy a spread alone, such as scanned double pages. */
+  singlePageIndexes?: readonly number[];
 }
 
 function clampIndex(index: number, total: number) {
@@ -19,18 +21,20 @@ export function comicSpreadForIndex(
   if (total <= 0) return [];
   const current = clampIndex(index, total);
   if (options.pageMode === "single") return [current];
-  if (options.firstPageIsCover && current === 0) return [0];
-
-  const spreadStart = options.firstPageIsCover
-    ? current % 2 === 1
-      ? current
-      : current - 1
-    : current % 2 === 0
-      ? current
-      : current - 1;
-  const safeStart = clampIndex(spreadStart, total);
-  const next = safeStart + 1;
-  return next < total ? [safeStart, next] : [safeStart];
+  const singlePages = new Set(options.singlePageIndexes ?? []);
+  let cursor = 0;
+  while (cursor < total) {
+    const next = cursor + 1;
+    const standsAlone =
+      (options.firstPageIsCover && cursor === 0)
+      || singlePages.has(cursor)
+      || next >= total
+      || singlePages.has(next);
+    const spread = standsAlone ? [cursor] : [cursor, next];
+    if (spread.includes(current)) return spread;
+    cursor += spread.length;
+  }
+  return [current];
 }
 
 export function nextComicIndex(
