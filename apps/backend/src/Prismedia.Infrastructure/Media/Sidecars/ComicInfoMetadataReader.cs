@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.IO.Compression;
 using System.Xml.Linq;
+using Prismedia.Application.Files;
 using Prismedia.Application.Jobs.Ports;
 
 namespace Prismedia.Infrastructure.Media.Sidecars;
@@ -32,7 +33,9 @@ public sealed class ComicInfoMetadataReader : IComicInfoMetadataReader {
             using var archive = ZipFile.OpenRead(archivePath);
             var entry = archive.Entries.FirstOrDefault(candidate =>
                 !string.IsNullOrEmpty(candidate.Name) &&
-                candidate.Name.Equals("ComicInfo.xml", StringComparison.OrdinalIgnoreCase));
+                candidate.Name.Equals(
+                    SupportedExtensions.ComicInfoSidecarFileName,
+                    StringComparison.OrdinalIgnoreCase));
             if (entry is null) {
                 return null;
             }
