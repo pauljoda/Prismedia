@@ -28,6 +28,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Existing image-archive Books now transition into the serialized comic hierarchy without duplicate catalog entries or scan-order data loss, retaining their stable identities and promoting saved chapter progress to the adopted installment.
 - A video's saved resume position can no longer be destroyed by a playback attempt that never gets going. Players that stall while opening report a position of zero, and the server previously treated that as "the viewer went back to the beginning" and erased the real resume point. Zero-position progress and stop reports now keep their watch-activity accounting but leave the resume position untouched; choosing Start Over when starting playback still clears it explicitly.
 - Safari no longer stutters, stalls, and restarts part-way through HEVC videos played as Direct Stream. Safari now plays these streams with its own built-in player, which correctly handles the segment structure that most HEVC files use; the previous player could not, and got stuck re-requesting the same few seconds forever. Chrome and Firefox are unaffected.
 - Stream descriptions now measure every segment boundary against the video that is actually there, instead of assuming each segment starts exactly on its keyframe, and no longer advertise segments as independently decodable when they are not. Affected videos re-measure themselves once on their next play.

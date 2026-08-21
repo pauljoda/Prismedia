@@ -156,7 +156,16 @@ public sealed partial class LibraryScanPersistenceService {
     }
 
     public async Task<int> RemoveStaleBooksInRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) {
-        var bookIds = await DirectRootedKindIdsAsync(rootId, EntityKind.Book, cancellationToken);
+        // Image archives belong to ScanComic. Keep their legacy Book rows intact until that
+        // scanner can adopt the IDs (or prove the source disappeared) so scan job ordering cannot
+        // erase metadata and user state during the serialized-comic cutover.
+        var imageArchiveIds = await _db.BookDetails.AsNoTracking()
+            .Where(detail => detail.Format == BookFormat.ImageArchive)
+            .Select(detail => detail.EntityId)
+            .ToHashSetAsync(cancellationToken);
+        var bookIds = (await DirectRootedKindIdsAsync(rootId, EntityKind.Book, cancellationToken))
+            .Where(id => !imageArchiveIds.Contains(id))
+            .ToList();
 
         var fileBackedBookIds = await _db.EntityFiles.AsNoTracking()
             .Where(file => file.Role == EntityFileRole.Source && bookIds.Contains(file.EntityId))
