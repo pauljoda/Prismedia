@@ -126,6 +126,10 @@ public sealed class EntityContractShapeTests {
             GetCapabilitySchema(schemas, typeof(ImagesCapability)),
             "supportedKinds");
         AssertPropertyReference(
+            GetCapabilitySchema(schemas, typeof(OrderedSequenceCapability)),
+            "role",
+            nameof(EntitySequenceRole));
+        AssertPropertyReference(
             schemas.GetProperty(nameof(OrganizePlanItem)),
             "storageShape",
             nameof(EntityStorageShape));

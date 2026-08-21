@@ -85,6 +85,31 @@ internal sealed class PlayableVideoCapabilityProjector : EntityCapabilityProject
             : null;
 }
 
+[EntityCapabilityProjector(66)]
+internal sealed class PlayableAudioCapabilityProjector : EntityCapabilityProjector<PlayableAudioCapability> {
+    public override PlayableAudioCapability? Project(EntityCapabilityProjectionContext context) =>
+        context.Entity.Definition is IPlayableAudioKindDefinition &&
+        context.Entity.EntityFiles.Any(file => file.Role == EntityFileRole.Source)
+            ? new PlayableAudioCapability()
+            : null;
+}
+
+[EntityCapabilityProjector(67)]
+internal sealed class OrderedSequenceCapabilityProjector : EntityCapabilityProjector<OrderedSequenceCapability> {
+    public override OrderedSequenceCapability? Project(EntityCapabilityProjectionContext context) =>
+        context.Entity.Definition.ProgressTopology switch {
+            EntityProgressTopology.OrderedContainerTopology container => new OrderedSequenceCapability(
+                EntitySequenceRole.Container,
+                container.ItemKind,
+                []),
+            EntityProgressTopology.OrderedRollupTopology item => new OrderedSequenceCapability(
+                EntitySequenceRole.Item,
+                item.ItemKind,
+                item.ContainerKinds),
+            _ => null
+        };
+}
+
 [EntityCapabilityProjector(70)]
 internal sealed class MarkersCapabilityProjector : EntityCapabilityProjector<MarkersCapability> {
     public override MarkersCapability? Project(EntityCapabilityProjectionContext context) =>

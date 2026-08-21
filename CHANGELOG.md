@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Entity details now advertise ordered-sequence participation and directly playable audio through generated capabilities, giving every client one shared contract for sequence interactions and audio playback without media-kind checks.
 - Books that have both readable and audiobook renditions now include a Chapter Mapping tab. Mark the readable chapter where the first audiobook file begins to fill the map sequentially, override individual files when needed, and save the alignment for web and native clients.
 - Audiobook-to-ebook chapter matching is now computed once during library scans and stored with the book, instead of being recalculated by every client on every visit. The Chapter Mapping tab shows the stored map instantly, distinguishes automatic matches from your explicit choices, and refills the automatic layer whenever files, tracks, or your overrides change.
 - Book pages open in one round of requests: the readable chapter list (EPUB contents or chapter summaries with page counts) is persisted at scan time and served from the database, chapter page counts no longer require fetching every page of every chapter, and moving your reading position no longer refetches the contents at all.

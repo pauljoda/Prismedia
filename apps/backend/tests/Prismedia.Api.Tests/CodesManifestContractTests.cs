@@ -43,13 +43,21 @@ public sealed class CodesManifestContractTests {
     }
 
     [Fact]
-    public void CapabilityManifestDiscoversPlayableVideoMarker() {
+    public void CapabilityManifestDiscoversSharedPlaybackAndSequenceContracts() {
         var capabilityKinds = CodesManifest.Build().CapabilityKinds;
         var playableVideoKind = typeof(PlayableVideoCapability)
             .GetCustomAttribute<CapabilityKindAttribute>()!
             .Kind;
+        var playableAudioKind = typeof(PlayableAudioCapability)
+            .GetCustomAttribute<CapabilityKindAttribute>()!
+            .Kind;
+        var orderedSequenceKind = typeof(OrderedSequenceCapability)
+            .GetCustomAttribute<CapabilityKindAttribute>()!
+            .Kind;
 
         Assert.Contains(playableVideoKind, capabilityKinds);
+        Assert.Contains(playableAudioKind, capabilityKinds);
+        Assert.Contains(orderedSequenceKind, capabilityKinds);
     }
 
     [Fact]

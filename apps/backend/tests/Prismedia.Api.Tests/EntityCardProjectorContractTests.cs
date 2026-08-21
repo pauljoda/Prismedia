@@ -76,6 +76,58 @@ public sealed class EntityCardProjectorContractTests {
     }
 
     [Fact]
+    public void ProjectsPlayableAudioOnlyForPlayableDefinitionsWithTheirOwnSourceFile() {
+        var track = new AudioTrack(Guid.NewGuid(), "Prologue", embeddedArtist: null, embeddedAlbum: null);
+        track.AttachFile(EntityFileRole.Source, "/media/books/Novel/01 Prologue.m4b", "audio/mp4");
+        var missingTrack = new AudioTrack(Guid.NewGuid(), "Missing", embeddedArtist: null, embeddedAlbum: null);
+        var book = new Book(
+            Guid.NewGuid(),
+            "Novel",
+            BookType.Novel,
+            coverPageId: null,
+            BookFormat.Audio);
+        book.AttachFile(EntityFileRole.Source, "/media/books/Novel/Novel.m4b", "audio/mp4");
+
+        AssertCapability<PlayableAudioCapability>(EntityCardProjector.ToCard(track, hasSourceBackedSubtree: true));
+        Assert.Empty(EntityCardProjector.ToCard(missingTrack, hasSourceBackedSubtree: false)
+            .Capabilities.OfType<PlayableAudioCapability>());
+        Assert.Empty(EntityCardProjector.ToCard(book, hasSourceBackedSubtree: true)
+            .Capabilities.OfType<PlayableAudioCapability>());
+    }
+
+    [Fact]
+    public void ProjectsOrderedSequenceParticipationFromDefinitionTopology() {
+        var series = EntityCardProjector.ToCard(
+            new VideoSeries(Guid.NewGuid(), "Series"),
+            hasSourceBackedSubtree: false);
+        var season = EntityCardProjector.ToCard(
+            new VideoSeason(Guid.NewGuid(), "Season 1", Guid.NewGuid()),
+            hasSourceBackedSubtree: false);
+        var episode = EntityCardProjector.ToCard(
+            new VideoEpisode(Guid.NewGuid(), "Pilot", Guid.NewGuid()),
+            hasSourceBackedSubtree: false);
+        var book = EntityCardProjector.ToCard(
+            new Book(Guid.NewGuid(), "Novel", BookType.Novel, coverPageId: null, BookFormat.Epub),
+            hasSourceBackedSubtree: false);
+
+        var seriesSequence = AssertCapability<OrderedSequenceCapability>(series);
+        Assert.Equal(EntitySequenceRole.Container, seriesSequence.Role);
+        Assert.Equal(EntityKind.VideoEpisode, seriesSequence.ItemKind);
+        Assert.Empty(seriesSequence.ContainerKinds);
+
+        var seasonSequence = AssertCapability<OrderedSequenceCapability>(season);
+        Assert.Equal(EntitySequenceRole.Container, seasonSequence.Role);
+        Assert.Equal(EntityKind.VideoEpisode, seasonSequence.ItemKind);
+        Assert.Empty(seasonSequence.ContainerKinds);
+
+        var episodeSequence = AssertCapability<OrderedSequenceCapability>(episode);
+        Assert.Equal(EntitySequenceRole.Item, episodeSequence.Role);
+        Assert.Equal(EntityKind.VideoEpisode, episodeSequence.ItemKind);
+        Assert.Equal([EntityKind.VideoSeason, EntityKind.VideoSeries], episodeSequence.ContainerKinds);
+        Assert.Empty(book.Capabilities.OfType<OrderedSequenceCapability>());
+    }
+
+    [Fact]
     public void ProjectsFileManagementForARecoverableDeletionWithoutClaimingSourceMedia() {
         var wantedMovie = new Movie(Guid.NewGuid(), "Wanted Arrival");
 

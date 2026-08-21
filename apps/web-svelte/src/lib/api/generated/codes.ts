@@ -561,6 +561,14 @@ export const ENTITY_MEDIA_QUALITY_FAMILY = {
 
 export type EntityMediaQualityFamilyCode = (typeof ENTITY_MEDIA_QUALITY_FAMILY)[keyof typeof ENTITY_MEDIA_QUALITY_FAMILY];
 
+// source: enum EntitySequenceRole
+export const ENTITY_SEQUENCE_ROLE = {
+  container: "container",
+  item: "item",
+} as const;
+
+export type EntitySequenceRoleCode = (typeof ENTITY_SEQUENCE_ROLE)[keyof typeof ENTITY_SEQUENCE_ROLE];
+
 // source: enum EntitySortDirection
 export const ENTITY_SORT_DIRECTION = {
   ascending: "asc",
@@ -1172,7 +1180,9 @@ export const CAPABILITY_KIND = {
   lifetime: "lifetime",
   links: "links",
   markers: "markers",
+  orderedSequence: "ordered-sequence",
   personProfile: "person-profile",
+  playableAudio: "playable-audio",
   playableVideo: "playable-video",
   position: "position",
   progress: "progress",

@@ -47,7 +47,7 @@ public sealed class AudioTrackEntityKindDefinition() : EntityKindDefinition<Audi
         libraryVisibility: EntityLibraryVisibilityPolicy.AncestorRoot,
         supportsFileDeletion: true,
         mediaQualityFamily: EntityMediaQualityFamily.Audio),
-    defaultCapabilities: static () => [new CapabilityConsumption()]) {
+    defaultCapabilities: static () => [new CapabilityConsumption()]), IPlayableAudioKindDefinition {
     /// <inheritdoc />
     public override EntityProgressTopology ProgressTopology => EntityProgressTopology.Work(
         EntityKind.Book,
