@@ -30,12 +30,9 @@ public sealed class ScanComicJobHandler(
     IScanSnapshotStore? snapshots = null,
     IComicInfoMetadataReader? comicInfoReader = null,
     IScanMetadataPersistence? scanMetadata = null,
-    ILibraryFileChangeIntake? changeIntake = null)
+    ILibraryFileChangeIntake? changeIntake = null,
+    IComicFolderNormalizer? folderNormalizer = null)
     : ScanJobHandler(logger, fileDiscovery, roots, snapshots, changeIntake: changeIntake) {
-    private static readonly HashSet<string> ImageExtensions = new(StringComparer.OrdinalIgnoreCase) {
-        ".jpg", ".jpeg", ".png", ".apng", ".gif", ".webp", ".avif", ".bmp", ".tiff", ".tif"
-    };
-
     private static readonly Regex FirstInteger = new(@"\d+", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
     /// <inheritdoc />
@@ -43,6 +40,13 @@ public sealed class ScanComicJobHandler(
 
     /// <inheritdoc />
     protected override IReadOnlyList<MediaCategory> ScanCategories => [MediaCategory.ComicArchive];
+
+    /// <inheritdoc />
+    protected override IReadOnlyList<MediaCategory> SnapshotCategories => [
+        MediaCategory.ComicArchive,
+        MediaCategory.ComicPage,
+        MediaCategory.ComicMetadataSidecar
+    ];
 
     /// <inheritdoc />
     protected override async Task<ScanRootOutcome> ScanRootCoreAsync(
@@ -61,13 +65,32 @@ public sealed class ScanComicJobHandler(
             archivePaths.Count,
             root.Label);
 
+        var normalized = folderNormalizer is null
+            ? new ComicFolderNormalizationBatch([], [])
+            : await folderNormalizer.NormalizeAsync(root, excludedPaths, cancellationToken);
+        if (normalized.Archives.Count > 0) {
+            logger.LogInformation(
+                "ScanComic: materialized {Count} managed archives from loose-page folders in {Label}",
+                normalized.Archives.Count,
+                root.Label);
+        }
+
         var settings = await Roots.GetSettingsAsync(cancellationToken);
         if (!root.AutoIdentify) {
             settings = settings with { AutoIdentifyEnabled = false };
         }
 
+        var sources = archivePaths
+            .Select(path => new ComicArchiveSource(path, path, null))
+            .Concat(normalized.Archives.Select(archive => new ComicArchiveSource(
+                archive.ArchivePath,
+                archive.ClassificationPath,
+                new ComicSourceProvenance(archive.OriginFolderPath, archive.OriginSignature))))
+            .OrderBy(source => source.ClassificationPath, NaturalPathComparer.Instance)
+            .ToArray();
         var items = new List<ComicArchiveItem>();
-        foreach (var archivePath in archivePaths.OrderBy(path => path, NaturalPathComparer.Instance)) {
+        foreach (var source in sources) {
+            var archivePath = source.ArchivePath;
             var members = ListImageMembers(archivePath);
             if (members.Count == 0) {
                 logger.LogWarning("ScanComic: skipping archive with no safe readable pages: {Path}", archivePath);
@@ -77,7 +100,13 @@ public sealed class ScanComicJobHandler(
             var metadata = comicInfoReader is null
                 ? null
                 : await comicInfoReader.ReadAsync(archivePath, cancellationToken);
-            items.Add(ComicArchiveItem.From(root.Path, archivePath, members, metadata));
+            items.Add(ComicArchiveItem.From(
+                root.Path,
+                archivePath,
+                source.ClassificationPath,
+                members,
+                metadata,
+                source.Provenance));
         }
 
         var validArchivePaths = items
@@ -166,13 +195,23 @@ public sealed class ScanComicJobHandler(
             }
         }
 
+        if (folderNormalizer is not null && !normalized.HasFailures) {
+            await folderNormalizer.PruneAsync(
+                root.Id,
+                normalized.Archives
+                    .Select(archive => archive.ArchivePath)
+                    .ToHashSet(FileSystemPathComparison.Comparer),
+                cancellationToken);
+        }
         await comics.RemoveStaleComicInstallmentsInRootAsync(
             root.Id,
             validArchivePaths,
             cancellationToken);
         await comics.RemoveEmptyComicContainersAsync(cancellationToken);
         await Roots.RemoveEntitiesInExcludedPathsAsync(root.Id, cancellationToken);
-        return ScanRootOutcome.Success;
+        return normalized.HasFailures
+            ? new ScanRootOutcome(normalized.FailedPaths)
+            : ScanRootOutcome.Success;
     }
 
     private async Task MaterializeInstallmentAsync(
@@ -197,6 +236,7 @@ public sealed class ScanComicJobHandler(
             item.InstallmentKind,
             sizeBytes,
             isNsfw,
+            item.SourceProvenance,
             cancellationToken);
 
         if (item.Metadata is not null && scanMetadata is not null) {
@@ -241,7 +281,8 @@ public sealed class ScanComicJobHandler(
             direction,
             defaultMode,
             coverOrdinal,
-            SourceSignature(item.ArchivePath, item.PageMembers, sizeBytes),
+            item.SourceProvenance?.OriginSignature
+                ?? SourceSignature(item.ArchivePath, item.PageMembers, sizeBytes),
             pages);
     }
 
@@ -285,7 +326,7 @@ public sealed class ScanComicJobHandler(
             return archive.Entries
                 .Where(entry =>
                     !string.IsNullOrEmpty(entry.Name) &&
-                    ImageExtensions.Contains(Path.GetExtension(entry.Name)) &&
+                    SupportedExtensions.ComicPage.Contains(Path.GetExtension(entry.Name)) &&
                     IsSafeMember(entry.FullName))
                 .Select(entry => entry.FullName)
                 .Distinct(StringComparer.Ordinal)
@@ -387,17 +428,20 @@ public sealed class ScanComicJobHandler(
         ComicInstallmentKind InstallmentKind,
         IReadOnlyList<string> PageMembers,
         ComicInfoMetadata? Metadata,
-        bool MarksNsfw) {
+        bool MarksNsfw,
+        ComicSourceProvenance? SourceProvenance) {
         public static ComicArchiveItem From(
             string rootPath,
             string archivePath,
+            string classificationPath,
             IReadOnlyList<string> pageMembers,
-            ComicInfoMetadata? metadata) {
-            var relativePath = Path.GetRelativePath(rootPath, archivePath);
+            ComicInfoMetadata? metadata,
+            ComicSourceProvenance? sourceProvenance) {
+            var relativePath = Path.GetRelativePath(rootPath, classificationPath);
             var segments = relativePath.Split(
                 [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
                 StringSplitOptions.RemoveEmptyEntries);
-            var fallbackTitle = Path.GetFileNameWithoutExtension(archivePath);
+            var fallbackTitle = Path.GetFileNameWithoutExtension(classificationPath);
             var installmentTitle = FirstNonEmpty(metadata?.Title, fallbackTitle)!;
             var seriesFolderPath = segments.Length > 1
                 ? Path.Combine(rootPath, segments[0])
@@ -409,7 +453,7 @@ public sealed class ScanComicJobHandler(
             var seriesKey = seriesFolderPath ?? $"title:{seriesTitle}";
 
             var volumeFolderPath = segments.Length > 2
-                ? Path.GetDirectoryName(archivePath)
+                ? Path.GetDirectoryName(classificationPath)
                 : null;
             var volumeFolderTitle = volumeFolderPath is null
                 ? null
@@ -441,9 +485,15 @@ public sealed class ScanComicJobHandler(
                 InstallmentKindFor(metadata, installmentTitle),
                 pageMembers,
                 metadata,
-                metadata?.MarksNsfw == true);
+                metadata?.MarksNsfw == true,
+                sourceProvenance);
         }
     }
+
+    private sealed record ComicArchiveSource(
+        string ArchivePath,
+        string ClassificationPath,
+        ComicSourceProvenance? Provenance);
 
     private static int? ParseFirstInteger(string? value) {
         if (string.IsNullOrWhiteSpace(value)) return null;

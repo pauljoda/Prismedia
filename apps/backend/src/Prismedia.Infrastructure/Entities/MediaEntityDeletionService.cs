@@ -8,6 +8,7 @@ using Prismedia.Application.Jobs;
 using Prismedia.Application.Requests;
 using Prismedia.Contracts.System;
 using Prismedia.Domain.Entities;
+using Prismedia.Infrastructure.Files;
 using Prismedia.Infrastructure.Media.Processing;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
@@ -33,7 +34,8 @@ public sealed class MediaEntityDeletionService(
     ILogger<MediaEntityDeletionService> logger,
     EntityAssetCleanupService? sharedAssetCleanup = null,
     IJobGraphService? graphs = null,
-    Prismedia.Application.Jobs.Ports.ILibraryFileChangeIntake? changeIntake = null) : IMediaEntityDeletionService {
+    Prismedia.Application.Jobs.Ports.ILibraryFileChangeIntake? changeIntake = null,
+    ManagedGeneratedSourceRoot? generatedSourceRoot = null) : IMediaEntityDeletionService {
     private readonly EntityAssetCleanupService entityAssetCleanup =
         sharedAssetCleanup ?? new EntityAssetCleanupService(assets, logger);
     private readonly EfEntityPhysicalManagedPathProjection physicalManagedPaths = new(db);
@@ -1048,6 +1050,11 @@ public sealed class MediaEntityDeletionService(
                 .Where(candidate => IsUnder(candidate.Path, path))
                 .OrderByDescending(candidate => candidate.Path.Length)
                 .FirstOrDefault();
+            if (root is null &&
+                generatedSourceRoot is not null &&
+                generatedSourceRoot.TryResolve(path, out var generated)) {
+                root = generated.Root;
+            }
             if (root is null) {
                 rootFailures.Add(new PhysicalDeletionFailure(
                     path,

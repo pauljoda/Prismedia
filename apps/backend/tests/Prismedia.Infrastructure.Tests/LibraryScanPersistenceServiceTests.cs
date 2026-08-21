@@ -2787,6 +2787,7 @@ public sealed class LibraryScanPersistenceServiceTests {
             ComicInstallmentKind.Chapter,
             sizeBytes: 4096,
             isNsfw: true,
+            sourceProvenance: null,
             CancellationToken.None);
 
         var series = await db.Entities.FindAsync([seriesId]);
@@ -2824,6 +2825,64 @@ public sealed class LibraryScanPersistenceServiceTests {
     }
 
     [Fact]
+    public async Task GeneratedComicSourceKeepsStableIdentityAndFolderProvenance() {
+        await using var db = CreateContext();
+        var rootPath = Path.Combine(Path.GetTempPath(), $"prismedia-comics-{Guid.NewGuid():N}");
+        var originPath = Path.Combine(rootPath, "Series", "Chapter 1");
+        var firstManagedPath = Path.Combine(Path.GetTempPath(), $"managed-{Guid.NewGuid():N}.cbz");
+        var secondManagedPath = Path.Combine(Path.GetTempPath(), $"managed-{Guid.NewGuid():N}.cbz");
+        SeedLibraryRoot(db, RootId, rootPath);
+        await db.SaveChangesAsync();
+        var service = new LibraryScanPersistenceService(db);
+        var seriesId = await service.UpsertComicSeriesAsync(
+            Path.Combine(rootPath, "Series"),
+            "Series",
+            RootId,
+            isNsfw: false,
+            CancellationToken.None);
+
+        var firstId = await service.UpsertComicInstallmentAsync(
+            firstManagedPath,
+            "Chapter 1",
+            RootId,
+            seriesId,
+            sortOrder: 0,
+            position: 1,
+            positionLabel: "1",
+            ComicInstallmentKind.Chapter,
+            sizeBytes: 100,
+            isNsfw: false,
+            new ComicSourceProvenance(originPath, "first-signature"),
+            CancellationToken.None);
+        var secondId = await service.UpsertComicInstallmentAsync(
+            secondManagedPath,
+            "Chapter 1",
+            RootId,
+            seriesId,
+            sortOrder: 0,
+            position: 1,
+            positionLabel: "1",
+            ComicInstallmentKind.Chapter,
+            sizeBytes: 200,
+            isNsfw: false,
+            new ComicSourceProvenance(originPath, "second-signature"),
+            CancellationToken.None);
+
+        Assert.Equal(firstId, secondId);
+        Assert.Equal(
+            secondManagedPath,
+            Assert.Single(db.EntityFiles.Where(row => row.EntityId == firstId)).Path);
+        Assert.Equal(
+            originPath,
+            (await db.EntitySources.FindAsync([
+                firstId,
+                EntitySourceCode.GeneratedFromFolder.ToCode()
+            ]))!.Value);
+        Assert.Equal(0, await service.RemoveEntitiesOutsideLibraryRootsAsync(CancellationToken.None));
+        Assert.NotNull(await db.Entities.FindAsync([firstId]));
+    }
+
+    [Fact]
     public async Task RootLevelComicSeriesUsesCatalogIdentityAndPrunesAfterSourceDisappears() {
         await using var db = CreateContext();
         var rootPath = Path.Combine(Path.GetTempPath(), $"prismedia-comics-{Guid.NewGuid():N}");
@@ -2855,6 +2914,7 @@ public sealed class LibraryScanPersistenceServiceTests {
             ComicInstallmentKind.Issue,
             sizeBytes: null,
             isNsfw: false,
+            sourceProvenance: null,
             CancellationToken.None);
 
         Assert.Equal(firstSeriesId, secondSeriesId);

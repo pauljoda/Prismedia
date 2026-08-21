@@ -294,6 +294,47 @@ public interface IBookScanPersistence {
 }
 
 /// <summary>
+/// Normalizes explicitly bounded loose comic pages into managed archives while retaining originals.
+/// </summary>
+public interface IComicFolderNormalizer {
+    /// <summary>
+    /// Finds explicit loose-page comic boundaries beneath one library root and materializes verified,
+    /// managed CBZ representations without modifying any original source file.
+    /// </summary>
+    Task<ComicFolderNormalizationBatch> NormalizeAsync(
+        LibraryRootData root,
+        IReadOnlySet<string> excludedPaths,
+        CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Removes obsolete files created by this normalizer for one root. Implementations must constrain
+    /// deletion to their own root-scoped managed directory.
+    /// </summary>
+    Task PruneAsync(
+        Guid rootId,
+        IReadOnlySet<string> retainedArchivePaths,
+        CancellationToken cancellationToken);
+}
+
+/// <summary>One managed comic archive and the original folder facts used to produce it.</summary>
+public sealed record NormalizedComicArchive(
+    string ArchivePath,
+    string ClassificationPath,
+    string OriginFolderPath,
+    string OriginSignature);
+
+/// <summary>Results from normalizing every explicit loose-page comic boundary in one root.</summary>
+public sealed record ComicFolderNormalizationBatch(
+    IReadOnlyList<NormalizedComicArchive> Archives,
+    IReadOnlyCollection<string> FailedPaths) {
+    /// <summary>Whether any explicit boundary could not be safely normalized.</summary>
+    public bool HasFailures => FailedPaths.Count > 0;
+}
+
+/// <summary>Provenance attached to an installment whose canonical source is generated and managed.</summary>
+public sealed record ComicSourceProvenance(string OriginFolderPath, string OriginSignature);
+
+/// <summary>
 /// Serialized-comic scan persistence. Installments own source archives; series and optional volumes
 /// are structural catalog entities and never masquerade as readable source files.
 /// </summary>
@@ -326,6 +367,7 @@ public interface IComicScanPersistence {
         ComicInstallmentKind installmentKind,
         long? sizeBytes,
         bool isNsfw,
+        ComicSourceProvenance? sourceProvenance,
         CancellationToken cancellationToken);
 
     /// <summary>Removes source-backed installments whose archives disappeared from the root.</summary>

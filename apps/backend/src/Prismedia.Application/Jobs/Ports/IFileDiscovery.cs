@@ -43,6 +43,12 @@ public enum MediaCategory {
     Audio,
     ComicArchive,
 
+    /// <summary>Raster pages that may form a normalized loose-page comic.</summary>
+    ComicPage,
+
+    /// <summary>Potential comic metadata sidecars; consumers still validate exact filenames.</summary>
+    ComicMetadataSidecar,
+
     /// <summary>Single-file books (EPUB, PDF) discovered alongside comic archives in book roots.</summary>
     Book,
 

@@ -2172,6 +2172,73 @@ public sealed class ScanJobHandlerTests {
     }
 
     [Fact]
+    public async Task ComicScanUsesManagedArchiveAsSourceAndRetainedFolderAsProvenance() {
+        var tempRoot = Directory.CreateTempSubdirectory("prismedia-loose-comic-scan-");
+        try {
+            var rootPath = tempRoot.FullName;
+            var originPath = Path.Combine(rootPath, "Promised Neverland", "Chapter 2");
+            Directory.CreateDirectory(originPath);
+            var generatedPath = Path.Combine(rootPath, "managed-chapter.cbz");
+            CreateZip(generatedPath, ["001.jpg"]);
+            var root = new LibraryRootData(
+                Guid.Parse("11111111-1111-1111-1111-111111111111"),
+                rootPath,
+                "Comics",
+                Enabled: true,
+                Recursive: true,
+                ScanVideos: false,
+                ScanImages: false,
+                ScanAudio: false,
+                ScanBooks: true,
+                IsNsfw: false);
+            var persistence = new FakeScanPersistence([root]) {
+                Settings = DisabledGeneratedWorkSettings
+            };
+            var normalizer = new RecordingComicFolderNormalizer(new NormalizedComicArchive(
+                generatedPath,
+                originPath + ".cbz",
+                originPath,
+                "source-signature"));
+            var handler = new ScanComicJobHandler(
+                NullLogger<ScanComicJobHandler>.Instance,
+                new RecordingFileDiscovery([]),
+                persistence,
+                persistence,
+                new RecordingPageManifestStore(),
+                persistence,
+                folderNormalizer: normalizer);
+            var job = new JobRunSnapshot(
+                Guid.NewGuid(),
+                JobType.ScanComic,
+                JobRunStatus.Running,
+                Progress: 0,
+                Message: null,
+                PayloadJson: $$"""{"libraryRootId":"{{root.Id}}"}""",
+                TargetEntityKind: "library-root",
+                TargetEntityId: root.Id.ToString(),
+                TargetLabel: root.Label,
+                CreatedAt: DateTimeOffset.UtcNow,
+                StartedAt: DateTimeOffset.UtcNow,
+                FinishedAt: null);
+
+            await handler.HandleAsync(
+                new JobContext(job, new RecordingJobQueue()),
+                CancellationToken.None);
+
+            var series = Assert.Single(persistence.UpsertedComicSeries);
+            Assert.Equal(Path.Combine(rootPath, "Promised Neverland"), series.FolderPath);
+            var installment = Assert.Single(persistence.UpsertedComicInstallments);
+            Assert.Equal(generatedPath, installment.ArchivePath);
+            Assert.Equal("Chapter 2", installment.Title);
+            Assert.Equal(new ComicSourceProvenance(originPath, "source-signature"), installment.SourceProvenance);
+            Assert.Equal([generatedPath], normalizer.LastRetainedPaths);
+            Assert.Equal([generatedPath], persistence.ValidComicArchivePaths);
+        } finally {
+            tempRoot.Delete(recursive: true);
+        }
+    }
+
+    [Fact]
     public async Task ComicScanSkipsAlreadyOrganizedAutoIdentifyRootsWhenUnorganizedOnly() {
         var tempRoot = Directory.CreateTempSubdirectory("prismedia-book-auto-skip-");
         try {
@@ -3622,6 +3689,7 @@ public sealed class ScanJobHandlerTests {
             ComicInstallmentKind installmentKind,
             long? sizeBytes,
             bool isNsfw,
+            ComicSourceProvenance? sourceProvenance,
             CancellationToken cancellationToken) {
             var id = IdFor($"comic-installment:{archivePath}");
             UpsertedComicInstallments.Add(new ComicInstallmentRecord(
@@ -3635,7 +3703,8 @@ public sealed class ScanJobHandlerTests {
                 positionLabel,
                 installmentKind,
                 sizeBytes,
-                isNsfw));
+                isNsfw,
+                sourceProvenance));
             return Task.FromResult(id);
         }
 
@@ -3896,7 +3965,28 @@ public sealed class ScanJobHandlerTests {
         string PositionLabel,
         ComicInstallmentKind InstallmentKind,
         long? SizeBytes,
-        bool IsNsfw);
+        bool IsNsfw,
+        ComicSourceProvenance? SourceProvenance);
+
+    private sealed class RecordingComicFolderNormalizer(NormalizedComicArchive archive) : IComicFolderNormalizer {
+        public IReadOnlyList<string> LastRetainedPaths { get; private set; } = [];
+
+        public Task<ComicFolderNormalizationBatch> NormalizeAsync(
+            LibraryRootData root,
+            IReadOnlySet<string> excludedPaths,
+            CancellationToken cancellationToken) =>
+            Task.FromResult(new ComicFolderNormalizationBatch([archive], []));
+
+        public Task PruneAsync(
+            Guid rootId,
+            IReadOnlySet<string> retainedArchivePaths,
+            CancellationToken cancellationToken) {
+            LastRetainedPaths = retainedArchivePaths
+                .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)
+                .ToArray();
+            return Task.CompletedTask;
+        }
+    }
 
     private sealed class RecordingPageManifestStore : IEntityPageManifestStore {
         public List<EntityPageManifest> Manifests { get; } = [];

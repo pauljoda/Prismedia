@@ -70,6 +70,30 @@ public sealed class FileDiscoveryServiceTests : IDisposable {
     }
 
     [Fact]
+    public async Task ComicMetadataDiscoveryAcceptsOnlyCanonicalSidecarFilenames() {
+        await File.WriteAllTextAsync(Path.Combine(_root.FullName, "ComicInfo.xml"), "<ComicInfo />");
+        await File.WriteAllTextAsync(Path.Combine(_root.FullName, "metroninfo.XML"), "<MetronInfo />");
+        await File.WriteAllTextAsync(Path.Combine(_root.FullName, "notes.xml"), "<notes />");
+        var discovery = new FileDiscoveryAdapter(new FileDiscoveryService());
+
+        var files = await discovery.DiscoverFilesAsync(
+            _root.FullName,
+            MediaCategory.ComicMetadataSidecar,
+            recursive: false,
+            excludedPaths: new HashSet<string>(),
+            CancellationToken.None);
+        var signatures = await discovery.DiscoverFileSignaturesAsync(
+            _root.FullName,
+            MediaCategory.ComicMetadataSidecar,
+            recursive: false,
+            excludedPaths: new HashSet<string>(),
+            CancellationToken.None);
+
+        Assert.Equal(["ComicInfo.xml", "metroninfo.XML"], files.Select(Path.GetFileName));
+        Assert.Equal(["ComicInfo.xml", "metroninfo.XML"], signatures.Select(item => Path.GetFileName(item.Path)));
+    }
+
+    [Fact]
     public async Task DiscoverFilesByDirectoryOmitsExcludedGroups() {
         Directory.CreateDirectory(Path.Combine(_root.FullName, "Excluded"));
         Directory.CreateDirectory(Path.Combine(_root.FullName, "Included"));

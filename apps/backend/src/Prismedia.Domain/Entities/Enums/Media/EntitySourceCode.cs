@@ -7,5 +7,13 @@ namespace Prismedia.Domain.Entities;
 public enum EntitySourceCode {
     /// <summary>Directory that establishes a structural container or movie's scan provenance.</summary>
     [Code("folder")]
-    Folder
+    Folder,
+
+    /// <summary>
+    /// Original directory retained when Prismedia creates a managed file representation from
+    /// loose source files. This is provenance only: physical-file deletion must never treat the
+    /// directory as an Entity-owned payload.
+    /// </summary>
+    [Code("generated-from-folder")]
+    GeneratedFromFolder
 }

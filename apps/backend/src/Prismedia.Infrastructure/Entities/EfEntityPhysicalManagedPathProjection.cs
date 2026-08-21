@@ -8,7 +8,8 @@ namespace Prismedia.Infrastructure.Entities;
 /// <summary>
 /// Projects the physical paths Prismedia is allowed to remove for an Entity. A managed path is either
 /// a real source payload or a folder-provenance source; provenance deliberately remains separate from
-/// media availability and request fulfillment.
+/// media availability and request fulfillment. Retained origins of generated sources are a protected
+/// provenance boundary and suppress deletion of overlapping folder-owned paths.
 /// </summary>
 internal sealed class EfEntityPhysicalManagedPathProjection(PrismediaDbContext db) {
     /// <summary>Lists the normalized physical paths owned by the supplied Entity identifiers.</summary>
@@ -50,9 +51,23 @@ internal sealed class EfEntityPhysicalManagedPathProjection(PrismediaDbContext d
             .Select(source => new EntityPhysicalManagedPath(source.EntityId, source.Value))
             .ToArrayAsync(cancellationToken);
 
-        return payloadPaths.Concat(folderPaths)
+        var candidates = payloadPaths.Concat(folderPaths)
             .Select(path => path with { Path = EntitySourcePath.PhysicalOwner(path.Path) })
             .Distinct()
+            .ToArray();
+        if (!includeEntities || candidates.Length == 0) {
+            return candidates;
+        }
+
+        var retainedOriginCode = EntitySourceCode.GeneratedFromFolder.ToCode();
+        var retainedOrigins = await db.EntitySources.AsNoTracking()
+            .Where(source => ids.Contains(source.EntityId) && source.Code == retainedOriginCode)
+            .Select(source => source.Value)
+            .ToArrayAsync(cancellationToken);
+        return candidates
+            .Where(candidate => !retainedOrigins.Any(origin =>
+                FileSystemPathComparison.IsSameOrDescendant(candidate.Path, origin) ||
+                FileSystemPathComparison.IsSameOrDescendant(origin, candidate.Path)))
             .ToArray();
     }
 }

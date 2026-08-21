@@ -189,7 +189,11 @@ public sealed partial class LibraryScanPersistenceService {
             .Where(source => source.Code == EntitySourceCode.Folder.ToCode())
             .Select(source => new { source.EntityId, Path = source.Value })
             .ToArrayAsync(cancellationToken);
-        var sourceRows = fileSourceRows.Concat(folderSourceRows).ToArray();
+        var generatedOriginRows = await _db.EntitySources.AsNoTracking()
+            .Where(source => source.Code == EntitySourceCode.GeneratedFromFolder.ToCode())
+            .Select(source => new { source.EntityId, Path = source.Value })
+            .ToArrayAsync(cancellationToken);
+        var sourceRows = fileSourceRows.Concat(folderSourceRows).Concat(generatedOriginRows).ToArray();
 
         var validSourceIds = sourceRows
             .Where(file => rootPaths.Any(rootPath => LibraryScanPathRules.IsPathUnderRoot(file.Path, rootPath)))

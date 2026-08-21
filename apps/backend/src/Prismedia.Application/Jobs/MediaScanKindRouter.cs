@@ -65,7 +65,10 @@ public static class MediaScanKindRouter {
                 Add(JobType.ScanBook, path);
             }
 
-            if (selection.Comics && SupportedExtensions.ComicArchive.Contains(extension)) {
+            if (selection.Comics &&
+                (SupportedExtensions.ComicArchive.Contains(extension) ||
+                 SupportedExtensions.ComicPage.Contains(extension) ||
+                 SupportedExtensions.IsComicMetadataSidecar(path))) {
                 Add(JobType.ScanComic, path);
             }
         }

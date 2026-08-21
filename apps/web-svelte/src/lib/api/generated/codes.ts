@@ -594,6 +594,7 @@ export type EntitySortDirectionCode = (typeof ENTITY_SORT_DIRECTION)[keyof typeo
 // source: enum EntitySourceCode
 export const ENTITY_SOURCE_CODE = {
   folder: "folder",
+  generatedFromFolder: "generated-from-folder",
 } as const;
 
 export type EntitySourceCodeCode = (typeof ENTITY_SOURCE_CODE)[keyof typeof ENTITY_SOURCE_CODE];

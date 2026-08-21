@@ -42,6 +42,26 @@ public sealed class MediaScanKindRouterTests {
     }
 
     [Fact]
+    public void RoutesLooseComicPagesToGalleryAndComicScans() {
+        var routed = MediaScanKindRouter.Route(AllEnabled, ["/media/comics/issue-1/001.jpg"]);
+
+        Assert.Equal(
+            [JobType.ScanComic, JobType.ScanGallery],
+            routed.Keys.OrderBy(type => type.ToCode()).ToArray());
+    }
+
+    [Fact]
+    public void RoutesOnlyRecognizedComicXmlSidecarsToComicScan() {
+        var routed = MediaScanKindRouter.Route(AllEnabled, [
+            "/media/comics/issue-1/ComicInfo.xml",
+            "/media/comics/issue-1/notes.xml"
+        ]);
+
+        Assert.Equal([JobType.ScanComic], routed.Keys.ToArray());
+        Assert.Equal(["/media/comics/issue-1/ComicInfo.xml"], routed[JobType.ScanComic]);
+    }
+
+    [Fact]
     public void RoutesAudiobookContainersToAudioAndBookScans() {
         var routed = MediaScanKindRouter.Route(AllEnabled, ["/media/audiobooks/story.m4b"]);
 

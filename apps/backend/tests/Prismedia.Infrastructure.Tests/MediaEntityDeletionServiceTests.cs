@@ -11,6 +11,7 @@ using Prismedia.Contracts.System;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Acquisition;
 using Prismedia.Infrastructure.Entities;
+using Prismedia.Infrastructure.Files;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 using Prismedia.Infrastructure.Queue;
@@ -50,6 +51,51 @@ public sealed class MediaEntityDeletionServiceTests {
 
         Assert.True(result.Deleted);
         Assert.Equal(["/media/movies/Arrival"], storage.DeletedPaths);
+        Assert.Equal(1, result.FilesDeleted);
+    }
+
+    [Fact]
+    public async Task GeneratedComicDeletionRemovesManagedArchiveAndPreservesRetainedOrigin() {
+        await using var db = CreateContext();
+        var root = new FileLibraryRoot(
+            Guid.NewGuid(),
+            "/media/comics",
+            "Comics",
+            true,
+            false,
+            false,
+            false,
+            true,
+            false);
+        var generatedSources = new ManagedGeneratedSourceRoot("/data");
+        var seriesId = Guid.NewGuid();
+        var installmentId = Guid.NewGuid();
+        var managedArchive = Path.Combine(
+            generatedSources.AreaPath(ManagedGeneratedSourceRoot.ComicsArea),
+            root.Id.ToString("N"),
+            "chapter.cbz");
+        db.Entities.AddRange(
+            NewEntity(seriesId, EntityKind.ComicSeries.ToCode(), "Series"),
+            NewEntity(installmentId, EntityKind.ComicInstallment.ToCode(), "Chapter 1", seriesId, 0));
+        db.EntityFiles.Add(NewSourceFile(installmentId, managedArchive));
+        db.EntitySources.AddRange(
+            NewFolderSource(seriesId, "/media/comics/Series"),
+            new EntitySourceRow {
+                EntityId = installmentId,
+                Code = EntitySourceCode.GeneratedFromFolder.ToCode(),
+                Value = "/media/comics/Series/Chapter 1",
+                UpdatedAt = DateTimeOffset.UtcNow
+            });
+        await db.SaveChangesAsync();
+        var storage = new RecordingStorage();
+        var service = CreateDeletionService(db, root, storage, generatedSources);
+
+        var result = await service.DeleteAsync(seriesId, deleteFiles: true, CancellationToken.None);
+
+        Assert.True(result.Deleted);
+        Assert.Equal([managedArchive], storage.DeletedPaths);
+        Assert.DoesNotContain("/media/comics/Series", storage.AttemptedPaths);
+        Assert.DoesNotContain("/media/comics/Series/Chapter 1", storage.AttemptedPaths);
         Assert.Equal(1, result.FilesDeleted);
     }
 
@@ -1907,7 +1953,8 @@ public sealed class MediaEntityDeletionServiceTests {
     private static MediaEntityDeletionService CreateDeletionService(
         PrismediaDbContext db,
         FileLibraryRoot root,
-        RecordingStorage storage) =>
+        RecordingStorage storage,
+        ManagedGeneratedSourceRoot? generatedSources = null) =>
         new(
             db,
             new FakeRoots(root),
@@ -1917,7 +1964,8 @@ public sealed class MediaEntityDeletionServiceTests {
             new NullJobQueue(),
             new Prismedia.Infrastructure.Media.Processing.AssetPathService(System.IO.Path.GetTempPath()),
             new EfEntityHierarchyReader(db),
-            NullLogger<MediaEntityDeletionService>.Instance);
+            NullLogger<MediaEntityDeletionService>.Instance,
+            generatedSourceRoot: generatedSources);
 
     private static PrismediaDbContext CreateContext() =>
         new(new DbContextOptionsBuilder<PrismediaDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);

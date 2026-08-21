@@ -35,6 +35,7 @@ using Prismedia.Infrastructure.Files;
 using Prismedia.Infrastructure.Jobs;
 using Prismedia.Infrastructure.Media.Adapters;
 using Prismedia.Infrastructure.Media.Books;
+using Prismedia.Infrastructure.Media.Comics;
 using Prismedia.Infrastructure.Media.Persistence;
 using Prismedia.Infrastructure.Media.Processing;
 using Prismedia.Infrastructure.Media.Sidecars;
@@ -84,6 +85,7 @@ public static class DependencyInjection {
         }
 
         RegisterPersistence(services, connectionString);
+        services.AddSingleton(new ManagedGeneratedSourceRoot(dataDir));
         RegisterMediaProcessing(services, mediaToolOptions, dataDir, cacheDir);
         RegisterPluginsAndIdentify(services, configuration, pathBase, cacheDir);
         RegisterLibraryScanning(services, dataDir);
@@ -251,6 +253,10 @@ public static class DependencyInjection {
         services.AddScoped<ILibraryFileChangeIntake, EfLibraryFileChangeIntake>();
         services.AddSingleton<IVideoSidecarMetadataReader, VideoSidecarMetadataReader>();
         services.AddSingleton<IComicInfoMetadataReader, ComicInfoMetadataReader>();
+        services.AddSingleton<IComicFolderNormalizer>(provider =>
+            new ComicFolderNormalizer(
+                provider.GetRequiredService<ManagedGeneratedSourceRoot>(),
+                provider.GetRequiredService<ILogger<ComicFolderNormalizer>>()));
         services.AddSingleton<IBookFileMetadataReader, Media.Books.BookFileMetadataReader>();
         services.AddSingleton<IBookCoverImageExtractor, Media.Books.BookCoverImageExtractor>();
         services.AddScoped<IMaintenancePersistence>(provider =>

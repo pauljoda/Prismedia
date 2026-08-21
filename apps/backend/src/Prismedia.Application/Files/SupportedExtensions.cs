@@ -6,6 +6,12 @@ namespace Prismedia.Application.Files;
 /// Canonical file-extension sets for each media category, used by file discovery and scan handlers.
 /// </summary>
 public static class SupportedExtensions {
+    /// <summary>Canonical ComicInfo metadata sidecar filename.</summary>
+    public const string ComicInfoSidecarFileName = "ComicInfo.xml";
+
+    /// <summary>Canonical Metron metadata sidecar filename.</summary>
+    public const string MetronInfoSidecarFileName = "MetronInfo.xml";
+
     public static readonly IReadOnlySet<string> Video = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
     {
         ".mp4", ".m4v", ".mkv", ".mov", ".webm", ".avi", ".wmv", ".flv", ".ts", ".m2ts", ".mpg", ".mpeg"
@@ -32,6 +38,29 @@ public static class SupportedExtensions {
     {
         ".cbz", ".zip"
     };
+
+    /// <summary>
+    /// Raster formats that can safely become pages in a normalized comic archive. This is
+    /// intentionally narrower than <see cref="Image"/>, which also accepts gallery-oriented
+    /// vector, layered, icon, and video formats.
+    /// </summary>
+    public static readonly IReadOnlySet<string> ComicPage = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ".jpg", ".jpeg", ".png", ".apng", ".gif", ".webp", ".avif", ".bmp", ".tiff", ".tif"
+    };
+
+    /// <summary>XML sidecars whose exact filenames establish or enrich a loose-page comic.</summary>
+    public static readonly IReadOnlySet<string> ComicMetadataSidecar = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+    {
+        ".xml"
+    };
+
+    /// <summary>Returns whether a filename is a supported comic metadata sidecar.</summary>
+    public static bool IsComicMetadataSidecar(string path) {
+        var name = Path.GetFileName(path);
+        return name.Equals(ComicInfoSidecarFileName, StringComparison.OrdinalIgnoreCase)
+            || name.Equals(MetronInfoSidecarFileName, StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>
     /// Single-file book formats (EPUB, PDF). Each file is one self-contained book whose

@@ -131,6 +131,7 @@ public sealed partial class LibraryScanPersistenceService {
         ComicInstallmentKind installmentKind,
         long? sizeBytes,
         bool isNsfw,
+        ComicSourceProvenance? sourceProvenance,
         CancellationToken cancellationToken) {
         if (sortOrder < 0) throw new ArgumentOutOfRangeException(nameof(sortOrder));
         if (position < 0) throw new ArgumentOutOfRangeException(nameof(position));
@@ -138,10 +139,15 @@ public sealed partial class LibraryScanPersistenceService {
             throw new ArgumentException("A comic installment position label is required.", nameof(positionLabel));
         }
 
-        var existing = await FindEntityBySourcePath(
-            EntityKind.ComicInstallment.ToCode(),
-            archivePath,
-            cancellationToken);
+        var existing = sourceProvenance is null
+            ? await FindEntityBySourcePath(
+                EntityKind.ComicInstallment.ToCode(),
+                archivePath,
+                cancellationToken)
+            : await FindGeneratedComicInstallmentAsync(
+                libraryRootId,
+                sourceProvenance,
+                cancellationToken);
         var now = DateTimeOffset.UtcNow;
         var installmentId = existing?.Id ?? Guid.NewGuid();
         if (existing is null) {
@@ -189,6 +195,14 @@ public sealed partial class LibraryScanPersistenceService {
             sizeBytes,
             now,
             cancellationToken);
+        if (sourceProvenance is not null) {
+            await EnsureEntitySourceAsync(
+                installmentId,
+                EntitySourceCode.GeneratedFromFolder.ToCode(),
+                sourceProvenance.OriginFolderPath,
+                now,
+                cancellationToken);
+        }
         await UpsertPositionAsync(
             installmentId,
             EntityPositionCodes.Chapter,
@@ -255,4 +269,59 @@ public sealed partial class LibraryScanPersistenceService {
         _db.EntityExternalIds.AsNoTracking().AnyAsync(
             row => row.EntityId == entityId,
             cancellationToken);
+
+    private async Task<EntityRow?> FindGeneratedComicInstallmentAsync(
+        Guid libraryRootId,
+        ComicSourceProvenance provenance,
+        CancellationToken cancellationToken) {
+        var generatedFromFolderCode = EntitySourceCode.GeneratedFromFolder.ToCode();
+        var exact = await _db.EntitySources.AsNoTracking()
+            .Where(source =>
+                source.Code == generatedFromFolderCode &&
+                source.Value == provenance.OriginFolderPath)
+            .Join(
+                _db.EntityLibraryRoots.AsNoTracking().Where(root =>
+                    root.LibraryRootId == libraryRootId),
+                source => source.EntityId,
+                root => root.EntityId,
+                (source, _) => source)
+            .Join(
+                _db.Entities.AsNoTracking().Where(entity =>
+                    entity.KindCode == EntityKind.ComicInstallment.ToCode()),
+                source => source.EntityId,
+                entity => entity.Id,
+                (_, entity) => entity)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (exact is not null) {
+            return exact;
+        }
+
+        // A manual folder rename changes the managed archive path. Rebind only when the previous
+        // content signature identifies exactly one installment in this root; ambiguity creates a
+        // new Entity rather than silently merging two identical releases.
+        var signatureMatches = await _db.EntityLibraryRoots.AsNoTracking()
+            .Where(root => root.LibraryRootId == libraryRootId)
+            .Join(
+                _db.EntitySources.AsNoTracking().Where(source =>
+                    source.Code == generatedFromFolderCode),
+                root => root.EntityId,
+                source => source.EntityId,
+                (_, source) => source.EntityId)
+            .Join(
+                _db.EntityPageManifests.AsNoTracking().Where(manifest =>
+                    manifest.SourceSignature == provenance.OriginSignature),
+                entityId => entityId,
+                manifest => manifest.EntityId,
+                (entityId, _) => entityId)
+            .Take(2)
+            .ToArrayAsync(cancellationToken);
+        if (signatureMatches.Length != 1) {
+            return null;
+        }
+
+        return await _db.Entities.AsNoTracking().FirstOrDefaultAsync(entity =>
+            entity.Id == signatureMatches[0] &&
+            entity.KindCode == EntityKind.ComicInstallment.ToCode(),
+            cancellationToken);
+    }
 }

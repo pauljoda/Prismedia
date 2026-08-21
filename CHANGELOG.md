@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Loose comic-page folders can now become verified, naturally ordered managed CBZ sources at explicit comic boundaries. Prismedia keeps the original pages as protected provenance, rebuilds only when their content changes, and prunes only its own generated copies.
 - Comic archives now scan through an independent serialized-media pipeline that groups released installments beneath titles and optional volumes, preserves ComicInfo release metadata and reading direction, and builds generic page manifests without creating one Entity per page.
 - Readable Entities can now expose a generic ordered page manifest and stream pages through shared Entity reader routes, with exact archive-member ordering and no page-Entity expansion.
 - Serialized comics now have separate series, optional volume, and installment entity contracts, preserving the distinction between an independently released chapter or issue and a prose book's internal chapter markers.
