@@ -115,6 +115,33 @@ internal sealed class EfBookChapterMapService(
         return new BookChapterMapRefreshResult(contentsRefreshed, autoReplaced);
     }
 
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<StaleBookChapterMap>> ListStaleForRootAsync(
+        string rootPath,
+        CancellationToken cancellationToken) {
+        var prefix = rootPath.TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+        var bookKind = EntityKind.Book.ToCode();
+        var trackKind = EntityKind.AudioTrack.ToCode();
+        var candidates = await db.Entities.AsNoTracking()
+            .Where(book => book.KindCode == bookKind && !book.IsWanted &&
+                (db.EntityFiles.Any(file => file.EntityId == book.Id &&
+                     file.Role == EntityFileRole.Source && file.Path.StartsWith(prefix)) ||
+                 db.Entities.Any(track => track.ParentEntityId == book.Id && track.KindCode == trackKind &&
+                     db.EntityFiles.Any(file => file.EntityId == track.Id &&
+                         file.Role == EntityFileRole.Source && file.Path.StartsWith(prefix)))))
+            .Select(book => new { book.Id, book.Title })
+            .ToArrayAsync(cancellationToken);
+
+        var stale = new List<StaleBookChapterMap>();
+        foreach (var candidate in candidates) {
+            if (await IsRefreshNeededAsync(candidate.Id, cancellationToken)) {
+                stale.Add(new StaleBookChapterMap(candidate.Id, candidate.Title));
+            }
+        }
+
+        return stale;
+    }
+
     private async Task<BookContentStateRow> EnsureStateAsync(
         BookContentStateRow? state,
         Guid bookId,

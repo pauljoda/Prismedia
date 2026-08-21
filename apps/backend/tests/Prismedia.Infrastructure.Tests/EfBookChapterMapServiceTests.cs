@@ -99,6 +99,26 @@ public sealed class EfBookChapterMapServiceTests {
     }
 
     [Fact]
+    public async Task ListsOnlyStaleBooksUnderTheGivenRoot() {
+        await using var db = CreateContext();
+        var insideId = AddEntity(db, EntityKind.Book, "Inside");
+        AddEntity(db, EntityKind.BookChapter, "Prologue", insideId, 0);
+        var insideTrack = AddEntity(db, EntityKind.AudioTrack, "Prologue", insideId, 0);
+        AddSource(db, insideTrack, "/library/books/inside/prologue.mp3");
+        var outsideId = AddEntity(db, EntityKind.Book, "Outside");
+        var outsideTrack = AddEntity(db, EntityKind.AudioTrack, "Elsewhere", outsideId, 0);
+        AddSource(db, outsideTrack, "/other-root/elsewhere.mp3");
+        await db.SaveChangesAsync();
+        var service = new EfBookChapterMapService(db, new EpubBookContentsCache());
+
+        var stale = await service.ListStaleForRootAsync("/library/books", CancellationToken.None);
+        Assert.Equal(insideId, Assert.Single(stale).BookId);
+
+        await service.RefreshAsync(insideId, CancellationToken.None);
+        Assert.Empty(await service.ListStaleForRootAsync("/library/books", CancellationToken.None));
+    }
+
+    [Fact]
     public async Task BooksWithNoChaptersOrTracksNeedNoRefresh() {
         await using var db = CreateContext();
         var bookId = AddEntity(db, EntityKind.Book, "Book");
@@ -132,12 +152,12 @@ public sealed class EfBookChapterMapServiceTests {
         return id;
     }
 
-    private static void AddSource(PrismediaDbContext db, Guid entityId) {
+    private static void AddSource(PrismediaDbContext db, Guid entityId, string? path = null) {
         db.EntityFiles.Add(new EntityFileRow {
             Id = Guid.NewGuid(),
             EntityId = entityId,
             Role = EntityFileRole.Source,
-            Path = $"/media/{entityId:N}.mp3",
+            Path = path ?? $"/media/{entityId:N}.mp3",
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
         });

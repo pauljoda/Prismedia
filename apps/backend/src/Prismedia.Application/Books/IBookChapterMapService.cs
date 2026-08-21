@@ -5,6 +5,11 @@ namespace Prismedia.Application.Books;
 /// <param name="AutoMappingsReplaced">Whether the automatic mapping rows changed.</param>
 public sealed record BookChapterMapRefreshResult(bool ContentsRefreshed, bool AutoMappingsReplaced);
 
+/// <summary>One book whose persisted chapter map no longer matches its inputs.</summary>
+/// <param name="BookId">Identifier of the Book entity.</param>
+/// <param name="Title">The book's display title, for job labels.</param>
+public sealed record StaleBookChapterMap(Guid BookId, string Title);
+
 /// <summary>
 /// Owns the persisted readable-chapter projection and the automatic audiobook chapter map for one
 /// Book. The scan pipeline calls <see cref="IsRefreshNeededAsync"/> to decide whether to enqueue
@@ -29,4 +34,16 @@ public interface IBookChapterMapService {
     /// <param name="cancellationToken">Token to cancel the operation.</param>
     /// <returns>What actually changed, for job logging.</returns>
     Task<BookChapterMapRefreshResult> RefreshAsync(Guid bookId, CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Finds this root's books whose persisted chapter state is stale. Backs the unchanged-scan
+    /// integrity hook: catalog-only edits (metadata retitles, first-deploy backfill) change no
+    /// files, so the snapshot fast path skips the detailed scan and only this sweep would notice.
+    /// </summary>
+    /// <param name="rootPath">Absolute path of the library root being verified.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>Books that need a chapter-map refresh, with titles for job labels.</returns>
+    Task<IReadOnlyList<StaleBookChapterMap>> ListStaleForRootAsync(
+        string rootPath,
+        CancellationToken cancellationToken);
 }

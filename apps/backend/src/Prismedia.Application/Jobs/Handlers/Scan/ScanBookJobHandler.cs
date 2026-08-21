@@ -631,6 +631,31 @@ public sealed class ScanBookJobHandler(
             : Path.GetFileName(groupKey);
 
     /// <summary>
+    /// Catalog-only chapter-map drift repair for unchanged roots: retitled tracks, first-deploy
+    /// backfill, and manual data edits change no files, so the snapshot fast path skips the
+    /// detailed scan and the per-book enqueue hooks never run. Stale signatures are proven drift,
+    /// so only those books get a refresh job — an up-to-date root enqueues nothing.
+    /// </summary>
+    protected override async Task OnUnchangedIntegrityScanAsync(
+        JobContext context,
+        LibraryRootData root,
+        CancellationToken cancellationToken) {
+        if (chapterMap is null) {
+            return;
+        }
+
+        foreach (var stale in await chapterMap.ListStaleForRootAsync(root.Path, cancellationToken)) {
+            await context.EnqueueIfNeededAsync(
+                EnqueueJobRequest.ForEntity(
+                    JobType.MapBookChapters,
+                    EntityKind.Book,
+                    stale.BookId.ToString(),
+                    stale.Title),
+                cancellationToken);
+        }
+    }
+
+    /// <summary>
     /// Enqueues the chapter-map refresh only when its persisted signatures are stale, so routine
     /// verification scans of unchanged books enqueue nothing. The job re-projects the EPUB table
     /// of contents and recomputes the automatic audiobook chapter map.
