@@ -8,4 +8,6 @@
 export interface BookChapterAudioMapping {
   readableChapterKey: string;
   audioTrackId: string;
+  /** @nullable */
+  origin?: string | null;
 }

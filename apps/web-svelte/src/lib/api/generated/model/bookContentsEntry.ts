@@ -28,4 +28,9 @@ export interface BookContentsEntry {
      * @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$
      */
   endFraction: number | string | null;
+  /**
+     * @nullable
+     * @pattern ^-?(?:0|[1-9]\d*)$
+     */
+  pageCount?: number | string | null;
 }

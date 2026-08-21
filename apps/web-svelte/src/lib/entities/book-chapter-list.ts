@@ -39,33 +39,10 @@ interface BuildBookChapterRowsOptions {
   currentAudioTrackId?: string | null;
 }
 
-/** Stable comparison key for common EPUB/audio filename chapter labels. */
-export function chapterMatchKey(value: string): string {
-  return value
-    .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toLowerCase()
-    .replace(/^\s*(?:chapter|ch\.?|track|part)\s*[ivxlcdm]+\s*(?:[.\-–—:_]|\s)+/i, "")
-    .replace(/^\s*(?:chapter|ch\.?|track|part)\s*0*\d+\s*(?:[.\-–—:_]|\s)*/i, "")
-    .replace(/^\s*0*\d+\s*(?:[.\-–—:_]|\s)+/, "")
-    .replace(/[^a-z0-9]+/g, " ")
-    .trim();
-}
-
-function takeFirstMatch<T>(
-  items: readonly T[],
-  consumed: Set<number>,
-  predicate: (item: T) => boolean,
-): number | null {
-  const index = items.findIndex((item, itemIndex) => !consumed.has(itemIndex) && predicate(item));
-  if (index < 0) return null;
-  consumed.add(index);
-  return index;
-}
-
 /**
- * Builds one ordered reading/listening surface. Persisted user mappings win, then normalized title
- * text can supply safe automatic matches. Numbers and sort order never determine chapter identity.
+ * Builds one ordered reading/listening surface from the server-persisted chapter map. The map
+ * already merges manual choices with the scan-computed automatic title matches, so this function
+ * only applies it — no matching runs in the client anymore.
  */
 export function buildBookChapterRows(options: BuildBookChapterRowsOptions): BookChapterRow[] {
   const readable = [...options.readableChapters].sort(
@@ -87,18 +64,6 @@ export function buildBookChapterRows(options: BuildBookChapterRowsOptions): Book
     if (trackIndex === undefined || consumedTracks.has(trackIndex)) continue;
     consumedTracks.add(trackIndex);
     matches.set(mapping.readableChapterKey, trackIndex);
-  }
-
-  for (const chapter of readable) {
-    if (matches.has(chapter.id)) continue;
-    const key = chapterMatchKey(chapter.title);
-    if (!key) continue;
-    const trackIndex = takeFirstMatch(
-      tracks,
-      consumedTracks,
-      (track) => chapterMatchKey(track.title) === key,
-    );
-    if (trackIndex !== null) matches.set(chapter.id, trackIndex);
   }
 
   const rows: BookChapterRow[] = readable.map((chapter) => {

@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest";
 import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
 import {
   buildBookChapterRows,
-  chapterMatchKey,
   sequentialBookChapterMappings,
   type ReadableBookChapter,
 } from "./book-chapter-list";
@@ -49,13 +48,7 @@ function readable(id: string, title: string, order: number): ReadableBookChapter
 }
 
 describe("book chapter list", () => {
-  it("normalizes chapter labels without erasing their meaningful titles", () => {
-    expect(chapterMatchKey("Chapter 01 — The Boy Who Lived")).toBe("the boy who lived");
-    expect(chapterMatchKey("01. The Boy Who Lived")).toBe("the boy who lived");
-    expect(chapterMatchKey("Prologue")).toBe("prologue");
-  });
-
-  it("matches audio parts to readable chapters by normalized title before position", () => {
+  it("applies the persisted chapter map regardless of origin", () => {
     const rows = buildBookChapterRows({
       readableChapters: [
         readable("chapter-1", "Chapter 1: Bran", 0),
@@ -64,6 +57,10 @@ describe("book chapter list", () => {
       audioTracks: [
         audioTrack("audio-2", "02 - Catelyn", 1),
         audioTrack("audio-1", "01 - Bran", 0),
+      ],
+      chapterMappings: [
+        { readableChapterKey: "chapter-1", audioTrackId: "audio-1", origin: "auto" },
+        { readableChapterKey: "chapter-2", audioTrackId: "audio-2", origin: "manual" },
       ],
       currentReadableId: "chapter-2",
       currentAudioTrackId: "audio-1",
@@ -77,77 +74,47 @@ describe("book chapter list", () => {
     expect(rows[1]).toMatchObject({ isCurrentAudio: false, isCurrentReading: true });
   });
 
-  it("does not use chapter numbers when the text titles differ", () => {
+  it("never matches by title in the client — unmapped tracks stay unattached", () => {
+    // Matching is computed and persisted server-side; identical titles alone must not attach.
     const rows = buildBookChapterRows({
-      readableChapters: [
-        readable("chapter-1", "Chapter 1: An Unexpected Party", 0),
-        readable("chapter-2", "Chapter 2: Roast Mutton", 1),
-      ],
-      audioTracks: [
-        audioTrack("audio-2", "A Storm of Swords — Chapter 02", 0),
-        audioTrack("audio-1", "A Storm of Swords — Chapter 01", 1),
-      ],
+      readableChapters: [readable("prologue", "Prologue", 0)],
+      audioTracks: [audioTrack("audio-1", "Prologue", 0)],
     });
 
-    expect(rows.slice(0, 2).map((row) => row.audioTrack)).toEqual([null, null]);
+    expect(rows[0]?.audioTrack).toBeNull();
+    expect(rows[1]?.audioTrack?.id).toBe("audio-1");
   });
 
-  it("does not use delimited trailing numbers from audio filenames", () => {
+  it("ignores mappings whose chapter or track is not present", () => {
     const rows = buildBookChapterRows({
-      readableChapters: [
-        readable("chapter-1", "Chapter 1", 0),
-        readable("chapter-2", "Chapter 2", 1),
+      readableChapters: [readable("chapter-1", "Bran", 0)],
+      audioTracks: [audioTrack("audio-1", "Bran", 0)],
+      chapterMappings: [
+        { readableChapterKey: "vanished-chapter", audioTrackId: "audio-1" },
+        { readableChapterKey: "chapter-1", audioTrackId: "vanished-track" },
       ],
-      audioTracks: [
-        audioTrack("audio-2", "George R. R. Martin - SFI03 Storm of Swords - 2", 0),
-        audioTrack("audio-1", "George R. R. Martin - SFI03 Storm of Swords - 1", 1),
-      ],
-    });
-
-    expect(rows.slice(0, 2).map((row) => row.audioTrack)).toEqual([null, null]);
-  });
-
-  it("does not mistake a book number at the end of a title for a chapter", () => {
-    const rows = buildBookChapterRows({
-      readableChapters: [readable("chapter-3", "Chapter 3", 0)],
-      audioTracks: [audioTrack("book-title", "A Storm of Swords: A Song of Ice and Fire, Book 3", 0)],
     });
 
     expect(rows[0]?.audioTrack).toBeNull();
   });
 
-  it("does not infer chapter numbers from audio sort order", () => {
+  it("keeps unmatched audio visible instead of attaching it to the wrong chapter", () => {
     const rows = buildBookChapterRows({
-      readableChapters: [
-        readable("chapter-1", "Chapter 1", 0),
-        readable("chapter-2", "Chapter 2", 1),
-      ],
+      readableChapters: [readable("prologue", "Prologue", 0), readable("chapter-1", "Bran", 1)],
       audioTracks: [
-        audioTrack("audio-1", "Bran", 0),
-        audioTrack("audio-2", "Catelyn", 1),
+        audioTrack("credits", "Publisher credits", 0),
+        audioTrack("appendix", "Historical appendix", 1),
+        audioTrack("interview", "Author interview", 2),
       ],
     });
 
-    expect(rows.slice(0, 2).map((row) => row.audioTrack)).toEqual([null, null]);
-  });
-
-  it("uses explicit mappings before normalized title matches", () => {
-    const rows = buildBookChapterRows({
-      readableChapters: [
-        readable("prologue", "Prologue", 0),
-        readable("chapter-1", "Chapter 1", 1),
-      ],
-      audioTracks: [
-        audioTrack("audio-1", "Chapter 1", 0),
-        audioTrack("audio-2", "Prologue", 1),
-      ],
-      chapterMappings: [
-        { readableChapterKey: "prologue", audioTrackId: "audio-1" },
-        { readableChapterKey: "chapter-1", audioTrackId: "audio-2" },
-      ],
-    });
-
-    expect(rows.slice(0, 2).map((row) => row.audioTrack?.id)).toEqual(["audio-1", "audio-2"]);
+    expect(rows).toHaveLength(5);
+    expect(rows.slice(0, 2).every((row) => row.audioTrack == null)).toBe(true);
+    expect(rows.slice(2).map((row) => row.audioTrack?.id)).toEqual([
+      "credits",
+      "appendix",
+      "interview",
+    ]);
   });
 
   it("maps ordered audio files sequentially from the chapter the user marks first", () => {
@@ -170,25 +137,6 @@ describe("book chapter list", () => {
       { readableChapterKey: "prologue", audioTrackId: "audio-1" },
       { readableChapterKey: "chapter-1", audioTrackId: "audio-2" },
       { readableChapterKey: "chapter-2", audioTrackId: "audio-3" },
-    ]);
-  });
-
-  it("keeps unmatched audio visible instead of attaching it to the wrong chapter", () => {
-    const rows = buildBookChapterRows({
-      readableChapters: [readable("prologue", "Prologue", 0), readable("chapter-1", "Bran", 1)],
-      audioTracks: [
-        audioTrack("credits", "Publisher credits", 0),
-        audioTrack("appendix", "Historical appendix", 1),
-        audioTrack("interview", "Author interview", 2),
-      ],
-    });
-
-    expect(rows).toHaveLength(5);
-    expect(rows.slice(0, 2).every((row) => row.audioTrack == null)).toBe(true);
-    expect(rows.slice(2).map((row) => row.audioTrack?.id)).toEqual([
-      "credits",
-      "appendix",
-      "interview",
     ]);
   });
 });

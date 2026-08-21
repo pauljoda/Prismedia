@@ -1,4 +1,4 @@
-import { fetchBookContents } from "$lib/api/books";
+import type { BookContentsEntry } from "$lib/api/generated/model";
 
 export interface EpubTocSourceEntry {
   label?: unknown;
@@ -61,11 +61,6 @@ export function addEpubChapterRanges(
       ? { ...entry, startFraction, endFraction }
       : { ...entry };
   });
-}
-
-export interface LoadedEpubContents {
-  entries: EpubContentsEntry[];
-  currentChapterId: string | null;
 }
 
 /** Keeps exact web EPUB cursors; native/foreign locator formats resume via canonical fraction. */
@@ -165,15 +160,11 @@ function numberOrNull(value: number | string | null | undefined): number | null 
   return Number.isFinite(numeric) ? numeric : null;
 }
 
-/** Loads the server-projected EPUB TOC without transferring or parsing the source archive. */
-export async function loadEpubContents(
-  bookId: string,
-  currentLocation?: string | null,
-  signal?: AbortSignal,
-  currentFraction?: number | null,
-): Promise<LoadedEpubContents> {
-  const response = await fetchBookContents(bookId, { signal });
-  const entries = response.items.map((entry): EpubContentsEntry => ({
+/** Normalizes server-projected readable-chapter entries into typed rows. */
+export function mapBookContentsEntries(
+  items: readonly BookContentsEntry[],
+): EpubContentsEntry[] {
+  return items.map((entry): EpubContentsEntry => ({
     id: entry.id,
     title: entry.title,
     location: entry.location,
@@ -183,10 +174,21 @@ export async function loadEpubContents(
     startFraction: numberOrNull(entry.startFraction),
     endFraction: numberOrNull(entry.endFraction),
   }));
+}
+
+/**
+ * Resolves which chapter owns the reader's saved position — an exact location match when the
+ * cursor is a plain navigation target, else the chapter whose fraction range contains it. Pure
+ * math over already-loaded entries, so progress changes never require refetching contents.
+ */
+export function resolveCurrentContentsEntry(
+  entries: readonly EpubContentsEntry[],
+  currentLocation?: string | null,
+  currentFraction?: number | null,
+): EpubContentsEntry | null {
   const normalizedLocation = currentLocation?.trim() ?? "";
   const current = normalizedLocation && !normalizedLocation.toLowerCase().startsWith("epubcfi(")
     ? entries.findLast((entry) => entry.location === normalizedLocation) ?? null
     : null;
-  const resolvedCurrent = current ?? resolveEpubChapterByFraction(entries, currentFraction);
-  return { entries, currentChapterId: resolvedCurrent?.id ?? null };
+  return current ?? resolveEpubChapterByFraction(entries, currentFraction);
 }

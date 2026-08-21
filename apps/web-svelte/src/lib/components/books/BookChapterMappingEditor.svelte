@@ -4,10 +4,10 @@
   import type { BookChapterAudioMapping } from "$lib/api/generated/model";
   import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
   import {
-    buildBookChapterRows,
     sequentialBookChapterMappings,
     type ReadableBookChapter,
   } from "$lib/entities/book-chapter-list";
+  import { BOOK_CHAPTER_MAPPING_ORIGIN } from "$lib/api/generated/codes";
 
   interface Props {
     resetKey: string;
@@ -47,29 +47,39 @@
     annotation: `Chapter ${index + 1}`,
   })));
   const mappingByTrack = $derived(new Map(draft.map((mapping) => [mapping.audioTrackId, mapping])));
+  // Automatic matches are computed and persisted server-side; here they only annotate the
+  // "no explicit mapping" option so the user can see what the matcher already chose.
   const automaticTitleByTrack = $derived.by(() => {
-    const rows = buildBookChapterRows({ readableChapters, audioTracks });
-    return new Map(rows
-      .filter((row) => row.readTarget && row.audioTrack)
-      .map((row) => [row.audioTrack!.id, row.title]));
+    const titleByKey = new Map(readableChapters.map((chapter) => [chapter.id, chapter.title]));
+    return new Map(mappings
+      .filter((mapping) => mapping.origin === BOOK_CHAPTER_MAPPING_ORIGIN.auto)
+      .flatMap((mapping) => {
+        const title = titleByKey.get(mapping.readableChapterKey);
+        return title ? [[mapping.audioTrackId, title] as const] : [];
+      }));
   });
   const draftSignature = $derived(mappingSignature(draft));
   const dirty = $derived(draftSignature !== sourceSignature);
   const mappedCount = $derived(draft.length);
   const displayedError = $derived(actionError ?? loadError);
 
+  // Only manual rows are editable; automatic rows are server-owned and refill after every save.
+  const manualMappings = $derived(
+    mappings.filter((mapping) => mapping.origin !== BOOK_CHAPTER_MAPPING_ORIGIN.auto),
+  );
+
   // The editor stays mounted while its parent route changes data. Reset only for a new Book or a
   // genuinely new persisted map; local draft changes remain untouched until save or clear.
   $effect(() => {
-    const nextSignature = mappingSignature(mappings);
+    const nextSignature = mappingSignature(manualMappings);
     if (loadedResetKey === resetKey && nextSignature === sourceSignature) return;
     loadedResetKey = resetKey;
     sourceSignature = nextSignature;
-    draft = mappings.map((mapping) => ({ ...mapping }));
+    draft = manualMappings.map((mapping) => ({ ...mapping }));
     firstReadableChapterKey = initialFirstChapterKey(
       readableChapters,
       audioTracks,
-      mappings,
+      manualMappings,
     );
     saved = false;
     actionError = null;
@@ -151,8 +161,9 @@
     saved = false;
     try {
       const persisted = await onSave(draft);
-      draft = persisted.map((mapping) => ({ ...mapping }));
-      sourceSignature = mappingSignature(persisted);
+      const manual = persisted.filter((mapping) => mapping.origin !== BOOK_CHAPTER_MAPPING_ORIGIN.auto);
+      draft = manual.map((mapping) => ({ ...mapping }));
+      sourceSignature = mappingSignature(manual);
       saved = true;
     } catch (error) {
       actionError = error instanceof Error ? error.message : "Failed to save chapter mappings.";

@@ -7,7 +7,6 @@
     READER_MODE,
     type BookRenditionCode,
   } from "$lib/api/generated/codes";
-  import { onDestroy } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { BookOpen, CloudDownload, Headphones, Info, ListOrdered, Play, SlidersHorizontal, Users } from "@lucide/svelte";
@@ -29,14 +28,16 @@
   import type {
     AcquisitionDetail,
     BookChapterAudioMapping,
+    BookContentsEntry,
     EntityThumbnail,
     MonitorView,
   } from "$lib/api/generated/model";
   import {
+    fetchBookContents,
     fetchBookChapterMappings,
     saveBookChapterMappings,
   } from "$lib/api/books";
-  import { fetchEntity, fetchEntityChildren, type EntityCardFull } from "$lib/api/entities";
+  import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
   import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
   import { entityCardToDetailCard, type EntityDetailCardFull, type EntityDetailCredit, type EntityDetailTag } from "$lib/entities/entity-detail";
   import {
@@ -91,7 +92,8 @@
   import { useLegacyBookProgressMigration } from "$lib/entities/book-legacy-progress-migration.svelte";
   import { formatActiveDuration } from "$lib/stats/consumption-stats";
   import {
-    loadEpubContents,
+    mapBookContentsEntries,
+    resolveCurrentContentsEntry,
     type EpubContentsEntry,
   } from "$lib/entities/epub-contents";
   import { acquisitionStatusShouldPoll } from "$lib/requests/acquisition-status";
@@ -101,7 +103,6 @@
   const playback = useAudioPlayback()!;
   interface ChapterDetail {
     thumbnail: EntityThumbnail;
-    pages: EntityThumbnail[];
     summary: BookReaderChapter;
   }
 
@@ -122,13 +123,9 @@
   let bookRenditionMonitors = $state.raw<MonitorView[]>([]);
   let selectedChapterId: string | null = $state(null);
   let epubContents = $state.raw<EpubContentsEntry[]>([]);
-  let currentEpubChapterId = $state<string | null>(null);
-  let epubContentsLoading = $state(false);
   let artworkPalette = $state.raw<ArtworkPalette | null>(null);
   let chapterMappings = $state.raw<BookChapterAudioMapping[]>([]);
   let chapterMappingLoadError = $state<string | null>(null);
-  let loadedEpubKey: string | null = null;
-  let epubContentsAbort: AbortController | null = null;
 
   const bookId = $derived(page.params.id ?? "");
   const detail = useEntityDetailPage<EntityCardFull>({
@@ -149,6 +146,18 @@
   });
   const book = $derived(detail.entity);
   const bookMetadata = $derived(book ? getBookMetadataCapability(book.capabilities) : undefined);
+  // The saved reading position resolves to a chapter with pure math over the loaded contents, so
+  // progress changes never refetch the contents projection.
+  const currentEpubChapterId = $derived.by((): string | null => {
+    if (!book || bookMetadata?.format !== BOOK_FORMAT.epub || epubContents.length === 0) return null;
+    const progress = getCapability(book.capabilities, CAPABILITY_KIND.progress);
+    const currentLocation = progress?.completedAt ? null : progress?.location;
+    const progressTotal = numberValue(progress?.total) ?? 0;
+    const currentFraction = progress?.completedAt || progressTotal <= 0
+      ? null
+      : (numberValue(progress?.index) ?? 0) / progressTotal;
+    return resolveCurrentContentsEntry(epubContents, currentLocation, currentFraction)?.id ?? null;
+  });
   const bookType = $derived(bookMetadata?.bookType ?? null);
   // A wanted placeholder has metadata but no file yet; reading is offered only once the file lands.
   // Its acquisition/monitoring surface is the Acquisition detail tab.
@@ -177,7 +186,7 @@
   const selectedProgress = $derived(
     progressDisplay?.chapterId === selectedChapter?.thumbnail.id ? progressDisplay : null,
   );
-  const readerPageCount = $derived(selectedChapter?.pages.length ?? 0);
+  const readerPageCount = $derived(selectedChapter?.summary.pageCount ?? 0);
   // Started/completed come straight from the progress capability (same source the grid card uses),
   // so the label is correct even for volume-only comics whose in-progress chapter isn't a direct child.
   const comicProgress = $derived(book && !isSingleFileBook ? getCapability(book.capabilities, CAPABILITY_KIND.progress) : undefined);
@@ -219,7 +228,7 @@
       order: index,
       depth: 0,
       target: { kind: "entity-chapter", chapterId: chapter.thumbnail.id },
-      pageCount: chapter.pages.length,
+      pageCount: chapter.summary.pageCount,
     }));
   });
   const baseChapterRows = $derived(buildBookChapterRows({
@@ -456,8 +465,6 @@
     return tabs;
   });
 
-  onDestroy(() => epubContentsAbort?.abort());
-
   $effect(() => {
     if (!bookRenditionAcquisitions.some((item) => acquisitionStatusShouldPoll(item.summary.status))) return;
     const timer = setInterval(() => void pollBookAcquisitionState().catch(() => {}), 5000);
@@ -465,7 +472,7 @@
   });
 
   async function loadBook(targetBookId: string, signal: AbortSignal): Promise<EntityCardFull> {
-    const [nextBook, nextAcquisitions, nextMonitors, nextMappingState] = await Promise.all([
+    const [nextBook, nextAcquisitions, nextMonitors, nextMappingState, nextContents] = await Promise.all([
       fetchEntity(targetBookId, { signal }),
       fetchAcquisitionsForEntity(targetBookId, { signal }).catch(() => {
         signal.throwIfAborted();
@@ -484,20 +491,26 @@
             error: error instanceof Error ? error.message : "Failed to load chapter mappings.",
           };
         }),
+      // The readable chapter list (EPUB TOC or chapter summaries with page counts) is one small
+      // server-persisted read, so it loads with the first wave instead of trailing the page.
+      fetchBookContents(targetBookId, { signal })
+        .then((response) => response.items)
+        .catch(() => {
+          signal.throwIfAborted();
+          return [];
+        }),
     ]);
     const parentId = nextBook.parentEntityId;
-    const [relationships, chapters, parentThumbs] = await Promise.all([
+    const chapters = buildChapterDetails(nextBook, nextContents);
+    const [relationships, parentThumbs, progressSummary] = await Promise.all([
       hydrateStandardRelationshipCards(nextBook, { signal }),
-      hydrateChapters(nextBook, signal),
       parentId ? fetchOrderedEntityThumbnails([parentId], { signal }) : Promise.resolve([]),
+      hydrateProgressChapterSummary(nextBook, chapters, signal),
     ]);
-    const progressSummary = await hydrateProgressChapterSummary(nextBook, chapters, signal);
     signal.throwIfAborted();
 
     if (book?.id !== nextBook.id) {
       epubContents = [];
-      currentEpubChapterId = null;
-      loadedEpubKey = null;
       artworkPalette = null;
       chapterMappings = [];
       chapterMappingLoadError = null;
@@ -523,56 +536,13 @@
     chapterMappings = nextMappingState.mappings;
     chapterMappingLoadError = nextMappingState.error;
 
+    epubContents = getBookMetadataCapability(nextBook.capabilities)?.format === BOOK_FORMAT.epub
+      ? mapBookContentsEntries(nextContents)
+      : [];
+
     const nextProgress = bookEntityProgressDisplay(nextBook, combineChapterSummaries(chapters, progressSummary));
     selectedChapterId = nextProgress?.chapterId ?? chapters[0]?.thumbnail.id ?? null;
-    void hydrateEpubContents(nextBook);
     return nextBook;
-  }
-
-  async function hydrateEpubContents(nextBook: EntityCardFull): Promise<void> {
-    epubContentsAbort?.abort();
-    if (getBookMetadataCapability(nextBook.capabilities)?.format !== BOOK_FORMAT.epub) {
-      epubContents = [];
-      currentEpubChapterId = null;
-      epubContentsLoading = false;
-      loadedEpubKey = null;
-      return;
-    }
-
-    const progress = getCapability(nextBook.capabilities, CAPABILITY_KIND.progress);
-    const currentLocation = progress?.completedAt ? null : progress?.location;
-    const progressTotal = numberValue(progress?.total) ?? 0;
-    const currentFraction = progress?.completedAt || progressTotal <= 0
-      ? null
-      : (numberValue(progress?.index) ?? 0) / progressTotal;
-    const key = `${nextBook.id}:${currentLocation ?? ""}:${currentFraction ?? ""}`;
-    if (key === loadedEpubKey && epubContents.length > 0) return;
-
-    const controller = new AbortController();
-    epubContentsAbort = controller;
-    epubContentsLoading = true;
-    try {
-      const contents = await loadEpubContents(
-        nextBook.id,
-        currentLocation,
-        controller.signal,
-        currentFraction,
-      );
-      if (controller.signal.aborted || bookId !== nextBook.id) return;
-      epubContents = contents.entries;
-      currentEpubChapterId = contents.currentChapterId;
-      loadedEpubKey = key;
-    } catch (error) {
-      if (controller.signal.aborted || (error instanceof DOMException && error.name === "AbortError")) return;
-      if (bookId !== nextBook.id) return;
-      epubContents = [];
-      currentEpubChapterId = null;
-    } finally {
-      if (epubContentsAbort === controller) {
-        epubContentsAbort = null;
-        epubContentsLoading = false;
-      }
-    }
   }
 
   async function refreshBookAcquisitionState(): Promise<void> {
@@ -653,10 +623,19 @@
     await refreshBookAcquisitionState().catch(() => {});
   }
 
-  async function hydrateChapters(
+  /**
+   * Chapter summaries come from the book card's own children plus the contents projection's
+   * per-chapter page counts — the previous implementation fetched every chapter's page
+   * thumbnails just to count them.
+   */
+  function buildChapterDetails(
     nextBook: EntityCardFull,
-    signal: AbortSignal,
-  ): Promise<ChapterDetail[]> {
+    contentsItems: readonly BookContentsEntry[],
+  ): ChapterDetail[] {
+    const pageCountByChapter = new Map(contentsItems.map((entry) => [
+      entry.id,
+      numberValue(entry.pageCount) ?? 0,
+    ]));
     const directChapters = orderedBookChildren(nextBook, ENTITY_KIND.bookChapter).map((thumbnail, index) => ({
       thumbnail,
       sortOrder: Number(thumbnail.sortOrder ?? index),
@@ -664,25 +643,15 @@
     const chapterItems = directChapters.sort((a, b) =>
       a.sortOrder - b.sortOrder || a.thumbnail.title.localeCompare(b.thumbnail.title),
     );
-    const childGroups = await fetchEntityChildren(
-      chapterItems.map((item) => item.thumbnail.id),
-      { signal },
-    );
-    const pagesByChapter = new Map(childGroups.map((group) => [group.parentId, group.items]));
-    return chapterItems.map(({ thumbnail }, index) => {
-      const pages = (pagesByChapter.get(thumbnail.id) ?? [])
-        .filter((child) => child.kind === ENTITY_KIND.bookPage);
-      return {
-        thumbnail,
-        pages,
-        summary: {
-          id: thumbnail.id,
-          title: thumbnail.title,
-          sortOrder: index,
-          pageCount: pages.length,
-        },
-      };
-    });
+    return chapterItems.map(({ thumbnail }, index) => ({
+      thumbnail,
+      summary: {
+        id: thumbnail.id,
+        title: thumbnail.title,
+        sortOrder: index,
+        pageCount: pageCountByChapter.get(thumbnail.id) ?? 0,
+      },
+    }));
   }
 
   function combineChapterSummaries(
@@ -1100,7 +1069,7 @@
           </span>
           <span class="meta-sep"></span>
           <span class="meta-item">
-            {chapterDetails.reduce((total, chapter) => total + chapter.pages.length, 0)} pages
+            {chapterDetails.reduce((total, chapter) => total + chapter.summary.pageCount, 0)} pages
           </span>
         {/if}
         {#if bookActivityLabel}
@@ -1231,8 +1200,6 @@
         onListen={listenToChapter}
         onCombined={openCombinedChapter}
       />
-    {:else if epubContentsLoading}
-      <section class="chapter-loading" aria-live="polite">Reading the EPUB contents…</section>
     {/if}
 
     {#if childBookCards.length > 0}
@@ -1301,16 +1268,6 @@
   .progress-section {
     display: block;
     min-width: 0;
-  }
-
-  .chapter-loading {
-    border: 1px solid var(--color-border-subtle);
-    background: var(--color-surface-1);
-    padding: 1rem;
-    color: var(--color-text-muted);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.68rem;
-    letter-spacing: 0.04em;
   }
 
 </style>

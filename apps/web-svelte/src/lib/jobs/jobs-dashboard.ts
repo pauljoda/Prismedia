@@ -121,6 +121,12 @@ const _JOB_DEFINITIONS = [
     description: "Extracts and generates cover thumbnails for books and comics.",
   },
   {
+    type: JOB_TYPE.mapBookChapters,
+    queueName: "background",
+    label: "Book Chapter Mapping",
+    description: "Persists a book's readable chapters and refreshes its automatic audiobook chapter map.",
+  },
+  {
     type: JOB_TYPE.generateAudioWaveform,
     queueName: "audio-waveform",
     label: "Audio Waveform",

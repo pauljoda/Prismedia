@@ -178,6 +178,14 @@ export const BLOCKLIST_REASON = {
 
 export type BlocklistReasonCode = (typeof BLOCKLIST_REASON)[keyof typeof BLOCKLIST_REASON];
 
+// source: enum BookChapterMappingOrigin
+export const BOOK_CHAPTER_MAPPING_ORIGIN = {
+  manual: "manual",
+  auto: "auto",
+} as const;
+
+export type BookChapterMappingOriginCode = (typeof BOOK_CHAPTER_MAPPING_ORIGIN)[keyof typeof BOOK_CHAPTER_MAPPING_ORIGIN];
+
 // source: enum BookFormat
 export const BOOK_FORMAT = {
   imageArchive: "image-archive",
@@ -790,6 +798,7 @@ export const JOB_TYPE = {
   gridThumbnailSweep: "grid-thumbnail-sweep",
   generateBookPageThumbnail: "generate-book-page-thumbnail",
   generateBookCoverThumbnail: "generate-book-cover-thumbnail",
+  mapBookChapters: "map-book-chapters",
   generateAudioWaveform: "generate-audio-waveform",
   extractSubtitles: "extract-subtitles",
   acquireSubtitles: "acquire-subtitles",
