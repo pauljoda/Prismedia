@@ -52,6 +52,10 @@ public sealed class PrismediaDbContext : DbContext {
 
     public DbSet<EntityFileFingerprintRow> EntityFileFingerprints => Set<EntityFileFingerprintRow>();
 
+    public DbSet<EntityPageManifestRow> EntityPageManifests => Set<EntityPageManifestRow>();
+
+    public DbSet<EntityPageEntryRow> EntityPageEntries => Set<EntityPageEntryRow>();
+
     public DbSet<UserEntityStateRow> UserEntityStates => Set<UserEntityStateRow>();
 
     public DbSet<EntityConsumptionEventRow> EntityConsumptionEvents => Set<EntityConsumptionEventRow>();

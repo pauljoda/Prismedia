@@ -1,5 +1,6 @@
 using Prismedia.Application.Entities;
 using Prismedia.Contracts.Entities;
+using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
 using Prismedia.Domain.Media;
 using Prismedia.Domain.Taxonomy;
@@ -155,6 +156,35 @@ public sealed class EntityCardProjectorContractTests {
             [EntityKind.ComicVolume, EntityKind.ComicSeries],
             comicInstallmentSequence.ContainerKinds);
         Assert.Empty(book.Capabilities.OfType<OrderedSequenceCapability>());
+    }
+
+    [Fact]
+    public void ProjectsPageSequenceOnlyWhenAPersistedManifestWasHydrated() {
+        var readable = new ComicInstallment(
+            Guid.NewGuid(),
+            "Chapter 83",
+            ComicInstallmentKind.Chapter,
+            Guid.NewGuid());
+        readable.AddCapability(new CapabilityPageSequence(
+            42,
+            PageReadingDirection.RightToLeft,
+            ReaderMode.Paged,
+            coverOrdinal: 0));
+        var empty = new ComicInstallment(
+            Guid.NewGuid(),
+            "Chapter 84",
+            ComicInstallmentKind.Chapter,
+            Guid.NewGuid());
+
+        var capability = AssertCapability<PageSequenceCapability>(
+            EntityCardProjector.ToCard(readable, hasSourceBackedSubtree: true));
+
+        Assert.Equal(42, capability.PageCount);
+        Assert.Equal(PageReadingDirection.RightToLeft, capability.Direction);
+        Assert.Equal(ReaderMode.Paged, capability.DefaultMode);
+        Assert.Equal(0, capability.CoverOrdinal);
+        Assert.Empty(EntityCardProjector.ToCard(empty, hasSourceBackedSubtree: false)
+            .Capabilities.OfType<PageSequenceCapability>());
     }
 
     [Fact]

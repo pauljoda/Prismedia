@@ -295,6 +295,11 @@ public static class DependencyInjection {
         services.AddScoped<ILibraryAccessReader>(provider => provider.GetRequiredService<EfLibraryAccessReader>());
         services.AddScoped<ILibraryAccessStore>(provider => provider.GetRequiredService<EfLibraryAccessReader>());
         services.AddScoped<IEntityFileContentService, EfEntityFileContentService>();
+        services.AddScoped<EfEntityReaderService>();
+        services.AddScoped<IEntityReaderService>(provider =>
+            provider.GetRequiredService<EfEntityReaderService>());
+        services.AddScoped<IEntityPageManifestStore>(provider =>
+            provider.GetRequiredService<EfEntityReaderService>());
         services.AddSingleton<EpubBookContentsCache>();
         services.AddScoped<IBookContentsService, EpubBookContentsService>();
         services.AddScoped<IBookChapterMappingService, EfBookChapterMappingService>();

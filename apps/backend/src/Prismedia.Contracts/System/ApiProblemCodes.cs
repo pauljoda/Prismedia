@@ -82,6 +82,12 @@ public static class ApiProblemCodes {
     /// <summary>Problem code <c>entity_file_not_found</c>.</summary>
     public const string EntityFileNotFound = "entity_file_not_found";
 
+    /// <summary>Problem code <c>entity_reader_manifest_not_found</c>.</summary>
+    public const string EntityReaderManifestNotFound = "entity_reader_manifest_not_found";
+
+    /// <summary>Problem code <c>entity_reader_page_not_found</c>.</summary>
+    public const string EntityReaderPageNotFound = "entity_reader_page_not_found";
+
     /// <summary>Problem code <c>entity_deletion_conflict</c>.</summary>
     public const string EntityDeletionConflict = "entity_deletion_conflict";
 

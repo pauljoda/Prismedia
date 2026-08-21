@@ -8,6 +8,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Readable Entities can now expose a generic ordered page manifest and stream pages through shared Entity reader routes, with exact archive-member ordering and no page-Entity expansion.
 - Serialized comics now have separate series, optional volume, and installment entity contracts, preserving the distinction between an independently released chapter or issue and a prose book's internal chapter markers.
 - Entity details now advertise ordered-sequence participation and directly playable audio through generated capabilities, giving every client one shared contract for sequence interactions and audio playback without media-kind checks.
 - Books that have both readable and audiobook renditions now include a Chapter Mapping tab. Mark the readable chapter where the first audiobook file begins to fill the map sequentially, override individual files when needed, and save the alignment for web and native clients.

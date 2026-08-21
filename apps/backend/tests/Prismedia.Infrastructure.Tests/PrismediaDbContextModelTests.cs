@@ -37,6 +37,8 @@ public sealed class PrismediaDbContextModelTests {
     [InlineData(typeof(BookChapterDetailRow), "book_chapter_details")]
     [InlineData(typeof(ComicSeriesDetailRow), "comic_series_details")]
     [InlineData(typeof(ComicInstallmentDetailRow), "comic_installment_details")]
+    [InlineData(typeof(EntityPageManifestRow), "entity_page_manifests")]
+    [InlineData(typeof(EntityPageEntryRow), "entity_page_entries")]
     [InlineData(typeof(AudioTrackDetailRow), "audio_track_details")]
     [InlineData(typeof(PersonDetailRow), "person_details")]
     [InlineData(typeof(TagDetailRow), "tag_details")]
@@ -138,6 +140,32 @@ public sealed class PrismediaDbContextModelTests {
             foreignKey.Properties.Select(property => property.Name).SequenceEqual([nameof(EntityRow.ParentEntityId)]));
         Assert.NotNull(parentFk);
         Assert.Equal(typeof(EntityRow), parentFk!.PrincipalEntityType.ClrType);
+    }
+
+    [Fact]
+    public void EntityPageEntriesUseStableOrderExactMemberUniquenessAndBounds() {
+        using var db = CreateContext();
+        var model = db.GetService<IDesignTimeModel>().Model;
+        var manifest = model.FindEntityType(typeof(EntityPageManifestRow));
+        var page = model.FindEntityType(typeof(EntityPageEntryRow));
+
+        Assert.NotNull(manifest);
+        Assert.NotNull(page);
+        Assert.Equal(
+            [nameof(EntityPageEntryRow.EntityId), nameof(EntityPageEntryRow.Ordinal)],
+            page!.FindPrimaryKey()!.Properties.Select(property => property.Name));
+        var memberIndex = Assert.Single(page.GetIndexes(), index =>
+            index.Properties.Select(property => property.Name).SequenceEqual([
+                nameof(EntityPageEntryRow.EntityId),
+                nameof(EntityPageEntryRow.ArchiveMember)
+            ]));
+        Assert.True(memberIndex.IsUnique);
+        Assert.Contains(page.GetCheckConstraints(), constraint =>
+            constraint.Name == "ck_entity_page_entries_ordinal");
+        Assert.Contains(page.GetCheckConstraints(), constraint =>
+            constraint.Name == "ck_entity_page_entries_dimensions");
+        Assert.Contains(manifest!.GetCheckConstraints(), constraint =>
+            constraint.Name == "ck_entity_page_manifests_cover_ordinal");
     }
 
     [Fact]

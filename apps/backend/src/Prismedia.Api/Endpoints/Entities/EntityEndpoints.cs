@@ -14,6 +14,7 @@ public static class EntityEndpoints {
         group.MapEntityRatingEndpoint();
         group.MapEntityFlagsEndpoint();
         group.MapEntityFileEndpoint();
+        group.MapEntityReaderEndpoints();
         group.MapEntityConsumptionEndpoint();
         group.MapEntityProgressEndpoint();
         group.MapEntityMarkerEndpoints();

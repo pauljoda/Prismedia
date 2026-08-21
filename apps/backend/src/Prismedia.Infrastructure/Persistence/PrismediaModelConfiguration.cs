@@ -7,6 +7,7 @@ namespace Prismedia.Infrastructure.Persistence;
 internal static partial class PrismediaModelConfiguration {
     public static void ConfigurePrismediaModel(this ModelBuilder modelBuilder) {
         ConfigureEntityCapabilities(modelBuilder);
+        ConfigureEntityPageManifests(modelBuilder);
         ConfigureMediaDetails(modelBuilder);
         ConfigureMediaPlaybackModel(modelBuilder);
         ConfigureTaxonomyDetails(modelBuilder);

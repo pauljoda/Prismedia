@@ -87,6 +87,7 @@ import type {
   EntityMonitorStateRequest,
   EntityMonitorStateView,
   EntityProgressUpdateRequest,
+  EntityReaderManifestResponse,
   EntityRefreshResponse,
   EntityShelfResponse,
   EntityThumbnailBatchRequest,
@@ -3077,6 +3078,94 @@ export const headEntityFile = async (id: string,
   {
     ...options,
     method: 'HEAD'
+
+
+  }
+);}
+
+
+
+export type getEntityReaderManifestResponse200 = {
+  data: EntityReaderManifestResponse
+  status: 200
+}
+
+export type getEntityReaderManifestResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type getEntityReaderManifestResponseSuccess = (getEntityReaderManifestResponse200) & {
+  headers: Headers;
+};
+export type getEntityReaderManifestResponseError = (getEntityReaderManifestResponse404) & {
+  headers: Headers;
+};
+
+export type getEntityReaderManifestResponse = (getEntityReaderManifestResponseSuccess | getEntityReaderManifestResponseError)
+
+export const getGetEntityReaderManifestUrl = (id: string,) => {
+
+
+
+
+  return `/api/entities/${id}/reader-manifest`
+}
+
+/**
+ * @summary Gets an Entity's complete ordered image-page manifest.
+ */
+export const getEntityReaderManifest = async (id: string, options?: RequestInit): Promise<getEntityReaderManifestResponse> => {
+
+  return orvalFetch<getEntityReaderManifestResponse>(getGetEntityReaderManifestUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getEntityReaderPageResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getEntityReaderPageResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type getEntityReaderPageResponseSuccess = (getEntityReaderPageResponse200) & {
+  headers: Headers;
+};
+export type getEntityReaderPageResponseError = (getEntityReaderPageResponse404) & {
+  headers: Headers;
+};
+
+export type getEntityReaderPageResponse = (getEntityReaderPageResponseSuccess | getEntityReaderPageResponseError)
+
+export const getGetEntityReaderPageUrl = (id: string,
+    ordinal: number,) => {
+
+
+
+
+  return `/api/entities/${id}/reader-pages/${ordinal}`
+}
+
+/**
+ * @summary Streams one page from an Entity's ordered reader manifest.
+ */
+export const getEntityReaderPage = async (id: string,
+    ordinal: number, options?: RequestInit): Promise<getEntityReaderPageResponse> => {
+
+  return orvalFetch<getEntityReaderPageResponse>(getGetEntityReaderPageUrl(id,ordinal),
+  {
+    ...options,
+    method: 'GET'
 
 
   }

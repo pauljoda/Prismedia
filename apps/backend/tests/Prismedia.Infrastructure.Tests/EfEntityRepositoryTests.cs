@@ -70,6 +70,115 @@ public sealed class EfEntityRepositoryTests {
     }
 
     [Fact]
+    public async Task PageManifestHydrationAddsTheGenericPageSequenceCapability() {
+        await using var db = CreateContext();
+        var seriesId = Guid.NewGuid();
+        var installmentId = Guid.NewGuid();
+        SeedEntity(db, seriesId, EntityKind.ComicSeries, "Series");
+        SeedEntity(db, installmentId, EntityKind.ComicInstallment, "Chapter 1", seriesId);
+        db.ComicInstallmentDetails.Add(new ComicInstallmentDetailRow {
+            EntityId = installmentId,
+            InstallmentKind = ComicInstallmentKind.Chapter
+        });
+        db.EntityFiles.Add(new EntityFileRow {
+            Id = Guid.NewGuid(),
+            EntityId = installmentId,
+            Role = EntityFileRole.Source,
+            Path = "/media/chapter.cbz",
+            CreatedAt = IdentityCreatedAt,
+            UpdatedAt = IdentityCreatedAt
+        });
+        db.EntityPageManifests.Add(new EntityPageManifestRow {
+            EntityId = installmentId,
+            Direction = PageReadingDirection.RightToLeft,
+            DefaultMode = ReaderMode.Paged,
+            CoverOrdinal = 0,
+            SourceSignature = "source:v1",
+            UpdatedAt = IdentityCreatedAt
+        });
+        db.EntityPageEntries.AddRange(
+            new EntityPageEntryRow {
+                EntityId = installmentId,
+                Ordinal = 0,
+                ArchiveMember = "001.jpg",
+                MimeType = "image/jpeg",
+                PageType = PageType.FrontCover
+            },
+            new EntityPageEntryRow {
+                EntityId = installmentId,
+                Ordinal = 1,
+                ArchiveMember = "002.jpg",
+                MimeType = "image/jpeg",
+                PageType = PageType.Story
+            });
+        await db.SaveChangesAsync();
+
+        var repository = new EfEntityRepository(
+            db,
+            TestUserContext.Admin(),
+            EntityMappers.Kinds(db),
+            EntityMappers.Capabilities(db, TestUserContext.Admin()));
+
+        var installment = await repository.RequireAsync<ComicInstallment>(
+            installmentId,
+            CancellationToken.None);
+        var capability = installment.GetCapability<CapabilityPageSequence>();
+
+        Assert.NotNull(capability);
+        Assert.Equal(2, capability.PageCount);
+        Assert.Equal(PageReadingDirection.RightToLeft, capability.Direction);
+        Assert.Equal(ReaderMode.Paged, capability.DefaultMode);
+        Assert.Equal(0, capability.CoverOrdinal);
+    }
+
+    [Fact]
+    public async Task PageManifestHydrationRejectsAGappedPersistedSequence() {
+        await using var db = CreateContext();
+        var seriesId = Guid.NewGuid();
+        var installmentId = Guid.NewGuid();
+        SeedEntity(db, seriesId, EntityKind.ComicSeries, "Series");
+        SeedEntity(db, installmentId, EntityKind.ComicInstallment, "Chapter 1", seriesId);
+        db.ComicInstallmentDetails.Add(new ComicInstallmentDetailRow {
+            EntityId = installmentId,
+            InstallmentKind = ComicInstallmentKind.Chapter
+        });
+        db.EntityFiles.Add(new EntityFileRow {
+            Id = Guid.NewGuid(),
+            EntityId = installmentId,
+            Role = EntityFileRole.Source,
+            Path = "/media/chapter.cbz",
+            CreatedAt = IdentityCreatedAt,
+            UpdatedAt = IdentityCreatedAt
+        });
+        db.EntityPageManifests.Add(new EntityPageManifestRow {
+            EntityId = installmentId,
+            Direction = PageReadingDirection.LeftToRight,
+            DefaultMode = ReaderMode.Paged,
+            SourceSignature = "source:v1",
+            UpdatedAt = IdentityCreatedAt
+        });
+        db.EntityPageEntries.Add(new EntityPageEntryRow {
+            EntityId = installmentId,
+            Ordinal = 1,
+            ArchiveMember = "002.jpg",
+            MimeType = "image/jpeg",
+            PageType = PageType.Story
+        });
+        await db.SaveChangesAsync();
+        var repository = new EfEntityRepository(
+            db,
+            TestUserContext.Admin(),
+            EntityMappers.Kinds(db),
+            EntityMappers.Capabilities(db, TestUserContext.Admin()));
+
+        var installment = await repository.RequireAsync<ComicInstallment>(
+            installmentId,
+            CancellationToken.None);
+
+        Assert.Null(installment.GetCapability<CapabilityPageSequence>());
+    }
+
+    [Fact]
     public async Task SubtitleHydrationOnlyAttachesStateToSupportedOrPersistedEntities() {
         await using var db = CreateContext();
         var tagId = Guid.NewGuid();

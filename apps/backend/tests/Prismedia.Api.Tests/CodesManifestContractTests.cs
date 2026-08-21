@@ -54,10 +54,14 @@ public sealed class CodesManifestContractTests {
         var orderedSequenceKind = typeof(OrderedSequenceCapability)
             .GetCustomAttribute<CapabilityKindAttribute>()!
             .Kind;
+        var pageSequenceKind = typeof(PageSequenceCapability)
+            .GetCustomAttribute<CapabilityKindAttribute>()!
+            .Kind;
 
         Assert.Contains(playableVideoKind, capabilityKinds);
         Assert.Contains(playableAudioKind, capabilityKinds);
         Assert.Contains(orderedSequenceKind, capabilityKinds);
+        Assert.Contains(pageSequenceKind, capabilityKinds);
     }
 
     [Fact]

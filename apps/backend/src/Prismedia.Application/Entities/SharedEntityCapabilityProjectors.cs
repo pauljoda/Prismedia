@@ -110,6 +110,18 @@ internal sealed class OrderedSequenceCapabilityProjector : EntityCapabilityProje
         };
 }
 
+[EntityCapabilityProjector(68)]
+internal sealed class PageSequenceCapabilityProjector : EntityCapabilityProjector<PageSequenceCapability> {
+    public override PageSequenceCapability? Project(EntityCapabilityProjectionContext context) =>
+        context.Entity.GetCapability<CapabilityPageSequence>() is { } pages
+            ? new PageSequenceCapability(
+                pages.PageCount,
+                pages.Direction,
+                pages.DefaultMode,
+                pages.CoverOrdinal)
+            : null;
+}
+
 [EntityCapabilityProjector(70)]
 internal sealed class MarkersCapabilityProjector : EntityCapabilityProjector<MarkersCapability> {
     public override MarkersCapability? Project(EntityCapabilityProjectionContext context) =>

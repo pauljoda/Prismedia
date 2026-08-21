@@ -959,6 +959,27 @@ export const ORGANIZE_ITEM_STATUS = {
 
 export type OrganizeItemStatusCode = (typeof ORGANIZE_ITEM_STATUS)[keyof typeof ORGANIZE_ITEM_STATUS];
 
+// source: enum PageReadingDirection
+export const PAGE_READING_DIRECTION = {
+  leftToRight: "left-to-right",
+  rightToLeft: "right-to-left",
+  topToBottom: "top-to-bottom",
+} as const;
+
+export type PageReadingDirectionCode = (typeof PAGE_READING_DIRECTION)[keyof typeof PAGE_READING_DIRECTION];
+
+// source: enum PageType
+export const PAGE_TYPE = {
+  story: "story",
+  frontCover: "front-cover",
+  backCover: "back-cover",
+  advertisement: "advertisement",
+  letters: "letters",
+  other: "other",
+} as const;
+
+export type PageTypeCode = (typeof PAGE_TYPE)[keyof typeof PAGE_TYPE];
+
 // source: enum PlaybackMode
 export const PLAYBACK_MODE = {
   direct: "direct",
@@ -1196,6 +1217,7 @@ export const CAPABILITY_KIND = {
   links: "links",
   markers: "markers",
   orderedSequence: "ordered-sequence",
+  pageSequence: "page-sequence",
   personProfile: "person-profile",
   playableAudio: "playable-audio",
   playableVideo: "playable-video",
@@ -1304,6 +1326,8 @@ export const PROBLEM_CODE = {
   entityNotCreatable: "entity_not_creatable",
   entityNotDeletable: "entity_not_deletable",
   entityNotFound: "entity_not_found",
+  entityReaderManifestNotFound: "entity_reader_manifest_not_found",
+  entityReaderPageNotFound: "entity_reader_page_not_found",
   externalIdentityAmbiguous: "external_identity_ambiguous",
   fileConflict: "file_conflict",
   identifyApplyProgressNotFound: "identify_apply_progress_not_found",

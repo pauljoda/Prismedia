@@ -130,6 +130,14 @@ public sealed class EntityContractShapeTests {
             "role",
             nameof(EntitySequenceRole));
         AssertPropertyReference(
+            GetCapabilitySchema(schemas, typeof(PageSequenceCapability)),
+            "direction",
+            nameof(PageReadingDirection));
+        AssertPropertyReference(
+            GetCapabilitySchema(schemas, typeof(PageSequenceCapability)),
+            "defaultMode",
+            nameof(ReaderMode));
+        AssertPropertyReference(
             schemas.GetProperty(nameof(OrganizePlanItem)),
             "storageShape",
             nameof(EntityStorageShape));
