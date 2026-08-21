@@ -1032,6 +1032,23 @@ public sealed class EfEntityReadServiceTests {
         db.AudioTrackDetails.AddRange(
             new AudioTrackDetailRow { EntityId = audiobookTrackId },
             new AudioTrackDetailRow { EntityId = musicTrackId });
+        db.EntityFiles.AddRange(
+            new EntityFileRow {
+                Id = Guid.NewGuid(),
+                EntityId = audiobookTrackId,
+                Role = EntityFileRole.Source,
+                Path = "/media/books/Spoken Story/01 Book Chapter.m4b",
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityFileRow {
+                Id = Guid.NewGuid(),
+                EntityId = musicTrackId,
+                Role = EntityFileRole.Source,
+                Path = "/media/music/Album/01 Music Chapter.flac",
+                CreatedAt = now,
+                UpdatedAt = now
+            });
         await db.SaveChangesAsync();
 
         var service = CreateService(db);
@@ -1060,6 +1077,10 @@ public sealed class EfEntityReadServiceTests {
         Assert.Equal(1, search.TotalCount);
         var audiobookTracks = Assert.Single(book.ChildrenByKind, group => group.Kind == EntityKind.AudioTrack);
         Assert.Equal(audiobookTrackId, Assert.Single(audiobookTracks.Entities).Id);
+        var playback = Assert.Single(book.Capabilities.OfType<PlayableAudioCapability>());
+        Assert.Equal(EntityKind.AudioTrack, playback.ItemKind);
+        Assert.True(playback.PreservesQueueOrder);
+        Assert.True(playback.SupportsPlaybackRate);
     }
 
     [Fact]

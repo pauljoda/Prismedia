@@ -663,9 +663,19 @@ public sealed partial class EfEntityReadService : IEntityReadService {
 
         var fileManagementState = await ResolveFileManagementStateAsync(id, cancellationToken);
         var creditMetadata = await ProjectCreditMetadataAsync(id, hideNsfw, cancellationToken);
+        var sourceBackedChildKinds = await ResolveSourceBackedAudioChildKindsAsync(
+            entity,
+            hideNsfw,
+            enforceLibraryVisibility,
+            cancellationToken);
         var projected = SanitizeLocalAssets(
             await EnrichBorrowedParentCoverAsync(
-                EntityCardProjector.ToCard(entity, fileManagementState, CurrentUserId, creditMetadata),
+                EntityCardProjector.ToCard(
+                    entity,
+                    fileManagementState,
+                    CurrentUserId,
+                    creditMetadata,
+                    sourceBackedChildKinds),
                 hideNsfw,
                 enforceLibraryVisibility,
                 cancellationToken));
@@ -759,6 +769,34 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         return new EntityFileManagementState(
             sourceBackedIds.Contains(entityId),
             recoverableDeletionIds.Contains(entityId));
+    }
+
+    private async Task<IReadOnlySet<EntityKind>> ResolveSourceBackedAudioChildKindsAsync(
+        Entity entity,
+        bool hideNsfw,
+        bool enforceLibraryVisibility,
+        CancellationToken cancellationToken) {
+        if (entity.Definition is not IAudioPlaybackOwnerKindDefinition owner ||
+            entity.Definition is IPlayableAudioKindDefinition) {
+            return new HashSet<EntityKind>();
+        }
+
+        var itemKind = owner.AudioPlaybackPolicy.ItemKind;
+        var itemKindCode = itemKind.ToCode();
+        var childQuery = _db.Entities.AsNoTracking()
+            .Where(child => child.ParentEntityId == entity.Id && child.KindCode == itemKindCode);
+        if (enforceLibraryVisibility) {
+            childQuery = ApplyEnabledLibraryVisibility(childQuery);
+        }
+
+        childQuery = ApplyNsfwVisibility(childQuery, hideNsfw);
+        var hasSourceBackedChild = await childQuery.AnyAsync(
+            child => _db.EntityFiles.Any(file =>
+                file.EntityId == child.Id && file.Role == EntityFileRole.Source),
+            cancellationToken);
+        return hasSourceBackedChild
+            ? new HashSet<EntityKind> { itemKind }
+            : new HashSet<EntityKind>();
     }
 
     public async Task<IReadOnlyDictionary<Guid, EntityFolderListContext>> GetFolderListContextsAsync(

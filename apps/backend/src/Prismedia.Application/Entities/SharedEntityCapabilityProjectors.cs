@@ -101,6 +101,8 @@ internal sealed class PlayableAudioCapabilityProjector : EntityCapabilityProject
                 child.Definition is IPlayableAudioKindDefinition && HasSource(child));
         }
 
+        hasPlayableItem = hasPlayableItem || context.SourceBackedChildKinds.Contains(policy.ItemKind);
+
         return hasPlayableItem
             ? new PlayableAudioCapability(
                 policy.ItemKind,

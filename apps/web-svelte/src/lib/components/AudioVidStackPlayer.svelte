@@ -13,9 +13,6 @@
     Shuffle,
     SkipBack,
     SkipForward,
-    Volume1,
-    Volume2,
-    VolumeX,
     X,
   } from "@lucide/svelte";
   import { cn } from "@prismedia/ui-svelte";
@@ -28,6 +25,7 @@
   import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
   import AudioWaveformFilmstrip from "./AudioWaveformFilmstrip.svelte";
   import PlaybackQueueFlyout from "./PlaybackQueueFlyout.svelte";
+  import AudioTransportPreferenceControl from "./AudioTransportPreferenceControl.svelte";
   import { waveformForDisplay } from "./audio-waveform";
   import { ConsumptionActivityClock } from "$lib/entities/consumption-activity-clock";
   import { bookProgressUpdateForAudio } from "$lib/entities/book-combined-progress";
@@ -76,6 +74,7 @@
   let waveformData = $state<number[] | null>(null);
   let timelineDragging = $state(false);
   let queueOpen = $state(false);
+  let playbackRate = $state(1);
   let artworkPaletteState = $state<{ coverUrl: string; palette: ArtworkPalette } | null>(null);
   let timelineDraggingRef = false;
   let currentSrcTrackId: string | null = null;
@@ -111,6 +110,7 @@
   const muted = $derived(playback.muted);
   const collapsed = $derived(playback.collapsed);
   const preservesQueueOrder = $derived(ctx?.preservesQueueOrder === true);
+  const supportsPlaybackRate = $derived(ctx?.supportsPlaybackRate === true);
   const hasBookProgress = $derived(
     Boolean(ctx?.playbackOwnerEntityId && ctx?.bookProgressMappings?.length),
   );
@@ -515,9 +515,8 @@
     tabCoordinator?.releasePlayback();
   }
 
-  function handleVolumeInput(event: Event) {
+  function handleVolumeChange(nextVolume: number) {
     if (!audioEl) return;
-    const nextVolume = Number((event.currentTarget as HTMLInputElement).value);
     audioEl.volume = nextVolume;
     playback.volume = nextVolume;
     if (nextVolume > 0 && audioEl.muted) {
@@ -632,6 +631,11 @@
     if (!audioEl) return;
     audioEl.volume = volume;
     audioEl.muted = muted;
+  });
+
+  $effect(() => {
+    if (!audioEl) return;
+    audioEl.playbackRate = supportsPlaybackRate ? playbackRate : 1;
   });
 
   // Load waveform data for the current track.
@@ -758,7 +762,7 @@
     const handleTimeUpdate = () => {
       if (!timelineDraggingRef) playback.currentTime = audio.currentTime;
       saveAudiobookProgress({ completed: false, periodic: true });
-      setMediaSessionPosition(audio.duration, audio.currentTime);
+      setMediaSessionPosition(audio.duration, audio.currentTime, audio.playbackRate);
     };
     const handleDurationChange = () => {
       if (Number.isFinite(audio.duration)) {
@@ -766,7 +770,7 @@
         const track = activeTrack;
       }
       applyPendingInitialSeek(audio);
-      setMediaSessionPosition(audio.duration, audio.currentTime);
+      setMediaSessionPosition(audio.duration, audio.currentTime, audio.playbackRate);
       resumePendingAutoplay();
     };
     const handlePlay = () => {
@@ -927,7 +931,6 @@
     }
   }
 
-  const VolumeIcon = $derived(muted || volume === 0 ? VolumeX : volume < 0.5 ? Volume1 : Volume2);
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
@@ -1121,23 +1124,16 @@
 
   <!-- Transport controls -->
   <div class="grid grid-cols-[1fr_auto_1fr] items-center gap-x-2 px-2 py-1.5">
-    <div class="group/vol flex min-w-0 items-center gap-1">
-      <button type="button" onclick={toggleMute} class="player-icon-control p-1 transition-colors">
-        <VolumeIcon class="h-3 w-3" />
-      </button>
-      <div class="w-0 overflow-hidden transition-all duration-200 group-hover/vol:w-16">
-        <input
-          type="range"
-          min="0"
-          max="1"
-          step="0.01"
-          value={muted ? 0 : volume}
-          oninput={handleVolumeInput}
-          class="h-1 w-full cursor-pointer"
-          style:accent-color={playerPalette.primary}
-        />
-      </div>
-    </div>
+    <AudioTransportPreferenceControl
+      accentColor={playerPalette.primary}
+      {muted}
+      {playbackRate}
+      {supportsPlaybackRate}
+      {volume}
+      onMute={toggleMute}
+      onPlaybackRate={(rate) => (playbackRate = rate)}
+      onVolume={handleVolumeChange}
+    />
 
     <div class="flex items-center gap-0.5">
       <button

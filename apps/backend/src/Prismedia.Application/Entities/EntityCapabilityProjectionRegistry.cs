@@ -25,7 +25,8 @@ internal sealed record EntityCapabilityProjectionContext(
     Entity Entity,
     EntityFileManagementState FileManagementState,
     Guid? CurrentUserId,
-    IReadOnlyList<EntityCreditMetadata>? ProjectedCreditMetadata);
+    IReadOnlyList<EntityCreditMetadata>? ProjectedCreditMetadata,
+    IReadOnlySet<EntityKind> SourceBackedChildKinds);
 
 /// <summary>Runtime contract used by the assembly-discovered projection registry.</summary>
 internal interface IEntityCapabilityProjector {
@@ -74,12 +75,14 @@ internal static class EntityCapabilityProjectionRegistry {
         Entity entity,
         EntityFileManagementState fileManagementState,
         Guid? currentUserId,
-        IReadOnlyList<EntityCreditMetadata>? projectedCreditMetadata) {
+        IReadOnlyList<EntityCreditMetadata>? projectedCreditMetadata,
+        IReadOnlySet<EntityKind> sourceBackedChildKinds) {
         var context = new EntityCapabilityProjectionContext(
             entity,
             fileManagementState,
             currentUserId,
-            projectedCreditMetadata);
+            projectedCreditMetadata,
+            sourceBackedChildKinds);
         var sharedCapabilities = Registrations
             .Select(registration => registration.Projector.Project(context))
             .OfType<ContractCapability>()
