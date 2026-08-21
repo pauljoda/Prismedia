@@ -169,8 +169,16 @@ internal sealed class EpubBookContentsCache {
         }
     }
 
+    /// <summary>
+    /// The contents projection needs only navigation and reading-order metadata, so common
+    /// real-world EPUB validation quirks (like a cover image referenced but missing from the
+    /// manifest) must not fail the parse.
+    /// </summary>
+    private static readonly VersOne.Epub.Options.EpubReaderOptions LenientReaderOptions =
+        new(VersOne.Epub.Options.EpubReaderOptionsPreset.RELAXED);
+
     private static async Task<BookContentsResponse> ParseAsync(string path) {
-        using var book = await EpubReader.OpenBookAsync(path);
+        using var book = await EpubReader.OpenBookAsync(path, LenientReaderOptions);
         var readingOrder = await book.GetReadingOrderAsync();
         var navigation = await book.GetNavigationAsync() ?? [];
         var sectionSizes = readingOrder

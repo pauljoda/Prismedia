@@ -58,10 +58,20 @@ internal sealed class EfBookChapterMapService(
         if (epub is not null) {
             var signature = SourceSignatureFor(epub);
             if (!string.Equals(signature, state?.SourceSignature, StringComparison.Ordinal)) {
-                var parsed = await epubCache.GetAsync(
-                    new EpubBookContentsCacheKey(epub.Info.FullName, epub.Info.Length, epub.Info.LastWriteTimeUtc.Ticks),
-                    cancellationToken);
-                await ReplaceReadingChaptersAsync(bookId, parsed.Items, cancellationToken);
+                IReadOnlyList<Contracts.Books.BookContentsEntry> parsedItems;
+                try {
+                    var parsed = await epubCache.GetAsync(
+                        new EpubBookContentsCacheKey(epub.Info.FullName, epub.Info.Length, epub.Info.LastWriteTimeUtc.Ticks),
+                        cancellationToken);
+                    parsedItems = parsed.Items;
+                } catch (Exception) when (!cancellationToken.IsCancellationRequested) {
+                    // A structurally broken EPUB stays broken until the file itself changes, so
+                    // record the signature with no chapters instead of re-enqueueing this book on
+                    // every verification scan. Replacing the file changes the signature and retries.
+                    parsedItems = [];
+                }
+
+                await ReplaceReadingChaptersAsync(bookId, parsedItems, cancellationToken);
                 state = await EnsureStateAsync(state, bookId, cancellationToken);
                 state.SourceSignature = signature;
                 contentsRefreshed = true;
