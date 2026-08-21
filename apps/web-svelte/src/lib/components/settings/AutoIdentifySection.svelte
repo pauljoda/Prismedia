@@ -55,6 +55,7 @@
     [AUTO_IDENTIFY_SELECTOR_KIND.image]: "Images",
     [AUTO_IDENTIFY_SELECTOR_KIND.audio]: "Audio",
     [AUTO_IDENTIFY_SELECTOR_KIND.book]: "Books",
+    [AUTO_IDENTIFY_SELECTOR_KIND.comic]: "Comics",
   } satisfies Record<AutoIdentifySelectorKindCode, string>;
 
   // The backend owns the selectable family codes. This presentation-only label map is exhaustive,

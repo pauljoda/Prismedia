@@ -106,6 +106,19 @@ public sealed class EntityCardProjectorContractTests {
         var episode = EntityCardProjector.ToCard(
             new VideoEpisode(Guid.NewGuid(), "Pilot", Guid.NewGuid()),
             hasSourceBackedSubtree: false);
+        var comicSeries = EntityCardProjector.ToCard(
+            new ComicSeries(Guid.NewGuid(), "Witch Hat Atelier"),
+            hasSourceBackedSubtree: false);
+        var comicVolume = EntityCardProjector.ToCard(
+            new ComicVolume(Guid.NewGuid(), "Volume 12", Guid.NewGuid()),
+            hasSourceBackedSubtree: false);
+        var comicInstallment = EntityCardProjector.ToCard(
+            new ComicInstallment(
+                Guid.NewGuid(),
+                "Chapter 83",
+                ComicInstallmentKind.Chapter,
+                Guid.NewGuid()),
+            hasSourceBackedSubtree: false);
         var book = EntityCardProjector.ToCard(
             new Book(Guid.NewGuid(), "Novel", BookType.Novel, coverPageId: null, BookFormat.Epub),
             hasSourceBackedSubtree: false);
@@ -124,6 +137,23 @@ public sealed class EntityCardProjectorContractTests {
         Assert.Equal(EntitySequenceRole.Item, episodeSequence.Role);
         Assert.Equal(EntityKind.VideoEpisode, episodeSequence.ItemKind);
         Assert.Equal([EntityKind.VideoSeason, EntityKind.VideoSeries], episodeSequence.ContainerKinds);
+
+        var comicSeriesSequence = AssertCapability<OrderedSequenceCapability>(comicSeries);
+        Assert.Equal(EntitySequenceRole.Container, comicSeriesSequence.Role);
+        Assert.Equal(EntityKind.ComicInstallment, comicSeriesSequence.ItemKind);
+        Assert.Empty(comicSeriesSequence.ContainerKinds);
+
+        var comicVolumeSequence = AssertCapability<OrderedSequenceCapability>(comicVolume);
+        Assert.Equal(EntitySequenceRole.Container, comicVolumeSequence.Role);
+        Assert.Equal(EntityKind.ComicInstallment, comicVolumeSequence.ItemKind);
+        Assert.Empty(comicVolumeSequence.ContainerKinds);
+
+        var comicInstallmentSequence = AssertCapability<OrderedSequenceCapability>(comicInstallment);
+        Assert.Equal(EntitySequenceRole.Item, comicInstallmentSequence.Role);
+        Assert.Equal(EntityKind.ComicInstallment, comicInstallmentSequence.ItemKind);
+        Assert.Equal(
+            [EntityKind.ComicVolume, EntityKind.ComicSeries],
+            comicInstallmentSequence.ContainerKinds);
         Assert.Empty(book.Capabilities.OfType<OrderedSequenceCapability>());
     }
 

@@ -33,6 +33,24 @@ public sealed class BookChapterDetailRow {
     public Guid? CoverPageEntityId { get; set; }
 }
 
+/// <summary>Persistence details owned by one serialized-comic title or run.</summary>
+public sealed class ComicSeriesDetailRow {
+    /// <summary>Owning comic-series Entity identifier.</summary>
+    public Guid EntityId { get; set; }
+
+    /// <summary>Optional provider status such as releasing, completed, or cancelled.</summary>
+    public string? Status { get; set; }
+}
+
+/// <summary>Persistence details owned by one independently released comic installment.</summary>
+public sealed class ComicInstallmentDetailRow {
+    /// <summary>Owning comic-installment Entity identifier.</summary>
+    public Guid EntityId { get; set; }
+
+    /// <summary>Canonical released-work subtype.</summary>
+    public ComicInstallmentKind InstallmentKind { get; set; }
+}
+
 public sealed class AudioTrackDetailRow {
     public Guid EntityId { get; set; }
     public string? EmbeddedArtist { get; set; }

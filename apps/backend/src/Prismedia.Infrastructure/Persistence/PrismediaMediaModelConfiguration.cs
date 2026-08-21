@@ -27,7 +27,38 @@ internal static partial class PrismediaModelConfiguration {
         });
 
         ConfigureBooks(modelBuilder);
+        ConfigureSerializedComics(modelBuilder);
         ConfigureAudio(modelBuilder);
+    }
+
+    private static void ConfigureSerializedComics(ModelBuilder modelBuilder) {
+        modelBuilder.Entity<ComicSeriesDetailRow>(entity => {
+            entity.ToTable("comic_series_details");
+            entity.HasKey(row => row.EntityId);
+            entity.Property(row => row.EntityId).HasColumnName("entity_id");
+            entity.Property(row => row.Status).HasColumnName("status").HasMaxLength(64);
+            entity.HasOne<EntityRow>()
+                .WithOne()
+                .HasForeignKey<ComicSeriesDetailRow>(row => row.EntityId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<ComicInstallmentDetailRow>(entity => {
+            entity.ToTable("comic_installment_details");
+            entity.HasKey(row => row.EntityId);
+            entity.Property(row => row.EntityId).HasColumnName("entity_id");
+            entity.Property(row => row.InstallmentKind)
+                .HasColumnName("installment_kind")
+                .HasMaxLength(32)
+                .HasConversion(
+                    value => value.ToCode(),
+                    value => value.DecodeAs<ComicInstallmentKind>())
+                .IsRequired();
+            entity.HasOne<EntityRow>()
+                .WithOne()
+                .HasForeignKey<ComicInstallmentDetailRow>(row => row.EntityId)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
     }
 
     private static void ConfigureBooks(ModelBuilder modelBuilder) {

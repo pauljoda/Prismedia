@@ -136,6 +136,7 @@ public sealed class CodesManifestContractTests {
             EntityKind.Tag.ToCode(),
             EntityKind.Gallery.ToCode(),
             EntityKind.Book.ToCode(),
+            EntityKind.ComicSeries.ToCode(),
             EntityKind.Image.ToCode(),
             EntityKind.Collection.ToCode(),
             EntityKind.AudioLibrary.ToCode(),
@@ -144,6 +145,11 @@ public sealed class CodesManifestContractTests {
 
         Assert.True(kinds[EntityKind.Person.ToCode()].Search!.ExpandsRelationshipResults);
         Assert.False(kinds[EntityKind.Movie.ToCode()].Search!.ExpandsRelationshipResults);
+
+        var comicInstallment = kinds[EntityKind.ComicInstallment.ToCode()];
+        Assert.Equal(EntityKind.ComicSeries.ToCode(), comicInstallment.Navigation!.CanonicalBrowseKind);
+        Assert.Equal("/comics/{parentId}/installments/{id}", comicInstallment.Navigation.DetailPathTemplate);
+        Assert.Equal(EntityKind.ComicSeries.ToCode(), comicInstallment.Navigation.RequiredAncestorKind);
 
         var season = kinds[EntityKind.VideoSeason.ToCode()].Navigation!;
         Assert.Equal(EntityKind.VideoSeries.ToCode(), season.CanonicalBrowseKind);
@@ -164,6 +170,9 @@ public sealed class CodesManifestContractTests {
         Assert.Equal(
             collectionPolicy.ContainableKinds.Select(kind => kind.ToCode()),
             kinds[EntityKind.Collection.ToCode()].ContainableKinds);
+        Assert.Contains(EntityKind.ComicSeries, collectionPolicy.ContainableKinds);
+        Assert.Contains(EntityKind.ComicInstallment, collectionPolicy.ContainableKinds);
+        Assert.DoesNotContain(EntityKind.ComicVolume, collectionPolicy.ContainableKinds);
         Assert.All(
             manifest.Where(kind => kind.Code != EntityKind.Collection.ToCode()),
             kind => Assert.Null(kind.ContainableKinds));

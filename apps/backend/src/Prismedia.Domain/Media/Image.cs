@@ -20,7 +20,7 @@ public sealed class ImageEntityKindDefinition() : RootEntityKindDefinition<Image
         EntityAccentHue.Violet,
         EntityArtworkFit.Cover),
     new EntityKindNavigation(EntityKind.Image, "images", "/images", "/images/{id}"),
-    new EntityKindSearch(8),
+    new EntityKindSearch(9),
     static root => new Image(root.Id, root.Title),
     behavior: new EntityKindBehavior(
         identification: new(AutoIdentifySelectorKind.Image),

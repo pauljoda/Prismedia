@@ -23,7 +23,7 @@ public sealed class AudioTrackEntityKindDefinition() : EntityKindDefinition<Audi
         EntityArtworkFit.Cover,
         borrowArtworkFromParentKinds: [EntityKind.AudioLibrary]),
     new EntityKindNavigation(EntityKind.AudioTrack, "tracks", "/tracks", "/audio/tracks/{id}"),
-    new EntityKindSearch(11),
+    new EntityKindSearch(12),
     new EntityKindBehavior(
         identification: new(AutoIdentifySelectorKind.Audio),
         processing: new EntityProcessingPolicy(

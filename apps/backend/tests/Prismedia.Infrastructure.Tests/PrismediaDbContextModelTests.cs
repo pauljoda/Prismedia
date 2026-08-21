@@ -35,6 +35,8 @@ public sealed class PrismediaDbContextModelTests {
     [InlineData(typeof(GalleryDetailRow), "gallery_details")]
     [InlineData(typeof(BookDetailRow), "book_details")]
     [InlineData(typeof(BookChapterDetailRow), "book_chapter_details")]
+    [InlineData(typeof(ComicSeriesDetailRow), "comic_series_details")]
+    [InlineData(typeof(ComicInstallmentDetailRow), "comic_installment_details")]
     [InlineData(typeof(AudioTrackDetailRow), "audio_track_details")]
     [InlineData(typeof(PersonDetailRow), "person_details")]
     [InlineData(typeof(TagDetailRow), "tag_details")]
@@ -77,6 +79,21 @@ public sealed class PrismediaDbContextModelTests {
         Assert.Contains(EntityKind.BookVolume.ToCode(), seededCodes);
         Assert.Contains(EntityKind.BookChapter.ToCode(), seededCodes);
         Assert.Contains(EntityKind.BookPage.ToCode(), seededCodes);
+        Assert.Contains(EntityKind.ComicSeries.ToCode(), seededCodes);
+        Assert.Contains(EntityKind.ComicVolume.ToCode(), seededCodes);
+        Assert.Contains(EntityKind.ComicInstallment.ToCode(), seededCodes);
+    }
+
+    [Fact]
+    public void ComicInstallmentDetailsPersistTheCanonicalReleasedWorkSubtype() {
+        using var db = CreateContext();
+        var modelEntity = db.Model.FindEntityType(typeof(ComicInstallmentDetailRow));
+
+        Assert.NotNull(modelEntity);
+        Assert.Equal(
+            "installment_kind",
+            modelEntity!.FindProperty(nameof(ComicInstallmentDetailRow.InstallmentKind))!.GetColumnName());
+        Assert.False(modelEntity.FindProperty(nameof(ComicInstallmentDetailRow.InstallmentKind))!.IsNullable);
     }
 
     [Fact]

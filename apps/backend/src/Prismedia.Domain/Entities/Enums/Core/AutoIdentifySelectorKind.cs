@@ -21,7 +21,11 @@ public enum AutoIdentifySelectorKind {
     [Code("audio")]
     Audio,
 
-    /// <summary>Books, comics, and other page-based media.</summary>
+    /// <summary>Prose books and their readable or audiobook renditions.</summary>
     [Code("book")]
-    Book
+    Book,
+
+    /// <summary>Serialized comics, manga titles, volumes, issues, and chapters.</summary>
+    [Code("comic")]
+    Comic
 }

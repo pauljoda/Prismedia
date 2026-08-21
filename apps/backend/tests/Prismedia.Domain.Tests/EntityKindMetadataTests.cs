@@ -51,6 +51,7 @@ public sealed class EntityKindMetadataTests {
     [InlineData(EntityKind.BookAuthor, AcquisitionAncestorContextRole.Creator)]
     [InlineData(EntityKind.MusicArtist, AcquisitionAncestorContextRole.Creator)]
     [InlineData(EntityKind.AudioLibrary, AcquisitionAncestorContextRole.Series)]
+    [InlineData(EntityKind.ComicSeries, AcquisitionAncestorContextRole.Series)]
     [InlineData(EntityKind.VideoSeries, AcquisitionAncestorContextRole.Series)]
     [InlineData(EntityKind.VideoSeason, AcquisitionAncestorContextRole.None)]
     public void AcquisitionAncestorContextIsOwnedByEachEntityKindDefinition(
@@ -63,6 +64,8 @@ public sealed class EntityKindMetadataTests {
     [InlineData(EntityKind.VideoSeason, EntityPositionCodes.Season)]
     [InlineData(EntityKind.VideoEpisode, EntityPositionCodes.Sort)]
     [InlineData(EntityKind.AudioTrack, EntityPositionCodes.Sort)]
+    [InlineData(EntityKind.ComicVolume, EntityPositionCodes.Volume)]
+    [InlineData(EntityKind.ComicInstallment, EntityPositionCodes.Sort)]
     public void StructuralFallbackPositionIsOwnedByEachEntityKindDefinition(
         EntityKind kind,
         string expected) {
@@ -76,11 +79,14 @@ public sealed class EntityKindMetadataTests {
     [InlineData("music-artist", true)]
     [InlineData("book", true)]
     [InlineData("book-volume", true)]
+    [InlineData("comic-series", true)]
+    [InlineData("comic-volume", true)]
     [InlineData("movie", false)]
     [InlineData("video", false)]
     [InlineData("image", false)]
     [InlineData("audio-track", false)]
     [InlineData("gallery", false)]
+    [InlineData("comic-installment", false)]
     public void EnumeratesIdentifyChildrenMatchesContainerClassification(string code, bool expected) {
         Assert.Equal(expected, EntityKindRegistry.EnumeratesIdentifyChildren(code));
     }
@@ -93,6 +99,9 @@ public sealed class EntityKindMetadataTests {
     [InlineData(EntityKind.BookAuthor, true)]
     [InlineData(EntityKind.BookChapter, false)]
     [InlineData(EntityKind.BookVolume, true)]
+    [InlineData(EntityKind.ComicInstallment, true)]
+    [InlineData(EntityKind.ComicSeries, true)]
+    [InlineData(EntityKind.ComicVolume, true)]
     [InlineData(EntityKind.Gallery, true)]
     [InlineData(EntityKind.Image, true)]
     [InlineData(EntityKind.Movie, true)]
@@ -339,7 +348,7 @@ public sealed class EntityKindMetadataTests {
             .ToArray();
 
         Assert.Equal(
-            [EntityKind.VideoSeries, EntityKind.VideoSeason],
+            [EntityKind.ComicSeries, EntityKind.ComicVolume, EntityKind.VideoSeries, EntityKind.VideoSeason],
             prunableKinds);
     }
 
@@ -358,6 +367,9 @@ public sealed class EntityKindMetadataTests {
                 EntityKind.Book,
                 EntityKind.BookVolume,
                 EntityKind.BookChapter,
+                EntityKind.ComicInstallment,
+                EntityKind.ComicSeries,
+                EntityKind.ComicVolume,
                 EntityKind.Movie,
                 EntityKind.Video,
                 EntityKind.VideoEpisode,
@@ -463,6 +475,7 @@ public sealed class EntityKindMetadataTests {
             [
                 EntityKind.AudioLibrary,
                 EntityKind.Book,
+                EntityKind.ComicInstallment,
                 EntityKind.Gallery,
                 EntityKind.MusicArtist,
                 EntityKind.Movie,
@@ -488,7 +501,13 @@ public sealed class EntityKindMetadataTests {
         Assert.Equal(
             (EntityKind.VideoEpisode, 2),
             (descendantRoots[EntityKind.VideoSeries].DescendantKind, descendantRoots[EntityKind.VideoSeries].MaximumDepth));
-        Assert.Equal(3, descendantRoots.Count);
+        Assert.Equal(
+            (EntityKind.ComicInstallment, 1),
+            (descendantRoots[EntityKind.ComicVolume].DescendantKind, descendantRoots[EntityKind.ComicVolume].MaximumDepth));
+        Assert.Equal(
+            (EntityKind.ComicInstallment, 2),
+            (descendantRoots[EntityKind.ComicSeries].DescendantKind, descendantRoots[EntityKind.ComicSeries].MaximumDepth));
+        Assert.Equal(5, descendantRoots.Count);
         Assert.All(descendantRoots.Values, policy =>
             Assert.Equal(
                 EntityLibraryVisibilityMode.DirectRoot,
@@ -575,6 +594,16 @@ public sealed class EntityKindMetadataTests {
         Assert.Equal([EntityKind.VideoEpisode, EntityKind.VideoSeason], EntityKindRegistry.AllowedChildKinds(EntityKind.VideoSeries));
         Assert.Equal([EntityKind.VideoEpisode], EntityKindRegistry.AllowedChildKinds(EntityKind.VideoSeason));
 
+        var comicInstallment = EntityKindRegistry.Describe(EntityKind.ComicInstallment).StructurePolicy;
+        Assert.False(comicInstallment.AllowsRoot);
+        Assert.Equal([EntityKind.ComicSeries, EntityKind.ComicVolume], comicInstallment.AllowedParentKinds);
+        Assert.Equal(
+            [EntityKind.ComicInstallment, EntityKind.ComicVolume],
+            EntityKindRegistry.AllowedChildKinds(EntityKind.ComicSeries));
+        Assert.Equal(
+            [EntityKind.ComicInstallment],
+            EntityKindRegistry.AllowedChildKinds(EntityKind.ComicVolume));
+
         var book = EntityKindRegistry.Describe(EntityKind.Book).StructurePolicy;
         Assert.True(book.AllowsRoot);
         Assert.Equal([EntityKind.BookAuthor, EntityKind.Book], book.AllowedParentKinds);
@@ -616,6 +645,9 @@ public sealed class EntityKindMetadataTests {
     [InlineData(EntityKind.VideoEpisode, "video-episode", "Video Episode", EntityKindCategory.Media, EntityStorageShape.File, typeof(Prismedia.Domain.Media.VideoEpisode))]
     [InlineData(EntityKind.VideoSeries, "video-series", "Video Series", EntityKindCategory.Media, EntityStorageShape.Folder, typeof(Prismedia.Domain.Media.VideoSeries))]
     [InlineData(EntityKind.BookPage, "book-page", "Book Page", EntityKindCategory.Media, EntityStorageShape.ArchiveEntry, typeof(Prismedia.Domain.Media.BookPage))]
+    [InlineData(EntityKind.ComicInstallment, "comic-installment", "Comic Installment", EntityKindCategory.Media, EntityStorageShape.Archive, typeof(Prismedia.Domain.Media.ComicInstallment))]
+    [InlineData(EntityKind.ComicSeries, "comic-series", "Comic Series", EntityKindCategory.Media, EntityStorageShape.Folder, typeof(Prismedia.Domain.Media.ComicSeries))]
+    [InlineData(EntityKind.ComicVolume, "comic-volume", "Comic Volume", EntityKindCategory.Media, EntityStorageShape.None, typeof(Prismedia.Domain.Media.ComicVolume))]
     [InlineData(EntityKind.Person, "person", "Person", EntityKindCategory.Taxonomy, EntityStorageShape.None, typeof(Prismedia.Domain.Taxonomy.Person))]
     [InlineData(EntityKind.AudioLibrary, "audio-library", "Audio Library", EntityKindCategory.Media, EntityStorageShape.Folder, typeof(Prismedia.Domain.Media.AudioLibrary))]
     public void DescriptorValuesArePreservedExactly(

@@ -97,6 +97,46 @@ public sealed class EfEntityProgressTopologyResolverTests {
             await resolver.ResolveOrderedScopesAsync(seasonEpisodeId, CancellationToken.None));
     }
 
+    [Fact]
+    public async Task ComicInstallmentsRollUpThroughTheSameDirectAndGroupedSequenceRules() {
+        await using var db = CreateContext();
+        var seriesId = Guid.NewGuid();
+        var directInstallmentId = Guid.NewGuid();
+        var volumeId = Guid.NewGuid();
+        var firstVolumeInstallmentId = Guid.NewGuid();
+        var secondVolumeInstallmentId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.Entities.AddRange(
+            Row(seriesId, EntityKind.ComicSeries, now),
+            Row(directInstallmentId, EntityKind.ComicInstallment, now, seriesId, 0),
+            Row(volumeId, EntityKind.ComicVolume, now, seriesId, 1),
+            Row(firstVolumeInstallmentId, EntityKind.ComicInstallment, now, volumeId, 0),
+            Row(secondVolumeInstallmentId, EntityKind.ComicInstallment, now, volumeId, 1));
+        await db.SaveChangesAsync();
+
+        var resolver = new EfEntityProgressTopologyResolver(db);
+
+        Assert.Equal(
+            [new OrderedProgressScope(seriesId, directInstallmentId, 0, 1, null)],
+            await resolver.ResolveOrderedScopesAsync(directInstallmentId, CancellationToken.None));
+        Assert.Equal(
+            [
+                new OrderedProgressScope(
+                    volumeId,
+                    firstVolumeInstallmentId,
+                    0,
+                    2,
+                    secondVolumeInstallmentId),
+                new OrderedProgressScope(
+                    seriesId,
+                    firstVolumeInstallmentId,
+                    0,
+                    2,
+                    secondVolumeInstallmentId)
+            ],
+            await resolver.ResolveOrderedScopesAsync(firstVolumeInstallmentId, CancellationToken.None));
+    }
+
     [Theory]
     [InlineData(EntityKind.Movie)]
     [InlineData(EntityKind.Video)]

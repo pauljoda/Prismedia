@@ -15,7 +15,7 @@ public enum EntityKind {
     /// <summary>Playable audio track.</summary>
     AudioTrack,
 
-    /// <summary>Book, comic, manga, or other page-based media item.</summary>
+    /// <summary>Prose book whose chapters are navigation markers within the published work.</summary>
     Book,
 
     /// <summary>Structural book volume.</summary>
@@ -26,6 +26,15 @@ public enum EntityKind {
 
     /// <summary>Structural book page.</summary>
     BookPage,
+
+    /// <summary>Released serialized-comic chapter, issue, special, or one-shot.</summary>
+    ComicInstallment,
+
+    /// <summary>Serialized-comic title or western comic run.</summary>
+    ComicSeries,
+
+    /// <summary>Optional collected or thematic serialized-comic grouping.</summary>
+    ComicVolume,
 
     /// <summary>User collection.</summary>
     Collection,

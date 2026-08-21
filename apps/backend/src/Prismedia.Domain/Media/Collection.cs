@@ -24,7 +24,7 @@ public sealed class CollectionEntityKindDefinition()
             EntityAccentHue.Red,
             EntityArtworkFit.Cover),
         new EntityKindNavigation(EntityKind.Collection, "collections", "/collections", "/collections/{id}"),
-        new EntityKindSearch(9),
+        new EntityKindSearch(10),
         EntityKindBehavior.None),
       IEntityContainmentPolicy {
     /// <inheritdoc />
@@ -42,6 +42,8 @@ public sealed class CollectionEntityKindDefinition()
         EntityKind.Gallery,
         EntityKind.Image,
         EntityKind.Book,
+        EntityKind.ComicSeries,
+        EntityKind.ComicInstallment,
         EntityKind.MusicArtist,
         EntityKind.AudioLibrary,
         EntityKind.AudioTrack,

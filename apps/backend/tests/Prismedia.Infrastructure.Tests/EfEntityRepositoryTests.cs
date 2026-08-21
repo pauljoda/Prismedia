@@ -22,6 +22,54 @@ public sealed class EfEntityRepositoryTests {
         DateTimeOffset.Parse("2026-07-09T18:30:00Z");
 
     [Fact]
+    public async Task ComicInstallmentHydrationPreservesSubtypeAndStructuralPlacement() {
+        await using var db = CreateContext();
+        var seriesId = Guid.NewGuid();
+        var installmentId = Guid.NewGuid();
+        SeedEntity(db, seriesId, EntityKind.ComicSeries, "Series");
+        SeedEntity(db, installmentId, EntityKind.ComicInstallment, "Issue 10.5", seriesId, sortOrder: 11);
+        db.ComicSeriesDetails.Add(new ComicSeriesDetailRow { EntityId = seriesId, Status = "releasing" });
+        db.ComicInstallmentDetails.Add(new ComicInstallmentDetailRow {
+            EntityId = installmentId,
+            InstallmentKind = ComicInstallmentKind.Issue
+        });
+        await db.SaveChangesAsync();
+
+        var repository = new EfEntityRepository(
+            db,
+            TestUserContext.Admin(),
+            EntityMappers.Kinds(db),
+            EntityMappers.Capabilities(db, TestUserContext.Admin()));
+
+        var series = await repository.RequireAsync<ComicSeries>(seriesId, CancellationToken.None);
+        var installment = await repository.RequireAsync<ComicInstallment>(installmentId, CancellationToken.None);
+
+        Assert.Equal("releasing", series.Status);
+        Assert.Equal(ComicInstallmentKind.Issue, installment.InstallmentKind);
+        Assert.Equal(seriesId, installment.ParentEntityId);
+        Assert.Equal(11, installment.SortOrder);
+    }
+
+    [Fact]
+    public async Task ComicInstallmentHydrationRejectsMissingRequiredSubtype() {
+        await using var db = CreateContext();
+        var seriesId = Guid.NewGuid();
+        var installmentId = Guid.NewGuid();
+        SeedEntity(db, seriesId, EntityKind.ComicSeries, "Series");
+        SeedEntity(db, installmentId, EntityKind.ComicInstallment, "Unclassified", seriesId);
+        await db.SaveChangesAsync();
+
+        var repository = new EfEntityRepository(
+            db,
+            TestUserContext.Admin(),
+            EntityMappers.Kinds(db),
+            EntityMappers.Capabilities(db, TestUserContext.Admin()));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            repository.RequireAsync<ComicInstallment>(installmentId, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task SubtitleHydrationOnlyAttachesStateToSupportedOrPersistedEntities() {
         await using var db = CreateContext();
         var tagId = Guid.NewGuid();
