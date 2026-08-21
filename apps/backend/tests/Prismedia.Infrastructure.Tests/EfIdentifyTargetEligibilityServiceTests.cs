@@ -9,6 +9,42 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EfIdentifyTargetEligibilityServiceTests {
     [Fact]
+    public async Task ScannerDerivedBookStructureRejectsProviderMetadataEvenWithSourceMedia() {
+        await using var db = CreateContext();
+        var bookId = Guid.NewGuid();
+        var chapterId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.Entities.AddRange(
+            new EntityRow {
+                Id = bookId,
+                KindCode = EntityKind.Book.ToCode(),
+                Title = "Novel",
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = chapterId,
+                KindCode = EntityKind.BookChapter.ToCode(),
+                Title = "Chapter 1",
+                ParentEntityId = bookId,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        db.EntityFiles.Add(File(
+            chapterId,
+            EntityFileRole.Source,
+            "/media/books/Novel.epub::chapter-1.xhtml",
+            now));
+        await db.SaveChangesAsync();
+
+        var result = await new EfIdentifyTargetEligibilityService(db)
+            .EvaluateAsync(chapterId, CancellationToken.None);
+
+        Assert.Equal(IdentifyTargetEligibilityStatus.ProviderMetadataDisabled, result.Status);
+        Assert.False(result.IsEligible);
+    }
+
+    [Fact]
     public async Task EvaluateManyAsyncDistinguishesMissingWantedFilelessAndSourceMediaTargets() {
         await using var db = CreateContext();
         var eligibleId = Guid.NewGuid();

@@ -36,7 +36,13 @@ public sealed class AudioLibraryEntityKindDefinition() : RootEntityKindDefinitio
         libraryVisibility: EntityLibraryVisibilityPolicy.DirectRoot,
         supportsFileDeletion: true,
         mediaQualityFamily: EntityMediaQualityFamily.Audio),
-    defaultCapabilities: static () => [new CapabilityConsumption()]) {
+    defaultCapabilities: static () => [new CapabilityConsumption()]), IAudioPlaybackOwnerKindDefinition {
+    /// <inheritdoc />
+    public AudioPlaybackPolicy AudioPlaybackPolicy { get; } = new(
+        EntityKind.AudioTrack,
+        PreservesQueueOrder: false,
+        SupportsPlaybackRate: false);
+
     /// <inheritdoc />
     public override EntityProgressTopology ProgressTopology => EntityProgressTopology.None;
 

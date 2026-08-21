@@ -35,7 +35,7 @@ public sealed class EfIdentifyTargetEligibilityService(
         var rows = await db.Entities
             .AsNoTracking()
             .Where(entity => ids.Contains(entity.Id))
-            .Select(entity => new { entity.Id, entity.IsWanted })
+            .Select(entity => new { entity.Id, entity.KindCode, entity.IsWanted })
             .ToDictionaryAsync(entity => entity.Id, cancellationToken);
         var sourceBackedIds = await _sourceOwnership.ResolveAsync(ids, cancellationToken);
 
@@ -46,6 +46,9 @@ public sealed class EfIdentifyTargetEligibilityService(
                     id,
                     row.IsWanted
                         ? IdentifyTargetEligibilityStatus.Wanted
+                        : !EntityKindRegistry.Describe(row.KindCode.DecodeAs<EntityKind>())
+                            .Identification.AllowsProviderMetadata
+                            ? IdentifyTargetEligibilityStatus.ProviderMetadataDisabled
                         : sourceBackedIds.Contains(id)
                             ? IdentifyTargetEligibilityStatus.Eligible
                             : IdentifyTargetEligibilityStatus.NoSourceMedia)

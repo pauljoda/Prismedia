@@ -87,11 +87,30 @@ internal sealed class PlayableVideoCapabilityProjector : EntityCapabilityProject
 
 [EntityCapabilityProjector(66)]
 internal sealed class PlayableAudioCapabilityProjector : EntityCapabilityProjector<PlayableAudioCapability> {
-    public override PlayableAudioCapability? Project(EntityCapabilityProjectionContext context) =>
-        context.Entity.Definition is IPlayableAudioKindDefinition &&
-        context.Entity.EntityFiles.Any(file => file.Role == EntityFileRole.Source)
-            ? new PlayableAudioCapability()
+    public override PlayableAudioCapability? Project(EntityCapabilityProjectionContext context) {
+        if (context.Entity.Definition is not IAudioPlaybackOwnerKindDefinition owner) {
+            return null;
+        }
+
+        var policy = owner.AudioPlaybackPolicy;
+        var hasPlayableItem = context.Entity.Definition is IPlayableAudioKindDefinition &&
+            context.Entity.Kind == policy.ItemKind &&
+            HasSource(context.Entity);
+        if (!hasPlayableItem && context.Entity.ChildrenByKind.TryGetValue(policy.ItemKind, out var children)) {
+            hasPlayableItem = children.Any(child =>
+                child.Definition is IPlayableAudioKindDefinition && HasSource(child));
+        }
+
+        return hasPlayableItem
+            ? new PlayableAudioCapability(
+                policy.ItemKind,
+                policy.PreservesQueueOrder,
+                policy.SupportsPlaybackRate)
             : null;
+    }
+
+    private static bool HasSource(Entity entity) =>
+        entity.EntityFiles.Any(file => file.Role == EntityFileRole.Source);
 }
 
 [EntityCapabilityProjector(67)]

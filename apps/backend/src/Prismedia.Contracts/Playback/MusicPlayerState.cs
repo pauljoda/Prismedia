@@ -41,6 +41,8 @@ public sealed record BookProgressTrackMapping(
 /// Optional chapter-scoped audio-to-reader mappings used by audiobook queues to update the Book's
 /// one shared progress cursor. Missing mappings leave an existing readable cursor untouched.
 /// </param>
+/// <param name="PreservesQueueOrder">Whether the queue capability requires semantic source order.</param>
+/// <param name="SupportsPlaybackRate">Whether the queue capability permits variable-rate playback.</param>
 public sealed record MusicPlayerContext(
     Guid? AlbumId,
     string? AlbumTitle,
@@ -51,7 +53,9 @@ public sealed record MusicPlayerContext(
     Guid? PlaybackOwnerEntityId = null,
     string? PlaybackOwnerTitle = null,
     EntityKind? PlaybackOwnerEntityKind = null,
-    IReadOnlyList<BookProgressTrackMapping>? BookProgressMappings = null);
+    IReadOnlyList<BookProgressTrackMapping>? BookProgressMappings = null,
+    bool PreservesQueueOrder = false,
+    bool SupportsPlaybackRate = false);
 
 /// <summary>
 /// Persisted browser-scoped music player state returned to the web client.

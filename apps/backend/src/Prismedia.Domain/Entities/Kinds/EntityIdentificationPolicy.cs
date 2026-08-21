@@ -20,6 +20,10 @@ public sealed record EntityIdentificationPolicy {
     /// <param name="stopsDescendantAutoIdentifyRootTraversal">
     /// Whether descendants stop at the child immediately below this kind when selecting their automatic-identification root.
     /// </param>
+    /// <param name="allowsProviderMetadata">
+    /// Whether this kind may be a direct or structural target of provider metadata. Scanner-derived
+    /// resources can disable this without changing their ordinary Entity or capability behavior.
+    /// </param>
     public EntityIdentificationPolicy(
         AutoIdentifySelectorKind? autoIdentifySelector = null,
         bool enumeratesChildren = false,
@@ -28,7 +32,8 @@ public sealed record EntityIdentificationPolicy {
         bool? cascadeChildrenAutomatically = null,
         bool usesParentExternalIdentityContext = false,
         bool allowsDirectReconcileChildTarget = false,
-        bool stopsDescendantAutoIdentifyRootTraversal = false) {
+        bool stopsDescendantAutoIdentifyRootTraversal = false,
+        bool allowsProviderMetadata = true) {
         if (autoIdentifySelector is null &&
             (allowsParentedAutoIdentifyRoot ||
              cascadeChildrenAutomatically is not null ||
@@ -54,6 +59,7 @@ public sealed record EntityIdentificationPolicy {
         UsesParentExternalIdentityContext = usesParentExternalIdentityContext;
         AllowsDirectReconcileChildTarget = allowsDirectReconcileChildTarget;
         StopsDescendantAutoIdentifyRootTraversal = stopsDescendantAutoIdentifyRootTraversal;
+        AllowsProviderMetadata = allowsProviderMetadata;
     }
 
     /// <summary>User-facing automatic-identification selector family, when supported.</summary>
@@ -81,4 +87,7 @@ public sealed record EntityIdentificationPolicy {
     /// Whether a descendant's automatic-identification root stops at the entity directly below this kind.
     /// </summary>
     public bool StopsDescendantAutoIdentifyRootTraversal { get; }
+
+    /// <summary>Whether plugins may bind identities or apply metadata to this Entity kind.</summary>
+    public bool AllowsProviderMetadata { get; }
 }

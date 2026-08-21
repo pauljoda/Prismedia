@@ -15,6 +15,9 @@ public enum IdentifyTargetEligibilityStatus {
     /// <summary>The entity's structural subtree owns no source-media file binding.</summary>
     NoSourceMedia,
 
+    /// <summary>The Entity kind is scanner-derived and does not accept provider metadata.</summary>
+    ProviderMetadataDisabled,
+
     /// <summary>The entity or one of its structural descendants owns source media and may enter Identify.</summary>
     Eligible
 }
@@ -66,6 +69,8 @@ public sealed class IdentifyTargetNotEligibleException : InvalidOperationExcepti
                 $"Entity '{eligibility.EntityId}' is Wanted and cannot be identified until source media is on disk.",
             IdentifyTargetEligibilityStatus.NoSourceMedia =>
                 $"Entity '{eligibility.EntityId}' has no source media on disk to identify.",
+            IdentifyTargetEligibilityStatus.ProviderMetadataDisabled =>
+                $"Entity '{eligibility.EntityId}' is file-derived and does not accept provider metadata.",
             _ => $"Entity '{eligibility.EntityId}' is not eligible for Identify."
         };
 }

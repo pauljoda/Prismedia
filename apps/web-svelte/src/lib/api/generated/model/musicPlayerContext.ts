@@ -28,4 +28,6 @@ export interface MusicPlayerContext {
   playbackOwnerEntityKind?: MusicPlayerContextPlaybackOwnerEntityKind;
   /** @nullable */
   bookProgressMappings?: BookProgressTrackMapping[] | null;
+  preservesQueueOrder?: boolean;
+  supportsPlaybackRate?: boolean;
 }

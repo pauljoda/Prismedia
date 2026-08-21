@@ -5,7 +5,11 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { EntityCapabilityPlayableAudioCapabilityKind } from './entityCapabilityPlayableAudioCapabilityKind';
+import type { EntityKind } from './entityKind';
 
 export interface EntityCapabilityPlayableAudioCapability {
   kind: EntityCapabilityPlayableAudioCapabilityKind;
+  itemKind: EntityKind;
+  preservesQueueOrder: boolean;
+  supportsPlaybackRate: boolean;
 }

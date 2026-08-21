@@ -81,6 +81,8 @@ function fromResponse(response: MusicPlayerStateResponse): RestoredMusicPlayerSt
           playbackOwnerTitle: response.context.playbackOwnerTitle,
           playbackOwnerEntityKind: response.context.playbackOwnerEntityKind,
           bookProgressMappings: response.context.bookProgressMappings,
+          preservesQueueOrder: response.context.preservesQueueOrder,
+          supportsPlaybackRate: response.context.supportsPlaybackRate,
         }
       : null,
   };
@@ -111,6 +113,8 @@ function toRequest(state: PersistMusicPlayerState): UpdateMusicPlayerStateReques
           playbackOwnerTitle: state.context.playbackOwnerTitle ?? null,
           playbackOwnerEntityKind: state.context.playbackOwnerEntityKind ?? undefined,
           bookProgressMappings: state.context.bookProgressMappings ?? null,
+          preservesQueueOrder: state.context.preservesQueueOrder ?? false,
+          supportsPlaybackRate: state.context.supportsPlaybackRate ?? false,
         }
       : null,
   };

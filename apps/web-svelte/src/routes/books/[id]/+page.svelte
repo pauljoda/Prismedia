@@ -202,9 +202,11 @@
   const bookProgress = $derived(
     book ? getCapability(book.capabilities, CAPABILITY_KIND.progress) : undefined,
   );
+  const audioPlayback = $derived(
+    book ? getCapability(book.capabilities, CAPABILITY_KIND.playableAudio) : undefined,
+  );
   const isCurrentAudiobook = $derived(
-    playback.context?.playbackOwnerEntityId === book?.id &&
-      playback.context?.playbackOwnerEntityKind === ENTITY_KIND.book,
+    playback.context?.playbackOwnerEntityId === book?.id,
   );
   const readableChapters = $derived.by((): ReadableBookChapter[] => {
     if (bookMetadata?.format === BOOK_FORMAT.epub) {
@@ -749,7 +751,7 @@
   }
 
   function audiobookPlaybackContext() {
-    if (!book) return null;
+    if (!book || !audioPlayback) return null;
     return {
       artistName: authorLink?.title ?? null,
       coverUrl: card?.posterCard?.cover?.src ?? card?.poster?.src ?? null,
@@ -757,6 +759,8 @@
       playbackOwnerTitle: book.title,
       playbackOwnerEntityKind: ENTITY_KIND.book,
       bookProgressMappings,
+      preservesQueueOrder: audioPlayback.preservesQueueOrder,
+      supportsPlaybackRate: audioPlayback.supportsPlaybackRate,
     };
   }
 

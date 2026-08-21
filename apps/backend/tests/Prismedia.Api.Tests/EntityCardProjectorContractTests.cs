@@ -77,7 +77,7 @@ public sealed class EntityCardProjectorContractTests {
     }
 
     [Fact]
-    public void ProjectsPlayableAudioOnlyForPlayableDefinitionsWithTheirOwnSourceFile() {
+    public void ProjectsGenericAudioQueuePolicyForDirectItemsAndSourceBackedOwners() {
         var track = new AudioTrack(Guid.NewGuid(), "Prologue", embeddedArtist: null, embeddedAlbum: null);
         track.AttachFile(EntityFileRole.Source, "/media/books/Novel/01 Prologue.m4b", "audio/mp4");
         var missingTrack = new AudioTrack(Guid.NewGuid(), "Missing", embeddedArtist: null, embeddedAlbum: null);
@@ -87,12 +87,25 @@ public sealed class EntityCardProjectorContractTests {
             BookType.Novel,
             coverPageId: null,
             BookFormat.Audio);
-        book.AttachFile(EntityFileRole.Source, "/media/books/Novel/Novel.m4b", "audio/mp4");
+        book.AddChild(track);
 
-        AssertCapability<PlayableAudioCapability>(EntityCardProjector.ToCard(track, hasSourceBackedSubtree: true));
+        var direct = AssertCapability<PlayableAudioCapability>(
+            EntityCardProjector.ToCard(track, hasSourceBackedSubtree: true));
+        Assert.Equal(EntityKind.AudioTrack, direct.ItemKind);
+        Assert.False(direct.PreservesQueueOrder);
+        Assert.False(direct.SupportsPlaybackRate);
+
+        var queue = AssertCapability<PlayableAudioCapability>(
+            EntityCardProjector.ToCard(book, hasSourceBackedSubtree: true));
+        Assert.Equal(EntityKind.AudioTrack, queue.ItemKind);
+        Assert.True(queue.PreservesQueueOrder);
+        Assert.True(queue.SupportsPlaybackRate);
+
         Assert.Empty(EntityCardProjector.ToCard(missingTrack, hasSourceBackedSubtree: false)
             .Capabilities.OfType<PlayableAudioCapability>());
-        Assert.Empty(EntityCardProjector.ToCard(book, hasSourceBackedSubtree: true)
+        Assert.Empty(EntityCardProjector.ToCard(
+                new Book(Guid.NewGuid(), "Silent", BookType.Novel, coverPageId: null, BookFormat.Audio),
+                hasSourceBackedSubtree: false)
             .Capabilities.OfType<PlayableAudioCapability>());
     }
 

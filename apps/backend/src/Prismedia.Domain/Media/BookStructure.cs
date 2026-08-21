@@ -86,6 +86,7 @@ public sealed class BookChapterEntityKindDefinition() : EntityKindDefinition<Boo
         EntityKind.Book),
     search: null,
     behavior: new EntityKindBehavior(
+        identification: new(allowsProviderMetadata: false),
         engagement: new(EntityEngagementMode.Reading),
         libraryVisibility: EntityLibraryVisibilityPolicy.AncestorRoot),
     defaultCapabilities: static () =>
@@ -141,6 +142,7 @@ public sealed class BookPageEntityKindDefinition() : RootEntityKindDefinition<Bo
         parentEntityId: root.ParentEntityId,
         sortOrder: root.SortOrder),
     behavior: new EntityKindBehavior(
+        identification: new(allowsProviderMetadata: false),
         processing: new EntityProcessingPolicy(
             assetFamily: GeneratedAssetFamily.BookPage,
             previewJobType: JobType.GenerateBookPageThumbnail,

@@ -99,7 +99,6 @@
       context?.combined &&
       book &&
       playback.context?.playbackOwnerEntityId === book.id &&
-      playback.context?.playbackOwnerEntityKind === ENTITY_KIND.book &&
       playback.currentTrack,
     ),
   );

@@ -110,8 +110,9 @@
   const volume = $derived(playback.volume);
   const muted = $derived(playback.muted);
   const collapsed = $derived(playback.collapsed);
-  const isAudiobook = $derived(
-    ctx?.playbackOwnerEntityKind === ENTITY_KIND.book && Boolean(ctx.playbackOwnerEntityId),
+  const preservesQueueOrder = $derived(ctx?.preservesQueueOrder === true);
+  const hasBookProgress = $derived(
+    Boolean(ctx?.playbackOwnerEntityId && ctx?.bookProgressMappings?.length),
   );
   const playbackOwnerHref = $derived(
     ctx?.playbackOwnerEntityId && ctx.playbackOwnerEntityKind
@@ -135,7 +136,9 @@
   // so mixed-album queues (e.g. an artist Play All) still show the right album per track.
   const displayTitle = $derived(ctx?.playbackOwnerTitle ?? activeTrack?.title ?? null);
   const albumLabel = $derived(
-    isAudiobook ? activeTrack?.title ?? null : ctx?.albumTitle ?? activeTrack?.embeddedAlbum ?? null,
+    ctx?.supportsPlaybackRate === true
+      ? activeTrack?.title ?? null
+      : ctx?.albumTitle ?? activeTrack?.embeddedAlbum ?? null,
   );
 
   // Publish now-playing metadata to the OS media controls (lock screen, media keys, Bluetooth).
@@ -441,7 +444,7 @@
   }
 
   function recordCurrentTrackSkip(track: AudioTrackListItemDto | null = activeTrack) {
-    if (isAudiobook) return;
+    if (preservesQueueOrder) return;
     if (!track || !isQuickSkipCandidate()) return;
     void recordEntityConsumptionEvent(track.id, {
       kind: CONSUMPTION_EVENT_KIND.skipped,
@@ -541,7 +544,7 @@
   }
 
   function isFinalAudiobookPart(): boolean {
-    return isAudiobook && playback.position === playback.order.length - 1;
+    return hasBookProgress && playback.position === playback.order.length - 1;
   }
 
   function saveAudiobookProgress(options: {
@@ -551,7 +554,7 @@
   }) {
     const ownerId = ctx?.playbackOwnerEntityId;
     const track = activeTrack;
-    if (!isAudiobook || !ownerId || !track) return;
+    if (!hasBookProgress || !ownerId || !track) return;
     const mapping = ctx?.bookProgressMappings?.find((candidate) => candidate.trackId === track.id);
     if (!mapping) return;
     if (track.id !== lastAudiobookTrackId) {
@@ -634,7 +637,7 @@
   // Load waveform data for the current track.
   $effect(() => {
     const track = activeTrack;
-    if (!track || isAudiobook) {
+    if (!track || ctx?.supportsPlaybackRate === true) {
       waveformData = null;
       return;
     }
@@ -770,7 +773,7 @@
       audioStartedInThisSession = true;
       playback.playIntent = true;
       playback.playing = true;
-      if (isAudiobook) startAudiobookConsumption();
+      if (hasBookProgress) startAudiobookConsumption();
       else musicConsumption.start();
     };
     const handlePlaying = () => {
@@ -799,7 +802,7 @@
     };
     const handleEnded = () => {
       musicConsumption.pause();
-      if (isAudiobook) {
+      if (hasBookProgress) {
         saveAudiobookProgress({ completed: isFinalAudiobookPart() });
       } else if (playback.currentTrack) {
         recordTrackPlay(playback.currentTrack.id);
@@ -834,7 +837,7 @@
     audio.addEventListener("ended", handleEnded);
     audio.addEventListener("error", handleError);
     const activityTimer = window.setInterval(() => {
-      if (!isAudiobook && playback.playing) musicConsumption.heartbeat();
+      if (!hasBookProgress && playback.playing) musicConsumption.heartbeat();
     }, 10_000);
     document.addEventListener("visibilitychange", handleVisibilityChange);
     audio.volume = playback.volume;
@@ -1103,7 +1106,7 @@
   {/if}
 
   <!-- Waveform (only when data available) -->
-  {#if activeTrack && !isAudiobook && waveformData && duration > 0}
+  {#if activeTrack && ctx?.supportsPlaybackRate !== true && waveformData && duration > 0}
     <div class="waveform-shell overflow-hidden border-t">
       <AudioWaveformFilmstrip
         peaks={waveformData}
@@ -1140,8 +1143,8 @@
       <button
         type="button"
         onclick={() => playback.toggleShuffle()}
-        disabled={isAudiobook}
-        title={isAudiobook ? "Audiobook parts play in order" : playback.shuffle ? "Shuffle: on" : "Shuffle: off"}
+        disabled={preservesQueueOrder}
+        title={preservesQueueOrder ? "This queue plays in source order" : playback.shuffle ? "Shuffle: on" : "Shuffle: off"}
         class={cn("player-icon-control p-1.5 transition-colors", playback.shuffle && "player-icon-control--active")}
       >
         <Shuffle class="h-3 w-3" />

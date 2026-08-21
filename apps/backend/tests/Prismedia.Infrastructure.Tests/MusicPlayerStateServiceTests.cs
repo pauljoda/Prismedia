@@ -154,7 +154,9 @@ public sealed class MusicPlayerStateServiceTests {
                         EndIndex: 4000,
                         Total: 10000,
                         ReaderMode.Paged)
-                ])
+                ],
+                PreservesQueueOrder: true,
+                SupportsPlaybackRate: true)
         };
 
         await service.SaveAsync(browserSessionId, request, CancellationToken.None);
@@ -163,6 +165,8 @@ public sealed class MusicPlayerStateServiceTests {
         Assert.Equal(bookId, loaded.Context?.PlaybackOwnerEntityId);
         Assert.Equal("Dune", loaded.Context?.PlaybackOwnerTitle);
         Assert.Equal(EntityKind.Book, loaded.Context?.PlaybackOwnerEntityKind);
+        Assert.True(loaded.Context?.PreservesQueueOrder);
+        Assert.True(loaded.Context?.SupportsPlaybackRate);
         var mapping = Assert.Single(loaded.Context?.BookProgressMappings ?? []);
         Assert.Equal(trackId, mapping.TrackId);
         Assert.Equal(ProgressUnit.Cfi, mapping.Unit);

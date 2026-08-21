@@ -1,5 +1,4 @@
 import {
-  ENTITY_KIND,
   MUSIC_PLAYER_MINI_SIDE,
   MUSIC_PLAYER_REPEAT_MODE,
   type EntityKindCode,
@@ -29,6 +28,10 @@ export interface PlaybackContext {
   playbackOwnerEntityKind?: EntityKindCode | null;
   /** Chapter-scoped conversions from each audiobook part into the Book's canonical cursor. */
   bookProgressMappings?: BookProgressTrackMapping[] | null;
+  /** Capability-projected queue rule: source order is semantic and shuffle is unavailable. */
+  preservesQueueOrder?: boolean | null;
+  /** Capability-projected transport rule: variable-rate playback may be exposed. */
+  supportsPlaybackRate?: boolean | null;
 }
 
 /** Element-level controls the global player registers so any component can drive playback. */
@@ -130,7 +133,8 @@ export class AudioPlaybackStore {
     if (tracks.length === 0) return;
     this.queue = tracks;
     this.context = context ?? null;
-    if (options?.shuffle !== undefined) this.shuffle = options.shuffle;
+    if (this.context?.preservesQueueOrder) this.shuffle = false;
+    else if (options?.shuffle !== undefined) this.shuffle = options.shuffle;
     this.playIntent = true;
     this.playing = false;
 
@@ -166,7 +170,7 @@ export class AudioPlaybackStore {
    * restores list order and keeps the current track playing.
    */
   toggleShuffle() {
-    if (this.context?.playbackOwnerEntityKind === ENTITY_KIND.book) return;
+    if (this.context?.preservesQueueOrder) return;
     if (this.order.length === 0) {
       this.shuffle = !this.shuffle;
       return;
@@ -264,13 +268,13 @@ export class AudioPlaybackStore {
       ? -1
       : Math.max(0, Math.min(state.position, Math.max(0, restoredOrder.length - 1)));
     const currentQueueIndex = restoredOrder[restoredPosition] ?? -1;
-    const audiobook = state.context?.playbackOwnerEntityKind === ENTITY_KIND.book;
+    const preservesQueueOrder = state.context?.preservesQueueOrder === true;
     this.queue = queue;
-    this.order = audiobook ? queue.map((_, index) => index) : restoredOrder;
-    this.position = audiobook ? this.order.indexOf(currentQueueIndex) : restoredPosition;
+    this.order = preservesQueueOrder ? queue.map((_, index) => index) : restoredOrder;
+    this.position = preservesQueueOrder ? this.order.indexOf(currentQueueIndex) : restoredPosition;
     this.playIntent = state.playing && queue.length > 0;
     this.playing = false;
-    this.shuffle = audiobook ? false : state.shuffle;
+    this.shuffle = preservesQueueOrder ? false : state.shuffle;
     this.repeat = state.repeat;
     this.context = state.context ?? null;
     this.duration = queue[this.order[this.position] ?? -1]?.duration ?? 0;

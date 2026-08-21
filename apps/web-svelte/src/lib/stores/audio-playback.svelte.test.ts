@@ -161,7 +161,7 @@ describe("AudioPlaybackStore", () => {
     expect(store.collapsedSide).toBe(MUSIC_PLAYER_MINI_SIDE.right);
   });
 
-  it("restores audiobook parts in source order while keeping the current concrete part", () => {
+  it("restores capability-locked queues in source order while keeping the current item", () => {
     const store = new AudioPlaybackStore();
     store.restore({
       queue: tracks(3),
@@ -175,6 +175,8 @@ describe("AudioPlaybackStore", () => {
         playbackOwnerEntityId: "book-1",
         playbackOwnerTitle: "Book",
         playbackOwnerEntityKind: "book",
+        preservesQueueOrder: true,
+        supportsPlaybackRate: true,
       },
       volume: 1,
       muted: false,
@@ -188,6 +190,17 @@ describe("AudioPlaybackStore", () => {
     expect(store.shuffle).toBe(false);
 
     store.toggleShuffle();
+    expect(store.shuffle).toBe(false);
+  });
+
+  it("locks a newly started queue when its playback capability preserves source order", () => {
+    const store = new AudioPlaybackStore();
+    store.shuffle = true;
+
+    store.play(tracks(3), "t2", { preservesQueueOrder: true }, { shuffle: true });
+
+    expect(ids(store)).toEqual(["t1", "t2", "t3"]);
+    expect(store.currentTrack?.id).toBe("t2");
     expect(store.shuffle).toBe(false);
   });
 
