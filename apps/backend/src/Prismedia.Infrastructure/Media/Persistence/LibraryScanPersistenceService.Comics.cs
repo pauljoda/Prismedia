@@ -272,7 +272,11 @@ public sealed partial class LibraryScanPersistenceService {
                 (entityId, _) => entityId)
             .ToListAsync(cancellationToken);
         if (legacyRootIds.Count > 0) {
-            removed += await RemoveEntitiesByIdAsync(legacyRootIds, cancellationToken);
+            var staleLegacySubtreeIds = await ExpandContainerSubtreeIdsAsync(
+                legacyRootIds,
+                validArchivePaths,
+                cancellationToken);
+            removed += await RemoveEntitiesByIdAsync(staleLegacySubtreeIds, cancellationToken);
         }
         return removed;
     }
@@ -311,7 +315,27 @@ public sealed partial class LibraryScanPersistenceService {
         string folderPath,
         CancellationToken cancellationToken) {
         var bookCode = EntityKind.Book.ToCode();
-        var candidates = await _db.EntityFiles.AsNoTracking()
+        var folderSourceCode = EntitySourceCode.Folder.ToCode();
+        var folderCandidates = await _db.EntitySources.AsNoTracking()
+            .Where(source => source.Code == folderSourceCode)
+            .Join(
+                _db.Entities.Where(entity => entity.KindCode == bookCode),
+                source => source.EntityId,
+                entity => entity.Id,
+                (source, entity) => new { Path = source.Value, EntityId = entity.Id })
+            .Join(
+                _db.BookDetails.Where(detail => detail.Format == BookFormat.ImageArchive),
+                candidate => candidate.EntityId,
+                detail => detail.EntityId,
+                (candidate, _) => candidate)
+            .ToArrayAsync(cancellationToken);
+        var folderCandidate = folderCandidates.FirstOrDefault(item =>
+            FileSystemPathComparison.Equals(item.Path, folderPath));
+
+        // Older scanners stored directory-backed comic roots as a source EntityFile. Keep that
+        // shape readable as a fallback, but prefer the Folder provenance used by production.
+        var fileCandidates = folderCandidate is null
+            ? await _db.EntityFiles.AsNoTracking()
             .Where(file => file.Role == EntityFileRole.Source)
             .Join(
                 _db.Entities.Where(entity => entity.KindCode == bookCode),
@@ -323,26 +347,30 @@ public sealed partial class LibraryScanPersistenceService {
                 candidate => candidate.EntityId,
                 detail => detail.EntityId,
                 (candidate, _) => candidate)
-            .ToArrayAsync(cancellationToken);
-        var candidate = candidates.FirstOrDefault(item =>
+            .ToArrayAsync(cancellationToken)
+            : [];
+        var fileCandidate = fileCandidates.FirstOrDefault(item =>
             FileSystemPathComparison.Equals(item.Path, folderPath));
-        if (candidate is null) {
+        var candidateId = folderCandidate?.EntityId ?? fileCandidate?.EntityId;
+        if (candidateId is null) {
             return null;
         }
 
-        var entity = await _db.Entities.FindAsync([candidate.EntityId], cancellationToken);
+        var entity = await _db.Entities.FindAsync([candidateId.Value], cancellationToken);
         if (entity is null) {
             return null;
         }
         entity.KindCode = EntityKind.ComicSeries.ToCode();
         await RemoveLegacyBookPayloadAsync(entity.Id, cancellationToken);
-        var sourceFiles = await _db.EntityFiles
-            .Where(file =>
-                file.EntityId == entity.Id &&
-                file.Role == EntityFileRole.Source &&
-                file.Path == candidate.Path)
-            .ToArrayAsync(cancellationToken);
-        _db.EntityFiles.RemoveRange(sourceFiles);
+        if (fileCandidate is not null) {
+            var sourceFiles = await _db.EntityFiles
+                .Where(file =>
+                    file.EntityId == entity.Id &&
+                    file.Role == EntityFileRole.Source &&
+                    file.Path == fileCandidate.Path)
+                .ToArrayAsync(cancellationToken);
+            _db.EntityFiles.RemoveRange(sourceFiles);
+        }
         return entity;
     }
 

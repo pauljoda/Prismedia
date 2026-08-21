@@ -2834,11 +2834,15 @@ public sealed class LibraryScanPersistenceServiceTests {
         SeedLibraryRoot(db, RootId, rootPath);
         await db.SaveChangesAsync();
         var service = new LibraryScanPersistenceService(db);
-        var legacySeriesId = await service.UpsertBookAsync(
+        // Production comic series are folder-backed Books. This must exercise Folder provenance,
+        // not the older directory-as-EntityFile shape retained only as a compatibility fallback.
+        var legacySeriesId = await service.UpsertBookSeriesAsync(
             seriesPath,
             "The Series",
             RootId,
             isNsfw: false,
+            BookType.Comic,
+            BookFormat.ImageArchive,
             CancellationToken.None);
         var legacyVolumeId = await service.UpsertBookVolumeAsync(
             volumePath,
@@ -3015,6 +3019,63 @@ public sealed class LibraryScanPersistenceServiceTests {
 
         Assert.Equal(1, removedByComicScan);
         Assert.Null(await db.Entities.FindAsync([legacyComicId]));
+    }
+
+    [Fact]
+    public async Task ComicCleanupRemovesTheEntireStaleLegacyHierarchy() {
+        await using var db = CreateContext();
+        var rootPath = Path.Combine(Path.GetTempPath(), $"prismedia-stale-comic-tree-{Guid.NewGuid():N}");
+        var seriesPath = Path.Combine(rootPath, "Missing Series");
+        var volumePath = Path.Combine(seriesPath, "Volume 1");
+        var archivePath = Path.Combine(volumePath, "Chapter 1.cbz");
+        SeedLibraryRoot(db, RootId, rootPath);
+        await db.SaveChangesAsync();
+        var service = new LibraryScanPersistenceService(db);
+        var seriesId = await service.UpsertBookSeriesAsync(
+            seriesPath,
+            "Missing Series",
+            RootId,
+            isNsfw: false,
+            BookType.Comic,
+            BookFormat.ImageArchive,
+            CancellationToken.None);
+        var volumeId = await service.UpsertBookVolumeAsync(
+            volumePath,
+            "Volume 1",
+            seriesId,
+            sortOrder: 1,
+            isNsfw: false,
+            CancellationToken.None);
+        var installmentId = await service.UpsertBookChapterAsync(
+            archivePath,
+            "Chapter 1",
+            volumeId,
+            sortOrder: 0,
+            pageCount: 1,
+            isNsfw: false,
+            CancellationToken.None);
+        var pageId = Guid.NewGuid();
+        db.Entities.Add(new EntityRow {
+            Id = pageId,
+            KindCode = EntityKind.BookPage.ToCode(),
+            Title = "Page 1",
+            ParentEntityId = installmentId,
+            SortOrder = 0,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var removed = await service.RemoveStaleComicInstallmentsInRootAsync(
+            RootId,
+            new HashSet<string>(),
+            CancellationToken.None);
+
+        Assert.Equal(4, removed);
+        Assert.Null(await db.Entities.FindAsync([seriesId]));
+        Assert.Null(await db.Entities.FindAsync([volumeId]));
+        Assert.Null(await db.Entities.FindAsync([installmentId]));
+        Assert.Null(await db.Entities.FindAsync([pageId]));
     }
 
     [Fact]
