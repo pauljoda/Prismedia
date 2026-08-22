@@ -59,7 +59,7 @@ public sealed class ConsumptionCapabilityMapperTests {
     private static Entity CreateEntity(EntityKind kind, Guid id) => kind switch {
         EntityKind.AudioLibrary => new AudioLibrary(id, "Album"),
         EntityKind.VideoSeason => new VideoSeason(id, "Season", parentEntityId: null),
-        EntityKind.Book => new Book(id, "Book", BookType.Book, coverPageId: null),
+        EntityKind.Book => new Book(id, "Book", BookType.Book),
         EntityKind.Gallery => new Gallery(id, "Gallery", GalleryType.Virtual, coverImageId: null),
         _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, null)
     };

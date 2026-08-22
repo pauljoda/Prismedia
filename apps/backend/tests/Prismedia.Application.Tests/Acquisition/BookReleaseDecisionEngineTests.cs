@@ -99,7 +99,7 @@ public sealed class BookReleaseDecisionEngineTests {
 
     [Fact]
     public void RejectsDisallowedFormatWhenTitleNamesIt() {
-        var rules = BookAcquisitionRules.Default with { AllowedFormats = [BookFormat.ImageArchive] };
+        var rules = BookAcquisitionRules.Default with { AllowedFormats = [BookFormat.Pdf] };
 
         var result = Engine.Evaluate(One(Release(title: "Some Book (2020) (epub)")), rules);
 

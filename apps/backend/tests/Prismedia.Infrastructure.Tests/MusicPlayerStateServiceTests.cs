@@ -128,7 +128,7 @@ public sealed class MusicPlayerStateServiceTests {
     }
 
     [Fact]
-    public async Task AudiobookPlaybackOwnerSurvivesQueueRestore() {
+    public async Task MappedPlaybackOwnerSurvivesQueueRestore() {
         var browserSessionId = Guid.NewGuid();
         var bookId = Guid.NewGuid();
         var trackId = Guid.NewGuid();
@@ -145,8 +145,8 @@ public sealed class MusicPlayerStateServiceTests {
                 PlaybackOwnerEntityId: bookId,
                 PlaybackOwnerTitle: "Dune",
                 PlaybackOwnerEntityKind: EntityKind.Book,
-                BookProgressMappings: [
-                    new BookProgressTrackMapping(
+                ProgressMappings: [
+                    new PlaybackProgressMapping(
                         trackId,
                         bookId,
                         ProgressUnit.Cfi,
@@ -167,11 +167,60 @@ public sealed class MusicPlayerStateServiceTests {
         Assert.Equal(EntityKind.Book, loaded.Context?.PlaybackOwnerEntityKind);
         Assert.True(loaded.Context?.PreservesQueueOrder);
         Assert.True(loaded.Context?.SupportsPlaybackRate);
-        var mapping = Assert.Single(loaded.Context?.BookProgressMappings ?? []);
-        Assert.Equal(trackId, mapping.TrackId);
+        var mapping = Assert.Single(loaded.Context?.ProgressMappings ?? []);
+        Assert.Equal(trackId, mapping.ItemId);
         Assert.Equal(ProgressUnit.Cfi, mapping.Unit);
         Assert.Equal(2000, mapping.StartIndex);
         Assert.Equal(4000, mapping.EndIndex);
+    }
+
+    [Fact]
+    public async Task LegacyBookProgressMappingsAreUpgradedOnRestore() {
+        var browserSessionId = Guid.NewGuid();
+        var ownerId = Guid.NewGuid();
+        var trackId = Guid.NewGuid();
+        var settings = new InMemoryBrowserSessionPersistence();
+        var service = new MusicPlayerStateService(settings, new FakeEntityReadService(trackId));
+        var request = Request(trackId, 1) with {
+            Context = new MusicPlayerContext(
+                AlbumId: null,
+                AlbumTitle: null,
+                ArtistId: null,
+                ArtistName: null,
+                CoverUrl: null,
+                AlbumCoverUrls: null,
+                PlaybackOwnerEntityId: ownerId,
+                ProgressMappings: [
+                    new PlaybackProgressMapping(
+                        trackId,
+                        ownerId,
+                        ProgressUnit.Item,
+                        StartIndex: 3,
+                        EndIndex: 4,
+                        Total: 10,
+                        Mode: null)
+                ])
+        };
+        await service.SaveAsync(browserSessionId, request, CancellationToken.None);
+        var currentJson = settings.ValuesFor(browserSessionId)[BrowserSessionConstants.AudioPlaybackStateSettingKey];
+        var legacyJson = currentJson
+            .Replace("\"progressMappings\"", "\"bookProgressMappings\"", StringComparison.Ordinal)
+            .Replace("\"itemId\"", "\"trackId\"", StringComparison.Ordinal);
+        await settings.ReplaceSettingsAsync(
+            browserSessionId,
+            new Dictionary<string, string> {
+                [BrowserSessionConstants.AudioPlaybackStateSettingKey] = legacyJson
+            },
+            [],
+            DateTimeOffset.UtcNow,
+            CancellationToken.None);
+
+        var loaded = await service.GetAsync(browserSessionId, CancellationToken.None);
+
+        var mapping = Assert.Single(loaded.Context?.ProgressMappings ?? []);
+        Assert.Equal(trackId, mapping.ItemId);
+        Assert.Equal(ownerId, mapping.CurrentEntityId);
+        Assert.Equal(3, mapping.StartIndex);
     }
 
     [Fact]
@@ -199,9 +248,11 @@ public sealed class MusicPlayerStateServiceTests {
 
         Assert.True(updated);
         Assert.Equal(0, entities.GetCount);
+        Assert.Equal(0, entities.PlaybackBatchCount);
 
         var loaded = await service.GetAsync(browserSessionId, CancellationToken.None);
-        Assert.Equal(3, entities.GetCount);
+        Assert.Equal(0, entities.GetCount);
+        Assert.Equal(1, entities.PlaybackBatchCount);
         Assert.Equal(1, loaded.Position);
         Assert.Equal(19, loaded.CurrentTime);
         Assert.False(loaded.Playing);
@@ -314,6 +365,8 @@ public sealed class MusicPlayerStateServiceTests {
         private readonly IReadOnlyDictionary<Guid, EntityCard> _tracks;
 
         public int GetCount { get; private set; }
+        public int ThumbnailBatchCount { get; private set; }
+        public int PlaybackBatchCount { get; private set; }
 
         public FakeEntityReadService(params Guid[] trackIds)
             : this(new HashSet<Guid>(), trackIds) {
@@ -374,8 +427,75 @@ public sealed class MusicPlayerStateServiceTests {
         public Task<EntityThumbnailBatchResponse> GetThumbnailsAsync(
             IReadOnlyList<Guid> ids,
             bool hideNsfw,
-            CancellationToken cancellationToken) =>
-            throw new NotSupportedException();
+            CancellationToken cancellationToken) {
+            ThumbnailBatchCount += 1;
+            var items = ids
+                .Where(_tracks.ContainsKey)
+                .Select(id => {
+                    var card = _tracks[id];
+                    var technical = card.Capabilities.OfType<TechnicalCapability>().Single();
+                    var flags = card.Capabilities.OfType<FlagsCapability>().Single();
+                    return new EntityThumbnail(
+                        id,
+                        EntityKind.AudioTrack,
+                        card.Title,
+                        card.ParentEntityId,
+                        card.SortOrder,
+                        null,
+                        null,
+                        ThumbnailHoverKind.None,
+                        null,
+                        [],
+                        [new EntityThumbnailMeta(EntityThumbnailMetaIcons.Duration, technical.Duration?.ToString() ?? "00:00:00")],
+                        null,
+                        false,
+                        false,
+                        false) {
+                        IsWanted = flags.IsWanted == true,
+                        HasSourceMedia = flags.IsWanted != true
+                    };
+                })
+                .ToArray();
+            return Task.FromResult(new EntityThumbnailBatchResponse(items));
+        }
+
+        public Task<IReadOnlyList<AudioPlaybackItem>> GetAudioPlaybackItemsAsync(
+            IReadOnlyList<Guid> ids,
+            bool hideNsfw,
+            CancellationToken cancellationToken) {
+            PlaybackBatchCount += 1;
+            var items = ids
+                .Where(_tracks.ContainsKey)
+                .Select(id => {
+                    var card = _tracks[id];
+                    var technical = card.Capabilities.OfType<TechnicalCapability>().Single();
+                    var flags = card.Capabilities.OfType<FlagsCapability>().Single();
+                    return new AudioPlaybackItem(
+                        id,
+                        card.Title,
+                        card.ParentEntityId,
+                        card.SortOrder,
+                        false,
+                        false,
+                        flags.IsWanted == true,
+                        flags.IsWanted != true,
+                        technical.Duration?.TotalSeconds,
+                        technical.BitRate,
+                        technical.SampleRate,
+                        technical.Channels,
+                        technical.Codec,
+                        null,
+                        null,
+                        null,
+                        null,
+                        null,
+                        0,
+                        null,
+                        DateTimeOffset.UnixEpoch);
+                })
+                .ToArray();
+            return Task.FromResult<IReadOnlyList<AudioPlaybackItem>>(items);
+        }
 
     }
 }

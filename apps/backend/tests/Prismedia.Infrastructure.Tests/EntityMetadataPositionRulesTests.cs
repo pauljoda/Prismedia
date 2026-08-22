@@ -49,7 +49,6 @@ public sealed class EntityMetadataPositionRulesTests {
     [InlineData("video-episode", "episode", 5)]
     [InlineData("video-episode", "absolute-episode", 6)]
     [InlineData("audio-track", "track", 7)]
-    [InlineData("book-page", "page", 8)]
     public void SortOrderUsesKindSpecificPositionPriority(string kindCode, string positionCode, int expected) {
         var positions = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase) {
             [positionCode] = expected

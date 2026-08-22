@@ -115,14 +115,8 @@ const _JOB_DEFINITIONS = [
     description: "Backfills missing grid-card thumbnail variants across the library.",
   },
   {
-    type: JOB_TYPE.generateBookPageThumbnail,
-    queueName: "book-page-thumbnail",
-    label: "Book Page Thumbnail",
-    description: "Generates thumbnails for comic book pages.",
-  },
-  {
     type: JOB_TYPE.generateBookCoverThumbnail,
-    queueName: "book-page-thumbnail",
+    queueName: "book-cover-thumbnail",
     label: "Book Cover Thumbnail",
     description: "Extracts and generates cover thumbnails for books and comics.",
   },

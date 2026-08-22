@@ -4,9 +4,9 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
-import type { BookProgressTrackMapping } from './bookProgressTrackMapping';
 import type { MusicPlayerContextAlbumCoverUrls } from './musicPlayerContextAlbumCoverUrls';
 import type { MusicPlayerContextPlaybackOwnerEntityKind } from './musicPlayerContextPlaybackOwnerEntityKind';
+import type { PlaybackProgressMapping } from './playbackProgressMapping';
 
 export interface MusicPlayerContext {
   /** @nullable */
@@ -27,7 +27,7 @@ export interface MusicPlayerContext {
   playbackOwnerTitle?: string | null;
   playbackOwnerEntityKind?: MusicPlayerContextPlaybackOwnerEntityKind;
   /** @nullable */
-  bookProgressMappings?: BookProgressTrackMapping[] | null;
+  progressMappings?: PlaybackProgressMapping[] | null;
   preservesQueueOrder?: boolean;
   supportsPlaybackRate?: boolean;
 }

@@ -5,7 +5,6 @@ const records: Record<string, EntityRouteRecord> = {
   book: { id: "book", kind: "book", parentEntityId: null },
   volume: { id: "volume", kind: "book-volume", parentEntityId: "book" },
   chapter: { id: "chapter", kind: "book-chapter", parentEntityId: "volume" },
-  page: { id: "page", kind: "book-page", parentEntityId: "chapter" },
   series: { id: "series", kind: "video-series", parentEntityId: null },
   season: { id: "season", kind: "video-season", parentEntityId: "series" },
 };
@@ -27,7 +26,4 @@ describe("entity route resolver", () => {
     await expect(resolveEntityHrefById("season", fetchRecord)).resolves.toBe("/series/series/seasons/season");
   });
 
-  it("resolves leaf entities to their nearest routable parent", async () => {
-    await expect(resolveEntityHrefById("page", fetchRecord)).resolves.toBe("/books/book/chapters/chapter");
-  });
 });

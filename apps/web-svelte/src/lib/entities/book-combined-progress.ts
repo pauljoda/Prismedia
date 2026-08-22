@@ -1,8 +1,14 @@
-import { CONSUMPTION_ACTIVITY_KIND, PROGRESS_UNIT, type ReaderModeCode } from "$lib/api/generated/codes";
-import type { BookProgressTrackMapping, EntityCapabilityProgressCapability } from "$lib/api/generated/model";
+import { PROGRESS_UNIT, type ReaderModeCode } from "$lib/api/generated/codes";
+import type { EntityCapabilityProgressCapability, PlaybackProgressMapping } from "$lib/api/generated/model";
 import type { BookChapterRow } from "$lib/entities/book-chapter-list";
 import { resolveAudiobookResume } from "$lib/entities/audiobook-playback";
 import { exactWebEpubResumeLocation } from "$lib/entities/epub-contents";
+import {
+  audioProgressUpdateForItem,
+  type AudioProgressUpdate,
+} from "$lib/player/audio-progress-mapping";
+
+type BookProgressTrackMapping = PlaybackProgressMapping;
 
 /** Saved book cursor normalized to both the whole readable rendition and its matched row. */
 export interface BookReadingPosition {
@@ -27,18 +33,8 @@ export interface BookCombinedLaunch {
   readerPageIndex: number | null;
 }
 
-/** Progress payload produced by an audiobook heartbeat. */
-export interface BookAudioProgressUpdate {
-  currentEntityId: string;
-  unit: BookProgressTrackMapping["unit"];
-  index: number;
-  total: number;
-  mode: BookProgressTrackMapping["mode"];
-  location: null;
-  completed: boolean | null;
-  activitySeconds: number | null;
-  activityKind: typeof CONSUMPTION_ACTIVITY_KIND.listening | undefined;
-}
+/** Progress payload produced by a book-owned audio heartbeat. */
+export type BookAudioProgressUpdate = AudioProgressUpdate;
 
 export interface BookProgressCursor {
   currentEntityId: string;
@@ -169,7 +165,7 @@ export function buildBookProgressMappings(
       const duration = durations[rowIndex] ?? 0;
       if (!row.audioTrack || duration <= 0 || total <= 0) return [];
       const mapping = {
-        trackId: row.audioTrack.id,
+        itemId: row.audioTrack.id,
         currentEntityId: bookId,
         unit: PROGRESS_UNIT.second,
         startIndex,
@@ -189,7 +185,7 @@ export function buildBookProgressMappings(
       const range = epubRange(row);
       if (!range) return [];
       return [{
-        trackId: row.audioTrack.id,
+        itemId: row.audioTrack.id,
         currentEntityId: bookId,
         unit: PROGRESS_UNIT.cfi,
         startIndex: Math.round(range.start * EPUB_PROGRESS_TOTAL),
@@ -202,7 +198,7 @@ export function buildBookProgressMappings(
     const pageCount = Math.max(0, Math.floor(row.readPageCount ?? 0));
     if (pageCount <= 0) return [];
     return [{
-      trackId: row.audioTrack.id,
+      itemId: row.audioTrack.id,
       currentEntityId: row.readTarget.chapterId,
       unit: PROGRESS_UNIT.page,
       startIndex: 0,
@@ -221,31 +217,13 @@ export function bookProgressUpdateForAudio(
   activitySeconds: number | null,
   completed: boolean,
 ): BookAudioProgressUpdate {
-  const start = Number(mapping.startIndex);
-  const end = Number(mapping.endIndex);
-  const total = Number(mapping.total);
-  const fraction = durationSeconds > 0 ? clampFraction(offsetSeconds / durationSeconds) : 0;
-  let index: number;
-
-  if (mapping.unit === PROGRESS_UNIT.page) {
-    index = Math.max(start, Math.min(end, Math.ceil(fraction * total) - 1));
-  } else {
-    index = Math.max(start, Math.min(end, Math.round(start + fraction * (end - start))));
-  }
-
-  return {
-    currentEntityId: mapping.currentEntityId,
-    unit: mapping.unit,
-    index,
-    total,
-    mode: mapping.mode,
-    location: null,
-    completed: completed ? true : null,
+  return audioProgressUpdateForItem(
+    mapping,
+    offsetSeconds,
+    durationSeconds,
     activitySeconds,
-    activityKind: activitySeconds && activitySeconds > 0
-      ? CONSUMPTION_ACTIVITY_KIND.listening
-      : undefined,
-  };
+    completed,
+  );
 }
 
 /** Maps the canonical Book cursor back into its matched audiobook part. */
@@ -258,13 +236,13 @@ export function resolveBookAudioResume(
   const mapping = resolveBookProgressMapping(mappings, cursor);
   if (!mapping) return null;
 
-  const track = rows.find((row) => row.audioTrack?.id === mapping.trackId)?.audioTrack;
+  const track = rows.find((row) => row.audioTrack?.id === mapping.itemId)?.audioTrack;
   if (!track) return null;
   const start = Number(mapping.startIndex);
   const end = Number(mapping.endIndex);
   const fraction = end > start ? clampFraction((cursor.index - start) / (end - start)) : 0;
   return {
-    trackId: mapping.trackId,
+    trackId: mapping.itemId,
     trackOffsetSeconds: runwayStart(fraction * Math.max(0, Number(track.duration ?? 0))),
   };
 }
@@ -303,7 +281,7 @@ export function legacyBookProgressPromotion(
   }
   const resume = resolveAudiobookResume(tracks, absoluteSeconds);
   if (!resume) return null;
-  const mapping = mappings.find((candidate) => candidate.trackId === resume.trackId);
+  const mapping = mappings.find((candidate) => candidate.itemId === resume.trackId);
   const track = tracks.find((candidate) => candidate.id === resume.trackId);
   const duration = Math.max(0, Number(track?.duration ?? 0));
   if (!mapping || !track || duration <= 0) return null;

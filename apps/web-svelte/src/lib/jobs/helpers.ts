@@ -23,7 +23,7 @@ export const queueIcons: Record<string, QueueIcon> = {
   "gallery-scan": FolderSearch,
   "book-scan": BookOpen,
   "image-thumbnail": Image,
-  "book-page-thumbnail": BookOpen,
+  "book-cover-thumbnail": BookOpen,
   "image-fingerprint": Fingerprint,
 };
 

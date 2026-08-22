@@ -21,7 +21,7 @@ public enum BookFormatTier {
     [Code("reflowable")]
     Reflowable = 20,
 
-    /// <summary>Lossless image-archive comic payload (CBZ/ZIP). Top tier for comics.</summary>
+    /// <summary>Lossless serialized-comic archive payload (CBZ/ZIP).</summary>
     [Code("archive")]
     Archive = 30
 }

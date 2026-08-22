@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { JOB_GRAPH_ORIGIN, JOB_GRAPH_STATUS } from "$lib/api/generated/codes";
+import { ENTITY_KIND, JOB_GRAPH_ORIGIN, JOB_GRAPH_STATUS, JOB_TYPE } from "$lib/api/generated/codes";
 import {
   buildJobsDashboard,
   groupJobGraphsByActivity,
@@ -82,34 +82,34 @@ describe("jobs dashboard adapter", () => {
   it("preserves job kind and status detail separately from the target label", () => {
     const job = mapJobRun({
       ...baseJob,
-      type: "generate-book-page-thumbnail",
+      type: JOB_TYPE.generateBookCoverThumbnail,
       status: "running",
       progress: 60,
       message: "Generating thumbnail",
-      targetKind: "book-page",
-      targetId: "page-14",
-      targetLabel: "14",
+      targetKind: ENTITY_KIND.book,
+      targetId: "book-14",
+      targetLabel: "Book 14",
     });
 
-    expect(job.jobType).toBe("generate-book-page-thumbnail");
-    expect(job.jobLabel).toBe("Book Page Thumbnail");
-    expect(job.jobDescription).toBe("Generates thumbnails for comic book pages.");
-    expect(job.queueLabel).toBe("Book Page Thumbnail");
-    expect(job.targetLabel).toBe("14");
+    expect(job.jobType).toBe(JOB_TYPE.generateBookCoverThumbnail);
+    expect(job.jobLabel).toBe("Book Cover Thumbnail");
+    expect(job.jobDescription).toBe("Extracts and generates cover thumbnails for books and comics.");
+    expect(job.queueLabel).toBe("Book Cover Thumbnail");
+    expect(job.targetLabel).toBe("Book 14");
     expect(job.statusMessage).toBe("Generating thumbnail");
   });
 
   it("groups visible live jobs by job kind", () => {
     const jobs = [
-      mapJobRun({ ...baseJob, id: "page-14", type: "generate-book-page-thumbnail", status: "running" }),
-      mapJobRun({ ...baseJob, id: "page-13", type: "generate-book-page-thumbnail", status: "queued" }),
+      mapJobRun({ ...baseJob, id: "book-14", type: JOB_TYPE.generateBookCoverThumbnail, status: "running" }),
+      mapJobRun({ ...baseJob, id: "book-13", type: JOB_TYPE.generateBookCoverThumbnail, status: "queued" }),
       mapJobRun({ ...baseJob, id: "probe", type: "probe-video", status: "queued" }),
     ];
 
     const groups = groupJobRunsByKind(jobs);
 
     expect(groups.map((group) => group.jobLabel)).toEqual([
-      "Book Page Thumbnail",
+      "Book Cover Thumbnail",
       "Video Probe",
     ]);
     expect(groups[0]).toMatchObject({
@@ -117,7 +117,7 @@ describe("jobs dashboard adapter", () => {
       waitingCount: 1,
       totalCount: 2,
     });
-    expect(groups[0].jobs.map((job) => job.id)).toEqual(["page-14", "page-13"]);
+    expect(groups[0].jobs.map((job) => job.id)).toEqual(["book-14", "book-13"]);
   });
 
   it("builds queue summaries and dashboard buckets from jobs", () => {

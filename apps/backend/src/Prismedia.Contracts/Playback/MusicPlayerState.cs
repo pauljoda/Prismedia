@@ -1,26 +1,76 @@
-using Prismedia.Contracts.Entities;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Contracts.Playback;
 
 /// <summary>
-/// Chapter-scoped conversion from one audiobook track into Prismedia's canonical book cursor.
+/// Converts one concrete playback item into its owning Entity's canonical progress cursor.
 /// </summary>
-/// <param name="TrackId">Concrete audiobook part.</param>
-/// <param name="CurrentEntityId">Book, readable chapter, or audio part stored as the cursor owner.</param>
+/// <param name="ItemId">Concrete item presented by the shared player.</param>
+/// <param name="CurrentEntityId">Entity stored as the canonical cursor owner.</param>
 /// <param name="Unit">Canonical unit stored by the shared progress capability.</param>
-/// <param name="StartIndex">Canonical index at the start of the audio part.</param>
-/// <param name="EndIndex">Canonical index at the end of the audio part.</param>
+/// <param name="StartIndex">Canonical index at the start of the playback item.</param>
+/// <param name="EndIndex">Canonical index at the end of the playback item.</param>
 /// <param name="Total">Canonical unit total for the owning cursor.</param>
-/// <param name="Mode">Reader layout to retain when audio advances a readable cursor.</param>
-public sealed record BookProgressTrackMapping(
-    Guid TrackId,
+/// <param name="Mode">Optional presentation mode retained when playback advances the cursor.</param>
+/// <param name="ResourceLocation">Optional portable resource location advanced within the item.</param>
+public sealed record PlaybackProgressMapping(
+    Guid ItemId,
     Guid CurrentEntityId,
     ProgressUnit Unit,
     int StartIndex,
     int EndIndex,
     int Total,
-    ReaderMode? Mode);
+    ReaderMode? Mode,
+    string? ResourceLocation = null);
+
+/// <summary>
+/// Compact, exact queue item consumed by every shared audio-player client. This is a
+/// playback projection rather than an Entity-kind DTO: any Entity accepted by the
+/// audio source endpoint can be represented without hydrating its full detail graph.
+/// </summary>
+/// <param name="Id">Playable Entity identifier.</param>
+/// <param name="Title">Display title.</param>
+/// <param name="ParentEntityId">Optional structural parent used as queue/library context.</param>
+/// <param name="SortOrder">Optional structural source order.</param>
+/// <param name="IsNsfw">Whether the item is marked NSFW.</param>
+/// <param name="IsOrganized">Whether file organization is complete.</param>
+/// <param name="IsWanted">Whether this is an unfulfilled request placeholder.</param>
+/// <param name="HasSourceMedia">Whether the Entity owns playable source media.</param>
+/// <param name="DurationSeconds">Exact probed duration in seconds.</param>
+/// <param name="BitRate">Optional probed bit rate.</param>
+/// <param name="SampleRate">Optional probed sample rate.</param>
+/// <param name="Channels">Optional probed channel count.</param>
+/// <param name="Codec">Optional probed codec.</param>
+/// <param name="EmbeddedArtist">Optional artist embedded in the source.</param>
+/// <param name="EmbeddedAlbum">Optional album embedded in the source.</param>
+/// <param name="SectionLabel">Optional source section or disc label.</param>
+/// <param name="WaveformPath">Optional generated waveform asset path.</param>
+/// <param name="Rating">Current user's rating.</param>
+/// <param name="AccessCount">Current user's access count.</param>
+/// <param name="LastActiveAt">Current user's latest activity timestamp.</param>
+/// <param name="CreatedAt">Library creation timestamp.</param>
+public sealed record AudioPlaybackItem(
+    Guid Id,
+    string Title,
+    Guid? ParentEntityId,
+    int? SortOrder,
+    bool IsNsfw,
+    bool IsOrganized,
+    bool IsWanted,
+    bool HasSourceMedia,
+    double? DurationSeconds,
+    int? BitRate,
+    int? SampleRate,
+    int? Channels,
+    string? Codec,
+    string? EmbeddedArtist,
+    string? EmbeddedAlbum,
+    string? SectionLabel,
+    string? WaveformPath,
+    int? Rating,
+    int AccessCount,
+    DateTimeOffset? LastActiveAt,
+    DateTimeOffset CreatedAt);
 
 /// <summary>
 /// Context labels and artwork fallbacks used by the global music player.
@@ -37,9 +87,9 @@ public sealed record BookProgressTrackMapping(
 /// </param>
 /// <param name="PlaybackOwnerTitle">Display title for <paramref name="PlaybackOwnerEntityId"/>.</param>
 /// <param name="PlaybackOwnerEntityKind">Typed kind of the playback owner; never inferred from the id.</param>
-/// <param name="BookProgressMappings">
-/// Optional chapter-scoped audio-to-reader mappings used by audiobook queues to update the Book's
-/// one shared progress cursor. Missing mappings leave an existing readable cursor untouched.
+/// <param name="ProgressMappings">
+/// Optional item-to-owner mappings used by the shared player to advance canonical Entity progress.
+/// Missing mappings leave the owner's existing progress cursor untouched.
 /// </param>
 /// <param name="PreservesQueueOrder">Whether the queue capability requires semantic source order.</param>
 /// <param name="SupportsPlaybackRate">Whether the queue capability permits variable-rate playback.</param>
@@ -53,14 +103,14 @@ public sealed record MusicPlayerContext(
     Guid? PlaybackOwnerEntityId = null,
     string? PlaybackOwnerTitle = null,
     EntityKind? PlaybackOwnerEntityKind = null,
-    IReadOnlyList<BookProgressTrackMapping>? BookProgressMappings = null,
+    IReadOnlyList<PlaybackProgressMapping>? ProgressMappings = null,
     bool PreservesQueueOrder = false,
     bool SupportsPlaybackRate = false);
 
 /// <summary>
 /// Persisted browser-scoped music player state returned to the web client.
 /// </summary>
-/// <param name="Tracks">Hydrated queue tracks in source queue order, with missing/deleted tracks filtered out.</param>
+/// <param name="Tracks">Compact queue tracks in source order, with missing/deleted tracks filtered out.</param>
 /// <param name="Order">Indices into <paramref name="Tracks"/> representing the current play order.</param>
 /// <param name="Position">Index into <paramref name="Order"/> for the current track, or -1 when the queue is empty.</param>
 /// <param name="CurrentTime">Current playback time in seconds for the restored track.</param>
@@ -73,7 +123,7 @@ public sealed record MusicPlayerContext(
 /// <param name="CollapsedSide">Horizontal side used by the mini player.</param>
 /// <param name="Context">Optional now-playing context labels and artwork.</param>
 public sealed record MusicPlayerStateResponse(
-    IReadOnlyList<EntityCard> Tracks,
+    IReadOnlyList<AudioPlaybackItem> Tracks,
     IReadOnlyList<int> Order,
     int Position,
     double CurrentTime,

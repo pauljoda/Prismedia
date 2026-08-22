@@ -9,7 +9,6 @@ export type BookAcquisitionProfileSaveRequestAllowedFormatsItem = typeof BookAcq
 
 
 export const BookAcquisitionProfileSaveRequestAllowedFormatsItem = {
-  'image-archive': 'image-archive',
   epub: 'epub',
   pdf: 'pdf',
   audio: 'audio',

@@ -16,8 +16,7 @@ internal sealed class BookKindMapper(PrismediaDbContext db) : IEntityKindMapper 
             row.Id,
             row.Title,
             detail?.BookType ?? BookType.Book,
-            detail?.CoverPageEntityId,
-            detail?.Format ?? BookFormat.ImageArchive,
+            detail?.Format ?? BookFormat.Epub,
             parentEntityId: row.ParentEntityId,
             sortOrder: row.SortOrder);
     }

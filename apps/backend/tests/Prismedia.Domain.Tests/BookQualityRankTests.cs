@@ -11,7 +11,6 @@ namespace Prismedia.Domain.Tests;
 public sealed class BookQualityRankTests {
     [Theory]
     [InlineData(BookFormat.Epub, BookFormatTier.Reflowable)]
-    [InlineData(BookFormat.ImageArchive, BookFormatTier.Archive)]
     [InlineData(BookFormat.Pdf, BookFormatTier.Fixed)]
     public void TierForMapsEveryImportableFormat(BookFormat format, BookFormatTier expected) =>
         Assert.Equal(expected, BookQualityRank.TierFor(format));

@@ -24,9 +24,6 @@ public enum EntityKind {
     /// <summary>Structural book chapter.</summary>
     BookChapter,
 
-    /// <summary>Structural book page.</summary>
-    BookPage,
-
     /// <summary>Released serialized-comic chapter, issue, special, or one-shot.</summary>
     ComicInstallment,
 

@@ -1,5 +1,5 @@
 import { CAPABILITY_KIND } from "$lib/api/generated/codes";
-import type { BookProgressTrackMapping } from "$lib/api/generated/model";
+import type { PlaybackProgressMapping } from "$lib/api/generated/model";
 import type { EntityCardFull } from "$lib/api/entities";
 import { updateEntityProgress } from "$lib/api/consumption";
 import { getCapability } from "$lib/api/capabilities";
@@ -14,7 +14,7 @@ import {
 export function useLegacyBookProgressMigration(
   getBook: () => EntityCardFull | null,
   getRows: () => readonly BookChapterRow[],
-  getMappings: () => readonly BookProgressTrackMapping[],
+  getMappings: () => readonly PlaybackProgressMapping[],
   refresh: (bookId: string, options: { showLoading: boolean }) => Promise<void>,
 ): void {
   let migrationKey: string | null = null;
@@ -36,7 +36,7 @@ export function useLegacyBookProgressMigration(
       promotion,
     ) || !promotion) return;
 
-    const key = `${book.id}:${promotion.mapping.trackId}:${promotion.update.index}`;
+    const key = `${book.id}:${promotion.mapping.itemId}:${promotion.update.index}`;
     if (migrationKey === key) return;
     migrationKey = key;
     void updateEntityProgress(book.id, promotion.update)

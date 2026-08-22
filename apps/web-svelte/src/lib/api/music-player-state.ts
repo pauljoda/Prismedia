@@ -9,7 +9,7 @@ import type {
   UpdateMusicPlayerProgressRequest,
   UpdateMusicPlayerStateRequest,
 } from "$lib/api/generated/model";
-import { entityCardToAudioTrackListItem } from "$lib/entities/audio-track-items";
+import { audioPlaybackItemToTrackItem } from "$lib/entities/audio-track-items";
 import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
 import type { MiniPlayerSide, PlaybackContext, RepeatMode } from "$lib/stores/audio-playback.svelte";
 
@@ -58,7 +58,7 @@ function albumCoverUrlsForWire(
 
 function fromResponse(response: MusicPlayerStateResponse): RestoredMusicPlayerState {
   return {
-    queue: response.tracks.map(entityCardToAudioTrackListItem),
+    queue: response.tracks.map(audioPlaybackItemToTrackItem),
     order: response.order.map(numberValue),
     position: numberValue(response.position),
     currentTime: numberValue(response.currentTime),
@@ -80,7 +80,7 @@ function fromResponse(response: MusicPlayerStateResponse): RestoredMusicPlayerSt
           playbackOwnerEntityId: response.context.playbackOwnerEntityId,
           playbackOwnerTitle: response.context.playbackOwnerTitle,
           playbackOwnerEntityKind: response.context.playbackOwnerEntityKind,
-          bookProgressMappings: response.context.bookProgressMappings,
+          progressMappings: response.context.progressMappings,
           preservesQueueOrder: response.context.preservesQueueOrder,
           supportsPlaybackRate: response.context.supportsPlaybackRate,
         }
@@ -112,7 +112,7 @@ function toRequest(state: PersistMusicPlayerState): UpdateMusicPlayerStateReques
           playbackOwnerEntityId: state.context.playbackOwnerEntityId ?? null,
           playbackOwnerTitle: state.context.playbackOwnerTitle ?? null,
           playbackOwnerEntityKind: state.context.playbackOwnerEntityKind ?? undefined,
-          bookProgressMappings: state.context.bookProgressMappings ?? null,
+          progressMappings: state.context.progressMappings ?? null,
           preservesQueueOrder: state.context.preservesQueueOrder ?? false,
           supportsPlaybackRate: state.context.supportsPlaybackRate ?? false,
         }

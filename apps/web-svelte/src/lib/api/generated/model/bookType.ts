@@ -10,7 +10,5 @@ export type BookType = typeof BookType[keyof typeof BookType];
 
 export const BookType = {
   book: 'book',
-  comic: 'comic',
-  manga: 'manga',
   novel: 'novel',
 } as const;

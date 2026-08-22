@@ -315,7 +315,5 @@ public sealed partial class AcquisitionHintApplier {
             cancellationToken)
         || await db.CollectionDetails.AsNoTracking().AnyAsync(row => row.CoverItemEntityId == entityId, cancellationToken)
         || await db.GalleryDetails.AsNoTracking().AnyAsync(row => row.CoverImageEntityId == entityId, cancellationToken)
-        || await db.BookDetails.AsNoTracking().AnyAsync(row => row.CoverPageEntityId == entityId, cancellationToken)
-        || await db.BookChapterDetails.AsNoTracking().AnyAsync(row => row.CoverPageEntityId == entityId, cancellationToken)
         || await db.Entities.AsNoTracking().AnyAsync(row => row.ParentEntityId == entityId, cancellationToken);
 }

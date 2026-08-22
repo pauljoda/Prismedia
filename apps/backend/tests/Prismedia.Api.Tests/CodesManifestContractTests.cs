@@ -80,13 +80,22 @@ public sealed class CodesManifestContractTests {
     }
 
     [Fact]
+    public void EntityStatManifestCarriesTheCachedPageCountCode() {
+        var stats = CodesManifest.Build().EntityStatCodes;
+
+        Assert.Contains(stats, stat =>
+            stat.Name == nameof(EntityStatCodes.Pages) &&
+            stat.Value == EntityStatCodes.Pages);
+    }
+
+    [Fact]
     public void EntityKindManifestCarriesTheRegistryFileDeletionPolicy() {
         var kinds = CodesManifest.Build().EntityKinds.ToDictionary(kind => kind.Code);
 
         Assert.True(kinds[EntityKind.Audio.ToCode()].SupportsFileDeletion);
         Assert.True(kinds[EntityKind.VideoSeries.ToCode()].SupportsFileDeletion);
         Assert.False(kinds[EntityKind.BookChapter.ToCode()].SupportsFileDeletion);
-        Assert.False(kinds[EntityKind.BookPage.ToCode()].SupportsFileDeletion);
+        Assert.DoesNotContain(kinds.Keys, code => code.Equals("book-page", StringComparison.Ordinal));
         Assert.False(kinds[EntityKind.Collection.ToCode()].SupportsFileDeletion);
     }
 
@@ -195,6 +204,7 @@ public sealed class CodesManifestContractTests {
         Assert.True(kinds[EntityKind.Movie.ToCode()].SupportsAtomicMediaUpgrade);
         Assert.False(kinds[EntityKind.VideoSeason.ToCode()].SupportsAtomicMediaUpgrade);
         Assert.True(kinds[EntityKind.Book.ToCode()].ManualAcquisition.SupportsReplacement);
+        Assert.True(kinds[EntityKind.ComicInstallment.ToCode()].ManualAcquisition.SupportsReplacement);
         Assert.True(kinds[EntityKind.AudioLibrary.ToCode()].ManualAcquisition.SupportsReplacement);
         Assert.False(kinds[EntityKind.VideoSeason.ToCode()].ManualAcquisition.SupportsReplacement);
         Assert.True(kinds[EntityKind.VideoSeason.ToCode()].ManualAcquisition.SupportsUpload);

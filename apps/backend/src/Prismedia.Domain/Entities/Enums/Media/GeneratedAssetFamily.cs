@@ -17,10 +17,6 @@ public enum GeneratedAssetFamily {
     [Code("image")]
     Image,
 
-    /// <summary>Rendered book-page thumbnails.</summary>
-    [Code("book-page")]
-    BookPage,
-
     /// <summary>Audio waveform assets.</summary>
     [Code("audio-track")]
     AudioTrack

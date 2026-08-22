@@ -69,7 +69,6 @@ public interface IMediaAssetGenerator {
     string TrickplayTileDir(Guid entityId, int width);
     string ImageThumbnailPath(Guid entityId);
     string ImagePreviewPath(Guid entityId);
-    string BookPageThumbnailPath(Guid entityId);
     string BookCoverThumbnailPath(Guid entityId);
     string AudioWaveformPath(Guid entityId);
 
@@ -79,7 +78,6 @@ public interface IMediaAssetGenerator {
     string TrickplayPlaylistUrl(Guid entityId, int width);
     string ImageThumbnailUrl(Guid entityId);
     string ImagePreviewUrl(Guid entityId);
-    string BookPageThumbnailUrl(Guid entityId);
     string BookCoverThumbnailUrl(Guid entityId);
     string AudioWaveformUrl(Guid entityId);
 }

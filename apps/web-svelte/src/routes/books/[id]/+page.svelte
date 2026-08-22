@@ -1,7 +1,6 @@
 <script lang="ts">
   import {
     BOOK_FORMAT,
-    BOOK_TYPE,
     CAPABILITY_KIND,
     PROGRESS_UNIT,
     READER_MODE,
@@ -43,6 +42,7 @@
   import {
     bookEntityProgressDisplay,
     orderedBookChildren,
+    persistedPageCount,
     singleFileBookProgressDisplay,
     type BookEntityProgressDisplay,
     type BookReaderChapter,
@@ -121,7 +121,6 @@
   let relationshipTags = $state<EntityDetailTag[]>([]);
   let bookRenditionAcquisitions = $state.raw<AcquisitionDetail[]>([]);
   let bookRenditionMonitors = $state.raw<MonitorView[]>([]);
-  let selectedChapterId: string | null = $state(null);
   let epubContents = $state.raw<EpubContentsEntry[]>([]);
   let artworkPalette = $state.raw<ArtworkPalette | null>(null);
   let chapterMappings = $state.raw<BookChapterAudioMapping[]>([]);
@@ -171,30 +170,12 @@
   const singleFileInProgress = $derived(!!singleFileProgress?.currentEntityId && !singleFileProgress?.completedAt);
   // Single-file books have no chapter entities, so they need their own progress-panel display.
   const singleFileProgressDisplay = $derived(isSingleFileBook ? singleFileBookProgressDisplay(book) : null);
-  const peopleLabel = $derived(
-    bookType === BOOK_TYPE.comic || bookType === BOOK_TYPE.manga ? "Artists" : "People",
-  );
-  const defaultCreditRole = $derived(
-    bookType === BOOK_TYPE.comic || bookType === BOOK_TYPE.manga ? CREDIT_ROLE.artist : CREDIT_ROLE.writer,
-  );
+  const peopleLabel = "People";
+  const defaultCreditRole = CREDIT_ROLE.writer;
+  const pageCount = $derived(persistedPageCount(book));
   const bookTitle = $derived(book?.title ?? "Book");
   const chapterSummaries = $derived(combineChapterSummaries(chapterDetails, progressChapterSummary));
   const progressDisplay = $derived(bookEntityProgressDisplay(book, chapterSummaries));
-  const selectedChapter = $derived(
-    chapterDetails.find((chapter) => chapter.thumbnail.id === selectedChapterId) ?? chapterDetails[0] ?? null,
-  );
-  const selectedProgress = $derived(
-    progressDisplay?.chapterId === selectedChapter?.thumbnail.id ? progressDisplay : null,
-  );
-  const readerPageCount = $derived(selectedChapter?.summary.pageCount ?? 0);
-  // Started/completed come straight from the progress capability (same source the grid card uses),
-  // so the label is correct even for volume-only comics whose in-progress chapter isn't a direct child.
-  const comicProgress = $derived(book && !isSingleFileBook ? getCapability(book.capabilities, CAPABILITY_KIND.progress) : undefined);
-  const comicStarted = $derived(!!comicProgress?.currentEntityId);
-  const comicCompleted = $derived(!!comicProgress?.completedAt);
-  const primaryReadLabel = $derived(
-    comicCompleted ? "Re-read" : comicStarted ? "Resume" : "Read",
-  );
   const audiobookTracks = $derived(book ? audiobookTrackItems(book) : []);
   const bookConsumption = $derived(
     book ? getCapability(book.capabilities, CAPABILITY_KIND.consumption) : undefined,
@@ -340,11 +321,7 @@
   const chapterListeningProgressLabel = $derived(
     canonicalPositionLabel ?? (currentAudiobookTrackId ? "Current part" : null),
   );
-  const hasReadableContent = $derived(
-    isSingleFileBook ||
-      (bookMetadata?.format === BOOK_FORMAT.imageArchive &&
-        (readerPageCount > 0 || chapterDetails.length > 0 || volumeCards.length > 0)),
-  );
+  const hasReadableContent = $derived(isSingleFileBook);
   const card = $derived.by((): EntityDetailCardFull | null => {
     if (!book) return null;
     return {
@@ -388,15 +365,6 @@
       actions.push({
         id: "read-book",
         label: canonicalCompleted ? "Re-read" : canonicalPercent > 0 ? "Resume" : "Read",
-        icon: Play,
-        iconFill: "currentColor",
-        variant: "primary",
-        onClick: continueReading,
-      });
-    } else if (hasReadableContent) {
-      actions.push({
-        id: "read-book",
-        label: primaryReadLabel,
         icon: Play,
         iconFill: "currentColor",
         variant: "primary",
@@ -542,8 +510,6 @@
       ? mapBookContentsEntries(nextContents)
       : [];
 
-    const nextProgress = bookEntityProgressDisplay(nextBook, combineChapterSummaries(chapters, progressSummary));
-    selectedChapterId = nextProgress?.chapterId ?? chapters[0]?.thumbnail.id ?? null;
     return nextBook;
   }
 
@@ -692,51 +658,18 @@
 
     if (detail.kind !== ENTITY_KIND.bookChapter) return null;
 
-    const pages = orderedBookChildren(detail, ENTITY_KIND.bookPage);
     const sortOrder = Number(detail.sortOrder ?? chapters.length);
     return {
       id: detail.id,
       title: detail.title,
       sortOrder: Number.isFinite(sortOrder) ? sortOrder : chapters.length,
-      pageCount: pages.length,
+      pageCount: persistedPageCount(detail),
     };
   }
 
   /** Cancel stops the download only — the wanted placeholder stays, so refresh in place. */
   function handleAcquisitionCancelled() {
     void detail.reload({ showLoading: false });
-  }
-
-  function openSelectedReader() {
-    if (!book) return;
-    // In progress: resume where they left off (the reader resolves the saved chapter), regardless
-    // of which chapter is selected.
-    if (comicStarted && !comicCompleted) {
-      void goto(bookReaderHref({
-        bookId: book.id,
-        kind: "book",
-        id: book.id,
-        returnId: book.id,
-        command: "resume",
-      }));
-      return;
-    }
-    // Starting fresh (or re-reading): open the selected direct chapter, else the book's first.
-    if (selectedChapter) {
-      void goto(bookReaderHref({
-        bookId: book.id,
-        kind: "chapter",
-        id: selectedChapter.thumbnail.id,
-        returnId: book.id,
-      }));
-      return;
-    }
-    void goto(bookReaderHref({
-      bookId: book.id,
-      kind: "book",
-      id: book.id,
-      returnId: book.id,
-    }));
   }
 
   function openSingleFileReader() {
@@ -758,7 +691,7 @@
       playbackOwnerEntityId: book.id,
       playbackOwnerTitle: book.title,
       playbackOwnerEntityKind: ENTITY_KIND.book,
-      bookProgressMappings,
+      progressMappings: bookProgressMappings,
       preservesQueueOrder: audioPlayback.preservesQueueOrder,
       supportsPlaybackRate: audioPlayback.supportsPlaybackRate,
     };
@@ -854,9 +787,7 @@
     }
     if (isSingleFileBook) {
       openSingleFileReader();
-      return;
     }
-    openSelectedReader();
   }
 
   function continueCombined() {
@@ -902,7 +833,7 @@
   async function startListeningOver() {
     const firstTrack = audiobookTracks[0];
     const firstMapping = firstTrack
-      ? bookProgressMappings.find((mapping) => mapping.trackId === firstTrack.id)
+      ? bookProgressMappings.find((mapping) => mapping.itemId === firstTrack.id)
       : null;
     if (!book || !firstTrack || !firstMapping || listeningBusy) return;
     listeningBusy = true;
@@ -1038,7 +969,7 @@
   <title>{book?.title ?? "Book"} · Prismedia</title>
 </svelte:head>
 
-<div class="book-page">
+<div class="book-detail-page">
   <EntityDetailPageState
     loadState={detail.loadState}
     errorMessage={detail.errorMessage}
@@ -1071,10 +1002,10 @@
           <span class="meta-item">
             {chapterDetails.length} chapter{chapterDetails.length === 1 ? "" : "s"}
           </span>
+        {/if}
+        {#if pageCount > 0}
           <span class="meta-sep"></span>
-          <span class="meta-item">
-            {chapterDetails.reduce((total, chapter) => total + chapter.summary.pageCount, 0)} pages
-          </span>
+          <span class="meta-item">{pageCount} page{pageCount === 1 ? "" : "s"}</span>
         {/if}
         {#if bookActivityLabel}
           <span class="meta-sep"></span>
@@ -1245,7 +1176,7 @@
 </div>
 
 <style>
-  .book-page {
+  .book-detail-page {
     display: grid;
     gap: 1.25rem;
     padding: 0;

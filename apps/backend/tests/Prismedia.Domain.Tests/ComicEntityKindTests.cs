@@ -4,9 +4,9 @@ using Prismedia.Domain.Media;
 
 namespace Prismedia.Domain.Tests;
 
-public sealed class SerializedComicEntityKindTests {
+public sealed class ComicEntityKindTests {
     [Fact]
-    public void SerializedComicHierarchyUsesTheSharedOrderedSequenceTopology() {
+    public void ComicHierarchyUsesTheSharedOrderedSequenceTopology() {
         var series = EntityKindRegistry.Describe(EntityKind.ComicSeries);
         var volume = EntityKindRegistry.Describe(EntityKind.ComicVolume);
         var installment = EntityKindRegistry.Describe(EntityKind.ComicInstallment);
@@ -47,7 +47,7 @@ public sealed class SerializedComicEntityKindTests {
     }
 
     [Fact]
-    public void SerializedComicDefinitionsExposeSeriesMetadataAndInstallmentSubtype() {
+    public void ComicDefinitionsExposeSeriesMetadataAndInstallmentSubtype() {
         var series = new ComicSeries(Guid.NewGuid(), "Witch Hat Atelier", "releasing");
         var installment = new ComicInstallment(
             Guid.NewGuid(),
@@ -69,7 +69,7 @@ public sealed class SerializedComicEntityKindTests {
     }
 
     [Fact]
-    public void SerializedComicRequestsAllowCollectedAndDirectInstallmentChildren() {
+    public void ComicRequestsAllowCollectedAndDirectInstallmentChildren() {
         var seriesRequest = Assert.Single(EntityKindRegistry.Describe(EntityKind.ComicSeries).RequestKinds);
         var volumeRequest = Assert.Single(EntityKindRegistry.Describe(EntityKind.ComicVolume).RequestKinds);
         var installmentRequest = Assert.Single(EntityKindRegistry.Describe(EntityKind.ComicInstallment).RequestKinds);
@@ -95,7 +95,7 @@ public sealed class SerializedComicEntityKindTests {
     }
 
     [Fact]
-    public void SerializedComicAcquisitionProfileUsesArchivePlacementAndComicScanning() {
+    public void ComicAcquisitionProfileUsesArchivePlacementAndComicScanning() {
         var profile = EntityKindRegistry.Describe(EntityKind.ComicSeries).AcquisitionProfile;
 
         Assert.NotNull(profile);

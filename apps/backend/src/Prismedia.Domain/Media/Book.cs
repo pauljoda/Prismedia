@@ -2,7 +2,6 @@ using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
 using BookMetadataDocumentCapability = Prismedia.Contracts.Entities.BookMetadataCapability;
 using ContractCapability = Prismedia.Contracts.Entities.EntityCapability;
-using CoverSelectionDocumentCapability = Prismedia.Contracts.Entities.CoverSelectionCapability;
 using ThumbnailMetaIcons = Prismedia.Contracts.Entities.EntityThumbnailMetaIcons;
 
 namespace Prismedia.Domain.Media;
@@ -30,12 +29,15 @@ public sealed class BookEntityKindDefinition() : EntityKindDefinition<Book>(
         identification: new(AutoIdentifySelectorKind.Book, enumeratesChildren: true),
         manualAcquisition: EntityManualAcquisitionPolicy.UploadAndReplacement,
         engagement: new(EntityEngagementMode.Reading),
-        catalogVisibility: new(
-            parentExclusions: [new(EntityKind.Book, EntityCatalogSurface.KindBrowse)]),
         libraryVisibility: EntityLibraryVisibilityPolicy.DirectRoot,
         supportsFileDeletion: true,
         upgradeMode: EntityUpgradeMode.AtomicBookFile),
-    defaultCapabilities: static () => [new CapabilityProgress(), new CapabilityConsumption()]),
+    defaultCapabilities: static () =>
+    [
+        new CapabilityStats(),
+        new CapabilityProgress(),
+        new CapabilityConsumption()
+    ]),
     IAudioPlaybackOwnerKindDefinition {
     /// <inheritdoc />
     public AudioPlaybackPolicy AudioPlaybackPolicy { get; } = new(
@@ -48,7 +50,7 @@ public sealed class BookEntityKindDefinition() : EntityKindDefinition<Book>(
 
     /// <inheritdoc />
     public override EntityStructurePolicy StructurePolicy { get; } =
-        EntityStructurePolicy.RootOrChildOf(EntityKind.BookAuthor, EntityKind.Book);
+        EntityStructurePolicy.RootOrChildOf(EntityKind.BookAuthor);
 
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;
@@ -57,13 +59,12 @@ public sealed class BookEntityKindDefinition() : EntityKindDefinition<Book>(
     public override IReadOnlyList<EntityStructuralCountDefinition> StructuralThumbnailCounts =>
     [
         new(EntityKind.BookVolume, 1, ThumbnailMetaIcons.Volume),
-        new(EntityKind.BookChapter, 2, ThumbnailMetaIcons.Chapter),
-        new(EntityKind.BookPage, 3, ThumbnailMetaIcons.Page)
+        new(EntityKind.BookChapter, 2, ThumbnailMetaIcons.Chapter)
     ];
 
     /// <inheritdoc />
     public override IReadOnlyList<Type> ProjectedCapabilityTypes =>
-        [typeof(BookMetadataDocumentCapability), typeof(CoverSelectionDocumentCapability)];
+        [typeof(BookMetadataDocumentCapability)];
 
     /// <inheritdoc />
     public override IReadOnlyList<RequestKindDescriptor> RequestKinds =>
@@ -102,33 +103,28 @@ public sealed class BookEntityKindDefinition() : EntityKindDefinition<Book>(
     protected override IReadOnlyList<ContractCapability> ProjectCapabilities(
         Book entity,
         EntityKindProjectionContext context) =>
-        [
-            new BookMetadataDocumentCapability(entity.BookType, entity.Format),
-            new CoverSelectionDocumentCapability(entity.CoverPageId)
-        ];
+        [new BookMetadataDocumentCapability(entity.BookType, entity.Format)];
 }
 
 /// <summary>
-/// Domain model for a book, comic, manga, or other page-based media item.
+/// Domain model for a prose book published as one work. Chapters are navigation metadata within
+/// that work; serialized comics use their separate series/volume/installment aggregate.
 /// </summary>
 public sealed class Book : Entity<BookEntityKindDefinition> {
     public Book(
         Guid id,
         string title,
         BookType bookType,
-        Guid? coverPageId,
-        BookFormat format = BookFormat.ImageArchive,
+        BookFormat format = BookFormat.Epub,
         IEnumerable<EntityCapability>? capabilities = null,
         Guid? parentEntityId = null,
         int? sortOrder = null)
         : base(id, title, capabilities, parentEntityId: parentEntityId, sortOrder: sortOrder) {
         BookType = bookType;
-        CoverPageId = coverPageId;
         Format = format;
     }
 
     public BookType BookType { get; private set; }
-    public Guid? CoverPageId { get; private set; }
 
     /// <summary>
     /// Physical format of the book, which selects the reader and detail presentation.

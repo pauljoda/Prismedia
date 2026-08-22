@@ -9,7 +9,6 @@ export type BookFormat = typeof BookFormat[keyof typeof BookFormat];
 
 
 export const BookFormat = {
-  'image-archive': 'image-archive',
   epub: 'epub',
   pdf: 'pdf',
   audio: 'audio',

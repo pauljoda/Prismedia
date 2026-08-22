@@ -164,6 +164,7 @@ public sealed record RequestKindManifestEntry(
 /// <param name="SettingKeys">App setting keys.</param>
 /// <param name="ProblemCodes">Machine-readable API problem codes.</param>
 /// <param name="ThumbnailMetaIcons">Stable compact-thumbnail metadata icon codes.</param>
+/// <param name="EntityStatCodes">Prismedia-owned persisted statistic codes.</param>
 public sealed record CodesManifest(
     IReadOnlyDictionary<string, IReadOnlyList<CodeEntry>> Enums,
     IReadOnlyDictionary<string, CodeFamilyManifestEntry> CodeFamilies,
@@ -173,7 +174,8 @@ public sealed record CodesManifest(
     IReadOnlyList<ConstantEntry> ExternalIdProviders,
     IReadOnlyList<ConstantEntry> SettingKeys,
     IReadOnlyList<ConstantEntry> ProblemCodes,
-    IReadOnlyList<ConstantEntry> ThumbnailMetaIcons) {
+    IReadOnlyList<ConstantEntry> ThumbnailMetaIcons,
+    IReadOnlyList<ConstantEntry> EntityStatCodes) {
     /// <summary>Reflects the current backend registries into a fresh manifest.</summary>
     public static CodesManifest Build() {
         var enums = BuildEnums();
@@ -189,7 +191,8 @@ public sealed record CodesManifest(
                 .Select(entry => new ConstantEntry(entry.Key, entry.Value.Key))
                 .ToArray(),
             ReflectConstants(typeof(Contracts.System.ApiProblemCodes)),
-            ReflectConstants(typeof(EntityThumbnailMetaIcons)));
+            ReflectConstants(typeof(EntityThumbnailMetaIcons)),
+            ReflectConstants(typeof(EntityStatCodes)));
     }
 
     private static IReadOnlyDictionary<string, IReadOnlyList<CodeEntry>> BuildEnums() {

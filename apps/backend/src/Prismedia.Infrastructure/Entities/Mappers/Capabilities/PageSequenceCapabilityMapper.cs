@@ -5,7 +5,10 @@ using Prismedia.Infrastructure.Persistence;
 
 namespace Prismedia.Infrastructure.Entities.Mappers.Capabilities;
 
-/// <summary>Hydrates the generic page-sequence summary from a persisted, source-backed manifest.</summary>
+/// <summary>
+/// Hydrates the generic page-sequence summary from a persisted, source-backed manifest and its
+/// scan-maintained page-count statistic. Full manifest entries are loaded only by the reader.
+/// </summary>
 internal sealed class PageSequenceCapabilityMapper(PrismediaDbContext db) : IEntityCapabilityMapper {
     /// <inheritdoc />
     public async Task HydrateAsync(Entity entity, CancellationToken cancellationToken) {
@@ -17,20 +20,18 @@ internal sealed class PageSequenceCapabilityMapper(PrismediaDbContext db) : IEnt
             return;
         }
 
-        var ordinals = await db.EntityPageEntries.AsNoTracking()
-            .Where(row => row.EntityId == entity.Id)
-            .OrderBy(row => row.Ordinal)
-            .Select(row => row.Ordinal)
-            .ToArrayAsync(cancellationToken);
-        if (ordinals.Length == 0 ||
-            ordinals.Where((ordinal, index) => ordinal != index).Any() ||
-            header.CoverOrdinal is < 0 || header.CoverOrdinal >= ordinals.Length) {
+        var pageCount = await db.EntityStats.AsNoTracking()
+            .Where(row => row.EntityId == entity.Id && row.Code == EntityStatCodes.Pages)
+            .Select(row => (int?)row.Value)
+            .SingleOrDefaultAsync(cancellationToken);
+        if (pageCount is null or <= 0 ||
+            header.CoverOrdinal is < 0 || header.CoverOrdinal >= pageCount) {
             return;
         }
 
         entity.RemoveCapability<CapabilityPageSequence>();
         entity.AddCapability(new CapabilityPageSequence(
-            ordinals.Length,
+            pageCount.Value,
             header.Direction,
             header.DefaultMode,
             header.CoverOrdinal));

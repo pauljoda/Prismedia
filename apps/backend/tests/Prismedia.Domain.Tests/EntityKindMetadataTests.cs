@@ -5,6 +5,14 @@ namespace Prismedia.Domain.Tests;
 
 public sealed class EntityKindMetadataTests {
     [Fact]
+    public void PagesAreResourcesRatherThanEntityKindsOrProcessingJobs() {
+        Assert.DoesNotContain(EntityKindRegistry.All, definition => definition.Code == "book-page");
+        Assert.DoesNotContain(
+            CodecRegistry.Get<JobType>().Codes,
+            code => code == "generate-book-page-thumbnail");
+    }
+
+    [Fact]
     public void EveryEntityKindHasExactlyOneDiscoveredDefinition() {
         var expectedKinds = Enum.GetValues<EntityKind>();
         var definitions = EntityKindRegistry.All;
@@ -110,7 +118,6 @@ public sealed class EntityKindMetadataTests {
     [InlineData(EntityKind.VideoEpisode, true)]
     [InlineData(EntityKind.VideoSeason, true)]
     [InlineData(EntityKind.VideoSeries, true)]
-    [InlineData(EntityKind.BookPage, false)]
     [InlineData(EntityKind.Collection, false)]
     [InlineData(EntityKind.Person, false)]
     [InlineData(EntityKind.Studio, false)]
@@ -183,10 +190,10 @@ public sealed class EntityKindMetadataTests {
             .ToArray();
 
         Assert.Equal(
-            [EntityKind.AudioLibrary, EntityKind.Book, EntityKind.Movie, EntityKind.Video],
+            [EntityKind.AudioLibrary, EntityKind.Book, EntityKind.ComicInstallment, EntityKind.Movie, EntityKind.Video],
             replaceableKinds);
         Assert.Equal(
-            [EntityKind.AudioLibrary, EntityKind.Book, EntityKind.Movie, EntityKind.Video, EntityKind.VideoSeason],
+            [EntityKind.AudioLibrary, EntityKind.Book, EntityKind.ComicInstallment, EntityKind.Movie, EntityKind.Video, EntityKind.VideoSeason],
             uploadableKinds);
         Assert.All(
             EntityKindRegistry.All.Where(definition => definition.ManualAcquisition.SupportsReplacement),
@@ -250,7 +257,6 @@ public sealed class EntityKindMetadataTests {
     [Theory]
     [InlineData(EntityKind.AudioTrack, JobType.GenerateAudioWaveform)]
     [InlineData(EntityKind.Image, JobType.GenerateImageThumbnail)]
-    [InlineData(EntityKind.BookPage, JobType.GenerateBookPageThumbnail)]
     public void DefinitionOwnedAutomaticPreviewJobsRespectTheSetting(
         EntityKind kind,
         JobType expectedPreviewJobType) {
@@ -365,7 +371,6 @@ public sealed class EntityKindMetadataTests {
                 EntityKind.AudioLibrary,
                 EntityKind.AudioTrack,
                 EntityKind.Book,
-                EntityKind.BookVolume,
                 EntityKind.BookChapter,
                 EntityKind.ComicInstallment,
                 EntityKind.ComicSeries,
@@ -405,11 +410,9 @@ public sealed class EntityKindMetadataTests {
             surface => Assert.True(trackVisibility.ExcludesParent(surface, EntityKind.Book)));
         Assert.False(trackVisibility.ExcludesParent(EntityCatalogSurface.KindBrowse, EntityKind.AudioLibrary));
 
-        var bookVisibility = EntityKindRegistry.Describe(EntityKind.Book).CatalogVisibility;
-        Assert.True(bookVisibility.ExcludesParent(EntityCatalogSurface.KindBrowse, EntityKind.Book));
-        Assert.All(
-            [EntityCatalogSurface.Discovery, EntityCatalogSurface.Collection, EntityCatalogSurface.Statistics],
-            surface => Assert.False(bookVisibility.ExcludesParent(surface, EntityKind.Book)));
+        Assert.Equal(
+            EntityCatalogVisibilityPolicy.Default,
+            EntityKindRegistry.Describe(EntityKind.Book).CatalogVisibility);
 
         var galleryVisibility = EntityKindRegistry.Describe(EntityKind.Gallery).CatalogVisibility;
         Assert.True(galleryVisibility.RequiresTopLevel(EntityCatalogSurface.KindBrowse));
@@ -419,7 +422,7 @@ public sealed class EntityKindMetadataTests {
         Assert.Equal(EntityBrowsePolicy.Default, EntityKindRegistry.Describe(EntityKind.Video).Browse);
         Assert.All(
             EntityKindRegistry.All.Where(definition => definition.Kind is not (
-                EntityKind.AudioTrack or EntityKind.Book or EntityKind.Gallery)),
+                EntityKind.AudioTrack or EntityKind.Gallery)),
             definition => Assert.Equal(EntityCatalogVisibilityPolicy.Default, definition.CatalogVisibility));
     }
 
@@ -488,7 +491,6 @@ public sealed class EntityKindMetadataTests {
                 EntityKind.AudioTrack,
                 EntityKind.BookVolume,
                 EntityKind.BookChapter,
-                EntityKind.BookPage,
                 EntityKind.Image
             ],
             inheritedRoots);
@@ -612,8 +614,8 @@ public sealed class EntityKindMetadataTests {
 
         var book = EntityKindRegistry.Describe(EntityKind.Book).StructurePolicy;
         Assert.True(book.AllowsRoot);
-        Assert.Equal([EntityKind.BookAuthor, EntityKind.Book], book.AllowedParentKinds);
-        Assert.Equal([EntityKind.AudioTrack, EntityKind.Book, EntityKind.BookVolume, EntityKind.BookChapter],
+        Assert.Equal([EntityKind.BookAuthor], book.AllowedParentKinds);
+        Assert.Equal([EntityKind.AudioTrack, EntityKind.BookVolume, EntityKind.BookChapter],
             EntityKindRegistry.AllowedChildKinds(EntityKind.Book));
 
         var audioLibrary = EntityKindRegistry.Describe(EntityKind.AudioLibrary).StructurePolicy;
@@ -650,7 +652,6 @@ public sealed class EntityKindMetadataTests {
     [InlineData(EntityKind.Movie, "movie", "Movie", EntityKindCategory.Media, EntityStorageShape.File, typeof(Prismedia.Domain.Media.Movie))]
     [InlineData(EntityKind.VideoEpisode, "video-episode", "Video Episode", EntityKindCategory.Media, EntityStorageShape.File, typeof(Prismedia.Domain.Media.VideoEpisode))]
     [InlineData(EntityKind.VideoSeries, "video-series", "Video Series", EntityKindCategory.Media, EntityStorageShape.Folder, typeof(Prismedia.Domain.Media.VideoSeries))]
-    [InlineData(EntityKind.BookPage, "book-page", "Book Page", EntityKindCategory.Media, EntityStorageShape.ArchiveEntry, typeof(Prismedia.Domain.Media.BookPage))]
     [InlineData(EntityKind.ComicInstallment, "comic-installment", "Comic Installment", EntityKindCategory.Media, EntityStorageShape.Archive, typeof(Prismedia.Domain.Media.ComicInstallment))]
     [InlineData(EntityKind.ComicSeries, "comic-series", "Comic Series", EntityKindCategory.Media, EntityStorageShape.Folder, typeof(Prismedia.Domain.Media.ComicSeries))]
     [InlineData(EntityKind.ComicVolume, "comic-volume", "Comic Volume", EntityKindCategory.Media, EntityStorageShape.None, typeof(Prismedia.Domain.Media.ComicVolume))]

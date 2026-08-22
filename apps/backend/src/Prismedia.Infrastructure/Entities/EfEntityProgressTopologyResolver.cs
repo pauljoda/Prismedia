@@ -94,6 +94,35 @@ public sealed class EfEntityProgressTopologyResolver(
             .GroupBy(row => row.ParentEntityId!.Value)
             .ToDictionary(group => group.Key, group => Order(group));
 
+        // A cached page stat lets a work flatten chapter-local page progress without page
+        // Entities. This remains capability-driven: kinds without persisted page counts take
+        // the generic structural path below.
+        var sameKindLeaves = DepthFirst(rows, owner.Id)
+            .Where(row => row.KindCode == current.KindCode && !children.ContainsKey(row.Id))
+            .ToArray();
+        if (sameKindLeaves.Length > 0) {
+            var leafIds = sameKindLeaves.Select(row => row.Id).ToArray();
+            var pageCounts = await db.EntityStats.AsNoTracking()
+                .Where(row => leafIds.Contains(row.EntityId) && row.Code == EntityStatCodes.Pages)
+                .ToDictionaryAsync(row => row.EntityId, row => row.Value, cancellationToken);
+            var currentPageCount = pageCounts.GetValueOrDefault(current.Id);
+            if (currentPageCount > 0) {
+                var absoluteIndex = 0;
+                foreach (var leaf in sameKindLeaves) {
+                    if (leaf.Id == current.Id) {
+                        absoluteIndex += Math.Clamp(index, 0, currentPageCount - 1);
+                        break;
+                    }
+                    absoluteIndex += Math.Max(0, pageCounts.GetValueOrDefault(leaf.Id));
+                }
+                var absoluteTotal = sameKindLeaves.Sum(
+                    leaf => Math.Max(0, pageCounts.GetValueOrDefault(leaf.Id)));
+                if (absoluteTotal > 0) {
+                    return new ProgressWorkPosition(current.Id, absoluteIndex, absoluteTotal);
+                }
+            }
+        }
+
         // A local cursor belongs to the nearest structural container which has children of a
         // single declared kind. This lets a definition-defined work flatten pages, tracks, or
         // future work items without naming any concrete media kind here.

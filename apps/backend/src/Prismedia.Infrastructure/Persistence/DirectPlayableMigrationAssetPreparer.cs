@@ -29,6 +29,7 @@ internal static class DirectPlayableMigrationAssetPreparer {
     private const string AncestorConfirmedClassification = "ancestor-confirmed";
     private const string FilesystemClassification = "filesystem";
     private const string FilesystemOverrideClassification = "filesystem-override";
+    private const string LegacyImageArchiveBookFormat = "image-archive";
 
     /// <summary>
     /// Classifies legacy structural source paths and copies managed child assets to the Movie id
@@ -386,14 +387,14 @@ internal static class DirectPlayableMigrationAssetPreparer {
                 || kindCode == EntityKind.Book.ToCode()
                 && bookFormat is not null
                 && (bookFormat == BookFormat.Audio.ToCode()
-                    || bookFormat == BookFormat.ImageArchive.ToCode()
+                    || bookFormat == LegacyImageArchiveBookFormat
                     && !SupportedExtensions.ComicArchive.Contains(Path.GetExtension(path)));
             var isKnownFile = hasPlayableFileReference
                 || kindCode == EntityKind.Book.ToCode()
                 && bookFormat is not null
                 && (bookFormat == BookFormat.Epub.ToCode()
                     || bookFormat == BookFormat.Pdf.ToCode()
-                    || bookFormat == BookFormat.ImageArchive.ToCode()
+                    || bookFormat == LegacyImageArchiveBookFormat
                     && SupportedExtensions.ComicArchive.Contains(Path.GetExtension(path)));
             if (isKnownFolder && isKnownFile) {
                 throw new InvalidOperationException(

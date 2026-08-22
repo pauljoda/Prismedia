@@ -70,6 +70,8 @@
     ENTITY_KIND.movie,
     ENTITY_KIND.videoSeries,
     ENTITY_KIND.videoSeason,
+    ENTITY_KIND.comicSeries,
+    ENTITY_KIND.comicVolume,
     ENTITY_KIND.collection,
   ]);
   const leafKinds = new Set<string>([
@@ -77,8 +79,8 @@
     ENTITY_KIND.videoEpisode,
     ENTITY_KIND.image,
     ENTITY_KIND.audioTrack,
-    ENTITY_KIND.bookPage,
     ENTITY_KIND.bookChapter,
+    ENTITY_KIND.comicInstallment,
   ]);
 
   const primaryLinked = $derived.by(() => {

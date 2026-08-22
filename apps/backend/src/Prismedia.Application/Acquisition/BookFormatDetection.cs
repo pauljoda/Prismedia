@@ -3,11 +3,12 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Application.Acquisition;
 
 /// <summary>
-/// Detects book formats referenced in a release title. Release titles routinely name their payload
+/// Detects publication payload formats referenced in a release title. Release titles routinely name their payload
 /// format (e.g. "Saga Vol 1 (2012) (Digital) (CBZ)"), which lets the decision engine reject formats the
 /// pipeline cannot import. The detected formats are deliberately limited to the formats Prismedia can
-/// actually import and scan (EPUB, PDF, and CBZ/ZIP image archives) — the same set the import planner
-/// (<see cref="ImportPlanBuilder.SupportedExtensions"/>) and the book scanner accept — so a release the
+/// actually import and scan. Book format results are limited to EPUB, PDF, and audio; CBZ/ZIP is
+/// exposed separately as serialized-comic archive syntax so it cannot enter Book metadata. The import planner
+/// (<see cref="ImportPlanBuilder.SupportedExtensions"/>) and scanners accept the same payload set, so a release the
 /// engine marks acceptable on format can actually be imported.
 /// </summary>
 public static class BookFormatDetection {
@@ -18,8 +19,8 @@ public static class BookFormatDetection {
     private static readonly string[] WebSourceTokens = ["web", "webrip", "webdl", "digital", "converted", "calibre"];
 
     /// <summary>
-    /// Importable book formats named in <paramref name="title"/>, mapped onto Prismedia's
-    /// <see cref="BookFormat"/> set. Returns an empty set when the title names no importable format token.
+    /// Importable prose-book formats named in <paramref name="title"/>, mapped onto Prismedia's
+    /// <see cref="BookFormat"/> set. Comic archive tokens are deliberately excluded.
     /// </summary>
     public static IReadOnlySet<BookFormat> Detect(string title) {
         var formats = new HashSet<BookFormat>();
@@ -29,10 +30,6 @@ public static class BookFormatDetection {
             }
 
             switch (token) {
-                case "cbz":
-                case "zip":
-                    formats.Add(BookFormat.ImageArchive);
-                    break;
                 case "epub":
                     formats.Add(BookFormat.Epub);
                     break;
@@ -49,6 +46,10 @@ public static class BookFormatDetection {
 
         return formats;
     }
+
+    /// <summary>Whether a release title names a CBZ or ZIP serialized-comic archive.</summary>
+    public static bool NamesImageArchive(string title) =>
+        ReleaseTitleText.ContainsToken(title, ["cbz", "zip"]);
 
     /// <summary>
     /// True when the title names a known-but-unimportable format (CBR, RAR, MOBI, AZW/AZW3). Used to reject
@@ -75,7 +76,7 @@ public static class BookFormatDetection {
     /// no importable format is named.
     /// </summary>
     public static BookFormatTier DetectFormatTier(string title) {
-        var best = BookFormatTier.Unknown;
+        var best = NamesImageArchive(title) ? BookFormatTier.Archive : BookFormatTier.Unknown;
         foreach (var format in Detect(title)) {
             var tier = BookQualityRank.TierFor(format);
             if (tier > best) {

@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Domain.Entities;
+using Prismedia.Infrastructure.Entities;
 using Prismedia.Infrastructure.Persistence.Entities;
 
 namespace Prismedia.Infrastructure.Media.Persistence;
@@ -358,6 +359,32 @@ public sealed partial class LibraryScanPersistenceService {
         await SetStudioIfMissingAsync(entityId, metadata.Publisher, now, markNsfw, cancellationToken);
         await AddCreditsAsync(entityId, metadata.Creators, CreditRole.Creator, now, markNsfw, cancellationToken);
 
+        if (markNsfw && !entity.IsNsfw) {
+            entity.IsNsfw = true;
+        }
+
+        entity.UpdatedAt = now;
+        await SaveChangesWithLifecycleAsync(cancellationToken);
+    }
+
+    public async Task ApplyBookFileMetadataAsync(
+        Guid entityId,
+        BookFileMetadata metadata,
+        bool markNsfw,
+        CancellationToken cancellationToken) {
+        var now = DateTimeOffset.UtcNow;
+        var entity = await _db.Entities.FirstOrDefaultAsync(
+            row => row.Id == entityId && row.KindCode == EntityKind.Book.ToCode(),
+            cancellationToken);
+        if (entity is null) {
+            return;
+        }
+
+        await UpsertDescriptionIfMissingAsync(entityId, metadata.Summary, now, cancellationToken);
+        await AddCreditsAsync(entityId, metadata.Creators, CreditRole.Creator, now, markNsfw, cancellationToken);
+        if (metadata.PageCount is { } pageCount) {
+            await EntityPageCountPersistence.SetAsync(_db, entityId, pageCount, cancellationToken);
+        }
         if (markNsfw && !entity.IsNsfw) {
             entity.IsNsfw = true;
         }

@@ -127,14 +127,20 @@ public sealed class FormatSpecification : IReleaseSpecification {
         }
 
         if (rules.BookRendition == BookRendition.Audiobook) {
-            return detected.Contains(BookFormat.Audio) ? null : Reason;
+            return !BookFormatDetection.NamesImageArchive(release.Title)
+                && detected.Contains(BookFormat.Audio) ? null : Reason;
         }
 
         if (rules.Kind is EntityKind.ComicVolume or EntityKind.ComicInstallment) {
-            return detected.SetEquals([BookFormat.ImageArchive]) ? null : Reason;
+            return BookFormatDetection.NamesImageArchive(release.Title) && detected.Count == 0
+                ? null
+                : Reason;
         }
 
         if (rules.BookRendition == BookRendition.Ebook) {
+            if (BookFormatDetection.NamesImageArchive(release.Title)) {
+                return Reason;
+            }
             var ebookFormats = detected.Where(format => format != BookFormat.Audio).ToHashSet();
             if (ebookFormats.Count == 0) {
                 return Reason;

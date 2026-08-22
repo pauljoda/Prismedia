@@ -23,7 +23,7 @@ public sealed class ComicInstallmentSpecificationTests {
     }
 
     [Fact]
-    public void SerializedComicAcquisitionAcceptsOnlyImageArchives() {
+    public void ComicAcquisitionAcceptsOnlyImageArchives() {
         var result = Evaluate("Witch Hat Atelier Chapter 83 EPUB", "Chapter 83");
 
         Assert.False(result.Accepted);

@@ -232,16 +232,12 @@ public interface IAudioScanPersistence {
     Task<int> RemoveStaleMusicArtistsInRootAsync(Guid rootId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken);
 }
 
-/// <summary>Book/comic scan persistence operations for discovered archives/pages and stale cleanup.</summary>
+/// <summary>Book scan persistence operations for whole-book files, audiobook owners, and stale cleanup.</summary>
 public interface IBookScanPersistence {
-    Task<Guid> UpsertBookAsync(string sourcePath, string title, Guid libraryRootId, bool isNsfw, CancellationToken cancellationToken);
-
     /// <summary>
-    /// Upserts a folder-backed book series parent used to group single-file EPUB/PDF books.
-    /// The parent is still represented by the book entity kind so existing book detail and
-    /// thumbnail surfaces can render it as the library entry point.
+    /// Upserts an audio-only Book whose ordered audio-track children live in one source folder.
     /// </summary>
-    Task<Guid> UpsertBookSeriesAsync(
+    Task<Guid> UpsertAudiobookBookAsync(
         string folderPath,
         string title,
         Guid libraryRootId,
@@ -254,8 +250,8 @@ public interface IBookScanPersistence {
     /// Upserts a single-file book (EPUB/PDF) where the file itself is the whole book and
     /// no chapter/page entities are created. Stores the book format and content type so the
     /// reader can stream the raw file and select the matching renderer.
-    /// When <paramref name="parentBookEntityId"/> is supplied, the book is attached under
-    /// a folder-backed book series parent and ordered by <paramref name="sortOrder"/>.
+    /// When <paramref name="parentEntityId"/> is supplied, the book is attached to a BookAuthor
+    /// grouping and ordered by <paramref name="sortOrder"/>.
     /// </summary>
     Task<Guid> UpsertSingleFileBookAsync(
         string sourcePath,
@@ -265,19 +261,9 @@ public interface IBookScanPersistence {
         BookType bookType,
         BookFormat format,
         string contentType,
-        Guid? parentBookEntityId,
+        Guid? parentEntityId,
         int? sortOrder,
         CancellationToken cancellationToken);
-
-    Task<Guid> UpsertBookVolumeAsync(string folderPath, string title, Guid bookEntityId, int sortOrder, bool isNsfw, CancellationToken cancellationToken);
-    Task<Guid> UpsertBookChapterAsync(string archivePath, string title, Guid parentEntityId, int sortOrder, int pageCount, bool isNsfw, CancellationToken cancellationToken);
-    Task<Guid> UpsertBookPageAsync(string filePath, string title, Guid bookEntityId, Guid chapterEntityId, int sortOrder, bool isNsfw, CancellationToken cancellationToken);
-
-    /// <summary>
-    /// Upserts discovered book pages as one persistence unit, returning IDs in input order.
-    /// </summary>
-    Task<IReadOnlyList<Guid>> UpsertBookPagesBatchAsync(
-        IReadOnlyList<BookPageUpsertItem> items, CancellationToken cancellationToken);
 
     /// <summary>
     /// Upserts a folder-backed author grouping that gathers an author's single-file books as children,
@@ -285,8 +271,6 @@ public interface IBookScanPersistence {
     /// </summary>
     Task<Guid> UpsertBookAuthorAsync(string folderPath, string title, int? sortOrder, bool isNsfw, CancellationToken cancellationToken);
 
-    Task<int> RemoveStaleBookVolumesAsync(Guid bookEntityId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken);
-    Task<int> RemoveStaleBookChaptersAsync(Guid bookEntityId, IReadOnlySet<string> validArchivePaths, CancellationToken cancellationToken);
     Task<int> RemoveStaleBooksInRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken);
 
     /// <summary>Removes author groupings that no longer have any child books (run after stale book cleanup).</summary>
@@ -798,23 +782,6 @@ public sealed record MusicArtistUpsertItem(
     string FolderPath,
     string Title,
     Guid LibraryRootId,
-    int SortOrder,
-    bool IsNsfw);
-
-/// <summary>
-/// Book page discovered inside an archive-backed chapter.
-/// </summary>
-/// <param name="FilePath">Synthetic archive member path used as the source identity.</param>
-/// <param name="Title">Display title inferred from the member name.</param>
-/// <param name="BookEntityId">Top-level book entity that owns the page.</param>
-/// <param name="ChapterEntityId">Chapter entity that directly contains the page.</param>
-/// <param name="SortOrder">Position within the chapter.</param>
-/// <param name="IsNsfw">Whether the owning book/chapter marks discovered pages as NSFW.</param>
-public sealed record BookPageUpsertItem(
-    string FilePath,
-    string Title,
-    Guid BookEntityId,
-    Guid ChapterEntityId,
     int SortOrder,
     bool IsNsfw);
 

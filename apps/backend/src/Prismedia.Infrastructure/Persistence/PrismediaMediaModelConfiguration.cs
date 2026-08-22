@@ -27,11 +27,11 @@ internal static partial class PrismediaModelConfiguration {
         });
 
         ConfigureBooks(modelBuilder);
-        ConfigureSerializedComics(modelBuilder);
+        ConfigureComics(modelBuilder);
         ConfigureAudio(modelBuilder);
     }
 
-    private static void ConfigureSerializedComics(ModelBuilder modelBuilder) {
+    private static void ConfigureComics(ModelBuilder modelBuilder) {
         modelBuilder.Entity<ComicSeriesDetailRow>(entity => {
             entity.ToTable("comic_series_details");
             entity.HasKey(row => row.EntityId);
@@ -53,6 +53,10 @@ internal static partial class PrismediaModelConfiguration {
                 .HasConversion(
                     value => value.ToCode(),
                     value => value.DecodeAs<ComicInstallmentKind>())
+                .IsRequired();
+            entity.Property(row => row.PageCount)
+                .HasColumnName("page_count")
+                .HasDefaultValue(0)
                 .IsRequired();
             entity.HasOne<EntityRow>()
                 .WithOne()
@@ -80,7 +84,7 @@ internal static partial class PrismediaModelConfiguration {
                 .HasConversion(value => value.ToCode(), value => value.DecodeAs<BookSourceTier>())
                 .HasDefaultValue(BookSourceTier.Unknown)
                 .IsRequired();
-            entity.Property(row => row.CoverPageEntityId).HasColumnName("cover_page_entity_id");
+            entity.Property(row => row.PageCount).HasColumnName("page_count");
             entity.HasOne<EntityRow>().WithOne().HasForeignKey<BookDetailRow>(row => row.EntityId).OnDelete(DeleteBehavior.Cascade);
         });
 
@@ -88,7 +92,7 @@ internal static partial class PrismediaModelConfiguration {
             entity.ToTable("book_chapter_details");
             entity.HasKey(row => row.EntityId);
             entity.Property(row => row.EntityId).HasColumnName("entity_id");
-            entity.Property(row => row.CoverPageEntityId).HasColumnName("cover_page_entity_id");
+            entity.Property(row => row.PageCount).HasColumnName("page_count");
             entity.HasOne<EntityRow>().WithOne().HasForeignKey<BookChapterDetailRow>(row => row.EntityId).OnDelete(DeleteBehavior.Cascade);
         });
 

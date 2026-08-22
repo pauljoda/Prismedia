@@ -119,6 +119,16 @@ async function main() {
     ),
   );
 
+  // Prismedia-owned persisted statistics. Provider-specific stat keys remain an open vocabulary.
+  sections.push(
+    constBlock(
+      "ENTITY_STAT_CODE",
+      "EntityStatCode",
+      (manifest.entityStatCodes ?? []).map((c) => [camel(c.name), c.value]),
+      "registry EntityStatCodes",
+    ),
+  );
+
   // Complete Entity-kind definitions. One generated object carries identity, labels, storage facts,
   // presentation, and behavior flags so clients do not rebuild parallel maps for each concern.
   const entityKindFields = [

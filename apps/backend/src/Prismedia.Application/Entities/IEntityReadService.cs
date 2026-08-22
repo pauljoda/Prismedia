@@ -1,4 +1,5 @@
 using Prismedia.Contracts.Entities;
+using Prismedia.Contracts.Playback;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Entities;
@@ -32,11 +33,11 @@ public interface IEntityReadService {
     /// (completed), <c>unwatched</c>/<c>unread</c> (no engagement), or <c>in-progress</c>.
     /// </param>
     /// <param name="bookType">
-    /// Comma-separated book type codes (<c>book</c>, <c>comic</c>, <c>manga</c>, <c>novel</c>).
+    /// Comma-separated prose book type codes (<c>book</c>, <c>novel</c>).
     /// Books matching any listed type are kept; unrecognized codes are ignored.
     /// </param>
     /// <param name="bookFormat">
-    /// Comma-separated book format codes (<c>image-archive</c>, <c>epub</c>, <c>pdf</c>).
+    /// Comma-separated book format codes (<c>epub</c>, <c>pdf</c>, <c>audio</c>).
     /// Books matching any listed format are kept; unrecognized codes are ignored.
     /// </param>
     /// <param name="nsfw">
@@ -161,6 +162,55 @@ public interface IEntityReadService {
         IReadOnlyList<Guid> ids,
         bool hideNsfw,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Gets exact, compact shared-audio-player projections in caller order. The default
+    /// keeps partial adapters source compatible; production adapters should override it
+    /// with one bounded projection rather than hydrating full Entity documents in a loop.
+    /// </summary>
+    async Task<IReadOnlyList<AudioPlaybackItem>> GetAudioPlaybackItemsAsync(
+        IReadOnlyList<Guid> ids,
+        bool hideNsfw,
+        CancellationToken cancellationToken) {
+        var items = new List<AudioPlaybackItem>();
+        foreach (var id in ids) {
+            var entity = await GetAsync(id, hideNsfw, cancellationToken);
+            if (entity is null) {
+                continue;
+            }
+
+            var technical = entity.Capabilities.OfType<TechnicalCapability>().FirstOrDefault();
+            var flags = entity.Capabilities.OfType<FlagsCapability>().FirstOrDefault();
+            var embedded = entity.Capabilities.OfType<EmbeddedAudioMetadataCapability>().FirstOrDefault();
+            var files = entity.Capabilities.OfType<FilesCapability>().FirstOrDefault();
+            var rating = entity.Capabilities.OfType<RatingCapability>().FirstOrDefault();
+            var consumption = entity.Capabilities.OfType<ConsumptionCapability>().FirstOrDefault();
+            items.Add(new AudioPlaybackItem(
+                entity.Id,
+                entity.Title,
+                entity.ParentEntityId,
+                entity.SortOrder,
+                flags?.IsNsfw == true,
+                flags?.IsOrganized == true,
+                flags?.IsWanted == true,
+                files?.Items.Any(file => file.Role == EntityFileRole.Source) == true,
+                technical?.Duration?.TotalSeconds,
+                technical?.BitRate,
+                technical?.SampleRate,
+                technical?.Channels,
+                technical?.Codec,
+                embedded?.Artist,
+                embedded?.Album,
+                null,
+                files?.Items.FirstOrDefault(file => file.Role == EntityFileRole.Waveform)?.Path,
+                rating?.Value,
+                consumption?.AccessCount ?? 0,
+                consumption?.LastActiveAt,
+                DateTimeOffset.MinValue));
+        }
+
+        return items;
+    }
 
     /// <summary>
     /// Gets sampled child-artwork hover previews for the requested visible entities. Served

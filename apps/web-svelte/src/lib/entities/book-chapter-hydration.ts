@@ -3,7 +3,11 @@ import {
   fetchEntityChildren,
   type EntityThumbnailRequestOptions,
 } from "$lib/api/entities";
-import { orderedBookChildren, type BookReaderChapter } from "$lib/entities/book-entity-reader";
+import {
+  orderedBookChildren,
+  persistedPageCount,
+  type BookReaderChapter,
+} from "$lib/entities/book-entity-reader";
 import { ENTITY_KIND } from "$lib/entities/entity-codes";
 
 /**
@@ -15,7 +19,7 @@ export async function fetchBookChapterSummaries(
   currentChapter: EntityCard,
   options?: EntityThumbnailRequestOptions,
 ): Promise<BookReaderChapter[]> {
-  const currentPageCount = orderedBookChildren(currentChapter, ENTITY_KIND.bookPage).length;
+  const currentPageCount = persistedPageCount(currentChapter);
   const volumeThumbnails = orderedBookChildren(book, ENTITY_KIND.bookVolume);
   if (volumeThumbnails.length === 0) {
     return summariesFor(

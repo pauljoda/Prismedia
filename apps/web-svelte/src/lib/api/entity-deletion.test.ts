@@ -7,7 +7,7 @@ describe("entity deletion kind policy", () => {
     expect(isDeletableMediaKind(ENTITY_KIND.audio)).toBe(true);
     expect(isDeletableMediaKind(ENTITY_KIND.videoSeries)).toBe(true);
     expect(isDeletableMediaKind(ENTITY_KIND.bookChapter)).toBe(false);
-    expect(isDeletableMediaKind(ENTITY_KIND.bookPage)).toBe(false);
+    expect(isDeletableMediaKind(ENTITY_KIND.comicInstallment)).toBe(true);
     expect(isDeletableMediaKind(ENTITY_KIND.collection)).toBe(false);
   });
 });

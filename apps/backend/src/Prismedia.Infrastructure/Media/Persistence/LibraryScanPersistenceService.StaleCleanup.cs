@@ -137,35 +137,8 @@ public sealed partial class LibraryScanPersistenceService {
         return await RemoveStaleContainerEntitiesByFolderSource(artistIds, validFolderPaths, cancellationToken);
     }
 
-    public async Task<int> RemoveStaleBookVolumesAsync(Guid bookEntityId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken) {
-        var volumeIds = await _db.Entities.AsNoTracking()
-            .Where(entity => entity.ParentEntityId == bookEntityId && entity.KindCode == EntityKind.BookVolume.ToCode())
-            .Select(entity => entity.Id)
-            .ToListAsync(cancellationToken);
-
-        return await RemoveStaleContainerEntitiesByFolderSource(volumeIds, validFolderPaths, cancellationToken);
-    }
-
-    public async Task<int> RemoveStaleBookChaptersAsync(Guid bookEntityId, IReadOnlySet<string> validArchivePaths, CancellationToken cancellationToken) {
-        var chapterIds = await _db.Entities.AsNoTracking()
-            .Where(entity => entity.ParentEntityId == bookEntityId && entity.KindCode == EntityKind.BookChapter.ToCode())
-            .Select(entity => entity.Id)
-            .ToListAsync(cancellationToken);
-
-        return await RemoveStaleEntitiesBySourcePath(chapterIds, validArchivePaths, cancellationToken);
-    }
-
     public async Task<int> RemoveStaleBooksInRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) {
-        // Image archives belong to ScanComic. Keep their legacy Book rows intact until that
-        // scanner can adopt the IDs (or prove the source disappeared) so scan job ordering cannot
-        // erase metadata and user state during the serialized-comic cutover.
-        var imageArchiveIds = await _db.BookDetails.AsNoTracking()
-            .Where(detail => detail.Format == BookFormat.ImageArchive)
-            .Select(detail => detail.EntityId)
-            .ToHashSetAsync(cancellationToken);
-        var bookIds = (await DirectRootedKindIdsAsync(rootId, EntityKind.Book, cancellationToken))
-            .Where(id => !imageArchiveIds.Contains(id))
-            .ToList();
+        var bookIds = await DirectRootedKindIdsAsync(rootId, EntityKind.Book, cancellationToken);
 
         var fileBackedBookIds = await _db.EntityFiles.AsNoTracking()
             .Where(file => file.Role == EntityFileRole.Source && bookIds.Contains(file.EntityId))

@@ -5,13 +5,19 @@ namespace Prismedia.Application.Tests.Acquisition;
 
 public sealed class BookFormatDetectionTests {
     [Theory]
-    [InlineData("Saga Vol 1 (2012) (Digital) (CBZ)", BookFormat.ImageArchive)]
-    [InlineData("Some Comic v01 (cbz)", BookFormat.ImageArchive)]
     [InlineData("A Novel [EPUB]", BookFormat.Epub)]
     [InlineData("A Manual.pdf", BookFormat.Pdf)]
-    [InlineData("Absolute_Batman_022__2026__Digital__Shan-Empire_CBZ", BookFormat.ImageArchive)]
     public void DetectsImportableFormat(string title, BookFormat expected) {
         Assert.Contains(expected, BookFormatDetection.Detect(title));
+    }
+
+    [Theory]
+    [InlineData("Saga Vol 1 (2012) (Digital) (CBZ)")]
+    [InlineData("Some Comic v01 (cbz)")]
+    [InlineData("Absolute_Batman_022__2026__Digital__Shan-Empire_CBZ")]
+    public void DetectsComicArchivesWithoutTreatingThemAsBookFormats(string title) {
+        Assert.True(BookFormatDetection.NamesImageArchive(title));
+        Assert.Empty(BookFormatDetection.Detect(title));
     }
 
     [Fact]

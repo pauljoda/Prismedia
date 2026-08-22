@@ -134,6 +134,11 @@ public sealed class EfEntityReaderService(
                 IsDoublePage = page.IsDoublePage,
                 Checksum = page.Checksum
             }));
+            await EntityPageCountPersistence.SetAsync(
+                db,
+                manifest.EntityId,
+                manifest.Pages.Count,
+                cancellationToken);
             await db.SaveChangesAsync(cancellationToken);
             if (transaction is not null) {
                 await transaction.CommitAsync(cancellationToken);
@@ -160,6 +165,7 @@ public sealed class EfEntityReaderService(
             .ToArrayAsync(cancellationToken);
         db.EntityPageEntries.RemoveRange(pages);
         db.EntityPageManifests.Remove(header);
+        await EntityPageCountPersistence.SetAsync(db, entityId, 0, cancellationToken);
         await db.SaveChangesAsync(cancellationToken);
         return true;
     }

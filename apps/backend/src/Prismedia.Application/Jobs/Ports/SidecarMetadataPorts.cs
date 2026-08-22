@@ -25,8 +25,7 @@ public interface IComicInfoMetadataReader {
 }
 
 /// <summary>
-/// Reads descriptive metadata embedded in single-file books (EPUB/PDF), normalized into the
-/// shared <see cref="ComicInfoMetadata"/> shape so the scan applies it through one path.
+/// Reads descriptive metadata embedded in single-file books (EPUB/PDF).
 /// </summary>
 public interface IBookFileMetadataReader {
     /// <summary>
@@ -36,7 +35,7 @@ public interface IBookFileMetadataReader {
     /// <param name="sourcePath">Absolute path to the EPUB/PDF file.</param>
     /// <param name="format">Book format selecting the parser.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
-    Task<ComicInfoMetadata?> ReadAsync(string sourcePath, Prismedia.Domain.Entities.BookFormat format, CancellationToken cancellationToken);
+    Task<BookFileMetadata?> ReadAsync(string sourcePath, Prismedia.Domain.Entities.BookFormat format, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -105,16 +104,23 @@ public interface IScanMetadataPersistence {
     Task CompleteScanBatchAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     /// <summary>
-    /// Applies ComicInfo.xml metadata to its owning book or serialized-comic Entity without
-    /// clearing existing user or provider metadata.
+    /// Applies ComicInfo.xml metadata to its owning serialized-comic Entity without clearing
+    /// existing user or provider metadata. Page totals come from the scanned archive manifest.
     /// </summary>
-    /// <param name="entityId">Book, comic-series, or comic-installment Entity receiving metadata.</param>
-    /// <param name="metadata">ComicInfo.xml metadata discovered for the book.</param>
+    /// <param name="entityId">Comic-series or comic-installment Entity receiving metadata.</param>
+    /// <param name="metadata">ComicInfo.xml metadata discovered for the comic archive.</param>
     /// <param name="markNsfw">Whether linked taxonomy should be marked NSFW.</param>
     /// <param name="cancellationToken">Cancellation token.</param>
     Task ApplyComicInfoMetadataAsync(
         Guid entityId,
         ComicInfoMetadata metadata,
+        bool markNsfw,
+        CancellationToken cancellationToken);
+
+    /// <summary>Applies descriptive and page-count metadata read from a whole-book file.</summary>
+    Task ApplyBookFileMetadataAsync(
+        Guid entityId,
+        BookFileMetadata metadata,
         bool markNsfw,
         CancellationToken cancellationToken);
 }
@@ -159,6 +165,27 @@ public sealed record VideoSidecarMetadata {
     public double? DurationSeconds { get; init; }
 }
 
+/// <summary>Metadata embedded in one whole-book EPUB or PDF source.</summary>
+public sealed record BookFileMetadata {
+    /// <summary>Published title.</summary>
+    public string? Title { get; init; }
+
+    /// <summary>Optional series label carried by the file.</summary>
+    public string? Series { get; init; }
+
+    /// <summary>Description or synopsis.</summary>
+    public string? Summary { get; init; }
+
+    /// <summary>Book creator names.</summary>
+    public IReadOnlyList<string> Creators { get; init; } = [];
+
+    /// <summary>Exact fixed-layout page count when the source exposes one.</summary>
+    public int? PageCount { get; init; }
+
+    /// <summary>Whether embedded metadata marks the work as adult content.</summary>
+    public bool MarksNsfw { get; init; }
+}
+
 /// <summary>
 /// Metadata read from ComicInfo.xml inside ZIP/CBZ comic archives.
 /// </summary>
@@ -189,9 +216,6 @@ public sealed record ComicInfoMetadata {
 
     /// <summary>Reference URLs.</summary>
     public IReadOnlyList<string> Urls { get; init; } = [];
-
-    /// <summary>Declared page count.</summary>
-    public int? PageCount { get; init; }
 
     /// <summary>Language code from ComicInfo.xml.</summary>
     public string? Language { get; init; }

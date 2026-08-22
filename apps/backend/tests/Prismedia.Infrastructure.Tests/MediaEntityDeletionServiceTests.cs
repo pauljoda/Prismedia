@@ -28,7 +28,6 @@ public sealed class MediaEntityDeletionServiceTests {
     [Theory]
     [InlineData(EntityKind.Audio, true)]
     [InlineData(EntityKind.BookChapter, false)]
-    [InlineData(EntityKind.BookPage, false)]
     [InlineData(EntityKind.Collection, false)]
     public void DeleteFilesGateUsesTheEntityKindRegistry(EntityKind kind, bool expected) {
         Assert.Equal(expected, MediaEntityDeletionService.IsDeletableKind(kind.ToCode()));
@@ -730,21 +729,32 @@ public sealed class MediaEntityDeletionServiceTests {
     }
 
     [Fact]
-    public async Task ArchiveMemberSourcesDeleteTheirPhysicalArchiveExactlyOnce() {
+    public async Task ComicPageManifestsDeleteOnlyTheirOwningArchive() {
         await using var db = CreateContext();
         var root = new FileLibraryRoot(Guid.NewGuid(), "/media/books", "Books", true, true, false, false, false, false);
-        var bookId = Guid.NewGuid();
-        var chapterId = Guid.NewGuid();
-        var pageId = Guid.NewGuid();
+        var installmentId = Guid.NewGuid();
         var archive = "/media/books/Comic/Volume 1.cbz";
-        db.Entities.AddRange(
-            NewEntity(bookId, EntityKind.Book.ToCode(), "Comic"),
-            NewEntity(chapterId, EntityKind.BookChapter.ToCode(), "Chapter 1", bookId),
-            NewEntity(pageId, EntityKind.BookPage.ToCode(), "Page 1", chapterId));
-        db.EntityFiles.AddRange(
-            NewSourceFile(bookId, archive),
-            NewSourceFile(chapterId, $"{archive}::chapter-1"),
-            NewSourceFile(pageId, $"{archive}::001.jpg"));
+        db.Entities.Add(NewEntity(installmentId, EntityKind.ComicInstallment.ToCode(), "Chapter 1"));
+        db.ComicInstallmentDetails.Add(new ComicInstallmentDetailRow {
+            EntityId = installmentId,
+            InstallmentKind = ComicInstallmentKind.Chapter,
+            PageCount = 1
+        });
+        db.EntityFiles.Add(NewSourceFile(installmentId, archive));
+        db.EntityPageManifests.Add(new EntityPageManifestRow {
+            EntityId = installmentId,
+            Direction = PageReadingDirection.LeftToRight,
+            DefaultMode = ReaderMode.Paged,
+            SourceSignature = "source:v1",
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        db.EntityPageEntries.Add(new EntityPageEntryRow {
+            EntityId = installmentId,
+            Ordinal = 0,
+            ArchiveMember = "001.jpg",
+            MimeType = "image/jpeg",
+            PageType = PageType.Story
+        });
         await db.SaveChangesAsync();
         var storage = new RecordingStorage();
         var service = new MediaEntityDeletionService(
@@ -754,11 +764,12 @@ public sealed class MediaEntityDeletionServiceTests {
             new EfEntityHierarchyReader(db),
             NullLogger<MediaEntityDeletionService>.Instance);
 
-        var result = await service.DeleteAsync(bookId, deleteFiles: true, CancellationToken.None);
+        var result = await service.DeleteAsync(installmentId, deleteFiles: true, CancellationToken.None);
 
         Assert.True(result.Deleted);
         Assert.Equal([archive], storage.DeletedPaths);
-        Assert.Empty(await db.Entities.Where(row => row.Id == bookId || row.Id == chapterId || row.Id == pageId).ToArrayAsync());
+        Assert.Empty(await db.Entities.Where(row => row.Id == installmentId).ToArrayAsync());
+        Assert.Empty(await db.EntityPageEntries.ToArrayAsync());
     }
 
     [Fact]

@@ -12,7 +12,7 @@ namespace Prismedia.Infrastructure.Media.Books;
 /// <summary>
 /// Serves the readable chapter list for one Book. EPUB books read the scan-persisted projection in
 /// <c>book_reading_chapters</c> (falling back to a cached archive parse until the first mapping job
-/// lands); paged books serve chapter-entity summaries with page counts in one grouped query, so no
+/// lands); other book formats serve chapter-entity summaries with stored page-count metadata, so no
 /// caller has to fan out per chapter.
 /// </summary>
 internal sealed class EpubBookContentsService(
@@ -80,8 +80,8 @@ internal sealed class EpubBookContentsService(
     }
 
     /// <summary>
-    /// Chapter-entity books (comics/manga) list their direct chapters with page counts from one
-    /// grouped query — previously every client counted pages by fetching each chapter's children.
+    /// Chapter-entity books list their direct navigation chapters with page-count metadata from one
+    /// grouped query. Page resources are never represented as child Entities.
     /// </summary>
     private async Task<BookContentsResponse?> GetChapterEntitySummariesAsync(
         Guid bookId,
@@ -107,14 +107,9 @@ internal sealed class EpubBookContentsService(
         }
 
         var chapterIds = chapters.Select(chapter => chapter.Id).ToArray();
-        var pageKind = EntityKind.BookPage.ToCode();
-        var pageCounts = await db.Entities.AsNoTracking()
-            .Where(row => row.ParentEntityId != null &&
-                chapterIds.Contains(row.ParentEntityId.Value) &&
-                row.KindCode == pageKind)
-            .GroupBy(row => row.ParentEntityId!.Value)
-            .Select(group => new { ChapterId = group.Key, Count = group.Count() })
-            .ToDictionaryAsync(group => group.ChapterId, group => group.Count, cancellationToken);
+        var pageCounts = await db.BookChapterDetails.AsNoTracking()
+            .Where(row => chapterIds.Contains(row.EntityId) && row.PageCount != null)
+            .ToDictionaryAsync(row => row.EntityId, row => row.PageCount!.Value, cancellationToken);
 
         return new BookContentsResponse(chapters
             .OrderBy(chapter => chapter.SortOrder ?? int.MaxValue)
@@ -178,7 +173,8 @@ internal sealed class EpubBookContentsCache {
         new(VersOne.Epub.Options.EpubReaderOptionsPreset.RELAXED);
 
     private static async Task<BookContentsResponse> ParseAsync(string path) {
-        using var book = await EpubReader.OpenBookAsync(path, LenientReaderOptions);
+        using var book = await EpubReader.OpenBookAsync(path, LenientReaderOptions)
+            ?? throw new InvalidDataException($"EPUB reader did not return a book for '{path}'.");
         var readingOrder = await book.GetReadingOrderAsync();
         var navigation = await book.GetNavigationAsync() ?? [];
         var sectionSizes = readingOrder

@@ -28,7 +28,7 @@ describe("EntityGridFilterDrawer availability", () => {
     const { rerender } = render(EntityGridFilterDrawer, {
       activeFilterIds: [],
       filterOptions: [],
-      entityKind: ENTITY_KIND.bookVolume,
+      entityKind: ENTITY_KIND.bookChapter,
       onActiveFilterIdsChange: vi.fn(),
     });
 

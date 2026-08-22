@@ -8,7 +8,7 @@ namespace Prismedia.Domain.Tests;
 public sealed class EntityCapabilityTests {
     [Fact]
     public void BookTracksReadingAndListeningProgressIndependently() {
-        var book = new Book(Guid.NewGuid(), "Dune", BookType.Novel, null, BookFormat.Epub);
+        var book = new Book(Guid.NewGuid(), "Dune", BookType.Novel, BookFormat.Epub);
 
         Assert.NotNull(book.GetCapability<CapabilityProgress>());
         Assert.NotNull(book.GetCapability<CapabilityConsumption>());
@@ -153,7 +153,7 @@ public sealed class EntityCapabilityTests {
     [Fact]
     public void StructurePoliciesRejectUndeclaredParentChildEdges() {
         var person = new Person(Guid.NewGuid(), "Parent");
-        var book = new Book(Guid.NewGuid(), "Child", BookType.Novel, null, BookFormat.Epub);
+        var book = new Book(Guid.NewGuid(), "Child", BookType.Novel, BookFormat.Epub);
 
         Assert.Throws<ArgumentException>(() => person.AddChild(book));
     }
@@ -171,30 +171,23 @@ public sealed class EntityCapabilityTests {
     public void OptionalRootKindsCanRemainRootsOrBeNestedUnderTheirDeclaredParents() {
         var gallery = new Gallery(Guid.NewGuid(), "Gallery", GalleryType.Folder, null);
         var image = new Image(Guid.NewGuid(), "Loose image");
-        var book = new Book(Guid.NewGuid(), "Book", BookType.Novel, null, BookFormat.Epub);
-        var nestedBook = new Book(Guid.NewGuid(), "Nested book", BookType.Novel, null, BookFormat.Epub);
+        var book = new Book(Guid.NewGuid(), "Book", BookType.Novel, BookFormat.Epub);
+        var nestedBook = new Book(Guid.NewGuid(), "Nested book", BookType.Novel, BookFormat.Epub);
 
         image.HydrateStructuralPlacement(null, null);
         gallery.AddChild(image);
-        book.AddChild(nestedBook);
+        Assert.Throws<ArgumentException>(() => book.AddChild(nestedBook));
 
         Assert.Equal(gallery.Id, image.ParentEntityId);
-        Assert.Equal(book.Id, nestedBook.ParentEntityId);
+        Assert.Null(nestedBook.ParentEntityId);
     }
 
     [Fact]
-    public void RecursiveBookAndGalleryTreesAreAllowedButSubtreeCyclesAreRejected() {
-        var rootBook = new Book(Guid.NewGuid(), "Collection", BookType.Novel, null, BookFormat.Epub);
-        var nestedBook = new Book(Guid.NewGuid(), "Volume", BookType.Novel, null, BookFormat.Epub);
-        var leafBook = new Book(Guid.NewGuid(), "Issue", BookType.Novel, null, BookFormat.Epub);
-        rootBook.AddChild(nestedBook);
-        nestedBook.AddChild(leafBook);
-
+    public void RecursiveGalleryTreesAreAllowedButSubtreeCyclesAreRejected() {
         var rootGallery = new Gallery(Guid.NewGuid(), "Root", GalleryType.Folder, null);
         var nestedGallery = new Gallery(Guid.NewGuid(), "Nested", GalleryType.Folder, null);
         rootGallery.AddChild(nestedGallery);
 
-        Assert.Throws<ArgumentException>(() => leafBook.AddChild(rootBook));
         Assert.Throws<ArgumentException>(() => nestedGallery.AddChild(rootGallery));
     }
 

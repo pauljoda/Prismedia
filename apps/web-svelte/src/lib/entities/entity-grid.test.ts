@@ -531,17 +531,17 @@ describe("server-resolved filters and sorting", () => {
 
   it("folds book type and format filters into comma-separated server params", () => {
     const server = buildServerQueryFromFilters([
-      BOOK_TYPE_FILTER_DEFS.find((definition) => definition.code === BOOK_TYPE.comic)!.id,
-      BOOK_TYPE_FILTER_DEFS.find((definition) => definition.code === BOOK_TYPE.manga)!.id,
+      BOOK_TYPE_FILTER_DEFS.find((definition) => definition.code === BOOK_TYPE.book)!.id,
+      BOOK_TYPE_FILTER_DEFS.find((definition) => definition.code === BOOK_TYPE.novel)!.id,
       BOOK_FORMAT_FILTER_DEFS.find((definition) => definition.code === BOOK_FORMAT.pdf)!.id,
     ]);
-    expect(server.bookType).toBe([BOOK_TYPE.comic, BOOK_TYPE.manga].join(","));
+    expect(server.bookType).toBe([BOOK_TYPE.book, BOOK_TYPE.novel].join(","));
     expect(server.bookFormat).toBe(BOOK_FORMAT.pdf);
   });
 
   it("treats book type and format filters as server-resolved", () => {
     expect(isServerResolvedFilterId(
-      BOOK_TYPE_FILTER_DEFS.find((definition) => definition.code === BOOK_TYPE.comic)!.id,
+      BOOK_TYPE_FILTER_DEFS.find((definition) => definition.code === BOOK_TYPE.book)!.id,
     )).toBe(true);
     expect(isServerResolvedFilterId(
       BOOK_FORMAT_FILTER_DEFS.find((definition) => definition.code === BOOK_FORMAT.epub)!.id,
@@ -550,12 +550,12 @@ describe("server-resolved filters and sorting", () => {
 
   it("does not re-filter the loaded page on book type/format filters", () => {
     const cards = [
-      entityCardToThumbnailCard(thumbnailEntity("a", "book", "Comic A")),
-      entityCardToThumbnailCard(thumbnailEntity("b", "book", "Novel B")),
+      entityCardToThumbnailCard(thumbnailEntity("a", ENTITY_KIND.book, "Book A")),
+      entityCardToThumbnailCard(thumbnailEntity("b", ENTITY_KIND.book, "Novel B")),
     ];
     // Thumbnails carry no book type, so the server result must pass through untouched.
     const visible = applyEntityGridState(cards, gridState({
-      filterIds: [BOOK_TYPE_FILTER_DEFS.find((definition) => definition.code === BOOK_TYPE.comic)!.id],
+      filterIds: [BOOK_TYPE_FILTER_DEFS.find((definition) => definition.code === BOOK_TYPE.book)!.id],
     }));
     expect(visible.map((card) => card.entity.id).sort()).toEqual(["a", "b"]);
   });

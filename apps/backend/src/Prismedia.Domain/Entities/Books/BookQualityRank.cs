@@ -31,7 +31,6 @@ public readonly record struct BookQualityRank(BookSourceTier Source, BookFormatT
     /// </summary>
     public static BookFormatTier TierFor(BookFormat format) => format switch {
         BookFormat.Epub => BookFormatTier.Reflowable,
-        BookFormat.ImageArchive => BookFormatTier.Archive,
         BookFormat.Pdf => BookFormatTier.Fixed,
         _ => BookFormatTier.Unknown
     };

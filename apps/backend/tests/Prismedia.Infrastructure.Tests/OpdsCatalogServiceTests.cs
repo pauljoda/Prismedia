@@ -26,8 +26,6 @@ public sealed class OpdsCatalogServiceTests : IDisposable {
     private static readonly Guid HiddenTagId = Guid.Parse("99999999-9999-9999-9999-999999999999");
     private static readonly Guid VisibleCollectionId = Guid.Parse("12121212-1212-1212-1212-121212121212");
     private static readonly Guid HiddenCollectionId = Guid.Parse("13131313-1313-1313-1313-131313131313");
-    private static readonly Guid DirectoryComicId = Guid.Parse("14141414-1414-1414-1414-141414141414");
-    private static readonly Guid WrappedComicId = Guid.Parse("15151515-1515-1515-1515-151515151515");
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"prismedia-opds-catalog-{Guid.NewGuid():N}");
 
     public OpdsCatalogServiceTests() {
@@ -69,7 +67,7 @@ public sealed class OpdsCatalogServiceTests : IDisposable {
     }
 
     [Fact]
-    public async Task CatalogMapsBookMimeTypesAndAuthorizedAssetCovers() {
+    public async Task CatalogMapsBookMimeTypeAndAuthorizedAssetCover() {
         await using var db = CreateContext();
         SeedCatalog(db);
         var coverPath = Path.Combine(_tempDir, "cache", "book-covers", VisibleBookId.ToString(), "thumb.jpg");
@@ -84,49 +82,13 @@ public sealed class OpdsCatalogServiceTests : IDisposable {
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
         });
-        db.Entities.AddRange(
-            Entity(DirectoryComicId, EntityKind.Book.ToCode(), "Comic", false),
-            Entity(WrappedComicId, EntityKind.Book.ToCode(), "Wrapped Comic", false));
-        db.BookDetails.AddRange(
-            new BookDetailRow {
-                EntityId = DirectoryComicId,
-                BookType = BookType.Comic,
-                Format = BookFormat.ImageArchive
-            },
-            new BookDetailRow {
-                EntityId = WrappedComicId,
-                BookType = BookType.Comic,
-                Format = BookFormat.ImageArchive
-            });
-        db.EntityLibraryRoots.AddRange(
-            RootMembership(DirectoryComicId, VisibleRootId),
-            RootMembership(WrappedComicId, VisibleRootId));
-        var comicDirectory = Path.Combine(_tempDir, "comic-folder");
-        Directory.CreateDirectory(comicDirectory);
-        await File.WriteAllTextAsync(Path.Combine(comicDirectory, "001.jpg"), "page");
-        var wrappedComicDirectory = Path.Combine(_tempDir, "wrapped-comic");
-        Directory.CreateDirectory(wrappedComicDirectory);
-        var wrappedComicPath = Path.Combine(wrappedComicDirectory, "wrapped.cbz");
-        await File.WriteAllTextAsync(wrappedComicPath, "archive");
-        db.EntityFiles.AddRange(
-            Source(DirectoryComicId, comicDirectory, null),
-            Source(WrappedComicId, wrappedComicDirectory, null));
         await db.SaveChangesAsync();
         var service = CreateService(db);
 
         var recent = await service.ListRecentAsync(hideNsfw: true, new OpdsPageRequest(1, 50), CancellationToken.None);
-        var directoryDownload = await service.GetBookDownloadAsync(DirectoryComicId, hideNsfw: true, CancellationToken.None);
-        var wrappedDownload = await service.GetBookDownloadAsync(WrappedComicId, hideNsfw: true, CancellationToken.None);
         var cover = await service.GetBookCoverAsync(VisibleBookId, hideNsfw: true, CancellationToken.None);
 
         Assert.Contains(recent.Items, book => book.Id == VisibleBookId && book.AcquisitionContentType == MediaContentTypes.Epub);
-        Assert.Contains(recent.Items, book => book.Id == DirectoryComicId && book.AcquisitionContentType == MediaContentTypes.ComicBookZip);
-        Assert.Contains(recent.Items, book => book.Id == WrappedComicId && book.AcquisitionContentType == MediaContentTypes.ComicBookZip);
-        Assert.NotNull(directoryDownload);
-        Assert.Equal("comic-folder.cbz", directoryDownload.FileName);
-        Assert.NotNull(wrappedDownload);
-        Assert.Equal(wrappedComicPath, wrappedDownload.Path);
-        Assert.Equal("wrapped.cbz", wrappedDownload.FileName);
         Assert.NotNull(cover);
         Assert.Equal(coverPath, cover.Path);
         Assert.Equal(MediaContentTypes.ImageJpeg, cover.ContentType);
@@ -182,59 +144,6 @@ public sealed class OpdsCatalogServiceTests : IDisposable {
         Assert.Contains(seriesBooks.Items, book => book.Id == secondBookId);
         Assert.Null(parentDetail);
         Assert.Null(parentDownload);
-    }
-
-    [Fact]
-    public async Task CatalogUsesSharedThumbnailRepresentativeAsOpdsCover() {
-        await using var db = CreateContext();
-        SeedCatalog(db);
-        var bookId = Guid.Parse("16161616-1616-1616-1616-161616161616");
-        var chapterId = Guid.Parse("17171717-1717-1717-1717-171717171717");
-        var pageId = Guid.Parse("18181818-1818-1818-1818-181818181818");
-        var comicDirectory = Path.Combine(_tempDir, "representative-comic");
-        Directory.CreateDirectory(comicDirectory);
-        await File.WriteAllTextAsync(Path.Combine(comicDirectory, "001.jpg"), "page");
-        var pageThumbPath = Path.Combine(_tempDir, "cache", "book-pages", pageId.ToString(), "thumb.jpg");
-        Directory.CreateDirectory(Path.GetDirectoryName(pageThumbPath)!);
-        await File.WriteAllTextAsync(pageThumbPath, "thumbnail");
-        var now = DateTimeOffset.UtcNow;
-        var chapter = Entity(chapterId, EntityKind.BookChapter.ToCode(), "Chapter 1", false, bookId);
-        chapter.SortOrder = 0;
-        var page = Entity(pageId, EntityKind.BookPage.ToCode(), "Page 1", false, chapterId);
-        page.SortOrder = 0;
-        db.Entities.AddRange(
-            Entity(bookId, EntityKind.Book.ToCode(), "Representative Comic", false),
-            chapter,
-            page);
-        db.BookDetails.Add(new BookDetailRow {
-            EntityId = bookId,
-            BookType = BookType.Comic,
-            Format = BookFormat.ImageArchive
-        });
-        db.EntityLibraryRoots.Add(RootMembership(bookId, VisibleRootId));
-        db.EntityFiles.AddRange(
-            Source(bookId, comicDirectory, null),
-            new EntityFileRow {
-                Id = Guid.NewGuid(),
-                EntityId = pageId,
-                Role = EntityFileRole.Thumbnail,
-                Path = AssetPathService.BookPageThumbnailUrl(pageId),
-                MimeType = MediaContentTypes.ImageJpeg,
-                CreatedAt = now,
-                UpdatedAt = now
-            });
-        await db.SaveChangesAsync();
-        var service = CreateService(db);
-
-        var recent = await service.ListRecentAsync(hideNsfw: true, new OpdsPageRequest(1, 50), CancellationToken.None);
-        var entry = Assert.Single(recent.Items, book => book.Id == bookId);
-        var cover = await service.GetBookCoverAsync(bookId, hideNsfw: true, CancellationToken.None);
-
-        Assert.Equal(MediaContentTypes.ImageJpeg, entry.CoverContentType);
-        Assert.Equal(MediaContentTypes.ImageJpeg, entry.ThumbnailContentType);
-        Assert.NotNull(cover);
-        Assert.Equal(pageThumbPath, cover.Path);
-        Assert.Equal(MediaContentTypes.ImageJpeg, cover.ContentType);
     }
 
     public void Dispose() {

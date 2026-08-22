@@ -47,27 +47,6 @@ public sealed class EntityOrganizerServiceTests {
     }
 
     [Fact]
-    public async Task PlanSkipsArchiveEntriesBecauseTheyAreNotMovedIndependently() {
-        await using var db = CreateContext();
-        var rootPath = Path.Combine(Path.GetTempPath(), "prismedia-organize-archive");
-        var pageId = Guid.Parse("20000000-0000-0000-0000-000000000001");
-        var now = DateTimeOffset.UtcNow;
-
-        SeedRoot(db, rootPath);
-        SeedEntity(db, pageId, EntityKind.BookPage.ToCode(), "Page 1", null, null, now);
-        SeedSource(db, pageId, Path.Combine(rootPath, "Book.cbz#page-1.jpg"), now);
-        await db.SaveChangesAsync();
-
-        var service = CreateService(db);
-        var plan = await service.PlanAsync(new OrganizePlanRequest(pageId, null), CancellationToken.None);
-
-        var item = Assert.Single(plan.Items);
-        Assert.Equal(EntityStorageShape.ArchiveEntry, item.StorageShape);
-        Assert.Equal(OrganizeItemStatus.Skipped, item.Status);
-        Assert.Equal("Archive entries are not moved independently.", item.Reason);
-    }
-
-    [Fact]
     public async Task ApplyMovesReadyFileAndUpdatesSourcePath() {
         await using var db = CreateContext();
         var tempRoot = Directory.CreateTempSubdirectory("prismedia-organize-apply-");

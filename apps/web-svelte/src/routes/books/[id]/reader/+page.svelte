@@ -1,4 +1,12 @@
 <script lang="ts">
+  import { goto } from "$app/navigation";
+  import { page } from "$app/state";
+  import { AlertTriangle, Headphones, Pause, Play } from "@lucide/svelte";
+  import { Button } from "@prismedia/ui-svelte";
+  import { onMount } from "svelte";
+  import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
+  import { getBookMetadataCapability, getCapability } from "$lib/api/capabilities";
+  import { recordEntityConsumptionEvent, updateEntityProgress } from "$lib/api/consumption";
   import {
     BOOK_FORMAT,
     CAPABILITY_KIND,
@@ -7,93 +15,52 @@
     PROGRESS_UNIT,
     READER_MODE,
   } from "$lib/api/generated/codes";
-  import { onMount } from "svelte";
-  import { goto } from "$app/navigation";
-  import { page } from "$app/state";
-  import { AlertTriangle, Headphones, Pause, Play } from "@lucide/svelte";
-  import { Button } from "@prismedia/ui-svelte";
-  import { getBookMetadataCapability, getCapability } from "$lib/api/capabilities";
-  import { fetchEntity, fetchEntityChildren, type EntityCardFull } from "$lib/api/entities";
-  import { recordEntityConsumptionEvent, updateEntityProgress } from "$lib/api/consumption";
-  import {
-    bookEntityProgressDisplay,
-    entityPageToReaderImage,
-    orderedBookChildren,
-    type BookReaderChapter,
-  } from "$lib/entities/book-entity-reader";
-  import {
-    bookReaderContextFromUrl,
-    bookReaderHref,
-    bookReaderReturnHref,
-    type BookReaderRouteContext,
-  } from "$lib/entities/book-reader-route";
-  import { resolveEntityHrefById } from "$lib/entities/entity-route-resolver";
-  import { ENTITY_KIND } from "$lib/entities/entity-codes";
-  import type { EntityThumbnail } from "$lib/api/generated/model";
-  import ComicReader from "$lib/components/ComicReader.svelte";
   import BookFileReader from "$lib/components/BookFileReader.svelte";
   import PdfReader from "$lib/components/PdfReader.svelte";
-  import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
-  import { useNsfw } from "$lib/nsfw/store.svelte";
-  import { useAudioPlayback } from "$lib/stores/audio-playback.svelte";
   import { ConsumptionActivityClock } from "$lib/entities/consumption-activity-clock";
   import {
     exactWebEpubResumeLocation,
     webEpubLaunchLocation,
   } from "$lib/entities/epub-contents";
-  import { fetchBookChapterSummaries } from "$lib/entities/book-chapter-hydration";
-
-  type ReaderFlow = "paginated" | "scrolled";
+  import {
+    bookReaderContextFromUrl,
+    bookReaderReturnHref,
+    type BookReaderRouteContext,
+  } from "$lib/entities/book-reader-route";
+  import { resolveEntityHrefById } from "$lib/entities/entity-route-resolver";
+  import { redirectHiddenEntityNotFound } from "$lib/nsfw/hidden-entity";
+  import { useNsfw } from "$lib/nsfw/store.svelte";
+  import { useAudioPlayback } from "$lib/stores/audio-playback.svelte";
 
   type LoadState = "loading" | "ready" | "error";
-  type ReaderMode = typeof READER_MODE.paged | typeof READER_MODE.webtoon;
-
-  interface ReaderChapter {
-    id: string;
-    title: string;
-    pages: EntityThumbnail[];
-    summary: BookReaderChapter;
-  }
+  type ReaderFlow = "paginated" | "scrolled";
+  type ReaderSurface = "epub" | "pdf";
 
   const nsfw = useNsfw();
   const playback = useAudioPlayback()!;
 
   let loadState: LoadState = $state("loading");
-  let book = $state<EntityCardFull | null>(null);
+  let surface: ReaderSurface | null = $state(null);
+  let book = $state.raw<EntityCardFull | null>(null);
   let context = $state.raw<BookReaderRouteContext | null>(null);
-  let readerChapters = $state.raw<ReaderChapter[]>([]);
-  let nextChapter = $state.raw<BookReaderChapter | null>(null);
-  let readerIndex = $state(0);
-  let readerMode: ReaderMode = $state(READER_MODE.paged);
   let readerTitle = $state("Reader");
   let returnHref = $state("/books");
-  let errorMessage: string | null = $state(null);
+  let errorMessage = $state<string | null>(null);
+  let sourceUrl = $state("");
+  let epubLocation = $state.raw<string | null>(null);
+  let epubInitialFraction = $state.raw<number | null>(null);
+  let epubFlow = $state.raw<ReaderFlow>("paginated");
+  let epubSaveLocation: string | null = null;
+  let epubSaveFraction = 0;
+  let epubFlowMode: ReaderFlow = "paginated";
+  let pdfInitialPage = $state(0);
+  let pdfLastPage = 0;
+  let pdfLastCount = 0;
   let progressSaveQueue: Promise<void> = Promise.resolve();
   const readerActivityClock = new ConsumptionActivityClock();
   const readerConsumptionSessionId = createReaderSessionId();
 
-  // EPUB reader state (reflowable, via foliate).
-  let singleFileBook = $state(false);
-  let singleFileSource = $state("");
-  let singleFileContentType = $state("application/epub+zip");
-  let singleFileLocation = $state.raw<string | null>(null);
-  let singleFileInitialFraction = $state.raw<number | null>(null);
-  let singleFileFlow = $state.raw<ReaderFlow>("paginated");
-  let singleFileSaveLocation: string | null = null;
-  let singleFileSaveFraction = 0;
-  let singleFileFlowMode: ReaderFlow = "paginated";
-
-  // PDF reader state: a dedicated pdf.js reader (continuous scroll, selectable text).
-  let pdfBook = $state(false);
-  let pdfSource = $state("");
-  let pdfInitialPage = $state(0);
-  let pdfLastPage = 0;
-  let pdfLastCount = 0;
-
   const bookId = $derived(page.params.id ?? "");
-  const readerPages = $derived(
-    readerChapters.flatMap((chapter) => chapter.pages.map(entityPageToReaderImage)),
-  );
   const combinedAudiobookActive = $derived(
     Boolean(
       context?.combined &&
@@ -118,11 +85,8 @@
     };
     const heartbeat = window.setInterval(() => queueReaderActivityHeartbeat(false), 15_000);
     const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        readerActivityClock.start();
-      } else {
-        queueReaderActivityHeartbeat(true);
-      }
+      if (document.visibilityState === "visible") readerActivityClock.start();
+      else queueReaderActivityHeartbeat(true);
     };
     document.addEventListener("visibilitychange", handleVisibilityChange);
     void startReader();
@@ -141,159 +105,125 @@
   function queueReaderActivityHeartbeat(stop: boolean) {
     const activitySeconds = stop ? readerActivityClock.stop() : readerActivityClock.take();
     if (!activitySeconds || loadState !== "ready") return;
-    if (singleFileBook) {
-      void queueSingleFileSave(false, activitySeconds).catch(() => undefined);
-    } else if (pdfBook) {
+    if (surface === "epub") {
+      void queueEpubSave(false, activitySeconds).catch(() => undefined);
+    } else if (surface === "pdf") {
       void queuePdfSave(pdfLastPage, pdfLastCount, false, activitySeconds).catch(() => undefined);
-    } else {
-      void queueProgressSave(readerIndex, false, activitySeconds).catch(() => undefined);
     }
   }
 
   async function loadReader(url: URL) {
     loadState = "loading";
     errorMessage = null;
-
-    // A bare /books/[id]/reader URL (bookmark, refresh, shared link) carries no
-    // context params; fall back to resuming the book itself, which lands on the
-    // in-progress chapter or the first chapter.
-    const nextContext: BookReaderRouteContext =
-      bookReaderContextFromUrl(url) ?? { kind: "book", id: bookId, command: "resume" };
+    surface = null;
+    const nextContext = bookReaderContextFromUrl(url) ?? {
+      kind: "book" as const,
+      id: bookId,
+      command: "resume" as const,
+    };
 
     try {
       const nextBook = await fetchEntity(bookId);
-      const metadata = getBookMetadataCapability(nextBook.capabilities);
-
-      if (metadata?.format === BOOK_FORMAT.epub) {
-        await loadSingleFileReader(nextBook, nextContext);
-        return;
-      }
-      if (metadata?.format === BOOK_FORMAT.pdf) {
-        await loadPdfReader(nextBook, nextContext);
-        return;
+      const format = getBookMetadataCapability(nextBook.capabilities)?.format;
+      if (format !== BOOK_FORMAT.epub && format !== BOOK_FORMAT.pdf) {
+        throw new Error("This book has no readable EPUB or PDF rendition.");
       }
 
-      const resolved = await resolveReader(nextBook, nextContext);
       book = nextBook;
       context = nextContext;
-      readerChapters = resolved.chapters;
-      nextChapter = resolved.nextChapter;
-      readerMode = nextContext.mode ?? resolved.readerMode;
-      readerIndex = clampIndex(nextContext.pageIndex ?? resolved.initialIndex, resolved.pageCount);
-      readerTitle = resolved.title;
+      readerTitle = nextBook.title;
       returnHref = await resolveReaderReturnHref(nextBook.id, nextContext);
+      sourceUrl = `/entities/${nextBook.id}/files/source`;
+      if (format === BOOK_FORMAT.epub) loadEpubState(nextBook, nextContext);
+      else loadPdfState(nextBook, nextContext);
       loadState = "ready";
-    } catch (err) {
-      if (redirectHiddenEntityNotFound(err, nsfw.mode)) return;
-      errorMessage = err instanceof Error ? err.message : String(err);
+    } catch (error) {
+      if (redirectHiddenEntityNotFound(error, nsfw.mode)) return;
+      errorMessage = error instanceof Error ? error.message : String(error);
       loadState = "error";
     }
   }
 
-  async function loadSingleFileReader(nextBook: EntityCardFull, nextContext: BookReaderRouteContext) {
+  function loadEpubState(nextBook: EntityCardFull, nextContext: BookReaderRouteContext) {
     const progress = getCapability(nextBook.capabilities, CAPABILITY_KIND.progress);
     const resume = nextContext.command !== "start-over" && !progress?.completedAt;
     const launchLocation = webEpubLaunchLocation(nextContext.location);
     const launchFraction = launchLocation ? null : nextContext.fraction ?? null;
     const persistedLocation = resume ? exactWebEpubResumeLocation(progress?.location) : null;
-    singleFileBook = true;
-    singleFileSource = `/entities/${nextBook.id}/files/source`;
-    singleFileContentType = getBookMetadataCapability(nextBook.capabilities)?.format === BOOK_FORMAT.pdf
-      ? "application/pdf"
-      : "application/epub+zip";
-    singleFileLocation = launchLocation ?? (launchFraction === null ? persistedLocation : null);
-    singleFileInitialFraction = launchFraction
-      ?? (singleFileLocation
+    surface = "epub";
+    epubLocation = launchLocation ?? (launchFraction === null ? persistedLocation : null);
+    epubInitialFraction = launchFraction
+      ?? (epubLocation
         ? null
         : resume && Number(progress?.total ?? 0) > 0
           ? Number(progress?.index ?? 0) / Number(progress?.total ?? 0)
           : null);
-    singleFileFlow = progress?.mode === READER_MODE.scrolled ? "scrolled" : "paginated";
-    singleFileFlowMode = singleFileFlow;
-    singleFileSaveLocation = singleFileLocation;
-    singleFileSaveFraction = launchFraction ?? (launchLocation ? 0 : resume ? Number(progress?.index ?? 0) / 10000 : 0);
-    book = nextBook;
-    context = nextContext;
-    readerTitle = nextBook.title;
-    returnHref = await resolveReaderReturnHref(nextBook.id, nextContext);
-    loadState = "ready";
+    epubFlow = progress?.mode === READER_MODE.scrolled ? "scrolled" : "paginated";
+    epubFlowMode = epubFlow;
+    epubSaveLocation = epubLocation;
+    epubSaveFraction = launchFraction
+      ?? (launchLocation ? 0 : resume ? Number(progress?.index ?? 0) / 10_000 : 0);
   }
 
-  function handleSingleFileLocation(location: { cfi: string | null; fraction: number; label: string | null }) {
-    singleFileSaveLocation = location.cfi;
-    singleFileSaveFraction = location.fraction;
-    void queueSingleFileSave().catch(() => undefined);
+  function loadPdfState(nextBook: EntityCardFull, nextContext: BookReaderRouteContext) {
+    const progress = getCapability(nextBook.capabilities, CAPABILITY_KIND.progress);
+    const resume = nextContext.command !== "start-over" && !progress?.completedAt;
+    surface = "pdf";
+    pdfInitialPage = resume ? Math.max(0, Number(progress?.index ?? 0)) : 0;
+    pdfLastPage = pdfInitialPage;
+    pdfLastCount = Math.max(0, Number(progress?.total ?? 0));
   }
 
-  function handleSingleFileFlow(flow: ReaderFlow) {
-    singleFileFlowMode = flow;
-    void queueSingleFileSave().catch(() => undefined);
+  function handleEpubLocation(location: { cfi: string | null; fraction: number; label: string | null }) {
+    epubSaveLocation = location.cfi;
+    epubSaveFraction = location.fraction;
+    void queueEpubSave().catch(() => undefined);
   }
 
-  async function saveSingleFileProgress(
+  function handleEpubFlow(flow: ReaderFlow) {
+    epubFlowMode = flow;
+    void queueEpubSave().catch(() => undefined);
+  }
+
+  async function saveEpubProgress(
     completed = false,
     activitySeconds = readerActivityClock.take(),
   ) {
     if (!book) return;
-    const percent = Math.max(0, Math.min(10000, Math.round(singleFileSaveFraction * 10000)));
+    const index = Math.max(0, Math.min(10_000, Math.round(epubSaveFraction * 10_000)));
     await updateEntityProgress(book.id, {
       currentEntityId: book.id,
       unit: PROGRESS_UNIT.cfi,
-      index: percent,
-      total: 10000,
-      // The EPUB surface tracks a paginated/scrolled flow; only "scrolled" is a persisted
-      // reader-mode code, the paginated flow stores as the paged layout.
-      mode: singleFileFlowMode === "scrolled" ? READER_MODE.scrolled : READER_MODE.paged,
-      location: singleFileSaveLocation,
+      index,
+      total: 10_000,
+      mode: epubFlowMode === "scrolled" ? READER_MODE.scrolled : READER_MODE.paged,
+      location: epubSaveLocation,
       completed: completed ? true : null,
       activitySeconds,
       activityKind: activitySeconds ? CONSUMPTION_ACTIVITY_KIND.reading : undefined,
     });
   }
 
-  function queueSingleFileSave(completed = false, activitySeconds?: number | null) {
-    const nextSave = progressSaveQueue
+  function queueEpubSave(completed = false, activitySeconds?: number | null) {
+    const save = progressSaveQueue
       .catch(() => undefined)
-      .then(() => saveSingleFileProgress(completed, activitySeconds));
-    progressSaveQueue = nextSave;
-    return nextSave;
-  }
-
-  async function closeSingleFileReader() {
-    const completed = singleFileSaveFraction >= 0.995;
-    await queueSingleFileSave(completed).catch(() => undefined);
-    await goto(returnHref);
-  }
-
-  // ── PDF reader (dedicated pdf.js reader: continuous scroll, selectable text) ──
-
-  async function loadPdfReader(nextBook: EntityCardFull, nextContext: BookReaderRouteContext) {
-    const progress = getCapability(nextBook.capabilities, CAPABILITY_KIND.progress);
-    const resume = nextContext.command !== "start-over" && !progress?.completedAt;
-    pdfBook = true;
-    pdfSource = `/entities/${nextBook.id}/files/source`;
-    pdfInitialPage = resume ? Math.max(0, Number(progress?.index ?? 0)) : 0;
-    pdfLastPage = pdfInitialPage;
-    pdfLastCount = Math.max(0, Number(progress?.total ?? 0));
-    book = nextBook;
-    context = nextContext;
-    readerTitle = nextBook.title;
-    returnHref = await resolveReaderReturnHref(nextBook.id, nextContext);
-    loadState = "ready";
+      .then(() => saveEpubProgress(completed, activitySeconds));
+    progressSaveQueue = save;
+    return save;
   }
 
   async function savePdfProgress(
-    page: number,
-    count: number,
+    pageIndex: number,
+    pageCount: number,
     completed: boolean,
     activitySeconds = readerActivityClock.take(),
   ) {
-    if (!book || count === 0) return;
+    if (!book || pageCount <= 0) return;
     await updateEntityProgress(book.id, {
       currentEntityId: book.id,
       unit: PROGRESS_UNIT.page,
-      index: clampIndex(page, count),
-      total: count,
+      index: clampPageIndex(pageIndex, pageCount),
+      total: pageCount,
       mode: READER_MODE.scrolled,
       completed: completed ? true : null,
       activitySeconds,
@@ -302,273 +232,48 @@
   }
 
   function queuePdfSave(
-    page: number,
-    count: number,
+    pageIndex: number,
+    pageCount: number,
     completed: boolean,
     activitySeconds?: number | null,
   ) {
-    const nextSave = progressSaveQueue
+    const save = progressSaveQueue
       .catch(() => undefined)
-      .then(() => savePdfProgress(page, count, completed, activitySeconds));
-    progressSaveQueue = nextSave;
-    return nextSave;
+      .then(() => savePdfProgress(pageIndex, pageCount, completed, activitySeconds));
+    progressSaveQueue = save;
+    return save;
   }
 
-  function handlePdfPageChange(page: number, count: number) {
-    pdfLastPage = page;
-    pdfLastCount = count;
-    const reachedEnd = count > 0 && page >= count - 1;
-    void queuePdfSave(page, count, reachedEnd).catch(() => undefined);
-  }
-
-  async function closePdfReader() {
-    const reachedEnd = pdfLastCount > 0 && pdfLastPage >= pdfLastCount - 1;
-    await queuePdfSave(pdfLastPage, pdfLastCount, reachedEnd).catch(() => undefined);
-    await goto(returnHref);
-  }
-
-  async function resolveReader(nextBook: EntityCardFull, nextContext: BookReaderRouteContext) {
-    if (nextContext.kind === "volume") {
-      return resolveVolumeReader(nextBook, nextContext.id);
-    }
-    if (nextContext.kind === "book") {
-      return resolveBookReader(nextBook, nextContext);
-    }
-    return resolveChapterReader(nextBook, nextContext);
-  }
-
-  async function resolveChapterReader(nextBook: EntityCardFull, nextContext: BookReaderRouteContext) {
-    const chapter = await fetchEntity(nextContext.id);
-    const summaries = await fetchBookChapterSummaries(nextBook, chapter);
-    const progress = bookEntityProgressDisplay(nextBook, summaries);
-    const chapterIndex = summaries.findIndex((item) => item.id === chapter.id);
-    const pages = orderedBookChildren(chapter, ENTITY_KIND.bookPage);
-    const initialIndex = initialChapterIndex(nextContext, progress, chapter.id);
-
-    return {
-      title: `${nextBook.title} · ${chapter.title}`,
-      chapters: [readerChapter(chapter, pages, chapterIndex >= 0 ? chapterIndex : 0)],
-      nextChapter: chapterIndex >= 0 ? summaries[chapterIndex + 1] ?? null : null,
-      initialIndex,
-      readerMode: progress?.readerMode ?? READER_MODE.paged,
-      pageCount: pages.length,
-    };
-  }
-
-  async function resolveVolumeReader(nextBook: EntityCardFull, volumeId: string) {
-    const volume = await fetchEntity(volumeId);
-    const chapterThumbnails = orderedBookChildren(volume, ENTITY_KIND.bookChapter);
-    const childGroups = await fetchEntityChildren(chapterThumbnails.map((chapter) => chapter.id));
-    const pagesByChapter = new Map(childGroups.map((group) => [group.parentId, group.items]));
-    const chapters = chapterThumbnails.map((chapter, index) =>
-      readerChapter(
-        chapter,
-        (pagesByChapter.get(chapter.id) ?? []).filter((child) => child.kind === ENTITY_KIND.bookPage),
-        index,
-      ),
-    );
-    const summaries = chapters.map((chapter) => chapter.summary);
-    const progress = bookEntityProgressDisplay(nextBook, summaries);
-    const initialIndex = progress && !progress.isComplete
-      ? pageOffsetForChapter(chapters, progress.chapterId) + progress.currentPage - 1
-      : 0;
-
-    return {
-      title: `${nextBook.title} · ${volume.title}`,
-      chapters,
-      nextChapter: null,
-      initialIndex,
-      readerMode: progress?.readerMode ?? READER_MODE.paged,
-      pageCount: chapters.reduce((total, chapter) => total + chapter.pages.length, 0),
-    };
-  }
-
-  async function resolveBookReader(nextBook: EntityCardFull, nextContext: BookReaderRouteContext) {
-    const progressChapterId = getCapability(nextBook.capabilities, CAPABILITY_KIND.progress)?.currentEntityId ?? null;
-    if (nextContext.command === "resume" && progressChapterId) {
-      const progressChapter = await fetchEntity(progressChapterId);
-      if (progressChapter.kind === ENTITY_KIND.bookChapter) {
-        return resolveBookChapterReader(nextBook, nextContext, progressChapter);
-      }
-    }
-
-    const firstChapter = await loadFirstBookChapterDetail(nextBook);
-    return resolveBookChapterReader(nextBook, nextContext, firstChapter);
-  }
-
-  async function resolveBookChapterReader(
-    nextBook: EntityCardFull,
-    nextContext: BookReaderRouteContext,
-    selectedChapter: EntityCardFull | null,
-  ) {
-    const summaries = selectedChapter
-      ? await fetchBookChapterSummaries(nextBook, selectedChapter)
-      : [];
-    const progress = bookEntityProgressDisplay(nextBook, summaries);
-    const selectedIndex = selectedChapter
-      ? Math.max(0, summaries.findIndex((chapter) => chapter.id === selectedChapter.id))
-      : -1;
-    const pages = selectedChapter ? orderedBookChildren(selectedChapter, ENTITY_KIND.bookPage) : [];
-    const initialIndex = selectedChapter && progress?.chapterId === selectedChapter.id && !progress.isComplete
-      ? progress.currentPage - 1
-      : 0;
-
-    return {
-      title: `${nextBook.title}${selectedChapter ? ` · ${selectedChapter.title}` : ""}`,
-      chapters: selectedChapter ? [readerChapter(selectedChapter, pages, selectedIndex >= 0 ? selectedIndex : 0)] : [],
-      nextChapter: selectedIndex >= 0 ? summaries[selectedIndex + 1] ?? null : null,
-      initialIndex,
-      readerMode: progress?.readerMode ?? READER_MODE.paged,
-      pageCount: pages.length,
-    };
-  }
-
-  async function loadFirstBookChapterDetail(nextBook: EntityCardFull): Promise<EntityCardFull | null> {
-    const directChapters = orderedBookChildren(nextBook, ENTITY_KIND.bookChapter);
-    if (directChapters.length > 0) {
-      return fetchEntity(directChapters[0].id);
-    }
-
-    const firstVolume = orderedBookChildren(nextBook, ENTITY_KIND.bookVolume)[0];
-    if (!firstVolume) return null;
-
-    const volume = await fetchEntity(firstVolume.id);
-    const firstVolumeChapter = orderedBookChildren(volume, ENTITY_KIND.bookChapter)[0];
-    return firstVolumeChapter ? fetchEntity(firstVolumeChapter.id) : null;
-  }
-
-  function readerChapter(
-    detail: Pick<EntityCardFull, "id" | "title">,
-    pages: EntityThumbnail[],
-    index: number,
-  ): ReaderChapter {
-    return {
-      id: detail.id,
-      title: detail.title,
-      pages,
-      summary: {
-        id: detail.id,
-        title: detail.title,
-        sortOrder: index,
-        pageCount: pages.length,
-      },
-    };
-  }
-
-  function initialChapterIndex(
-    nextContext: BookReaderRouteContext,
-    progress: ReturnType<typeof bookEntityProgressDisplay>,
-    chapterId: string,
-  ) {
-    if (nextContext.command === "start-over") return 0;
-    if (progress?.chapterId === chapterId && !progress.isComplete) return progress.currentPage - 1;
-    return 0;
-  }
-
-  function pageOffsetForChapter(chapters: ReaderChapter[], chapterId: string) {
-    let offset = 0;
-    for (const chapter of chapters) {
-      if (chapter.id === chapterId) return offset;
-      offset += chapter.pages.length;
-    }
-    return 0;
-  }
-
-  function positionForReaderIndex(index: number) {
-    let offset = 0;
-    for (const chapter of readerChapters) {
-      const nextOffset = offset + chapter.pages.length;
-      if (index < nextOffset) {
-        return { chapter, pageIndex: index - offset, pageCount: chapter.pages.length };
-      }
-      offset = nextOffset;
-    }
-
-    const chapter = readerChapters.at(-1) ?? null;
-    return {
-      chapter,
-      pageIndex: Math.max(0, (chapter?.pages.length ?? 1) - 1),
-      pageCount: chapter?.pages.length ?? 0,
-    };
-  }
-
-  async function saveProgress(
-    index = readerIndex,
-    completed = false,
-    activitySeconds = readerActivityClock.take(),
-  ) {
-    if (!book || readerPages.length === 0) return;
-    const position = positionForReaderIndex(index);
-    if (!position.chapter) return;
-    await updateEntityProgress(book.id, {
-      currentEntityId: position.chapter.id,
-      unit: PROGRESS_UNIT.page,
-      index: Math.max(0, Math.min(position.pageIndex, Math.max(0, position.pageCount - 1))),
-      total: position.pageCount,
-      mode: readerMode,
-      // Only an explicit end-of-book save reports completion; mid-reading sends null so it does not
-      // get treated as an explicit "mark unread".
-      completed: completed ? true : null,
-      activitySeconds,
-      activityKind: activitySeconds ? CONSUMPTION_ACTIVITY_KIND.reading : undefined,
-    });
-  }
-
-  function queueProgressSave(
-    index = readerIndex,
-    completed = false,
-    activitySeconds?: number | null,
-  ) {
-    const nextSave = progressSaveQueue
-      .catch(() => undefined)
-      .then(() => saveProgress(index, completed, activitySeconds));
-    progressSaveQueue = nextSave;
-    return nextSave;
-  }
-
-  function handleIndexChange(index: number) {
-    readerIndex = index;
-    const reachedEnd = readerPages.length > 0 && index >= readerPages.length - 1 && !nextChapter;
-    void queueProgressSave(index, reachedEnd).catch(() => undefined);
-  }
-
-  function handleModeChange(mode: ReaderMode) {
-    readerMode = mode;
-    void queueProgressSave(readerIndex, false).catch(() => undefined);
-  }
-
-  async function handleNextChapter() {
-    if (!book || !context || !nextChapter) return;
-    await queueProgressSave(readerIndex, false).catch(() => undefined);
-    const nextHref = bookReaderHref({
-      bookId: book.id,
-      kind: "chapter",
-      id: nextChapter.id,
-      returnId: context.returnId ?? context.id,
-      command: "resume",
-      mode: readerMode,
-    });
-    await goto(nextHref);
-    await loadReader(new URL(nextHref, page.url.origin));
+  function handlePdfPageChange(pageIndex: number, pageCount: number) {
+    pdfLastPage = pageIndex;
+    pdfLastCount = pageCount;
+    void queuePdfSave(pageIndex, pageCount, pageCount > 0 && pageIndex >= pageCount - 1)
+      .catch(() => undefined);
   }
 
   async function closeReader() {
-    const reachedEnd = readerPages.length > 0 && readerIndex >= readerPages.length - 1 && !nextChapter;
-    await queueProgressSave(readerIndex, reachedEnd).catch(() => undefined);
+    if (surface === "epub") {
+      await queueEpubSave(epubSaveFraction >= 0.995).catch(() => undefined);
+    } else if (surface === "pdf") {
+      await queuePdfSave(
+        pdfLastPage,
+        pdfLastCount,
+        pdfLastCount > 0 && pdfLastPage >= pdfLastCount - 1,
+      ).catch(() => undefined);
+    }
     await goto(returnHref);
   }
 
-  function clampIndex(index: number, pageCount: number) {
-    return Math.max(0, Math.min(index, Math.max(0, pageCount - 1)));
+  function clampPageIndex(index: number, count: number): number {
+    return Math.max(0, Math.min(index, Math.max(0, count - 1)));
   }
 
-  async function resolveReaderReturnHref(bookId: string, nextContext: BookReaderRouteContext) {
+  async function resolveReaderReturnHref(bookEntityId: string, nextContext: BookReaderRouteContext) {
     if (nextContext.returnId) {
       const href = await resolveEntityHrefById(nextContext.returnId).catch(() => null);
       if (href) return href;
     }
-
-    return bookReaderReturnHref(bookId, nextContext);
+    return bookReaderReturnHref(bookEntityId, nextContext);
   }
 </script>
 
@@ -597,43 +302,28 @@
   </div>
 {/snippet}
 
-{#if loadState === "ready" && pdfBook}
+{#if loadState === "ready" && surface === "pdf"}
   <PdfReader
-    sourceUrl={pdfSource}
+    sourceUrl={sourceUrl}
     title={readerTitle}
     presentation="page"
     closeIcon="back"
     initialPage={pdfInitialPage}
     onPageChange={handlePdfPageChange}
-    onClose={() => void closePdfReader()}
+    onClose={() => void closeReader()}
   />
-{:else if loadState === "ready" && singleFileBook}
+{:else if loadState === "ready" && surface === "epub"}
   <BookFileReader
-    sourceUrl={singleFileSource}
-    contentType={singleFileContentType}
+    sourceUrl={sourceUrl}
+    contentType="application/epub+zip"
     title={readerTitle}
     presentation="page"
     closeIcon="back"
-    initialLocation={singleFileLocation}
-    initialFraction={singleFileInitialFraction}
-    initialFlow={singleFileFlow}
-    onLocationChange={handleSingleFileLocation}
-    onFlowChange={handleSingleFileFlow}
-    companionControls={combinedAudiobookActive ? combinedAudioControls : undefined}
-    onClose={() => void closeSingleFileReader()}
-  />
-{:else if loadState === "ready"}
-  <ComicReader
-    images={readerPages}
-    initialIndex={readerIndex}
-    initialMode={readerMode}
-    nextChapterLabel={nextChapter?.title ?? null}
-    title={readerTitle}
-    presentation="page"
-    closeIcon="back"
-    onIndexChange={handleIndexChange}
-    onModeChange={handleModeChange}
-    onNextChapter={nextChapter ? handleNextChapter : undefined}
+    initialLocation={epubLocation}
+    initialFraction={epubInitialFraction}
+    initialFlow={epubFlow}
+    onLocationChange={handleEpubLocation}
+    onFlowChange={handleEpubFlow}
     companionControls={combinedAudiobookActive ? combinedAudioControls : undefined}
     onClose={() => void closeReader()}
   />
@@ -702,10 +392,6 @@
   @media (max-width: 540px) {
     .combined-track-title {
       display: none;
-    }
-
-    .combined-audio-controls {
-      padding-left: 0.4rem;
     }
   }
 </style>

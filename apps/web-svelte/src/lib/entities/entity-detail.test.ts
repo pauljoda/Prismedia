@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EntityCard, EntityKind } from "$lib/api/generated/model";
-import { CAPABILITY_KIND } from "$lib/entities/entity-codes";
+import { CAPABILITY_KIND, ENTITY_KIND } from "$lib/entities/entity-codes";
 import { entityCardToDetailCard, formatDetailDateValue } from "./entity-detail";
 
 describe("formatDetailDateValue", () => {
@@ -270,11 +270,11 @@ describe("entity detail view model", () => {
     }
   });
 
-  it("uses the shared thumbnail hover model for comic detail posters", () => {
+  it("does not treat comic installment pages as child Entities", () => {
     const detail = entityCardToDetailCard({
       id: "comic-1",
-      kind: "book",
-      title: "Comic",
+      kind: ENTITY_KIND.comicInstallment,
+      title: "Installment 1",
       parentEntityId: null,
       sortOrder: null,
       capabilities: [
@@ -289,13 +289,28 @@ describe("entity detail view model", () => {
           ],
         },
       ],
+      childrenByKind: [],
+      relationships: [],
+    } satisfies EntityCard);
+
+    expect(detail.posterCard?.hover.kind).toBe("none");
+  });
+
+  it("uses child images for gallery detail poster previews", () => {
+    const detail = entityCardToDetailCard({
+      id: "gallery-2",
+      kind: ENTITY_KIND.gallery,
+      title: "Gallery",
+      parentEntityId: null,
+      sortOrder: null,
+      capabilities: [],
       childrenByKind: [
         {
-          kind: "book-page",
-          label: "Pages",
+          kind: ENTITY_KIND.image,
+          label: "Images",
           entities: [
-            thumbnail("page-1", "book-page", "Page 1", "/assets/comics/comic-1/page-1.jpg", "comic-1"),
-            thumbnail("page-2", "book-page", "Page 2", "/assets/comics/comic-1/page-2.jpg", "comic-1"),
+            thumbnail("image-1", ENTITY_KIND.image, "Image 1", "/assets/gallery/image-1.jpg", "gallery-2"),
+            thumbnail("image-2", ENTITY_KIND.image, "Image 2", "/assets/gallery/image-2.jpg", "gallery-2"),
           ],
         },
       ],
@@ -305,8 +320,8 @@ describe("entity detail view model", () => {
     expect(detail.posterCard?.hover.kind).toBe("image-sequence");
     if (detail.posterCard?.hover.kind === "image-sequence") {
       expect(detail.posterCard.hover.assets.map((asset) => asset.src)).toEqual([
-        "/assets/comics/comic-1/page-1.jpg",
-        "/assets/comics/comic-1/page-2.jpg",
+        "/assets/gallery/image-1.jpg",
+        "/assets/gallery/image-2.jpg",
       ]);
     }
   });

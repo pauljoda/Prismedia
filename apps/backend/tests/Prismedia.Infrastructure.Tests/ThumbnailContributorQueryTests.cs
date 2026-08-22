@@ -64,6 +64,39 @@ public sealed class ThumbnailContributorQueryTests {
         Assert.Empty(contributions.ExtraMetaFor(leaf.Id));
     }
 
+    [Fact]
+    public async Task PersistedPageStatsBecomeThumbnailChipsWithoutCountingDescendants() {
+        await using var db = new PrismediaDbContext(
+            new DbContextOptionsBuilder<PrismediaDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString())
+                .Options);
+        var installment = new EntityRow {
+            Id = Guid.NewGuid(),
+            KindCode = EntityKind.ComicInstallment.ToCode(),
+            Title = "Chapter 1"
+        };
+        db.Entities.Add(installment);
+        db.EntityStats.Add(new EntityStatRow {
+            EntityId = installment.Id,
+            Code = EntityStatCodes.Pages,
+            Value = 42,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var contributions = new ThumbnailContributions(
+            [installment],
+            db.Entities.AsNoTracking());
+
+        await new PersistedStatThumbnailContributor(db)
+            .ContributeAsync(contributions, CancellationToken.None);
+
+        Assert.Equal(
+            [new Prismedia.Contracts.Entities.EntityThumbnailMeta(
+                Prismedia.Contracts.Entities.EntityThumbnailMetaIcons.Page,
+                "42")],
+            contributions.ExtraMetaFor(installment.Id));
+    }
+
     private static PrismediaDbContext CreateNpgsqlContext() =>
         new(new DbContextOptionsBuilder<PrismediaDbContext>()
             .UseNpgsql("Host=localhost;Database=prismedia;Username=prismedia;Password=prismedia")

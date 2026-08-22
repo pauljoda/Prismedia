@@ -247,7 +247,6 @@ public sealed class GeneratePreviewJobHandlerTests : IDisposable {
         public string TrickplayTileDir(Guid entityId, int width) => Path.Combine(tempDir, "trickplay", entityId.ToString(), width.ToString());
         public string ImageThumbnailPath(Guid entityId) => throw new NotSupportedException();
         public string ImagePreviewPath(Guid entityId) => throw new NotSupportedException();
-        public string BookPageThumbnailPath(Guid entityId) => throw new NotSupportedException();
         public string BookCoverThumbnailPath(Guid entityId) => throw new NotSupportedException();
         public string AudioWaveformPath(Guid entityId) => throw new NotSupportedException();
         public string SubtitleDir(Guid entityId) => throw new NotSupportedException();
@@ -257,7 +256,6 @@ public sealed class GeneratePreviewJobHandlerTests : IDisposable {
         public string TrickplayPlaylistUrl(Guid entityId, int width) => VideoPlaybackProtocol.TrickplayPlaylistPath(entityId, width);
         public string ImageThumbnailUrl(Guid entityId) => throw new NotSupportedException();
         public string ImagePreviewUrl(Guid entityId) => throw new NotSupportedException();
-        public string BookPageThumbnailUrl(Guid entityId) => throw new NotSupportedException();
         public string BookCoverThumbnailUrl(Guid entityId) => throw new NotSupportedException();
         public string AudioWaveformUrl(Guid entityId) => throw new NotSupportedException();
         public string SubtitleUrl(Guid entityId, string fileName) => throw new NotSupportedException();
@@ -300,11 +298,7 @@ public sealed class GeneratePreviewJobHandlerTests : IDisposable {
         public Task<Guid> UpsertAudioLibraryAsync(string folderPath, string title, Guid libraryRootId, Guid? parentEntityId, int sortOrder, bool isNsfw, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<Guid> UpsertMusicArtistAsync(string folderPath, string title, Guid libraryRootId, int sortOrder, bool isNsfw, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<Guid> UpsertBookAsync(string sourcePath, string title, Guid libraryRootId, bool isNsfw, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<Guid> UpsertBookSeriesAsync(string folderPath, string title, Guid libraryRootId, bool isNsfw, BookType bookType, BookFormat format, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<Guid> UpsertSingleFileBookAsync(string sourcePath, string title, Guid libraryRootId, bool isNsfw, BookType bookType, BookFormat format, string contentType, Guid? parentBookEntityId, int? sortOrder, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<Guid> UpsertBookVolumeAsync(string folderPath, string title, Guid bookEntityId, int sortOrder, bool isNsfw, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<Guid> UpsertBookChapterAsync(string archivePath, string title, Guid parentEntityId, int sortOrder, int pageCount, bool isNsfw, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<Guid> UpsertBookPageAsync(string filePath, string title, Guid bookEntityId, Guid chapterEntityId, int sortOrder, bool isNsfw, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<int> RemoveStalePlayableVideosByRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<int> RemoveStaleMoviesByRootAsync(Guid rootId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<int> RemoveStaleLooseImagesInRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) => throw new NotSupportedException();

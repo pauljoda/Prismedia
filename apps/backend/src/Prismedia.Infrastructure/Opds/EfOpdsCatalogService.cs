@@ -312,8 +312,7 @@ public sealed class EfOpdsCatalogService(
                   (membership == null || membership.LibraryRootId == null || (root != null && root.Enabled)) &&
                   (membership == null || membership.LibraryRootId == null || !hiddenRootIds.Contains(membership.LibraryRootId ?? Guid.Empty)) &&
                   (detail.Format == BookFormat.Epub ||
-                   detail.Format == BookFormat.Pdf ||
-                   detail.Format == BookFormat.ImageArchive) &&
+                   detail.Format == BookFormat.Pdf) &&
                   !db.Entities.AsNoTracking().Any(child =>
                       child.ParentEntityId == entity.Id &&
                       child.KindCode == BookKindCode) &&
@@ -771,17 +770,8 @@ public sealed class EfOpdsCatalogService(
         return format switch {
             BookFormat.Epub => MediaContentTypes.Epub,
             BookFormat.Pdf => MediaContentTypes.Pdf,
-            BookFormat.ImageArchive => ImageArchiveMimeForPath(sourcePath, storedMime),
             _ => MediaContentTypes.OctetStream
         };
-    }
-
-    private static string ImageArchiveMimeForPath(string path, string? storedMime) {
-        var downloadPath = DownloadPathFor(path);
-        var mime = MimeForPath(downloadPath, storedMime);
-        return mime.Equals(MediaContentTypes.OctetStream, StringComparison.OrdinalIgnoreCase) && Directory.Exists(downloadPath)
-            ? MediaContentTypes.ComicBookZip
-            : mime;
     }
 
     private static string DownloadPathFor(string sourcePath) {

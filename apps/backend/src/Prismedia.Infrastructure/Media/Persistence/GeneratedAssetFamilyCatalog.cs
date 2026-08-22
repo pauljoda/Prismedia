@@ -15,7 +15,6 @@ internal static class GeneratedAssetFamilyCatalog {
         new Dictionary<GeneratedAssetFamily, Layout> {
             [GeneratedAssetFamily.Video] = new(VideoExpected, DeleteVideo, CleanupVideo),
             [GeneratedAssetFamily.Image] = new(ImageExpected, DeleteImage, (assets, ids, token) => CleanupDirectories(assets, AssetPaths.Images, ids, token)),
-            [GeneratedAssetFamily.BookPage] = new(BookPageExpected, DeleteBookPage, (assets, ids, token) => CleanupDirectories(assets, AssetPaths.BookPages, ids, token)),
             [GeneratedAssetFamily.AudioTrack] = new(AudioExpected, DeleteAudio, (assets, ids, token) => CleanupDirectories(assets, AssetPaths.AudioTracks, ids, token))
         };
 
@@ -49,7 +48,6 @@ internal static class GeneratedAssetFamilyCatalog {
 
     private static IReadOnlyList<string> VideoExpected(AssetPathService assets, Guid id) => [assets.VideoThumbnailPath(id)];
     private static IReadOnlyList<string> ImageExpected(AssetPathService assets, Guid id) => [assets.ImageThumbnailPath(id)];
-    private static IReadOnlyList<string> BookPageExpected(AssetPathService assets, Guid id) => [assets.BookPageThumbnailPath(id)];
     private static IReadOnlyList<string> AudioExpected(AssetPathService assets, Guid id) => [assets.AudioWaveformPath(id)];
 
     private static void DeleteVideo(AssetPathService assets, Guid entityId, Action<string> deleteFile, Action<string> deleteDirectory) {
@@ -72,8 +70,6 @@ internal static class GeneratedAssetFamilyCatalog {
         deleteFile(Path.Combine(assets.CacheRoot, AssetPaths.Images, id.ToString(), AssetPaths.ThumbnailFile));
         deleteFile(Path.Combine(assets.CacheRoot, AssetPaths.Images, id.ToString(), AssetPaths.PreviewFile));
     }
-    private static void DeleteBookPage(AssetPathService assets, Guid id, Action<string> deleteFile, Action<string> _) =>
-        deleteFile(Path.Combine(assets.CacheRoot, AssetPaths.BookPages, id.ToString(), AssetPaths.ThumbnailFile));
     private static void DeleteAudio(AssetPathService assets, Guid id, Action<string> deleteFile, Action<string> _) =>
         deleteFile(Path.Combine(assets.CacheRoot, AssetPaths.AudioTracks, id.ToString(), AssetPaths.WaveformFile));
 

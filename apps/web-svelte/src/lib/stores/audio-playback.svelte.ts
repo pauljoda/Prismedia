@@ -6,7 +6,7 @@ import {
   type MusicPlayerRepeatModeCode,
 } from "$lib/api/generated/codes";
 import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
-import type { BookProgressTrackMapping } from "$lib/api/generated/model";
+import type { PlaybackProgressMapping } from "$lib/api/generated/model";
 import { createOptionalContext } from "$lib/utils/context";
 
 export type RepeatMode = MusicPlayerRepeatModeCode;
@@ -26,8 +26,8 @@ export interface PlaybackContext {
   playbackOwnerEntityId?: string | null;
   playbackOwnerTitle?: string | null;
   playbackOwnerEntityKind?: EntityKindCode | null;
-  /** Chapter-scoped conversions from each audiobook part into the Book's canonical cursor. */
-  bookProgressMappings?: BookProgressTrackMapping[] | null;
+  /** Converts concrete queue items into their owning Entity's canonical progress cursor. */
+  progressMappings?: PlaybackProgressMapping[] | null;
   /** Capability-projected queue rule: source order is semantic and shuffle is unavailable. */
   preservesQueueOrder?: boolean | null;
   /** Capability-projected transport rule: variable-rate playback may be exposed. */

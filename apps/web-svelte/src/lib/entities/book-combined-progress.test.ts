@@ -136,7 +136,7 @@ describe("unified book progress", () => {
     ));
 
     expect(mapping).toEqual({
-      trackId: "audio-1",
+      itemId: "audio-1",
       currentEntityId: "book-1",
       unit: PROGRESS_UNIT.cfi,
       startIndex: 2000,
@@ -188,7 +188,7 @@ describe("unified book progress", () => {
     const audioOnly = { ...epubRow(), readTarget: null };
     expect(expectSingle(buildBookProgressMappings("book-1", [audioOnly], READER_MODE.paged)))
       .toEqual({
-        trackId: "audio-1",
+        itemId: "audio-1",
         currentEntityId: "book-1",
         unit: PROGRESS_UNIT.second,
         startIndex: 0,
@@ -227,7 +227,7 @@ describe("unified book progress", () => {
       currentEntityId: "book-1",
       unit: PROGRESS_UNIT.cfi,
       index: 4000,
-    })?.trackId).toBe("audio-2");
+    })?.itemId).toBe("audio-2");
   });
 
   it("does not invent an audiobook chapter for a readable cursor outside mapped ranges", () => {
@@ -257,7 +257,7 @@ describe("unified book progress", () => {
     const promotion = legacyBookProgressPromotion(rows, mappings, 2_100);
 
     expect(promotion).toMatchObject({
-      mapping: { trackId: "audio-2" },
+      mapping: { itemId: "audio-2" },
       update: { index: 5500, location: null, activitySeconds: null },
     });
     expect(shouldPromoteLegacyBookProgress(mappings, {

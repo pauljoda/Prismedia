@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { THUMBNAIL_META_ICON } from "$lib/api/generated/codes";
 import EntityThumbnail from "./EntityThumbnail.svelte";
 import {
-  bookPageCard,
+  comicInstallmentCard,
   episodeCard,
   personCard,
   studioCard,
@@ -69,15 +69,15 @@ describe("EntityThumbnail presentation", () => {
     expect(container.querySelector(".bottom-left-badges")).toHaveClass("has-selection");
   });
 
-  it("shows book page metadata when media-only mode is not requested", () => {
+  it("shows cached comic installment page metadata when media-only mode is not requested", () => {
     const { container } = render(EntityThumbnail, {
       props: {
-        card: bookPageCard(),
+        card: comicInstallmentCard(),
       },
     });
 
     expect(container.querySelector(".thumbnail-caption")).not.toBeNull();
-    expect(container.querySelector(".chips")?.textContent).toContain("Page 12");
+    expect(container.querySelector(".chips")?.textContent).toContain("24");
   });
 
   it("renders original Studio artwork on the definition-owned brand plate", () => {
@@ -119,7 +119,7 @@ describe("EntityThumbnail presentation", () => {
       getImageData: vi.fn(() => ({ data: pixels })),
     } as unknown as CanvasRenderingContext2D);
 
-    const { container } = render(EntityThumbnail, { props: { card: bookPageCard() } });
+    const { container } = render(EntityThumbnail, { props: { card: comicInstallmentCard() } });
     const image = container.querySelector("img") as HTMLImageElement;
     Object.defineProperty(image, "naturalWidth", { configurable: true, value: 12 });
     Object.defineProperty(image, "naturalHeight", { configurable: true, value: 12 });
@@ -134,7 +134,7 @@ describe("EntityThumbnail presentation", () => {
   it("skips synchronous artwork analysis when a bulk grid opts out", async () => {
     const canvas = vi.spyOn(HTMLCanvasElement.prototype, "getContext");
     const { container } = render(EntityThumbnail, {
-      props: { artworkReactive: false, card: bookPageCard() },
+      props: { artworkReactive: false, card: comicInstallmentCard() },
     });
     const image = container.querySelector("img") as HTMLImageElement;
     Object.defineProperty(image, "naturalWidth", { configurable: true, value: 480 });

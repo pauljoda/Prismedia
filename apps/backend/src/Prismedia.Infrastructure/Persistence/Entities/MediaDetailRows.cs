@@ -16,7 +16,7 @@ public sealed class GalleryDetailRow {
 public sealed class BookDetailRow {
     public Guid EntityId { get; set; }
     public BookType BookType { get; set; } = BookType.Book;
-    public BookFormat Format { get; set; } = BookFormat.ImageArchive;
+    public BookFormat Format { get; set; } = BookFormat.Epub;
 
     /// <summary>
     /// Provenance tier of the owned payload (web/retail/unknown), captured at acquisition import. The format
@@ -25,12 +25,15 @@ public sealed class BookDetailRow {
     /// </summary>
     public BookSourceTier SourceTier { get; set; } = BookSourceTier.Unknown;
 
-    public Guid? CoverPageEntityId { get; set; }
+    /// <summary>Known page count for a fixed-layout book, or a rollup from chapter metadata.</summary>
+    public int? PageCount { get; set; }
 }
 
 public sealed class BookChapterDetailRow {
     public Guid EntityId { get; set; }
-    public Guid? CoverPageEntityId { get; set; }
+
+    /// <summary>Known page count for this navigation chapter when supplied by its source metadata.</summary>
+    public int? PageCount { get; set; }
 }
 
 /// <summary>Persistence details owned by one serialized-comic title or run.</summary>
@@ -49,6 +52,9 @@ public sealed class ComicInstallmentDetailRow {
 
     /// <summary>Canonical released-work subtype.</summary>
     public ComicInstallmentKind InstallmentKind { get; set; }
+
+    /// <summary>Exact number of page resources currently present in the installment manifest.</summary>
+    public int PageCount { get; set; }
 }
 
 public sealed class AudioTrackDetailRow {

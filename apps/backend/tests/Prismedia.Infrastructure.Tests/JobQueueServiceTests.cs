@@ -520,7 +520,7 @@ public sealed class JobQueueServiceTests {
         var service = new JobQueueService(db);
         var now = DateTimeOffset.UtcNow;
 
-        var staleOtherWorker = NewJobRun(JobType.GenerateBookPageThumbnail, JobRunStatus.Running, now.AddMinutes(-30));
+        var staleOtherWorker = NewJobRun(JobType.GenerateImageThumbnail, JobRunStatus.Running, now.AddMinutes(-30));
         staleOtherWorker.LockedAt = now.AddMinutes(-25);
         staleOtherWorker.LockedBy = "worker-old";
         staleOtherWorker.Progress = 60;

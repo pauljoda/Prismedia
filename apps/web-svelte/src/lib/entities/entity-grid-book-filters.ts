@@ -27,14 +27,11 @@ function bookFilterDefinition(
 /** Book type filters resolved by the list endpoint against the book detail row. */
 export const BOOK_TYPE_FILTER_DEFS = [
   bookFilterDefinition("type", BOOK_TYPE.book, "Book"),
-  bookFilterDefinition("type", BOOK_TYPE.comic, "Comic"),
-  bookFilterDefinition("type", BOOK_TYPE.manga, "Manga"),
   bookFilterDefinition("type", BOOK_TYPE.novel, "Novel"),
 ] as const;
 
 /** Book format filters resolved by the list endpoint against the book detail row. */
 export const BOOK_FORMAT_FILTER_DEFS = [
-  bookFilterDefinition("format", BOOK_FORMAT.imageArchive, "Comic Archive"),
   bookFilterDefinition("format", BOOK_FORMAT.epub, "EPUB"),
   bookFilterDefinition("format", BOOK_FORMAT.pdf, "PDF"),
 ] as const;

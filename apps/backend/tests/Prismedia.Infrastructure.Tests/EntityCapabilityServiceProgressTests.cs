@@ -340,7 +340,7 @@ public sealed class EntityCapabilityServiceProgressTests {
 
     [Fact]
     public async Task BookPlaybackAndProgressRemainSupported() {
-        var book = new Book(Guid.NewGuid(), "Book", BookType.Comic, coverPageId: null);
+        var book = new Book(Guid.NewGuid(), "Book", BookType.Novel);
         var repository = new SingleEntityWriteRepository(book);
         var service = new EntityCapabilityService(repository, new CanonicalEntityReadStub(), new TestProgressTopologyResolver());
 
@@ -451,20 +451,19 @@ public sealed class EntityCapabilityServiceProgressTests {
     };
 
     private sealed class FakeEntityWriteRepository : IEntityWriteRepository {
-        private readonly BookChapter _chapterOne = new(ChapterOneId, "Chapter 1", coverPageId: null, parentEntityId: BookId, sortOrder: 0);
-        private readonly BookChapter _chapterTwo = new(ChapterTwoId, "Chapter 2", coverPageId: null, parentEntityId: BookId, sortOrder: 1);
+        private readonly BookChapter _chapterOne = new(ChapterOneId, "Chapter 1", parentEntityId: BookId, sortOrder: 0);
+        private readonly BookChapter _chapterTwo = new(ChapterTwoId, "Chapter 2", parentEntityId: BookId, sortOrder: 1);
 
         public FakeEntityWriteRepository(CapabilityProgress progress) {
             Book = new Book(
                 BookId,
-                "Comic",
-                BookType.Comic,
-                coverPageId: null,
+                "Book",
+                BookType.Novel,
                 capabilities: [progress]);
         }
 
         public Book Book { get; }
-        public Book OtherBook { get; } = new(OtherBookId, "Other comic", BookType.Comic, coverPageId: null);
+        public Book OtherBook { get; } = new(OtherBookId, "Other book", BookType.Novel);
         public Entity? SavedEntity { get; private set; }
 
         public Task<Entity?> FindAsync(Guid id, CancellationToken cancellationToken) =>

@@ -15,7 +15,6 @@ export const MonitorEligibilityViewMissingChildEntityKindsItem = {
   book: 'book',
   'book-volume': 'book-volume',
   'book-chapter': 'book-chapter',
-  'book-page': 'book-page',
   'comic-installment': 'comic-installment',
   'comic-series': 'comic-series',
   'comic-volume': 'comic-volume',

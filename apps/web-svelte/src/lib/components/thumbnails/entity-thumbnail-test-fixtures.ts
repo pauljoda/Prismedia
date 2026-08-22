@@ -149,13 +149,13 @@ export function episodeCard(): EntityThumbnailCard {
   };
 }
 
-export function bookPageCard(): EntityThumbnailCard {
+export function comicInstallmentCard(): EntityThumbnailCard {
   return {
     entity: {
-      id: "page-12",
-      kind: ENTITY_KIND.bookPage,
-      title: "Page 12",
-      parentEntityId: "chapter-1",
+      id: "installment-12",
+      kind: ENTITY_KIND.comicInstallment,
+      title: "Chapter 12",
+      parentEntityId: "series-1",
       sortOrder: 12,
       relationships: [],
       capabilities: [],
@@ -163,13 +163,13 @@ export function bookPageCard(): EntityThumbnailCard {
     },
     aspectRatio: "poster",
     cover: {
-      alt: "Page 12",
-      src: "/assets/pages/page-12.jpg",
+      alt: "Chapter 12",
+      src: "/assets/comics/installment-12.jpg",
     },
     hover: {
       kind: THUMBNAIL_HOVER_KIND.none,
     },
-    meta: [{ icon: THUMBNAIL_META_ICON.book, label: "Page 12" }],
+    meta: [{ icon: THUMBNAIL_META_ICON.book, label: "24" }],
   };
 }
 

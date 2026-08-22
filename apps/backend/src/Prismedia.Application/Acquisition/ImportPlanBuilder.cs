@@ -5,13 +5,13 @@ namespace Prismedia.Application.Acquisition;
 
 /// <summary>Why an import was blocked for manual resolution rather than performed automatically.</summary>
 public enum ImportBlockReason {
-    /// <summary>The payload contained no supported book files.</summary>
+    /// <summary>The payload contained no supported publication files.</summary>
     NoSupportedPayload,
 
     /// <summary>The payload contained supported video, but its positive TV identifiers did not agree with the requested unit.</summary>
     NoMatchingTvUnit,
 
-    /// <summary>The payload contained multiple standalone books, so the correct one is ambiguous.</summary>
+    /// <summary>The payload contained multiple standalone prose books, so the correct one is ambiguous.</summary>
     AmbiguousMultiplePrimaries,
 
     /// <summary>The payload mixed a standalone book with comic archives, so the intent is ambiguous.</summary>
@@ -42,7 +42,7 @@ public sealed record ImportTemplateContext(
     int? VolumeNumber = null);
 
 /// <summary>
-/// Pure import planning: decides which downloaded files are the book payload and renders their target
+/// Pure import planning: decides which downloaded files are the publication payload and renders their target
 /// paths from a profile template. Filesystem access lives in the infrastructure planner; this core is
 /// deterministic so the format rules, ambiguity handling, and path sanitization are unit-testable.
 /// </summary>
@@ -67,7 +67,7 @@ public static partial class ImportPlanBuilder {
     [GeneratedRegex(@"\{[^{}]*\bVolume\b[^{}]*\}", RegexOptions.IgnoreCase)]
     private static partial Regex OptionalVolumeTokenRegex();
 
-    /// <summary>The book file extensions the importer recognizes.</summary>
+    /// <summary>The prose-book, serialized-comic, and audiobook file extensions the publication importer recognizes.</summary>
     public static IReadOnlySet<string> SupportedExtensions { get; } =
         new HashSet<string>(PrimaryBookExtensions.Concat(ComicArchiveExtensions).Concat(AudiobookExtensions), StringComparer.OrdinalIgnoreCase);
 
@@ -129,7 +129,7 @@ public static partial class ImportPlanBuilder {
             return ImportPlan.For([new ImportPlanItem(chosen, target)]);
         }
 
-        // One or more comic archives: treat them as volumes/chapters of one book under the rendered folder.
+        // One or more comic archives: retain each released installment under the rendered series/volume folder.
         var folder = RenderFolder(pathTemplate, context);
         var items = archives
             .OrderBy(path => path, StringComparer.OrdinalIgnoreCase)

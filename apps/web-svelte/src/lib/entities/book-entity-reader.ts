@@ -1,6 +1,5 @@
-import { CAPABILITY_KIND, PROGRESS_UNIT, READER_MODE, type ProgressUnitCode, type ReaderModeCode } from "$lib/api/generated/codes";
+import { CAPABILITY_KIND, ENTITY_STAT_CODE, PROGRESS_UNIT, READER_MODE, type ProgressUnitCode, type ReaderModeCode } from "$lib/api/generated/codes";
 import { getCapability } from "$lib/api/capabilities";
-import type { ImageListItemDto } from "$lib/entities/media-view-models";
 import { numberValue } from "$lib/utils/format";
 import type { EntityCard, EntityThumbnail } from "$lib/api/generated/model";
 
@@ -102,30 +101,15 @@ export function orderedBookChildren(
   });
 }
 
-export function entityPageToReaderImage(page: EntityThumbnail): ImageListItemDto {
-  const sortOrder = numberValue(page.sortOrder) ?? 0;
-  return {
-    id: page.id,
-    title: page.title,
-    date: null,
-    rating: numberValue(page.rating),
-    organized: page.isOrganized,
-    isNsfw: page.isNsfw,
-    width: null,
-    height: null,
-    format: null,
-    isVideo: false,
-    fileSize: null,
-    thumbnailPath: page.coverUrl,
-    previewPath: null,
-    fullPath: `/entities/${page.id}/files/source`,
-    galleryId: null,
-    sortOrder,
-    studioId: null,
-    performers: [],
-    tags: [],
-    createdAt: "",
-  };
+/** Returns the scan-maintained page-count metadata without inspecting page resources. */
+export function persistedPageCount(
+  entity: Pick<EntityCard, "capabilities"> | null | undefined,
+): number {
+  const value = entity
+    ? getCapability(entity.capabilities, CAPABILITY_KIND.stats)?.items
+        .find((stat) => stat.code === ENTITY_STAT_CODE.pages)?.value
+    : null;
+  return Math.max(0, Math.floor(numberValue(value) ?? 0));
 }
 
 export function bookEntityProgressDisplay(

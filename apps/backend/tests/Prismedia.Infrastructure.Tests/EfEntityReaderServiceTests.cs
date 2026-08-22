@@ -77,6 +77,78 @@ public sealed class EfEntityReaderServiceTests {
         Assert.Empty(db.EntityPageEntries);
     }
 
+    [Fact]
+    public async Task ManifestPagesAreMetadataAndRollUpWithoutCreatingPageEntities() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var seriesId = Guid.NewGuid();
+        var volumeId = Guid.NewGuid();
+        var installmentId = Guid.NewGuid();
+        db.Entities.AddRange(
+            new EntityRow {
+                Id = seriesId,
+                KindCode = EntityKind.ComicSeries.ToCode(),
+                Title = "Series",
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = volumeId,
+                KindCode = EntityKind.ComicVolume.ToCode(),
+                Title = "Volume 1",
+                ParentEntityId = seriesId,
+                CreatedAt = now,
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = installmentId,
+                KindCode = EntityKind.ComicInstallment.ToCode(),
+                Title = "Chapter 1",
+                ParentEntityId = volumeId,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        db.ComicSeriesDetails.Add(new ComicSeriesDetailRow { EntityId = seriesId });
+        db.ComicInstallmentDetails.Add(new ComicInstallmentDetailRow {
+            EntityId = installmentId,
+            InstallmentKind = ComicInstallmentKind.Chapter
+        });
+        db.EntityFiles.Add(new EntityFileRow {
+            Id = Guid.NewGuid(),
+            EntityId = installmentId,
+            Role = EntityFileRole.Source,
+            Path = "/media/chapter.cbz",
+            MimeType = "application/vnd.comicbook+zip",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+        var service = new EfEntityReaderService(db, new Visibility(true));
+        var manifest = new EntityPageManifest(
+            installmentId,
+            PageReadingDirection.RightToLeft,
+            ReaderMode.Paged,
+            coverOrdinal: 0,
+            sourceSignature: "source:v1",
+            pages:
+            [
+                new EntityPageEntry(0, "001.jpg", "image/jpeg", 1200, 1800, PageType.FrontCover, false, null),
+                new EntityPageEntry(1, "002.jpg", "image/jpeg", 1200, 1800, PageType.Story, false, null)
+            ]);
+
+        Assert.True(await service.ReplaceAsync(manifest, CancellationToken.None));
+
+        Assert.Equal(2, db.ComicInstallmentDetails.Single().PageCount);
+        Assert.Equal(
+            new[] { (installmentId, 2), (volumeId, 2), (seriesId, 2) }.OrderBy(item => item.Item1),
+            db.EntityStats
+                .Where(row => row.Code == EntityStatCodes.Pages)
+                .AsEnumerable()
+                .Select(row => (row.EntityId, row.Value))
+                .OrderBy(item => item.EntityId));
+        Assert.DoesNotContain(db.Entities, row => row.KindCode == "book-page");
+    }
+
     private static PrismediaDbContext CreateContext() =>
         new(new DbContextOptionsBuilder<PrismediaDbContext>()
             .UseInMemoryDatabase($"entity-reader-{Guid.NewGuid():N}")
@@ -91,6 +163,10 @@ public sealed class EfEntityReaderServiceTests {
             Title = "Chapter 1",
             CreatedAt = now,
             UpdatedAt = now
+        });
+        db.ComicInstallmentDetails.Add(new ComicInstallmentDetailRow {
+            EntityId = entityId,
+            InstallmentKind = ComicInstallmentKind.Chapter
         });
         if (withSource) {
             db.EntityFiles.Add(new EntityFileRow {

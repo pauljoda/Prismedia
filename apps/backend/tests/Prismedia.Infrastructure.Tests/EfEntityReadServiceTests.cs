@@ -907,6 +907,89 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
+    public async Task GetAudioPlaybackItemsAsyncProjectsExactQueueDataInCallerOrder() {
+        await using var db = CreateContext();
+        var userId = Guid.NewGuid();
+        var firstId = Guid.NewGuid();
+        var secondId = Guid.NewGuid();
+        var missingId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.Entities.AddRange(
+            new EntityRow {
+                Id = firstId,
+                KindCode = EntityKind.AudioTrack.ToCode(),
+                Title = "Part One",
+                SortOrder = 1,
+                IsOrganized = true,
+                CreatedAt = now.AddMinutes(-2),
+                UpdatedAt = now
+            },
+            new EntityRow {
+                Id = secondId,
+                KindCode = EntityKind.Book.ToCode(),
+                Title = "Playable Entity",
+                SortOrder = 2,
+                CreatedAt = now.AddMinutes(-1),
+                UpdatedAt = now
+            });
+        db.EntityTechnical.Add(new EntityTechnicalRow {
+            EntityId = firstId,
+            DurationSeconds = 3_723.75,
+            BitRate = 256_000,
+            SampleRate = 48_000,
+            Channels = 2,
+            Codec = "aac",
+            UpdatedAt = now
+        });
+        db.AudioTrackDetails.Add(new AudioTrackDetailRow {
+            EntityId = firstId,
+            EmbeddedArtist = "Narrator",
+            EmbeddedAlbum = "Novel",
+            SectionLabel = "Disc 1"
+        });
+        db.EntityFiles.AddRange(
+            File(firstId, EntityFileRole.Source, "/media/part-one.m4b", now),
+            File(firstId, EntityFileRole.Waveform, "/assets/audio/part-one.json", now),
+            File(secondId, EntityFileRole.Source, "/media/entity.m4a", now));
+        db.UserEntityStates.Add(new UserEntityStateRow {
+            UserId = userId,
+            EntityId = firstId,
+            RatingValue = 4,
+            AccessCount = 3,
+            LastActiveAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+        var repository = new EfEntityRepository(
+            db,
+            TestUserContext.Admin(userId),
+            EntityMappers.Kinds(db),
+            EntityMappers.Capabilities(db, TestUserContext.Admin(userId)));
+        var service = new EfEntityReadService(
+            db,
+            TestUserContext.Admin(userId),
+            repository,
+            ThumbnailContributors.For(db),
+            new EfEntityProgressTopologyResolver(db));
+
+        var response = await service.GetAudioPlaybackItemsAsync(
+            [secondId, missingId, firstId],
+            hideNsfw: false,
+            CancellationToken.None);
+
+        var first = Assert.Single(response);
+        Assert.Equal(firstId, first.Id);
+        Assert.True(first.HasSourceMedia);
+        Assert.Equal(3_723.75, first.DurationSeconds);
+        Assert.Equal(256_000, first.BitRate);
+        Assert.Equal("Narrator", first.EmbeddedArtist);
+        Assert.Equal("Disc 1", first.SectionLabel);
+        Assert.Equal("/assets/audio/part-one.json", first.WaveformPath);
+        Assert.Equal(4, first.Rating);
+        Assert.Equal(3, first.AccessCount);
+    }
+
+    [Fact]
     public async Task ListAsyncReturnsOnlyTopLevelGalleriesForGalleryBrowse() {
         await using var db = CreateContext();
         var galleryId = Guid.Parse("11111111-1111-1111-1111-111111111111");
@@ -1084,143 +1167,6 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
-    public async Task ListAsyncProjectsRepresentativeChildHoverImages() {
-        await using var db = CreateContext();
-        var bookId = Guid.Parse("11111111-1111-1111-1111-111111111111");
-        var now = DateTimeOffset.UtcNow;
-        db.Entities.Add(new EntityRow {
-            Id = bookId,
-            KindCode = EntityKind.Book.ToCode(),
-            Title = "Collected Manga",
-            CreatedAt = now,
-            UpdatedAt = now
-        });
-        db.EntityFiles.Add(new EntityFileRow {
-            Id = Guid.NewGuid(),
-            EntityId = bookId,
-            Role = EntityFileRole.Cover,
-            Path = "/assets/books/custom-cover.jpg",
-            CreatedAt = now,
-            UpdatedAt = now
-        });
-
-        for (var index = 0; index < 6; index++) {
-            var volumeId = Guid.Parse($"22222222-2222-2222-2222-22222222222{index}");
-            var chapterId = Guid.Parse($"33333333-3333-3333-3333-33333333333{index}");
-            var pageId = Guid.Parse($"44444444-4444-4444-4444-44444444444{index}");
-            db.Entities.AddRange(
-                new EntityRow {
-                    Id = volumeId,
-                    KindCode = EntityKind.BookVolume.ToCode(),
-                    Title = $"Volume {index + 1:00}",
-                    ParentEntityId = bookId,
-                    SortOrder = index,
-                    CreatedAt = now,
-                    UpdatedAt = now
-                },
-                new EntityRow {
-                    Id = chapterId,
-                    KindCode = EntityKind.BookChapter.ToCode(),
-                    Title = $"Chapter {index + 1:00}",
-                    ParentEntityId = volumeId,
-                    SortOrder = 0,
-                    CreatedAt = now,
-                    UpdatedAt = now
-                },
-                new EntityRow {
-                    Id = pageId,
-                    KindCode = EntityKind.BookPage.ToCode(),
-                    Title = $"Page {index + 1:00}",
-                    ParentEntityId = chapterId,
-                    SortOrder = 0,
-                    CreatedAt = now,
-                    UpdatedAt = now
-                });
-            db.EntityFiles.Add(new EntityFileRow {
-                Id = Guid.NewGuid(),
-                EntityId = pageId,
-                Role = EntityFileRole.Thumbnail,
-                Path = $"/assets/book-pages/page-{index + 1}.jpg",
-                CreatedAt = now,
-                UpdatedAt = now
-            });
-        }
-
-        await db.SaveChangesAsync();
-
-        var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
-        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db), new EfEntityProgressTopologyResolver(db));
-
-        var result = await service.ListAsync(EntityKind.Book.ToCode(), null, null, null, null, CancellationToken.None);
-        var item = Assert.Single(result.Items);
-
-        // A row with its own cover no longer pays the child-artwork sampling walk inline;
-        // hover previews come from the lazy hover-images read instead.
-        Assert.Equal("/assets/books/custom-cover.jpg", item.CoverUrl);
-        Assert.Empty(item.HoverImages);
-
-        var hover = await service.GetHoverImagesAsync([bookId], hideNsfw: false, CancellationToken.None);
-        var set = Assert.Single(hover.Items);
-        Assert.Equal(bookId, set.EntityId);
-        Assert.Equal(5, set.Images.Count);
-        Assert.Equal("/assets/book-pages/page-1.jpg", set.Images[0].Path);
-        Assert.Equal("/assets/book-pages/page-6.jpg", set.Images[^1].Path);
-    }
-
-    [Fact]
-    public async Task ListAsyncUsesFirstRepresentativeHoverImageAsFallbackCover() {
-        await using var db = CreateContext();
-        var bookId = Guid.Parse("aaaaaaaa-1111-1111-1111-111111111111");
-        var chapterId = Guid.Parse("bbbbbbbb-2222-2222-2222-222222222222");
-        var pageId = Guid.Parse("cccccccc-3333-3333-3333-333333333333");
-        var now = DateTimeOffset.UtcNow;
-        db.Entities.AddRange(
-            new EntityRow {
-                Id = bookId,
-                KindCode = EntityKind.Book.ToCode(),
-                Title = "No Custom Cover",
-                CreatedAt = now,
-                UpdatedAt = now
-            },
-            new EntityRow {
-                Id = chapterId,
-                KindCode = EntityKind.BookChapter.ToCode(),
-                Title = "Chapter 1",
-                ParentEntityId = bookId,
-                SortOrder = 0,
-                CreatedAt = now,
-                UpdatedAt = now
-            },
-            new EntityRow {
-                Id = pageId,
-                KindCode = EntityKind.BookPage.ToCode(),
-                Title = "Page 1",
-                ParentEntityId = chapterId,
-                SortOrder = 0,
-                CreatedAt = now,
-                UpdatedAt = now
-            });
-        db.EntityFiles.Add(new EntityFileRow {
-            Id = Guid.NewGuid(),
-            EntityId = pageId,
-            Role = EntityFileRole.Thumbnail,
-            Path = "/assets/book-pages/page-1.jpg",
-            CreatedAt = now,
-            UpdatedAt = now
-        });
-        await db.SaveChangesAsync();
-
-        var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
-        var service = new EfEntityReadService(db, TestUserContext.Admin(), repository, ThumbnailContributors.For(db), new EfEntityProgressTopologyResolver(db));
-
-        var result = await service.ListAsync(EntityKind.Book.ToCode(), null, null, null, null, CancellationToken.None);
-        var item = Assert.Single(result.Items);
-
-        Assert.Equal("/assets/book-pages/page-1.jpg", item.CoverUrl);
-        Assert.Equal("/assets/book-pages/page-1.jpg", Assert.Single(item.HoverImages).Path);
-    }
-
-    [Fact]
     public async Task ListAsyncUsesCollectionMemberArtworkAsFallbackCover() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
@@ -1392,7 +1338,7 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
-    public async Task ListAsyncShowsOnlyTopLevelBooksWhenBooksHaveChildBooks() {
+    public async Task ListAsyncShowsEveryPublishedBookAsItsOwnWork() {
         await using var db = CreateContext();
         var seriesId = Guid.Parse("aaaaaaaa-1111-1111-1111-111111111111");
         var childBookId = Guid.Parse("bbbbbbbb-2222-2222-2222-222222222222");
@@ -1410,7 +1356,6 @@ public sealed class EfEntityReadServiceTests {
                 Id = childBookId,
                 KindCode = EntityKind.Book.ToCode(),
                 Title = "A Game of Thrones",
-                ParentEntityId = seriesId,
                 SortOrder = 0,
                 CreatedAt = now,
                 UpdatedAt = now
@@ -1433,34 +1378,28 @@ public sealed class EfEntityReadServiceTests {
 
         var result = await service.ListAsync(EntityKind.Book.ToCode(), null, null, null, null, CancellationToken.None);
 
-        Assert.Equal(2, result.TotalCount);
-        Assert.Equal([seriesId, looseBookId], result.Items.Select(item => item.Id).Order().ToArray());
+        Assert.Equal(3, result.TotalCount);
+        Assert.Equal(
+            new[] { seriesId, childBookId, looseBookId }.Order(),
+            result.Items.Select(item => item.Id).Order());
     }
 
     [Fact]
-    public async Task DiscoveryKeepsNestedBooksAndGalleriesWhileTheirTypedBrowseHidesThem() {
+    public async Task DiscoveryKeepsNestedGalleriesWhileTheirTypedBrowseHidesThem() {
         await using var db = CreateContext();
-        var bookId = Guid.NewGuid();
-        var nestedBookId = Guid.NewGuid();
         var galleryId = Guid.NewGuid();
         var nestedGalleryId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
         db.Entities.AddRange(
-            Row(bookId, EntityKind.Book, "Book"),
-            Row(nestedBookId, EntityKind.Book, "Nested book", bookId),
             Row(galleryId, EntityKind.Gallery, "Gallery"),
             Row(nestedGalleryId, EntityKind.Gallery, "Nested gallery", galleryId));
         await db.SaveChangesAsync();
 
         var service = CreateService(db);
         var discovery = await service.ListAsync(null, "Nested", null, null, null, CancellationToken.None);
-        var books = await service.ListAsync(EntityKind.Book.ToCode(), null, null, null, null, CancellationToken.None);
         var galleries = await service.ListAsync(EntityKind.Gallery.ToCode(), null, null, null, null, CancellationToken.None);
 
-        Assert.Equal(
-            new[] { nestedBookId, nestedGalleryId }.Order(),
-            discovery.Items.Select(item => item.Id).Order());
-        Assert.DoesNotContain(books.Items, item => item.Id == nestedBookId);
+        Assert.Equal([nestedGalleryId], discovery.Items.Select(item => item.Id));
         Assert.DoesNotContain(galleries.Items, item => item.Id == nestedGalleryId);
 
         EntityRow Row(Guid id, EntityKind kind, string title, Guid? parentId = null) =>
@@ -1480,7 +1419,6 @@ public sealed class EfEntityReadServiceTests {
         var bookId = Guid.Parse("11111111-1111-1111-1111-111111111111");
         var volumeId = Guid.Parse("22222222-2222-2222-2222-222222222222");
         var chapterId = Guid.Parse("33333333-3333-3333-3333-333333333333");
-        var pageId = Guid.Parse("44444444-4444-4444-4444-444444444444");
         var now = DateTimeOffset.UtcNow;
         db.Entities.AddRange(
             new EntityRow {
@@ -1507,15 +1445,6 @@ public sealed class EfEntityReadServiceTests {
                 SortOrder = 0,
                 CreatedAt = now,
                 UpdatedAt = now
-            },
-            new EntityRow {
-                Id = pageId,
-                KindCode = EntityKind.BookPage.ToCode(),
-                Title = "001",
-                ParentEntityId = chapterId,
-                SortOrder = 0,
-                CreatedAt = now,
-                UpdatedAt = now
             });
         db.BookDetails.Add(new BookDetailRow { EntityId = bookId });
         db.BookChapterDetails.Add(new BookChapterDetailRow { EntityId = chapterId });
@@ -1531,7 +1460,6 @@ public sealed class EfEntityReadServiceTests {
         Assert.Equal(EntityKind.BookVolume, volumes.Kind);
         Assert.Equal(volumeId, Assert.Single(volumes.Entities).Id);
         Assert.DoesNotContain(detail.ChildrenByKind, group => group.Kind == EntityKind.BookChapter);
-        Assert.DoesNotContain(detail.ChildrenByKind, group => group.Kind == EntityKind.BookPage);
     }
 
     [Fact]
@@ -1540,7 +1468,6 @@ public sealed class EfEntityReadServiceTests {
         var bookId = Guid.Parse("00000000-0000-0000-0000-000000000001");
         var volumeId = Guid.Parse("11111111-1111-1111-1111-111111111111");
         var chapterId = Guid.Parse("22222222-2222-2222-2222-222222222222");
-        var pageId = Guid.Parse("33333333-3333-3333-3333-333333333333");
         var now = DateTimeOffset.UtcNow;
         db.Entities.AddRange(
             new EntityRow {
@@ -1566,15 +1493,6 @@ public sealed class EfEntityReadServiceTests {
                 SortOrder = 0,
                 CreatedAt = now,
                 UpdatedAt = now
-            },
-            new EntityRow {
-                Id = pageId,
-                KindCode = EntityKind.BookPage.ToCode(),
-                Title = "001",
-                ParentEntityId = chapterId,
-                SortOrder = 0,
-                CreatedAt = now,
-                UpdatedAt = now
             });
         db.BookChapterDetails.Add(new BookChapterDetailRow { EntityId = chapterId });
         await db.SaveChangesAsync();
@@ -1587,7 +1505,6 @@ public sealed class EfEntityReadServiceTests {
         var chapters = Assert.Single(card.ChildrenByKind);
         Assert.Equal(EntityKind.BookChapter, chapters.Kind);
         Assert.Equal(chapterId, Assert.Single(chapters.Entities).Id);
-        Assert.DoesNotContain(card.ChildrenByKind, group => group.Kind == EntityKind.BookPage);
     }
 
     [Fact]
@@ -2258,45 +2175,45 @@ public sealed class EfEntityReadServiceTests {
     public async Task ListAsyncFiltersBooksByTypeAndFormat() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
-        var comicCbz = Guid.Parse("11111111-1111-1111-1111-111111111111");
-        var comicPdf = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var genericPdf = Guid.Parse("11111111-1111-1111-1111-111111111111");
+        var genericEpub = Guid.Parse("22222222-2222-2222-2222-222222222222");
         var novelEpub = Guid.Parse("33333333-3333-3333-3333-333333333333");
-        var mangaCbz = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        var novelPdf = Guid.Parse("44444444-4444-4444-4444-444444444444");
         db.Entities.AddRange(
-            new EntityRow { Id = comicCbz, KindCode = EntityKind.Book.ToCode(), Title = "Comic Archive", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = comicPdf, KindCode = EntityKind.Book.ToCode(), Title = "Comic PDF", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = genericPdf, KindCode = EntityKind.Book.ToCode(), Title = "Reference PDF", CreatedAt = now, UpdatedAt = now },
+            new EntityRow { Id = genericEpub, KindCode = EntityKind.Book.ToCode(), Title = "Reference EPUB", CreatedAt = now, UpdatedAt = now },
             new EntityRow { Id = novelEpub, KindCode = EntityKind.Book.ToCode(), Title = "Novel EPUB", CreatedAt = now, UpdatedAt = now },
-            new EntityRow { Id = mangaCbz, KindCode = EntityKind.Book.ToCode(), Title = "Manga Archive", CreatedAt = now, UpdatedAt = now });
+            new EntityRow { Id = novelPdf, KindCode = EntityKind.Book.ToCode(), Title = "Novel PDF", CreatedAt = now, UpdatedAt = now });
         db.BookDetails.AddRange(
-            new BookDetailRow { EntityId = comicCbz, BookType = BookType.Comic, Format = BookFormat.ImageArchive },
-            new BookDetailRow { EntityId = comicPdf, BookType = BookType.Comic, Format = BookFormat.Pdf },
+            new BookDetailRow { EntityId = genericPdf, BookType = BookType.Book, Format = BookFormat.Pdf },
+            new BookDetailRow { EntityId = genericEpub, BookType = BookType.Book, Format = BookFormat.Epub },
             new BookDetailRow { EntityId = novelEpub, BookType = BookType.Novel, Format = BookFormat.Epub },
-            new BookDetailRow { EntityId = mangaCbz, BookType = BookType.Manga, Format = BookFormat.ImageArchive });
+            new BookDetailRow { EntityId = novelPdf, BookType = BookType.Novel, Format = BookFormat.Pdf });
         await db.SaveChangesAsync();
 
         var service = CreateService(db);
 
-        // Single type: only comics, regardless of format.
-        var comics = await service.ListAsync(
-            EntityKind.Book.ToCode(), null, null, null, null, CancellationToken.None, bookType: "comic");
-        Assert.Equal([comicCbz, comicPdf], comics.Items.Select(item => item.Id).Order().ToArray());
-        Assert.Equal(2, comics.TotalCount);
+        // Single type: only novels, regardless of format.
+        var novels = await service.ListAsync(
+            EntityKind.Book.ToCode(), null, null, null, null, CancellationToken.None, bookType: "novel");
+        Assert.Equal([novelEpub, novelPdf], novels.Items.Select(item => item.Id).Order().ToArray());
+        Assert.Equal(2, novels.TotalCount);
 
         // Multiple types are OR-ed within the family.
-        var comicsAndManga = await service.ListAsync(
-            EntityKind.Book.ToCode(), null, null, null, null, CancellationToken.None, bookType: "comic,manga");
-        Assert.Equal([comicCbz, comicPdf, mangaCbz], comicsAndManga.Items.Select(item => item.Id).Order().ToArray());
+        var booksAndNovels = await service.ListAsync(
+            EntityKind.Book.ToCode(), null, null, null, null, CancellationToken.None, bookType: "book,novel");
+        Assert.Equal(4, booksAndNovels.TotalCount);
 
         // Single format: only PDFs.
         var pdfs = await service.ListAsync(
             EntityKind.Book.ToCode(), null, null, null, null, CancellationToken.None, bookFormat: "pdf");
-        Assert.Equal(comicPdf, Assert.Single(pdfs.Items).Id);
+        Assert.Equal([genericPdf, novelPdf], pdfs.Items.Select(item => item.Id).Order().ToArray());
 
         // Type and format combine with AND across families.
-        var comicArchives = await service.ListAsync(
+        var novelPdfs = await service.ListAsync(
             EntityKind.Book.ToCode(), null, null, null, null, CancellationToken.None,
-            bookType: "comic", bookFormat: "image-archive");
-        Assert.Equal(comicCbz, Assert.Single(comicArchives.Items).Id);
+            bookType: "novel", bookFormat: "pdf");
+        Assert.Equal(novelPdf, Assert.Single(novelPdfs.Items).Id);
 
         // Unknown codes are ignored, leaving the result unfiltered by that family.
         var unknown = await service.ListAsync(
@@ -2308,28 +2225,28 @@ public sealed class EfEntityReadServiceTests {
     public async Task ListAsyncProjectsBookTypeMetaForBookThumbnails() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
-        var comicId = Guid.Parse("55555555-5555-5555-5555-555555555555");
+        var novelId = Guid.Parse("55555555-5555-5555-5555-555555555555");
         db.Entities.Add(new EntityRow {
-            Id = comicId,
+            Id = novelId,
             KindCode = EntityKind.Book.ToCode(),
-            Title = "Comic Archive",
+            Title = "Novel",
             CreatedAt = now,
             UpdatedAt = now
         });
         db.BookDetails.Add(new BookDetailRow {
-            EntityId = comicId,
-            BookType = BookType.Comic,
-            Format = BookFormat.ImageArchive
+            EntityId = novelId,
+            BookType = BookType.Novel,
+            Format = BookFormat.Epub
         });
         await db.SaveChangesAsync();
 
         var service = CreateService(db);
 
         var result = await service.ListAsync(
-            EntityKind.Book.ToCode(), null, null, null, null, CancellationToken.None, bookType: "comic");
+            EntityKind.Book.ToCode(), null, null, null, null, CancellationToken.None, bookType: "novel");
         var item = Assert.Single(result.Items);
 
-        Assert.Contains(new EntityThumbnailMeta("book", "Comic"), item.Meta);
+        Assert.Contains(new EntityThumbnailMeta("book", "Novel"), item.Meta);
     }
 
     [Fact]
@@ -2685,36 +2602,24 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
-    public async Task GetThumbnailsAsyncCountsBookHierarchyAcrossDirectAndNestedPages() {
+    public async Task GetThumbnailsAsyncUsesPersistedPageStatsAlongsideStructuralCounts() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
         var bookId = Guid.NewGuid();
         var volumeId = Guid.NewGuid();
         var nestedChapterId = Guid.NewGuid();
         var directChapterId = Guid.NewGuid();
-        var directPageId = Guid.NewGuid();
-        var nestedPageId = Guid.NewGuid();
-        var chapterPageId = Guid.NewGuid();
-        var hiddenVolumeId = Guid.NewGuid();
-        var hiddenChapterId = Guid.NewGuid();
-        var hiddenPageId = Guid.NewGuid();
-        var wantedChapterId = Guid.NewGuid();
-        var wantedPageId = Guid.NewGuid();
 
         db.Entities.AddRange(
             Row(bookId, EntityKind.Book.ToCode(), "Book", now),
             Row(volumeId, EntityKind.BookVolume.ToCode(), "Volume 1", now, bookId),
             Row(nestedChapterId, EntityKind.BookChapter.ToCode(), "Nested Chapter", now, volumeId),
-            Row(directChapterId, EntityKind.BookChapter.ToCode(), "Direct Chapter", now, bookId),
-            Row(directPageId, EntityKind.BookPage.ToCode(), "Loose Page", now, bookId),
-            Row(nestedPageId, EntityKind.BookPage.ToCode(), "Nested Page", now, nestedChapterId),
-            Row(chapterPageId, EntityKind.BookPage.ToCode(), "Direct Chapter Page", now, directChapterId),
-            Row(hiddenVolumeId, EntityKind.BookVolume.ToCode(), "Hidden Volume", now, bookId, isNsfw: true),
-            Row(hiddenChapterId, EntityKind.BookChapter.ToCode(), "Hidden Chapter", now, hiddenVolumeId),
-            Row(hiddenPageId, EntityKind.BookPage.ToCode(), "Hidden Page", now, hiddenChapterId),
-            Row(wantedChapterId, EntityKind.BookChapter.ToCode(), "Wanted Chapter", now, bookId, isWanted: true),
-            Row(wantedPageId, EntityKind.BookPage.ToCode(), "Wanted Page", now, wantedChapterId));
+            Row(directChapterId, EntityKind.BookChapter.ToCode(), "Direct Chapter", now, bookId));
         db.BookDetails.Add(new BookDetailRow { EntityId = bookId, BookType = BookType.Book });
+        db.EntityStats.AddRange(
+            new EntityStatRow { EntityId = bookId, Code = EntityStatCodes.Pages, Value = 60, UpdatedAt = now },
+            new EntityStatRow { EntityId = volumeId, Code = EntityStatCodes.Pages, Value = 40, UpdatedAt = now },
+            new EntityStatRow { EntityId = nestedChapterId, Code = EntityStatCodes.Pages, Value = 40, UpdatedAt = now });
         db.EntityTechnical.Add(new EntityTechnicalRow { EntityId = bookId, DurationSeconds = 3600, UpdatedAt = now });
         await db.SaveChangesAsync();
 
@@ -2727,7 +2632,7 @@ public sealed class EfEntityReadServiceTests {
             [
                 new EntityThumbnailMeta(EntityThumbnailMetaIcons.Volume, "1"),
                 new EntityThumbnailMeta(EntityThumbnailMetaIcons.Chapter, "2"),
-                new EntityThumbnailMeta(EntityThumbnailMetaIcons.Page, "3"),
+                new EntityThumbnailMeta(EntityThumbnailMetaIcons.Page, "60"),
                 new EntityThumbnailMeta(EntityThumbnailMetaIcons.Book, "Book"),
                 new EntityThumbnailMeta(EntityThumbnailMetaIcons.Duration, "01:00")
             ],
@@ -2735,11 +2640,11 @@ public sealed class EfEntityReadServiceTests {
         Assert.Equal(
             [
                 new EntityThumbnailMeta(EntityThumbnailMetaIcons.Chapter, "1"),
-                new EntityThumbnailMeta(EntityThumbnailMetaIcons.Page, "1")
+                new EntityThumbnailMeta(EntityThumbnailMetaIcons.Page, "40")
             ],
             response.Items.Single(item => item.Id == volumeId).Meta);
         Assert.Equal(
-            [new EntityThumbnailMeta(EntityThumbnailMetaIcons.Page, "1")],
+            [new EntityThumbnailMeta(EntityThumbnailMetaIcons.Page, "40")],
             response.Items.Single(item => item.Id == nestedChapterId).Meta);
 
         static EntityRow Row(

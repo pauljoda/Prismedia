@@ -40,12 +40,18 @@
   $effect(() => {
     const id = entityId;
     const reset = page.url.searchParams.get("reset") === "1";
+    const requestedIndex = parseRequestedIndex(page.url.searchParams.get("index"));
     const controller = new AbortController();
-    void loadReader(id, reset, controller.signal);
+    void loadReader(id, reset, requestedIndex, controller.signal);
     return () => controller.abort();
   });
 
-  async function loadReader(id: string, reset: boolean, signal: AbortSignal) {
+  async function loadReader(
+    id: string,
+    reset: boolean,
+    requestedIndex: number | null,
+    signal: AbortSignal,
+  ) {
     loadState = "loading";
     errorMessage = "This Entity does not expose readable pages.";
     try {
@@ -72,7 +78,9 @@
       entity = nextEntity;
       manifest = nextManifest;
       images = nextManifest.pages.map((readerPage) => manifestPageImage(nextEntity, readerPage));
-      currentIndex = reset ? 0 : clampPageIndex(savedIndex, nextManifest.pages.length);
+      currentIndex = reset
+        ? 0
+        : clampPageIndex(requestedIndex ?? savedIndex, nextManifest.pages.length);
       initialIndex = currentIndex;
       readerMode = comicReaderMode(progress?.mode ?? nextManifest.defaultMode);
       pendingReset = reset;
@@ -165,6 +173,12 @@
 
   function clampPageIndex(index: number, pageCount: number): number {
     return Math.max(0, Math.min(Number.isFinite(index) ? index : 0, Math.max(0, pageCount - 1)));
+  }
+
+  function parseRequestedIndex(value: string | null): number | null {
+    if (value === null || value.trim() === "") return null;
+    const index = Number(value);
+    return Number.isInteger(index) && index >= 0 ? index : null;
   }
 
   function comicReaderMode(mode: string | null | undefined): ComicReaderMode {

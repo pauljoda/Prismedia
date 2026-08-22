@@ -43,10 +43,8 @@ public sealed class EntityCardProjectorContractTests {
     public void ProjectsFileManagementOnlyForSourceBackedSafeManagedTreeRoots() {
         var emptyMovie = EntityCardProjector.ToCard(new Movie(Guid.NewGuid(), "Wanted Arrival"), hasSourceBackedSubtree: false);
         var sourceBackedMovie = EntityCardProjector.ToCard(new Movie(Guid.NewGuid(), "Arrival"), hasSourceBackedSubtree: true);
-        var archiveChapter = new BookChapter(Guid.NewGuid(), "Chapter 1", coverPageId: null);
+        var archiveChapter = new BookChapter(Guid.NewGuid(), "Chapter 1");
         archiveChapter.AttachFile(EntityFileRole.Source, "/media/books/Arrival.cbz::001.jpg", "image/jpeg");
-        var archivePage = new BookPage(Guid.NewGuid(), "Page 1");
-        archivePage.AttachFile(EntityFileRole.Source, "/media/books/Arrival.cbz::001.jpg", "image/jpeg");
         var studio = EntityCardProjector.ToCard(new Studio(Guid.NewGuid(), "Paramount"), hasSourceBackedSubtree: false);
 
         Assert.Empty(emptyMovie.Capabilities.OfType<FileManagementCapability>());
@@ -54,7 +52,6 @@ public sealed class EntityCardProjectorContractTests {
         Assert.True(sourceBackedMovie.HasSourceMedia);
         Assert.True(AssertCapability<FileManagementCapability>(sourceBackedMovie).CanDeleteFiles);
         Assert.Empty(EntityCardProjector.ToCard(archiveChapter, hasSourceBackedSubtree: true).Capabilities.OfType<FileManagementCapability>());
-        Assert.Empty(EntityCardProjector.ToCard(archivePage, hasSourceBackedSubtree: true).Capabilities.OfType<FileManagementCapability>());
         Assert.Empty(studio.Capabilities.OfType<FileManagementCapability>());
     }
 
@@ -85,7 +82,6 @@ public sealed class EntityCardProjectorContractTests {
             Guid.NewGuid(),
             "Novel",
             BookType.Novel,
-            coverPageId: null,
             BookFormat.Audio);
         book.AddChild(track);
 
@@ -104,7 +100,7 @@ public sealed class EntityCardProjectorContractTests {
         Assert.Empty(EntityCardProjector.ToCard(missingTrack, hasSourceBackedSubtree: false)
             .Capabilities.OfType<PlayableAudioCapability>());
         Assert.Empty(EntityCardProjector.ToCard(
-                new Book(Guid.NewGuid(), "Silent", BookType.Novel, coverPageId: null, BookFormat.Audio),
+                new Book(Guid.NewGuid(), "Silent", BookType.Novel, BookFormat.Audio),
                 hasSourceBackedSubtree: false)
             .Capabilities.OfType<PlayableAudioCapability>());
     }
@@ -134,7 +130,7 @@ public sealed class EntityCardProjectorContractTests {
                 Guid.NewGuid()),
             hasSourceBackedSubtree: false);
         var book = EntityCardProjector.ToCard(
-            new Book(Guid.NewGuid(), "Novel", BookType.Novel, coverPageId: null, BookFormat.Epub),
+            new Book(Guid.NewGuid(), "Novel", BookType.Novel, BookFormat.Epub),
             hasSourceBackedSubtree: false);
 
         var seriesSequence = AssertCapability<OrderedSequenceCapability>(series);
@@ -222,20 +218,18 @@ public sealed class EntityCardProjectorContractTests {
 
     [Fact]
     public void ProjectsKindDataThroughCapabilitiesInsteadOfDerivedDetailShapes() {
-        var coverPageId = Guid.NewGuid();
         var book = new Book(
             Guid.NewGuid(),
             "The Left Hand of Darkness",
             BookType.Novel,
-            coverPageId,
-            BookFormat.Epub);
+            format: BookFormat.Epub);
 
         var card = EntityCardProjector.ToCard(book, hasSourceBackedSubtree: false);
 
         var metadata = AssertCapability<BookMetadataCapability>(card);
         Assert.Equal(BookType.Novel, metadata.BookType);
         Assert.Equal(BookFormat.Epub, metadata.Format);
-        Assert.Equal(coverPageId, AssertCapability<CoverSelectionCapability>(card).EntityId);
+        Assert.Empty(card.Capabilities.OfType<CoverSelectionCapability>());
     }
 
     [Fact]

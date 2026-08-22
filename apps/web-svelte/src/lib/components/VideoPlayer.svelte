@@ -69,6 +69,7 @@
     writeQualityPreference,
   } from "$lib/player/quality-preference";
   import { resolveInitialVideoPlayerSourcePolicy } from "$lib/player/video-player-source-policy";
+  import { isFatalVideoDecodeError } from "$lib/player/video-player-errors";
   import {
     pickPreferredSubtitleTrack,
     readLocalSubtitleAppearance,
@@ -1564,21 +1565,6 @@
     refreshQualities();
   }
 
-  // True only for a genuine, unrecoverable codec/decode failure (the browser cannot play this
-  // stream at all) — MediaError DECODE (3) or SRC_NOT_SUPPORTED (4), or an equivalent message.
-  // Network/abort/transient errors return false: those recover on their own and must NOT trigger a
-  // transcode fallback, or a perfectly playable remux gets abandoned for a heavy re-encode.
-  function isFatalDecodeError(detail: unknown): boolean {
-    const d = detail as { code?: number; mediaError?: { code?: number }; message?: string } | null;
-    const code = d?.code ?? d?.mediaError?.code;
-    if (code === 3 || code === 4) return true;
-    const message = (d?.message ?? "").toLowerCase();
-    return message.includes("decode") ||
-      message.includes("not supported") ||
-      message.includes("buffer append") ||
-      message.includes("src_not_supported");
-  }
-
   function handleError(event: Event) {
     const detail = (event as MediaErrorEvent).detail;
     const message = detail instanceof Error
@@ -1587,7 +1573,7 @@
     if (applyPlaybackFallback()) return;
     // Only escalate to a re-negotiated transcode when the browser genuinely cannot decode the
     // stream. A transient/network error here would otherwise tear down a working remux.
-    if (isFatalDecodeError(detail) && tryForceTranscodeFallback()) return;
+    if (isFatalVideoDecodeError(detail) && tryForceTranscodeFallback()) return;
     playerNotice = `${effectiveMode === "direct" ? "Direct" : "Adaptive"} playback error: ${message}`;
     buffering = false;
   }

@@ -28,7 +28,7 @@
   import AudioTransportPreferenceControl from "./AudioTransportPreferenceControl.svelte";
   import { waveformForDisplay } from "./audio-waveform";
   import { ConsumptionActivityClock } from "$lib/entities/consumption-activity-clock";
-  import { bookProgressUpdateForAudio } from "$lib/entities/book-combined-progress";
+  import { audioProgressUpdateForItem } from "$lib/player/audio-progress-mapping";
   import {
     AUDIO_PLAYBACK_SAVE_EVENT,
     resolveAudioArtwork,
@@ -62,7 +62,7 @@
   const playback = useAudioPlayback()!;
   const chrome = useAppChrome();
   const QUICK_SKIP_THRESHOLD_SECONDS = 10;
-  const AUDIOBOOK_PROGRESS_SAVE_INTERVAL_SECONDS = 5;
+  const MAPPED_PROGRESS_SAVE_INTERVAL_SECONDS = 5;
   const FALLBACK_PLAYER_PALETTE: ArtworkPalette = {
     primary: "#c7c9cc",
     secondary: "#8b8f96",
@@ -85,11 +85,11 @@
   let streamRecoverySequence = 0;
   let tabCoordinator: AudioTabCoordinator | null = null;
   let currentTrackRequestedAtMs: number | null = null;
-  let lastAudiobookProgressSeconds: number | null = null;
-  let lastAudiobookTrackId: string | null = null;
-  let audiobookProgressSave = Promise.resolve();
-  const audiobookActivityClock = new ConsumptionActivityClock();
-  let audiobookAccessOwnerId: string | null = null;
+  let lastMappedProgressSeconds: number | null = null;
+  let lastMappedItemId: string | null = null;
+  let mappedProgressSave = Promise.resolve();
+  const mappedProgressActivityClock = new ConsumptionActivityClock();
+  let mappedProgressAccessOwnerId: string | null = null;
   const musicConsumption = new MusicConsumptionReporter(() => ({
     positionSeconds: playback.currentTime,
     durationSeconds: playback.duration || activeTrack?.duration || null,
@@ -111,8 +111,8 @@
   const collapsed = $derived(playback.collapsed);
   const preservesQueueOrder = $derived(ctx?.preservesQueueOrder === true);
   const supportsPlaybackRate = $derived(ctx?.supportsPlaybackRate === true);
-  const hasBookProgress = $derived(
-    Boolean(ctx?.playbackOwnerEntityId && ctx?.bookProgressMappings?.length),
+  const hasMappedProgress = $derived(
+    Boolean(ctx?.playbackOwnerEntityId && ctx?.progressMappings?.length),
   );
   const playbackOwnerHref = $derived(
     ctx?.playbackOwnerEntityId && ctx.playbackOwnerEntityKind
@@ -179,7 +179,7 @@
   }
 
   function dismiss() {
-    saveAudiobookProgress({ completed: false });
+    saveMappedProgress({ completed: false });
     pauseAudio(AUDIO_PLAYBACK_PAUSE_SOURCE.dismiss);
     tabCoordinator?.releasePlayback();
     playback.clear();
@@ -413,7 +413,7 @@
     if (!audioEl) return;
     audioEl.currentTime = time;
     playback.currentTime = time;
-    if (!timelineDraggingRef) saveAudiobookProgress({ completed: false });
+    if (!timelineDraggingRef) saveMappedProgress({ completed: false });
     window.dispatchEvent(new Event(AUDIO_PLAYBACK_SAVE_EVENT));
   }
 
@@ -466,7 +466,7 @@
   function jumpToQueuedTrack(orderIndex: number) {
     const skippedTrack = activeTrack;
     if (orderIndex === playback.position) return;
-    saveAudiobookProgress({ completed: false });
+    saveMappedProgress({ completed: false });
     playback.jumpTo(orderIndex);
     if (playback.position !== orderIndex) return;
     recordCurrentTrackSkip(skippedTrack);
@@ -477,7 +477,7 @@
   function handleNext() {
     // The Next button advances even in repeat-one; the play position effect loads the new track.
     const skippedTrack = activeTrack;
-    saveAudiobookProgress({ completed: false });
+    saveMappedProgress({ completed: false });
     if (playback.next()) {
       recordCurrentTrackSkip(skippedTrack);
       resetPlaybackPosition(playback.currentTrack?.duration ?? 0);
@@ -486,7 +486,7 @@
   }
 
   function handlePrev() {
-    saveAudiobookProgress({ completed: false });
+    saveMappedProgress({ completed: false });
     if (audioEl && audioEl.currentTime > 3) {
       resetPlaybackPosition(duration);
       window.dispatchEvent(new Event(AUDIO_PLAYBACK_SAVE_EVENT));
@@ -533,32 +533,32 @@
     }).catch(() => {});
   }
 
-  function startAudiobookConsumption() {
+  function startMappedProgressConsumption() {
     const ownerId = ctx?.playbackOwnerEntityId;
     if (!ownerId) return;
-    audiobookActivityClock.start();
-    if (audiobookAccessOwnerId === ownerId) return;
-    audiobookAccessOwnerId = ownerId;
+    mappedProgressActivityClock.start();
+    if (mappedProgressAccessOwnerId === ownerId) return;
+    mappedProgressAccessOwnerId = ownerId;
     recordAudioConsumptionAccess(ownerId, playback.currentTime);
   }
 
-  function isFinalAudiobookPart(): boolean {
-    return hasBookProgress && playback.position === playback.order.length - 1;
+  function isFinalMappedItem(): boolean {
+    return hasMappedProgress && playback.position === playback.order.length - 1;
   }
 
-  function saveAudiobookProgress(options: {
+  function saveMappedProgress(options: {
     completed: boolean;
     periodic?: boolean;
     stopActivity?: boolean;
   }) {
     const ownerId = ctx?.playbackOwnerEntityId;
     const track = activeTrack;
-    if (!hasBookProgress || !ownerId || !track) return;
-    const mapping = ctx?.bookProgressMappings?.find((candidate) => candidate.trackId === track.id);
+    if (!hasMappedProgress || !ownerId || !track) return;
+    const mapping = ctx?.progressMappings?.find((candidate) => candidate.itemId === track.id);
     if (!mapping) return;
-    if (track.id !== lastAudiobookTrackId) {
-      lastAudiobookTrackId = track.id;
-      lastAudiobookProgressSeconds = null;
+    if (track.id !== lastMappedItemId) {
+      lastMappedItemId = track.id;
+      lastMappedProgressSeconds = null;
     }
 
     const durationSeconds = Math.max(0, playback.duration || track.duration || 0);
@@ -566,19 +566,19 @@
     const positionSeconds = options.completed ? durationSeconds : playback.currentTime;
     if (
       options.periodic &&
-      lastAudiobookProgressSeconds !== null &&
-      Math.abs(positionSeconds - lastAudiobookProgressSeconds) < AUDIOBOOK_PROGRESS_SAVE_INTERVAL_SECONDS
+      lastMappedProgressSeconds !== null &&
+      Math.abs(positionSeconds - lastMappedProgressSeconds) < MAPPED_PROGRESS_SAVE_INTERVAL_SECONDS
     ) {
       return;
     }
 
-    lastAudiobookProgressSeconds = positionSeconds;
+    lastMappedProgressSeconds = positionSeconds;
     const activitySeconds = options.stopActivity
-      ? audiobookActivityClock.stop()
+      ? mappedProgressActivityClock.stop()
       : playing
-        ? audiobookActivityClock.take()
+        ? mappedProgressActivityClock.take()
         : null;
-    const update = bookProgressUpdateForAudio(
+    const update = audioProgressUpdateForItem(
       mapping,
       positionSeconds,
       durationSeconds,
@@ -586,8 +586,8 @@
       options.completed,
     );
     // Preserve seek/pause/part-transition ordering. Parallel writes can resolve backwards and move
-    // the Book cursor to an older position even though the browser emitted events in the right order.
-    audiobookProgressSave = audiobookProgressSave
+    // the owner cursor to an older position even though the browser emitted events in the right order.
+    mappedProgressSave = mappedProgressSave
       .catch(() => undefined)
       .then(() => updateEntityProgress(ownerId, update))
       .then(() => undefined)
@@ -761,7 +761,7 @@
 
     const handleTimeUpdate = () => {
       if (!timelineDraggingRef) playback.currentTime = audio.currentTime;
-      saveAudiobookProgress({ completed: false, periodic: true });
+      saveMappedProgress({ completed: false, periodic: true });
       setMediaSessionPosition(audio.duration, audio.currentTime, audio.playbackRate);
     };
     const handleDurationChange = () => {
@@ -777,7 +777,7 @@
       audioStartedInThisSession = true;
       playback.playIntent = true;
       playback.playing = true;
-      if (hasBookProgress) startAudiobookConsumption();
+      if (hasMappedProgress) startMappedProgressConsumption();
       else musicConsumption.start();
     };
     const handlePlaying = () => {
@@ -795,8 +795,8 @@
     };
     const handlePause = () => {
       reportAudioDiagnostic(AUDIO_PLAYBACK_DIAGNOSTIC_EVENT.pause, audio);
-      saveAudiobookProgress({
-        completed: audio.ended && isFinalAudiobookPart(),
+      saveMappedProgress({
+        completed: audio.ended && isFinalMappedItem(),
         stopActivity: true,
       });
       playback.playing = false;
@@ -806,8 +806,8 @@
     };
     const handleEnded = () => {
       musicConsumption.pause();
-      if (hasBookProgress) {
-        saveAudiobookProgress({ completed: isFinalAudiobookPart() });
+      if (hasMappedProgress) {
+        saveMappedProgress({ completed: isFinalMappedItem() });
       } else if (playback.currentTrack) {
         recordTrackPlay(playback.currentTrack.id);
       }
@@ -841,7 +841,9 @@
     audio.addEventListener("ended", handleEnded);
     audio.addEventListener("error", handleError);
     const activityTimer = window.setInterval(() => {
-      if (!hasBookProgress && playback.playing) musicConsumption.heartbeat();
+      if (!playback.playing) return;
+      if (hasMappedProgress) saveMappedProgress({ completed: false, periodic: true });
+      else musicConsumption.heartbeat();
     }, 10_000);
     document.addEventListener("visibilitychange", handleVisibilityChange);
     audio.volume = playback.volume;
@@ -1096,7 +1098,7 @@
           (event.currentTarget as HTMLDivElement).releasePointerCapture(event.pointerId);
           timelineDraggingRef = false;
           timelineDragging = false;
-          saveAudiobookProgress({ completed: false });
+          saveMappedProgress({ completed: false });
         }}
         onpointercancel={() => {
           timelineDraggingRef = false;

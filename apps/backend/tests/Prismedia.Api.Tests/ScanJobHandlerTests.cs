@@ -2162,8 +2162,6 @@ public sealed class ScanJobHandlerTests {
                 Assert.Equal(0, manifest.CoverOrdinal);
             });
             Assert.Empty(persistence.UpsertedBooks);
-            Assert.Empty(persistence.UpsertedBookChapters);
-            Assert.Empty(persistence.UpsertedBookPages);
             Assert.Equal([chapterOnePath, chapterTwoPath], persistence.ValidComicArchivePaths);
             Assert.Equal([root.Id], persistence.LastScannedRootIds);
         } finally {
@@ -2462,7 +2460,7 @@ public sealed class ScanJobHandlerTests {
             var author = Assert.Single(persistence.UpsertedBookAuthors);
             Assert.Equal(seriesPath, author.FolderPath);
             Assert.Equal("Game of Thrones", author.Title);
-            Assert.Empty(persistence.UpsertedBookSeries);
+            Assert.Empty(persistence.UpsertedAudiobookBooks);
 
             Assert.Collection(
                 persistence.UpsertedBooks,
@@ -2554,7 +2552,7 @@ public sealed class ScanJobHandlerTests {
                 new JobContext(SingleRootScanJob(root), new RecordingJobQueue()),
                 CancellationToken.None);
 
-            var book = Assert.Single(persistence.UpsertedBookSeries);
+            var book = Assert.Single(persistence.UpsertedAudiobookBooks);
             Assert.Equal(sourcePath, book.SourcePath);
             Assert.Equal(BookFormat.Audio, book.Format);
             var track = Assert.Single(persistence.UpsertedAudioTracks);
@@ -2656,7 +2654,7 @@ public sealed class ScanJobHandlerTests {
                 [audioPath],
                 CancellationToken.None);
 
-            Assert.Empty(persistence.UpsertedBookSeries);
+            Assert.Empty(persistence.UpsertedAudiobookBooks);
             var track = Assert.Single(persistence.UpsertedAudioTracks);
             Assert.Equal(existingBookId, track.AudioLibraryEntityId);
         } finally {
@@ -2730,7 +2728,7 @@ public sealed class ScanJobHandlerTests {
                 persistence.UpsertedAudioTracks.TakeLast(audioPaths.Length),
                 track => Assert.Equal(requestedBookId, track.AudioLibraryEntityId));
             Assert.DoesNotContain(
-                persistence.UpsertedBookSeries,
+                persistence.UpsertedAudiobookBooks,
                 book => string.Equals(book.SourcePath, audioFolder, StringComparison.OrdinalIgnoreCase));
         } finally {
             tempRoot.Delete(recursive: true);
@@ -2756,7 +2754,7 @@ public sealed class ScanJobHandlerTests {
                 NullLogger<ScanBookJobHandler>.Instance,
                 new RecordingFileDiscovery([bookPath]),
                 persistence, persistence, persistence,
-                bookFileMetadata: new StubBookFileMetadataReader(new ComicInfoMetadata {
+                bookFileMetadata: new StubBookFileMetadataReader(new BookFileMetadata {
                     Title = "A Game of Thrones",
                     Creators = ["George R.R. Martin"],
                 }));
@@ -2778,9 +2776,9 @@ public sealed class ScanJobHandlerTests {
         }
     }
 
-    private sealed class StubBookFileMetadataReader(ComicInfoMetadata metadata) : IBookFileMetadataReader {
-        public Task<ComicInfoMetadata?> ReadAsync(string sourcePath, BookFormat format, CancellationToken cancellationToken) =>
-            Task.FromResult<ComicInfoMetadata?>(metadata);
+    private sealed class StubBookFileMetadataReader(BookFileMetadata metadata) : IBookFileMetadataReader {
+        public Task<BookFileMetadata?> ReadAsync(string sourcePath, BookFormat format, CancellationToken cancellationToken) =>
+            Task.FromResult<BookFileMetadata?>(metadata);
     }
 
     [Fact]
@@ -3392,10 +3390,7 @@ public sealed class ScanJobHandlerTests {
         public List<AudioLibraryRecord> UpsertedAudioLibraries { get; } = [];
         public List<MusicArtistRecord> UpsertedMusicArtists { get; } = [];
         public List<BookRecord> UpsertedBooks { get; } = [];
-        public List<BookSeriesRecord> UpsertedBookSeries { get; } = [];
-        public List<BookVolumeRecord> UpsertedBookVolumes { get; } = [];
-        public List<BookChapterRecord> UpsertedBookChapters { get; } = [];
-        public List<BookPageRecord> UpsertedBookPages { get; } = [];
+        public List<AudiobookBookRecord> UpsertedAudiobookBooks { get; } = [];
         public List<ComicSeriesRecord> UpsertedComicSeries { get; } = [];
         public List<ComicVolumeRecord> UpsertedComicVolumes { get; } = [];
         public List<ComicInstallmentRecord> UpsertedComicInstallments { get; } = [];
@@ -3404,7 +3399,6 @@ public sealed class ScanJobHandlerTests {
         public int MusicArtistBatchCalls { get; private set; }
         public int AudioLibraryBatchCalls { get; private set; }
         public int AudioTrackBatchCalls { get; private set; }
-        public int BookPageBatchCalls { get; private set; }
         public IReadOnlyList<string> ValidLooseImagePaths { get; private set; } = [];
         public IReadOnlyList<string> ValidMoviePaths { get; private set; } = [];
         public Dictionary<Guid, IReadOnlyList<string>> ValidImagePathsByGalleryId { get; } = [];
@@ -3585,9 +3579,9 @@ public sealed class ScanJobHandlerTests {
             return Task.FromResult(id);
         }
 
-        public Task<Guid> UpsertBookSeriesAsync(string folderPath, string title, Guid libraryRootId, bool isNsfw, BookType bookType, BookFormat format, CancellationToken cancellationToken) {
+        public Task<Guid> UpsertAudiobookBookAsync(string folderPath, string title, Guid libraryRootId, bool isNsfw, BookType bookType, BookFormat format, CancellationToken cancellationToken) {
             var id = IdFor($"book-series:{folderPath}");
-            UpsertedBookSeries.Add(new BookSeriesRecord(id, folderPath, title, libraryRootId, bookType, format));
+            UpsertedAudiobookBooks.Add(new AudiobookBookRecord(id, folderPath, title, libraryRootId, bookType, format));
             return Task.FromResult(id);
         }
 
@@ -3616,41 +3610,6 @@ public sealed class ScanJobHandlerTests {
             MarkOrganizedIfNeeded(id, sourcePath);
             UpsertedBooks.Add(new BookRecord(id, sourcePath, title, libraryRootId, parentBookEntityId, sortOrder));
             return Task.FromResult(id);
-        }
-
-        public Task<Guid> UpsertBookVolumeAsync(string folderPath, string title, Guid bookEntityId, int sortOrder, bool isNsfw, CancellationToken cancellationToken) {
-            var id = IdFor($"book-volume:{folderPath}");
-            UpsertedBookVolumes.Add(new BookVolumeRecord(id, folderPath, title, bookEntityId, sortOrder));
-            return Task.FromResult(id);
-        }
-
-        public Task<Guid> UpsertBookChapterAsync(string archivePath, string title, Guid parentEntityId, int sortOrder, int pageCount, bool isNsfw, CancellationToken cancellationToken) {
-            var id = IdFor($"book-chapter:{archivePath}");
-            UpsertedBookChapters.Add(new BookChapterRecord(id, archivePath, title, parentEntityId, sortOrder, pageCount));
-            return Task.FromResult(id);
-        }
-
-        public Task<Guid> UpsertBookPageAsync(string filePath, string title, Guid bookEntityId, Guid chapterEntityId, int sortOrder, bool isNsfw, CancellationToken cancellationToken) {
-            var id = IdFor($"book-page:{filePath}");
-            UpsertedBookPages.Add(new BookPageRecord(id, filePath, title, bookEntityId, chapterEntityId, sortOrder));
-            return Task.FromResult(id);
-        }
-
-        public async Task<IReadOnlyList<Guid>> UpsertBookPagesBatchAsync(IReadOnlyList<BookPageUpsertItem> items, CancellationToken cancellationToken) {
-            BookPageBatchCalls++;
-            var ids = new List<Guid>(items.Count);
-            foreach (var item in items) {
-                ids.Add(await UpsertBookPageAsync(
-                    item.FilePath,
-                    item.Title,
-                    item.BookEntityId,
-                    item.ChapterEntityId,
-                    item.SortOrder,
-                    item.IsNsfw,
-                    cancellationToken));
-            }
-
-            return ids;
         }
 
         public Task<Guid> UpsertComicSeriesAsync(
@@ -3938,10 +3897,7 @@ public sealed class ScanJobHandlerTests {
     private sealed record AudioLibraryRecord(Guid Id, string FolderPath, string Title, Guid LibraryRootId, Guid? ParentAudioLibraryEntityId, int SortOrder);
     private sealed record MusicArtistRecord(Guid Id, string FolderPath, string Title, Guid LibraryRootId, int SortOrder);
     private sealed record BookRecord(Guid Id, string SourcePath, string Title, Guid LibraryRootId, Guid? ParentEntityId, int? SortOrder);
-    private sealed record BookSeriesRecord(Guid Id, string SourcePath, string Title, Guid LibraryRootId, BookType BookType, BookFormat Format);
-    private sealed record BookVolumeRecord(Guid Id, string SourcePath, string Title, Guid BookEntityId, int SortOrder);
-    private sealed record BookChapterRecord(Guid Id, string SourcePath, string Title, Guid ParentEntityId, int SortOrder, int PageCount);
-    private sealed record BookPageRecord(Guid Id, string SourcePath, string Title, Guid BookEntityId, Guid ChapterEntityId, int SortOrder);
+    private sealed record AudiobookBookRecord(Guid Id, string SourcePath, string Title, Guid LibraryRootId, BookType BookType, BookFormat Format);
     private sealed record ComicSeriesRecord(
         Guid Id,
         string? FolderPath,
@@ -4016,6 +3972,7 @@ public sealed class ScanJobHandlerTests {
     private sealed class RecordingScanMetadataPersistence : IScanMetadataPersistence {
         public List<AppliedVideoMetadata> AppliedVideos { get; } = [];
         public List<AppliedComicInfoMetadata> AppliedComics { get; } = [];
+        public List<AppliedBookFileMetadata> AppliedBooks { get; } = [];
 
         public Task ApplyVideoSidecarMetadataAsync(
             Guid entityId,
@@ -4035,6 +3992,15 @@ public sealed class ScanJobHandlerTests {
             AppliedComics.Add(new AppliedComicInfoMetadata(bookEntityId, metadata, markNsfw));
             return Task.CompletedTask;
         }
+
+        public Task ApplyBookFileMetadataAsync(
+            Guid entityId,
+            BookFileMetadata metadata,
+            bool markNsfw,
+            CancellationToken cancellationToken) {
+            AppliedBooks.Add(new AppliedBookFileMetadata(entityId, metadata, markNsfw));
+            return Task.CompletedTask;
+        }
     }
 
     private sealed record AppliedVideoMetadata(
@@ -4046,6 +4012,11 @@ public sealed class ScanJobHandlerTests {
     private sealed record AppliedComicInfoMetadata(
         Guid EntityId,
         ComicInfoMetadata Metadata,
+        bool MarkNsfw);
+
+    private sealed record AppliedBookFileMetadata(
+        Guid EntityId,
+        BookFileMetadata Metadata,
         bool MarkNsfw);
 
     private sealed class NoopFileDiscovery : IFileDiscovery {

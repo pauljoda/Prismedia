@@ -1,4 +1,5 @@
 import {
+  BookCopy,
   BookOpen,
   FolderSearch,
   Image,
@@ -42,8 +43,14 @@ export const RUN_CATALOG: readonly RunCatalogGroup[] = [
       {
         jobType: JOB_TYPE.scanBook,
         label: "Books",
-        description: "Walk library roots for comic archives.",
+        description: "Walk library roots for prose books and audiobook sources.",
         icon: BookOpen,
+      },
+      {
+        jobType: JOB_TYPE.scanComic,
+        label: "Comics",
+        description: "Walk library roots for serialized comic archives and loose-page folders.",
+        icon: BookCopy,
       },
       {
         jobType: JOB_TYPE.scanAudio,

@@ -80,7 +80,7 @@ public sealed class PrismediaDbContextModelTests {
         Assert.Contains(EntityKind.VideoEpisode.ToCode(), seededCodes);
         Assert.Contains(EntityKind.BookVolume.ToCode(), seededCodes);
         Assert.Contains(EntityKind.BookChapter.ToCode(), seededCodes);
-        Assert.Contains(EntityKind.BookPage.ToCode(), seededCodes);
+        Assert.DoesNotContain("book-page", seededCodes);
         Assert.Contains(EntityKind.ComicSeries.ToCode(), seededCodes);
         Assert.Contains(EntityKind.ComicVolume.ToCode(), seededCodes);
         Assert.Contains(EntityKind.ComicInstallment.ToCode(), seededCodes);

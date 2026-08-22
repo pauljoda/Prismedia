@@ -48,6 +48,34 @@ public sealed class AudioSourceServiceTests : IDisposable {
         Assert.Null(source);
     }
 
+    [Fact]
+    public async Task SourceFileDoesNotMakeANonPlayableEntityAnAudioSource() {
+        await using var db = CreateContext();
+        var bookId = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        var filePath = Path.Combine(_tempDir, "book.m4b");
+        await File.WriteAllTextAsync(filePath, "audio-bytes");
+        db.Entities.Add(new EntityRow {
+            Id = bookId,
+            KindCode = EntityKind.Book.ToCode(),
+            Title = "Book queue owner",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        db.EntityFiles.Add(new EntityFileRow {
+            Id = Guid.NewGuid(),
+            EntityId = bookId,
+            Role = EntityFileRole.Source,
+            Path = filePath,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var source = await new AudioSourceService(db).GetSourceAsync(bookId, CancellationToken.None);
+
+        Assert.Null(source);
+    }
+
     public void Dispose() {
         if (Directory.Exists(_tempDir)) {
             Directory.Delete(_tempDir, recursive: true);

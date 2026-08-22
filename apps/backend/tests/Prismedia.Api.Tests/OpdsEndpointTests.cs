@@ -1,4 +1,3 @@
-using System.IO.Compression;
 using System.Net;
 using System.Net.Http.Headers;
 using System.Net.Http.Json;
@@ -25,8 +24,6 @@ public sealed class OpdsEndpointTests : IDisposable {
     private static readonly Guid VisibleBookId = Guid.Parse("11111111-1111-1111-1111-111111111111");
     private static readonly Guid HiddenBookId = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly Guid PdfBookId = Guid.Parse("33333333-3333-3333-3333-333333333333");
-    private static readonly Guid CbzBookId = Guid.Parse("44444444-4444-4444-4444-444444444444");
-    private static readonly Guid FolderComicId = Guid.Parse("55555555-5555-5555-5555-555555555555");
     private readonly string _tempDir = Path.Combine(Path.GetTempPath(), $"prismedia-opds-{Guid.NewGuid():N}");
 
     public OpdsEndpointTests() {
@@ -129,9 +126,6 @@ public sealed class OpdsEndpointTests : IDisposable {
             (string?)link.Attribute("rel") == OpdsProtocol.LinkRelations.Acquisition &&
             (string?)link.Attribute("type") == MediaContentTypes.Pdf);
         Assert.Contains(entries.SelectMany(entry => entry.Elements(Atom("link"))), link =>
-            (string?)link.Attribute("rel") == OpdsProtocol.LinkRelations.Acquisition &&
-            (string?)link.Attribute("type") == MediaContentTypes.ComicBookZip);
-        Assert.Contains(entries.SelectMany(entry => entry.Elements(Atom("link"))), link =>
             (string?)link.Attribute("rel") == OpdsProtocol.LinkRelations.Image);
     }
 
@@ -179,22 +173,6 @@ public sealed class OpdsEndpointTests : IDisposable {
         Assert.Equal(HttpStatusCode.OK, cover.StatusCode);
         Assert.Equal(MediaContentTypes.ImageJpeg, cover.Content.Headers.ContentType?.MediaType);
         Assert.Equal("cover", await cover.Content.ReadAsStringAsync());
-    }
-
-    [Fact]
-    public async Task DirectoryComicDownloadStreamsVirtualCbz() {
-        using var factory = CreateFactory();
-        using var client = factory.CreateAuthenticatedClient();
-
-        using var response = await client.GetAsync(OpdsProtocol.Routes.BookDownload(FolderComicId));
-        await using var stream = await response.Content.ReadAsStreamAsync();
-        using var archive = new ZipArchive(stream, ZipArchiveMode.Read);
-
-        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
-        Assert.Equal(MediaContentTypes.ComicBookZip, response.Content.Headers.ContentType?.MediaType);
-        Assert.Contains("folder-comic.cbz", response.Content.Headers.ContentDisposition?.FileNameStar);
-        Assert.Contains(archive.Entries, entry => entry.FullName == "001.jpg");
-        Assert.Contains(archive.Entries, entry => entry.FullName == "chapter/002.png");
     }
 
     [Fact]
@@ -300,38 +278,26 @@ public sealed class OpdsEndpointTests : IDisposable {
             var visiblePath = Path.Combine(tempDir, "visible.epub");
             var hiddenPath = Path.Combine(tempDir, "hidden.epub");
             var pdfPath = Path.Combine(tempDir, "book.pdf");
-            var cbzPath = Path.Combine(tempDir, "comic.cbz");
-            var folderComicPath = Path.Combine(tempDir, "folder-comic");
             var coverPath = Path.Combine(tempDir, "cover.jpg");
-            Directory.CreateDirectory(Path.Combine(folderComicPath, "chapter"));
             File.WriteAllText(visiblePath, "visible book");
             File.WriteAllText(hiddenPath, "hidden book");
             File.WriteAllText(pdfPath, "pdf book");
-            File.WriteAllText(cbzPath, "cbz book");
-            File.WriteAllText(Path.Combine(folderComicPath, "001.jpg"), "page 1");
-            File.WriteAllText(Path.Combine(folderComicPath, "chapter", "002.png"), "page 2");
             File.WriteAllText(coverPath, "cover");
 
             _books = [
                 Book(VisibleBookId, "Visible & <Book>", "Summary & <safe>", MediaContentTypes.Epub, cover: true),
                 Book(PdfBookId, "PDF Book", null, MediaContentTypes.Pdf, cover: false),
-                Book(CbzBookId, "Comic Book", null, MediaContentTypes.ComicBookZip, cover: false),
-                Book(FolderComicId, "Folder Comic", null, MediaContentTypes.ComicBookZip, cover: false),
                 Book(HiddenBookId, "Hidden Book", null, MediaContentTypes.Epub, cover: true)
             ];
             _nsfw = new Dictionary<Guid, bool> {
                 [VisibleBookId] = false,
                 [PdfBookId] = false,
-                [CbzBookId] = false,
-                [FolderComicId] = false,
                 [HiddenBookId] = true
             };
             _downloads = new Dictionary<Guid, OpdsFileContent> {
                 [VisibleBookId] = new(VisibleBookId, EntityFileRole.Source, visiblePath, MediaContentTypes.Epub, "visible.epub"),
                 [HiddenBookId] = new(HiddenBookId, EntityFileRole.Source, hiddenPath, MediaContentTypes.Epub, "hidden.epub"),
-                [PdfBookId] = new(PdfBookId, EntityFileRole.Source, pdfPath, MediaContentTypes.Pdf, "book.pdf"),
-                [CbzBookId] = new(CbzBookId, EntityFileRole.Source, cbzPath, MediaContentTypes.ComicBookZip, "comic.cbz"),
-                [FolderComicId] = new(FolderComicId, EntityFileRole.Source, folderComicPath, MediaContentTypes.ComicBookZip, "folder-comic.cbz")
+                [PdfBookId] = new(PdfBookId, EntityFileRole.Source, pdfPath, MediaContentTypes.Pdf, "book.pdf")
             };
             _covers = new Dictionary<Guid, OpdsFileContent> {
                 [VisibleBookId] = new(VisibleBookId, EntityFileRole.Cover, coverPath, MediaContentTypes.ImageJpeg, "cover.jpg"),
@@ -419,7 +385,7 @@ public sealed class OpdsEndpointTests : IDisposable {
                 DateTimeOffset.UtcNow.AddMinutes(-(id.ToString()[0] % 4)),
                 DateTimeOffset.UtcNow,
                 BookType.Novel,
-                mime == MediaContentTypes.Pdf ? BookFormat.Pdf : mime == MediaContentTypes.ComicBookZip ? BookFormat.ImageArchive : BookFormat.Epub,
+                mime == MediaContentTypes.Pdf ? BookFormat.Pdf : BookFormat.Epub,
                 null,
                 null,
                 [new OpdsContributor(Guid.NewGuid(), "Author & Person")],

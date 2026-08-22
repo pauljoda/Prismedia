@@ -27,9 +27,6 @@ public static class AssetPaths {
     /// <summary>Per-audio-track generated assets (waveforms).</summary>
     public const string AudioTracks = "audio-tracks";
 
-    /// <summary>Per-book-page thumbnails.</summary>
-    public const string BookPages = "book-pages";
-
     /// <summary>Per-book cover thumbnails.</summary>
     public const string BookCovers = "book-covers";
 
@@ -83,7 +80,6 @@ public static class AssetPaths {
         Images,
         Trickplay,
         AudioTracks,
-        BookPages,
         BookCovers,
         Hls,
         Hls2,

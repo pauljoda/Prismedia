@@ -27,7 +27,8 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
     // stored and displayed as-is), so this filter matches wire strings rather than a
     // closed [Code] enum. prism-vocab: external
     private static readonly HashSet<string> IgnoredStatCodes = new(StringComparer.OrdinalIgnoreCase) {
-        "popularity"
+        "popularity",
+        EntityStatCodes.Pages
     };
 
     private readonly PrismediaDbContext _db;

@@ -32,13 +32,17 @@ public sealed class AudioSourceService : IAudioSourceService {
 
     /// <inheritdoc />
     public async Task<AudioSourceFile?> GetSourceAsync(Guid id, CancellationToken cancellationToken) {
+        var playableKindCodes = EntityKindRegistry.All
+            .OfType<IPlayableAudioKindDefinition>()
+            .Select(definition => definition.Kind.ToCode())
+            .ToArray();
         var source = await (
             from entity in _db.Entities.AsNoTracking()
             join file in _db.EntityFiles.AsNoTracking() on entity.Id equals file.EntityId
             join technical in _db.EntityTechnical.AsNoTracking() on entity.Id equals technical.EntityId into technicalRows
             from technical in technicalRows.DefaultIfEmpty()
             where entity.Id == id &&
-                entity.KindCode == EntityKind.AudioTrack.ToCode() &&
+                playableKindCodes.Contains(entity.KindCode) &&
                 !entity.IsWanted &&
                 file.Role == EntityFileRole.Source
             select new {

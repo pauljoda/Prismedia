@@ -37,8 +37,6 @@ internal sealed class BookTypeThumbnailContributor(PrismediaDbContext db) : IThu
     private static string? FormatBookType(BookType bookType) =>
         bookType switch {
             BookType.Book => "Book",
-            BookType.Comic => "Comic",
-            BookType.Manga => "Manga",
             BookType.Novel => "Novel",
             _ => null
         };

@@ -7,8 +7,8 @@
 import type { ProgressUnit } from './progressUnit';
 import type { ReaderMode } from './readerMode';
 
-export interface BookProgressTrackMapping {
-  trackId: string;
+export interface PlaybackProgressMapping {
+  itemId: string;
   currentEntityId: string;
   unit: ProgressUnit;
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
@@ -18,4 +18,6 @@ export interface BookProgressTrackMapping {
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   total: number | string;
   mode: null | ReaderMode;
+  /** @nullable */
+  resourceLocation?: string | null;
 }

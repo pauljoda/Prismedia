@@ -119,19 +119,6 @@ export interface ImageListItemDto {
   createdAt: string;
 }
 
-export interface BookPageDto {
-  id: string;
-  bookId: string;
-  chapterId: string;
-  title: string;
-  width: number | null;
-  height: number | null;
-  format: string | null;
-  thumbnailPath: string | null;
-  fullPath: string;
-  sortOrder: number;
-}
-
 export interface BookChapterDto {
   id: string;
   bookId: string;
@@ -144,7 +131,6 @@ export interface BookChapterDto {
   coverPageId: string | null;
   coverImagePath: string | null;
   hasCustomCover: boolean;
-  pages: BookPageDto[];
 }
 
 export interface BookProgressDto {

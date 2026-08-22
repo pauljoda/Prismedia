@@ -11,7 +11,6 @@ public sealed class EntityCatalogQueryPolicyTests {
     public async Task PlansApplyTheDeclaredSurfaceMatrixWithoutRouteSpecificKindBranches() {
         await using var db = CreateContext();
         var bookId = Guid.NewGuid();
-        var nestedBookId = Guid.NewGuid();
         var galleryId = Guid.NewGuid();
         var nestedGalleryId = Guid.NewGuid();
         var audiobookTrackId = Guid.NewGuid();
@@ -20,7 +19,6 @@ public sealed class EntityCatalogQueryPolicyTests {
         var now = DateTimeOffset.UtcNow;
         db.Entities.AddRange(
             Row(bookId, EntityKind.Book, now),
-            Row(nestedBookId, EntityKind.Book, now, bookId),
             Row(galleryId, EntityKind.Gallery, now),
             Row(nestedGalleryId, EntityKind.Gallery, now, galleryId),
             Row(audiobookTrackId, EntityKind.AudioTrack, now, bookId),
@@ -64,7 +62,6 @@ public sealed class EntityCatalogQueryPolicyTests {
         Assert.Equal([bookId], typedBooks);
         Assert.Equal([galleryId], typedGalleries);
         Assert.DoesNotContain(audiobookTrackId, discovery);
-        Assert.Contains(nestedBookId, discovery);
         Assert.Contains(nestedGalleryId, discovery);
     }
 
@@ -82,7 +79,7 @@ public sealed class EntityCatalogQueryPolicyTests {
 
         Assert.Equal(EntityKind.AudioTrack.ToCode(), trackPlan.KindCode);
         Assert.Equal([EntityKind.Book.ToCode()], trackPlan.HiddenParentKindCodes);
-        Assert.Equal([EntityKind.Book.ToCode()], bookPlan.HiddenParentKindCodes);
+        Assert.Empty(bookPlan.HiddenParentKindCodes);
         Assert.True(galleryPlan.RequiresTopLevel);
     }
 

@@ -9,7 +9,6 @@ export type BookAcquisitionProfileViewAllowedFormatsItem = typeof BookAcquisitio
 
 
 export const BookAcquisitionProfileViewAllowedFormatsItem = {
-  'image-archive': 'image-archive',
   epub: 'epub',
   pdf: 'pdf',
   audio: 'audio',

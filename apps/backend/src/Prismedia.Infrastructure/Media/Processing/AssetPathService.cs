@@ -74,9 +74,6 @@ public sealed class AssetPathService {
     public string ImagePreviewPath(Guid entityId) =>
         Path.Combine(_cacheRoot, AssetPaths.Images, entityId.ToString(), AssetPaths.PreviewFile);
 
-    public string BookPageThumbnailPath(Guid entityId) =>
-        Path.Combine(_cacheRoot, AssetPaths.BookPages, entityId.ToString(), AssetPaths.ThumbnailFile);
-
     public string BookCoverThumbnailPath(Guid entityId) =>
         Path.Combine(_cacheRoot, AssetPaths.BookCovers, entityId.ToString(), AssetPaths.ThumbnailFile);
 
@@ -198,9 +195,6 @@ public sealed class AssetPathService {
 
     public static string ImagePreviewUrl(Guid entityId) =>
         $"{AssetPaths.AssetsUrlPrefix}{AssetPaths.Images}/{entityId}/{AssetPaths.PreviewFile}";
-
-    public static string BookPageThumbnailUrl(Guid entityId) =>
-        $"{AssetPaths.AssetsUrlPrefix}{AssetPaths.BookPages}/{entityId}/{AssetPaths.ThumbnailFile}";
 
     public static string BookCoverThumbnailUrl(Guid entityId) =>
         $"{AssetPaths.AssetsUrlPrefix}{AssetPaths.BookCovers}/{entityId}/{AssetPaths.ThumbnailFile}";

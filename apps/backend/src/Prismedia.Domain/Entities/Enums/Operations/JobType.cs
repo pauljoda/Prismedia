@@ -73,10 +73,6 @@ public enum JobType {
     [Code("grid-thumbnail-sweep")]
     GridThumbnailSweep,
 
-    /// <summary>Generates thumbnails for comic book pages.</summary>
-    [Code("generate-book-page-thumbnail")]
-    GenerateBookPageThumbnail,
-
     /// <summary>Generates the cover thumbnail for a single-file book (EPUB/PDF).</summary>
     [Code("generate-book-cover-thumbnail")]
     GenerateBookCoverThumbnail,

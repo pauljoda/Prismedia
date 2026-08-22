@@ -54,7 +54,7 @@ const MAGIC_CODE_ALLOWLIST: Record<string, string[]> = {
   "lib/components/video-player-types.ts": ["direct"],
   "lib/entities/detail-lab-data.ts": ["audio-library", "video-series"],
   "lib/entities/thumbnail-lab-data.ts": [
-    "audio-library", "audio-track", "book-chapter", "book-page", "book-volume", "video-season", "video-series",
+    "audio-library", "audio-track", "book-chapter", "book-volume", "video-season", "video-series",
   ],
   "lib/jobs/helpers.ts": ["library-maintenance"],
   "lib/jobs/jobs-dashboard.ts": [
@@ -67,7 +67,6 @@ const MAGIC_CODE_ALLOWLIST: Record<string, string[]> = {
   "lib/search/models.ts": ["direct"],
   "lib/settings/app-settings.ts": ["direct", "hls"],
   "lib/settings/settings-section-catalog.ts": ["auto-identify"],
-  "routes/books/[id]/+page.svelte": ["book-page"],
   "routes/movies/[id]/+page.svelte": ["direct", "hls"],
   "routes/videos/[id]/+page.svelte": ["direct", "hls"],
 };

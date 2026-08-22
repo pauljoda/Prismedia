@@ -425,11 +425,10 @@ public sealed class EntityPatchEndpointTests {
         private readonly Book _entity = new(
             EntityId,
             "Book Title",
-            BookType.Comic,
-            coverPageId: null,
+            BookType.Book,
             capabilities: [new CapabilityProgress()]);
         private readonly BookVolume _volume = new(VolumeId, "Volume 1");
-        private readonly BookChapter _chapter = new(ChapterId, "Chapter 1", coverPageId: null);
+        private readonly BookChapter _chapter = new(ChapterId, "Chapter 1");
 
         public FakeEntityWriteRepository() {
             _entity.AddChild(_volume);

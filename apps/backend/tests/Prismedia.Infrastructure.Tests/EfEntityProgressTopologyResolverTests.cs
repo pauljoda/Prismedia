@@ -9,33 +9,34 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EfEntityProgressTopologyResolverTests {
     [Fact]
-    public async Task NestedWorkCursorBelongsOnlyToItsNearestBookOwner() {
+    public async Task ChapterCursorBelongsToItsBookOwner() {
         await using var db = CreateContext();
-        var outerBookId = Guid.NewGuid();
-        var innerBookId = Guid.NewGuid();
+        var bookId = Guid.NewGuid();
         var volumeId = Guid.NewGuid();
         var chapterId = Guid.NewGuid();
-        var pageId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
         db.Entities.AddRange(
-            Row(outerBookId, EntityKind.Book, now),
-            Row(innerBookId, EntityKind.Book, now, outerBookId),
-            Row(volumeId, EntityKind.BookVolume, now, innerBookId),
-            Row(chapterId, EntityKind.BookChapter, now, volumeId),
-            Row(pageId, EntityKind.BookPage, now, chapterId));
+            Row(bookId, EntityKind.Book, now),
+            Row(volumeId, EntityKind.BookVolume, now, bookId),
+            Row(chapterId, EntityKind.BookChapter, now, volumeId));
+        db.EntityStats.Add(new EntityStatRow {
+            EntityId = chapterId,
+            Code = EntityStatCodes.Pages,
+            Value = 24,
+            UpdatedAt = now
+        });
         await db.SaveChangesAsync();
 
         var resolver = new EfEntityProgressTopologyResolver(db);
 
-        Assert.Null(await resolver.ResolveCursorAsync(outerBookId, pageId, CancellationToken.None));
         Assert.Equal(
-            new ProgressOwnerResolution(innerBookId),
+            new ProgressOwnerResolution(bookId),
             await resolver.ResolveOwnerAsync(chapterId, CancellationToken.None));
         Assert.Null(await resolver.ResolveWorkPositionAsync(
-            innerBookId, volumeId, 0, 1, CancellationToken.None));
+            bookId, volumeId, 0, 1, CancellationToken.None));
         Assert.Equal(
-            new ProgressWorkPosition(chapterId, 0, 1),
-            await resolver.ResolveWorkPositionAsync(innerBookId, pageId, 0, 1, CancellationToken.None));
+            new ProgressWorkPosition(chapterId, 6, 24),
+            await resolver.ResolveWorkPositionAsync(bookId, chapterId, 6, 24, CancellationToken.None));
     }
 
     [Fact]

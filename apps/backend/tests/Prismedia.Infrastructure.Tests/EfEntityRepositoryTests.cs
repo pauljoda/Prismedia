@@ -111,6 +111,12 @@ public sealed class EfEntityRepositoryTests {
                 MimeType = "image/jpeg",
                 PageType = PageType.Story
             });
+        db.EntityStats.Add(new EntityStatRow {
+            EntityId = installmentId,
+            Code = EntityStatCodes.Pages,
+            Value = 2,
+            UpdatedAt = IdentityCreatedAt
+        });
         await db.SaveChangesAsync();
 
         var repository = new EfEntityRepository(
@@ -132,7 +138,7 @@ public sealed class EfEntityRepositoryTests {
     }
 
     [Fact]
-    public async Task PageManifestHydrationRejectsAGappedPersistedSequence() {
+    public async Task PageManifestHydrationRequiresTheCachedPageCountStatistic() {
         await using var db = CreateContext();
         var seriesId = Guid.NewGuid();
         var installmentId = Guid.NewGuid();
@@ -159,8 +165,8 @@ public sealed class EfEntityRepositoryTests {
         });
         db.EntityPageEntries.Add(new EntityPageEntryRow {
             EntityId = installmentId,
-            Ordinal = 1,
-            ArchiveMember = "002.jpg",
+            Ordinal = 0,
+            ArchiveMember = "001.jpg",
             MimeType = "image/jpeg",
             PageType = PageType.Story
         });

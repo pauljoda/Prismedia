@@ -418,50 +418,7 @@ public sealed partial class LibraryScanPersistenceService {
         return rows.Count;
     }
 
-    public async Task<Guid> UpsertBookAsync(string sourcePath, string title, Guid libraryRootId, bool isNsfw, CancellationToken cancellationToken) {
-        var existing = await FindEntityBySourcePath(EntityKind.Book.ToCode(), sourcePath, cancellationToken);
-        if (existing is not null) {
-            var tracked = await _db.Entities.FindAsync([existing.Id], cancellationToken);
-            if (tracked is not null) {
-                tracked.Title = title;
-                tracked.ParentEntityId = null;
-                tracked.SortOrder = null;
-                tracked.UpdatedAt = DateTimeOffset.UtcNow;
-                if (isNsfw) tracked.IsNsfw = true;
-            }
-            var detail = await _db.BookDetails.FindAsync([existing.Id], cancellationToken);
-            if (detail is not null) {
-                detail.BookType = BookType.Comic;
-                detail.Format = BookFormat.ImageArchive;
-            } else {
-                _db.BookDetails.Add(new BookDetailRow { EntityId = existing.Id, BookType = BookType.Comic, Format = BookFormat.ImageArchive });
-            }
-            await SetEntityLibraryRootAsync(existing.Id, libraryRootId, cancellationToken);
-            await SaveChangesWithLifecycleAsync(cancellationToken);
-            return existing.Id;
-        }
-
-        var now = DateTimeOffset.UtcNow;
-        var id = Guid.NewGuid();
-
-        _db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKind.Book.ToCode(), Title = title, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
-        _db.BookDetails.Add(new BookDetailRow { EntityId = id, BookType = BookType.Comic, Format = BookFormat.ImageArchive });
-        _db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = id, LibraryRootId = libraryRootId });
-        _db.EntityFiles.Add(new EntityFileRow {
-            Id = Guid.NewGuid(),
-            EntityId = id,
-            Role = EntityFileRole.Source,
-            Path = sourcePath,
-            SizeBytes = LibraryScanFileSystem.TryGetFileSize(sourcePath),
-            CreatedAt = now,
-            UpdatedAt = now
-        });
-
-        await SaveChangesWithLifecycleAsync(cancellationToken);
-        return id;
-    }
-
-    public async Task<Guid> UpsertBookSeriesAsync(
+    public async Task<Guid> UpsertAudiobookBookAsync(
         string folderPath,
         string title,
         Guid libraryRootId,
@@ -487,7 +444,6 @@ public sealed partial class LibraryScanPersistenceService {
                 _db.BookDetails.Add(new BookDetailRow { EntityId = existing.Id, BookType = bookType, Format = format });
             }
             await SetEntityLibraryRootAsync(existing.Id, libraryRootId, cancellationToken);
-            await ReparentSingleFileBooksUnderSeriesAsync(existing.Id, folderPath, libraryRootId, DateTimeOffset.UtcNow, cancellationToken);
             await SaveChangesWithLifecycleAsync(cancellationToken);
             return existing.Id;
         }
@@ -504,67 +460,9 @@ public sealed partial class LibraryScanPersistenceService {
             Value = folderPath,
             UpdatedAt = now
         });
-        await ReparentSingleFileBooksUnderSeriesAsync(id, folderPath, libraryRootId, now, cancellationToken);
-
         await SaveChangesWithLifecycleAsync(cancellationToken);
         return id;
     }
-
-    private async Task ReparentSingleFileBooksUnderSeriesAsync(
-        Guid seriesId,
-        string folderPath,
-        Guid libraryRootId,
-        DateTimeOffset now,
-        CancellationToken cancellationToken) {
-        var folderPrefix = EnsureTrailingSeparator(folderPath);
-        var candidates = await _db.EntityFiles.AsNoTracking()
-            .Where(file => file.Role == EntityFileRole.Source && file.Path.StartsWith(folderPath))
-            .Join(
-                _db.BookDetails,
-                file => file.EntityId,
-                detail => detail.EntityId,
-                (file, detail) => new { file.EntityId, file.Path, detail.Format })
-            .Join(_db.EntityLibraryRoots, candidate => candidate.EntityId, root => root.EntityId,
-                (candidate, root) => new { candidate.EntityId, candidate.Path, candidate.Format, root.LibraryRootId })
-            .Where(candidate => candidate.LibraryRootId == libraryRootId && candidate.Format != BookFormat.ImageArchive)
-            .ToArrayAsync(cancellationToken);
-        var childCandidates = candidates
-            .Where(candidate => IsDescendantSourcePath(candidate.Path, folderPath, folderPrefix))
-            .OrderBy(candidate => candidate.Path, StringComparer.OrdinalIgnoreCase)
-            .ToArray();
-
-        for (var sortOrder = 0; sortOrder < childCandidates.Length; sortOrder++) {
-            var child = _db.Entities.Local.FirstOrDefault(row => row.Id == childCandidates[sortOrder].EntityId)
-                ?? await _db.Entities.FirstOrDefaultAsync(row =>
-                    row.Id == childCandidates[sortOrder].EntityId &&
-                    row.KindCode == EntityKind.Book.ToCode(),
-                    cancellationToken);
-            if (child is null) {
-                continue;
-            }
-
-            var shouldMarkAncestors = ShouldMarkAutoIdentifyAncestors(child, seriesId);
-            child.ParentEntityId = seriesId;
-            child.SortOrder = sortOrder;
-            child.UpdatedAt = now;
-            if (shouldMarkAncestors) {
-                await MarkAutoIdentifyAncestorsUnorganizedAsync(seriesId, now, cancellationToken);
-            }
-        }
-    }
-
-    private static string EnsureTrailingSeparator(string path) {
-        if (path.EndsWith(Path.DirectorySeparatorChar) ||
-            path.EndsWith(Path.AltDirectorySeparatorChar)) {
-            return path;
-        }
-
-        return path + Path.DirectorySeparatorChar;
-    }
-
-    private static bool IsDescendantSourcePath(string sourcePath, string folderPath, string folderPrefix) =>
-        !FileSystemPathComparison.Equals(sourcePath, folderPath) &&
-        sourcePath.StartsWith(folderPrefix, FileSystemPathComparison.Comparison);
 
     public async Task<Guid> UpsertSingleFileBookAsync(
         string sourcePath,
@@ -574,7 +472,7 @@ public sealed partial class LibraryScanPersistenceService {
         BookType bookType,
         BookFormat format,
         string contentType,
-        Guid? parentBookEntityId,
+        Guid? parentEntityId,
         int? sortOrder,
         CancellationToken cancellationToken) {
         var existing = await FindEntityBySourcePath(EntityKind.Book.ToCode(), sourcePath, cancellationToken);
@@ -582,14 +480,14 @@ public sealed partial class LibraryScanPersistenceService {
             var tracked = await _db.Entities.FindAsync([existing.Id], cancellationToken);
             if (tracked is not null) {
                 var updatedAt = DateTimeOffset.UtcNow;
-                var shouldMarkAncestors = ShouldMarkAutoIdentifyAncestors(tracked, parentBookEntityId);
+                var shouldMarkAncestors = ShouldMarkAutoIdentifyAncestors(tracked, parentEntityId);
                 tracked.Title = title;
-                tracked.ParentEntityId = parentBookEntityId;
+                tracked.ParentEntityId = parentEntityId;
                 tracked.SortOrder = sortOrder;
                 tracked.UpdatedAt = updatedAt;
                 if (isNsfw) tracked.IsNsfw = true;
                 if (shouldMarkAncestors) {
-                    await MarkAutoIdentifyAncestorsUnorganizedAsync(parentBookEntityId, updatedAt, cancellationToken);
+                    await MarkAutoIdentifyAncestorsUnorganizedAsync(parentEntityId, updatedAt, cancellationToken);
                 }
             }
             var detail = await _db.BookDetails.FindAsync([existing.Id], cancellationToken);
@@ -605,7 +503,7 @@ public sealed partial class LibraryScanPersistenceService {
         var now = DateTimeOffset.UtcNow;
         var id = Guid.NewGuid();
 
-        _db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKind.Book.ToCode(), Title = title, ParentEntityId = parentBookEntityId, SortOrder = sortOrder, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
+        _db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKind.Book.ToCode(), Title = title, ParentEntityId = parentEntityId, SortOrder = sortOrder, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
         _db.BookDetails.Add(new BookDetailRow { EntityId = id, BookType = bookType, Format = format });
         _db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = id, LibraryRootId = libraryRootId });
         _db.EntityFiles.Add(new EntityFileRow {
@@ -618,142 +516,9 @@ public sealed partial class LibraryScanPersistenceService {
             CreatedAt = now,
             UpdatedAt = now
         });
-        await MarkAutoIdentifyAncestorsUnorganizedAsync(parentBookEntityId, now, cancellationToken);
+        await MarkAutoIdentifyAncestorsUnorganizedAsync(parentEntityId, now, cancellationToken);
 
         await SaveChangesWithLifecycleAsync(cancellationToken);
-        return id;
-    }
-
-    public async Task<Guid> UpsertBookVolumeAsync(string folderPath, string title, Guid bookEntityId, int sortOrder, bool isNsfw, CancellationToken cancellationToken) {
-        var existing = await FindEntityByFolderSourcePathAsync(EntityKind.BookVolume.ToCode(), folderPath, cancellationToken);
-        if (existing is not null) {
-            existing.Title = title;
-            existing.UpdatedAt = DateTimeOffset.UtcNow;
-            await UpsertStructuralChildLinkAsync(
-                bookEntityId,
-                existing.Id,
-                sortOrder,
-                DateTimeOffset.UtcNow,
-                cancellationToken);
-            await SaveChangesWithLifecycleAsync(cancellationToken);
-            return existing.Id;
-        }
-
-        var now = DateTimeOffset.UtcNow;
-        var id = Guid.NewGuid();
-
-        _db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKind.BookVolume.ToCode(), Title = title, ParentEntityId = bookEntityId, SortOrder = sortOrder, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
-        _db.EntitySources.Add(new EntitySourceRow {
-            EntityId = id,
-            Code = EntitySourceCode.Folder.ToCode(),
-            Value = folderPath,
-            UpdatedAt = now
-        });
-        await UpsertStructuralChildLinkAsync(
-            bookEntityId,
-            id,
-            sortOrder,
-            now,
-            cancellationToken);
-
-        await SaveChangesWithLifecycleAsync(cancellationToken);
-        return id;
-    }
-
-    public async Task<Guid> UpsertBookChapterAsync(string archivePath, string title, Guid parentEntityId, int sortOrder, int pageCount, bool isNsfw, CancellationToken cancellationToken) {
-        var existing = await FindEntityBySourcePath(EntityKind.BookChapter.ToCode(), archivePath, cancellationToken);
-        if (existing is not null) {
-            existing.Title = title;
-            existing.UpdatedAt = DateTimeOffset.UtcNow;
-            await UpsertStructuralChildLinkAsync(
-                parentEntityId,
-                existing.Id,
-                sortOrder,
-                DateTimeOffset.UtcNow,
-                cancellationToken);
-            await SaveChangesWithLifecycleAsync(cancellationToken);
-            return existing.Id;
-        }
-
-        var now = DateTimeOffset.UtcNow;
-        var id = Guid.NewGuid();
-
-        _db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKind.BookChapter.ToCode(), Title = title, ParentEntityId = parentEntityId, SortOrder = sortOrder, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
-        _db.BookChapterDetails.Add(new BookChapterDetailRow { EntityId = id });
-        _db.EntityFiles.Add(new EntityFileRow {
-            Id = Guid.NewGuid(),
-            EntityId = id,
-            Role = EntityFileRole.Source,
-            Path = archivePath,
-            CreatedAt = now,
-            UpdatedAt = now
-        });
-        await UpsertStructuralChildLinkAsync(
-            parentEntityId,
-            id,
-            sortOrder,
-            now,
-            cancellationToken);
-
-        await SaveChangesWithLifecycleAsync(cancellationToken);
-        return id;
-    }
-
-    public async Task<Guid> UpsertBookPageAsync(string filePath, string title, Guid bookEntityId, Guid chapterEntityId, int sortOrder, bool isNsfw, CancellationToken cancellationToken) {
-        var id = await UpsertBookPageCoreAsync(
-            new BookPageUpsertItem(filePath, title, bookEntityId, chapterEntityId, sortOrder, isNsfw),
-            cancellationToken);
-        await SaveChangesWithLifecycleAsync(cancellationToken);
-        return id;
-    }
-
-    public async Task<IReadOnlyList<Guid>> UpsertBookPagesBatchAsync(
-        IReadOnlyList<BookPageUpsertItem> items, CancellationToken cancellationToken) {
-        if (items.Count == 0) return [];
-
-        var ids = new List<Guid>(items.Count);
-        foreach (var item in items) {
-            ids.Add(await UpsertBookPageCoreAsync(item, cancellationToken));
-        }
-
-        await SaveChangesWithLifecycleAsync(cancellationToken);
-        return ids;
-    }
-
-    private async Task<Guid> UpsertBookPageCoreAsync(
-        BookPageUpsertItem item, CancellationToken cancellationToken) {
-        var (filePath, title, bookEntityId, chapterEntityId, sortOrder, isNsfw) = item;
-        var existing = await FindEntityBySourcePath(EntityKind.BookPage.ToCode(), filePath, cancellationToken);
-        if (existing is not null) {
-            existing.UpdatedAt = DateTimeOffset.UtcNow;
-            await UpsertStructuralChildLinkAsync(
-                chapterEntityId,
-                existing.Id,
-                sortOrder,
-                DateTimeOffset.UtcNow,
-                cancellationToken);
-            return existing.Id;
-        }
-
-        var now = DateTimeOffset.UtcNow;
-        var id = Guid.NewGuid();
-
-        _db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKind.BookPage.ToCode(), Title = title, ParentEntityId = chapterEntityId, SortOrder = sortOrder, IsNsfw = isNsfw, CreatedAt = now, UpdatedAt = now });
-        _db.EntityFiles.Add(new EntityFileRow {
-            Id = Guid.NewGuid(),
-            EntityId = id,
-            Role = EntityFileRole.Source,
-            Path = filePath,
-            CreatedAt = now,
-            UpdatedAt = now
-        });
-        await UpsertStructuralChildLinkAsync(
-            chapterEntityId,
-            id,
-            sortOrder,
-            now,
-            cancellationToken);
-
         return id;
     }
 

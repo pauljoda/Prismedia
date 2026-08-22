@@ -100,7 +100,7 @@
             <p>
               {row.rendition === BOOK_RENDITION.audiobook
                 ? "Narrated audio that shares this Book's metadata and artwork."
-                : "Readable text, document, comic, or image-archive content."}
+                : "Readable EPUB or PDF content for this Book."}
             </p>
           </div>
         </div>

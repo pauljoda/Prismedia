@@ -25,7 +25,6 @@ export const JobType = {
   'generate-image-thumbnail': 'generate-image-thumbnail',
   'generate-grid-thumbnail': 'generate-grid-thumbnail',
   'grid-thumbnail-sweep': 'grid-thumbnail-sweep',
-  'generate-book-page-thumbnail': 'generate-book-page-thumbnail',
   'generate-book-cover-thumbnail': 'generate-book-cover-thumbnail',
   'map-book-chapters': 'map-book-chapters',
   'generate-audio-waveform': 'generate-audio-waveform',

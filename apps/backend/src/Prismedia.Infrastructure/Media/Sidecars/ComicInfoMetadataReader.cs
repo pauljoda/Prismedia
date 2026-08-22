@@ -81,7 +81,6 @@ public sealed class ComicInfoMetadataReader : IComicInfoMetadataReader {
             Date = Date(document),
             Publisher = publisher,
             Urls = Unique(SplitList(Clean(FirstValue(document, "Web")))),
-            PageCount = Number(document, "PageCount"),
             Language = Clean(FirstValue(document, "LanguageISO")),
             Format = Clean(FirstValue(document, "Format")),
             Manga = manga,

@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Comic archives now scan through an independent serialized-media pipeline that groups released installments beneath titles and optional volumes, preserves ComicInfo release metadata and reading direction, and builds generic page manifests without creating one Entity per page.
 - Serialized comic requests can now discover and monitor both collected volumes and independently released chapters or issues, search comic indexer categories with installment-aware matching, and import verified CBZ/ZIP payloads into the exact wanted Entity without folding uncollected releases into invented volumes.
 - Readable Entities can now expose a generic ordered page manifest and stream pages through shared Entity reader routes, with exact archive-member ordering and no page-Entity expansion.
+- Comic installments now use the same definition-owned manual upload and replacement contract as other concrete media files, while prose Books accept only their own readable or audio formats.
 - Serialized comics now have separate series, optional volume, and installment entity contracts, preserving the distinction between an independently released chapter or issue and a prose book's internal chapter markers.
 - Entity details now advertise ordered-sequence participation and directly playable audio through generated capabilities, giving every client one shared contract for sequence interactions and audio playback without media-kind checks.
 - Books that have both readable and audiobook renditions now include a Chapter Mapping tab. Mark the readable chapter where the first audiobook file begins to fill the map sequentially, override individual files when needed, and save the alignment for web and native clients.
@@ -20,6 +21,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Book pages open in one round of requests: the readable chapter list (EPUB contents or chapter summaries with page counts) is persisted at scan time and served from the database, chapter page counts no longer require fetching every page of every chapter, and moving your reading position no longer refetches the contents at all.
 - Household members can now discover and request content using the installed metadata sources, their accessible libraries, and the acquisition profiles available to them; plugin and profile administration remain restricted to administrators.
 - TV downloads held for manual import now open an expected-episode review: Prismedia prefills unambiguous matches, lets each episode choose a downloaded video, supports one video satisfying several episodes, and keeps the complete payload in a collapsed audit list. Potentially dangerous companion files are blocked from selection while verified media remains mappable behind an explicit safety confirmation. A held release can also be rejected to remove its download data, blocklist it, and immediately search again.
+
+### Changed
+
+- Shared audio players now advance any owning Entity through generic item-to-progress mappings. Book code constructs the chapter mapping, while web and Apple players use the same media-neutral playback and persistence contract as every other audio-capable Entity.
+- Saved audio queues now restore through one compact, exact batch projection instead of loading every queued item independently, preserving numeric durations and player metadata without query growth as queues get longer.
 
 ### Removed
 
@@ -30,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ### Fixed
 
 - Existing image-archive Books now transition into the serialized comic hierarchy without duplicate catalog entries or scan-order data loss, including libraries whose series identity is recorded as folder provenance. They retain stable identities, promote saved chapter progress to the adopted installment, and remove the entire obsolete chapter/page hierarchy when a source disappears.
+- Job Control now offers separate Book and Comic scans, so serialized comic archives and loose-page folders run through the comic scanner instead of the prose-book scanner.
 - Source-backed audio queues loaded from the database now advertise the same playable-audio capability as in-memory Entities. The shared player derives ordered-queue and variable-rate controls from that capability, with no book-specific playback branch.
 - A video's saved resume position can no longer be destroyed by a playback attempt that never gets going. Players that stall while opening report a position of zero, and the server previously treated that as "the viewer went back to the beginning" and erased the real resume point. Zero-position progress and stop reports now keep their watch-activity accounting but leave the resume position untouched; choosing Start Over when starting playback still clears it explicitly.
 - Safari no longer stutters, stalls, and restarts part-way through HEVC videos played as Direct Stream. Safari now plays these streams with its own built-in player, which correctly handles the segment structure that most HEVC files use; the previous player could not, and got stuck re-requesting the same few seconds forever. Chrome and Firefox are unaffected.

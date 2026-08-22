@@ -1,17 +1,18 @@
 import { describe, expect, it } from "vitest";
 import type { EntityCard, EntityThumbnail } from "$lib/api/generated/model";
+import { ENTITY_STAT_CODE } from "$lib/api/generated/codes";
 import {
   bookEntityProgressDisplay,
-  entityPageToReaderImage,
   orderedBookChildren,
+  persistedPageCount,
   singleFileBookProgressDisplay,
 } from "./book-entity-reader";
 
 function thumbnail(overrides: Partial<EntityThumbnail>): EntityThumbnail {
   return {
     id: "entity",
-    kind: "book-page",
-    title: "Page",
+    kind: "book-chapter",
+    title: "Chapter",
     parentEntityId: null,
     sortOrder: null,
     coverUrl: null,
@@ -63,25 +64,11 @@ describe("book entity reader helpers", () => {
     ]);
   });
 
-  it("maps page entities to the existing reader image contract", () => {
-    const image = entityPageToReaderImage(
-      thumbnail({
-        id: "page-1",
-        title: "Page 1",
-        sortOrder: 3,
-        coverUrl: "/assets/book-pages/page-1/thumb.jpg",
-        isNsfw: true,
-      }),
-    );
-
-    expect(image).toMatchObject({
-      id: "page-1",
-      title: "Page 1",
-      isNsfw: true,
-      thumbnailPath: "/assets/book-pages/page-1/thumb.jpg",
-      fullPath: "/entities/page-1/files/source",
-      sortOrder: 3,
-    });
+  it("reads page count from the scan-maintained stats capability", () => {
+    expect(persistedPageCount(entity({
+      capabilities: [{ kind: "stats", items: [{ code: ENTITY_STAT_CODE.pages, value: 324 }] }],
+    }))).toBe(324);
+    expect(persistedPageCount(entity({ capabilities: [] }))).toBe(0);
   });
 
   it("describes current book progress from the shared progress capability", () => {

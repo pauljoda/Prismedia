@@ -8,12 +8,11 @@ using VersOne.Epub;
 namespace Prismedia.Infrastructure.Media.Books;
 
 /// <summary>
-/// Reads descriptive metadata from single-file books, normalized into the shared
-/// <see cref="ComicInfoMetadata"/> shape. EPUB is parsed with VersOne.Epub and PDF with PdfPig.
+/// Reads descriptive metadata from single-file books. EPUB is parsed with VersOne.Epub and PDF with PdfPig.
 /// </summary>
 public sealed partial class BookFileMetadataReader : IBookFileMetadataReader {
     /// <inheritdoc />
-    public async Task<ComicInfoMetadata?> ReadAsync(string sourcePath, BookFormat format, CancellationToken cancellationToken) {
+    public async Task<BookFileMetadata?> ReadAsync(string sourcePath, BookFormat format, CancellationToken cancellationToken) {
         return format switch {
             BookFormat.Epub => await ReadEpubAsync(sourcePath, cancellationToken),
             BookFormat.Pdf => ReadPdf(sourcePath, cancellationToken),
@@ -21,17 +20,18 @@ public sealed partial class BookFileMetadataReader : IBookFileMetadataReader {
         };
     }
 
-    private static ComicInfoMetadata? ReadPdf(string sourcePath, CancellationToken cancellationToken) {
+    private static BookFileMetadata? ReadPdf(string sourcePath, CancellationToken cancellationToken) {
         try {
             using var document = PdfDocument.Open(sourcePath);
             cancellationToken.ThrowIfCancellationRequested();
 
             var info = document.Information;
             var author = NullIfBlank(info?.Author);
-            return new ComicInfoMetadata {
+            return new BookFileMetadata {
                 Title = NullIfBlank(info?.Title),
                 Summary = NullIfBlank(info?.Subject),
-                Creators = author is null ? [] : [author]
+                Creators = author is null ? [] : [author],
+                PageCount = document.NumberOfPages
             };
         } catch (OperationCanceledException) {
             throw;
@@ -40,7 +40,7 @@ public sealed partial class BookFileMetadataReader : IBookFileMetadataReader {
         }
     }
 
-    private static async Task<ComicInfoMetadata?> ReadEpubAsync(string sourcePath, CancellationToken cancellationToken) {
+    private static async Task<BookFileMetadata?> ReadEpubAsync(string sourcePath, CancellationToken cancellationToken) {
         try {
             var book = await EpubReader.ReadBookAsync(sourcePath);
             cancellationToken.ThrowIfCancellationRequested();
@@ -52,7 +52,7 @@ public sealed partial class BookFileMetadataReader : IBookFileMetadataReader {
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToArray();
 
-            return new ComicInfoMetadata {
+            return new BookFileMetadata {
                 Title = NullIfBlank(book.Title),
                 Summary = NullIfBlank(StripHtml(book.Description)),
                 Creators = creators

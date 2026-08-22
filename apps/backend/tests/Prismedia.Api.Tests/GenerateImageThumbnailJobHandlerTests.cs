@@ -168,7 +168,6 @@ public sealed class GenerateImageThumbnailJobHandlerTests : IDisposable {
         public string TrickplayTileDir(Guid entityId, int width) => throw new NotSupportedException();
         public string ImageThumbnailPath(Guid entityId) => Path.Combine(tempDir, $"{entityId}-thumb.jpg");
         public string ImagePreviewPath(Guid entityId) => Path.Combine(tempDir, $"{entityId}-preview.mp4");
-        public string BookPageThumbnailPath(Guid entityId) => throw new NotSupportedException();
         public string BookCoverThumbnailPath(Guid entityId) => throw new NotSupportedException();
         public string AudioWaveformPath(Guid entityId) => throw new NotSupportedException();
         public string SubtitleDir(Guid entityId) => throw new NotSupportedException();
@@ -178,7 +177,6 @@ public sealed class GenerateImageThumbnailJobHandlerTests : IDisposable {
         public string TrickplayPlaylistUrl(Guid entityId, int width) => throw new NotSupportedException();
         public string ImageThumbnailUrl(Guid entityId) => $"/assets/images/{entityId}/thumb.jpg";
         public string ImagePreviewUrl(Guid entityId) => $"/assets/images/{entityId}/preview.mp4";
-        public string BookPageThumbnailUrl(Guid entityId) => throw new NotSupportedException();
         public string BookCoverThumbnailUrl(Guid entityId) => throw new NotSupportedException();
         public string AudioWaveformUrl(Guid entityId) => throw new NotSupportedException();
         public string SubtitleUrl(Guid entityId, string fileName) => throw new NotSupportedException();

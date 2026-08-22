@@ -1,5 +1,4 @@
 using Prismedia.Application.Jobs.Handlers;
-using System.IO.Compression;
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Books;
 using Prismedia.Application.Files;
@@ -21,18 +20,12 @@ public sealed class ScanBookJobHandler(
     IBookScanPersistence books,
     IDownstreamNeedsPersistence downstreamNeeds,
     IScanSnapshotStore? snapshots = null,
-    IComicInfoMetadataReader? comicInfoReader = null,
     IScanMetadataPersistence? scanMetadata = null,
     IBookFileMetadataReader? bookFileMetadata = null,
     Acquisition.IAcquisitionHintApplier? acquisitionHints = null,
     IAudioScanPersistence? audio = null,
     ILibraryFileChangeIntake? changeIntake = null,
     IBookChapterMapService? chapterMap = null) : ScanJobHandler(logger, fileDiscovery, roots, snapshots, changeIntake: changeIntake) {
-    private static readonly HashSet<string> ImageExtensions = new(StringComparer.OrdinalIgnoreCase)
-    {
-        ".jpg", ".jpeg", ".png", ".gif", ".webp", ".bmp", ".tiff", ".tif"
-    };
-
     protected override bool IsEligibleRoot(LibraryRootData root) => root.ScanBooks;
 
     protected override IReadOnlyList<MediaCategory> ScanCategories =>
@@ -50,7 +43,6 @@ public sealed class ScanBookJobHandler(
         return await MaterializeBookPathsAsync(
             context,
             root,
-            archiveFiles: [],
             bookFiles,
             audiobookFiles,
             reconcile: true,
@@ -77,10 +69,9 @@ public sealed class ScanBookJobHandler(
             throw new InvalidOperationException("The imported books no longer belong to an enabled book library root.");
         }
 
-        var archiveFiles = placedPaths.Where(IsArchivePath).ToArray();
         var bookFiles = placedPaths.Where(path => BookFormatFor(path) is not null).ToArray();
         var audiobookFiles = placedPaths.Where(IsAudiobookPath).ToArray();
-        if (archiveFiles.Length + bookFiles.Length + audiobookFiles.Length != placedPaths.Count) {
+        if (bookFiles.Length + audiobookFiles.Length != placedPaths.Count) {
             throw new InvalidOperationException("The book import contains a file the book scanner does not support.");
         }
         if (removedSourcePaths?.Any(path => !IsAudiobookPath(path)) == true) {
@@ -94,7 +85,6 @@ public sealed class ScanBookJobHandler(
         await MaterializeBookPathsAsync(
             context,
             root,
-            archiveFiles,
             bookFiles,
             audiobookFiles,
             reconcile: false,
@@ -108,7 +98,6 @@ public sealed class ScanBookJobHandler(
     private async Task<ScanRootOutcome> MaterializeBookPathsAsync(
         JobContext context,
         LibraryRootData root,
-        IReadOnlyList<string> archiveFiles,
         IReadOnlyList<string> bookFiles,
         IReadOnlyList<string> audiobookFiles,
         bool reconcile,
@@ -123,141 +112,7 @@ public sealed class ScanBookJobHandler(
             // Honor this root's Auto Identify opt-out without touching other generation settings.
             settings = settings with { AutoIdentifyEnabled = false };
         }
-        var archiveItems = new List<BookArchiveItem>();
-
-        foreach (var archivePath in archiveFiles.OrderBy(path => path, NaturalPathComparer.Instance)) {
-            var pageMembers = ListImageMembersInZip(archivePath);
-            if (pageMembers.Count == 0) {
-                logger.LogDebug("ScanBook: skipping empty archive {Path}", archivePath);
-                continue;
-            }
-
-            var comicInfo = comicInfoReader is null
-                ? null
-                : await comicInfoReader.ReadAsync(archivePath, cancellationToken);
-            archiveItems.Add(BookArchiveItem.From(root.Path, archivePath, pageMembers, comicInfo));
-        }
-
         var validBookPaths = new HashSet<string>(FileSystemPathComparison.Comparer);
-        var archiveBookPaths = new HashSet<string>(FileSystemPathComparison.Comparer);
-        var processedArchiveCount = 0;
-
-        foreach (var bookGroup in archiveItems
-            .GroupBy(item => item.BookPath, FileSystemPathComparison.Comparer)
-            .OrderBy(group => group.Key, NaturalPathComparer.Instance)) {
-            var first = bookGroup.First();
-            var bookMetadata = BestBookMetadata(bookGroup);
-            var bookIsNsfw = root.IsNsfw || bookGroup.Any(item => item.MarksNsfw);
-            // Bind a request-created wanted entity to this path first, so the path-keyed upsert finds it
-            // (attaching the imported file to the wanted entity) instead of creating a duplicate.
-            if (acquisitionHints is not null) {
-                await acquisitionHints.BindWantedFileAsync(
-                    EntityKind.Book, first.BookPath, cancellationToken, acquisitionId);
-            }
-            var bookId = await books.UpsertBookAsync(first.BookPath, first.BookTitle, root.Id, bookIsNsfw, cancellationToken);
-            if (bookMetadata is not null && scanMetadata is not null) {
-                await scanMetadata.ApplyComicInfoMetadataAsync(
-                    bookId,
-                    bookMetadata,
-                    bookIsNsfw,
-                    cancellationToken);
-            }
-            validBookPaths.Add(first.BookPath);
-            archiveBookPaths.Add(first.BookPath);
-
-            // Stamp acquisition-supplied identity (plugin/external ids) before auto-identify so it resolves ID-first.
-            if (acquisitionHints is not null) {
-                await acquisitionHints.ApplyAsync(bookId, first.BookPath, cancellationToken);
-            }
-
-            // A book is the top-level root of its volumes/chapters/pages, so identify it directly.
-            if (!bestEffortHousekeeping) {
-                await QueueBookAutoIdentifyAsync(
-                    context, settings, bookId, first.BookTitle, cancellationToken);
-            }
-
-            var directChapterPaths = new HashSet<string>(FileSystemPathComparison.Comparer);
-            var directChapters = bookGroup
-                .Where(item => item.VolumePath is null)
-                .OrderBy(item => item.ArchivePath, NaturalPathComparer.Instance)
-                .ToArray();
-
-            for (var chapterIndex = 0; chapterIndex < directChapters.Length; chapterIndex++) {
-                await UpsertChapterPagesAsync(
-                    context,
-                    settings,
-                    bookIsNsfw,
-                    bookId,
-                    directChapters[chapterIndex],
-                    bookId,
-                    chapterIndex,
-                    directChapterPaths,
-                    bestEffortHousekeeping,
-                    cancellationToken);
-                processedArchiveCount++;
-                await ReportArchiveProgressAsync(
-                    context,
-                    processedArchiveCount,
-                    archiveItems.Count,
-                    bestEffortHousekeeping,
-                    cancellationToken);
-            }
-
-            var validVolumePaths = new HashSet<string>(FileSystemPathComparison.Comparer);
-            var volumeGroups = bookGroup
-                .Where(item => item.VolumePath is not null)
-                .GroupBy(item => item.VolumePath!, FileSystemPathComparison.Comparer)
-                .OrderBy(group => group.Key, NaturalPathComparer.Instance)
-                .ToArray();
-
-            for (var volumeIndex = 0; volumeIndex < volumeGroups.Length; volumeIndex++) {
-                var volumeGroup = volumeGroups[volumeIndex];
-                var volumeFirst = volumeGroup.First();
-                var volumePath = volumeFirst.VolumePath!;
-                var volumeId = await books.UpsertBookVolumeAsync(
-                    volumePath,
-                    volumeFirst.VolumeTitle!,
-                    bookId,
-                    volumeIndex,
-                    bookIsNsfw,
-                    cancellationToken);
-                validVolumePaths.Add(volumePath);
-
-                var validChapterPaths = new HashSet<string>(FileSystemPathComparison.Comparer);
-                var chapters = volumeGroup
-                    .OrderBy(item => item.ArchivePath, NaturalPathComparer.Instance)
-                    .ToArray();
-                for (var chapterIndex = 0; chapterIndex < chapters.Length; chapterIndex++) {
-                    await UpsertChapterPagesAsync(
-                        context,
-                        settings,
-                        bookIsNsfw,
-                        bookId,
-                        chapters[chapterIndex],
-                        volumeId,
-                        chapterIndex,
-                        validChapterPaths,
-                        bestEffortHousekeeping,
-                        cancellationToken);
-                    processedArchiveCount++;
-                    await ReportArchiveProgressAsync(
-                        context,
-                        processedArchiveCount,
-                        archiveItems.Count,
-                        bestEffortHousekeeping,
-                        cancellationToken);
-                }
-
-                if (reconcile) {
-                    await books.RemoveStaleBookChaptersAsync(volumeId, validChapterPaths, cancellationToken);
-                }
-            }
-
-            if (reconcile) {
-                await books.RemoveStaleBookChaptersAsync(bookId, directChapterPaths, cancellationToken);
-                await books.RemoveStaleBookVolumesAsync(bookId, validVolumePaths, cancellationToken);
-            }
-        }
 
         var readableBooksByDirectory = await ScanSingleFileBooksAsync(
             context,
@@ -265,7 +120,6 @@ public sealed class ScanBookJobHandler(
             settings,
             bookFiles,
             validBookPaths,
-            archiveBookPaths,
             acquisitionId,
             bestEffortHousekeeping,
             cancellationToken);
@@ -304,7 +158,6 @@ public sealed class ScanBookJobHandler(
         LibrarySettingsData settings,
         IReadOnlyList<string> bookFiles,
         ISet<string> validBookPaths,
-        IReadOnlySet<string> archiveBookPaths,
         Guid? acquisitionId,
         bool bestEffortHousekeeping,
         CancellationToken cancellationToken) {
@@ -341,7 +194,7 @@ public sealed class ScanBookJobHandler(
                 root,
                 looseItem,
                 validBookPaths,
-                parentBookEntityId: null,
+                parentEntityId: null,
                 sortOrder: null,
                 acquisitionId,
                 bestEffortHousekeeping,
@@ -404,7 +257,7 @@ public sealed class ScanBookJobHandler(
         LibraryRootData root,
         SingleFileBookItem item,
         ISet<string> validBookPaths,
-        Guid? parentBookEntityId,
+        Guid? parentEntityId,
         int? sortOrder,
         Guid? acquisitionId,
         bool bestEffortHousekeeping,
@@ -423,7 +276,7 @@ public sealed class ScanBookJobHandler(
             DefaultBookTypeFor(item.Format),
             item.Format,
             ContentTypeFor(item.Format),
-            parentBookEntityId,
+            parentEntityId,
             sortOrder,
             cancellationToken);
         validBookPaths.Add(item.SourcePath);
@@ -434,7 +287,7 @@ public sealed class ScanBookJobHandler(
         }
 
         if (item.Metadata is not null && scanMetadata is not null) {
-            await scanMetadata.ApplyComicInfoMetadataAsync(bookId, item.Metadata, item.IsNsfw, cancellationToken);
+            await scanMetadata.ApplyBookFileMetadataAsync(bookId, item.Metadata, item.IsNsfw, cancellationToken);
         }
 
         if (!bestEffortHousekeeping) {
@@ -507,7 +360,7 @@ public sealed class ScanBookJobHandler(
                     await acquisitionHints.BindWantedFolderAsync(
                         EntityKind.Book, sourcePath, cancellationToken, acquisitionId);
                 }
-                bookId = await books.UpsertBookSeriesAsync(
+                bookId = await books.UpsertAudiobookBookAsync(
                     sourcePath,
                     title,
                     root.Id,
@@ -712,42 +565,12 @@ public sealed class ScanBookJobHandler(
         await QueueChapterMapAsync(context, bookId, title, cancellationToken);
     }
 
-    private async Task QueueBookPageJobsAsync(
-        JobContext context,
-        LibrarySettingsData settings,
-        IReadOnlyList<BookPageUpsertItem> pageItems,
-        IReadOnlyList<Guid> pageIds,
-        CancellationToken cancellationToken) {
-        var needs = pageIds.Count == 0
-            ? new Dictionary<Guid, DownstreamNeeds>()
-            : await downstreamNeeds.CheckDownstreamNeedsBatchAsync(pageIds, cancellationToken);
-        var requests = new List<EnqueueJobRequest>();
-        for (var index = 0; index < pageItems.Count && index < pageIds.Count; index++) {
-            if (needs.TryGetValue(pageIds[index], out var pageNeeds)) {
-                requests.AddRange(EntityProcessingPlanRequests.ForEntity(
-                    EntityKind.BookPage,
-                    pageIds[index],
-                    pageItems[index].Title,
-                    settings,
-                    pageNeeds));
-            }
-        }
-
-        if (requests.Count > 0) {
-            await context.EnqueueBatchAsync(requests, cancellationToken);
-        }
-    }
-
     private static BookFormat? BookFormatFor(string sourcePath) =>
         Path.GetExtension(sourcePath).ToLowerInvariant() switch {
             ".epub" => BookFormat.Epub,
             ".pdf" => BookFormat.Pdf,
             _ => null
         };
-
-    private static bool IsArchivePath(string sourcePath) =>
-        Path.GetExtension(sourcePath).Equals(".cbz", StringComparison.OrdinalIgnoreCase)
-        || Path.GetExtension(sourcePath).Equals(".zip", StringComparison.OrdinalIgnoreCase);
 
     private static bool IsAudiobookPath(string sourcePath) =>
         Path.GetExtension(sourcePath) is var extension &&
@@ -763,138 +586,12 @@ public sealed class ScanBookJobHandler(
             ? Prismedia.Contracts.Media.MediaContentTypes.Pdf
             : Prismedia.Contracts.Media.MediaContentTypes.Epub;
 
-    private async Task UpsertChapterPagesAsync(
-        JobContext context,
-        LibrarySettingsData settings,
-        bool isNsfw,
-        Guid bookId,
-        BookArchiveItem item,
-        Guid parentEntityId,
-        int chapterIndex,
-        ISet<string> validChapterPaths,
-        bool bestEffortHousekeeping,
-        CancellationToken cancellationToken) {
-        validChapterPaths.Add(item.ArchivePath);
-        var chapterId = await books.UpsertBookChapterAsync(
-            item.ArchivePath,
-            item.ChapterTitle,
-            parentEntityId,
-            chapterIndex,
-            item.PageMembers.Count,
-            isNsfw || item.MarksNsfw,
-            cancellationToken);
-
-        var pageItems = new List<BookPageUpsertItem>(item.PageMembers.Count);
-        for (var i = 0; i < item.PageMembers.Count; i++) {
-            var memberPath = item.PageMembers[i];
-            var pagePath = EntitySourcePath.ArchiveMember(item.ArchivePath, memberPath);
-            var pageTitle = Path.GetFileNameWithoutExtension(memberPath);
-
-            pageItems.Add(new BookPageUpsertItem(
-                pagePath,
-                pageTitle,
-                bookId,
-                chapterId,
-                i,
-                isNsfw || item.MarksNsfw));
-        }
-
-        var pageIds = await books.UpsertBookPagesBatchAsync(pageItems, cancellationToken);
-        if (!bestEffortHousekeeping) {
-            await QueueBookPageJobsAsync(
-                context, settings, pageItems, pageIds, cancellationToken);
-        }
-    }
-
-    private Task ReportArchiveProgressAsync(
-        JobContext context,
-        int processedArchiveCount,
-        int archiveCount,
-        bool bestEffortHousekeeping,
-        CancellationToken cancellationToken) {
-        if (archiveCount == 0 || processedArchiveCount % 10 != 0) {
-            return Task.CompletedTask;
-        }
-
-        Task ReportAsync() => context.ReportProgressAsync(
-            processedArchiveCount * 80 / archiveCount,
-            $"Processing {processedArchiveCount}/{archiveCount}",
-            cancellationToken);
-        return bestEffortHousekeeping
-            ? ImportedMaterializationHousekeeping.TryAsync(
-                logger,
-                "Imported book progress could not be reported.",
-                ReportAsync)
-            : ReportAsync();
-    }
-
-    private static List<string> ListImageMembersInZip(string archivePath) {
-        try {
-            using var archive = ZipFile.OpenRead(archivePath);
-            return archive.Entries
-                .Where(entry => !string.IsNullOrEmpty(entry.Name)
-                    && ImageExtensions.Contains(Path.GetExtension(entry.Name)))
-                .OrderBy(entry => entry.FullName, NaturalPathComparer.Instance)
-                .Select(entry => entry.FullName)
-                .ToList();
-        } catch {
-            return [];
-        }
-    }
-
-    private static ComicInfoMetadata? BestBookMetadata(IEnumerable<BookArchiveItem> items) =>
-        items.Select(item => item.Metadata)
-            .FirstOrDefault(metadata => metadata is not null &&
-                (!string.IsNullOrWhiteSpace(metadata.Series) ||
-                    !string.IsNullOrWhiteSpace(metadata.Summary) ||
-                    metadata.Tags.Count > 0 ||
-                    metadata.Creators.Count > 0 ||
-                    !string.IsNullOrWhiteSpace(metadata.Publisher)));
-
-    private sealed record BookArchiveItem(
-        string ArchivePath,
-        string BookPath,
-        string BookTitle,
-        string? VolumePath,
-        string? VolumeTitle,
-        string ChapterTitle,
-        IReadOnlyList<string> PageMembers,
-        ComicInfoMetadata? Metadata,
-        bool MarksNsfw) {
-        public static BookArchiveItem From(
-            string rootPath,
-            string archivePath,
-            IReadOnlyList<string> pageMembers,
-            ComicInfoMetadata? metadata) {
-            var relativePath = Path.GetRelativePath(rootPath, archivePath);
-            var segments = relativePath
-                .Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);
-            var fallbackTitle = Path.GetFileNameWithoutExtension(archivePath);
-            var chapterTitle = string.IsNullOrWhiteSpace(metadata?.Title) ? fallbackTitle : metadata.Title.Trim();
-
-            if (segments.Length <= 1) {
-                var rootBookTitle = FirstNonEmpty(metadata?.Series, metadata?.Title, chapterTitle)!;
-                return new BookArchiveItem(archivePath, archivePath, rootBookTitle, null, null, chapterTitle, pageMembers, metadata, metadata?.MarksNsfw == true);
-            }
-
-            var bookPath = Path.Combine(rootPath, segments[0]);
-            var bookTitle = FirstNonEmpty(metadata?.Series, segments[0])!;
-            if (segments.Length <= 2) {
-                return new BookArchiveItem(archivePath, bookPath, bookTitle, null, null, chapterTitle, pageMembers, metadata, metadata?.MarksNsfw == true);
-            }
-
-            var volumePath = Path.GetDirectoryName(archivePath) ?? bookPath;
-            var volumeTitle = Path.GetFileName(volumePath);
-            return new BookArchiveItem(archivePath, bookPath, bookTitle, volumePath, volumeTitle, chapterTitle, pageMembers, metadata, metadata?.MarksNsfw == true);
-        }
-    }
-
     private sealed record SingleFileBookItem(
         string SourcePath,
         string Title,
         bool IsNsfw,
         BookFormat Format,
-        ComicInfoMetadata? Metadata,
+        BookFileMetadata? Metadata,
         string? AuthorPath,
         string? AuthorTitle) {
         public static SingleFileBookItem From(
@@ -903,7 +600,7 @@ public sealed class ScanBookJobHandler(
             string title,
             bool isNsfw,
             BookFormat format,
-            ComicInfoMetadata? metadata) {
+            BookFileMetadata? metadata) {
             var relativePath = Path.GetRelativePath(rootPath, sourcePath);
             var segments = relativePath
                 .Split([Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar], StringSplitOptions.RemoveEmptyEntries);

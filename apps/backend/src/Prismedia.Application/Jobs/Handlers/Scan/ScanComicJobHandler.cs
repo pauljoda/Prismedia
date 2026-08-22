@@ -499,8 +499,7 @@ public sealed class ScanComicJobHandler(
         Number = null,
         Volume = null,
         Summary = null,
-        Date = null,
-        PageCount = null
+        Date = null
     };
 
     private static Task ReportProgressAsync(

@@ -1,7 +1,6 @@
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Entities;
-using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Playback;
 using Prismedia.Domain.Entities;
 
@@ -55,7 +54,7 @@ public sealed class MusicPlayerStateService {
         }
 
         var stored = DeserializeOrNull<StoredMusicPlayerPlaybackState>(
-            rawJson,
+            UpgradeLegacyProgressMappings(rawJson),
             "Stored music player playback state is invalid JSON and will be ignored.");
         return stored is null ? Empty(output) : await HydrateAsync(stored, output, cancellationToken);
     }
@@ -154,25 +153,25 @@ public sealed class MusicPlayerStateService {
         StoredMusicPlayerPlaybackState stored,
         StoredMusicPlayerOutput output,
         CancellationToken cancellationToken) {
-        var tracks = new List<EntityCard>();
+        var hydrated = await _entities.GetAudioPlaybackItemsAsync(
+            stored.QueueTrackIds,
+            hideNsfw: false,
+            cancellationToken);
+        var hydratedById = hydrated.ToDictionary(item => item.Id);
+        var tracks = new List<AudioPlaybackItem>();
         var oldToNewIndex = new Dictionary<int, int>();
 
         for (var i = 0; i < stored.QueueTrackIds.Count; i++) {
-            var card = await _entities.GetAsync(
-                stored.QueueTrackIds[i],
-                EntityKind.AudioTrack.ToCode(),
-                hideNsfw: false,
-                cancellationToken);
-            if (card is null) {
+            if (!hydratedById.TryGetValue(stored.QueueTrackIds[i], out var item)) {
                 continue;
             }
 
-            if (card.Capabilities.OfType<FlagsCapability>().Any(flags => flags.IsWanted == true)) {
+            if (item.IsWanted) {
                 continue;
             }
 
             oldToNewIndex[i] = tracks.Count;
-            tracks.Add(card);
+            tracks.Add(item);
         }
 
         if (tracks.Count == 0) {
@@ -233,6 +232,68 @@ public sealed class MusicPlayerStateService {
         }
     }
 
+    private static string UpgradeLegacyProgressMappings(string rawJson) {
+        try {
+            using var document = JsonDocument.Parse(rawJson);
+            if (document.RootElement.ValueKind != JsonValueKind.Object ||
+                !document.RootElement.TryGetProperty("context", out var context) ||
+                context.ValueKind != JsonValueKind.Object ||
+                context.TryGetProperty("progressMappings", out _) ||
+                !context.TryGetProperty("bookProgressMappings", out var legacyMappings)) {
+                return rawJson;
+            }
+
+            using var stream = new MemoryStream();
+            using (var writer = new Utf8JsonWriter(stream)) {
+                writer.WriteStartObject();
+                foreach (var property in document.RootElement.EnumerateObject()) {
+                    if (property.NameEquals("context")) {
+                        writer.WritePropertyName(property.Name);
+                        writer.WriteStartObject();
+                        foreach (var contextProperty in context.EnumerateObject()) {
+                            if (!contextProperty.NameEquals("bookProgressMappings")) {
+                                contextProperty.WriteTo(writer);
+                            }
+                        }
+                        writer.WritePropertyName("progressMappings");
+                        WriteUpgradedProgressMappings(writer, legacyMappings);
+                        writer.WriteEndObject();
+                    } else {
+                        property.WriteTo(writer);
+                    }
+                }
+                writer.WriteEndObject();
+            }
+
+            return System.Text.Encoding.UTF8.GetString(stream.ToArray());
+        } catch (JsonException) {
+            return rawJson;
+        }
+    }
+
+    private static void WriteUpgradedProgressMappings(Utf8JsonWriter writer, JsonElement legacyMappings) {
+        if (legacyMappings.ValueKind != JsonValueKind.Array) {
+            legacyMappings.WriteTo(writer);
+            return;
+        }
+
+        writer.WriteStartArray();
+        foreach (var mapping in legacyMappings.EnumerateArray()) {
+            if (mapping.ValueKind != JsonValueKind.Object) {
+                mapping.WriteTo(writer);
+                continue;
+            }
+
+            writer.WriteStartObject();
+            foreach (var property in mapping.EnumerateObject()) {
+                writer.WritePropertyName(property.NameEquals("trackId") ? "itemId" : property.Name);
+                property.Value.WriteTo(writer);
+            }
+            writer.WriteEndObject();
+        }
+        writer.WriteEndArray();
+    }
+
     private static StoredMusicPlayerOutput NormalizeOutput(UpdateMusicPlayerStateRequest request) =>
         NormalizeOutput(new StoredMusicPlayerOutput(
             Math.Clamp(FiniteOrDefault(request.Volume, 1), 0, 1),
@@ -276,7 +337,7 @@ public sealed class MusicPlayerStateService {
 
     private static double ClampCurrentTime(
         double value,
-        IReadOnlyList<EntityCard> tracks,
+        IReadOnlyList<AudioPlaybackItem> tracks,
         IReadOnlyList<int> order,
         int position) {
         var currentTime = Math.Max(0, FiniteOrDefault(value, 0));
@@ -289,12 +350,7 @@ public sealed class MusicPlayerStateService {
             return 0;
         }
 
-        var duration = tracks[queueIndex]
-            .Capabilities
-            .OfType<TechnicalCapability>()
-            .FirstOrDefault()
-            ?.Duration
-            ?.TotalSeconds;
+        var duration = tracks[queueIndex].DurationSeconds;
         return duration is > 0 ? Math.Min(currentTime, duration.Value) : currentTime;
     }
 

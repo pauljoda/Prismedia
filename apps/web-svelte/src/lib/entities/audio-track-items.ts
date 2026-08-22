@@ -1,4 +1,4 @@
-import type { EntityCard, EntityThumbnail } from "$lib/api/generated/model";
+import type { AudioPlaybackItem, EntityCard, EntityThumbnail } from "$lib/api/generated/model";
 import { getCapability, getEmbeddedAudioMetadataCapability } from "$lib/api/capabilities";
 import { THUMBNAIL_META_ICON } from "$lib/api/generated/codes";
 import { CAPABILITY_KIND, ENTITY_FILE_ROLE } from "$lib/entities/entity-codes";
@@ -37,6 +37,42 @@ function toNumber(value: number | string | null | undefined): number | null {
   if (value == null) return null;
   const n = Number(value);
   return Number.isFinite(n) ? n : null;
+}
+
+/** Builds the shared player view model from its exact compact server projection. */
+export function audioPlaybackItemToTrackItem(item: AudioPlaybackItem): AudioTrackListItemDto {
+  return {
+    id: item.id,
+    title: item.title,
+    date: null,
+    rating: toNumber(item.rating),
+    organized: item.isOrganized,
+    isNsfw: item.isNsfw,
+    isWanted: item.isWanted,
+    hasSourceMedia: item.hasSourceMedia,
+    wantedStatus: null,
+    latestAcquisitionStatus: null,
+    duration: toNumber(item.durationSeconds),
+    bitRate: toNumber(item.bitRate),
+    sampleRate: toNumber(item.sampleRate),
+    channels: toNumber(item.channels),
+    codec: item.codec,
+    fileSize: null,
+    embeddedArtist: item.embeddedArtist,
+    embeddedAlbum: item.embeddedAlbum,
+    trackNumber: toNumber(item.sortOrder),
+    sectionLabel: item.sectionLabel,
+    sectionKey: null,
+    waveformPath: item.waveformPath,
+    libraryId: item.parentEntityId,
+    sortOrder: toNumber(item.sortOrder) ?? 0,
+    studioId: null,
+    performers: [],
+    tags: [],
+    accessCount: toNumber(item.accessCount) ?? 0,
+    lastActiveAt: item.lastActiveAt,
+    createdAt: item.createdAt,
+  };
 }
 
 /**

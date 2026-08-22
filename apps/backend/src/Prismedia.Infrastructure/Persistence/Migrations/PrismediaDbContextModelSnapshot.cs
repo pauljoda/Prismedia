@@ -767,9 +767,9 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .HasColumnType("uuid")
                         .HasColumnName("entity_id");
 
-                    b.Property<Guid?>("CoverPageEntityId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("cover_page_entity_id");
+                    b.Property<int?>("PageCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("page_count");
 
                     b.HasKey("EntityId");
 
@@ -813,15 +813,15 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .HasColumnType("character varying(64)")
                         .HasColumnName("book_type");
 
-                    b.Property<Guid?>("CoverPageEntityId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("cover_page_entity_id");
-
                     b.Property<string>("Format")
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("character varying(64)")
                         .HasColumnName("format");
+
+                    b.Property<int?>("PageCount")
+                        .HasColumnType("integer")
+                        .HasColumnName("page_count");
 
                     b.Property<string>("SourceTier")
                         .IsRequired()
@@ -1023,6 +1023,12 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .HasMaxLength(32)
                         .HasColumnType("character varying(32)")
                         .HasColumnName("installment_kind");
+
+                    b.Property<int>("PageCount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0)
+                        .HasColumnName("page_count");
 
                     b.HasKey("EntityId");
 
@@ -1848,13 +1854,6 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                             Category = "Media",
                             DisplayName = "Book Chapter",
                             StorageShape = "none"
-                        },
-                        new
-                        {
-                            Code = "book-page",
-                            Category = "Media",
-                            DisplayName = "Book Page",
-                            StorageShape = "archive-entry"
                         },
                         new
                         {

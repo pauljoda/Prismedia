@@ -4,6 +4,7 @@
     BookOpen,
     BookOpenText,
     CloudDownload,
+    Images,
     Info,
     LibraryBig,
     Play,
@@ -21,11 +22,13 @@
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
   import EntityGridSection from "$lib/components/entities/EntityGridSection.svelte";
   import MediaProgressPanel from "$lib/components/MediaProgressPanel.svelte";
+  import ComicPageThumbnailGrid from "$lib/components/comics/ComicPageThumbnailGrid.svelte";
   import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
   import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
   import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
   import { getCapability, isWanted } from "$lib/api/capabilities";
   import { updateEntityProgress } from "$lib/api/consumption";
+  import { fetchEntityReaderManifest } from "$lib/api/entity-reader";
   import {
     fetchEntity,
     fetchEntityChildReferences,
@@ -45,6 +48,7 @@
     thumbnailsToCards,
   } from "$lib/entities/entity-relationship-thumbnails";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
+  import type { EntityReaderManifestResponse } from "$lib/api/generated/model";
   import { requestableDirectChildCards } from "$lib/requests/requestable-entity-children";
   import { acquisitionStatusDisplay } from "$lib/requests/acquisition-status-display";
   import {
@@ -68,6 +72,7 @@
   let volumeCards = $state<EntityThumbnailCard[]>([]);
   let installmentCards = $state<EntityThumbnailCard[]>([]);
   let allInstallmentCards = $state<EntityThumbnailCard[]>([]);
+  let pageManifest = $state.raw<EntityReaderManifestResponse | null>(null);
   let relationshipCredits = $state<EntityDetailCredit[]>([]);
   let relationshipStudio = $state<EntityDetailCredit | null>(null);
   let relationshipTags = $state<EntityDetailTag[]>([]);
@@ -208,6 +213,7 @@
 
   async function loadComicEntity(signal: AbortSignal): Promise<EntityCardFull> {
     const nextEntity = await fetchEntity(entityId, { signal });
+    const nextPageSequence = getCapability(nextEntity.capabilities, CAPABILITY_KIND.pageSequence);
     const nextSeries = nextEntity.kind === ENTITY_KIND.comicSeries
       ? nextEntity
       : await fetchEntity(seriesId ?? nextEntity.parentEntityId ?? "", { signal });
@@ -229,11 +235,14 @@
         .map((item) => item.id),
     );
     const allInstallmentIds = [...new Set([...directInstallmentIds, ...nestedInstallmentIds])];
-    const [volumes, directInstallments, allInstallments, relationships] = await Promise.all([
+    const [volumes, directInstallments, allInstallments, relationships, nextPageManifest] = await Promise.all([
       fetchOrderedEntityThumbnails(volumeIds, { signal }),
       fetchOrderedEntityThumbnails(directInstallmentIds, { signal }),
       fetchOrderedEntityThumbnails(allInstallmentIds, { signal }),
       hydrateStandardRelationshipCards(nextEntity, { signal }),
+      nextPageSequence
+        ? fetchEntityReaderManifest(nextEntity.id, { signal })
+        : Promise.resolve(null),
     ]);
     signal.throwIfAborted();
     const installmentById = new Map(allInstallments.map((item) => [item.id, item]));
@@ -253,6 +262,7 @@
     allInstallmentCards = thumbnailsToCards(orderedInstallments, {
       hrefFor: (thumbnail) => `/comics/${nextSeries.id}/installments/${thumbnail.id}`,
     });
+    pageManifest = nextPageManifest;
     relationshipCredits = relationships.credits;
     relationshipStudio = relationships.studio;
     relationshipTags = relationships.relationshipTags;
@@ -264,14 +274,18 @@
   }
 
   function openReader(targetId: string, reset = false) {
-    const returnTo = entity?.kind === ENTITY_KIND.comicInstallment
+    const returnTo = comicReturnHref();
+    const params = new URLSearchParams({ returnTo });
+    if (reset) params.set("reset", "1");
+    void goto(`/entities/${targetId}/reader?${params}`);
+  }
+
+  function comicReturnHref(): string {
+    return entity?.kind === ENTITY_KIND.comicInstallment
       ? `/comics/${parentSeries?.id ?? seriesId}/installments/${entity.id}`
       : entity?.kind === ENTITY_KIND.comicVolume
         ? `/comics/${parentSeries?.id ?? seriesId}/volumes/${entity.id}`
         : `/comics/${entity?.id ?? seriesId}`;
-    const params = new URLSearchParams({ returnTo });
-    if (reset) params.set("reset", "1");
-    void goto(`/entities/${targetId}/reader?${params}`);
   }
 
   async function toggleCompleted(nextCompleted: boolean) {
@@ -391,6 +405,22 @@
             onStartOver={startOver}
           />
         </section>
+      {/if}
+
+      {#if pageManifest && pageManifest.pages.length > 0}
+        <EntityGridSection
+          title="Pages"
+          count={pageManifest.pages.length}
+          icon={Images}
+          prefsKey={`comic-${entity.id}-pages-section`}
+        >
+          <ComicPageThumbnailGrid
+            entityId={entity.id}
+            entityTitle={entity.title}
+            pages={pageManifest.pages}
+            returnHref={comicReturnHref()}
+          />
+        </EntityGridSection>
       {/if}
 
       {#if volumeCards.length > 0}

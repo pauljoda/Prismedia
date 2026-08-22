@@ -13,7 +13,7 @@ vi.mock("$lib/api/generated/prismedia", () => ({
 }));
 
 vi.mock("$lib/entities/audio-track-items", () => ({
-  entityCardToAudioTrackListItem: (track: { id: string; title: string }) => ({
+  audioPlaybackItemToTrackItem: (track: { id: string; title: string }) => ({
     id: track.id,
     title: track.title,
     duration: 120,
@@ -100,7 +100,7 @@ describe("music player state API", () => {
     expect(updateMusicPlayerState).not.toHaveBeenCalled();
   });
 
-  it("round-trips the logical playback owner for an audiobook queue", async () => {
+  it("round-trips the logical playback owner for a mapped audio queue", async () => {
     getMusicPlayerState.mockResolvedValue({
       data: {
         tracks: [{ id: "part-2", title: "Part 2" }],
@@ -124,8 +124,8 @@ describe("music player state API", () => {
           playbackOwnerEntityId: "book-1",
           playbackOwnerTitle: "Project Hail Mary",
           playbackOwnerEntityKind: "book",
-          bookProgressMappings: [{
-            trackId: "part-2",
+          progressMappings: [{
+            itemId: "part-2",
             currentEntityId: "book-1",
             unit: "cfi",
             startIndex: 2000,
@@ -145,7 +145,7 @@ describe("music player state API", () => {
       playbackOwnerEntityId: "book-1",
       playbackOwnerTitle: "Project Hail Mary",
       playbackOwnerEntityKind: "book",
-      bookProgressMappings: [expect.objectContaining({ trackId: "part-2" })],
+      progressMappings: [expect.objectContaining({ itemId: "part-2" })],
       preservesQueueOrder: true,
       supportsPlaybackRate: true,
     });
@@ -170,7 +170,7 @@ describe("music player state API", () => {
         playbackOwnerEntityId: "book-1",
         playbackOwnerTitle: "Project Hail Mary",
         playbackOwnerEntityKind: "book",
-        bookProgressMappings: [expect.objectContaining({ trackId: "part-2" })],
+        progressMappings: [expect.objectContaining({ itemId: "part-2" })],
         preservesQueueOrder: true,
         supportsPlaybackRate: true,
       }),
