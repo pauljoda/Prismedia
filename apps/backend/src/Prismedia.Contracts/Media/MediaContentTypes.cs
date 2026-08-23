@@ -75,6 +75,9 @@ public static class MediaContentTypes {
     /// <summary>Ogg audio.</summary>
     public const string AudioOgg = "audio/ogg";
 
+    /// <summary>Opus audio stored in an Ogg container.</summary>
+    public const string AudioOggOpus = "audio/ogg; codecs=opus";
+
     /// <summary>Opus audio.</summary>
     public const string AudioOpus = "audio/opus";
 

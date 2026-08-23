@@ -35,6 +35,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Ogg Opus audio now streams with its container-accurate media type, allowing Apple players to start these tracks instead of remaining silent at 00:00.
 - First playback of a video that needs Direct Stream now prepares its complete seekable timeline before opening, so Apple players no longer freeze at the short temporary duration shown during the initial probe. If exact preparation is unavailable, playback safely falls back to transcoding.
 - Existing image-archive Books now transition into the serialized comic hierarchy without duplicate catalog entries or scan-order data loss, including libraries whose series identity is recorded as folder provenance. They retain stable identities, promote saved chapter progress to the adopted installment, and remove the entire obsolete chapter/page hierarchy when a source disappears.
 - Job Control now offers separate Book and Comic scans, so serialized comic archives and loose-page folders run through the comic scanner instead of the prose-book scanner.

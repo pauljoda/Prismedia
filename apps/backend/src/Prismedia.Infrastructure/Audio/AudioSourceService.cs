@@ -60,7 +60,11 @@ public sealed class AudioSourceService : IAudioSourceService {
         return new AudioSourceFile(
             id,
             source.File.Path,
-            source.File.MimeType ?? MimeForExtension(extension),
+            ContentTypeForSource(
+                source.File.MimeType,
+                extension,
+                source.Technical?.Container,
+                source.Technical?.Codec),
             source.Technical?.DurationSeconds,
             source.Technical?.Codec,
             IsDirectPlayable(source.Technical?.Codec));
@@ -69,12 +73,33 @@ public sealed class AudioSourceService : IAudioSourceService {
     private static bool IsDirectPlayable(string? codec) =>
         string.IsNullOrWhiteSpace(codec) || BrowserNativeCodecs.Contains(codec.Trim());
 
+    private static string ContentTypeForSource(
+        string? storedContentType,
+        string extension,
+        string? container,
+        string? codec) {
+        if (IsOggOpus(extension, container, codec)) {
+            return MediaContentTypes.AudioOggOpus;
+        }
+
+        return storedContentType ?? MimeForExtension(extension);
+    }
+
+    private static bool IsOggOpus(string extension, string? container, string? codec) {
+        if (string.Equals(extension, ".opus", StringComparison.OrdinalIgnoreCase)) {
+            return true;
+        }
+
+        return string.Equals(container?.Trim(), "ogg", StringComparison.OrdinalIgnoreCase) &&
+            string.Equals(codec?.Trim(), MediaCodecs.Opus, StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string MimeForExtension(string extension) {
         return extension.ToLowerInvariant() switch {
             ".mp3" => MediaContentTypes.AudioMpeg,
             ".m4a" or ".m4b" or ".aac" => MediaContentTypes.AudioMp4,
             ".ogg" or ".oga" => MediaContentTypes.AudioOgg,
-            ".opus" => MediaContentTypes.AudioOpus,
+            ".opus" => MediaContentTypes.AudioOggOpus,
             ".flac" => MediaContentTypes.AudioFlac,
             ".wav" => MediaContentTypes.AudioWav,
             ".aiff" or ".aif" => MediaContentTypes.AudioAiff,

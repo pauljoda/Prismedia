@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Contracts.Media;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Audio;
 using Prismedia.Infrastructure.Persistence;
@@ -32,6 +33,30 @@ public sealed class AudioSourceServiceTests : IDisposable {
         Assert.NotNull(source);
         Assert.Equal(directPlayable, source.DirectPlayable);
         Assert.Equal(codec, source.Codec);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(MediaContentTypes.AudioOpus)]
+    public async Task DescribesOggOpusFilesWithTheirContainerContentType(string? storedContentType) {
+        await using var db = CreateContext();
+        var trackId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        var filePath = Path.Combine(_tempDir, "track.opus");
+        await File.WriteAllTextAsync(filePath, "ogg-opus-bytes");
+        SeedAudioSource(
+            db,
+            trackId,
+            filePath,
+            MediaCodecs.Opus,
+            container: "ogg",
+            mimeType: storedContentType);
+        await db.SaveChangesAsync();
+
+        var source = await new AudioSourceService(db).GetSourceAsync(trackId, CancellationToken.None);
+
+        Assert.NotNull(source);
+        Assert.Equal(MediaContentTypes.AudioOggOpus, source.ContentType);
+        Assert.True(source.DirectPlayable);
     }
 
     [Fact]
@@ -92,7 +117,9 @@ public sealed class AudioSourceServiceTests : IDisposable {
         Guid trackId,
         string filePath,
         string codec,
-        bool isWanted = false) {
+        bool isWanted = false,
+        string? container = null,
+        string? mimeType = null) {
         db.Entities.Add(new EntityRow {
             Id = trackId,
             KindCode = EntityKind.AudioTrack.ToCode(),
@@ -107,12 +134,14 @@ public sealed class AudioSourceServiceTests : IDisposable {
             EntityId = trackId,
             Role = EntityFileRole.Source,
             Path = filePath,
+            MimeType = mimeType,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
         });
         db.EntityTechnical.Add(new EntityTechnicalRow {
             EntityId = trackId,
             Codec = codec,
+            Container = container,
             UpdatedAt = DateTimeOffset.UtcNow
         });
     }
