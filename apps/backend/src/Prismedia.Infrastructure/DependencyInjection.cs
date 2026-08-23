@@ -350,7 +350,9 @@ public static class DependencyInjection {
             mediaToolOptions.FfprobePath));
         services.AddSingleton<ITranscodeSessionService, TranscodeSessionService>();
         services.AddSingleton<ITranscodeCacheService, TranscodeCacheService>();
-        services.AddScoped<IHlsAssetService, HlsAssetService>();
+        services.AddScoped<HlsAssetService>();
+        services.AddScoped<IHlsAssetService>(provider => provider.GetRequiredService<HlsAssetService>());
+        services.AddScoped<IRemuxTimelinePreparationService>(provider => provider.GetRequiredService<HlsAssetService>());
         services.AddScoped<IVideoPlaybackPlanService, VideoPlaybackPlanService>();
         services.AddScoped<IPlaybackSessionService, PlaybackSessionService>();
         services.AddScoped<IConsumptionEventStore, EfConsumptionEventStore>();

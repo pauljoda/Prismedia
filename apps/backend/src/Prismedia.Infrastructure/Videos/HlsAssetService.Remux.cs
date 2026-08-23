@@ -298,7 +298,12 @@ public sealed partial class HlsAssetService {
                 : CancellationToken.None;
 
             // Probes (and persists the durable keyframe cache) then writes the VOD playlist.
-            var keyframes = await ComputeRemuxKeyframesAsync(id, source, options, token);
+            var keyframes = await ComputeRemuxKeyframesAsync(
+                id,
+                source,
+                options,
+                lowPriority: true,
+                token);
             if (keyframes is null || keyframes.Count == 0) {
                 _logger?.LogWarning(
                     "Remux keyframe probe produced no segments for {VideoId}; keeping the event playlist.",

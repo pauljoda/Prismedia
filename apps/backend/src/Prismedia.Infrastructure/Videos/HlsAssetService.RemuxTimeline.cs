@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -22,6 +23,8 @@ namespace Prismedia.Infrastructure.Videos;
 /// the real presentation timeline instead.
 /// </remarks>
 public sealed partial class HlsAssetService {
+    private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> RemuxTimelinePreparationLocks = new();
+
     /// <summary>
     /// One stream-copy segment boundary: the keyframe ffmpeg cuts at, and the earliest presentation
     /// time of the pictures that decode along with it.
@@ -45,6 +48,32 @@ public sealed partial class HlsAssetService {
     // rounding artefact in the probe cannot be mistaken for real leading pictures.
     private const double IndependenceEpsilonSeconds = 0.001;
 
+    /// <inheritdoc />
+    public async Task<bool> PrepareAsync(
+        VideoSourceFile source,
+        CancellationToken cancellationToken) {
+        if (_processes is null || source.DurationSeconds is not > 0) {
+            return false;
+        }
+
+        var preparationLock = RemuxTimelinePreparationLocks.GetOrAdd(
+            source.EntityId,
+            static _ => new SemaphoreSlim(1, 1));
+        await preparationLock.WaitAsync(cancellationToken);
+        try {
+            var options = await ResolveTranscoderOptionsAsync(cancellationToken);
+            var keyframes = await ComputeRemuxKeyframesAsync(
+                source.EntityId,
+                source,
+                options,
+                lowPriority: false,
+                cancellationToken);
+            return keyframes is { Count: > 1 };
+        } finally {
+            preparationLock.Release();
+        }
+    }
+
     /// <summary>
     /// Computes the exact per-segment boundaries the stream-copy remux will produce for one source.
     /// </summary>
@@ -56,16 +85,17 @@ public sealed partial class HlsAssetService {
         Guid id,
         VideoSourceFile source,
         HlsAssetServiceOptions options,
+        bool lowPriority,
         CancellationToken cancellationToken) {
         if (source.DurationSeconds is not > 0) {
             return null;
         }
 
-        // The durable cache holds a previous exact walk. Otherwise walk the whole file: this runs off the
-        // request thread precisely so it may be slow, and it is the only source that knows each segment's
-        // true presentation start on an open-GOP encode.
+        // The durable cache holds a previous exact walk. Otherwise walk the whole file: the playback
+        // plan awaits this on first play so strict players receive a complete initial timeline. Legacy
+        // manifest callers still use the background path, with the same exact probe at low priority.
         var keyframes = TryReadDurableKeyframes(id, source)
-            ?? await ProbeVideoKeyframesAsync(source.Path, options, cancellationToken);
+            ?? await ProbeVideoKeyframesAsync(source.Path, options, lowPriority, cancellationToken);
         if (keyframes is not { Count: > 0 }) {
             return null;
         }
@@ -168,10 +198,12 @@ public sealed partial class HlsAssetService {
     /// </remarks>
     /// <param name="sourcePath">Absolute path to the source file.</param>
     /// <param name="options">Transcoder options carrying the ffprobe path.</param>
+    /// <param name="lowPriority">Whether the probe is background work rather than awaited playback preparation.</param>
     /// <param name="cancellationToken">Token cancelling the probe.</param>
     private async Task<IReadOnlyList<RemuxKeyframe>?> ProbeVideoKeyframesAsync(
         string sourcePath,
         HlsAssetServiceOptions options,
+        bool lowPriority,
         CancellationToken cancellationToken) {
         if (_processes is null) {
             return null;
@@ -189,16 +221,12 @@ public sealed partial class HlsAssetService {
 
         ProcessExecutionResult result;
         try {
-            // Low priority: this reads the whole source while the stream copy is reading it too and the
-            // API is serving segments off the same disk. It is never on the critical path — the copy is
-            // paced at RemuxReadRate× realtime, so it finishes long after this walk does, and a segment
-            // cannot be seeked to before the copy has produced it — so it must yield rather than compete.
             result = await _processes.RunAsync(
                 options.FfprobePath,
                 arguments,
                 environment: null,
                 cancellationToken,
-                lowPriority: true);
+                lowPriority);
         } catch (Exception ex) when (ex is not OperationCanceledException) {
             _logger?.LogWarning(ex, "ffprobe keyframe probe could not run for {Source}.", sourcePath);
             return null;

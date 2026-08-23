@@ -17,7 +17,7 @@ namespace Prismedia.Infrastructure.Videos;
 /// <summary>
 /// Filesystem-backed implementation that resolves generated HLS playback assets from the cache directory.
 /// </summary>
-public sealed partial class HlsAssetService : IHlsAssetService {
+public sealed partial class HlsAssetService : IHlsAssetService, IRemuxTimelinePreparationService {
     private const int SegmentDurationSeconds = 6;
     private const int VirtualCacheFormatVersion = 14;
 

@@ -29,14 +29,17 @@ public sealed class VideoPlaybackPlanService : IVideoPlaybackPlanService {
     private readonly IVideoSourceService _sources;
     private readonly ITranscodeSessionService _transcodes;
     private readonly SettingsService? _settings;
+    private readonly IRemuxTimelinePreparationService? _remuxTimelines;
 
     public VideoPlaybackPlanService(
         IVideoSourceService sources,
         ITranscodeSessionService transcodes,
-        SettingsService? settings = null) {
+        SettingsService? settings = null,
+        IRemuxTimelinePreparationService? remuxTimelines = null) {
         _sources = sources;
         _transcodes = transcodes;
         _settings = settings;
+        _remuxTimelines = remuxTimelines;
     }
 
     /// <summary>
@@ -85,6 +88,18 @@ public sealed class VideoPlaybackPlanService : IVideoPlaybackPlanService {
 
         if (!supportsDirectPlayback && !serveTranscode) {
             return null;
+        }
+
+        // Strict native HLS players keep the duration from the first manifest they load. Returning
+        // ffmpeg's short, growing EVENT playlist and replacing it at the same URL later therefore
+        // strands first playback at that initial frontier. Make the exact timeline part of plan
+        // preparation so the very first manifest is VOD; a failed probe uses the established full
+        // transcode path instead of advertising an incomplete remux timeline.
+        if (isRemux &&
+            _remuxTimelines is not null &&
+            !await _remuxTimelines.PrepareAsync(source, cancellationToken)) {
+            decision = new VideoPlaybackDecision(VideoPlaybackMethod.Transcode);
+            isRemux = false;
         }
 
         if (serveTranscode) {

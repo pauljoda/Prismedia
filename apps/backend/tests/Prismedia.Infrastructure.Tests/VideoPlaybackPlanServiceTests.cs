@@ -123,6 +123,87 @@ public sealed class VideoPlaybackPlanServiceTests {
     }
 
     [Fact]
+    public async Task VideoPlaybackPlanPreparesExactTimelineBeforeReturningRemuxUrl() {
+        var videoId = Guid.Parse("78787878-7878-7878-7878-787878787878");
+        var sourceFile = new VideoSourceFile(
+            videoId,
+            "/media/first-play.mkv",
+            "video/x-matroska",
+            false,
+            DurationSeconds: 1_380,
+            Container: "matroska",
+            VideoCodec: "h264",
+            AudioCodec: "aac",
+            Streams:
+            [
+                new(0, "Video", "h264", null, "Video", 1920, 1080, 24, null, null, null, true, false),
+                new(1, "Audio", "aac", "eng", "English", null, null, null, null, 48000, 2, true, false)
+            ]);
+        var preparation = new FakeRemuxTimelinePreparationService(result: true);
+        var service = new VideoPlaybackPlanService(
+            new FakeVideoSourceService(sourceFile),
+            new TranscodeSessionService(),
+            settings: null,
+            remuxTimelines: preparation);
+
+        var info = await service.CreatePlanAsync(videoId, new VideoPlaybackPlanQuery {
+            EnableDirectPlay = true,
+            EnableDirectStream = true,
+            EnableTranscoding = true,
+            Profile = new VideoPlaybackProfile(
+                200_000_000,
+                [new VideoDirectPlayProfile(StreamKind.Video.ToCode(), "mp4", "h264", "aac")])
+        }, CancellationToken.None);
+
+        Assert.NotNull(info);
+        Assert.Same(sourceFile, Assert.Single(preparation.PreparedSources));
+        Assert.Equal(VideoPlaybackMethod.Remux, info.Source.Method);
+        Assert.StartsWith(
+            VideoPlaybackProtocol.HlsPath(videoId, $"v/remux/{VideoPlaybackProtocol.Hls.StreamPlaylist}"),
+            info.Source.Url);
+    }
+
+    [Fact]
+    public async Task VideoPlaybackPlanFallsBackToTranscodeWhenExactRemuxTimelineCannotBePrepared() {
+        var videoId = Guid.Parse("79797979-7979-7979-7979-797979797979");
+        var preparation = new FakeRemuxTimelinePreparationService(result: false);
+        var service = new VideoPlaybackPlanService(
+            new FakeVideoSourceService(new VideoSourceFile(
+                videoId,
+                "/media/unprobeable.mkv",
+                "video/x-matroska",
+                false,
+                DurationSeconds: 1_380,
+                Container: "matroska",
+                VideoCodec: "h264",
+                AudioCodec: "aac",
+                Streams:
+                [
+                    new(0, "Video", "h264", null, "Video", 1920, 1080, 24, null, null, null, true, false),
+                    new(1, "Audio", "aac", "eng", "English", null, null, null, null, 48000, 2, true, false)
+                ])),
+            new TranscodeSessionService(),
+            settings: null,
+            remuxTimelines: preparation);
+
+        var info = await service.CreatePlanAsync(videoId, new VideoPlaybackPlanQuery {
+            EnableDirectPlay = true,
+            EnableDirectStream = true,
+            EnableTranscoding = true,
+            Profile = new VideoPlaybackProfile(
+                200_000_000,
+                [new VideoDirectPlayProfile(StreamKind.Video.ToCode(), "mp4", "h264", "aac")])
+        }, CancellationToken.None);
+
+        Assert.NotNull(info);
+        Assert.Equal(VideoPlaybackMethod.Transcode, info.Source.Method);
+        Assert.StartsWith(
+            VideoPlaybackProtocol.HlsPath(videoId, VideoPlaybackProtocol.Hls.MasterPlaylist),
+            info.Source.Url);
+        Assert.False(info.Source.Transcoding?.IsVideoDirect);
+    }
+
+    [Fact]
     public async Task VideoPlaybackPlanPreservesNegotiatedMultichannelAudioDuringRemux() {
         var videoId = Guid.Parse("24242424-2424-2424-2424-242424242424");
         var service = new VideoPlaybackPlanService(
@@ -368,6 +449,15 @@ public sealed class VideoPlaybackPlanServiceTests {
 
         public Task<VideoSourceFile?> GetSourceAsync(Guid id, CancellationToken cancellationToken) =>
             Task.FromResult(id == _source.EntityId ? _source : null);
+    }
+
+    private sealed class FakeRemuxTimelinePreparationService(bool result) : IRemuxTimelinePreparationService {
+        public List<VideoSourceFile> PreparedSources { get; } = [];
+
+        public Task<bool> PrepareAsync(VideoSourceFile source, CancellationToken cancellationToken) {
+            PreparedSources.Add(source);
+            return Task.FromResult(result);
+        }
     }
 
     private sealed class FakeSettingsPersistence : ISettingsPersistence {

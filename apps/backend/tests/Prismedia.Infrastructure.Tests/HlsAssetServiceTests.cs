@@ -395,6 +395,48 @@ public sealed class HlsAssetServiceTests : IDisposable {
         Assert.Equal("copy", arguments[audioCodecIndex + 1]);
     }
 
+    [Fact]
+    public async Task PreparedRemuxReturnsCompleteVodOnFirstManifestRequest() {
+        var videoId = Guid.Parse("25252525-2525-2525-2525-252525252525");
+        var sourcePath = Path.Combine(_cacheRoot, "cold-first-play.mkv");
+        await File.WriteAllTextAsync(sourcePath, "source");
+        var source = new VideoSourceFile(
+            videoId,
+            sourcePath,
+            "video/x-matroska",
+            false,
+            DurationSeconds: 18,
+            Width: 1920,
+            Height: 1080,
+            Container: "matroska",
+            VideoCodec: "h264",
+            AudioCodec: "aac");
+        var process = new RemuxPreparationProcessExecutor();
+        var service = new HlsAssetService(
+            new HlsAssetServiceOptions(_cacheRoot),
+            new FakeVideoSourceService(source),
+            process,
+            NullLogger<HlsAssetService>.Instance);
+
+        var prepared = await Task.WhenAll(
+            service.PrepareAsync(source, CancellationToken.None),
+            service.PrepareAsync(source, CancellationToken.None));
+        var playlistAsset = await service.GetAssetAsync(
+            videoId,
+            "v/remux/stream.m3u8",
+            null,
+            CancellationToken.None);
+
+        Assert.All(prepared, Assert.True);
+        Assert.Equal(1, process.ProbeCount);
+        Assert.False(process.ProbeWasLowPriority);
+        Assert.NotNull(playlistAsset);
+        var playlist = await File.ReadAllTextAsync(playlistAsset.Path);
+        Assert.Contains("#EXT-X-PLAYLIST-TYPE:VOD", playlist);
+        Assert.Contains("#EXT-X-ENDLIST", playlist);
+        Assert.DoesNotContain("#EXT-X-PLAYLIST-TYPE:EVENT", playlist);
+    }
+
     private static VideoSourceFile RemuxAudioSource(string audioCodec, int channels = 6) =>
         new(
             EntityId: Guid.NewGuid(),
@@ -1412,6 +1454,35 @@ public sealed class HlsAssetServiceTests : IDisposable {
             }
 
             await File.WriteAllTextAsync(outputPath, "segment", cancellationToken);
+            return new ProcessExecutionResult(0, string.Empty, string.Empty);
+        }
+    }
+
+    private sealed class RemuxPreparationProcessExecutor : ProcessExecutor {
+        public int ProbeCount { get; private set; }
+        public bool ProbeWasLowPriority { get; private set; }
+
+        public override async Task<ProcessExecutionResult> RunAsync(
+            string fileName,
+            IReadOnlyList<string> arguments,
+            IReadOnlyDictionary<string, string>? environment,
+            CancellationToken cancellationToken,
+            bool lowPriority = false) {
+            if (arguments.Contains("packet=pts_time,flags")) {
+                ProbeCount++;
+                ProbeWasLowPriority = lowPriority;
+                return new ProcessExecutionResult(
+                    0,
+                    "0.000000,K__\n6.000000,K__\n12.000000,K__\n",
+                    string.Empty);
+            }
+
+            var outputPath = arguments[^1];
+            Directory.CreateDirectory(Path.GetDirectoryName(outputPath)!);
+            await File.WriteAllTextAsync(
+                outputPath,
+                "#EXTM3U\n#EXT-X-PLAYLIST-TYPE:EVENT\n",
+                cancellationToken);
             return new ProcessExecutionResult(0, string.Empty, string.Empty);
         }
     }

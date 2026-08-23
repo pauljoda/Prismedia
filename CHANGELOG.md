@@ -35,6 +35,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- First playback of a video that needs Direct Stream now prepares its complete seekable timeline before opening, so Apple players no longer freeze at the short temporary duration shown during the initial probe. If exact preparation is unavailable, playback safely falls back to transcoding.
 - Existing image-archive Books now transition into the serialized comic hierarchy without duplicate catalog entries or scan-order data loss, including libraries whose series identity is recorded as folder provenance. They retain stable identities, promote saved chapter progress to the adopted installment, and remove the entire obsolete chapter/page hierarchy when a source disappears.
 - Job Control now offers separate Book and Comic scans, so serialized comic archives and loose-page folders run through the comic scanner instead of the prose-book scanner.
 - Source-backed audio queues loaded from the database now advertise the same playable-audio capability as in-memory Entities. The shared player derives ordered-queue and variable-rate controls from that capability, with no book-specific playback branch.
