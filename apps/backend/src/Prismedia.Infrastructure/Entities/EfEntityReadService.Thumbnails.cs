@@ -271,6 +271,15 @@ public sealed partial class EfEntityReadService {
                 coverSourceId = hoverImages[0].EntityId;
             }
 
+            // A persisted rollup is the complete artwork source when the entity has no original
+            // cover of its own. Give clients a base cover as well as the responsive variants;
+            // otherwise card mappers cannot construct an image from an orphaned thumbnail URL
+            // and render their placeholder instead.
+            if (coverUrl is null && coverSourceId == row.Id) {
+                coverUrl = gridThumb2xByEntity.GetValueOrDefault(row.Id)
+                    ?? gridThumbByEntity.GetValueOrDefault(row.Id);
+            }
+
             var preservesOriginalArtwork = PreservesOriginalArtwork(row.KindCode);
             var coverThumbUrl = preservesOriginalArtwork
                 ? coverUrl

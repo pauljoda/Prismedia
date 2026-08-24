@@ -772,6 +772,7 @@ public sealed class EfEntityReadServiceTests {
             var seriesId = Guid.NewGuid();
             var episodeId = Guid.NewGuid();
             var seriesGrid = AssetPathService.GridThumbnailUrl(seriesId);
+            var seriesGrid2x = AssetPathService.GridThumbnail2xUrl(seriesId);
             var episodeCover = $"/assets/videos/{episodeId}/thumb.jpg";
             var now = DateTimeOffset.UtcNow;
             db.Entities.AddRange(
@@ -792,9 +793,11 @@ public sealed class EfEntityReadServiceTests {
                 });
             db.EntityFiles.AddRange(
                 File(seriesId, EntityFileRole.GridThumbnail, seriesGrid, now),
+                File(seriesId, EntityFileRole.GridThumbnail2x, seriesGrid2x, now),
                 File(episodeId, EntityFileRole.Thumbnail, episodeCover, now));
             await db.SaveChangesAsync();
             WriteCacheFile(cacheRoot, seriesGrid);
+            WriteCacheFile(cacheRoot, seriesGrid2x);
             WriteCacheFile(cacheRoot, episodeCover);
 
             var repository = new EfEntityRepository(
@@ -815,9 +818,22 @@ public sealed class EfEntityReadServiceTests {
                 CancellationToken.None);
             var item = Assert.Single(result.Items);
 
-            Assert.Null(item.CoverUrl);
+            Assert.Equal(seriesGrid2x, item.CoverUrl);
             Assert.Equal(seriesGrid, item.CoverThumbUrl);
+            Assert.Equal(seriesGrid2x, item.CoverThumb2xUrl);
             Assert.Empty(item.HoverImages);
+
+            var list = await service.ListAsync(
+                EntityKind.VideoSeries.ToCode(),
+                query: null,
+                cursor: null,
+                hideNsfw: false,
+                limit: null,
+                CancellationToken.None);
+            var listItem = Assert.Single(list.Items);
+            Assert.Equal(seriesGrid2x, listItem.CoverUrl);
+            Assert.Equal(seriesGrid, listItem.CoverThumbUrl);
+            Assert.Equal(seriesGrid2x, listItem.CoverThumb2xUrl);
         } finally {
             DeleteDirectory(cacheRoot);
         }
