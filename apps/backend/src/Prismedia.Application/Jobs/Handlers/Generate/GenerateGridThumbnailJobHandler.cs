@@ -5,9 +5,9 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Application.Jobs.Handlers.Generate;
 
 /// <summary>
-/// Generates the small grid-card cover variant for an entity that already has a
-/// cover. Enqueued by the library scan to backfill libraries whose covers predate
-/// grid thumbnails; new entities get theirs as part of <see cref="GeneratePreviewJobHandler"/>.
+/// Materializes an Entity's static grid thumbnail chain. Own artwork wins; readable
+/// cover pages and representative child artwork are resolved by the infrastructure
+/// service without adding work to API reads.
 /// </summary>
 [JobDefinition(JobType.GenerateGridThumbnail, ResourceClass = JobResourceClass.StandardCpu, Importance = JobNodeImportance.BestEffort, BlocksAutoIdentify = true)]
 public sealed class GenerateGridThumbnailJobHandler(

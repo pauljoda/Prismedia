@@ -312,6 +312,51 @@ public sealed class LibraryScanPersistenceServiceTests {
     }
 
     [Fact]
+    public async Task DownstreamNeedsGridThumbnailWhenOnlyAChildHasArtwork() {
+        var cacheRoot = CreateCacheRoot();
+        try {
+            await using var db = CreateContext();
+            var artistId = Guid.Parse("22222222-bbbb-3333-3333-333333333333");
+            var albumId = Guid.Parse("22222222-bbbb-4444-4444-444444444444");
+            var coverPath = $"/assets/plugins/artwork/{albumId}/cover.jpg";
+            var now = DateTimeOffset.UtcNow;
+            db.Entities.AddRange(
+                new EntityRow {
+                    Id = artistId,
+                    KindCode = EntityKind.MusicArtist.ToCode(),
+                    Title = "Artist",
+                    CreatedAt = now,
+                    UpdatedAt = now
+                },
+                new EntityRow {
+                    Id = albumId,
+                    KindCode = EntityKind.AudioLibrary.ToCode(),
+                    Title = "Album",
+                    ParentEntityId = artistId,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                });
+            db.EntityFiles.Add(new EntityFileRow {
+                Id = Guid.NewGuid(),
+                EntityId = albumId,
+                Role = EntityFileRole.Cover,
+                Path = coverPath,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+            await db.SaveChangesAsync();
+            WriteCacheFile(cacheRoot, coverPath);
+
+            var needs = await new LibraryScanPersistenceService(db, Assets(cacheRoot))
+                .CheckDownstreamNeedsBatchAsync([artistId], CancellationToken.None);
+
+            Assert.True(needs[artistId].NeedsGridThumbnail);
+        } finally {
+            DeleteDirectory(cacheRoot);
+        }
+    }
+
+    [Fact]
     public async Task DownstreamDoesNotRequestRasterVariantsForOriginalArtworkKinds() {
         var cacheRoot = CreateCacheRoot();
         try {

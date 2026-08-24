@@ -23,17 +23,8 @@ public sealed class GridThumbnailSweepJobHandler(
         }
 
         logger.LogInformation("GridThumbnailSweep: refreshing grid thumbnails for {Count} entities", needed.Count);
-        var done = 0;
-        foreach (var entityId in needed) {
-            cancellationToken.ThrowIfCancellationRequested();
-            await gridThumbnails.EnsureAsync(entityId, cancellationToken);
-            done++;
-            if (done % 25 == 0 || done == needed.Count) {
-                await context.ReportProgressAsync(
-                    done * 100 / needed.Count,
-                    $"Generated grid thumbnails for {done}/{needed.Count} entities",
-                    cancellationToken);
-            }
-        }
+        await context.ReportProgressAsync(10, $"Refreshing {needed.Count} thumbnail chains", cancellationToken);
+        await gridThumbnails.EnsureManyAsync(needed, cancellationToken);
+        await context.ReportProgressAsync(100, $"Refreshed {needed.Count} thumbnail chains", cancellationToken);
     }
 }

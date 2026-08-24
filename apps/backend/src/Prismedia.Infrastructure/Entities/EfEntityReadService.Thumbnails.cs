@@ -94,6 +94,12 @@ public sealed partial class EfEntityReadService {
             .ToDictionary(group => group.Key, group => EntityCoverSelection.Select(group.ToArray())!.Path);
         var coverByEntity = coverByOwner;
         var coverByParent = coverByOwner;
+        var gridThumbByEntity = pageFiles
+            .Where(file => file.Role == EntityFileRole.GridThumbnail)
+            .ToDictionary(file => file.EntityId, file => file.Path);
+        var gridThumb2xByEntity = pageFiles
+            .Where(file => file.Role == EntityFileRole.GridThumbnail2x)
+            .ToDictionary(file => file.EntityId, file => file.Path);
         var hoverByEntity = isCompact
             ? new Dictionary<Guid, string>()
             : pageFiles
@@ -113,7 +119,9 @@ public sealed partial class EfEntityReadService {
         var representativeRows = isCompact
             ? []
             : rows
-                .Where(row => UsesRepresentativeCover(row.KindCode) && !coverByOwner.ContainsKey(row.Id))
+                .Where(row => UsesRepresentativeCover(row.KindCode) &&
+                    !coverByOwner.ContainsKey(row.Id) &&
+                    !gridThumbByEntity.ContainsKey(row.Id))
                 .ToArray();
         var hoverImagesByEntity = representativeRows.Length == 0
             ? new Dictionary<Guid, IReadOnlyList<EntityThumbnailHoverImage>>()
@@ -127,12 +135,6 @@ public sealed partial class EfEntityReadService {
         var technicalByEntity = await _db.EntityTechnical.AsNoTracking()
             .Where(technical => ids.Contains(technical.EntityId))
             .ToDictionaryAsync(technical => technical.EntityId, cancellationToken);
-        var gridThumbByEntity = pageFiles
-            .Where(file => file.Role == EntityFileRole.GridThumbnail)
-            .ToDictionary(file => file.EntityId, file => file.Path);
-        var gridThumb2xByEntity = pageFiles
-            .Where(file => file.Role == EntityFileRole.GridThumbnail2x)
-            .ToDictionary(file => file.EntityId, file => file.Path);
         // A card that displays representative child artwork inherits that child's grid variants;
         // those sources sit outside the page set, so load them in one supplemental query that
         // only fires when representative artwork was actually resolved.

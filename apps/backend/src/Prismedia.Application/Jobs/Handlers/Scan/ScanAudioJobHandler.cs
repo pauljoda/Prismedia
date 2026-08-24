@@ -40,20 +40,23 @@ public sealed class ScanAudioJobHandler(
         JobContext context,
         LibraryRootData root,
         CancellationToken cancellationToken) {
-        if (acquisitionHints is null) {
-            return;
+        if (acquisitionHints is not null) {
+            var reconciliations = await acquisitionHints.ReconcileExistingWantedAudioTracksAsync(
+                root.Id,
+                cancellationToken);
+            foreach (var reconciliation in reconciliations.Where(result => result.NeedsWaveformRegeneration)) {
+                await EnqueueWaveformRegenerationAsync(
+                    context,
+                    reconciliation.EntityId,
+                    "Audio track",
+                    cancellationToken);
+            }
         }
 
-        var reconciliations = await acquisitionHints.ReconcileExistingWantedAudioTracksAsync(
-            root.Id,
+        await EnqueueContainerGridThumbnailsAsync(
+            context,
+            await audio.GetAudioContainerTargetsInRootAsync(root.Id, cancellationToken),
             cancellationToken);
-        foreach (var reconciliation in reconciliations.Where(result => result.NeedsWaveformRegeneration)) {
-            await EnqueueWaveformRegenerationAsync(
-                context,
-                reconciliation.EntityId,
-                "Audio track",
-                cancellationToken);
-        }
     }
 
     /// <summary>
@@ -417,7 +420,13 @@ public sealed class ScanAudioJobHandler(
         // the original album art until the low-priority daily sweep reaches them.
         var containerTargets = artistItems
             .Select((item, index) => new EntityRefreshTarget(artistIds[index], EntityKind.MusicArtist.ToCode(), item.Title))
-            .Concat(albumItems.Select((item, index) => new EntityRefreshTarget(albumIds[index], EntityKind.AudioLibrary.ToCode(), item.Title)))
+            .Concat(albumItems
+                .Select((item, index) => (Item: item, Id: albumIds[index]))
+                .Where(album => album.Item.ParentEntityId is null)
+                .Select(album => new EntityRefreshTarget(
+                    album.Id,
+                    EntityKind.AudioLibrary.ToCode(),
+                    album.Item.Title)))
             .ToArray();
         await EnqueueContainerGridThumbnailsAsync(context, containerTargets, cancellationToken);
 
@@ -474,8 +483,8 @@ public sealed class ScanAudioJobHandler(
             cancellationToken);
 
     /// <summary>
-    /// Enqueues a grid-thumbnail job for each album/artist container whose cover lacks its 480/960
-    /// variants, so audio grids ride the same fast variant path as video kinds.
+    /// Enqueues one thumbnail-chain job per top-level album/artist whose own or child artwork lacks
+    /// static variants. A target renders descendants first, so artist rollups do not repeat once per album.
     /// </summary>
     private async Task EnqueueContainerGridThumbnailsAsync(
         JobContext context,

@@ -99,8 +99,8 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
             return;
         }
 
-        foreach (var entityId in entityIds) {
-            await _gridThumbnails.EnsureAsync(entityId, cancellationToken);
+        if (entityIds.Count > 0) {
+            await _gridThumbnails.EnsureManyAsync(entityIds, cancellationToken);
         }
     }
 

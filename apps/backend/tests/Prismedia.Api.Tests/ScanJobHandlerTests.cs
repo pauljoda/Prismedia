@@ -2164,6 +2164,10 @@ public sealed class ScanJobHandlerTests {
             Assert.Empty(persistence.UpsertedBooks);
             Assert.Equal([chapterOnePath, chapterTwoPath], persistence.ValidComicArchivePaths);
             Assert.Equal([root.Id], persistence.LastScannedRootIds);
+            var thumbnailJob = Assert.Single(queue.Enqueued);
+            Assert.Equal(JobType.GenerateGridThumbnail, thumbnailJob.Type);
+            Assert.Equal(EntityKind.ComicSeries.ToCode(), thumbnailJob.TargetEntityKind);
+            Assert.Equal(series.Id.ToString(), thumbnailJob.TargetEntityId);
         } finally {
             tempRoot.Delete(recursive: true);
         }

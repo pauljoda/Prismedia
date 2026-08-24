@@ -765,6 +765,65 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
+    public async Task GetThumbnailsAsyncUsesPersistedSeriesGridWithoutSamplingChildArtwork() {
+        var cacheRoot = CreateCacheRoot();
+        try {
+            await using var db = CreateContext();
+            var seriesId = Guid.NewGuid();
+            var episodeId = Guid.NewGuid();
+            var seriesGrid = AssetPathService.GridThumbnailUrl(seriesId);
+            var episodeCover = $"/assets/videos/{episodeId}/thumb.jpg";
+            var now = DateTimeOffset.UtcNow;
+            db.Entities.AddRange(
+                new EntityRow {
+                    Id = seriesId,
+                    KindCode = EntityKind.VideoSeries.ToCode(),
+                    Title = "Series",
+                    CreatedAt = now,
+                    UpdatedAt = now
+                },
+                new EntityRow {
+                    Id = episodeId,
+                    KindCode = EntityKind.VideoEpisode.ToCode(),
+                    Title = "Episode",
+                    ParentEntityId = seriesId,
+                    CreatedAt = now,
+                    UpdatedAt = now
+                });
+            db.EntityFiles.AddRange(
+                File(seriesId, EntityFileRole.GridThumbnail, seriesGrid, now),
+                File(episodeId, EntityFileRole.Thumbnail, episodeCover, now));
+            await db.SaveChangesAsync();
+            WriteCacheFile(cacheRoot, seriesGrid);
+            WriteCacheFile(cacheRoot, episodeCover);
+
+            var repository = new EfEntityRepository(
+                db,
+                TestUserContext.Admin(),
+                EntityMappers.Kinds(db),
+                EntityMappers.Capabilities(db, TestUserContext.Admin()));
+            var service = new EfEntityReadService(
+                db,
+                TestUserContext.Admin(),
+                repository,
+                ThumbnailContributors.For(db),
+                new EfEntityProgressTopologyResolver(db),
+                Assets(cacheRoot));
+            var result = await service.GetThumbnailsAsync(
+                [seriesId],
+                hideNsfw: false,
+                CancellationToken.None);
+            var item = Assert.Single(result.Items);
+
+            Assert.Null(item.CoverUrl);
+            Assert.Equal(seriesGrid, item.CoverThumbUrl);
+            Assert.Empty(item.HoverImages);
+        } finally {
+            DeleteDirectory(cacheRoot);
+        }
+    }
+
+    [Fact]
     public async Task ListAsyncPrefersLogoOverBackdropForThumbnailCover() {
         await using var db = CreateContext();
         var studioId = Guid.Parse("16161616-1616-1616-1616-161616161616");

@@ -215,10 +215,9 @@ public interface IAudioScanPersistence {
         Task.FromResult<IReadOnlyList<EntityRefreshTarget>>([]);
 
     /// <summary>
-    /// Lists the album and artist container entities under a library root. Used by scans to backfill
-    /// container-level downstream work — most importantly the grid-thumbnail variants for covers that
-    /// arrived via identify artwork, so album/artist grids serve small variants instead of full-size
-    /// originals while waiting for the daily sweep.
+    /// Lists the highest album or artist container entities under a library root. Used by scans to
+    /// backfill one bottom-up thumbnail-chain job per independent audio hierarchy, including containers
+    /// that inherit their static artwork from descendants.
     /// </summary>
     Task<IReadOnlyList<EntityRefreshTarget>> GetAudioContainerTargetsInRootAsync(
         Guid rootId, CancellationToken cancellationToken) =>
@@ -816,7 +815,7 @@ public sealed record VideoSeasonScanInfo(string FolderPath, string Title, int Se
 /// <param name="NeedsPreview">No preview asset (thumbnail, waveform, or animated image clip) exists yet.</param>
 /// <param name="NeedsTrickplay">No trickplay tiles exist yet.</param>
 /// <param name="NeedsSubtitleExtraction">Managed embedded/sidecar subtitles require reconciliation.</param>
-/// <param name="NeedsGridThumbnail">A cover exists but its small grid-card variant has not been generated yet.</param>
+/// <param name="NeedsGridThumbnail">Own or structural-child artwork exists but its static grid-card variant is missing.</param>
 public sealed record DownstreamNeeds(
     bool NeedsProbe,
     bool MissingOshash,

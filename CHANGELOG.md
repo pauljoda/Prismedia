@@ -35,6 +35,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Comics now derive static thumbnails from their persisted cover pages, and artwork-less media containers roll up one to four child covers during background scans and metadata work. Grid API reads use those stored variants, leaving placeholders only when the entire hierarchy has no artwork.
 - Ogg Opus audio now streams with its container-accurate media type, allowing Apple players to start these tracks instead of remaining silent at 00:00.
 - First playback of a video that needs Direct Stream now prepares its complete seekable timeline before opening, so Apple players no longer freeze at the short temporary duration shown during the initial probe. If exact preparation is unavailable, playback safely falls back to transcoding.
 - Existing image-archive Books now transition into the serialized comic hierarchy without duplicate catalog entries or scan-order data loss, including libraries whose series identity is recorded as folder provenance. They retain stable identities, promote saved chapter progress to the adopted installment, and remove the entire obsolete chapter/page hierarchy when a source disappears.

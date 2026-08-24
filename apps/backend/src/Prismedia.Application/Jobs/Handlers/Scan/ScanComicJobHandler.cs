@@ -310,6 +310,17 @@ public sealed class ScanComicJobHandler(
             if (identify is not null) {
                 await context.EnqueueIfNeededAsync(identify, cancellationToken);
             }
+
+            // One series-scoped pass runs after this scan node completes. It extracts every
+            // installment's persisted cover page, folds installments into volume/series collages,
+            // and writes only static Entity-file references for API reads.
+            await context.EnqueueIfNeededAsync(
+                EnqueueJobRequest.ForEntity(
+                    JobType.GenerateGridThumbnail,
+                    EntityKind.ComicSeries,
+                    seriesId.ToString(),
+                    seriesFirst.SeriesTitle),
+                cancellationToken);
         }
 
         return validArchivePaths;

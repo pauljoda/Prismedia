@@ -15,10 +15,25 @@ public interface IGridThumbnailService {
     Task EnsureAsync(Guid entityId, CancellationToken cancellationToken);
 
     /// <summary>
-    /// Lists entities whose grid variants are missing, stale (older than the cover
-    /// they derive from), or gone from disk — the work list for the sweep job.
-    /// Only includes entities whose resolved cover actually exists on disk, so the
-    /// sweep converges instead of retrying covers it can never generate from.
+    /// Ensures static thumbnails for several changed entities in one coalesced pass. Implementations
+    /// may fold shared descendants and ancestors together so a parent with many changed children is
+    /// rendered only after the child thumbnails are current.
+    /// </summary>
+    /// <param name="entityIds">Changed entities whose thumbnail chains should be refreshed.</param>
+    /// <param name="cancellationToken">Cancellation token.</param>
+    async Task EnsureManyAsync(
+        IReadOnlyCollection<Guid> entityIds,
+        CancellationToken cancellationToken) {
+        foreach (var entityId in entityIds.Distinct()) {
+            await EnsureAsync(entityId, cancellationToken);
+        }
+    }
+
+    /// <summary>
+    /// Lists the highest roots of thumbnail chains whose static variants are missing,
+    /// stale, or gone from disk. Sources include own artwork, a persisted reader cover
+    /// page, and structural-child artwork, so one returned root can repair its subtree
+    /// bottom-up without repeated parent work.
     /// </summary>
     /// <param name="cancellationToken">Cancellation token.</param>
     Task<IReadOnlyList<Guid>> ListEntitiesNeedingRefreshAsync(CancellationToken cancellationToken);

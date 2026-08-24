@@ -141,6 +141,7 @@ public static class DependencyInjection {
             provider.GetRequiredService<MediaToolOptions>()));
         services.AddSingleton<HashingService>();
         services.AddSingleton<SkiaImageDownscaler>();
+        services.AddSingleton<SkiaThumbnailCollageComposer>();
         services.AddSingleton<IImageThumbnailGenerator>(provider =>
             new ImageThumbnailGenerator(
                 provider.GetRequiredService<SkiaImageDownscaler>(),
@@ -316,7 +317,8 @@ public static class DependencyInjection {
             new GridThumbnailService(
                 provider.GetRequiredService<PrismediaDbContext>(),
                 provider.GetRequiredService<AssetPathService>(),
-                provider.GetRequiredService<IImageThumbnailGenerator>()));
+                provider.GetRequiredService<IImageThumbnailGenerator>(),
+                provider.GetRequiredService<SkiaThumbnailCollageComposer>()));
         services.AddScoped<IEntityImageAssetMutationService>(provider =>
             new EntityImageAssetMutationService(
                 provider.GetRequiredService<PrismediaDbContext>(),

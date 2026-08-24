@@ -3,6 +3,7 @@ using Prismedia.Application.Jobs;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Settings;
 using Prismedia.Domain.Entities;
+using Prismedia.Infrastructure.Entities;
 using Prismedia.Infrastructure.Media.Processing;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
@@ -81,6 +82,26 @@ public sealed partial class LibraryScanPersistenceService {
         var hasGridThumbnail = await LoadUsableAssetIdsAsync(ids, [EntityFileRole.GridThumbnail], cancellationToken);
         var hasGridThumbnail2x = await LoadUsableAssetIdsAsync(ids, [EntityFileRole.GridThumbnail2x], cancellationToken);
 
+        // Static container thumbnails are also valid when the Entity has no artwork of its own
+        // but one of its direct structural children already has a cover or generated variant.
+        // This scan-only query lets artist/series/container jobs enter the background rollup path
+        // without making list APIs walk their children.
+        var childArtworkRows = await _db.Entities.AsNoTracking()
+            .Where(child => child.ParentEntityId != null && ids.Contains(child.ParentEntityId.Value))
+            .Join(
+                _db.EntityFiles.AsNoTracking().Where(file =>
+                    EntityCoverSelection.CoverRoles.Contains(file.Role) ||
+                    file.Role == EntityFileRole.GridThumbnail ||
+                    file.Role == EntityFileRole.GridThumbnail2x),
+                child => child.Id,
+                file => file.EntityId,
+                (child, file) => new { ParentId = child.ParentEntityId!.Value, file.Path })
+            .ToArrayAsync(cancellationToken);
+        var hasChildArtwork = childArtworkRows
+            .Where(row => HasUsableAssetPath(row.Path))
+            .Select(row => row.ParentId)
+            .ToHashSet();
+
         var hasWaveform = await LoadUsableAssetIdsAsync(ids, [EntityFileRole.Waveform], cancellationToken);
 
         var hasTrickplay = (await _db.TrickplayInfos.AsNoTracking()
@@ -140,10 +161,10 @@ public sealed partial class LibraryScanPersistenceService {
                 // Source-file changes clear both the probe marker and subtitle completion so a
                 // repaired video receives a fresh embedded-stream pass as well.
                 NeedsSubtitleExtraction: !hasUsableSubtitleState.Contains(id),
-                // Backfill: an existing cover missing either small variant. New entities
-                // (no cover at scan time) get theirs from GeneratePreview instead.
+                // Backfill own covers and structural rollups without making API reads resolve
+                // representative children on demand.
                 NeedsGridThumbnail: !PreservesOriginalArtwork(kindCode) &&
-                    hasCover.Contains(id) &&
+                    (hasCover.Contains(id) || hasChildArtwork.Contains(id)) &&
                     (!hasGridThumbnail.Contains(id) || !hasGridThumbnail2x.Contains(id)));
         }
 
@@ -248,12 +269,13 @@ public sealed partial class LibraryScanPersistenceService {
         var audioContainers = await _db.Entities.AsNoTracking()
             .Where(entity => rootedAudioIds.Contains(entity.Id) &&
                 (entity.KindCode == EntityKind.AudioLibrary.ToCode() || entity.KindCode == EntityKind.MusicArtist.ToCode()))
-            .Select(entity => new { entity.Id, entity.KindCode })
+            .Select(entity => new { entity.Id, entity.KindCode, entity.ParentEntityId })
             .ToListAsync(cancellationToken);
-        var albumIds = audioContainers.Where(entity => entity.KindCode == EntityKind.AudioLibrary.ToCode()).Select(entity => entity.Id).ToList();
-        var artistIds = audioContainers.Where(entity => entity.KindCode == EntityKind.MusicArtist.ToCode()).Select(entity => entity.Id).ToList();
-
-        var containerIds = albumIds.Concat(artistIds).Distinct().ToArray();
+        var containerIdSet = audioContainers.Select(entity => entity.Id).ToHashSet();
+        var containerIds = audioContainers
+            .Where(entity => entity.ParentEntityId is null || !containerIdSet.Contains(entity.ParentEntityId.Value))
+            .Select(entity => entity.Id)
+            .ToArray();
         if (containerIds.Length == 0) {
             return [];
         }
