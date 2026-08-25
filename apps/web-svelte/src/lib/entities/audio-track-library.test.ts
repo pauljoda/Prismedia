@@ -6,6 +6,7 @@ import {
   type EntityThumbnail,
   type ListAudioTracksParams,
 } from "$lib/api/generated/model";
+import { THUMBNAIL_META_ICON } from "$lib/api/generated/codes";
 import { loadAudioTrackLibrary } from "$lib/entities/audio-track-library";
 
 function thumbnail(
@@ -37,6 +38,7 @@ function thumbnail(
 describe("loadAudioTrackLibrary", () => {
   it("loads every cursor page and hydrates album artwork plus artist and album labels", async () => {
     const firstTrack = thumbnail("track-1", EntityKind["audio-track"], "First", "album-1", "covers/album.jpg");
+    firstTrack.meta = [{ icon: THUMBNAIL_META_ICON.person, label: "Featured Artist" }];
     const secondTrack = thumbnail("track-2", EntityKind["audio-track"], "Second", "album-1");
     const album = thumbnail("album-1", EntityKind["audio-library"], "The Album", "artist-1");
     const artist = thumbnail("artist-1", EntityKind["music-artist"], "The Artist", null);
@@ -70,7 +72,7 @@ describe("loadAudioTrackLibrary", () => {
       album: track.embeddedAlbum,
       artist: track.embeddedArtist,
     }))).toEqual([
-      { id: "track-1", libraryId: "album-1", album: "The Album", artist: "The Artist" },
+      { id: "track-1", libraryId: "album-1", album: "The Album", artist: "Featured Artist" },
       { id: "track-2", libraryId: "album-1", album: "The Album", artist: "The Artist" },
     ]);
   });

@@ -66,6 +66,38 @@ export function resolveAudioArtwork(
   return albumCover || context?.coverUrl || PRISMEDIA_AUDIO_ARTWORK_FALLBACK;
 }
 
+export interface ResolvedAudioArtist {
+  name: string | null;
+  artistId: string | null;
+}
+
+function normalizedArtistName(value: string | null | undefined): string | null {
+  const normalized = value?.trim();
+  return normalized ? normalized : null;
+}
+
+/** Resolve per-track artist metadata before the structural album/queue fallback. */
+export function resolveAudioArtist(
+  track: AudioTrackListItemDto | null | undefined,
+  context: PlaybackContext | null | undefined,
+): ResolvedAudioArtist {
+  const trackArtist = normalizedArtistName(
+    track?.embeddedArtist ?? track?.performers?.[0]?.name,
+  );
+  const contextArtist = normalizedArtistName(context?.artistName);
+  const sharesContextArtist =
+    trackArtist !== null &&
+    contextArtist !== null &&
+    trackArtist.localeCompare(contextArtist, undefined, { sensitivity: "accent" }) === 0;
+
+  return {
+    name: trackArtist ?? contextArtist,
+    artistId: context?.artistId && (trackArtist === null || sharesContextArtist)
+      ? context.artistId
+      : null,
+  };
+}
+
 /**
  * Shared, app-global audio playback queue. Holds the loaded tracks (`queue`), the play `order` over
  * them (a list of indices, sequential or shuffled), and the current `position` within that order, so

@@ -945,6 +945,7 @@ public sealed class EfEntityReadServiceTests {
             });
         db.AudioTrackDetails.Add(new AudioTrackDetailRow {
             EntityId = trackId,
+            EmbeddedArtist = "Guest Artist",
             SectionLabel = "Disc 2"
         });
         db.EntityTechnical.AddRange(
@@ -975,6 +976,7 @@ public sealed class EfEntityReadServiceTests {
         Assert.Equal(
             [
                 new EntityThumbnailMeta(EntityThumbnailMetaIcons.Disc, "Disc 2"),
+                new EntityThumbnailMeta(EntityThumbnailMetaIcons.Person, "Guest Artist"),
                 new EntityThumbnailMeta(EntityThumbnailMetaIcons.Duration, "03:20"),
                 new EntityThumbnailMeta(EntityThumbnailMetaIcons.Audio, "FLAC")
             ],

@@ -4,6 +4,7 @@ import { MUSIC_PLAYER_MINI_SIDE, MUSIC_PLAYER_REPEAT_MODE } from "$lib/api/gener
 import {
   AudioPlaybackStore,
   PRISMEDIA_AUDIO_ARTWORK_FALLBACK,
+  resolveAudioArtist,
   resolveAudioArtwork,
 } from "./audio-playback.svelte";
 
@@ -128,6 +129,25 @@ describe("AudioPlaybackStore", () => {
       albumCoverUrls: { "album-1": null },
     })).toBe("/artist.jpg");
     expect(resolveAudioArtwork(track, null)).toBe(PRISMEDIA_AUDIO_ARTWORK_FALLBACK);
+  });
+
+  it("prefers a track artist over the album artist without linking to the wrong artist entity", () => {
+    const [track] = tracks(1);
+    track.embeddedArtist = "Taylor Swift";
+
+    expect(resolveAudioArtist(track, {
+      artistId: "album-artist-id",
+      artistName: "Randy Newman",
+    })).toEqual({ name: "Taylor Swift", artistId: null });
+  });
+
+  it("uses the album artist as fallback and keeps its entity link", () => {
+    const [track] = tracks(1);
+
+    expect(resolveAudioArtist(track, {
+      artistId: "album-artist-id",
+      artistName: "Randy Newman",
+    })).toEqual({ name: "Randy Newman", artistId: "album-artist-id" });
   });
 
   it("restores persisted play intent without reporting active playback before the audio element starts", () => {

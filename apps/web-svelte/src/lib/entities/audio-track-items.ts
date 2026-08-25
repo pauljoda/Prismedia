@@ -87,6 +87,7 @@ export function entityThumbnailToTrackItem(
   const durationMeta = thumb.meta.find((m) => m.icon === THUMBNAIL_META_ICON.duration);
   const codecMeta = thumb.meta.find((m) => m.icon === THUMBNAIL_META_ICON.audio);
   const sectionMeta = thumb.meta.find((m) => m.icon === THUMBNAIL_META_ICON.disc);
+  const artistMeta = thumb.meta.find((m) => m.icon === THUMBNAIL_META_ICON.person);
 
   return {
     id: thumb.id,
@@ -105,7 +106,7 @@ export function entityThumbnailToTrackItem(
     channels: null,
     codec: codecMeta?.label ?? null,
     fileSize: null,
-    embeddedArtist: options.embeddedArtist ?? null,
+    embeddedArtist: artistMeta?.label ?? options.embeddedArtist ?? null,
     embeddedAlbum: options.embeddedAlbum ?? null,
     trackNumber: toNumber(thumb.sortOrder) ?? null,
     sectionLabel: options.sectionLabel ?? sectionMeta?.label ?? null,

@@ -31,6 +31,7 @@
   import { audioProgressUpdateForItem } from "$lib/player/audio-progress-mapping";
   import {
     AUDIO_PLAYBACK_SAVE_EVENT,
+    resolveAudioArtist,
     resolveAudioArtwork,
     useAudioPlayback,
   } from "$lib/stores/audio-playback.svelte";
@@ -122,10 +123,11 @@
   const progress = $derived(
     duration > 0 ? Math.max(0, Math.min(100, (currentTime / duration) * 100)) : 0,
   );
-  const artistName = $derived(
-    ctx?.artistName ?? activeTrack?.embeddedArtist ?? activeTrack?.performers?.[0]?.name ?? null,
+  const artist = $derived(resolveAudioArtist(activeTrack, ctx));
+  const artistName = $derived(artist.name);
+  const artistHref = $derived(
+    artist.artistId ? resolveEntityHref(ENTITY_KIND.musicArtist, artist.artistId) : undefined,
   );
-  const artistHref = $derived(ctx?.artistId ? resolveEntityHref(ENTITY_KIND.musicArtist, ctx.artistId) : undefined);
   const coverUrl = $derived(resolveAudioArtwork(activeTrack, ctx));
   const playerPalette = $derived(
     artworkPaletteState?.coverUrl === coverUrl

@@ -35,6 +35,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Album and artist playback queues now preserve each track's embedded artist when present, falling back to the album artist only for tracks without one.
 - qBittorrent connections now reuse authenticated sessions, refresh an expired cookie once, and back off rejected credentials so concurrent transfer polling cannot turn one bad login into an IP ban.
 - Wanted book placeholders no longer appear to own an ebook, expose reading progress controls, or enter the reader until a direct EPUB or PDF source has actually arrived. Opening a placeholder reader URL also no longer creates phantom reading history.
 - Comics now derive static thumbnails from their persisted cover pages, and artwork-less media containers roll up one to four child covers during background scans and metadata work. Grid API reads expose those stored variants as the entity's base artwork, leaving placeholders only when the entire hierarchy has no artwork.
