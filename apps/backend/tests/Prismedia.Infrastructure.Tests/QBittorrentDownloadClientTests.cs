@@ -124,8 +124,52 @@ public sealed class QBittorrentDownloadClientTests {
         Assert.Equal(67, item.Properties?.SeedingTimeSeconds);
     }
 
+    [Fact]
+    public async Task AuthenticatedCallsReuseOneSessionAcrossScopedClientInstances() {
+        var connection = AuthenticatedConnection();
+        var handler = new AuthenticatedHandler();
+        var first = NewClient(handler);
+        var second = NewClient(handler);
+
+        await Task.WhenAll(
+            first.ListItemsAsync(connection, CancellationToken.None),
+            second.GetItemAsync(connection, "abc", CancellationToken.None));
+
+        Assert.Equal(1, handler.LoginCount);
+    }
+
+    [Fact]
+    public async Task ConcurrentRejectedCredentialsProduceOneLoginAttemptDuringBackoff() {
+        var connection = AuthenticatedConnection() with { Password = "wrong" };
+        var handler = new AuthenticatedHandler(validPassword: "correct");
+        var clients = Enumerable.Range(0, 8).Select(_ => NewClient(handler)).ToArray();
+
+        var attempts = clients.Select(client => Assert.ThrowsAsync<QBittorrentAuthException>(
+            () => client.GetItemAsync(connection, "abc", CancellationToken.None)));
+        await Task.WhenAll(attempts);
+
+        Assert.Equal(1, handler.LoginCount);
+    }
+
+    [Fact]
+    public async Task ExpiredSessionIsReauthenticatedAndTheRequestIsRetriedOnce() {
+        var connection = AuthenticatedConnection();
+        var handler = new AuthenticatedHandler();
+        var client = NewClient(handler);
+
+        await client.GetItemAsync(connection, "abc", CancellationToken.None);
+        handler.ExpireSession();
+        var item = await client.GetItemAsync(connection, "abc", CancellationToken.None);
+
+        Assert.NotNull(item);
+        Assert.Equal(2, handler.LoginCount);
+    }
+
     private static QBittorrentDownloadClient NewClient(HttpMessageHandler handler) =>
         new(new HttpClient(handler)) { AddPollDelay = TimeSpan.FromMilliseconds(1) };
+
+    private static DownloadClientConnection AuthenticatedConnection() =>
+        Connection with { Id = Guid.NewGuid(), Username = "admin", Password = "correct" };
 
     /// <summary>
     /// Minimal WebUI stub: category listings are served from a queue (optionally repeating the last one
@@ -215,5 +259,65 @@ public sealed class QBittorrentDownloadClientTests {
             Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) {
                 Content = new StringContent(body, Encoding.UTF8, "application/json")
             });
+    }
+
+    private sealed class AuthenticatedHandler(string validPassword = "correct") : HttpMessageHandler {
+        private readonly object _sync = new();
+        private string? _currentSession;
+        private int _loginCount;
+
+        public int LoginCount => Volatile.Read(ref _loginCount);
+
+        public void ExpireSession() {
+            lock (_sync) {
+                _currentSession = null;
+            }
+        }
+
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) {
+            var path = request.RequestUri!.AbsolutePath;
+            if (path.EndsWith("/auth/login", StringComparison.Ordinal)) {
+                Interlocked.Increment(ref _loginCount);
+                await Task.Delay(20, cancellationToken);
+                var form = await request.Content!.ReadAsStringAsync(cancellationToken);
+                if (!form.Contains($"password={Uri.EscapeDataString(validPassword)}", StringComparison.Ordinal)) {
+                    return new HttpResponseMessage(HttpStatusCode.OK) {
+                        Content = new StringContent("Fails.", Encoding.UTF8, "text/plain")
+                    };
+                }
+
+                string session;
+                lock (_sync) {
+                    session = $"sid-{_loginCount}";
+                    _currentSession = session;
+                }
+
+                var response = new HttpResponseMessage(HttpStatusCode.OK) {
+                    Content = new StringContent("Ok.", Encoding.UTF8, "text/plain")
+                };
+                response.Headers.TryAddWithoutValidation("Set-Cookie", $"SID={session}; HttpOnly; path=/");
+                return response;
+            }
+
+            string? currentSession;
+            lock (_sync) {
+                currentSession = _currentSession;
+            }
+            var suppliedCookie = request.Headers.TryGetValues("Cookie", out var cookies)
+                ? cookies.SingleOrDefault()
+                : null;
+            if (currentSession is null || suppliedCookie != $"SID={currentSession}") {
+                return new HttpResponseMessage(HttpStatusCode.Forbidden);
+            }
+
+            return new HttpResponseMessage(HttpStatusCode.OK) {
+                Content = new StringContent(
+                    path.EndsWith("/torrents/info", StringComparison.Ordinal)
+                        ? """[{"hash":"abc","name":"Book","progress":0.25,"state":"downloading"}]"""
+                        : string.Empty,
+                    Encoding.UTF8,
+                    "application/json")
+            };
+        }
     }
 }
