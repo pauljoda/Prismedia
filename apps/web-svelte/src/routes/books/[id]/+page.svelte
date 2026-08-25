@@ -16,7 +16,7 @@
   import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
   import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
   import { requestableDirectChildCards } from "$lib/requests/requestable-entity-children";
-  import { getBookMetadataCapability, getCapability, isWanted } from "$lib/api/capabilities";
+  import { getBookMetadataCapability, getCapability, hasReadableBookFile, isWanted } from "$lib/api/capabilities";
   import {
     fetchAcquisitionsForEntity,
     fetchAcquisitionSummariesForEntity,
@@ -163,7 +163,7 @@
   const entityWanted = $derived(!!book && isWanted(book.capabilities));
   // Single-file books (EPUB/PDF) are read straight from the source file with no chapter entities.
   const isSingleFileBook = $derived(
-    !!book && (bookMetadata?.format === BOOK_FORMAT.epub || bookMetadata?.format === BOOK_FORMAT.pdf),
+    !!book && hasReadableBookFile(book.capabilities),
   );
   const singleFileProgress = $derived(book && isSingleFileBook ? getCapability(book.capabilities, CAPABILITY_KIND.progress) : null);
   // Started once a position has been saved (EPUB and PDF both set currentEntityId to the book id).

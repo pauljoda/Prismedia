@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { CAPABILITY_KIND, ENTITY_FILE_ROLE } from "$lib/api/generated/codes";
+import { BOOK_FORMAT, CAPABILITY_KIND, ENTITY_FILE_ROLE } from "$lib/api/generated/codes";
 import type { EntityCapability } from "$lib/api/generated/model";
 import {
   externalIdentities,
   firstExternalIdentity,
   getProviderIdentityCapability,
+  hasReadableBookFile,
   hasSourceMedia,
   isPlayableVideo,
 } from "./capabilities";
@@ -85,6 +86,51 @@ describe("entity source media", () => {
 
   it("returns false when the Entity has no files capability", () => {
     expect(hasSourceMedia([])).toBe(false);
+  });
+
+  it("does not treat wanted EPUB metadata as an owned readable file", () => {
+    const placeholder: EntityCapability[] = [{
+      kind: CAPABILITY_KIND.bookMetadata,
+      bookType: "novel",
+      format: BOOK_FORMAT.epub,
+    }];
+
+    expect(hasReadableBookFile(placeholder)).toBe(false);
+  });
+
+  it.each([BOOK_FORMAT.epub, BOOK_FORMAT.pdf])(
+    "requires both %s metadata and a direct source file",
+    (format) => {
+      const capabilities: EntityCapability[] = [
+        {
+          kind: CAPABILITY_KIND.bookMetadata,
+          bookType: "novel",
+          format,
+        },
+        {
+          kind: CAPABILITY_KIND.files,
+          items: [{ role: ENTITY_FILE_ROLE.source, path: `/media/book.${format}`, mimeType: null }],
+        },
+      ];
+
+      expect(hasReadableBookFile(capabilities)).toBe(true);
+    },
+  );
+
+  it("does not expose an audio source through the file reader", () => {
+    const capabilities: EntityCapability[] = [
+      {
+        kind: CAPABILITY_KIND.bookMetadata,
+        bookType: "novel",
+        format: BOOK_FORMAT.audio,
+      },
+      {
+        kind: CAPABILITY_KIND.files,
+        items: [{ role: ENTITY_FILE_ROLE.source, path: "/media/book.m4b", mimeType: "audio/mp4" }],
+      },
+    ];
+
+    expect(hasReadableBookFile(capabilities)).toBe(false);
   });
 
 });

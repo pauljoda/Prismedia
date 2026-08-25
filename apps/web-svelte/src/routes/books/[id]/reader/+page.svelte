@@ -5,7 +5,7 @@
   import { Button } from "@prismedia/ui-svelte";
   import { onMount } from "svelte";
   import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
-  import { getBookMetadataCapability, getCapability } from "$lib/api/capabilities";
+  import { getBookMetadataCapability, getCapability, hasReadableBookFile } from "$lib/api/capabilities";
   import { recordEntityConsumptionEvent, updateEntityProgress } from "$lib/api/consumption";
   import {
     BOOK_FORMAT,
@@ -125,7 +125,7 @@
     try {
       const nextBook = await fetchEntity(bookId);
       const format = getBookMetadataCapability(nextBook.capabilities)?.format;
-      if (format !== BOOK_FORMAT.epub && format !== BOOK_FORMAT.pdf) {
+      if (!hasReadableBookFile(nextBook.capabilities)) {
         throw new Error("This book has no readable EPUB or PDF rendition.");
       }
 

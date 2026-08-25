@@ -17,7 +17,7 @@ import type {
   EntityCapabilityTechnicalCapability,
   ExternalIdentity,
 } from "$lib/api/generated/model";
-import { CAPABILITY_KIND, ENTITY_FILE_ROLE } from "$lib/api/generated/codes";
+import { BOOK_FORMAT, CAPABILITY_KIND, ENTITY_FILE_ROLE } from "$lib/api/generated/codes";
 
 export type EntityCapabilityKind = EntityCapability["kind"];
 
@@ -171,6 +171,12 @@ export function isPlayableVideo(capabilities: EntityCapability[]): boolean {
 export function hasSourceMedia(capabilities: EntityCapability[]): boolean {
   const files = getCapability(capabilities, CAPABILITY_KIND.files);
   return files?.items.some((file) => file.role === ENTITY_FILE_ROLE.source) === true;
+}
+
+/** True only when an EPUB/PDF book owns the direct source file required by the reader. */
+export function hasReadableBookFile(capabilities: EntityCapability[]): boolean {
+  const format = getBookMetadataCapability(capabilities)?.format;
+  return (format === BOOK_FORMAT.epub || format === BOOK_FORMAT.pdf) && hasSourceMedia(capabilities);
 }
 
 /**
