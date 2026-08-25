@@ -257,10 +257,29 @@ The design language lives in [docs/design-language.md](docs/design-language.md) 
 
 ## Development
 
-### Prerequisites
+### Nix / NixOS
+
+The repository flake is the recommended development setup. With Nix and a
+Docker daemon available, it installs the complete pinned system toolchain and
+the matching Playwright browser and Jellyfin FFmpeg build:
+
+```bash
+nix develop
+prismedia-setup
+prismedia-doctor
+```
+
+NixOS users can import the included host module to enable Docker, `nix-ld`,
+flakes, optional GPU device access, and direnv integration. See the complete
+[Nix development guide](docs/nix-development.md) for fresh-host configuration,
+rootless/remote Docker options, and flake maintenance.
+
+### Manual Prerequisites
+
+Without Nix, install:
 
 - Node.js 22
-- pnpm 10
+- pnpm 10.30.3
 - .NET 10 SDK
 - Docker
 - ffmpeg for media work outside the unified image
