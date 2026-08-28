@@ -77,6 +77,7 @@ public sealed class EfSecurityPersistence : ISecurityPersistence {
         UserRole role,
         bool allowNsfw,
         bool canCreateLibraries,
+        bool canRequestContent,
         bool enabled,
         CancellationToken cancellationToken) {
         var normalized = NormalizeUsername(username);
@@ -95,6 +96,7 @@ public sealed class EfSecurityPersistence : ISecurityPersistence {
             Role = role,
             AllowNsfw = allowNsfw,
             CanCreateLibraries = canCreateLibraries,
+            CanRequestContent = canRequestContent,
             Enabled = enabled,
             CreatedAt = now,
             UpdatedAt = now
@@ -112,6 +114,7 @@ public sealed class EfSecurityPersistence : ISecurityPersistence {
         UserRole? role,
         bool? allowNsfw,
         bool? canCreateLibraries,
+        bool? canRequestContent,
         bool? enabled,
         CancellationToken cancellationToken) {
         var row = await _db.Users.FirstOrDefaultAsync(user => user.Id == userId, cancellationToken);
@@ -146,6 +149,10 @@ public sealed class EfSecurityPersistence : ISecurityPersistence {
 
         if (canCreateLibraries is { } canCreate) {
             row.CanCreateLibraries = canCreate;
+        }
+
+        if (canRequestContent is { } canRequest) {
+            row.CanRequestContent = canRequest;
         }
 
         if (enabled is { } isEnabled) {
@@ -338,6 +345,7 @@ public sealed class EfSecurityPersistence : ISecurityPersistence {
             row.Role,
             row.AllowNsfw,
             row.CanCreateLibraries,
+            row.CanRequestContent,
             row.Enabled,
             row.PasswordHash != null,
             row.LastLoginAt,

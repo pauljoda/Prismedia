@@ -133,6 +133,7 @@ internal static partial class PrismediaModelConfiguration {
                 .IsRequired();
             entity.Property(row => row.AllowNsfw).HasColumnName("allow_nsfw");
             entity.Property(row => row.CanCreateLibraries).HasColumnName("can_create_libraries");
+            entity.Property(row => row.CanRequestContent).HasColumnName("can_request_content");
             entity.Property(row => row.Enabled).HasColumnName("enabled");
             entity.Property(row => row.LastLoginAt).HasColumnName("last_login_at");
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");

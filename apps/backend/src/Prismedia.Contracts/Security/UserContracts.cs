@@ -13,6 +13,7 @@ public sealed record UserCreateRequest(
     UserRole Role = UserRole.Member,
     bool AllowNsfw = false,
     bool CanCreateLibraries = false,
+    bool CanRequestContent = false,
     bool Enabled = true);
 
 /// <summary>Admin request updating a user account; null fields are left unchanged.</summary>
@@ -22,6 +23,7 @@ public sealed record UserUpdateRequest(
     UserRole? Role = null,
     bool? AllowNsfw = null,
     bool? CanCreateLibraries = null,
+    bool? CanRequestContent = null,
     bool? Enabled = null);
 
 /// <summary>Admin request resetting a user's password; the user is signed out everywhere.</summary>

@@ -73,6 +73,7 @@ public static class UserBootstrapRunner {
                 Role = UserRole.Admin,
                 AllowNsfw = true,
                 CanCreateLibraries = true,
+                CanRequestContent = true,
                 Enabled = true,
                 CreatedAt = now,
                 UpdatedAt = now

@@ -56,6 +56,9 @@ public sealed class CurrentUserContextHolder : ICurrentUserContext {
     public bool CanCreateLibraries => IsAdmin || (_user?.CanCreateLibraries ?? false);
 
     /// <inheritdoc />
+    public bool CanRequestContent => IsAdmin || (_user?.CanRequestContent ?? false);
+
+    /// <inheritdoc />
     public async ValueTask<IReadOnlySet<Guid>?> GetAllowedLibraryRootIdsAsync(CancellationToken cancellationToken) {
         if (IsSystem || _user is null || _user.Role == UserRole.Admin || _libraryAccess is null) {
             return null;

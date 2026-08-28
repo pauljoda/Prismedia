@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { Flame, FolderPlus, KeyRound, Pencil, ShieldUser, Trash2, UserPlus, UsersRound } from "@lucide/svelte";
+  import { Flame, FolderPlus, KeyRound, Pencil, Send, ShieldUser, Trash2, UserPlus, UsersRound } from "@lucide/svelte";
   import { Badge, Button, Panel, StatusLed, cn } from "@prismedia/ui-svelte";
   import { USER_ROLE } from "$lib/api/generated/codes";
   import type { LibraryRoot, UserResponse } from "$lib/api/generated/model";
@@ -183,6 +183,9 @@
                   {/if}
                   {#if user.canCreateLibraries && user.role !== USER_ROLE.admin}
                     <span title="Can create libraries"><FolderPlus class="size-3.5 text-text-muted" /></span>
+                  {/if}
+                  {#if user.canRequestContent && user.role !== USER_ROLE.admin}
+                    <span title="Can request content"><Send class="size-3.5 text-text-muted" /></span>
                   {/if}
                 </div>
                 <p class="flex flex-wrap items-center gap-x-2 font-mono text-[0.68rem] text-text-muted">

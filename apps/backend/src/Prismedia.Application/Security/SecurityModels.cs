@@ -10,6 +10,7 @@ public sealed record User(
     UserRole Role,
     bool AllowNsfw,
     bool CanCreateLibraries,
+    bool CanRequestContent,
     bool Enabled,
     bool HasPassword,
     DateTimeOffset? LastLoginAt,

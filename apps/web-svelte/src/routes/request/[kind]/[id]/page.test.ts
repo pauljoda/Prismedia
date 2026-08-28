@@ -55,6 +55,10 @@ vi.mock("$lib/nsfw/store.svelte", () => ({
   useNsfw: () => ({ mode: "off" }),
 }));
 
+vi.mock("$lib/stores/session.svelte", () => ({
+  useSession: () => ({ canRequestContent: true }),
+}));
+
 describe("reviewed request route", () => {
   beforeEach(() => {
     vi.clearAllMocks();

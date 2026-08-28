@@ -165,6 +165,7 @@ internal static class TestAuth {
                 UserRole.Admin,
                 allowNsfw,
                 CanCreateLibraries: true,
+                CanRequestContent: true,
                 Enabled: true,
                 HasPassword: true,
                 LastLoginAt: null,
@@ -241,6 +242,7 @@ internal static class TestAuth {
             UserRole role,
             bool allowNsfw,
             bool canCreateLibraries,
+            bool canRequestContent,
             bool enabled,
             CancellationToken cancellationToken) {
             lock (_gate) {
@@ -251,7 +253,7 @@ internal static class TestAuth {
                 var now = DateTimeOffset.UtcNow;
                 var user = new User(
                     Guid.NewGuid(), username, displayName, role, allowNsfw,
-                    canCreateLibraries, enabled, passwordHash != null, null, now, now);
+                    canCreateLibraries, canRequestContent, enabled, passwordHash != null, null, now, now);
                 _users[user.Id] = new UserRow(user, passwordHash);
                 return Task.FromResult(user);
             }
@@ -264,6 +266,7 @@ internal static class TestAuth {
             UserRole? role,
             bool? allowNsfw,
             bool? canCreateLibraries,
+            bool? canRequestContent,
             bool? enabled,
             CancellationToken cancellationToken) {
             lock (_gate) {
@@ -277,6 +280,7 @@ internal static class TestAuth {
                     Role = role ?? row.User.Role,
                     AllowNsfw = allowNsfw ?? row.User.AllowNsfw,
                     CanCreateLibraries = canCreateLibraries ?? row.User.CanCreateLibraries,
+                    CanRequestContent = canRequestContent ?? row.User.CanRequestContent,
                     Enabled = enabled ?? row.User.Enabled,
                     UpdatedAt = DateTimeOffset.UtcNow
                 };

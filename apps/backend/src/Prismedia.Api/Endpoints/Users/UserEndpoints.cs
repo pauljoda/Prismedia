@@ -51,6 +51,7 @@ public static class UserEndpoints {
                     request.Role,
                     request.AllowNsfw,
                     request.CanCreateLibraries,
+                    request.CanRequestContent,
                     request.Enabled,
                     cancellationToken);
                 return Results.Ok(user.ToResponse());
@@ -76,6 +77,7 @@ public static class UserEndpoints {
                     request.Role,
                     request.AllowNsfw,
                     request.CanCreateLibraries,
+                    request.CanRequestContent,
                     request.Enabled,
                     cancellationToken);
                 return user is null ? UserNotFound(userId) : Results.Ok(user.ToResponse());

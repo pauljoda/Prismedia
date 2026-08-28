@@ -27,4 +27,25 @@ internal static class AuthorizationEndpointFilters {
 
             return await next(context);
         });
+
+    /// <summary>Restricts the endpoint(s) to admins or members granted content-request access.</summary>
+    internal static TBuilder RequireRequestPermission<TBuilder>(this TBuilder builder) where TBuilder : IEndpointConventionBuilder =>
+        builder.AddEndpointFilterFactory((_, next) => async context => {
+            var user = context.HttpContext.GetCurrentUser();
+            if (user is null) {
+                return Results.Json(
+                    new ApiProblem(ApiProblemCodes.AuthenticationRequired, "Authentication is required."),
+                    statusCode: StatusCodes.Status401Unauthorized);
+            }
+
+            if (user.Role != UserRole.Admin && !user.CanRequestContent) {
+                return Results.Json(
+                    new ApiProblem(
+                        ApiProblemCodes.RequestPermissionRequired,
+                        "Content request access is required."),
+                    statusCode: StatusCodes.Status403Forbidden);
+            }
+
+            return await next(context);
+        });
 }

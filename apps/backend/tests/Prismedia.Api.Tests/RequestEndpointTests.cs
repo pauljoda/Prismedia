@@ -157,13 +157,13 @@ public sealed class RequestEndpointTests {
     }
 
     [Fact]
-    public async Task MemberCanReviewContentAndLoadRequestConfiguration() {
+    public async Task MemberWithRequestPermissionCanReviewContentAndLoadRequestConfiguration() {
         var reviews = new NestedReviewSource();
         using var factory = CreateFactory(
             reviews,
             pluginCatalog: new EndpointPluginCatalog(),
             profileStore: new EndpointProfileStore());
-        using var client = await CreateMemberClientAsync(factory);
+        using var client = await CreateMemberClientAsync(factory, canRequestContent: true);
 
         using var reviewResponse = await client.PostAsJsonAsync(
             "/api/requests/review",
@@ -178,6 +178,38 @@ public sealed class RequestEndpointTests {
         Assert.Equal(HttpStatusCode.OK, reviewResponse.StatusCode);
         Assert.Equal(HttpStatusCode.OK, pluginsResponse.StatusCode);
         Assert.Equal(HttpStatusCode.OK, profilesResponse.StatusCode);
+    }
+
+    [Fact]
+    public async Task MemberWithoutRequestPermissionCannotUseRequestEndpoints() {
+        using var factory = CreateFactory();
+        using var client = await CreateMemberClientAsync(factory, canRequestContent: false);
+
+        using var response = await client.GetAsync($"/api/requests/review/{Guid.NewGuid():D}");
+        var problem = await response.Content.ReadFromJsonAsync<ApiProblem>(CodecJson);
+
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        Assert.Equal(ApiProblemCodes.RequestPermissionRequired, problem!.Code);
+    }
+
+    [Fact]
+    public async Task RevokingRequestPermissionAppliesToAnExistingSession() {
+        using var factory = CreateFactory();
+        using var member = await CreateMemberClientAsync(factory, canRequestContent: true);
+        using var admin = factory.CreateAuthenticatedClient();
+        var users = await admin.GetFromJsonAsync<UsersResponse>("/api/users", CodecJson);
+        var memberUser = users!.Items.Single(user => user.Username == "request-member");
+
+        using var update = await admin.PatchAsJsonAsync(
+            $"/api/users/{memberUser.Id:D}",
+            new UserUpdateRequest(CanRequestContent: false),
+            CodecJson);
+        update.EnsureSuccessStatusCode();
+
+        using var response = await member.GetAsync($"/api/requests/review/{Guid.NewGuid():D}");
+        Assert.Equal(HttpStatusCode.Forbidden, response.StatusCode);
+        var problem = await response.Content.ReadFromJsonAsync<ApiProblem>();
+        Assert.Equal(ApiProblemCodes.RequestPermissionRequired, problem!.Code);
     }
 
     [Fact]
@@ -343,11 +375,15 @@ public sealed class RequestEndpointTests {
             .WithTestAuth();
 
     private static async Task<HttpClient> CreateMemberClientAsync(
-        WebApplicationFactory<Program> factory) {
+        WebApplicationFactory<Program> factory,
+        bool canRequestContent) {
         using var admin = factory.CreateAuthenticatedClient();
         using var createResponse = await admin.PostAsJsonAsync(
             "/api/users",
-            new UserCreateRequest("request-member", "member-password"),
+            new UserCreateRequest(
+                "request-member",
+                "member-password",
+                CanRequestContent: canRequestContent),
             CodecJson);
         createResponse.EnsureSuccessStatusCode();
 

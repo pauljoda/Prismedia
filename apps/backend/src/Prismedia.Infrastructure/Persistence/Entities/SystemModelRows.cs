@@ -52,6 +52,7 @@ public sealed class UserRow {
     public UserRole Role { get; set; } = UserRole.Member;
     public bool AllowNsfw { get; set; }
     public bool CanCreateLibraries { get; set; }
+    public bool CanRequestContent { get; set; }
     public bool Enabled { get; set; } = true;
     public DateTimeOffset? LastLoginAt { get; set; }
     public DateTimeOffset CreatedAt { get; set; }

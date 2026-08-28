@@ -61,6 +61,7 @@ public sealed class NsfwVisibilityTests {
             UserRole.Member,
             AllowNsfw: allowNsfw,
             CanCreateLibraries: false,
+            CanRequestContent: false,
             Enabled: true,
             HasPassword: true,
             LastLoginAt: null,

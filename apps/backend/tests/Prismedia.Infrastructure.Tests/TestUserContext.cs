@@ -42,6 +42,7 @@ internal static class TestUserContext {
                 role,
                 AllowNsfw: true,
                 CanCreateLibraries: role == UserRole.Admin,
+                CanRequestContent: role == UserRole.Admin,
                 Enabled: true,
                 HasPassword: true,
                 LastLoginAt: null,

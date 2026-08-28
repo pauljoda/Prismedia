@@ -162,11 +162,19 @@ public sealed class AuthEndpointTests {
         // Create a member.
         using var createResponse = await admin.PostAsJsonAsync(
             "/api/users",
-            new UserCreateRequest("alice", "alice-password", "Alice", AllowNsfw: false, CanCreateLibraries: true), CodecJson);
+            new UserCreateRequest(
+                "alice",
+                "alice-password",
+                "Alice",
+                AllowNsfw: false,
+                CanCreateLibraries: true,
+                CanRequestContent: true),
+            CodecJson);
         createResponse.EnsureSuccessStatusCode();
         var alice = await createResponse.Content.ReadFromJsonAsync<UserResponse>(CodecJson);
         Assert.Equal(UserRole.Member, alice!.Role);
         Assert.True(alice.CanCreateLibraries);
+        Assert.True(alice.CanRequestContent);
 
         // Members cannot reach user administration.
         using var memberClient = factory.CreateClient();

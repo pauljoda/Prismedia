@@ -96,6 +96,7 @@ public sealed class RequestTargetResolverTests {
         public bool IsAdmin => false;
         public bool AllowNsfw => false;
         public bool CanCreateLibraries => false;
+        public bool CanRequestContent => true;
         public ValueTask<IReadOnlySet<Guid>?> GetAllowedLibraryRootIdsAsync(CancellationToken cancellationToken) =>
             ValueTask.FromResult<IReadOnlySet<Guid>?>(allowedRootIds);
     }

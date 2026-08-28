@@ -11,6 +11,7 @@ namespace Prismedia.Application.Tests.Security;
 public sealed class AuthCacheTests {
     private static User MakeUser(Guid id) =>
         new(id, "user", "User", UserRole.Member, AllowNsfw: false, CanCreateLibraries: false,
+            CanRequestContent: false,
             Enabled: true, HasPassword: true, LastLoginAt: null,
             CreatedAt: DateTimeOffset.UnixEpoch, UpdatedAt: DateTimeOffset.UnixEpoch);
 

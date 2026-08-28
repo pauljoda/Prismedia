@@ -1,7 +1,7 @@
 import type { SessionStore } from "$lib/stores/session.svelte";
 
 /** Nav hrefs restricted to admins (server-operating surfaces). */
-const ADMIN_ONLY_HREFS = new Set(["/files", "/identify", "/request", "/downloads", "/plugins", "/jobs"]);
+const ADMIN_ONLY_HREFS = new Set(["/files", "/identify", "/downloads", "/plugins", "/jobs"]);
 
 /**
  * Whether a nav item is visible to the current session. Settings shows for anyone who
@@ -10,6 +10,10 @@ const ADMIN_ONLY_HREFS = new Set(["/files", "/identify", "/request", "/downloads
  * is visible to every signed-in user.
  */
 export function navItemVisible(href: string, session: SessionStore): boolean {
+  if (href === "/request") {
+    return session.canRequestContent;
+  }
+
   if (href === "/settings") {
     return session.canManageServer;
   }

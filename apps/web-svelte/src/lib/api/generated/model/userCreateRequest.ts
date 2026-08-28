@@ -14,5 +14,6 @@ export interface UserCreateRequest {
   role?: UserCreateRequestRole;
   allowNsfw?: boolean;
   canCreateLibraries?: boolean;
+  canRequestContent?: boolean;
   enabled?: boolean;
 }

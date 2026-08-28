@@ -193,6 +193,9 @@ public static class ApiProblemCodes {
     /// <summary>Problem code <c>request_invalid</c>.</summary>
     public const string RequestInvalid = "request_invalid";
 
+    /// <summary>Problem code <c>request_permission_required</c>.</summary>
+    public const string RequestPermissionRequired = "request_permission_required";
+
     /// <summary>Problem code <c>request_proposal_changed</c>.</summary>
     public const string RequestProposalChanged = "request_proposal_changed";
 

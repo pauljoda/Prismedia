@@ -62,6 +62,7 @@ public sealed record UserResponse(
     UserRole Role,
     bool AllowNsfw,
     bool CanCreateLibraries,
+    bool CanRequestContent,
     bool Enabled,
     DateTimeOffset? LastLoginAt,
     DateTimeOffset CreatedAt,

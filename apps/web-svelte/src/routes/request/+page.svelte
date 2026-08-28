@@ -3,6 +3,7 @@
   import { Button } from "@prismedia/ui-svelte";
   import { goto } from "$app/navigation";
   import RequestDiscover from "$lib/components/requests/RequestDiscover.svelte";
+  import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import { useSession } from "$lib/stores/session.svelte";
 
   const session = useSession();
@@ -10,6 +11,13 @@
 
 <svelte:head><title>Request · Prismedia</title></svelte:head>
 
+{#if !session.canRequestContent}
+  <StatePlaceholder
+    icon={Send}
+    title="Request access required"
+    description="Ask an administrator to allow content requests for your account."
+  />
+{:else}
 <div class="space-y-5">
   <div class="flex flex-wrap items-start justify-between gap-3">
     <div>
@@ -37,3 +45,4 @@
 
   <RequestDiscover />
 </div>
+{/if}

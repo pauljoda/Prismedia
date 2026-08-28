@@ -13,6 +13,7 @@
   import { ApiError } from "$lib/api/orval-fetch";
   import { commitReviewedRequest, fetchRequestReview, reviewRequest } from "$lib/api/requests";
   import RequestTargetOptions from "$lib/components/acquisitions/RequestTargetOptions.svelte";
+  import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import {
     buildRootReviewApplyPayload,
     defaultFieldSelectionForReview,
@@ -49,6 +50,7 @@
     tagRelationshipForTitle,
   } from "$lib/components/identify/identify-review-helpers";
   import type { RequestReviewResponse } from "$lib/api/generated/model";
+  import { useSession } from "$lib/stores/session.svelte";
 
   interface ReviewLoadInput {
     kind: RequestMediaKindCode;
@@ -65,6 +67,7 @@
   const backQuery = $derived(page.url.searchParams.get("back"));
   const backHref = $derived(backQuery ? `/request?${backQuery}` : "/request");
   const nsfw = useNsfw();
+  const session = useSession();
 
   let review = $state.raw<RequestReviewResponse | null>(null);
   let selectedProposalIds = $state<string[]>([]);
@@ -156,6 +159,11 @@
 
   let loadedKey = $state("");
   $effect(() => {
+    if (!session.canRequestContent) {
+      loadedKey = "";
+      loading = false;
+      return;
+    }
     const input = currentReviewInput();
     const key = JSON.stringify(input);
     if (key === loadedKey) return;
@@ -473,6 +481,13 @@
 
 <svelte:head><title>{activeProposal ? proposalTitle(activeProposal) : "Request"} · Prismedia</title></svelte:head>
 
+{#if !session.canRequestContent}
+  <StatePlaceholder
+    icon={Send}
+    title="Request access required"
+    description="Ask an administrator to allow content requests for your account."
+  />
+{:else}
 <div class="space-y-4">
   <a
     href={resolve(backHref as "/")}
@@ -625,3 +640,4 @@
     {/snippet}
   {/if}
 </div>
+{/if}

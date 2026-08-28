@@ -23,6 +23,7 @@ internal static class SecurityProblemResults {
             user.Role,
             user.AllowNsfw,
             user.CanCreateLibraries,
+            user.CanRequestContent,
             user.Enabled,
             user.LastLoginAt,
             user.CreatedAt,

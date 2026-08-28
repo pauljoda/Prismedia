@@ -39,6 +39,9 @@ public interface ICurrentUserContext {
     /// <summary>Whether a member may create library roots (admins always can).</summary>
     bool CanCreateLibraries { get; }
 
+    /// <summary>Whether the caller may discover and request content (admins always can).</summary>
+    bool CanRequestContent { get; }
+
     /// <summary>
     /// Library roots visible to this user, or null when unrestricted (admins, system
     /// context). Memoized per request; members cost at most one indexed read.

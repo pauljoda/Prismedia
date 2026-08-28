@@ -86,6 +86,7 @@ public sealed class SecurityServiceTests {
             role: null,
             allowNsfw: null,
             canCreateLibraries: null,
+            canRequestContent: null,
             enabled: false,
             CancellationToken.None);
 
@@ -102,6 +103,7 @@ public sealed class SecurityServiceTests {
             UserRole.Member,
             allowNsfw: false,
             canCreateLibraries: false,
+            canRequestContent: false,
             enabled: true,
             CancellationToken.None);
 

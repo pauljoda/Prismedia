@@ -33,6 +33,10 @@ export class SessionStore {
     return this.isAdmin || (this.user?.canCreateLibraries ?? false);
   }
 
+  get canRequestContent(): boolean {
+    return this.isAdmin || (this.user?.canRequestContent ?? false);
+  }
+
   /** Gates the Settings surface: admins fully, members only for their own libraries. */
   get canManageServer(): boolean {
     return this.isAdmin || this.canCreateLibraries;

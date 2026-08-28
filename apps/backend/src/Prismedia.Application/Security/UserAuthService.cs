@@ -194,6 +194,7 @@ public sealed class UserAuthService {
                 role: UserRole.Admin,
                 allowNsfw: null,
                 canCreateLibraries: null,
+                canRequestContent: null,
                 enabled: true,
                 cancellationToken) ?? throw new SecurityProblemException(
                     ApiProblemCodes.UserNotFound,
@@ -207,6 +208,7 @@ public sealed class UserAuthService {
                 UserRole.Admin,
                 allowNsfw: true,
                 canCreateLibraries: true,
+                canRequestContent: true,
                 enabled: true,
                 cancellationToken);
         }
@@ -259,6 +261,7 @@ public sealed class UserAuthService {
             role: null,
             allowNsfw: null,
             canCreateLibraries: null,
+            canRequestContent: null,
             enabled: null,
             cancellationToken);
         _sessionCache?.InvalidateUser(userId);

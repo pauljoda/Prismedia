@@ -10,7 +10,8 @@ namespace Prismedia.Api.Endpoints;
 public static class RequestEndpoints {
     public static RouteGroupBuilder MapRequestEndpoints(this IEndpointRouteBuilder routes) {
         var group = routes.MapGroup("/api/requests")
-            .WithTags("Requests");
+            .WithTags("Requests")
+            .RequireRequestPermission();
 
         group.MapPost("/search", async (
             RequestPluginSearchRequest request,

@@ -48,6 +48,7 @@ public sealed class UserAdminService {
         UserRole role,
         bool allowNsfw,
         bool canCreateLibraries,
+        bool canRequestContent,
         bool enabled,
         CancellationToken cancellationToken) {
         var normalizedUsername = UserAuthService.ValidateUsername(username);
@@ -62,6 +63,7 @@ public sealed class UserAdminService {
             role,
             allowNsfw,
             canCreateLibraries,
+            canRequestContent,
             enabled,
             cancellationToken);
     }
@@ -77,6 +79,7 @@ public sealed class UserAdminService {
         UserRole? role,
         bool? allowNsfw,
         bool? canCreateLibraries,
+        bool? canRequestContent,
         bool? enabled,
         CancellationToken cancellationToken) {
         var current = await _persistence.GetUserAsync(userId, cancellationToken);
@@ -103,6 +106,7 @@ public sealed class UserAdminService {
             role,
             allowNsfw,
             canCreateLibraries,
+            canRequestContent,
             enabled,
             cancellationToken);
 

@@ -36,6 +36,7 @@ public interface ISecurityPersistence {
         UserRole role,
         bool allowNsfw,
         bool canCreateLibraries,
+        bool canRequestContent,
         bool enabled,
         CancellationToken cancellationToken);
 
@@ -47,6 +48,7 @@ public interface ISecurityPersistence {
         UserRole? role,
         bool? allowNsfw,
         bool? canCreateLibraries,
+        bool? canRequestContent,
         bool? enabled,
         CancellationToken cancellationToken);
 

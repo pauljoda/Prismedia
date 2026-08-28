@@ -22,6 +22,7 @@ public sealed class UserEntityProgressTimestampMigrationPostgresTests {
         var progressUpdatedAt = DateTimeOffset.Parse("2026-07-31T12:00:00Z");
         var ratingUpdatedAt = progressUpdatedAt.AddMinutes(1);
 
+        await AddCurrentUserModelCompatibilityAsync(database);
         await SeedUserAndEntitiesAsync(database, userId, progressEntityId, ratingEntityId);
         await using (var connection = await database.OpenConnectionAsync()) {
             await using var command = new Npgsql.NpgsqlCommand(
@@ -58,6 +59,14 @@ public sealed class UserEntityProgressTimestampMigrationPostgresTests {
 
         await database.MigrateAsync(PreviousMigration);
         Assert.False(await ColumnExistsAsync(database, "progress_updated_at"));
+    }
+
+    private static async Task AddCurrentUserModelCompatibilityAsync(PostgresTestDatabase database) {
+        await using var connection = await database.OpenConnectionAsync();
+        await using var command = new Npgsql.NpgsqlCommand(
+            "ALTER TABLE users ADD COLUMN can_request_content boolean NOT NULL DEFAULT false",
+            connection);
+        await command.ExecuteNonQueryAsync();
     }
 
     private static async Task SeedUserAndEntitiesAsync(

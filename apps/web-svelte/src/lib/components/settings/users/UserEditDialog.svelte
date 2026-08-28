@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Flame, FolderPlus, Loader2 } from "@lucide/svelte";
+  import { Flame, FolderPlus, Loader2, Send } from "@lucide/svelte";
   import { Button, Checkbox, Select, Toggle, cn, flyUp, fadeIn } from "@prismedia/ui-svelte";
   import { USER_ROLE, type UserRoleCode } from "$lib/api/generated/codes";
   import type { LibraryRoot, UserResponse } from "$lib/api/generated/model";
@@ -27,6 +27,7 @@
   let role = $state<UserRoleCode>(USER_ROLE.member);
   let allowNsfw = $state(false);
   let canCreateLibraries = $state(false);
+  let canRequestContent = $state(false);
   let enabled = $state(true);
   let libraryRootIds = $state<string[]>([]);
   let saving = $state(false);
@@ -46,6 +47,7 @@
     role = (user?.role as UserRoleCode) ?? USER_ROLE.member;
     allowNsfw = user?.allowNsfw ?? false;
     canCreateLibraries = user?.canCreateLibraries ?? false;
+    canRequestContent = user?.canRequestContent ?? false;
     enabled = user?.enabled ?? true;
     libraryRootIds = [...(user?.libraryRootIds ?? [])];
     error = null;
@@ -84,6 +86,7 @@
           role,
           allowNsfw,
           canCreateLibraries,
+          canRequestContent,
           enabled,
         });
       } else {
@@ -93,6 +96,7 @@
           role: isSelf ? undefined : role,
           allowNsfw,
           canCreateLibraries,
+          canRequestContent,
           enabled: isSelf ? null : enabled,
         });
       }
@@ -187,6 +191,18 @@
               checked={canCreateLibraries}
               onchange={(value) => (canCreateLibraries = value)}
               ariaLabel="Can create libraries"
+            />
+          </div>
+          <div class="flex items-center gap-3 py-2.5">
+            <Send class="size-4 shrink-0 text-text-muted" />
+            <div class="min-w-0 flex-1">
+              <p class="text-sm text-text-secondary">Can request content</p>
+              <p class="text-[0.68rem] text-text-muted">Discover new media and submit requests into accessible libraries.</p>
+            </div>
+            <Toggle
+              checked={canRequestContent}
+              onchange={(value) => (canRequestContent = value)}
+              ariaLabel="Can request content"
             />
           </div>
           {#if !isSelf}

@@ -13,6 +13,7 @@ export interface UserResponse {
   role: UserRole;
   allowNsfw: boolean;
   canCreateLibraries: boolean;
+  canRequestContent: boolean;
   enabled: boolean;
   /** @nullable */
   lastLoginAt: string | null;

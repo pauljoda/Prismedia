@@ -17,5 +17,7 @@ export interface UserUpdateRequest {
   /** @nullable */
   canCreateLibraries?: boolean | null;
   /** @nullable */
+  canRequestContent?: boolean | null;
+  /** @nullable */
   enabled?: boolean | null;
 }
