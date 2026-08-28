@@ -470,6 +470,21 @@ public interface IMediaProcessingStatePersistence {
 
     Task UpsertAudioTrackTagsAsync(Guid entityId, string? artist, string? album, int? trackNumber, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Replaces the ordered chapter windows discovered inside one audio source. Implementations
+    /// preserve marker identities by source order so persisted book mappings remain stable across
+    /// an unchanged re-probe.
+    /// </summary>
+    Task ReplaceEmbeddedAudioChaptersAsync(
+        Guid entityId,
+        IReadOnlyList<AudioChapterProbeData> chapters,
+        CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <summary>Returns the direct structural parent used for aggregate follow-up jobs.</summary>
+    Task<DirectEntityParentData?> GetDirectParentAsync(
+        Guid entityId,
+        CancellationToken cancellationToken) => Task.FromResult<DirectEntityParentData?>(null);
+
     Task<EntityTechnicalData?> GetEntityTechnicalAsync(Guid entityId, CancellationToken cancellationToken);
 
     /// <summary>
@@ -495,6 +510,9 @@ public interface IMediaProcessingStatePersistence {
         IReadOnlyCollection<string> sourcePaths,
         CancellationToken cancellationToken) => Task.CompletedTask;
 }
+
+/// <summary>Minimal direct-parent projection needed by media processing handlers.</summary>
+public sealed record DirectEntityParentData(Guid Id, string KindCode, string Title);
 
 /// <summary>One fully materialized subtitle track owned by Prismedia's extraction pipeline.</summary>
 public sealed record ManagedSubtitleTrackData(

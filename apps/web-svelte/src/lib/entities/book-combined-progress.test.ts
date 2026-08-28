@@ -283,6 +283,34 @@ describe("unified book progress", () => {
       index: 10,
     }, promotion)).toBe(false);
   });
+
+  it("uses an embedded M4B chapter window for launch, progress, and resume", () => {
+    const row: BookChapterRow = {
+      ...epubRow(),
+      audioMarkerId: "marker-2",
+      audioStartSeconds: 100,
+      audioEndSeconds: 200,
+    };
+    const launch = resolveChapterCombinedLaunch(row, reading);
+    const mapping = expectSingle(buildBookProgressMappings("book-1", [row], READER_MODE.paged));
+
+    expect(launch?.audioStartSeconds).toBe(145);
+    expect(mapping).toMatchObject({
+      itemId: "audio-1",
+      sourceStartSeconds: 100,
+      sourceEndSeconds: 200,
+    });
+    expect(bookProgressUpdateForAudio(mapping, 150, 1200, null, false).index).toBe(3000);
+    expect(resolveBookAudioResume([row], [mapping], {
+      currentEntityId: "book-1",
+      unit: PROGRESS_UNIT.cfi,
+      index: 3500,
+    })).toEqual({ trackId: "audio-1", trackOffsetSeconds: 170 });
+    expect(legacyBookProgressPromotion([row], [mapping], 150)).toMatchObject({
+      mapping: { sourceStartSeconds: 100, sourceEndSeconds: 200 },
+      update: { index: 3000 },
+    });
+  });
 });
 
 function expectSingle<T>(items: readonly T[]): T {

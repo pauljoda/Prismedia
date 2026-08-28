@@ -26,6 +26,7 @@
   import { updateEntityProgress } from "$lib/api/consumption";
   import type {
     AcquisitionDetail,
+    BookAudioChapter,
     BookChapterAudioMapping,
     BookContentsEntry,
     EntityThumbnail,
@@ -124,6 +125,7 @@
   let epubContents = $state.raw<EpubContentsEntry[]>([]);
   let artworkPalette = $state.raw<ArtworkPalette | null>(null);
   let chapterMappings = $state.raw<BookChapterAudioMapping[]>([]);
+  let audioChapters = $state.raw<BookAudioChapter[]>([]);
   let chapterMappingLoadError = $state<string | null>(null);
 
   const bookId = $derived(page.params.id ?? "");
@@ -217,6 +219,7 @@
   const baseChapterRows = $derived(buildBookChapterRows({
     readableChapters,
     audioTracks: audiobookTracks,
+    audioChapters,
     chapterMappings,
     currentReadableId: bookMetadata?.format === BOOK_FORMAT.epub
       ? currentEpubChapterId
@@ -224,6 +227,7 @@
         ? null
         : progressDisplay?.chapterId ?? null,
     currentAudioTrackId: isCurrentAudiobook ? playback.currentTrack?.id ?? null : null,
+    currentAudioSeconds: isCurrentAudiobook ? playback.currentTime : null,
   }));
   const bookProgressMappings = $derived(buildBookProgressMappings(
     book?.id ?? "",
@@ -248,7 +252,11 @@
   );
   const chapterRows = $derived(baseChapterRows.map((row) => ({
     ...row,
-    isCurrentAudio: row.audioTrack?.id === currentAudiobookTrackId,
+    isCurrentAudio: rowOwnsAudioTime(
+      row,
+      currentAudiobookTrackId,
+      isCurrentAudiobook ? playback.currentTime : savedAudiobookResume?.trackOffsetSeconds ?? null,
+    ),
   })));
   const canonicalCompleted = $derived(Boolean(bookProgress?.completedAt));
   const canonicalPercent = $derived.by(() => {
@@ -453,11 +461,16 @@
         return [];
       }),
       fetchBookChapterMappings(targetBookId, { signal })
-        .then((response) => ({ mappings: response.mappings, error: null }))
+        .then((response) => ({
+          mappings: response.mappings ?? [],
+          audioChapters: response.audioChapters ?? [],
+          error: null,
+        }))
         .catch((error) => {
           signal.throwIfAborted();
           return {
             mappings: [],
+            audioChapters: [],
             error: error instanceof Error ? error.message : "Failed to load chapter mappings.",
           };
         }),
@@ -504,6 +517,7 @@
     bookRenditionAcquisitions = nextAcquisitions;
     bookRenditionMonitors = nextMonitors;
     chapterMappings = nextMappingState.mappings;
+    audioChapters = nextMappingState.audioChapters;
     chapterMappingLoadError = nextMappingState.error;
 
     epubContents = getBookMetadataCapability(nextBook.capabilities)?.format === BOOK_FORMAT.epub
@@ -531,9 +545,10 @@
   ): Promise<readonly BookChapterAudioMapping[]> {
     if (!book) return [];
     const response = await saveBookChapterMappings(book.id, mappings);
-    chapterMappings = response.mappings;
+    chapterMappings = response.mappings ?? [];
+    audioChapters = response.audioChapters ?? [];
     chapterMappingLoadError = null;
-    return response.mappings;
+    return chapterMappings;
   }
 
   /**
@@ -703,6 +718,19 @@
     playback.play(audiobookTracks, trackId, context, { shuffle: false, startSeconds });
   }
 
+  function rowOwnsAudioTime(
+    row: BookChapterRow,
+    trackId: string | null,
+    seconds: number | null,
+  ): boolean {
+    if (!row.audioTrack || row.audioTrack.id !== trackId) return false;
+    if (!row.audioMarkerId) return true;
+    if (seconds === null || !Number.isFinite(seconds)) return false;
+    const start = Number(row.audioStartSeconds ?? 0);
+    const end = row.audioEndSeconds == null ? Number.POSITIVE_INFINITY : Number(row.audioEndSeconds);
+    return seconds >= start && seconds < end;
+  }
+
   function openChapterRow(row: BookChapterRow) {
     if (!book || !row.readTarget) return;
     const target = row.readTarget;
@@ -763,13 +791,19 @@
     const track = row.audioTrack;
     if (!track) return;
     if (isCurrentAudiobook && playback.currentTrack?.id === track.id) {
-      playback.toggle();
+      if (rowOwnsAudioTime(row, track.id, playback.currentTime)) {
+        playback.toggle();
+        return;
+      }
+      playback.seek(Number(row.audioStartSeconds ?? 0));
+      if (!playback.playing) playback.toggle();
       return;
     }
-    const startSeconds = currentAudiobookTrackId === track.id && savedAudiobookResume?.trackId === track.id
+    const savedStartSeconds = currentAudiobookTrackId === track.id && savedAudiobookResume?.trackId === track.id &&
+        rowOwnsAudioTime(row, savedAudiobookResume.trackId, savedAudiobookResume.trackOffsetSeconds)
       ? savedAudiobookResume.trackOffsetSeconds
-      : 0;
-    playAudiobookTrack(track.id, startSeconds);
+      : Number(row.audioStartSeconds ?? 0);
+    playAudiobookTrack(track.id, savedStartSeconds);
   }
 
   function openCombinedChapter(row: BookChapterRow) {
@@ -1029,6 +1063,7 @@
               resetKey={book.id}
               {readableChapters}
               audioTracks={audiobookTracks}
+              {audioChapters}
               mappings={chapterMappings}
               loadError={chapterMappingLoadError}
               onSave={saveChapterMappingDraft}
@@ -1113,7 +1148,7 @@
           completed={canonicalCompleted}
           percent={canonicalPercent}
           positionLabel={canonicalPositionLabel}
-          countLabel={`${audiobookTracks.length} part${audiobookTracks.length === 1 ? "" : "s"}`}
+          countLabel={`${audioChapters.length || audiobookTracks.length} part${(audioChapters.length || audiobookTracks.length) === 1 ? "" : "s"}`}
           canResume={!canonicalCompleted && canonicalPercent > 0}
           canStartOver={canonicalCompleted || canonicalPercent > 0}
           busy={listeningBusy}

@@ -10,7 +10,7 @@ using Prismedia.Infrastructure.Persistence.Entities;
 namespace Prismedia.Infrastructure.Media.Books;
 
 /// <summary>
-/// Persists the shared one-to-one associations between readable chapter keys and audiobook tracks.
+/// Persists associations between readable chapter keys and addressable audiobook chapter windows.
 /// </summary>
 internal sealed class EfBookChapterMappingService(
     PrismediaDbContext db,
@@ -46,7 +46,7 @@ internal sealed class EfBookChapterMappingService(
                 normalized.Error);
         }
 
-        var trackIds = normalized.Mappings.Select(mapping => mapping.AudioTrackId).ToArray();
+        var trackIds = normalized.Mappings.Select(mapping => mapping.AudioTrackId).Distinct().ToArray();
         var validTrackCount = await db.Entities
             .AsNoTracking()
             .CountAsync(row =>
@@ -63,6 +63,18 @@ internal sealed class EfBookChapterMappingService(
                 BookChapterMappingSaveStatus.Invalid,
                 null,
                 "Every mapped audiobook file must be a playable source owned directly by this Book.");
+        }
+
+        var audioChapters = await BookAudioChapterProjection.LoadAsync(db, bookId, cancellationToken);
+        var availableAudioChapterIds = audioChapters
+            .Select(chapter => (chapter.AudioTrackId, chapter.AudioMarkerId))
+            .ToHashSet();
+        if (normalized.Mappings.Any(mapping =>
+                !availableAudioChapterIds.Contains((mapping.AudioTrackId, mapping.AudioMarkerId)))) {
+            return new BookChapterMappingSaveResult(
+                BookChapterMappingSaveStatus.Invalid,
+                null,
+                "Every mapped audiobook chapter must identify an available whole file or embedded marker.");
         }
 
         IDbContextTransaction? transaction = null;
@@ -84,6 +96,7 @@ internal sealed class EfBookChapterMappingService(
                     BookId = bookId,
                     ReadableChapterKey = mapping.ReadableChapterKey,
                     AudioTrackEntityId = mapping.AudioTrackId,
+                    AudioMarkerId = mapping.AudioMarkerId,
                     Origin = BookChapterMappingOrigin.Manual,
                     UpdatedAt = now
                 }));
@@ -98,7 +111,7 @@ internal sealed class EfBookChapterMappingService(
             }
         }
 
-        // The saved manual pairs consume chapters and tracks, so the automatic layer is stale by
+        // The saved manual pairs consume readable and audio chapters, so the automatic layer is stale by
         // definition; refill it inline so the response is the complete merged map.
         await chapterMap.RefreshAsync(bookId, cancellationToken);
         return new BookChapterMappingSaveResult(
@@ -120,14 +133,28 @@ internal sealed class EfBookChapterMappingService(
             .AsNoTracking()
             .Where(row => row.BookId == bookId)
             .OrderBy(row => row.ReadableChapterKey)
-            .Select(row => new { row.ReadableChapterKey, row.AudioTrackEntityId, row.Origin })
-            .ToArrayAsync(cancellationToken);
-        return new BookChapterMappingsResponse(rows
-            .Select(row => new BookChapterAudioMapping(
+            .Select(row => new {
                 row.ReadableChapterKey,
                 row.AudioTrackEntityId,
-                row.Origin.ToCode()))
-            .ToArray());
+                row.AudioMarkerId,
+                row.Origin
+            })
+            .ToArrayAsync(cancellationToken);
+        var audioChapters = await BookAudioChapterProjection.LoadAsync(db, bookId, cancellationToken);
+        return new BookChapterMappingsResponse(
+            rows.Select(row => new BookChapterAudioMapping(
+                    row.ReadableChapterKey,
+                    row.AudioTrackEntityId,
+                    row.Origin.ToCode(),
+                    row.AudioMarkerId))
+                .ToArray(),
+            audioChapters.Select(chapter => new BookAudioChapter(
+                    chapter.AudioTrackId,
+                    chapter.AudioMarkerId,
+                    chapter.Title,
+                    chapter.StartSeconds,
+                    chapter.EndSeconds))
+                .ToArray());
     }
 
     private static NormalizedMappings Normalize(IReadOnlyList<BookChapterAudioMapping>? mappings) {
@@ -137,7 +164,7 @@ internal sealed class EfBookChapterMappingService(
 
         var normalized = new List<BookChapterAudioMapping>(mappings.Count);
         var chapterKeys = new HashSet<string>(StringComparer.Ordinal);
-        var audioTrackIds = new HashSet<Guid>();
+        var audioChapterIds = new HashSet<(Guid AudioTrackId, Guid? AudioMarkerId)>();
         foreach (var mapping in mappings) {
             var chapterKey = mapping.ReadableChapterKey?.Trim() ?? string.Empty;
             if (chapterKey.Length == 0 || chapterKey.Length > MaximumReadableChapterKeyLength) {
@@ -151,11 +178,14 @@ internal sealed class EfBookChapterMappingService(
             if (!chapterKeys.Add(chapterKey)) {
                 return new NormalizedMappings([], "A readable chapter can map to only one audiobook file.");
             }
-            if (!audioTrackIds.Add(mapping.AudioTrackId)) {
-                return new NormalizedMappings([], "An audiobook file can map to only one readable chapter.");
+            if (!audioChapterIds.Add((mapping.AudioTrackId, mapping.AudioMarkerId))) {
+                return new NormalizedMappings([], "An audiobook chapter can map to only one readable chapter.");
             }
 
-            normalized.Add(new BookChapterAudioMapping(chapterKey, mapping.AudioTrackId));
+            normalized.Add(new BookChapterAudioMapping(
+                chapterKey,
+                mapping.AudioTrackId,
+                AudioMarkerId: mapping.AudioMarkerId));
         }
 
         return new NormalizedMappings(normalized, null);

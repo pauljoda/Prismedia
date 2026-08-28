@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
+import type { BookAudioChapter } from "$lib/api/generated/model";
 import {
   buildBookChapterRows,
   sequentialBookChapterMappings,
@@ -44,6 +45,21 @@ function readable(id: string, title: string, order: number): ReadableBookChapter
     order,
     depth: 0,
     target: { kind: "epub", location: `Text/${id}.xhtml` },
+  };
+}
+
+function audioChapter(
+  markerId: string,
+  title: string,
+  startSeconds: number,
+  endSeconds: number,
+): BookAudioChapter {
+  return {
+    audioTrackId: "audio-1",
+    audioMarkerId: markerId,
+    title,
+    startSeconds,
+    endSeconds,
   };
 }
 
@@ -137,6 +153,69 @@ describe("book chapter list", () => {
       { readableChapterKey: "prologue", audioTrackId: "audio-1" },
       { readableChapterKey: "chapter-1", audioTrackId: "audio-2" },
       { readableChapterKey: "chapter-2", audioTrackId: "audio-3" },
+    ]);
+  });
+
+  it("renders multiple embedded chapters from one physical M4B as distinct mapped rows", () => {
+    const rows = buildBookChapterRows({
+      readableChapters: [
+        readable("opening", "Opening Credits", 0),
+        readable("chapter-1", "Chapter One", 1),
+      ],
+      audioTracks: [audioTrack("audio-1", "Whole Book", 0)],
+      audioChapters: [
+        audioChapter("marker-1", "Opening Credits", 0, 12.5),
+        audioChapter("marker-2", "Chapter One", 12.5, 180),
+      ],
+      chapterMappings: [
+        { readableChapterKey: "opening", audioTrackId: "audio-1", audioMarkerId: "marker-1" },
+        { readableChapterKey: "chapter-1", audioTrackId: "audio-1", audioMarkerId: "marker-2" },
+      ],
+      currentAudioTrackId: "audio-1",
+      currentAudioSeconds: 20,
+    });
+
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => [
+      row.audioTrack?.id,
+      row.audioMarkerId,
+      row.audioStartSeconds,
+      row.audioEndSeconds,
+      row.isCurrentAudio,
+    ])).toEqual([
+      ["audio-1", "marker-1", 0, 12.5, false],
+      ["audio-1", "marker-2", 12.5, 180, true],
+    ]);
+  });
+
+  it("shows embedded chapters for an audio-only book without duplicating the whole file", () => {
+    const rows = buildBookChapterRows({
+      readableChapters: [],
+      audioTracks: [audioTrack("audio-1", "Whole Book", 0)],
+      audioChapters: [
+        audioChapter("marker-1", "Opening Credits", 0, 12.5),
+        audioChapter("marker-2", "Chapter One", 12.5, 180),
+      ],
+    });
+
+    expect(rows.map((row) => row.title)).toEqual(["Opening Credits", "Chapter One"]);
+    expect(rows.every((row) => row.audioTrack?.id === "audio-1")).toBe(true);
+  });
+
+  it("creates sequential overrides for embedded chapter candidates", () => {
+    const mappings = sequentialBookChapterMappings(
+      [readable("opening", "Opening Credits", 0), readable("chapter-1", "Chapter One", 1)],
+      [audioTrack("audio-1", "Whole Book", 0)],
+      "opening",
+      [
+        audioChapter("marker-1", "Opening Credits", 0, 12.5),
+        audioChapter("marker-2", "Chapter One", 12.5, 180),
+      ],
+    );
+
+    expect(mappings).toEqual([
+      { readableChapterKey: "opening", audioTrackId: "audio-1", audioMarkerId: "marker-1" },
+      { readableChapterKey: "chapter-1", audioTrackId: "audio-1", audioMarkerId: "marker-2" },
     ]);
   });
 });

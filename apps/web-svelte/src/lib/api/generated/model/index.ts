@@ -54,6 +54,7 @@ export * from './bookAcquisitionProfileView';
 export * from './bookAcquisitionProfileViewAllowedFormatsItem';
 export * from './bookAcquisitionProfileViewFormatScores';
 export * from './bookAcquisitionProfileViewSearchAfterDateType';
+export * from './bookAudioChapter';
 export * from './bookChapterAudioMapping';
 export * from './bookChapterMappingsResponse';
 export * from './bookContentsEntry';

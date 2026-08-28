@@ -28,7 +28,7 @@ internal sealed class EfBookChapterMapService(
         }
 
         var inputs = await LoadMappingInputsAsync(bookId, epub, cancellationToken);
-        if (inputs.ReadableChapters.Count == 0 && inputs.AudioTracks.Count == 0) {
+        if (inputs.ReadableChapters.Count == 0 && inputs.AudioChapters.Count == 0) {
             return state is not null &&
                 (state.SourceSignature is not null || state.MappingSignature is not null);
         }
@@ -87,16 +87,17 @@ internal sealed class EfBookChapterMapService(
         var mappingSignature = MappingSignatureFor(inputs);
         var autoReplaced = false;
         if (!string.Equals(mappingSignature, state?.MappingSignature, StringComparison.Ordinal)) {
-            var autoPairs = BookChapterMatcher.ComputeAutoPairs(
+            var autoPairs = BookChapterMatcher.ComputeAutoChapterPairs(
                 inputs.ReadableChapters,
-                inputs.AudioTracks,
+                inputs.AudioChapters,
                 inputs.ManualPairs);
             // Dangling manual rows (their chapter key vanished with a replaced EPUB) still pin
             // their track and key so the unique indexes can never collide with an auto row.
             var blockedKeys = inputs.AllManualChapterKeys.ToHashSet(StringComparer.Ordinal);
-            var blockedTracks = inputs.AllManualTrackIds.ToHashSet();
+            var blockedAudioChapters = inputs.AllManualAudioChapterIds.ToHashSet();
             var nextAuto = autoPairs
-                .Where(pair => !blockedKeys.Contains(pair.ChapterKey) && !blockedTracks.Contains(pair.AudioTrackId))
+                .Where(pair => !blockedKeys.Contains(pair.ChapterKey) &&
+                    !blockedAudioChapters.Contains((pair.AudioTrackId, pair.AudioMarkerId)))
                 .ToArray();
 
             var existingAuto = await db.BookChapterAudioMappings
@@ -109,6 +110,7 @@ internal sealed class EfBookChapterMapService(
                 BookId = bookId,
                 ReadableChapterKey = pair.ChapterKey,
                 AudioTrackEntityId = pair.AudioTrackId,
+                AudioMarkerId = pair.AudioMarkerId,
                 Origin = BookChapterMappingOrigin.Auto,
                 UpdatedAt = now
             }));
@@ -210,10 +212,10 @@ internal sealed class EfBookChapterMapService(
 
     private sealed record MappingInputs(
         IReadOnlyList<MatchableReadableChapter> ReadableChapters,
-        IReadOnlyList<MatchableAudioTrack> AudioTracks,
-        IReadOnlyList<(string ChapterKey, Guid AudioTrackId)> ManualPairs,
+        IReadOnlyList<MatchableAudioChapter> AudioChapters,
+        IReadOnlyList<(string ChapterKey, Guid AudioTrackId, Guid? AudioMarkerId)> ManualPairs,
         IReadOnlyList<string> AllManualChapterKeys,
-        IReadOnlyList<Guid> AllManualTrackIds);
+        IReadOnlyList<(Guid AudioTrackId, Guid? AudioMarkerId)> AllManualAudioChapterIds);
 
     private async Task<MappingInputs> LoadMappingInputsAsync(
         Guid bookId,
@@ -240,30 +242,23 @@ internal sealed class EfBookChapterMapService(
                 .ToArray();
         }
 
-        var trackKind = EntityKind.AudioTrack.ToCode();
-        var tracks = (await db.Entities.AsNoTracking()
-                .Where(row => row.ParentEntityId == bookId && row.KindCode == trackKind && !row.IsWanted &&
-                    db.EntityFiles.Any(file => file.EntityId == row.Id && file.Role == EntityFileRole.Source))
-                .Select(row => new { row.Id, row.Title, row.SortOrder })
-                .ToArrayAsync(cancellationToken))
-            .Select(row => new MatchableAudioTrack(row.Id, row.Title, row.SortOrder ?? 0))
-            .ToArray();
+        var audioChapters = await BookAudioChapterProjection.LoadAsync(db, bookId, cancellationToken);
 
         var manualRows = await db.BookChapterAudioMappings.AsNoTracking()
             .Where(row => row.BookId == bookId && row.Origin == BookChapterMappingOrigin.Manual)
             .OrderBy(row => row.ReadableChapterKey)
-            .Select(row => new { row.ReadableChapterKey, row.AudioTrackEntityId })
+            .Select(row => new { row.ReadableChapterKey, row.AudioTrackEntityId, row.AudioMarkerId })
             .ToArrayAsync(cancellationToken);
         var manualPairs = manualRows
-            .Select(row => (row.ReadableChapterKey, row.AudioTrackEntityId))
+            .Select(row => (row.ReadableChapterKey, row.AudioTrackEntityId, row.AudioMarkerId))
             .ToArray();
 
         return new MappingInputs(
             readable,
-            tracks,
+            audioChapters,
             manualPairs,
             manualRows.Select(row => row.ReadableChapterKey).ToArray(),
-            manualRows.Select(row => row.AudioTrackEntityId).ToArray());
+            manualRows.Select(row => (row.AudioTrackEntityId, row.AudioMarkerId)).ToArray());
     }
 
     private static string MappingSignatureFor(MappingInputs inputs) {
@@ -271,12 +266,18 @@ internal sealed class EfBookChapterMapService(
         foreach (var chapter in inputs.ReadableChapters) {
             builder.Append("r|").Append(chapter.Key).Append('|').Append(chapter.Title).Append('\n');
         }
-        foreach (var track in inputs.AudioTracks.OrderBy(track => track.Id)) {
-            builder.Append("t|").Append(track.Id.ToString("D")).Append('|')
-                .Append(track.SortOrder).Append('|').Append(track.Title).Append('\n');
+        foreach (var chapter in inputs.AudioChapters
+                     .OrderBy(chapter => chapter.AudioTrackId)
+                     .ThenBy(chapter => chapter.AudioMarkerId)) {
+            builder.Append("a|").Append(chapter.AudioTrackId.ToString("D")).Append('|')
+                .Append(chapter.AudioMarkerId?.ToString("D") ?? "whole").Append('|')
+                .Append(chapter.TrackSortOrder).Append('|').Append(chapter.MarkerOrder).Append('|')
+                .Append(chapter.Title).Append('|').Append(chapter.StartSeconds).Append('|')
+                .Append(chapter.EndSeconds).Append('\n');
         }
-        foreach (var (chapterKey, trackId) in inputs.ManualPairs) {
-            builder.Append("m|").Append(chapterKey).Append('|').Append(trackId.ToString("D")).Append('\n');
+        foreach (var (chapterKey, trackId, markerId) in inputs.ManualPairs) {
+            builder.Append("m|").Append(chapterKey).Append('|').Append(trackId.ToString("D")).Append('|')
+                .Append(markerId?.ToString("D") ?? "whole").Append('\n');
         }
 
         return ShortHash(builder.ToString());

@@ -99,6 +99,29 @@ public sealed class EfBookChapterMapServiceTests {
     }
 
     [Fact]
+    public async Task PersistsMultipleEmbeddedChapterMatchesForOnePhysicalTrack() {
+        await using var db = CreateContext();
+        var bookId = AddEntity(db, EntityKind.Book, "Book");
+        var openingId = AddEntity(db, EntityKind.BookChapter, "Opening Credits", bookId, 0);
+        var chapterId = AddEntity(db, EntityKind.BookChapter, "Chapter One", bookId, 1);
+        var trackId = AddEntity(db, EntityKind.AudioTrack, "Whole Book", bookId, 0);
+        AddSource(db, trackId);
+        var openingMarkerId = AddMarker(db, trackId, "Opening Credits", 0, 12.5);
+        var chapterMarkerId = AddMarker(db, trackId, "Chapter One", 12.5, 180);
+        await db.SaveChangesAsync();
+        var service = new EfBookChapterMapService(db, new EpubBookContentsCache());
+
+        var result = await service.RefreshAsync(bookId, CancellationToken.None);
+
+        Assert.True(result.AutoMappingsReplaced);
+        var rows = await db.BookChapterAudioMappings.OrderBy(row => row.ReadableChapterKey).ToArrayAsync();
+        Assert.Equal(2, rows.Length);
+        Assert.Contains(rows, row => row.ReadableChapterKey == openingId.ToString("D") && row.AudioMarkerId == openingMarkerId);
+        Assert.Contains(rows, row => row.ReadableChapterKey == chapterId.ToString("D") && row.AudioMarkerId == chapterMarkerId);
+        Assert.All(rows, row => Assert.Equal(trackId, row.AudioTrackEntityId));
+    }
+
+    [Fact]
     public async Task ListsOnlyStaleBooksUnderTheGivenRoot() {
         await using var db = CreateContext();
         var insideId = AddEntity(db, EntityKind.Book, "Inside");
@@ -161,5 +184,24 @@ public sealed class EfBookChapterMapServiceTests {
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
         });
+    }
+
+    private static Guid AddMarker(
+        PrismediaDbContext db,
+        Guid entityId,
+        string title,
+        double seconds,
+        double endSeconds) {
+        var id = Guid.NewGuid();
+        db.EntityMarkers.Add(new EntityMarkerRow {
+            Id = id,
+            EntityId = entityId,
+            Title = title,
+            Seconds = seconds,
+            EndSeconds = endSeconds,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        return id;
     }
 }

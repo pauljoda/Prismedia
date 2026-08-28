@@ -28,7 +28,10 @@
   import AudioTransportPreferenceControl from "./AudioTransportPreferenceControl.svelte";
   import { waveformForDisplay } from "./audio-waveform";
   import { ConsumptionActivityClock } from "$lib/entities/consumption-activity-clock";
-  import { audioProgressUpdateForItem } from "$lib/player/audio-progress-mapping";
+  import {
+    audioProgressUpdateForItem,
+    resolvePlaybackProgressMappingForTime,
+  } from "$lib/player/audio-progress-mapping";
   import {
     AUDIO_PLAYBACK_SAVE_EVENT,
     resolveAudioArtist,
@@ -556,7 +559,11 @@
     const ownerId = ctx?.playbackOwnerEntityId;
     const track = activeTrack;
     if (!hasMappedProgress || !ownerId || !track) return;
-    const mapping = ctx?.progressMappings?.find((candidate) => candidate.itemId === track.id);
+    const mapping = resolvePlaybackProgressMappingForTime(
+      ctx?.progressMappings ?? [],
+      track.id,
+      playback.currentTime,
+    );
     if (!mapping) return;
     if (track.id !== lastMappedItemId) {
       lastMappedItemId = track.id;

@@ -5,6 +5,7 @@ import { resolveAudiobookResume } from "$lib/entities/audiobook-playback";
 import { exactWebEpubResumeLocation } from "$lib/entities/epub-contents";
 import {
   audioProgressUpdateForItem,
+  resolvePlaybackProgressMappingForTime,
   type AudioProgressUpdate,
 } from "$lib/player/audio-progress-mapping";
 
@@ -82,6 +83,30 @@ function runwayStart(seconds: number): number {
   return seconds - COMBINED_AUDIO_RUNWAY_SECONDS;
 }
 
+function audioWindow(row: BookChapterRow): { start: number; end: number; duration: number } {
+  const physicalDuration = Math.max(0, Number(row.audioTrack?.duration ?? 0));
+  const start = Math.max(0, Number(row.audioStartSeconds ?? 0));
+  const requestedEnd = row.audioEndSeconds == null
+    ? physicalDuration
+    : Number(row.audioEndSeconds);
+  const end = Number.isFinite(requestedEnd) && requestedEnd > start
+    ? requestedEnd
+    : Math.max(start, physicalDuration);
+  return { start, end, duration: Math.max(0, end - start) };
+}
+
+function sourceWindow(row: BookChapterRow): Pick<
+  BookProgressTrackMapping,
+  "sourceStartSeconds" | "sourceEndSeconds"
+> {
+  if (!row.audioMarkerId) return {};
+  const window = audioWindow(row);
+  return {
+    sourceStartSeconds: window.start,
+    sourceEndSeconds: window.end,
+  };
+}
+
 function epubRange(row: BookChapterRow): { start: number; end: number } | null {
   if (row.readTarget?.kind !== "epub") return null;
   const start = row.readTarget.startFraction;
@@ -120,13 +145,16 @@ export function resolveChapterCombinedLaunch(
 
   const rowPosition = position?.rowId === row.id ? position : null;
   const chapterFraction = clampFraction(rowPosition?.chapterFraction ?? 0);
-  const duration = Math.max(0, Number(row.audioTrack.duration ?? 0));
+  const window = audioWindow(row);
   const readerLocation = exactWebEpubResumeLocation(rowPosition?.location);
 
   return {
     rowId: row.id,
     source: rowPosition ? "progress" : "start",
-    audioStartSeconds: runwayStart(chapterFraction * duration),
+    audioStartSeconds: Math.max(
+      window.start,
+      runwayStart(window.start + chapterFraction * window.duration),
+    ),
     readerLocation,
     readerFraction: readerLocation ? null : epubReaderFraction(row, chapterFraction),
     readerPageIndex: rowPosition?.pageIndex ?? pageReaderIndex(row, chapterFraction),
@@ -158,7 +186,7 @@ export function buildBookProgressMappings(
   const hasReadableRendition = rows.some((row) => row.readTarget !== null);
 
   if (!hasReadableRendition) {
-    const durations = rows.map((row) => Math.max(0, Math.ceil(Number(row.audioTrack?.duration ?? 0))));
+    const durations = rows.map((row) => Math.max(0, Math.ceil(audioWindow(row).duration)));
     const total = durations.reduce((sum, duration) => sum + duration, 0);
     let startIndex = 0;
     return rows.flatMap((row, rowIndex) => {
@@ -172,6 +200,7 @@ export function buildBookProgressMappings(
         endIndex: startIndex + duration,
         total,
         mode: null,
+        ...sourceWindow(row),
       } satisfies BookProgressTrackMapping;
       startIndex += duration;
       return [mapping];
@@ -192,6 +221,7 @@ export function buildBookProgressMappings(
         endIndex: Math.round(range.end * EPUB_PROGRESS_TOTAL),
         total: EPUB_PROGRESS_TOTAL,
         mode,
+        ...sourceWindow(row),
       }];
     }
 
@@ -205,6 +235,7 @@ export function buildBookProgressMappings(
       endIndex: pageCount - 1,
       total: pageCount,
       mode,
+      ...sourceWindow(row),
     }];
   });
 }
@@ -236,14 +267,21 @@ export function resolveBookAudioResume(
   const mapping = resolveBookProgressMapping(mappings, cursor);
   if (!mapping) return null;
 
-  const track = rows.find((row) => row.audioTrack?.id === mapping.itemId)?.audioTrack;
-  if (!track) return null;
+  const row = rows.find((candidate) =>
+    candidate.audioTrack?.id === mapping.itemId &&
+    Number(candidate.audioStartSeconds ?? 0) === Number(mapping.sourceStartSeconds ?? 0)
+  ) ?? rows.find((candidate) => candidate.audioTrack?.id === mapping.itemId);
+  if (!row?.audioTrack) return null;
   const start = Number(mapping.startIndex);
   const end = Number(mapping.endIndex);
   const fraction = end > start ? clampFraction((cursor.index - start) / (end - start)) : 0;
+  const window = audioWindow(row);
   return {
     trackId: mapping.itemId,
-    trackOffsetSeconds: runwayStart(fraction * Math.max(0, Number(track.duration ?? 0))),
+    trackOffsetSeconds: Math.max(
+      window.start,
+      runwayStart(window.start + fraction * window.duration),
+    ),
   };
 }
 
@@ -273,15 +311,19 @@ export function legacyBookProgressPromotion(
   absoluteSeconds: number,
 ): LegacyBookProgressPromotion | null {
   if (!Number.isFinite(absoluteSeconds) || absoluteSeconds <= 0) return null;
-  const tracks = rows
-    .flatMap((row) => row.audioTrack ? [row.audioTrack] : [])
+  const trackById = new Map(rows.flatMap((row) => row.audioTrack ? [[row.audioTrack.id, row.audioTrack] as const] : []));
+  const tracks = [...trackById.values()]
     .sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title) || a.id.localeCompare(b.id));
   if (tracks.some((track) => !Number.isFinite(Number(track.duration)) || Number(track.duration) <= 0)) {
     return null;
   }
   const resume = resolveAudiobookResume(tracks, absoluteSeconds);
   if (!resume) return null;
-  const mapping = mappings.find((candidate) => candidate.itemId === resume.trackId);
+  const mapping = resolvePlaybackProgressMappingForTime(
+    mappings,
+    resume.trackId,
+    resume.trackOffsetSeconds,
+  );
   const track = tracks.find((candidate) => candidate.id === resume.trackId);
   const duration = Math.max(0, Number(track?.duration ?? 0));
   if (!mapping || !track || duration <= 0) return null;

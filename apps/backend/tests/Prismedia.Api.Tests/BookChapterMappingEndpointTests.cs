@@ -17,7 +17,7 @@ public sealed class BookChapterMappingEndpointTests {
         var trackId = Guid.NewGuid();
         var initial = new BookChapterMappingsResponse([
             new BookChapterAudioMapping("Text/prologue.xhtml", trackId)
-        ]);
+        ], []);
         var service = new FakeBookChapterMappingService(bookId, initial);
         using var factory = CreateFactory(service);
         using var client = factory.CreateAuthenticatedClient();
@@ -44,7 +44,7 @@ public sealed class BookChapterMappingEndpointTests {
     [Fact]
     public async Task ReturnsAStableProblemForInvalidMappings() {
         var bookId = Guid.NewGuid();
-        var service = new FakeBookChapterMappingService(bookId, new BookChapterMappingsResponse([])) {
+        var service = new FakeBookChapterMappingService(bookId, new BookChapterMappingsResponse([], [])) {
             SaveResult = new BookChapterMappingSaveResult(
                 BookChapterMappingSaveStatus.Invalid,
                 null,
@@ -93,7 +93,7 @@ public sealed class BookChapterMappingEndpointTests {
             CancellationToken cancellationToken) {
             LastRequest = request;
             var result = SaveResult.Status == BookChapterMappingSaveStatus.Saved
-                ? SaveResult with { Response = new BookChapterMappingsResponse(request.Mappings) }
+                ? SaveResult with { Response = new BookChapterMappingsResponse(request.Mappings, []) }
                 : SaveResult;
             return Task.FromResult(result);
         }

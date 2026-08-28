@@ -128,7 +128,7 @@ public sealed class MediaProbeService {
         string? ffprobePath = null) {
         var result = await RunFfprobeAsync(
             ["-v", "error",
-             "-show_entries", "format=duration,size,bit_rate,format_name:format_tags=artist,album,title,track:stream=codec_name,sample_rate,channels",
+             "-show_entries", "format=duration,size,bit_rate,format_name:format_tags=artist,album,title,track:stream=codec_name,sample_rate,channels:chapter=id,start_time,end_time:chapter_tags=title",
              "-of", "json",
              filePath],
             cancellationToken,
@@ -139,6 +139,7 @@ public sealed class MediaProbeService {
 
         var format = result.RootElement.GetPropertyOrDefault("format");
         var streams = result.RootElement.GetPropertyOrDefault("streams");
+        var chapters = result.RootElement.GetPropertyOrDefault("chapters");
         var tags = format.GetPropertyOrDefault("tags");
 
         var duration = format.GetDoubleOrDefault("duration");
@@ -163,9 +164,30 @@ public sealed class MediaProbeService {
         var title = tags.GetStringOrDefault("title") ?? tags.GetStringOrDefault("TITLE");
         var track = tags.GetStringOrDefault("track") ?? tags.GetStringOrDefault("TRACK");
 
+        var chapterResults = new List<AudioChapterProbeResult>();
+        if (chapters.ValueKind == JsonValueKind.Array) {
+            var fallbackIndex = 0;
+            foreach (var chapter in chapters.EnumerateArray()) {
+                var index = chapter.GetIntOrDefault("id") ?? fallbackIndex;
+                var start = chapter.GetDoubleOrDefault("start_time");
+                var end = chapter.GetDoubleOrDefault("end_time");
+                fallbackIndex++;
+                if (start is null || end is null || !double.IsFinite(start.Value) ||
+                    !double.IsFinite(end.Value) || start < 0 || end <= start) {
+                    continue;
+                }
+
+                var chapterTags = chapter.GetPropertyOrDefault("tags");
+                var chapterTitle = chapterTags.GetStringOrDefault("title")
+                    ?? chapterTags.GetStringOrDefault("TITLE")
+                    ?? $"Chapter {index + 1}";
+                chapterResults.Add(new AudioChapterProbeResult(index, chapterTitle, start.Value, end.Value));
+            }
+        }
+
         return new AudioProbeResult(
             duration, fileSize, bitRate, codec, container, sampleRate, channels,
-            artist, album, title, track);
+            artist, album, title, track, chapterResults);
     }
 
     /// <summary>
@@ -396,7 +418,15 @@ public sealed record AudioProbeResult(
     string? Artist,
     string? Album,
     string? Title,
-    string? TrackNumber);
+    string? TrackNumber,
+    IReadOnlyList<AudioChapterProbeResult>? Chapters = null);
+
+/// <summary>One embedded chapter window reported by ffprobe for an audiobook source.</summary>
+public sealed record AudioChapterProbeResult(
+    int Index,
+    string Title,
+    double StartSeconds,
+    double EndSeconds);
 
 public sealed record SubtitleStreamInfo(
     int StreamIndex,

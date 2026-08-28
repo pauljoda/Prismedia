@@ -13,6 +13,8 @@ namespace Prismedia.Contracts.Playback;
 /// <param name="Total">Canonical unit total for the owning cursor.</param>
 /// <param name="Mode">Optional presentation mode retained when playback advances the cursor.</param>
 /// <param name="ResourceLocation">Optional portable resource location advanced within the item.</param>
+/// <param name="SourceStartSeconds">Optional start of this mapping inside a shared physical audio item.</param>
+/// <param name="SourceEndSeconds">Optional end of this mapping inside a shared physical audio item.</param>
 public sealed record PlaybackProgressMapping(
     Guid ItemId,
     Guid CurrentEntityId,
@@ -21,7 +23,9 @@ public sealed record PlaybackProgressMapping(
     int EndIndex,
     int Total,
     ReaderMode? Mode,
-    string? ResourceLocation = null);
+    string? ResourceLocation = null,
+    double? SourceStartSeconds = null,
+    double? SourceEndSeconds = null);
 
 /// <summary>
 /// Compact, exact queue item consumed by every shared audio-player client. This is a

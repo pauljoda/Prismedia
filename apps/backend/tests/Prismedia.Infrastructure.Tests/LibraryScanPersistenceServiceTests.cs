@@ -22,9 +22,20 @@ public sealed class LibraryScanPersistenceServiceTests {
         await File.WriteAllBytesAsync(sourcePath, [0x66, 0x4c, 0x61, 0x43]);
         try {
             await using var db = CreateContext();
+            var bookId = Guid.NewGuid();
             var trackId = Guid.NewGuid();
-            SeedSourceEntity(db, trackId, EntityKind.AudioTrack.ToCode(), sourcePath);
+            SeedSourceEntity(db, bookId, EntityKind.Book.ToCode(), sourcePath + ".epub");
+            SeedSourceEntity(db, trackId, EntityKind.AudioTrack.ToCode(), sourcePath, bookId);
             db.AudioTrackDetails.Add(new AudioTrackDetailRow { EntityId = trackId });
+            var manualMarkerId = Guid.NewGuid();
+            db.EntityMarkers.Add(new EntityMarkerRow {
+                Id = manualMarkerId,
+                EntityId = trackId,
+                Title = "My note",
+                Seconds = 8,
+                CreatedAt = DateTimeOffset.UtcNow,
+                UpdatedAt = DateTimeOffset.UtcNow
+            });
             await db.SaveChangesAsync();
             var persistence = new LibraryScanPersistenceService(db);
             var handler = new ProbeAudioJobHandler(
@@ -56,9 +67,22 @@ public sealed class LibraryScanPersistenceServiceTests {
             var stream = await db.MediaStreams.AsNoTracking().SingleAsync(row => row.MediaSourceId == source.Id);
             Assert.Equal("Audio", stream.Type);
             Assert.Equal("flac", stream.Codec);
+            var chapters = await db.EntityMarkers.AsNoTracking()
+                .Where(row => row.EntityId == trackId && row.SourceIndex != null)
+                .OrderBy(row => row.Seconds)
+                .ToArrayAsync();
+            Assert.Equal(["Opening Credits", "Chapter One"], chapters.Select(chapter => chapter.Title));
+            Assert.Equal([0d, 12.5d], chapters.Select(chapter => chapter.Seconds));
+            Assert.Equal([0, 1], chapters.Select(chapter => chapter.SourceIndex));
+            Assert.True(await db.EntityMarkers.AsNoTracking().AnyAsync(row =>
+                row.Id == manualMarkerId && row.SourceIndex == null && row.Title == "My note"));
             var needs = await persistence.CheckDownstreamNeedsBatchAsync([trackId], CancellationToken.None);
             Assert.False(needs[trackId].NeedsProbe);
             Assert.Collection(queue.Enqueued, request => {
+                Assert.Equal(JobType.MapBookChapters, request.Type);
+                Assert.Equal(EntityKind.Book.ToCode(), request.TargetEntityKind);
+                Assert.Equal(bookId.ToString(), request.TargetEntityId);
+            }, request => {
                 Assert.Equal(
                     EntityKindRegistry.Describe(EntityKind.AudioTrack).Processing.PreviewJobType,
                     request.Type);
@@ -2891,7 +2915,11 @@ public sealed class LibraryScanPersistenceServiceTests {
                 "Artist",
                 "Album",
                 "Track",
-                "1"));
+                "1",
+                [
+                    new AudioChapterProbeData(0, "Opening Credits", 0, 12.5),
+                    new AudioChapterProbeData(1, "Chapter One", 12.5, 180)
+                ]));
 
         public Task<VideoProbeData?> ProbeVideoAsync(string filePath, CancellationToken cancellationToken) =>
             throw new NotSupportedException();

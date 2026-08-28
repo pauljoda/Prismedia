@@ -137,4 +137,54 @@ public sealed class BookChapterMatcherTests {
 
         Assert.Equal([("chapter-1", Track1)], pairs);
     }
+
+    [Fact]
+    public void MapsMultipleEmbeddedChaptersFromOnePhysicalTrackByTitle() {
+        var openingMarker = Guid.Parse("10000000-0000-0000-0000-000000000001");
+        var chapterMarker = Guid.Parse("10000000-0000-0000-0000-000000000002");
+
+        var pairs = BookChapterMatcher.ComputeAutoChapterPairs(
+            [
+                new MatchableReadableChapter("opening", "Opening Credits", 0),
+                new MatchableReadableChapter("chapter-1", "Chapter One", 1)
+            ],
+            [
+                new MatchableAudioChapter(Track1, openingMarker, "Opening Credits", 0, 0, 0, 12.5),
+                new MatchableAudioChapter(Track1, chapterMarker, "Chapter One", 0, 1, 12.5, 180)
+            ],
+            []);
+
+        Assert.Equal([
+            new MatchedBookAudioChapter("opening", Track1, openingMarker, 0, 12.5),
+            new MatchedBookAudioChapter("chapter-1", Track1, chapterMarker, 12.5, 180)
+        ], pairs);
+    }
+
+    [Fact]
+    public void UsesOrdinalFallbackOnlyForACompleteEmbeddedChapterSet() {
+        var firstMarker = Guid.Parse("10000000-0000-0000-0000-000000000001");
+        var secondMarker = Guid.Parse("10000000-0000-0000-0000-000000000002");
+        var readable = new[] {
+            new MatchableReadableChapter("chapter-1", "The First", 0),
+            new MatchableReadableChapter("chapter-2", "The Second", 1)
+        };
+
+        var embedded = BookChapterMatcher.ComputeAutoChapterPairs(
+            readable,
+            [
+                new MatchableAudioChapter(Track1, firstMarker, "Part A", 0, 0, 0, 60),
+                new MatchableAudioChapter(Track1, secondMarker, "Part B", 0, 1, 60, 120)
+            ],
+            []);
+        var unmarkedFiles = BookChapterMatcher.ComputeAutoChapterPairs(
+            readable,
+            [
+                new MatchableAudioChapter(Track1, null, "Part A", 0, 0, 0, 60),
+                new MatchableAudioChapter(Track2, null, "Part B", 1, 0, 0, 60)
+            ],
+            []);
+
+        Assert.Equal(["chapter-1", "chapter-2"], embedded.Select(pair => pair.ChapterKey));
+        Assert.Empty(unmarkedFiles);
+    }
 }

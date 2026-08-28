@@ -106,6 +106,7 @@ internal static partial class PrismediaModelConfiguration {
                 .HasMaxLength(2048)
                 .IsRequired();
             entity.Property(row => row.AudioTrackEntityId).HasColumnName("audio_track_entity_id");
+            entity.Property(row => row.AudioMarkerId).HasColumnName("audio_marker_id");
             entity.Property(row => row.Origin)
                 .HasColumnName("origin")
                 .HasMaxLength(32)
@@ -114,7 +115,14 @@ internal static partial class PrismediaModelConfiguration {
                 .IsRequired();
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
             entity.HasIndex(row => new { row.BookId, row.ReadableChapterKey }).IsUnique();
-            entity.HasIndex(row => new { row.BookId, row.AudioTrackEntityId }).IsUnique();
+            entity.HasIndex(row => new { row.BookId, row.AudioTrackEntityId })
+                .IsUnique()
+                .HasFilter("audio_marker_id IS NULL")
+                .HasDatabaseName("UX_book_chapter_audio_mappings_whole_track");
+            entity.HasIndex(row => new { row.BookId, row.AudioTrackEntityId, row.AudioMarkerId })
+                .IsUnique()
+                .HasFilter("audio_marker_id IS NOT NULL")
+                .HasDatabaseName("UX_book_chapter_audio_mappings_marker");
             entity.HasOne<EntityRow>()
                 .WithMany()
                 .HasForeignKey(row => row.BookId)
@@ -122,6 +130,10 @@ internal static partial class PrismediaModelConfiguration {
             entity.HasOne<EntityRow>()
                 .WithMany()
                 .HasForeignKey(row => row.AudioTrackEntityId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<EntityMarkerRow>()
+                .WithMany()
+                .HasForeignKey(row => row.AudioMarkerId)
                 .OnDelete(DeleteBehavior.Cascade);
         });
 

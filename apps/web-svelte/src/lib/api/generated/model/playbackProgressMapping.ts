@@ -20,4 +20,14 @@ export interface PlaybackProgressMapping {
   mode: null | ReaderMode;
   /** @nullable */
   resourceLocation?: string | null;
+  /**
+     * @nullable
+     * @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$
+     */
+  sourceStartSeconds?: number | string | null;
+  /**
+     * @nullable
+     * @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$
+     */
+  sourceEndSeconds?: number | string | null;
 }

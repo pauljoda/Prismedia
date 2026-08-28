@@ -75,6 +75,34 @@ public sealed class EfBookChapterMappingServiceTests {
     }
 
     [Fact]
+    public async Task MapsDistinctEmbeddedChapterWindowsFromTheSameAudioTrack() {
+        await using var db = CreateContext();
+        var bookId = AddEntity(db, EntityKind.Book, "Book");
+        var trackId = AddEntity(db, EntityKind.AudioTrack, "Whole Book", bookId, 0);
+        AddSource(db, trackId);
+        var firstMarkerId = AddMarker(db, trackId, "Opening Credits", 0, 12.5);
+        var secondMarkerId = AddMarker(db, trackId, "Chapter One", 12.5, 180);
+        await db.SaveChangesAsync();
+        var service = CreateService(db, new VisibleEntityScope());
+
+        var saved = await service.ReplaceAsync(
+            bookId,
+            new ReplaceBookChapterMappingsRequest([
+                new BookChapterAudioMapping("opening", trackId, AudioMarkerId: firstMarkerId),
+                new BookChapterAudioMapping("chapter-1", trackId, AudioMarkerId: secondMarkerId)
+            ]),
+            CancellationToken.None);
+
+        Assert.Equal(BookChapterMappingSaveStatus.Saved, saved.Status);
+        var response = await service.GetAsync(bookId, CancellationToken.None);
+        Assert.Equal(2, response!.Mappings.Count);
+        Assert.Equal(2, response.AudioChapters.Count);
+        Assert.Equal(firstMarkerId, response.Mappings.Single(mapping => mapping.ReadableChapterKey == "opening").AudioMarkerId);
+        Assert.Equal(secondMarkerId, response.Mappings.Single(mapping => mapping.ReadableChapterKey == "chapter-1").AudioMarkerId);
+        Assert.Equal([0d, 12.5d], response.AudioChapters.Select(chapter => chapter.StartSeconds));
+    }
+
+    [Fact]
     public async Task RejectsAggregateTracksWithoutSourceMedia() {
         await using var db = CreateContext();
         var bookId = AddEntity(db, EntityKind.Book, "Book");
@@ -149,6 +177,25 @@ public sealed class EfBookChapterMappingServiceTests {
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
         });
+    }
+
+    private static Guid AddMarker(
+        PrismediaDbContext db,
+        Guid entityId,
+        string title,
+        double seconds,
+        double endSeconds) {
+        var id = Guid.NewGuid();
+        db.EntityMarkers.Add(new EntityMarkerRow {
+            Id = id,
+            EntityId = entityId,
+            Title = title,
+            Seconds = seconds,
+            EndSeconds = endSeconds,
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        return id;
     }
 
     private sealed class VisibleEntityScope : IEntityVisibilityChecker {

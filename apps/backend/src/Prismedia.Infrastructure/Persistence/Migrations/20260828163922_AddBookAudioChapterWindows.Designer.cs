@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Prismedia.Infrastructure.Persistence;
@@ -11,9 +12,11 @@ using Prismedia.Infrastructure.Persistence;
 namespace Prismedia.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(PrismediaDbContext))]
-    partial class PrismediaDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260828163922_AddBookAudioChapterWindows")]
+    partial class AddBookAudioChapterWindows
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -2079,10 +2082,6 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .HasColumnType("double precision")
                         .HasColumnName("seconds");
 
-                    b.Property<int?>("SourceIndex")
-                        .HasColumnType("integer")
-                        .HasColumnName("source_index");
-
                     b.Property<string>("Title")
                         .IsRequired()
                         .HasColumnType("text")
@@ -2095,10 +2094,6 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("EntityId", "Seconds");
-
-                    b.HasIndex("EntityId", "SourceIndex")
-                        .IsUnique()
-                        .HasFilter("source_index IS NOT NULL");
 
                     b.ToTable("entity_markers", (string)null);
                 });

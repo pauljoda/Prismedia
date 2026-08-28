@@ -11,6 +11,12 @@ public sealed class EntityMarkerRow {
 
     public double? EndSeconds { get; set; }
 
+    /// <summary>
+    /// Source-owned chapter index for markers imported from a media container. Null identifies a
+    /// user-managed timeline marker.
+    /// </summary>
+    public int? SourceIndex { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }

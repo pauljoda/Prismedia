@@ -4,8 +4,10 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { BookAudioChapter } from './bookAudioChapter';
 import type { BookChapterAudioMapping } from './bookChapterAudioMapping';
 
 export interface BookChapterMappingsResponse {
   mappings: BookChapterAudioMapping[];
+  audioChapters: BookAudioChapter[];
 }

@@ -69,6 +69,22 @@ public sealed class ProbeAudioJobHandler(
             await Persistence.UpsertAudioTrackTagsAsync(entityId, probe.Artist, probe.Album, trackNumber, cancellationToken);
         }
 
+        await Persistence.ReplaceEmbeddedAudioChaptersAsync(
+            entityId,
+            probe.Chapters ?? [],
+            cancellationToken);
+
+        var parent = await Persistence.GetDirectParentAsync(entityId, cancellationToken);
+        if (parent?.KindCode == EntityKind.Book.ToCode()) {
+            await context.EnqueueIfNeededAsync(
+                EnqueueJobRequest.ForEntity(
+                    JobType.MapBookChapters,
+                    EntityKind.Book,
+                    parent.Id.ToString(),
+                    parent.Title),
+                cancellationToken);
+        }
+
         var settings = await roots.GetSettingsAsync(cancellationToken);
         var needs = await downstreamNeeds.CheckDownstreamNeedsBatchAsync([entityId], cancellationToken);
         var processing = EntityKindRegistry.Describe(EntityKind.AudioTrack).Processing;

@@ -35,7 +35,15 @@ public sealed record AudioProbeData(
     string? Artist,
     string? Album,
     string? Title,
-    string? TrackNumber);
+    string? TrackNumber,
+    IReadOnlyList<AudioChapterProbeData>? Chapters = null);
+
+/// <summary>One ordered embedded chapter window parsed from an audiobook container.</summary>
+public sealed record AudioChapterProbeData(
+    int Index,
+    string Title,
+    double StartSeconds,
+    double EndSeconds);
 
 public sealed record ImageProbeData(int Width, int Height, string? Codec);
 

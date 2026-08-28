@@ -10,4 +10,6 @@ export interface BookChapterAudioMapping {
   audioTrackId: string;
   /** @nullable */
   origin?: string | null;
+  /** @nullable */
+  audioMarkerId?: string | null;
 }

@@ -47,7 +47,12 @@ public sealed class MediaProbeAdapter(MediaProbeService inner) : IMediaProbe {
         if (result is null) return null;
         return new AudioProbeData(result.DurationSeconds, result.FileSize, result.BitRate, result.Codec,
             result.Container, result.SampleRate, result.Channels,
-            result.Artist, result.Album, result.Title, result.TrackNumber);
+            result.Artist, result.Album, result.Title, result.TrackNumber,
+            result.Chapters?.Select(chapter => new AudioChapterProbeData(
+                chapter.Index,
+                chapter.Title,
+                chapter.StartSeconds,
+                chapter.EndSeconds)).ToArray());
     }
 
     public async Task<ImageProbeData?> ProbeImageAsync(string filePath, CancellationToken cancellationToken) {

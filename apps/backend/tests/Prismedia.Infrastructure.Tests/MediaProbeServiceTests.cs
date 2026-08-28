@@ -80,6 +80,42 @@ public sealed class MediaProbeServiceTests {
     }
 
     [Fact]
+    public async Task ProbeAudioCapturesEmbeddedChapterWindows() {
+        var process = new JsonProcessExecutor("""
+            {
+              "format": { "duration": "180", "format_name": "mov,mp4,m4a,3gp,3g2,mj2" },
+              "streams": [
+                { "codec_name": "aac", "sample_rate": "44100", "channels": 2 }
+              ],
+              "chapters": [
+                {
+                  "id": 0,
+                  "start_time": "0.000000",
+                  "end_time": "12.500000",
+                  "tags": { "title": "Opening Credits" }
+                },
+                {
+                  "id": 1,
+                  "start_time": "12.500000",
+                  "end_time": "180.000000",
+                  "tags": { "title": "Chapter One" }
+                }
+              ]
+            }
+            """);
+        var service = new MediaProbeService(process);
+
+        var result = await service.ProbeAudioAsync("/media/book.m4b", CancellationToken.None);
+
+        Assert.NotNull(result);
+        Assert.Contains("chapter=id,start_time,end_time", string.Join(' ', process.LastArguments));
+        Assert.Equal([
+            new AudioChapterProbeResult(0, "Opening Credits", 0, 12.5),
+            new AudioChapterProbeResult(1, "Chapter One", 12.5, 180)
+        ], result.Chapters);
+    }
+
+    [Fact]
     public async Task ProbeVideoClassifiesHlgWithoutDolbyVisionSideData() {
         var service = new MediaProbeService(new JsonProcessExecutor("""
             {

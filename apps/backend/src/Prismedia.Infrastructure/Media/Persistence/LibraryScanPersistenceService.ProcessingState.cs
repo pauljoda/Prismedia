@@ -226,6 +226,66 @@ public sealed partial class LibraryScanPersistenceService {
             .FirstOrDefaultAsync(cancellationToken);
     }
 
+    public async Task ReplaceEmbeddedAudioChaptersAsync(
+        Guid entityId,
+        IReadOnlyList<AudioChapterProbeData> chapters,
+        CancellationToken cancellationToken) {
+        var existing = await _db.EntityMarkers
+            .Where(row => row.EntityId == entityId && row.SourceIndex != null)
+            .ToArrayAsync(cancellationToken);
+        var ordered = chapters
+            .Where(chapter => double.IsFinite(chapter.StartSeconds) &&
+                double.IsFinite(chapter.EndSeconds) &&
+                chapter.StartSeconds >= 0 &&
+                chapter.EndSeconds > chapter.StartSeconds)
+            .OrderBy(chapter => chapter.Index)
+            .ThenBy(chapter => chapter.StartSeconds)
+            .GroupBy(chapter => chapter.Index)
+            .Select(group => group.First())
+            .ToArray();
+        var existingBySourceIndex = existing.ToDictionary(row => row.SourceIndex!.Value);
+        var importedSourceIndices = ordered.Select(chapter => chapter.Index).ToHashSet();
+        var now = DateTimeOffset.UtcNow;
+
+        foreach (var chapter in ordered) {
+            if (existingBySourceIndex.TryGetValue(chapter.Index, out var marker)) {
+                marker.Title = chapter.Title;
+                marker.Seconds = chapter.StartSeconds;
+                marker.EndSeconds = chapter.EndSeconds;
+                marker.UpdatedAt = now;
+                continue;
+            }
+
+            _db.EntityMarkers.Add(new EntityMarkerRow {
+                Id = Guid.NewGuid(),
+                EntityId = entityId,
+                Title = chapter.Title,
+                Seconds = chapter.StartSeconds,
+                EndSeconds = chapter.EndSeconds,
+                SourceIndex = chapter.Index,
+                CreatedAt = now,
+                UpdatedAt = now
+            });
+        }
+
+        _db.EntityMarkers.RemoveRange(existing.Where(marker =>
+            !importedSourceIndices.Contains(marker.SourceIndex!.Value)));
+
+        await SaveChangesWithLifecycleAsync(cancellationToken);
+    }
+
+    public async Task<DirectEntityParentData?> GetDirectParentAsync(
+        Guid entityId,
+        CancellationToken cancellationToken) =>
+        await _db.Entities.AsNoTracking()
+            .Where(entity => entity.Id == entityId && entity.ParentEntityId != null)
+            .Join(
+                _db.Entities.AsNoTracking(),
+                entity => entity.ParentEntityId,
+                parent => parent.Id,
+                (_, parent) => new DirectEntityParentData(parent.Id, parent.KindCode, parent.Title))
+            .SingleOrDefaultAsync(cancellationToken);
+
     public async Task MarkSubtitlesExtractedAsync(Guid entityId, CancellationToken cancellationToken) {
         var state = await _db.EntitySubtitleStates.FindAsync([entityId], cancellationToken);
         if (state is null) {

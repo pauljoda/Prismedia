@@ -1,18 +1,22 @@
 <script lang="ts">
   import { ArrowDownToLine, Check, FileAudio, Link2Off } from "@lucide/svelte";
   import { Button, Select, type SelectOption } from "@prismedia/ui-svelte";
-  import type { BookChapterAudioMapping } from "$lib/api/generated/model";
+  import type { BookAudioChapter, BookChapterAudioMapping } from "$lib/api/generated/model";
   import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
   import {
+    bookAudioChapterCandidates,
     sequentialBookChapterMappings,
+    type BookAudioChapterCandidate,
     type ReadableBookChapter,
   } from "$lib/entities/book-chapter-list";
   import { BOOK_CHAPTER_MAPPING_ORIGIN } from "$lib/api/generated/codes";
+  import { formatDuration } from "$lib/utils/format";
 
   interface Props {
     resetKey: string;
     readableChapters: readonly ReadableBookChapter[];
     audioTracks: readonly AudioTrackListItemDto[];
+    audioChapters: readonly BookAudioChapter[];
     mappings: readonly BookChapterAudioMapping[];
     loadError?: string | null;
     onSave: (mappings: readonly BookChapterAudioMapping[]) => Promise<readonly BookChapterAudioMapping[]>;
@@ -22,6 +26,7 @@
     resetKey,
     readableChapters,
     audioTracks,
+    audioChapters,
     mappings,
     loadError = null,
     onSave,
@@ -38,24 +43,22 @@
   const orderedReadable = $derived([...readableChapters].sort(
     (a, b) => a.order - b.order || a.title.localeCompare(b.title) || a.id.localeCompare(b.id),
   ));
-  const orderedTracks = $derived([...audioTracks].sort(
-    (a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title) || a.id.localeCompare(b.id),
-  ));
+  const orderedAudioChapters = $derived(bookAudioChapterCandidates(audioTracks, audioChapters));
   const readableOptions = $derived<SelectOption[]>(orderedReadable.map((chapter, index) => ({
     value: chapter.id,
     label: chapter.title,
     annotation: `Chapter ${index + 1}`,
   })));
-  const mappingByTrack = $derived(new Map(draft.map((mapping) => [mapping.audioTrackId, mapping])));
+  const mappingByAudioChapter = $derived(new Map(draft.map((mapping) => [mappingKey(mapping), mapping])));
   // Automatic matches are computed and persisted server-side; here they only annotate the
   // "no explicit mapping" option so the user can see what the matcher already chose.
-  const automaticTitleByTrack = $derived.by(() => {
+  const automaticTitleByAudioChapter = $derived.by(() => {
     const titleByKey = new Map(readableChapters.map((chapter) => [chapter.id, chapter.title]));
     return new Map(mappings
       .filter((mapping) => mapping.origin === BOOK_CHAPTER_MAPPING_ORIGIN.auto)
       .flatMap((mapping) => {
         const title = titleByKey.get(mapping.readableChapterKey);
-        return title ? [[mapping.audioTrackId, title] as const] : [];
+        return title ? [[mappingKey(mapping), title] as const] : [];
       }));
   });
   const draftSignature = $derived(mappingSignature(draft));
@@ -79,6 +82,7 @@
     firstReadableChapterKey = initialFirstChapterKey(
       readableChapters,
       audioTracks,
+      audioChapters,
       manualMappings,
     );
     saved = false;
@@ -89,22 +93,26 @@
     return [...items]
       .sort((a, b) =>
         a.audioTrackId.localeCompare(b.audioTrackId)
+          || (a.audioMarkerId ?? "").localeCompare(b.audioMarkerId ?? "")
           || a.readableChapterKey.localeCompare(b.readableChapterKey),
       )
-      .map((mapping) => `${mapping.audioTrackId}:${mapping.readableChapterKey}`)
+      .map((mapping) => `${mappingKey(mapping)}:${mapping.readableChapterKey}`)
       .join("|");
+  }
+
+  function mappingKey(mapping: Pick<BookChapterAudioMapping, "audioTrackId" | "audioMarkerId">): string {
+    return `${mapping.audioTrackId}:${mapping.audioMarkerId ?? "whole"}`;
   }
 
   function initialFirstChapterKey(
     chapters: readonly ReadableBookChapter[],
     tracks: readonly AudioTrackListItemDto[],
+    availableAudioChapters: readonly BookAudioChapter[],
     existingMappings: readonly BookChapterAudioMapping[],
   ): string {
-    const firstTrackId = [...tracks]
-      .sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title) || a.id.localeCompare(b.id))[0]
-      ?.id;
+    const firstAudioChapter = bookAudioChapterCandidates(tracks, availableAudioChapters)[0];
     const mappedChapterKey = existingMappings.find((mapping) =>
-      mapping.audioTrackId === firstTrackId,
+      mappingKey(mapping) === firstAudioChapter?.key,
     )?.readableChapterKey;
     if (mappedChapterKey && chapters.some((chapter) => chapter.id === mappedChapterKey)) {
       return mappedChapterKey;
@@ -114,8 +122,8 @@
       ?.id ?? "";
   }
 
-  function selectionOptions(trackId: string): SelectOption[] {
-    const automaticTitle = automaticTitleByTrack.get(trackId);
+  function selectionOptions(audioChapterKey: string): SelectOption[] {
+    const automaticTitle = automaticTitleByAudioChapter.get(audioChapterKey);
     return [
       {
         value: "",
@@ -125,15 +133,22 @@
     ];
   }
 
-  function updateTrackMapping(trackId: string, readableChapterKey: string): void {
+  function updateAudioChapterMapping(
+    audioChapter: BookAudioChapterCandidate,
+    readableChapterKey: string,
+  ): void {
     saved = false;
     actionError = null;
     draft = draft.filter((mapping) =>
-      mapping.audioTrackId !== trackId &&
+      mappingKey(mapping) !== audioChapter.key &&
       (!readableChapterKey || mapping.readableChapterKey !== readableChapterKey),
     );
     if (readableChapterKey) {
-      draft = [...draft, { audioTrackId: trackId, readableChapterKey }];
+      draft = [...draft, {
+        audioTrackId: audioChapter.track.id,
+        readableChapterKey,
+        ...(audioChapter.markerId ? { audioMarkerId: audioChapter.markerId } : {}),
+      }];
     }
   }
 
@@ -143,6 +158,7 @@
       readableChapters,
       audioTracks,
       firstReadableChapterKey,
+      audioChapters,
     );
     saved = false;
     actionError = null;
@@ -177,10 +193,10 @@
   <div class="mapping-header">
     <div>
       <p class="eyebrow">Audiobook alignment</p>
-      <h2 id="chapter-mapping-heading">Map files to readable chapters</h2>
+      <h2 id="chapter-mapping-heading">Map audio chapters to readable chapters</h2>
       <p class="mapping-intro">
-        Choose where the first audiobook file begins, then Prismedia fills the remaining files in order.
-        You can override any file below before saving.
+        Prismedia uses embedded M4B chapters when present and whole files otherwise. Choose where
+        the first audio chapter begins, then adjust any association before saving.
       </p>
     </div>
     <div class="mapping-count" aria-label={`${mappedCount} explicit mappings`}>
@@ -193,8 +209,8 @@
     <div class="first-file">
       <span class="file-icon"><FileAudio class="h-5 w-5" /></span>
       <div>
-        <span class="field-label">First audiobook file</span>
-        <strong>{orderedTracks[0]?.title ?? "No audiobook files"}</strong>
+        <span class="field-label">First audio chapter</span>
+        <strong>{orderedAudioChapters[0]?.title ?? "No audio chapters"}</strong>
       </div>
     </div>
     <div class="first-chapter-control">
@@ -202,7 +218,7 @@
       <Select
         value={firstReadableChapterKey}
         options={readableOptions}
-        ariaLabel="Readable chapter for the first audiobook file"
+        ariaLabel="Readable chapter for the first audio chapter"
         disabled={saving || orderedReadable.length === 0}
         onchange={(value) => (firstReadableChapterKey = value)}
       />
@@ -210,7 +226,7 @@
     <Button
       variant="primary"
       size="lg"
-      disabled={saving || !firstReadableChapterKey || orderedTracks.length === 0}
+      disabled={saving || !firstReadableChapterKey || orderedAudioChapters.length === 0}
       onclick={markFirstChapter}
     >
       <ArrowDownToLine class="h-4 w-4" />
@@ -218,20 +234,26 @@
     </Button>
   </div>
 
-  <div class="mapping-list" aria-label="Audiobook file chapter overrides">
-    {#each orderedTracks as track, index (track.id)}
+  <div class="mapping-list" aria-label="Audiobook chapter overrides">
+    {#each orderedAudioChapters as audioChapter, index (audioChapter.key)}
       <div class="mapping-row">
         <span class="track-number">{String(index + 1).padStart(2, "0")}</span>
         <div class="track-title">
-          <strong>{track.title}</strong>
-          <span>{mappingByTrack.has(track.id) ? "Explicit mapping" : "Automatic title matching"}</span>
+          <strong>{audioChapter.title}</strong>
+          <span>
+            {formatDuration(audioChapter.startSeconds) ?? "0:00"}
+            {#if audioChapter.endSeconds !== null}
+              – {formatDuration(audioChapter.endSeconds) ?? "0:00"}
+            {/if}
+            · {mappingByAudioChapter.has(audioChapter.key) ? "Explicit mapping" : "Automatic title matching"}
+          </span>
         </div>
         <Select
-          value={mappingByTrack.get(track.id)?.readableChapterKey ?? ""}
-          options={selectionOptions(track.id)}
-          ariaLabel={`Readable chapter for ${track.title}`}
+          value={mappingByAudioChapter.get(audioChapter.key)?.readableChapterKey ?? ""}
+          options={selectionOptions(audioChapter.key)}
+          ariaLabel={`Readable chapter for ${audioChapter.title}`}
           disabled={saving}
-          onchange={(value) => updateTrackMapping(track.id, value)}
+          onchange={(value) => updateAudioChapterMapping(audioChapter, value)}
         />
       </div>
     {/each}
