@@ -6,8 +6,8 @@ namespace Prismedia.Application.Requests;
 
 /// <summary>
 /// Validates the cached review and user-filtered proposal submitted by the shared metadata review
-/// surface. Request commits can therefore persist the already-reviewed data without another provider
-/// lookup while still rejecting stale, mismatched, or expanded client payloads.
+/// surface. Request commits can therefore persist the data the user actually reviewed without another
+/// provider lookup while still rejecting mismatched or expanded client payloads.
 /// </summary>
 internal static class ReviewedRequestProposalValidator {
     /// <summary>Returns a commit-ready review whose proposal is the validated user selection.</summary>
@@ -15,10 +15,6 @@ internal static class ReviewedRequestProposalValidator {
         ReviewedRequestCommitRequest request,
         RequestReviewResponse review,
         EntityMetadataProposal selectedProposal) {
-        if (RequestProposalRevision.Compute(review.Proposal) != request.ProposalRevision
-            || !string.Equals(review.Revision, request.ProposalRevision, StringComparison.Ordinal)) {
-            throw new RequestProposalChangedException();
-        }
         if (!string.Equals(review.PluginId, request.PluginId, StringComparison.OrdinalIgnoreCase)
             || review.Kind != request.Kind
             || review.ExternalIdentity != request.RootExternalIdentity

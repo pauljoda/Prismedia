@@ -10029,7 +10029,7 @@ export const getCommitReviewedRequestUrl = (params?: CommitReviewedRequestParams
 }
 
 /**
- * @summary Commits the cached reviewed metadata selection after validating its proposal revision.
+ * @summary Commits the metadata selection and complete review confirmed by the client; legacy clients retain revision validation.
  */
 export const commitReviewedRequest = async (reviewedRequestCommitRequest: ReviewedRequestCommitRequest,
     params?: CommitReviewedRequestParams, options?: RequestInit): Promise<commitReviewedRequestResponse> => {

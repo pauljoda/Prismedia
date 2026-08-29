@@ -36,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Native content requests now commit the exact review the user confirmed instead of rejecting harmless client-side JSON normalization as a changed provider proposal and trapping the request in a reload loop.
 - Album and artist playback queues now preserve each track's embedded artist when present, falling back to the album artist only for tracks without one.
 - qBittorrent connections now reuse authenticated sessions, refresh an expired cookie once, and back off rejected credentials so concurrent transfer polling cannot turn one bad login into an IP ban.
 - Wanted book placeholders no longer appear to own an ebook, expose reading progress controls, or enter the reader until a direct EPUB or PDF source has actually arrived. Opening a placeholder reader URL also no longer creates phantom reading history.

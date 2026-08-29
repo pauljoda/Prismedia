@@ -165,7 +165,7 @@ public static class RequestEndpoints {
                 }
             })
             .WithName("CommitReviewedRequest")
-            .WithSummary("Commits the cached reviewed metadata selection after validating its proposal revision.")
+            .WithSummary("Commits the metadata selection and complete review confirmed by the client; legacy clients retain revision validation.")
             .Produces<RequestCommitResponse>()
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound)

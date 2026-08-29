@@ -1355,6 +1355,46 @@ public sealed class RequestCommitServiceTests {
         Assert.Empty(applied.Relationships);
     }
 
+    [Fact]
+    public async Task ReviewedMovieCommitsTheClientReviewAfterNullableCollectionsRoundTripAsEmpty() {
+        var identity = new ExternalIdentity("tmdb", "Movie:603");
+        var providerProposal = Node(
+            "movie:603",
+            "cinema-metadata",
+            EntityKind.Movie,
+            "The Matrix",
+            identity) with { Candidates = null! };
+        var providerReview = Review(
+            "cinema-metadata",
+            RequestMediaKind.Movie,
+            identity,
+            providerProposal,
+            [Target(providerProposal, RequestMediaKind.Movie, identity)]);
+        var clientProposal = providerProposal with { Candidates = [] };
+        var clientReview = providerReview with { Proposal = clientProposal };
+        var reviews = new FakeReviewSource(_ => throw new InvalidOperationException("Provider review must not run."));
+        var (service, writer, acquisitions, _, _) = ReviewedService(providerProposal, reviews);
+
+        var response = await service.CommitReviewedAsync(
+            new ReviewedRequestCommitRequest(
+                RequestMediaKind.Movie,
+                providerReview.PluginId,
+                identity,
+                providerReview.Revision,
+                [clientProposal.ProposalId],
+                Review: clientReview,
+                Proposal: clientProposal,
+                SelectedFields: ["title"],
+                SelectedImages: new Dictionary<string, string?>()),
+            hideNsfw: false,
+            CancellationToken.None);
+
+        Assert.Empty(reviews.ReviewCalls);
+        Assert.Equal(RequestCommitOutcome.Requested, Assert.Single(response!.Items).Outcome);
+        Assert.Equal("The Matrix", Assert.Single(writer.Applied).Proposal.Patch.Title);
+        Assert.Single(acquisitions.Created);
+    }
+
     [Theory]
     [InlineData(RequestMediaKind.Audiobook, BookRendition.Ebook, BookRendition.Audiobook)]
     [InlineData(RequestMediaKind.Book, BookRendition.Audiobook, BookRendition.Ebook)]

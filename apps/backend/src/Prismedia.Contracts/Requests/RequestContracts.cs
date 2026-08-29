@@ -169,7 +169,10 @@ public sealed record RequestCommitRequest(
 /// <param name="Kind">Request-flow kind reviewed by the user.</param>
 /// <param name="PluginId">Stable manifest id of the plugin that produced the review.</param>
 /// <param name="RootExternalIdentity">Persistent identity used to resolve the reviewed root proposal.</param>
-/// <param name="ProposalRevision">Revision returned by the review endpoint.</param>
+/// <param name="ProposalRevision">
+/// Revision returned by the review endpoint. Used to protect the legacy server-resolved commit path;
+/// complete submitted reviews are authoritative because they contain the data the user confirmed.
+/// </param>
 /// <param name="SelectedProposalIds">Case-sensitive proposal ids selected from the reviewed proposal.</param>
 /// <param name="TargetLibraryRootId">Optional import-target override.</param>
 /// <param name="ProfileId">Optional acquisition-profile override.</param>
