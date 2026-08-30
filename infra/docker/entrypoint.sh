@@ -73,6 +73,10 @@ else
 fi
 
 # ── Start PostgreSQL ──────────────────────────────────────────────
+# PostgreSQL refuses group-writable data directories. Reassert the mode at the
+# last possible moment because host ACLs can widen their effective mask while
+# the bind-mounted data volume is in use.
+chmod 0750 "$PGDATA"
 echo "[prismedia] Starting PostgreSQL..."
 gosu postgres pg_ctl -D "$PGDATA" -l /data/postgres/log -w -t 30 start
 
