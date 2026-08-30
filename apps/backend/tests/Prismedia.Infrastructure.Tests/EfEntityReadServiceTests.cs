@@ -2223,6 +2223,40 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
+    public async Task CompletedVideoDoesNotExposeItsRetainedResumePosition() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var videoId = Guid.Parse("99999999-9999-4999-8999-999999999999");
+        db.Entities.Add(new EntityRow {
+            Id = videoId,
+            KindCode = EntityKind.Video.ToCode(),
+            Title = "Completed Video",
+            CreatedAt = now,
+            UpdatedAt = now
+        });
+        db.UserEntityStates.Add(new UserEntityStateRow {
+            UserId = TestUserContext.UserId,
+            EntityId = videoId,
+            CompletionCount = 1,
+            ResumeSeconds = 99,
+            CompletedAt = now,
+            UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+
+        var service = CreateService(db);
+        var detail = Assert.IsType<EntityCard>(
+            await service.GetAsync(videoId, hideNsfw: false, CancellationToken.None));
+        var thumbnail = Assert.Single((await service.GetThumbnailsAsync(
+            [videoId],
+            hideNsfw: false,
+            CancellationToken.None)).Items);
+
+        Assert.Equal(0, Assert.Single(detail.Capabilities.OfType<ConsumptionCapability>()).ResumeSeconds);
+        Assert.Null(thumbnail.ResumeSeconds);
+    }
+
+    [Fact]
     public async Task ListAsyncSortsByMostRecentEngagementForLastPlayed() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;

@@ -69,7 +69,7 @@ internal sealed class ConsumptionCapabilityProjector : EntityCapabilityProjector
                 consumption.CompletionCount,
                 consumption.SkipCount,
                 consumption.ActiveDuration.TotalSeconds,
-                consumption.ResumeTime.TotalSeconds,
+                consumption.CompletedAt is null ? consumption.ResumeTime.TotalSeconds : 0,
                 consumption.LastAccessedAt,
                 consumption.LastActiveAt,
                 consumption.CompletedAt)

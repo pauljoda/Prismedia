@@ -87,7 +87,7 @@ public sealed partial class EntityCapabilityService {
     private const double StartedFraction = 0.05;
 
     /// <summary>Fraction of a video runtime at or above which the item is treated as watched.</summary>
-    private const double VideoWatchedFraction = 0.95;
+    private const double VideoWatchedFraction = 0.90;
 
     /// <summary>
     /// Updates timed resume and consumption state using canonical Prismedia thresholds so all
@@ -218,16 +218,17 @@ public sealed partial class EntityCapabilityService {
             // may change cursor/completion state. Reported duration remains additive above.
             var acceptsSignal = AcceptsConsumptionSignal(consumption, occurredAt);
 
-            // Explicit watched toggle. The completion flag is independent of the resume position:
-            // a resume value is only applied when the caller supplies one, so the in-app
-            // toggle leaves the position untouched.
+            // An explicit completion with a position is a terminal player report, so it clears
+            // resume state. A completion without a position is the in-app watched toggle and
+            // intentionally preserves the prior position so marking the item incomplete can
+            // restore it.
             if (completed is { } watched) {
-                if (acceptsSignal && resumeSeconds is { } toggleSeconds) {
-                    consumption.RecordResume(TimeSpan.FromSeconds(Math.Max(0, toggleSeconds)), occurredAt);
-                }
-
                 if (acceptsSignal && watched) {
-                    consumption.MarkCompleted(occurredAt);
+                    if (resumeSeconds is not null) {
+                        consumption.RecordCompleted(occurredAt);
+                    } else {
+                        consumption.MarkCompleted(occurredAt);
+                    }
                     if (consumption.Value.CompletionCount > completionCountBefore) {
                         completedEvent = CompletedEvent(
                             entity,
@@ -236,6 +237,11 @@ public sealed partial class EntityCapabilityService {
                             mediaDurationSeconds ?? entity.Technical?.Duration?.TotalSeconds);
                     }
                 } else if (acceptsSignal) {
+                    if (resumeSeconds is { } toggleSeconds) {
+                        consumption.RecordResume(
+                            TimeSpan.FromSeconds(Math.Max(0, toggleSeconds)),
+                            occurredAt);
+                    }
                     consumption.MarkIncomplete(occurredAt);
                 }
 

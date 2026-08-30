@@ -74,8 +74,8 @@ public sealed class PlaybackSessionServiceTests {
     }
 
     [Theory]
-    [InlineData(95, true, 1)]   // >= 95% completes and counts
-    [InlineData(94, false, 0)]  // credits-friendly, but not completed yet
+    [InlineData(90, true, 1)]   // >= 90% completes and counts
+    [InlineData(89, false, 0)]  // before the credit-friendly threshold remains resumable
     [InlineData(50, false, 0)]  // mid-watch stores a resume point only
     [InlineData(2, false, 0)]   // < 5% is treated as not started
     public async Task ProgressThresholdsDeriveCompletion(int percent, bool expectCompleted, int expectCompletionCount) {
@@ -91,7 +91,7 @@ public sealed class PlaybackSessionServiceTests {
 
         Assert.Equal(expectCompleted, state!.CompletedAt is not null);
         Assert.Equal(expectCompletionCount, state.CompletionCount);
-        if (percent is >= 5 and < 95) {
+        if (percent is >= 5 and < 90) {
             Assert.True(state.ResumeTime > TimeSpan.Zero);
         }
     }
@@ -99,20 +99,48 @@ public sealed class PlaybackSessionServiceTests {
     [Theory]
     [InlineData(EntityKind.Video)]
     [InlineData(EntityKind.Movie)]
-    public async Task VideoAndMovieProgressAtNinetyFivePercentDerivesCompletion(EntityKind kind) {
+    public async Task VideoAndMovieProgressAtNinetyPercentDerivesCompletion(EntityKind kind) {
         const double runtimeSeconds = 1000;
         var id = kind == EntityKind.Movie ? MovieId : VideoId;
 
         var state = await RunAsync(
             async (_, capabilities) => await capabilities.UpdateConsumptionAsync(
                 id,
-                positionSeconds: runtimeSeconds * 0.95,
+                positionSeconds: runtimeSeconds * 0.90,
                 activitySeconds: null,
                 completed: null,
                 CancellationToken.None),
             runtimeSeconds,
             id,
             kind);
+
+        Assert.NotNull(state!.CompletedAt);
+        Assert.Equal(1, state.CompletionCount);
+        Assert.Equal(TimeSpan.Zero, state.ResumeTime);
+    }
+
+    [Fact]
+    public async Task PlayerReportedCompletionClearsTheTerminalResumePosition() {
+        const double runtimeSeconds = 1000;
+        var state = await RunAsync(
+            async (sessions, _) => {
+                await sessions.ProgressAsync(
+                    new VideoPlaybackSessionCommand {
+                        EntityId = VideoId,
+                        PositionSeconds = 500,
+                        DurationSeconds = runtimeSeconds
+                    },
+                    CancellationToken.None);
+                await sessions.StopAsync(
+                    new VideoPlaybackSessionCommand {
+                        EntityId = VideoId,
+                        PositionSeconds = runtimeSeconds,
+                        DurationSeconds = runtimeSeconds,
+                        Completed = true
+                    },
+                    CancellationToken.None);
+            },
+            runtimeSeconds);
 
         Assert.NotNull(state!.CompletedAt);
         Assert.Equal(1, state.CompletionCount);

@@ -336,7 +336,7 @@ public sealed partial class EfEntityReadService {
                 CreatedAt = row.CreatedAt,
                 SharedSourceEpisodes = sharedSourceEpisodesByEntity.GetValueOrDefault(row.Id) ?? [],
                 AccessCount = playbackState?.AccessCount,
-                ResumeSeconds = playbackState is { ResumeSeconds: > 0 }
+                ResumeSeconds = playbackState is { CompletedAt: null, ResumeSeconds: > 0 }
                     ? playbackState.ResumeSeconds
                     : null,
                 Genres = tagsByEntity.GetValueOrDefault(row.Id),

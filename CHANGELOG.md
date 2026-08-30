@@ -36,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Videos now count as completed after 90% playback, so leaving during credits records the play. Completed items also stop advertising a final-second resume point, while manually marking an item watched still preserves its prior position if it is later marked incomplete.
 - The unified container now reasserts PostgreSQL-safe data-directory permissions immediately before database startup, so a named ACL cannot leave Prismedia stuck in a restart loop after the container restarts.
 - Native content requests now commit the exact review the user confirmed instead of rejecting harmless client-side JSON normalization as a changed provider proposal and trapping the request in a reload loop.
 - Album and artist playback queues now preserve each track's embedded artist when present, falling back to the album artist only for tracks without one.
