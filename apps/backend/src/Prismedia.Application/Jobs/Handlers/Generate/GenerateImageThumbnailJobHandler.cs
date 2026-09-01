@@ -10,7 +10,7 @@ namespace Prismedia.Application.Jobs.Handlers.Generate;
 /// Generates a thumbnail for an image entity by scaling it to 640px width through the
 /// shared image resizer (in-process SkiaSharp, with an ffmpeg fallback for exotic formats).
 /// </summary>
-[JobDefinition(JobType.GenerateImageThumbnail, ResourceClass = JobResourceClass.StandardCpu, Importance = JobNodeImportance.BestEffort, BlocksAutoIdentify = true)]
+[JobDefinition(JobType.GenerateImageThumbnail, ResourceClass = JobResourceClass.StandardCpu, Importance = JobNodeImportance.BestEffort)]
 public sealed class GenerateImageThumbnailJobHandler(
     ILogger<GenerateImageThumbnailJobHandler> logger,
     IMediaAssetGenerator assets,

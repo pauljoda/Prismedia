@@ -7,11 +7,10 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Application.Jobs.Handlers.Generate;
 
 /// <summary>
-/// Generates video thumbnails, preview clips, and trickplay tiles via ffmpeg.
-/// Optimized for throughput: uses batch trickplay extraction (single ffmpeg pass)
-/// and combined thumbnail+preview generation.
+/// Generates the thumbnail and short preview assets needed by library surfaces.
+/// Long-running trickplay generation is dispatched independently so it cannot delay these assets.
 /// </summary>
-[JobDefinition(JobType.GeneratePreview, ResourceClass = JobResourceClass.HeavyCpu, Importance = JobNodeImportance.BestEffort, BlocksAutoIdentify = true)]
+[JobDefinition(JobType.GeneratePreview, ResourceClass = JobResourceClass.HeavyCpu, Importance = JobNodeImportance.BestEffort)]
 public sealed class GeneratePreviewJobHandler(
     ILogger<GeneratePreviewJobHandler> logger,
     IMediaAssetGenerator assets,
@@ -38,26 +37,6 @@ public sealed class GeneratePreviewJobHandler(
             return;
         }
 
-        if (settings.GenerateTrickplay && duration is null or <= 0) {
-            if (!EntityKindRegistry.TryDescribe(context.Job.TargetEntityKind, out var definition)
-                || definition.Processing.ProbeJobType is not { } probeJobType) {
-                throw new InvalidOperationException(
-                    "GeneratePreview requires a target kind with a technical probe job.");
-            }
-            await context.EnqueueIfNeededAsync(
-                EnqueueJobRequest.ForEntity(
-                    probeJobType,
-                    definition.Kind,
-                    entityId.ToString(),
-                    context.Job.TargetLabel),
-                cancellationToken);
-            // Ordinary graph planning places the probe dependency before preview generation. This
-            // retry-safe fallback repairs historical graphs that predate explicit dependencies.
-            throw new JobRetryLaterException(
-                $"Waiting for video probe metadata before generating trickplay for {entityId}.",
-                TimeSpan.FromSeconds(5));
-        }
-
         if (settings.AutoGeneratePreview) {
             using (timer.Phase("thumbnail+preview")) {
                 await context.ReportProgressAsync(10, "Generating thumbnail and preview", cancellationToken);
@@ -65,17 +44,6 @@ public sealed class GeneratePreviewJobHandler(
             }
             // Derive the small grid-card variant from the freshly generated cover.
             await gridThumbnails.EnsureAsync(entityId, cancellationToken);
-        }
-
-        if (settings.GenerateTrickplay) {
-            using (timer.Phase("trickplay")) {
-                await context.ReportProgressAsync(50, "Generating trickplay tiles", cancellationToken);
-                var trickplayGenerated = await GenerateTrickplayBatchAsync(
-                    entityId, filePath, settings, duration, width, height, cancellationToken);
-                if (!trickplayGenerated) {
-                    throw new InvalidOperationException($"Failed to generate trickplay tiles for {entityId}.");
-                }
-            }
         }
 
         var report = timer.Finish();
@@ -117,64 +85,6 @@ public sealed class GeneratePreviewJobHandler(
         }
     }
 
-    private async Task<bool> GenerateTrickplayBatchAsync(
-        Guid entityId, string filePath, LibrarySettingsData settings,
-        double? duration, int? width, int? height, CancellationToken cancellationToken) {
-        if (duration is null or <= 0) return true;
-
-        var interval = Math.Max(3, settings.TrickplayIntervalSeconds);
-        var frameCount = (int)(duration.Value / interval);
-        if (frameCount < 1) return true;
-
-        var (frameWidth, frameHeight) = ComputeTrickplayDimensions(
-            width ?? 1920, height ?? 1080, settings.TrickplayQuality);
-
-        var frameDir = assets.TrickplayFrameDir(entityId);
-
-        var extractedCount = await assets.ExtractTrickplayFramesBatchAsync(
-            filePath, frameDir, duration.Value, interval,
-            frameWidth, frameHeight, QualityToJpeg(settings.TrickplayQuality),
-            cancellationToken);
-
-        if (extractedCount == 0) {
-            logger.LogWarning("Trickplay batch extraction produced zero frames for {EntityId}", entityId);
-            return false;
-        }
-
-        logger.LogInformation(
-            "Trickplay: extracted {Count} frames in single pass (expected {Expected})",
-            extractedCount, frameCount);
-
-        const int columns = 5;
-        const int rows = 5;
-        var tileDir = assets.TrickplayTileDir(entityId, frameWidth);
-        var tileCount = await assets.ComposeTiledJpegSheetsAsync(
-            frameDir, tileDir, columns, rows, frameWidth, frameHeight,
-            QualityToJpeg(settings.TrickplayQuality), cancellationToken);
-
-        if (tileCount == 0) {
-            logger.LogWarning("Failed to compose trickplay tiles for {EntityId}", entityId);
-            return false;
-        }
-
-        await Persistence.UpsertTrickplayInfoAsync(
-            entityId,
-            new TrickplayInfoData(
-                frameWidth,
-                frameHeight,
-                columns,
-                rows,
-                extractedCount,
-                interval,
-                EstimateTrickplayBandwidth(tileDir, tileCount, extractedCount, interval)),
-            cancellationToken);
-
-        await Persistence.UpsertEntityFileAsync(entityId, EntityFileRole.Trickplay,
-            assets.TrickplayPlaylistUrl(entityId, frameWidth), MediaContentTypes.HlsPlaylist, null, cancellationToken);
-
-        return true;
-    }
-
     private static double ComputeSeekTime(double? duration) {
         var seekTime = Math.Max(0, (duration ?? 10) * 0.18);
         if (duration is not null && seekTime > duration.Value - 0.5)
@@ -205,36 +115,9 @@ public sealed class GeneratePreviewJobHandler(
     }
 
     /// <summary>
-    /// Trickplay frames are small scrubber-preview thumbnails, not full-resolution images.
-    /// Capped at 320×180 regardless of source resolution (matching v1 behavior).
-    /// Quality 1 (best) = 320w, quality 5 (lowest) = 160w.
-    /// </summary>
-    private static (int Width, int Height) ComputeTrickplayDimensions(int sourceWidth, int sourceHeight, int quality) {
-        const int maxWidth = 320;
-        const int minWidth = 160;
-        var q = Math.Clamp(quality, 1, 5);
-        var targetWidth = maxWidth - (q - 1) * (maxWidth - minWidth) / 4;
-        targetWidth = targetWidth / 2 * 2;
-
-        var targetHeight = sourceWidth > 0
-            ? targetWidth * sourceHeight / sourceWidth
-            : targetWidth * 9 / 16;
-        targetHeight = targetHeight / 2 * 2;
-
-        return (targetWidth, Math.Max(2, targetHeight));
-    }
-
-    /// <summary>
     /// Maps the 1–5 quality preset onto ffmpeg's inverse -q:v scale (2 ≈ visually
     /// lossless, 31 = worst). Preset 1 (Best) → 2, preset 5 (Lowest) → 6.
     /// </summary>
     private static int QualityToJpeg(int quality) => Math.Clamp(quality + 1, 2, 6);
 
-    private static int EstimateTrickplayBandwidth(string tileDir, int tileCount, int thumbnailCount, int interval) {
-        var totalBytes = Directory.GetFiles(tileDir, "*.jpg")
-            .Take(tileCount)
-            .Sum(path => new FileInfo(path).Length);
-        var totalSeconds = Math.Max(interval, thumbnailCount * interval);
-        return (int)Math.Ceiling(totalBytes * 8d / totalSeconds);
-    }
 }

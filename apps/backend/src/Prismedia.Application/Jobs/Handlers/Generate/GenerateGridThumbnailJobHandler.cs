@@ -9,7 +9,7 @@ namespace Prismedia.Application.Jobs.Handlers.Generate;
 /// cover pages and representative child artwork are resolved by the infrastructure
 /// service without adding work to API reads.
 /// </summary>
-[JobDefinition(JobType.GenerateGridThumbnail, ResourceClass = JobResourceClass.StandardCpu, Importance = JobNodeImportance.BestEffort, BlocksAutoIdentify = true)]
+[JobDefinition(JobType.GenerateGridThumbnail, ResourceClass = JobResourceClass.StandardCpu, Importance = JobNodeImportance.BestEffort)]
 public sealed class GenerateGridThumbnailJobHandler(
     ILogger<GenerateGridThumbnailJobHandler> logger,
     IGridThumbnailService gridThumbnails) : IJobHandler {

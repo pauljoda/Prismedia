@@ -10,7 +10,7 @@ namespace Prismedia.Application.Jobs.Handlers.Identity;
 /// <summary>
 /// Reconciles embedded text streams and adjacent subtitle sidecars into app-owned subtitle assets.
 /// </summary>
-[JobDefinition(JobType.ExtractSubtitles, ResourceClass = JobResourceClass.HeavyCpu, Importance = JobNodeImportance.BestEffort, BlocksAutoIdentify = true)]
+[JobDefinition(JobType.ExtractSubtitles, ResourceClass = JobResourceClass.HeavyCpu, Importance = JobNodeImportance.BestEffort)]
 public sealed class ExtractSubtitlesJobHandler(
     ILogger<ExtractSubtitlesJobHandler> logger,
     IMediaProbe mediaProbe,

@@ -227,8 +227,9 @@ public sealed class EntityKindMetadataTests {
         Assert.Equal(JobType.ProbeVideo, videoPlan.ProbeJobType);
         Assert.Equal(JobType.FingerprintVideo, videoPlan.FingerprintJobType);
         Assert.Equal(JobType.ExtractSubtitles, videoPlan.SubtitleExtractionJobType);
-        Assert.Equal(JobType.GeneratePreview, videoPlan.PreviewJobType);
-        Assert.Null(videoPlan.GridThumbnailJobType);
+        Assert.Null(videoPlan.PreviewJobType);
+        Assert.Equal(JobType.GenerateTrickplay, videoPlan.TrickplayJobType);
+        Assert.Equal(JobType.GenerateGridThumbnail, videoPlan.GridThumbnailJobType);
         Assert.Contains(EntityFileRole.Hls, video.GeneratedFileRoles);
 
         Assert.Equal([EntityFileRole.Waveform], audio.GeneratedFileRoles);
@@ -277,7 +278,7 @@ public sealed class EntityKindMetadataTests {
         Assert.Throws<ArgumentException>(() =>
             new EntityProcessingPolicy(probeRequiresAutomaticMetadata: true));
         Assert.Throws<ArgumentException>(() =>
-            new EntityProcessingPolicy(supportsTrickplayGeneration: true));
+            new EntityProcessingPolicy(trickplayJobType: JobType.GenerateTrickplay));
         Assert.Throws<ArgumentException>(() =>
             new EntityProcessingPolicy(
                 generatedFileRoles: [EntityFileRole.Thumbnail, EntityFileRole.Thumbnail]));
@@ -314,6 +315,7 @@ public sealed class EntityKindMetadataTests {
         Assert.Equal(JobType.FingerprintVideo, fullPlan.FingerprintJobType);
         Assert.Equal(JobType.ExtractSubtitles, fullPlan.SubtitleExtractionJobType);
         Assert.Equal(JobType.GeneratePreview, fullPlan.PreviewJobType);
+        Assert.Equal(JobType.GenerateTrickplay, fullPlan.TrickplayJobType);
         Assert.Equal(JobType.GenerateGridThumbnail, gridPlan.GridThumbnailJobType);
         Assert.Null(gatedProbePlan.ProbeJobType);
         Assert.Contains(EntityFileRole.Hls, processing.GeneratedFileRoles);

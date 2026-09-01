@@ -812,6 +812,7 @@ export const JOB_TYPE = {
   fingerprintImage: "fingerprint-image",
   fingerprintAudio: "fingerprint-audio",
   generatePreview: "generate-preview",
+  generateTrickplay: "generate-trickplay",
   generateImageThumbnail: "generate-image-thumbnail",
   generateGridThumbnail: "generate-grid-thumbnail",
   gridThumbnailSweep: "grid-thumbnail-sweep",

@@ -23,7 +23,7 @@ public sealed class GeneratePreviewJobHandlerTests : IDisposable {
     }
 
     [Fact]
-    public async Task TrickplayOnlySettingsDoNotGenerateThumbnailPreviewAssets() {
+    public async Task TrickplayJobDoesNotGenerateThumbnailPreviewAssets() {
         var entityId = Guid.Parse("11111111-1111-1111-1111-111111111111");
         var sourcePath = Path.Combine(_tempDir, "movie.mkv");
         await File.WriteAllTextAsync(sourcePath, "video");
@@ -50,15 +50,14 @@ public sealed class GeneratePreviewJobHandlerTests : IDisposable {
                 Codec: "hevc",
                 Container: "mkv")
         };
-        var handler = new GeneratePreviewJobHandler(
-            NullLogger<GeneratePreviewJobHandler>.Instance,
+        var handler = new GenerateTrickplayJobHandler(
+            NullLogger<GenerateTrickplayJobHandler>.Instance,
             assets,
             persistence,
-            persistence,
-            new NoopGridThumbnailService());
+            persistence);
         var job = new JobRunSnapshot(
             Guid.NewGuid(),
-            JobType.GeneratePreview,
+            JobType.GenerateTrickplay,
             JobRunStatus.Running,
             Progress: 0,
             Message: null,
@@ -97,15 +96,14 @@ public sealed class GeneratePreviewJobHandlerTests : IDisposable {
                 TrickplayQuality: 2),
             Technical = null
         };
-        var handler = new GeneratePreviewJobHandler(
-            NullLogger<GeneratePreviewJobHandler>.Instance,
+        var handler = new GenerateTrickplayJobHandler(
+            NullLogger<GenerateTrickplayJobHandler>.Instance,
             assets,
             persistence,
-            persistence,
-            new NoopGridThumbnailService());
+            persistence);
         var job = new JobRunSnapshot(
             Guid.NewGuid(),
-            JobType.GeneratePreview,
+            JobType.GenerateTrickplay,
             JobRunStatus.Running,
             Progress: 0,
             Message: null,
@@ -129,6 +127,52 @@ public sealed class GeneratePreviewJobHandlerTests : IDisposable {
         Assert.Equal(JobType.ProbeVideo, probe.Type);
         Assert.Equal(entityId.ToString(), probe.TargetEntityId);
         Assert.Equal(JobResourceClass.StandardCpu, probe.ResourceClass ?? JobDefinitionRegistry.ResourceClass(probe.Type));
+    }
+
+    [Fact]
+    public async Task PreviewJobNeverGeneratesTrickplayAssets() {
+        var entityId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        var sourcePath = Path.Combine(_tempDir, "preview.mkv");
+        await File.WriteAllTextAsync(sourcePath, "video");
+        var assets = new RecordingMediaAssetGenerator(_tempDir);
+        var persistence = new PreviewPersistence(sourcePath) {
+            Technical = new EntityTechnicalData(
+                DurationSeconds: 60,
+                Width: 1920,
+                Height: 1080,
+                FrameRate: 24,
+                BitRate: null,
+                SampleRate: null,
+                Channels: null,
+                Codec: "hevc",
+                Container: "mkv")
+        };
+        var handler = new GeneratePreviewJobHandler(
+            NullLogger<GeneratePreviewJobHandler>.Instance,
+            assets,
+            persistence,
+            persistence,
+            new NoopGridThumbnailService());
+        var job = new JobRunSnapshot(
+            Guid.NewGuid(),
+            JobType.GeneratePreview,
+            JobRunStatus.Running,
+            Progress: 0,
+            Message: null,
+            PayloadJson: "{}",
+            TargetEntityKind: "video",
+            TargetEntityId: entityId.ToString(),
+            TargetLabel: "Preview",
+            CreatedAt: DateTimeOffset.UtcNow,
+            StartedAt: DateTimeOffset.UtcNow,
+            FinishedAt: null);
+
+        await handler.HandleAsync(new JobContext(job, new NoopJobQueue()), CancellationToken.None);
+
+        Assert.True(assets.GeneratedThumbnailAndPreview);
+        Assert.Contains(persistence.EntityFiles, file => file.Role == EntityFileRole.Thumbnail);
+        Assert.Contains(persistence.EntityFiles, file => file.Role == EntityFileRole.Preview);
+        Assert.DoesNotContain(persistence.EntityFiles, file => file.Role == EntityFileRole.Trickplay);
     }
 
     [Fact]

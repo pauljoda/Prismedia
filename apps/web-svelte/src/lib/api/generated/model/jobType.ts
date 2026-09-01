@@ -22,6 +22,7 @@ export const JobType = {
   'fingerprint-image': 'fingerprint-image',
   'fingerprint-audio': 'fingerprint-audio',
   'generate-preview': 'generate-preview',
+  'generate-trickplay': 'generate-trickplay',
   'generate-image-thumbnail': 'generate-image-thumbnail',
   'generate-grid-thumbnail': 'generate-grid-thumbnail',
   'grid-thumbnail-sweep': 'grid-thumbnail-sweep',

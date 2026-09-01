@@ -126,9 +126,12 @@ public sealed partial class LibraryScanPersistenceService {
         long? sizeBytes,
         DateTimeOffset now,
         CancellationToken cancellationToken) {
-        var file = _db.EntityFiles.Local.FirstOrDefault(row => row.EntityId == entityId && row.Role == role)
-            ?? await _db.EntityFiles.FirstOrDefaultAsync(row =>
+        var entity = _db.Entities.Local.FirstOrDefault(row => row.Id == entityId);
+        var file = _db.EntityFiles.Local.FirstOrDefault(row => row.EntityId == entityId && row.Role == role);
+        if (file is null && (entity is null || _db.Entry(entity).State != EntityState.Added)) {
+            file = await _db.EntityFiles.FirstOrDefaultAsync(row =>
                 row.EntityId == entityId && row.Role == role, cancellationToken);
+        }
         if (file is null) {
             _db.EntityFiles.Add(new EntityFileRow {
                 Id = Guid.NewGuid(),
@@ -149,8 +152,7 @@ public sealed partial class LibraryScanPersistenceService {
         // This runs in the scan transaction, so a failed upsert cannot leave a fileless entity marked
         // as owned merely because its structural folder was discovered.
         if (role == EntityFileRole.Source) {
-            var entity = _db.Entities.Local.FirstOrDefault(row => row.Id == entityId)
-                ?? await _db.Entities.FirstOrDefaultAsync(row => row.Id == entityId, cancellationToken);
+            entity ??= await _db.Entities.FirstOrDefaultAsync(row => row.Id == entityId, cancellationToken);
             if (entity is not null && entity.IsWanted) {
                 entity.IsWanted = false;
                 entity.UpdatedAt = now;
@@ -164,8 +166,11 @@ public sealed partial class LibraryScanPersistenceService {
         string value,
         DateTimeOffset now,
         CancellationToken cancellationToken) {
-        var source = _db.EntitySources.Local.FirstOrDefault(row => row.EntityId == entityId && row.Code == code)
-            ?? await _db.EntitySources.FindAsync([entityId, code], cancellationToken);
+        var source = _db.EntitySources.Local.FirstOrDefault(row => row.EntityId == entityId && row.Code == code);
+        var entity = _db.Entities.Local.FirstOrDefault(row => row.Id == entityId);
+        if (source is null && (entity is null || _db.Entry(entity).State != EntityState.Added)) {
+            source = await _db.EntitySources.FindAsync([entityId, code], cancellationToken);
+        }
         if (source is null) {
             _db.EntitySources.Add(new EntitySourceRow {
                 EntityId = entityId,

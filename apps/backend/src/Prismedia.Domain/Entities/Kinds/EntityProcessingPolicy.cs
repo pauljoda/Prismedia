@@ -19,7 +19,7 @@ public sealed record EntityProcessingPolicy {
         JobType? fingerprintJobType = null,
         JobType? previewJobType = null,
         bool previewRequiresAutomaticGeneration = false,
-        bool supportsTrickplayGeneration = false,
+        JobType? trickplayJobType = null,
         JobType? subtitleExtractionJobType = null,
         JobType? gridThumbnailJobType = null,
         IReadOnlyList<EntityFileRole>? generatedFileRoles = null) {
@@ -29,9 +29,9 @@ public sealed record EntityProcessingPolicy {
                 nameof(probeRequiresAutomaticMetadata));
         }
 
-        if ((previewRequiresAutomaticGeneration || supportsTrickplayGeneration) && previewJobType is null) {
+        if (previewRequiresAutomaticGeneration && previewJobType is null) {
             throw new ArgumentException(
-                "Preview generation gates require a preview job.",
+                "Automatic preview generation requires a preview job.",
                 nameof(previewJobType));
         }
 
@@ -49,7 +49,7 @@ public sealed record EntityProcessingPolicy {
         }
 
         if (assetFamily == GeneratedAssetFamily.None &&
-            (previewJobType is not null || generatedFileRoles is { Count: > 0 })) {
+            (previewJobType is not null || trickplayJobType is not null || generatedFileRoles is { Count: > 0 })) {
             throw new ArgumentException(
                 "Generated jobs and file roles require a generated asset family.",
                 nameof(assetFamily));
@@ -61,7 +61,7 @@ public sealed record EntityProcessingPolicy {
         FingerprintJobType = fingerprintJobType;
         PreviewJobType = previewJobType;
         PreviewRequiresAutomaticGeneration = previewRequiresAutomaticGeneration;
-        SupportsTrickplayGeneration = supportsTrickplayGeneration;
+        TrickplayJobType = trickplayJobType;
         SubtitleExtractionJobType = subtitleExtractionJobType;
         GridThumbnailJobType = gridThumbnailJobType;
         _generatedFileRoles = Array.AsReadOnly(roles);
@@ -85,8 +85,11 @@ public sealed record EntityProcessingPolicy {
     /// <summary>Whether ordinary preview generation follows the automatic-preview setting.</summary>
     public bool PreviewRequiresAutomaticGeneration { get; }
 
-    /// <summary>Whether the preview job also produces enabled trickplay output.</summary>
-    public bool SupportsTrickplayGeneration { get; }
+    /// <summary>Deferred best-effort trickplay job, when this kind supports scrub previews.</summary>
+    public JobType? TrickplayJobType { get; }
+
+    /// <summary>Whether this kind supports trickplay generation.</summary>
+    public bool SupportsTrickplayGeneration => TrickplayJobType is not null;
 
     /// <summary>Best-effort subtitle reconciliation job, when applicable.</summary>
     public JobType? SubtitleExtractionJobType { get; }
@@ -109,10 +112,10 @@ public sealed record EntityProcessingPolicy {
             : null;
         var ordinaryPreview = inputs.NeedsPreview &&
             (!PreviewRequiresAutomaticGeneration || inputs.AutomaticPreviewEnabled);
-        var trickplay = SupportsTrickplayGeneration && inputs.NeedsTrickplay && inputs.TrickplayEnabled;
-        var preview = ordinaryPreview || trickplay ? PreviewJobType : null;
+        var preview = ordinaryPreview ? PreviewJobType : null;
+        var trickplay = inputs.NeedsTrickplay && inputs.TrickplayEnabled ? TrickplayJobType : null;
         var gridThumbnail = preview is null && inputs.NeedsGridThumbnail ? GridThumbnailJobType : null;
-        return new EntityProcessingPlan(probe, fingerprint, subtitles, preview, gridThumbnail);
+        return new EntityProcessingPlan(probe, fingerprint, subtitles, preview, trickplay, gridThumbnail);
     }
 }
 
@@ -135,4 +138,5 @@ public sealed record EntityProcessingPlan(
     JobType? FingerprintJobType,
     JobType? SubtitleExtractionJobType,
     JobType? PreviewJobType,
+    JobType? TrickplayJobType,
     JobType? GridThumbnailJobType);

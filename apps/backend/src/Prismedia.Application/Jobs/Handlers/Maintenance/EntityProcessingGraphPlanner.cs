@@ -198,6 +198,10 @@ public sealed class EntityProcessingGraphPlanner(
             yield return Request(preview, entity);
         }
 
+        if (plan.TrickplayJobType is { } trickplay) {
+            yield return Request(trickplay, entity);
+        }
+
         if (plan.GridThumbnailJobType is { } gridThumbnail) {
             yield return Request(gridThumbnail, entity);
         }

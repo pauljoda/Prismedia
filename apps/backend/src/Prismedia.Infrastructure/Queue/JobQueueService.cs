@@ -561,7 +561,11 @@ public sealed partial class JobQueueService : IJobQueueService {
                                 AND active.status = 'running'
                           )
                       )
-                    ORDER BY graph.last_dispatched_at NULLS FIRST,
+                    ORDER BY CASE candidate.importance
+                                 WHEN 'required' THEN 0
+                                 ELSE 1
+                             END,
+                             graph.last_dispatched_at NULLS FIRST,
                              graph.created_at,
                              candidate.sequence,
                              candidate.available_at,
@@ -658,7 +662,8 @@ public sealed partial class JobQueueService : IJobQueueService {
             }
 
             var selected = await candidates
-                .OrderBy(candidate => candidate.Graph.LastDispatchedAt)
+                .OrderBy(candidate => candidate.Run.Importance == JobNodeImportance.Required ? 0 : 1)
+                .ThenBy(candidate => candidate.Graph.LastDispatchedAt)
                 .ThenBy(candidate => candidate.Graph.CreatedAt)
                 .ThenBy(candidate => candidate.Run.Sequence)
                 .ThenBy(candidate => candidate.Run.AvailableAt)

@@ -20,7 +20,11 @@ public sealed partial class LibraryScanPersistenceService {
         Guid entityId,
         Guid? libraryRootId,
         CancellationToken cancellationToken) {
-        var row = await _db.EntityLibraryRoots.FindAsync([entityId], cancellationToken);
+        var row = _db.EntityLibraryRoots.Local.FirstOrDefault(candidate => candidate.EntityId == entityId);
+        var entity = _db.Entities.Local.FirstOrDefault(candidate => candidate.Id == entityId);
+        if (row is null && (entity is null || _db.Entry(entity).State != EntityState.Added)) {
+            row = await _db.EntityLibraryRoots.FindAsync([entityId], cancellationToken);
+        }
         if (row is null) {
             _db.EntityLibraryRoots.Add(new EntityLibraryRootRow {
                 EntityId = entityId,

@@ -57,9 +57,13 @@ public enum JobType {
     FingerprintAudio,
 
     // ── Preview / asset generation ──────────────────────────────
-    /// <summary>Builds video thumbnails, preview clips, and trickplay sprites.</summary>
+    /// <summary>Builds video thumbnails and short preview clips.</summary>
     [Code("generate-preview")]
     GeneratePreview,
+
+    /// <summary>Builds deferred trickplay tiles for video scrub previews.</summary>
+    [Code("generate-trickplay")]
+    GenerateTrickplay,
 
     /// <summary>Generates thumbnails and lightweight previews for images.</summary>
     [Code("generate-image-thumbnail")]

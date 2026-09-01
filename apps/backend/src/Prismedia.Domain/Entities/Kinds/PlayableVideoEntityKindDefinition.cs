@@ -96,7 +96,7 @@ public abstract class PlayableVideoEntityKindDefinition<TEntity> : RootEntityKin
         fingerprintJobType: JobType.FingerprintVideo,
         previewJobType: JobType.GeneratePreview,
         previewRequiresAutomaticGeneration: true,
-        supportsTrickplayGeneration: true,
+        trickplayJobType: JobType.GenerateTrickplay,
         subtitleExtractionJobType: JobType.ExtractSubtitles,
         gridThumbnailJobType: JobType.GenerateGridThumbnail,
         generatedFileRoles: [

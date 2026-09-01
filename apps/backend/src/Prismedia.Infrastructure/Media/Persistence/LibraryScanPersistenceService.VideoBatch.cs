@@ -206,6 +206,7 @@ public sealed partial class LibraryScanPersistenceService {
         var movieCache = new Dictionary<string, Guid>(FileSystemPathComparison.Comparer);
         var seriesCache = new Dictionary<string, Guid>(FileSystemPathComparison.Comparer);
         var seasonCache = new Dictionary<(Guid SeriesId, int SeasonNumber), Guid>();
+        var existingMoviesByFolderPath = await LoadExistingMoviesByFolderPathAsync(items, cancellationToken);
 
         // One source path can legitimately belong to SEVERAL video entities: a multi-episode file
         // (S01E05-E06) is bound to each episode it covers, so this lookup must group rather than
@@ -240,6 +241,7 @@ public sealed partial class LibraryScanPersistenceService {
                     item.IsNsfw,
                     now,
                     movieCache,
+                    existingMoviesByFolderPath,
                     cancellationToken);
             }
 
@@ -425,13 +427,13 @@ public sealed partial class LibraryScanPersistenceService {
         bool isNsfw,
         DateTimeOffset now,
         Dictionary<string, Guid> movieCache,
+        IReadOnlyDictionary<string, EntityRow> existingMoviesByFolderPath,
         CancellationToken cancellationToken) {
         if (movieCache.TryGetValue(movie.FolderPath, out var cachedMovieId)) {
             return cachedMovieId;
         }
 
-        var existing = await FindEntityBySourceValueAsync(
-            EntityKind.Movie.ToCode(), EntitySourceCode.Folder.ToCode(), movie.FolderPath, cancellationToken);
+        existingMoviesByFolderPath.TryGetValue(movie.FolderPath, out var existing);
         var movieId = existing?.Id ?? Guid.NewGuid();
 
         if (existing is null) {
@@ -456,6 +458,44 @@ public sealed partial class LibraryScanPersistenceService {
         await ApplyMovieSidecarMetadataAsync(movieId, metadata, isNsfw, now, cancellationToken);
         movieCache[movie.FolderPath] = movieId;
         return movieId;
+    }
+
+    private async Task<IReadOnlyDictionary<string, EntityRow>> LoadExistingMoviesByFolderPathAsync(
+        IReadOnlyList<VideoUpsertItem> items,
+        CancellationToken cancellationToken) {
+        var folderPaths = items
+            .Where(item => item.ScanPlacement == PlayableVideoScanPlacement.Movie)
+            .Select(item => item.Movie?.FolderPath)
+            .Where(path => !string.IsNullOrWhiteSpace(path))
+            .Select(path => path!)
+            .Distinct(FileSystemPathComparison.Comparer)
+            .ToArray();
+        if (folderPaths.Length == 0) {
+            return new Dictionary<string, EntityRow>(FileSystemPathComparison.Comparer);
+        }
+
+        var folderPathLengths = folderPaths.Select(path => path.Length).Distinct().ToArray();
+        var candidates = await _db.EntitySources
+            .Where(source => source.Code == EntitySourceCode.Folder.ToCode()
+                && folderPathLengths.Contains(source.Value.Length))
+            .Join(
+                _db.Entities.Where(entity => entity.KindCode == EntityKind.Movie.ToCode()),
+                source => source.EntityId,
+                entity => entity.Id,
+                (source, entity) => new { source.Value, Entity = entity })
+            .ToArrayAsync(cancellationToken);
+
+        return candidates
+            .Where(candidate => folderPaths.Contains(candidate.Value, FileSystemPathComparison.Comparer))
+            .GroupBy(candidate => candidate.Value, FileSystemPathComparison.Comparer)
+            .ToDictionary(
+                group => group.Key,
+                group => group
+                    .OrderBy(candidate => candidate.Entity.CreatedAt)
+                    .ThenBy(candidate => candidate.Entity.Id)
+                    .First()
+                    .Entity,
+                FileSystemPathComparison.Comparer);
     }
 
     private async Task ApplyMovieSidecarMetadataAsync(

@@ -36,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Fresh movie-library setup now persists discovered titles in bounded database batches, runs every playback-critical probe before optional enrichment, and defers long trickplay generation behind ordinary thumbnails and previews so the library becomes visible and playable without waiting for background media work.
 - Videos now count as completed after 90% playback, so leaving during credits records the play. Completed items also stop advertising a final-second resume point, while manually marking an item watched still preserves its prior position if it is later marked incomplete.
 - The unified container now reasserts PostgreSQL-safe data-directory permissions immediately before database startup, so a named ACL cannot leave Prismedia stuck in a restart loop after the container restarts.
 - Native content requests now commit the exact review the user confirmed instead of rejecting harmless client-side JSON normalization as a changed provider proposal and trapping the request in a reload loop.

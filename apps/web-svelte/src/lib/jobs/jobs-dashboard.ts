@@ -94,7 +94,13 @@ const _JOB_DEFINITIONS = [
     type: JOB_TYPE.generatePreview,
     queueName: "preview",
     label: "Video Preview",
-    description: "Builds video thumbnails, preview clips, and trickplay sprites.",
+    description: "Builds video thumbnails and short preview clips.",
+  },
+  {
+    type: JOB_TYPE.generateTrickplay,
+    queueName: "preview",
+    label: "Video Trickplay",
+    description: "Builds deferred scrub-preview tiles after playback-critical media work.",
   },
   {
     type: JOB_TYPE.generateImageThumbnail,

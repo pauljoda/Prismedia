@@ -73,7 +73,7 @@ public sealed class ScanJobHandlerTests {
         await handler.HandleAsync(new JobContext(job, queue), CancellationToken.None);
 
         var request = Assert.Single(queue.Enqueued);
-        Assert.Equal(JobType.GeneratePreview, request.Type);
+        Assert.Equal(JobType.GenerateTrickplay, request.Type);
         Assert.Equal(videoId.ToString(), request.TargetEntityId);
     }
 

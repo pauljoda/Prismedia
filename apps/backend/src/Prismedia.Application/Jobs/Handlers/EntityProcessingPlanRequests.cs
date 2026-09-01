@@ -33,7 +33,7 @@ internal static class EntityProcessingPlanRequests {
                 settings,
                 needs,
                 forceSubtitleReconciliationForOwnedSource: false));
-        var requests = new List<EnqueueJobRequest>(5);
+        var requests = new List<EnqueueJobRequest>(6);
         var entityIdText = entityId.ToString();
 
         Add(plan.ProbeJobType);
@@ -41,6 +41,7 @@ internal static class EntityProcessingPlanRequests {
         Add(plan.SubtitleExtractionJobType);
         if (!deferPreviewUntilProbeCompletes || plan.ProbeJobType is null) {
             Add(plan.PreviewJobType);
+            Add(plan.TrickplayJobType);
         }
 
         if (plan.PreviewJobType is null) {

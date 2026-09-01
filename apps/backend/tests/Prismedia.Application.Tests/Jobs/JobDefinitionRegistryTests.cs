@@ -12,8 +12,10 @@ public sealed class JobDefinitionRegistryTests {
 
     [Fact]
     public void DefinitionsPreserveRepresentativeSchedulingPolicies() {
-        AssertDefinition(JobType.GeneratePreview, JobResourceClass.HeavyCpu, JobNodeImportance.BestEffort, blocksAutoIdentify: true);
-        AssertDefinition(JobType.ExtractSubtitles, JobResourceClass.HeavyCpu, JobNodeImportance.BestEffort, blocksAutoIdentify: true);
+        AssertDefinition(JobType.GeneratePreview, JobResourceClass.HeavyCpu, JobNodeImportance.BestEffort, blocksAutoIdentify: false);
+        AssertDefinition(JobType.GenerateTrickplay, JobResourceClass.HeavyCpu, JobNodeImportance.BestEffort, blocksAutoIdentify: false);
+        AssertDefinition(JobType.ExtractSubtitles, JobResourceClass.HeavyCpu, JobNodeImportance.BestEffort, blocksAutoIdentify: false);
+        AssertDefinition(JobType.FingerprintVideo, JobResourceClass.StandardCpu, JobNodeImportance.BestEffort, blocksAutoIdentify: true);
         Assert.True(JobDefinitionRegistry.IsQueueWideSingleton(JobType.ScanLibrary, hasTarget: false));
         Assert.False(JobDefinitionRegistry.IsQueueWideSingleton(JobType.ScanLibrary, hasTarget: true));
         Assert.True(JobDefinitionRegistry.BlocksAutoIdentify(JobType.ScanLibrary));
