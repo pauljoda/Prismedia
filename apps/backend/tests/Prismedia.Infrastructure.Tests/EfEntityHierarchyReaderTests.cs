@@ -41,6 +41,26 @@ public sealed class EfEntityHierarchyReaderTests {
         Assert.Equal([second], await reader.ListAncestorIdsAsync(first, CancellationToken.None));
     }
 
+    [Fact]
+    public async Task ListsDistinctAncestorsForManyEntitiesWithoutReturningStartingIds() {
+        await using var db = CreateContext();
+        var root = Guid.NewGuid();
+        var branch = Guid.NewGuid();
+        var firstLeaf = Guid.NewGuid();
+        var secondLeaf = Guid.NewGuid();
+        db.Entities.AddRange(
+            NewEntity(root, EntityKind.VideoSeries.ToCode(), null),
+            NewEntity(branch, EntityKind.VideoSeason.ToCode(), root),
+            NewEntity(firstLeaf, EntityKind.VideoEpisode.ToCode(), branch),
+            NewEntity(secondLeaf, EntityKind.VideoEpisode.ToCode(), branch));
+        await db.SaveChangesAsync();
+
+        var actual = await new EfEntityHierarchyReader(db)
+            .ListAncestorIdsAsync([firstLeaf, secondLeaf], CancellationToken.None);
+
+        Assert.True(actual.SetEquals([root, branch]));
+    }
+
     private static EntityRow NewEntity(Guid id, string kind, Guid? parentId) => new() {
         Id = id,
         KindCode = kind,

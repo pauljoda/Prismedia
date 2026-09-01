@@ -66,4 +66,35 @@ public sealed class EfEntityHierarchyReader(PrismediaDbContext db) : IEntityHier
             currentId = parent;
         }
     }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlySet<Guid>> ListAncestorIdsAsync(
+        IReadOnlyCollection<Guid> entityIds,
+        CancellationToken cancellationToken) {
+        var visited = entityIds.ToHashSet();
+        var result = new HashSet<Guid>();
+        var frontier = visited.ToArray();
+        while (frontier.Length > 0) {
+            var currentIds = frontier;
+            var parents = await db.Entities.AsNoTracking()
+                .Where(row => currentIds.Contains(row.Id) && row.ParentEntityId != null)
+                .Select(row => row.ParentEntityId!.Value)
+                .Distinct()
+                .ToArrayAsync(cancellationToken);
+
+            var next = new List<Guid>(parents.Length);
+            foreach (var parentId in parents) {
+                if (!visited.Add(parentId)) {
+                    continue;
+                }
+
+                result.Add(parentId);
+                next.Add(parentId);
+            }
+
+            frontier = next.ToArray();
+        }
+
+        return result;
+    }
 }

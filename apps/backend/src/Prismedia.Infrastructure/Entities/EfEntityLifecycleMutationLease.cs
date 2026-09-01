@@ -41,31 +41,16 @@ public sealed class EfEntityLifecycleMutationLease(
 
         try {
             var lifecycleEntityIds = new HashSet<Guid>(targetEntityIds);
-            foreach (var targetEntityId in targetEntityIds) {
-                lifecycleEntityIds.UnionWith(await hierarchy.ListAncestorIdsAsync(
-                    targetEntityId,
-                    cancellationToken));
-            }
+            lifecycleEntityIds.UnionWith(await hierarchy.ListAncestorIdsAsync(
+                targetEntityIds,
+                cancellationToken));
             var orderedLifecycleEntityIds = lifecycleEntityIds.Order().ToArray();
             var monitorIds = await ListMonitorIdsTargetingAsync(
                 orderedLifecycleEntityIds,
                 cancellationToken);
 
-            var lockedMonitors = new List<MonitorRow>(monitorIds.Count);
-            foreach (var monitorId in monitorIds.Order()) {
-                var locked = await LockMonitorAsync(monitorId, cancellationToken);
-                if (locked is not null) {
-                    lockedMonitors.Add(locked);
-                }
-            }
-
-            var lockedEntities = new List<EntityRow>(orderedLifecycleEntityIds.Length);
-            foreach (var lifecycleEntityId in orderedLifecycleEntityIds) {
-                var locked = await LockEntityAsync(lifecycleEntityId, cancellationToken);
-                if (locked is not null) {
-                    lockedEntities.Add(locked);
-                }
-            }
+            var lockedMonitors = (await LockMonitorsAsync(monitorIds, cancellationToken)).ToList();
+            var lockedEntities = await LockEntitiesAsync(orderedLifecycleEntityIds, cancellationToken);
             var lockedEntityIds = lockedEntities.Select(row => row.Id).ToHashSet();
             if (targetEntityIds.Any(targetEntityId => !lockedEntityIds.Contains(targetEntityId))
                 || lockedEntities.Any(row => row.LifecycleClaimKind != null)) {
@@ -80,12 +65,9 @@ public sealed class EfEntityLifecycleMutationLease(
             var refreshedMonitorIds = await ListMonitorIdsTargetingAsync(
                 orderedLifecycleEntityIds,
                 cancellationToken);
-            foreach (var monitorId in refreshedMonitorIds.Except(monitorIds).Order()) {
-                var locked = await LockMonitorAsync(monitorId, cancellationToken);
-                if (locked is not null) {
-                    lockedMonitors.Add(locked);
-                }
-            }
+            lockedMonitors.AddRange(await LockMonitorsAsync(
+                refreshedMonitorIds.Except(monitorIds).ToArray(),
+                cancellationToken));
             if (lockedMonitors.Any(row => row.Status is MonitorStatus.Stopping or MonitorStatus.DeletingFiles)) {
                 if (transaction is not null) {
                     await transaction.RollbackAsync(cancellationToken);
@@ -105,26 +87,48 @@ public sealed class EfEntityLifecycleMutationLease(
         }
     }
 
-    private Task<MonitorRow?> LockMonitorAsync(Guid monitorId, CancellationToken cancellationToken) =>
-        db.Database.IsRelational()
-        && db.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true
-            ? db.Monitors
-                .FromSqlInterpolated($"SELECT * FROM monitors WHERE id = {monitorId} FOR UPDATE")
-                .AsNoTracking()
-                .SingleOrDefaultAsync(cancellationToken)
-            : db.Monitors.FirstOrDefaultAsync(row => row.Id == monitorId, cancellationToken);
+    private async Task<IReadOnlyList<MonitorRow>> LockMonitorsAsync(
+        IReadOnlyCollection<Guid> monitorIds,
+        CancellationToken cancellationToken) {
+        var ids = monitorIds.Distinct().Order().ToArray();
+        if (ids.Length == 0) {
+            return [];
+        }
 
-    private Task<EntityRow?> LockEntityAsync(Guid entityId, CancellationToken cancellationToken) =>
-        db.Database.IsRelational()
-        && db.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true
-            ? db.Entities
-                // The entity model maps PostgreSQL's xmin system column for optimistic
-                // concurrency. FromSql is composed as a subquery, so project xmin explicitly;
-                // SELECT * alone does not expose PostgreSQL system columns to that outer query.
-                .FromSqlInterpolated($"SELECT *, xmin FROM entities WHERE id = {entityId} FOR UPDATE")
-                .AsNoTracking()
-                .SingleOrDefaultAsync(cancellationToken)
-            : db.Entities.FirstOrDefaultAsync(row => row.Id == entityId, cancellationToken);
+        return db.Database.IsRelational()
+            && db.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true
+                ? await db.Monitors
+                    .FromSqlInterpolated($"SELECT * FROM monitors WHERE id = ANY ({ids}) ORDER BY id FOR UPDATE")
+                    .AsNoTracking()
+                    .ToArrayAsync(cancellationToken)
+                : await db.Monitors.AsNoTracking()
+                    .Where(row => ids.Contains(row.Id))
+                    .OrderBy(row => row.Id)
+                    .ToArrayAsync(cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<EntityRow>> LockEntitiesAsync(
+        IReadOnlyCollection<Guid> entityIds,
+        CancellationToken cancellationToken) {
+        var ids = entityIds.Distinct().Order().ToArray();
+        if (ids.Length == 0) {
+            return [];
+        }
+
+        return db.Database.IsRelational()
+            && db.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true
+                ? await db.Entities
+                    // The entity model maps PostgreSQL's xmin system column for optimistic
+                    // concurrency. FromSql is composed as a subquery, so project xmin explicitly;
+                    // SELECT * alone does not expose PostgreSQL system columns to that outer query.
+                    .FromSqlInterpolated($"SELECT *, xmin FROM entities WHERE id = ANY ({ids}) ORDER BY id FOR UPDATE")
+                    .AsNoTracking()
+                    .ToArrayAsync(cancellationToken)
+                : await db.Entities.AsNoTracking()
+                    .Where(row => ids.Contains(row.Id))
+                    .OrderBy(row => row.Id)
+                    .ToArrayAsync(cancellationToken);
+    }
 
     private async Task<IReadOnlySet<Guid>> ListMonitorIdsTargetingAsync(
         IReadOnlyCollection<Guid> entityIds,
