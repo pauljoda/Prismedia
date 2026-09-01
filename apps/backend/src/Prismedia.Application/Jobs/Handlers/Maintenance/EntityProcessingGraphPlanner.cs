@@ -62,7 +62,7 @@ public sealed class EntityProcessingGraphPlanner(
             processingTree.Select(entity => entity.Id).ToArray(),
             cancellationToken);
         var requiredReadiness = new List<Guid>();
-        var bestEffort = new List<GraphJobNodeRequest>();
+        var optional = new List<GraphJobNodeRequest>();
 
         foreach (var entity in processingTree) {
             if (!needs.TryGetValue(entity.Id, out var entityNeeds)
@@ -86,10 +86,10 @@ public sealed class EntityProcessingGraphPlanner(
             }
 
             foreach (var request in BestEffortRequests(plan, entity)) {
-                bestEffort.Add(Node(
+                optional.Add(Node(
                     request,
                     [baseDependency],
-                    JobNodeImportance.BestEffort));
+                    JobDefinitionRegistry.Importance(request.Type)));
             }
         }
 
@@ -113,7 +113,7 @@ public sealed class EntityProcessingGraphPlanner(
             finalizationNodeId = finalizer.Id;
         }
 
-        foreach (var node in bestEffort) {
+        foreach (var node in optional) {
             await context.AppendNodeAsync(node, cancellationToken);
         }
 
@@ -157,11 +157,11 @@ public sealed class EntityProcessingGraphPlanner(
         logger.LogInformation(
             "Entity processing: planned {Required} required and {BestEffort} best-effort nodes for {Label}",
             requiredReadiness.Count,
-            bestEffort.Count,
+            optional.Count,
             tree[0].Title);
         await context.ReportProgressAsync(
             100,
-            $"Planned {requiredReadiness.Count + bestEffort.Count + touchedAncestors.Length + (finalization is null ? 0 : 1)} jobs",
+            $"Planned {requiredReadiness.Count + optional.Count + touchedAncestors.Length + (finalization is null ? 0 : 1)} jobs",
             cancellationToken);
     }
 

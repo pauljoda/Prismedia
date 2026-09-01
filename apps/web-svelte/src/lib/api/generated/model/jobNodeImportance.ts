@@ -11,4 +11,5 @@ export type JobNodeImportance = typeof JobNodeImportance[keyof typeof JobNodeImp
 export const JobNodeImportance = {
   required: 'required',
   'best-effort': 'best-effort',
+  deferred: 'deferred',
 } as const;

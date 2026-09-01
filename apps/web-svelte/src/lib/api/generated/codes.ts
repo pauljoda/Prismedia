@@ -773,6 +773,7 @@ export type JobGraphStatusCode = (typeof JOB_GRAPH_STATUS)[keyof typeof JOB_GRAP
 export const JOB_NODE_IMPORTANCE = {
   required: "required",
   bestEffort: "best-effort",
+  deferred: "deferred",
 } as const;
 
 export type JobNodeImportanceCode = (typeof JOB_NODE_IMPORTANCE)[keyof typeof JOB_NODE_IMPORTANCE];

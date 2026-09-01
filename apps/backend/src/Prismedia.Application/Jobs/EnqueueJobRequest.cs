@@ -12,7 +12,7 @@ namespace Prismedia.Application.Jobs;
 /// <param name="TargetLabel">Optional human-readable label shown on the dashboard.</param>
 /// <param name="Origin">Interactive or background scheduling pool for a root operation.</param>
 /// <param name="NodeKey">Optional stable graph-local key for idempotent child expansion.</param>
-/// <param name="Importance">Optional override for required versus best-effort graph behavior.</param>
+/// <param name="Importance">Optional override for required, best-effort, or deferred graph behavior.</param>
 /// <param name="ResourceClass">Optional override for the job type's CPU resource profile.</param>
 /// <param name="ResourceKey">Optional shared external or entity resource key.</param>
 /// <param name="GraphRootEntityKind">Optional top-level Entity kind for a root graph when the executable node targets another durable record.</param>

@@ -156,6 +156,41 @@ public sealed class JobGraphServiceTests {
     }
 
     [Fact]
+    public async Task BestEffortBackgroundWorkPreemptsOlderDeferredGraphs() {
+        await using var db = CreateContext();
+        var graphs = new JobGraphService(db);
+        var queue = new JobQueueService(db);
+
+        var deferred = await graphs.StartAsync(
+            new StartJobGraphRequest(
+                JobGraphOrigin.Background,
+                "Generate trickplay",
+                new GraphJobNodeRequest(
+                    "trickplay",
+                    new EnqueueJobRequest(JobType.GenerateTrickplay),
+                    Importance: JobNodeImportance.Deferred)),
+            CancellationToken.None);
+        var bestEffort = await graphs.StartAsync(
+            new StartJobGraphRequest(
+                JobGraphOrigin.Background,
+                "Generate preview",
+                new GraphJobNodeRequest(
+                    "preview",
+                    new EnqueueJobRequest(JobType.GeneratePreview),
+                    Importance: JobNodeImportance.BestEffort)),
+            CancellationToken.None);
+
+        var claimed = await queue.ClaimNextGraphNodeAsync(
+            "worker",
+            JobGraphOrigin.Background,
+            CancellationToken.None);
+
+        Assert.Equal(bestEffort.Id, claimed?.GraphId);
+        Assert.NotEqual(deferred.Id, claimed?.GraphId);
+        Assert.Equal(JobType.GeneratePreview, claimed?.Type);
+    }
+
+    [Fact]
     public async Task DeclaredExternalResourceQueuesNodesAcrossIndependentGraphs() {
         await using var db = CreateContext();
         var graphs = new JobGraphService(db);

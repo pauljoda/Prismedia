@@ -9,7 +9,7 @@ namespace Prismedia.Application.Jobs.Handlers.Generate;
 /// Generates optional video scrub-preview tiles after playback-critical probes and ordinary preview
 /// assets have had an opportunity to finish. Trickplay intentionally remains best-effort background work.
 /// </summary>
-[JobDefinition(JobType.GenerateTrickplay, ResourceClass = JobResourceClass.HeavyCpu, Importance = JobNodeImportance.BestEffort)]
+[JobDefinition(JobType.GenerateTrickplay, ResourceClass = JobResourceClass.HeavyCpu, Importance = JobNodeImportance.Deferred)]
 public sealed class GenerateTrickplayJobHandler(
     ILogger<GenerateTrickplayJobHandler> logger,
     IMediaAssetGenerator assets,

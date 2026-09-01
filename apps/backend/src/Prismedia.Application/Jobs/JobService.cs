@@ -272,7 +272,7 @@ public sealed class JobService {
         var terminal = nodes.Count(node => node.Status is
             JobRunStatus.Completed or JobRunStatus.Failed or JobRunStatus.Cancelled);
         var warnings = nodes.Count(node =>
-            node.Status == JobRunStatus.Failed && node.Importance == JobNodeImportance.BestEffort);
+            node.Status == JobRunStatus.Failed && node.Importance != JobNodeImportance.Required);
         var nodeStatusById = nodes.ToDictionary(node => node.Id, node => node.Status);
         var dependencyBlocked = detail.Dependencies
             .Where(edge => !nodeStatusById.TryGetValue(edge.PredecessorRunId, out var predecessorStatus)
