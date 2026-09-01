@@ -30,6 +30,10 @@ public enum JobType {
     [Code("scan-audio")]
     ScanAudio,
 
+    /// <summary>Applies descriptive video sidecar metadata after fresh-library readiness work.</summary>
+    [Code("apply-video-sidecar-metadata")]
+    ApplyVideoSidecarMetadata,
+
     /// <summary>Plans and appends processing work for one exact entity tree without enumerating a library root.</summary>
     [Code("reconcile-entity")]
     ReconcileEntity,

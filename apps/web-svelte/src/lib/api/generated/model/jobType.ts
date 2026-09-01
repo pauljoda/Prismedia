@@ -15,6 +15,7 @@ export const JobType = {
   'scan-book': 'scan-book',
   'scan-comic': 'scan-comic',
   'scan-audio': 'scan-audio',
+  'apply-video-sidecar-metadata': 'apply-video-sidecar-metadata',
   'reconcile-entity': 'reconcile-entity',
   'probe-video': 'probe-video',
   'probe-audio': 'probe-audio',

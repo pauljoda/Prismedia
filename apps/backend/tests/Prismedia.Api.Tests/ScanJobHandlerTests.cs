@@ -1566,7 +1566,7 @@ public sealed class ScanJobHandlerTests {
     }
 
     [Fact]
-    public async Task VideoScanReadsAndAppliesSidecarMetadata() {
+    public async Task VideoScanUsesSidecarTitleAndDefersDescriptiveMetadata() {
         var root = new LibraryRootData(
             Guid.Parse("11111111-1111-1111-1111-111111111111"),
             "/media/videos",
@@ -1625,15 +1625,77 @@ public sealed class ScanJobHandlerTests {
             StartedAt: DateTimeOffset.UtcNow,
             FinishedAt: null);
 
-        await handler.HandleAsync(new JobContext(job, new RecordingJobQueue()), CancellationToken.None);
+        var queue = new RecordingJobQueue();
+        await handler.HandleAsync(new JobContext(job, queue), CancellationToken.None);
 
         var item = Assert.Single(persistence.UpsertedVideoItems);
         Assert.Equal("Sidecar Title", item.Title);
         Assert.Same(metadata, item.Metadata);
-        var applied = Assert.Single(metadataPersistence.AppliedVideos);
-        Assert.Equal(videoId, applied.EntityId);
-        Assert.Equal("movie", applied.FallbackTitle);
-        Assert.Same(metadata, applied.Metadata);
+        Assert.Empty(metadataPersistence.AppliedVideos);
+        var deferred = Assert.Single(queue.Enqueued);
+        Assert.Equal(JobType.ApplyVideoSidecarMetadata, deferred.Type);
+        Assert.Equal(root.Id.ToString(), deferred.TargetEntityId);
+    }
+
+    [Fact]
+    public async Task VideoSidecarMetadataJobAppliesCurrentRootFilesToEverySourceOwner() {
+        var root = new LibraryRootData(
+            Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            "/media/videos",
+            "Videos",
+            Enabled: true,
+            Recursive: true,
+            ScanVideos: true,
+            ScanImages: false,
+            ScanAudio: false,
+            ScanBooks: false,
+            IsNsfw: true);
+        const string sourcePath = "/media/videos/movie.mkv";
+        var firstOwner = Guid.Parse("22222222-2222-2222-2222-222222222222");
+        var secondOwner = Guid.Parse("33333333-3333-3333-3333-333333333333");
+        var metadata = new VideoSidecarMetadata {
+            Title = "Sidecar Title",
+            Tags = ["Feature"]
+        };
+        var persistence = new FakeScanPersistence([root]) {
+            PlayableVideoSourceOwners = [
+                new PlayableVideoSourceOwner(firstOwner, sourcePath, EntityKind.Video),
+                new PlayableVideoSourceOwner(secondOwner, sourcePath, EntityKind.VideoEpisode)
+            ]
+        };
+        var metadataPersistence = new RecordingScanMetadataPersistence();
+        var handler = new ApplyVideoSidecarMetadataJobHandler(
+            NullLogger<ApplyVideoSidecarMetadataJobHandler>.Instance,
+            new RecordingFileDiscovery([sourcePath]),
+            persistence,
+            persistence,
+            new StubVideoSidecarMetadataReader(metadata),
+            metadataPersistence);
+        var job = new JobRunSnapshot(
+            Guid.NewGuid(),
+            JobType.ApplyVideoSidecarMetadata,
+            JobRunStatus.Running,
+            Progress: 0,
+            Message: null,
+            PayloadJson: "{}",
+            TargetEntityKind: JobTargetKinds.LibraryRoot,
+            TargetEntityId: root.Id.ToString(),
+            TargetLabel: root.Label,
+            CreatedAt: DateTimeOffset.UtcNow,
+            StartedAt: DateTimeOffset.UtcNow,
+            FinishedAt: null);
+
+        await handler.HandleAsync(new JobContext(job, new RecordingJobQueue()), CancellationToken.None);
+
+        Assert.True(metadataPersistence.AppliedVideos
+            .Select(item => item.EntityId)
+            .ToHashSet()
+            .SetEquals([firstOwner, secondOwner]));
+        Assert.All(metadataPersistence.AppliedVideos, item => {
+            Assert.Same(metadata, item.Metadata);
+            Assert.Equal("movie", item.FallbackTitle);
+            Assert.True(item.MarkNsfw);
+        });
     }
 
     [Fact]

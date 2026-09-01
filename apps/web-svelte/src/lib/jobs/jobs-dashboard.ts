@@ -34,6 +34,12 @@ const _JOB_DEFINITIONS = [
     description: "Discovers videos in configured library roots.",
   },
   {
+    type: JOB_TYPE.applyVideoSidecarMetadata,
+    queueName: "metadata-import",
+    label: "Local Video Metadata",
+    description: "Applies local NFO and JSON metadata after the playable library is ready.",
+  },
+  {
     type: JOB_TYPE.scanGallery,
     queueName: "gallery-scan",
     label: "Gallery Scan",

@@ -291,7 +291,10 @@ public sealed class ScanLibraryJobHandler(
             }
 
             using (timer.Phase("sidecar-metadata")) {
-                if (scanMetadata is not null) {
+                // A full initial scan publishes the playable structure first and applies the
+                // high-cardinality descriptive graph through one durable background job. Surgical
+                // sidecar changes stay synchronous because their scope is already bounded.
+                if (!reconcileWholeRoot && scanMetadata is not null) {
                     var applyItems = new List<VideoSidecarApplyItem>(persistedItems.Count);
                     for (var i = 0; i < persistedItems.Count && i < entityIds.Count; i++) {
                         if (persistedItems[i].Metadata is not { } metadata) {
@@ -433,6 +436,16 @@ public sealed class ScanLibraryJobHandler(
             orphans = await videos.RemoveOrphanSeriesAndSeasonsAsync(cancellationToken);
             if (orphans > 0)
                 logger.LogInformation("ScanLibrary: removed {Count} orphan movie/series/season entities", orphans);
+        }
+
+        using (timer.Phase("sidecar-defer")) {
+            if (reconcileWholeRoot && sidecars is not null && scanMetadata is not null && files.Count > 0) {
+                await context.EnqueueIfNeededAsync(new EnqueueJobRequest(
+                    JobType.ApplyVideoSidecarMetadata,
+                    TargetEntityKind: JobTargetKinds.LibraryRoot,
+                    TargetEntityId: root.Id.ToString(),
+                    TargetLabel: $"{root.Label} metadata"), cancellationToken);
+            }
         }
 
         var report = timer.Finish();

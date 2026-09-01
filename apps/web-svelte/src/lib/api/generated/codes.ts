@@ -806,6 +806,7 @@ export const JOB_TYPE = {
   scanBook: "scan-book",
   scanComic: "scan-comic",
   scanAudio: "scan-audio",
+  applyVideoSidecarMetadata: "apply-video-sidecar-metadata",
   reconcileEntity: "reconcile-entity",
   probeVideo: "probe-video",
   probeAudio: "probe-audio",
