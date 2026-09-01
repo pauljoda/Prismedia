@@ -343,6 +343,19 @@ public sealed class ScanLibraryJobHandler(
         allEntityIds.Clear();
         allEntityIds.AddRange(downstreamTargets.Select(target => target.EntityId).Distinct());
 
+        // Keep descriptive sidecar expansion outside the blocking scan, but enqueue it before
+        // per-video best-effort assets. Required probes still claim first by importance, while
+        // metadata can fill the visible library before previews consume every standard worker.
+        using (timer.Phase("sidecar-defer")) {
+            if (reconcileWholeRoot && sidecars is not null && scanMetadata is not null && files.Count > 0) {
+                await context.EnqueueIfNeededAsync(new EnqueueJobRequest(
+                    JobType.ApplyVideoSidecarMetadata,
+                    TargetEntityKind: JobTargetKinds.LibraryRoot,
+                    TargetEntityId: root.Id.ToString(),
+                    TargetLabel: $"{root.Label} metadata"), cancellationToken);
+            }
+        }
+
         for (var batchStart = 0; batchStart < downstreamTargets.Count; batchStart += BatchSize) {
             var batchEnd = Math.Min(batchStart + BatchSize, downstreamTargets.Count);
             var batchTargets = downstreamTargets.GetRange(batchStart, batchEnd - batchStart);
@@ -436,16 +449,6 @@ public sealed class ScanLibraryJobHandler(
             orphans = await videos.RemoveOrphanSeriesAndSeasonsAsync(cancellationToken);
             if (orphans > 0)
                 logger.LogInformation("ScanLibrary: removed {Count} orphan movie/series/season entities", orphans);
-        }
-
-        using (timer.Phase("sidecar-defer")) {
-            if (reconcileWholeRoot && sidecars is not null && scanMetadata is not null && files.Count > 0) {
-                await context.EnqueueIfNeededAsync(new EnqueueJobRequest(
-                    JobType.ApplyVideoSidecarMetadata,
-                    TargetEntityKind: JobTargetKinds.LibraryRoot,
-                    TargetEntityId: root.Id.ToString(),
-                    TargetLabel: $"{root.Label} metadata"), cancellationToken);
-            }
         }
 
         var report = timer.Finish();

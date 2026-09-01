@@ -1566,7 +1566,7 @@ public sealed class ScanJobHandlerTests {
     }
 
     [Fact]
-    public async Task VideoScanUsesSidecarTitleAndDefersDescriptiveMetadata() {
+    public async Task VideoScanUsesSidecarTitleAndQueuesDescriptiveMetadataBeforePreview() {
         var root = new LibraryRootData(
             Guid.Parse("11111111-1111-1111-1111-111111111111"),
             "/media/videos",
@@ -1589,14 +1589,23 @@ public sealed class ScanJobHandlerTests {
             Urls = ["https://example.test/video"]
         };
         var persistence = new FakeScanPersistence([root]) {
-            Settings = DisabledGeneratedWorkSettings,
+            Settings = new LibrarySettingsData(
+                AutoGenerateMetadata: false,
+                AutoGenerateOshash: false,
+                AutoGenerateMd5: false,
+                AutoGeneratePreview: true,
+                GenerateTrickplay: false,
+                TrickplayIntervalSeconds: 10,
+                PreviewClipDurationSeconds: 8,
+                ThumbnailQuality: 2,
+                TrickplayQuality: 2),
             UpsertedVideoIds = [videoId],
             DownstreamNeedsById = new Dictionary<Guid, DownstreamNeeds> {
                 [videoId] = new(
                     NeedsProbe: false,
                     MissingOshash: false,
                     MissingMd5: false,
-                    NeedsPreview: false,
+                    NeedsPreview: true,
                     NeedsTrickplay: false,
                     NeedsSubtitleExtraction: false,
                     NeedsGridThumbnail: false)
@@ -1632,9 +1641,12 @@ public sealed class ScanJobHandlerTests {
         Assert.Equal("Sidecar Title", item.Title);
         Assert.Same(metadata, item.Metadata);
         Assert.Empty(metadataPersistence.AppliedVideos);
-        var deferred = Assert.Single(queue.Enqueued);
-        Assert.Equal(JobType.ApplyVideoSidecarMetadata, deferred.Type);
-        Assert.Equal(root.Id.ToString(), deferred.TargetEntityId);
+        Assert.Collection(queue.Enqueued,
+            deferred => {
+                Assert.Equal(JobType.ApplyVideoSidecarMetadata, deferred.Type);
+                Assert.Equal(root.Id.ToString(), deferred.TargetEntityId);
+            },
+            preview => Assert.Equal(JobType.GeneratePreview, preview.Type));
     }
 
     [Fact]
