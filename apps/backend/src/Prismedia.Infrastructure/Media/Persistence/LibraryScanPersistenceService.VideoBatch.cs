@@ -455,7 +455,6 @@ public sealed partial class LibraryScanPersistenceService {
         }
 
         await EnsureEntitySourceAsync(movieId, EntitySourceCode.Folder.ToCode(), movie.FolderPath, now, cancellationToken);
-        await ApplyMovieSidecarMetadataAsync(movieId, metadata, isNsfw, now, cancellationToken);
         movieCache[movie.FolderPath] = movieId;
         return movieId;
     }
@@ -496,36 +495,6 @@ public sealed partial class LibraryScanPersistenceService {
                     .First()
                     .Entity,
                 FileSystemPathComparison.Comparer);
-    }
-
-    private async Task ApplyMovieSidecarMetadataAsync(
-        Guid movieId,
-        VideoSidecarMetadata? metadata,
-        bool markNsfw,
-        DateTimeOffset now,
-        CancellationToken cancellationToken) {
-        if (metadata is null) {
-            return;
-        }
-
-        var entity = await _db.Entities.FindAsync([movieId], cancellationToken);
-        if (entity is not null) {
-            if (markNsfw) {
-                entity.IsNsfw = true;
-            }
-        }
-
-        await UpsertDescriptionIfMissingAsync(movieId, metadata.Description, now, cancellationToken);
-        await UpsertDateIfMissingAsync(
-            movieId,
-            EntityDateType.Release.ToCode(),
-            metadata.Date,
-            now,
-            cancellationToken);
-        await AddUrlsAsync(movieId, metadata.Urls, now, cancellationToken);
-        await AddTagsAsync(movieId, metadata.Tags, now, markNsfw, cancellationToken);
-        await SetStudioIfMissingAsync(movieId, metadata.Studio, now, markNsfw, cancellationToken);
-        await AddCreditsAsync(movieId, metadata.Performers, CreditRole.Actor, now, markNsfw, cancellationToken);
     }
 
     private async Task<Guid> UpsertVideoSeriesFromScanAsync(

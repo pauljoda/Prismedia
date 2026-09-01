@@ -1340,6 +1340,14 @@ public sealed class LibraryScanPersistenceServiceTests {
         await using var db = CreateContext();
         var rootId = Guid.Parse("33333333-3333-3333-3333-333333333333");
         var service = new LibraryScanPersistenceService(db);
+        var metadata = new VideoSidecarMetadata {
+            Title = "Friendship",
+            Description = "Movie description",
+            Date = "2025-05-09",
+            Studio = "BoulderLight Pictures",
+            Tags = ["Comedy"],
+            Performers = ["Tim Robinson", "Paul Rudd"]
+        };
 
         var ids = await service.UpsertVideosBatchAsync([
             new VideoUpsertItem(
@@ -1348,18 +1356,18 @@ public sealed class LibraryScanPersistenceServiceTests {
                 rootId,
                 IsNsfw: false,
                 ScanPlacement: PlayableVideoScanPlacement.Movie,
-                Metadata: new VideoSidecarMetadata {
-                    Title = "Friendship",
-                    Description = "Movie description",
-                    Date = "2025-05-09",
-                    Studio = "BoulderLight Pictures",
-                    Tags = ["Comedy"],
-                    Performers = ["Tim Robinson", "Paul Rudd"]
-                },
+                Metadata: metadata,
                 Movie: new MovieScanInfo("/media/Friendship", "Friendship"))
         ], CancellationToken.None);
 
         var movieId = Assert.Single(ids);
+        Assert.Null(await db.EntityDescriptions.FindAsync([movieId]));
+        Assert.Empty(db.EntityRelationshipLinks.Where(relationship => relationship.EntityId == movieId));
+
+        await service.ApplyVideoSidecarMetadataBatchAsync([
+            new VideoSidecarApplyItem(movieId, metadata, "Friendship", MarkNsfw: false)
+        ], CancellationToken.None);
+
         var movie = Assert.Single(db.Entities.Where(entity => entity.KindCode == EntityKind.Movie.ToCode()));
         Assert.Equal(movieId, movie.Id);
         Assert.Equal("Friendship", movie.Title);
