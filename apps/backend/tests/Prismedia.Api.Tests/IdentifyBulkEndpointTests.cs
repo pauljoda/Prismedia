@@ -90,6 +90,25 @@ public sealed class IdentifyBulkEndpointTests {
     }
 
     [Fact]
+    public async Task IdentifyEntityPreservesDottedTitleForProviderSearch() {
+        using var factory = CreateFactory();
+        using var client = factory.CreateAuthenticatedClient();
+        var entityId = Guid.NewGuid();
+        var identify = factory.Services.GetRequiredService<RecordingIdentifyProviderService>();
+        identify.ExistingEntityId = entityId;
+
+        using var response = await client.PostAsJsonAsync(
+            $"/api/identify/entities/{entityId}",
+            new IdentifyEntityRequest(
+                "tmdb",
+                new IdentifyQuery("10.Cloverfield.Lane", null, null)),
+            CodecJson);
+
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+        Assert.Equal("10.Cloverfield.Lane", identify.LastQuery?.Title);
+    }
+
+    [Fact]
     public async Task ApplyIdentifyProposalReturnsNotFoundWhenTargetDisappears() {
         using var factory = CreateFactory();
         using var client = factory.CreateAuthenticatedClient();
@@ -112,9 +131,9 @@ public sealed class IdentifyBulkEndpointTests {
                     services.AddSingleton<RecordingIdentifyQueueService>();
                     services.AddScoped<IIdentifyQueueService>(provider =>
                         provider.GetRequiredService<RecordingIdentifyQueueService>());
-                    services.AddSingleton<MissingIdentifyTargetService>();
+                    services.AddSingleton<RecordingIdentifyProviderService>();
                     services.AddScoped<IIdentifyProviderService>(provider =>
-                        provider.GetRequiredService<MissingIdentifyTargetService>());
+                        provider.GetRequiredService<RecordingIdentifyProviderService>());
                 });
             })
             .WithTestAuth();
@@ -144,7 +163,10 @@ public sealed class IdentifyBulkEndpointTests {
             TargetEntityId: entityId,
             Relationships: []);
 
-    private sealed class MissingIdentifyTargetService : IIdentifyProviderService {
+    private sealed class RecordingIdentifyProviderService : IIdentifyProviderService {
+        public Guid? ExistingEntityId { get; set; }
+        public IdentifyQuery? LastQuery { get; private set; }
+
         public Task<IReadOnlyList<PluginProvider>> ListProvidersAsync(
             string? entityKind,
             CancellationToken cancellationToken) =>
@@ -159,9 +181,15 @@ public sealed class IdentifyBulkEndpointTests {
             CancellationToken cancellationToken,
             bool cascadeChildren = true,
             IIdentifyCascadeSink? sink = null,
-            bool hydrateRelationships = true) =>
-            Task.FromException<IdentifyPluginResponse>(
-                new KeyNotFoundException($"Entity '{entityId}' was not found."));
+            bool hydrateRelationships = true) {
+            if (entityId != ExistingEntityId) {
+                return Task.FromException<IdentifyPluginResponse>(
+                    new KeyNotFoundException($"Entity '{entityId}' was not found."));
+            }
+
+            LastQuery = query;
+            return Task.FromResult(IdentifyPluginResponse.NoMatch());
+        }
 
         public Task<bool> ApplyAsync(
             Guid entityId,
