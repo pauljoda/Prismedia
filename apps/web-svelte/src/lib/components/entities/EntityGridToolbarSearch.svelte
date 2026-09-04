@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { ChevronDown, Shuffle } from "@lucide/svelte";
-  import { Button, cn, SearchInput, Select } from "@prismedia/ui-svelte";
+  import { ArrowDownWideNarrow, ArrowUpNarrowWide, Shuffle } from "@lucide/svelte";
+  import { Button, SearchInput, Select } from "@prismedia/ui-svelte";
   import { ENTITY_SORT_DIRECTION } from "$lib/api/generated/codes";
   import { isTaxonomyEntityKind } from "$lib/entities/entity-codes";
   import { ENTITY_GRID_SORT, type EntityGridSort, type EntityGridSortDir } from "$lib/entities/entity-grid";
@@ -44,9 +44,9 @@
       </Button>
     {:else}
       <Button variant="ghost" size="icon" class="ctrl-btn ctrl-icon" aria-label={ascending ? "Sort ascending; switch to descending" : "Sort descending; switch to ascending"}
-        title={ascending ? "Ascending" : "Descending"}
+        title={ascending ? "Ascending order; switch to descending" : "Descending order; switch to ascending"}
         onclick={() => onSortDirChange(ascending ? ENTITY_SORT_DIRECTION.descending : ENTITY_SORT_DIRECTION.ascending)}>
-        <ChevronDown class={cn("size-3.5 dir-arrow", ascending && "is-up")} />
+        {#if ascending}<ArrowUpNarrowWide class="size-3.5" />{:else}<ArrowDownWideNarrow class="size-3.5" />{/if}
       </Button>
     {/if}
   </div>

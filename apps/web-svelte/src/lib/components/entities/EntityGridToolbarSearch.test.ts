@@ -10,6 +10,14 @@ function props() {
 }
 
 describe("library search and sorting", () => {
+  it("distinguishes sort direction from a disclosure control", () => {
+    render(EntityGridToolbarSearch, props());
+    const direction = screen.getByRole("button", { name: "Sort descending; switch to ascending" });
+    expect(direction).toHaveAttribute("title", "Descending order; switch to ascending");
+    expect(direction.querySelector(".lucide-arrow-down-wide-narrow")).not.toBeNull();
+    expect(direction.querySelector(".lucide-chevron-down")).toBeNull();
+  });
+
   it("offers a named keyboard select and returns focus without changing the sort on Escape", async () => {
     const callbacks = props();
     render(EntityGridToolbarSearch, callbacks);

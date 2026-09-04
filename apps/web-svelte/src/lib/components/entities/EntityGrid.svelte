@@ -527,19 +527,13 @@
     if (activePresetId === id) activePresetId = null;
   }
 
-  function clearFiltersAndSort() {
+  function clearFilters() {
     activeKind = ENTITY_GRID_ALL_KINDS;
     activePresetId = null;
     filterIds = [];
     includeNsfw = true;
     query = "";
-    selectedIds = [];
-    sortBy = initialSortBy;
-    sortDir = initialSortDir;
-    viewMode = "grid";
-    mediaWall = initialMediaWall;
     pagination.resetPage();
-    onSelectionChange?.(selectedIds);
   }
 
   function updateSelection(id: string, selected: boolean) {
@@ -642,15 +636,11 @@
     {bulkActions}
     collectionItems={bulkLibraryActions ? collectionItems : []}
     showNsfwAction={bulkLibraryActions}
-    canClearFiltersAndSort={Boolean(
+    canClearFilters={Boolean(
       activeKind !== ENTITY_GRID_ALL_KINDS ||
         filterIds.length > 0 ||
         !includeNsfw ||
-        query ||
-        sortBy !== initialSortBy ||
-        sortDir !== initialSortDir ||
-        mediaWall !== initialMediaWall ||
-        selectedIds.length > 0,
+        query,
     )}
     {enableFeedView}
     {drawerOpen}
@@ -662,7 +652,7 @@
     onActiveFilterIdsChange={setFilterIds}
     onApplyPreset={applyPreset}
     onBarsCollapsedChange={(collapsed) => (barsCollapsed = collapsed)}
-    onClearFiltersAndSort={clearFiltersAndSort}
+    onClearFilters={clearFilters}
     onClearSelection={clearSelection}
     onDeletePreset={deletePreset}
     onDrawerOpenChange={(open) => (drawerOpen = open)}

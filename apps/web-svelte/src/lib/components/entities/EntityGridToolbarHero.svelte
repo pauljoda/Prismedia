@@ -256,14 +256,6 @@
     padding: 0;
   }
 
-  :global(.dir-arrow) {
-    transition: transform var(--duration-normal) var(--ease-mechanical);
-  }
-
-  :global(.dir-arrow.is-up) {
-    transform: rotate(180deg);
-  }
-
   .toolbar-hero :global(.filter-count) {
     display: inline-flex;
     align-items: center;

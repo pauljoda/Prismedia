@@ -2,8 +2,8 @@
   import type { ComponentProps } from "svelte";
   import EntityGridToolbar from "./EntityGridToolbar.svelte";
 
-  let { barsCollapsed = false, onBarsCollapsedChange = () => {}, canClearFiltersAndSort = true }:
-    Partial<Pick<ComponentProps<typeof EntityGridToolbar>, "barsCollapsed" | "onBarsCollapsedChange" | "canClearFiltersAndSort">> = $props();
+  let { barsCollapsed = false, onBarsCollapsedChange = () => {}, canClearFilters = true }:
+    Partial<Pick<ComponentProps<typeof EntityGridToolbar>, "barsCollapsed" | "onBarsCollapsedChange" | "canClearFilters">> = $props();
   let selectionActive = $state(false);
 
   const noop = () => {};
@@ -15,7 +15,7 @@
   {barsCollapsed}
   bulkActions={[]}
   collectionItems={[]}
-  {canClearFiltersAndSort}
+  {canClearFilters}
   drawerOpen={false}
   filterOptions={[]}
   maxScale={12}
@@ -23,7 +23,7 @@
   onActiveFilterIdsChange={noop}
   onApplyPreset={noop}
   {onBarsCollapsedChange}
-  onClearFiltersAndSort={noop}
+  onClearFilters={noop}
   onClearSelection={noop}
   onDeletePreset={noop}
   onDrawerOpenChange={noop}

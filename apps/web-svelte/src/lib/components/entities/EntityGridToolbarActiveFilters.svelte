@@ -8,17 +8,17 @@
   interface Props {
     activeFilterIds: string[];
     activeFilters: EntityGridFilterOption[];
-    canClearFiltersAndSort: boolean;
+    canClearFilters: boolean;
     onActiveFilterIdsChange: (ids: string[]) => void;
-    onClearFiltersAndSort: () => void;
+    onClearFilters: () => void;
   }
 
   let {
     activeFilterIds,
     activeFilters,
-    canClearFiltersAndSort,
+    canClearFilters,
     onActiveFilterIdsChange,
-    onClearFiltersAndSort,
+    onClearFilters,
   }: Props = $props();
 
   function removeFilter(id: string) {
@@ -42,13 +42,14 @@
     {/if}
   </div>
 
-  {#if canClearFiltersAndSort}
+  {#if canClearFilters}
     <Button
       variant="ghost"
       size="sm"
-      title="Clear filters, sort, search, and saved preferences"
+      title="Clear search and filters"
+      aria-label="Clear search and filters"
       class="ml-auto shrink-0"
-      onclick={onClearFiltersAndSort}
+      onclick={onClearFilters}
     >
       <RotateCcw class="h-3.5 w-3.5 shrink-0" />
       Clear

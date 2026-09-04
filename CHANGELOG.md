@@ -40,6 +40,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Changing library sort, artwork layout, or selection no longer reveals a reset row or shifts the toolbar. Clear now removes only search and filters while keeping those browsing preferences.
+- Library sort direction now uses a distinct sorting icon and explicit tooltip so it is not confused with expanding the toolbar.
 - The library toolbar's Clear action now keeps its icon and label aligned in one compact button.
 - Fresh movie-library setup now persists discovered titles in bounded database batches, runs every playback-critical probe before optional enrichment, applies high-cardinality local sidecar relationships in the background, and defers long trickplay generation behind ordinary thumbnails and previews so the library becomes visible and playable without waiting for metadata expansion or background media work.
 - Videos now count as completed after 90% playback, so leaving during credits records the play. Completed items also stop advertising a final-second resume point, while manually marking an item watched still preserves its prior position if it is later marked incomplete.

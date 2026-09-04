@@ -4,7 +4,7 @@ import EntityGridToolbar from "./EntityGridToolbar.test-harness.svelte";
 
 describe("EntityGridToolbar", () => {
   it("keeps search, view controls and selection in their original separate rows", async () => {
-    render(EntityGridToolbar, { props: { canClearFiltersAndSort: false } });
+    render(EntityGridToolbar, { props: { canClearFilters: false } });
     const viewRow = screen.getByRole("radio", { name: "Grid view" }).closest(".controls-row");
     expect(viewRow).toContainElement(screen.getByRole("button", { name: "Filters" }));
     expect(viewRow).not.toContainElement(screen.getByRole("searchbox"));

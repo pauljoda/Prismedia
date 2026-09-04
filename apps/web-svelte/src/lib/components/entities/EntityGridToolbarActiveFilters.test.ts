@@ -4,25 +4,25 @@ import EntityGridToolbarActiveFilters from "./EntityGridToolbarActiveFilters.sve
 
 describe("active filter toolbar", () => {
   it("uses the shared inline button layout for Clear and invokes the reset action", async () => {
-    const onClearFiltersAndSort = vi.fn();
+    const onClearFilters = vi.fn();
     render(EntityGridToolbarActiveFilters, {
-      activeFilterIds: [], activeFilters: [], canClearFiltersAndSort: true,
-      onActiveFilterIdsChange: vi.fn(), onClearFiltersAndSort,
+      activeFilterIds: [], activeFilters: [], canClearFilters: true,
+      onActiveFilterIdsChange: vi.fn(), onClearFilters,
     });
 
-    const clear = screen.getByRole("button", { name: "Clear" });
+    const clear = screen.getByRole("button", { name: "Clear search and filters" });
     // This row is outside the hero; its icon/label alignment must not depend on hero CSS.
     expect(clear).toHaveClass("inline-flex", "items-center");
     expect(clear).not.toHaveClass("ctrl-btn");
     await fireEvent.click(clear);
-    expect(onClearFiltersAndSort).toHaveBeenCalledOnce();
+    expect(onClearFilters).toHaveBeenCalledOnce();
   });
 
   it("does not offer a reset when the library view has no changes", () => {
     render(EntityGridToolbarActiveFilters, {
-      activeFilterIds: [], activeFilters: [], canClearFiltersAndSort: false,
-      onActiveFilterIdsChange: vi.fn(), onClearFiltersAndSort: vi.fn(),
+      activeFilterIds: [], activeFilters: [], canClearFilters: false,
+      onActiveFilterIdsChange: vi.fn(), onClearFilters: vi.fn(),
     });
-    expect(screen.queryByRole("button", { name: "Clear" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Clear search and filters" })).not.toBeInTheDocument();
   });
 });
