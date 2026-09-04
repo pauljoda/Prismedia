@@ -32,14 +32,14 @@
     ariaDisabled = false,
     ariaLabel,
     title,
-    iconClass = "h-3.5 w-3.5",
+    iconClass,
     iconFill,
     class: className = "",
     onClick,
   }: Props = $props();
 
   const classes = $derived(cn(
-    buttonVariants({ variant: variant === "primary" ? "primary" : variant === "danger" ? "danger" : "outline", size: "sm" }),
+    buttonVariants({ variant: variant === "primary" ? "primary" : variant === "danger" ? "danger" : "outline", size: "lg" }),
     active && "bg-accent text-foreground",
     muted && "text-muted-foreground",
     className,
@@ -60,12 +60,12 @@
   >
     {#if icon}
       {@const Icon = icon}
-      <Icon class={iconClass} fill={iconFill} />
+      <Icon data-icon="inline-start" class={iconClass} fill={iconFill} />
     {/if}
     <span class="entity-action-button-label">{label}</span>
   </a>
 {:else}
-  <Button variant={variant === "primary" ? "primary" : variant === "danger" ? "danger" : "outline"} size="sm"
+  <Button variant={variant === "primary" ? "primary" : variant === "danger" ? "danger" : "outline"} size="lg"
     type="button"
     class={classes}
     disabled={disabled}
@@ -76,7 +76,7 @@
   >
     {#if icon}
       {@const Icon = icon}
-      <Icon class={iconClass} fill={iconFill} />
+      <Icon data-icon="inline-start" class={iconClass} fill={iconFill} />
     {/if}
     <span class="entity-action-button-label">{label}</span>
   </Button>

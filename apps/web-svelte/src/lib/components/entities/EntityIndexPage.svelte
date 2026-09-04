@@ -447,7 +447,7 @@
   }
 
   .page-head-title :global(.page-head-icon) {
-    color: var(--color-text-muted);
+    color: color-mix(in srgb, var(--entity-accent) 80%, var(--color-text-primary));
   }
 
 </style>

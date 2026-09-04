@@ -77,6 +77,7 @@ describe("EntityDetail", () => {
     });
 
     const action = screen.getByRole("button", { name: "Play All" });
+    expect(action).toHaveClass("h-11", "gap-2", "px-4");
     await fireEvent.click(action);
 
     expect(onClick).toHaveBeenCalledOnce();

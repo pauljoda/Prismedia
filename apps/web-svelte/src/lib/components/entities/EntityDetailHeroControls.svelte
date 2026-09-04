@@ -279,7 +279,7 @@
     min-width: 0;
     align-items: center;
     justify-content: flex-end;
-    gap: 0.35rem;
+    gap: 0.625rem;
     margin-left: auto;
   }
 
@@ -327,7 +327,7 @@
     .action-group {
       flex-wrap: wrap;
       justify-content: flex-end;
-      gap: 0.25rem;
+      gap: 0.5rem;
       width: auto;
     }
   }

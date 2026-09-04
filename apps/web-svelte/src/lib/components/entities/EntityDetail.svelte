@@ -984,8 +984,8 @@
     position: absolute;
     inset: 0;
     background:
-      radial-gradient(circle at top left, color-mix(in srgb, var(--detail-accent) 18%, transparent), transparent 58%),
-      radial-gradient(circle at right, color-mix(in srgb, var(--detail-secondary) 12%, transparent), transparent 54%),
+      radial-gradient(circle at top left, color-mix(in srgb, var(--detail-accent) 28%, transparent), transparent 58%),
+      radial-gradient(circle at right, color-mix(in srgb, var(--detail-secondary) 18%, transparent), transparent 54%),
       linear-gradient(180deg, rgb(0 0 0 / 0.3), rgb(0 0 0 / 0.82));
   }
 
@@ -996,8 +996,8 @@
     inset: 0;
     z-index: 0;
     background:
-      radial-gradient(circle at 14% 18%, color-mix(in srgb, var(--detail-accent) 16%, transparent), transparent 46%),
-      radial-gradient(circle at 90% 42%, color-mix(in srgb, var(--detail-secondary) 10%, transparent), transparent 48%),
+      radial-gradient(circle at 14% 18%, color-mix(in srgb, var(--detail-accent) 26%, transparent), transparent 56%),
+      radial-gradient(circle at 90% 42%, color-mix(in srgb, var(--detail-secondary) 16%, transparent), transparent 54%),
       #000;
     background-size: cover;
   }
@@ -1316,6 +1316,7 @@
   /* ── Detail Body ────────────────────────────────────────── */
 
   .detail-tabs {
+    --tabs-indicator: var(--detail-accent);
     min-width: 0;
     margin-inline: var(--detail-slideout-inset);
   }
