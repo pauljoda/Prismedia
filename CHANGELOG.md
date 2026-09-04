@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Track lists now prioritize titles and artists, keep play controls separate from row numbers, and only flag missing media. The Tracks library uses continuous numbering without album disc headings, with shared search and empty-state controls.
 - Entity metadata now consolidates provider links that point to the same website, uses clearer shared link rows, and fits cards to their content with consistently aligned labels and values.
 - Dashboard and related-entity shelves now share visible previous/next controls, with clearer cast counts and readable thumbnail captions at smaller sizes.
 - Entity pages now use clearer full-height tabs, readable metadata and descriptions, calmer tags and credit labels, and consistent shared empty and disclosure surfaces. Acquisition review now leads with the current problem and next action, while monitoring preferences move into a responsive settings column and file audits and history stay out of the primary path.

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ListMusic, LoaderCircle, Play, Search, Shuffle } from "@lucide/svelte";
-  import { Button, TextInput } from "@prismedia/ui-svelte";
+  import { Alert, Badge, Button, Empty, SearchInput } from "@prismedia/ui-svelte";
   import AudioTrackList from "$lib/components/AudioTrackList.svelte";
   import EntityActionButton from "$lib/components/entities/EntityActionButton.svelte";
   import { ENTITY_KIND } from "$lib/entities/entity-codes";
@@ -92,7 +92,7 @@
 </svelte:head>
 
 <section
-  class="space-y-5"
+  class="flex flex-col gap-5"
   style:--entity-accent={pageAccent.primary}
   style:--entity-accent-secondary={pageAccent.secondary}
 >
@@ -102,9 +102,7 @@
         <ListMusic class="h-5 w-5 text-text-muted" />
         Tracks
         {#if !loading && !errorMessage}
-          <span class="tracks-count">
-            {tracks.length}
-          </span>
+          <Badge>{tracks.length}</Badge>
         {/if}
       </h1>
     </div>
@@ -128,37 +126,32 @@
   </header>
 
   {#if errorMessage}
-    <div class="surface-card-sharp flex items-center justify-between gap-4 border-error-500/50 p-4">
-      <p class="text-sm text-text-muted">{errorMessage}</p>
-      <Button variant="secondary" size="sm" onclick={() => void loadTracks(nsfw.mode === "off")}>
+    <Alert.Root variant="destructive" class="flex flex-wrap items-center justify-between gap-4 p-4">
+      <Alert.Description>{errorMessage}</Alert.Description>
+      <Button variant="outline" size="sm" onclick={() => void loadTracks(nsfw.mode === "off")}>
         Retry
       </Button>
-    </div>
+    </Alert.Root>
   {:else if loading}
-    <div class="surface-well flex min-h-48 items-center justify-center gap-2 text-sm text-text-muted">
+    <div role="status" class="flex min-h-48 items-center justify-center gap-2 text-sm text-muted-foreground">
       <LoaderCircle class="h-4 w-4 animate-spin text-text-accent" />
       Loading tracks…
     </div>
   {:else if tracks.length === 0}
-    <div class="surface-well p-10 text-center">
-      <ListMusic class="mx-auto mb-3 h-6 w-6 text-text-disabled" />
-      <h2 class="m-0 font-heading text-base font-semibold text-text-primary">No tracks</h2>
-      <p class="mt-1 text-sm text-text-muted">
-        No standalone music tracks are in your collection yet. Scan an Artist/Album/Songs library to get started.
-      </p>
-    </div>
+    <Empty.Root>
+      <Empty.Header>
+        <Empty.Media variant="icon"><ListMusic /></Empty.Media>
+        <Empty.Title>No tracks yet</Empty.Title>
+        <Empty.Description>Scan a music library to add your tracks.</Empty.Description>
+      </Empty.Header>
+    </Empty.Root>
   {:else}
-    <div class="track-search max-w-xl">
-      <Search class="pointer-events-none absolute left-3 top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-text-disabled" />
-      <TextInput
-        class="track-search-input"
-        type="search"
-        placeholder="Search tracks, artists, or albums"
-        aria-label="Search tracks"
-        value={query}
-        oninput={(event) => (query = event.currentTarget.value)}
-      />
-    </div>
+    <SearchInput
+      class="max-w-xl"
+      placeholder="Search tracks, artists, or albums"
+      ariaLabel="Search tracks"
+      bind:value={query}
+    />
 
     {#if visibleTracks.length > 0}
       <AudioTrackList
@@ -168,11 +161,19 @@
         isPlaying={playback.playing}
         onPlay={playTrack}
         selectable={false}
+        groupBySection={false}
       />
     {:else}
-      <div class="surface-well p-8 text-center text-sm text-text-muted">
-        No tracks match “{query.trim()}”.
-      </div>
+      <Empty.Root>
+        <Empty.Header>
+          <Empty.Media variant="icon"><Search /></Empty.Media>
+          <Empty.Title>No matching tracks</Empty.Title>
+          <Empty.Description>No tracks match "{query.trim()}".</Empty.Description>
+        </Empty.Header>
+        <Empty.Content>
+          <Button variant="outline" onclick={() => (query = "")}>Clear search</Button>
+        </Empty.Content>
+      </Empty.Root>
     {/if}
   {/if}
 </section>
@@ -180,6 +181,7 @@
 <style>
   .tracks-page-head {
     display: flex;
+    flex-wrap: wrap;
     align-items: flex-end;
     justify-content: space-between;
     gap: 1rem;
@@ -203,30 +205,6 @@
     font-weight: 600;
     letter-spacing: -0.025em;
     line-height: 1.05;
-  }
-
-  .tracks-count {
-    display: inline-flex;
-    align-items: center;
-    min-height: 1.25rem;
-    padding: 0.1rem 0.35rem;
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-xs);
-    background: var(--color-surface-2);
-    color: var(--color-text-muted);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.65rem;
-    font-variant-numeric: tabular-nums;
-    letter-spacing: 0;
-  }
-
-  .track-search {
-    position: relative;
-    width: 100%;
-  }
-
-  .track-search :global(.track-search-input) {
-    padding-left: 2.5rem;
   }
 
   @media (max-width: 640px) {

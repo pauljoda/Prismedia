@@ -104,6 +104,21 @@ describe("TrackListRow", () => {
     expect(onSelectedChange).not.toHaveBeenCalled();
   });
 
+  it("keeps playable tracks quiet and exposes a visible play action", async () => {
+    const onPlay = vi.fn();
+    render(TrackListRow, {
+      track: { ...track("track-present", "Prelude"), isWanted: false, hasSourceMedia: true },
+      index: 0,
+      isActive: false,
+      isPlaying: false,
+      onPlay,
+    });
+
+    expect(screen.queryByText("Present")).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Play Prelude" }));
+    expect(onPlay).toHaveBeenCalledExactlyOnceWith("track-present");
+  });
+
   it("opens a row actions flyout and renames a track without starting playback", async () => {
     const onPlay = vi.fn();
     const onRename = vi.fn().mockResolvedValue(undefined);

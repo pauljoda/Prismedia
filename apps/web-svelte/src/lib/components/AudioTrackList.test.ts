@@ -4,6 +4,32 @@ import AudioTrackList from "./AudioTrackList.svelte";
 import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
 
 describe("AudioTrackList", () => {
+  it("keeps disc grouping for albums but uses continuous numbering for library results", async () => {
+    const tracks = [
+      { ...track("track-1", "Prelude"), sectionLabel: "Disc one", trackNumber: 7 },
+      { ...track("track-2", "Nocturne"), sectionLabel: "Disc two", trackNumber: 3 },
+    ];
+    const { container, rerender } = render(AudioTrackList, {
+      tracks,
+      activeTrackId: null,
+      isPlaying: false,
+      onPlay: vi.fn(),
+    });
+
+    expect(screen.getByText("Disc one")).toBeInTheDocument();
+    expect(screen.getByText("Disc two")).toBeInTheDocument();
+    const numbers = () => Array.from(container.querySelectorAll(".index-cell > span:first-child"))
+      .map((node) => node.textContent?.trim());
+    expect(numbers()).toEqual(["1", "1"]);
+
+    await rerender({ groupBySection: false });
+    expect(screen.queryByText("Disc one")).not.toBeInTheDocument();
+    expect(screen.queryByText("Disc two")).not.toBeInTheDocument();
+    expect(numbers()).toEqual(["1", "2"]);
+    expect(screen.getAllByRole("link").map((link) => link.textContent?.trim()))
+      .toEqual(["Prelude", "Nocturne"]);
+  });
+
   it("selects all tracks and exposes collection plus bulk actions", async () => {
     const onBulk = vi.fn();
 

@@ -20,6 +20,8 @@
     onSelectionChange?: (selectedIds: string[]) => void;
     artworkUrls?: Record<string, string | null | undefined>;
     selectable?: boolean;
+    /** Keep album disc sections by default; disable for a cross-album library or search. */
+    groupBySection?: boolean;
     class?: string;
   }
 
@@ -35,6 +37,7 @@
     onSelectionChange,
     artworkUrls = {},
     selectable = true,
+    groupBySection = true,
     class: className = "",
   }: Props = $props();
 
@@ -84,8 +87,8 @@
       rows: { track: AudioTrackListItemDto; globalIndex: number; numberInSection: number }[];
     }[] = [];
     tracks.forEach((track, globalIndex) => {
-      const label = track.sectionLabel ?? null;
-      const sectionKey = track.sectionKey ?? label;
+      const label = groupBySection ? track.sectionLabel ?? null : null;
+      const sectionKey = groupBySection ? track.sectionKey ?? label : null;
       let group = groups[groups.length - 1];
       if (!group || group.sectionKey !== sectionKey) {
         group = { key: `${groups.length}:${sectionKey ?? "__main__"}`, sectionKey, label, rows: [] };
@@ -197,7 +200,7 @@
         artworkUrl={row.track.libraryId ? artworkUrls[row.track.libraryId] : null}
         showArtwork={hasArtwork}
         index={row.globalIndex}
-        displayNumber={hasSections ? row.numberInSection : undefined}
+        displayNumber={!groupBySection ? row.globalIndex + 1 : hasSections ? row.numberInSection : undefined}
         isActive={row.track.id === activeTrackId}
         isPlaying={row.track.id === activeTrackId && isPlaying}
         {onPlay}
@@ -232,19 +235,19 @@
 
 <style>
   .track-header {
-    grid-template-columns: 2rem minmax(0, 1fr) auto 3rem 2rem;
+    grid-template-columns: 4.5rem minmax(0, 1fr) auto 3rem 2rem;
   }
 
   .track-header.has-selection {
-    grid-template-columns: 1.35rem 2rem minmax(0, 1fr) auto 3rem 2rem;
+    grid-template-columns: 1.35rem 4.5rem minmax(0, 1fr) auto 3rem 2rem;
   }
 
   .track-header.has-artwork {
-    grid-template-columns: 2rem 2.75rem minmax(0, 1fr) auto 3rem 2rem;
+    grid-template-columns: 4.5rem 2.75rem minmax(0, 1fr) auto 3rem 2rem;
   }
 
   .track-header.has-selection.has-artwork {
-    grid-template-columns: 1.35rem 2rem 2.75rem minmax(0, 1fr) auto 3rem 2rem;
+    grid-template-columns: 1.35rem 4.5rem 2.75rem minmax(0, 1fr) auto 3rem 2rem;
   }
 
   .track-select-row {

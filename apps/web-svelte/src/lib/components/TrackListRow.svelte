@@ -59,7 +59,6 @@
   let renameError = $state<string | null>(null);
 
   const displayTrackNumber = $derived(displayNumber ?? (track.trackNumber ?? index) + 1);
-  const presenceKnown = $derived(track.hasSourceMedia !== undefined || track.isWanted !== undefined);
   const isMissing = $derived(track.hasSourceMedia === false || track.isWanted === true);
 
   function formatDuration(sec: number | null | undefined) {
@@ -157,7 +156,7 @@
     </div>
   {/if}
 
-  <div class="index-cell flex h-7 w-7 items-center justify-center">
+  <div class="index-cell flex h-8 w-18 items-center justify-end gap-1">
     {#if !isMissing && isActive && isPlaying}
       <span
         class="flex h-4 items-end gap-[2px]"
@@ -169,28 +168,19 @@
         <span class="w-[2px] bg-accent-400 animate-[bar-bounce_0.9s_ease-in-out_infinite]" style="height:75%; animation-delay:450ms"></span>
       </span>
     {:else}
-      <span class={cn(
-        "absolute font-mono text-[0.72rem] tabular-nums transition-opacity duration-fast",
-        isMissing
-          ? "text-text-disabled"
-          : isActive
-            ? "text-accent-400 opacity-0"
-            : "text-text-disabled group-hover/row:opacity-0",
-      )}>
+      <span class="min-w-6 text-right font-mono text-[0.72rem] tabular-nums text-muted-foreground">
         {displayTrackNumber}
       </span>
       {#if !isMissing}
-        <Button variant="ghost" size="sm"
+        <Button variant="ghost" size="icon-sm"
           type="button"
           onclick={() => onPlay(track.id)}
           aria-label={isActive ? "Resume" : `Play ${track.title}`}
-          class={cn(
-            "inline-flex h-7 w-7 items-center justify-center transition-opacity duration-fast",
-            isActive ? "text-accent-400 opacity-100 hover:text-accent-300" : "text-text-primary opacity-70 group-hover/row:opacity-100 hover:text-accent-300",
-          )}
         >
-          <Play class="h-3.5 w-3.5" fill="currentColor" />
+          <Play fill="currentColor" />
         </Button>
+      {:else}
+        <span class="size-8" aria-hidden="true"></span>
       {/if}
     {/if}
   </div>
@@ -255,12 +245,9 @@
         {track.title}
       </span>
     {/if}
-    {#if !renaming && presenceKnown}
-      <p class={cn(
-        "track-presence mt-1 font-mono text-[0.62rem] font-semibold uppercase tracking-wider",
-        isMissing ? "text-warning-text" : "text-success-text",
-      )}>
-        {isMissing ? "Missing · not playable" : "Present"}
+    {#if !renaming && isMissing}
+      <p class="mt-1 text-xs text-warning-text">
+        Missing · not playable
       </p>
     {/if}
     {#if !renaming && (track.embeddedArtist || track.embeddedAlbum)}
@@ -435,7 +422,7 @@
 
   @media (min-width: 640px) {
     .track-row {
-      grid-template-columns: 2rem minmax(0, 1fr) auto 3rem 2rem;
+      grid-template-columns: 4.5rem minmax(0, 1fr) auto 3rem 2rem;
       grid-template-areas: "index title rating time actions";
       min-height: 2.75rem;
       padding: 0.375rem 1rem;
@@ -443,18 +430,18 @@
     }
 
     .track-row.has-selection {
-      grid-template-columns: 1.35rem 2rem minmax(0, 1fr) auto 3rem 2rem;
+      grid-template-columns: 1.35rem 4.5rem minmax(0, 1fr) auto 3rem 2rem;
       grid-template-areas: "select index title rating time actions";
     }
 
     .track-row.has-artwork {
-      grid-template-columns: 2rem 2.75rem minmax(0, 1fr) auto 3rem 2rem;
+      grid-template-columns: 4.5rem 2.75rem minmax(0, 1fr) auto 3rem 2rem;
       grid-template-areas: "index artwork title rating time actions";
       min-height: 3.5rem;
     }
 
     .track-row.has-selection.has-artwork {
-      grid-template-columns: 1.35rem 2rem 2.75rem minmax(0, 1fr) auto 3rem 2rem;
+      grid-template-columns: 1.35rem 4.5rem 2.75rem minmax(0, 1fr) auto 3rem 2rem;
       grid-template-areas: "select index artwork title rating time actions";
     }
 
