@@ -52,7 +52,7 @@
 </script>
 
 <Field.Set class="@container gap-4">
-  <Field.Legend variant="label">Release dates</Field.Legend>
+  <Field.Legend variant="label">Dates</Field.Legend>
   <Field.Group class="grid gap-4 @min-[24rem]:grid-cols-2">
     {#each fields as field (field.code)}
       <DateField

@@ -56,6 +56,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Entity metadata combines repeated provider destinations into one link with aligned, readable IDs, without changing the editable source data. Personal milestones now appear under Dates rather than Release dates.
 - Untabbed Entity pages now use the same responsive editor as tabbed pages. Hidden fields and read-only relationships no longer appear as editable or enter the save selection.
 - Entity detail panels align with the header without dark side gutters, and narrow-screen title/rating fields stay within the shared edit grid.
 - Link editors now identify editing clearly, focus the field, and explain invalid entries. Metadata input errors are associated with their fields, manual upload is keyboard-accessible, and supporting acquisition sections no longer run together.

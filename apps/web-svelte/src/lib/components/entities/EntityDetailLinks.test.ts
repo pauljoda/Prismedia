@@ -4,6 +4,28 @@ import { EXTERNAL_ID_PROVIDER } from "$lib/api/generated/codes";
 import EntityDetailLinks from "./EntityDetailLinks.svelte";
 
 describe("EntityDetailLinks", () => {
+  it("groups provider aliases by destination while retaining each identifier", () => {
+    const links = [
+      { label: `${EXTERNAL_ID_PROVIDER.tmdb}: 42`, provider: EXTERNAL_ID_PROVIDER.tmdb, url: "https://example.test/title/42" },
+      { label: `${EXTERNAL_ID_PROVIDER.imdb}: tt42`, provider: EXTERNAL_ID_PROVIDER.imdb, url: "https://EXAMPLE.test:443/title/42" },
+    ];
+    const original = structuredClone(links);
+    render(EntityDetailLinks, { links });
+    expect(screen.getAllByRole("link")).toHaveLength(1);
+    expect(screen.getByRole("link")).toHaveTextContent("example.test");
+    expect(screen.getByRole("link")).toHaveTextContent("42");
+    expect(screen.getByRole("link")).toHaveTextContent("tt42");
+    expect(screen.getByRole("link")).toHaveTextContent(EXTERNAL_ID_PROVIDER.tmdb);
+    expect(screen.getByRole("link")).toHaveTextContent(EXTERNAL_ID_PROVIDER.imdb);
+    expect(links).toEqual(original);
+  });
+
+  it("renders repeated identical links once and keeps URL fragments distinct", () => {
+    const link = { label: "Website", url: "https://example.test/title/42" };
+    render(EntityDetailLinks, { links: [link, { ...link }, { ...link, url: `${link.url}#credits` }] });
+    expect(screen.getAllByRole("link")).toHaveLength(2);
+  });
+
   it("shows one destination when a website duplicates the provider link, retaining its ID", () => {
     render(EntityDetailLinks, { links: [
       { label: "Website", url: "https://example.test/movie/42" },
