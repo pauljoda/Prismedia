@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Readers, player settings, file actions, ratings, selection controls, and operational screens now use the shared themed UI foundation. Reader contents and media settings share keyboard dismissal and focus handling, while existing artwork layouts, Settings section identities, and library toolbar placement are preserved.
 - Relationship, tag, and collection pickers now share searchable keyboard navigation, removable selections, and clearer loading and retry states. Editors, dialogs, mobile navigation, progress indicators, and collection choices build on the same themed UI foundations without replacing Settings navigation or library toolbar layouts.
 - Global search now uses a shared command interface with clearer artwork rows, keyboard-accessible recent searches and full-result actions, visible navigation hints, and retry feedback, while preserving grouped results and layered dialog interaction.
 - Shared buttons, search fields, form labels, status badges, detail tabs, and navigation disclosures now build on themed shadcn-svelte components, with quieter toolbar styling and existing page layouts and section identities preserved.

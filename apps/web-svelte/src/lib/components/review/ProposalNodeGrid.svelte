@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Check } from "@lucide/svelte";
-  import { Checkbox, cn } from "@prismedia/ui-svelte";
+  import { Button, Checkbox, cn } from "@prismedia/ui-svelte";
   import type { EntityMetadataProposal } from "$lib/api/identify-types";
   import { entityKindIcon } from "$lib/entities/entity-kind-icons";
   import { entityAccentForKind } from "$lib/entities/entity-accent";
@@ -79,25 +79,25 @@
     {/snippet}
     <article class={cn("proposal-node", isSelected && "is-selected", selectionMode && !canSelect && "is-disabled")}>
       {#if onActivate}
-        <button
+        <Button variant="ghost" size="sm"
           type="button"
-          class="proposal-node-open"
+          class="proposal-node-open h-auto p-0"
           aria-label={`Review ${title}`}
           onclick={() => onActivate(node)}
         >
           {@render nodeContent()}
-        </button>
+        </Button>
       {:else if canSelect}
-        <button
+        <Button variant="ghost" size="sm"
           type="button"
-          class="proposal-node-open"
+          class="proposal-node-open h-auto p-0"
           aria-label={`${isSelected ? "Deselect" : "Select"} ${title}`}
           onclick={() => onSelectedChange(node.proposalId, !isSelected)}
         >
           {@render nodeContent()}
-        </button>
+        </Button>
       {:else}
-        <div class="proposal-node-open">{@render nodeContent()}</div>
+        <div class="proposal-node-open h-auto p-0">{@render nodeContent()}</div>
       {/if}
 
       {#if selectionMode}
@@ -151,7 +151,7 @@
     opacity: 0.66;
   }
 
-  .proposal-node-open {
+  .proposal-node :global(.proposal-node-open) {
     display: flex;
     width: 100%;
     min-width: 0;

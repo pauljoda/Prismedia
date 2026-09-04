@@ -9,7 +9,7 @@
     Sparkles,
     X,
   } from "@lucide/svelte";
-  import { Checkbox,  cn  } from "@prismedia/ui-svelte";
+  import { Button, Checkbox,  cn } from "@prismedia/ui-svelte";
   import { useIdentifyStore } from "./identify-store.svelte";
   import { entityKindIcon } from "$lib/entities/entity-kind-icons";
   import { entityAccentForKind } from "$lib/entities/entity-accent";
@@ -71,7 +71,7 @@
         {@const hasPending = kindInfo.pending > 0}
         {@const KindIcon = entityKindIcon(kindInfo.kind)}
         {@const kindAccent = entityAccentForKind(kindInfo.kind).primary}
-        <button
+        <Button variant="outline" size="sm"
           type="button"
           class={cn(
             "surface-card flex flex-col gap-2.5 p-3.5 text-left transition-all",
@@ -111,7 +111,7 @@
             <div class="flex-1"></div>
             <ChevronRight class={cn("h-3.5 w-3.5", hasPending ? "text-text-accent" : "text-text-muted")} />
           </div>
-        </button>
+        </Button>
       {/each}
     </div>
   {/if}
@@ -140,10 +140,10 @@
         <div class="hidden flex-1 sm:block"></div>
         <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
           {#if acceptableSelectedCount > 0}
-            <button
+            <Button variant="outline" size="sm"
               type="button"
-              class="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-xs border border-border-accent-strong px-2.5 text-[0.72rem] font-medium text-text-primary transition-all disabled:cursor-not-allowed disabled:opacity-40 sm:h-7 sm:w-auto"
-              style="background: linear-gradient(135deg, rgba(199, 201, 204,0.24), rgba(199, 201, 204,0.1)); box-shadow: 0 0 18px rgba(199, 201, 204,0.16);"
+              class="inline-flex h-8 w-full items-center justify-center gap-1.5 px-2.5 text-[0.72rem] font-medium disabled:cursor-not-allowed disabled:opacity-40 sm:h-7 sm:w-auto"
+
               disabled={store.bulkAccepting}
               onclick={acceptSelected}
             >
@@ -153,28 +153,28 @@
                 <Check class="h-3 w-3" />
               {/if}
               Accept {acceptableSelectedCount}
-            </button>
+            </Button>
           {/if}
           {#if selectedQueueIds.size > 0}
-            <button
+            <Button variant="destructive" size="sm"
               type="button"
-              class="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-xs border border-border-default bg-surface-2 px-2.5 text-[0.72rem] font-medium text-text-muted transition-colors hover:border-error/50 hover:text-error-text disabled:cursor-not-allowed disabled:opacity-40 sm:h-7 sm:w-auto"
+              class="inline-flex h-8 w-full items-center justify-center gap-1.5 px-2.5 text-[0.72rem] font-medium disabled:cursor-not-allowed disabled:opacity-40 sm:h-7 sm:w-auto"
               disabled={store.bulkAccepting}
               onclick={rejectSelected}
             >
               <X class="h-3 w-3" />
               Reject {selectedQueueIds.size}
-            </button>
+            </Button>
           {/if}
-          <button
+          <Button variant="outline" size="sm"
             type="button"
-            class="inline-flex h-8 w-full items-center justify-center gap-1.5 rounded-xs border border-border-accent-strong bg-accent-950/40 px-2.5 text-[0.72rem] font-medium text-text-accent transition-colors hover:bg-accent-950/60 disabled:cursor-not-allowed disabled:opacity-40 sm:h-7 sm:w-auto"
+            class="inline-flex h-8 w-full items-center justify-center gap-1.5 px-2.5 text-[0.72rem] font-medium disabled:cursor-not-allowed disabled:opacity-40 sm:h-7 sm:w-auto"
             disabled={!hasReviewable}
             onclick={() => store.reviewQueueItem(store.queue[0])}
           >
             <Sparkles class="h-3 w-3" />
             Review all
-          </button>
+          </Button>
         </div>
       </header>
 
@@ -294,7 +294,7 @@
           </span>
 
           <div class="flex justify-end">
-            <button
+            <Button variant="outline" size="sm"
               type="button"
               class={cn(
                 "inline-flex h-7 items-center gap-1 rounded-xs border px-2 text-[0.72rem] font-medium transition-colors",
@@ -306,7 +306,7 @@
             >
               {item.state === "proposal" ? "Review" : item.state === "done" ? "View" : item.state === "error" ? "Retry" : "Identify"}
               <ChevronRight class="h-3 w-3" />
-            </button>
+            </Button>
           </div>
         </div>
       {/each}

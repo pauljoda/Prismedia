@@ -15,7 +15,7 @@
     SkipForward,
     X,
   } from "@lucide/svelte";
-  import { Popover, buttonVariants,  cn  } from "@prismedia/ui-svelte";
+  import { Button, Popover, buttonVariants,  cn  } from "@prismedia/ui-svelte";
   import { formatDuration } from "$lib/utils/format";
   import { recordEntityConsumptionEvent, updateEntityProgress } from "$lib/api/consumption";
   import { sendAudioPlaybackDiagnostic } from "$lib/api/audio-playback-diagnostics";
@@ -952,8 +952,8 @@
 {#if activeTrack}
 {#if collapsed}
   <!-- Collapsed: just the artwork with animated notes; tap to expand. -->
-  <button
-    bind:this={rootEl}
+  <Button variant="ghost" size="icon-sm"
+    bind:ref={() => rootEl instanceof HTMLButtonElement ? rootEl : null, next => rootEl = next}
     type="button"
     onclick={bubbleClick}
     onpointerdown={bubblePointerDown}
@@ -968,11 +968,7 @@
         ? "shadow-[0_22px_60px_rgba(0,0,0,0.6),inset_0_1px_0_rgba(255,255,255,0.1)]"
         : "shadow-[0_14px_40px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.07)]",
     )}
-    style:transform={`translateX(${appliedTranslate}px) scale(${dragging ? 1.08 : 1})`}
-    style:transition={dragging ? "none" : `transform ${snapDuration}s cubic-bezier(0.22, 1, 0.36, 1)`}
-    style:cursor={dragging ? "grabbing" : "grab"}
-    style:--player-accent={playerPalette.primary}
-    style:--player-secondary={playerPalette.secondary}
+    style={`transform: translateX(${appliedTranslate}px) scale(${dragging ? 1.08 : 1}); transition: ${dragging ? "none" : `transform ${snapDuration}s cubic-bezier(0.22, 1, 0.36, 1)`}; cursor: ${dragging ? "grabbing" : "grab"}; --player-accent: ${playerPalette.primary}; --player-secondary: ${playerPalette.secondary}`}
   >
     {#if playing}
       <span class="audio-notes" aria-hidden="true">
@@ -999,7 +995,7 @@
         </span>
       {/if}
     </span>
-  </button>
+  </Button>
 {:else}
 <div
   bind:this={rootEl}
@@ -1011,7 +1007,7 @@
 >
   <!-- Now-playing + progress -->
   <div class="flex items-center gap-2.5 px-3 pt-2.5 pb-1">
-    <button
+    <Button variant="ghost" size="icon-sm"
       type="button"
       onclick={collapse}
       title="Minimize player"
@@ -1034,7 +1030,7 @@
           <Music class="h-4 w-4" />
         </div>
       {/if}
-    </button>
+    </Button>
 
     <div class="min-w-0 flex-1">
       {#if activeTrack}
@@ -1070,15 +1066,15 @@
       {/if}
     </span>
 
-    <button
+    <Button variant="ghost" size="icon-sm"
       type="button"
       onclick={dismiss}
       title="Close player"
       aria-label="Close player and clear queue"
-      class="player-icon-control -mr-1 shrink-0 rounded-full p-1 transition-colors hover:bg-white/5"
+      class="-mr-1 shrink-0 rounded-full p-1 transition-colors hover:bg-white/5"
     >
       <X class="h-3.5 w-3.5" />
-    </button>
+    </Button>
   </div>
 
   <!-- Progress scrubber -->
@@ -1147,29 +1143,33 @@
     />
 
     <div class="flex items-center gap-0.5">
-      <button
+      <Button variant="ghost" size="icon-sm"
         type="button"
         onclick={() => playback.toggleShuffle()}
+        aria-label="Shuffle"
+        aria-pressed={playback.shuffle}
         disabled={preservesQueueOrder}
         title={preservesQueueOrder ? "This queue plays in source order" : playback.shuffle ? "Shuffle: on" : "Shuffle: off"}
-        class={cn("player-icon-control p-1.5 transition-colors", playback.shuffle && "player-icon-control--active")}
+        class={cn("p-1.5 transition-colors", playback.shuffle && "bg-accent text-accent-foreground")}
       >
         <Shuffle class="h-3 w-3" />
-      </button>
+      </Button>
 
-      <button
+      <Button variant="ghost" size="icon-sm"
         type="button"
         onclick={handlePrev}
+        aria-label="Previous track"
         disabled={!activeTrack}
-        class="player-icon-control p-1.5 transition-colors disabled:text-text-disabled"
+        class="p-1.5 transition-colors disabled:text-text-disabled"
       >
         <SkipBack class="h-3.5 w-3.5" />
-      </button>
+      </Button>
 
-      <button
+      <Button variant="ghost" size="icon-sm"
         type="button"
         onclick={togglePlay}
-        class="player-play-button mx-0.5 rounded-full p-2 transition-all"
+        aria-label={playing ? "Pause" : "Play"}
+        class="mx-0.5 rounded-full bg-primary text-primary-foreground"
         data-playing={playing}
       >
         {#if playing}
@@ -1177,43 +1177,45 @@
         {:else}
           <Play class="ml-0.5 h-4 w-4" />
         {/if}
-      </button>
+      </Button>
 
-      <button
+      <Button variant="ghost" size="icon-sm"
         type="button"
         onclick={handleNext}
+        aria-label="Next track"
         disabled={!activeTrack || !playback.hasNext}
-        class="player-icon-control p-1.5 transition-colors disabled:text-text-disabled"
+        class="p-1.5 transition-colors disabled:text-text-disabled"
       >
         <SkipForward class="h-3.5 w-3.5" />
-      </button>
+      </Button>
 
-      <button
+      <Button variant="ghost" size="icon-sm"
         type="button"
         onclick={() => playback.cycleRepeat()}
+        aria-label="Repeat mode"
         title={playback.repeat === MUSIC_PLAYER_REPEAT_MODE.off ? "Repeat: off" : playback.repeat === MUSIC_PLAYER_REPEAT_MODE.all ? "Repeat: all" : "Repeat: one"}
-        class={cn("player-icon-control p-1.5 transition-colors", playback.repeat !== MUSIC_PLAYER_REPEAT_MODE.off && "player-icon-control--active")}
+        class={cn("p-1.5 transition-colors", playback.repeat !== MUSIC_PLAYER_REPEAT_MODE.off && "bg-accent text-accent-foreground")}
       >
         {#if playback.repeat === MUSIC_PLAYER_REPEAT_MODE.one}
           <Repeat1 class="h-3 w-3" />
         {:else}
           <Repeat class="h-3 w-3" />
         {/if}
-      </button>
+      </Button>
     </div>
 
     <div class="flex min-w-0 items-center justify-end gap-0.5">
-      <button
+      <Button variant="ghost" size="icon-sm"
         type="button"
         onclick={collapse}
         title="Minimize player"
         aria-label="Minimize player"
-        class="player-icon-control p-1.5 transition-colors"
+        class="p-1.5 transition-colors"
       >
         <Minimize2 class="h-3.5 w-3.5" />
-      </button>
+      </Button>
       <Popover.Root bind:open={queueOpen}>
-        <Popover.Trigger aria-label="Queue" title="Queue" class={cn(buttonVariants({ variant: "ghost", size: "icon" }), queueOpen && "player-icon-control--active")}>
+        <Popover.Trigger aria-label="Queue" title="Queue" class={cn(buttonVariants({ variant: "ghost", size: "icon" }), queueOpen && "bg-accent text-accent-foreground")}>
           <ListMusic class="h-3.5 w-3.5" />
         </Popover.Trigger>
         <PlaybackQueueFlyout onClose={() => (queueOpen = false)} onJumpTo={jumpToQueuedTrack} />
@@ -1235,36 +1237,8 @@
     transition: border-color 180ms var(--ease-default);
   }
 
-  .player-link:hover,
-  .player-icon-control.player-icon-control--active {
-    color: color-mix(in srgb, var(--player-accent) 84%, white 12%);
-  }
-
-  .player-icon-control {
-    color: var(--color-text-disabled);
-  }
-
-  .player-icon-control:hover:not(:disabled) {
-    color: var(--color-text-muted);
-  }
-
-  .player-icon-control--active:hover:not(:disabled) {
-    color: color-mix(in srgb, var(--player-accent) 92%, white 8%);
-  }
-
-  .player-play-button {
-    color: color-mix(in srgb, var(--player-accent) 84%, white 12%);
-    background: color-mix(in srgb, var(--player-accent) 16%, transparent);
-    box-shadow:
-      0 0 0 1px color-mix(in srgb, var(--player-accent) 46%, transparent),
-      0 0 14px color-mix(in srgb, var(--player-accent) 22%, transparent);
-  }
-
-  .player-play-button:hover,
-  .player-play-button[data-playing="true"] {
-    color: var(--color-bg);
-    background: color-mix(in srgb, var(--player-accent) 88%, white 8%);
-    box-shadow: 0 0 16px color-mix(in srgb, var(--player-accent) 34%, transparent);
+  .player-link:hover {
+    color: var(--player-accent);
   }
 
   .audio-progress-fill {

@@ -16,7 +16,7 @@
   import { dragHandle, dragHandleZone, SHADOW_ITEM_MARKER_PROPERTY_NAME } from "svelte-dnd-action";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import { Button, Collapsible, cn, ColorInput, prefersReducedMotion } from "@prismedia/ui-svelte";
+  import { TextInput, Button, Collapsible, cn, ColorInput, prefersReducedMotion } from "@prismedia/ui-svelte";
   import { useNavCustomization } from "$lib/stores/nav-customization.svelte";
   import { appShellNavIconMap } from "./app-shell-nav-icon-map";
   import LogoMark from "./LogoMark.svelte";
@@ -258,14 +258,14 @@
               >
                 <GripVertical class="h-4 w-4" />
               </span>
-              <input
+              <TextInput
                 value={section.label}
                 oninput={(e) => renameLocal(section.id, e.currentTarget.value)}
                 onchange={(e) => nav.renameSection(section.id, e.currentTarget.value.trim() || section.label)}
                 onblur={(e) => nav.renameSection(section.id, e.currentTarget.value.trim() || section.label)}
                 aria-label="Section name"
                 maxlength={40}
-                class="section-input allow-compact-input-text text-kicker min-w-0 flex-1 bg-transparent outline-none"
+                class="min-w-0 flex-1 font-mono text-xs"
               />
               <ColorInput
                 value={section.accent}
@@ -275,15 +275,15 @@
                   nav.setSectionAccent(section.id, accent);
                 }}
               />
-              <button
+              <Button variant="destructive" size="sm"
                 type="button"
-                class="icon-btn icon-btn-danger"
+                class="size-7 p-0 text-destructive"
                 aria-label="Delete section"
                 disabled={dndSections.length <= 1}
                 onclick={() => nav.removeSection(section.id)}
               >
                 <Trash2 class="h-3.5 w-3.5" />
-              </button>
+              </Button>
             </div>
 
             <!-- Section items -->
@@ -321,9 +321,9 @@
                     {/if}
                   </div>
                   <span class="min-w-0 flex-1 truncate text-sm text-text-primary">{item.label}</span>
-                  <button
+                  <Button variant="ghost" size="sm"
                     type="button"
-                    class="icon-btn"
+                    class="size-7 p-0"
                     aria-label={item.hidden ? "Show item" : "Hide item"}
                     onclick={() => nav.toggleHidden(item.href)}
                   >
@@ -332,7 +332,7 @@
                     {:else}
                       <Eye class="h-4 w-4" />
                     {/if}
-                  </button>
+                  </Button>
                 </li>
               {/each}
             </ul>
@@ -340,10 +340,10 @@
         {/each}
       </section>
 
-      <button type="button" class="add-section mt-3" onclick={() => nav.addSection("New Section")}>
+      <Button variant="ghost" size="sm" type="button" class="mt-3 w-full border border-dashed" onclick={() => nav.addSection("New Section")}>
         <Plus class="h-4 w-4" />
         <span>Add section</span>
-      </button>
+      </Button>
     </nav>
   {:else}
     <!-- Normal mode -->
@@ -427,17 +427,17 @@
   <!-- Footer actions -->
   <div class="shrink-0 space-y-1 border-t border-border-subtle px-3 py-3">
     {#if editing}
-      <button
+      <Button variant="ghost" size="sm"
         type="button"
         onclick={() => nav.reset()}
-        class="group flex h-8 w-full items-center overflow-hidden whitespace-nowrap rounded-sm text-text-muted transition-colors duration-fast hover:bg-surface-2 hover:text-text-primary"
+        class="group flex h-8 w-full items-center overflow-hidden whitespace-nowrap h-auto whitespace-normal"
         title={!isExpanded ? "Reset navigation" : undefined}
       >
         <div class="flex w-8 shrink-0 items-center justify-center">
           <RotateCcw class="h-4 w-4" />
         </div>
         <span class="ml-1 text-mono-sm">Reset to default</span>
-      </button>
+      </Button>
     {/if}
 
     <ChangelogDialog version={APP_VERSION}>
@@ -492,7 +492,7 @@
         </div>
       </a>
       {#if isExpanded}
-        <button
+        <Button variant="ghost" size="sm"
           type="button"
           onclick={() => nav.toggleEdit()}
           aria-pressed={editing}
@@ -510,7 +510,7 @@
           {:else}
             <Pencil class="h-[0.95rem] w-[0.95rem]" />
           {/if}
-        </button>
+        </Button>
       {/if}
     </div>
     <div class="mt-1 border-t border-border-subtle pt-2">
@@ -547,18 +547,6 @@
      global input font rules (anti-iOS-zoom + font:inherit opt-out) would
      otherwise override the class, so we restate the kicker metrics in this
      unlayered scoped rule. Colour still comes from .text-kicker. */
-  .section-input {
-    font-size: 0.65rem;
-    font-weight: 600;
-    letter-spacing: 0.15em;
-    text-transform: uppercase;
-    padding: 0.2rem 0.3rem;
-    border-radius: var(--radius-xs);
-  }
-  .section-input:focus {
-    background: var(--color-surface-1);
-    box-shadow: var(--shadow-focus-accent);
-  }
 
   .section-label {
     color: var(--color-text-muted);
@@ -606,49 +594,5 @@
     visibility: hidden;
   }
 
-  .icon-btn {
-    display: inline-flex;
-    height: 1.75rem;
-    width: 1.75rem;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--radius-sm);
-    color: var(--color-text-muted);
-    transition:
-      color var(--duration-fast) var(--ease-default),
-      background var(--duration-fast) var(--ease-default);
-  }
-  .icon-btn:hover {
-    color: var(--color-text-primary);
-    background: var(--color-surface-2);
-  }
-  .icon-btn:disabled {
-    opacity: 0.3;
-    pointer-events: none;
-  }
-  .icon-btn-danger:hover {
-    color: var(--color-error-text, #f87171);
-  }
 
-  .add-section {
-    display: flex;
-    width: 100%;
-    align-items: center;
-    justify-content: center;
-    gap: 0.4rem;
-    border-radius: var(--radius-md);
-    border: 1px dashed var(--color-border-default);
-    padding: 0.5rem;
-    font-size: 0.8rem;
-    color: var(--color-text-muted);
-    transition:
-      color var(--duration-fast) var(--ease-default),
-      border-color var(--duration-fast) var(--ease-default),
-      background var(--duration-fast) var(--ease-default);
-  }
-  .add-section:hover {
-    color: var(--color-text-primary);
-    border-color: var(--color-border-accent);
-    background: var(--color-surface-2);
-  }
 </style>

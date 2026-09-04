@@ -903,14 +903,14 @@
                   <span class="text-label text-text-muted">Allowed qualities (none = all)</span>
                   <div class="flex flex-wrap gap-1.5">
                     {#each qualityLadderFor(profileForm.kind) as code (code)}
-                      <button type="button"
+                      <Button variant="outline" size="sm" type="button"
                         class={cn(
                           "rounded-xs border px-2 py-0.5 font-mono text-[0.7rem] transition-colors",
                           (profileForm.allowedQualities ?? []).includes(code)
                             ? "border-border-accent bg-surface-2 text-text-primary"
                             : "border-border-subtle bg-surface-1 text-text-muted hover:text-text-primary",
                         )}
-                        onclick={() => toggleAllowedQuality(code)}>{code}</button>
+                        onclick={() => toggleAllowedQuality(code)}>{code}</Button>
                     {/each}
                   </div>
                 </div>

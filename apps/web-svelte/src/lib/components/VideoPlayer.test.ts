@@ -241,13 +241,13 @@ describe("VideoPlayer", () => {
     expect(screen.getByRole("button", { name: "Cast" })).toBeInTheDocument();
     const settingsButton = screen.getByRole("button", { name: "Player settings" });
     await fireEvent.click(settingsButton);
-    expect(screen.getByRole("menu", { name: "Player settings menu" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Player settings menu" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Quality/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Audio/ })).toBeInTheDocument();
 
     await fireEvent.click(settingsButton);
     await waitFor(() => {
-      expect(screen.queryByRole("menu", { name: "Player settings menu" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("dialog", { name: "Player settings menu" })).not.toBeInTheDocument();
     });
   });
 

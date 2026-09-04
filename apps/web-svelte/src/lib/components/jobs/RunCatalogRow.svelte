@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Loader2, Play } from "@lucide/svelte";
-  import { cn } from "@prismedia/ui-svelte";
+  import { Button, cn } from "@prismedia/ui-svelte";
   import type { RunCatalogEntry } from "$lib/jobs/run-catalog";
 
   interface Props {
@@ -27,7 +27,7 @@
     "focus-within:border-border-accent focus-within:shadow-[var(--shadow-focus-accent)]",
   )}
 >
-  <button
+  <Button variant="outline" size="sm"
     type="button"
     onclick={() => void onRun(entry.jobType)}
     disabled={disabled || running}
@@ -61,6 +61,6 @@
         <Play class="h-3.5 w-3.5 text-text-accent" />
       {/if}
     </span>
-  </button>
+  </Button>
 
 </div>

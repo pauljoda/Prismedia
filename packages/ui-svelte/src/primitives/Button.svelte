@@ -27,16 +27,18 @@
   import { cn } from "../lib/utils";
 
   interface Props extends Omit<HTMLButtonAttributes, "class"> {
+    ref?: HTMLButtonElement | null;
     variant?: ButtonVariant;
     size?: ButtonSize;
     class?: string;
     children?: Snippet;
   }
 
-  let { variant = "primary", size = "md", class: className, children, ...rest }: Props = $props();
+  let { ref = $bindable(null), variant = "primary", size = "md", class: className, children, ...rest }: Props = $props();
 </script>
 
 <BaseButton
+  bind:ref
   variant={variant === "primary" ? "default" : variant === "danger" ? "destructive" : variant}
   size={size === "md" ? "default" : size}
   class={cn(className)}

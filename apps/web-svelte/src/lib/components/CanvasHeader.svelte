@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Ellipsis, Search, Settings } from "@lucide/svelte";
   import { page } from "$app/state";
-  import { cn, DropdownMenu } from "@prismedia/ui-svelte";
+  import { Button, cn, DropdownMenu } from "@prismedia/ui-svelte";
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
   import { useSession } from "$lib/stores/session.svelte";
   import { useSearch } from "$lib/stores/search.svelte";
@@ -160,7 +160,7 @@
   </div>
 
   <div class="flex items-center gap-2">
-    <button
+    <Button variant="outline" size="sm"
       type="button"
       onclick={() => search.openPalette()}
       class={cn(
@@ -180,7 +180,7 @@
       <kbd class="hidden sm:inline-flex h-5 items-center rounded-xs border border-border-subtle px-1.5 text-[0.65rem] font-mono text-text-disabled bg-surface-2 shadow-[inset_0_1px_0_rgba(255,255,255,0.04),0_1px_2px_rgba(0,0,0,0.2)]">
         {searchShortcutKbd}
       </kbd>
-    </button>
+    </Button>
     {#if session.canManageServer}
       <a
         href="/settings"

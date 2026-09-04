@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Button } from "@prismedia/ui-svelte";
   import type { Component } from "svelte";
   import { onMount, untrack } from "svelte";
   import { Plus } from "@lucide/svelte";
@@ -327,23 +328,23 @@
         <span>{actionLabel}</span>
       </a>
     {:else if canManage}
-      <button type="button" class="page-head-action" onclick={() => (createOpen = true)}>
+      <Button variant="outline" size="sm" type="button" class="page-head-action" onclick={() => (createOpen = true)}>
         <Plus class="h-4 w-4" />
         <span>Add {noun}</span>
-      </button>
+      </Button>
     {/if}
   </header>
 
   {#if page.loadState === "error"}
     <div class="surface-card-sharp flex items-center justify-between gap-4 border-error-500/50 p-4">
       <p class="text-sm text-text-muted">{page.errorMessage ?? errorMessage ?? `Failed to load ${title.toLowerCase()}.`}</p>
-      <button
+      <Button variant="outline" size="sm"
         type="button"
-        class="surface-well px-3 py-1 text-body-sm text-text-muted transition-colors hover:text-text-primary"
+        class="surface-well px-3 py-1 text-body-sm"
         onclick={() => void page.loadInitial()}
       >
         Retry
-      </button>
+      </Button>
     </div>
   {:else}
     <EntityGrid

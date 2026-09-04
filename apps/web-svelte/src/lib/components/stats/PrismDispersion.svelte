@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { cn } from "@prismedia/ui-svelte";
+  import { ToggleButton, cn } from "@prismedia/ui-svelte";
   import { PRISM_SPECTRUM } from "$lib/entities/entity-accent";
   import { entityKindIcon } from "$lib/entities/entity-kind-icons";
   import {
@@ -248,13 +248,10 @@
       {@const Icon = entityKindIcon(band.kind)}
       {@const isActive = activeKind === band.kind}
       <li>
-        <button
-          type="button"
+        <ToggleButton variant="default"
           class={cn("legend-row", isActive && "legend-row-active")}
-          style:--band-primary={band.accent.primary}
-          style:--band-secondary={band.accent.secondary}
-          aria-pressed={isActive}
-          onclick={() => select(band.kind)}
+          style={`--band-primary: ${band.accent.primary}; --band-secondary: ${band.accent.secondary}`}
+          bind:pressed={() => isActive, () => select(band.kind)}
           onpointerenter={() => (hoveredKind = band.kind)}
           onpointerleave={() => (hoveredKind = null)}
           onfocus={() => (hoveredKind = band.kind)}
@@ -267,7 +264,7 @@
           <span class="legend-detail">
             {band.accessedCount.toLocaleString()} opened · {formatActiveDuration(band.activeSeconds)}
           </span>
-        </button>
+        </ToggleButton>
       </li>
     {/each}
   </ul>
@@ -362,7 +359,7 @@
     min-width: 0;
   }
 
-  .legend-row {
+  .dispersion-legend :global(.legend-row) {
     display: grid;
     grid-template-columns: 3px auto minmax(0, 1fr) auto;
     grid-template-rows: auto auto;
@@ -380,18 +377,18 @@
       border-color var(--duration-fast, 120ms) var(--ease-default, ease);
   }
 
-  .legend-row:hover,
-  .legend-row:focus-visible {
+  .dispersion-legend :global(.legend-row:hover),
+  .dispersion-legend :global(.legend-row:focus-visible) {
     background: var(--color-surface-2);
     border-color: var(--color-border-subtle);
     outline: none;
   }
 
-  .legend-row:focus-visible {
+  .dispersion-legend :global(.legend-row:focus-visible) {
     border-color: var(--color-border-accent);
   }
 
-  .legend-row-active {
+  .dispersion-legend :global(.legend-row-active) {
     background: var(--color-surface-2);
     border-color: var(--color-border-default);
   }
@@ -406,9 +403,9 @@
     transition: opacity var(--duration-fast, 120ms) var(--ease-default, ease);
   }
 
-  .legend-row:hover .legend-rail,
-  .legend-row:focus-visible .legend-rail,
-  .legend-row-active .legend-rail {
+  .dispersion-legend :global(.legend-row:hover .legend-rail),
+  .dispersion-legend :global(.legend-row:focus-visible .legend-rail),
+  .dispersion-legend :global(.legend-row-active .legend-rail) {
     opacity: 1;
   }
 
@@ -421,8 +418,8 @@
     color: var(--color-text-secondary);
   }
 
-  .legend-row-active .legend-label,
-  .legend-row:hover .legend-label {
+  .dispersion-legend :global(.legend-row-active .legend-label),
+  .dispersion-legend :global(.legend-row:hover .legend-label) {
     color: var(--color-text-primary);
   }
 
@@ -448,7 +445,7 @@
 
     .prism-band,
     .prism-band-seam,
-    .legend-row,
+    .dispersion-legend :global(.legend-row),
     .legend-rail {
       transition: none;
     }

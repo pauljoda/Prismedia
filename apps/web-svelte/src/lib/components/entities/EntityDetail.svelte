@@ -409,27 +409,27 @@
 {#snippet imageAssetActions(role: EntityFileRoleCode, label: "poster" | "header", hasAsset: boolean)}
   {#if isEditingActiveTab && canManageImages && roleSupported(role)}
     <div class="image-asset-actions">
-      <button
+      <Button variant="ghost" size="sm"
         type="button"
-        class="image-asset-btn"
+
         onclick={() => openAssetPicker(role)}
         disabled={assetBusy(role)}
         aria-label={`Upload ${label}`}
       >
         <Upload class="h-3.5 w-3.5" />
         <span>{assetBusy(role) ? "Uploading" : "Upload"}</span>
-      </button>
+      </Button>
       {#if hasAsset}
-        <button
+        <Button variant="ghost" size="sm"
           type="button"
-          class="image-asset-btn"
+
           onclick={() => void clearAsset(role)}
           disabled={assetBusy(role)}
           aria-label={`Clear ${label}`}
         >
           <Trash2 class="h-3.5 w-3.5" />
           <span>Clear</span>
-        </button>
+        </Button>
       {/if}
     </div>
   {/if}
@@ -1175,38 +1175,8 @@
     justify-content: center;
   }
 
-  .image-asset-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.3rem;
-    min-height: 1.8rem;
-    padding: 0.3rem 0.5rem;
-    border: 1px solid color-mix(in srgb, var(--detail-accent) 38%, var(--detail-border));
-    border-radius: var(--radius-xs, 4px);
-    background: rgba(8, 10, 15, 0.78);
-    color: var(--detail-text-secondary);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.66rem;
-    font-weight: 700;
-    letter-spacing: 0.03em;
-    text-transform: uppercase;
-    cursor: pointer;
-    box-shadow: 0 0 14px rgba(0, 0, 0, 0.35);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-  }
 
-  .image-asset-btn:hover:not(:disabled) {
-    color: var(--detail-accent);
-    border-color: color-mix(in srgb, var(--detail-accent) 62%, var(--detail-border));
-    box-shadow: 0 2px 10px rgb(0 0 0 / 0.4);
-  }
 
-  .image-asset-btn:disabled {
-    cursor: not-allowed;
-    opacity: 0.55;
-  }
 
   [data-asset-dropzone="poster"],
   [data-asset-dropzone="backdrop"] {

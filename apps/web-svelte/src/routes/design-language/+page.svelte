@@ -500,10 +500,10 @@
           <h3 class="text-kicker">ICON ACTIONS</h3>
           <Panel>
             <div class="p-5 flex flex-wrap gap-3">
-              <button class="btn-accent px-3 py-2 text-lg">▶</button>
-              <button class="btn-accent px-3 py-2 text-lg">♡</button>
-              <button class="btn-accent px-3 py-2 text-lg">⬇</button>
-              <button class="btn-accent px-3 py-2 text-lg text-text-muted !border-border-subtle !bg-surface-2">⋯</button>
+              <Button size="icon" aria-label="Play">▶</Button>
+              <Button variant="outline" size="icon" aria-label="Favorite">♡</Button>
+              <Button variant="outline" size="icon" aria-label="Download">⬇</Button>
+              <Button variant="ghost" size="icon" aria-label="More actions">⋯</Button>
             </div>
           </Panel>
         </div>

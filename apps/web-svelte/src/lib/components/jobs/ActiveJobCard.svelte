@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Square } from "@lucide/svelte";
-  import { StatusLed, cn } from "@prismedia/ui-svelte";
+  import { Progress, Button, StatusLed, cn } from "@prismedia/ui-svelte";
   import type { JobRun } from "$lib/jobs/models";
   import {
     displayJobDetail,
@@ -71,23 +71,20 @@
       {formatElapsed(job)}
     </span>
 
-    <button
+    <Button variant="destructive" size="sm"
       type="button"
       onclick={() => void onCancelJob(job)}
       disabled={isCancelling}
-      class="shrink-0 text-text-disabled transition-colors hover:text-status-error-text disabled:opacity-30"
+      class="shrink-0 disabled:opacity-30"
       title="Kill task"
     >
       <Square class="h-3 w-3" />
-    </button>
+    </Button>
   </div>
 
   {#if isRunning}
-    <div class="meter-track mx-3 mb-2" style="height: 3px;">
-      <div
-        class={cn(forceRebuild ? "" : "meter-fill")}
-        style="width: {job.progress}%;{forceRebuild ? ' background: var(--color-status-error); box-shadow: 0 0 6px rgba(168, 72, 80, 0.4);' : ''}"
-      ></div>
+    <div class="mx-3 mb-2">
+      <Progress value={job.progress} aria-label="Task progress" class="h-[3px]" style={forceRebuild ? "--progress-fill: var(--color-status-error)" : undefined} />
     </div>
   {/if}
 </div>

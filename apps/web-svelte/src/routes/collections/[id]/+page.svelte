@@ -3,7 +3,7 @@
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import { Button } from "@prismedia/ui-svelte";
+  import { Button, Tabs } from "@prismedia/ui-svelte";
   import {
     Layers,
     Music,
@@ -384,35 +384,21 @@
       </div>
     {/if}
 
+    <Tabs.Root value={activeBodyTab} onValueChange={value => { if (value === "items" || value === "audio") activeBodyTab = value; }} class="gap-4">
     {#if hasAudioMembers}
-      <div class="collection-tabs" role="tablist" aria-label="Collection views">
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          role="tab"
-          aria-selected={activeBodyTab === "items"}
-          class={activeBodyTab === "items" ? "collection-body-tab active" : "collection-body-tab"}
-          onclick={() => (activeBodyTab = "items")}
-        >
+      <Tabs.List aria-label="Collection views">
+        <Tabs.Trigger value="items">
           <Layers class="h-3.5 w-3.5" />
           Items
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          role="tab"
-          aria-selected={activeBodyTab === "audio"}
-          class={activeBodyTab === "audio" ? "collection-body-tab active" : "collection-body-tab"}
-          onclick={() => (activeBodyTab = "audio")}
-        >
+        </Tabs.Trigger>
+        <Tabs.Trigger value="audio">
           <Music class="h-3.5 w-3.5" />
           Audio
-        </Button>
-      </div>
+        </Tabs.Trigger>
+      </Tabs.List>
     {/if}
 
+    <Tabs.Content value="items">
     {#if activeBodyTab === "items"}
       {#if itemCards.length > 0}
         <section class="grid gap-3">
@@ -436,7 +422,10 @@
           <p class="m-0">This collection is empty.</p>
         </div>
       {/if}
-    {:else if hasAudioMembers}
+    {/if}
+    </Tabs.Content>
+    <Tabs.Content value="audio">
+    {#if activeBodyTab === "audio" && hasAudioMembers}
       <section class="grid gap-3">
         <div class="collection-audio-heading">
           <h2 class="m-0 font-heading text-[1.1rem] font-semibold text-text-primary flex items-center gap-2">
@@ -481,6 +470,8 @@
         {/if}
       </section>
     {/if}
+    </Tabs.Content>
+    </Tabs.Root>
     {/if}
   </EntityDetailPageState>
 </div>
@@ -496,50 +487,6 @@
 />
 
 <style>
-  .collection-tabs {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.25rem;
-    width: max-content;
-    max-width: 100%;
-    overflow-x: auto;
-    border: 1px solid var(--color-border-subtle, rgba(148, 158, 178, 0.07));
-    border-radius: var(--radius-sm, 6px);
-    background: var(--color-surface-2, #101420);
-    padding: 0.25rem;
-    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.30);
-  }
-
-  .collection-tabs :global(.collection-body-tab) {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.4rem;
-    min-height: 2rem;
-    border: 1px solid transparent;
-    border-radius: var(--radius-xs, 4px);
-    color: var(--color-text-muted, #8a93a6);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.68rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    padding: 0 0.7rem;
-    transition:
-      border-color var(--duration-fast, 80ms) var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)),
-      background var(--duration-fast, 80ms) var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)),
-      color var(--duration-fast, 80ms) var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1));
-  }
-
-  .collection-tabs :global(.collection-body-tab:hover),
-  .collection-tabs :global(.collection-body-tab:focus-visible),
-  .collection-tabs :global(.collection-body-tab.active) {
-    border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
-    background: var(--color-surface-3, #151a28);
-    color: var(--color-text-accent, #c7c9cc);
-    outline: none;
-  }
-
   .collection-audio-heading {
     display: flex;
     align-items: center;

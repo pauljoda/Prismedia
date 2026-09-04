@@ -24,6 +24,7 @@ function baseProps(
   overrides: Partial<VideoSettingsMenuProps> = {},
 ): VideoSettingsMenuProps {
   const props: VideoSettingsMenuProps = {
+    open: true,
     activeSubtitleLabel: "English",
     appearance: defaultSubtitleAppearance,
     displayedAudioTrackLabel: "Main",

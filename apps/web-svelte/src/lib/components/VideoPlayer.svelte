@@ -18,11 +18,12 @@
     Maximize,
     Play,
     PanelRightOpen,
-    Settings2,
     Volume2,
     VolumeX,
   } from "@lucide/svelte";
   import {
+    Button,
+    Slider,
     cn,
     findFrameAtTime,
     loadTrickplayFrames,
@@ -294,9 +295,7 @@
   let timelineTrickplayFrames = $state<TrickplayFrame[] | null>(null);
   let timelineTrickplayError = $state(false);
   let settingsMenuRendered = $state(false);
-  let settingsMenuClosing = $state(false);
   let settingsView = $state<SettingsView>("root");
-  let settingsCloseTimer: number | null = null;
   let internalSubtitleId = $state<string | null>(null);
   let activeTrackCues = $state<SubtitleCue[]>([]);
   let activeCueText = $state<string | null>(null);
@@ -496,12 +495,6 @@
     }
   }
 
-  function clearSettingsCloseTimer() {
-    if (settingsCloseTimer) {
-      window.clearTimeout(settingsCloseTimer);
-      settingsCloseTimer = null;
-    }
-  }
 
   function scheduleControlsHide() {
     clearControlsTimer();
@@ -925,15 +918,6 @@
     return googleCastFrameworkPromise;
   }
 
-  function animateControlPress(event: MouseEvent) {
-    const target = event.currentTarget;
-    if (!(target instanceof HTMLElement)) return;
-    target.classList.remove("is-pressed");
-    void target.offsetWidth;
-    target.classList.add("is-pressed");
-    window.setTimeout(() => target.classList.remove("is-pressed"), 180);
-  }
-
   async function requestCast(event: MouseEvent) {
     if (!player) return;
     const remote = (player as unknown as {
@@ -976,30 +960,13 @@
   }
 
   function openSettings(view: SettingsView = "root") {
-    clearSettingsCloseTimer();
     settingsView = view;
     settingsMenuRendered = true;
-    settingsMenuClosing = false;
   }
 
   function closeSettings() {
-    if (!settingsMenuRendered || settingsMenuClosing) return;
-    clearSettingsCloseTimer();
-    settingsMenuClosing = true;
-    settingsCloseTimer = window.setTimeout(() => {
-      settingsMenuRendered = false;
-      settingsMenuClosing = false;
-      settingsView = "root";
-      settingsCloseTimer = null;
-    }, 180);
-  }
-
-  function toggleSettings() {
-    if (settingsMenuRendered && !settingsMenuClosing) {
-      closeSettings();
-      return;
-    }
-    openSettings();
+    settingsMenuRendered = false;
+    settingsView = "root";
   }
 
   async function toggleFullscreen() {
@@ -1414,7 +1381,6 @@
     return () => {
       abortVideoElementLoad(mediaElement());
       clearControlsTimer();
-      clearSettingsCloseTimer();
       clearInitialMutedSync();
       if (enableKeyboardShortcuts) {
         window.removeEventListener("keydown", handleKey);
@@ -1689,7 +1655,7 @@
         {#if markers.length > 0}
           <div class="pointer-events-auto order-3 hidden flex-wrap gap-1.5 sm:order-1 sm:flex">
             {#each markers as marker (marker.id)}
-              <button
+              <Button variant="outline" size="xs"
                 type="button"
                 data-testid="video-marker-chip"
                 onpointerdown={(event) => event.stopPropagation()}
@@ -1700,10 +1666,10 @@
                 }}
                 title={`Seek to ${marker.title}`}
                 aria-label={`Seek to ${marker.title}`}
-                class="player-chip px-2.5 py-1 text-[0.68rem] text-white/72 transition-colors hover:border-accent-400/35 hover:text-white"
+
               >
                 {marker.title}
-              </button>
+              </Button>
             {/each}
           </div>
         {/if}
@@ -1718,19 +1684,10 @@
             />
 
             <div class="hidden sm:flex items-center gap-2 text-white/80">
-              <button type="button" onclick={toggleMute} class="transition-colors hover:text-white" aria-label={muted ? "Unmute" : "Mute"}>
+              <Button variant="ghost" size="icon" type="button" onclick={toggleMute} class="transition-colors hover:text-white" aria-label={muted ? "Unmute" : "Mute"}>
                 {#if muted}<VolumeX class="h-4 w-4" />{:else}<Volume2 class="h-4 w-4" />{/if}
-              </button>
-              <input
-                aria-label="Volume"
-                type="range"
-                min="0"
-                max="1"
-                step="0.05"
-                value={muted ? 0 : volume}
-                oninput={(event) => handleVolumeChange(Number(event.currentTarget.value))}
-                class="prismedia-range h-1 w-20"
-              />
+              </Button>
+              <Slider type="single" min={0} max={1} step={0.05} value={muted ? 0 : volume} onValueChange={handleVolumeChange} thumbLabel="Volume" class="w-20" />
             </div>
 
             <span class="shrink-0 whitespace-nowrap text-mono-tabular text-glow-phosphor text-[0.7rem] sm:text-xs">
@@ -1741,84 +1698,33 @@
           <div class="flex w-full items-center justify-between gap-2 sm:w-auto sm:justify-start">
             <div class="flex min-w-0 shrink items-center gap-2">
               {#if subtitleTracks.length > 0 && onTranscriptSidecarToggle}
-                <button
+                <Button variant="ghost" size="icon"
                   type="button"
                   onclick={(event) => {
-                    animateControlPress(event);
                     onTranscriptSidecarToggle();
                   }}
                   aria-label={isTranscriptSidecarOpen ? "Hide transcript sidecar" : "Show transcript sidecar"}
                   title={isTranscriptSidecarOpen ? "Hide transcript sidecar" : "Show transcript sidecar"}
                   class={cn(
-                    "player-control-button sidecar-control-button text-[0.56rem] sm:text-[0.72rem]",
+                    "size-7 sm:size-9",
                     isTranscriptSidecarOpen
-                      ? "border-accent-500/45 bg-accent-500/12 text-accent-100 shadow-[var(--shadow-glow-accent)]"
+                      ? "bg-accent text-accent-foreground"
                       : "text-white/82",
                   )}
                 >
                   <PanelRightOpen class="h-3 w-3 sm:h-3.5 sm:w-3.5" />
-                </button>
+                </Button>
               {/if}
             </div>
 
             <div class="relative flex min-w-0 items-center justify-end gap-2">
-              <button
-                type="button"
-                onclick={(event) => {
-                  animateControlPress(event);
-                  toggleSettings();
-                }}
-                class={cn(
-                  "player-control-button justify-center p-0 text-white/80",
-                  settingsMenuRendered &&
-                    !settingsMenuClosing &&
-                    "border-accent-500/40 text-accent-100 shadow-[var(--shadow-glow-accent)]",
-                )}
-                aria-label="Player settings"
-                aria-expanded={settingsMenuRendered && !settingsMenuClosing}
-              >
-                <Settings2 class="h-3 w-3 sm:h-4 sm:w-4" />
-              </button>
-
-              {#if showCastControls}
-                <button
-                  type="button"
-                  onclick={(event) => {
-                    animateControlPress(event);
-                    void requestCast(event);
-                  }}
-                  class="player-control-button justify-center p-0 text-white/80"
-                  aria-label="Cast"
-                  title="Cast"
-                >
-                  <Cast class="h-3 w-3 sm:h-4 sm:w-4" />
-                </button>
-              {/if}
-
-              <button
-                type="button"
-                onclick={(event) => {
-                  animateControlPress(event);
-                  void toggleFullscreen();
-                }}
-                class="player-control-button justify-center p-0 text-white/80"
-                aria-label="Fullscreen"
-              >
-                <Maximize class="h-3 w-3 sm:h-4 sm:w-4" />
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-      </div>
-
-      {#if settingsMenuRendered}
         <VideoSettingsMenu
           activeQualityLabel={activeQualityLabel}
           activeSubtitleId={activeSubtitleId}
           {activeSubtitleLabel}
           {appearance}
-          closing={settingsMenuClosing}
+          open={settingsMenuRendered}
+          portalTarget={settingsMenuRendered && isDocumentFullscreen() ? containerEl : null}
           {displayedAudioTrackLabel}
           {displayedAudioTracks}
           {localAppearance}
@@ -1838,7 +1744,38 @@
           {subtitleTracks}
           view={settingsView}
         />
-      {/if}
+
+              {#if showCastControls}
+                <Button variant="ghost" size="icon"
+                  type="button"
+                  onclick={(event) => {
+                    void requestCast(event);
+                  }}
+                  class="size-7 sm:size-9"
+                  aria-label="Cast"
+                  title="Cast"
+                >
+                  <Cast class="h-3 w-3 sm:h-4 sm:w-4" />
+                </Button>
+              {/if}
+
+              <Button variant="ghost" size="icon"
+                type="button"
+                onclick={(event) => {
+                  void toggleFullscreen();
+                }}
+                class="size-7 sm:size-9"
+                aria-label="Fullscreen"
+              >
+                <Maximize class="h-3 w-3 sm:h-4 sm:w-4" />
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
+      </div>
+
+
     {/if}
   </div>
 
@@ -1967,106 +1904,4 @@
     width: 100%;
   }
 
-  .prismedia-range {
-    appearance: none;
-    background: rgba(255, 255, 255, 0.18);
-    border-radius: var(--radius-xs);
-    cursor: pointer;
-    transition: background var(--duration-fast) var(--ease-default);
-  }
-
-  .prismedia-range:hover {
-    background: rgba(255, 255, 255, 0.24);
-  }
-
-  .prismedia-range::-webkit-slider-thumb {
-    appearance: none;
-    width: 0.72rem;
-    height: 0.72rem;
-    border-radius: 50%;
-    background: var(--color-accent-300);
-    box-shadow:
-      0 0 0 1px rgba(199, 201, 204, 0.35),
-      0 0 10px rgba(199, 201, 204, 0.65);
-  }
-
-  .prismedia-range::-moz-range-thumb {
-    width: 0.72rem;
-    height: 0.72rem;
-    border: 0;
-    border-radius: 50%;
-    background: var(--color-accent-300);
-    box-shadow:
-      0 0 0 1px rgba(199, 201, 204, 0.35),
-      0 0 10px rgba(199, 201, 204, 0.65);
-  }
-
-  .player-control-button {
-    align-items: center;
-    backdrop-filter: blur(var(--glass-blur-sm));
-    -webkit-backdrop-filter: blur(var(--glass-blur-sm));
-    background: rgba(12, 15, 21, 0.78);
-    border: 1px solid rgba(148, 158, 178, 0.14);
-    border-radius: var(--radius-base);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.07),
-      0 2px 10px rgba(0, 0, 0, 0.35);
-    display: flex;
-    height: 1.75rem;
-    min-height: 1.75rem;
-    min-width: 1.75rem;
-    transform: translateY(0) scale(1);
-    transition:
-      background-color var(--duration-fast) var(--ease-default),
-      border-color var(--duration-fast) var(--ease-default),
-      box-shadow var(--duration-fast) var(--ease-default),
-      color var(--duration-fast) var(--ease-default),
-      transform var(--duration-fast) var(--ease-default);
-  }
-
-  .player-control-button:hover,
-  .player-control-button:focus-visible {
-    background: rgba(21, 26, 40, 0.88);
-    border-color: rgba(199, 201, 204, 0.45);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.10),
-      0 0 0 1px rgba(199, 201, 204, 0.20),
-      0 0 20px rgba(199, 201, 204, 0.30),
-      0 4px 16px rgba(0, 0, 0, 0.40);
-    color: white;
-  }
-
-  .player-control-button:focus-visible {
-    outline: 1px solid rgba(199, 201, 204, 0.72);
-    outline-offset: 2px;
-  }
-
-  .player-control-button:active,
-  .player-control-button.is-pressed {
-    background: rgba(33, 39, 51, 0.98);
-    border-color: rgba(199, 201, 204, 0.58);
-    box-shadow:
-      inset 0 0 14px rgba(199, 201, 204, 0.18),
-      0 0 20px rgba(199, 201, 204, 0.34);
-    transform: translateY(1px) scale(0.94);
-  }
-
-  .sidecar-control-button {
-    justify-content: center;
-    padding: 0;
-    width: 1.75rem;
-  }
-
-  @media (min-width: 640px) {
-    .player-control-button {
-      height: 2.25rem;
-      min-height: 2.25rem;
-      min-width: 2.25rem;
-    }
-
-    .sidecar-control-button {
-      padding: 0;
-      width: 2.25rem;
-    }
-  }
 </style>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { TextInput } from "@prismedia/ui-svelte";
   import { onMount } from "svelte";
   import { FILE_ENTRY_KIND } from "$lib/api/generated/codes";
   import type { ContextMenuItem, ContextMenuOpenContext, FileTree, FileTreeDirectoryHandle } from "@pierre/trees";
@@ -358,8 +359,9 @@
 
 <section class="files-tree-pane" aria-label="Directory tree">
   <div class="tree-toolbar">
-    <input
+    <TextInput
       type="search"
+      aria-label="Filter loaded files"
       placeholder="Filter loaded files"
       value={search}
       oninput={(event) => onSearch?.(event.currentTarget.value)}
@@ -386,24 +388,7 @@
     color: var(--color-text-muted);
   }
 
-  .tree-toolbar input {
-    min-width: 0;
-    width: 100%;
-    border: 1px solid var(--color-border-default);
-    border-radius: var(--radius-xs);
-    background: var(--color-surface-1);
-    color: var(--color-text-primary);
-    padding: 0.45rem 0.6rem;
-    font-family: var(--font-body);
-    font-size: 0.85rem;
-    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.25);
-    outline: none;
-  }
 
-  .tree-toolbar input:focus {
-    border-color: var(--color-border-accent-strong);
-    box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.25), 0 0 0 2px rgba(199, 201, 204, 0.20);
-  }
 
   .tree-host {
     min-height: 0;

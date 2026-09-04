@@ -8,16 +8,14 @@
     Search,
     Sparkles,
   } from "@lucide/svelte";
-  import {
-    Badge,
+  import { Button, Badge,
     Checkbox,
     Panel,
     Select,
     TextInput,
     Toggle,
     cn,
-    type SelectOption,
-  } from "@prismedia/ui-svelte";
+    type SelectOption, } from "@prismedia/ui-svelte";
   import {
     AUTO_IDENTIFY_SELECTOR_KIND,
     ENTITY_KIND_DEFINITIONS,
@@ -318,7 +316,7 @@
         <div class="flex flex-wrap gap-2">
           {#each ENTITY_KINDS as kind (kind.key)}
             {@const active = selectedKinds.includes(kind.key)}
-            <button
+            <Button variant="outline" size="sm"
               type="button"
               onclick={() => toggleKind(kind.key)}
               class={cn(
@@ -329,7 +327,7 @@
               )}
             >
               {kind.label}
-            </button>
+            </Button>
           {/each}
         </div>
       </div>
@@ -374,10 +372,10 @@
               {@const priority = priorityOf(provider.id)}
               <div class="flex items-center gap-3 px-3 py-2.5">
                 <Checkbox {checked} onchange={() => toggleProvider(provider.id)} />
-                <button
+                <Button variant="outline" size="sm"
                   type="button"
                   onclick={() => toggleProvider(provider.id)}
-                  class="min-w-0 flex-1 text-left"
+                  class="min-w-0 flex-1 text-left h-auto whitespace-normal"
                 >
                   <div class="flex items-center gap-2">
                     {#if checked}
@@ -397,27 +395,27 @@
                       <Badge variant="default" class="text-[0.6rem]">{kind}</Badge>
                     {/each}
                   </div>
-                </button>
+                </Button>
                 {#if checked}
                   <div class="flex shrink-0 flex-col">
-                    <button
+                    <Button variant="outline" size="sm"
                       type="button"
                       onclick={() => moveProvider(provider.id, -1)}
                       disabled={priority <= 0}
-                      class="px-1 text-text-muted transition-colors hover:text-text-primary disabled:opacity-30"
+                      class="px-1 disabled:opacity-30"
                       aria-label="Increase priority"
                     >
                       <ArrowUp class="h-3.5 w-3.5" />
-                    </button>
-                    <button
+                    </Button>
+                    <Button variant="outline" size="sm"
                       type="button"
                       onclick={() => moveProvider(provider.id, 1)}
                       disabled={priority >= selectedProviders.length - 1}
-                      class="px-1 text-text-muted transition-colors hover:text-text-primary disabled:opacity-30"
+                      class="px-1 disabled:opacity-30"
                       aria-label="Decrease priority"
                     >
                       <ArrowDown class="h-3.5 w-3.5" />
-                    </button>
+                    </Button>
                   </div>
                 {/if}
               </div>

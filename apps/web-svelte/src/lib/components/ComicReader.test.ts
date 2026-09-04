@@ -37,7 +37,7 @@ function makeImages(count: number): ImageListItemDto[] {
 const images = makeImages(3);
 
 function readerRoot(container: HTMLElement): HTMLElement {
-  return document.body.querySelector('[role="dialog"]') ?? container;
+  return document.body.querySelector('[data-reader-overlay]') ?? container;
 }
 
 describe("ComicReader", () => {
@@ -63,7 +63,7 @@ describe("ComicReader", () => {
       },
     });
 
-    const overlay = document.body.querySelector('[role="dialog"]');
+    const overlay = document.body.querySelector("[data-reader-overlay]");
     expect(overlay).toBeInTheDocument();
     expect(container.querySelector('[role="dialog"]')).toBeNull();
   });
@@ -80,7 +80,7 @@ describe("ComicReader", () => {
       },
     });
 
-    const overlay = document.body.querySelector('[role="dialog"]');
+    const overlay = document.body.querySelector("[data-reader-overlay]");
     expect(overlay).toHaveClass("reader-page-presentation");
     expect(getByLabelText("Back")).toBeInTheDocument();
   });

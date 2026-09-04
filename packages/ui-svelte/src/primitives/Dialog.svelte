@@ -8,10 +8,12 @@
     onClose: () => void;
     initialFocus?: () => HTMLElement | null;
     dismissible?: boolean;
+    /** Edge-to-edge media presentation; the modal still owns focus and dismissal. */
+    fullscreen?: boolean;
     class?: string;
     children: Snippet;
   }
-  let { open, ariaLabel, onClose, initialFocus, dismissible = true, class: className, children }: Props = $props();
+  let { open, ariaLabel, onClose, initialFocus, dismissible = true, fullscreen = false, class: className, children }: Props = $props();
 </script>
 
 <Base.Root {open} onOpenChange={(next) => { if (!next && dismissible) onClose(); }}>
@@ -22,7 +24,7 @@
     escapeKeydownBehavior={dismissible ? "close" : "ignore"}
     interactOutsideBehavior={dismissible ? "close" : "ignore"}
     onOpenAutoFocus={(event) => { const target = initialFocus?.(); if (target) { event.preventDefault(); target.focus(); } }}
-    class={cn("flex max-h-[calc(100dvh-2rem)] max-w-[calc(100vw-2rem)] flex-col gap-0 overflow-auto p-0 sm:max-w-[calc(100vw-2rem)]", className)}>
+    class={cn("flex max-h-[calc(100dvh-2rem)] max-w-[calc(100vw-2rem)] flex-col gap-0 overflow-auto p-0 sm:max-w-[calc(100vw-2rem)]", fullscreen && "inset-0 h-dvh w-dvw max-h-none max-w-none translate-x-0 translate-y-0 overflow-hidden rounded-none border-0 bg-black shadow-none ring-0 sm:max-w-none", className)}>
     <Base.Title class="sr-only">{ariaLabel}</Base.Title>
     {@render children()}
   </Base.Content>

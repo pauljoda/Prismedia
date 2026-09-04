@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Loader2, RefreshCw, Wrench } from "@lucide/svelte";
-  import { Panel } from "@prismedia/ui-svelte";
+  import { Button, Panel } from "@prismedia/ui-svelte";
   import { rebuildPreviews, backfillFingerprints } from "$lib/api/jobs";
 
   let rebuilding = $state(false);
@@ -57,11 +57,11 @@
           </p>
         </div>
         <div class="flex items-center gap-3">
-          <button
+          <Button variant="destructive" size="sm"
             type="button"
             onclick={handleRebuildPreviews}
             disabled={rebuilding}
-            class="inline-flex items-center gap-1.5 rounded-xs border border-status-error/25 bg-status-error/[0.12] px-3 py-1.5 text-[0.72rem] font-medium text-status-error-text transition-colors hover:bg-status-error/[0.18] disabled:opacity-50"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-[0.72rem] font-medium disabled:opacity-50"
           >
             {#if rebuilding}
               <Loader2 class="h-3 w-3 animate-spin" />
@@ -69,7 +69,7 @@
               <RefreshCw class="h-3 w-3" />
             {/if}
             {rebuilding ? "Queuing..." : "Force rebuild previews"}
-          </button>
+          </Button>
           {#if result}
             <p class="text-[0.68rem] text-text-muted">{result}</p>
           {/if}
@@ -85,11 +85,11 @@
           </p>
         </div>
         <div class="flex items-center gap-3">
-          <button
+          <Button variant="outline" size="sm"
             type="button"
             onclick={handleBackfillFingerprints}
             disabled={backfilling}
-            class="inline-flex items-center gap-1.5 rounded-xs border border-border-accent/40 bg-accent-950/30 px-3 py-1.5 text-[0.72rem] font-medium text-text-accent transition-colors hover:bg-accent-950/50 hover:shadow-[var(--shadow-glow-accent)] disabled:opacity-50"
+            class="inline-flex items-center gap-1.5 px-3 py-1.5 text-[0.72rem] font-medium disabled:opacity-50"
           >
             {#if backfilling}
               <Loader2 class="h-3 w-3 animate-spin" />
@@ -97,7 +97,7 @@
               <RefreshCw class="h-3 w-3" />
             {/if}
             {backfilling ? "Queuing..." : "Backfill fingerprints"}
-          </button>
+          </Button>
           {#if backfillResult}
             <p class="text-[0.68rem] text-text-muted">{backfillResult}</p>
           {/if}

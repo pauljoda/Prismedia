@@ -121,7 +121,7 @@
     {@const selected = matched ? store.isReviewProposalSelected(matched.proposalId) : false}
     <div class={cn("child-tile", selected && "is-selected")}>
       <div class="child-cover-wrap">
-        <button
+        <Button variant="ghost" size="sm"
           type="button"
           class={cn("child-cover", noMatch && "is-nomatch")}
           style="aspect-ratio: {toAspectRatioValue(aspectRatioForKind(child.kind))};"
@@ -150,17 +150,17 @@
           {:else if noMatch}
             <div class="child-overlay child-overlay-muted"><span>No match found</span></div>
           {/if}
-        </button>
+        </Button>
 
         {#if matched}
-          <button
+          <Button variant="ghost" size="sm"
             type="button"
             class={cn("child-select", selected && "is-on")}
             onclick={() => matched && store.setReviewProposalSelected(matched.proposalId, !selected)}
             aria-label={`${selected ? "Deselect" : "Select"} ${matched.patch?.title ?? child.title}`}
           >
             {#if selected}<Check class="h-3.5 w-3.5" />{/if}
-          </button>
+          </Button>
         {/if}
       </div>
 
@@ -181,16 +181,16 @@
 
   .child-tile { display: grid; gap: 0.3rem; }
   .child-cover-wrap { position: relative; }
-  .child-cover { position: relative; display: block; width: 100%; overflow: hidden; border-radius: var(--radius-sm, 6px); border: 1px solid var(--color-border-subtle, #1c2235); background: var(--color-surface-2, #101420); cursor: pointer; }
-  .child-cover.is-nomatch { cursor: default; }
-  .child-cover.is-nomatch img { filter: grayscale(1); opacity: 0.4; }
-  .child-cover img { width: 100%; height: 100%; object-fit: cover; }
+  .child-cover-wrap :global(.child-cover) { position: relative; display: block; width: 100%; overflow: hidden; border-radius: var(--radius-sm, 6px); border: 1px solid var(--color-border-subtle, #1c2235); background: var(--color-surface-2, #101420); cursor: pointer; }
+  .child-cover-wrap :global(.child-cover.is-nomatch) { cursor: default; }
+  .child-cover-wrap :global(.child-cover.is-nomatch img) { filter: grayscale(1); opacity: 0.4; }
+  .child-cover-wrap :global(.child-cover img) { width: 100%; height: 100%; object-fit: cover; }
   .child-cover-empty { width: 100%; height: 100%; background: linear-gradient(135deg, #141925, #0d1119); }
-  .is-selected .child-cover { border-color: var(--color-border-accent-strong, #9699a1); box-shadow: 0 0 0 1px var(--color-border-accent-strong, #9699a1); }
+  .is-selected .child-cover-wrap :global(.child-cover) { border-color: var(--color-border-accent-strong, #9699a1); box-shadow: 0 0 0 1px var(--color-border-accent-strong, #9699a1); }
   .child-overlay { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.3rem; background: color-mix(in srgb, #060810 60%, transparent); color: var(--color-text-accent, #c7c9cc); font-size: 0.66rem; text-align: center; padding: 0 0.4rem; }
   .child-overlay-muted { color: var(--color-text-muted, #8a93a6); }
-  .child-select { position: absolute; right: 0.3rem; top: 0.3rem; width: 1.15rem; height: 1.15rem; display: flex; align-items: center; justify-content: center; border-radius: 4px; border: 1px solid var(--color-border, #1c2235); background: color-mix(in srgb, #060810 55%, transparent); color: var(--color-text-accent, #c7c9cc); cursor: pointer; }
-  .child-select.is-on { background: var(--color-border-accent-strong, #9699a1); border-color: var(--color-border-accent-strong, #9699a1); color: #0c0f15; }
+  .child-cover-wrap :global(.child-select) { position: absolute; right: 0.3rem; top: 0.3rem; width: 1.15rem; height: 1.15rem; display: flex; align-items: center; justify-content: center; border-radius: 4px; border: 1px solid var(--color-border, #1c2235); background: color-mix(in srgb, #060810 55%, transparent); color: var(--color-text-accent, #c7c9cc); cursor: pointer; }
+  .child-cover-wrap :global(.child-select.is-on) { background: var(--color-border-accent-strong, #9699a1); border-color: var(--color-border-accent-strong, #9699a1); color: #0c0f15; }
   .child-title { font-size: 0.72rem; line-height: 1.2; color: var(--color-text-primary, #f2eed8); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .child-title.is-muted { color: var(--color-text-muted, #8a93a6); }
 </style>

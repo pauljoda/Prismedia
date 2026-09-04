@@ -14,7 +14,7 @@
     Wand2,
     X,
   } from "@lucide/svelte";
-  import { TextInput,  cn  } from "@prismedia/ui-svelte";
+  import { Button, TextInput,  cn } from "@prismedia/ui-svelte";
   import SubtitleSearchSurface from "$lib/components/SubtitleSearchSurface.svelte";
   import type { SubtitleCue, VideoSubtitleTrack } from "$lib/player/subtitle-types";
   import { fetchVideoSubtitleCues } from "$lib/player/video-subtitles";
@@ -221,15 +221,15 @@
     <div class="flex items-center justify-between border-b border-border-default px-3 py-2">
       <span class="text-[0.66rem] uppercase tracking-[0.16em] text-text-muted">Transcript</span>
       {#if onDockToggle}
-        <button
+        <Button variant="outline" size="sm"
           type="button"
           onclick={onDockToggle}
-          class="inline-flex items-center gap-1.5 border border-border-default px-2 py-0.5 text-[0.62rem] text-text-muted transition-colors duration-fast hover:border-border-accent hover:text-text-accent"
+          class="inline-flex items-center gap-1.5 px-2 py-0.5 text-[0.62rem]"
           title="Move transcript back into the tab"
         >
           <Layout class="h-3 w-3" />
           Theatre
-        </button>
+        </Button>
       {/if}
     </div>
     <div
@@ -254,7 +254,7 @@
         {#each cues as cue, idx (idx)}
           {@const isCurrent = idx === currentIndex}
           {@const isPast = currentIndex >= 0 ? idx < currentIndex : cue.end <= currentTime}
-          <button
+          <Button variant="outline" size="sm"
             type="button"
             data-cue-index={idx}
             onclick={() => onSeek(cue.start)}
@@ -271,7 +271,7 @@
               {formatTime(cue.start)}
             </span>
             <span class="whitespace-pre-line">{cue.text}</span>
-          </button>
+          </Button>
         {/each}
       {/if}
     </div>
@@ -283,10 +283,10 @@
       <div class="flex items-center justify-between gap-2">
         <span class="text-[0.7rem] uppercase tracking-[0.14em] text-text-muted">Tracks</span>
         {#if onDockToggle}
-          <button
+          <Button variant="outline" size="sm"
             type="button"
             onclick={onDockToggle}
-            class="inline-flex items-center gap-1.5 border border-border-default px-2 py-0.5 text-[0.65rem] text-text-muted hover:border-border-accent hover:text-text-accent transition-colors duration-fast"
+            class="inline-flex items-center gap-1.5 px-2 py-0.5 text-[0.65rem]"
             title={isDocked ? "Move transcript back into this tab" : "Dock transcript next to the video"}
           >
             {#if isDocked}
@@ -296,7 +296,7 @@
               <PanelRightOpen class="h-3 w-3" />
               Dock next to video
             {/if}
-          </button>
+          </Button>
         {/if}
       </div>
 
@@ -340,27 +340,27 @@
                       if (e.key === "Escape") cancelEditingTrack();
                     }}
                   />
-                  <button
+                  <Button variant="outline" size="sm"
                     type="button"
                     onclick={() => void saveEditingTrack()}
-                    class="text-text-accent hover:text-text-accent-bright transition-colors"
+                    class=""
                     title="Save"
                     aria-label="Save track"
                   >
                     <Check class="h-3.5 w-3.5" />
-                  </button>
-                  <button
+                  </Button>
+                  <Button variant="outline" size="sm"
                     type="button"
                     onclick={cancelEditingTrack}
-                    class="text-text-muted hover:text-text-primary transition-colors"
+                    class=""
                     title="Cancel"
                     aria-label="Cancel edit"
                   >
                     <X class="h-3.5 w-3.5" />
-                  </button>
+                  </Button>
                 </div>
               {:else}
-                <button
+                <Button variant="outline" size="sm"
                   type="button"
                   onclick={() => onActiveTrackIdChange(track.id)}
                   class="flex-1 flex items-center gap-2 text-left"
@@ -384,25 +384,25 @@
                       {track.source}
                     </span>
                   </span>
-                </button>
-                <button
+                </Button>
+                <Button variant="outline" size="sm"
                   type="button"
                   onclick={() => startEditingTrack(track)}
-                  class="text-text-muted hover:text-text-accent transition-colors"
+                  class=""
                   title="Rename track"
                   aria-label="Rename track"
                 >
                   <Pencil class="h-3.5 w-3.5" />
-                </button>
-                <button
+                </Button>
+                <Button variant="destructive" size="sm"
                   type="button"
                   onclick={() => void handleDelete(track.id)}
-                  class="text-text-muted hover:text-error-text transition-colors"
+                  class=""
                   title="Remove track"
                   aria-label="Remove track"
                 >
                   <Trash2 class="h-3.5 w-3.5" />
-                </button>
+                </Button>
               {/if}
             </div>
           {/each}
@@ -425,11 +425,11 @@
           class="w-16 border border-border-default bg-surface-1 px-2 py-1 text-[0.75rem] text-text-primary focus:border-border-accent focus:outline-none"
           aria-label="Upload language"
         />
-        <button
+        <Button variant="outline" size="sm"
           type="button"
           onclick={() => fileInput?.click()}
           disabled={uploading}
-          class="flex items-center gap-1.5 border border-border-default px-2.5 py-1 text-[0.75rem] text-text-secondary hover:border-border-accent hover:text-text-accent transition-colors duration-fast disabled:opacity-60"
+          class="flex items-center gap-1.5 px-2.5 py-1 text-[0.75rem] disabled:opacity-60"
         >
           {#if uploading}
             <Loader2 class="h-3.5 w-3.5 animate-spin" />
@@ -437,16 +437,16 @@
             <Upload class="h-3.5 w-3.5" />
           {/if}
           Upload subtitle
-        </button>
-        <button
+        </Button>
+        <Button variant="outline" size="sm"
           type="button"
           onclick={() => void handleExtract()}
           disabled={extractState !== "idle"}
-          class="flex items-center gap-1.5 border border-border-default px-2.5 py-1 text-[0.75rem] text-text-secondary hover:border-border-accent hover:text-text-accent transition-colors duration-fast disabled:opacity-60"
+          class="flex items-center gap-1.5 px-2.5 py-1 text-[0.75rem] disabled:opacity-60"
         >
           <Wand2 class="h-3.5 w-3.5" />
           {extractState === "idle" ? "Extract embedded" : "Queued"}
-        </button>
+        </Button>
       </div>
     </div>
 
@@ -468,15 +468,15 @@
         </div>
         <div class="flex shrink-0 items-center gap-2">
           {#if isListOnly && onDockToggle}
-            <button
+            <Button variant="outline" size="sm"
               type="button"
               onclick={onDockToggle}
-              class="text-text-muted hover:text-text-accent transition-colors"
+              class=""
               title="Move transcript back into the tab"
               aria-label="Undock transcript"
             >
               <Layout class="h-3.5 w-3.5" />
-            </button>
+            </Button>
           {/if}
         </div>
       </div>
@@ -506,7 +506,7 @@
           {#each cues as cue, idx (idx)}
             {@const isCurrent = idx === currentIndex}
             {@const isPast = currentIndex >= 0 ? idx < currentIndex : cue.end <= currentTime}
-            <button
+            <Button variant="outline" size="sm"
               type="button"
               data-cue-index={idx}
               onclick={() => onSeek(cue.start)}
@@ -523,7 +523,7 @@
                 {formatTime(cue.start)}
               </span>
               <span class="whitespace-pre-line">{cue.text}</span>
-            </button>
+            </Button>
           {/each}
         {/if}
       </div>

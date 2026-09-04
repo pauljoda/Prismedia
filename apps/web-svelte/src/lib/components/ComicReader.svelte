@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Button, Checkbox } from "@prismedia/ui-svelte";
   import {
     PAGE_READING_DIRECTION,
     READER_MODE,
@@ -395,37 +396,37 @@
       {@render companionControls()}
     {/if}
     <div class="flex items-center gap-1">
-      <button
+      <Button variant="outline" size="sm"
         type="button"
         onclick={() => setReaderMode(READER_MODE.paged)}
-        class:active-reader-control={readerMode === READER_MODE.paged}
-        class="reader-mode-button"
+        aria-pressed={readerMode === READER_MODE.paged}
+        class="aria-pressed:bg-accent aria-pressed:text-accent-foreground"
         aria-label="Paged reader"
         title="Paged reader"
       >
         <BookOpen class="h-4 w-4" />
         <span class="hidden sm:inline">Paged</span>
-      </button>
-      <button
+      </Button>
+      <Button variant="outline" size="sm"
         type="button"
         onclick={() => setReaderMode(READER_MODE.webtoon)}
-        class:active-reader-control={readerMode === READER_MODE.webtoon}
-        class="reader-mode-button"
+        aria-pressed={readerMode === READER_MODE.webtoon}
+        class="aria-pressed:bg-accent aria-pressed:text-accent-foreground"
         aria-label="Webtoon reader"
         title="Webtoon reader"
       >
         <Rows3 class="h-4 w-4" />
         <span class="hidden sm:inline">Webtoon</span>
-      </button>
+      </Button>
     </div>
 
     {#if readerMode === READER_MODE.paged}
       <div class="hidden items-center gap-1 border-l border-border-subtle pl-2 sm:flex">
-        <button
+        <Button variant="outline" size="sm"
           type="button"
           onclick={() => (pageMode = pageMode === "single" ? "double" : "single")}
-          class:active-reader-control={pageMode === "double"}
-          class="reader-mode-button"
+          aria-pressed={pageMode === "double"}
+          class="aria-pressed:bg-accent aria-pressed:text-accent-foreground"
           aria-label="Toggle one or two pages"
           title="Toggle one or two pages"
         >
@@ -436,10 +437,10 @@
             <ImageIcon class="h-4 w-4" />
             <span>1 page</span>
           {/if}
-        </button>
+        </Button>
         {#if pageMode === "double"}
-          <label class="reader-check">
-            <input type="checkbox" bind:checked={firstPageIsCover} />
+          <label class="inline-flex items-center gap-2 px-2 text-xs">
+            <Checkbox checked={firstPageIsCover} onchange={next => firstPageIsCover = next} aria-label="First page is cover" />
             <span>First page is cover</span>
           </label>
         {/if}
@@ -474,12 +475,12 @@
         {/each}
         {#if hasEndAction}
           <div class="flex w-full justify-center px-4 py-10 sm:py-14">
-            <button
+            <Button variant="outline" size="sm"
               type="button"
               data-reader-control
               onclick={() => void goChapterEndAction()}
               disabled={nextChapterBusy}
-              class="reader-next-chapter-button"
+              class="h-auto w-[min(100%,34rem)] flex-col whitespace-normal p-5 text-center"
             >
               <span class="font-mono text-[0.62rem] uppercase tracking-[0.16em] text-text-accent">
                 {hasNextChapter ? "Next Chapter" : "No next chapter"}
@@ -491,7 +492,7 @@
                 {chapterEndActionLabel}
                 <ChevronRight class="h-4 w-4" />
               </span>
-            </button>
+            </Button>
           </div>
         {/if}
       </div>
@@ -506,26 +507,26 @@
       onpointercancel={clearReaderPointerGesture}
     >
       {#if images.length > 1 || hasEndAction}
-        <button
+        <Button variant="outline" size="sm"
           type="button"
           onclick={rightToLeft ? goNext : goPrev}
           data-reader-control
-          class="reader-nav-button left-2 sm:left-3"
+          class="absolute top-1/2 z-10 hidden size-11 -translate-y-1/2 sm:inline-flex left-2 sm:left-3"
           aria-label={rightToLeft ? "Next page" : "Previous page"}
           title={rightToLeft ? "Next (←)" : "Previous (←)"}
         >
           <ChevronLeft class="h-6 w-6" />
-        </button>
-        <button
+        </Button>
+        <Button variant="outline" size="sm"
           type="button"
           onclick={rightToLeft ? goPrev : goNext}
           data-reader-control
-          class="reader-nav-button right-2 sm:right-3"
+          class="absolute top-1/2 z-10 hidden size-11 -translate-y-1/2 sm:inline-flex right-2 sm:right-3"
           aria-label={rightToLeft ? "Previous page" : "Next page"}
           title={rightToLeft ? "Previous (→)" : "Next (→)"}
         >
           <ChevronRight class="h-6 w-6" />
-        </button>
+        </Button>
       {/if}
 
       <div
@@ -541,15 +542,15 @@
             <h3 class="mt-3 max-w-[32rem] text-center font-heading text-2xl font-semibold text-text-primary sm:text-4xl">
               {chapterEndTitle}
             </h3>
-            <button
+            <Button variant="outline" size="sm"
               type="button"
               onclick={() => void goChapterEndAction()}
               disabled={nextChapterBusy}
-              class="reader-next-chapter-action"
+              class="mt-6"
             >
               {chapterEndActionLabel}
               <ChevronRight class="h-4 w-4" />
-            </button>
+            </Button>
           </div>
         {:else}
           {#each displayedSpread as pageIndex (pageIndex)}
@@ -573,166 +574,5 @@
 </ReaderShell>
 
 <style>
-  .reader-mode-button {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    border: 1px solid var(--color-border-default);
-    background: var(--color-overlay-heavy);
-    padding: 0.45rem 0.65rem;
-    border-radius: var(--radius-sm);
-    color: var(--color-text-secondary);
-    font-size: 0.72rem;
-    line-height: 1;
-    backdrop-filter: blur(var(--glass-blur-sm));
-    transition:
-      border-color var(--duration-normal) var(--ease-mechanical),
-      color var(--duration-normal) var(--ease-mechanical),
-      box-shadow var(--duration-normal) var(--ease-mechanical);
-  }
 
-  .reader-mode-button:hover,
-  .reader-mode-button:focus-visible,
-  .active-reader-control {
-    border-color: var(--color-border-accent-strong);
-    color: var(--color-text-accent-bright);
-    box-shadow: var(--shadow-glow-accent);
-    outline: none;
-  }
-
-  .reader-stage {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    min-height: 0;
-    flex: 1 1 auto;
-    touch-action: manipulation;
-  }
-
-  /* Paged mode has no native scroll, so claim every touch gesture for our
-     swipe handlers instead of letting the browser pan or navigate back. */
-  .reader-stage-paged {
-    touch-action: none;
-  }
-
-  .reader-nav-button {
-    position: absolute;
-    top: 50%;
-    z-index: 10;
-    display: none;
-    height: 2.75rem;
-    width: 2.75rem;
-    transform: translateY(-50%);
-    align-items: center;
-    justify-content: center;
-    border: 1px solid var(--color-border-default);
-    border-radius: var(--radius-sm);
-    background: var(--color-overlay-heavy);
-    color: var(--color-text-secondary);
-    backdrop-filter: blur(var(--glass-blur-sm));
-    transition:
-      border-color var(--duration-normal) var(--ease-mechanical),
-      color var(--duration-normal) var(--ease-mechanical),
-      box-shadow var(--duration-normal) var(--ease-mechanical);
-  }
-
-  .reader-nav-button:hover,
-  .reader-nav-button:focus-visible {
-    border-color: var(--color-border-accent-strong);
-    color: var(--color-text-accent-bright);
-    box-shadow: var(--shadow-glow-accent);
-    outline: none;
-  }
-
-  .reader-next-chapter-button,
-  .reader-next-chapter-page {
-    border: 1px solid var(--color-border-accent);
-    border-radius: var(--radius-md);
-    background:
-      linear-gradient(135deg, var(--color-overlay-glass-accent), rgba(255, 255, 255, 0.04)),
-      var(--color-overlay-heavy);
-    box-shadow: var(--shadow-glow-accent);
-    backdrop-filter: blur(var(--glass-blur-md));
-  }
-
-  .reader-next-chapter-button {
-    width: min(100%, 34rem);
-    padding: 1.25rem;
-    text-align: center;
-    transition:
-      border-color var(--duration-normal) var(--ease-mechanical),
-      box-shadow var(--duration-normal) var(--ease-mechanical),
-      transform var(--duration-normal) var(--ease-mechanical);
-  }
-
-  .reader-next-chapter-button:hover,
-  .reader-next-chapter-button:focus-visible,
-  .reader-next-chapter-action:hover,
-  .reader-next-chapter-action:focus-visible {
-    border-color: var(--color-border-accent-strong);
-    box-shadow: var(--shadow-glow-accent-strong);
-    outline: none;
-  }
-
-  .reader-next-chapter-button:hover,
-  .reader-next-chapter-button:focus-visible {
-    transform: translateY(-1px);
-  }
-
-  .reader-next-chapter-page {
-    display: flex;
-    min-height: min(32rem, 72vh);
-    width: min(100%, 44rem);
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    padding: 2rem;
-    text-align: center;
-  }
-
-  .reader-next-chapter-action {
-    margin-top: 1.5rem;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.45rem;
-    border: 1px solid var(--color-border-accent);
-    border-radius: var(--radius-sm);
-    background: var(--color-overlay-heavy);
-    padding: 0.7rem 0.95rem;
-    color: var(--color-text-accent-bright);
-    font-size: 0.78rem;
-    font-weight: 600;
-    transition:
-      border-color var(--duration-normal) var(--ease-mechanical),
-      box-shadow var(--duration-normal) var(--ease-mechanical);
-  }
-
-  .reader-next-chapter-button:disabled,
-  .reader-next-chapter-action:disabled {
-    cursor: wait;
-    opacity: 0.65;
-  }
-
-  .reader-check {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    border: 1px solid var(--color-border-default);
-    border-radius: var(--radius-sm);
-    background: var(--color-overlay-heavy);
-    padding: 0.45rem 0.65rem;
-    color: var(--color-text-secondary);
-    font-size: 0.72rem;
-    line-height: 1;
-  }
-
-  .reader-check input {
-    accent-color: var(--color-accent-500);
-  }
-
-  @media (min-width: 640px) {
-    .reader-nav-button {
-      display: flex;
-    }
-  }
 </style>

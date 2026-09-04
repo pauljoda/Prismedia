@@ -354,11 +354,9 @@
             {#each orderedKinds as kind (kind.kind)}
               {@const KindIcon = requestKindIcon(kind.kind)}
               {@const sources = sourceCountByKind.get(kind.kind) ?? 0}
-              <button
-                type="button"
-                class="kind-card"
-                class:has-no-source={!providersLoading && sources === 0}
-                style:--family-accent={requestKindAccent(kind.kind)}
+              <Button variant="outline"
+                class={`kind-card h-auto ${!providersLoading && sources === 0 ? "has-no-source" : ""}`}
+                style={`--family-accent: ${requestKindAccent(kind.kind)}`}
                 aria-label={kind.plural}
                 aria-describedby={`discover-sources-${kind.kind}`}
                 onclick={() => chooseKind(kind.kind)}
@@ -375,7 +373,7 @@
                     {sources} {sources === 1 ? "source" : "sources"}
                   {/if}
                 </span>
-              </button>
+              </Button>
             {/each}
           </div>
         {/if}
@@ -448,7 +446,7 @@
     gap: 0.5rem;
   }
 
-  .kind-card {
+  .kind-chooser :global(.kind-card) {
     position: relative;
     display: grid;
     grid-template-columns: 3px auto minmax(0, 1fr);
@@ -467,14 +465,14 @@
       background var(--duration-fast, 120ms) var(--ease-default, ease);
   }
 
-  .kind-card:hover,
-  .kind-card:focus-visible {
+  .kind-chooser :global(.kind-card:hover),
+  .kind-chooser :global(.kind-card:focus-visible) {
     border-color: var(--color-border-default);
     background: var(--color-surface-3);
     outline: none;
   }
 
-  .kind-card:focus-visible {
+  .kind-chooser :global(.kind-card:focus-visible) {
     border-color: var(--color-border-accent-strong);
   }
 
@@ -486,7 +484,7 @@
     opacity: 0.85;
   }
 
-  .kind-card :global(.kind-card-icon) {
+  .kind-chooser :global(.kind-card .kind-card-icon) {
     grid-row: 1 / span 2;
     box-sizing: content-box;
     width: 1.15rem;
@@ -518,16 +516,16 @@
   }
 
   /* A kind with no installed provider stays selectable so the empty-state guidance can explain why. */
-  .kind-card.has-no-source .kind-card-label {
+  .kind-chooser :global(.kind-card.has-no-source .kind-card-label) {
     color: var(--color-text-muted);
   }
 
-  .kind-card.has-no-source .kind-card-rail {
+  .kind-chooser :global(.kind-card.has-no-source .kind-card-rail) {
     opacity: 0.3;
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .kind-card {
+    .kind-chooser :global(.kind-card) {
       transition: none;
     }
   }

@@ -8,7 +8,7 @@
     Trash2,
     X,
   } from "@lucide/svelte";
-  import { buttonVariants, Checkbox, cn, DropdownMenu, TextInput } from "@prismedia/ui-svelte";
+  import { Button, buttonVariants, Checkbox, cn, DropdownMenu, TextInput } from "@prismedia/ui-svelte";
   import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
   import StarRatingPicker from "./StarRatingPicker.svelte";
 
@@ -180,17 +180,17 @@
         {displayTrackNumber}
       </span>
       {#if !isMissing}
-        <button
+        <Button variant="ghost" size="sm"
           type="button"
           onclick={() => onPlay(track.id)}
           aria-label={isActive ? "Resume" : `Play ${track.title}`}
           class={cn(
             "inline-flex h-7 w-7 items-center justify-center transition-opacity duration-fast",
-            isActive ? "text-accent-400 opacity-100 hover:text-accent-300" : "text-text-primary opacity-0 group-hover/row:opacity-100 hover:text-accent-300",
+            isActive ? "text-accent-400 opacity-100 hover:text-accent-300" : "text-text-primary opacity-70 group-hover/row:opacity-100 hover:text-accent-300",
           )}
         >
           <Play class="h-3.5 w-3.5" fill="currentColor" />
-        </button>
+        </Button>
       {/if}
     {/if}
   </div>
@@ -211,24 +211,24 @@
             if (event.key === "Escape") cancelRename();
           }}
         />
-        <button
+        <Button variant="ghost" size="sm"
           type="button"
-          class="inline-flex h-7 w-7 items-center justify-center rounded-xs border border-border-accent bg-accent-950/30 text-text-accent transition-colors hover:bg-accent-950/50 disabled:opacity-40"
+          class="inline-flex h-7 w-7 items-center justify-center disabled:opacity-40"
           disabled={renameBusy || !renameTitle.trim()}
           aria-label="Save track title"
           onclick={() => void saveRename()}
         >
           <Check class="h-3.5 w-3.5" />
-        </button>
-        <button
+        </Button>
+        <Button variant="ghost" size="sm"
           type="button"
-          class="inline-flex h-7 w-7 items-center justify-center rounded-xs border border-border-default bg-surface-2 text-text-muted transition-colors hover:bg-surface-3"
+          class="inline-flex h-7 w-7 items-center justify-center"
           disabled={renameBusy}
           aria-label="Cancel track rename"
           onclick={cancelRename}
         >
           <X class="h-3.5 w-3.5" />
-        </button>
+        </Button>
       </div>
       {#if renameError}
         <p class="mt-0.5 truncate text-[0.68rem] text-error-text">{renameError}</p>
@@ -333,14 +333,14 @@
     {/if}
 
     {#if onDelete}
-      <button
+      <Button variant="ghost" size="sm"
         type="button"
         onclick={() => onDelete!(track)}
         aria-label={`Delete ${track.title}`}
         class="hidden"
       >
         <Trash2 class="h-3.5 w-3.5" />
-      </button>
+      </Button>
     {/if}
   </div>
 </div>

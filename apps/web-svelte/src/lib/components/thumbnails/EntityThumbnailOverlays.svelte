@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Checkbox } from "@prismedia/ui-svelte";
   import { getRatingValue, isNsfw, isWanted } from "$lib/api/capabilities";
   import { acquisitionStatusDisplay } from "$lib/requests/acquisition-status-display";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
@@ -21,15 +22,14 @@
   const sourceTag = $derived(card.custom?.sourceTag);
   const progressPercent = $derived(card.progress != null && card.progress > 0 ? Math.min(100, Math.max(0, card.progress * 100)) : null);
 
-  function handleSelectionChange(event: Event) {
-    onSelectedChange?.((event.currentTarget as HTMLInputElement).checked);
-  }
   function stopSelectionActivation(event: Event) { event.stopPropagation(); }
   function formatRating(value: number): string { return value <= 0 ? "" : String(Math.round(value)); }
 </script>
 
 {#if selectable}
-  <input class="selection" class:is-selected={selected} type="checkbox" checked={selected} title={`Select ${card.entity.title}`} aria-label={`Select ${card.entity.title}`} onclick={stopSelectionActivation} onpointerdown={stopSelectionActivation} onchange={handleSelectionChange} />
+  <span class="selection">
+    <Checkbox class="size-full" checked={selected} title={`Select ${card.entity.title}`} aria-label={`Select ${card.entity.title}`} onclick={stopSelectionActivation} onpointerdown={stopSelectionActivation} onchange={onSelectedChange} />
+  </span>
 {/if}
 {#if (wanted && showWantedBadge) || nsfw}
   <div class="badges top-badges">
@@ -73,13 +73,8 @@
   .wb-muted { color: rgb(196 201 212 / 0.72); border-color: rgb(255 255 255 / 0.14); background: rgb(18 20 24 / 0.82); }
   .wb-wanted { color: rgb(199 201 204 / 0.96); border-color: rgb(199 201 204 / 0.42); background: rgb(39 29 12 / 0.82); }
   .icon-only { justify-content: center; inline-size: 1.35rem; padding-inline: 0; }
-  .selection { position: absolute; z-index: 6; top: 0.45rem; left: 0.45rem; display: grid; inline-size: 1.55rem; block-size: 1.55rem; border: 1px solid rgb(255 255 255 / 0.12); border-radius: var(--radius-xs, 4px); background: rgb(11 11 12 / 0.72); appearance: none; cursor: pointer; opacity: 0; pointer-events: none; transition: opacity 120ms ease, border-color 120ms ease, box-shadow 120ms ease; }
-  :global(.entity-thumbnail:is(:hover, :focus-within)) .selection, :global(.entity-thumbnail.is-select-mode) .selection, :global(.entity-thumbnail.is-selected) .selection, .selection:focus { opacity: 1; pointer-events: auto; }
-  .selection::before { position: absolute; inset: 0.38rem; border: 1px solid rgb(244 239 230 / 0.7); background: rgb(0 0 0 / 0.16); content: ""; pointer-events: none; }
-  .selection::after { position: absolute; top: 0.58rem; left: 0.54rem; inline-size: 0.45rem; block-size: 0.24rem; border-bottom: 2px solid #0b0b0c; border-left: 2px solid #0b0b0c; content: ""; opacity: 0; transform: rotate(-45deg); }
-  .selection:checked, .selection.is-selected { border-color: color-mix(in srgb, var(--entity-accent) 74%, white 8%); box-shadow: 0 0 0 1px color-mix(in srgb, var(--entity-accent) 64%, transparent); }
-  .selection:checked::before, .selection.is-selected::before { border-color: var(--entity-accent); background: linear-gradient(135deg, var(--entity-accent), var(--entity-accent-secondary)); }
-  .selection:checked::after, .selection.is-selected::after { opacity: 1; }
+  .selection { position: absolute; z-index: 6; top: 0.45rem; left: 0.45rem; width: 1.55rem; height: 1.55rem; opacity: 0; pointer-events: none; transition: opacity 120ms ease; }
+  :global(.entity-thumbnail:is(:hover, :focus-within)) .selection, :global(.entity-thumbnail.is-select-mode) .selection, :global(.entity-thumbnail.is-selected) .selection, .selection:focus-within { opacity: 1; pointer-events: auto; }
   :global(.entity-thumbnail.is-list) .selection { opacity: 1; pointer-events: auto; }
   :global(.entity-thumbnail.is-list) .badges { right: 0.38rem; left: 2.2rem; }
   @media (max-width: 640px) { .badge { font-size: 0.61rem; } }

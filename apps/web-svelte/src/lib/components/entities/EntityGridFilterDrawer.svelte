@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { ToggleButton } from "@prismedia/ui-svelte";
   import { CalendarRange } from "@lucide/svelte";
   import { TextInput,  cn  } from "@prismedia/ui-svelte";
   import {
@@ -135,14 +136,6 @@
     onActiveFilterIdsChange(isActive(id) ? without : [...without, id]);
   }
 
-  function chipClass(id: string, variant: "accent" | "info" = "accent"): string {
-    const activeClass = variant === "info" ? "tag-chip-info" : "tag-chip-accent";
-    const hoverClass =
-      variant === "info"
-        ? "tag-chip-default hover:tag-chip-info"
-        : "tag-chip-default hover:tag-chip-accent";
-    return cn("tag-chip cursor-pointer transition-colors duration-fast", isActive(id) ? activeClass : hoverClass);
-  }
 
   function countFor(id: string): number | null {
     return optionMap.get(id)?.count ?? null;
@@ -161,10 +154,10 @@
         <div class="flex flex-wrap gap-1">
           {#each resolutions as resolution (resolution)}
             {@const id = `technical:resolution:${resolution}`}
-            <button type="button" class={chipClass(id)} onclick={() => toggleFilter(id)}>
+            <ToggleButton variant="outline" size="sm" bind:pressed={() => isActive(id), () => toggleFilter(id)} >
               {resolution}
               {#if countFor(id) != null}<span class="ml-1 text-text-disabled">{countFor(id)}</span>{/if}
-            </button>
+            </ToggleButton>
           {/each}
         </div>
       </section>
@@ -178,24 +171,24 @@
           <div class="flex flex-wrap gap-1">
             {#each ratingValues as value (value)}
               {@const id = `rating:min:${value}`}
-              <button type="button" class={chipClass(id)} onclick={() => toggleFilter(id)}>
+              <ToggleButton variant="outline" size="sm" bind:pressed={() => isActive(id), () => toggleFilter(id)} >
                 {value}★+
-              </button>
+              </ToggleButton>
             {/each}
           </div>
           <div class="font-mono text-[0.6rem] uppercase tracking-wider text-text-disabled">At most</div>
           <div class="flex flex-wrap gap-1">
             {#each ratingValues as value (value)}
               {@const id = `rating:max:${value}`}
-              <button type="button" class={chipClass(id)} onclick={() => toggleFilter(id)}>
+              <ToggleButton variant="outline" size="sm" bind:pressed={() => isActive(id), () => toggleFilter(id)} >
                 ≤{value}★
-              </button>
+              </ToggleButton>
             {/each}
           </div>
           <div class="flex flex-wrap gap-1">
-            <button type="button" class={chipClass("rating:unrated")} onclick={() => toggleFilter("rating:unrated")}>
+            <ToggleButton variant="outline" size="sm" bind:pressed={() => isActive("rating:unrated"), () => toggleFilter("rating:unrated")} >
               Unrated
-            </button>
+            </ToggleButton>
           </div>
         </div>
       </section>
@@ -235,9 +228,9 @@
         <div class="flex flex-wrap gap-1">
           {#each durationChoices as duration (duration.id)}
             {@const id = `technical:duration:${duration.id}`}
-            <button type="button" class={chipClass(id)} onclick={() => toggleFilter(id)}>
+            <ToggleButton variant="outline" size="sm" bind:pressed={() => isActive(id), () => toggleFilter(id)} >
               {duration.label}
-            </button>
+            </ToggleButton>
           {/each}
         </div>
       </section>
@@ -248,9 +241,9 @@
         <div class="mb-2 text-kicker">Status</div>
         <div class="flex flex-wrap gap-1">
           {#each statusChoices as item (item.id)}
-            <button type="button" class={chipClass(item.id)} onclick={() => toggleFilter(item.id)}>
+            <ToggleButton variant="outline" size="sm" bind:pressed={() => isActive(item.id), () => toggleFilter(item.id)} >
               {item.label}
-            </button>
+            </ToggleButton>
           {/each}
         </div>
       </section>
@@ -261,9 +254,9 @@
         <div class="mb-2 text-kicker">Type</div>
         <div class="flex flex-wrap gap-1">
           {#each BOOK_TYPE_FILTER_DEFS as type (type.id)}
-            <button type="button" class={chipClass(type.id)} onclick={() => toggleFilter(type.id)}>
+            <ToggleButton variant="outline" size="sm" bind:pressed={() => isActive(type.id), () => toggleFilter(type.id)} >
               {type.label}
-            </button>
+            </ToggleButton>
           {/each}
         </div>
       </section>
@@ -272,9 +265,9 @@
         <div class="mb-2 text-kicker">Format</div>
         <div class="flex flex-wrap gap-1">
           {#each BOOK_FORMAT_FILTER_DEFS as format (format.id)}
-            <button type="button" class={chipClass(format.id)} onclick={() => toggleFilter(format.id)}>
+            <ToggleButton variant="outline" size="sm" bind:pressed={() => isActive(format.id), () => toggleFilter(format.id)} >
               {format.label}
-            </button>
+            </ToggleButton>
           {/each}
         </div>
       </section>
@@ -285,9 +278,9 @@
         <div class="mb-2 text-kicker">Availability</div>
         <div class="flex flex-wrap gap-1">
           {#each AVAILABILITY_FILTER_DEFS as item (item.id)}
-            <button type="button" class={chipClass(item.id)} onclick={() => toggleExclusive(item.id, AVAILABILITY_FILTER_IDS)}>
+            <ToggleButton variant="outline" size="sm" bind:pressed={() => isActive(item.id), () => toggleExclusive(item.id, AVAILABILITY_FILTER_IDS)} >
               {item.label}
-            </button>
+            </ToggleButton>
           {/each}
         </div>
       </section>
@@ -297,20 +290,14 @@
       <section>
         <div class="mb-2 text-kicker">References</div>
         <div class="flex flex-wrap gap-1">
-          <button
-            type="button"
-            class={chipClass("taxonomy:referenced")}
-            onclick={() => toggleExclusive("taxonomy:referenced", REFERENCE_FILTER_IDS)}
+          <ToggleButton variant="outline" size="sm" bind:pressed={() => isActive("taxonomy:referenced"), () => toggleExclusive("taxonomy:referenced", REFERENCE_FILTER_IDS)}
           >
             Has references
-          </button>
-          <button
-            type="button"
-            class={chipClass("taxonomy:orphaned")}
-            onclick={() => toggleExclusive("taxonomy:orphaned", REFERENCE_FILTER_IDS)}
+          </ToggleButton>
+          <ToggleButton variant="outline" size="sm" bind:pressed={() => isActive("taxonomy:orphaned"), () => toggleExclusive("taxonomy:orphaned", REFERENCE_FILTER_IDS)}
           >
             No references
-          </button>
+          </ToggleButton>
         </div>
       </section>
     {/if}
@@ -326,10 +313,10 @@
             { id: "flags:nsfw:true", label: "Is NSFW" },
             { id: "flags:nsfw:false", label: "Not NSFW" },
           ] as item (item.id)}
-            <button type="button" class={chipClass(item.id)} onclick={() => toggleFilter(item.id)}>
+            <ToggleButton variant="outline" size="sm" bind:pressed={() => isActive(item.id), () => toggleFilter(item.id)} >
               {item.label}
               {#if countFor(item.id) != null}<span class="ml-1 text-text-disabled">{countFor(item.id)}</span>{/if}
-            </button>
+            </ToggleButton>
           {/each}
         </div>
       </section>
@@ -341,10 +328,10 @@
         <div class="flex flex-wrap gap-1">
           {#each codecs as codec (codec.id)}
             {@const id = `technical:codec:${codec.id}`}
-            <button type="button" class={chipClass(id)} onclick={() => toggleFilter(id)}>
+            <ToggleButton variant="outline" size="sm" bind:pressed={() => isActive(id), () => toggleFilter(id)} >
               {codec.label}
               {#if countFor(id) != null}<span class="ml-1 text-text-disabled">{countFor(id)}</span>{/if}
-            </button>
+            </ToggleButton>
           {/each}
         </div>
       </section>

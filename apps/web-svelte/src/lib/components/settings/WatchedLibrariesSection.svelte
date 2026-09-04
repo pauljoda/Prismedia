@@ -195,15 +195,15 @@
     <div class="surface-card no-lift space-y-4 border-border-accent/30 p-4">
       <div class="surface-well p-3 border border-border-subtle">
         <div class="mb-3 flex items-center gap-2">
-          <button
+          <Button variant="outline" size="sm"
             type="button"
             onclick={() => void openBrowser(browser?.parentPath ?? browser?.path)}
             disabled={!browser?.parentPath}
-            class="flex items-center gap-1 flex-shrink-0 rounded-xs border border-border-subtle px-2.5 py-1.5 text-xs font-medium text-text-muted transition-all hover:bg-surface-3 hover:text-text-primary disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/25"
+            class="flex items-center gap-1 flex-shrink-0 px-2.5 py-1.5 text-xs font-medium disabled:opacity-40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/25"
           >
             <ChevronLeft class="h-3.5 w-3.5" />
             Up
-          </button>
+          </Button>
           <div
             class="flex-1 overflow-x-auto scrollbar-hidden rounded-xs border border-border-subtle bg-surface-1 px-3 py-1.5 shadow-well"
           >
@@ -217,9 +217,9 @@
         >
           {#if browser}
             {#each browser.directories as directory (directory.path)}
-              <button
+              <Button variant="outline" size="sm"
                 type="button"
-                class="surface-card px-3 py-2 text-left flex items-center gap-3 group hover:border-border-accent/50 transition-colors"
+                class="surface-card px-3 py-2 text-left flex items-center gap-3 group hover:border-border-accent/50 transition-colors h-auto whitespace-normal"
                 onclick={() => void openBrowser(directory.path)}
               >
                 <FolderOpen
@@ -232,7 +232,7 @@
                     {directory.name}
                   </p>
                 </div>
-              </button>
+              </Button>
             {/each}
             {#if browser.directories.length === 0}
               <p
@@ -392,19 +392,19 @@
             </div>
             <div class="flex items-center gap-1 shrink-0">
               {#if session.isAdmin}
-                <button
+                <Button variant="outline" size="sm"
                   type="button"
                   onclick={() => (accessDialogRoot = root)}
-                  class="rounded-xs p-1.5 text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors"
+                  class="p-1.5"
                   title="Library access"
                 >
                   <UsersRound class="h-4 w-4" />
-                </button>
+                </Button>
               {/if}
-              <button
+              <Button variant="outline" size="sm"
                 type="button"
                 onclick={() => void handleToggleRoot(root)}
-                class="rounded-xs p-1.5 text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors"
+                class="p-1.5"
                 title={root.enabled ? "Disable Library" : "Enable Library"}
               >
                 {#if root.enabled}
@@ -412,15 +412,15 @@
                 {:else}
                   <ToggleLeft class="h-4 w-4" />
                 {/if}
-              </button>
-              <button
+              </Button>
+              <Button variant="destructive" size="sm"
                 type="button"
                 onclick={() => void handleDeleteRoot(root)}
-                class="rounded-xs p-1.5 text-text-muted transition-colors hover:bg-error-muted/30 hover:text-error-text"
+                class="p-1.5"
                 title="Remove Library"
               >
                 <Trash2 class="h-4 w-4" />
-              </button>
+              </Button>
             </div>
           </div>
 
@@ -434,7 +434,7 @@
                 Scans:
               </span>
 
-              <button
+              <Button variant="outline" size="sm"
                 type="button"
                 onclick={() => void handleToggleMediaType(root, "scanVideos")}
                 title={root.scanVideos ? "Videos: scanning" : "Videos: skipped"}
@@ -447,9 +447,9 @@
               >
                 <Film class="h-3.5 w-3.5" />
                 Video
-              </button>
+              </Button>
 
-              <button
+              <Button variant="outline" size="sm"
                 type="button"
                 onclick={() => void handleToggleMediaType(root, "scanImages")}
                 title={root.scanImages ? "Images: scanning" : "Images: skipped"}
@@ -462,9 +462,9 @@
               >
                 <ImageIcon class="h-3.5 w-3.5" />
                 Image
-              </button>
+              </Button>
 
-              <button
+              <Button variant="outline" size="sm"
                 type="button"
                 onclick={() => void handleToggleMediaType(root, "scanAudio")}
                 title={root.scanAudio ? "Audio: scanning" : "Audio: skipped"}
@@ -477,9 +477,9 @@
               >
                 <Music class="h-3.5 w-3.5" />
                 Audio
-              </button>
+              </Button>
 
-              <button
+              <Button variant="outline" size="sm"
                 type="button"
                 onclick={() => void handleToggleMediaType(root, "scanBooks")}
                 title={
@@ -498,12 +498,12 @@
               >
                 <BookOpen class="h-3.5 w-3.5" />
                 Books
-              </button>
+              </Button>
 
               <div class="w-px h-4 bg-border-subtle mx-1 hidden sm:block"></div>
 
               {#if session.allowNsfw}
-                <button
+                <Button variant="outline" size="sm"
                   type="button"
                   onclick={() => void handleToggleNsfw(root)}
                   title={root.isNsfw ? "NSFW library: on" : "NSFW library: off"}
@@ -516,10 +516,10 @@
                 >
                   <Eye class="h-3.5 w-3.5" />
                   NSFW
-                </button>
+                </Button>
               {/if}
 
-              <button
+              <Button variant="outline" size="sm"
                 type="button"
                 onclick={() => void handleToggleMediaType(root, "autoIdentify")}
                 title={root.autoIdentify ? "Auto Identify: on" : "Auto Identify: off"}
@@ -532,7 +532,7 @@
               >
                 <Sparkles class="h-3.5 w-3.5" />
                 Auto ID
-              </button>
+              </Button>
             </div>
 
             <div

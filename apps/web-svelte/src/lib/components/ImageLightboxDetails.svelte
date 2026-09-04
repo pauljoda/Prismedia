@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Button } from "@prismedia/ui-svelte";
   import { Users } from "@lucide/svelte";
   import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
   import {
@@ -104,7 +105,7 @@
   {:else if loadState === "error"}
     <div class="error-notice">
       <p>{errorMessage ?? "Failed to load image details."}</p>
-      <button type="button" onclick={() => void loadImage(entity.id)}>Retry</button>
+      <Button variant="outline" size="sm" type="button" onclick={() => void loadImage(entity.id)}>Retry</Button>
     </div>
   {:else if card}
     <EntityDetail
@@ -174,14 +175,6 @@
     font-size: 0.85rem;
   }
 
-  .error-notice button {
-    border: 1px solid var(--color-border, #1c2235);
-    background: var(--color-surface-3, #151a28);
-    color: var(--color-text-muted, #8a93a6);
-    padding: 0.4rem 0.8rem;
-    font-size: 0.78rem;
-    cursor: pointer;
-  }
 
   :global(.meta-item) {
     white-space: nowrap;

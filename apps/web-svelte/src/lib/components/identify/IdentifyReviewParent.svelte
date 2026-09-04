@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Progress, Button } from "@prismedia/ui-svelte";
   import {
     Check,
     ChevronDown,
@@ -289,9 +290,7 @@
           </div>
         </div>
       </div>
-      <div class="mt-3 h-1.5 overflow-hidden rounded-xs border border-border-subtle bg-surface-3" role="progressbar" aria-valuenow={applyProgressPercent} aria-valuemin="0" aria-valuemax="100">
-        <div class="h-full rounded-xs bg-[linear-gradient(90deg,rgba(150, 153, 161,0.82),rgba(199, 201, 204,0.95))] shadow-[0_0_14px_rgba(199, 201, 204,0.28)] transition-[width] duration-300" style:width={`${applyProgressPercent}%`}></div>
-      </div>
+      <Progress value={applyProgressPercent} aria-label="Apply progress" class="mt-3 h-1.5" />
     </div>
   {/if}
 
@@ -299,27 +298,27 @@
   <div class="flex flex-col gap-2 py-2 md:flex-row md:items-center md:gap-3">
     {#if store.queue.length > 1 && queueIndex >= 0}
       <div class="flex items-center gap-1.5">
-        <button
+        <Button variant="outline" size="sm"
           type="button"
-          class="inline-flex h-8 w-8 items-center justify-center rounded-xs border border-border-default bg-surface-2 text-text-muted transition-colors hover:bg-surface-3 disabled:opacity-30 md:h-7 md:w-7"
+          class="inline-flex h-8 w-8 items-center justify-center disabled:opacity-30 md:h-7 md:w-7"
           disabled={!prevQueueNavItem}
           onclick={() => prevQueueNavItem && store.reviewQueueItem(prevQueueNavItem)}
           aria-label="Previous queue item"
         >
           <ChevronUp class="h-3.5 w-3.5" />
-        </button>
+        </Button>
         <span class="font-mono text-[0.72rem] text-text-muted">
           {queueIndex + 1}/{store.queue.length}
         </span>
-        <button
+        <Button variant="outline" size="sm"
           type="button"
-          class="inline-flex h-8 w-8 items-center justify-center rounded-xs border border-border-default bg-surface-2 text-text-muted transition-colors hover:bg-surface-3 disabled:opacity-30 md:h-7 md:w-7"
+          class="inline-flex h-8 w-8 items-center justify-center disabled:opacity-30 md:h-7 md:w-7"
           disabled={!nextQueueNavItem}
           onclick={() => nextQueueNavItem && store.reviewQueueItem(nextQueueNavItem)}
           aria-label="Next queue item"
         >
           <ChevronDown class="h-3.5 w-3.5" />
-        </button>
+        </Button>
       </div>
     {/if}
 
@@ -340,9 +339,9 @@
     <div class="flex flex-col gap-2 md:flex-row md:items-center md:gap-3" data-testid="identify-proposal-actions">
       <IdentifyRejectQueueActions entityId={entity.id} showNext={Boolean(nextQueueItem)} disabled={store.applying} />
       <div class="flex flex-col gap-2 md:flex-row md:gap-3">
-        <button
+        <Button variant="default" size="sm"
           type="button"
-          class="btn-accent-glow inline-flex h-10 items-center justify-center gap-1.5 rounded-xs border border-border-accent-strong px-3 text-[0.78rem] text-text-primary transition-all disabled:cursor-not-allowed disabled:opacity-40 md:h-9"
+          class="inline-flex h-10 items-center justify-center gap-1.5 px-3 text-[0.78rem] disabled:cursor-not-allowed disabled:opacity-40 md:h-9"
           disabled={store.applying || cascadeRunning}
           onclick={() => handleApply(false)}
         >
@@ -352,12 +351,12 @@
             <Check class="h-4 w-4" />
           {/if}
           Accept
-        </button>
+        </Button>
         {#if nextQueueItem}
-          <button
+          <Button variant="outline" size="sm"
             type="button"
-            class="inline-flex h-10 items-center justify-center gap-1.5 rounded-xs border border-border-accent-strong px-3 text-[0.78rem] text-text-primary transition-all disabled:cursor-not-allowed disabled:opacity-40 md:h-9"
-            style="background: linear-gradient(135deg, rgba(199, 201, 204,0.24), rgba(199, 201, 204,0.1)); box-shadow: 0 0 18px rgba(199, 201, 204,0.16);"
+            class="inline-flex h-10 items-center justify-center gap-1.5 px-3 text-[0.78rem] disabled:cursor-not-allowed disabled:opacity-40 md:h-9"
+
             disabled={store.applying || cascadeRunning}
             onclick={() => handleApply(true)}
           >
@@ -367,7 +366,7 @@
               <Check class="h-4 w-4" />
             {/if}
             Accept and Next
-          </button>
+          </Button>
         {/if}
       </div>
     </div>
@@ -386,8 +385,4 @@
     padding: 0.875rem;
   }
 
-  .btn-accent-glow {
-    background: linear-gradient(135deg, var(--color-accent-overlay-light), var(--color-accent-overlay-faint));
-    box-shadow: 0 0 18px var(--color-accent-overlay-subtle);
-  }
 </style>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Button } from "@prismedia/ui-svelte";
   import { THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
   import { onDestroy } from "svelte";
   import { browser } from "$app/environment";
@@ -391,12 +392,11 @@
         <!-- Capture taps above the player so the feed stays purely visual: a tap
              opens the lightbox (or links to the entity) rather than toggling play. -->
         {#if onActivate}
-          <button
-            type="button"
-            class="feed-open"
+          <Button variant="ghost"
+            class="absolute inset-0 z-2 block size-full rounded-none border-0 p-0 hover:bg-transparent"
             aria-label={`Open ${card.entity.title}`}
             onclick={() => onActivate?.(card, cards)}
-          ></button>
+          ></Button>
         {:else if href}
           <a class="feed-open" {href} aria-label={`Open ${card.entity.title}`}></a>
         {/if}

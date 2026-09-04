@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { Button, TextInput, buttonVariants } from "@prismedia/ui-svelte";
+  import ReaderContentsSheet from "./reader/ReaderContentsSheet.svelte";
   import { onMount, tick } from "svelte";
   import {
     AlertTriangle,
@@ -574,102 +576,102 @@
 
   {#snippet controls()}
     {#if hasToc}
-      <button
+      <Button variant="outline" size="sm"
         type="button"
         onclick={() => (tocOpen = true)}
-        class="reader-mode-button"
+        class="aria-pressed:bg-accent aria-pressed:text-accent-foreground"
         aria-label="Table of contents"
         title="Contents"
       >
         <List class="h-4 w-4" />
         <span class="hidden sm:inline">Contents</span>
-      </button>
+      </Button>
     {/if}
 
-    <button
+    <Button variant="outline" size="sm"
       type="button"
       onclick={() => void toggleSearch()}
-      class:active-reader-control={searchOpen}
-      class="reader-mode-button"
+      aria-pressed={searchOpen}
+      class="aria-pressed:bg-accent aria-pressed:text-accent-foreground"
       aria-label="Search document"
       title="Search"
     >
       <Search class="h-4 w-4" />
-    </button>
+    </Button>
 
     <div class="flex items-center gap-1 border-l border-border-subtle pl-2">
-      <button
+      <Button variant="outline" size="sm"
         type="button"
         onclick={() => setFlow("scrolled")}
-        class:active-reader-control={flow === "scrolled"}
-        class="reader-mode-button"
+        aria-pressed={flow === "scrolled"}
+        class="aria-pressed:bg-accent aria-pressed:text-accent-foreground"
         aria-label="Scrolled reading"
         title="Scrolled (selectable text)"
       >
         <Rows3 class="h-4 w-4" />
-      </button>
-      <button
+      </Button>
+      <Button variant="outline" size="sm"
         type="button"
         onclick={() => setFlow("paged")}
-        class:active-reader-control={flow === "paged"}
-        class="reader-mode-button"
+        aria-pressed={flow === "paged"}
+        class="aria-pressed:bg-accent aria-pressed:text-accent-foreground"
         aria-label="Paged reading"
         title="Paged (one page per view)"
       >
         <BookOpen class="h-4 w-4" />
-      </button>
+      </Button>
     </div>
 
     {#if flow === "scrolled"}
       <div class="flex items-center gap-1 border-l border-border-subtle pl-2">
-        <button
+        <Button variant="outline" size="sm"
           type="button"
           onclick={zoomOut}
           disabled={scale <= MIN_SCALE}
-          class="reader-mode-button"
+          class="aria-pressed:bg-accent aria-pressed:text-accent-foreground"
           aria-label="Zoom out"
           title="Zoom out"
         >
           <Minus class="h-4 w-4" />
-        </button>
+        </Button>
         <span class="min-w-[3ch] text-center font-mono text-[0.62rem] tabular-nums text-text-muted">{zoomPercent}%</span>
-        <button
+        <Button variant="outline" size="sm"
           type="button"
           onclick={zoomIn}
           disabled={scale >= MAX_SCALE}
-          class="reader-mode-button"
+          class="aria-pressed:bg-accent aria-pressed:text-accent-foreground"
           aria-label="Zoom in"
           title="Zoom in"
         >
           <Plus class="h-4 w-4" />
-        </button>
-        <button type="button" onclick={fitWidth} class="reader-mode-button" aria-label="Fit width" title="Fit width">
+        </Button>
+        <Button variant="outline" size="sm" type="button" onclick={fitWidth} class="aria-pressed:bg-accent aria-pressed:text-accent-foreground" aria-label="Fit width" title="Fit width">
           <span class="text-[0.62rem]">W</span>
-        </button>
-        <button type="button" onclick={fitPage} class="reader-mode-button" aria-label="Fit page" title="Fit one page in view">
+        </Button>
+        <Button variant="outline" size="sm" type="button" onclick={fitPage} class="aria-pressed:bg-accent aria-pressed:text-accent-foreground" aria-label="Fit page" title="Fit one page in view">
           <Maximize class="h-4 w-4" />
-        </button>
+        </Button>
       </div>
     {/if}
 
     <div class="flex items-center gap-1 border-l border-border-subtle pl-2">
       {#if flow === "scrolled"}
-        <button
+        <Button variant="outline" size="sm"
           type="button"
           onclick={toggleGap}
-          class:active-reader-control={gapless}
-          class="reader-mode-button"
+          aria-pressed={gapless}
+          class="aria-pressed:bg-accent aria-pressed:text-accent-foreground"
           aria-label="Toggle page gaps"
           title={gapless ? "Show page gaps" : "Remove page gaps"}
         >
           <StretchVertical class="h-4 w-4" />
-        </button>
+        </Button>
       {/if}
       {#if downloadHref}
         <a
           href={downloadHref}
           download
-          class="reader-mode-button"
+          class={buttonVariants({ variant: "outline", size: "sm" })}
           aria-label="Download PDF"
           title="Download original PDF"
         >
@@ -717,100 +719,85 @@
 
   {#if ready && flow === "paged"}
     <!-- Fixed over the stage (siblings, not inside the scroller) so they don't scroll away. -->
-    <button
+    <Button variant="outline" size="sm"
       type="button"
       onclick={goPrev}
       data-reader-control
-      class="reader-nav-button reader-nav-prev"
+      class="absolute top-1/2 z-10 hidden size-11 -translate-y-1/2 sm:inline-flex left-3"
       aria-label="Previous page"
       title="Previous (←)"
     >
       <ChevronLeft class="h-6 w-6" />
-    </button>
-    <button
+    </Button>
+    <Button variant="outline" size="sm"
       type="button"
       onclick={goNext}
       data-reader-control
-      class="reader-nav-button reader-nav-next"
+      class="absolute top-1/2 z-10 hidden size-11 -translate-y-1/2 sm:inline-flex right-3"
       aria-label="Next page"
       title="Next (→)"
     >
       <ChevronRight class="h-6 w-6" />
-    </button>
+    </Button>
   {/if}
 
   {#if searchOpen}
     <div class="pdf-search" data-reader-control>
       <Search class="h-4 w-4 shrink-0 text-text-muted" />
-      <input
-        bind:this={searchInputEl}
+      <TextInput
+        bind:ref={searchInputEl}
         bind:value={searchQuery}
         oninput={onSearchInput}
         onkeydown={onSearchKeydown}
         type="search"
         placeholder="Search document…"
-        class="pdf-search-input"
+        class="w-[min(14rem,40vw)]"
+        aria-label="Search document"
       />
       <span class="pdf-search-count">
         {#if searchBusy}…{:else if searchQuery.trim()}{searchMatches.length ? `${searchActive + 1}/${searchMatches.length}` : "0/0"}{/if}
       </span>
-      <button
+      <Button variant="outline" size="sm"
         type="button"
-        class="reader-mode-button"
+        class="aria-pressed:bg-accent aria-pressed:text-accent-foreground"
         onclick={() => gotoMatch(-1)}
         disabled={searchMatches.length === 0}
         aria-label="Previous match"
         title="Previous match"
       >
         <ChevronUp class="h-4 w-4" />
-      </button>
-      <button
+      </Button>
+      <Button variant="outline" size="sm"
         type="button"
-        class="reader-mode-button"
+        class="aria-pressed:bg-accent aria-pressed:text-accent-foreground"
         onclick={() => gotoMatch(1)}
         disabled={searchMatches.length === 0}
         aria-label="Next match"
         title="Next match"
       >
         <ChevronDown class="h-4 w-4" />
-      </button>
-      <button type="button" class="reader-mode-button" onclick={() => void toggleSearch()} aria-label="Close search" title="Close">
+      </Button>
+      <Button variant="outline" size="sm" type="button" class="aria-pressed:bg-accent aria-pressed:text-accent-foreground" onclick={() => void toggleSearch()} aria-label="Close search" title="Close">
         <X class="h-4 w-4" />
-      </button>
+      </Button>
     </div>
   {/if}
 </ReaderShell>
 
-{#if tocOpen}
-  {@const closeToc = () => (tocOpen = false)}
-  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-  <div class="toc-overlay" onclick={closeToc}>
-    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-    <div class="toc-panel" role="dialog" aria-label="Table of contents" tabindex="-1" onclick={(e) => e.stopPropagation()}>
-      <div class="toc-header">
-        <span class="toc-title">Contents</span>
-        <button type="button" class="reader-mode-button" onclick={closeToc} aria-label="Close contents" title="Close">
-          <X class="h-4 w-4" />
-        </button>
-      </div>
-      <nav class="toc-list">
-        {@render tocItems(toc, 0)}
-      </nav>
-    </div>
-  </div>
-{/if}
+<ReaderContentsSheet open={tocOpen} onClose={() => tocOpen = false}>
+  {@render tocItems(toc, 0)}
+</ReaderContentsSheet>
 
 {#snippet tocItems(items: TocEntry[], depth: number)}
   {#each items as entry (entry.label + (entry.pageIndex ?? ""))}
-    <button
-      type="button"
-      class="toc-item"
+    <Button variant="ghost"
+      class="h-auto w-full justify-start whitespace-normal py-2 text-left"
       style={`padding-left: ${0.85 + depth * 0.9}rem`}
       disabled={entry.pageIndex === null}
       onclick={() => openToc(entry)}
     >
       {entry.label}
-    </button>
+    </Button>
     {#if entry.subitems.length > 0}
       {@render tocItems(entry.subitems, depth + 1)}
     {/if}
@@ -859,44 +846,7 @@
     pointer-events: none;
   }
 
-  .reader-nav-button {
-    position: absolute;
-    top: 50%;
-    z-index: 10;
-    display: none;
-    height: 2.75rem;
-    width: 2.75rem;
-    transform: translateY(-50%);
-    align-items: center;
-    justify-content: center;
-    border: 1px solid var(--color-border-default);
-    border-radius: var(--radius-sm);
-    background: var(--color-overlay-heavy);
-    color: var(--color-text-secondary);
-    backdrop-filter: blur(var(--glass-blur-sm));
-  }
 
-  .reader-nav-prev {
-    left: 0.75rem;
-  }
-
-  .reader-nav-next {
-    right: 0.75rem;
-  }
-
-  .reader-nav-button:hover,
-  .reader-nav-button:focus-visible {
-    border-color: var(--color-border-accent-strong);
-    color: var(--color-text-accent-bright);
-    box-shadow: var(--shadow-glow-accent);
-    outline: none;
-  }
-
-  @media (min-width: 640px) {
-    .reader-nav-button {
-      display: flex;
-    }
-  }
 
   .pdf-page {
     position: relative;
@@ -979,14 +929,6 @@
     box-shadow: var(--shadow-glow-accent);
   }
 
-  .pdf-search-input {
-    width: min(14rem, 40vw);
-    border: none;
-    background: transparent;
-    color: var(--color-text-primary);
-    font-size: 0.82rem;
-    outline: none;
-  }
 
   .pdf-search-count {
     min-width: 3.5ch;
@@ -996,94 +938,4 @@
     color: var(--color-text-muted);
   }
 
-  .reader-mode-button {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    border: 1px solid var(--color-border-default);
-    background: var(--color-overlay-heavy);
-    padding: 0.45rem 0.65rem;
-    border-radius: var(--radius-sm);
-    color: var(--color-text-secondary);
-    font-size: 0.72rem;
-    line-height: 1;
-    backdrop-filter: blur(var(--glass-blur-sm));
-    transition:
-      border-color var(--duration-normal) var(--ease-mechanical),
-      color var(--duration-normal) var(--ease-mechanical),
-      box-shadow var(--duration-normal) var(--ease-mechanical);
-  }
-
-  .reader-mode-button:hover,
-  .reader-mode-button:focus-visible {
-    border-color: var(--color-border-accent-strong);
-    color: var(--color-text-accent-bright);
-    box-shadow: var(--shadow-glow-accent);
-    outline: none;
-  }
-
-  .toc-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 2147483100;
-    display: flex;
-    justify-content: flex-start;
-    background: rgba(4, 5, 7, 0.55);
-    backdrop-filter: blur(var(--glass-blur-sm));
-  }
-
-  .toc-panel {
-    display: flex;
-    width: min(22rem, 86vw);
-    height: 100%;
-    flex-direction: column;
-    border-right: 1px solid var(--color-border-default);
-    background: var(--color-surface-1, #0e1014);
-    box-shadow: var(--shadow-glow-accent);
-  }
-
-  .toc-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
-    padding: max(0.75rem, env(safe-area-inset-top)) 0.85rem 0.75rem;
-    border-bottom: 1px solid var(--color-border-default);
-  }
-
-  .toc-title {
-    font-family: var(--font-mono, monospace);
-    font-size: 0.68rem;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--color-text-accent-bright);
-  }
-
-  .toc-list {
-    flex: 1 1 auto;
-    overflow-y: auto;
-    padding: 0.4rem 0.4rem 1.5rem;
-  }
-
-  .toc-item {
-    display: block;
-    width: 100%;
-    border-radius: var(--radius-sm);
-    padding: 0.5rem 0.85rem;
-    text-align: left;
-    font-size: 0.82rem;
-    color: var(--color-text-secondary);
-  }
-
-  .toc-item:hover:not(:disabled),
-  .toc-item:focus-visible {
-    background: var(--color-overlay-heavy);
-    color: var(--color-text-accent-bright);
-    outline: none;
-  }
-
-  .toc-item:disabled {
-    color: var(--color-text-muted);
-    cursor: default;
-  }
 </style>

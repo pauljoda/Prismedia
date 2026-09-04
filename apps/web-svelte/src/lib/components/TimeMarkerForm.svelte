@@ -153,15 +153,15 @@
           }}
           placeholder="0:00"
         />
-        <button
+        <Button variant="outline" size="sm"
           type="button"
           onclick={onSetCurrentTime}
-          class="flex items-center gap-1 px-2 py-1.5 text-xs text-text-muted hover:text-text-accent surface-well hover:border-border-accent transition-colors"
+          class="flex items-center gap-1 px-2 py-1.5 text-xs surface-well"
           title="Set to current playback time"
         >
           <MapPin class="h-3 w-3" />
           Now
-        </button>
+        </Button>
       </div>
     </div>
 
@@ -178,28 +178,28 @@
           }}
           placeholder="—"
         />
-        <button
+        <Button variant="outline" size="sm"
           type="button"
           onclick={onSetCurrentEndTime}
-          class="flex items-center gap-1 px-2 py-1.5 text-xs text-text-muted hover:text-text-accent surface-well hover:border-border-accent transition-colors"
+          class="flex items-center gap-1 px-2 py-1.5 text-xs surface-well"
           title="Set to current playback time"
         >
           <MapPin class="h-3 w-3" />
           Now
-        </button>
+        </Button>
         {#if endSeconds != null}
-          <button
+          <Button variant="destructive" size="sm"
             type="button"
             onclick={() => {
               endText = "";
               onEndSecondsChange(null);
             }}
-            class="flex items-center justify-center p-1.5 text-text-muted hover:text-error-text transition-colors"
+            class="flex items-center justify-center p-1.5"
             title="Clear end time"
             aria-label="Clear end time"
           >
             <X class="h-3 w-3" />
-          </button>
+          </Button>
         {/if}
       </div>
     </div>

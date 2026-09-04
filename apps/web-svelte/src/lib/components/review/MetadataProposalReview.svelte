@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import { Check, Images, Layers, Loader2, Tag, Users, X } from "@lucide/svelte";
-  import { cn } from "@prismedia/ui-svelte";
+  import { Button, cn } from "@prismedia/ui-svelte";
   import type { EntityMetadataProposal } from "$lib/api/identify-types";
   import type { EntityDetailCard } from "$lib/api/entities";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
@@ -187,10 +187,10 @@
     {#snippet icon()}<Images class="h-3.5 w-3.5 text-text-accent" />{/snippet}
     <div class="identify-artwork-grid p-3.5" data-artwork-kind={group.kind}>
       {#each group.images as image (image.url)}
-        <button
+        <Button variant="ghost" size="sm"
           type="button"
           class={cn(
-            "identify-artwork-tile relative overflow-hidden rounded-xs border bg-surface-3 transition-all",
+            "h-auto p-0 identify-artwork-tile relative overflow-hidden rounded-xs border bg-surface-3 transition-all",
             selectedImages[group.kind] === image.url
               ? "border-border-accent-strong shadow-[0_0_16px_rgba(199,201,204,0.2)]"
               : "border-border-default hover:border-border-accent",
@@ -225,7 +225,7 @@
               <span class="font-mono text-[0.58rem] text-text-disabled">{image.width}×{image.height}</span>
             {/if}
           </span>
-        </button>
+        </Button>
       {/each}
     </div>
   </ReviewSection>
@@ -241,7 +241,7 @@
     <div class="flex flex-wrap items-center gap-2 p-3.5">
       {#each looseTags as tag (tag)}
         {@const isExisting = !isNewRelationshipTitle(tag, existingTagTitles)}
-        <button
+        <Button variant="ghost" size="sm"
           type="button"
           class={cn(
             "inline-flex min-h-8 items-center gap-1.5 rounded-xs border px-2.5 py-1 text-[0.76rem] transition-colors",
@@ -267,7 +267,7 @@
           )}>
             {isExisting ? "Merge" : "New"}
           </span>
-        </button>
+        </Button>
       {/each}
     </div>
   </ReviewSection>
@@ -319,7 +319,7 @@
     grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr));
   }
 
-  .identify-artwork-tile::before {
+  .identify-artwork-grid :global(.identify-artwork-tile::before) {
     position: absolute;
     inset: 0;
     z-index: 0;
@@ -333,9 +333,9 @@
     animation: identify-artwork-shimmer 1.2s ease-in-out infinite;
   }
 
-  .identify-artwork-tile.is-loaded::before { opacity: 0; animation: none; }
-  .identify-artwork-tile img { position: relative; z-index: 1; }
-  .identify-artwork-tile > span { z-index: 2; }
+  .identify-artwork-grid :global(.identify-artwork-tile.is-loaded::before) { opacity: 0; animation: none; }
+  .identify-artwork-grid :global(.identify-artwork-tile img) { position: relative; z-index: 1; }
+  .identify-artwork-grid :global(.identify-artwork-tile > span) { z-index: 2; }
 
   @keyframes identify-artwork-shimmer {
     from { background-position: 180% 0, 0 0, 0 0; }
@@ -355,6 +355,6 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .identify-artwork-tile::before { animation: none; }
+    .identify-artwork-grid :global(.identify-artwork-tile::before) { animation: none; }
   }
 </style>
