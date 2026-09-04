@@ -1,360 +1,137 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import {
-    Search as SearchIcon,
-    X,
-    ChevronDown,
-    Loader2,
-    SlidersHorizontal,
-    Star,
-  } from "@lucide/svelte";
-  import { Button, ChoiceGroup, SearchInput, cn } from "@prismedia/ui-svelte";
-  import SearchResultCard from "$lib/components/SearchResultCard.svelte";
+  import { Search, SearchX, AlertTriangle, SlidersHorizontal } from "@lucide/svelte";
+  import { Badge, Button, ChoiceGroup, SearchInput } from "@prismedia/ui-svelte";
+  import SearchResultGroup from "$lib/components/SearchResultGroup.svelte";
+  import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
+  import StarRatingPicker from "$lib/components/StarRatingPicker.svelte";
   import { buildHrefWithFrom } from "$lib/back-navigation";
   import { useNsfw } from "$lib/nsfw/store.svelte";
-  import { ALL_SEARCH_KINDS, type SearchEntityKind, type SearchResponse, type SearchResultItem } from "$lib/search/models";
+  import { ALL_SEARCH_KINDS, type SearchEntityKind, type SearchResponse } from "$lib/search/models";
   import { firstSearchResult, searchEntities } from "$lib/search/entity-search";
-  import { ENTITY_KIND } from "$lib/entities/entity-codes";
   import { entityAccentForKind } from "$lib/entities/entity-accent";
   import { SEARCH_KIND_CONFIG } from "$lib/components/search-kind-config";
-  import DateField from "$lib/components/forms/DateField.svelte";
 
-  const PAGE_SIZE = 20;
   const nsfw = useNsfw();
   const currentPath = $derived(`${page.url.pathname}${page.url.search}`);
-
+  const filterId = $props.id();
   let query = $state(page.url.searchParams.get("q") ?? "");
-  let activeKinds = $state<Set<SearchEntityKind>>(initialKinds());
+  let activeKinds = $state<SearchEntityKind[]>(initialKinds());
   let filtersOpen = $state(false);
   let minRating = $state<number | null>(null);
-  let dateFrom = $state("");
-  let dateTo = $state("");
-
   let results = $state<SearchResponse | null>(null);
   let loading = $state(false);
-  let expanded = $state<
-    Record<string, { items: SearchResultItem[]; total: number; loading: boolean }>
-  >({});
-
+  let failed = $state(false);
+  let retry = $state(0);
   let inputRef = $state<HTMLInputElement | null>(null);
-  let activeRequest = 0;
 
-  function initialKinds(): Set<SearchEntityKind> {
-    const raw = page.url.searchParams.get("kinds");
-    if (!raw) return new Set(ALL_SEARCH_KINDS);
-    const parsed = raw
-      .split(",")
-      .filter((k): k is SearchEntityKind => (ALL_SEARCH_KINDS as readonly string[]).includes(k));
-    return parsed.length > 0 ? new Set(parsed) : new Set(ALL_SEARCH_KINDS);
+  function initialKinds(): SearchEntityKind[] {
+    const raw = page.url.searchParams.get("kinds")?.split(",") ?? [];
+    const parsed = ALL_SEARCH_KINDS.filter(kind => raw.includes(kind));
+    return parsed.length ? parsed : [...ALL_SEARCH_KINDS];
   }
 
-  const kindsArray = $derived(Array.from(activeKinds));
   const kindChoices = ALL_SEARCH_KINDS.map(kind => ({ value: kind, label: SEARCH_KIND_CONFIG[kind].label, icon: SEARCH_KIND_CONFIG[kind].icon, iconColor: entityAccentForKind(kind).primary }));
   const hasQuery = $derived(query.trim().length >= 2);
-  const hasResults = $derived(
-    results != null && results.groups.some((g) => g.items.length > 0),
-  );
-  const hasFiltersApplied = $derived(
-    minRating != null || dateFrom !== "" || dateTo !== "",
-  );
-  const topResult = $derived(firstSearchResult(results));
+  const filtered = $derived(results ? {
+    ...results,
+    groups: results.groups.filter(group => activeKinds.includes(group.kind)).map(group => {
+      const items = group.items.filter(item => minRating == null || (item.rating ?? 0) >= minRating);
+      return { ...group, items, total: items.length };
+    }).filter(group => group.items.length > 0),
+  } : null);
+  const topResult = $derived(firstSearchResult(filtered));
+  const hasFilters = $derived(minRating != null || activeKinds.length !== ALL_SEARCH_KINDS.length);
 
-  $effect(() => {
-    inputRef?.focus();
-  });
-
-  // Keep URL in sync (debounced).
+  // Search is the page's primary task. Preserve focus while updating the URL.
+  $effect(() => { inputRef?.focus(); });
   $effect(() => {
     const q = query.trim();
-    const kindsList = Array.from(activeKinds);
+    const kinds = [...activeKinds];
     const timer = window.setTimeout(() => {
       const params = new URLSearchParams();
       if (q) params.set("q", q);
-      if (kindsList.length < ALL_SEARCH_KINDS.length) {
-        params.set("kinds", kindsList.join(","));
-      }
+      if (kinds.length < ALL_SEARCH_KINDS.length) params.set("kinds", kinds.join(","));
       const qs = params.toString();
-      void goto(`/search${qs ? `?${qs}` : ""}`, {
-        replaceState: true,
-        keepFocus: true,
-        noScroll: true,
-      });
+      void goto(`/search${qs ? `?${qs}` : ""}`, { replaceState: true, keepFocus: true, noScroll: true });
     }, 400);
     return () => window.clearTimeout(timer);
   });
 
-  // Debounced fetch.
+  // Kind and rating filters operate on fetched matches without repeating the same request.
   $effect(() => {
     const q = query.trim();
-    const kindsList = kindsArray;
-    const rating = minRating;
-    const from = dateFrom;
-    const to = dateTo;
-    const nsfwMode = nsfw.mode;
-
-    expanded = {};
-
-    if (q.length < 2) {
-      results = null;
-      loading = false;
-      activeRequest += 1;
-      return;
-    }
-
-    loading = true;
-    const requestId = ++activeRequest;
+    const hideNsfw = nsfw.mode === "off";
+    void retry;
+    let cancelled = false;
+    results = null;
+    failed = false;
+    loading = q.length >= 2;
+    if (q.length < 2) return;
     const timer = window.setTimeout(async () => {
       try {
-        void rating;
-        void from;
-        void to;
-        const data = await searchEntities({
-          query: q,
-          hideNsfw: nsfwMode === "off",
-          kinds: kindsList,
-          directLimit: 160,
-          relatedSourceLimit: 6,
-          relatedLimitPerSource: 60,
-        });
-        if (requestId === activeRequest) {
-          results = filterSearchResponse(data);
-        }
+        const data = await searchEntities({ query: q, hideNsfw, directLimit: 160, relatedSourceLimit: 6, relatedLimitPerSource: 60 });
+        if (!cancelled) results = data;
       } catch {
-        if (requestId === activeRequest) {
-          results = null;
-        }
+        if (!cancelled) failed = true;
       } finally {
-        if (requestId === activeRequest) {
-          loading = false;
-        }
+        if (!cancelled) loading = false;
       }
     }, 300);
-
-    return () => window.clearTimeout(timer);
+    return () => { cancelled = true; window.clearTimeout(timer); };
   });
 
-  async function loadMore(_kind: SearchEntityKind, _currentCount: number, _total: number) {
-    //  entity search currently returns one page per request. The result groups
-    // report their returned total, so this path is only here for template parity.
-  }
-
-  function filterSearchResponse(response: SearchResponse): SearchResponse {
-    return {
-      ...response,
-      groups: response.groups
-        .map((group) => {
-          const groupItems = group.items
-            .filter((item) => activeKinds.has(item.kind))
-            .filter((item) => minRating == null || (item.rating ?? 0) >= minRating);
-          return {
-            ...group,
-            items: groupItems.slice(0, PAGE_SIZE),
-            total: groupItems.length,
-          };
-        })
-        .filter((group) => group.items.length > 0),
-    };
-  }
-
-  function navigateToTopResult() {
-    if (!topResult) return;
-    void goto(buildHrefWithFrom(topResult.href, currentPath));
-  }
-
-  function gridClassFor(kind: SearchEntityKind): string {
-    switch (kind) {
-      case ENTITY_KIND.movie:
-        return "grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5";
-      case ENTITY_KIND.video:
-        return "grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
-      case ENTITY_KIND.videoSeries:
-        return "grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5";
-      case ENTITY_KIND.gallery:
-        return "grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4";
-      case ENTITY_KIND.image:
-        return "grid gap-2 grid-cols-2 sm:grid-cols-3 md:grid-cols-4 xl:grid-cols-5";
-      case ENTITY_KIND.person:
-        return "grid gap-2 grid-cols-2 sm:grid-cols-3 xl:grid-cols-5";
-      case ENTITY_KIND.studio:
-        return "grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3";
-      case ENTITY_KIND.tag:
-        return "grid gap-2 grid-cols-2 sm:grid-cols-3 lg:grid-cols-4";
-      default:
-        return "grid gap-2 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3";
-    }
-  }
-
-  function groupItemsFor(kind: SearchEntityKind, baseItems: SearchResultItem[]) {
-    const extra = expanded[kind];
-    const items = extra ? [...baseItems, ...extra.items] : baseItems;
-    return items;
+  function clearFilters() {
+    minRating = null;
+    activeKinds = [...ALL_SEARCH_KINDS];
   }
 </script>
 
-<svelte:head>
-  <title>Search · Prismedia</title>
-</svelte:head>
+<svelte:head><title>Search · Prismedia</title></svelte:head>
 
-<div class="space-y-4">
-  <!-- Search header -->
-  <div class="flex flex-col gap-3">
+<div class="flex min-w-0 flex-col gap-6">
+  <div class="flex min-w-0 flex-col gap-3">
     <div class="flex items-start gap-2">
-      <SearchInput
-        bind:element={inputRef}
-        bind:value={query}
-        ariaLabel="Search everything"
-        placeholder="Search everything..."
-        {loading}
-        onkeydown={(e) => {
-          if (e.key === "Enter" && topResult) {
-            e.preventDefault();
-            navigateToTopResult();
+      <SearchInput bind:element={inputRef} bind:value={query} ariaLabel="Search everything" placeholder="Search everything…" {loading}
+        onkeydown={event => {
+          if (event.key === "Enter" && topResult && !loading) {
+            event.preventDefault();
+            void goto(buildHrefWithFrom(topResult.href, currentPath));
           }
-        }}
-      />
-
-      <Button
-        type="button"
-        variant={filtersOpen ? "secondary" : "outline"}
-        class="shrink-0"
-        aria-expanded={filtersOpen}
-        onclick={() => (filtersOpen = !filtersOpen)}
-      >
-        <SlidersHorizontal data-icon="inline-start" />
-        Filters
-        {#if hasFiltersApplied}
-          <span class="flex h-3.5 w-3.5 items-center justify-center bg-accent-800 text-[0.5rem] font-bold text-accent-200">
-            !
-          </span>
-        {/if}
+        }} />
+      <Button variant={filtersOpen ? "secondary" : "outline"} class="shrink-0" aria-expanded={filtersOpen} aria-controls={filterId} onclick={() => { filtersOpen = !filtersOpen; }}>
+        <SlidersHorizontal data-icon="inline-start" /> Filters
+        {#if minRating != null}<Badge variant="secondary">1</Badge>{/if}
       </Button>
     </div>
-
-    <ChoiceGroup type="multiple" options={kindChoices} value={kindsArray} onValueChange={next => { activeKinds = new Set(next); }} ariaLabel="Search entity kinds" />
-
-    <!-- Filter panel -->
+    <ChoiceGroup type="multiple" options={kindChoices} value={activeKinds} onValueChange={next => { activeKinds = next; }} ariaLabel="Search entity kinds" />
     {#if filtersOpen}
-      <div class="surface-well grid grid-cols-1 gap-4 p-3 sm:grid-cols-3">
-        <div>
-          <div class="text-kicker mb-2">Min Rating</div>
-          <div class="flex items-center gap-1">
-            {#each [1, 2, 3, 4, 5] as n (n)}
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                class={cn(
-                  "h-7 w-7 transition-colors duration-fast",
-                  minRating && n <= minRating
-                    ? "text-text-accent"
-                    : "text-text-disabled hover:text-text-muted",
-                )}
-                onclick={() => (minRating = minRating === n ? null : n)}
-                aria-label={`Rating ${n}`}
-              >
-                <Star
-                  class="h-3.5 w-3.5"
-                  fill={minRating && n <= minRating ? "currentColor" : "none"}
-                />
-              </Button>
-            {/each}
-            {#if minRating}
-              <Button
-                type="button"
-                variant="ghost"
-                size="icon"
-                class="ml-1 h-7 w-7 text-text-disabled hover:text-text-muted"
-                onclick={() => (minRating = null)}
-                aria-label="Clear rating"
-              >
-                <X class="h-3 w-3" />
-              </Button>
-            {/if}
-          </div>
+      <section id={filterId} aria-label="Search filters" class="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-card p-4">
+        <div class="flex flex-col gap-2">
+          <h2 class="text-sm font-medium">Minimum rating</h2>
+          <StarRatingPicker value={minRating} onChange={value => { minRating = value; }} ariaLabelPrefix="Minimum" />
         </div>
-        <DateField label="Date From" value={dateFrom} onChange={(value) => (dateFrom = value)} />
-        <DateField label="Date To" value={dateTo} onChange={(value) => (dateTo = value)} />
-      </div>
+        {#if minRating != null}<Button variant="ghost" onclick={() => { minRating = null; }}>Clear rating</Button>{/if}
+      </section>
     {/if}
   </div>
 
-  <!-- Results states -->
   {#if !hasQuery}
-    <div class="flex flex-col items-center justify-center py-20 text-text-disabled">
-      <SearchIcon class="mb-3 h-8 w-8 opacity-30" />
-      <div class="text-sm">
-        Enter a search term to find videos, people, studios, and more
-      </div>
-    </div>
-  {:else if loading && !results}
-    <div class="flex items-center justify-center py-20">
-      <Loader2 class="h-5 w-5 animate-spin text-text-disabled" />
-    </div>
-  {:else if results && !hasResults && !loading}
-    <div class="flex flex-col items-center justify-center py-20 text-text-disabled">
-      <SearchIcon class="mb-3 h-8 w-8 opacity-30" />
-      <div class="text-sm">No results for "{query}"</div>
-    </div>
-  {:else if results && hasResults}
-    <div class="space-y-6">
-      {#each results.groups.filter((g) => g.items.length > 0 && activeKinds.has(g.kind)) as group (group.kind)}
-        {@const items = groupItemsFor(group.kind, group.items)}
-        {@const total = expanded[group.kind]?.total ?? group.total}
-        {@const loadingMore = expanded[group.kind]?.loading ?? false}
-        {@const hasMore = items.length < total}
-        {@const config = SEARCH_KIND_CONFIG[group.kind]}
-        {@const Icon = config.icon}
-        {@const groupAccent = entityAccentForKind(group.kind).primary}
-
-        <section>
-          <div class="mb-3 flex items-center justify-between">
-            <div class="flex items-center gap-2">
-              <Icon class="h-4 w-4" color={groupAccent} aria-hidden="true" />
-              <span class="text-sm font-medium text-text-primary">
-                {config.label}
-              </span>
-              <span class="font-mono text-[0.65rem] text-text-disabled">{total}</span>
-            </div>
-            <a
-              href={config.href}
-              class="text-[0.68rem] text-text-muted transition-colors duration-fast hover:text-text-accent"
-            >
-              Browse all
-            </a>
-          </div>
-
-          <div class={gridClassFor(group.kind)}>
-            {#each items as item, index (item.id)}
-              <SearchResultCard {item} {index} {currentPath} highlighted={item.id === topResult?.id} />
-            {/each}
-          </div>
-
-          {#if hasMore}
-            <div class="mt-3 flex justify-center">
-              <Button
-                type="button"
-                variant="secondary"
-                size="sm"
-                class={cn(
-                  "surface-well gap-1.5 px-4 text-[0.72rem] text-text-muted hover:text-text-primary",
-                  loadingMore && "cursor-wait opacity-60",
-                )}
-                disabled={loadingMore}
-                onclick={() => loadMore(group.kind, items.length, total)}
-              >
-                {#if loadingMore}
-                  <Loader2 class="h-3 w-3 animate-spin" />
-                {:else}
-                  <ChevronDown class="h-3 w-3" />
-                {/if}
-                Show more ({total - items.length} remaining)
-              </Button>
-            </div>
-          {/if}
-        </section>
-      {/each}
-
-    </div>
+    <StatePlaceholder icon={Search} title="Search your library" description="Find titles, people, and their related media. Enter at least two characters." />
+  {:else if loading}
+    <StatePlaceholder icon={Search} title="Searching your library" busy />
+  {:else if failed}
+    <StatePlaceholder icon={AlertTriangle} title="Search couldn't load" description="Check your connection and try again.">
+      <Button variant="outline" onclick={() => { retry += 1; }}>Try again</Button>
+    </StatePlaceholder>
+  {:else if !filtered?.groups.length}
+    <StatePlaceholder icon={SearchX} title={`No matches for “${query.trim()}”`} description={hasFilters ? "Try another title or clear your filters." : "Try another title, person, or tag."}>
+      {#if hasFilters}<Button variant="outline" onclick={clearFilters}>Clear filters</Button>{/if}
+    </StatePlaceholder>
+  {:else}
+    {#each filtered.groups as group (`${filtered.query}:${group.kind}:${minRating}`)}
+      <SearchResultGroup {group} {currentPath} topResultId={topResult?.id} />
+    {/each}
   {/if}
 </div>

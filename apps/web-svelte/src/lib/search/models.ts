@@ -1,3 +1,4 @@
+import type { EntityThumbnail } from "$lib/api/generated/model";
 import {
   ENTITY_KINDS_IN_GLOBAL_SEARCH,
   type GlobalSearchEntityKindCode,
@@ -18,6 +19,8 @@ export interface SearchRelatedEntity {
 }
 
 export interface SearchResultItem {
+  /** Original list projection, retained for the same artwork and status presentation as library grids. */
+  thumbnail?: EntityThumbnail;
   id: string;
   kind: SearchEntityKind;
   title: string;

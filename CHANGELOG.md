@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Search results use consistently sized Entity thumbnails with library artwork and status badges, clearer group headings, working result expansion, and retry feedback. Rating and type filters update fetched matches immediately; nonfunctional date filters have been removed.
 - Search, Request discovery, mixed-library grids, and download statuses now share spaced choice controls. Required filters stay visibly selected, and reselecting the current Request type preserves the search draft.
 - Downloads now uses readable, status-first rows on phones, opening transfer details in a full-height view with a clear return to the queue. Desktop retains its resizable table and inspector, and status filters use shared single-choice controls.
 - Entity thumbnails use readable shared status and metadata badges. List views place these beside the title instead of over small artwork, and selection checkboxes remain visible over bright images.

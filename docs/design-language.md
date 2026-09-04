@@ -230,6 +230,10 @@ shared class-merging utility so ordinary layout overrides replace them correctly
   It composes the themed ToggleGroup and retains at least one selection. The
   parent owns the value; selecting the current single choice must not reset
   page state. Use ToggleGroup directly when deselecting every option is valid.
+- Search results retain the Entity thumbnail projection and use the library's
+  thumbnail mapper. Group headings identify the type; captions explain related
+  matches instead of repeating that type beneath every title. Full thumbnail
+  grids use the canonical artwork aspect ratio, not route-specific kind cases.
 - Availability belongs beside the item name, separate from its actions. Use
   quiet text for ordinary missing/in-library information; reserve status badges
   for active work or conditions that need attention. Supporting sections share

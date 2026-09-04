@@ -79,6 +79,7 @@ export function entityToSearchItem(
 
   return {
     href,
+    thumbnail: entity,
     id: entity.id,
     imagePath: entity.coverUrl ?? null,
     kind,
