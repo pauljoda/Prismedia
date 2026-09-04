@@ -28,6 +28,7 @@
   import Badge from "./Badge.svelte";
 
   interface Props {
+    id?: string;
     options: SelectOption[];
     value?: string;
     placeholder?: string;
@@ -36,10 +37,12 @@
     variant?: SelectVariant;
     class?: string;
     ariaLabel?: string;
+    ariaDescribedby?: string;
     onchange?: (value: string) => void;
   }
 
   let {
+    id,
     options,
     value = $bindable(),
     placeholder = "Select...",
@@ -48,6 +51,7 @@
     variant = "default",
     class: className,
     ariaLabel,
+    ariaDescribedby,
     onchange,
   }: Props = $props();
 
@@ -63,8 +67,10 @@
 
 <SelectBase.Root type="single" value={value ?? ""} items={options} onValueChange={select} {disabled} allowDeselect={false}>
   <SelectBase.Trigger
+    {id}
     bind:ref={trigger}
     aria-label={ariaLabel}
+    aria-describedby={ariaDescribedby}
     aria-invalid={variant === "error" || undefined}
     class={cn(selectTriggerVariants({ size, variant }), className)}
   >

@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Shared buttons, search fields, form labels, status badges, detail tabs, and navigation disclosures now build on themed shadcn-svelte components, with quieter toolbar styling and existing page layouts and section identities preserved.
 - Bulk-selection actions and page-size pickers now use shared keyboard-accessible controls with consistent focus handling, while keeping their existing toolbar placement.
 - Library toolbars retain their full-width search row, inline view and thumbnail controls, and separate selection strip while using shared keyboard-accessible controls. Identify provider search now shares keyboard navigation and focus handling with other menus.
 - Account, breadcrumb, and track menus now share keyboard navigation, focus return, and collision-aware positioning. Filter presets use a clearer panel with labeled fields and always-visible management actions.
@@ -41,6 +42,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Video playback shortcuts no longer also react to keys used by tabs, menus, sliders, or other focused controls.
 - Changing library sort, artwork layout, or selection no longer reveals a reset row or shifts the toolbar. Clear now removes only search and filters while keeping those browsing preferences.
 - Library sort direction now uses a distinct sorting icon and explicit tooltip so it is not confused with expanding the toolbar.
 - The library toolbar's Clear action now keeps its icon and label aligned in one compact button.

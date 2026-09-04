@@ -22,6 +22,13 @@ export {
 } from "./navigation/app-shell-sections";
 
 // Primitives
+export * as Card from "./components/ui/card";
+export * as InputGroup from "./components/ui/input-group";
+export * as Field from "./components/ui/field";
+export * as Tabs from "./components/ui/tabs";
+export * as Collapsible from "./components/ui/collapsible";
+export { default as Textarea } from "./components/ui/textarea/textarea.svelte";
+export { default as Label } from "./components/ui/label/label.svelte";
 export * as DropdownMenu from "./components/ui/dropdown-menu";
 export * as Popover from "./components/ui/popover";
 export * as Command from "./components/ui/command";

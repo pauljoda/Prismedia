@@ -46,6 +46,7 @@
     type VideoSubtitleTrack,
   } from "$lib/player/subtitle-types";
   import { fetchVideoSubtitleCues } from "$lib/player/video-subtitles";
+  import { createVideoKeyboardHandler } from "$lib/player/video-keyboard";
   import { VIDEO_PLAYBACK_METHOD, type PlaybackModeCode } from "$lib/api/generated/codes";
   import {
     enterMediaFullscreen,
@@ -1405,35 +1406,7 @@
     scheduleInitialMutedSync();
     if (showCastControls && fullChrome) void loadGoogleCastFramework();
 
-    const handleKey = (event: KeyboardEvent) => {
-      if (event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement) return;
-      switch (event.key.toLowerCase()) {
-        case " ":
-        case "k":
-          if (event.key.toLowerCase() === "k" && (event.metaKey || event.ctrlKey)) break;
-          event.preventDefault();
-          togglePlay();
-          break;
-        case "arrowleft":
-          seek(-5);
-          break;
-        case "arrowright":
-          seek(5);
-          break;
-        case "j":
-          seek(-10);
-          break;
-        case "l":
-          seek(10);
-          break;
-        case "m":
-          toggleMute();
-          break;
-        case "f":
-          void toggleFullscreen();
-          break;
-      }
-    };
+    const handleKey = createVideoKeyboardHandler({ togglePlay, seek, toggleMute, toggleFullscreen });
 
     if (enableKeyboardShortcuts) {
       window.addEventListener("keydown", handleKey);

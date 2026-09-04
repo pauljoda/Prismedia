@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Component, Snippet } from "svelte";
-  import { cn } from "@prismedia/ui-svelte";
+  import { Field } from "@prismedia/ui-svelte";
 
   interface Props {
     label?: string;
@@ -25,18 +25,18 @@
   }: Props = $props();
 </script>
 
-<div class={cn("space-y-1.5", className)}>
+<Field.Field class={className} data-invalid={Boolean(error)}>
   {#if label}
-    <label class="text-kicker inline-flex items-center gap-1.5" for={htmlFor}>
-      {#if Icon}<Icon class="h-3 w-3" />{/if}
+    <Field.Label for={htmlFor}>
+      {#if Icon}<Icon class="size-3.5" />{/if}
       {label}
-      {#if required}<span class="text-error-text" aria-label="required">*</span>{/if}
-    </label>
+      {#if required}<span class="text-destructive" aria-hidden="true">*</span>{/if}
+    </Field.Label>
   {/if}
   {@render children()}
   {#if error}
-    <p class="text-[0.7rem] text-error-text">{error}</p>
+    <Field.Error id={htmlFor ? `${htmlFor}-message` : undefined}>{error}</Field.Error>
   {:else if helper}
-    <p class="text-[0.7rem] text-text-disabled">{helper}</p>
+    <Field.Description id={htmlFor ? `${htmlFor}-message` : undefined}>{helper}</Field.Description>
   {/if}
-</div>
+</Field.Field>

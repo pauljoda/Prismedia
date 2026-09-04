@@ -16,7 +16,7 @@
   import { dragHandle, dragHandleZone, SHADOW_ITEM_MARKER_PROPERTY_NAME } from "svelte-dnd-action";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import { cn, ColorInput, prefersReducedMotion } from "@prismedia/ui-svelte";
+  import { Button, Collapsible, cn, ColorInput, prefersReducedMotion } from "@prismedia/ui-svelte";
   import { useNavCustomization } from "$lib/stores/nav-customization.svelte";
   import { appShellNavIconMap } from "./app-shell-nav-icon-map";
   import LogoMark from "./LogoMark.svelte";
@@ -210,9 +210,10 @@
         isExpanded ? "max-w-[32px] opacity-100" : "max-w-0 opacity-0",
       )}
     >
-      <button
+      <Button
+        variant="ghost"
+        size="icon"
         onclick={onToggle}
-        class="flex h-8 w-8 items-center justify-center rounded-sm text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors duration-fast"
         aria-label={collapsed ? "Pin sidebar open" : "Collapse sidebar"}
       >
         {#if collapsed}
@@ -220,7 +221,7 @@
         {:else}
           <PanelLeftClose class="h-4 w-4" />
         {/if}
-      </button>
+      </Button>
     </div>
   </div>
 
@@ -348,14 +349,12 @@
     <!-- Normal mode -->
     <nav class="flex-1 overflow-y-auto overflow-x-hidden py-3 scrollbar-hidden">
       {#each visibleSections as section (section.id)}
-        <div class="nav-section mb-4" style:--section-accent={section.accent}>
-          <button
-            type="button"
-            onclick={() => nav.toggleSectionCollapsed(section.id)}
+        <Collapsible.Root class="nav-section mb-4" style={`--section-accent: ${section.accent}`}
+          bind:open={() => !isExpanded || !section.collapsed, () => nav.toggleSectionCollapsed(section.id)}>
+          <Collapsible.Trigger
             tabindex={isExpanded ? 0 : -1}
-            aria-expanded={!section.collapsed}
             class={cn(
-              "section-toggle group/sec flex w-full items-center gap-1 px-4 pb-1.5 text-left text-kicker whitespace-nowrap transition-[max-height,opacity] duration-moderate overflow-hidden hover:text-text-muted",
+              "section-toggle group/sec flex w-full items-center gap-1 px-4 pb-1.5 text-left text-xs font-medium whitespace-nowrap transition-[max-height,opacity] duration-moderate overflow-hidden hover:text-text-muted",
               isExpanded ? "max-h-8 opacity-100" : "max-h-0 opacity-0",
             )}
           >
@@ -368,21 +367,22 @@
               />
             </span>
             <span class="section-label">{section.label}</span>
-          </button>
+          </Collapsible.Trigger>
           <div
             class={cn(
               "mx-auto mb-1 w-6 separator transition-[max-height,opacity] duration-moderate overflow-hidden",
               !isExpanded ? "max-h-2 opacity-100" : "max-h-0 opacity-0",
             )}
           ></div>
-          {#if !(isExpanded && section.collapsed)}
-          <ul class="space-y-0.5 px-2">
+          <Collapsible.Content>
+          <ul class="flex flex-col gap-0.5 px-2">
             {#each section.items as item (item.href)}
               {@const Icon = appShellNavIconMap[item.icon]}
               {@const active = isActive(item.href)}
               <li>
                 <a
                   href={resolve(item.href as "/")}
+                  aria-current={active ? "page" : undefined}
                   class={cn(
                     "group relative flex items-center rounded-sm px-2.5 py-2 text-sm transition-colors duration-fast whitespace-nowrap",
                     active
@@ -418,8 +418,8 @@
               </li>
             {/each}
           </ul>
-          {/if}
-        </div>
+          </Collapsible.Content>
+        </Collapsible.Root>
       {/each}
     </nav>
   {/if}
@@ -570,7 +570,7 @@
     transition: color var(--duration-fast) var(--ease-default), opacity var(--duration-fast) var(--ease-default);
   }
 
-  .section-toggle:hover .section-collapse-icon {
+  :global(.section-toggle:hover) .section-collapse-icon {
     color: color-mix(in srgb, var(--section-accent) 84%, #f5f5f6);
     opacity: 1;
   }

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Select, Toggle, cn, type SelectOption } from "@prismedia/ui-svelte";
+  import { Badge, Button, Field, Select, Slider, TextInput, Toggle, cn, type SelectOption } from "@prismedia/ui-svelte";
   import type { SettingDescriptor, SettingValue } from "$lib/api/settings";
   import {
     parseStringList,
@@ -71,161 +71,54 @@
   );
 </script>
 
-<div class={cn("setting-row", disabled && "opacity-60", className)}>
+<Field.Field
+  orientation={setting.type === "boolean" ? "horizontal" : setting.type === "integer" || setting.type === "select" ? "responsive" : "vertical"}
+  data-disabled={disabled}
+  class={cn("setting-row py-4", className)}
+>
+  <Field.Content>
+    <Field.Label for={setting.type === "decimal" ? undefined : inputId} id={`${inputId}-label`}>
+      {setting.label}
+    </Field.Label>
+    <Field.Description id={`${inputId}-description`}>{description}</Field.Description>
+  </Field.Content>
+
   {#if setting.type === "boolean"}
-    <label for={inputId}
-      class="flex w-full items-center justify-between gap-4 py-3 text-left rounded-xs transition-colors hover:bg-surface-2/30"
-    >
-      <div class="min-w-0 flex-1">
-        <div class="text-sm font-medium text-text-primary">{setting.label}</div>
-        <p id={`${inputId}-description`} class="mt-0.5 text-xs leading-relaxed text-text-muted">{description}</p>
-      </div>
-      <Toggle id={inputId} ariaLabel={setting.label} ariaDescribedby={`${inputId}-description`}
-        checked={valueAsBoolean(setting.value)} {disabled}
-        onchange={(next) => { if (!disabled) onCommit(setting.key, next); }} />
-    </label>
-
+    <Toggle id={inputId} ariaLabel={setting.label} ariaDescribedby={`${inputId}-description`}
+      checked={valueAsBoolean(setting.value)} {disabled}
+      onchange={(next) => { if (!disabled) onCommit(setting.key, next); }} />
   {:else if setting.type === "integer"}
-    <div class="flex items-center justify-between gap-4 py-3">
-      <div class="min-w-0 flex-1">
-        <div class="text-sm font-medium text-text-primary">{setting.label}</div>
-        <p class="mt-0.5 text-xs leading-relaxed text-text-muted">{description}</p>
-      </div>
-      <div class="flex items-center rounded-xs border border-border-default bg-surface-1 shadow-well shrink-0">
-        <button
-          type="button"
-          onclick={() => { if (!disabled) commitNumber(valueAsNumber(setting.value, numericMin) - numericStep); }}
-          class="px-2 py-1 text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors rounded-l-xs border-r border-border-subtle"
-          aria-label="Decrement"
-        >−</button>
-        <input
-          type="text"
-          inputmode="numeric"
-          bind:value={draftIntText}
-          {disabled}
-          onblur={commitIntText}
-          onkeydown={(e) => { if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur(); }}
-          class="w-12 bg-transparent text-center font-mono text-[0.78rem] text-text-primary py-1 outline-none"
-          aria-label={setting.label}
-        />
-        <button
-          type="button"
-          onclick={() => { if (!disabled) commitNumber(valueAsNumber(setting.value, numericMin) + numericStep); }}
-          class="px-2 py-1 text-text-muted hover:text-text-primary hover:bg-surface-2 transition-colors rounded-r-xs border-l border-border-subtle"
-          aria-label="Increment"
-        >+</button>
-      </div>
+    <div class="flex shrink-0 items-center gap-1">
+      <Button variant="outline" size="icon" aria-label="Decrement"
+        disabled={disabled || valueAsNumber(setting.value, numericMin) <= numericMin}
+        onclick={() => commitNumber(valueAsNumber(setting.value, numericMin) - numericStep)}>−</Button>
+      <TextInput id={inputId} inputmode="numeric" bind:value={draftIntText} {disabled}
+        aria-describedby={`${inputId}-description`}
+        onblur={commitIntText}
+        onkeydown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
+        class="w-20 text-center" />
+      <Button variant="outline" size="icon" aria-label="Increment"
+        disabled={disabled || valueAsNumber(setting.value, numericMin) >= numericMax}
+        onclick={() => commitNumber(valueAsNumber(setting.value, numericMin) + numericStep)}>+</Button>
     </div>
-
   {:else if setting.type === "decimal"}
-    <div class="py-3">
-      <div class="flex items-center justify-between gap-4">
-        <div class="min-w-0 flex-1">
-          <label class="text-sm font-medium text-text-primary" for={inputId}>{setting.label}</label>
-          <p class="mt-0.5 text-xs leading-relaxed text-text-muted">{description}</p>
-        </div>
-        <span class="text-mono-sm shrink-0 rounded-xs border border-border-subtle bg-surface-1 px-2 py-0.5 text-text-accent shadow-well">
-          {displayNumber(draftNumber)}
-        </span>
-      </div>
-      <input
-        id={inputId}
-        type="range"
-        min={numericMin}
-        max={numericMax}
-        step={numericStep}
-        bind:value={draftNumber}
-        disabled={disabled}
-        onmouseup={() => commitNumber(draftNumber)}
-        ontouchend={() => commitNumber(draftNumber)}
-        onblur={() => commitNumber(draftNumber)}
-        onkeydown={(e) => { if (e.key === "Enter") commitNumber(draftNumber); }}
-        class="setting-range mt-2.5"
-        aria-label={setting.label}
-      />
+    <div class="flex items-center gap-4">
+      <Slider type="single" min={numericMin} max={numericMax} step={numericStep}
+        bind:value={draftNumber} {disabled} thumbLabel={setting.label}
+        onValueCommit={commitNumber} />
+      <Badge class="min-w-12 tabular-nums">{displayNumber(draftNumber)}</Badge>
     </div>
-
   {:else if setting.type === "select"}
-    <div class="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-      <div class="min-w-0 flex-1">
-        <div class="text-sm font-medium text-text-primary">{setting.label}</div>
-        <p class="mt-0.5 text-xs leading-relaxed text-text-muted">{description}</p>
-      </div>
-      <div class="w-full shrink-0 sm:w-44">
-        <Select
-          options={selectOptions}
-          value={valueAsString(setting.value)}
-          size="sm"
-          ariaLabel={setting.label}
-          {disabled}
-          onchange={(val) => { if (!disabled) onCommit(setting.key, val); }}
-        />
-      </div>
+    <div class="w-full shrink-0 sm:w-52">
+      <Select id={inputId} options={selectOptions} value={valueAsString(setting.value)}
+        ariaLabel={setting.label} ariaDescribedby={`${inputId}-description`} {disabled}
+        onchange={(value) => { if (!disabled) onCommit(setting.key, value); }} />
     </div>
-
   {:else}
-    <div class="py-3">
-      <div class="min-w-0">
-        <label class="text-sm font-medium text-text-primary" for={inputId}>{setting.label}</label>
-        <p class="mt-0.5 text-xs leading-relaxed text-text-muted">{description}</p>
-      </div>
-      <input
-        id={inputId}
-        type="text"
-        bind:value={draftText}
-        disabled={disabled}
-        onblur={commitText}
-        onkeydown={(e) => { if (e.key === "Enter") (e.currentTarget as HTMLInputElement).blur(); }}
-        class={cn(
-          "setting-text mt-2 w-full rounded-xs border border-border-default bg-surface-1 px-2.5 py-1.5 text-text-secondary shadow-[inset_0_1px_3px_rgba(0,0,0,0.25)]",
-          "focus:border-border-accent focus:outline-none focus:shadow-[var(--shadow-focus-accent)] focus:text-text-primary",
-          (setting.inputKind === "path" || setting.type === "stringList") && "font-mono",
-        )}
-        placeholder={valueAsStringListText(setting.defaultValue, valueAsString(setting.defaultValue))}
-      />
-    </div>
+    <TextInput id={inputId} bind:value={draftText} {disabled}
+      aria-describedby={`${inputId}-description`}
+      onblur={commitText}
+      onkeydown={(event) => { if (event.key === "Enter") event.currentTarget.blur(); }}
+      placeholder={valueAsStringListText(setting.defaultValue, valueAsString(setting.defaultValue))} />
   {/if}
-</div>
-
-<style>
-  .setting-text {
-    font-size: max(16px, 0.75rem);
-    line-height: 1.35;
-  }
-
-  .setting-range {
-    appearance: none;
-    background: transparent;
-    cursor: pointer;
-    height: 1rem;
-    width: 100%;
-  }
-
-  .setting-range::-webkit-slider-runnable-track {
-    background: var(--color-surface-4, #252b36);
-    border: 1px solid var(--color-border-subtle, #354057);
-    border-radius: var(--radius-full);
-    height: 0.38rem;
-  }
-
-  .setting-range::-webkit-slider-thumb {
-    appearance: none;
-    background: var(--color-surface-2, #141924);
-    border: 1px solid var(--color-border-accent, #c7c9cc);
-    border-radius: var(--radius-full);
-    box-shadow: 0 0 8px rgba(199, 201, 204, 0.25);
-    height: 1rem;
-    margin-top: -0.36rem;
-    width: 1rem;
-  }
-
-  .setting-range::-webkit-slider-thumb:hover {
-    box-shadow: 0 0 12px rgba(199, 201, 204, 0.45);
-  }
-
-  @media (min-width: 48rem) {
-    .setting-text {
-      font-size: 0.75rem !important;
-    }
-  }
-</style>
+</Field.Field>

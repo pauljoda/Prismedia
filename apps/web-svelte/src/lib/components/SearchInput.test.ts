@@ -19,6 +19,8 @@ describe("SearchInput", () => {
     const clearButton = screen.getByRole("button", { name: "Clear search" });
 
     expect(clearButton).toHaveAttribute("title", "Clear search");
+    expect(input).toHaveAttribute("data-slot", "input-group-control");
+    expect(clearButton).toHaveAttribute("data-slot", "input-group-button");
 
     await fireEvent.click(clearButton);
     await Promise.resolve();

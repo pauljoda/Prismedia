@@ -1,4 +1,4 @@
-import { render } from "@testing-library/svelte";
+import { render, screen } from "@testing-library/svelte";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import Sidebar from "./Sidebar.svelte";
 
@@ -82,6 +82,15 @@ vi.mock("./LogoMark.svelte", () => ({
 }));
 
 describe("Sidebar", () => {
+  it("connects each navigation disclosure to its controlled section", () => {
+    render(Sidebar, { collapsed: false, onToggle: vi.fn() });
+    const disclosure = screen.getByRole("button", { name: "Video" });
+    expect(disclosure).toHaveAttribute("aria-expanded", "true");
+    expect(document.getElementById(disclosure.getAttribute("aria-controls") ?? "")).toContainElement(
+      screen.getByRole("link", { name: "Movies" }),
+    );
+  });
+
   beforeEach(() => {
     nsfwMode.value = "off";
   });

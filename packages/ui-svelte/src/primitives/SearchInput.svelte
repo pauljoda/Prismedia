@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Loader2, Search, X } from "@lucide/svelte";
   import type { HTMLInputAttributes } from "svelte/elements";
+  import * as InputGroup from "../components/ui/input-group";
   import { cn } from "../lib/utils";
 
   interface Props extends Omit<HTMLInputAttributes, "class" | "type" | "value"> {
@@ -41,34 +42,35 @@
   }
 </script>
 
-<div class={cn("surface-well flex items-center gap-2 px-3 py-2", className)}>
-  <Search class={cn("h-4 w-4 shrink-0 text-text-disabled", searchIconClass)} aria-hidden="true" />
-  <input
-    bind:this={element}
+<InputGroup.Root class={className} aria-disabled={rest.disabled}>
+  <InputGroup.Addon>
+    <Search class={cn("size-4", searchIconClass)} aria-hidden="true" />
+  </InputGroup.Addon>
+  <InputGroup.Input
+    bind:ref={element}
     bind:value
     type="search"
     aria-label={ariaLabel}
-    class={cn(
-      "min-w-0 flex-1 bg-transparent text-sm text-text-primary placeholder:text-text-disabled focus:outline-none",
-      inputClass,
-    )}
+    class={cn("[&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none", inputClass)}
     {...rest}
   />
-  {#if clearable && value}
-    <button
-      type="button"
-      class={cn(
-        "flex h-7 w-7 shrink-0 items-center justify-center rounded-xs text-text-disabled transition-colors duration-fast hover:bg-surface-2 hover:text-text-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-500/20",
-        clearButtonClass,
-      )}
-      onclick={clear}
-      aria-label={clearLabel}
-      title={clearLabel}
-    >
-      <X class={cn("h-3.5 w-3.5", clearIconClass)} />
-    </button>
+  {#if (clearable && value) || loading}
+    <InputGroup.Addon align="inline-end">
+      {#if clearable && value}
+        <InputGroup.Button
+          size="icon-xs"
+          class={clearButtonClass}
+          disabled={rest.disabled}
+          onclick={clear}
+          aria-label={clearLabel}
+          title={clearLabel}
+        >
+          <X class={cn("size-3.5", clearIconClass)} />
+        </InputGroup.Button>
+      {/if}
+      {#if loading}
+        <Loader2 class="size-3.5 shrink-0 animate-spin text-muted-foreground motion-reduce:animate-none" aria-label="Searching" />
+      {/if}
+    </InputGroup.Addon>
   {/if}
-  {#if loading}
-    <Loader2 class="h-3.5 w-3.5 shrink-0 animate-spin text-text-disabled" aria-label="Searching" />
-  {/if}
-</div>
+</InputGroup.Root>

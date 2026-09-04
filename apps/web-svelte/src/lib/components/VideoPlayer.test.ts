@@ -109,6 +109,30 @@ describe("VideoPlayer", () => {
     expect(screen.getByText("0:25 / 1:40")).toBeInTheDocument();
   });
 
+  it("leaves focused controls and consumed keys to their UI owner", async () => {
+    const { container } = render(VideoPlayer, {
+      src: "/api/videos/video-1/hls/master.m3u8",
+      defaultPlaybackMode: "hls",
+      duration: 100,
+      initialTime: 25,
+    });
+    const tab = document.createElement("button");
+    tab.setAttribute("role", "tab");
+    tab.textContent = "Metadata";
+    container.append(tab);
+
+    await fireEvent.keyDown(tab, { key: "ArrowRight" });
+    expect(screen.getByText("0:25 / 1:40")).toBeInTheDocument();
+
+    const consumed = new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true });
+    consumed.preventDefault();
+    await fireEvent(window, consumed);
+    expect(screen.getByText("0:25 / 1:40")).toBeInTheDocument();
+
+    await fireEvent.keyDown(window, { key: "ArrowRight" });
+    expect(screen.getByText("0:30 / 1:40")).toBeInTheDocument();
+  });
+
   it("auto-selects the preferred subtitle track when unlocked", async () => {
     const onActiveSubtitleTrackIdChange = vi.fn();
 

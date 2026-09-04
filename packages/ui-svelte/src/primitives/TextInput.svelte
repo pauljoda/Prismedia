@@ -1,34 +1,14 @@
 <script module lang="ts">
   import { cva, type VariantProps } from "class-variance-authority";
+  import Input, { inputStyles } from "../components/ui/input/input.svelte";
 
-  export const textInputVariants = cva(
-    [
-      "w-full bg-surface-1 text-text-primary border rounded-xs",
-      "shadow-[inset_0_1px_3px_rgba(0,0,0,0.25)]",
-      "placeholder:text-text-disabled",
-      "transition-all duration-fast",
-      "focus:outline-none focus:border-border-accent-strong focus:shadow-[var(--shadow-focus-accent)]",
-      "disabled:opacity-40 disabled:cursor-not-allowed",
-    ].join(" "),
-    {
-      variants: {
-        size: {
-          sm: "h-8 px-2.5 text-xs",
-          md: "h-9 px-3 text-sm",
-          lg: "h-10 px-3.5 text-sm",
-        },
-        variant: {
-          default: "border-border-default",
-          error: "border-error/40",
-        },
-      },
-      defaultVariants: {
-        size: "md",
-        variant: "default",
-      },
+  export const textInputVariants = cva(inputStyles, {
+    variants: {
+      size: { sm: "h-8 px-2.5 text-xs", md: "h-9 px-3 text-sm", lg: "h-10 px-3.5 text-sm" },
+      variant: { default: "", error: "border-destructive" },
     },
-  );
-
+    defaultVariants: { size: "md", variant: "default" },
+  });
   export type TextInputSize = NonNullable<VariantProps<typeof textInputVariants>["size"]>;
   export type TextInputVariant = NonNullable<VariantProps<typeof textInputVariants>["variant"]>;
 </script>
@@ -47,6 +27,7 @@
 
   let {
     ref = $bindable(null),
+    value = $bindable(),
     size = "md",
     variant = "default",
     class: className,
@@ -55,4 +36,11 @@
   }: Props = $props();
 </script>
 
-<input bind:this={ref} {type} class={cn(textInputVariants({ size, variant }), className)} {...rest} />
+<Input
+  bind:ref
+  bind:value
+  type={type ?? "text"}
+  aria-invalid={variant === "error" ? "true" : undefined}
+  class={cn(textInputVariants({ size, variant }), className)}
+  {...rest}
+/>

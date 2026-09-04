@@ -23,6 +23,30 @@ function descriptor(overrides: Partial<SettingDescriptor>): SettingDescriptor {
 }
 
 describe("SettingsControl", () => {
+  it("disables both numeric step buttons when a setting is unavailable", () => {
+    render(SettingsControl, {
+      setting: descriptor({ type: "integer", value: 3, constraints: { min: 1, max: 5, step: 1 } }),
+      disabled: true,
+      onCommit: vi.fn(),
+    });
+    expect(screen.getByRole("button", { name: "Decrement" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Increment" })).toBeDisabled();
+  });
+
+  it("commits a keyboard slider change only once and respects its numeric bounds", async () => {
+    const onCommit = vi.fn();
+    render(SettingsControl, {
+      setting: descriptor({ type: "decimal", value: 1, constraints: { min: 0, max: 2, step: 0.25 } }),
+      onCommit,
+    });
+    const slider = screen.getByRole("slider", { name: "Show cast controls" });
+    slider.focus();
+    await fireEvent.keyDown(slider, { key: "ArrowRight" });
+    await fireEvent.keyUp(slider, { key: "ArrowRight" });
+    await fireEvent.blur(slider);
+    expect(onCommit).toHaveBeenCalledExactlyOnceWith("playback.showCastControls", 1.25);
+  });
+
   it("exposes one named switch without nesting interactive controls", async () => {
     const onCommit = vi.fn();
     render(SettingsControl, { setting: descriptor({ value: false }), onCommit });

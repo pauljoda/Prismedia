@@ -37,7 +37,7 @@
     Upload,
     Users,
   } from "@lucide/svelte";
-  import { Button } from "@prismedia/ui-svelte";
+  import { Button, Tabs } from "@prismedia/ui-svelte";
   import type { EntityDetailCard, EntityDetailCardFull } from "$lib/entities/entity-detail";
   import { renderEntityDescriptionMarkdown } from "$lib/entities/entity-detail-markdown";
   import {
@@ -756,18 +756,13 @@
 
   {#if hasTabs}
     <div class="detail-tabs">
-      <div class="detail-tab-list" role="tablist" aria-label="Detail sections">
+      <Tabs.Root activationMode="manual" bind:value={() => activeTab?.id ?? "", requestTab}>
+      <Tabs.List variant="line" class="max-w-full justify-start overflow-x-auto" aria-label="Detail sections">
         {#each visibleTabs as tab (tab.id)}
-          {@const active = activeTab?.id === tab.id}
           {@const TabIcon = tab.icon}
-          <button
-            type="button"
-            role="tab"
+          <Tabs.Trigger
+            value={tab.id}
             id={`entity-detail-tab-${tab.id}`}
-            aria-selected={active}
-            aria-controls={`entity-detail-panel-${tab.id}`}
-            class:active
-            onclick={() => requestTab(tab.id)}
           >
             {#if TabIcon}
               <TabIcon class="detail-tab-icon h-3.5 w-3.5" />
@@ -776,14 +771,14 @@
             {#if tab.count != null && tab.count > 0}
               <strong>{tab.count}</strong>
             {/if}
-          </button>
+          </Tabs.Trigger>
         {/each}
-      </div>
+      </Tabs.List>
 
       {#if activeTab}
-        <div
+        <Tabs.Content
+          value={activeTab.id}
           class="detail-tab-panel detail-content-card detail-content-card--tabbed"
-          role="tabpanel"
           id={`entity-detail-panel-${activeTab.id}`}
           aria-labelledby={`entity-detail-tab-${activeTab.id}`}
         >
@@ -825,8 +820,9 @@
               {/if}
             </div>
           {/key}
-        </div>
+        </Tabs.Content>
       {/if}
+      </Tabs.Root>
     </div>
   {:else}
     {@render defaultDetailContent()}
@@ -1351,66 +1347,11 @@
     margin-inline: var(--detail-slideout-inset);
   }
 
-  .detail-tab-list {
-    position: relative;
-    z-index: 2;
-    display: flex;
-    gap: 0.35rem;
-    min-width: 0;
-    margin-top: -1px;
-    overflow-x: auto;
-    padding: 0.65rem 1.5rem;
-    border: 1px solid var(--detail-border);
-    border-top: 0;
-    border-radius: 0 0 var(--radius-md, 10px) var(--radius-md, 10px);
-    background: var(--detail-glass);
-    scrollbar-width: thin;
-  }
-
-  .detail-tab-list button {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.45rem;
-    min-height: 2rem;
-    padding: 0.35rem 0.75rem;
-    border: 1px solid transparent;
-    border-radius: var(--radius-xs, 4px);
-    background: transparent;
-    color: var(--detail-text-muted);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    white-space: nowrap;
-    cursor: pointer;
-    transition: color 0.15s, border-color 0.15s, background 0.15s, box-shadow 0.15s;
-  }
-
-  .detail-tab-list button:hover {
-    color: var(--detail-text);
-    border-color: var(--color-border-subtle, rgba(148, 158, 178, 0.07));
-    background: var(--detail-surface-raised);
-  }
-
-  .detail-tab-list button.active {
-    color: var(--detail-text);
-    border-color: var(--color-border-default);
-    background: var(--detail-surface-raised);
-    box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--detail-accent) 72%, #c7c9cc);
-  }
-
-  .detail-tab-list strong {
-    color: var(--detail-text-disabled);
-    font-size: 0.65rem;
-    font-weight: 600;
-  }
-
-  .detail-tab-panel {
+  .detail-tabs :global(.detail-tab-panel) {
     min-width: 0;
   }
 
-  .detail-content-card {
+  .entity-detail :global(.detail-content-card) {
     min-width: 0;
     border: 1px solid var(--detail-border);
     border-top: 0;
@@ -1420,7 +1361,7 @@
     overflow: hidden;
   }
 
-  .detail-content-card--tabbed {
+  .entity-detail :global(.detail-content-card--tabbed) {
     position: relative;
     z-index: 1;
     margin-top: -0.5rem;
@@ -1660,10 +1601,6 @@
 
     .metadata-sections {
       padding: 1rem 2rem 2rem;
-    }
-
-    .detail-tab-list {
-      padding-inline: 2rem;
     }
 
     .detail-tab-sections {

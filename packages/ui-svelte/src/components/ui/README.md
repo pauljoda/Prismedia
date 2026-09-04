@@ -1,8 +1,17 @@
 # Shared component bases
 
-This directory contains source copied with shadcn-svelte CLI 1.6.0 from the official registry, then adapted to Prismedia. The installed set is Select, Switch, Separator, DropdownMenu, Popover, ToggleGroup, Slider, and Command, with Toggle supporting the group styles. Bits UI provides their interaction behavior. The lockfile records the tested runtime version.
+This directory contains source copied with shadcn-svelte CLI 1.6.0 from the official registry, then themed for Prismedia. The foundation includes Button, Input, InputGroup, Textarea, Badge, Card, Field, Label, Tabs, Collapsible, Select, Switch, Separator, DropdownMenu, Popover, ToggleGroup, Slider, and Command, with Toggle supporting the group styles. Bits UI provides behavior for interactive composites; simple controls retain native HTML semantics. The lockfile records the tested runtime version.
 
 Application code imports these bases from `@prismedia/ui-svelte`. Select and Toggle retain their existing adapter APIs; DropdownMenu, Popover, ToggleGroup, and Command expose namespaced composition parts. `SearchableSelect` composes Command and Popover for local single-choice catalogs. Domain fetching, settings persistence, entity relationships, and validation belong outside this directory.
+
+## Building on the foundation
+
+- Button, Badge, TextInput, SearchInput, and Panel keep their established import paths as thin adapters. Button maps legacy `primary`/`danger` and `md` names to the base variants. Badge retains quiet default and semantic status variants. Panel uses Card without imposing new internal spacing on existing consumers.
+- Compose new panels from Card. Existing Panel consumers retain their page composition. Settings keeps its list of destinations, colored section icons, and established preference layouts; media artwork grids retain their purpose-built layout.
+- Compose fields with Field and Label, and use Input/Textarea controls. App TextField and TextAreaField retain validation and change callbacks while forwarding required, invalid, and description semantics. SearchInput composes InputGroup and keeps clear/focus behavior in one place.
+- Use Tabs for panels, not route navigation. EntityDetail uses manual keyboard activation and function binding so the existing dirty-edit guard can reject a tab change. Sidebar uses Collapsible only for section disclosure; the app still owns permissions, ordering, and persisted preferences.
+- A component migration is not permission to redesign a page. Preserve deliberate composition and identity choices; obtain page-by-page agreement before changing them.
+- Prefer component variants over descendant CSS that restyles controls. Theme aliases map Card, secondary, muted, border, and ring colors to the shared neutral palette. Tight radii, existing font voices, and sparse entity identity remain Prismedia's theme; avoid layering old inset shadows and tiny utility typography over every base.
 
 ## Composing overlays
 
@@ -38,6 +47,10 @@ Review generated dependency declarations before installing. Runtime dependencies
 
 ## Intentional adaptations
 
+- Registry variant recipes use the existing class-variance-authority dependency. No additional variant runtime or forms framework is needed. Simple Button and Badge bases expose native button/span contracts; links remain real anchors, styled with the exported recipes when needed.
+- Tabs target Bits UI's `data-state="active"` and explicit orientation attributes. Card uses a real border and allows content overflow so existing overlays are not clipped.
+- Global player shortcuts yield to focused controls and already-consumed keyboard events. Test tab navigation beside a real video player; isolated tab tests cannot establish shortcut ownership across the page.
+- Settings numeric controls preserve clamping and parent-owned persistence. Disabled integer fields disable their step buttons too; decimal Slider saves through its commit event once, not a second blur handler.
 - Select retains the existing option/value/callback API, three sizes, error variant, disabled options, and status annotations. Choosing the current item does not clear the value or call `onchange` again. Empty values remain valid options.
 - Select forwards item labels to Bits UI for typeahead and exposes disabled options through `aria-disabled`. The trigger is a native button with a listbox popup, not an editable combobox.
 - Portal placement uses the nearest native dialog when present. Body portals cannot escape a native modal's inert boundary. Keep the existing Dialog implementation until its dismissal and busy-state contracts are explicitly migrated.

@@ -173,6 +173,11 @@
 @theme inline {
   --color-background: var(--color-bg);
   --color-foreground: var(--color-text-primary);
+  --color-card: var(--color-surface-1);
+  --color-card-foreground: var(--color-text-primary);
+  --color-secondary: var(--color-surface-3);
+  --color-secondary-foreground: var(--color-text-primary);
+  --color-muted: var(--color-surface-2);
   --color-popover: var(--color-surface-2);
   --color-popover-foreground: var(--color-text-primary);
   --color-primary: var(--color-accent-200);
@@ -181,7 +186,7 @@
   --color-accent: var(--color-surface-3);
   --color-accent-foreground: var(--color-text-primary);
   --color-input: var(--color-border-default);
-  --color-border: var(--color-border-subtle);
+  --color-border: var(--color-border-default);
   --color-ring: var(--color-accent-500);
   --color-destructive: var(--color-error-text);
 }

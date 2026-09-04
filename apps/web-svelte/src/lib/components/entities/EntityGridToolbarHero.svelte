@@ -4,7 +4,7 @@
     ChevronsUpDown,
     SlidersHorizontal,
   } from "@lucide/svelte";
-  import { Badge, Button, cn } from "@prismedia/ui-svelte";
+  import { Badge, Button } from "@prismedia/ui-svelte";
   import type { FilterPreset } from "$lib/filter-presets";
   import type {
     EntityGridSort,
@@ -109,16 +109,16 @@
 
     <div class="control-cluster control-cluster-trailing">
       <Button
-        variant="ghost"
-        class={cn("ctrl-btn ctrl-filters", drawerOpen && "is-active")}
+        variant={drawerOpen ? "secondary" : "outline"}
+        size="sm"
         aria-label="Filters"
         aria-expanded={drawerOpen}
         onclick={() => onDrawerOpenChange(!drawerOpen)}
       >
         <SlidersHorizontal class="h-3.5 w-3.5" />
-        <span class="ctrl-label">Filters</span>
+        <span class="hidden min-[520px]:inline">Filters</span>
         {#if activeFilterCount > 0}
-          <Badge class="filter-count">{activeFilterCount}</Badge>
+          <Badge class="h-4 px-1 text-[10px]">{activeFilterCount}</Badge>
         {/if}
       </Button>
 
@@ -134,7 +134,7 @@
       {#if hasCollapsibleRows}
         <Button
           variant="ghost"
-          class={cn("ctrl-btn ctrl-icon collapse-toggle", barsCollapsed && "is-active")}
+          size="icon-sm"
           title={barsCollapsed ? "Show filter and selection rows" : "Hide filter and selection rows"}
           aria-label={barsCollapsed ? "Show filter and selection rows" : "Hide filter and selection rows"}
           aria-expanded={!barsCollapsed}
@@ -160,8 +160,7 @@
     gap: 0.75rem;
     border: 1px solid var(--toolbar-detail-border);
     border-radius: var(--radius-sm, 6px);
-    background: var(--toolbar-detail-glass);
-    box-shadow: 0 8px 40px rgba(0, 0, 0, 0.60);
+    background: var(--color-card);
     padding: 1rem 1.05rem;
   }
 
@@ -202,84 +201,6 @@
     justify-content: flex-end;
     flex-wrap: nowrap;
     flex-shrink: 0;
-  }
-
-  .toolbar-hero :global(.ctrl-btn) {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    height: 2rem;
-    min-height: 2rem;
-    border: 1px solid var(--color-border-subtle, rgba(148, 158, 178, 0.07));
-    background: var(--color-surface-2, #101420);
-    border-radius: var(--radius-xs, 4px);
-    box-shadow: inset 0 2px 8px rgba(0,0,0,0.30);
-    color: var(--color-text-muted);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.7rem;
-    letter-spacing: 0.04em;
-    padding: 0 0.6rem;
-    transition:
-      background var(--duration-fast, 80ms) var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)),
-      border-color var(--duration-fast, 80ms) var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)),
-      color var(--duration-fast, 80ms) var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)),
-      box-shadow var(--duration-fast, 80ms) var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1));
-  }
-
-  .toolbar-hero :global(.ctrl-btn:hover) {
-    border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
-    background: var(--color-surface-3, #151a28);
-    color: var(--color-text-primary);
-    box-shadow: inset 0 0 0 1px var(--color-border-default);
-  }
-
-  .toolbar-hero :global(.ctrl-btn:focus-visible) {
-    outline: none;
-    border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
-    box-shadow: var(--shadow-focus-accent);
-  }
-
-  .toolbar-hero :global(.ctrl-btn.is-active) {
-    border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
-    background: var(--color-surface-4, #1c2235);
-    color: var(--color-text-accent, #c7c9cc);
-    box-shadow: inset 0 -2px 0 var(--entity-accent, var(--color-accent-500));
-  }
-
-  .toolbar-hero :global(.ctrl-label) {
-    display: none;
-  }
-
-  .toolbar-hero :global(.ctrl-icon) {
-    width: 2rem;
-    justify-content: center;
-    padding: 0;
-  }
-
-  .toolbar-hero :global(.filter-count) {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    height: 1.05rem;
-    min-width: 1.05rem;
-    border: 1px solid var(--color-border-default);
-    border-radius: var(--radius-xs, 4px);
-    background: var(--color-surface-3);
-    color: var(--color-text-accent-bright, #d8d9dc);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.58rem;
-    font-weight: 700;
-    letter-spacing: 0;
-    line-height: 1;
-    box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.05);
-    padding: 0 0.25rem;
-    text-shadow: none;
-  }
-
-  @media (min-width: 520px) {
-    .toolbar-hero :global(.ctrl-label) {
-      display: inline;
-    }
   }
 
   @media (max-width: 520px) {

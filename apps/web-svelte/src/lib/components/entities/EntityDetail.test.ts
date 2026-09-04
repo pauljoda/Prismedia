@@ -39,6 +39,25 @@ function buildCard(): EntityDetailCard {
 }
 
 describe("EntityDetail", () => {
+  it("moves detail-tab focus with arrow keys before committing with Enter", async () => {
+    const card = buildCard();
+    card.description = "Details content";
+    card.links = [{ label: "Website", url: "https://example.test" }];
+    render(EntityDetail, { card, tabs: [
+      { id: "details", label: "Details", sections: ["description"] },
+      { id: "links", label: "Links", sections: ["links"] },
+    ] });
+    const details = screen.getByRole("tab", { name: "Details" });
+    const links = screen.getByRole("tab", { name: "Links" });
+    details.focus();
+    await fireEvent.keyDown(details, { key: "ArrowRight" });
+    expect(links).toHaveFocus();
+    expect(details).toHaveAttribute("aria-selected", "true");
+    await fireEvent.keyDown(links, { key: "Enter" });
+    expect(links).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tabpanel", { name: "Links" })).toBeInTheDocument();
+  });
+
   it("renders configured hero action buttons with shared styling", async () => {
     const onClick = vi.fn();
     render(EntityDetail, {
