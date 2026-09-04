@@ -12,6 +12,9 @@ describe("MetadataCard", () => {
       ],
     });
 
+    const heading = screen.getByRole("heading", { name: "Stats" });
+
+    expect(heading.closest('[data-slot="card"]')).toBeInTheDocument();
     expect(screen.getByText("Runtime Minutes")).toBeInTheDocument();
     expect(screen.getByText("TMDB")).toBeInTheDocument();
   });

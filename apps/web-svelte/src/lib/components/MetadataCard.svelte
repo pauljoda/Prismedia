@@ -7,6 +7,7 @@
 
 <script lang="ts">
   import type { Component, Snippet } from "svelte";
+  import { Card } from "@prismedia/ui-svelte";
 
   interface Props {
     title: string;
@@ -18,6 +19,11 @@
   }
 
   let { title, icon: Icon, rows, children, wide = false, capped = false }: Props = $props();
+  const cardClass = $derived([
+    "metadata-card min-w-0",
+    wide ? "metadata-card-wide" : "",
+    capped ? "metadata-card-capped" : "",
+  ].filter(Boolean).join(" "));
 
   /** Makes backend-style field names readable while preserving deliberate codes such as TMDB. */
   function displayLabel(label: string): string {
@@ -30,67 +36,45 @@
   }
 </script>
 
-<div class="metadata-card" class:metadata-card-wide={wide} class:metadata-card-capped={capped}>
-  <h3 class="metadata-card-title">
-    {#if Icon}
-      <Icon class="h-3.5 w-3.5" />
-    {/if}
-    {title}
-  </h3>
+<Card.Root size="sm" class={cardClass}>
+  <Card.Header>
+    <Card.Title role="heading" aria-level={3} class="flex items-center gap-2 text-foreground">
+      {#if Icon}
+        <Icon class="text-muted-foreground" aria-hidden="true" />
+      {/if}
+      {title}
+    </Card.Title>
+  </Card.Header>
   {#if children}
-    <div class="metadata-card-body">
-      {@render children()}
-    </div>
+    <Card.Content>
+      <div class="metadata-card-body">
+        {@render children()}
+      </div>
+    </Card.Content>
   {:else if rows && rows.length > 0}
-    <dl class="metadata-card-rows">
-      {#each rows as row (row.label)}
-        <div class="metadata-card-row">
-          <dt>{displayLabel(row.label)}</dt>
-          <dd>{row.value}</dd>
-        </div>
-      {/each}
-    </dl>
+    <Card.Content>
+      <dl class="metadata-card-rows">
+        {#each rows as row (row.label)}
+          <div class="metadata-card-row">
+            <dt>{displayLabel(row.label)}</dt>
+            <dd>{row.value}</dd>
+          </div>
+        {/each}
+      </dl>
+    </Card.Content>
   {/if}
-</div>
+</Card.Root>
 
 <style>
-  .metadata-card {
-    min-width: 0;
-    padding: 0.95rem 1rem;
-    border: 1px solid var(--color-border-default, rgba(164, 172, 185, 0.12));
-    border-radius: var(--radius-md, 8px);
-    background: color-mix(in srgb, var(--color-surface-2, #11161d) 78%, transparent);
-  }
-
-  .metadata-card-capped {
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
+  :global(.metadata-card-capped) {
     max-height: var(--metadata-card-max-height, 24rem);
-  }
-
-  .metadata-card-title {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin: 0 0 0.7rem;
-    font-family: var(--font-heading, Geist, sans-serif);
-    font-size: 0.8125rem;
-    font-weight: 600;
-    letter-spacing: -0.01em;
-    color: var(--color-text-secondary, #c4c9d4);
-  }
-
-  .metadata-card-title :global(svg) {
-    width: 1rem;
-    height: 1rem;
-    color: var(--color-text-muted, #8a93a6);
   }
 
   .metadata-card-body {
     min-width: 0;
   }
 
-  .metadata-card-capped .metadata-card-body {
+  :global(.metadata-card-capped) .metadata-card-body {
     min-height: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
