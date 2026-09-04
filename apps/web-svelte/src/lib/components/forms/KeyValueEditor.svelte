@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Component } from "svelte";
-  import { Button, TextInput } from "@prismedia/ui-svelte";
+  import { Button, Field, TextInput } from "@prismedia/ui-svelte";
   import { Plus, X } from "@lucide/svelte";
   import FormField from "./FormField.svelte";
 
@@ -39,6 +39,8 @@
   let newKey = $state("");
   let newValue = $state("");
   let addError = $state<string | null>(null);
+  let invalidField = $state<"key" | "value" | null>(null);
+  const id = $props.id();
 
   function addPair() {
     const k = newKey.trim();
@@ -46,13 +48,14 @@
     if (!k || !v) return;
     if (validateKey) {
       const err = validateKey(k);
-      if (err) { addError = err; return; }
+      if (err) { addError = err; invalidField = "key"; return; }
     }
     if (validateValue) {
       const err = validateValue(v);
-      if (err) { addError = err; return; }
+      if (err) { addError = err; invalidField = "value"; return; }
     }
     addError = null;
+    invalidField = null;
     onChange([...values, { key: k, value: v }]);
     newKey = "";
     newValue = "";
@@ -78,68 +81,76 @@
 </script>
 
 <FormField {label} {icon} {helper} {error}>
-  <div class="grid gap-2">
+  <Field.Group class="@container gap-4">
     {#if values.length > 0}
-      <div class="grid min-w-0 grid-cols-[minmax(6rem,0.4fr)_minmax(0,1fr)_2rem] items-center gap-1">
-        <span class="text-xs text-muted-foreground">{keyLabel}</span>
-        <span class="text-xs text-muted-foreground">{valueLabel}</span>
-        <span ></span>
-      </div>
-      <ul class="grid gap-1">
+      <ul class="grid min-w-0 gap-3">
         {#each values as pair, i (i)}
-          <li class="grid min-w-0 grid-cols-[minmax(6rem,0.4fr)_minmax(0,1fr)_2rem] items-center gap-1">
-            <span class="truncate px-2 text-sm text-muted-foreground">{pair.key}</span>
-            <TextInput
-              type="text"
-              inputmode={valueInputMode}
-              value={pair.value}
-              oninput={(e) => updateValue(i, (e.currentTarget as HTMLInputElement).value)}
-              aria-label={label ?? pair.key}
-              class="min-w-0"
-            />
+          <li class="grid min-w-0 grid-cols-[minmax(0,1fr)_auto] items-end gap-control-gap">
+            <Field.Field class="min-w-0">
+              <Field.Label for={`${id}-value-${i}`} class="break-all">{pair.key} {valueLabel}</Field.Label>
+              <TextInput
+                id={`${id}-value-${i}`}
+                type="text"
+                inputmode={valueInputMode}
+                value={pair.value}
+                oninput={(e) => updateValue(i, (e.currentTarget as HTMLInputElement).value)}
+                class="min-w-0"
+              />
+            </Field.Field>
             <Button variant="ghost"
               type="button"
               size="icon"
               onclick={() => removePair(i)}
               aria-label={`Remove ${pair.key}`}
             >
-              <X class="h-3 w-3" />
+              <X />
             </Button>
           </li>
         {/each}
       </ul>
     {/if}
 
-    <div class="grid min-w-0 grid-cols-[minmax(6rem,0.4fr)_minmax(0,1fr)_2rem] items-center gap-1">
-      <TextInput
-        type="text"
-        bind:value={newKey}
-        onkeydown={handleAddKeydown}
-        aria-label={keyLabel}
-        placeholder={keyPlaceholder}
-        class="min-w-0"
-      />
-      <TextInput
-        type="text"
-        inputmode={valueInputMode}
-        bind:value={newValue}
-        onkeydown={handleAddKeydown}
-        aria-label={valueLabel}
-        placeholder={valuePlaceholder}
-        class="min-w-0"
-      />
-      <Button variant="ghost"
+    <div class="grid min-w-0 grid-cols-1 items-end gap-3 @min-[24rem]:grid-cols-2">
+      <Field.Field data-invalid={invalidField === "key"} class="min-w-0">
+        <Field.Label for={`${id}-new-key`}>New {keyLabel}</Field.Label>
+        <TextInput
+          id={`${id}-new-key`}
+          type="text"
+          bind:value={newKey}
+          onkeydown={handleAddKeydown}
+          aria-invalid={invalidField === "key"}
+          aria-describedby={invalidField === "key" ? `${id}-error` : undefined}
+          placeholder={keyPlaceholder}
+          class="min-w-0"
+        />
+      </Field.Field>
+      <Field.Field data-invalid={invalidField === "value"} class="min-w-0">
+        <Field.Label for={`${id}-new-value`}>New {valueLabel}</Field.Label>
+        <TextInput
+          id={`${id}-new-value`}
+          type="text"
+          inputmode={valueInputMode}
+          bind:value={newValue}
+          onkeydown={handleAddKeydown}
+          aria-invalid={invalidField === "value"}
+          aria-describedby={invalidField === "value" ? `${id}-error` : undefined}
+          placeholder={valuePlaceholder}
+          class="min-w-0"
+        />
+      </Field.Field>
+      <Button variant="secondary"
         type="button"
-        size="icon"
+        class="@min-[24rem]:col-span-2 @min-[24rem]:justify-self-end"
         onclick={addPair}
         disabled={!newKey.trim() || !newValue.trim()}
         aria-label="Add entry"
       >
-        <Plus class="h-3.5 w-3.5" />
+        <Plus data-icon="inline-start" />
+        Add entry
       </Button>
     </div>
     {#if addError}
-      <p class="text-[0.7rem] text-error-text">{addError}</p>
+      <Field.Error id={`${id}-error`}>{addError}</Field.Error>
     {/if}
-  </div>
+  </Field.Group>
 </FormField>

@@ -196,6 +196,15 @@ shared class-merging utility so ordinary layout overrides replace them correctly
 - Acquisition work and monitoring settings align at the top on wide screens and
   stack on narrow screens. File actions belong inside a card, not in the space
   between cards. Child activity opens initially when it is the only work shown.
+- Entity edit forms use a full-width shared grid: primary fields and dates in one
+  flow, links and source references in another. On narrow screens these flows
+  stack in reading order. Add-entry fields retain visible labels, and form
+  actions align with the panel's padded right edge. Do not cap the editor inside
+  a wider panel and leave its actions floating in the middle.
+- Availability belongs beside the item name, separate from its actions. Use
+  quiet text for ordinary missing/in-library information; reserve status badges
+  for active work or conditions that need attention. Supporting sections share
+  the same spacing whether supplied by a page or by the Entity base.
 
 ### Behavior
 

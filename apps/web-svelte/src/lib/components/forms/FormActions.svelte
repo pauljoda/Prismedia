@@ -31,11 +31,11 @@
   );
 </script>
 
-<div class={cn("flex flex-col gap-2", fullWidth && "w-full")}>
+<div class={cn("@container flex flex-col gap-2", fullWidth && "w-full")}>
   {#if error}
     <Alert.Root variant="destructive"><Alert.Description>{error}</Alert.Description></Alert.Root>
   {/if}
-  <div class={cn("flex items-center gap-2", justify)}>
+  <div class={cn("flex flex-wrap items-center gap-control-gap @max-[24rem]:grid @max-[24rem]:grid-cols-1", justify)}>
     <Button
       type="button"
       onclick={onCancel}
@@ -43,7 +43,7 @@
       variant="outline"
       class={fullWidth ? "flex-1" : undefined}
     >
-      <XCircle class="h-3.5 w-3.5" />
+      <XCircle data-icon="inline-start" />
       {cancelLabel}
     </Button>
     <Button
@@ -55,9 +55,9 @@
       class={fullWidth ? "flex-1" : undefined}
     >
       {#if saving}
-        <Loader2 class="h-3.5 w-3.5 animate-spin" />
+        <Loader2 data-icon="inline-start" class="animate-spin motion-reduce:animate-none" />
       {:else}
-        <Save class="h-3.5 w-3.5" />
+        <Save data-icon="inline-start" />
       {/if}
       {saving ? "Saving…" : saveLabel}
     </Button>

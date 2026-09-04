@@ -13,6 +13,14 @@ vi.mock("$lib/api/acquisitions", () => mocks);
 describe("ManualAcquisitionActions", () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it("provides a keyboard-accessible button for choosing upload files", async () => {
+    const { container } = render(ManualAcquisitionActions, { entityId: "entity-1", canReplace: false, canUpload: true, onStarted: vi.fn() });
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const choose = vi.spyOn(input, "click").mockImplementation(() => {});
+    await fireEvent.click(screen.getByRole("button", { name: "Upload content" }));
+    expect(choose).toHaveBeenCalledOnce();
+  });
+
   it("opens a replacement review without selecting a release", async () => {
     mocks.searchManualReplacement.mockResolvedValue({ searchId: "review-1", candidates: [] });
 
@@ -61,7 +69,7 @@ describe("ManualAcquisitionActions", () => {
       onStarted,
     });
 
-    const input = screen.getByLabelText("Upload content");
+    const input = screen.getByLabelText("Content files");
     await fireEvent.change(input, { target: { files: [new File(["content"], "release.zip")] } });
 
     expect(await screen.findByRole("status", { name: "Uploading 42%" })).toBeInTheDocument();

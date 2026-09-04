@@ -287,26 +287,28 @@
 
   .edit-section {
     display: grid;
-    gap: 0.75rem;
+    gap: calc(var(--spacing) * 6);
+  }
+
+  .custom-detail-section {
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--spacing) * 4);
   }
 
   .edit-flag-chips {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.35rem;
-    min-height: 2.55rem;
+    gap: var(--spacing-control-gap);
+    min-height: var(--spacing-control);
     align-items: center;
-  }
-
-  .edit-flag-chips :global(button) {
-    min-height: 2.55rem;
   }
 
   .section-label {
     display: flex;
     align-items: center;
     gap: 0.45rem;
-    margin: 0 0 0.75rem;
+    margin: 0;
     font-family: var(--font-heading, Geist, sans-serif);
     font-size: 0.875rem;
     font-weight: 600;

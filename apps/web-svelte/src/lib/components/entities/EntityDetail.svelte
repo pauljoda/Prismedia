@@ -38,6 +38,7 @@
     Users,
   } from "@lucide/svelte";
   import { Button, Tabs } from "@prismedia/ui-svelte";
+  import EntityDetailEditLayout from "./EntityDetailEditLayout.svelte";
   import type { EntityDetailCard, EntityDetailCardFull } from "$lib/entities/entity-detail";
   import { renderEntityDescriptionMarkdown } from "$lib/entities/entity-detail-markdown";
   import {
@@ -815,6 +816,8 @@
                     </Button>
                   {/if}
                 </StatePlaceholder>
+              {:else if isEditingActiveTab}
+                <EntityDetailEditLayout sections={activeTabSections} item={renderDetailSection} />
               {:else}
                 <MetadataCardGrid>
                   {#each activeTabSections as section (section.id)}

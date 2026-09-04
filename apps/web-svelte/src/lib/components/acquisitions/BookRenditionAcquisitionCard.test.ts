@@ -9,6 +9,12 @@ vi.mock("$lib/components/acquisitions/AcquisitionPanel.svelte", async () => ({
 }));
 
 describe("BookRenditionAcquisitionCard", () => {
+  it("keeps missing status with rendition information, separate from request actions", () => {
+    const { container } = render(BookRenditionAcquisitionCard, { ownership: { ebook: false, audiobook: false }, acquisitions: [], monitors: [], onRequest: vi.fn() });
+    expect(screen.getAllByText("Not in library")).toHaveLength(2);
+    expect(container.querySelectorAll('[data-slot="item-content"]')).toHaveLength(2);
+    expect(screen.getByRole("button", { name: "Request ebook" }).closest('[data-slot="item-actions"]')).not.toBeNull();
+  });
   afterEach(() => {
     cleanup();
   });

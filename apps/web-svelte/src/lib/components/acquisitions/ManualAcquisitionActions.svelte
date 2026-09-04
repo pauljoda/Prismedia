@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Loader2, RefreshCw, Repeat2, Search, Upload, X } from "@lucide/svelte";
-  import { Button, SearchInput } from "@prismedia/ui-svelte";
+  import { Button, Progress, SearchInput } from "@prismedia/ui-svelte";
   import type { AcquisitionDetail, ManualReplacementSearchResult, ReleaseCandidateView } from "$lib/api/generated/model";
   import {
     queueManualReplacement,
@@ -28,6 +28,7 @@
   let busy = $state(false);
   let uploadProgress = $state<number | null>(null);
   let error = $state<string | null>(null);
+  let uploadInput = $state<HTMLInputElement | null>(null);
 
   async function search(query?: string) {
     if (busy) return;
@@ -87,19 +88,19 @@
 
 {#if canReplace || canUpload}
   <div class="manual-actions">
-    <div class="flex flex-wrap items-center gap-2">
+    <div class="flex flex-wrap items-center gap-control-gap">
       {#if canReplace}
-        <Button type="button" size="sm" variant="secondary" class="no-lift gap-1.5" disabled={busy} onclick={() => void search()}>
-          <Repeat2 class="h-3.5 w-3.5" />
+        <Button type="button" variant="secondary" disabled={busy} onclick={() => void search()}>
+          <Repeat2 data-icon="inline-start" />
           Replace
         </Button>
       {/if}
       {#if canUpload}
-        <label class:disabled={busy} class="upload-trigger">
-          <Upload class="h-3.5 w-3.5" />
+        <Button type="button" variant="secondary" disabled={busy} onclick={() => uploadInput?.click()}>
+          <Upload data-icon="inline-start" />
           Upload content
-          <input type="file" multiple class="hidden" disabled={busy} onchange={upload} />
-        </label>
+        </Button>
+        <input bind:this={uploadInput} type="file" multiple class="hidden" aria-label="Content files" disabled={busy} onchange={upload} />
       {/if}
     </div>
 
@@ -109,9 +110,7 @@
           <span class="flex items-center gap-2 text-text-secondary"><Loader2 class="h-3.5 w-3.5 animate-spin" />Uploading content</span>
           <span class="font-mono text-text-accent">{Math.round(uploadProgress * 100)}%</span>
         </div>
-        <div class="h-1.5 overflow-hidden rounded-full bg-surface-3">
-          <div class="h-full rounded-full bg-accent-500 transition-all" style:width={`${uploadProgress * 100}%`}></div>
-        </div>
+        <Progress value={uploadProgress * 100} aria-label="Upload progress" />
       </div>
     {/if}
 
@@ -160,21 +159,6 @@
 
 <style>
   .manual-actions { display: grid; gap: 0.75rem; }
-  .upload-trigger {
-    display: inline-flex;
-    cursor: pointer;
-    align-items: center;
-    gap: 0.375rem;
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-xs);
-    background: var(--color-surface-2);
-    padding: 0.375rem 0.625rem;
-    color: var(--color-text-secondary);
-    font-size: 0.75rem;
-    font-weight: 600;
-  }
-  .upload-trigger:hover { color: var(--color-text-primary); }
-  .upload-trigger.disabled { cursor: not-allowed; opacity: 0.5; }
   .upload-progress,
   .replacement-review {
     display: grid;

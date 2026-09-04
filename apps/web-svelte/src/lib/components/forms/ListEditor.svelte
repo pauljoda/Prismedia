@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { Component } from "svelte";
-  import { Button, TextInput } from "@prismedia/ui-svelte";
-  import { Plus, X, GripVertical } from "@lucide/svelte";
+  import { tick, type Component } from "svelte";
+  import { Button, Field, TextInput } from "@prismedia/ui-svelte";
+  import { Plus, X, Pencil } from "@lucide/svelte";
   import FormField from "./FormField.svelte";
 
   interface Props {
@@ -30,6 +30,9 @@
   let inputError = $state<string | null>(null);
   let editingIndex = $state<number | null>(null);
   let editingValue = $state("");
+  let editingError = $state<string | null>(null);
+  let editingInput = $state<HTMLInputElement | null>(null);
+  const id = $props.id();
 
   function addItem() {
     const trimmed = inputValue.trim();
@@ -53,9 +56,13 @@
     }
   }
 
-  function startEdit(index: number) {
+  async function startEdit(index: number) {
     editingIndex = index;
     editingValue = values[index];
+    editingError = null;
+    await tick();
+    editingInput?.focus();
+    editingInput?.select();
   }
 
   function commitEdit() {
@@ -67,7 +74,7 @@
     }
     if (validate) {
       const err = validate(trimmed);
-      if (err) return;
+      if (err) { editingError = err; return; }
     }
     const next = [...values];
     next[editingIndex] = trimmed;
@@ -77,6 +84,7 @@
 
   function cancelEdit() {
     editingIndex = null;
+    editingError = null;
   }
 
   function handleInputKeydown(e: KeyboardEvent) {
@@ -97,18 +105,21 @@
 </script>
 
 <FormField {label} {icon} {helper} {error}>
-  <div class="grid gap-2">
+  <Field.Group class="gap-3">
     {#if values.length > 0}
-      <ul class="grid gap-1">
+      <ul class="grid min-w-0 gap-control-gap">
         {#each values as value, i (i)}
-          <li class="flex min-w-0 items-center gap-1">
+          <li class="flex min-w-0 flex-wrap items-center gap-control-gap">
             {#if editingIndex === i}
               <TextInput
                 type="text"
                 bind:value={editingValue}
+                bind:ref={editingInput}
                 onkeydown={handleEditKeydown}
                 onblur={commitEdit}
                 aria-label={label ? `${label} item` : "Item"}
+                aria-invalid={Boolean(editingError)}
+                aria-describedby={editingError ? `${id}-edit-error` : undefined}
                 class="min-w-0 flex-1"
               />
             {:else}
@@ -116,9 +127,10 @@
                 type="button"
                 class="min-w-0 flex-1 justify-start"
                 onclick={() => startEdit(i)}
-                title="Click to edit"
+                title="Edit item"
+                aria-label={`Edit ${value}`}
               >
-                <GripVertical class="grip-icon h-3 w-3 shrink-0" />
+                <Pencil data-icon="inline-start" />
                 <span class="truncate">{value}</span>
               </Button>
             {/if}
@@ -128,34 +140,42 @@
               onclick={() => removeItem(i)}
               aria-label={`Remove ${value}`}
             >
-              <X class="h-3 w-3" />
+              <X />
             </Button>
+            {#if editingIndex === i && editingError}
+              <Field.Error id={`${id}-edit-error`} class="w-full">{editingError}</Field.Error>
+            {/if}
           </li>
         {/each}
       </ul>
     {/if}
 
-    <div class="mt-1 flex gap-1">
-      <TextInput
-        type="text"
-        bind:value={inputValue}
-        onkeydown={handleInputKeydown}
-        aria-label={label ?? "Add item"}
-        {placeholder}
-        class="min-w-0 flex-1"
-      />
-      <Button variant="ghost"
-        type="button"
-        size="icon"
-        onclick={addItem}
-        disabled={!inputValue.trim()}
-        aria-label="Add item"
-      >
-        <Plus class="h-3.5 w-3.5" />
-      </Button>
-    </div>
-    {#if inputError}
-      <p class="text-[0.7rem] text-error-text">{inputError}</p>
-    {/if}
-  </div>
+    <Field.Field data-invalid={Boolean(inputError)}>
+      <Field.Label for={`${id}-new-item`}>Add item</Field.Label>
+      <div class="flex min-w-0 gap-control-gap">
+        <TextInput
+          id={`${id}-new-item`}
+          type="text"
+          bind:value={inputValue}
+          onkeydown={handleInputKeydown}
+          aria-invalid={Boolean(inputError)}
+          aria-describedby={inputError ? `${id}-error` : undefined}
+          {placeholder}
+          class="min-w-0 flex-1"
+        />
+        <Button variant="secondary"
+          type="button"
+          onclick={addItem}
+          disabled={!inputValue.trim()}
+          aria-label="Add item"
+        >
+          <Plus data-icon="inline-start" />
+          Add
+        </Button>
+      </div>
+      {#if inputError}
+        <Field.Error id={`${id}-error`}>{inputError}</Field.Error>
+      {/if}
+    </Field.Field>
+  </Field.Group>
 </FormField>

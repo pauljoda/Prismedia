@@ -417,7 +417,7 @@ describe("EntityDetail", () => {
     });
 
     await fireEvent.click(screen.getByRole("button", { name: "Edit Links" }));
-    await fireEvent.click(screen.getByRole("button", { name: "https://example.test" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Edit https://example.test" }));
     await fireEvent.input(screen.getByRole("textbox", { name: "Links item" }), {
       target: { value: "https://new-link.test" },
     });
@@ -458,6 +458,7 @@ describe("EntityDetail", () => {
     });
 
     await fireEvent.click(screen.getByRole("button", { name: "Edit Details" }));
+    expect(screen.getByRole("region", { name: "Editable fields" })).toBeInTheDocument();
     await fireEvent.input(screen.getByRole("textbox", { name: "Title" }), {
       target: { value: "Big Buck Bunny Remastered" },
     });
@@ -465,11 +466,11 @@ describe("EntityDetail", () => {
       target: { value: "4.5" },
     });
     await fireEvent.click(screen.getByRole("button", { name: "Favorite" }));
-    await fireEvent.input(screen.getByRole("textbox", { name: "Stats" }), { target: { value: "94" } });
+    await fireEvent.input(screen.getByRole("textbox", { name: "runtimeMinutes Value" }), { target: { value: "94" } });
     await fireEvent.input(screen.getByPlaceholderText("count"), { target: { value: "voteCount" } });
     await fireEvent.input(screen.getByPlaceholderText("12"), { target: { value: "12" } });
     await fireEvent.click(screen.getAllByRole("button", { name: "Add entry" })[0]);
-    await fireEvent.input(screen.getByRole("textbox", { name: "Positions" }), { target: { value: "3" } });
+    await fireEvent.input(screen.getByRole("textbox", { name: "episodeNumber Value" }), { target: { value: "3" } });
     await fireEvent.input(screen.getByRole("textbox", { name: "Classification" }), {
       target: { value: "short" },
     });
@@ -506,7 +507,8 @@ describe("EntityDetail", () => {
     });
 
     await fireEvent.click(screen.getByRole("button", { name: "Edit Links" }));
-    await fireEvent.click(screen.getByRole("button", { name: "https://example.test" }));
+    expect(screen.getByRole("region", { name: "References" })).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Edit https://example.test" }));
     await fireEvent.input(screen.getByRole("textbox", { name: "Links item" }), {
       target: { value: "https://changed.test" },
     });
@@ -542,7 +544,7 @@ describe("EntityDetail", () => {
     });
 
     await fireEvent.click(screen.getByRole("button", { name: "Edit Links" }));
-    await fireEvent.input(screen.getByRole("textbox", { name: "Links" }), { target: { value: "not-a-url" } });
+    await fireEvent.input(screen.getByRole("textbox", { name: "Add item" }), { target: { value: "not-a-url" } });
     await fireEvent.click(screen.getByRole("button", { name: "Add item" }));
 
     expect(screen.getByText("Invalid URL")).toBeInTheDocument();
@@ -568,10 +570,10 @@ describe("EntityDetail", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Edit Links" }));
 
     expect(screen.queryByText("Links must be absolute http or https URLs.")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "https://example.test" })).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "External IDs" })).toHaveValue("6515881");
+    expect(screen.getByRole("button", { name: "Edit https://example.test" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "tmdb ID" })).toHaveValue("6515881");
 
-    await fireEvent.input(screen.getByRole("textbox", { name: "External IDs" }), {
+    await fireEvent.input(screen.getByRole("textbox", { name: "tmdb ID" }), {
       target: { value: "6515882" },
     });
     await fireEvent.click(screen.getByRole("button", { name: "Save Links" }));

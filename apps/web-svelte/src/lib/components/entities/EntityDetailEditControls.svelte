@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { Save, X } from "@lucide/svelte";
-  import { Button } from "@prismedia/ui-svelte";
+  import { Alert } from "@prismedia/ui-svelte";
+  import FormActions from "$lib/components/forms/FormActions.svelte";
 
   interface Props {
     cancelLabel: string;
@@ -23,76 +23,18 @@
   }: Props = $props();
 </script>
 
-<div class="detail-edit-toolbar">
-  <div class="detail-edit-actions">
-    <Button
-      type="button"
-      variant="ghost"
-      size="sm"
-      class="font-mono text-[0.68rem] font-bold uppercase tracking-[0.04em]"
-      onclick={onCancel}
-      disabled={saving}
-      aria-label={cancelLabel}
-    >
-      <X class="h-3.5 w-3.5" />
-      Cancel
-    </Button>
-    <Button
-      type="button"
-      variant="secondary"
-      size="sm"
-      class="font-mono text-[0.68rem] font-bold uppercase tracking-[0.04em] shadow-[inset_2px_0_0_color-mix(in_srgb,var(--detail-accent)_72%,#c7c9cc)]"
-      onclick={onSave}
-      disabled={saveDisabled}
-      aria-label={saveLabel}
-    >
-      <Save class="h-3.5 w-3.5" />
-      {saving ? "Saving…" : "Save"}
-    </Button>
+<div class="flex flex-col gap-3 border-b border-border-subtle px-6 py-3 sm:px-8">
+  <div class="w-full min-w-0">
+    <FormActions {onSave} {onCancel} {saving} {saveDisabled} {saveLabel} {cancelLabel} />
   </div>
+  {#if errors.length > 0}
+    <Alert.Root variant="destructive">
+      <Alert.Title>Changes need attention</Alert.Title>
+      <Alert.Description>
+        {#each errors as error (error)}
+          <p>{error}</p>
+        {/each}
+      </Alert.Description>
+    </Alert.Root>
+  {/if}
 </div>
-
-{#if errors.length > 0}
-  <div class="edit-errors" aria-live="polite">
-    {#each errors as error (error)}
-      <p>{error}</p>
-    {/each}
-  </div>
-{/if}
-
-<style>
-  .detail-edit-toolbar {
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    gap: 0.5rem;
-    padding: 0.5rem 1.5rem;
-    border-bottom: 1px solid var(--detail-border);
-    background: var(--detail-glass);
-    backdrop-filter: blur(var(--detail-glass-blur));
-    -webkit-backdrop-filter: blur(var(--detail-glass-blur));
-  }
-
-  .detail-edit-actions {
-    display: flex;
-    align-items: center;
-    justify-content: end;
-    gap: 0.5rem;
-    flex-wrap: wrap;
-  }
-
-  .edit-errors {
-    display: grid;
-    gap: 0.25rem;
-    padding: 0.65rem 1.5rem;
-    border-bottom: 1px solid color-mix(in srgb, #ef4444 45%, var(--detail-border));
-    border-radius: var(--radius-xs, 4px);
-    background: color-mix(in srgb, #ef4444 8%, var(--detail-surface));
-    color: #fca5a5;
-    font-size: 0.78rem;
-  }
-
-  .edit-errors p {
-    margin: 0;
-  }
-</style>

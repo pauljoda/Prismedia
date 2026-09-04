@@ -33,6 +33,7 @@
 </script>
 
 <FormField {label} {icon} {helper} {error} {required} htmlFor={id}>
+  <!-- iOS date inputs add native padding outside width:100%; normalize the shell, not the picker. -->
   <TextInput
     {id}
     type="date"
@@ -44,6 +45,6 @@
     aria-invalid={error ? "true" : undefined}
     {required}
     aria-describedby={error || helper ? `${id}-message` : undefined}
-    class="[color-scheme:dark]"
+    class="appearance-none [color-scheme:dark]"
   />
 </FormField>

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Calendar } from "@lucide/svelte";
+  import { Field } from "@prismedia/ui-svelte";
   import type { KeyValuePair } from "$lib/components/forms";
   import {
     entityDateFieldsForKind,
@@ -50,8 +51,9 @@
   }
 </script>
 
-<div class="grid gap-4">
-  <div class="grid gap-3 sm:grid-cols-2">
+<Field.Set class="@container gap-4">
+  <Field.Legend variant="label">Release dates</Field.Legend>
+  <Field.Group class="grid gap-4 @min-[24rem]:grid-cols-2">
     {#each fields as field (field.code)}
       <DateField
         value={exactDayValue(field.code)}
@@ -61,7 +63,7 @@
         icon={Calendar}
       />
     {/each}
-  </div>
+  </Field.Group>
 
   {#if otherDates.length > 0}
     <KeyValueEditor
@@ -75,4 +77,4 @@
       valueLabel="Date"
     />
   {/if}
-</div>
+</Field.Set>
