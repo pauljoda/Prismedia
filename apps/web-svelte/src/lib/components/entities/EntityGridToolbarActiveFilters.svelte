@@ -2,6 +2,7 @@
   import { RotateCcw, SlidersHorizontal, X } from "@lucide/svelte";
   import { cubicOut } from "svelte/easing";
   import { slide } from "svelte/transition";
+  import { Button } from "@prismedia/ui-svelte";
   import type { EntityGridFilterOption } from "$lib/entities/entity-grid";
 
   interface Props {
@@ -42,15 +43,16 @@
   </div>
 
   {#if canClearFiltersAndSort}
-    <button
-      type="button"
+    <Button
+      variant="ghost"
+      size="sm"
       title="Clear filters, sort, search, and saved preferences"
-      class="ctrl-btn ctrl-clear filter-reset"
+      class="ml-auto shrink-0"
       onclick={onClearFiltersAndSort}
     >
       <RotateCcw class="h-3.5 w-3.5 shrink-0" />
-      <span class="ctrl-label">Clear</span>
-    </button>
+      Clear
+    </Button>
   {/if}
 </div>
 
@@ -72,13 +74,6 @@
     min-width: 0;
     overflow-x: auto;
     scrollbar-width: thin;
-  }
-
-  .filter-reset {
-    flex: 0 0 auto;
-    height: 1.6rem;
-    min-height: 1.6rem;
-    margin-left: auto;
   }
 
   .filter-chip-label {

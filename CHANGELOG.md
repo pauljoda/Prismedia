@@ -25,7 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
-- Library toolbars now keep search, sorting, filters, presets, and selection together, with layout and artwork controls grouped in a Display panel. Bulk actions appear only during selection, and Identify provider search now shares keyboard navigation and focus handling with other menus.
+- Library toolbars retain their full-width search row, inline view and thumbnail controls, and separate selection strip while using shared keyboard-accessible controls. Identify provider search now shares keyboard navigation and focus handling with other menus.
 - Account, breadcrumb, and track menus now share keyboard navigation, focus return, and collision-aware positioning. Filter presets use a clearer panel with labeled fields and always-visible management actions.
 
 - Shared dropdowns and settings switches now use accessible component bases with clearer neutral styling, keyboard typeahead, disabled-option handling, and dialog-aware menus. Settings labels are easier to read and selectors expand to full width on small screens.
@@ -40,6 +40,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- The library toolbar's Clear action now keeps its icon and label aligned in one compact button.
 - Fresh movie-library setup now persists discovered titles in bounded database batches, runs every playback-critical probe before optional enrichment, applies high-cardinality local sidecar relationships in the background, and defers long trickplay generation behind ordinary thumbnails and previews so the library becomes visible and playable without waiting for metadata expansion or background media work.
 - Videos now count as completed after 90% playback, so leaving during credits records the play. Completed items also stop advertising a final-second resume point, while manually marking an item watched still preserves its prior position if it is later marked incomplete.
 - The unified container now reasserts PostgreSQL-safe data-directory permissions immediately before database startup, so a named ACL cannot leave Prismedia stuck in a restart loop after the container restarts.

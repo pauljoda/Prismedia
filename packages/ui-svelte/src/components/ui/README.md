@@ -15,10 +15,12 @@ Application code imports these bases from `@prismedia/ui-svelte`. Select and Tog
 
 ## Choosing library controls
 
+- Prefer the base component's standard styling through Prismedia's shared theme tokens when it already fits. Preserving a page's layout does not require recreating every legacy control detail; pickers should use the shared Select/SearchableSelect styles instead of route-specific overrides.
 - Use Select for short finite lists, such as sorting. Use SearchableSelect when choices need explicit text search, such as Identify providers. The searchable adapter matches labels and values case-insensitively, preserves catalog order, and limits rendered results to 50 by default. Parent code owns the chosen value and any fallback selection.
 - Use ToggleGroup for a small set of mutually exclusive layout choices. The library consumer uses function binding to reject an empty value when the active choice is pressed again.
 - Use Slider for single numeric values. Supply `thumbLabel` so the focusable control is named, and keep persistence in the consumer. Multi-thumb ranges are intentionally not exposed yet.
-- Group optional layout and artwork controls in a named Popover. Keep search, sorting, filters, presets, and the selection entry point visible; render bulk actions only while selection is active.
+- Preserve the library toolbar's established layout when replacing control internals: full-width search and sort, inline view/thumbnail controls with filters and presets opposite, then the selection strip below. Use a named Popover for thumbnail size only on narrow screens; do not move desktop controls into an extra menu.
+- Use shared Button variants for row actions, including Clear. Do not rely on styles scoped to a sibling row for icon alignment, spacing, or focus treatment.
 
 ## Updating a base
 
@@ -53,7 +55,7 @@ Review generated dependency declarations before installing. Runtime dependencies
 
 Run both package typechecks, the web unit suite, and the static build. Keep adapter tests for keyboard navigation, annotations, disabled state, typeahead, empty values, external updates, controlled state, and dialog portal placement. Menu consumers cover account permissions, real links, callback isolation, and breadcrumb portals. Preset tests cover naming, cancellation, focus return, applying, deleting, and explicit overwrite confirmation. Existing consumer tests exercise import mapping, collection rules, download protocol preference, and request monitoring.
 
-Library control tests cover selection entry/exit, persisted collapsed rows, sort direction, display callbacks, and layout choices. Searchable selection tests cover bounded results, matches beyond the initial limit, disabled items, provider fallback, external value changes, empty results, keyboard commit, and Escape/focus return. Also check these controls in a populated library and Identify through the running app.
+Library control tests cover separate toolbar rows, direct view and thumbnail controls, selection entry/exit, persisted collapsed rows, sort direction, and compact thumbnail popover dismissal. Searchable selection tests cover bounded results, matches beyond the initial limit, disabled items, provider fallback, external value changes, empty results, keyboard commit, and Escape/focus return. Also check these controls in a populated library and Identify through the running app.
 
 Also inspect `/design-language#component-bases` and a real Settings section through the .NET app. Test pointer selection, keyboard selection, scrolling, focus return, layered Escape, and a narrow viewport. DOM tests do not establish native top-layer behavior, touch behavior, or visual quality.
 

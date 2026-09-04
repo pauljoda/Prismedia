@@ -211,8 +211,7 @@ describe("EntityGrid pagination", () => {
 
     expect(container.querySelector(".thumbnail-caption")).not.toBeNull();
 
-    await fireEvent.click(screen.getByRole("button", { name: "Display options" }));
-    await fireEvent.click(screen.getByRole("switch", { name: "Artwork only" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Media wall" }));
 
     await waitFor(() => {
       expect(container.querySelector(".cards")?.classList.contains("is-media-wall")).toBe(true);
@@ -245,8 +244,7 @@ describe("EntityGrid pagination", () => {
       },
     });
 
-    await fireEvent.click(screen.getByRole("button", { name: "Display options" }));
-    await fireEvent.click(screen.getByRole("switch", { name: "Artwork only" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Media wall" }));
 
     await waitFor(() => {
       expect(readGridPrefs("media-wall-persist-test")?.mediaWall).toBe(true);
