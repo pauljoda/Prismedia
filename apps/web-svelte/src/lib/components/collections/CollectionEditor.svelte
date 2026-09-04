@@ -34,15 +34,12 @@
   } from "$lib/api/capabilities";
   import { fetchLibraryRoots, type LibraryRoot } from "$lib/api/settings";
   import {
-    COLLECTION_RULE_FIELDS,
     EMPTY_COLLECTION_RULE,
-    type CollectionConditionValue,
-    type CollectionOperator,
-    type CollectionRuleCondition,
-    type CollectionRuleFieldDef,
     type CollectionRuleGroup,
     type CollectionWriteRequest,
   } from "$lib/collections/models";
+  import { rulesReadyForPreview } from "$lib/collections/rule-editor";
+  import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
   import TextAreaField from "$lib/components/forms/TextAreaField.svelte";
   import TextField from "$lib/components/forms/TextField.svelte";
@@ -85,15 +82,14 @@
   let previewing = $state(false);
   let previewError = $state<string | null>(null);
   let previewTotal = $state<number | null>(null);
-  let previewByType = $state<Record<string, number>>({});
   let previewCards = $state<EntityThumbnailCard[]>([]);
   let libraryRoots = $state<LibraryRoot[]>([]);
   let previewToken = 0;
 
   const showRules = $derived(mode === COLLECTION_MODE.dynamic || mode === COLLECTION_MODE.hybrid);
-  const canSave = $derived(title.trim().length > 0 && !saving);
   const hasConditions = $derived(ruleTree.children.length > 0);
-  const rulesReady = $derived(allConditionsRunnable(ruleTree));
+  const rulesReady = $derived(rulesReadyForPreview(ruleTree));
+  const canSave = $derived(title.trim().length > 0 && !saving && (!showRules || rulesReady));
   const libraryOptions = $derived(
     libraryRoots
       .filter((root) => root.enabled !== false)
@@ -116,55 +112,6 @@
     void loadLibraryRoots(controller.signal);
     return () => controller.abort();
   });
-
-  function isNullaryOperator(op: CollectionOperator): boolean {
-    return op === "is_null" || op === "is_not_null" || op === "is_true" || op === "is_false";
-  }
-
-  function findField(fieldName: string): CollectionRuleFieldDef | null {
-    return COLLECTION_RULE_FIELDS.find((field) => field.field === fieldName) ?? null;
-  }
-
-  function isConditionRunnable(condition: CollectionRuleCondition): boolean {
-    const field = findField(condition.field);
-    if (!field) return false;
-    const op = condition.operator;
-    if (isNullaryOperator(op)) return true;
-    const value = condition.value as CollectionConditionValue;
-    if (value === null || value === undefined) return false;
-    if (op === "between") {
-      if (!Array.isArray(value) || value.length !== 2) return false;
-      if (field.fieldType === "date") {
-        return !Number.isNaN(new Date(String(value[0])).getTime()) &&
-          !Number.isNaN(new Date(String(value[1])).getTime());
-      }
-      return Number.isFinite(Number(value[0])) && Number.isFinite(Number(value[1]));
-    }
-    if (op === "in" || op === "not_in") {
-      return Array.isArray(value) && value.length > 0;
-    }
-    if (field.fieldType === "number") {
-      return typeof value === "number" && Number.isFinite(value);
-    }
-    if (field.fieldType === "date") {
-      if (typeof value !== "string" || value.length === 0) return false;
-      return !Number.isNaN(new Date(value).getTime());
-    }
-    if (field.fieldType === "enum") {
-      return typeof value === "string" && value.length > 0;
-    }
-    if (field.fieldType === "library") {
-      return typeof value === "string" && value.length > 0;
-    }
-    return typeof value === "string" || typeof value === "number" || typeof value === "boolean";
-  }
-
-  function allConditionsRunnable(rule: CollectionRuleGroup): boolean {
-    for (const child of rule.children) {
-      if (child.type === "condition" && !isConditionRunnable(child)) return false;
-    }
-    return true;
-  }
 
   $effect(() => {
     if (isNew) {
@@ -214,18 +161,19 @@
     const ready = rulesReady;
     void snapshot;
 
-    if (!active) {
+    // Invalidate outstanding requests as soon as the rule changes, not after the debounce.
+    previewToken += 1;
+    if (!active || !ready) {
       resetPreview();
       return;
     }
 
-    if (!ready) return;
 
     const timer = setTimeout(() => {
       void runPreview();
     }, 500);
 
-    return () => clearTimeout(timer);
+    return () => { clearTimeout(timer); previewToken += 1; };
   });
 
   function normalizeMode(value: string | null | undefined): CollectionModeCode {
@@ -255,7 +203,6 @@
 
   function resetPreview() {
     previewTotal = null;
-    previewByType = {};
     previewCards = [];
     previewError = null;
     previewing = false;
@@ -308,9 +255,6 @@
       const preview = await previewCollectionRules(JSON.stringify(ruleTree));
       if (token !== previewToken) return;
       previewTotal = preview.total;
-      previewByType = Object.fromEntries(
-        Object.entries(preview.byType).filter(([, value]) => typeof value === "number"),
-      ) as Record<string, number>;
       const nextCards: EntityThumbnailCard[] = [];
       for (const item of preview.sample) {
         if (!item.entity) continue;
@@ -462,24 +406,10 @@
       <div class="surface-panel overflow-hidden">
         <div class="flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle px-4 py-3">
           <div>
-            <p class="text-kicker m-0 flex items-center gap-1.5">
-              <SlidersHorizontal class="h-3 w-3" /> Rule Editor
-            </p>
-            <p class="m-0 mt-1 text-[0.75rem] text-text-muted">{previewSummary}</p>
+            <h2 class="m-0 font-heading text-base font-semibold">Collection rules</h2>
+            <p class="mt-1 text-sm text-muted-foreground" role="status">{previewSummary}</p>
           </div>
           <div class="flex flex-wrap items-center justify-end gap-2">
-            {#if previewTotal !== null && Object.keys(previewByType).length > 0}
-              <div class="flex flex-wrap justify-end gap-1">
-                {#each Object.entries(previewByType) as [kind, count] (kind)}
-                  <span
-                    class="inline-flex items-center gap-1 rounded-xs border border-border-subtle bg-surface-2/70 px-2 py-1 font-mono text-[0.6rem] uppercase tracking-wider text-text-muted tabular-nums"
-                  >
-                    <span>{kind}</span>
-                    <strong class="text-text-accent">{count}</strong>
-                  </span>
-                {/each}
-              </div>
-            {/if}
             <Button variant="outline" size="sm"
               type="button"
               disabled={previewing || !hasConditions || !rulesReady || saving}
@@ -521,7 +451,13 @@
         </div>
       {/if}
 
+      {#if !rulesReady}
+        <StatePlaceholder icon={SlidersHorizontal}
+          title={hasConditions ? "Complete your conditions" : "Build a collection rule"}
+          description={hasConditions ? "Enter the missing values to preview matching items." : "Add a condition to choose what belongs in this collection."} />
+      {:else}
       <EntityGrid
+        selectable={false}
         cards={previewCards}
         dockControls={false}
         emptyTitle={hasConditions && rulesReady ? "No matching items" : "Rule preview"}
@@ -533,6 +469,7 @@
         prefsKey="collection-rule-preview"
         showPagination={previewCards.length > 0}
       />
+      {/if}
     </section>
   {/if}
 </section>
