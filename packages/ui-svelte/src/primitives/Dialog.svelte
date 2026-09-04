@@ -6,6 +6,8 @@
     open: boolean;
     ariaLabel: string;
     onClose: () => void;
+    /** Optional task field to focus once, immediately after the native modal opens. */
+    initialFocus?: () => HTMLElement | null;
     dismissible?: boolean;
     class?: string;
     children: Snippet;
@@ -15,6 +17,7 @@
     open,
     ariaLabel,
     onClose,
+    initialFocus,
     dismissible = true,
     class: className,
     children,
@@ -27,6 +30,7 @@
     if (open && !dialogRef.open) {
       if (typeof dialogRef.showModal === "function") dialogRef.showModal();
       else dialogRef.setAttribute("open", "");
+      initialFocus?.()?.focus();
     } else if (!open && dialogRef.open) {
       if (typeof dialogRef.close === "function") dialogRef.close();
       else dialogRef.removeAttribute("open");

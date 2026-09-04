@@ -62,4 +62,18 @@ describe("Dialog", () => {
 
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  it("focuses the requested task field on opening without stealing later focus", async () => {
+    const fields = createRawSnippet(() => ({ render: () => '<div><button type="button">Other action</button><input aria-label="Task field" /></div>' }));
+    const props = {
+      open: true, ariaLabel: "Focused dialog", onClose: vi.fn(), children: fields,
+      initialFocus: () => screen.queryByRole("textbox", { name: "Task field" }),
+    };
+    const view = render(Dialog, props);
+    expect(screen.getByRole("textbox", { name: "Task field" })).toHaveFocus();
+    const action = screen.getByRole("button", { name: "Other action" });
+    action.focus();
+    await view.rerender({ ...props, class: "w-full" });
+    expect(action).toHaveFocus();
+  });
 });

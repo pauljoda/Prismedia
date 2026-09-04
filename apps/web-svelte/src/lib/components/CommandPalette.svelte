@@ -1,334 +1,187 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { browser } from "$app/environment";
-  import { Search, X, Clock, ArrowRight, Trash2 } from "@lucide/svelte";
-  import { cn, dur, ease, flyDown } from "@prismedia/ui-svelte";
-  import { fade } from "svelte/transition";
-  import SearchResultCard from "$lib/components/SearchResultCard.svelte";
+  import { tick } from "svelte";
+  import { Search, X, Clock, ArrowRight, LoaderCircle } from "@lucide/svelte";
+  import { Button, Command, Dialog, Separator } from "@prismedia/ui-svelte";
+  import CommandSearchResult from "./CommandSearchResult.svelte";
   import { useSearch } from "$lib/stores/search.svelte";
   import { useNsfw } from "$lib/nsfw/store.svelte";
-  import { entityTerms } from "$lib/terminology";
   import { recentSearches } from "$lib/stores/recent-searches.svelte";
   import { buildHrefWithFrom } from "$lib/back-navigation";
   import type { SearchEntityKind, SearchResponse } from "$lib/search/models";
-  import { firstSearchResult, searchEntities } from "$lib/search/entity-search";
+  import { searchEntities } from "$lib/search/entity-search";
 
   const search = useSearch();
   const nsfw = useNsfw();
   const recent = recentSearches();
+  const PER_KIND_LIMIT = 3;
 
   let query = $state("");
-  let results = $state<SearchResponse | null>(null);
+  let results = $state.raw<SearchResponse | null>(null);
   let loading = $state(false);
+  let failed = $state(false);
   let inputRef = $state<HTMLInputElement | null>(null);
-  let activeResultId = $state<string | null>(null);
-
+  let commandApi = $state<Command.CommandRootApi | null>(null);
   let activeRequest = 0;
   const currentPath = $derived(`${page.url.pathname}${page.url.search}`);
-  const open = $derived(search.open);
   const hasQuery = $derived(query.trim().length >= 2);
-  const hasResults = $derived(
-    results != null && results.groups.some((group) => group.items.length > 0),
-  );
-  // Show only a few results per entity kind so high-count kinds (e.g. People)
-  // don't bury everything else. The per-section "see all" row links to the full
-  // search page filtered to that kind.
-  const PER_KIND_LIMIT = 3;
-  const displayGroups = $derived(
-    (results?.groups ?? [])
-      .filter((group) => group.items.length > 0)
-      .map((group) => ({
-        group,
-        shownItems: group.items.slice(0, PER_KIND_LIMIT),
-      })),
-  );
-  const flatResults = $derived(displayGroups.flatMap((entry) => entry.shownItems));
-  const activeResult = $derived(
-    flatResults.find((item) => item.id === activeResultId) ?? flatResults[0] ?? null,
-  );
-
-  function closePalette() {
-    search.closePalette();
-  }
+  const displayGroups = $derived((results?.groups ?? [])
+    .filter((group) => group.items.length > 0)
+    .map((group) => ({ group, shownItems: group.items.slice(0, PER_KIND_LIMIT) })));
 
   function clearQuery() {
     query = "";
-    results = null;
-    loading = false;
-    activeResultId = null;
+    inputRef?.focus();
   }
 
-  async function runSearch(term: string) {
-    const trimmed = term.trim();
-    const requestId = ++activeRequest;
+  function keepActionEnterLocal(event: KeyboardEvent) {
+    // Native action buttons must not also activate the selected command item.
+    if (event.key === "Enter") event.stopPropagation();
+  }
 
-    if (trimmed.length < 2) {
-      results = null;
-      loading = false;
-      activeResultId = null;
-      return;
-    }
-
-    loading = true;
+  async function runSearch(term: string, requestId: number) {
     try {
       const data = await searchEntities({
-        query: trimmed,
-        hideNsfw: nsfw.mode === "off",
-        directLimit: 30,
-        relatedSourceLimit: 3,
-        relatedLimitPerSource: 8,
+        query: term, hideNsfw: nsfw.mode === "off", directLimit: 30,
+        relatedSourceLimit: 3, relatedLimitPerSource: 8,
       });
-      if (requestId === activeRequest) {
-        results = data;
-        activeResultId = firstSearchResult(data)?.id ?? null;
-      }
+      if (requestId !== activeRequest) return;
+      results = data;
     } catch {
-      if (requestId === activeRequest) {
-        results = null;
-        activeResultId = null;
-      }
+      if (requestId !== activeRequest) return;
+      failed = true;
     } finally {
       if (requestId === activeRequest) {
         loading = false;
+        await tick();
+        if (requestId === activeRequest) commandApi?.updateSelectedToIndex(0);
       }
     }
+  }
+
+  function retrySearch() {
+    failed = false;
+    loading = true;
+    void runSearch(query.trim(), ++activeRequest);
+    inputRef?.focus();
   }
 
   function navigateTo(href: string) {
-    const trimmed = query.trim();
-    if (trimmed) recent.add(trimmed);
-    closePalette();
+    recent.add(query.trim());
+    search.closePalette();
     void goto(buildHrefWithFrom(href, currentPath));
   }
 
-  function submitSearch() {
-    const trimmed = query.trim();
-    if (!trimmed) return;
-    recent.add(trimmed);
-    closePalette();
-    void goto(`/search?q=${encodeURIComponent(trimmed)}`);
-  }
-
-  function seeAllForKind(kind: SearchEntityKind) {
-    const trimmed = query.trim();
-    if (!trimmed) return;
-    recent.add(trimmed);
-    closePalette();
-    void goto(`/search?q=${encodeURIComponent(trimmed)}&kinds=${kind}`);
-  }
-
-  function moveActiveResult(delta: number) {
-    if (flatResults.length === 0) return;
-    const currentIndex = Math.max(0, flatResults.findIndex((item) => item.id === activeResultId));
-    const nextIndex = (currentIndex + delta + flatResults.length) % flatResults.length;
-    activeResultId = flatResults[nextIndex].id;
-  }
-
-  function handleSearchKeydown(e: KeyboardEvent) {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      if (activeResult) {
-        navigateTo(activeResult.href);
-      } else {
-        submitSearch();
-      }
-    } else if (e.key === "ArrowDown") {
-      e.preventDefault();
-      moveActiveResult(1);
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      moveActiveResult(-1);
-    }
+  function submitSearch(kind?: SearchEntityKind) {
+    const term = query.trim();
+    if (!term) return;
+    recent.add(term);
+    search.closePalette();
+    void goto(`/search?q=${encodeURIComponent(term)}${kind ? `&kinds=${kind}` : ""}`);
   }
 
   $effect(() => {
-    if (!open) {
-      query = "";
-      results = null;
-      loading = false;
-      activeResultId = null;
-      activeRequest += 1;
-      return;
-    }
-
-    if (browser) {
-      requestAnimationFrame(() => inputRef?.focus());
-    }
+    if (!search.open) query = "";
   });
 
+  // Invalidate immediately when the query changes, including during the debounce.
+  // Command handles selection and scrolling; the API owns result ranking.
   $effect(() => {
-    if (!browser || !open) return;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = "";
-    };
-  });
-
-  $effect(() => {
-    if (!open) return;
-
-    const trimmed = query.trim();
-    if (trimmed.length < 2) {
-      results = null;
-      loading = false;
-      activeResultId = null;
-      activeRequest += 1;
-      return;
-    }
-
-    loading = true;
-    const timer = window.setTimeout(() => {
-      void runSearch(trimmed);
-    }, 250);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
+    const term = query.trim();
+    const requestId = ++activeRequest;
+    results = null;
+    failed = false;
+    const shouldSearch = search.open && term.length >= 2;
+    loading = shouldSearch;
+    if (!shouldSearch) return;
+    const timer = window.setTimeout(() => { void runSearch(term, requestId); }, 250);
+    return () => { window.clearTimeout(timer); activeRequest++; };
   });
 </script>
 
-{#if open}
-  <div class="fixed inset-0 z-[70] flex items-start justify-center pt-[12vh] sm:pt-[10vh]">
-    <button
-      type="button"
-      class="app-overlay-backdrop absolute inset-0"
-      aria-label="Close search"
-      onclick={closePalette}
-      transition:fade={{ duration: dur.normal, easing: ease.enter }}
-    ></button>
-
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Search"
-      class={cn(
-        "relative mx-4 flex max-h-[70vh] w-full max-w-2xl flex-col",
-        "app-dialog-surface overflow-hidden",
-      )}
-      transition:flyDown
-    >
-      <div class="flex items-center gap-3 border-b border-border-subtle px-4 py-3">
-        <Search class="h-4 w-4 shrink-0 text-text-muted" />
-        <input
-          bind:this={inputRef}
-          bind:value={query}
-          type="text"
-          placeholder={`Search ${entityTerms.videos.toLowerCase()}, ${entityTerms.performers.toLowerCase()}, ${entityTerms.studios.toLowerCase()}, ${entityTerms.tags.toLowerCase()}...`}
-          class="flex-1 bg-transparent text-sm text-text-primary placeholder:text-text-disabled focus:outline-none"
-          onkeydown={handleSearchKeydown}
-        />
-        {#if query}
-          <button
-            type="button"
-            class="text-text-disabled transition-colors duration-fast hover:text-text-muted"
-            aria-label="Clear search"
-            onclick={clearQuery}
-          >
-            <X class="h-3.5 w-3.5" />
-          </button>
-        {/if}
-        <kbd class="kbd hidden shrink-0 text-text-disabled sm:inline-flex">ESC</kbd>
+<Dialog open={search.open} ariaLabel="Search library" onClose={() => search.closePalette()}
+  initialFocus={() => inputRef}
+  class="top-[10dvh] bottom-auto my-0 w-full max-h-[80dvh] overflow-hidden sm:max-w-2xl">
+  <div class="flex max-h-[80dvh] flex-col">
+    <header class="flex items-start justify-between gap-3 px-4 pt-4 pb-3">
+      <div class="flex flex-col gap-2">
+        <h2 class="font-heading text-base font-medium">Search library</h2>
+        <p class="text-sm text-muted-foreground">Find media, people, studios, and collections.</p>
       </div>
-
-      <div class="flex-1 overflow-y-auto">
+      <Button variant="ghost" size="icon-sm" aria-label="Close search" onclick={() => search.closePalette()}><X /></Button>
+    </header>
+    <Command.Root bind:api={commandApi} shouldFilter={false} loop label="Search library" class="min-h-0 rounded-none">
+      <div class="flex items-center gap-1 px-3 pb-3">
+        <div class="min-w-0 flex-1">
+          <Command.Input bind:ref={inputRef} bind:value={query} aria-label="Search library" placeholder="Search your library…" />
+        </div>
+        {#if query}
+          <Button variant="ghost" size="icon-sm" aria-label="Clear search" onclick={clearQuery} onkeydown={keepActionEnterLocal}><X /></Button>
+        {/if}
+      </div>
+      <Separator />
+      <Command.List aria-label="Search results" aria-busy={loading} class="max-h-[50dvh] min-h-32 p-1">
         {#if !hasQuery}
-          {#if recent.value.length === 0}
-            <div class="px-4 py-8 text-center">
-              <Search class="mx-auto mb-2 h-5 w-5 text-text-disabled opacity-50" />
-              <div class="text-sm text-text-disabled">Start typing to search...</div>
-            </div>
-          {:else}
-            <div class="py-1">
-              <div class="flex items-center justify-between px-4 py-1.5">
-                <span class="text-kicker">Recent Searches</span>
-                <button
-                  type="button"
-                  class="flex items-center gap-1 text-[0.6rem] text-text-disabled transition-colors duration-fast hover:text-text-muted"
-                  onclick={recent.clear}
-                >
-                  <Trash2 class="h-2.5 w-2.5" />
-                  Clear
-                </button>
-              </div>
+          {#if recent.value.length > 0}
+            <Command.Group heading="Recent searches">
               {#each recent.value as previousQuery (previousQuery)}
-                <div class="group flex items-center gap-2 px-4 py-1.5 transition-colors duration-fast hover:bg-surface-2">
-                  <Clock class="h-3.5 w-3.5 shrink-0 text-text-disabled" />
-                  <button
-                    type="button"
-                    class="flex-1 truncate text-left text-sm text-text-muted group-hover:text-text-primary"
-                    onclick={() => {
-                      query = previousQuery;
-                    }}
-                  >
-                    {previousQuery}
-                  </button>
-                  <button
-                    type="button"
-                    class="opacity-0 transition-all duration-fast group-hover:opacity-100 text-text-disabled hover:text-text-muted"
-                    onclick={() => recent.remove(previousQuery)}
-                    aria-label={`Remove ${previousQuery}`}
-                  >
-                    <X class="h-3 w-3" />
-                  </button>
+                <div class="flex items-center gap-1">
+                  <Command.Item value={`recent:${previousQuery}`} showIndicator={false} class="min-w-0 flex-1"
+                    onSelect={() => { query = previousQuery; inputRef?.focus(); }}>
+                    <Clock /><span class="truncate">{previousQuery}</span>
+                    <ArrowRight class="ml-auto" />
+                  </Command.Item>
+                  <Button variant="ghost" size="icon-sm" aria-label={`Remove ${previousQuery}`} onclick={() => recent.remove(previousQuery)} onkeydown={keepActionEnterLocal}><X /></Button>
                 </div>
               {/each}
-            </div>
+            </Command.Group>
+          {:else}
+            <Command.Empty forceMount>
+              <span class="flex flex-col items-center gap-2 text-muted-foreground"><Search class="size-5" />Type at least two characters to search.</span>
+            </Command.Empty>
           {/if}
-        {:else if loading && !results}
-          <div class="px-4 py-8 text-center">
-            <div class="text-sm text-text-disabled">Searching...</div>
-          </div>
-        {:else if results && !hasResults && !loading}
-          <div class="px-4 py-8 text-center">
-            <div class="text-sm text-text-disabled">No results for "{query}"</div>
-          </div>
-        {:else if results && hasResults}
-          <div class="py-1">
-            {#each displayGroups as { group, shownItems } (group.kind)}
-              <div class="py-1">
-                <div class="flex items-center justify-between px-4 py-1.5">
-                  <span class="text-kicker">{group.label}</span>
-                  <span class="text-[0.6rem] text-text-disabled">{group.total}</span>
-                </div>
-                {#each shownItems as item, itemIndex (item.id)}
-                  <SearchResultCard
-                    {item}
-                    index={itemIndex}
-                    variant="compact"
-                    {currentPath}
-                    highlighted={item.id === activeResult?.id}
-                    onSelect={navigateTo}
-                  />
-                {/each}
-                {#if group.total > shownItems.length}
-                  <button
-                    type="button"
-                    class="flex w-full items-center justify-between px-4 py-1.5 text-left text-[0.72rem] text-text-muted transition-colors duration-fast hover:bg-surface-2 hover:text-text-accent"
-                    onclick={() => seeAllForKind(group.kind)}
-                  >
-                    <span>See all {group.total} {group.label.toLowerCase()}</span>
-                    <ArrowRight class="h-3 w-3 shrink-0" />
-                  </button>
-                {/if}
-              </div>
-            {/each}
-          </div>
+        {:else if loading}
+          <Command.Empty forceMount>
+            <span role="status" class="flex items-center justify-center gap-2 text-muted-foreground"><LoaderCircle class="size-4 animate-spin motion-reduce:animate-none" />Searching your library…</span>
+          </Command.Empty>
+        {:else if failed}
+          <Command.Empty forceMount>
+            <div role="alert" class="flex flex-col items-center gap-3">
+              <span>Search couldn't load. Please try again.</span>
+              <Button variant="outline" size="sm" onclick={retrySearch} onkeydown={keepActionEnterLocal}>Retry search</Button>
+            </div>
+          </Command.Empty>
+        {:else}
+          {#if displayGroups.length === 0}
+            <Command.Empty forceMount>No results for “{query.trim()}”</Command.Empty>
+          {/if}
+          {#each displayGroups as { group, shownItems } (group.kind)}
+            <Command.Group heading={`${group.label} · ${group.total}`}>
+              {#each shownItems as item (`${item.kind}:${item.id}`)}
+                <CommandSearchResult {item} onSelect={navigateTo} />
+              {/each}
+              {#if group.total > shownItems.length}
+                <Command.Item value={`kind:${group.kind}`} showIndicator={false} onSelect={() => submitSearch(group.kind)}>
+                  <span>See all {group.total} {group.label.toLowerCase()}</span><ArrowRight class="ml-auto" />
+                </Command.Item>
+              {/if}
+            </Command.Group>
+          {/each}
+          <Command.Group>
+            <Command.Item value="all-results" showIndicator={false} onSelect={() => submitSearch()}>
+              <Search /><span>See all results for “{query.trim()}”</span><ArrowRight class="ml-auto" />
+            </Command.Item>
+          </Command.Group>
         {/if}
-      </div>
-
-      {#if hasQuery}
-        <div class="flex items-center justify-between border-t border-border-subtle px-4 py-2">
-          <button
-            type="button"
-            class="flex items-center gap-1.5 text-[0.72rem] text-text-muted transition-colors duration-fast hover:text-text-accent"
-            onclick={submitSearch}
-          >
-            <span>See all results</span>
-            <ArrowRight class="h-3 w-3" />
-          </button>
-        </div>
+      </Command.List>
+    </Command.Root>
+    <Separator />
+    <div class="flex min-h-10 flex-wrap items-center justify-between gap-2 px-4 py-2 text-xs text-muted-foreground">
+      <span class="flex items-center gap-3"><span><kbd class="kbd">↑↓</kbd> Navigate</span><span><kbd class="kbd">↵</kbd> Open</span><span><kbd class="kbd">esc</kbd> Close</span></span>
+      {#if !hasQuery && recent.value.length > 0}
+        <Button variant="ghost" size="sm" onclick={recent.clear}>Clear history</Button>
       {/if}
     </div>
   </div>
-{/if}
+</Dialog>

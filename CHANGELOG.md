@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Global search now uses a shared command interface with clearer artwork rows, keyboard-accessible recent searches and full-result actions, visible navigation hints, and retry feedback, while preserving grouped results and native dialog layering.
 - Shared buttons, search fields, form labels, status badges, detail tabs, and navigation disclosures now build on themed shadcn-svelte components, with quieter toolbar styling and existing page layouts and section identities preserved.
 - Bulk-selection actions and page-size pickers now use shared keyboard-accessible controls with consistent focus handling, while keeping their existing toolbar placement.
 - Library toolbars retain their full-width search row, inline view and thumbnail controls, and separate selection strip while using shared keyboard-accessible controls. Identify provider search now shares keyboard navigation and focus handling with other menus.
@@ -42,6 +43,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Global search no longer shows an older request's results after the query changes or activates a result when Enter is used on Clear.
 - Video playback shortcuts no longer also react to keys used by tabs, menus, sliders, or other focused controls.
 - Changing library sort, artwork layout, or selection no longer reveals a reset row or shifts the toolbar. Clear now removes only search and filters while keeping those browsing preferences.
 - Library sort direction now uses a distinct sorting icon and explicit tooltip so it is not confused with expanding the toolbar.
