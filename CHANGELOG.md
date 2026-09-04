@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Collapsible related-content sections now visibly contain their toolbars and thumbnails, with clear Show/Hide controls. Mixed-library type filters use spaced chips with Entity-colored icons instead of cramped connected selectors.
 - Entity detail sections now extend behind the header with square top corners. Artwork editing uses an expandable set of labeled controls instead of buttons over the cover or an empty header overlay.
 - Entity editing now groups fields, dates, and references in a full-width responsive grid with consistently aligned save/cancel controls. Book acquisition rows separate availability from actions and use roomier shared controls.
 - Acquisition downloads now put progress, speed, and time remaining first, with technical details collapsed. Recovery actions share an aligned footer beneath the work area.

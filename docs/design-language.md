@@ -209,6 +209,13 @@ shared class-merging utility so ordinary layout overrides replace them correctly
 - Tabbed and untabbed Entity pages use the same edit layout and section rules.
   Hidden sections are excluded from editing and saving; read-only relationships
   remain information rather than offering controls that cannot save.
+- Collapsible grid headings, toolbars, results, and pagination share one card
+  boundary. Keep the heading attached to the content it controls, with a visible
+  Show/Hide cue and an accessible named content region. Do not clip sticky
+  toolbars or menus with an overflow container.
+- Mixed-kind result filters are a wrapping row of separate controls, spaced
+  below the toolbar. Use canonical Entity icons and colors with neutral labels,
+  counts, and selected-state borders.
 - Availability belongs beside the item name, separate from its actions. Use
   quiet text for ordinary missing/in-library information; reserve status badges
   for active work or conditions that need attention. Supporting sections share

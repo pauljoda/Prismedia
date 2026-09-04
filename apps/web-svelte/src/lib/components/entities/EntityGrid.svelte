@@ -787,6 +787,11 @@
     margin-top: 0;
   }
 
+  /* Type filters belong to the results, not the attached toolbar rows. */
+  .entity-grid > :global(.entity-kind-filters) {
+    margin-top: calc(var(--spacing) * 3);
+  }
+
   .entity-grid > :global(.pagination-shell),
   .entity-grid.is-static > :global(.pagination-shell) {
     margin-top: 0.85rem;
