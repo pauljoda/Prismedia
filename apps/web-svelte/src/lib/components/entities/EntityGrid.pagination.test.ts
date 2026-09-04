@@ -60,6 +60,41 @@ describe("EntityGrid pagination", () => {
     vi.restoreAllMocks();
   });
 
+  it("distinguishes no search matches from an empty library and resets without changing sort", async () => {
+    const cards = [card(0), card(1)];
+    render(EntityGrid, {
+      cards,
+      prefsKey: "empty-search-recovery",
+      emptyTitle: "No movies yet",
+      emptyMessage: "Scan a movie folder to get started.",
+      initialSortBy: "title",
+      initialSortDir: "desc",
+    });
+
+    await fireEvent.input(screen.getByRole("searchbox", { name: "Search the library" }), {
+      target: { value: "no-such-title" },
+    });
+    expect(await screen.findByText("No matching items")).toBeInTheDocument();
+    expect(screen.queryByText("Scan a movie folder to get started.")).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Reset search and filters" }));
+    await waitFor(() => expect(screen.getByRole("searchbox", { name: "Search the library" })).toHaveValue(""));
+    expect(screen.queryByText("No matching items")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sort descending; switch to ascending" })).toBeInTheDocument();
+  });
+
+  it("retains onboarding guidance for an unfiltered empty library", () => {
+    render(EntityGrid, {
+      cards: [],
+      prefsKey: "empty-library-guidance",
+      emptyTitle: "No movies yet",
+      emptyMessage: "Scan a movie folder to get started.",
+    });
+
+    expect(screen.getByText("No movies yet")).toBeInTheDocument();
+    expect(screen.getByText("Scan a movie folder to get started.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reset search and filters" })).not.toBeInTheDocument();
+  });
+
   it("defaults desktop thumbnail grids to the preferred mid-range card size when no saved size exists", async () => {
     vi.stubGlobal("matchMedia", createMatchMedia(false));
     const cards = Array.from({ length: 6 }, (_, index) => card(index));

@@ -1,5 +1,6 @@
 <script lang="ts">
   import { SearchX } from "@lucide/svelte";
+  import { Button } from "@prismedia/ui-svelte";
   import PrismediaLoadingMark from "$lib/components/PrismediaLoadingMark.svelte";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
@@ -17,6 +18,8 @@
     mediaWall: boolean;
     onCardActivate?: (card: EntityThumbnailCard, visibleCards: EntityThumbnailCard[]) => void;
     onCardSelectedChange: (id: string, selected: boolean) => void;
+    /** Present only when the current search or filters can be cleared. */
+    onResetFilters?: () => void;
     selectable: boolean;
     selectedIds: string[];
     selectionActive: boolean;
@@ -34,6 +37,7 @@
     mediaWall,
     onCardActivate,
     onCardSelectedChange,
+    onResetFilters,
     selectable,
     selectedIds,
     selectionActive,
@@ -81,7 +85,15 @@
     {/each}
   </div>
 {:else}
-  <StatePlaceholder icon={SearchX} title={emptyTitle} description={emptyMessage} />
+  <StatePlaceholder
+    icon={SearchX}
+    title={onResetFilters ? "No matching items" : emptyTitle}
+    description={onResetFilters ? "Try another search or clear your filters." : emptyMessage}
+  >
+    {#if onResetFilters}
+      <Button variant="outline" size="sm" onclick={onResetFilters}>Reset search and filters</Button>
+    {/if}
+  </StatePlaceholder>
 {/if}
 
 <style>

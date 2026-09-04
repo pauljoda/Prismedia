@@ -49,6 +49,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Library searches with no matches now offer a direct reset instead of incorrectly saying the library is empty and asking you to scan folders. Reset preserves sorting and display preferences.
 - Global search no longer shows an older request's results after the query changes or activates a result when Enter is used on Clear.
 - Video playback shortcuts no longer also react to keys used by tabs, menus, sliders, or other focused controls.
 - Changing library sort, artwork layout, or selection no longer reveals a reset row or shifts the toolbar. Clear now removes only search and filters while keeping those browsing preferences.

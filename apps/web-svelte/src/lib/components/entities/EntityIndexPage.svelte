@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Button } from "@prismedia/ui-svelte";
+  import { Alert, Button, buttonVariants } from "@prismedia/ui-svelte";
   import type { Component } from "svelte";
   import { onMount, untrack } from "svelte";
   import { Plus } from "@lucide/svelte";
@@ -320,7 +320,7 @@
     {#if actionHref && actionLabel}
       <a
         href={actionHref}
-        class="page-head-action"
+        class={buttonVariants({ variant: "outline", size: "sm" })}
       >
         {#if ActionIcon}
           <ActionIcon class="h-4 w-4" />
@@ -328,7 +328,7 @@
         <span>{actionLabel}</span>
       </a>
     {:else if canManage}
-      <Button variant="outline" size="sm" type="button" class="page-head-action" onclick={() => (createOpen = true)}>
+      <Button variant="outline" size="sm" type="button" onclick={() => (createOpen = true)}>
         <Plus class="h-4 w-4" />
         <span>Add {noun}</span>
       </Button>
@@ -336,16 +336,15 @@
   </header>
 
   {#if page.loadState === "error"}
-    <div class="surface-card-sharp flex items-center justify-between gap-4 border-error-500/50 p-4">
-      <p class="text-sm text-text-muted">{page.errorMessage ?? errorMessage ?? `Failed to load ${title.toLowerCase()}.`}</p>
+    <Alert.Root variant="destructive" class="flex flex-wrap items-center justify-between gap-4 p-4">
+      <Alert.Description>{page.errorMessage ?? errorMessage ?? `Failed to load ${title.toLowerCase()}.`}</Alert.Description>
       <Button variant="outline" size="sm"
         type="button"
-        class="surface-well px-3 py-1 text-body-sm"
         onclick={() => void page.loadInitial()}
       >
         Retry
       </Button>
-    </div>
+    </Alert.Root>
   {:else}
     <EntityGrid
       cards={page.cards}
@@ -451,36 +450,4 @@
     color: var(--color-text-muted);
   }
 
-  .page-head-action {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    height: 2.4rem;
-    padding: 0 1rem;
-    border-radius: var(--radius-sm);
-    border: 1px solid var(--color-border-default);
-    background: var(--color-surface-3);
-    color: var(--color-text-primary);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.72rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    text-decoration: none;
-    box-shadow: 0 1px 3px rgb(0 0 0 / 0.32);
-    transition:
-      background var(--duration-fast) var(--ease-default),
-      box-shadow var(--duration-fast) var(--ease-default),
-      transform var(--duration-fast) var(--ease-mechanical);
-  }
-
-  .page-head-action:hover {
-    background: var(--color-surface-4);
-    color: var(--color-text-primary);
-    box-shadow: 0 2px 7px rgb(0 0 0 / 0.36);
-  }
-
-  .page-head-action:active {
-    transform: translateY(1px);
-  }
 </style>

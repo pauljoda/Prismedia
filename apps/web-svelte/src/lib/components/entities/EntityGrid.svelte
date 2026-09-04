@@ -297,6 +297,9 @@
       .map((c) => ({ entityType: c.entity.kind as CollectionEntityType, entityId: c.entity.id })),
   );
   const request = $derived(entityGridRequestFromState(gridState, filterOptions));
+  const canClearFilters = $derived(Boolean(
+    activeKind !== ENTITY_GRID_ALL_KINDS || filterIds.length > 0 || !includeNsfw || query,
+  ));
   const pagedCards = $derived(pagination.page(visibleCards));
 
   interface EntityGridSnapshot {
@@ -636,12 +639,7 @@
     {bulkActions}
     collectionItems={bulkLibraryActions ? collectionItems : []}
     showNsfwAction={bulkLibraryActions}
-    canClearFilters={Boolean(
-      activeKind !== ENTITY_GRID_ALL_KINDS ||
-        filterIds.length > 0 ||
-        !includeNsfw ||
-        query,
-    )}
+    {canClearFilters}
     {enableFeedView}
     {drawerOpen}
     {entityKind}
@@ -716,6 +714,7 @@
       cards={pagedCards}
       {emptyMessage}
       {emptyTitle}
+      onResetFilters={canClearFilters ? clearFilters : undefined}
       hasVisibleCards={visibleCards.length > 0}
       hoverPreviewSuppressed={viewport.areHoverPreviewsSuppressed}
       {loading}
