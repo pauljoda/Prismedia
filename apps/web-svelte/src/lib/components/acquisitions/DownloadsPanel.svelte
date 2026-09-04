@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { SvelteMap } from "svelte/reactivity";
   import { ExternalLink, GripHorizontal, HardDriveDownload, Trash2 } from "@lucide/svelte";
-  import { Badge, Button } from "@prismedia/ui-svelte";
+  import { Badge, Button, Empty } from "@prismedia/ui-svelte";
   import type { DownloadQueueItemView, EntityThumbnail } from "$lib/api/generated/model";
   import { deleteAcquisition, fetchDownloadQueue, reSearchAcquisition } from "$lib/api/acquisitions";
   import { fetchEntityThumbnails } from "$lib/api/entities";
@@ -373,16 +373,20 @@
         {/key}
       </div>
     {:else if loading}
-      <div class="inspector-empty">
-        <HardDriveDownload class="h-6 w-6" />
-        <strong>Loading transfer details…</strong>
-      </div>
+      <Empty.Root class="min-h-0 flex-1 rounded-none border-0 p-6" aria-busy="true">
+        <Empty.Header>
+          <Empty.Media variant="icon"><HardDriveDownload /></Empty.Media>
+          <Empty.Title>Loading transfer details…</Empty.Title>
+        </Empty.Header>
+      </Empty.Root>
     {:else}
-      <div class="inspector-empty">
-        <HardDriveDownload class="h-6 w-6" />
-        <strong>No transfer selected</strong>
-        <span>Select a download row to inspect its controls, files, peers, and history.</span>
-      </div>
+      <Empty.Root class="min-h-0 flex-1 rounded-none border-0 p-6">
+        <Empty.Header>
+          <Empty.Media variant="icon"><HardDriveDownload /></Empty.Media>
+          <Empty.Title>No transfer selected</Empty.Title>
+          <Empty.Description>Select a download to inspect its controls, files, peers, and history.</Empty.Description>
+        </Empty.Header>
+      </Empty.Root>
     {/if}
   </section>
 </div>
@@ -472,10 +476,6 @@
   .inspector-kicker { color: var(--color-text-muted); font-family: var(--font-mono, "JetBrains Mono", monospace); font-size: 0.58rem !important; letter-spacing: 0.1em; text-transform: uppercase; }
   .inspector-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 0.45rem; }
   .inspector-detail { min-width: 0; min-height: 0; flex: 1 1 auto; overflow: auto; padding: 1rem; }
-  .inspector-empty { display: flex; min-height: 0; flex: 1 1 auto; align-items: center; justify-content: center; flex-direction: column; gap: 0.4rem; color: var(--color-text-muted); text-align: center; }
-  .inspector-empty strong { color: var(--color-text-secondary); font-family: var(--font-heading, "Geist", sans-serif); font-size: 0.9rem; }
-  .inspector-empty span { max-width: 28rem; font-size: 0.72rem; }
-
   @media (max-width: 640px) {
     .download-inspector { border-radius: 0 0 var(--radius-sm, 6px) var(--radius-sm, 6px); }
     .inspector-header { align-items: flex-start; flex-direction: column; }

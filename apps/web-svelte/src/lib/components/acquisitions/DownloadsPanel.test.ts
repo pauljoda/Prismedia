@@ -96,6 +96,13 @@ describe("DownloadsPanel", () => {
     vi.restoreAllMocks();
   });
 
+  it("uses the shared empty state before a transfer is selected", async () => {
+    render(DownloadsPanel);
+
+    const title = await screen.findByText("No transfer selected");
+    expect(title.closest('[data-slot="empty"]')).toBeInTheDocument();
+  });
+
   it("continues bulk removal after a failure, reloads, and reports the partial result", async () => {
     render(DownloadsPanel);
 
