@@ -9,7 +9,7 @@
     SlidersHorizontal,
     Star,
   } from "@lucide/svelte";
-  import { Button, SearchInput, cn } from "@prismedia/ui-svelte";
+  import { Button, ChoiceGroup, SearchInput, cn } from "@prismedia/ui-svelte";
   import SearchResultCard from "$lib/components/SearchResultCard.svelte";
   import { buildHrefWithFrom } from "$lib/back-navigation";
   import { useNsfw } from "$lib/nsfw/store.svelte";
@@ -50,6 +50,7 @@
   }
 
   const kindsArray = $derived(Array.from(activeKinds));
+  const kindChoices = ALL_SEARCH_KINDS.map(kind => ({ value: kind, label: SEARCH_KIND_CONFIG[kind].label, icon: SEARCH_KIND_CONFIG[kind].icon, iconColor: entityAccentForKind(kind).primary }));
   const hasQuery = $derived(query.trim().length >= 2);
   const hasResults = $derived(
     results != null && results.groups.some((g) => g.items.length > 0),
@@ -133,16 +134,6 @@
     return () => window.clearTimeout(timer);
   });
 
-  function toggleKind(kind: SearchEntityKind) {
-    const next = new Set(activeKinds);
-    if (next.has(kind)) {
-      if (next.size > 1) next.delete(kind);
-    } else {
-      next.add(kind);
-    }
-    activeKinds = next;
-  }
-
   async function loadMore(_kind: SearchEntityKind, _currentCount: number, _total: number) {
     //  entity search currently returns one page per request. The result groups
     // report their returned total, so this path is only here for template parity.
@@ -207,58 +198,30 @@
 
 <div class="space-y-4">
   <!-- Search header -->
-  <div class="space-y-3">
-    <SearchInput
-      bind:element={inputRef}
-      bind:value={query}
-      ariaLabel="Search everything"
-      placeholder="Search everything..."
-      {loading}
-      onkeydown={(e) => {
+  <div class="flex flex-col gap-3">
+    <div class="flex items-start gap-2">
+      <SearchInput
+        bind:element={inputRef}
+        bind:value={query}
+        ariaLabel="Search everything"
+        placeholder="Search everything..."
+        {loading}
+        onkeydown={(e) => {
           if (e.key === "Enter" && topResult) {
             e.preventDefault();
             navigateToTopResult();
           }
-      }}
-    />
-
-    <!-- Entity kind toggles + filters button -->
-    <div class="flex flex-wrap items-center gap-2">
-      {#each ALL_SEARCH_KINDS as kind (kind)}
-        {@const config = SEARCH_KIND_CONFIG[kind]}
-        {@const Icon = config.icon}
-        {@const active = activeKinds.has(kind)}
-        {@const kindAccent = entityAccentForKind(kind).primary}
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          aria-pressed={active}
-          class={cn(
-            "tag-chip h-auto cursor-pointer gap-1.5 transition-colors duration-fast",
-            active ? "tag-chip-accent" : "tag-chip-default",
-          )}
-          onclick={() => toggleKind(kind)}
-        >
-          <Icon class="h-3 w-3" color={kindAccent} aria-hidden="true" />
-          {config.label}
-        </Button>
-      {/each}
-
-      <div class="h-4 w-px bg-border-subtle"></div>
+        }}
+      />
 
       <Button
         type="button"
-        variant="ghost"
-        size="sm"
+        variant={filtersOpen ? "secondary" : "outline"}
+        class="shrink-0"
         aria-expanded={filtersOpen}
-        class={cn(
-          "tag-chip h-auto cursor-pointer gap-1.5 transition-colors duration-fast",
-          filtersOpen ? "tag-chip-info" : "tag-chip-default",
-        )}
         onclick={() => (filtersOpen = !filtersOpen)}
       >
-        <SlidersHorizontal class="h-3 w-3" />
+        <SlidersHorizontal data-icon="inline-start" />
         Filters
         {#if hasFiltersApplied}
           <span class="flex h-3.5 w-3.5 items-center justify-center bg-accent-800 text-[0.5rem] font-bold text-accent-200">
@@ -267,6 +230,8 @@
         {/if}
       </Button>
     </div>
+
+    <ChoiceGroup type="multiple" options={kindChoices} value={kindsArray} onValueChange={next => { activeKinds = new Set(next); }} ariaLabel="Search entity kinds" />
 
     <!-- Filter panel -->
     {#if filtersOpen}

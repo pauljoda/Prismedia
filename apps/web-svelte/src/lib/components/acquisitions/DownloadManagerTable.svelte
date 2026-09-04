@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { browser as isBrowser } from "$app/environment";
   import { ArrowDown, ArrowUp, ChevronsDownUp, ChevronsUpDown, Columns3, HardDriveDownload, Loader2, Trash2 } from "@lucide/svelte";
-  import { Button, Checkbox, Empty, SearchInput, Select, ToggleGroup, cn } from "@prismedia/ui-svelte";
+  import { Button, Checkbox, ChoiceGroup, Empty, SearchInput, Select, cn } from "@prismedia/ui-svelte";
   import { SvelteSet } from "svelte/reactivity";
   import { formatSpeed, numberValue } from "$lib/utils/format";
   import DownloadTreeRows from "./DownloadTreeRows.svelte";
@@ -95,6 +95,10 @@
   const aggregateSpeed = $derived(entries.reduce((sum, entry) => sum + (numberValue(entry.row.downloadSpeedBytesPerSecond) ?? 0), 0));
   const gridTemplate = $derived(downloadColumnTemplate(columnWidths));
   const gridWidth = $derived(downloadTableWidth(columnWidths));
+  const statusChoices = $derived(statusFilters.map(filter => {
+    const count = entries.filter(filter.match).length;
+    return { value: filter.value, label: filter.label, count: filter.value !== "all" && count > 0 ? count : undefined };
+  }));
   const sortOptions = DOWNLOAD_TABLE_COLUMN_KEYS.map((key) => ({ value: key, label: DOWNLOAD_TABLE_COLUMNS[key].label }));
 
   function toggleExpanded(key: string) {
@@ -276,15 +280,7 @@
         placeholder="Filter entities or clients…"
         class="download-search"
       />
-      <ToggleGroup.Root type="single" bind:value={() => activeStatus, next => { if (next) activeStatus = next; }} variant="outline" spacing={2} size="sm" class="status-filters flex-wrap justify-start" aria-label="Filter downloads by status">
-        {#each statusFilters as filter (filter.value)}
-          {@const count = entries.filter(filter.match).length}
-          <ToggleGroup.Item value={filter.value}>
-            {filter.label}
-            {#if filter.value !== "all" && count > 0}<span class="font-mono text-xs tabular-nums text-muted-foreground">{count}</span>{/if}
-          </ToggleGroup.Item>
-        {/each}
-      </ToggleGroup.Root>
+      <ChoiceGroup type="single" options={statusChoices} value={activeStatus} onValueChange={next => { activeStatus = next; }} size="sm" class="status-filters" ariaLabel="Filter downloads by status" />
       <Button variant="ghost" size="sm" class="columns-reset" onclick={resetColumnWidths} title="Reset all column widths">
         <Columns3 data-icon="inline-start" /> Reset columns
       </Button>

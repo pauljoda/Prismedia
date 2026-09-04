@@ -1,6 +1,6 @@
 {
   "name": "@prismedia/web-svelte",
-  "version": "3.6.12",
+  "version": "3.6.13",
   "private": true,
   "type": "module",
   "scripts": {

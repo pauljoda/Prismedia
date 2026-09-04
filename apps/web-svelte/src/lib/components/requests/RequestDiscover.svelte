@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { AlertTriangle, Loader2, PackageSearch, PlugZap } from "@lucide/svelte";
-  import { Button } from "@prismedia/ui-svelte";
+  import { Button, ChoiceGroup } from "@prismedia/ui-svelte";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { ENTITY_KIND, type RequestMediaKindCode } from "$lib/api/generated/codes";
@@ -105,6 +105,7 @@
   const orderedKinds = [...DISCOVERABLE_REQUEST_KINDS].sort((left, right) =>
     left.plural.localeCompare(right.plural),
   );
+  const kindChoices = orderedKinds.map(kind => ({ value: kind.kind, label: kind.plural, icon: requestKindIcon(kind.kind), iconColor: requestKindAccent(kind.kind) }));
 
   /**
    * How many installed providers can actually search each kind. Surfacing this on the chooser
@@ -329,22 +330,7 @@
         <span class="font-mono text-[0.72rem] text-text-muted">Content kind</span>
         {#if selectedKind}
           <!-- Once a kind is chosen the chooser collapses to chips so the search surface leads. -->
-          <div class="flex flex-wrap gap-1.5" role="group" aria-label="Choose a content kind">
-            {#each orderedKinds as kind (kind.kind)}
-              {@const KindIcon = requestKindIcon(kind.kind)}
-              {@const kindAccent = requestKindAccent(kind.kind)}
-              <Button
-                type="button"
-                size="sm"
-                variant={selectedKind === kind.kind ? "primary" : "secondary"}
-                aria-pressed={selectedKind === kind.kind}
-                onclick={() => chooseKind(kind.kind)}
-              >
-                <KindIcon class="h-3.5 w-3.5" color={kindAccent} aria-hidden="true" />
-                {kind.plural}
-              </Button>
-            {/each}
-          </div>
+          <ChoiceGroup type="single" options={kindChoices} value={selectedKind} onValueChange={chooseKind} ariaLabel="Choose a content kind" />
         {:else}
           <!--
             Nothing selected is the page's real starting point, so it gets a full chooser rather

@@ -44,6 +44,19 @@ describe("RequestDiscover", () => {
     searchRequestsByPlugin.mockResolvedValue({ results: [], providerErrors: [] });
   });
 
+  it("keeps the current search draft when its selected kind is clicked again", async () => {
+    render(RequestDiscoverHarness);
+    await waitFor(() => expect(fetchPluginProviders).toHaveBeenCalledOnce());
+    await fireEvent.click(screen.getByRole("button", { name: "Series" }));
+    const title = await screen.findByLabelText("Series title");
+    await fireEvent.input(title, { target: { value: "A planned search" } });
+    const selectedKind = screen.getByRole("radio", { name: "Series" });
+    await fireEvent.click(selectedKind);
+    expect(title).toHaveValue("A planned search");
+    expect(selectedKind).toHaveAttribute("aria-checked", "true");
+    expect(searchRequestsByPlugin).not.toHaveBeenCalled();
+  });
+
   it("requires a kind, filters its providers, and swaps to the selected provider's schema", async () => {
     render(RequestDiscoverHarness);
 

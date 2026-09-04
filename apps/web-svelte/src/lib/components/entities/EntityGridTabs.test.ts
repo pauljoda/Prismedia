@@ -28,6 +28,7 @@ describe("EntityGridTabs", () => {
     render(EntityGridTabs, { tabs, totalCount: 9, activeKind: ENTITY_GRID_ALL_KINDS, onActiveKindChange });
     await fireEvent.click(screen.getByRole("radio", { name: "All 9" }));
     expect(onActiveKindChange).not.toHaveBeenCalled();
+    expect(screen.getByRole("radio", { name: "All 9" })).toHaveAttribute("aria-checked", "true");
     await fireEvent.click(screen.getByRole("radio", { name: "Books 7" }));
     expect(onActiveKindChange).toHaveBeenCalledWith(ENTITY_KIND.book);
   });

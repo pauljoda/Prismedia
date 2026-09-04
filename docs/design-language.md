@@ -226,6 +226,10 @@ shared class-merging utility so ordinary layout overrides replace them correctly
 - Mixed-kind result filters are a wrapping row of separate controls, spaced
   below the toolbar. Use canonical Entity icons and colors with neutral labels,
   counts, and selected-state borders.
+- Use the shared `ChoiceGroup` for required single- or multiple-choice filters.
+  It composes the themed ToggleGroup and retains at least one selection. The
+  parent owns the value; selecting the current single choice must not reset
+  page state. Use ToggleGroup directly when deselecting every option is valid.
 - Availability belongs beside the item name, separate from its actions. Use
   quiet text for ordinary missing/in-library information; reserve status badges
   for active work or conditions that need attention. Supporting sections share

@@ -82,6 +82,7 @@ export {
 } from "./motion/transitions";
 
 // Composed
+export { default as ChoiceGroup, type ChoiceOption } from "./composed/ChoiceGroup.svelte";
 export { default as Disclosure } from "./composed/Disclosure.svelte";
 export { default as StatusLed } from "./composed/StatusLed.svelte";
 export { type LedStatus, type LedSize } from "./composed/StatusLed.svelte";
