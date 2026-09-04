@@ -16,6 +16,7 @@
   .metadata-card-grid {
     container-type: inline-size;
     display: grid;
+    align-items: start;
     grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
     gap: 0.75rem;
   }
@@ -24,7 +25,7 @@
     grid-column: 1 / -1;
   }
 
-  @container (min-width: 30rem) {
+  @container (min-width: 32.75rem) {
     .metadata-card-grid > :global(.metadata-card-wide) {
       grid-column: span 2;
     }

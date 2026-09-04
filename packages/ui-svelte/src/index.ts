@@ -22,6 +22,7 @@ export {
 } from "./navigation/app-shell-sections";
 
 // Primitives
+export * as Item from "./components/ui/item";
 export * as DialogBase from "./components/ui/dialog";
 export * as Sheet from "./components/ui/sheet";
 export * as Alert from "./components/ui/alert";

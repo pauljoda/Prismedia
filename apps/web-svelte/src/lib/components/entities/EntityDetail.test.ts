@@ -600,7 +600,7 @@ describe("EntityDetail", () => {
 
     expect(screen.getByText("Links & Provider IDs")).toBeInTheDocument();
     expect(container.querySelector(".metadata-card-capped")).toBeInTheDocument();
-    expect(screen.getByText("URLs")).toBeInTheDocument();
+    expect(screen.getByText("Websites")).toBeInTheDocument();
     expect(screen.getByText("themoviedb.org")).toBeInTheDocument();
     expect(screen.getByText("https://www.themoviedb.org/tv/271267")).toBeInTheDocument();
     expect(screen.getByText("Provider IDs")).toBeInTheDocument();

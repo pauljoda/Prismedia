@@ -40,19 +40,19 @@
   <Card.Header>
     <Card.Title role="heading" aria-level={3} class="flex items-center gap-2 text-foreground">
       {#if Icon}
-        <Icon class="text-muted-foreground" aria-hidden="true" />
+        <Icon class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
       {/if}
       {title}
     </Card.Title>
   </Card.Header>
   {#if children}
-    <Card.Content>
+    <Card.Content class={capped ? "min-h-0 overflow-y-auto overscroll-contain" : undefined}>
       <div class="metadata-card-body">
         {@render children()}
       </div>
     </Card.Content>
   {:else if rows && rows.length > 0}
-    <Card.Content>
+    <Card.Content class={capped ? "min-h-0 overflow-y-auto overscroll-contain" : undefined}>
       <dl class="metadata-card-rows">
         {#each rows as row (row.label)}
           <div class="metadata-card-row">
@@ -74,14 +74,6 @@
     min-width: 0;
   }
 
-  :global(.metadata-card-capped) .metadata-card-body {
-    min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    padding-right: 0.25rem;
-    scrollbar-gutter: stable;
-  }
-
   .metadata-card-rows {
     display: grid;
     gap: 0;
@@ -90,7 +82,7 @@
 
   .metadata-card-row {
     display: grid;
-    grid-template-columns: minmax(4.5rem, max-content) minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
     gap: 0.85rem;
     align-items: baseline;
     padding: 0.45rem 0;
@@ -111,6 +103,7 @@
     font-family: var(--font-body, Inter, sans-serif);
     font-size: 0.75rem;
     font-weight: 500;
+    overflow-wrap: anywhere;
   }
 
   .metadata-card-row dd {
