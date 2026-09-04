@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import { CalendarClock, CircleAlert, CircleCheck, CloudDownload, FileText, History, Loader2, PencilLine, RefreshCw, RotateCcw, Search, SearchX, Upload, X } from "@lucide/svelte";
-  import { Alert, Badge, Button, Card, Disclosure, Progress, SearchInput, type BadgeVariant } from "@prismedia/ui-svelte";
+  import { Alert, Badge, Button, Card, Disclosure, SearchInput, type BadgeVariant } from "@prismedia/ui-svelte";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
@@ -9,10 +9,10 @@
   import AcquisitionHistoryList from "$lib/components/acquisitions/AcquisitionHistoryList.svelte";
   import ManualImportReview from "$lib/components/acquisitions/ManualImportReview.svelte";
   import ConfirmDialog from "$lib/components/entities/ConfirmDialog.svelte";
-  import PieceStateBar from "$lib/components/acquisitions/PieceStateBar.svelte";
+  import AcquisitionTransferSummary from "$lib/components/acquisitions/AcquisitionTransferSummary.svelte";
   import ReleaseTable from "$lib/components/acquisitions/ReleaseTable.svelte";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
-  import { isTransferActive, transferStageLabel } from "$lib/requests/acquisition-transfer";
+  import { presentAcquisitionTransfer } from "$lib/requests/acquisition-transfer-presentation";
   import { ACQUISITION_STATUS } from "$lib/api/generated/codes";
   import { METADATA_PATCH_FIELD } from "$lib/entities/entity-codes";
   import type {
@@ -46,7 +46,7 @@
     acquisitionStatusLabel,
     acquisitionStatusShouldPoll,
   } from "$lib/requests/acquisition-status";
-  import { formatBytes, formatEta, formatSpeed } from "$lib/utils/format";
+  import { formatBytes } from "$lib/utils/format";
 
   /**
    * The acquisition-specific management surface: status, live transfer, imported files, release
@@ -543,51 +543,6 @@
     </Card.Header>
 
     <Card.Content class="flex min-w-0 flex-col gap-5">
-      {#if canRetryImport || canStartOver || canReSearch || canCancel}
-        <div class="flex flex-wrap items-center justify-end gap-2">
-        {#if canRetryImport}
-          <Button
-            type="button"
-            variant="primary"
-            class="gap-1.5"
-            disabled={busy}
-            onclick={() => void retryImport(false)}
-            title={status === ACQUISITION_STATUS.downloaded
-                ? "Queue import again without removing the completed download."
-                : "Resume the exact durable import plan from its last completed file."}
-          >
-            <CloudDownload class="h-3.5 w-3.5" />
-            Retry import
-          </Button>
-        {/if}
-        {#if canStartOver}
-          <Button
-            type="button"
-            variant="danger"
-            class="gap-1.5"
-            disabled={busy}
-            onclick={() => (resetConfirmOpen = true)}
-            title="Discard the interrupted import, its partial files, and the current download, then begin a clean search."
-          >
-            <RotateCcw class="h-3.5 w-3.5" />
-            Start over
-          </Button>
-        {/if}
-        {#if canReSearch}
-          <Button type="button" variant="ghost" class="gap-1.5" disabled={busy} onclick={() => void reSearch()}>
-            <RefreshCw class="h-3.5 w-3.5" />
-            Search again
-          </Button>
-        {/if}
-        {#if canCancel}
-          <Button type="button" variant="danger" class="gap-1.5" disabled={busy} onclick={() => void cancel()}>
-            <X class="h-3.5 w-3.5" />
-            Cancel
-          </Button>
-        {/if}
-        </div>
-      {/if}
-
       {#if transitionLocked}
       <StatePlaceholder
         icon={Loader2}
@@ -646,41 +601,7 @@
       />
 
       {:else if isDownloading}
-      <!-- ── Live transfer ── -->
-      <section class="space-y-3">
-        <h2 class="text-sm font-semibold text-text-primary">Download</h2>
-        {#if transfer}
-          {@const pct = Math.round(Number(transfer.progress) * 100)}
-          <div class="space-y-3 rounded-sm border border-border-subtle bg-surface-1 p-3.5">
-            <!-- Stage + percent -->
-            <div class="flex items-center justify-between gap-3">
-              <span class="flex items-center gap-2 text-sm font-medium text-text-primary">
-                {#if isTransferActive(transfer.state)}
-                  <Loader2 class="h-3.5 w-3.5 animate-spin text-text-accent" />
-                {/if}
-                {transferStageLabel(transfer.state)}
-              </span>
-              <span class="font-mono text-sm text-text-accent">{pct}%</span>
-            </div>
-            <Progress value={pct} aria-label={`Download ${pct}% complete`} class="h-2" />
-            <!-- Stats -->
-            <div class="grid grid-cols-2 gap-x-4 gap-y-2.5 sm:grid-cols-4">
-              {@render stat("Speed", formatSpeed(Number(transfer.downloadSpeedBytesPerSecond)))}
-              {@render stat("ETA", formatEta(Number(transfer.etaSeconds)))}
-              {@render stat("Seeds / Peers", `${transfer.seeds} / ${transfer.peers}`)}
-              {@render stat("Size", formatBytes(Number(transfer.totalSizeBytes)))}
-            </div>
-            <PieceStateBar pieces={transfer.pieceStates.map(Number)} />
-          </div>
-        {:else}
-          <StatePlaceholder
-            icon={CloudDownload}
-            title="Preparing download"
-            description="Connecting to the download client and waiting for the first progress report…"
-            busy
-          />
-        {/if}
-      </section>
+      <AcquisitionTransferSummary transfer={presentAcquisitionTransfer(transfer)} />
 
       {:else if isDone}
       <!-- ── Imported / downloaded files — collapsed once imported so a big pack doesn't fill the page ── -->
@@ -722,6 +643,20 @@
 
       {:else}
       <!-- ── Release review (awaiting selection / failed) ── -->
+      {#if status === ACQUISITION_STATUS.failed && detail.summary.statusMessage}
+        <Alert.Root variant="destructive">
+          <CircleAlert />
+          <Alert.Title>{hasResumableImport ? "Import interrupted" : "Acquisition failed"}</Alert.Title>
+          <Alert.Description>{detail.summary.statusMessage}</Alert.Description>
+        </Alert.Root>
+      {/if}
+      {#if hasResumableImport && detail.candidates.length === 0}
+        <StatePlaceholder
+          icon={CloudDownload}
+          title="Import can be resumed"
+          description="Retry import continues from the last completed file. Start over removes this interrupted import and begins a new search."
+        />
+      {:else}
       <section class="space-y-3">
         <h2 class="flex items-baseline gap-2 text-sm font-semibold text-text-primary">
           Releases
@@ -776,7 +711,51 @@
         {/if}
       </section>
       {/if}
+      {/if}
     </Card.Content>
+
+    {#if canRetryImport || canStartOver || canReSearch || canCancel}
+      <Card.Footer class="flex flex-wrap justify-start gap-control-gap border-border-subtle">
+        {#if canRetryImport}
+          <Button
+            type="button"
+            variant="primary"
+            disabled={busy}
+            onclick={() => void retryImport(false)}
+            title={status === ACQUISITION_STATUS.downloaded
+                ? "Queue import again without removing the completed download."
+                : "Resume the exact durable import plan from its last completed file."}
+          >
+            <CloudDownload data-icon="inline-start" />
+            Retry import
+          </Button>
+        {/if}
+        {#if canStartOver}
+          <Button
+            type="button"
+            variant="danger"
+            disabled={busy}
+            onclick={() => (resetConfirmOpen = true)}
+            title="Discard the interrupted import, its partial files, and the current download, then begin a clean search."
+          >
+            <RotateCcw data-icon="inline-start" />
+            Start over
+          </Button>
+        {/if}
+        {#if canReSearch}
+          <Button type="button" variant="ghost" disabled={busy} onclick={() => void reSearch()}>
+            <RefreshCw data-icon="inline-start" />
+            Search again
+          </Button>
+        {/if}
+        {#if canCancel}
+          <Button type="button" variant="danger" disabled={busy} onclick={() => void cancel()}>
+            <X data-icon="inline-start" />
+            Cancel
+          </Button>
+        {/if}
+      </Card.Footer>
+    {/if}
 
     {#if history.length > 0}
       <Card.Footer class="block border-border-subtle bg-transparent p-0">
@@ -836,10 +815,3 @@
   onConfirm={rejectManualImport}
   onClose={() => (rejectConfirmOpen = false)}
 />
-
-{#snippet stat(label: string, value: string)}
-  <div class="flex flex-col gap-0.5">
-    <span class="text-label text-text-muted">{label}</span>
-    <span class="font-mono text-[0.8rem] text-text-primary">{value}</span>
-  </div>
-{/snippet}

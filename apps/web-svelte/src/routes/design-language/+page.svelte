@@ -14,6 +14,7 @@
   import PrismediaLoadingMark from "$lib/components/PrismediaLoadingMark.svelte";
   import UiFoundationPreview from "$lib/components/UiFoundationPreview.svelte";
   import UiSelectSamples from "$lib/components/UiSelectSamples.svelte";
+  import AcquisitionTransferPreview from "$lib/components/acquisitions/AcquisitionTransferPreview.svelte";
 
   const ledStatuses: LedStatus[] = [
     "active",
@@ -197,6 +198,8 @@
     </a>
 
     <UiFoundationPreview />
+
+    <AcquisitionTransferPreview />
 
     <!-- ═══════════════════════════════ COLOR PALETTE ═══════════════════════════════ -->
     <section>

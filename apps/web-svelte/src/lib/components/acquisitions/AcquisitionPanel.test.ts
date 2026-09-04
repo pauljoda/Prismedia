@@ -50,6 +50,29 @@ vi.mock("$lib/components/entities/ConfirmDialog.svelte", async () => ({
 describe("AcquisitionPanel", () => {
   let poll: (() => void | Promise<void>) | null;
 
+  it("explains an interrupted import without suggesting an unavailable torrent upload", async () => {
+    const interrupted = acquisition(ACQUISITION_STATUS.failed, true);
+    interrupted.summary.statusMessage = "The destination ran out of space.";
+    mocks.fetchAcquisition.mockResolvedValue(interrupted);
+    const view = render(AcquisitionPanel, { acquisitionId: "acquisition-1", detail: interrupted });
+
+    expect(await view.findByText("The destination ran out of space.")).toBeTruthy();
+    expect(view.getByText("Import can be resumed")).toBeTruthy();
+    expect(view.queryByText("No releases found")).toBeNull();
+    expect(view.queryByText(/upload a .torrent manually below/)).toBeNull();
+    expect(view.getByRole("button", { name: "Retry import" })).toBeTruthy();
+  });
+
+  it("groups recovery actions in the card footer after the work area", async () => {
+    const interrupted = acquisition(ACQUISITION_STATUS.failed, true);
+    mocks.fetchAcquisition.mockResolvedValue(interrupted);
+    const view = render(AcquisitionPanel, { acquisitionId: "acquisition-1", detail: interrupted });
+    const retry = await view.findByRole("button", { name: "Retry import" });
+    expect(retry.closest('[data-slot="card-footer"]')).not.toBeNull();
+    expect(view.getByRole("button", { name: "Start over" }).closest('[data-slot="card-footer"]'))
+      .toBe(retry.closest('[data-slot="card-footer"]'));
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     poll = null;
