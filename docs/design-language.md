@@ -207,6 +207,10 @@ shared class-merging utility so ordinary layout overrides replace them correctly
 - Acquisition work and monitoring settings align at the top on wide screens and
   stack on narrow screens. File actions belong inside a card, not in the space
   between cards. Child activity opens initially when it is the only work shown.
+- Downloads keeps its resizable queue and inspector on desktop. Phones show
+  one at a time, with an explicit return to the queue that preserves filtering
+  and selection. Transfer rows put status below Entity identity and label
+  available metrics; wide table columns must not push status off-screen.
 - Entity edit forms use a full-width shared grid: primary fields and dates in one
   flow, links and source references in another. On narrow screens these flows
   stack in reading order. Add-entry fields retain visible labels, and form

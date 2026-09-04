@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { browser as isBrowser } from "$app/environment";
-  import { ChevronsDownUp, ChevronsUpDown, Columns3, HardDriveDownload, Loader2, Trash2 } from "@lucide/svelte";
-  import { Button, Checkbox, Empty, SearchInput, cn } from "@prismedia/ui-svelte";
+  import { ArrowDown, ArrowUp, ChevronsDownUp, ChevronsUpDown, Columns3, HardDriveDownload, Loader2, Trash2 } from "@lucide/svelte";
+  import { Button, Checkbox, Empty, SearchInput, Select, ToggleGroup, cn } from "@prismedia/ui-svelte";
   import { SvelteSet } from "svelte/reactivity";
   import { formatSpeed, numberValue } from "$lib/utils/format";
   import DownloadTreeRows from "./DownloadTreeRows.svelte";
@@ -95,6 +95,7 @@
   const aggregateSpeed = $derived(entries.reduce((sum, entry) => sum + (numberValue(entry.row.downloadSpeedBytesPerSecond) ?? 0), 0));
   const gridTemplate = $derived(downloadColumnTemplate(columnWidths));
   const gridWidth = $derived(downloadTableWidth(columnWidths));
+  const sortOptions = DOWNLOAD_TABLE_COLUMN_KEYS.map((key) => ({ value: key, label: DOWNLOAD_TABLE_COLUMNS[key].label }));
 
   function toggleExpanded(key: string) {
     if (expanded.has(key)) expanded.delete(key);
@@ -274,27 +275,28 @@
         ariaLabel="Filter downloads"
         placeholder="Filter entities or clients…"
         class="download-search"
-        inputClass="text-xs"
       />
-      <div class="status-filters" role="group" aria-label="Filter downloads by status">
+      <ToggleGroup.Root type="single" bind:value={() => activeStatus, next => { if (next) activeStatus = next; }} variant="outline" spacing={2} size="sm" class="status-filters flex-wrap justify-start" aria-label="Filter downloads by status">
         {#each statusFilters as filter (filter.value)}
           {@const count = entries.filter(filter.match).length}
-          <Button
-            variant={activeStatus === filter.value ? "secondary" : "ghost"}
-            size="sm"
-            class={cn("filter-button", activeStatus === filter.value && "is-active")}
-            onclick={() => (activeStatus = filter.value)}
-          >
+          <ToggleGroup.Item value={filter.value}>
             {filter.label}
-            {#if filter.value !== "all" && count > 0}<span class="filter-count">{count}</span>{/if}
-          </Button>
+            {#if filter.value !== "all" && count > 0}<span class="font-mono text-xs tabular-nums text-muted-foreground">{count}</span>{/if}
+          </ToggleGroup.Item>
         {/each}
-      </div>
+      </ToggleGroup.Root>
       <Button variant="ghost" size="sm" class="columns-reset" onclick={resetColumnWidths} title="Reset all column widths">
-        <Columns3 class="h-3.5 w-3.5" /> Reset columns
+        <Columns3 data-icon="inline-start" /> Reset columns
       </Button>
     </div>
   </header>
+
+  <div class="mobile-sort">
+    <Select ariaLabel="Sort downloads by" options={sortOptions} value={sortKey} onchange={next => { if (Object.hasOwn(DOWNLOAD_TABLE_COLUMNS, next)) sortColumn(next as DownloadColumnKey); }} />
+    <Button variant="outline" size="icon" aria-label={sortDirection === "asc" ? "Ascending order; switch to descending" : "Descending order; switch to ascending"} onclick={() => sortColumn(sortKey)}>
+      {#if sortDirection === "asc"}<ArrowUp />{:else}<ArrowDown />{/if}
+    </Button>
+  </div>
 
   <div class={["selection-bar", safeCheckedIds.size > 0 && "has-selection"]}>
     <span class="selection-check">
@@ -325,9 +327,9 @@
         onclick={toggleAllExpanded}
       >
         {#if expanded.size >= expandableKeys.length && expandableKeys.length > 0}
-          <ChevronsDownUp class="h-3.5 w-3.5" /> Collapse all
+          <ChevronsDownUp data-icon="inline-start" /> Collapse all
         {:else}
-          <ChevronsUpDown class="h-3.5 w-3.5" /> Expand all
+          <ChevronsUpDown data-icon="inline-start" /> Expand all
         {/if}
       </Button>
       {#if safeCheckedIds.size > 0}
@@ -337,7 +339,7 @@
           disabled={acting}
           onclick={() => onRemove([...safeCheckedIds])}
         >
-          <Trash2 class="h-3.5 w-3.5" /> Remove
+          <Trash2 data-icon="inline-start" /> Remove
         </Button>
       {/if}
     </div>
@@ -348,7 +350,7 @@
   {/if}
 
   <div class="table-scroll">
-    <div class="downloads-grid" role="treegrid" aria-label="Downloads" style:min-width={`${gridWidth}px`}>
+    <div class="downloads-grid" role="treegrid" aria-label="Downloads" style:--download-grid-width={`${gridWidth}px`}>
       <DownloadTableHeader
         columnTemplate={gridTemplate}
         {sortKey}
@@ -403,6 +405,7 @@
 
   .manager-toolbar {
     display: flex;
+    flex: none;
     align-items: center;
     justify-content: space-between;
     gap: 1rem;
@@ -418,22 +421,18 @@
   .manager-mark { display: grid; width: 2rem; height: 2rem; place-items: center; border: 1px solid var(--color-border-subtle); border-radius: var(--radius-xs, 4px); color: var(--color-text-secondary); background: var(--color-surface-2); box-shadow: inset 0 1px 0 rgb(255 255 255 / 0.035); }
   .aggregate-speed { padding-left: 0.7rem; border-left: 1px solid var(--color-border-subtle); color: var(--color-text-accent); font-family: var(--font-mono, "JetBrains Mono", monospace); font-size: 0.68rem; }
 
-  .toolbar-controls { display: flex; min-width: 0; flex: 1 1 auto; align-items: center; justify-content: flex-end; gap: 0.5rem; }
-  :global(.download-search) { width: min(18rem, 28vw); min-height: 2rem; padding-block: 0.35rem; border-radius: var(--radius-xs, 4px); }
-  .status-filters { display: flex; align-items: center; gap: 0.15rem; }
-  :global(.filter-button) { height: 1.85rem; padding-inline: 0.55rem; font-size: 0.68rem; }
-  :global(.filter-button.is-active) { border-color: var(--color-border-default); color: var(--color-text-primary); box-shadow: inset 0 -2px 0 var(--color-accent-400); }
-  .filter-count { min-width: 1rem; padding: 0.05rem 0.25rem; border-radius: var(--radius-xs, 4px); background: rgb(255 255 255 / 0.055); font-family: var(--font-mono, "JetBrains Mono", monospace); font-size: 0.59rem; }
-  :global(.columns-reset) { height: 1.85rem; white-space: nowrap; font-size: 0.68rem; }
+  .toolbar-controls { display: flex; min-width: 0; flex: 1 1 auto; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: var(--spacing-control-gap); }
+  :global(.download-search) { width: min(18rem, 28vw); flex-shrink: 0; }
+  :global(.status-filters) { max-width: 100%; }
+  .mobile-sort { display: none; }
 
-  .selection-bar { display: flex; min-height: 2.35rem; align-items: center; justify-content: space-between; gap: 0.75rem; padding: 0.3rem 0.7rem; border-bottom: 1px solid var(--color-border-subtle); color: var(--color-text-muted); background: rgb(255 255 255 / 0.012); font-size: 0.68rem; }
+  .selection-bar { display: flex; flex: none; min-height: 2.35rem; align-items: center; justify-content: space-between; gap: var(--spacing-control-gap); padding: calc(var(--spacing) * 2) calc(var(--spacing) * 3); border-bottom: 1px solid var(--color-border-subtle); color: var(--color-text-muted); background: var(--color-surface-1); font-size: var(--text-caption); }
   .selection-bar.has-selection { background: color-mix(in srgb, var(--color-accent-500) 5%, var(--color-surface-1)); }
   .selection-check, .selection-actions { display: flex; align-items: center; gap: 0.55rem; }
-  :global(.selection-actions button) { height: 1.75rem; font-size: 0.66rem; }
 
   .manager-error { border-bottom: 1px solid rgb(225 80 80 / 0.25); border-left: 2px solid var(--color-error); padding: 0.55rem 0.8rem; background: var(--color-error-muted); color: var(--color-error-text); font-size: 0.76rem; }
   .table-scroll { min-height: 0; flex: 1 1 auto; overflow: auto; scrollbar-gutter: stable; }
-  .downloads-grid { width: 100%; }
+  .downloads-grid { width: 100%; min-width: var(--download-grid-width); }
   .manager-state { display: flex; min-height: 10rem; align-items: center; justify-content: center; gap: 0.5rem; color: var(--color-text-muted); font-size: 0.78rem; }
   @media (max-width: 960px) {
     .manager-toolbar { align-items: flex-start; flex-direction: column; }
@@ -442,10 +441,15 @@
   }
 
   @media (max-width: 640px) {
-    .manager-shell { border-radius: var(--radius-sm, 6px) var(--radius-sm, 6px) 0 0; }
-    .status-filters { max-width: 100%; overflow-x: auto; }
-    .selection-bar { align-items: flex-start; flex-direction: column; }
-    .selection-actions { width: 100%; flex-wrap: wrap; }
-    :global(.expand-button) { display: none; }
+    .manager-shell { overflow: auto; border-radius: var(--radius-md); }
+    .manager-toolbar { gap: calc(var(--spacing) * 3); padding: calc(var(--spacing) * 3); }
+    .toolbar-controls { gap: calc(var(--spacing) * 3); }
+    .mobile-sort { display: flex; flex: none; gap: var(--spacing-control-gap); padding: 0 calc(var(--spacing) * 3) calc(var(--spacing) * 3); }
+    .mobile-sort > :global(:first-child) { flex: 1; }
+    :global(.columns-reset) { display: none; }
+    .selection-bar { flex-wrap: wrap; }
+    .selection-actions { flex-wrap: wrap; }
+    .table-scroll { flex: none; overflow: visible; scrollbar-gutter: auto; }
+    .downloads-grid { min-width: 0; }
   }
 </style>

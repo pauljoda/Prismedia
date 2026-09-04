@@ -126,8 +126,9 @@
       "download-row",
       selectionKey === selectedKey && "is-selected",
       isGroupRow && "is-group",
+      percent === null && "no-progress",
     ]}
-    style:grid-template-columns={columnTemplate}
+    style:--download-row-columns={columnTemplate}
     style:--tree-depth={rowDepth}
   >
     <Button
@@ -188,7 +189,7 @@
       </span>
     </div>
 
-    <div role="gridcell" class="size-cell mono-cell">{formatBytes(totalSize)}</div>
+    <div role="gridcell" class={["size-cell mono-cell", totalSize === 0 && "empty-metric"]}><span class="metric-label">Size</span>{formatBytes(totalSize)}</div>
     <div role="gridcell" class="progress-cell">
       <div class="progress-reading">
         <span class="progress-track" aria-hidden="true">
@@ -205,8 +206,8 @@
       <Badge variant={badgeVariant(tone)} class="status-badge">{statusLabel}</Badge>
       {#if entry?.item.clientLabel}<span class="client-label">{entry.item.clientLabel}</span>{/if}
     </div>
-    <div role="gridcell" class="speed-cell mono-cell">{formatSpeed(speed)}</div>
-    <div role="gridcell" class="eta-cell mono-cell">{formatEta(eta)}</div>
+    <div role="gridcell" class={["speed-cell mono-cell", speed === 0 && "empty-metric"]}><span class="metric-label">Speed</span>{formatSpeed(speed)}</div>
+    <div role="gridcell" class={["eta-cell mono-cell", eta === 0 && "empty-metric"]}><span class="metric-label">ETA</span>{formatEta(eta)}</div>
     <div role="gridcell" class="peers-cell mono-cell">{seeds || peers ? `${seeds} / ${peers}` : "—"}</div>
     <div role="gridcell" class="updated-cell mono-cell">{updatedAt ? formatRelativeTime(updatedAt, true) : "—"}</div>
   </div>
@@ -243,6 +244,7 @@
   .download-row {
     position: relative;
     display: grid;
+    grid-template-columns: var(--download-row-columns);
     min-width: 100%;
     min-height: 3.5rem;
     align-items: stretch;
@@ -255,7 +257,7 @@
   .download-row.is-group { background: rgb(255 255 255 / 0.014); }
   .download-row.is-selected {
     background: color-mix(in srgb, var(--color-accent-500, #c7c9cc) 8%, var(--color-surface-1));
-    box-shadow: inset 0 -2px 0 var(--color-accent-400, #c7c9cc);
+    box-shadow: inset 2px 0 0 var(--color-accent-400);
   }
 
   :global(.row-hit) {
@@ -316,6 +318,37 @@
   .status-cell { flex-direction: column; align-items: flex-start; justify-content: center; gap: 0.15rem; }
   :global(.status-badge) { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 0.65rem; }
   .client-label { max-width: 100%; overflow: hidden; color: var(--color-text-muted); font-family: var(--font-mono, "JetBrains Mono", monospace); font-size: 0.61rem; text-overflow: ellipsis; white-space: nowrap; }
+  .metric-label { display: none; }
+
+  @media (max-width: 640px) {
+    .download-row {
+      --download-indent: min(calc(var(--tree-depth) * var(--spacing) * 2), calc(var(--spacing) * 6));
+      grid-template-columns: var(--spacing-control-sm) repeat(3, minmax(0, 1fr));
+      gap: var(--spacing-control-gap-sm);
+      padding: calc(var(--spacing) * 3);
+    }
+    [role="gridcell"] { padding: 0; border: 0; }
+    .select-cell { grid-column: 1; grid-row: 1; }
+    .name-cell { grid-column: 2 / -1; grid-row: 1; gap: var(--spacing-control-gap-sm); }
+    .tree-indent { flex-basis: var(--download-indent); }
+    .expander-slot { flex-basis: var(--spacing-control-sm); }
+    :global(.expander) { width: var(--spacing-control-sm); height: var(--spacing-control-sm); }
+    .branch-mark { visibility: hidden; }
+    .row-artwork { flex-basis: calc(var(--spacing) * 10); width: calc(var(--spacing) * 10); }
+    .row-title { white-space: normal; overflow-wrap: anywhere; font-size: var(--text-control); }
+    .row-subtitle { font-size: var(--text-caption); }
+    .status-cell { grid-column: 2 / -1; grid-row: 2; flex-direction: row; flex-wrap: wrap; align-items: center; justify-content: flex-start; gap: var(--spacing-control-gap-sm); padding-left: calc(var(--download-indent) + var(--spacing-control-sm) + var(--spacing-control-gap-sm) * 2); }
+    :global(.status-badge) { font-size: var(--text-caption); white-space: normal; }
+    .client-label { font-size: var(--text-caption); }
+    .progress-cell { grid-column: 2 / -1; grid-row: 3; padding-left: calc(var(--download-indent) + var(--spacing-control-sm) + var(--spacing-control-gap-sm) * 2); }
+    .no-progress .progress-cell { display: none; }
+    .mono-cell { flex-direction: column; align-items: flex-start; gap: var(--spacing); font-size: var(--text-caption); }
+    .metric-label { display: block; font-family: var(--font-body); color: var(--color-text-muted); }
+    .size-cell { grid-column: 2; }
+    .speed-cell { grid-column: 3; }
+    .eta-cell { grid-column: 4; }
+    .empty-metric, .peers-cell, .updated-cell { display: none; }
+  }
 
   @keyframes transfer-sweep { from { transform: translateX(-85%); } to { transform: translateX(165%); } }
 

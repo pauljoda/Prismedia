@@ -103,6 +103,20 @@ describe("DownloadsPanel", () => {
     expect(title.closest('[data-slot="empty"]')).toBeInTheDocument();
   });
 
+  it("opens a mobile inspector and returns to the queue without losing the selected transfer", async () => {
+    const { container } = render(DownloadsPanel);
+    await screen.findByText("No transfer selected");
+    const workbench = container.querySelector(".downloads-workbench");
+    expect(workbench).not.toHaveClass("is-inspecting");
+    await fireEvent.click(screen.getByRole("button", { name: "Inspect first download" }));
+    expect(workbench).toHaveClass("is-inspecting");
+    expect(screen.getByRole("region", { name: "Selected download details" })).toHaveTextContent("download-1");
+    await fireEvent.click(screen.getByRole("button", { name: "Back to downloads" }));
+    expect(workbench).not.toHaveClass("is-inspecting");
+    expect(screen.getByRole("region", { name: "Selected download details" })).toHaveTextContent("download-1");
+    expect(mocks.deleteAcquisition).not.toHaveBeenCalled();
+  });
+
   it("continues bulk removal after a failure, reloads, and reports the partial result", async () => {
     render(DownloadsPanel);
 
