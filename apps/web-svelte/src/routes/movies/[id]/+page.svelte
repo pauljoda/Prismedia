@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Badge as UiBadge } from "@prismedia/ui-svelte";
   import { onMount } from "svelte";
   import { page } from "$app/state";
   import {
@@ -818,7 +819,7 @@
 
       {#snippet heroBadges()}
         {#if entityWanted}
-          <span class="hero-badge wanted">{wantedStateLabel}</span>
+          <UiBadge variant="outline">{wantedStateLabel}</UiBadge>
         {/if}
       {/snippet}
 

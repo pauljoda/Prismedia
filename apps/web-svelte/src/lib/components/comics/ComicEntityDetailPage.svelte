@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Badge as UiBadge } from "@prismedia/ui-svelte";
   import { goto } from "$app/navigation";
   import {
     BookOpen,
@@ -362,16 +363,16 @@
 
         {#snippet heroBadges()}
           {#if entityWanted}
-            <span class="hero-badge wanted">{wantedStateLabel}</span>
+            <UiBadge variant="outline">{wantedStateLabel}</UiBadge>
           {/if}
           {#if installmentMetadata}
-            <span class="hero-badge">{installmentKindLabel(installmentMetadata.installmentKind)}</span>
+            <UiBadge variant="outline">{installmentKindLabel(installmentMetadata.installmentKind)}</UiBadge>
           {/if}
           {#if seriesMetadata?.status}
-            <span class="hero-badge">{seriesMetadata.status}</span>
+            <UiBadge variant="outline">{seriesMetadata.status}</UiBadge>
           {/if}
           {#if pageSequence}
-            <span class="hero-badge">{numberValue(pageSequence.pageCount) ?? 0} pages</span>
+            <UiBadge variant="outline">{numberValue(pageSequence.pageCount) ?? 0} pages</UiBadge>
           {/if}
         {/snippet}
 

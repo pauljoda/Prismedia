@@ -205,7 +205,7 @@
       href={resolve(tab.href as "/")}
       aria-current={active ? "page" : undefined}
       class={cn(
-        "flex flex-1 flex-col items-center justify-center gap-1 px-2 py-2 text-[0.65rem] transition-colors duration-fast",
+        "flex min-h-control-lg flex-1 flex-col items-center justify-center gap-1 px-2 py-2 text-caption transition-colors duration-fast",
         active ? "mobile-item-active" : "text-text-disabled hover:text-text-muted",
       )}
       style:--nav-accent={tab.accent}

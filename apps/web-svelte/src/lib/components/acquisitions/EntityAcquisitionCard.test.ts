@@ -15,6 +15,21 @@ vi.mock("$lib/components/entities/ConfirmDialog.svelte", async () => ({
 describe("EntityAcquisitionCard", () => {
   afterEach(cleanup);
 
+  it("anchors file deletion inside the idle monitoring card footer", () => {
+    render(Harness, {
+      initialAcquisition: null,
+      refresh: vi.fn(async () => {}),
+      showMonitor: true,
+      showFileManagement: true,
+    });
+
+    const action = screen.getByRole("button", { name: "Delete files" });
+    expect(action.closest('[data-slot="card-footer"]')).not.toBeNull();
+    expect(action).toHaveClass("w-full", "justify-start");
+    expect(action).not.toHaveClass("ml-auto");
+    expect(screen.getAllByRole("button", { name: "Delete files" })).toHaveLength(1);
+  });
+
   it("keeps managed file deletion in the Entity acquisition toolbar without an acquisition row", () => {
     render(Harness, {
       initialAcquisition: null,

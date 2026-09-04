@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Badge as UiBadge } from "@prismedia/ui-svelte";
   import {
     BOOK_FORMAT,
     CAPABILITY_KIND,
@@ -1049,10 +1050,10 @@
 
       {#snippet heroBadges()}
         {#if entityWanted}
-          <span class="hero-badge wanted">{wantedStateLabel}</span>
+          <UiBadge variant="outline">{wantedStateLabel}</UiBadge>
         {/if}
         {#if canonicalPercent > 0}
-          <span class="hero-badge">Progress {canonicalPercent}%</span>
+          <UiBadge variant="outline">Progress {canonicalPercent}%</UiBadge>
         {/if}
       {/snippet}
 

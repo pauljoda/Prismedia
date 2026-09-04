@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Badge } from "@prismedia/ui-svelte";
   import OverflowTicker from "$lib/components/OverflowTicker.svelte";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
   import { thumbnailMetaAccentForIcon } from "$lib/entities/entity-accent";
@@ -37,14 +38,15 @@
     {#if card.meta?.length}
       <div class="chips">
         {#each card.meta.slice(0, 5) as item (item.icon + item.label)}
-          <span
+          <Badge
+            variant="outline"
             class="chip"
-            style:--thumbnail-meta-accent={thumbnailMetaAccentForIcon(item.icon)}
+            style={`--thumbnail-meta-accent: ${thumbnailMetaAccentForIcon(item.icon)}`}
             aria-label={`${item.icon} ${item.label}`}
           >
             <EntityThumbnailIcon icon={item.icon} />
             {item.label}
-          </span>
+          </Badge>
         {/each}
       </div>
     {/if}
@@ -75,7 +77,7 @@
     overflow: hidden;
     color: var(--color-text, #f4efe6);
     font-family: var(--font-heading, Geist, sans-serif);
-    font-size: 0.875rem;
+    font-size: var(--text-control);
     font-weight: 600;
     line-height: 1.25;
     letter-spacing: -0.01em;
@@ -83,7 +85,7 @@
     white-space: nowrap;
   }
 
-  .title-size-compact { font-size: 0.8125rem; font-weight: 600; line-height: 1.25; }
+  .title-size-compact { font-size: var(--text-label); font-weight: 600; line-height: 1.25; }
   .title-align-left { text-align: left; }
   .title-align-center { text-align: center; }
   .title-align-right { text-align: right; }
@@ -93,7 +95,7 @@
     margin: 0;
     color: var(--color-text-muted, #8a93a6);
     font-family: var(--font-body, Inter, sans-serif);
-    font-size: 0.75rem;
+    font-size: var(--text-caption);
     line-height: 1.35;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -104,29 +106,8 @@
   .custom-subtitle.title-align-center { justify-content: center; }
   .custom-subtitle.title-align-right { justify-content: flex-end; }
 
-  .chips { display: flex; flex-wrap: nowrap; gap: 0.25rem; margin-top: 0.2rem; overflow: hidden; }
-  .chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.2rem;
-    flex: 0 1 auto;
-    min-width: 0;
-    max-width: 100%;
-    min-height: 1.25rem;
-    overflow: hidden;
-    border: 1px solid color-mix(in srgb, var(--thumbnail-meta-accent) 22%, var(--color-border-subtle, transparent));
-    border-radius: var(--radius-sm, 6px);
-    background: color-mix(in srgb, var(--thumbnail-meta-accent) 7%, var(--color-surface-2, transparent));
-    color: var(--color-text-secondary, #c4c9d4);
-    font-family: var(--font-body, Inter, sans-serif);
-    font-size: 0.6875rem;
-    font-weight: 500;
-    line-height: 1;
-    padding: 0.125rem 0.35rem;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .chip :global(svg) { flex: 0 0 auto; color: var(--thumbnail-meta-accent); }
+  .chips { display: flex; flex-wrap: wrap; gap: var(--spacing-control-gap-sm); margin-top: var(--spacing-control-gap-sm); }
+  .chips :global(.chip svg) { color: var(--thumbnail-meta-accent); }
 
   :global(.entity-thumbnail.is-list) .thumbnail-caption {
     flex: 1 1 0;
@@ -145,16 +126,12 @@
 
   @container (max-width: 220px) {
     .thumbnail-caption { gap: 0.125rem; padding: 0 0.25rem; }
-    h3 { font-size: 0.8125rem; }
-    .chips { gap: 0.15rem; }
-    .chip { min-height: 1.125rem; padding: 0.125rem 0.25rem; font-size: 0.625rem; }
-    .chip:nth-child(n + 4) { display: none; }
+    h3 { font-size: var(--text-label); }
   }
 
   @container (max-width: 140px) {
     .thumbnail-caption { gap: 0.1rem; padding: 0 0.2rem; }
-    h3 { font-size: 0.75rem; }
+    h3 { font-size: var(--text-caption); }
     .subtitle { display: none; }
-    .chip:nth-child(n + 2) { display: none; }
   }
 </style>

@@ -168,6 +168,37 @@ Use the shared radius scale: `4`, `6`, `10`, `14`, `18`, and `24px`. Controls mu
 
 ## Interaction and accessibility
 
+### Shared control scale
+
+Web control tokens are defined in `apps/web-svelte/src/app.css`. Components in
+`packages/ui-svelte` consume these tokens through their size variants. Use the
+variant instead of setting a different height, font size, or padding per page.
+The rem values respect the user's type scale.
+
+| Token | Size | Use |
+| --- | --- | --- |
+| `control-xs` | 1.75rem | Dense auxiliary controls |
+| `control-sm` | 2rem | Compact rows and secondary actions |
+| `control` | 2.25rem | Standard buttons, inputs, selects, and toggles |
+| `control-lg` | 2.75rem | Entity page actions |
+| `badge` | 1.5rem minimum | Static metadata, counts, and statuses |
+
+Use `text-control`, `text-label`, and `text-caption` for standard controls,
+compact labels, and metadata respectively. `control-gap` and `control-gap-sm`
+define spacing inside control groups. Keep semantic tokens registered in the
+shared class-merging utility so ordinary layout overrides replace them correctly.
+
+- Interactive tags use button styling. Static counts use Badge, with neutral
+  text and restrained colored icons. Do not shrink captions to fit a thumbnail.
+- Related entities retain full normal thumbnails, even when a group has one item.
+- On mobile, Entity page actions form a labeled two-column grid below the
+  artwork and title. At narrow widths, ratings move to their own full-width row.
+- Acquisition work and monitoring settings align at the top on wide screens and
+  stack on narrow screens. File actions belong inside a card, not in the space
+  between cards. Child activity opens initially when it is the only work shown.
+
+### Behavior
+
 - Every primary action works without hover.
 - Focus is visible through shape, border, and motion as well as color.
 - Text and controls meet contrast requirements over both artwork and glass.

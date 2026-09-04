@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { ToggleButton } from "@prismedia/ui-svelte";
+  import { Badge, buttonVariants, cn, ToggleButton } from "@prismedia/ui-svelte";
   import StarRatingPicker from "../StarRatingPicker.svelte";
   import { CheckCircle, ExternalLink, Flame, Heart, Pencil, PencilOff } from "@lucide/svelte";
   import type { Snippet } from "svelte";
@@ -72,21 +72,21 @@
           href={card.providerIdentity.url}
           target="_blank"
           rel="noopener noreferrer"
-          class="hero-badge provider-identity-chip"
+          class={cn(buttonVariants({ variant: "outline", size: "default" }), "min-w-0 max-w-full")}
           title={providerIdentityTitle}
           aria-label={`${providerIdentityTitle}. Opens provider in a new tab.`}
         >
-          <span class="provider-identity-label">{providerIdentityLabel}</span>
-          <ExternalLink class="provider-identity-link-icon h-3 w-3" aria-hidden="true" />
+          <span class="truncate">{providerIdentityLabel}</span>
+          <ExternalLink data-icon="inline-end" aria-hidden="true" />
         </a>
       {:else}
-        <span
-          class="hero-badge provider-identity-chip"
+        <Badge
+          variant="outline"
           title={providerIdentityTitle}
           aria-label={providerIdentityTitle}
         >
-          <span class="provider-identity-label">{providerIdentityLabel}</span>
-        </span>
+          <span class="truncate">{providerIdentityLabel}</span>
+        </Badge>
       {/if}
     {/if}
     {#if heroBadges}
@@ -99,18 +99,18 @@
   <div class="action-row">
     <div class="action-badges">
       {#if showFlagActions}
-        <ToggleButton variant="outline" size="sm" class="size-7 p-0 data-[state=on]:text-[#e06070]" bind:pressed={() => isFavorite, () => onFavoriteToggle?.()} disabled={!onFavoriteToggle} aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
+        <ToggleButton variant="outline" class="size-control p-0 data-[state=on]:text-error-text" bind:pressed={() => isFavorite, () => onFavoriteToggle?.()} disabled={!onFavoriteToggle} aria-label={isFavorite ? "Remove from favorites" : "Add to favorites"}
         >
           <Heart class="h-4 w-4" />
         </ToggleButton>
 
         {#if isNsfw}
-          <span class="action-badge nsfw active" aria-label="NSFW">
-            <Flame class="h-4 w-4" />
-          </span>
+          <Badge variant="error" aria-label="NSFW">
+            <Flame /> NSFW
+          </Badge>
         {/if}
 
-        <ToggleButton variant="outline" size="sm" class="size-7 p-0 data-[state=on]:text-[#80b898]" bind:pressed={() => isOrganized, () => onOrganizedToggle?.()} disabled={!onOrganizedToggle} aria-label={isOrganized ? "Mark as unorganized" : "Mark as organized"}
+        <ToggleButton variant="outline" class="size-control p-0 data-[state=on]:text-success-text" bind:pressed={() => isOrganized, () => onOrganizedToggle?.()} disabled={!onOrganizedToggle} aria-label={isOrganized ? "Mark as unorganized" : "Mark as organized"}
         >
           <CheckCircle class="h-4 w-4" />
         </ToggleButton>
@@ -188,7 +188,7 @@
 <style>
   .rating-row {
     display: flex;
-    gap: 0.15rem;
+    gap: var(--spacing-control-gap-sm);
   }
 
 
@@ -196,80 +196,23 @@
   .position-badges {
     display: flex;
     align-items: center;
-    gap: 0.45rem;
+    gap: var(--spacing-control-gap);
     flex-wrap: wrap;
   }
-
-  :global(.hero-badge.wanted) {
-    color: var(--color-text-accent, #c7c9cc);
-    border-color: color-mix(in srgb, var(--color-text-accent, #c7c9cc) 45%, transparent);
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
-  }
-
-  :global(.hero-badge) {
-    display: inline-flex;
-    align-items: center;
-    min-height: 1.45rem;
-    padding: 0.2rem 0.62rem;
-    border: 1px solid rgba(199, 201, 204, 0.38);
-    border-radius: var(--radius-xs);
-    background:
-      linear-gradient(135deg, rgba(199, 201, 204, 0.11), rgba(255, 255, 255, 0.03)),
-      color-mix(in srgb, var(--color-surface-2) 82%, var(--color-accent-900) 18%);
-    box-shadow:
-      inset 0 1px 0 rgba(255, 255, 255, 0.06),
-      0 0 8px rgba(199, 201, 204, 0.08);
-    color: var(--color-accent-100);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.68rem;
-    font-weight: 700;
-    letter-spacing: 0.08em;
-    line-height: 1;
-    text-transform: uppercase;
-    text-shadow: 0 0 6px rgba(199, 201, 204, 0.16);
-  }
-
-  .provider-identity-chip {
-    gap: 0.35rem;
-    min-width: 0;
-    max-width: 100%;
-    text-decoration: none;
-    text-transform: none;
-  }
-
-  a.provider-identity-chip { transition: border-color 0.15s, box-shadow 0.15s, color 0.15s; }
-
-  a.provider-identity-chip:hover,
-  a.provider-identity-chip:focus-visible {
-    border-color: color-mix(in srgb, var(--detail-accent) 68%, transparent);
-    box-shadow: inset 0 1px 0 rgba(255, 255,255, 0.08);
-    color: var(--detail-accent);
-    outline: none;
-  }
-
-  .provider-identity-label {
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-
-  :global(.provider-identity-link-icon) { flex: 0 0 auto; }
 
   .action-row {
     display: flex;
     flex-wrap: wrap;
     align-items: flex-start;
     justify-content: space-between;
-    gap: 0.5rem;
+    gap: var(--spacing-control-gap);
     width: 100%;
   }
 
   .action-badges {
     display: flex;
     align-items: center;
-    gap: 0.35rem;
+    gap: var(--spacing-control-gap);
   }
 
   .action-group {
@@ -279,56 +222,40 @@
     min-width: 0;
     align-items: center;
     justify-content: flex-end;
-    gap: 0.625rem;
+    gap: var(--spacing-control-gap);
     margin-left: auto;
   }
 
-  .action-badge {
-    display: grid;
-    place-items: center;
-    width: 1.75rem;
-    height: 1.75rem;
-    padding: 0;
-    border: 1px solid var(--detail-border);
-    border-radius: var(--radius-xs, 4px);
-    background: rgba(255, 255, 255, 0.04);
-    color: var(--detail-text-disabled);
-    cursor: pointer;
-    transition: color 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.2s;
-  }
-
-  .action-badge.nsfw {
-    cursor: default;
-    color: #e06070;
-    border-color: rgba(224, 96, 112, 0.5);
-    box-shadow: 0 0 8px rgba(224, 96, 112, 0.15);
-    user-select: none;
-    -webkit-user-select: none;
-    pointer-events: none;
-  }
-
-
-
-
-  @media (max-width: 480px) {
-    .rating-row { grid-area: rating; }
+  @media (max-width: 767px) {
+    .rating-row { grid-column: var(--detail-text-column, 2); grid-row: 3; min-width: 0; }
     .position-badges {
-      grid-area: badges;
+      grid-column: var(--detail-text-column, 2);
+      grid-row: 4;
       justify-self: stretch;
       justify-content: flex-start;
       width: 100%;
     }
     .action-row {
-      grid-area: actions;
-      align-items: center;
-      gap: 0.35rem;
+      grid-column: 1 / -1;
+      grid-row: 5;
+      flex-direction: column;
+      align-items: stretch;
+      gap: var(--spacing-control-gap);
+      margin-top: var(--spacing-control-gap);
     }
     .action-badges { justify-self: start; }
     .action-group {
-      flex-wrap: wrap;
-      justify-content: flex-end;
-      gap: 0.5rem;
-      width: auto;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--spacing-control-gap);
+      width: 100%;
+      margin-left: 0;
     }
+    .action-group :global(.entity-detail-action),
+    .action-group :global(.entity-action-flyout-host) { width: 100%; min-width: 0; }
+    .action-group > :global(:last-child:nth-child(odd)) { grid-column: 1 / -1; }
+  }
+  @media (max-width: 400px) {
+    .rating-row, .position-badges { grid-column: 1 / -1; }
   }
 </style>

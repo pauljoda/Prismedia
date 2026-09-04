@@ -77,7 +77,7 @@ describe("EntityDetail", () => {
     });
 
     const action = screen.getByRole("button", { name: "Play All" });
-    expect(action).toHaveClass("h-11", "gap-2", "px-4");
+    expect(action).toHaveClass("h-control-lg", "gap-control-gap", "px-control-pad-lg");
     await fireEvent.click(action);
 
     expect(onClick).toHaveBeenCalledOnce();
@@ -113,7 +113,7 @@ describe("EntityDetail", () => {
     );
     expect(chip.textContent?.trim()).toBe("metadata-router");
     expect(chip).not.toHaveTextContent("Show:AbC:01:5");
-    expect(chip).toHaveClass("provider-identity-chip");
+    expect(chip).toHaveClass("h-control", "border-border");
     expect(screen.getByText("Wanted")).toBeInTheDocument();
     expect(container.querySelector(".position-badges")?.children).toHaveLength(2);
   });

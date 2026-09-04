@@ -23,6 +23,6 @@
   let { variant = "default", class: className, children, ...rest }: Props = $props();
 </script>
 
-<BaseBadge class={cn(badgeVariants({ variant }), className)} {...rest}>
+<BaseBadge variant={variant === "default" ? "secondary" : variant === "accent" ? "default" : variant} class={cn(className)} {...rest}>
   {@render children?.()}
 </BaseBadge>

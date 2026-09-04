@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Badge, badgeVariants, cn } from "@prismedia/ui-svelte";
+  import { Badge, buttonVariants, cn } from "@prismedia/ui-svelte";
   import type { EntityDetailTag } from "$lib/entities/entity-detail";
 
   interface Props {
@@ -15,7 +15,7 @@
     <span class="tags-label">{label}</span>
     {#each tags as tag (tag.id)}
       {#if tag.href}
-        <a class={cn(badgeVariants({ variant: "outline" }), "tag-link")} href={tag.href}>{tag.title}</a>
+        <a class={cn(buttonVariants({ variant: "outline", size: "sm" }), "tag-link")} href={tag.href}>{tag.title}</a>
       {:else}
         <Badge variant="outline">{tag.title}</Badge>
       {/if}
@@ -28,13 +28,13 @@
     display: flex;
     align-items: center;
     flex-wrap: wrap;
-    gap: 0.4rem;
+    gap: var(--spacing-control-gap);
     padding-top: 0.35rem;
   }
 
   .tags-label {
     font-family: var(--font-heading, Geist, sans-serif);
-    font-size: 0.8125rem;
+    font-size: var(--text-label);
     font-weight: 600;
     letter-spacing: -0.01em;
     color: var(--detail-text-secondary);

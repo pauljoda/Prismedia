@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Badge as UiBadge } from "@prismedia/ui-svelte";
   import { THUMBNAIL_HOVER_KIND } from "$lib/api/generated/codes";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
@@ -359,10 +360,10 @@
 
       {#snippet heroBadges()}
         {#if collectionConfiguration?.mode}
-          <span class="hero-badge">{collectionConfiguration.mode}</span>
+          <UiBadge variant="outline">{collectionConfiguration.mode}</UiBadge>
         {/if}
         {#if collectionConfiguration?.isShared}
-          <span class="hero-badge">shared</span>
+          <UiBadge variant="outline">shared</UiBadge>
         {/if}
       {/snippet}
 

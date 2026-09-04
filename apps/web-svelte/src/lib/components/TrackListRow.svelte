@@ -267,6 +267,7 @@
       <span class="font-mono text-[0.66rem] text-text-disabled">—</span>
     {:else}
       <StarRatingPicker
+        size="sm"
         value={track.rating}
         onChange={onRatingChange ? (v) => onRatingChange!(track.id, v) : undefined}
         readOnly={!onRatingChange}
@@ -338,7 +339,7 @@
     grid-template-columns: auto minmax(0, 1fr) auto auto;
     grid-template-areas:
       "index title  title  actions"
-      "index rating time   actions";
+      "rating rating time time";
     align-items: center;
     column-gap: 0.75rem;
     row-gap: 0.45rem;
@@ -354,21 +355,21 @@
     grid-template-columns: auto auto minmax(0, 1fr) auto auto;
     grid-template-areas:
       "select index title  title  actions"
-      "select index rating time   actions";
+      "rating rating rating time time";
   }
 
   .track-row.has-artwork {
     grid-template-columns: auto 2.75rem minmax(0, 1fr) auto auto;
     grid-template-areas:
       "index artwork title  title  actions"
-      "index artwork rating time   actions";
+      "rating rating rating time time";
   }
 
   .track-row.has-selection.has-artwork {
     grid-template-columns: auto auto 2.75rem minmax(0, 1fr) auto auto;
     grid-template-areas:
       "select index artwork title  title  actions"
-      "select index artwork rating time   actions";
+      "rating rating rating rating time time";
   }
 
   .selection-cell { grid-area: select; justify-self: start; align-self: start; padding-top: 0.35rem; }

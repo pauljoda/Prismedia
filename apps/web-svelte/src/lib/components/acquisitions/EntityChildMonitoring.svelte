@@ -1,7 +1,7 @@
 <script lang="ts">
   import { untrack } from "svelte";
   import { ChevronDown, Layers, Loader2 } from "@lucide/svelte";
-  import { Button, Toggle, cn } from "@prismedia/ui-svelte";
+  import { Badge, Button, Toggle, cn } from "@prismedia/ui-svelte";
   import { ACQUISITION_STATUS, ENTITY_KIND } from "$lib/api/generated/codes";
   import type {
     AcquisitionSummary,
@@ -51,14 +51,17 @@
   let {
     cards,
     onChanged,
+    initiallyExpanded = false,
   }: {
     /** Direct child Entities managed by this parent, regardless of medium. */
     cards: EntityThumbnailCard[];
+    /** Show child work immediately when it is the primary acquisition content. */
+    initiallyExpanded?: boolean;
     /** Refreshes the owning Entity graph after monitoring creates or removes wanted children. */
     onChanged?: () => void | Promise<void>;
   } = $props();
 
-  let open = $state(untrack(() => cards.some(cardHasActiveAcquisition)));
+  let open = $state(untrack(() => initiallyExpanded || cards.some(cardHasActiveAcquisition)));
   let loading = $state(false);
   let bulkBusy = $state(false);
   let busyIds = $state.raw<string[]>([]);
@@ -445,20 +448,20 @@
       type="button"
       variant="ghost"
       size="md"
-      class="h-auto w-full cursor-pointer justify-between rounded-none border-0 bg-transparent px-[0.8rem] py-[0.7rem] text-text-primary"
+      class="h-auto min-h-control-lg w-full cursor-pointer justify-between rounded-none px-control-pad py-2"
       aria-expanded={open}
       onclick={expand}
     >
       <span class="header-title">
         <Layers class="h-4 w-4 text-text-accent" />
         {sectionTitle}
-        <span class="header-count">{cards.length}</span>
-        {#if activityCounts.downloading > 0}<span class="active-count downloading">{activityCounts.downloading} downloading</span>{/if}
-        {#if activityCounts.preparing > 0}<span class="active-count">{activityCounts.preparing} preparing</span>{/if}
-        {#if activityCounts.searching > 0}<span class="active-count">{activityCounts.searching} searching</span>{/if}
-        {#if activityCounts.importing > 0}<span class="active-count">{activityCounts.importing} importing</span>{/if}
+        <Badge variant="secondary">{cards.length}</Badge>
+        {#if activityCounts.downloading > 0}<Badge variant="success">{activityCounts.downloading} downloading</Badge>{/if}
+        {#if activityCounts.preparing > 0}<Badge variant="secondary">{activityCounts.preparing} preparing</Badge>{/if}
+        {#if activityCounts.searching > 0}<Badge variant="secondary">{activityCounts.searching} searching</Badge>{/if}
+        {#if activityCounts.importing > 0}<Badge variant="secondary">{activityCounts.importing} importing</Badge>{/if}
         {#if activeAcquisitionCount > 0 && Object.values(activityCounts).every((count) => count === 0)}
-          <span class="active-count">{activeAcquisitionCount} active</span>
+          <Badge variant="secondary">{activeAcquisitionCount} active</Badge>
         {/if}
       </span>
       <ChevronDown class={cn("h-4 w-4 text-text-muted transition-transform", open && "rotate-180")} />
@@ -467,9 +470,7 @@
     {#if open}
       <div class="body">
         <p class="activity-help">
-          Downloads and search progress appear here. Requested children prepare their search metadata
-          before searching. Monitoring controls future searches and retries, so activity can continue
-          while a switch is off.
+          Monitoring controls future searches and retries. Turning it off does not stop active downloads.
         </p>
         <div class="toolbar">
           <span class="toolbar-label">{childLabel}</span>
@@ -552,54 +553,38 @@
   }
   .header-title {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
     gap: 0.5rem;
     min-width: 0;
     font-family: var(--font-heading);
-    font-size: 0.82rem;
+    font-size: var(--text-control);
     font-weight: 600;
   }
-  .header-count,
-  .active-count,
   .toolbar-label,
   .row-status {
     font-family: var(--font-mono);
-    font-size: 0.66rem;
+    font-size: var(--text-caption);
   }
-  .header-count,
   .row-status {
     color: var(--color-text-muted);
   }
-  .active-count {
-    padding: 0.15rem 0.35rem;
-    border: 1px solid color-mix(in srgb, var(--color-text-accent) 28%, transparent);
-    border-radius: var(--radius-xs);
-    color: var(--color-text-accent);
-    font-size: 0.6rem;
-    font-weight: 600;
-    letter-spacing: 0.03em;
-    text-transform: uppercase;
-  }
-  .active-count.downloading {
-    border-color: color-mix(in srgb, var(--color-success, #22c55e) 38%, transparent);
-    color: var(--color-success-text, #86efac);
-  }
   .body {
     display: grid;
-    gap: 0.65rem;
-    padding: 0 0.8rem 0.8rem;
+    gap: var(--spacing-control-gap);
+    padding: 0 var(--spacing-control-pad) var(--spacing-control-pad);
   }
   .toolbar {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
-    gap: 0.35rem;
+    gap: var(--spacing-control-gap-sm);
   }
   .activity-help {
     margin: 0;
     max-width: 68rem;
     color: var(--color-text-muted);
-    font-size: 0.72rem;
+    font-size: var(--text-caption);
     line-height: 1.45;
   }
   .toolbar-label {
@@ -622,7 +607,7 @@
     align-items: center;
     gap: 0.75rem;
     min-width: 0;
-    padding: 0.55rem 0.65rem;
+    padding: var(--spacing-control-gap) var(--spacing-control-pad);
     border-bottom: 1px solid var(--color-border-subtle);
   }
   .row:last-child {
@@ -637,7 +622,7 @@
   .row-title {
     overflow: hidden;
     color: var(--color-text-primary);
-    font-size: 0.8rem;
+    font-size: var(--text-control);
     font-weight: 500;
     text-decoration: none;
     text-overflow: ellipsis;
@@ -654,12 +639,12 @@
     align-items: center;
     gap: 0.5rem;
     color: var(--color-text-muted);
-    font-size: 0.78rem;
+    font-size: var(--text-label);
   }
   .message {
     margin: 0;
     color: var(--color-text-muted);
-    font-size: 0.72rem;
+    font-size: var(--text-caption);
   }
   .message.error {
     color: var(--color-error-text, #f87171);

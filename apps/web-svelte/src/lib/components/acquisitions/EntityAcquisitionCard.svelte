@@ -104,6 +104,17 @@
   );
 </script>
 
+{#snippet managedFileAction()}
+  {#if entity && fileManagement}
+    <EntityFileManagementAction
+      {entity}
+      onDeleted={fileManagement.onDeleted}
+      onReverted={fileManagement.onReverted}
+      compact
+    />
+  {/if}
+{/snippet}
+
 {#if acq.visible}
   <section class="acquisition-card">
     <div class:has-primary={hasPrimaryContent} class="acquisition-layout">
@@ -144,6 +155,7 @@
           {#if acq.childCards.length > 0}
             <EntityChildMonitoring
               cards={acq.childCards}
+              initiallyExpanded={!showAcquisitionPanel || !acq.acquisition}
               onChanged={acq.childMonitoringChanged}
             />
           {/if}
@@ -151,19 +163,12 @@
       {/if}
 
       <aside class="acquisition-settings" aria-label="Acquisition settings">
-        {#if !monitorExpanded && acq.showFileManagement && entity && fileManagement}
-          <div class="flex justify-end">
-            <EntityFileManagementAction
-              {entity}
-              onDeleted={fileManagement.onDeleted}
-              onReverted={fileManagement.onReverted}
-              compact
-            />
-          </div>
-        {/if}
-
         {#if showEntityRequestControls && acq.showMonitor}
-          <EntityMonitorControl {acq} kindInfo={monitorKindInfo} />
+          <EntityMonitorControl
+            {acq}
+            kindInfo={monitorKindInfo}
+            footer={!monitorExpanded && acq.showFileManagement && entity && fileManagement ? managedFileAction : undefined}
+          />
         {/if}
 
         {#if acq.monitorError}

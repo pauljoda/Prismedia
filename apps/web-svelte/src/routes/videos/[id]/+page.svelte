@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Badge as UiBadge } from "@prismedia/ui-svelte";
   import { onMount } from "svelte";
   import { beforeNavigate, goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -882,7 +883,7 @@
       sections={detailSections}
     >
       {#snippet heroBadges()}
-        <span class="hero-badge wanted">{wantedStateLabel}</span>
+        <UiBadge variant="outline">{wantedStateLabel}</UiBadge>
       {/snippet}
 
       {#snippet sectionContent(section)}

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Badge as UiBadge } from "@prismedia/ui-svelte";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -311,7 +312,7 @@
 
       {#snippet heroBadges()}
         {#if galleryMetadata?.galleryType}
-          <span class="hero-badge">{galleryMetadata.galleryType}</span>
+          <UiBadge variant="outline">{galleryMetadata.galleryType}</UiBadge>
         {/if}
       {/snippet}
 

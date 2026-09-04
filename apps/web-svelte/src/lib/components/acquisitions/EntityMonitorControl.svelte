@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Loader2, RefreshCw } from "@lucide/svelte";
   import { Button, Card, Toggle } from "@prismedia/ui-svelte";
+  import type { Snippet } from "svelte";
   import type { EntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
   import RequestTargetOptions from "$lib/components/acquisitions/RequestTargetOptions.svelte";
   import type { RequestKindInfo } from "$lib/requests/request-helpers";
@@ -8,9 +9,12 @@
   let {
     acq,
     kindInfo,
+    footer,
   }: {
     acq: EntityAcquisition;
     kindInfo?: RequestKindInfo | null;
+    /** Contextual file actions, kept below monitoring rather than above its heading. */
+    footer?: Snippet;
   } = $props();
 
   let profileId = $state<string | null>(null);
@@ -109,6 +113,7 @@
       {#if kindInfo}
         <RequestTargetOptions
           {kindInfo}
+          stacked
           bind:targetLibraryRootId
           bind:profileId
         >
@@ -117,10 +122,10 @@
               <Button
                 type="button"
                 variant="secondary"
-                size="sm"
+                size="md"
                 disabled={acq.monitorBusy || !targetingDirty}
                 onclick={() => void acq.updateMonitorTargeting({ profileId, targetLibraryRootId })}
-                class="no-lift"
+                class="no-lift w-full"
               >
                 Apply
               </Button>
@@ -129,5 +134,10 @@
         </RequestTargetOptions>
       {/if}
     </Card.Content>
+  {/if}
+  {#if footer}
+    <Card.Footer class="border-t border-border-subtle">
+      {@render footer()}
+    </Card.Footer>
   {/if}
 </Card.Root>

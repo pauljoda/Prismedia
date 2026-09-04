@@ -11,6 +11,7 @@ describe("shared rating control", () => {
     expect(screen.getByRole("button", { name: "Rate track with 3 star rating" })).toHaveAttribute(
       "aria-pressed", "true",
     );
+    expect(screen.getByRole("button", { name: "Rate track with 3 star rating" })).toHaveClass("size-control");
     await fireEvent.click(screen.getByRole("button", { name: "Rate track with 4 star rating" }));
     expect(onChange).toHaveBeenCalledWith(4);
   });

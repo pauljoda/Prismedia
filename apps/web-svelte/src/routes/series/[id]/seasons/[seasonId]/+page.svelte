@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Badge as UiBadge } from "@prismedia/ui-svelte";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import EntityGridSection from "$lib/components/entities/EntityGridSection.svelte";
   import { goto } from "$app/navigation";
@@ -269,10 +270,10 @@
 
       {#snippet heroBadges()}
         {#if seasonWanted}
-          <span class="hero-badge wanted">{wantedStateLabel}</span>
+          <UiBadge variant="outline">{wantedStateLabel}</UiBadge>
         {/if}
         {#if seasonNumber != null}
-          <span class="hero-badge">S{String(seasonNumber).padStart(2, "0")}</span>
+          <UiBadge variant="outline">S{String(seasonNumber).padStart(2, "0")}</UiBadge>
         {/if}
       {/snippet}
 

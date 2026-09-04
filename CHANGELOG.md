@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Entity controls and metadata chips now share readable sizes and spacing. Mobile detail actions keep their labels in an aligned grid below the artwork, and related entities retain full thumbnails.
 - Entity page actions now have larger touch targets and more breathing room. Library heading icons show their media-family color, while detail pages carry artwork colors into the active tab and a clearer background atmosphere.
 - Related-content sections now share consistent headings, counts, and empty states across artists, authors, albums, galleries, series, and seasons. Collapsed sections remember the correct preference when navigating between entities.
 - Track lists now prioritize titles and artists, keep play controls separate from row numbers, and only flag missing media. The Tracks library uses continuous numbering without album disc headings, with shared search and empty-state controls.
@@ -51,6 +52,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Metadata chips no longer combine a white background with light text. Mobile navigation icons align consistently, track ratings no longer overlap durations, and acquisition file actions stay inside their card instead of floating between sections.
 - Library searches with no matches now offer a direct reset instead of incorrectly saying the library is empty and asking you to scan folders. Reset preserves sorting and display preferences.
 - Global search no longer shows an older request's results after the query changes or activates a result when Enter is used on Clear.
 - Video playback shortcuts no longer also react to keys used by tabs, menus, sliders, or other focused controls.

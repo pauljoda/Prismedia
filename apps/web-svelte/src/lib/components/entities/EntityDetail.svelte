@@ -637,7 +637,7 @@
   >
 
     {#snippet heroContent()}
-      <div class="hero-content">
+      <div class="hero-content" class:has-poster={posterVisible}>
         {#if posterVisible}
           <div
             class="poster-frame"
@@ -764,6 +764,7 @@
           <Tabs.Trigger
             value={tab.id}
             id={`entity-detail-tab-${tab.id}`}
+            class="max-sm:group-data-[variant=line]/tabs-list:px-2"
           >
             {#if TabIcon}
               <TabIcon class="detail-tab-icon h-3.5 w-3.5" />
@@ -1195,50 +1196,49 @@
     align-self: flex-end;
   }
 
-  @media (max-width: 480px) {
+  @media (max-width: 767px) {
     .hero-content {
-      flex-direction: column;
-      align-items: stretch;
-      gap: 0.85rem;
-      padding: 1.25rem;
-      padding-top: 1.75rem;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+      align-items: start;
+      column-gap: var(--spacing-control-pad-lg);
+      row-gap: var(--spacing-control-gap);
     }
 
     .hero[data-hero-mode="image"] .hero-content {
       padding-top: calc(1.25rem - var(--hero-lower-overlap));
     }
 
-    [data-poster-size="small"] .poster-frame { --poster-width: min(10rem, 68vw); }
-    [data-poster-size="medium"] .poster-frame { --poster-width: min(11rem, 72vw); }
-    [data-poster-size="large"] .poster-frame { --poster-width: min(12rem, 76vw); }
-
     .poster-frame {
+      grid-column: 1;
+      grid-row: 1 / span 4;
       align-self: center;
-    }
-
-    .hero-text {
-      align-self: stretch;
-      grid-template-columns: minmax(0, 1fr) auto;
-      grid-template-areas:
-        "title title"
-        "meta meta"
-        "rating rating"
-        "badges badges"
-        "actions actions";
-      align-items: center;
-      column-gap: 0.75rem;
-      row-gap: 0.35rem;
       width: 100%;
     }
 
+    .hero-text {
+      display: contents;
+    }
+
+    .hero-content:not(.has-poster) {
+      grid-template-columns: minmax(0, 1fr);
+      --detail-text-column: 1;
+    }
+
     .hero-title {
-      grid-area: title;
+      grid-column: var(--detail-text-column, 2);
+      grid-row: 1;
     }
 
     .meta-row {
-      grid-area: meta;
+      grid-column: var(--detail-text-column, 2);
+      grid-row: 2;
     }
 
+  }
+
+  @media (max-width: 400px) {
+    .poster-frame { grid-row: 1 / span 2; }
   }
 
   .hero-title {

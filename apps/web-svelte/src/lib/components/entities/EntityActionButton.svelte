@@ -40,6 +40,7 @@
 
   const classes = $derived(cn(
     buttonVariants({ variant: variant === "primary" ? "primary" : variant === "danger" ? "danger" : "outline", size: "lg" }),
+    "entity-detail-action",
     active && "bg-accent text-foreground",
     muted && "text-muted-foreground",
     className,
@@ -62,7 +63,7 @@
       {@const Icon = icon}
       <Icon data-icon="inline-start" class={iconClass} fill={iconFill} />
     {/if}
-    <span class="entity-action-button-label">{label}</span>
+    <span class="truncate">{label}</span>
   </a>
 {:else}
   <Button variant={variant === "primary" ? "primary" : variant === "danger" ? "danger" : "outline"} size="lg"
@@ -78,6 +79,6 @@
       {@const Icon = icon}
       <Icon data-icon="inline-start" class={iconClass} fill={iconFill} />
     {/if}
-    <span class="entity-action-button-label">{label}</span>
+    <span class="truncate">{label}</span>
   </Button>
 {/if}

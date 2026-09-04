@@ -7,6 +7,8 @@
     max?: number;
     disabled?: boolean;
     compactLabels?: boolean;
+    /** Compact rows opt into the smaller shared control size. */
+    size?: "sm" | "default";
     onChange?: (value: number | null) => void;
     readOnly?: boolean;
     ariaLabelPrefix?: string;
@@ -17,6 +19,7 @@
     max = 5,
     disabled = false,
     compactLabels = false,
+    size = "default",
     onChange,
     readOnly = false,
     ariaLabelPrefix = "Set",
@@ -31,7 +34,7 @@
     {#each Array.from({ length: max }) as _, i (i)}
       <Star
         class={cn(
-          "h-4 w-4",
+          "size-icon",
           i < stars ? "fill-accent-500 text-accent-500" : "text-text-disabled",
         )}
       />
@@ -43,7 +46,7 @@
     {#each Array.from({ length: max }) as _, i (i)}
       {@const starIdx = i + 1}
       {@const active = hovered > 0 ? starIdx <= hovered : starIdx <= stars}
-      <ToggleButton variant="default" size="sm" class="size-7 p-0 data-[state=on]:bg-transparent" {disabled}
+      <ToggleButton variant="default" {size} class={cn(size === "sm" ? "size-control-sm" : "size-control", "p-0 data-[state=on]:bg-transparent")} {disabled}
         onmouseenter={() => (hovered = starIdx)}
         bind:pressed={() => starIdx <= stars, () => {
           const newVal = starIdx === stars ? null : starIdx;
@@ -53,7 +56,7 @@
       >
         <Star
           class={cn(
-            "h-5 w-5 transition-colors duration-fast",
+            "size-icon transition-colors duration-fast",
             active ? "fill-current text-[var(--detail-accent,var(--color-primary))]" : "text-muted-foreground",
           )}
         />

@@ -40,10 +40,10 @@
       variant="danger"
       size="sm"
       onclick={() => { confirmOpen = true; }}
-      class="no-lift ml-auto gap-1.5 px-2.5 py-1 text-xs"
+      class="no-lift w-full justify-start"
       title="Permanently delete this Entity's managed files and reconcile its acquisition state"
     >
-      <Trash2 class="h-3.5 w-3.5" />
+      <Trash2 data-icon="inline-start" />
       Delete files
     </Button>
   {:else}

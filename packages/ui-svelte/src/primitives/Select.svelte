@@ -4,7 +4,7 @@
   /** Prismedia sizing and validation variants over the shadcn-svelte Select base. */
   export const selectTriggerVariants = cva("w-full", {
     variants: {
-      size: { sm: "h-8 px-2.5 text-xs", md: "h-9 px-3 text-sm", lg: "h-10 px-3.5 text-sm" },
+      size: { sm: "h-control-sm px-control-pad text-label", md: "h-control px-control-pad text-control", lg: "h-control-lg px-control-pad-lg text-control" },
       variant: { default: "", error: "border-destructive" },
     },
     defaultVariants: { size: "md", variant: "default" },
