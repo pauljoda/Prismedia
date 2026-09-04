@@ -75,12 +75,12 @@
   <div class="monitor-summary">
     <div class="min-w-0 flex-1">
       <div class="flex items-center gap-2">
-        <h2 class="text-[0.88rem] font-medium text-text-primary">Monitor</h2>
+        <h2 class="text-base font-semibold text-text-primary">Monitor</h2>
         {#if acq.monitorBusy}
           <Loader2 class="h-3.5 w-3.5 animate-spin text-text-muted" aria-hidden="true" />
         {/if}
       </div>
-      <p class="mt-0.5 text-[0.68rem] leading-relaxed text-text-muted">{statusText}</p>
+      <p class="mt-1 text-xs leading-relaxed text-text-muted">{statusText}</p>
       {#if acq.monitorStopping}
         <Button
           type="button"
@@ -133,12 +133,12 @@
   .monitor-control {
     background: color-mix(in srgb, var(--color-surface-1) 72%, transparent);
     border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-sm);
+    border-radius: var(--radius-md);
     display: flex;
     flex-direction: column;
     gap: 1rem;
     min-width: 0;
-    padding: 0.8rem 0.9rem;
+    padding: 1rem;
   }
   .monitor-summary {
     align-items: center;

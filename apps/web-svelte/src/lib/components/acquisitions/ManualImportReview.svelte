@@ -1,12 +1,12 @@
 <script lang="ts">
   import { Ban, Check, FileQuestion, FileText, Files, ShieldAlert } from "@lucide/svelte";
-  import { Button, Select, type SelectOption } from "@prismedia/ui-svelte";
-  import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
+  import { Alert, Button, Disclosure, Select, Skeleton, type SelectOption } from "@prismedia/ui-svelte";
   import type { AcquisitionManualImportReview } from "$lib/api/generated/model";
   import { formatBytes } from "$lib/utils/format";
 
   let {
     review,
+    statusMessage,
     assignments,
     busy = false,
     onAssignmentChange,
@@ -14,6 +14,8 @@
     onReject,
   }: {
     review: AcquisitionManualImportReview | null;
+    /** Preserve the acquisition's explanation when the review has no separate warning. */
+    statusMessage?: string | null;
     assignments: Record<string, string>;
     busy?: boolean;
     onAssignmentChange: (targetEntityId: string, sourceRelativePath: string) => void;
@@ -22,6 +24,8 @@
   } = $props();
 
   const mappedEpisodeCount = $derived(Object.values(assignments).filter(Boolean).length);
+  const warning = $derived(review?.warning || statusMessage);
+  const unsafe = $derived(Boolean(review?.warning || review?.files.some(file => file.isDangerous)));
   const mappedSourcePaths = $derived(new Set(Object.values(assignments).filter(Boolean)));
   const sourceOptions = $derived<SelectOption[]>([
     { value: "", label: "No file selected" },
@@ -45,27 +49,31 @@
   }
 </script>
 
-<section class="space-y-3" aria-labelledby="manual-import-heading">
-  <div class="space-y-1">
-    <h2 id="manual-import-heading" class="text-kicker text-text-primary">Map expected episodes</h2>
-    <p class="max-w-3xl text-sm text-text-muted">
-      {review?.message ?? "Choose which downloaded file contains each expected episode."}
-    </p>
+<section class="flex min-w-0 flex-col gap-4" aria-labelledby="manual-import-heading">
+  <div class="flex flex-col gap-1.5">
+    <h2 id="manual-import-heading" class="font-heading text-base font-semibold text-foreground">
+      {review?.available ? "Map expected episodes" : "Review download"}
+    </h2>
+    {#if review?.message && review.message !== warning}
+      <p class="max-w-prose text-sm leading-relaxed text-muted-foreground">{review.message}</p>
+    {/if}
   </div>
 
-  {#if review?.warning}
-    <div role="alert" class="flex items-start gap-3 rounded-sm border border-warning/30 bg-warning-muted px-3 py-2.5 text-warning-text">
-      <ShieldAlert class="mt-0.5 h-4 w-4 shrink-0" />
-      <div class="min-w-0">
-        <p class="text-sm font-medium">Potentially unsafe download</p>
-        <p class="mt-0.5 whitespace-normal text-sm [overflow-wrap:anywhere]">{review.warning}</p>
-      </div>
-    </div>
+  {#if warning}
+    <Alert.Root class="border-warning/30 bg-warning-muted text-warning-text">
+      <ShieldAlert />
+      <Alert.Title>{unsafe ? "Potentially unsafe download" : "Import needs attention"}</Alert.Title>
+      <Alert.Description class="max-w-prose text-warning-text [overflow-wrap:anywhere]">{warning}</Alert.Description>
+    </Alert.Root>
+  {/if}
+
+  {#if !review}
+    <Skeleton class="h-20 w-full" aria-label="Loading downloaded files" />
   {/if}
 
   {#if review?.available}
     <div class="overflow-visible rounded-sm border border-border-subtle bg-surface-1">
-      <div class="hidden grid-cols-[minmax(0,1fr)_minmax(16rem,0.72fr)] gap-4 rounded-t-sm border-b border-border-subtle bg-surface-2 px-3 py-2 text-label text-text-muted md:grid">
+      <div class="hidden grid-cols-[minmax(0,1fr)_minmax(16rem,0.72fr)] gap-4 rounded-t-sm border-b border-border-subtle bg-surface-2 px-4 py-3 text-sm font-medium text-text-secondary md:grid">
         <span>Expected episode</span>
         <span>Downloaded file</span>
       </div>
@@ -77,7 +85,6 @@
               <p class="whitespace-normal text-sm font-medium text-text-primary [overflow-wrap:anywhere]">
                 {targetLabel(target.position, target.title)}
               </p>
-              <p class="mt-0.5 text-[0.72rem] text-text-muted">Select the file that contains this episode.</p>
             </div>
           </div>
           <div class="min-w-0">
@@ -94,22 +101,14 @@
     </div>
   {/if}
 
-  {#if review && !review.available}
-    <StatePlaceholder
-      icon={FileQuestion}
-      title="File mapping unavailable"
-      description={review?.message ?? "This held import cannot be mapped from the current payload."}
-    />
-  {/if}
-
   {#if review}
-    <div class="flex flex-wrap items-center justify-between gap-3 rounded-sm border border-border-subtle bg-surface-1 px-3 py-2.5">
+    <div class="flex flex-wrap items-center gap-x-5 gap-y-3">
       <p class="text-sm text-text-muted">
         {#if review.available}
           <span class="font-medium text-text-primary">{mappedEpisodeCount}</span>
-          {mappedEpisodeCount === 1 ? "episode" : "episodes"} mapped · one file may satisfy several episodes
+          of {review.targets.length} {review.targets.length === 1 ? "episode" : "episodes"} mapped. A file can contain several episodes.
         {:else}
-          Reject this payload to blocklist the release and search for another.
+          Reject this download to block the release and search again.
         {/if}
       </p>
       <div class="flex flex-wrap items-center gap-2">
@@ -132,13 +131,8 @@
       </div>
     </div>
 
-    <details class="group min-w-0 overflow-hidden rounded-sm border border-border-subtle bg-surface-1">
-      <summary class="flex min-w-0 cursor-pointer items-center gap-2 px-3 py-2 text-kicker text-text-primary select-none">
-        <Files class="h-3.5 w-3.5 text-text-muted" />
-        Downloaded files
-        <span class="font-mono text-[0.68rem] font-normal text-text-muted">{review.files.length}</span>
-      </summary>
-      <div class="min-w-0 border-t border-border-subtle">
+    <Disclosure title="Downloaded files" icon={Files} count={review.files.length}>
+      <div class="min-w-0">
         {#each review.files as file (file.sourceRelativePath)}
           <div class="flex min-w-0 items-start justify-between gap-3 border-b border-border-subtle px-3 py-2.5 last:border-b-0">
             <span class="flex min-w-0 items-start gap-2.5">
@@ -160,6 +154,6 @@
           </div>
         {/each}
       </div>
-    </details>
+    </Disclosure>
   {/if}
 </section>

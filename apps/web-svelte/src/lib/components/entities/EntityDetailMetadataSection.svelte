@@ -189,19 +189,19 @@
 {:else if section.id === "links"}
   <EntityDetailLinks links={card.links} />
 {:else if section.id === "studio" && studioCards.length > 0}
-  <section class="detail-section" aria-label={section.label ?? "Studio"}>
+  <div class="detail-section">
     <EntityCastAndCrewSection
       studioCards={studioCards}
       studioLabel={section.label ?? "Studio"}
     />
-  </section>
+  </div>
 {:else if section.id === "credits" && creditCards.length > 0}
-  <section class="detail-section" aria-label={section.label ?? peopleLabel}>
+  <div class="detail-section">
     <EntityCastAndCrewSection
       creditCards={creditCards}
       castLabel={section.label ?? peopleLabel}
     />
-  </section>
+  </div>
 {:else if section.id === "stats" && (cardFull.stats?.length ?? 0) > 0}
   <MetadataCard
     title="Stats"
@@ -307,11 +307,10 @@
     align-items: center;
     gap: 0.45rem;
     margin: 0 0 0.75rem;
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.68rem;
+    font-family: var(--font-heading, Geist, sans-serif);
+    font-size: 0.875rem;
     font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--detail-text-muted);
+    letter-spacing: -0.01em;
+    color: var(--detail-text);
   }
 </style>

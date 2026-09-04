@@ -7,8 +7,8 @@
    * page-owned {@link useEntityAcquisition} composable, whose `visible` also gates the tab itself;
    * this component only renders it. Renders nothing while the state says there is no story.
    */
-  import { RefreshCw, Search } from "@lucide/svelte";
-  import { Button } from "@prismedia/ui-svelte";
+  import { RefreshCw, Search, Wrench } from "@lucide/svelte";
+  import { Button, Disclosure } from "@prismedia/ui-svelte";
   import { ACQUISITION_STATUS, ENTITY_KIND, ENTITY_KIND_DEFINITIONS } from "$lib/api/generated/codes";
   import type { EntityCapability } from "$lib/api/generated/model";
   import AcquisitionPanel from "$lib/components/acquisitions/AcquisitionPanel.svelte";
@@ -191,20 +191,23 @@
         </p>
       {/if}
 
-      {#if entity && uploadableAcquisitionKind}
-        <ManualAcquisitionActions
-          entityId={entity.id}
-          canReplace={hasOwnedContent && replaceableKind}
-          canUpload={Boolean(acq.acquisition) || (hasOwnedContent && replaceableKind)}
-          onStarted={async (detail) => {
-            acq.setAcquisition(detail);
-            await acq.refresh();
-          }}
-        />
-      {/if}
-
       {#if entity}
-        <EntityBlocklistClearAction entityId={entity.id} entityTitle={entity.title} />
+        <Disclosure title="More acquisition actions" icon={Wrench}>
+          <div class="flex flex-col gap-3">
+            {#if uploadableAcquisitionKind}
+              <ManualAcquisitionActions
+                entityId={entity.id}
+                canReplace={hasOwnedContent && replaceableKind}
+                canUpload={Boolean(acq.acquisition) || (hasOwnedContent && replaceableKind)}
+                onStarted={async (detail) => {
+                  acq.setAcquisition(detail);
+                  await acq.refresh();
+                }}
+              />
+            {/if}
+            <EntityBlocklistClearAction entityId={entity.id} entityTitle={entity.title} />
+          </div>
+        </Disclosure>
       {/if}
 
       {#if acq.childCards.length > 0}
@@ -216,12 +219,10 @@
 
       {#if showAcquisitionPanel && acq.acquisition}
         {#if failedParentWithChildActivity}
-          <details class="parent-attempt">
-            <summary>
-              Parent release attempt failed
-              <span>{activeChildAcquisitionCount} {activeChildLabel} active instead</span>
-            </summary>
-            <div class="parent-attempt-body">
+          <Disclosure
+            title={`Parent release attempt failed · ${activeChildAcquisitionCount} ${activeChildLabel} active instead`}
+          >
+            <div>
               {#key acq.acquisition.summary.id}
                 <AcquisitionPanel
                   acquisitionId={acq.acquisition.summary.id}
@@ -233,7 +234,7 @@
                 />
               {/key}
             </div>
-          </details>
+          </Disclosure>
         {:else}
             {#key acq.acquisition.summary.id}
               <AcquisitionPanel
@@ -259,32 +260,4 @@
     gap: 0.9rem;
     min-width: 0;
   }
-  .parent-attempt {
-    overflow: hidden;
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-sm);
-    background: var(--color-surface-1);
-  }
-  .parent-attempt summary {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem 1rem;
-    padding: 0.7rem 0.8rem;
-    color: var(--color-text-secondary);
-    font-size: 0.76rem;
-    font-weight: 600;
-    cursor: pointer;
-  }
-  .parent-attempt summary span {
-    color: var(--color-text-accent);
-    font-family: var(--font-mono);
-    font-size: 0.66rem;
-    font-weight: 500;
-  }
-  .parent-attempt-body {
-    padding: 0 0.8rem 0.8rem;
-  }
-
 </style>

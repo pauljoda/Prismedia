@@ -81,6 +81,7 @@ export {
 } from "./motion/transitions";
 
 // Composed
+export { default as Disclosure } from "./composed/Disclosure.svelte";
 export { default as StatusLed } from "./composed/StatusLed.svelte";
 export { type LedStatus, type LedSize } from "./composed/StatusLed.svelte";
 export { default as Meter } from "./composed/Meter.svelte";

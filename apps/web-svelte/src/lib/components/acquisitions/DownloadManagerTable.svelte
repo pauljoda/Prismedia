@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { browser as isBrowser } from "$app/environment";
   import { ChevronsDownUp, ChevronsUpDown, Columns3, HardDriveDownload, Loader2, Trash2 } from "@lucide/svelte";
-  import { Button, Checkbox, SearchInput, cn } from "@prismedia/ui-svelte";
+  import { Button, Checkbox, Empty, SearchInput, cn } from "@prismedia/ui-svelte";
   import { SvelteSet } from "svelte/reactivity";
   import { formatSpeed, numberValue } from "$lib/utils/format";
   import DownloadTreeRows from "./DownloadTreeRows.svelte";
@@ -374,11 +374,13 @@
       {:else if loading}
         <div class="manager-state"><Loader2 class="h-4 w-4 animate-spin" /> Loading downloads…</div>
       {:else}
-        <div class="manager-state empty-state">
-          <HardDriveDownload class="h-6 w-6" />
-          <strong>{filtering ? "Nothing matches these filters" : "Nothing downloading"}</strong>
-          <span>{filtering ? "Try a different title, client, or status." : "Requested entities will appear here as soon as their acquisition begins."}</span>
-        </div>
+        <Empty.Root class="min-h-40 rounded-none border-0 p-6">
+          <Empty.Header>
+            <Empty.Media variant="icon"><HardDriveDownload /></Empty.Media>
+            <Empty.Title>{filtering ? "Nothing matches these filters" : "Nothing downloading"}</Empty.Title>
+            <Empty.Description>{filtering ? "Try a different title, client, or status." : "Requested entities will appear here as soon as their acquisition begins."}</Empty.Description>
+          </Empty.Header>
+        </Empty.Root>
       {/if}
     </div>
   </div>
@@ -433,10 +435,6 @@
   .table-scroll { min-height: 0; flex: 1 1 auto; overflow: auto; scrollbar-gutter: stable; }
   .downloads-grid { width: 100%; }
   .manager-state { display: flex; min-height: 10rem; align-items: center; justify-content: center; gap: 0.5rem; color: var(--color-text-muted); font-size: 0.78rem; }
-  .empty-state { flex-direction: column; gap: 0.35rem; }
-  .empty-state strong { color: var(--color-text-secondary); font-family: var(--font-heading, "Geist", sans-serif); font-size: 0.88rem; }
-  .empty-state span { max-width: 28rem; text-align: center; font-size: 0.72rem; }
-
   @media (max-width: 960px) {
     .manager-toolbar { align-items: flex-start; flex-direction: column; }
     .toolbar-controls { width: 100%; flex-wrap: wrap; justify-content: flex-start; }

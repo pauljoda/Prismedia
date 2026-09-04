@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
   import { CalendarClock, CloudDownload, FileText, History, Loader2, PencilLine, RefreshCw, RotateCcw, Search, SearchX, Upload, X } from "@lucide/svelte";
-  import { Badge, Button, SearchInput } from "@prismedia/ui-svelte";
+  import { Badge, Button, Disclosure, Progress, SearchInput } from "@prismedia/ui-svelte";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
@@ -140,20 +140,15 @@
       status === ACQUISITION_STATUS.imported,
   );
 
-  /**
-   * The user's manual Files toggle. Once set it wins over the status-derived default, so a poll
-   * reassigning `files` can't snap the list shut again; it resets when the imported flag actually
-   * transitions, keeping the collapse-once-imported behavior.
-   */
-  let filesOpen = $state<boolean | null>(null);
-  let lastFilesImported: boolean | null = null;
-  $effect(() => {
+  /** The user's Files disclosure choice, scoped to the imported state that produced it. */
+  let filesOpenPreference = $state<{ imported: boolean | null; open: boolean } | null>(null);
+
+  function filesDisclosureOpen(): boolean {
     const imported = files?.imported ?? null;
-    if (imported !== lastFilesImported) {
-      lastFilesImported = imported;
-      filesOpen = null;
-    }
-  });
+    return filesOpenPreference?.imported === imported
+      ? filesOpenPreference.open
+      : !Boolean(imported);
+  }
 
   /** True while a load is in flight, so poll ticks never stack behind a slow transfer probe. */
   let loading = false;
@@ -486,9 +481,11 @@
     <div class="flex flex-wrap items-center justify-between gap-3">
       <div class="flex min-w-0 flex-wrap items-center gap-2.5">
         <Badge variant={status === ACQUISITION_STATUS.imported ? "success" : status === ACQUISITION_STATUS.failed ? "error" : "accent"}>
-          {acquisitionStatusLabel(detail.summary.status)}
+          {status === ACQUISITION_STATUS.manualImportRequired
+            ? "Review required"
+            : acquisitionStatusLabel(detail.summary.status)}
         </Badge>
-        {#if detail.summary.statusMessage && !manualImportWarning}
+        {#if detail.summary.statusMessage && !manualImportWarning && status !== ACQUISITION_STATUS.manualImportRequired}
           <span class="text-sm text-text-muted">{detail.summary.statusMessage}</span>
         {/if}
       </div>
@@ -583,6 +580,7 @@
     {:else if status === ACQUISITION_STATUS.manualImportRequired}
       <ManualImportReview
         review={manualImportReview}
+        statusMessage={detail.summary.statusMessage}
         assignments={manualAssignments}
         {busy}
         onAssignmentChange={(targetEntityId, sourceRelativePath) => {
@@ -595,7 +593,7 @@
     {:else if isDownloading}
       <!-- ── Live transfer ── -->
       <section class="space-y-3">
-        <h2 class="text-kicker text-text-primary">Download</h2>
+        <h2 class="text-sm font-semibold text-text-primary">Download</h2>
         {#if transfer}
           {@const pct = Math.round(Number(transfer.progress) * 100)}
           <div class="space-y-3 rounded-sm border border-border-subtle bg-surface-1 p-3.5">
@@ -609,10 +607,7 @@
               </span>
               <span class="font-mono text-sm text-text-accent">{pct}%</span>
             </div>
-            <!-- Progress bar -->
-            <div class="h-2 w-full overflow-hidden rounded-full bg-surface-3">
-              <div class="h-full rounded-full bg-accent-500 transition-all" style:width={`${pct}%`}></div>
-            </div>
+            <Progress value={pct} aria-label={`Download ${pct}% complete`} class="h-2" />
             <!-- Stats -->
             <div class="grid grid-cols-2 gap-x-4 gap-y-2.5 sm:grid-cols-4">
               {@render stat("Speed", formatSpeed(Number(transfer.downloadSpeedBytesPerSecond)))}
@@ -635,17 +630,16 @@
     {:else if isDone}
       <!-- ── Imported / downloaded files — collapsed once imported so a big pack doesn't fill the page ── -->
       {#if files && files.files.length > 0}
-        <details
-          class="group min-w-0 overflow-hidden rounded-sm border border-border-subtle bg-surface-1"
-          open={filesOpen ?? !files.imported}
-          ontoggle={(event) => (filesOpen = event.currentTarget.open)}
+        <Disclosure
+          title="Files"
+          icon={FileText}
+          count={files.files.length}
+          bind:open={() => filesDisclosureOpen(), (next) => (filesOpenPreference = {
+            imported: files?.imported ?? null,
+            open: next,
+          })}
         >
-          <summary class="flex min-w-0 cursor-pointer items-center gap-2 px-3 py-2 text-kicker text-text-primary select-none">
-            <FileText class="h-3.5 w-3.5 text-text-muted" />
-            Files
-            <span class="font-mono text-[0.68rem] font-normal text-text-muted">{files.files.length}</span>
-          </summary>
-          <div class="min-w-0 px-3 pb-3">
+          <div class="min-w-0">
             <div class="overflow-hidden rounded-sm border border-border-subtle">
               {#each files.files as f (f.name)}
                 <div class="flex min-w-0 items-start justify-between gap-3 border-b border-border-subtle px-3 py-2 last:border-b-0">
@@ -658,10 +652,10 @@
               {/each}
             </div>
           </div>
-        </details>
+        </Disclosure>
       {:else}
         <section class="space-y-2">
-          <h2 class="text-kicker text-text-primary">Files</h2>
+          <h2 class="text-sm font-semibold text-text-primary">Files</h2>
           <StatePlaceholder
             icon={FileText}
             title="No files yet"
@@ -674,9 +668,9 @@
     {:else}
       <!-- ── Release review (awaiting selection / failed) ── -->
       <section class="space-y-3">
-        <h2 class="text-kicker text-text-primary">
+        <h2 class="flex items-baseline gap-2 text-sm font-semibold text-text-primary">
           Releases
-          <span class="ml-1.5 font-mono text-[0.68rem] font-normal text-text-muted">{detail.candidates.length}</span>
+          <span class="text-xs font-normal tabular-nums text-text-muted">{detail.candidates.length}</span>
         </h2>
 
         {#if canSearchReleases}
@@ -730,16 +724,11 @@
 
     <!-- ── History (durable activity log for this item) ── -->
     {#if history.length > 0}
-      <details class="group min-w-0 overflow-hidden rounded-sm border border-border-subtle bg-surface-1">
-        <summary class="flex min-w-0 cursor-pointer items-center gap-2 px-3 py-2 text-kicker text-text-primary select-none">
-          <History class="h-3.5 w-3.5 text-text-muted" />
-          History
-          <span class="font-mono text-[0.68rem] font-normal text-text-muted">{history.length}</span>
-        </summary>
-        <div class="min-w-0 px-3 pb-3">
+      <Disclosure title="History" icon={History} count={history.length}>
+        <div class="min-w-0">
           <AcquisitionHistoryList entries={history} />
         </div>
-      </details>
+      </Disclosure>
     {/if}
   </div>
 {/if}

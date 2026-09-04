@@ -1,11 +1,11 @@
 <script lang="ts" module>
 	import { cva, type VariantProps } from "class-variance-authority";
 
-	export const tabsListVariants = cva("rounded-sm p-[3px] group-data-[orientation=horizontal]/tabs:h-8 data-[variant=line]:rounded-none group/tabs-list inline-flex w-fit items-center justify-center text-muted-foreground group-data-[orientation=vertical]/tabs:h-fit group-data-[orientation=vertical]/tabs:flex-col", {
+	export const tabsListVariants = cva("group/tabs-list inline-flex min-h-11 w-fit items-center justify-center rounded-md p-1 text-muted-foreground group-data-[orientation=vertical]/tabs:h-fit group-data-[orientation=vertical]/tabs:flex-col", {
 		variants: {
 			variant: {
 				default: "cn-tabs-list-variant-default bg-muted",
-				line: "cn-tabs-list-variant-line gap-1 bg-transparent",
+				line: "cn-tabs-list-variant-line min-h-12 w-full justify-start gap-1 rounded-b-none border-b border-border bg-muted/60 px-2 py-0",
 			},
 		},
 		defaultVariants: {

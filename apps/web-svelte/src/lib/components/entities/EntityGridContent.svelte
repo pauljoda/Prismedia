@@ -1,6 +1,7 @@
 <script lang="ts">
   import { SearchX } from "@lucide/svelte";
   import PrismediaLoadingMark from "$lib/components/PrismediaLoadingMark.svelte";
+  import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import type { EntityGridViewMode } from "$lib/entities/entity-grid";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
@@ -80,13 +81,7 @@
     {/each}
   </div>
 {:else}
-  <div class="empty" role="status">
-    <span class="empty-icon">
-      <SearchX aria-hidden="true" />
-    </span>
-    <strong>{emptyTitle}</strong>
-    <span>{emptyMessage}</span>
-  </div>
+  <StatePlaceholder icon={SearchX} title={emptyTitle} description={emptyMessage} />
 {/if}
 
 <style>
@@ -132,50 +127,6 @@
     min-height: clamp(16rem, 42vh, 28rem);
     place-items: center;
     overflow: hidden;
-  }
-
-  .empty {
-    display: grid;
-    gap: 0.35rem;
-    min-height: 12rem;
-    place-content: center;
-    justify-items: center;
-    padding: 2.5rem 1.25rem;
-    background: var(--color-surface-1, #0c0f15);
-    border: 1px solid var(--color-border-subtle, rgba(148, 158, 178, 0.07));
-    border-radius: var(--radius-sm, 6px);
-    box-shadow: inset 0 2px 8px rgba(0,0,0,0.30);
-    color: var(--color-text-muted);
-    text-align: center;
-  }
-
-  .empty > strong,
-  .empty > span:not(.empty-icon) {
-    max-width: 32rem;
-  }
-
-  .empty-icon {
-    display: grid;
-    place-items: center;
-    justify-self: center;
-    width: 2rem;
-    height: 2rem;
-    color: var(--color-text-disabled);
-  }
-
-  .empty-icon :global(svg) {
-    width: 100%;
-    height: 100%;
-  }
-
-  .empty strong {
-    color: var(--color-text-primary);
-    font-family: var(--font-heading, Geist, sans-serif);
-    font-size: 1.1rem;
-  }
-
-  .empty span {
-    font-size: 0.85rem;
   }
 
   @media (min-width: 640px) {

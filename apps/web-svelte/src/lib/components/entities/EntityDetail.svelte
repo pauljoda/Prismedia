@@ -53,6 +53,7 @@
   } from "$lib/entities/entity-thumbnail";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import MetadataCardGrid from "$lib/components/MetadataCardGrid.svelte";
+  import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import EntityDateEditRequest from "./EntityDateEditRequest.svelte";
   import EntityTagChips from "./EntityTagChips.svelte";
   import EntityDetailHeroControls from "./EntityDetailHeroControls.svelte";
@@ -756,7 +757,7 @@
 
   {#if hasTabs}
     <div class="detail-tabs">
-      <Tabs.Root activationMode="manual" bind:value={() => activeTab?.id ?? "", requestTab}>
+      <Tabs.Root class="gap-0" activationMode="manual" bind:value={() => activeTab?.id ?? "", requestTab}>
       <Tabs.List variant="line" class="max-w-full justify-start overflow-x-auto" aria-label="Detail sections">
         {#each visibleTabs as tab (tab.id)}
           {@const TabIcon = tab.icon}
@@ -796,21 +797,23 @@
           {#key activeTab.id}
             <div class="detail-tab-sections">
               {#if activeTabSections.length === 0 && !isEditingActiveTab}
-                <div class="tab-empty-state">
-                  <p>No {activeTab.label.toLowerCase()} yet.</p>
+                {@const EmptyTabIcon = activeTab.icon ?? Pencil}
+                <StatePlaceholder
+                  icon={EmptyTabIcon}
+                  title={`No ${activeTab.label.toLowerCase()} yet`}
+                >
                   {#if canEdit}
                     <Button
                       type="button"
                       variant="secondary"
                       size="sm"
-                      class="font-mono text-[0.68rem] font-bold uppercase tracking-[0.04em]"
                       onclick={() => startEdit(activeTab ?? undefined)}
                     >
                       <Pencil class="h-3.5 w-3.5" />
                       Edit {activeTab.label}
                     </Button>
                   {/if}
-                </div>
+                </StatePlaceholder>
               {:else}
                 <MetadataCardGrid>
                   {#each activeTabSections as section (section.id)}
@@ -1334,8 +1337,7 @@
   .entity-detail :global(.detail-content-card--tabbed) {
     position: relative;
     z-index: 1;
-    margin-top: -0.5rem;
-    padding-top: 0.5rem;
+    margin-top: 0;
   }
 
   .detail-content-card--standalone {
@@ -1345,20 +1347,6 @@
   .detail-tab-sections {
     min-width: 0;
     padding: 1rem 1.5rem 1.5rem;
-  }
-
-  .tab-empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 2rem 1rem;
-  }
-
-  .tab-empty-state p {
-    margin: 0;
-    color: var(--detail-text-muted, #8a93a6);
-    font-size: 0.85rem;
   }
 
   .detail-tab-sections .detail-body {
@@ -1390,9 +1378,10 @@
   /* ── Description (markdown) ─────────────────────────────── */
 
   .description-content {
+    max-width: 80ch;
     color: var(--detail-text-secondary);
-    font-size: 0.88rem;
-    line-height: 1.65;
+    font-size: 0.9375rem;
+    line-height: 1.7;
     padding: 0.5rem 0 1rem;
   }
 

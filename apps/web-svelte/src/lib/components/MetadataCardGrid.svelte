@@ -16,8 +16,8 @@
   .metadata-card-grid {
     container-type: inline-size;
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(min(100%, 14rem), 1fr));
-    gap: 0.5rem;
+    grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
+    gap: 0.75rem;
   }
 
   .metadata-card-grid > :global(:not(.metadata-card)) {

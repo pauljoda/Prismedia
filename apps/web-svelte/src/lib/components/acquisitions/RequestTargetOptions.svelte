@@ -99,13 +99,12 @@
 
 <!-- Rendered from first paint (selects fill in as the lookups land) so the page never jumps. -->
 <div class="flex flex-wrap items-end gap-3">
-  <label class="min-w-44 flex-1 space-y-1 sm:max-w-64">
-    <span class="text-label flex items-center gap-1.5 text-text-muted">
-      <SlidersHorizontal class="h-3.5 w-3.5" /> Quality profile
+  <label class="min-w-44 flex-1 space-y-1.5 sm:max-w-64">
+    <span class="flex items-center gap-1.5 text-sm font-medium text-text-secondary">
+      <SlidersHorizontal class="h-4 w-4 text-text-muted" /> Quality profile
     </span>
     {#if !loaded || profileOptions.length > 0}
       <Select
-        size="sm"
         disabled={!loaded}
         value={profileId ?? ""}
         options={profileOptions}
@@ -118,13 +117,12 @@
     {/if}
   </label>
 
-  <label class="min-w-44 flex-1 space-y-1 sm:max-w-64">
-    <span class="text-label flex items-center gap-1.5 text-text-muted">
-      <FolderOpen class="h-3.5 w-3.5" /> Import into
+  <label class="min-w-44 flex-1 space-y-1.5 sm:max-w-64">
+    <span class="flex items-center gap-1.5 text-sm font-medium text-text-secondary">
+      <FolderOpen class="h-4 w-4 text-text-muted" /> Import into
     </span>
     {#if !loaded || rootOptions.length > 0}
       <Select
-        size="sm"
         disabled={!loaded}
         value={targetLibraryRootId ?? ""}
         options={rootOptions}

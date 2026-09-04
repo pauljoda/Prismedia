@@ -57,14 +57,14 @@
     z-index: 1;
     display: flex;
     flex-direction: column;
-    gap: 0.125rem;
+    gap: 0.2rem;
     min-width: 0;
     padding: 0 0.25rem;
     overflow: hidden;
     pointer-events: none;
   }
 
-  .thumbnail-caption.has-subtitle { gap: 0.125rem; }
+  .thumbnail-caption.has-subtitle { gap: 0.2rem; }
 
   .copy { display: flex; flex-direction: column; min-width: 0; max-width: 100%; }
 
@@ -73,7 +73,7 @@
     margin: 0;
     min-width: 0;
     overflow: hidden;
-    color: rgb(244 239 230 / 0.95);
+    color: var(--color-text, #f4efe6);
     font-family: var(--font-heading, Geist, sans-serif);
     font-size: 0.875rem;
     font-weight: 600;
@@ -83,7 +83,7 @@
     white-space: nowrap;
   }
 
-  .title-size-compact { font-size: 0.75rem; font-weight: 600; line-height: 1.2; }
+  .title-size-compact { font-size: 0.8125rem; font-weight: 600; line-height: 1.25; }
   .title-align-left { text-align: left; }
   .title-align-center { text-align: center; }
   .title-align-right { text-align: right; }
@@ -91,13 +91,12 @@
   .subtitle {
     overflow: hidden;
     margin: 0;
-    color: rgb(196 201 212 / 0.82);
+    color: var(--color-text-muted, #8a93a6);
     font-family: var(--font-body, Inter, sans-serif);
-    font-size: 0.6875rem;
-    line-height: 1.25;
+    font-size: 0.75rem;
+    line-height: 1.35;
     text-overflow: ellipsis;
     white-space: nowrap;
-    text-shadow: 0 1px 3px rgb(0 0 0 / 0.6);
   }
 
   .custom-subtitle { display: flex; min-width: 0; margin-top: 0.125rem; }
@@ -105,7 +104,7 @@
   .custom-subtitle.title-align-center { justify-content: center; }
   .custom-subtitle.title-align-right { justify-content: flex-end; }
 
-  .chips { display: flex; flex-wrap: nowrap; gap: 0.25rem; margin-top: 0.125rem; overflow: hidden; }
+  .chips { display: flex; flex-wrap: nowrap; gap: 0.25rem; margin-top: 0.2rem; overflow: hidden; }
   .chip {
     display: inline-flex;
     align-items: center;
@@ -113,19 +112,18 @@
     flex: 0 1 auto;
     min-width: 0;
     max-width: 100%;
-    min-height: 1.15rem;
+    min-height: 1.25rem;
     overflow: hidden;
-    border: 1px solid color-mix(in srgb, var(--thumbnail-meta-accent) 32%, transparent);
+    border: 1px solid color-mix(in srgb, var(--thumbnail-meta-accent) 22%, var(--color-border-subtle, transparent));
     border-radius: var(--radius-sm, 6px);
-    background: color-mix(in srgb, var(--thumbnail-meta-accent) 11%, transparent);
-    color: rgb(224 228 236 / 0.84);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.625rem;
-    font-weight: 600;
+    background: color-mix(in srgb, var(--thumbnail-meta-accent) 7%, var(--color-surface-2, transparent));
+    color: var(--color-text-secondary, #c4c9d4);
+    font-family: var(--font-body, Inter, sans-serif);
+    font-size: 0.6875rem;
+    font-weight: 500;
     line-height: 1;
-    padding: 0.125rem 0.25rem;
+    padding: 0.125rem 0.35rem;
     text-overflow: ellipsis;
-    text-shadow: 0 1px 2px rgb(0 0 0 / 0.5);
     white-space: nowrap;
   }
   .chip :global(svg) { flex: 0 0 auto; color: var(--thumbnail-meta-accent); }

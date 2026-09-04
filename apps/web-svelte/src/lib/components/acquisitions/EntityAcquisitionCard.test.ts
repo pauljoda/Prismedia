@@ -26,7 +26,7 @@ describe("EntityAcquisitionCard", () => {
     expect(screen.queryByRole("button", { name: "Notify imported" })).not.toBeInTheDocument();
   });
 
-  it("always offers reviewed replacement search for an on-disk album", () => {
+  it("keeps reviewed replacement search in a quiet secondary-actions disclosure", async () => {
     render(Harness, {
       initialAcquisition: acquisition("album-acquisition"),
       refresh: vi.fn(async () => {}),
@@ -34,6 +34,8 @@ describe("EntityAcquisitionCard", () => {
       entityKind: ENTITY_KIND.audioLibrary,
     });
 
+    expect(screen.queryByRole("button", { name: "Replace" })).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "More acquisition actions" }));
     expect(screen.getByRole("button", { name: "Replace" })).toBeInTheDocument();
   });
 

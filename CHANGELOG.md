@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Entity pages now use clearer full-height tabs, readable metadata and descriptions, calmer tags and credit labels, and consistent shared empty and disclosure surfaces. Acquisition review emphasizes the current problem and next action while moving secondary controls, file audits, and history out of the primary path.
 - Readers, player settings, file actions, ratings, selection controls, and operational screens now use the shared themed UI foundation. Reader contents and media settings share keyboard dismissal and focus handling, while existing artwork layouts, Settings section identities, and library toolbar placement are preserved.
 - Relationship, tag, and collection pickers now share searchable keyboard navigation, removable selections, and clearer loading and retry states. Editors, dialogs, mobile navigation, progress indicators, and collection choices build on the same themed UI foundations without replacing Settings navigation or library toolbar layouts.
 - Global search now uses a shared command interface with clearer artwork rows, keyboard-accessible recent searches and full-result actions, visible navigation hints, and retry feedback, while preserving grouped results and layered dialog interaction.

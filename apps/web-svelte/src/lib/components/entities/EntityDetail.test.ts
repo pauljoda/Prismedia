@@ -347,7 +347,7 @@ describe("EntityDetail", () => {
     expect(screen.getByText("watching")).toBeInTheDocument();
     expect(screen.getByText("Episode 2")).toBeInTheDocument();
     expect(screen.getByText("animation")).toBeInTheDocument();
-    expect(screen.getByText("stash-compat")).toBeInTheDocument();
+    expect(screen.getByText("Stash compat")).toBeInTheDocument();
     expect(screen.getByText("oshash")).toBeInTheDocument();
   });
 
