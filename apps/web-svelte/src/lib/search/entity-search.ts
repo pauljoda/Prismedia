@@ -12,6 +12,8 @@ import {
   type SearchResponse,
   type SearchResultGroup,
   type SearchResultItem,
+  type SearchContinuation,
+  type SearchPageRequest,
 } from "./models";
 
 const DEFAULT_DIRECT_LIMIT = 80;
@@ -53,11 +55,84 @@ export async function searchEntities(options: EntitySearchOptions): Promise<Sear
     .map((entity) => entityToSearchItem(entity, "direct"))
     .filter((item): item is SearchResultItem => Boolean(item));
 
-  const relatedItems = options.includeRelated === false
-    ? []
-    : await fetchRelatedItems(directItems, options, fetcher);
+  const continuation: SearchContinuation = {
+    requests: [], expandedSourceIds: [], kinds: [...(options.kinds ?? ALL_SEARCH_KINDS)],
+    includeRelated: options.includeRelated !== false && options.relatedSourceLimit !== 0,
+    relatedLimit: options.relatedLimitPerSource ?? DEFAULT_RELATED_LIMIT_PER_SOURCE,
+    batchSize: Math.max(1, options.relatedSourceLimit ?? DEFAULT_RELATED_SOURCE_LIMIT),
+  };
+  if (directResponse.nextCursor) continuation.requests.push({ params: {
+    query: trimmed, hideNsfw: options.hideNsfw, limit: options.directLimit ?? DEFAULT_DIRECT_LIMIT,
+    cursor: directResponse.nextCursor,
+  } });
+  queueRelatedSources(directItems, options.hideNsfw, continuation);
+  const initial = { ...toSearchResponse(trimmed, startedAt, directItems, options.kinds), continuation };
+  const relatedRequests = continuation.requests.filter(request => request.relatedTo).slice(0, continuation.batchSize);
+  return executeSearchRequests(initial, relatedRequests, fetcher);
+}
 
-  return toSearchResponse(trimmed, startedAt, [...directItems, ...relatedItems], options.kinds);
+/** Fetches one bounded batch of pending direct and related pages, retaining retryable failures. */
+export async function loadMoreSearchResults(previous: SearchResponse, fetcher: EntitySearchFetcher = fetchEntities): Promise<SearchResponse> {
+  if (!previous.continuation) return previous;
+  return executeSearchRequests(previous, previous.continuation.requests.slice(0, previous.continuation.batchSize), fetcher);
+}
+
+/** Adds each relationship source once, including sources beyond the initial request budget. */
+function queueRelatedSources(items: SearchResultItem[], hideNsfw: boolean | undefined, continuation: SearchContinuation): void {
+  if (!continuation.includeRelated) return;
+  const seen = new Set(continuation.expandedSourceIds);
+  for (const source of items) {
+    if (!RELATIONSHIP_SOURCE_KINDS.has(source.kind) || seen.has(source.id)) continue;
+    seen.add(source.id);
+    continuation.expandedSourceIds.push(source.id);
+    continuation.requests.push({
+      params: { referencedBy: source.id, hideNsfw, limit: continuation.relatedLimit },
+      relatedTo: { id: source.id, kind: source.kind, title: source.title },
+    });
+  }
+}
+
+async function executeSearchRequests(previous: SearchResponse, selected: SearchPageRequest[], fetcher: EntitySearchFetcher): Promise<SearchResponse> {
+  const startedAt = performance.now();
+  const current = previous.continuation!;
+  const continuation: SearchContinuation = {
+    ...current,
+    requests: current.requests.filter(request => !selected.includes(request)),
+    expandedSourceIds: [...current.expandedSourceIds],
+  };
+  const batches = await Promise.allSettled(selected.map(async request => {
+    const response = await fetcher(request.params);
+    if (response.nextCursor && response.nextCursor === request.params.cursor) throw new Error("Search cursor did not advance");
+    return response;
+  }));
+  const merged = new Map(flattenSearchResults(previous).map(item => [item.id, item]));
+  for (const [index, batch] of batches.entries()) {
+    const request = selected[index];
+    if (batch.status === "rejected") {
+      continuation.requests.push({ ...request, failed: true });
+      continue;
+    }
+    const items = batch.value.items.map(entity => entityToSearchItem(entity, request.relatedTo ? "related" : "direct", request.relatedTo))
+      .filter((item): item is SearchResultItem => Boolean(item));
+    for (const item of items) {
+      const existing = merged.get(item.id);
+      if (!existing || existing.matchType === "related" && item.matchType === "direct") merged.set(item.id, item);
+    }
+    if (batch.value.nextCursor) {
+      const next = { params: { ...request.params, cursor: batch.value.nextCursor }, relatedTo: request.relatedTo };
+      if (request.relatedTo) continuation.requests.push(next);
+      else continuation.requests.unshift(next);
+    }
+    if (!request.relatedTo) queueRelatedSources(items, request.params.hideNsfw, continuation);
+  }
+  const items = [...merged.values()].sort((a, b) => b.score - a.score);
+  const response = toSearchResponse(previous.query, startedAt, items, current.kinds);
+  return {
+    ...response,
+    durationMs: previous.durationMs + response.durationMs,
+    continuation: continuation.requests.length ? continuation : undefined,
+    partialFailure: continuation.requests.some(request => request.failed),
+  };
 }
 
 export function firstSearchResult(response: SearchResponse | null | undefined): SearchResultItem | null {
@@ -126,46 +201,6 @@ function toResultGroup(kind: SearchEntityKind, items: SearchResultItem[]): Searc
   };
 }
 
-async function fetchRelatedItems(
-  directItems: SearchResultItem[],
-  options: EntitySearchOptions,
-  fetcher: EntitySearchFetcher,
-): Promise<SearchResultItem[]> {
-  const sources = directItems
-    .filter((item) => RELATIONSHIP_SOURCE_KINDS.has(item.kind))
-    .slice(0, options.relatedSourceLimit ?? DEFAULT_RELATED_SOURCE_LIMIT);
-  if (sources.length === 0) return [];
-
-  const seen = new Set(directItems.map((item) => item.id));
-  const batches = await Promise.allSettled(
-    sources.map(async (source) => {
-      const response = await fetcher({
-        referencedBy: source.id,
-        hideNsfw: options.hideNsfw,
-        limit: options.relatedLimitPerSource ?? DEFAULT_RELATED_LIMIT_PER_SOURCE,
-      });
-      return response.items
-        .map((entity) => entityToSearchItem(entity, "related", {
-          id: source.id,
-          kind: source.kind,
-          title: source.title,
-        }))
-        .filter((item): item is SearchResultItem => Boolean(item));
-    }),
-  );
-
-  const related: SearchResultItem[] = [];
-  for (const batch of batches) {
-    if (batch.status !== "fulfilled") continue;
-    for (const item of batch.value) {
-      if (seen.has(item.id)) continue;
-      seen.add(item.id);
-      related.push(item);
-    }
-  }
-
-  return related;
-}
 
 function toSearchKind(kind: string): SearchEntityKind | null {
   return (ALL_SEARCH_KINDS as readonly string[]).includes(kind) ? (kind as SearchEntityKind) : null;

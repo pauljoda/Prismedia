@@ -1,7 +1,7 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { Search, SearchX, AlertTriangle, SlidersHorizontal } from "@lucide/svelte";
+  import { Search, SearchX, AlertTriangle, SlidersHorizontal, Loader2 } from "@lucide/svelte";
   import { Badge, Button, ChoiceGroup, SearchInput } from "@prismedia/ui-svelte";
   import SearchResultGroup from "$lib/components/SearchResultGroup.svelte";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
@@ -9,7 +9,7 @@
   import { buildHrefWithFrom } from "$lib/back-navigation";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { ALL_SEARCH_KINDS, type SearchEntityKind, type SearchResponse } from "$lib/search/models";
-  import { firstSearchResult, searchEntities } from "$lib/search/entity-search";
+  import { firstSearchResult, loadMoreSearchResults, searchEntities } from "$lib/search/entity-search";
   import { entityAccentForKind } from "$lib/entities/entity-accent";
   import { SEARCH_KIND_CONFIG } from "$lib/components/search-kind-config";
 
@@ -23,8 +23,11 @@
   let results = $state<SearchResponse | null>(null);
   let loading = $state(false);
   let failed = $state(false);
+  let loadingMore = $state(false);
+  let moreFailed = $state(false);
   let retry = $state(0);
   let inputRef = $state<HTMLInputElement | null>(null);
+  let searchGeneration = 0;
 
   function initialKinds(): SearchEntityKind[] {
     const raw = page.url.searchParams.get("kinds")?.split(",") ?? [];
@@ -64,9 +67,12 @@
     const q = query.trim();
     const hideNsfw = nsfw.mode === "off";
     void retry;
+    searchGeneration += 1;
     let cancelled = false;
     results = null;
     failed = false;
+    loadingMore = false;
+    moreFailed = false;
     loading = q.length >= 2;
     if (q.length < 2) return;
     const timer = window.setTimeout(async () => {
@@ -85,6 +91,23 @@
   function clearFilters() {
     minRating = null;
     activeKinds = [...ALL_SEARCH_KINDS];
+  }
+
+  async function loadMore() {
+    if (!results?.continuation || loadingMore) return;
+    const current = results;
+    const generation = searchGeneration;
+    loadingMore = true;
+    moreFailed = false;
+    try {
+      const next = await loadMoreSearchResults(current);
+      if (results === current) results = next;
+    } catch {
+      if (results === current) moreFailed = true;
+    } finally {
+      // A new search resets the loading state and owns its own continuation.
+      if (searchGeneration === generation) loadingMore = false;
+    }
   }
 </script>
 
@@ -117,6 +140,18 @@
     {/if}
   </div>
 
+  {#if results?.continuation && !loading}
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <p class="text-sm text-muted-foreground" role="status">
+        {results.partialFailure || moreFailed ? "Some matches couldn't load. Your results are still available." : "Showing loaded matches. More are available."}
+      </p>
+      <Button variant="outline" disabled={loadingMore} onclick={loadMore}>
+        {#if loadingMore}<Loader2 data-icon="inline-start" class="animate-spin" />{/if}
+        {loadingMore ? "Loading matches…" : results.partialFailure || moreFailed ? "Retry remaining matches" : "Load more matches"}
+      </Button>
+    </div>
+  {/if}
+
   {#if !hasQuery}
     <StatePlaceholder icon={Search} title="Search your library" description="Find titles, people, and their related media. Enter at least two characters." />
   {:else if loading}
@@ -126,7 +161,7 @@
       <Button variant="outline" onclick={() => { retry += 1; }}>Try again</Button>
     </StatePlaceholder>
   {:else if !filtered?.groups.length}
-    <StatePlaceholder icon={SearchX} title={`No matches for “${query.trim()}”`} description={hasFilters ? "Try another title or clear your filters." : "Try another title, person, or tag."}>
+    <StatePlaceholder icon={SearchX} title={results?.continuation ? "No matches in the loaded results" : `No matches for “${query.trim()}”`} description={results?.continuation ? "Load more matches or adjust your filters." : hasFilters ? "Try another title or clear your filters." : "Try another title, person, or tag."}>
       {#if hasFilters}<Button variant="outline" onclick={clearFilters}>Clear filters</Button>{/if}
     </StatePlaceholder>
   {:else}

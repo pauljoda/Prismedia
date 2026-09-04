@@ -31,7 +31,7 @@
   );
 
   let props: Props = $props();
-  const groupClass = $derived(cn("max-w-full flex-wrap justify-start", props.class));
+  const groupClass = $derived(cn("w-full min-w-0 flex-wrap justify-start", props.class));
 
   function selectOne(next: string) {
     if (props.type !== "single" || props.disabled || next === props.value) return;

@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Broad searches can load further direct and related Entity matches in bounded batches instead of silently stopping at the first page. Existing results stay visible during continuation, with retry for failed pages and no duplicate entries. Shared choice rows also stay within the available width in mobile Safari.
 - Search results use consistently sized Entity thumbnails with library artwork and status badges, clearer group headings, working result expansion, and retry feedback. Rating and type filters update fetched matches immediately; nonfunctional date filters have been removed.
 - Search, Request discovery, mixed-library grids, and download statuses now share spaced choice controls. Required filters stay visibly selected, and reselecting the current Request type preserves the search draft.
 - Downloads now uses readable, status-first rows on phones, opening transfer details in a full-height view with a clear return to the queue. Desktop retains its resizable table and inspector, and status filters use shared single-choice controls.

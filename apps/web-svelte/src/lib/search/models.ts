@@ -1,4 +1,4 @@
-import type { EntityThumbnail } from "$lib/api/generated/model";
+import type { EntityThumbnail, ListEntitiesParams } from "$lib/api/generated/model";
 import {
   ENTITY_KINDS_IN_GLOBAL_SEARCH,
   type GlobalSearchEntityKindCode,
@@ -46,4 +46,24 @@ export interface SearchResponse {
   query: string;
   groups: SearchResultGroup[];
   durationMs: number;
+  /** Remaining Entity list pages, fetched only after an explicit continuation. */
+  continuation?: SearchContinuation;
+  partialFailure?: boolean;
+}
+
+/** A pending direct or relationship-based Entity list request. */
+export interface SearchPageRequest {
+  params: ListEntitiesParams;
+  relatedTo?: SearchRelatedEntity;
+  failed?: boolean;
+}
+
+/** Client-side search traversal state. Cursors remain opaque API values. */
+export interface SearchContinuation {
+  requests: SearchPageRequest[];
+  expandedSourceIds: string[];
+  kinds: SearchEntityKind[];
+  includeRelated: boolean;
+  relatedLimit: number;
+  batchSize: number;
 }

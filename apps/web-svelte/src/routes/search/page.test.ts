@@ -5,11 +5,11 @@ import { ENTITY_KIND } from "$lib/entities/entity-codes";
 import type { SearchResponse } from "$lib/search/models";
 import SearchPage from "./+page.svelte";
 
-const mocks = vi.hoisted(() => ({ search: vi.fn(), goto: vi.fn() }));
+const mocks = vi.hoisted(() => ({ search: vi.fn(), more: vi.fn(), goto: vi.fn() }));
 vi.mock("$app/navigation", () => ({ goto: mocks.goto }));
 vi.mock("$lib/nsfw/store.svelte", () => ({ useNsfw: () => ({ mode: "off" }) }));
 vi.mock("$lib/search/entity-search", async importOriginal => ({
-  ...await importOriginal<typeof import("$lib/search/entity-search")>(), searchEntities: mocks.search,
+  ...await importOriginal<typeof import("$lib/search/entity-search")>(), searchEntities: mocks.search, loadMoreSearchResults: mocks.more,
 }));
 
 function response(): SearchResponse {
@@ -73,5 +73,48 @@ describe("search results page", () => {
     expect(result).not.toHaveTextContent("Books");
     expect(result).toHaveClass("entity-thumbnail");
     expect(screen.getByRole("link", { name: "Browse all books" })).toHaveAttribute("href", "/books");
+  });
+
+  it("offers server continuation even when the loaded batch has no matching kinds", async () => {
+    const initial = response();
+    initial.groups = [];
+    initial.continuation = { requests: [{ params: { query: "story", cursor: "next" } }], expandedSourceIds: [], kinds: [ENTITY_KIND.book], includeRelated: false, relatedLimit: 20, batchSize: 1 };
+    mocks.search.mockResolvedValueOnce(initial);
+    mocks.more.mockResolvedValueOnce(response());
+    render(SearchPage);
+    await fireEvent.click(await screen.findByRole("button", { name: "Load more matches" }));
+    expect(await screen.findByRole("link", { name: "Result 1" })).toBeInTheDocument();
+    expect(mocks.more).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("button", { name: "Load more matches" })).not.toBeInTheDocument();
+  });
+
+  it("retains matches and offers a retry after a continuation failure", async () => {
+    const initial = response();
+    initial.continuation = { requests: [{ params: { query: "story", cursor: "next" } }], expandedSourceIds: [], kinds: [ENTITY_KIND.book], includeRelated: false, relatedLimit: 20, batchSize: 1 };
+    mocks.search.mockResolvedValueOnce(initial);
+    mocks.more.mockResolvedValueOnce({ ...initial, partialFailure: true });
+    render(SearchPage);
+    await fireEvent.click(await screen.findByRole("button", { name: "Load more matches" }));
+    expect(await screen.findByRole("button", { name: "Retry remaining matches" })).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "Result 1" })).toBeInTheDocument();
+  });
+
+  it("ignores an old continuation after starting another search", async () => {
+    const initial = response();
+    initial.continuation = { requests: [{ params: { query: "story", cursor: "next" } }], expandedSourceIds: [], kinds: [ENTITY_KIND.book], includeRelated: false, relatedLimit: 20, batchSize: 1 };
+    mocks.search.mockResolvedValueOnce(initial);
+    let finishMore!: (value: SearchResponse) => void;
+    mocks.more.mockReturnValueOnce(new Promise<SearchResponse>(resolve => { finishMore = resolve; }));
+    render(SearchPage);
+    await fireEvent.click(await screen.findByRole("button", { name: "Load more matches" }));
+    const next = response();
+    next.query = "next";
+    next.groups[0].items = [{ ...next.groups[0].items[0], title: "New search result" }];
+    mocks.search.mockResolvedValueOnce(next);
+    await fireEvent.input(screen.getByRole("searchbox", { name: "Search everything" }), { target: { value: "next" } });
+    await screen.findByRole("link", { name: "New search result" });
+    finishMore(response());
+    await waitFor(() => expect(screen.getByRole("link", { name: "New search result" })).toBeInTheDocument());
+    expect(screen.queryByRole("link", { name: "Result 1" })).not.toBeInTheDocument();
   });
 });
