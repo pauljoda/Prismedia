@@ -9,7 +9,7 @@ describe("manual import presentation", () => {
       review: { available: false, files: [], targets: [], message },
       assignments: {}, onAssignmentChange: vi.fn(), onImport: vi.fn(), onReject: vi.fn(),
     });
-    expect(screen.getByRole("heading", { name: "Review download" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Downloaded file review" })).toBeInTheDocument();
     expect(screen.getAllByText(message)).toHaveLength(1);
     expect(screen.queryByText("Map expected episodes")).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Import mapped episodes" })).not.toBeInTheDocument();
@@ -30,8 +30,8 @@ describe("manual import presentation", () => {
     expect(files).toHaveAttribute("aria-expanded", "false");
     await fireEvent.click(files);
     expect(screen.getByText("unexpected.exe")).toBeVisible();
-    expect(screen.getByText("Blocked — potentially dangerous")).toBeVisible();
-    await fireEvent.click(screen.getByRole("button", { name: "Reject" }));
+    expect(screen.getByText("Blocked, potentially dangerous")).toBeVisible();
+    await fireEvent.click(screen.getByRole("button", { name: "Reject and search again" }));
     expect(onReject).toHaveBeenCalledOnce();
   });
 });

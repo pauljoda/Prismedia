@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ACQUISITION_STATUS, ENTITY_KIND } from "$lib/api/generated/codes";
 import type { AcquisitionDetail } from "$lib/api/generated/model";
@@ -37,6 +37,21 @@ describe("EntityAcquisitionCard", () => {
     expect(screen.queryByRole("button", { name: "Replace" })).not.toBeInTheDocument();
     await fireEvent.click(screen.getByRole("button", { name: "More acquisition actions" }));
     expect(screen.getByRole("button", { name: "Replace" })).toBeInTheDocument();
+  });
+
+  it("separates the current acquisition from its monitoring settings", () => {
+    render(Harness, {
+      initialAcquisition: acquisition("acquisition-1"),
+      refresh: vi.fn(async () => {}),
+      showMonitor: true,
+      monitorActive: true,
+    });
+
+    const currentAcquisition = screen.getByRole("region", { name: "Current acquisition" });
+    const settings = screen.getByRole("complementary", { name: "Acquisition settings" });
+
+    expect(within(currentAcquisition).getByTestId("acquisition-panel")).toBeInTheDocument();
+    expect(within(settings).getByRole("switch", { name: "Monitor" })).toBeInTheDocument();
   });
 
   it("forwards an imported transition to the owning entity page", async () => {

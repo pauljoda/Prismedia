@@ -198,6 +198,7 @@ describe("AcquisitionPanel", () => {
 
     const view = render(AcquisitionPanel, { acquisitionId: "acquisition-1", detail: held });
 
+    expect(await view.findByRole("heading", { name: "Import blocked" })).toBeInTheDocument();
     expect(await view.findByText("Map expected episodes")).toBeInTheDocument();
     expect(await view.findByText("Episode 01 · First Day")).toBeInTheDocument();
     expect(view.getByText("Episode 02 · Second Day")).toBeInTheDocument();
@@ -205,9 +206,10 @@ describe("AcquisitionPanel", () => {
     expect(view.getAllByText("pack/video-b.mp4").length).toBeGreaterThan(0);
     expect(view.getByText("pack/poster.jpg")).toBeInTheDocument();
     expect(view.getByText("Other downloaded file")).toBeInTheDocument();
-    expect(view.getByRole("alert")).toHaveTextContent("Potentially unsafe download");
-    expect(view.getByText("Blocked — potentially dangerous")).toBeInTheDocument();
+    expect(view.getByRole("alert")).toHaveTextContent("Unsafe file blocked");
+    expect(view.getByText("Blocked, potentially dangerous")).toBeInTheDocument();
     expect(view.queryByRole("button", { name: "Import anyway" })).toBeNull();
+    expect(view.queryByRole("button", { name: "Search again" })).toBeNull();
 
     await fireEvent.keyDown(view.getByRole("button", { name: "Downloaded file for Episode 02 · Second Day" }), { key: "ArrowDown" });
     const fileMenu = view.getByRole("listbox");
@@ -249,7 +251,7 @@ describe("AcquisitionPanel", () => {
       onReset,
     });
 
-    await fireEvent.click(await view.findByRole("button", { name: "Reject" }));
+    await fireEvent.click(await view.findByRole("button", { name: "Reject and search again" }));
     const dialog = view.getByRole("dialog", { name: "Reject this downloaded release?" });
     expect(within(dialog).getByText(/blocklists this exact release/i)).toBeInTheDocument();
     await fireEvent.click(within(dialog).getByRole("button", { name: "Confirm Reject" }));
@@ -400,7 +402,7 @@ describe("AcquisitionPanel", () => {
 
     await waitFor(() => expect(mocks.fetchAcquisition).toHaveBeenCalledOnce());
     expect(poll).not.toBeNull();
-    expect(view.getByText("Cleaning up acquisition")).toBeInTheDocument();
+    expect(view.getByRole("heading", { name: "Cleaning up acquisition" })).toBeInTheDocument();
     expect(view.queryByRole("button", { name: "Cancel" })).toBeNull();
     expect(view.queryByRole("button", { name: "Search again" })).toBeNull();
     expect(view.queryByRole("button", { name: "Retry import" })).toBeNull();
@@ -433,8 +435,9 @@ describe("AcquisitionPanel", () => {
       detail: waiting,
     });
 
-    expect(await view.findAllByText("Waiting for release")).toHaveLength(2);
-    expect(view.getAllByText(/provider did not return/i)).toHaveLength(2);
+    expect(await view.findByRole("heading", { name: "Waiting for release" })).toBeInTheDocument();
+    expect(view.getByText("Scheduled")).toBeInTheDocument();
+    expect(view.getByText(/provider did not return/i)).toBeInTheDocument();
     await fireEvent.click(view.getByRole("button", { name: "Enter release date" }));
     expect(mocks.goto).toHaveBeenCalledWith("/?edit=dates#entity-dates-editor");
     await fireEvent.click(view.getByRole("button", { name: "Manual search" }));
@@ -451,7 +454,8 @@ describe("AcquisitionPanel", () => {
       detail: waiting,
     });
 
-    expect(await view.findAllByText("Waiting for release")).toHaveLength(2);
+    expect(await view.findByRole("heading", { name: "Waiting for release" })).toBeInTheDocument();
+    expect(view.getByText("Scheduled")).toBeInTheDocument();
     expect(view.queryByRole("button", { name: "Enter release date" })).toBeNull();
     expect(view.getByRole("button", { name: "Manual search" })).toBeInTheDocument();
   });

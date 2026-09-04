@@ -8,7 +8,7 @@
    * this component only renders it. Renders nothing while the state says there is no story.
    */
   import { RefreshCw, Search, Wrench } from "@lucide/svelte";
-  import { Button, Disclosure } from "@prismedia/ui-svelte";
+  import { Alert, Button, Card, Disclosure } from "@prismedia/ui-svelte";
   import { ACQUISITION_STATUS, ENTITY_KIND, ENTITY_KIND_DEFINITIONS } from "$lib/api/generated/codes";
   import type { EntityCapability } from "$lib/api/generated/model";
   import AcquisitionPanel from "$lib/components/acquisitions/AcquisitionPanel.svelte";
@@ -91,6 +91,9 @@
   const hasImportedBaseline = $derived(
     acq.acquisition?.summary.status === ACQUISITION_STATUS.imported,
   );
+  const hasPrimaryContent = $derived(
+    (showAcquisitionPanel && Boolean(acq.acquisition)) || acq.childCards.length > 0,
+  );
   const hasOwnedContent = $derived(acq.showFileManagement || hasImportedBaseline);
   const activeChildLabel = $derived(
     acq.childCards.every((card) => card.entity.kind === ENTITY_KIND.videoEpisode)
@@ -103,121 +106,10 @@
 
 {#if acq.visible}
   <section class="acquisition-card">
-    {#if !monitorExpanded && acq.showFileManagement && entity && fileManagement}
-      <div class="flex justify-end">
-        <EntityFileManagementAction
-          {entity}
-          onDeleted={fileManagement.onDeleted}
-          onReverted={fileManagement.onReverted}
-          compact
-        />
-      </div>
-    {/if}
-
-    {#if showEntityRequestControls && acq.showMonitor}
-      <EntityMonitorControl {acq} kindInfo={monitorKindInfo} />
-    {/if}
-
-    {#if acq.monitorError}
-      <p role="alert" class="text-[0.72rem] text-error-text">{acq.monitorError}</p>
-    {/if}
-
-    {#if monitorExpanded}
-      {#if hasActions}
-      <div class="flex flex-wrap items-center gap-2">
-        {#if acq.showSync}
-          <Button
-            type="button"
-            variant="secondary"
-            size="sm"
-            disabled={acq.syncBusy}
-            onclick={() => void acq.syncNow()}
-            class="no-lift gap-1.5 px-2.5 py-1 text-xs"
-            title="Re-sync from the provider now instead of waiting for the daily sweep"
-          >
-            <RefreshCw class="h-3.5 w-3.5" />
-            {acq.syncBusy ? "Checking…" : "Check for new works"}
-          </Button>
-        {/if}
-        {#if showEntityRequestControls && acq.showSearch}
-          <Button
-            type="button"
-            variant="primary"
-            size="sm"
-            disabled={acq.searchBusy}
-            onclick={() => void acq.searchForRelease()}
-            class="no-lift gap-1.5 px-2.5 py-1 text-xs"
-          >
-            <Search class="h-3.5 w-3.5" />
-            {acq.searchBusy ? "Searching…" : "Search for release"}
-          </Button>
-        {/if}
-        {#if acq.showSearchMissing}
-          <Button
-            type="button"
-            variant="primary"
-            size="sm"
-            disabled={acq.missingBusy}
-            onclick={() => void acq.searchMissing()}
-            class="no-lift gap-1.5 px-2.5 py-1 text-xs"
-            title="Sweep for anything missing at any depth — every gap gets its own monitored search"
-          >
-            <Search class="h-3.5 w-3.5" />
-            {acq.missingBusy
-              ? "Searching…"
-              : acq.missingChildCount > 0
-                ? `Search ${acq.missingChildCount} missing`
-                : "Search missing content"}
-          </Button>
-        {/if}
-        {#if acq.showFileManagement && entity && fileManagement}
-          <EntityFileManagementAction
-            {entity}
-            onDeleted={fileManagement.onDeleted}
-            onReverted={fileManagement.onReverted}
-            compact
-          />
-        {/if}
-      </div>
-      {/if}
-
-      {#if acq.missingResult}
-        <p class="text-[0.72rem] text-text-muted">{acq.missingResult}</p>
-      {/if}
-
-      {#if showEntityRequestControls && acq.showSearch}
-        <p class="text-[0.72rem] text-text-muted">
-          No file yet. Searching starts an auto-grabbing, monitored acquisition for this item.
-        </p>
-      {/if}
-
-      {#if entity}
-        <Disclosure title="More acquisition actions" icon={Wrench}>
-          <div class="flex flex-col gap-3">
-            {#if uploadableAcquisitionKind}
-              <ManualAcquisitionActions
-                entityId={entity.id}
-                canReplace={hasOwnedContent && replaceableKind}
-                canUpload={Boolean(acq.acquisition) || (hasOwnedContent && replaceableKind)}
-                onStarted={async (detail) => {
-                  acq.setAcquisition(detail);
-                  await acq.refresh();
-                }}
-              />
-            {/if}
-            <EntityBlocklistClearAction entityId={entity.id} entityTitle={entity.title} />
-          </div>
-        </Disclosure>
-      {/if}
-
-      {#if acq.childCards.length > 0}
-        <EntityChildMonitoring
-          cards={acq.childCards}
-          onChanged={acq.childMonitoringChanged}
-        />
-      {/if}
-
-      {#if showAcquisitionPanel && acq.acquisition}
+    <div class:has-primary={hasPrimaryContent} class="acquisition-layout">
+      {#if hasPrimaryContent}
+        <div class="acquisition-primary" role="region" aria-label="Current acquisition">
+          {#if showAcquisitionPanel && acq.acquisition}
         {#if failedParentWithChildActivity}
           <Disclosure
             title={`Parent release attempt failed · ${activeChildAcquisitionCount} ${activeChildLabel} active instead`}
@@ -247,17 +139,159 @@
               />
             {/key}
         {/if}
-      {/if}
-    {/if}
-  </section>
+          {/if}
 
+          {#if acq.childCards.length > 0}
+            <EntityChildMonitoring
+              cards={acq.childCards}
+              onChanged={acq.childMonitoringChanged}
+            />
+          {/if}
+        </div>
+      {/if}
+
+      <aside class="acquisition-settings" aria-label="Acquisition settings">
+        {#if !monitorExpanded && acq.showFileManagement && entity && fileManagement}
+          <div class="flex justify-end">
+            <EntityFileManagementAction
+              {entity}
+              onDeleted={fileManagement.onDeleted}
+              onReverted={fileManagement.onReverted}
+              compact
+            />
+          </div>
+        {/if}
+
+        {#if showEntityRequestControls && acq.showMonitor}
+          <EntityMonitorControl {acq} kindInfo={monitorKindInfo} />
+        {/if}
+
+        {#if acq.monitorError}
+          <Alert.Root variant="destructive">
+            <Alert.Title>Monitoring could not be updated</Alert.Title>
+            <Alert.Description>{acq.monitorError}</Alert.Description>
+          </Alert.Root>
+        {/if}
+
+        {#if monitorExpanded}
+          {#if hasActions}
+            <Card.Root size="sm">
+              <Card.Header class="border-b border-border-subtle">
+                <Card.Title role="heading" aria-level={2}>Actions</Card.Title>
+              </Card.Header>
+              <Card.Content class="flex flex-col gap-2">
+                {#if acq.showSync}
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    size="sm"
+                    disabled={acq.syncBusy}
+                    onclick={() => void acq.syncNow()}
+                    class="no-lift w-full justify-start"
+                    title="Re-sync from the provider now instead of waiting for the daily sweep"
+                  >
+                    <RefreshCw data-icon="inline-start" />
+                    {acq.syncBusy ? "Checking…" : "Check for new works"}
+                  </Button>
+                {/if}
+                {#if showEntityRequestControls && acq.showSearch}
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    disabled={acq.searchBusy}
+                    onclick={() => void acq.searchForRelease()}
+                    class="no-lift w-full justify-start"
+                  >
+                    <Search data-icon="inline-start" />
+                    {acq.searchBusy ? "Searching…" : "Search for release"}
+                  </Button>
+                {/if}
+                {#if acq.showSearchMissing}
+                  <Button
+                    type="button"
+                    variant="primary"
+                    size="sm"
+                    disabled={acq.missingBusy}
+                    onclick={() => void acq.searchMissing()}
+                    class="no-lift w-full justify-start"
+                    title="Search every monitored gap in this group"
+                  >
+                    <Search data-icon="inline-start" />
+                    {acq.missingBusy
+                      ? "Searching…"
+                      : acq.missingChildCount > 0
+                        ? `Search ${acq.missingChildCount} missing`
+                        : "Search missing content"}
+                  </Button>
+                {/if}
+                {#if acq.showFileManagement && entity && fileManagement}
+                  <EntityFileManagementAction
+                    {entity}
+                    onDeleted={fileManagement.onDeleted}
+                    onReverted={fileManagement.onReverted}
+                    compact
+                  />
+                {/if}
+                {#if showEntityRequestControls && acq.showSearch}
+                  <p class="text-xs leading-relaxed text-muted-foreground">
+                    Starts a monitored search and grabs the best matching release automatically.
+                  </p>
+                {/if}
+                {#if acq.missingResult}
+                  <p class="text-xs leading-relaxed text-muted-foreground">{acq.missingResult}</p>
+                {/if}
+              </Card.Content>
+            </Card.Root>
+          {/if}
+
+          {#if entity}
+            <Disclosure title="More acquisition actions" icon={Wrench}>
+              <div class="flex flex-col gap-3">
+                {#if uploadableAcquisitionKind}
+                  <ManualAcquisitionActions
+                    entityId={entity.id}
+                    canReplace={hasOwnedContent && replaceableKind}
+                    canUpload={Boolean(acq.acquisition) || (hasOwnedContent && replaceableKind)}
+                    onStarted={async (detail) => {
+                      acq.setAcquisition(detail);
+                      await acq.refresh();
+                    }}
+                  />
+                {/if}
+                <EntityBlocklistClearAction entityId={entity.id} entityTitle={entity.title} />
+              </div>
+            </Disclosure>
+          {/if}
+        {/if}
+      </aside>
+    </div>
+  </section>
 {/if}
 
 <style>
-  /* Frameless: the detail tab panel supplies the surface, border, and padding. */
   .acquisition-card {
-    display: grid;
-    gap: 0.9rem;
+    container-type: inline-size;
     min-width: 0;
+  }
+
+  .acquisition-layout,
+  .acquisition-primary,
+  .acquisition-settings {
+    display: grid;
+    gap: 1rem;
+    min-width: 0;
+  }
+
+  .acquisition-primary,
+  .acquisition-settings {
+    align-self: start;
+  }
+
+  @container (min-width: 64rem) {
+    .acquisition-layout.has-primary {
+      grid-template-columns: minmax(0, 1fr) minmax(20rem, 24rem);
+      align-items: start;
+    }
   }
 </style>

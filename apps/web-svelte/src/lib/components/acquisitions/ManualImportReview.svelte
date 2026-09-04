@@ -44,26 +44,34 @@
   }
 
   function fileKindLabel(file: AcquisitionManualImportReview["files"][number]): string {
-    if (file.isDangerous) return "Blocked — potentially dangerous";
+    if (file.isDangerous) return "Blocked, potentially dangerous";
     return file.canMap ? "Available for mapping" : "Other downloaded file";
   }
 </script>
 
-<section class="flex min-w-0 flex-col gap-4" aria-labelledby="manual-import-heading">
-  <div class="flex flex-col gap-1.5">
-    <h2 id="manual-import-heading" class="font-heading text-base font-semibold text-foreground">
-      {review?.available ? "Map expected episodes" : "Review download"}
-    </h2>
-    {#if review?.message && review.message !== warning}
-      <p class="max-w-prose text-sm leading-relaxed text-muted-foreground">{review.message}</p>
-    {/if}
-  </div>
+<section
+  class="flex min-w-0 flex-col gap-4"
+  aria-labelledby={review?.available ? "manual-import-heading" : undefined}
+  aria-label={review?.available ? undefined : "Downloaded file review"}
+>
+  {#if review?.available}
+    <div class="flex flex-col gap-1.5">
+      <h2 id="manual-import-heading" class="font-heading text-base font-semibold text-foreground">
+        Map expected episodes
+      </h2>
+      {#if review.message && review.message !== warning}
+        <p class="max-w-prose text-sm leading-relaxed text-muted-foreground">{review.message}</p>
+      {/if}
+    </div>
+  {:else if review?.message && !warning}
+    <p class="max-w-prose text-sm leading-relaxed text-muted-foreground">{review.message}</p>
+  {/if}
 
   {#if warning}
-    <Alert.Root class="border-warning/30 bg-warning-muted text-warning-text">
+    <Alert.Root class="border-warning/30 bg-warning-muted p-4 text-warning-text">
       <ShieldAlert />
-      <Alert.Title>{unsafe ? "Potentially unsafe download" : "Import needs attention"}</Alert.Title>
-      <Alert.Description class="max-w-prose text-warning-text [overflow-wrap:anywhere]">{warning}</Alert.Description>
+      <Alert.Title>{unsafe ? "Unsafe file blocked" : "Import needs attention"}</Alert.Title>
+      <Alert.Description class="text-warning-text [overflow-wrap:anywhere]">{warning}</Alert.Description>
     </Alert.Root>
   {/if}
 
@@ -102,19 +110,25 @@
   {/if}
 
   {#if review}
-    <div class="flex flex-wrap items-center gap-x-5 gap-y-3">
-      <p class="text-sm text-text-muted">
-        {#if review.available}
-          <span class="font-medium text-text-primary">{mappedEpisodeCount}</span>
-          of {review.targets.length} {review.targets.length === 1 ? "episode" : "episodes"} mapped. A file can contain several episodes.
-        {:else}
-          Reject this download to block the release and search again.
-        {/if}
-      </p>
+    <div class="flex flex-col gap-3 rounded-md border border-border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
+      <div class="min-w-0">
+        <p class="text-sm font-medium text-foreground">
+          {#if review.available}
+            {mappedEpisodeCount} of {review.targets.length} {review.targets.length === 1 ? "episode" : "episodes"} mapped
+          {:else}
+            Choose a safer release
+          {/if}
+        </p>
+        <p class="mt-1 text-xs leading-relaxed text-muted-foreground">
+          {review.available
+            ? "A downloaded file can satisfy more than one episode."
+            : "Prismedia will remove this download, block the exact release, and search again."}
+        </p>
+      </div>
       <div class="flex flex-wrap items-center gap-2">
         <Button type="button" variant="danger" class="gap-1.5" disabled={busy} onclick={onReject}>
-          <Ban class="h-3.5 w-3.5" />
-          Reject
+          <Ban data-icon="inline-start" />
+          Reject and search again
         </Button>
         {#if review.available}
           <Button
@@ -124,7 +138,7 @@
             disabled={busy || mappedEpisodeCount === 0}
             onclick={onImport}
           >
-            <Check class="h-3.5 w-3.5" />
+            <Check data-icon="inline-start" />
             Import mapped episodes
           </Button>
         {/if}
