@@ -334,9 +334,9 @@ describe("EntityDetail", () => {
       },
     });
 
-    expect(screen.getByRole("heading", { name: "Studio" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Studio 1" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Blender Foundation" })).toHaveAttribute("href", "/studios/studio-1");
-    expect(screen.getByRole("heading", { name: "Credits" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Credits 3" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Sacha Goedegebure" })).toHaveAttribute("href", "/people/person-1");
     expect(screen.getByText("Views")).toBeInTheDocument();
     expect(screen.getByText("1842")).toBeInTheDocument();
@@ -380,10 +380,10 @@ describe("EntityDetail", () => {
     });
 
     const thumbnails = container.querySelectorAll(".entity-thumbnail");
-    const creditRails = container.querySelectorAll(".credit-scroller");
 
     expect(thumbnails).toHaveLength(4);
-    expect(creditRails.length).toBeGreaterThan(0);
+    expect(screen.getByRole("region", { name: "Studio" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Credits" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Blender Foundation" })).toHaveAttribute("href", "/studios/studio-1");
     expect(screen.getByRole("link", { name: /Sacha Goedegebure/ })).toHaveAttribute("href", "/people/person-1");
     // The primary role surfaces as the credit subtitle.

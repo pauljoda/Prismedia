@@ -145,15 +145,15 @@
 
   @container (max-width: 220px) {
     .thumbnail-caption { gap: 0.125rem; padding: 0 0.25rem; }
-    h3 { font-size: 0.72rem; }
+    h3 { font-size: 0.8125rem; }
     .chips { gap: 0.15rem; }
-    .chip { min-height: 0.9rem; padding: 0.08rem 0.2rem; font-size: 0.52rem; }
+    .chip { min-height: 1.125rem; padding: 0.125rem 0.25rem; font-size: 0.625rem; }
     .chip:nth-child(n + 4) { display: none; }
   }
 
   @container (max-width: 140px) {
     .thumbnail-caption { gap: 0.1rem; padding: 0 0.2rem; }
-    h3 { font-size: 0.62rem; }
+    h3 { font-size: 0.75rem; }
     .subtitle { display: none; }
     .chip:nth-child(n + 2) { display: none; }
   }
