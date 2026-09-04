@@ -119,10 +119,11 @@ describe("TrackListRow", () => {
       },
     });
 
-    await fireEvent.click(screen.getByRole("button", { name: "Track actions for Prelude in E minor" }));
-    await fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
+    await fireEvent.keyDown(screen.getByRole("button", { name: "Track actions for Prelude in E minor" }), { key: "ArrowDown" });
+    await fireEvent.click(await screen.findByRole("menuitem", { name: "Rename" }));
 
     const input = screen.getByLabelText("Track title");
+    await waitFor(() => expect(input).toHaveFocus());
     await fireEvent.input(input, { target: { value: "Prelude, Op. 28 No. 4" } });
     await fireEvent.click(screen.getByRole("button", { name: "Save track title" }));
 

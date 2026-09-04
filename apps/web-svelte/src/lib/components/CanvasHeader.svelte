@@ -1,8 +1,7 @@
 <script lang="ts">
   import { Ellipsis, Search, Settings } from "@lucide/svelte";
   import { page } from "$app/state";
-  import { cn } from "@prismedia/ui-svelte";
-  import { keepFlyoutOnScreen } from "$lib/actions/keep-flyout-on-screen";
+  import { cn, DropdownMenu } from "@prismedia/ui-svelte";
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
   import { useSession } from "$lib/stores/session.svelte";
   import { useSearch } from "$lib/stores/search.svelte";
@@ -53,38 +52,38 @@
   const session = useSession();
 
   let appleMod = $state(false);
-  let breadcrumbMenuOpen = $state(false);
-  // The breadcrumb navs use overflow-hidden to truncate, which would clip an in-flow dropdown,
-  // so the overflow menu is rendered once at the header level and positioned (fixed) under the
-  // button that opened it.
-  let breadcrumbMenuItems = $state<{ label: string; href: string }[]>([]);
-  let breadcrumbMenuPos = $state<{ left: number; top: number }>({ left: 0, top: 0 });
   $effect(() => {
     appleMod = typeof navigator !== "undefined" && /Mac|iPhone|iPad/i.test(navigator.userAgent);
   });
 
   const searchShortcutKbd = $derived(appleMod ? "⌘K" : "Ctrl+K");
 
-  function toggleBreadcrumbMenu(event: MouseEvent, items: { label: string; href: string }[]) {
-    if (breadcrumbMenuOpen) {
-      breadcrumbMenuOpen = false;
-      return;
-    }
-
-    const rect = (event.currentTarget as HTMLElement).getBoundingClientRect();
-    breadcrumbMenuPos = { left: rect.left, top: rect.bottom + 8 };
-    breadcrumbMenuItems = items;
-    breadcrumbMenuOpen = true;
-  }
-
-  function closeBreadcrumbMenu() {
-    breadcrumbMenuOpen = false;
-  }
-
   function resolveHref(href: string) {
     return href;
   }
 </script>
+
+{#snippet breadcrumbMenu(label: string, items: { label: string; href: string }[])}
+  <DropdownMenu.Root>
+    <DropdownMenu.Trigger
+      class="flex size-7 shrink-0 items-center justify-center rounded-xs border border-border-subtle bg-glass-1 text-text-muted transition-colors duration-fast hover:text-text-primary focus-visible:outline-none focus-visible:shadow-focus-accent"
+      aria-label={label}
+    >
+      <Ellipsis class="size-4" />
+    </DropdownMenu.Trigger>
+    <DropdownMenu.Content align="start" class="w-56">
+      <DropdownMenu.Group>
+        {#each items as crumb (crumb.href)}
+          <DropdownMenu.Item>
+            {#snippet child({ props })}
+              <a {...props} href={resolveHref(crumb.href)}>{crumb.label}</a>
+            {/snippet}
+          </DropdownMenu.Item>
+        {/each}
+      </DropdownMenu.Group>
+    </DropdownMenu.Content>
+  </DropdownMenu.Root>
+{/snippet}
 
 <header
   class="app-glass sticky top-0 z-40 flex shrink-0 items-center justify-between gap-3 border-b px-5"
@@ -112,20 +111,7 @@
           {/if}
           <span class={cn("flex min-w-0 items-center", item.kind === "crumb" && item.isLast && "flex-1")}>
             {#if item.kind === "overflow"}
-              <button
-                type="button"
-                class={cn(
-                  "flex h-6 w-6 shrink-0 items-center justify-center rounded-xs border border-border-subtle bg-glass-1 text-text-muted backdrop-blur-md",
-                  "hover:text-text-primary hover:border-border-accent focus-visible:border-border-accent-strong focus-visible:shadow-focus-accent",
-                  "transition-colors duration-fast outline-none",
-                )}
-                aria-label={item.label}
-                aria-haspopup="menu"
-                aria-expanded={breadcrumbMenuOpen}
-                onclick={(event) => toggleBreadcrumbMenu(event, item.items)}
-              >
-                <Ellipsis class="h-3.5 w-3.5" />
-              </button>
+              {@render breadcrumbMenu(item.label, item.items)}
             {:else if item.isLast}
               <OverflowTicker text={item.label} class="text-text-primary" />
             {:else}
@@ -153,20 +139,7 @@
           {/if}
           <span class={cn("flex min-w-0 items-center", item.kind === "crumb" && item.isLast && "flex-1")}>
             {#if item.kind === "overflow"}
-              <button
-                type="button"
-                class={cn(
-                  "flex h-7 w-7 shrink-0 items-center justify-center rounded-xs border border-border-subtle bg-glass-1 text-text-muted backdrop-blur-md",
-                  "hover:text-text-primary hover:border-border-accent focus-visible:border-border-accent-strong focus-visible:shadow-focus-accent",
-                  "transition-colors duration-fast outline-none",
-                )}
-                aria-label={item.label}
-                aria-haspopup="menu"
-                aria-expanded={breadcrumbMenuOpen}
-                onclick={(event) => toggleBreadcrumbMenu(event, item.items)}
-              >
-                <Ellipsis class="h-4 w-4" />
-              </button>
+              {@render breadcrumbMenu(item.label, item.items)}
             {:else if item.isLast}
               <OverflowTicker text={item.label} class="text-text-primary" />
             {:else}
@@ -218,29 +191,4 @@
     {/if}
   </div>
 
-  {#if breadcrumbMenuOpen}
-    <button
-      type="button"
-      class="fixed inset-0 z-[119] cursor-default"
-      aria-label="Close breadcrumb menu"
-      onclick={closeBreadcrumbMenu}
-    ></button>
-    <div
-      class="floating-surface fixed z-[120] w-[min(14rem,calc(100vw-2rem))] p-1"
-      style="left: {breadcrumbMenuPos.left}px; top: {breadcrumbMenuPos.top}px;"
-      role="menu"
-      use:keepFlyoutOnScreen
-    >
-      {#each breadcrumbMenuItems as crumb (crumb.href)}
-        <a
-          href={resolveHref(crumb.href)}
-          role="menuitem"
-          class="block min-w-0 truncate rounded-xs px-3 py-2 text-text-muted transition-colors duration-fast hover:bg-surface-2 hover:text-text-primary focus-visible:bg-surface-2 focus-visible:text-text-primary outline-none"
-          onclick={closeBreadcrumbMenu}
-        >
-          {crumb.label}
-        </a>
-      {/each}
-    </div>
-  {/if}
 </header>

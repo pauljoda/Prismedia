@@ -38,12 +38,15 @@
   import { cn } from "../lib/utils";
 
   interface Props extends Omit<HTMLInputAttributes, "class" | "size"> {
+    /** Native input reference for composing focus behavior. */
+    ref?: HTMLInputElement | null;
     size?: TextInputSize;
     variant?: TextInputVariant;
     class?: string;
   }
 
   let {
+    ref = $bindable(null),
     size = "md",
     variant = "default",
     class: className,
@@ -52,4 +55,4 @@
   }: Props = $props();
 </script>
 
-<input {type} class={cn(textInputVariants({ size, variant }), className)} {...rest} />
+<input bind:this={ref} {type} class={cn(textInputVariants({ size, variant }), className)} {...rest} />

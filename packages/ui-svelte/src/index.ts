@@ -22,6 +22,9 @@ export {
 } from "./navigation/app-shell-sections";
 
 // Primitives
+export * as DropdownMenu from "./components/ui/dropdown-menu";
+export * as Popover from "./components/ui/popover";
+export { default as Separator } from "./components/ui/separator/separator.svelte";
 export { default as Button } from "./primitives/Button.svelte";
 export { buttonVariants, type ButtonVariant, type ButtonSize } from "./primitives/Button.svelte";
 export { default as Badge } from "./primitives/Badge.svelte";

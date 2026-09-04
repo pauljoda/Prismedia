@@ -8,8 +8,7 @@
     Trash2,
     X,
   } from "@lucide/svelte";
-  import { Checkbox, cn } from "@prismedia/ui-svelte";
-  import { keepFlyoutOnScreen } from "$lib/actions/keep-flyout-on-screen";
+  import { buttonVariants, Checkbox, cn, DropdownMenu, TextInput } from "@prismedia/ui-svelte";
   import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
   import StarRatingPicker from "./StarRatingPicker.svelte";
 
@@ -52,8 +51,9 @@
     displayNumber,
   }: Props = $props();
 
-  let menuOpen = $state(false);
   let renaming = $state(false);
+  let renameInput = $state<HTMLInputElement | null>(null);
+  let menuTrigger = $state<HTMLButtonElement | null>(null);
   let renameTitle = $state("");
   let renameBusy = $state(false);
   let renameError = $state<string | null>(null);
@@ -75,7 +75,6 @@
   }
 
   function beginRename() {
-    menuOpen = false;
     renaming = true;
     renameTitle = track.title;
     renameError = null;
@@ -85,6 +84,7 @@
     renaming = false;
     renameTitle = track.title;
     renameError = null;
+    menuTrigger?.focus();
   }
 
   async function saveRename() {
@@ -100,6 +100,7 @@
     try {
       await onRename(track, title);
       renaming = false;
+      menuTrigger?.focus();
     } catch (err) {
       renameError = err instanceof Error ? err.message : String(err);
     } finally {
@@ -197,11 +198,13 @@
   <div class="title-cell min-w-0">
     {#if renaming}
       <div class="flex min-w-0 items-center gap-1.5">
-        <input
-          type="text"
+        <TextInput
+          bind:ref={renameInput}
           aria-label="Track title"
-          class="min-w-0 flex-1 rounded-xs border border-border-accent bg-surface-1 px-2 py-1 text-[0.82rem] font-medium text-text-primary outline-none shadow-[inset_0_1px_8px_rgba(0,0,0,0.28)]"
-          bind:value={renameTitle}
+          size="sm"
+          class="min-w-0 flex-1"
+          value={renameTitle}
+          oninput={(event) => (renameTitle = event.currentTarget.value)}
           disabled={renameBusy}
           onkeydown={(event) => {
             if (event.key === "Enter") void saveRename();
@@ -300,53 +303,33 @@
 
   <div class="actions-cell relative">
     {#if onRename || onDelete}
-      <button
-        type="button"
-        onclick={() => (menuOpen = !menuOpen)}
-        aria-label={`Track actions for ${track.title}`}
-        aria-haspopup="menu"
-        aria-expanded={menuOpen}
-        class={cn(
-          "inline-flex h-8 w-8 items-center justify-center rounded-xs border border-transparent text-text-disabled transition-all duration-fast hover:border-border-default hover:bg-surface-2 hover:text-text-primary",
-          menuOpen ? "border-border-accent bg-accent-950/20 text-text-accent opacity-100" : "opacity-70 hover:opacity-100 focus-visible:opacity-100",
-        )}
-      >
-        <EllipsisVertical class="h-4 w-4" />
-      </button>
-    {/if}
-
-    {#if menuOpen}
-      <div
-        role="menu"
-        class="floating-surface absolute right-0 top-8 z-20 min-w-36 overflow-hidden py-1"
-        use:keepFlyoutOnScreen
-      >
-        {#if onRename}
-          <button
-            type="button"
-            role="menuitem"
-            class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.76rem] text-text-secondary transition-colors hover:bg-surface-2 hover:text-text-primary"
-            onclick={beginRename}
-          >
-            <Pencil class="h-3.5 w-3.5 text-text-accent" />
-            Rename
-          </button>
-        {/if}
-        {#if onDelete}
-          <button
-            type="button"
-            role="menuitem"
-            class="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[0.76rem] text-text-secondary transition-colors hover:bg-surface-2 hover:text-error-text"
-            onclick={() => {
-              menuOpen = false;
-              onDelete?.(track);
-            }}
-          >
-            <Trash2 class="h-3.5 w-3.5" />
-            Delete
-          </button>
-        {/if}
-      </div>
+      <DropdownMenu.Root>
+        <DropdownMenu.Trigger
+          bind:ref={menuTrigger}
+          aria-label={`Track actions for ${track.title}`}
+          class={buttonVariants({ variant: "ghost", size: "icon" })}
+        >
+          <EllipsisVertical class="size-4" />
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content
+          align="end"
+          class="w-44"
+          onCloseAutoFocus={(event) => {
+            if (!renaming || !renameInput) return;
+            event.preventDefault();
+            renameInput.focus();
+          }}
+        >
+          <DropdownMenu.Group>
+            {#if onRename}
+              <DropdownMenu.Item onSelect={beginRename}><Pencil />Rename</DropdownMenu.Item>
+            {/if}
+            {#if onDelete}
+              <DropdownMenu.Item variant="destructive" onSelect={() => onDelete?.(track)}><Trash2 />Delete</DropdownMenu.Item>
+            {/if}
+          </DropdownMenu.Group>
+        </DropdownMenu.Content>
+      </DropdownMenu.Root>
     {/if}
 
     {#if onDelete}
