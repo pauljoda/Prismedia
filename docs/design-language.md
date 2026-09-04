@@ -191,6 +191,9 @@ shared class-merging utility so ordinary layout overrides replace them correctly
 - Interactive tags use button styling. Static counts use Badge, with neutral
   text and restrained colored icons. Do not shrink captions to fit a thumbnail.
 - Related entities retain full normal thumbnails, even when a group has one item.
+- Thumbnail status, rating, and source markers use shared Badges. Grid markers
+  stay on the artwork; list markers join the caption so small images remain clear.
+  Selection controls keep an opaque neutral backing over artwork.
 - Detail sections attach behind the header's lower corners, with square top
   edges and rounded bottom edges. The shared header owns the overlap depth.
 - Artwork editing lives in a shared disclosure with labeled poster/header

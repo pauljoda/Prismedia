@@ -1,7 +1,7 @@
 import { fireEvent, render } from "@testing-library/svelte";
 import { tick } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { THUMBNAIL_META_ICON } from "$lib/api/generated/codes";
+import { ACQUISITION_STATUS, CAPABILITY_KIND, THUMBNAIL_META_ICON } from "$lib/api/generated/codes";
 import EntityThumbnail from "./EntityThumbnail.svelte";
 import {
   comicInstallmentCard,
@@ -67,6 +67,38 @@ describe("EntityThumbnail presentation", () => {
     });
 
     expect(container.querySelector(".bottom-left-badges")).toHaveClass("has-selection");
+  });
+
+  it("puts readable status and metadata badges in list captions instead of covering the artwork", () => {
+    const card = episodeCard();
+    const flags = card.entity.capabilities.find((capability) => capability.kind === CAPABILITY_KIND.flags)!;
+    Object.assign(flags, { isWanted: true });
+    card.wantedStatus = ACQUISITION_STATUS.awaitingSelection;
+    card.custom = { ...card.custom, sourceTag: { label: "Source" } };
+    const { container } = render(EntityThumbnail, { props: { card, layout: "list" } });
+    const caption = container.querySelector(".thumbnail-caption")!;
+    expect(caption.querySelector(".wanted-badge")).toHaveTextContent("Review");
+    expect(caption.querySelector(".position-badge")).toHaveTextContent("S1 E2");
+    expect(caption.querySelector(".rating-badge")).toHaveTextContent("4");
+    expect(caption.querySelector(".source-badge")).toHaveTextContent("Source");
+    expect(caption.querySelector('[aria-label="NSFW"]')).toBeInTheDocument();
+    expect(container.querySelector(".media .thumbnail-badges")).toBeNull();
+    expect(caption.querySelectorAll('.thumbnail-badges [data-slot="badge"]')).toHaveLength(5);
+  });
+
+  it("retains badges on artwork when a list is explicitly media-only", () => {
+    const { container } = render(EntityThumbnail, { props: { card: episodeCard(), layout: "list", mediaOnly: true } });
+    expect(container.querySelector(".thumbnail-caption")).toBeNull();
+    expect(container.querySelector('.media .position-badge[data-slot="badge"]')).toHaveTextContent("S1 E2");
+  });
+
+  it.each(["grid", "list"] as const)("respects host-owned status in %s layout", (layout) => {
+    const card = episodeCard();
+    const flags = card.entity.capabilities.find((capability) => capability.kind === CAPABILITY_KIND.flags)!;
+    Object.assign(flags, { isWanted: true });
+    const { container } = render(EntityThumbnail, { props: { card, layout, showWantedBadge: false } });
+    expect(container.querySelector(".wanted-badge")).toBeNull();
+    expect(container.querySelector('[aria-label="NSFW"]')).toBeInTheDocument();
   });
 
   it("shows cached comic installment page metadata when media-only mode is not requested", () => {

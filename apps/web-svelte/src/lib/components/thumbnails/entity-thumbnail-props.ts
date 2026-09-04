@@ -30,7 +30,7 @@ export interface EntityThumbnailProps {
   selectable?: boolean;
   selectMode?: boolean;
   selected?: boolean;
-  /** Show the wanted/status badge on the artwork. Off where a host surface renders status itself. */
+  /** Show wanted/status on grid artwork or in list captions. Off where the host renders status itself. */
   showWantedBadge?: boolean;
   subtitleContent?: Snippet<[EntityThumbnailCard]>;
   titleAlign?: EntityThumbnailTitleAlign;

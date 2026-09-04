@@ -5,16 +5,19 @@
   import { thumbnailMetaAccentForIcon } from "$lib/entities/entity-accent";
   import type { Snippet } from "svelte";
   import EntityThumbnailIcon from "./EntityThumbnailIcon.svelte";
+  import EntityThumbnailBadges from "./EntityThumbnailBadges.svelte";
 
   interface Props {
     card: EntityThumbnailCard;
     mediaOnly: boolean;
+    layout: "grid" | "list";
+    showWantedBadge: boolean;
     subtitleContent?: Snippet<[EntityThumbnailCard]>;
     titleAlign: "left" | "center" | "right";
     titleSize: "default" | "compact";
   }
 
-  let { card, mediaOnly, subtitleContent, titleAlign, titleSize }: Props = $props();
+  let { card, mediaOnly, layout, showWantedBadge, subtitleContent, titleAlign, titleSize }: Props = $props();
 </script>
 
 {#if !mediaOnly}
@@ -34,6 +37,8 @@
         </div>
       {/if}
     </div>
+
+    {#if layout === "list"}<EntityThumbnailBadges {card} {showWantedBadge} inline />{/if}
 
     {#if card.meta?.length}
       <div class="chips">

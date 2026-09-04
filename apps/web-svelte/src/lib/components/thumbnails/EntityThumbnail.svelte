@@ -136,7 +136,7 @@
     {selected}
     {showWantedBadge}
   />
-  <EntityThumbnailInfo {card} {mediaOnly} {subtitleContent} {titleAlign} {titleSize} />
+  <EntityThumbnailInfo {card} {mediaOnly} {layout} {showWantedBadge} {subtitleContent} {titleAlign} {titleSize} />
 </svelte:element>
 
 <style>
