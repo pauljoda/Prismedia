@@ -2,8 +2,7 @@
   import { BellOff, CheckCheck, EllipsisVertical, Flame, ListChecks, X } from "@lucide/svelte";
   import { cubicOut } from "svelte/easing";
   import { slide } from "svelte/transition";
-  import { cn } from "@prismedia/ui-svelte";
-  import { keepFlyoutOnScreen } from "$lib/actions/keep-flyout-on-screen";
+  import { Button, buttonVariants, cn, DropdownMenu, Separator } from "@prismedia/ui-svelte";
   import type { CollectionEntityType } from "$lib/collections/models";
   import type { EntityGridBulkAction } from "$lib/entities/entity-grid";
   import AddToCollectionMenu from "./AddToCollectionMenu.svelte";
@@ -50,8 +49,6 @@
     variant = "toolbar",
   }: Props = $props();
 
-  let actionsMenuOpen = $state(false);
-
   const canToggleNsfw = $derived(showNsfwAction && typeof onToggleNsfwFlag === "function");
   const canRemoveWanted = $derived(allSelectedWanted && typeof onRemoveWanted === "function");
   const availableBulkActions = $derived(
@@ -72,10 +69,10 @@
   transition:slide={{ duration: 200, easing: cubicOut }}
 >
   {#if showSelectionToggle}
-    <button
-      type="button"
-      class="bulk-btn select-toggle"
-      class:is-active={selectionActive}
+    <Button
+      variant={selectionActive ? "secondary" : "ghost"}
+      size="sm"
+      aria-label={selectionActive ? "Done" : "Select"}
       aria-pressed={selectionActive}
       title={selectionActive ? "Exit selection" : "Select items"}
       onclick={() => onSelectionActiveChange?.(!selectionActive)}
@@ -87,58 +84,62 @@
         <ListChecks class="h-3.5 w-3.5" />
         <span class="bulk-btn-label">Select</span>
       {/if}
-    </button>
+    </Button>
   {/if}
 
   {#if selectionActive || !showSelectionToggle}
     <span class="bulk-count">{selectedCount} selected</span>
 
     <div class="bulk-controls">
-      <button
-        type="button"
-        class="bulk-btn"
+      <Button
+        variant="ghost"
+        size="sm"
+        aria-label="Select all"
         title="Select all visible"
         onclick={onSelectAllVisible}
       >
         <CheckCheck class="h-3.5 w-3.5" />
         <span class="bulk-btn-label">Select all</span>
-      </button>
-      <button
-        type="button"
-        class="bulk-btn"
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        aria-label="Clear"
         title="Clear selection"
         disabled={selectedCount === 0}
         onclick={onClearSelection}
       >
         <X class="h-3.5 w-3.5" />
         <span class="bulk-btn-label">Clear</span>
-      </button>
+      </Button>
 
       {#if selectedCount > 0}
         {#if canToggleNsfw}
-          <span class="bulk-divider" aria-hidden="true"></span>
-          <button
-            type="button"
-            class="bulk-btn"
+          <Separator orientation="vertical" class="mx-0.5 h-4" />
+          <Button
+            variant="ghost"
+            size="sm"
+            aria-label={allSelectedNsfw ? "Mark SFW" : "Mark NSFW"}
             title={allSelectedNsfw ? "Mark SFW" : "Mark NSFW"}
             onclick={() => onToggleNsfwFlag?.(!allSelectedNsfw)}
           >
             <Flame class="h-3.5 w-3.5" />
             <span class="bulk-btn-label">{allSelectedNsfw ? "Mark SFW" : "Mark NSFW"}</span>
-          </button>
+          </Button>
         {/if}
 
         {#if canRemoveWanted}
-          <span class="bulk-divider" aria-hidden="true"></span>
-          <button
-            type="button"
-            class="bulk-btn is-danger"
+          <Separator orientation="vertical" class="mx-0.5 h-4" />
+          <Button
+            variant="danger"
+            size="sm"
+            aria-label="Remove wanted"
             title="Remove from Wanted — deletes these placeholders and keeps them out of future discovery; requesting one again brings it back"
             onclick={() => onRemoveWanted?.()}
           >
             <BellOff class="h-3.5 w-3.5" />
             <span class="bulk-btn-label">Remove wanted</span>
-          </button>
+          </Button>
         {/if}
 
         {#if collectionItems.length > 0}
@@ -146,44 +147,29 @@
         {/if}
 
         {#if availableBulkActions.length > 0}
-          <span class="bulk-divider" aria-hidden="true"></span>
-          <div class="bulk-actions-menu">
-            <button
-              type="button"
-              class="bulk-btn"
-              class:is-active={actionsMenuOpen}
+          <Separator orientation="vertical" class="mx-0.5 h-4" />
+          <DropdownMenu.Root>
+            <DropdownMenu.Trigger
+              class={buttonVariants({ variant: "secondary", size: "sm" })}
               title="Actions"
               aria-label="Bulk actions"
-              aria-expanded={actionsMenuOpen}
-              onclick={() => (actionsMenuOpen = !actionsMenuOpen)}
             >
               <EllipsisVertical class="h-3.5 w-3.5" />
               <span class="bulk-btn-label">Actions</span>
-            </button>
-            {#if actionsMenuOpen}
-              <button
-                type="button"
-                class="fixed inset-0 z-40 cursor-default"
-                aria-label="Close actions menu"
-                onclick={() => (actionsMenuOpen = false)}
-              ></button>
-              <div class="floating-surface bulk-flyout" use:keepFlyoutOnScreen>
+            </DropdownMenu.Trigger>
+            <DropdownMenu.Content align="end" aria-label="Bulk actions">
+              <DropdownMenu.Group>
                 {#each availableBulkActions as action (action.id)}
-                  <button
-                    type="button"
-                    class="bulk-flyout-item"
-                    class:danger={action.tone === "danger"}
-                    onclick={() => {
-                      action.onRun(selectedIds);
-                      actionsMenuOpen = false;
-                    }}
+                  <DropdownMenu.Item
+                    variant={action.tone === "danger" ? "destructive" : "default"}
+                    onSelect={() => action.onRun(selectedIds)}
                   >
                     {action.label}
-                  </button>
+                  </DropdownMenu.Item>
                 {/each}
-              </div>
-            {/if}
-          </div>
+              </DropdownMenu.Group>
+            </DropdownMenu.Content>
+          </DropdownMenu.Root>
         {/if}
       {/if}
     </div>
@@ -248,72 +234,6 @@
     justify-content: flex-end;
   }
 
-  .bulk-divider {
-    display: inline-block;
-    width: 1px;
-    height: 1.1rem;
-    background: linear-gradient(
-      to bottom,
-      transparent,
-      rgb(255 255 255 / 0.08),
-      transparent
-    );
-    margin: 0 0.1rem;
-  }
-
-  .bulk-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.35rem;
-    height: 1.85rem;
-    border: 1px solid var(--color-border-subtle, rgba(148, 158, 178, 0.07));
-    background: var(--color-surface-2, #101420);
-    color: var(--color-text-muted);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.66rem;
-    letter-spacing: 0.04em;
-    padding: 0 0.55rem;
-    border-radius: var(--radius-xs, 4px);
-    box-shadow: inset 0 2px 8px rgba(0,0,0,0.30);
-    transition:
-      border-color var(--duration-fast, 80ms) var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)),
-      background var(--duration-fast, 80ms) var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)),
-      color var(--duration-fast, 80ms) var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)),
-      box-shadow var(--duration-fast, 80ms) var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1));
-  }
-
-  .bulk-btn:hover {
-    border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
-    background: var(--color-surface-3, #151a28);
-    color: var(--color-text-primary);
-    box-shadow: inset 0 0 0 1px var(--color-border-default);
-  }
-
-  .bulk-btn:focus-visible {
-    outline: none;
-    border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
-    box-shadow: var(--shadow-focus-accent);
-  }
-
-  .bulk-btn.is-active {
-    border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
-    background: var(--color-surface-4, #1c2235);
-    color: var(--color-text-accent, #c7c9cc);
-    box-shadow: inset 2px 0 0 var(--entity-accent, var(--color-accent-500));
-  }
-
-  .bulk-btn:disabled {
-    cursor: not-allowed;
-    opacity: 0.5;
-  }
-
-  .bulk-btn.is-danger:hover,
-  .bulk-btn.is-danger:focus-visible {
-    border-color: rgba(255, 92, 67, 0.42);
-    color: var(--color-status-error-text, #ff806f);
-    box-shadow: inset 2px 0 0 var(--color-error-text);
-  }
-
   .bulk-btn-label {
     display: none;
   }
@@ -322,50 +242,5 @@
     .bulk-btn-label {
       display: inline;
     }
-  }
-
-  .bulk-actions-menu {
-    position: relative;
-  }
-
-  .bulk-flyout {
-    position: absolute;
-    right: 0;
-    top: calc(100% + 0.3rem);
-    z-index: 50;
-    min-width: 10rem;
-    padding: 0.3rem 0;
-    overflow: hidden;
-  }
-
-  .bulk-flyout-item {
-    display: flex;
-    align-items: center;
-    gap: 0.55rem;
-    width: 100%;
-    padding: 0.45rem 0.85rem;
-    background: transparent;
-    color: var(--color-text-muted);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.74rem;
-    letter-spacing: 0.04em;
-    text-align: left;
-    transition:
-      background-color var(--duration-fast, 80ms) var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)),
-      color var(--duration-fast, 80ms) var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1));
-  }
-
-  .bulk-flyout-item:hover {
-    background: rgb(255 255 255 / 0.04);
-    color: var(--color-text-primary);
-  }
-
-  .bulk-flyout-item.danger {
-    color: var(--color-text-muted);
-  }
-
-  .bulk-flyout-item.danger:hover {
-    background: rgb(168 72 80 / 0.12);
-    color: var(--color-error-text, #cc7880);
   }
 </style>

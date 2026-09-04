@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Bulk-selection actions and page-size pickers now use shared keyboard-accessible controls with consistent focus handling, while keeping their existing toolbar placement.
 - Library toolbars retain their full-width search row, inline view and thumbnail controls, and separate selection strip while using shared keyboard-accessible controls. Identify provider search now shares keyboard navigation and focus handling with other menus.
 - Account, breadcrumb, and track menus now share keyboard navigation, focus return, and collision-aware positioning. Filter presets use a clearer panel with labeled fields and always-visible management actions.
 

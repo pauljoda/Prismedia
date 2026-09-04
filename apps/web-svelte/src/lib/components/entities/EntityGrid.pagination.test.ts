@@ -137,8 +137,10 @@ describe("EntityGrid pagination", () => {
       },
     });
 
-    await fireEvent.click(screen.getByLabelText("Per page"));
-    await fireEvent.click(screen.getByRole("button", { name: "100" }));
+    const pageSize = screen.getByLabelText("Per page");
+    pageSize.focus();
+    await fireEvent.keyDown(pageSize, { key: "ArrowDown" });
+    await fireEvent.pointerUp(await screen.findByRole("option", { name: "100" }));
 
     await waitFor(() => {
       expect(container.querySelectorAll(".entity-thumbnail").length).toBe(100);

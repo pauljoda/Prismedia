@@ -1,15 +1,12 @@
 <script lang="ts">
   import {
-    Check,
-    ChevronDown,
     ChevronLeft,
     ChevronRight,
     ChevronsLeft,
     ChevronsRight,
     LoaderCircle,
   } from "@lucide/svelte";
-  import { cn } from "@prismedia/ui-svelte";
-  import { keepFlyoutOnScreen } from "$lib/actions/keep-flyout-on-screen";
+  import { Button, Select } from "@prismedia/ui-svelte";
 
   interface Props {
     canPageBack: boolean;
@@ -59,8 +56,9 @@
     totalIsExact,
   }: Props = $props();
 
-  let pageSizeOpen = $state(false);
-  const showPageSizeMenu = $derived(pageSizeOpen);
+  const pageSizeOptions = $derived(
+    normalizedPageSizeOptions.map((value) => ({ value: String(value), label: String(value) })),
+  );
 </script>
 
 <div class="pagination-shell">
@@ -80,35 +78,35 @@
     </div>
 
     <div class="transport">
-      <button
-        type="button"
-        class="transport-btn"
+      <Button
+        variant="ghost"
+        size="icon"
         title="First page"
         aria-label="First page"
         disabled={!canPageBack}
         onclick={onFirstPage}
       >
         <ChevronsLeft aria-hidden="true" />
-      </button>
-      <button
-        type="button"
-        class="transport-btn"
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
         title="Previous page"
         aria-label="Previous page"
         disabled={!canPageBack}
         onclick={onPreviousPage}
       >
         <ChevronLeft aria-hidden="true" />
-      </button>
+      </Button>
       <span class="page-count" aria-hidden="true">
         <span class="page-count-current">{String(currentPageIndex + 1).padStart(String(pageCount).length, "0")}</span>
         <span class="page-count-sep">/</span>
         <span class="page-count-total">{pageCount}</span>
       </span>
       <span class="sr-only">Page {currentPageIndex + 1} / {pageCount}</span>
-      <button
-        type="button"
-        class="transport-btn"
+      <Button
+        variant="ghost"
+        size="icon"
         title="Next page"
         aria-label="Next page"
         disabled={!canPageForward || Boolean(loadMoreError) || loadingMore || pendingAdvanceAfterLoad}
@@ -119,67 +117,44 @@
         {:else}
           <ChevronRight aria-hidden="true" />
         {/if}
-      </button>
-      <button
-        type="button"
-        class="transport-btn"
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon"
         title="Last page"
         aria-label="Last page"
         disabled={!canSeekToEnd || Boolean(loadMoreError) || loadingMore || pendingAdvanceAfterLoad}
         onclick={() => void onLastPage()}
       >
         <ChevronsRight aria-hidden="true" />
-      </button>
+      </Button>
     </div>
 
     <div class="page-trailing">
       {#if loadMoreError}
-        <button
-          type="button"
-          class="retry-load"
+        <Button
+          variant="danger"
+          size="sm"
           onclick={() => {
             if (onLoadMore) void onLoadMore();
           }}
         >
           Try again
-        </button>
+        </Button>
       {/if}
       <div class="page-size-control">
         <span class="page-size-label">PER PAGE</span>
-        <div class="relative">
-          <button
-            type="button"
-            class="page-size-btn"
-            aria-label="Per page"
-            onclick={() => (pageSizeOpen = !pageSizeOpen)}
-          >
-            {pageSize}
-            <ChevronDown class="h-3 w-3 text-text-disabled ml-1 shrink-0" />
-          </button>
-          {#if showPageSizeMenu}
-            <button
-              type="button"
-              class="fixed inset-0 z-40 cursor-default"
-              aria-label="Close page size menu"
-              onclick={() => (pageSizeOpen = false)}
-            ></button>
-            <div class="page-size-menu" use:keepFlyoutOnScreen>
-              {#each normalizedPageSizeOptions as option (option)}
-                <button
-                  type="button"
-                  class={cn("page-size-menu-item", pageSize === option && "is-active")}
-                  onclick={() => {
-                    onPageSizeChange(option);
-                    pageSizeOpen = false;
-                  }}
-                >
-                  <Check class={cn("h-3 w-3 shrink-0", pageSize === option ? "opacity-100" : "opacity-0")} />
-                  {option}
-                </button>
-              {/each}
-            </div>
-          {/if}
-        </div>
+        <Select
+          ariaLabel="Per page"
+          size="sm"
+          class="w-auto min-w-18"
+          options={pageSizeOptions}
+          value={String(pageSize)}
+          onchange={(value) => {
+            const option = normalizedPageSizeOptions.find((size) => String(size) === value);
+            if (option !== undefined) onPageSizeChange(option);
+          }}
+        />
       </div>
     </div>
   </nav>
@@ -307,42 +282,6 @@
     box-shadow: inset 0 2px 8px rgba(0,0,0,0.30);
   }
 
-  .transport-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    width: 2rem;
-    height: 1.85rem;
-    border: 1px solid transparent;
-    background: transparent;
-    color: var(--color-text-muted);
-    border-radius: var(--radius-xs, 4px);
-    transition:
-      color var(--duration-fast, 80ms) var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)),
-      background var(--duration-fast, 80ms) var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)),
-      box-shadow var(--duration-fast, 80ms) var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1));
-  }
-
-  .transport-btn:hover:not(:disabled) {
-    background: var(--color-surface-3, #151a28);
-    color: var(--color-text-primary);
-  }
-
-  .transport-btn:active:not(:disabled) {
-    background: var(--color-surface-4, #1c2235);
-  }
-
-  .transport-btn:focus-visible {
-    outline: none;
-    box-shadow: 0 0 0 1px rgba(199, 201, 204,0.35), 0 0 8px rgba(199, 201, 204,0.15);
-  }
-
-  .transport-btn:disabled {
-    cursor: not-allowed;
-    color: var(--color-text-disabled);
-    opacity: 0.38;
-  }
-
   .transport :global(svg) {
     width: 0.95rem;
     height: 0.95rem;
@@ -395,98 +334,6 @@
     letter-spacing: 0.18em;
   }
 
-  .page-size-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: space-between;
-    height: 1.85rem;
-    min-width: 4.5rem;
-    border: 1px solid var(--color-border-subtle, rgba(148, 158, 178, 0.07));
-    background: var(--color-surface-1, #0c0f15);
-    border-radius: var(--radius-xs, 4px);
-    box-shadow: inset 0 2px 8px rgba(0,0,0,0.30);
-    color: var(--color-text-primary);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.72rem;
-    font-variant-numeric: tabular-nums;
-    letter-spacing: 0.04em;
-    padding: 0 0.45rem 0 0.65rem;
-    transition:
-      border-color var(--duration-fast, 80ms) var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)),
-      background var(--duration-fast, 80ms) var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)),
-      box-shadow var(--duration-fast, 80ms) var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1));
-  }
-
-  .page-size-btn:hover,
-  .page-size-btn:focus-visible {
-    outline: none;
-    border-color: var(--color-border-accent, rgba(199, 201, 204, 0.25));
-    background: var(--color-surface-2, #101420);
-    box-shadow: 0 0 0 1px rgba(199, 201, 204,0.35), 0 0 8px rgba(199, 201, 204,0.15);
-  }
-
-  .page-size-menu {
-    position: absolute;
-    bottom: calc(100% + 0.3rem);
-    right: 0;
-    z-index: 50;
-    min-width: 6rem;
-    border: 1px solid var(--color-border-subtle, rgba(148, 158, 178, 0.07));
-    background: rgba(12, 15, 21, 0.98);
-    backdrop-filter: blur(var(--glass-blur-lg));
-    -webkit-backdrop-filter: blur(var(--glass-blur-lg));
-    border-radius: var(--radius-sm, 6px);
-    box-shadow: 0 8px 40px rgba(0,0,0,0.60);
-    padding: 0.3rem 0;
-    overflow: hidden;
-  }
-
-  .page-size-menu-item {
-    display: flex;
-    align-items: center;
-    gap: 0.55rem;
-    width: 100%;
-    padding: 0.45rem 0.85rem;
-    background: transparent;
-    color: var(--color-text-muted);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.74rem;
-    letter-spacing: 0.04em;
-    text-align: left;
-    transition:
-      background-color var(--duration-fast, 80ms) var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)),
-      color var(--duration-fast, 80ms) var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1));
-  }
-
-  .page-size-menu-item:hover {
-    background: rgba(255, 255, 255, 0.04);
-    color: var(--color-text-primary);
-  }
-
-  .page-size-menu-item.is-active {
-    background: linear-gradient(90deg, var(--color-accent-overlay-subtle), transparent);
-    color: var(--color-text-accent, #c7c9cc);
-  }
-
-  .retry-load {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    height: 1.85rem;
-    border: 1px solid rgb(204 120 128 / 0.4);
-    background: rgb(40 18 22 / 0.65);
-    color: var(--color-error-text);
-    font-size: 0.66rem;
-    font-weight: 600;
-    letter-spacing: 0.1em;
-    padding: 0 0.85rem;
-    transition: background var(--duration-fast) var(--ease-default);
-  }
-
-  .retry-load:hover {
-    background: rgb(54 22 28 / 0.85);
-  }
-
   @keyframes spin {
     to {
       transform: rotate(360deg);
@@ -495,8 +342,7 @@
 
   @media (max-width: 720px) {
     /*
-     * Mobile stacks the readout, transport, and trailing controls into three
-     * rows while keeping status information visible above the transport.
+     * Mobile keeps the readout and trailing controls above a full-width transport.
      */
     .pagination-bar {
       grid-template-columns: minmax(0, 1fr) minmax(0, auto);
@@ -529,10 +375,6 @@
 
     .readout-range {
       min-width: 0;
-    }
-
-    .transport-btn {
-      flex: 0 0 auto;
     }
 
     .page-count {

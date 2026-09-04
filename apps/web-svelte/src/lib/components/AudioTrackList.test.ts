@@ -32,7 +32,7 @@ describe("AudioTrackList", () => {
     expect(screen.getByRole("button", { name: "Add selection to a collection" })).toBeInTheDocument();
 
     await fireEvent.click(screen.getByRole("button", { name: "Bulk actions" }));
-    await fireEvent.click(screen.getByRole("button", { name: "Queue Next" }));
+    await fireEvent.click(screen.getByRole("menuitem", { name: "Queue Next" }));
 
     expect(onBulk).toHaveBeenCalledWith(["track-1", "track-2"]);
   });
