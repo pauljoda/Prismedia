@@ -2,8 +2,9 @@
   import type { ComponentProps } from "svelte";
   import EntityGridToolbar from "./EntityGridToolbar.svelte";
 
-  let { barsCollapsed = false, onBarsCollapsedChange = () => {} }:
-    Pick<ComponentProps<typeof EntityGridToolbar>, "barsCollapsed" | "onBarsCollapsedChange"> = $props();
+  let { barsCollapsed = false, onBarsCollapsedChange = () => {}, canClearFiltersAndSort = true }:
+    Partial<Pick<ComponentProps<typeof EntityGridToolbar>, "barsCollapsed" | "onBarsCollapsedChange" | "canClearFiltersAndSort">> = $props();
+  let selectionActive = $state(false);
 
   const noop = () => {};
 </script>
@@ -14,7 +15,7 @@
   {barsCollapsed}
   bulkActions={[]}
   collectionItems={[]}
-  canClearFiltersAndSort={false}
+  {canClearFiltersAndSort}
   drawerOpen={false}
   filterOptions={[]}
   maxScale={12}
@@ -33,7 +34,7 @@
   onSavePreset={noop}
   onScaleChange={noop}
   onSelectAllVisible={noop}
-  onSelectionActiveChange={noop}
+  onSelectionActiveChange={(active) => (selectionActive = active)}
   onSortByChange={noop}
   onSortDirChange={noop}
   onToggleNsfwFlag={noop}
@@ -45,7 +46,7 @@
   selectable
   selectedCount={0}
   selectedIds={[]}
-  selectionActive={false}
+  {selectionActive}
   sortBy="title"
   sortDir="asc"
   viewMode="grid"

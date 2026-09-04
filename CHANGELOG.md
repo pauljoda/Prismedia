@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Library toolbars now keep search, sorting, filters, presets, and selection together, with layout and artwork controls grouped in a Display panel. Bulk actions appear only during selection, and Identify provider search now shares keyboard navigation and focus handling with other menus.
 - Account, breadcrumb, and track menus now share keyboard navigation, focus return, and collision-aware positioning. Filter presets use a clearer panel with labeled fields and always-visible management actions.
 
 - Shared dropdowns and settings switches now use accessible component bases with clearer neutral styling, keyboard typeahead, disabled-option handling, and dialog-aware menus. Settings labels are easier to read and selectors expand to full width on small screens.

@@ -24,6 +24,9 @@ export {
 // Primitives
 export * as DropdownMenu from "./components/ui/dropdown-menu";
 export * as Popover from "./components/ui/popover";
+export * as Command from "./components/ui/command";
+export * as ToggleGroup from "./components/ui/toggle-group";
+export { default as Slider } from "./components/ui/slider/slider.svelte";
 export { default as Separator } from "./components/ui/separator/separator.svelte";
 export { default as Button } from "./primitives/Button.svelte";
 export { buttonVariants, type ButtonVariant, type ButtonSize } from "./primitives/Button.svelte";
@@ -33,6 +36,7 @@ export { default as Checkbox } from "./primitives/Checkbox.svelte";
 export { default as ColorInput } from "./primitives/ColorInput.svelte";
 export { default as Dialog } from "./primitives/Dialog.svelte";
 export { default as SearchInput } from "./primitives/SearchInput.svelte";
+export { default as SearchableSelect, type SearchableSelectOption } from "./primitives/SearchableSelect.svelte";
 export { default as TextInput } from "./primitives/TextInput.svelte";
 export { textInputVariants, type TextInputSize, type TextInputVariant } from "./primitives/TextInput.svelte";
 export { default as Select } from "./primitives/Select.svelte";

@@ -108,16 +108,13 @@
     <div class="flex flex-col gap-3 p-3.5">
       {#if providers.length > 0}
         <div class="grid min-w-0 grid-cols-1 gap-2 sm:grid-cols-[minmax(12rem,32rem)_auto] sm:items-end">
-          <div class="plugin-search-provider flex min-w-0 flex-col gap-1.5">
-            <span class="font-mono text-[0.72rem] text-text-muted">{providerLabel}</span>
-            <IdentifyProviderSelect
-              {providers}
-              selectedId={activeProvider?.id ?? selectedProviderId}
-              onChange={onProviderChange}
-              label={providerLabel}
-              compact
-            />
-          </div>
+          <IdentifyProviderSelect
+            {providers}
+            selectedId={activeProvider?.id ?? selectedProviderId}
+            onChange={onProviderChange}
+            label={providerLabel}
+            class="max-w-none"
+          />
           {#if onSeek}
             <Button
               type="button"
@@ -214,9 +211,3 @@
     </section>
   {/if}
 </div>
-
-<style>
-  .plugin-search-provider :global(.provider-select) {
-    width: 100%;
-  }
-</style>

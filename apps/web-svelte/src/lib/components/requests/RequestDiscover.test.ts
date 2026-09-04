@@ -61,7 +61,7 @@ describe("RequestDiscover", () => {
     const listbox = screen.getByRole("listbox");
     expect(within(listbox).getByText("Beta TV Database")).toBeInTheDocument();
     expect(within(listbox).queryByText("Open Library")).not.toBeInTheDocument();
-    await fireEvent.mouseDown(within(listbox).getByRole("option", { name: /beta tv database/i }));
+    await fireEvent.click(within(listbox).getByRole("option", { name: /beta tv database/i }));
 
     expect(await screen.findByLabelText("Show name")).toBeInTheDocument();
     expect(screen.getByLabelText("Episode title")).toBeInTheDocument();

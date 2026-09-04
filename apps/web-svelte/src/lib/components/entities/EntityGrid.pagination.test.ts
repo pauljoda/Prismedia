@@ -36,6 +36,7 @@ describe("EntityGrid pagination", () => {
     vi.stubGlobal("cancelAnimationFrame", vi.fn());
     vi.stubGlobal("ResizeObserver", class {
       observe = vi.fn();
+      unobserve = vi.fn();
       disconnect = vi.fn();
     });
     Object.defineProperty(HTMLElement.prototype, "scrollTo", {
@@ -210,7 +211,8 @@ describe("EntityGrid pagination", () => {
 
     expect(container.querySelector(".thumbnail-caption")).not.toBeNull();
 
-    await fireEvent.click(screen.getByRole("button", { name: "Media wall" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Display options" }));
+    await fireEvent.click(screen.getByRole("switch", { name: "Artwork only" }));
 
     await waitFor(() => {
       expect(container.querySelector(".cards")?.classList.contains("is-media-wall")).toBe(true);
@@ -243,7 +245,8 @@ describe("EntityGrid pagination", () => {
       },
     });
 
-    await fireEvent.click(screen.getByRole("button", { name: "Media wall" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Display options" }));
+    await fireEvent.click(screen.getByRole("switch", { name: "Artwork only" }));
 
     await waitFor(() => {
       expect(readGridPrefs("media-wall-persist-test")?.mediaWall).toBe(true);

@@ -1,8 +1,8 @@
 # Shared component bases
 
-This directory contains source copied with shadcn-svelte CLI 1.6.0 from the official registry, then adapted to Prismedia. The installed set is Select, Switch, Separator, DropdownMenu, and Popover. Bits UI provides their interaction behavior. The lockfile records the tested runtime version.
+This directory contains source copied with shadcn-svelte CLI 1.6.0 from the official registry, then adapted to Prismedia. The installed set is Select, Switch, Separator, DropdownMenu, Popover, ToggleGroup, Slider, and Command, with Toggle supporting the group styles. Bits UI provides their interaction behavior. The lockfile records the tested runtime version.
 
-Application code imports `Select`, `Toggle`, `DropdownMenu`, `Popover`, and `Separator` from `@prismedia/ui-svelte`. Select and Toggle retain their existing adapter APIs; DropdownMenu and Popover expose namespaced composition parts. Domain fetching, settings persistence, entity relationships, and validation belong outside this directory.
+Application code imports these bases from `@prismedia/ui-svelte`. Select and Toggle retain their existing adapter APIs; DropdownMenu, Popover, ToggleGroup, and Command expose namespaced composition parts. `SearchableSelect` composes Command and Popover for local single-choice catalogs. Domain fetching, settings persistence, entity relationships, and validation belong outside this directory.
 
 ## Composing overlays
 
@@ -12,6 +12,13 @@ Application code imports `Select`, `Toggle`, `DropdownMenu`, `Popover`, and `Sep
 - Content portals to the body by default. When composing inside a native dialog or fullscreen host, explicitly pass `portalProps={{ to: hostElement }}`. Validate the actual top-layer host before migrating those consumers; the current menu consumers are outside those hosts.
 - Keep form state intact while an overlay closes so its focused element remains available to the focus manager. Reset an unfinished form when reopening it.
 - Only the used DropdownMenu parts are retained. Add submenu or checkbox/radio parts selectively from the registry when a concrete consumer needs them.
+
+## Choosing library controls
+
+- Use Select for short finite lists, such as sorting. Use SearchableSelect when choices need explicit text search, such as Identify providers. The searchable adapter matches labels and values case-insensitively, preserves catalog order, and limits rendered results to 50 by default. Parent code owns the chosen value and any fallback selection.
+- Use ToggleGroup for a small set of mutually exclusive layout choices. The library consumer uses function binding to reject an empty value when the active choice is pressed again.
+- Use Slider for single numeric values. Supply `thumbLabel` so the focusable control is named, and keep persistence in the consumer. Multi-thumb ranges are intentionally not exposed yet.
+- Group optional layout and artwork controls in a named Popover. Keep search, sorting, filters, presets, and the selection entry point visible; render bulk actions only while selection is active.
 
 ## Updating a base
 
@@ -37,11 +44,17 @@ Review generated dependency declarations before installing. Runtime dependencies
 - DropdownMenu and Popover use bounded, opaque neutral surfaces and existing radius, typography, border, and shadow tokens. Menu items have visible focus/hover states, comfortable targets, disabled handling, and an optional destructive variant.
 - Bits UI 2.19.0 drops the rendered content ID through its floating layer. DropdownMenu and Popover Content explicitly forward a stable ID through the documented child snippet, preserving `aria-controls` and menu typeahead. Keep the regression test when comparing a future upstream update; do not replace this with custom keyboard handlers.
 - Popover Content explicitly carries `role="dialog"`, matching its trigger's popup semantics. Consumers supply its title and description.
+- Command Input reuses the existing TextInput style recipe instead of adding a second input system. Its List wraps a Bits Viewport, required by Bits UI 2.19 for active-descendant linkage and list management. Keep the keyboard/ARIA regression tests when updating registry source.
+- SearchableSelect focuses its search field on opening; Popover owns dismissal and focus return. The adapter resets search on reopening, commits only on item selection, and uses the nearest native dialog as its portal host. Its first application consumer is IdentifyProviderSelect; asynchronous entity picking remains a separate domain concern.
+- ToggleGroup uses the existing class-variance-authority dependency and neutral selected states. No additional styling runtime is needed.
+- Slider and ToggleGroup orientation styles target Bits UI's `data-orientation` attribute explicitly. Registry-only shorthand variants are not assumed to exist in the app stylesheet. Muted control fills reuse the mapped neutral accent token.
 
 ## Checks
 
 Run both package typechecks, the web unit suite, and the static build. Keep adapter tests for keyboard navigation, annotations, disabled state, typeahead, empty values, external updates, controlled state, and dialog portal placement. Menu consumers cover account permissions, real links, callback isolation, and breadcrumb portals. Preset tests cover naming, cancellation, focus return, applying, deleting, and explicit overwrite confirmation. Existing consumer tests exercise import mapping, collection rules, download protocol preference, and request monitoring.
 
+Library control tests cover selection entry/exit, persisted collapsed rows, sort direction, display callbacks, and layout choices. Searchable selection tests cover bounded results, matches beyond the initial limit, disabled items, provider fallback, external value changes, empty results, keyboard commit, and Escape/focus return. Also check these controls in a populated library and Identify through the running app.
+
 Also inspect `/design-language#component-bases` and a real Settings section through the .NET app. Test pointer selection, keyboard selection, scrolling, focus return, layered Escape, and a narrow viewport. DOM tests do not establish native top-layer behavior, touch behavior, or visual quality.
 
-Sources: [installation](https://www.shadcn-svelte.com/docs/installation), [Select](https://www.shadcn-svelte.com/docs/components/select), [Switch](https://www.shadcn-svelte.com/docs/components/switch), [DropdownMenu](https://www.shadcn-svelte.com/docs/components/dropdown-menu), [Popover](https://www.shadcn-svelte.com/docs/components/popover), [theming](https://www.shadcn-svelte.com/docs/theming). Upstream attribution is retained in `LICENSE.md`.
+Sources: [installation](https://www.shadcn-svelte.com/docs/installation), [Select](https://www.shadcn-svelte.com/docs/components/select), [Switch](https://www.shadcn-svelte.com/docs/components/switch), [DropdownMenu](https://www.shadcn-svelte.com/docs/components/dropdown-menu), [Popover](https://www.shadcn-svelte.com/docs/components/popover), [Toggle Group](https://www.shadcn-svelte.com/docs/components/toggle-group), [Slider](https://www.shadcn-svelte.com/docs/components/slider), [Command](https://www.shadcn-svelte.com/docs/components/command), [Bits Command structure](https://www.bits-ui.com/docs/components/command#structure), [theming](https://www.shadcn-svelte.com/docs/theming). Upstream attribution is retained in `LICENSE.md`.

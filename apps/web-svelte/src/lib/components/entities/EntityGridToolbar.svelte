@@ -131,7 +131,7 @@
   // toolbar rows that can be collapsed to keep the bar compact (especially on
   // mobile). The toggle only appears when at least one of them is present.
   const hasCollapsibleRows = $derived(
-    selectable || activeFilters.length > 0 || canClearFiltersAndSort,
+    (selectable && selectionActive) || activeFilters.length > 0 || canClearFiltersAndSort,
   );
 
   // A persisted value seeds this mount; later prop changes must not overwrite a
@@ -172,6 +172,12 @@
       {onSortDirChange}
       onToggleCollapse={() => collapse.toggle()}
       {onViewModeChange}
+      {selectable}
+      {selectionActive}
+      onSelectionActiveChange={(active) => {
+        onSelectionActiveChange(active);
+        if (active && collapse.barsCollapsed) collapse.toggle();
+      }}
       {presets}
       {query}
       {scale}
@@ -190,8 +196,9 @@
       />
     {/if}
 
-    {#if selectable && !collapse.barsCollapsed}
+    {#if selectable && selectionActive && !collapse.barsCollapsed}
       <BulkSelectionBar
+        showSelectionToggle={false}
         {allSelectedNsfw}
         {allSelectedWanted}
         {onRemoveWanted}
@@ -222,11 +229,11 @@
     background: transparent;
     pointer-events: none;
 
-    --toolbar-detail-border: var(--color-border, #1c2235);
-    --toolbar-detail-glass: rgb(12 15 21);
+    --toolbar-detail-border: var(--color-border-subtle);
+    --toolbar-detail-glass: var(--color-surface-1);
     --toolbar-detail-slideout-inset: 5px;
     --toolbar-bar-overlap: 0.5rem;
-    --toolbar-page-accent: var(--page-accent, var(--entity-accent, #739b96));
+    --toolbar-page-accent: var(--page-accent, var(--entity-accent, var(--color-accent-500)));
   }
 
   .toolbar-shell::before {

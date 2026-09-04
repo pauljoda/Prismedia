@@ -37,6 +37,7 @@ import {
   type EntityThumbnailMetaIcon,
 } from "./entity-thumbnail";
 import { bookFilterDefinitionFromId } from "./entity-grid-book-filters";
+import type { EntityGridSort, EntityGridViewMode } from "./entity-grid-display";
 import {
   sharedSourceEpisodeDisplayTitle,
   sharedSourceEpisodeOverlay,
@@ -50,9 +51,8 @@ export { BOOK_FORMAT_FILTER_DEFS, BOOK_TYPE_FILTER_DEFS } from "./entity-grid-bo
  */
 export const ENTITY_GRID_ALL_KINDS = "all";
 
-export type EntityGridSort = "title" | "kind" | "rating" | "position" | "added" | "random" | "references";
+export { ENTITY_GRID_SORT, ENTITY_GRID_VIEW_MODE, type EntityGridSort, type EntityGridViewMode } from "./entity-grid-display";
 export type EntityGridSortDir = EntitySortDirectionCode;
-export type EntityGridViewMode = "grid" | "list" | "feed";
 
 export type EntityGridServerQuery = Pick<
   ListEntitiesParams,

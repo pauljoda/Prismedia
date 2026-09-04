@@ -50,7 +50,7 @@
     aria-label={activePreset?.name ?? "Presets"}
   >
     <Bookmark class="size-3.5" />
-    <span class="hidden max-w-36 truncate min-[520px]:inline">{activePreset?.name ?? "Presets"}</span>
+    <span class="max-w-36 truncate">{activePreset?.name ?? "Presets"}</span>
   </Popover.Trigger>
   <Popover.Content align="end" aria-labelledby={`${id}-title`} aria-describedby={`${id}-description`}>
     <Popover.Header>
