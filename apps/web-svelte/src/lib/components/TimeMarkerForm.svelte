@@ -31,7 +31,7 @@
 
 <script lang="ts">
   import { MapPin, X, Loader } from "@lucide/svelte";
-  import { Button } from "@prismedia/ui-svelte";
+  import { TextInput,  Button  } from "@prismedia/ui-svelte";
 
   interface Props {
     title: string;
@@ -131,9 +131,9 @@
   <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
     <div class="space-y-1 sm:col-span-2">
       <label class="text-xs text-text-muted" for="marker-title">Title</label>
-      <input
+      <TextInput
         id="marker-title"
-        class="control-input w-full"
+        class="w-full"
         value={title}
         oninput={(e) => onTitleChange((e.currentTarget as HTMLInputElement).value)}
         placeholder="Marker title"
@@ -143,9 +143,9 @@
     <div class="space-y-1">
       <label class="text-xs text-text-muted" for="marker-start">Start Time</label>
       <div class="flex items-center gap-2">
-        <input
+        <TextInput
           id="marker-start"
-          class="control-input flex-1 min-w-0"
+          class="flex-1 min-w-0"
           bind:value={startText}
           onblur={commitStartTime}
           onkeydown={(e) => {
@@ -168,9 +168,9 @@
     <div class="space-y-1">
       <label class="text-xs text-text-muted" for="marker-end">End Time (optional)</label>
       <div class="flex items-center gap-2">
-        <input
+        <TextInput
           id="marker-end"
-          class="control-input flex-1 min-w-0"
+          class="flex-1 min-w-0"
           bind:value={endText}
           onblur={commitEndTime}
           onkeydown={(e) => {

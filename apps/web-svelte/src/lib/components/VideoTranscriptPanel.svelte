@@ -14,7 +14,7 @@
     Wand2,
     X,
   } from "@lucide/svelte";
-  import { cn } from "@prismedia/ui-svelte";
+  import { TextInput,  cn  } from "@prismedia/ui-svelte";
   import SubtitleSearchSurface from "$lib/components/SubtitleSearchSurface.svelte";
   import type { SubtitleCue, VideoSubtitleTrack } from "$lib/player/subtitle-types";
   import { fetchVideoSubtitleCues } from "$lib/player/video-subtitles";
@@ -320,7 +320,7 @@
             >
               {#if isEditing}
                 <div class="flex flex-1 items-center gap-2">
-                  <input
+                  <TextInput
                     type="text"
                     bind:value={editDraftLanguage}
                     maxlength={8}
@@ -328,7 +328,7 @@
                     class="w-16 border border-border-default bg-surface-1 px-2 py-0.5 text-[0.72rem] text-text-primary focus:border-border-accent focus:outline-none"
                     aria-label="Track language"
                   />
-                  <input
+                  <TextInput
                     type="text"
                     bind:value={editDraftLabel}
                     maxlength={80}
@@ -417,7 +417,7 @@
           class="hidden"
           onchange={handleUpload}
         />
-        <input
+        <TextInput
           type="text"
           bind:value={uploadLanguage}
           maxlength={8}

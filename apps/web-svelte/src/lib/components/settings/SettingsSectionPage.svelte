@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { Captions, Film, Loader2, ScanSearch, Settings as SettingsIcon, ShieldUser } from "@lucide/svelte";
-  import { Button, Panel, StatusLed, cn } from "@prismedia/ui-svelte";
+  import { Dialog, Button, Panel, StatusLed, cn } from "@prismedia/ui-svelte";
   import {
     fetchLibraryConfig,
     fetchLibraryRoots,
@@ -500,19 +500,9 @@
 
 <!-- Metadata storage relocation dialog -->
 {#if metadataStorageDialogOpen}
-  <div class="fixed inset-0 z-50 flex items-center justify-center">
-    <button
-      type="button"
-      class="app-overlay-backdrop absolute inset-0"
-      onclick={metadataStorageBusy ? undefined : closeMetadataStorageDialogCancel}
-      aria-label="Close dialog"
-    ></button>
-    <div
-      class="app-dialog-surface relative mx-4 w-full max-w-md space-y-4 p-6"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Relocate existing video assets?"
-    >
+  <Dialog open={metadataStorageDialogOpen} onClose={closeMetadataStorageDialogCancel} dismissible={!metadataStorageBusy}
+    ariaLabel="Relocate existing video assets?" class="w-full max-w-md sm:max-w-md gap-4 p-6">
+
       <h3 class="text-base font-heading font-semibold text-text-primary">
         Relocate existing video assets?
       </h3>
@@ -555,7 +545,6 @@
           Cancel
         </Button>
       </div>
-    </div>
-  </div>
+  </Dialog>
 {/if}
 {/if}

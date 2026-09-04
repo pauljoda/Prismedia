@@ -838,8 +838,8 @@
                 <div class="flex flex-wrap items-center gap-2 rounded-sm border border-border-subtle bg-surface-1 px-2 py-1.5">
                   <Select size="sm" value={condition.type} options={conditionTypeOptions} onchange={(v) => formatForm && (formatForm.conditions[i].type = v as CustomFormatConditionView["type"])} />
                   <TextInput size="sm" value={condition.value} oninput={(e) => formatForm && (formatForm.conditions[i].value = e.currentTarget.value)} placeholder={conditionPlaceholder(condition.type)} class="min-w-40 flex-1" />
-                  <label class="flex items-center gap-1.5"><Checkbox checked={condition.negate} onchange={(e) => formatForm && (formatForm.conditions[i].negate = e.currentTarget.checked)} /><span class="text-[0.72rem] text-text-muted">Negate</span></label>
-                  <label class="flex items-center gap-1.5"><Checkbox checked={condition.required} onchange={(e) => formatForm && (formatForm.conditions[i].required = e.currentTarget.checked)} /><span class="text-[0.72rem] text-text-muted">Required</span></label>
+                  <label class="flex items-center gap-1.5"><Checkbox checked={condition.negate} onchange={(e) => formatForm && (formatForm.conditions[i].negate = e)} /><span class="text-[0.72rem] text-text-muted">Negate</span></label>
+                  <label class="flex items-center gap-1.5"><Checkbox checked={condition.required} onchange={(e) => formatForm && (formatForm.conditions[i].required = e)} /><span class="text-[0.72rem] text-text-muted">Required</span></label>
                   {#if formatForm.conditions.length > 1}
                     <Button size="sm" variant="ghost" onclick={() => removeCondition(i)} disabled={busy}><Trash2 class="h-3.5 w-3.5" /></Button>
                   {/if}
@@ -954,11 +954,11 @@
                 </div>
               </div>
             {/if}
-            <label class="flex items-center gap-2"><Checkbox checked={profileForm.isDefault} onchange={(e) => profileForm && (profileForm.isDefault = e.currentTarget.checked)} /><span class="text-sm text-text-secondary">Default profile</span></label>
-            <label class="flex items-start gap-2"><Checkbox checked={profileForm.autoPick} onchange={(e) => profileForm && (profileForm.autoPick = e.currentTarget.checked)} /><span class="text-sm text-text-secondary">Auto-grab<span class="block text-[0.72rem] text-text-muted">Download the best acceptable release automatically instead of waiting for manual review.</span></span></label>
-            <label class="flex items-start gap-2"><Checkbox checked={profileForm.autoRedownload} onchange={(e) => profileForm && (profileForm.autoRedownload = e.currentTarget.checked)} /><span class="text-sm text-text-secondary">Auto-redownload on failure<span class="block text-[0.72rem] text-text-muted">When a download fails, blocklist that release and automatically grab the next-best candidate.</span></span></label>
+            <label class="flex items-center gap-2"><Checkbox checked={profileForm.isDefault} onchange={(e) => profileForm && (profileForm.isDefault = e)} /><span class="text-sm text-text-secondary">Default profile</span></label>
+            <label class="flex items-start gap-2"><Checkbox checked={profileForm.autoPick} onchange={(e) => profileForm && (profileForm.autoPick = e)} /><span class="text-sm text-text-secondary">Auto-grab<span class="block text-[0.72rem] text-text-muted">Download the best acceptable release automatically instead of waiting for manual review.</span></span></label>
+            <label class="flex items-start gap-2"><Checkbox checked={profileForm.autoRedownload} onchange={(e) => profileForm && (profileForm.autoRedownload = e)} /><span class="text-sm text-text-secondary">Auto-redownload on failure<span class="block text-[0.72rem] text-text-muted">When a download fails, blocklist that release and automatically grab the next-best candidate.</span></span></label>
             {#if formIsBookKind}
-            <label class="flex items-start gap-2"><Checkbox checked={profileForm.upgradeUntilCutoff} onchange={(e) => profileForm && (profileForm.upgradeUntilCutoff = e.currentTarget.checked)} /><span class="text-sm text-text-secondary">Upgrade until cutoff<span class="block text-[0.72rem] text-text-muted">After a book is imported, keep searching for a higher-quality release and replace the file, until it reaches the cutoff below.</span></span></label>
+            <label class="flex items-start gap-2"><Checkbox checked={profileForm.upgradeUntilCutoff} onchange={(e) => profileForm && (profileForm.upgradeUntilCutoff = e)} /><span class="text-sm text-text-secondary">Upgrade until cutoff<span class="block text-[0.72rem] text-text-muted">After a book is imported, keep searching for a higher-quality release and replace the file, until it reaches the cutoff below.</span></span></label>
             {/if}
             {#if formIsBookKind && profileForm.upgradeUntilCutoff}
               <div class="grid gap-2 sm:grid-cols-2 pl-6">

@@ -119,8 +119,8 @@
     setSelectedIds([]);
   }
 
-  function handleSelectAllChange(event: Event) {
-    if ((event.currentTarget as HTMLInputElement).checked) {
+  function handleSelectAllChange(event: boolean) {
+    if (event) {
       selectAllTracks();
       return;
     }

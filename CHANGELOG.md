@@ -25,7 +25,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
-- Global search now uses a shared command interface with clearer artwork rows, keyboard-accessible recent searches and full-result actions, visible navigation hints, and retry feedback, while preserving grouped results and native dialog layering.
+- Relationship, tag, and collection pickers now share searchable keyboard navigation, removable selections, and clearer loading and retry states. Editors, dialogs, mobile navigation, progress indicators, and collection choices build on the same themed UI foundations without replacing Settings navigation or library toolbar layouts.
+- Global search now uses a shared command interface with clearer artwork rows, keyboard-accessible recent searches and full-result actions, visible navigation hints, and retry feedback, while preserving grouped results and layered dialog interaction.
 - Shared buttons, search fields, form labels, status badges, detail tabs, and navigation disclosures now build on themed shadcn-svelte components, with quieter toolbar styling and existing page layouts and section identities preserved.
 - Bulk-selection actions and page-size pickers now use shared keyboard-accessible controls with consistent focus handling, while keeping their existing toolbar placement.
 - Library toolbars retain their full-width search row, inline view and thumbnail controls, and separate selection strip while using shared keyboard-accessible controls. Identify provider search now shares keyboard navigation and focus handling with other menus.

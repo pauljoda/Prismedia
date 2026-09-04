@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Dialog } from "@prismedia/ui-svelte";
   import { FolderOpen } from "@lucide/svelte";
   import type { LibraryRootSummaryDto } from "$lib/entities/media-view-models";
 
@@ -13,19 +14,8 @@
 </script>
 
 {#if open}
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
-    <button
-      type="button"
-      class="app-overlay-backdrop absolute inset-0"
-      onclick={onCancel}
-      aria-label="Cancel library selection"
-    ></button>
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Choose a library root"
-      class="app-dialog-surface relative z-10 w-full max-w-lg p-6"
-    >
+  <Dialog {open} onClose={onCancel} ariaLabel={"Choose a library root"} class="w-full max-w-lg sm:max-w-lg p-6">
+
       <div class="space-y-1.5">
         <h2 class="text-base font-heading font-semibold text-text-primary">
           Choose a library
@@ -60,6 +50,5 @@
           Cancel
         </button>
       </div>
-    </div>
-  </div>
+  </Dialog>
 {/if}

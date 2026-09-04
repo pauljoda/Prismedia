@@ -108,8 +108,8 @@
     }
   }
 
-  function handleSelectedChange(event: Event) {
-    onSelectedChange?.((event.currentTarget as HTMLInputElement).checked);
+  function handleSelectedChange(event: boolean) {
+    onSelectedChange?.(event);
   }
 </script>
 

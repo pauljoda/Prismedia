@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { HardDrive, Loader2, Trash2 } from "@lucide/svelte";
-  import { Button, Panel, cn } from "@prismedia/ui-svelte";
+  import { Alert, Button, Panel, Progress } from "@prismedia/ui-svelte";
   import {
     clearTranscodeCache,
     fetchTranscodeCacheStatus,
@@ -115,13 +115,9 @@
     </div>
 
     {#if localError}
-      <div class="surface-panel border-l-2 border-status-error px-3 py-2 text-[0.78rem] text-status-error-text">
-        {localError}
-      </div>
+      <Alert.Root variant="destructive"><Alert.Description>{localError}</Alert.Description></Alert.Root>
     {:else if localMessage}
-      <div class="surface-panel border-l-2 border-status-success px-3 py-2 text-[0.78rem] text-status-success-text">
-        {localMessage}
-      </div>
+      <Alert.Root role="status"><Alert.Description>{localMessage}</Alert.Description></Alert.Root>
     {/if}
 
     <div class="grid gap-3 sm:grid-cols-2">
@@ -140,15 +136,7 @@
     <!-- Usage bar (only meaningful when a limit is set) -->
     {#if usagePercent !== null}
       <div class="space-y-1.5">
-        <div class="h-2 w-full overflow-hidden rounded-full bg-surface-1 shadow-[inset_0_1px_3px_rgba(0,0,0,0.25)]">
-          <div
-            class={cn(
-              "h-full rounded-full transition-all duration-fast",
-              overLimit ? "bg-status-error" : "bg-accent-500",
-            )}
-            style:width={`${usagePercent}%`}
-          ></div>
-        </div>
+        <Progress value={usagePercent} aria-label="Transcode cache usage" class="h-2" style={overLimit ? "--progress-fill: var(--color-status-error)" : undefined} />
         <p class="text-[0.66rem] text-text-muted">
           {usagePercent}% of the limit used.{overLimit ? " Oldest cached videos are removed automatically." : ""}
         </p>

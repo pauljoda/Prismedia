@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Flame, FolderPlus, Loader2, Send } from "@lucide/svelte";
-  import { Button, Checkbox, Select, Toggle, cn, flyUp, fadeIn } from "@prismedia/ui-svelte";
+  import { Button, Checkbox, Select, Toggle, cn, Dialog } from "@prismedia/ui-svelte";
   import { USER_ROLE, type UserRoleCode } from "$lib/api/generated/codes";
   import type { LibraryRoot, UserResponse } from "$lib/api/generated/model";
   import { createUser, replaceLibraryAccessForUser, updateUser } from "$lib/api/users";
@@ -116,21 +116,8 @@
 </script>
 
 {#if open}
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
-    <button
-      type="button"
-      class="app-overlay-backdrop absolute inset-0"
-      aria-label="Close"
-      onclick={onClose}
-      transition:fadeIn
-    ></button>
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={isCreate ? "Add user" : `Edit ${user?.username}`}
-      class="app-dialog-surface relative z-10 flex max-h-[85dvh] w-full max-w-lg flex-col overflow-hidden"
-      transition:flyUp
-    >
+  <Dialog {open} onClose={onClose} ariaLabel={isCreate ? "Add user" : `Edit ${user?.username}`} dismissible={!saving} class="w-full max-w-lg sm:max-w-lg">
+
       <div class="border-b border-border-subtle px-5 py-4">
         <h2 class="text-kicker text-text-primary">{isCreate ? "Add user" : "Edit user"}</h2>
         <p class="text-[0.68rem] text-text-muted">
@@ -229,7 +216,7 @@
                   <Checkbox
                     checked={libraryRootIds.includes(library.id)}
                     onchange={(event) =>
-                      toggleLibrary(library.id, (event.currentTarget as HTMLInputElement).checked)}
+                      toggleLibrary(library.id, event)}
                   />
                   <span class="flex-1 truncate">{library.label}</span>
                   {#if library.isNsfw}
@@ -262,6 +249,5 @@
           {isCreate ? "Create user" : "Save changes"}
         </Button>
       </div>
-    </div>
-  </div>
+  </Dialog>
 {/if}

@@ -628,7 +628,7 @@
               <label class="flex items-center gap-2 text-body">
                 <Checkbox
                   checked={demoChecked}
-                  onchange={(e) => (demoChecked = (e.currentTarget as HTMLInputElement).checked)}
+                  onchange={(e) => (demoChecked = e)}
                 />
                 Unchecked
               </label>

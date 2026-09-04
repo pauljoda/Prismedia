@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Component } from "svelte";
-  import { cn } from "@prismedia/ui-svelte";
+  import { Button, buttonVariants, cn } from "@prismedia/ui-svelte";
 
   type Variant = "default" | "primary" | "danger";
 
@@ -39,11 +39,9 @@
   }: Props = $props();
 
   const classes = $derived(cn(
-    "entity-action-button",
-    active && "entity-action-button-active",
-    muted && "entity-action-button-muted",
-    variant === "primary" && "entity-action-button-primary",
-    variant === "danger" && "entity-action-button-danger",
+    buttonVariants({ variant: variant === "primary" ? "primary" : variant === "danger" ? "danger" : "outline", size: "sm" }),
+    active && "bg-accent text-foreground",
+    muted && "text-muted-foreground",
     className,
   ));
 
@@ -67,7 +65,7 @@
     <span class="entity-action-button-label">{label}</span>
   </a>
 {:else}
-  <button
+  <Button variant={variant === "primary" ? "primary" : variant === "danger" ? "danger" : "outline"} size="sm"
     type="button"
     class={classes}
     disabled={disabled}
@@ -81,5 +79,5 @@
       <Icon class={iconClass} fill={iconFill} />
     {/if}
     <span class="entity-action-button-label">{label}</span>
-  </button>
+  </Button>
 {/if}

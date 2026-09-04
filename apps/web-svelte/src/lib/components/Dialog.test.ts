@@ -1,22 +1,28 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { Dialog } from "@prismedia/ui-svelte";
 import { createRawSnippet } from "svelte";
-import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 const children = createRawSnippet(() => ({ render: () => "<p>Dialog body</p>" }));
 
-beforeAll(() => {
-  HTMLDialogElement.prototype.showModal = function showModal() {
-    this.open = true;
-  };
-  HTMLDialogElement.prototype.close = function close() {
-    this.open = false;
-    this.dispatchEvent(new Event("close"));
-  };
-});
-
 describe("Dialog", () => {
   afterEach(cleanup);
+
+  it("mounts independent dialogs in opening order and returns focus to the lower dialog", async () => {
+    const fields = createRawSnippet(() => ({ render: () => '<input aria-label="Editor field" />' }));
+    const first = render(Dialog, { open: false, ariaLabel: "Global search", onClose: vi.fn(), children });
+    render(Dialog, { open: true, ariaLabel: "Editor", onClose: vi.fn(), children: fields,
+      initialFocus: () => screen.queryByRole("textbox", { name: "Editor field" }) });
+    const field = screen.getByRole("textbox", { name: "Editor field" });
+    await waitFor(() => expect(field).toHaveFocus());
+    await first.rerender({ open: true });
+    const editor = screen.getByRole("dialog", { name: "Editor" });
+    const search = screen.getByRole("dialog", { name: "Global search" });
+    expect(editor.compareDocumentPosition(search) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0);
+    await first.rerender({ open: false });
+    await waitFor(() => expect(field).toHaveFocus());
+    expect(editor).toBeInTheDocument();
+  });
 
   it("opens modally and requests close for Escape or backdrop dismissal", async () => {
     const onClose = vi.fn();
@@ -27,13 +33,10 @@ describe("Dialog", () => {
       children,
     });
 
-    const dialog = screen.getByRole("dialog", { name: "Shared dialog" }) as HTMLDialogElement;
-    expect(dialog.open).toBe(true);
-
-    await fireEvent(dialog, new Event("cancel", { cancelable: true }));
-    await fireEvent.click(dialog);
-
-    expect(onClose).toHaveBeenCalledTimes(2);
+    const dialog = screen.getByRole("dialog", { name: "Shared dialog" });
+    expect(dialog).toHaveAttribute("aria-modal", "true");
+    await fireEvent.keyDown(dialog, { key: "Escape" });
+    expect(onClose).toHaveBeenCalledTimes(1);
 
     onClose.mockClear();
     await view.rerender({
@@ -42,7 +45,7 @@ describe("Dialog", () => {
       onClose,
       children,
     });
-    expect(dialog.open).toBe(false);
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Shared dialog" })).not.toBeInTheDocument());
     expect(onClose).not.toHaveBeenCalled();
   });
 
@@ -57,8 +60,8 @@ describe("Dialog", () => {
     });
 
     const dialog = screen.getByRole("dialog", { name: "Busy dialog" });
-    await fireEvent(dialog, new Event("cancel", { cancelable: true }));
-    await fireEvent.click(dialog);
+    await fireEvent.keyDown(dialog, { key: "Escape" });
+    await fireEvent.pointerDown(document.body);
 
     expect(onClose).not.toHaveBeenCalled();
   });
@@ -70,7 +73,7 @@ describe("Dialog", () => {
       initialFocus: () => screen.queryByRole("textbox", { name: "Task field" }),
     };
     const view = render(Dialog, props);
-    expect(screen.getByRole("textbox", { name: "Task field" })).toHaveFocus();
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "Task field" })).toHaveFocus());
     const action = screen.getByRole("button", { name: "Other action" });
     action.focus();
     await view.rerender({ ...props, class: "w-full" });

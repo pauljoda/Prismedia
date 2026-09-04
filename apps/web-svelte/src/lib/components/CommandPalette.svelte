@@ -102,7 +102,7 @@
 
 <Dialog open={search.open} ariaLabel="Search library" onClose={() => search.closePalette()}
   initialFocus={() => inputRef}
-  class="top-[10dvh] bottom-auto my-0 w-full max-h-[80dvh] overflow-hidden sm:max-w-2xl">
+  class="top-[10dvh] bottom-auto my-0 w-full max-h-[80dvh] translate-y-0 overflow-hidden sm:max-w-2xl">
   <div class="flex max-h-[80dvh] flex-col">
     <header class="flex items-start justify-between gap-3 px-4 pt-4 pb-3">
       <div class="flex flex-col gap-2">

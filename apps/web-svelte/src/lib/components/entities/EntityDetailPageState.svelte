@@ -3,7 +3,7 @@
 </script>
 
 <script lang="ts">
-  import { Button } from "@prismedia/ui-svelte";
+  import { Button, Alert } from "@prismedia/ui-svelte";
   import type { Snippet } from "svelte";
   import EntityDetailSkeleton from "./EntityDetailSkeleton.svelte";
   import type { EntityDetailPosterSize } from "./EntityDetail.svelte";
@@ -36,29 +36,10 @@
 {#if loadState === "loading"}
   <EntityDetailSkeleton {posterAspect} {posterSize} {showHero} {tabCount} />
 {:else if loadState === "error"}
-  <div class="error-notice" role="alert">
-    <p>{errorMessage ?? fallbackError}</p>
-    <Button variant="secondary" size="sm" onclick={onRetry}>Retry</Button>
-  </div>
+  <Alert.Root variant="destructive" class="flex items-center justify-between gap-4 p-4">
+    <Alert.Description>{errorMessage ?? fallbackError}</Alert.Description>
+    <Button variant="outline" size="sm" onclick={onRetry}>Retry</Button>
+  </Alert.Root>
 {:else}
   {#if children}{@render children()}{/if}
 {/if}
-
-<style>
-  .error-notice {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 1rem;
-    padding: 1rem;
-    border: 1px solid color-mix(in srgb, var(--color-error, #ef4444) 50%, var(--color-border, #1c2235));
-    border-radius: var(--radius-xs, 4px);
-    background: var(--color-surface-2, #101420);
-    color: var(--color-text-muted, #8a93a6);
-    font-size: 0.85rem;
-  }
-
-  .error-notice p {
-    margin: 0;
-  }
-</style>

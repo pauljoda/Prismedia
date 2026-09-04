@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ArrowDown, ArrowUp, Ban, BookOpen, ChevronsUpDown, Download, ExternalLink, FileText, Film, Headphones, Tag } from "@lucide/svelte";
-  import { Badge, Button, Select, Toggle, cn } from "@prismedia/ui-svelte";
+  import { Table, Badge, Button, Select, Toggle, cn } from "@prismedia/ui-svelte";
   import type { Component } from "svelte";
   import { DOWNLOAD_PROTOCOL, RELEASE_REJECTION_REASON } from "$lib/api/generated/codes";
   import type { ReleaseCandidateView } from "$lib/api/generated/model";
@@ -185,7 +185,7 @@
 <!-- Fixed layout so a long release title truncates to its column rather than widening the table into a
      horizontal scroll. Release takes ~half the width; the remaining columns share the rest. -->
 <div class="release-table rounded-sm border border-border-subtle">
-  <table class="w-full table-fixed text-sm">
+  <Table.Root class="w-full table-fixed text-sm">
     <!-- Fixed widths for every column except the release title, which flexes to fill. This guarantees the
          actions column always fits the external-link, Download, and Block controls so they never overlap
          the Score column. -->
@@ -198,12 +198,12 @@
       <col style:width="4.5rem" />
       <col style:width="11rem" />
     </colgroup>
-    <thead class="bg-surface-1 text-left text-[0.7rem] uppercase tracking-wide text-text-muted">
-      <tr>
-        <th class="px-3 py-2"><span class="sr-only">Type</span></th>
+    <Table.Header class="bg-surface-1 text-left text-[0.7rem] uppercase tracking-wide text-text-muted">
+      <Table.Row>
+        <Table.Head class="px-3 py-2"><span class="sr-only">Type</span></Table.Head>
         {#each columns as col (col.key)}
-          <th class={cn("px-3 py-2", col.align === "right" && "text-right")}>
-            <button
+          <Table.Head class={cn("px-3 py-2", col.align === "right" && "text-right")}>
+            <Button variant="ghost" size="sm"
               type="button"
               onclick={() => toggleSort(col.key)}
               class={cn(
@@ -219,23 +219,23 @@
               {:else}
                 <ChevronsUpDown class="h-3 w-3 opacity-40" />
               {/if}
-            </button>
-          </th>
+            </Button>
+          </Table.Head>
         {/each}
-        <th class="px-3 py-2"><span class="sr-only">Actions</span></th>
-      </tr>
-    </thead>
-    <tbody>
+        <Table.Head class="px-3 py-2"><span class="sr-only">Actions</span></Table.Head>
+      </Table.Row>
+    </Table.Header>
+    <Table.Body>
       {#each visibleRows as row (row.candidate.id)}
         {@const c = row.candidate}
         {@const CatIcon = categoryIcon(row.category)}
-        <tr class={cn("border-t border-border-subtle", !c.accepted && !canManuallyQueue(c) && "opacity-55")}>
-          <td class="px-3 py-2 align-middle">
+        <Table.Row class={cn("border-t border-border-subtle", !c.accepted && !canManuallyQueue(c) && "opacity-55")}>
+          <Table.Cell class="px-3 py-2 align-middle">
             <span class="inline-flex text-text-muted" title={row.category ?? "Unknown type"} aria-label={row.category ?? "Unknown type"}>
               <CatIcon class="h-4 w-4" />
             </span>
-          </td>
-          <td class="px-3 py-2">
+          </Table.Cell>
+          <Table.Cell class="px-3 py-2">
             <div class="flex min-w-0 items-center gap-2">
               <div class="min-w-0 flex-1 truncate text-text-primary" title={row.title}>{row.title}</div>
               <Badge variant={protocolBadgeVariant(c.protocol)} class="shrink-0">{protocolLabel(c.protocol)}</Badge>
@@ -243,12 +243,12 @@
             {#if !c.accepted && c.rejections.length > 0}
               <div class="truncate text-[0.7rem] text-warning-text" title={rejectionText(c)}>{rejectionText(c)}</div>
             {/if}
-          </td>
-          <td class="truncate px-3 py-2 text-text-muted">{c.indexerName}</td>
-          <td class="px-3 py-2 text-right text-text-muted">{formatBytes(Number(c.sizeBytes))}</td>
-          <td class="px-3 py-2 text-right text-text-muted">{c.seeders ?? "—"}</td>
-          <td class="px-3 py-2 text-right font-mono text-[0.72rem] text-text-muted">{Number(c.score).toFixed(0)}</td>
-          <td class="px-3 py-2">
+          </Table.Cell>
+          <Table.Cell class="truncate px-3 py-2 text-text-muted">{c.indexerName}</Table.Cell>
+          <Table.Cell class="px-3 py-2 text-right text-text-muted">{formatBytes(Number(c.sizeBytes))}</Table.Cell>
+          <Table.Cell class="px-3 py-2 text-right text-text-muted">{c.seeders ?? "—"}</Table.Cell>
+          <Table.Cell class="px-3 py-2 text-right font-mono text-[0.72rem] text-text-muted">{Number(c.score).toFixed(0)}</Table.Cell>
+          <Table.Cell class="px-3 py-2">
             <div class="flex items-center justify-end gap-1.5">
               {#if c.infoUrl}
                 <a href={c.infoUrl} target="_blank" rel="noopener" title="Open release page" class="inline-flex items-center text-text-muted transition-colors hover:text-text-accent">
@@ -267,11 +267,11 @@
                 </Button>
               {/if}
             </div>
-          </td>
-        </tr>
+          </Table.Cell>
+        </Table.Row>
       {/each}
-    </tbody>
-  </table>
+    </Table.Body>
+  </Table.Root>
   {#if remainingCount > 0}
     <div class="flex justify-center border-t border-border-subtle p-2.5">
       <Button size="sm" variant="secondary" onclick={loadMore} aria-label={`Load ${nextPageCount} more releases`}>

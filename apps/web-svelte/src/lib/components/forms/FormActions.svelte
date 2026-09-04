@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Loader2, Save, XCircle } from "@lucide/svelte";
-  import { cn } from "@prismedia/ui-svelte";
+  import { Button, Alert, cn } from "@prismedia/ui-svelte";
 
   interface Props {
     onSave: () => void;
@@ -33,34 +33,26 @@
 
 <div class={cn("flex flex-col gap-2", fullWidth && "w-full")}>
   {#if error}
-    <p class="text-[0.72rem] text-error-text">{error}</p>
+    <Alert.Root variant="destructive"><Alert.Description>{error}</Alert.Description></Alert.Root>
   {/if}
   <div class={cn("flex items-center gap-2", justify)}>
-    <button
+    <Button
       type="button"
       onclick={onCancel}
       disabled={saving}
-      class={cn(
-        "inline-flex items-center gap-1.5 border border-border-subtle bg-surface-2 px-3 py-2 text-[0.78rem] text-text-muted transition-colors",
-        "hover:border-border-default hover:text-text-primary",
-        "disabled:cursor-not-allowed disabled:opacity-50",
-        fullWidth && "flex-1 justify-center",
-      )}
+      variant="outline"
+      class={fullWidth ? "flex-1" : undefined}
     >
       <XCircle class="h-3.5 w-3.5" />
       {cancelLabel}
-    </button>
-    <button
+    </Button>
+    <Button
       type="button"
       onclick={onSave}
       disabled={saving || saveDisabled}
       aria-label={saveLabel}
-      class={cn(
-        "inline-flex items-center gap-1.5 border border-border-accent bg-gradient-to-r from-accent-900 via-accent-800 to-accent-900 px-4 py-2 text-[0.78rem] font-medium text-accent-100 shadow-[var(--shadow-glow-accent)] transition-all",
-        "hover:shadow-[var(--shadow-glow-accent-strong)]",
-        "disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none",
-        fullWidth && "flex-1 justify-center",
-      )}
+      variant="primary"
+      class={fullWidth ? "flex-1" : undefined}
     >
       {#if saving}
         <Loader2 class="h-3.5 w-3.5 animate-spin" />
@@ -68,6 +60,6 @@
         <Save class="h-3.5 w-3.5" />
       {/if}
       {saving ? "Saving…" : saveLabel}
-    </button>
+    </Button>
   </div>
 </div>

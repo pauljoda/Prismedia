@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Component } from "svelte";
-  import { cn } from "@prismedia/ui-svelte";
+  import { ToggleButton } from "@prismedia/ui-svelte";
 
   interface Props {
     value: boolean;
@@ -22,26 +22,14 @@
     disabled = false,
   }: Props = $props();
 
-  const onClasses = $derived(
-    variant === "warning"
-      ? "border border-error/40 bg-error-muted/60 text-error-text shadow-[0_0_12px_rgba(220,80,80,0.18)]"
-      : "border border-border-accent bg-accent-950 text-accent-300 shadow-[0_0_12px_rgba(199, 201, 204,0.22)]",
-  );
 </script>
 
-<button
-  type="button"
+<ToggleButton
+  variant="outline"
+  bind:pressed={() => value, next => onChange(next)}
   {disabled}
-  aria-pressed={value}
-  onclick={() => onChange(!value)}
-  class={cn(
-    "inline-flex items-center gap-2 px-3 py-2 text-[0.78rem] rounded-xs transition-all duration-fast",
-    "disabled:opacity-50 disabled:cursor-not-allowed",
-    value
-      ? onClasses
-      : "border border-border-subtle bg-surface-2 text-text-muted hover:border-border-accent hover:text-text-primary",
-  )}
+  class={variant === "warning" ? "data-[state=on]:text-destructive" : undefined}
 >
   {#if Icon}<Icon class="h-3.5 w-3.5" />{/if}
   {value ? onLabel : (offLabel ?? onLabel)}
-</button>
+</ToggleButton>

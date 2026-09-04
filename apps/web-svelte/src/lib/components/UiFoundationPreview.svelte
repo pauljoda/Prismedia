@@ -43,7 +43,7 @@
   <div class="space-y-5 p-6">
     <div>
       <h2 class="font-heading text-lg font-medium">Select inside a dialog</h2>
-      <p class="mt-2 text-sm leading-relaxed text-text-secondary">The menu stays in the dialog's top layer. Escape closes the menu first, then the dialog.</p>
+      <p class="mt-2 text-sm leading-relaxed text-text-secondary">The menu remains interactive above the dialog. Escape closes the menu first, then the dialog.</p>
     </div>
     <Select {options} bind:value={selected} ariaLabel="Dialog source" />
     <div class="flex justify-end">

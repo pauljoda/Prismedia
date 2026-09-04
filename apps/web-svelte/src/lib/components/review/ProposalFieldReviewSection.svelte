@@ -79,7 +79,7 @@
             checked={selectedFields[field] ?? false}
             disabled={!selectable}
             aria-label={`Accept ${reviewFieldLabels[field] ?? field}`}
-            onchange={(event) => onFieldChange(field, event.currentTarget.checked)}
+            onchange={(event) => onFieldChange(field, event)}
           />
         </label>
       {/if}

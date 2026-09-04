@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Loader2, X } from "@lucide/svelte";
-  import { Button, Dialog, textInputVariants } from "@prismedia/ui-svelte";
+  import { Button, Dialog, TextInput } from "@prismedia/ui-svelte";
 
   interface Props {
     open: boolean;
@@ -35,7 +35,6 @@
       draft = initialValue;
       error = null;
       busy = false;
-      queueMicrotask(() => inputRef?.focus());
     }
   });
 
@@ -54,7 +53,7 @@
   }
 </script>
 
-<Dialog {open} {onClose} ariaLabel={title} dismissible={!busy} class="w-[min(92vw,26rem)]">
+<Dialog {open} {onClose} initialFocus={() => inputRef} ariaLabel={title} dismissible={!busy} class="w-[min(92vw,26rem)]">
   <form
     method="dialog"
     class="flex flex-col gap-4 p-5"
@@ -77,10 +76,11 @@
       </Button>
     </div>
 
-    <input
-      bind:this={inputRef}
+    <TextInput
+      bind:ref={inputRef}
       bind:value={draft}
-      class={textInputVariants({ size: "lg" })}
+      size="lg"
+      aria-label={placeholder}
       {placeholder}
       {maxlength}
       disabled={busy}

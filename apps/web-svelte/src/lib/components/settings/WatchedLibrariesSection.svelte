@@ -17,7 +17,7 @@
     Trash2,
     UsersRound,
   } from "@lucide/svelte";
-  import { Button, Panel, StatusLed, cn } from "@prismedia/ui-svelte";
+  import { TextInput,  Button, Panel, StatusLed, cn  } from "@prismedia/ui-svelte";
   import {
     browseLibraryPath,
     createLibraryRoot,
@@ -248,9 +248,9 @@
       <div class="space-y-3">
         <div class="flex flex-col gap-1.5">
           <label class="control-label" for="new-root-label">Label (optional)</label>
-          <input
+          <TextInput
             id="new-root-label"
-            class="control-input w-full max-w-md py-1.5 text-sm"
+            class="w-full max-w-md py-1.5 text-sm"
             bind:value={newRootLabel}
             placeholder={`Primary ${entityTerms.videos.toLowerCase()}`}
           />

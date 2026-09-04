@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/svelte";
+import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { FileText, Play } from "@lucide/svelte";
 import { createRawSnippet } from "svelte";
 import { describe, expect, it, vi } from "vitest";
@@ -517,7 +517,7 @@ describe("EntityDetail", () => {
 
     await fireEvent.click(screen.getByRole("button", { name: "Stay here" }));
 
-    expect(screen.queryByRole("dialog", { name: "Discard unsaved edits?" })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Discard unsaved edits?" })).not.toBeInTheDocument());
     expect(screen.getByRole("tab", { name: "Links" })).toHaveAttribute("aria-selected", "true");
 
     await fireEvent.click(screen.getByRole("tab", { name: "Details" }));
@@ -525,7 +525,7 @@ describe("EntityDetail", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
 
     expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.queryByRole("dialog", { name: "Discard unsaved edits?" })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Discard unsaved edits?" })).not.toBeInTheDocument());
   });
 
   it("shows inline validation and disables save for invalid editable fields", async () => {

@@ -15,7 +15,7 @@
     SkipForward,
     X,
   } from "@lucide/svelte";
-  import { cn } from "@prismedia/ui-svelte";
+  import { Popover, buttonVariants,  cn  } from "@prismedia/ui-svelte";
   import { formatDuration } from "$lib/utils/format";
   import { recordEntityConsumptionEvent, updateEntityProgress } from "$lib/api/consumption";
   import { sendAudioPlaybackDiagnostic } from "$lib/api/audio-playback-diagnostics";
@@ -1212,19 +1212,12 @@
       >
         <Minimize2 class="h-3.5 w-3.5" />
       </button>
-      <div class="relative">
-        <button
-          type="button"
-          onclick={() => (queueOpen = !queueOpen)}
-          title="Queue"
-          class={cn("player-icon-control p-1.5 transition-colors", queueOpen && "player-icon-control--active")}
-        >
+      <Popover.Root bind:open={queueOpen}>
+        <Popover.Trigger aria-label="Queue" title="Queue" class={cn(buttonVariants({ variant: "ghost", size: "icon" }), queueOpen && "player-icon-control--active")}>
           <ListMusic class="h-3.5 w-3.5" />
-        </button>
-        {#if queueOpen}
-          <PlaybackQueueFlyout onClose={() => (queueOpen = false)} onJumpTo={jumpToQueuedTrack} />
-        {/if}
-      </div>
+        </Popover.Trigger>
+        <PlaybackQueueFlyout onClose={() => (queueOpen = false)} onJumpTo={jumpToQueuedTrack} />
+      </Popover.Root>
     </div>
   </div>
 </div>

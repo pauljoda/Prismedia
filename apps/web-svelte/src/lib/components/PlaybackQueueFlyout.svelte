@@ -1,7 +1,6 @@
 <script lang="ts">
   import { ListMusic, Music, Repeat, Repeat1, Shuffle, X } from "@lucide/svelte";
-  import { cn } from "@prismedia/ui-svelte";
-  import { keepFlyoutOnScreen } from "$lib/actions/keep-flyout-on-screen";
+  import { Button, Popover } from "@prismedia/ui-svelte";
   import {
     resolveAudioArtist,
     resolveAudioArtwork,
@@ -16,20 +15,11 @@
   let { onClose, onJumpTo }: Props = $props();
 
   const playback = useAudioPlayback()!;
-  let root: HTMLElement | null = $state(null);
 
   const current = $derived(playback.currentTrack);
   const upNext = $derived(playback.upNext);
   const cover = $derived(resolveAudioArtwork(current, playback.context));
   const currentArtist = $derived(resolveAudioArtist(current, playback.context).name);
-
-  function onWindowPointerDown(event: PointerEvent) {
-    // Guard against the toggle button: it lives in the flyout's anchor wrapper, so checking the
-    // anchor (not just the flyout) lets the trigger's own click close the flyout instead of this
-    // handler closing it first and the trigger immediately reopening it.
-    const anchor = root?.parentElement ?? root;
-    if (anchor && !anchor.contains(event.target as Node)) onClose();
-  }
 
   function jumpToTrack(orderIndex: number) {
     if (onJumpTo) {
@@ -40,13 +30,7 @@
   }
 </script>
 
-<svelte:window onpointerdown={onWindowPointerDown} />
-
-<div
-  bind:this={root}
-  class="floating-surface absolute bottom-full right-0 z-30 mb-2 max-h-[70vh] w-80 max-w-[calc(100vw-1.5rem)] overflow-hidden"
-  use:keepFlyoutOnScreen
->
+<Popover.Content side="top" align="end" class="max-h-[70vh] w-80 overflow-hidden p-0">
   <div class="flex items-center justify-between border-b border-border-subtle px-3 py-2">
     <div class="flex items-center gap-1.5 text-text-secondary">
       <ListMusic class="h-3.5 w-3.5 text-text-accent" />
@@ -60,9 +44,9 @@
         <Repeat1 class="h-3 w-3 text-accent-500" />
       {/if}
     </div>
-    <button type="button" onclick={onClose} class="p-0.5 text-text-disabled transition-colors hover:text-text-muted" aria-label="Close queue">
+    <Button variant="ghost" type="button" onclick={onClose} class="p-0.5 text-text-disabled transition-colors hover:text-text-muted" aria-label="Close queue">
       <X class="h-3.5 w-3.5" />
-    </button>
+    </Button>
   </div>
 
   <div class="max-h-[calc(70vh-2.5rem)] overflow-y-auto">
@@ -93,10 +77,10 @@
         <ul class="mt-1 flex flex-col">
           {#each upNext as track, i (track.id + ":" + i)}
             <li>
-              <button
+              <Button variant="ghost"
                 type="button"
                 onclick={() => { jumpToTrack(playback.position + 1 + i); }}
-                class="group flex w-full items-center gap-2.5 rounded-sm px-2 py-1.5 text-left transition-colors hover:bg-surface-2"
+                class="group flex h-auto w-full justify-start whitespace-normal items-center gap-2.5 rounded-sm px-2 py-1.5 text-left transition-colors hover:bg-surface-2"
               >
                 <span class="w-5 shrink-0 text-right font-mono text-[0.64rem] text-text-disabled group-hover:hidden">
                   {(track.trackNumber ?? track.sortOrder + 1)}
@@ -108,7 +92,7 @@
                     <span class="block truncate text-[0.62rem] text-text-disabled">{track.embeddedArtist}</span>
                   {/if}
                 </span>
-              </button>
+              </Button>
             </li>
           {/each}
         </ul>
@@ -117,4 +101,4 @@
       <p class="px-3 py-4 text-center text-[0.72rem] text-text-disabled">Nothing up next.</p>
     {/if}
   </div>
-</div>
+</Popover.Content>

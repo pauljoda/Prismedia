@@ -19,7 +19,7 @@
   } from "@lucide/svelte";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import { cn, ColorInput } from "@prismedia/ui-svelte";
+  import { Button, Sheet, cn, ColorInput } from "@prismedia/ui-svelte";
   import { useNavCustomization } from "$lib/stores/nav-customization.svelte";
   import { useSession } from "$lib/stores/session.svelte";
   import { navItemVisible } from "$lib/nav/nav-visibility";
@@ -68,7 +68,6 @@
     });
   });
 
-  const opened = $derived(mounted && progress > 0.5);
   const useTransition = $derived(!dragging && !reduceMotion);
   const translateY = $derived(`${(1 - progress) * 100}%`);
   // Defence in depth: when essentially closed, never intercept input even if a
@@ -76,7 +75,6 @@
   const interactive = $derived(progress > 0.05);
 
   let editing = $state(false);
-  let closeButton = $state<HTMLButtonElement | null>(null);
 
   // Section name dialog state (rename + add share one dialog).
   let nameDialogOpen = $state(false);
@@ -126,55 +124,18 @@
     moveTarget = null;
   });
 
-  // Lock body scroll and wire escape / focus while the sheet is mounted.
-  $effect(() => {
-    if (!mounted) return;
-    document.body.style.overflow = "hidden";
-    const handler = (e: KeyboardEvent) => {
-      if (e.key !== "Escape") return;
-      if (nameDialogOpen || moveTarget) return; // dialogs handle their own escape
-      onClose();
-    };
-    window.addEventListener("keydown", handler);
-    return () => {
-      document.body.style.overflow = "";
-      window.removeEventListener("keydown", handler);
-    };
-  });
-
-  // Move focus into the sheet once it is fully open.
-  let focused = false;
-  $effect(() => {
-    if (opened && !focused) {
-      focused = true;
-      closeButton?.focus();
-    } else if (!opened) {
-      focused = false;
-    }
-  });
 </script>
 
-{#if mounted}
-  <button
-    type="button"
-    class={cn("app-overlay-backdrop sheet-backdrop fixed inset-0 z-[60] md:hidden", useTransition && "animate")}
-    style:opacity={progress}
-    style:pointer-events={interactive ? "auto" : "none"}
-    aria-label="Close navigation"
-    onclick={onClose}
-  ></button>
-
-  <div
-    role="dialog"
-    aria-modal="true"
-    aria-label="Navigation"
-    class={cn(
-      "sheet app-glass fixed inset-x-0 bottom-0 z-[60] flex max-h-[82dvh] flex-col border md:hidden",
-      useTransition && "animate",
-    )}
-    style:transform="translateY({translateY})"
-    style:pointer-events={interactive ? "auto" : "none"}
+<Sheet.Root open={mounted} onOpenChange={next => { if (!next) onClose(); }}>
+  <Sheet.Content side="bottom" showCloseButton={false}
+    class="max-h-[82dvh] gap-0 rounded-t-2xl border p-0 md:hidden"
+    style={`animation: none; transform: translateY(${translateY}); pointer-events: ${interactive ? "auto" : "none"}; transition: ${useTransition ? "transform 280ms var(--ease-mechanical)" : "none"};`}
+    overlayProps={{
+      class: "md:hidden",
+      style: `animation: none; opacity: ${progress}; pointer-events: ${interactive ? "auto" : "none"}; transition: ${useTransition ? "opacity 200ms var(--ease-default)" : "none"};`,
+    }}
   >
+    <Sheet.Title class="sr-only">Navigation</Sheet.Title>
     <!-- Drag-to-dismiss zone: grab handle + title. Touch enhancement only —
          the sheet is also dismissable via the close button and backdrop. -->
     <!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -190,7 +151,7 @@
           </h2>
         </div>
         <div class="flex shrink-0 items-center gap-1">
-          <button
+          <Button variant="ghost"
             type="button"
             onpointerdown={(e) => e.stopPropagation()}
             onclick={() => (editing = !editing)}
@@ -206,17 +167,16 @@
             {:else}
               <Pencil class="h-4 w-4" />
             {/if}
-          </button>
-          <button
+          </Button>
+          <Button variant="ghost"
             type="button"
-            bind:this={closeButton}
             onpointerdown={(e) => e.stopPropagation()}
             class="flex h-9 w-9 items-center justify-center rounded-sm text-text-muted transition-colors hover:bg-surface-2 hover:text-text-primary"
             aria-label="Close navigation"
             onclick={onClose}
           >
             <X class="h-4 w-4" />
-          </button>
+          </Button>
         </div>
       </div>
     </div>
@@ -237,16 +197,16 @@
               {/if}
               <span class="fav-label">{fav.label}</span>
               <div class="flex items-center gap-0.5">
-                <button
+                <Button variant="ghost"
                   type="button"
-                  class="fav-arrow"
+                  size="icon" class="size-6"
                   aria-label="Move left"
                   disabled={i === 0}
                   onclick={() => nav.moveFavorite(fav.href, -1)}
                 >
                   <ChevronLeft class="h-3.5 w-3.5" />
-                </button>
-                <button
+                </Button>
+                <Button variant="ghost"
                   type="button"
                   class="fav-arrow"
                   aria-label="Move right"
@@ -254,7 +214,7 @@
                   onclick={() => nav.moveFavorite(fav.href, 1)}
                 >
                   <ChevronRight class="h-3.5 w-3.5" />
-                </button>
+                </Button>
               </div>
             </div>
           {/each}
@@ -284,41 +244,41 @@
                     aria-label={`Color for ${section.label}`}
                     onValueChange={(accent) => nav.setSectionAccent(section.id, accent)}
                   />
-                  <button
+                  <Button variant="ghost"
                     type="button"
-                    class="icon-btn"
+                    size="icon" class="size-8"
                     aria-label="Move section up"
                     disabled={sectionIndex === 0}
                     onclick={() => nav.moveSectionByOffset(section.id, -1)}
                   >
                     <ChevronUp class="h-4 w-4" />
-                  </button>
-                  <button
+                  </Button>
+                  <Button variant="ghost"
                     type="button"
-                    class="icon-btn"
+                    size="icon" class="size-8"
                     aria-label="Move section down"
                     disabled={sectionIndex === sections.length - 1}
                     onclick={() => nav.moveSectionByOffset(section.id, 1)}
                   >
                     <ChevronDown class="h-4 w-4" />
-                  </button>
-                  <button
+                  </Button>
+                  <Button variant="ghost"
                     type="button"
-                    class="icon-btn"
+                    size="icon" class="size-8"
                     aria-label="Rename section"
                     onclick={() => openRename(section.id, section.label)}
                   >
                     <Pencil class="h-3.5 w-3.5" />
-                  </button>
-                  <button
+                  </Button>
+                  <Button variant="ghost"
                     type="button"
-                    class="icon-btn icon-btn-danger"
+                    size="icon" class="size-8 hover:text-destructive"
                     aria-label="Delete section"
                     disabled={sections.length <= 1}
                     onclick={() => nav.removeSection(section.id)}
                   >
                     <Trash2 class="h-3.5 w-3.5" />
-                  </button>
+                  </Button>
                 </div>
               {/if}
             </div>
@@ -342,19 +302,19 @@
                       <span class="min-w-0 flex-1 truncate text-sm text-text-primary">{item.label}</span>
 
                       <div class="flex shrink-0 items-center gap-0.5">
-                        <button
+                        <Button variant="ghost"
                           type="button"
-                          class={cn("icon-btn", favorite && "icon-btn-active")}
+                          size="icon" class={cn("size-8", favorite && "bg-accent text-foreground")}
                           aria-pressed={favorite}
                           aria-label={favorite ? "Remove from bottom bar" : "Add to bottom bar"}
                           disabled={item.hidden || (!favorite && nav.favoritesFull)}
                           onclick={() => handleFavorite(item.href)}
                         >
                           <Star class={cn("h-4 w-4", favorite && "fill-current")} />
-                        </button>
-                        <button
+                        </Button>
+                        <Button variant="ghost"
                           type="button"
-                          class="icon-btn"
+                          size="icon" class="size-8"
                           aria-label={item.hidden ? "Show item" : "Hide item"}
                           onclick={() => nav.toggleHidden(item.href)}
                         >
@@ -363,35 +323,35 @@
                           {:else}
                             <Eye class="h-4 w-4" />
                           {/if}
-                        </button>
-                        <button
+                        </Button>
+                        <Button variant="ghost"
                           type="button"
-                          class="icon-btn"
+                          size="icon" class="size-8"
                           aria-label="Move up"
                           disabled={itemIndex === 0}
                           onclick={() => nav.moveItemWithinSection(section.id, item.href, -1)}
                         >
                           <ChevronUp class="h-4 w-4" />
-                        </button>
-                        <button
+                        </Button>
+                        <Button variant="ghost"
                           type="button"
-                          class="icon-btn"
+                          size="icon" class="size-8"
                           aria-label="Move down"
                           disabled={itemIndex === visibleItems.length - 1}
                           onclick={() => nav.moveItemWithinSection(section.id, item.href, 1)}
                         >
                           <ChevronDown class="h-4 w-4" />
-                        </button>
+                        </Button>
                         {#if sections.length > 1}
-                          <button
+                          <Button variant="ghost"
                             type="button"
-                            class="icon-btn"
+                            size="icon" class="size-8"
                             aria-label="Move to another section"
                             onclick={() =>
                               (moveTarget = { href: item.href, label: item.label, sectionId: section.id })}
                           >
                             <FolderInput class="h-4 w-4" />
-                          </button>
+                          </Button>
                         {/if}
                       </div>
                     </div>
@@ -433,14 +393,14 @@
 
       {#if editing}
         <div class="mt-2 flex items-center justify-between gap-2 px-1">
-          <button type="button" class="ghost-action" onclick={openAddSection}>
+          <Button variant="ghost" type="button" size="sm" onclick={openAddSection}>
             <Plus class="h-4 w-4" />
             <span>Add section</span>
-          </button>
-          <button type="button" class="ghost-action" onclick={() => nav.reset()}>
+          </Button>
+          <Button variant="ghost" type="button" size="sm" onclick={() => nav.reset()}>
             <RotateCcw class="h-4 w-4" />
             <span>Reset</span>
-          </button>
+          </Button>
         </div>
       {:else}
         <!-- Footer actions: changelog (with update indicator) and docs, matching the desktop sidebar. -->
@@ -486,20 +446,20 @@
                   </span>
                 </span>
               </a>
-              <button
+              <Button variant="ghost"
                 type="button"
                 class="flex h-10 w-10 shrink-0 items-center justify-center rounded-sm text-text-muted active:bg-surface-2"
                 aria-label="Sign out"
                 onclick={() => void session.logout()}
               >
                 <LogOut class="h-4 w-4" />
-              </button>
+              </Button>
             </div>
           {/if}
         </div>
       {/if}
     </nav>
-  </div>
+  </Sheet.Content>
 
   <RenameSectionDialog
     open={nameDialogOpen}
@@ -518,17 +478,9 @@
     onMove={(sectionId) => moveTarget && nav.moveItemToSection(moveTarget.href, sectionId)}
     onClose={() => (moveTarget = null)}
   />
-{/if}
+</Sheet.Root>
 
 <style>
-  .sheet {
-    border-top-left-radius: var(--radius-2xl);
-    border-top-right-radius: var(--radius-2xl);
-    box-shadow:
-      0 -12px 40px rgba(0, 0, 0, 0.5),
-      var(--shadow-panel);
-    will-change: transform;
-  }
 
   .section-label {
     color: var(--color-text-muted);
@@ -562,14 +514,8 @@
   .nav-item-icon-active {
     color: var(--color-text-primary);
   }
-  .sheet.animate {
-    transition: transform 280ms var(--ease-mechanical);
-  }
   .sheet-backdrop {
     will-change: opacity;
-  }
-  .sheet-backdrop.animate {
-    transition: opacity 200ms var(--ease-default);
   }
 
   .drag-zone {
@@ -577,31 +523,12 @@
     cursor: grab;
   }
 
-  .icon-btn {
-    display: inline-flex;
-    height: 1.85rem;
-    width: 1.85rem;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--radius-sm);
-    color: var(--color-text-muted);
-    transition:
-      color var(--duration-fast) var(--ease-default),
-      background var(--duration-fast) var(--ease-default);
-  }
   .icon-btn:hover {
     color: var(--color-text-primary);
     background: var(--color-surface-2);
   }
-  .icon-btn:disabled {
-    opacity: 0.3;
-    pointer-events: none;
-  }
   .icon-btn-active {
     color: var(--color-accent-500);
-  }
-  .icon-btn-danger:hover {
-    color: var(--color-error-text, #f87171);
   }
 
   /* Bottom-bar preview cells */
@@ -623,39 +550,11 @@
     font-size: 0.62rem;
     color: var(--color-text-secondary);
   }
-  .fav-arrow {
-    display: inline-flex;
-    height: 1.4rem;
-    width: 1.4rem;
-    align-items: center;
-    justify-content: center;
-    border-radius: var(--radius-xs);
-    color: var(--color-text-muted);
-    transition:
-      color var(--duration-fast) var(--ease-default),
-      background var(--duration-fast) var(--ease-default);
-  }
   .fav-arrow:hover {
     color: var(--color-text-primary);
     background: var(--color-surface-2);
   }
-  .fav-arrow:disabled {
-    opacity: 0.3;
-    pointer-events: none;
-  }
 
-  .ghost-action {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    border-radius: var(--radius-sm);
-    padding: 0.5rem 0.75rem;
-    font-size: 0.8rem;
-    color: var(--color-text-muted);
-    transition:
-      color var(--duration-fast) var(--ease-default),
-      background var(--duration-fast) var(--ease-default);
-  }
   .ghost-action:hover {
     color: var(--color-text-primary);
     background: var(--color-surface-2);

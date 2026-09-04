@@ -9,7 +9,7 @@
     Sparkles,
     X,
   } from "@lucide/svelte";
-  import { cn } from "@prismedia/ui-svelte";
+  import { Checkbox,  cn  } from "@prismedia/ui-svelte";
   import { useIdentifyStore } from "./identify-store.svelte";
   import { entityKindIcon } from "$lib/entities/entity-kind-icons";
   import { entityAccentForKind } from "$lib/entities/entity-accent";
@@ -180,9 +180,7 @@
 
       <!-- Mobile select-all -->
       <label class="flex items-center gap-2.5 border-b border-border-default bg-surface-2 px-3.5 py-2 md:hidden">
-        <input
-          type="checkbox"
-          class="h-3.5 w-3.5 accent-accent-500"
+        <Checkbox size="sm"
           checked={allSelected}
           onchange={toggleSelectAll}
           aria-label="Select all queued items"
@@ -196,9 +194,7 @@
       <!-- Queue header -->
       <div class="hidden items-center gap-3 border-b border-border-default bg-surface-2 px-3.5 py-2 md:grid md:grid-cols-[32px_70px_minmax(0,2fr)_minmax(0,1fr)_90px_80px_100px]">
         <label class="flex items-center">
-          <input
-            type="checkbox"
-            class="h-3.5 w-3.5 accent-accent-500"
+          <Checkbox size="sm"
             checked={allSelected}
             onchange={toggleSelectAll}
             aria-label="Select all queued items"
@@ -223,10 +219,9 @@
           )}
         >
           <label class="flex items-center">
-            <input
-              type="checkbox"
-              class="h-3.5 w-3.5 accent-accent-500"
+            <Checkbox size="sm"
               checked={isSelected}
+              aria-label={`Select ${item.title}`}
               onchange={() => toggleQueueSelection(item.entityId)}
             />
           </label>

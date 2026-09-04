@@ -106,7 +106,7 @@
             checked={isSelected}
             disabled={!canSelect}
             aria-label={`${isSelected ? "Deselect" : "Select"} ${title}`}
-            onchange={(event) => canSelect && onSelectedChange(node.proposalId, event.currentTarget.checked)}
+            onchange={(event) => canSelect && onSelectedChange(node.proposalId, event)}
           />
           <span>{canSelect ? (isSelected ? "Selected" : "Select") : status ?? "Unavailable"}</span>
         </label>

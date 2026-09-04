@@ -34,10 +34,10 @@
         ACTIVE
       </span>
       {#each activeFilters as option (option.id)}
-        <button type="button" class="filter-chip" onclick={() => removeFilter(option.id)}>
-          <span>{option.label}</span>
+        <Button variant="outline" size="xs" onclick={() => removeFilter(option.id)}>
+          <span class="max-w-48 truncate">{option.label}</span>
           <X class="h-3 w-3" />
-        </button>
+        </Button>
       {/each}
     {/if}
   </div>
@@ -77,51 +77,7 @@
     scrollbar-width: thin;
   }
 
-  .filter-chip-label {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.3rem;
-    flex-shrink: 0;
-    color: var(--color-text-disabled);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.58rem;
-    font-weight: 600;
-    letter-spacing: 0.16em;
-  }
 
-  .filter-chip {
-    display: inline-flex;
-    flex: 0 0 auto;
-    align-items: center;
-    gap: 0.4rem;
-    height: 1.6rem;
-    border: 1px solid var(--color-border-subtle, rgba(148, 158, 178, 0.07));
-    background: var(--color-surface-2, #101420);
-    border-radius: var(--radius-xs, 4px);
-    box-shadow: inset 0 2px 8px rgba(0,0,0,0.30);
-    color: var(--color-text-muted);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.66rem;
-    line-height: 1;
-    padding: 0 0.6rem;
-    transition:
-      border-color var(--duration-fast) var(--ease-default),
-      color var(--duration-fast) var(--ease-default),
-      background var(--duration-fast) var(--ease-default),
-      box-shadow var(--duration-fast) var(--ease-default);
-  }
 
-  .filter-chip:hover {
-    border-color: var(--color-error-border, rgba(168, 72, 80, 0.4));
-    background: var(--color-surface-3, #151a28);
-    color: var(--color-error-text, #cc7880);
-    box-shadow: 0 0 0 1px rgba(168, 72, 80, 0.3), 0 0 8px rgba(168, 72, 80, 0.15);
-  }
 
-  .filter-chip span {
-    max-width: 12rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
 </style>

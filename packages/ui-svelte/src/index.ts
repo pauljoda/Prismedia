@@ -22,6 +22,15 @@ export {
 } from "./navigation/app-shell-sections";
 
 // Primitives
+export * as DialogBase from "./components/ui/dialog";
+export * as Sheet from "./components/ui/sheet";
+export * as Alert from "./components/ui/alert";
+export * as Empty from "./components/ui/empty";
+export * as Table from "./components/ui/table";
+export * as RadioGroup from "./components/ui/radio-group";
+export { default as Skeleton } from "./components/ui/skeleton/skeleton.svelte";
+export { default as Progress } from "./components/ui/progress/progress.svelte";
+export { default as ChoicePicker, type ChoicePickerOption } from "./primitives/ChoicePicker.svelte";
 export * as Card from "./components/ui/card";
 export * as InputGroup from "./components/ui/input-group";
 export * as Field from "./components/ui/field";
@@ -32,6 +41,7 @@ export { default as Label } from "./components/ui/label/label.svelte";
 export * as DropdownMenu from "./components/ui/dropdown-menu";
 export * as Popover from "./components/ui/popover";
 export * as Command from "./components/ui/command";
+export { default as ToggleButton } from "./components/ui/toggle/toggle.svelte";
 export * as ToggleGroup from "./components/ui/toggle-group";
 export { default as Slider } from "./components/ui/slider/slider.svelte";
 export { default as Separator } from "./components/ui/separator/separator.svelte";
