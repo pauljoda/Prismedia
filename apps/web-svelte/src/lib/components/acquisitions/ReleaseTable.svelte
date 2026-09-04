@@ -155,7 +155,7 @@
 
 <!-- The table/cards split queries this container's width (not the viewport): the picker mounts inside
      entity detail panels and the request hub, so available width is what decides whether the fixed-column
-     table actually fits. Same approach as AcquisitionCard. -->
+     table actually fits. -->
 <div class="release-list">
 <!-- Controls: relevance filter (hides rejected releases) + card-mode sort (table headers hidden on cards). -->
 <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
