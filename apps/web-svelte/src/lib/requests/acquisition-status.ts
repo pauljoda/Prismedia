@@ -20,7 +20,7 @@ const ACQUISITION_STATUS_LABELS: Record<AcquisitionStatusCode, string> = {
   [ACQUISITION_STATUS.stopping]: "Cleaning up",
   [ACQUISITION_STATUS.failed]: "Failed",
   [ACQUISITION_STATUS.cancelled]: "Cancelled",
-  [ACQUISITION_STATUS.manualImportRequired]: "Manual import",
+  [ACQUISITION_STATUS.manualImportRequired]: "Review import",
 };
 
 /** True when a runtime value belongs to the generated acquisition lifecycle. */

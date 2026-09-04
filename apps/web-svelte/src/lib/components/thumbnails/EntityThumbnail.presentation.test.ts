@@ -77,7 +77,7 @@ describe("EntityThumbnail presentation", () => {
     card.custom = { ...card.custom, sourceTag: { label: "Source" } };
     const { container } = render(EntityThumbnail, { props: { card, layout: "list" } });
     const caption = container.querySelector(".thumbnail-caption")!;
-    expect(caption.querySelector(".wanted-badge")).toHaveTextContent("Review");
+    expect(caption.querySelector(".wanted-badge")).toHaveTextContent("Choose release");
     expect(caption.querySelector(".position-badge")).toHaveTextContent("S1 E2");
     expect(caption.querySelector(".rating-badge")).toHaveTextContent("4");
     expect(caption.querySelector(".source-badge")).toHaveTextContent("Source");

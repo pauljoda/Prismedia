@@ -7,8 +7,16 @@ import {
 } from "$lib/api/generated/codes";
 import type { DownloadQueueItemView, WantedListItemView } from "$lib/api/generated/model";
 import { downloadToListItem, wantedToListItem } from "./acquisition-list-item";
+import { acquisitionStatusDisplay } from "./acquisition-status-display";
 
 describe("download acquisition list items", () => {
+  it.each(Object.values(ACQUISITION_STATUS))("shares the thumbnail status presentation for %s", (status) => {
+    const item = downloadToListItem(download(status), null, { onReSearch: vi.fn(), onRemove: vi.fn() }, false);
+    const display = acquisitionStatusDisplay(status);
+    expect(item.statusLabel).toBe(display.label);
+    expect(item.statusIcon).toBe(display.icon);
+    expect(item.tone).toBe(display.tone);
+  });
   it("locks every destructive or restart action while cleanup is in progress", () => {
     const item = downloadToListItem(
       download(ACQUISITION_STATUS.stopping),

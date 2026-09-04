@@ -57,6 +57,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Acquisition labels now agree across library cards, Downloads, and child activity. Pending, downloaded, and importing stages stay distinct, while attention states name the next step: Choose release or Review import.
 - Entity metadata combines repeated provider destinations into one link with aligned, readable IDs, without changing the editable source data. Personal milestones now appear under Dates rather than Release dates.
 - Untabbed Entity pages now use the same responsive editor as tabbed pages. Hidden fields and read-only relationships no longer appear as editable or enter the save selection.
 - Entity detail panels align with the header without dark side gutters, and narrow-screen title/rating fields stay within the shared edit grid.

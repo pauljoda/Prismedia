@@ -194,6 +194,9 @@ shared class-merging utility so ordinary layout overrides replace them correctly
 - Thumbnail status, rating, and source markers use shared Badges. Grid markers
   stay on the artwork; list markers join the caption so small images remain clear.
   Selection controls keep an opaque neutral backing over artwork.
+- Acquisition status labels and icons come from the shared lifecycle presentation.
+  Keep pending, transfer, and import stages distinct. Attention labels name the
+  decision, such as Choose release or Review import, rather than a generic Action.
 - Detail sections attach behind the header's lower corners, with square top
   edges and rounded bottom edges. The shared header owns the overlap depth.
 - Artwork editing lives in a shared disclosure with labeled poster/header
