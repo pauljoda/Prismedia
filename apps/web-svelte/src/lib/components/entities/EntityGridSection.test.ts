@@ -32,6 +32,18 @@ describe("EntityGridSection", () => {
     expect(screen.getByRole("button", { name: /Sub Galleries/ })).toHaveAttribute("aria-expanded", "false");
     expect(screen.queryByTestId("section-grid")).not.toBeInTheDocument();
   });
+
+  it("restores each entity's preference when a detail route reuses the section", async () => {
+    window.localStorage.setItem("prismedia:entity-grid-section:album-one", "collapsed");
+    const { rerender } = render(EntityGridSectionHarness, { prefsKey: "album-one" });
+    expect(screen.getByRole("button", { name: /Sub Galleries/ })).toHaveAttribute("aria-expanded", "false");
+
+    await rerender({ prefsKey: "album-two" });
+    expect(screen.getByRole("button", { name: /Sub Galleries/ })).toHaveAttribute("aria-expanded", "true");
+    expect(screen.getByRole("heading", { level: 2, name: /Sub Galleries/ })).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: /Sub Galleries/ }));
+    expect(window.localStorage.getItem("prismedia:entity-grid-section:album-two")).toBe("collapsed");
+  });
 });
 
 function createLocalStorageStub(): Storage {

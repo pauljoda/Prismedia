@@ -1,4 +1,6 @@
 <script lang="ts">
+  import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
+  import EntityGridSection from "$lib/components/entities/EntityGridSection.svelte";
   import { ENTITY_KIND } from "$lib/entities/entity-codes";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -342,19 +344,14 @@
     </EntityDetail>
 
     {#if subLibraryCards.length > 0}
-      <section class="content-section">
-        <h2 class="content-heading">
-          <Music class="h-4 w-4" />
-          Sub-Libraries
-          <span class="content-count">{subLibraryCards.length}</span>
-        </h2>
+      <EntityGridSection title="Sub-libraries" icon={Music} count={subLibraryCards.length} prefsKey={`audio-${library?.id}-children-section`}>
         <EntityGrid
           cards={subLibraryCards}
           prefsKey={`audio-${library?.id}-children`}
           emptyTitle="No sub-libraries"
           emptyMessage="No sub-libraries in this collection."
         />
-      </section>
+      </EntityGridSection>
     {/if}
 
     {#if trackItems.length > 0}
@@ -369,9 +366,7 @@
     {/if}
 
     {#if trackItems.length === 0 && subLibraryCards.length === 0}
-      <div class="empty-children">
-        <p>No tracks or sub-libraries in this audio library yet.</p>
-      </div>
+      <StatePlaceholder icon={Music} title="No tracks yet" description="Tracks and nested libraries will appear here." />
     {/if}
     {/if}
   </EntityDetailPageState>
@@ -385,10 +380,5 @@
   :global(.meta-sep) { display: inline-block; width: 3px; height: 3px; margin: 0 0.5rem; background: var(--color-text-muted, #8a93a6); opacity: 0.5; }
 
 
-  .content-section { display: grid; gap: 0.75rem; }
-  .content-heading { display: flex; align-items: center; gap: 0.5rem; margin: 0; font-family: var(--font-heading, Geist, sans-serif); font-size: 1.1rem; font-weight: 600; color: var(--color-text-primary, #f2eed8); }
-  .content-count { font-family: var(--font-mono, "JetBrains Mono", monospace); font-size: 0.68rem; font-weight: 600; color: var(--color-text-muted, #8a93a6); padding: 0.1rem 0.4rem; border: 1px solid var(--color-border, #1c2235); background: var(--color-surface-3, #151a28); }
-
-  .empty-children { padding: 2rem; border: 1px solid var(--color-border-subtle, #1c2235); background: var(--color-surface-1, #0c0f15); color: var(--color-text-muted, #8a93a6); text-align: center; font-size: 0.85rem; }
 
 </style>

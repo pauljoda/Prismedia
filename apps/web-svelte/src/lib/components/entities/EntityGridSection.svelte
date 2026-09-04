@@ -22,11 +22,9 @@
     title,
   }: Props = $props();
 
-  // svelte-ignore state_referenced_locally
-  const storageKey = `prismedia:entity-grid-section:${prefsKey}`;
-  // svelte-ignore state_referenced_locally
-  const contentId = `entity-grid-section-${slugify(prefsKey)}`;
-  let collapsed = $state(readStoredCollapsed(storageKey));
+  const storageKey = $derived(`prismedia:entity-grid-section:${prefsKey}`);
+  const contentId = $derived(`entity-grid-section-${slugify(prefsKey)}`);
+  let collapsed = $derived(readStoredCollapsed(storageKey));
 
   function readStoredCollapsed(key: string): boolean {
     if (!browser) return false;
@@ -57,6 +55,7 @@
 </script>
 
 <Collapsible.Root open={!collapsed} onOpenChange={setOpen} class="grid gap-3">
+  <h2 class="m-0">
   <Collapsible.Trigger class={cn(buttonVariants({ variant: "ghost" }), "h-auto w-full justify-between px-1 py-1 font-heading text-lg font-semibold")} title={collapsed ? `Expand ${title}` : `Collapse ${title}`}>
     <span class="flex min-w-0 items-center gap-2">
       {#if Icon}
@@ -67,6 +66,7 @@
     </span>
     <ChevronDown class={cn("size-4 shrink-0 transition-transform", !collapsed && "rotate-180")} />
   </Collapsible.Trigger>
+  </h2>
 
   <Collapsible.Content id={contentId} class="min-w-0">
     {#if !collapsed}

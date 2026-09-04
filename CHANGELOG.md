@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Related-content sections now share consistent headings, counts, and empty states across artists, authors, albums, galleries, series, and seasons. Collapsed sections remember the correct preference when navigating between entities.
 - Track lists now prioritize titles and artists, keep play controls separate from row numbers, and only flag missing media. The Tracks library uses continuous numbering without album disc headings, with shared search and empty-state controls.
 - Entity metadata now consolidates provider links that point to the same website, uses clearer shared link rows, and fits cards to their content with consistently aligned labels and values.
 - Dashboard and related-entity shelves now share visible previous/next controls, with clearer cast counts and readable thumbnail captions at smaller sizes.

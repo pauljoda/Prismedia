@@ -1,4 +1,6 @@
 <script lang="ts">
+  import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
+  import EntityGridSection from "$lib/components/entities/EntityGridSection.svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { CloudDownload, Film, Info, SlidersHorizontal, Users } from "@lucide/svelte";
@@ -307,12 +309,7 @@
     {/if}
 
     {#if episodeCards.length > 0}
-      <section class="content-section">
-        <h2 class="content-heading">
-          <Film class="h-4 w-4" />
-          Episodes
-          <span class="content-count">{episodeCards.length}</span>
-        </h2>
+      <EntityGridSection title="Episodes" icon={Film} count={episodeCards.length} prefsKey={`season-${seasonId}-episodes-section`}>
         <EntityGrid
           cards={episodeCards}
           prefsKey={`season-${seasonId}-episodes`}
@@ -322,11 +319,9 @@
           emptyTitle="No episodes"
           emptyMessage="No episodes found in this season."
         />
-      </section>
+      </EntityGridSection>
     {:else}
-      <div class="empty-children">
-        <p>No episodes found in this season yet.</p>
-      </div>
+      <StatePlaceholder icon={Film} title="No episodes yet" description="Episodes linked to this season will appear here." />
     {/if}
   {/if}
   </EntityDetailPageState>
@@ -359,40 +354,6 @@
     opacity: 0.5;
   }
 
-  .content-section {
-    display: grid;
-    gap: 0.75rem;
-  }
-
-  .content-heading {
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    margin: 0;
-    font-family: var(--font-heading, Geist, sans-serif);
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: var(--color-text-primary, #f2eed8);
-  }
-
-  .content-count {
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.68rem;
-    font-weight: 600;
-    color: var(--color-text-muted, #8a93a6);
-    padding: 0.1rem 0.4rem;
-    border: 1px solid var(--color-border, #1c2235);
-    background: var(--color-surface-3, #151a28);
-  }
-
-  .empty-children {
-    padding: 2rem;
-    border: 1px solid var(--color-border-subtle, #1c2235);
-    background: var(--color-surface-1, #0c0f15);
-    color: var(--color-text-muted, #8a93a6);
-    text-align: center;
-    font-size: 0.85rem;
-  }
 
 
 </style>
