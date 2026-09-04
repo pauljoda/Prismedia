@@ -26,29 +26,23 @@
     Heart,
     Flame,
     CheckCircle,
-    Image as ImageIcon,
     Link,
     ListOrdered,
-    LoaderCircle,
     MonitorCog,
     Pencil,
     Play,
-    Trash2,
-    Upload,
     Users,
   } from "@lucide/svelte";
   import { Button, Tabs } from "@prismedia/ui-svelte";
   import EntityDetailEditLayout from "./EntityDetailEditLayout.svelte";
+  import EntityDetailArtworkEditor from "./EntityDetailArtworkEditor.svelte";
   import type { EntityDetailCard, EntityDetailCardFull } from "$lib/entities/entity-detail";
   import { renderEntityDescriptionMarkdown } from "$lib/entities/entity-detail-markdown";
   import {
-    hasHero,
-    hasPoster,
     DEFAULT_STANDALONE_METADATA_SECTION_IDS,
   } from "$lib/entities/entity-detail";
   import {
     entityReferenceToThumbnailCard,
-    placeholderGradient,
     toAspectRatioValue,
     type EntityThumbnailCard,
   } from "$lib/entities/entity-thumbnail";
@@ -111,8 +105,6 @@
   }: Props = $props();
 
   let activeTabId = $state("");
-  let posterInput: HTMLInputElement | null = $state(null);
-  let headerInput: HTMLInputElement | null = $state(null);
   let paletteState = $state<{ entityId: string; palette: ArtworkPalette } | null>(null);
 
   const isFavorite = $derived(card.flags.find((f) => f.code === "favorite")?.active ?? false);
@@ -222,6 +214,10 @@
   const posterHasAsset = $derived(Boolean(displayPoster));
   const headerHasAsset = $derived(Boolean(displayHero));
   const canManageImages = $derived(artwork.canManage);
+  const editableArtwork = $derived([
+    { role: ENTITY_FILE_ROLE.poster, label: "Poster", hasAsset: posterHasAsset },
+    { role: ENTITY_FILE_ROLE.backdrop, label: "Header", hasAsset: headerHasAsset },
+  ].filter(asset => artwork.supports(asset.role)));
   const canEdit = $derived(Boolean(onMetadataSave));
   const editActionLabel = $derived(activeTab ? `Edit ${activeTab.label}` : "Edit details");
   const cancelEditActionLabel = $derived(activeTab ? `Cancel ${activeTab.label}` : "Cancel editing");
@@ -361,21 +357,6 @@
     return artwork.supports(role);
   }
 
-  function inputForRole(role: EntityFileRoleCode): HTMLInputElement | null {
-    return role === ENTITY_FILE_ROLE.backdrop ? headerInput : posterInput;
-  }
-
-  function openAssetPicker(role: EntityFileRoleCode) {
-    inputForRole(role)?.click();
-  }
-
-  async function handleAssetInput(role: EntityFileRoleCode, event: Event) {
-    const input = event.currentTarget as HTMLInputElement;
-    const file = input.files?.[0];
-    input.value = "";
-    if (file) await uploadAsset(role, file);
-  }
-
   async function handleAssetDrop(role: EntityFileRoleCode, event: DragEvent) {
     event.preventDefault();
     const file = event.dataTransfer?.files?.[0];
@@ -391,51 +372,7 @@
     await artwork.uploadAsset(role, file);
   }
 
-  async function clearAsset(role: EntityFileRoleCode) {
-    await artwork.clearAsset(role);
-  }
-
-  function assetBusy(role: EntityFileRoleCode): boolean {
-    return artwork.isBusy(role);
-  }
 </script>
-
-{#snippet assetBusyOverlay(role: EntityFileRoleCode)}
-  {#if assetBusy(role)}
-    <div class="asset-busy-overlay" role="status" aria-label="Uploading artwork">
-      <LoaderCircle class="asset-busy-spinner h-6 w-6" />
-    </div>
-  {/if}
-{/snippet}
-
-{#snippet imageAssetActions(role: EntityFileRoleCode, label: "poster" | "header", hasAsset: boolean)}
-  {#if isEditingActiveTab && canManageImages && roleSupported(role)}
-    <div class="image-asset-actions">
-      <Button variant="ghost" size="sm"
-        type="button"
-
-        onclick={() => openAssetPicker(role)}
-        disabled={assetBusy(role)}
-        aria-label={`Upload ${label}`}
-      >
-        <Upload class="h-3.5 w-3.5" />
-        <span>{assetBusy(role) ? "Uploading" : "Upload"}</span>
-      </Button>
-      {#if hasAsset}
-        <Button variant="ghost" size="sm"
-          type="button"
-
-          onclick={() => void clearAsset(role)}
-          disabled={assetBusy(role)}
-          aria-label={`Clear ${label}`}
-        >
-          <Trash2 class="h-3.5 w-3.5" />
-          <span>Clear</span>
-        </Button>
-      {/if}
-    </div>
-  {/if}
-{/snippet}
 
 {#snippet descriptionContent()}
   {#if renderedDescription}
@@ -603,21 +540,6 @@
   onEditStandalone={() => startEdit()}
 />
 
-<input
-  bind:this={posterInput}
-  class="asset-file-input"
-  type="file"
-  accept="image/*"
-  onchange={(event) => void handleAssetInput(ENTITY_FILE_ROLE.poster, event)}
-/>
-<input
-  bind:this={headerInput}
-  class="asset-file-input"
-  type="file"
-  accept="image/*"
-  onchange={(event) => void handleAssetInput(ENTITY_FILE_ROLE.backdrop, event)}
-/>
-
 <article
   class="entity-detail"
   data-poster-size={effectivePosterSize}
@@ -653,14 +575,6 @@
             {#if posterCard}
               <EntityThumbnail card={posterCard} linkable={false} mediaOnly={true} />
             {/if}
-            {#if isEditingActiveTab && !posterHasAsset}
-              <div class="asset-empty-label">
-                <ImageIcon class="h-4 w-4" />
-                <span>Poster empty</span>
-              </div>
-            {/if}
-            {@render imageAssetActions(ENTITY_FILE_ROLE.poster, "poster", posterHasAsset)}
-            {@render assetBusyOverlay(ENTITY_FILE_ROLE.poster)}
           </div>
         {/if}
 
@@ -697,22 +611,6 @@
       </div>
     {/snippet}
 
-    {#if isEditingActiveTab && !headerHasAsset}
-      <div
-        class="header-asset-placeholder"
-        style:background-image={placeholderGradient(card.entity.title)}
-        aria-hidden="true"
-      >
-        <ImageIcon class="h-8 w-8" />
-      </div>
-    {/if}
-
-    {#if isEditingActiveTab}
-      <div class="header-asset-panel" class:is-empty={!headerHasAsset}>
-        {@render imageAssetActions(ENTITY_FILE_ROLE.backdrop, "header", headerHasAsset)}
-      </div>
-    {/if}
-    {@render assetBusyOverlay(ENTITY_FILE_ROLE.backdrop)}
 
     {#if heroMode === "image"}
       <!-- Sharp banner, mask fades bottom 10%; the page's LCP image, loaded at high priority. -->
@@ -756,10 +654,14 @@
     {/if}
   </div>
 
+  {#if isEditingActiveTab && canManageImages && editableArtwork.length}
+    <EntityDetailArtworkEditor assets={editableArtwork} busyRole={artwork.busyRole} onUpload={artwork.uploadAsset} onClear={artwork.clearAsset} />
+  {/if}
+
   {#if hasTabs}
     <div class="detail-tabs">
       <Tabs.Root class="gap-0" activationMode="manual" bind:value={() => activeTab?.id ?? "", requestTab}>
-      <Tabs.List variant="line" class="max-w-full justify-start overflow-x-auto" aria-label="Detail sections">
+      <Tabs.List variant="line" class="max-w-full justify-start overflow-x-auto rounded-none" aria-label="Detail sections">
         {#each visibleTabs as tab (tab.id)}
           {@const TabIcon = tab.icon}
           <Tabs.Trigger
@@ -854,7 +756,6 @@
     --detail-glass-blur: var(--glass-blur-sm);
     --hero-banner-max-height: clamp(13rem, 36vw, 20rem);
     --hero-lower-overlap: clamp(-3.75rem, -6vw, -2rem);
-    --detail-slideout-inset: 5px;
 
     display: grid;
     gap: 0;
@@ -874,16 +775,10 @@
 
   /* ── Hero ────────────────────────────────────────────────── */
 
-  .asset-file-input {
-    position: fixed;
-    width: 1px;
-    height: 1px;
-    opacity: 0;
-    pointer-events: none;
-  }
 
   .hero {
     position: relative;
+    z-index: 1;
     overflow: hidden;
     border-radius: var(--radius-md, 10px);
   }
@@ -1066,121 +961,6 @@
     border-bottom: 0;
   }
 
-  .header-asset-placeholder {
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    display: grid;
-    place-items: center;
-    background-size: cover;
-    color: color-mix(in srgb, var(--detail-accent) 42%, var(--detail-text-muted));
-    opacity: 0.84;
-  }
-
-  .header-asset-placeholder::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background:
-      radial-gradient(circle at 50% 40%, rgba(199, 201, 204, 0.16), transparent 24%),
-      linear-gradient(180deg, rgba(7, 8, 11, 0.18), rgba(7, 8, 11, 0.58));
-  }
-
-  .header-asset-placeholder :global(svg) {
-    position: relative;
-    z-index: 1;
-    opacity: 0.48;
-  }
-
-  .header-asset-panel {
-    position: absolute;
-    inset: 0;
-    z-index: 5;
-    display: flex;
-    align-items: flex-start;
-    justify-content: flex-end;
-    gap: 0.5rem;
-    padding: 0.75rem;
-    pointer-events: none;
-  }
-
-  .header-asset-panel.is-empty {
-    align-items: flex-start;
-    justify-content: center;
-    padding-top: 1rem;
-  }
-
-  .asset-empty-label {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.4rem 0.55rem;
-    border: 1px solid color-mix(in srgb, var(--detail-accent) 28%, var(--detail-border));
-    border-radius: var(--radius-xs, 4px);
-    background: rgba(8, 10, 15, 0.72);
-    color: var(--detail-text-muted);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.68rem;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    box-shadow: 0 0 16px rgba(0, 0, 0, 0.35);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-  }
-
-  .poster-frame .asset-empty-label {
-    position: absolute;
-    inset: auto 0.45rem 3.2rem;
-    justify-content: center;
-  }
-
-  .image-asset-actions {
-    position: relative;
-    z-index: 2;
-    display: flex;
-    gap: 0.35rem;
-    pointer-events: auto;
-  }
-
-  /* Spinner shown over the artwork while an upload + thumbnail generation is in flight. */
-  .asset-busy-overlay {
-    position: absolute;
-    inset: 0;
-    z-index: 4;
-    display: grid;
-    place-items: center;
-    background: rgba(7, 8, 11, 0.55);
-    backdrop-filter: blur(2px);
-    -webkit-backdrop-filter: blur(2px);
-    pointer-events: none;
-    border-radius: inherit;
-  }
-
-  .asset-busy-overlay :global(.asset-busy-spinner) {
-    color: var(--detail-accent, #c7c9cc);
-    animation: asset-busy-spin 0.8s linear infinite;
-  }
-
-  @keyframes asset-busy-spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .asset-busy-overlay :global(.asset-busy-spinner) {
-      animation: none;
-    }
-  }
-
-  .poster-frame .image-asset-actions {
-    position: absolute;
-    right: 0.4rem;
-    bottom: 0.4rem;
-    left: 0.4rem;
-    justify-content: center;
-  }
 
 
 
@@ -1320,8 +1100,17 @@
 
   .detail-tabs {
     --tabs-indicator: var(--detail-accent);
+    position: relative;
+    z-index: 0;
     min-width: 0;
-    margin-inline: var(--detail-slideout-inset);
+  }
+
+  /* Attached sections continue behind the hero's lower corners. */
+  .hero + .detail-tabs,
+  .hero + .detail-content-card--standalone {
+    margin-top: calc(-1 * var(--radius-md));
+    padding-top: var(--radius-md);
+    background: var(--color-surface-1);
   }
 
   .detail-tabs :global(.detail-tab-panel) {
@@ -1345,7 +1134,7 @@
   }
 
   .detail-content-card--standalone {
-    margin: -1px var(--detail-slideout-inset) 0;
+    margin-top: -1px;
   }
 
   .detail-tab-sections {
@@ -1504,12 +1293,16 @@
 
   .edit-section {
     display: grid;
-    gap: 0.75rem;
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+    gap: calc(var(--spacing) * 4);
   }
 
   .edit-inline-grid {
     display: grid;
-    gap: 0.75rem;
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+    gap: calc(var(--spacing) * 4);
   }
 
   @media (min-width: 720px) {
@@ -1522,14 +1315,11 @@
   .edit-flag-chips {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.35rem;
-    min-height: 2.55rem;
+    gap: var(--spacing-control-gap);
+    min-height: var(--spacing-control);
     align-items: center;
   }
 
-  .edit-flag-chips :global(button) {
-    min-height: 2.55rem;
-  }
 
   /* ── Shared ─────────────────────────────────────────────── */
 

@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Entity detail sections now extend behind the header with square top corners. Artwork editing uses an expandable set of labeled controls instead of buttons over the cover or an empty header overlay.
 - Entity editing now groups fields, dates, and references in a full-width responsive grid with consistently aligned save/cancel controls. Book acquisition rows separate availability from actions and use roomier shared controls.
 - Acquisition downloads now put progress, speed, and time remaining first, with technical details collapsed. Recovery actions share an aligned footer beneath the work area.
 - Entity controls and metadata chips now share readable sizes and spacing. Mobile detail actions keep their labels in an aligned grid below the artwork, and related entities retain full thumbnails.
@@ -54,6 +55,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Entity detail panels align with the header without dark side gutters, and narrow-screen title/rating fields stay within the shared edit grid.
 - Link editors now identify editing clearly, focus the field, and explain invalid entries. Metadata input errors are associated with their fields, manual upload is keyboard-accessible, and supporting acquisition sections no longer run together.
 - Date fields stay aligned within their columns in iOS Safari while retaining the native calendar picker.
 - Interrupted imports now show the failure reason and available recovery path instead of suggesting an unavailable torrent upload.

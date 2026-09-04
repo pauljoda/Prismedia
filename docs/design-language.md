@@ -191,6 +191,11 @@ shared class-merging utility so ordinary layout overrides replace them correctly
 - Interactive tags use button styling. Static counts use Badge, with neutral
   text and restrained colored icons. Do not shrink captions to fit a thumbnail.
 - Related entities retain full normal thumbnails, even when a group has one item.
+- Detail sections attach behind the header's lower corners, with square top
+  edges and rounded bottom edges. The shared header owns the overlap depth.
+- Artwork editing lives in a shared disclosure with labeled poster/header
+  actions, outside the artwork itself. It distinguishes immediate image changes
+  from the metadata draft and does not paint an empty upload area over the hero.
 - On mobile, Entity page actions form a labeled two-column grid below the
   artwork and title. At narrow widths, ratings move to their own full-width row.
 - Acquisition work and monitoring settings align at the top on wide screens and

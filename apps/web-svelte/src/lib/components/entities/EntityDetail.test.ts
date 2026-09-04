@@ -202,11 +202,14 @@ describe("EntityDetail", () => {
 
     await fireEvent.click(screen.getByRole("button", { name: "Edit details" }));
 
-    expect(screen.getByText("Poster empty")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Header empty" })).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Artwork" })).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Edit artwork" }));
+    expect(screen.getAllByText("No image")).toHaveLength(2);
     expect(screen.getByRole("button", { name: "Upload poster" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Upload header" })).toBeInTheDocument();
-    expect(container.querySelector(".header-asset-placeholder")).toBeInTheDocument();
+    expect(container.querySelector(".header-asset-placeholder")).not.toBeInTheDocument();
+    expect(container.querySelector(".hero button[aria-label='Upload poster']")).not.toBeInTheDocument();
+    expect(container.querySelector(".hero button[aria-label='Upload header']")).not.toBeInTheDocument();
     expect(container.querySelector('[data-asset-dropzone="poster"]')).toBeInTheDocument();
     expect(container.querySelector('[data-asset-dropzone="backdrop"]')).toBeInTheDocument();
 
