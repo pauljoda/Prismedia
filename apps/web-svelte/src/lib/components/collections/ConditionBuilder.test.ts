@@ -28,8 +28,8 @@ describe("ConditionBuilder", () => {
     const onChange = vi.fn();
     render(ConditionBuilder, { props: baseProps({ onChange }) });
 
-    await fireEvent.click(screen.getByRole("button", { name: "Rule field" }));
-    await fireEvent.click(screen.getByRole("option", { name: "Rating" }));
+    await fireEvent.keyDown(screen.getByRole("button", { name: "Rule field" }), { key: "ArrowDown" });
+    await fireEvent.pointerUp(screen.getByRole("option", { name: "Rating" }));
 
     expect(onChange).toHaveBeenLastCalledWith({
       type: "group",

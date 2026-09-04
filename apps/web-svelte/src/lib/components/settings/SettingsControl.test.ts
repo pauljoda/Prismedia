@@ -23,6 +23,24 @@ function descriptor(overrides: Partial<SettingDescriptor>): SettingDescriptor {
 }
 
 describe("SettingsControl", () => {
+  it("exposes one named switch without nesting interactive controls", async () => {
+    const onCommit = vi.fn();
+    render(SettingsControl, { setting: descriptor({ value: false }), onCommit });
+    const control = screen.getByRole("switch", { name: "Show cast controls" });
+    expect(control.parentElement?.closest("button")).toBeNull();
+    await fireEvent.click(control);
+    expect(onCommit).toHaveBeenCalledExactlyOnceWith("playback.showCastControls", true);
+  });
+
+  it("names and disables select settings at the control", () => {
+    render(SettingsControl, {
+      setting: descriptor({ type: "select", value: "a", options: [{ value: "a", label: "Alpha" }] }),
+      disabled: true,
+      onCommit: vi.fn(),
+    });
+    expect(screen.getByRole("button", { name: "Show cast controls" })).toBeDisabled();
+  });
+
   it("renders boolean settings as toggle cards", async () => {
     const onCommit = vi.fn();
     render(SettingsControl, {

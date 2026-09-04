@@ -73,23 +73,23 @@
 
 <div class={cn("setting-row", disabled && "opacity-60", className)}>
   {#if setting.type === "boolean"}
-    <button
-      type="button"
+    <label for={inputId}
       class="flex w-full items-center justify-between gap-4 py-3 text-left rounded-xs transition-colors hover:bg-surface-2/30"
-      onclick={() => { if (!disabled) onCommit(setting.key, !valueAsBoolean(setting.value)); }}
     >
       <div class="min-w-0 flex-1">
-        <div class="text-[0.82rem] font-medium text-text-primary">{setting.label}</div>
-        <p class="mt-0.5 text-[0.68rem] leading-relaxed text-text-muted">{description}</p>
+        <div class="text-sm font-medium text-text-primary">{setting.label}</div>
+        <p id={`${inputId}-description`} class="mt-0.5 text-xs leading-relaxed text-text-muted">{description}</p>
       </div>
-      <Toggle checked={valueAsBoolean(setting.value)} {disabled} />
-    </button>
+      <Toggle id={inputId} ariaLabel={setting.label} ariaDescribedby={`${inputId}-description`}
+        checked={valueAsBoolean(setting.value)} {disabled}
+        onchange={(next) => { if (!disabled) onCommit(setting.key, next); }} />
+    </label>
 
   {:else if setting.type === "integer"}
     <div class="flex items-center justify-between gap-4 py-3">
       <div class="min-w-0 flex-1">
-        <div class="text-[0.82rem] font-medium text-text-primary">{setting.label}</div>
-        <p class="mt-0.5 text-[0.68rem] leading-relaxed text-text-muted">{description}</p>
+        <div class="text-sm font-medium text-text-primary">{setting.label}</div>
+        <p class="mt-0.5 text-xs leading-relaxed text-text-muted">{description}</p>
       </div>
       <div class="flex items-center rounded-xs border border-border-default bg-surface-1 shadow-well shrink-0">
         <button
@@ -121,8 +121,8 @@
     <div class="py-3">
       <div class="flex items-center justify-between gap-4">
         <div class="min-w-0 flex-1">
-          <label class="text-[0.82rem] font-medium text-text-primary" for={inputId}>{setting.label}</label>
-          <p class="mt-0.5 text-[0.68rem] leading-relaxed text-text-muted">{description}</p>
+          <label class="text-sm font-medium text-text-primary" for={inputId}>{setting.label}</label>
+          <p class="mt-0.5 text-xs leading-relaxed text-text-muted">{description}</p>
         </div>
         <span class="text-mono-sm shrink-0 rounded-xs border border-border-subtle bg-surface-1 px-2 py-0.5 text-text-accent shadow-well">
           {displayNumber(draftNumber)}
@@ -146,16 +146,18 @@
     </div>
 
   {:else if setting.type === "select"}
-    <div class="flex items-center justify-between gap-4 py-3">
+    <div class="flex flex-col gap-2 py-3 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
       <div class="min-w-0 flex-1">
-        <div class="text-[0.82rem] font-medium text-text-primary">{setting.label}</div>
-        <p class="mt-0.5 text-[0.68rem] leading-relaxed text-text-muted">{description}</p>
+        <div class="text-sm font-medium text-text-primary">{setting.label}</div>
+        <p class="mt-0.5 text-xs leading-relaxed text-text-muted">{description}</p>
       </div>
-      <div class="w-44 shrink-0">
+      <div class="w-full shrink-0 sm:w-44">
         <Select
           options={selectOptions}
           value={valueAsString(setting.value)}
           size="sm"
+          ariaLabel={setting.label}
+          {disabled}
           onchange={(val) => { if (!disabled) onCommit(setting.key, val); }}
         />
       </div>
@@ -164,8 +166,8 @@
   {:else}
     <div class="py-3">
       <div class="min-w-0">
-        <label class="text-[0.82rem] font-medium text-text-primary" for={inputId}>{setting.label}</label>
-        <p class="mt-0.5 text-[0.68rem] leading-relaxed text-text-muted">{description}</p>
+        <label class="text-sm font-medium text-text-primary" for={inputId}>{setting.label}</label>
+        <p class="mt-0.5 text-xs leading-relaxed text-text-muted">{description}</p>
       </div>
       <input
         id={inputId}

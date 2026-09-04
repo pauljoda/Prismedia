@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Shared dropdowns and settings switches now use accessible component bases with clearer neutral styling, keyboard typeahead, disabled-option handling, and dialog-aware menus. Settings labels are easier to read and selectors expand to full width on small screens.
 - Shared audio players now advance any owning Entity through generic item-to-progress mappings. Book code constructs the chapter mapping, while web and Apple players use the same media-neutral playback and persistence contract as every other audio-capable Entity.
 - Saved audio queues now restore through one compact, exact batch projection instead of loading every queued item independently, preserving numeric durations and player metadata without query growth as queues get longer.
 

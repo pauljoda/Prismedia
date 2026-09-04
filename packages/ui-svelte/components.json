@@ -1,0 +1,17 @@
+{
+  "$schema": "https://shadcn-svelte.com/schema.json",
+  "tailwind": {
+    "css": "../../apps/web-svelte/src/app.css",
+    "baseColor": "neutral"
+  },
+  "aliases": {
+    "lib": "@prismedia/ui-svelte",
+    "components": "@prismedia/ui-svelte/components",
+    "ui": "@prismedia/ui-svelte/components/ui",
+    "utils": "@prismedia/ui-svelte/lib/utils",
+    "hooks": "@prismedia/ui-svelte/hooks"
+  },
+  "typescript": true,
+  "iconLibrary": "lucide",
+  "registry": "https://shadcn-svelte.com/registry"
+}

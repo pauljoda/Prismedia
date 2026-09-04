@@ -5,15 +5,15 @@
     Checkbox,
     Meter,
     Panel,
-    Select,
     StatusLed,
     TextInput,
     Toggle,
     type LedStatus,
-    type SelectOption,
   } from "@prismedia/ui-svelte";
   import LogoMark from "$lib/components/LogoMark.svelte";
   import PrismediaLoadingMark from "$lib/components/PrismediaLoadingMark.svelte";
+  import UiFoundationPreview from "$lib/components/UiFoundationPreview.svelte";
+  import UiSelectSamples from "$lib/components/UiSelectSamples.svelte";
 
   const ledStatuses: LedStatus[] = [
     "active",
@@ -29,14 +29,6 @@
   let demoIndeterminate = $state(true);
   let demoToggle = $state(false);
   let demoToggleSm = $state(true);
-  let demoSelectValue = $state("");
-
-  const demoSelectOptions: SelectOption[] = [
-    { value: "option-a", label: "Option A" },
-    { value: "option-b", label: "Option B" },
-    { value: "option-c", label: "Option C" },
-    { value: "option-d", label: "Option D (disabled)", disabled: true },
-  ];
 
   const corePalette = [
     { label: "Black", hex: "#000000", token: "bg" },
@@ -203,6 +195,8 @@
     <a href="/" class="inline-flex items-center gap-1 text-mono-sm text-text-muted hover:text-text-accent transition-colors">
       ← Back to Dashboard
     </a>
+
+    <UiFoundationPreview />
 
     <!-- ═══════════════════════════════ COLOR PALETTE ═══════════════════════════════ -->
     <section>
@@ -618,40 +612,7 @@
           </Panel>
         </div>
 
-        <!-- Select -->
-        <div class="space-y-4">
-          <h3 class="text-kicker">DROPDOWN</h3>
-          <Panel>
-            <div class="p-5 space-y-4">
-              <div>
-                <div class="control-label">Default</div>
-                <Select
-                  options={demoSelectOptions}
-                  bind:value={demoSelectValue}
-                  placeholder="Select an option..."
-                />
-              </div>
-              <div class="grid grid-cols-3 gap-3">
-                <div>
-                  <div class="control-label">Small</div>
-                  <Select options={demoSelectOptions} size="sm" placeholder="Small" />
-                </div>
-                <div>
-                  <div class="control-label">Medium</div>
-                  <Select options={demoSelectOptions} placeholder="Medium" />
-                </div>
-                <div>
-                  <div class="control-label">Large</div>
-                  <Select options={demoSelectOptions} size="lg" placeholder="Large" />
-                </div>
-              </div>
-              <div>
-                <div class="control-label">Disabled</div>
-                <Select options={demoSelectOptions} disabled value="option-a" />
-              </div>
-            </div>
-          </Panel>
-        </div>
+        <UiSelectSamples />
       </div>
 
       <div class="grid lg:grid-cols-2 gap-8 mt-8">

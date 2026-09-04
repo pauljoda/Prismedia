@@ -10,11 +10,11 @@
   }
 
   let { checked, label, description, class: className, onChange }: Props = $props();
+  const id = $props.id();
 </script>
 
-<button
-  type="button"
-  onclick={() => onChange(!checked)}
+<label
+  for={id}
   class={cn(
     "surface-card no-lift flex h-full min-h-[104px] flex-col justify-between p-3.5 text-left transition-all duration-normal group",
     checked ? "border-border-accent/40 bg-surface-2/30" : "opacity-85 hover:opacity-100",
@@ -25,7 +25,7 @@
     <p class={cn("text-sm font-medium transition-colors", checked ? "text-text-primary" : "text-text-secondary")}>
       {label}
     </p>
-    <Toggle {checked} />
+    <Toggle {id} {checked} ariaLabel={label} ariaDescribedby={`${id}-description`} onchange={onChange} />
   </div>
-  <p class="text-[0.72rem] text-text-muted leading-relaxed">{description}</p>
-</button>
+  <p id={`${id}-description`} class="text-[0.72rem] text-text-muted leading-relaxed">{description}</p>
+</label>

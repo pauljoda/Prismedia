@@ -209,14 +209,14 @@ describe("AcquisitionPanel", () => {
     expect(view.getByText("Blocked — potentially dangerous")).toBeInTheDocument();
     expect(view.queryByRole("button", { name: "Import anyway" })).toBeNull();
 
-    await fireEvent.click(view.getByRole("button", { name: "Downloaded file for Episode 02 · Second Day" }));
+    await fireEvent.keyDown(view.getByRole("button", { name: "Downloaded file for Episode 02 · Second Day" }), { key: "ArrowDown" });
     const fileMenu = view.getByRole("listbox");
-    expect(fileMenu.parentElement).toBe(document.body);
-    expect(fileMenu).toHaveClass("fixed");
+    expect(document.body).toContainElement(fileMenu);
+    expect(view.container).not.toContainElement(fileMenu);
     expect(view.queryByRole("option", { name: "pack/RARBG_DO_NOT_MIRROR.exe" })).toBeNull();
     const alreadyMappedFile = await view.findByRole("option", { name: "pack/video-a.mp4 Mapped" });
-    expect(alreadyMappedFile).toBeEnabled();
-    await fireEvent.click(alreadyMappedFile);
+    expect(alreadyMappedFile).not.toHaveAttribute("data-disabled");
+    await fireEvent.pointerUp(alreadyMappedFile);
     await fireEvent.click(view.getByRole("button", { name: "Import mapped episodes" }));
 
     expect(mocks.submitAcquisitionManualImport).not.toHaveBeenCalled();
