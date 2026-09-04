@@ -206,6 +206,9 @@ shared class-merging utility so ordinary layout overrides replace them correctly
   stack in reading order. Add-entry fields retain visible labels, and form
   actions align with the panel's padded right edge. Do not cap the editor inside
   a wider panel and leave its actions floating in the middle.
+- Tabbed and untabbed Entity pages use the same edit layout and section rules.
+  Hidden sections are excluded from editing and saving; read-only relationships
+  remain information rather than offering controls that cannot save.
 - Availability belongs beside the item name, separate from its actions. Use
   quiet text for ordinary missing/in-library information; reserve status badges
   for active work or conditions that need attention. Supporting sections share

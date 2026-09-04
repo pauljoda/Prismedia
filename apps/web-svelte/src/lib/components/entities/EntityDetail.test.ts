@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { FileText, Play } from "@lucide/svelte";
 import { createRawSnippet } from "svelte";
 import { describe, expect, it, vi } from "vitest";
@@ -430,6 +430,48 @@ describe("EntityDetail", () => {
     expect(onMetadataSave).toHaveBeenCalledWith({
       fields: ["urls", "externalIds"],
       patch: expect.objectContaining({ urls: ["https://new-link.test"] }),
+    });
+  });
+
+  it("uses the shared edit grid on untabbed pages and keeps non-editable tags read-only", async () => {
+    const card = buildCard();
+    card.tags = [{ id: "tag-comedy", kind: "tag", title: "COMEDY", href: "/tags/tag-comedy" }];
+    render(EntityDetail, {
+      card,
+      standaloneMetadataSectionIds: ["links"],
+      sections: [{ id: "tags", label: "Tags", editable: false }],
+      onMetadataSave: vi.fn().mockResolvedValue(undefined),
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Edit details" }));
+
+    expect(within(screen.getByRole("region", { name: "Editable fields" })).getByRole("textbox", { name: "Title" })).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "References" })).getByRole("textbox", { name: "New Provider" })).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Add Tags" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "COMEDY" })).toBeInTheDocument();
+  });
+
+  it("excludes hidden and non-editable standalone sections from the saved patch", async () => {
+    const card = { ...buildCard(), classification: { value: "Author", label: "Known for", system: "kind" } };
+    const onMetadataSave = vi.fn().mockResolvedValue(undefined);
+    render(EntityDetail, {
+      card,
+      standaloneMetadataSectionIds: ["classification"],
+      sections: [
+        { id: "tags", label: "Tags", editable: false },
+        { id: "classification", label: "Classification", hidden: true },
+      ],
+      onMetadataSave,
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Edit details" }));
+    expect(screen.queryByRole("textbox", { name: "Classification" })).not.toBeInTheDocument();
+    await fireEvent.input(screen.getByRole("textbox", { name: "Title" }), { target: { value: "Updated title" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(onMetadataSave).toHaveBeenCalledWith({
+      fields: ["title", "description", "rating", "flags"],
+      patch: expect.objectContaining({ title: "Updated title" }),
     });
   });
 

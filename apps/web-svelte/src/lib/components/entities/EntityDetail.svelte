@@ -221,13 +221,14 @@
   const canEdit = $derived(Boolean(onMetadataSave));
   const editActionLabel = $derived(activeTab ? `Edit ${activeTab.label}` : "Edit details");
   const cancelEditActionLabel = $derived(activeTab ? `Cancel ${activeTab.label}` : "Cancel editing");
-  const standaloneEditSections = $derived.by(() => {
+  const standaloneSections = $derived.by(() => {
     const ids = ["description", "tags", ...standaloneMetadataSectionIds];
-    return ids
+    return [...new Set(ids)]
       .map(findSection)
       .filter((section): section is EntityDetailSection => Boolean(section))
-      .filter(sectionEditable);
+      .filter((section) => !section.hidden);
   });
+  const standaloneEditSections = $derived(standaloneSections.filter(sectionEditable));
   const editValidationErrors = $derived(edit.validationErrors);
   const saveDisabled = $derived(edit.saveDisabled);
   const editErrors = $derived.by(() =>
@@ -246,6 +247,7 @@
   }
 
   function sectionEditable(section: EntityDetailSection): boolean {
+    if (section.hidden) return false;
     if (section.editable != null) return section.editable;
     return [
       "description",
@@ -490,9 +492,8 @@
       {/if}
 
       {#if isEditingActiveTab}
-        <div class="detail-body">
-          {@render descriptionEditSection()}
-          {@render tagsEditSection()}
+        <div class="detail-tab-sections">
+          <EntityDetailEditLayout sections={standaloneSections.filter(sectionHasContent)} item={renderDetailSection} />
         </div>
       {:else if hasStandaloneBodyContent}
         <div class="detail-body">
@@ -511,17 +512,19 @@
       {/if}
 
       <!-- Lower metadata sections -->
-      {#if standaloneMetadataSections.length > 0 || extraSections}
+      {#if (!isEditingActiveTab && standaloneMetadataSections.length > 0) || extraSections}
         <div class="metadata-sections">
           {#if extraSections}
             {@render extraSections()}
           {/if}
 
-          <MetadataCardGrid>
-            {#each standaloneMetadataSections as section (section.id)}
-              {@render renderDetailSection(section)}
-            {/each}
-          </MetadataCardGrid>
+          {#if !isEditingActiveTab}
+            <MetadataCardGrid>
+              {#each standaloneMetadataSections as section (section.id)}
+                {@render renderDetailSection(section)}
+              {/each}
+            </MetadataCardGrid>
+          {/if}
         </div>
       {/if}
     </div>

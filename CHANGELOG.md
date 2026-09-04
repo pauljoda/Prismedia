@@ -55,6 +55,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Untabbed Entity pages now use the same responsive editor as tabbed pages. Hidden fields and read-only relationships no longer appear as editable or enter the save selection.
 - Entity detail panels align with the header without dark side gutters, and narrow-screen title/rating fields stay within the shared edit grid.
 - Link editors now identify editing clearly, focus the field, and explain invalid entries. Metadata input errors are associated with their fields, manual upload is keyboard-accessible, and supporting acquisition sections no longer run together.
 - Date fields stay aligned within their columns in iOS Safari while retaining the native calendar picker.
