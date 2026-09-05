@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Replacement searches open in the main acquisition area instead of inside More acquisition actions. Closing the search returns to the current acquisition without changing the existing files.
 - Clicking an Entity grid thumbnail carries its artwork into the detail header on supported browsers. Back and forward navigation stay immediate, reduced motion skips the effect, and slow or unavailable artwork falls back to normal navigation.
 - Identify's content-type buttons now grow with their labels and queue counts, keeping icons and text aligned without overlapping adjacent rows on desktop or phones.
 - Entity editors warn before leaving a page with unsaved changes, including browser back navigation, refresh, and closing the tab.

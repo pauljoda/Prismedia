@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { tick, type Snippet } from "svelte";
   import { Loader2, RefreshCw, Repeat2, Search, Upload, X } from "@lucide/svelte";
   import { Button, Progress, SearchInput } from "@prismedia/ui-svelte";
   import type { AcquisitionDetail, ManualReplacementSearchResult, ReleaseCandidateView } from "$lib/api/generated/model";
@@ -15,11 +16,14 @@
     canReplace,
     canUpload,
     onStarted,
+    children,
   }: {
     entityId: string;
     canReplace: boolean;
     canUpload: boolean;
     onStarted: (detail: AcquisitionDetail) => void | Promise<void>;
+    /** The owning acquisition layout places controls and review in their respective columns. */
+    children?: Snippet<[actions: Snippet, replacementReview: Snippet, reviewOpen: boolean]>;
   } = $props();
 
   let review = $state<ManualReplacementSearchResult | null>(null);
@@ -29,12 +33,14 @@
   let uploadProgress = $state<number | null>(null);
   let error = $state<string | null>(null);
   let uploadInput = $state<HTMLInputElement | null>(null);
+  let searchInput = $state<HTMLInputElement | null>(null);
 
   async function search(query?: string) {
     if (busy) return;
     busy = true;
     reviewOpen = true;
     error = null;
+    void tick().then(() => searchInput?.focus());
     try {
       review = await searchManualReplacement(entityId, query);
     } catch (reason) {
@@ -86,6 +92,7 @@
   }
 </script>
 
+{#snippet actions()}
 {#if canReplace || canUpload}
   <div class="manual-actions">
     <div class="flex flex-wrap items-center gap-control-gap">
@@ -113,7 +120,12 @@
         <Progress value={uploadProgress * 100} aria-label="Upload progress" />
       </div>
     {/if}
+    {#if error && !reviewOpen}<p role="alert" class="text-[0.72rem] text-error-text">{error}</p>{/if}
+  </div>
+{/if}
+{/snippet}
 
+{#snippet replacementReview()}
     {#if reviewOpen}
       <section class="replacement-review">
         <div class="flex items-center justify-between gap-3">
@@ -134,8 +146,9 @@
         >
           <SearchInput
             bind:value={customQuery}
+            bind:element={searchInput}
             ariaLabel="Custom replacement search term"
-            placeholder="Try an exact title, edition, group, or quality…"
+            placeholder="Search replacements"
             loading={busy}
             class="min-w-0 flex-1"
           />
@@ -150,10 +163,17 @@
         {:else if review}
           <StatePlaceholder icon={Search} title="No replacement releases found" description="Adjust the search term or upload content directly." />
         {/if}
+        {#if error}<p role="alert" class="text-[0.72rem] text-error-text">{error}</p>{/if}
       </section>
     {/if}
+{/snippet}
 
-    {#if error}<p role="alert" class="text-[0.72rem] text-error-text">{error}</p>{/if}
+{#if children}
+  {@render children(actions, replacementReview, reviewOpen)}
+{:else}
+  <div class="manual-actions">
+    {@render actions()}
+    {@render replacementReview()}
   </div>
 {/if}
 

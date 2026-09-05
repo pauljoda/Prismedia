@@ -7,6 +7,7 @@
    * page-owned {@link useEntityAcquisition} composable, whose `visible` also gates the tab itself;
    * this component only renders it. Renders nothing while the state says there is no story.
    */
+  import type { Snippet } from "svelte";
   import { RefreshCw, Search, Wrench } from "@lucide/svelte";
   import { Alert, Button, Card, Disclosure } from "@prismedia/ui-svelte";
   import { ACQUISITION_STATUS, ENTITY_KIND, ENTITY_KIND_DEFINITIONS } from "$lib/api/generated/codes";
@@ -116,10 +117,26 @@
 {/snippet}
 
 {#if acq.visible}
+  <ManualAcquisitionActions
+    entityId={entity?.id ?? ""}
+    canReplace={Boolean(entity) && uploadableAcquisitionKind && hasOwnedContent && replaceableKind}
+    canUpload={Boolean(entity) && uploadableAcquisitionKind && (Boolean(acq.acquisition) || (hasOwnedContent && replaceableKind))}
+    onStarted={async (detail) => {
+      acq.setAcquisition(detail);
+      await acq.refresh();
+    }}
+    children={acquisitionLayout}
+  />
+{/if}
+
+{#snippet acquisitionLayout(manualActions: Snippet, replacementReview: Snippet, reviewOpen: boolean)}
   <section class="acquisition-card">
-    <div class:has-primary={hasPrimaryContent} class="acquisition-layout">
-      {#if hasPrimaryContent}
-        <div class="acquisition-primary" role="region" aria-label="Current acquisition">
+    <div class:has-primary={hasPrimaryContent || reviewOpen} class="acquisition-layout">
+      {#if hasPrimaryContent || reviewOpen}
+        <div class="acquisition-primary" role="region" aria-label={reviewOpen ? "Replacement search" : "Current acquisition"}>
+          {#if reviewOpen}
+            {@render replacementReview()}
+          {:else}
           {#if showAcquisitionPanel && acq.acquisition}
         {#if failedParentWithChildActivity}
           <Disclosure
@@ -158,6 +175,7 @@
               initiallyExpanded={!showAcquisitionPanel || !acq.acquisition}
               onChanged={acq.childMonitoringChanged}
             />
+          {/if}
           {/if}
         </div>
       {/if}
@@ -253,17 +271,7 @@
           {#if entity}
             <Disclosure title="More acquisition actions" icon={Wrench}>
               <div class="flex flex-col gap-3">
-                {#if uploadableAcquisitionKind}
-                  <ManualAcquisitionActions
-                    entityId={entity.id}
-                    canReplace={hasOwnedContent && replaceableKind}
-                    canUpload={Boolean(acq.acquisition) || (hasOwnedContent && replaceableKind)}
-                    onStarted={async (detail) => {
-                      acq.setAcquisition(detail);
-                      await acq.refresh();
-                    }}
-                  />
-                {/if}
+                {@render manualActions()}
                 <EntityBlocklistClearAction entityId={entity.id} entityTitle={entity.title} />
               </div>
             </Disclosure>
@@ -272,7 +280,7 @@
       </aside>
     </div>
   </section>
-{/if}
+{/snippet}
 
 <style>
   .acquisition-card {
