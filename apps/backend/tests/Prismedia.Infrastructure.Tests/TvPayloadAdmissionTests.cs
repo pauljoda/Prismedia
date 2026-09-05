@@ -71,6 +71,18 @@ public sealed class TvPayloadAdmissionTests {
     }
 
     [Fact]
+    public async Task ALongCandidateListDoesNotEvictEarlierEvidenceAndCreateARetryLoop() {
+        await using var db = CreateContext();
+        using var fixture = await TvPayloadAdmissionFixture.CreateAsync(db);
+        for (var index = 0; index < 70; index++) {
+            var selected = new SelectedRelease("Show S01 720p WEB", "Indexer", $"release-{index}");
+            await AcquisitionTestFactory.Store(db).SetSelectedReleaseAsync(fixture.Input.Id, selected, CancellationToken.None);
+            await fixture.Service.RememberAsync(fixture.Input.Id, selected.Identity, fixture.Files, CancellationToken.None);
+        }
+        Assert.Equal(70, (await fixture.Service.GetExcludedAsync(fixture.Input, CancellationToken.None)).Count);
+    }
+
+    [Fact]
     public async Task ObservationsAreBoundedToTheirEntityAndExpireWithoutBecomingGlobalBlocks() {
         await using var db = CreateContext();
         using var fixture = await TvPayloadAdmissionFixture.CreateAsync(db);

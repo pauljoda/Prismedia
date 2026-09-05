@@ -16,7 +16,7 @@ public sealed class EfTvPayloadObservationStore(PrismediaDbContext db) : ITvPayl
             || JsonSerializer.Deserialize<SelectedRelease>(row.SelectedReleaseJson)?.Identity != observation.Identity) return;
         var oldJson = row.TvPayloadObservationsJson;
         var updated = Read(oldJson).Where(value => value.Identity != observation.Identity && value.ObservedAt >= DateTimeOffset.UtcNow - Retention)
-            .Append(observation).OrderByDescending(value => value.ObservedAt).Take(64).ToArray();
+            .Append(observation).OrderByDescending(value => value.ObservedAt).ToArray();
         var json = JsonSerializer.Serialize(updated);
         if (db.Database.IsRelational()) {
             await db.Acquisitions.Where(value => value.Id == acquisitionId && value.SelectedReleaseJson == row.SelectedReleaseJson
@@ -36,7 +36,7 @@ public sealed class EfTvPayloadObservationStore(PrismediaDbContext db) : ITvPayl
             .OrderByDescending(row => row.CreatedAt).Take(32)
             .Select(row => row.TvPayloadObservationsJson).ToArrayAsync(cancellationToken);
         return rows.SelectMany(Read).Where(value => value.ObservedAt >= DateTimeOffset.UtcNow - Retention)
-            .OrderByDescending(value => value.ObservedAt).DistinctBy(value => value.Identity).Take(64).ToArray();
+            .OrderByDescending(value => value.ObservedAt).DistinctBy(value => value.Identity).ToArray();
     }
 
     private static IReadOnlyList<TvPayloadObservation> Read(string? json) => string.IsNullOrWhiteSpace(json)

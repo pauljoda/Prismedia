@@ -7,7 +7,8 @@ namespace Prismedia.Application.Jobs.Handlers;
 
 /// <summary>
 /// Recovers from a failed download. Blocklists the release that failed (so neither this recovery pass nor
-/// any future search re-grabs it), then — when the profile has auto-redownload enabled — grabs the
+/// any future search re-grabs it). Coverage-only decisions retain reevaluated file-list evidence instead.
+/// When the profile has auto-redownload enabled, grabs the
 /// next-best accepted candidate that is not itself blocklisted. With auto-redownload off, or when no
 /// alternative remains, the acquisition is left <see cref="AcquisitionStatus.Failed"/> for manual retry.
 /// </summary>
@@ -123,7 +124,8 @@ public sealed class AcquisitionFailedHandleJobHandler(
         if (next is null) {
             await KeepFailedIfOwnedAsync(
                 acquisitionId,
-                "Download failed and no alternative release is available.",
+                payload.RecheckTvCoverage ? $"{failureMessage} No alternative release is currently available."
+                    : "Download failed and no alternative release is available.",
                 cancellationToken);
             return;
         }
@@ -134,7 +136,7 @@ public sealed class AcquisitionFailedHandleJobHandler(
                 next.CandidateId,
                 cancellationToken,
                 requiredStatus: AcquisitionStatus.Failed);
-            logger.LogInformation("AcquisitionFailedHandle: blocklisted the failed release and re-queued the next-best candidate for {AcquisitionId}.", acquisitionId);
+            logger.LogInformation("AcquisitionFailedHandle: recovered the transfer and re-queued the next-best candidate for {AcquisitionId}.", acquisitionId);
         } catch (OperationCanceledException) {
             throw;
         } catch (Exception ex) {
