@@ -601,8 +601,9 @@ public sealed class QBittorrentAuthException(string message, TimeSpan retryAfter
 }
 
 /// <summary>Resolves the configured <see cref="IDownloadClient"/> for a client family.</summary>
-public sealed class DownloadClientFactory(IEnumerable<IDownloadClient> clients) : IDownloadClientFactory {
-    private readonly Dictionary<DownloadClientKind, IDownloadClient> _clients = clients.ToDictionary(client => client.Kind);
+public sealed class DownloadClientFactory(IEnumerable<IDownloadClient> clients, IAcquisitionDownloadRemoval? removal = null) : IDownloadClientFactory {
+    private readonly Dictionary<DownloadClientKind, IDownloadClient> _clients = clients.ToDictionary(
+        client => client.Kind, client => removal is null ? client : new OwnedDownloadClient(client, removal));
 
     public IDownloadClient Get(DownloadClientKind kind) =>
         _clients.TryGetValue(kind, out var client)

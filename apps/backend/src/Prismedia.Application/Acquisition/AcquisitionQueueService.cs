@@ -536,8 +536,9 @@ public sealed class AcquisitionQueueService(
         }
 
         try {
-            await downloadClient.RemoveAsync(
+            await downloadClient.RemoveOwnedAsync(
                 connection,
+                acquisitionId,
                 clientItemId,
                 deleteData: true,
                 CancellationToken.None);
@@ -698,7 +699,7 @@ public sealed class AcquisitionQueueService(
         }
 
         try {
-            await RemovePriorDownloadAsync(prior, priorClientItemId, fallbackClient, cancellationToken);
+            await RemovePriorDownloadAsync(acquisitionId, prior, priorClientItemId, fallbackClient, cancellationToken);
             return;
         } catch (OperationCanceledException) {
             await RestorePriorQueueStateAsync(acquisitionId, priorStatus);
@@ -824,6 +825,7 @@ public sealed class AcquisitionQueueService(
     /// it directly with the new transfer would make the old client item unreachable to later teardown.
     /// </summary>
     private async Task RemovePriorDownloadAsync(
+        Guid acquisitionId,
         AcquisitionTransferInfo prior,
         string priorClientItemId,
         DownloadClientDetail fallbackClient,
@@ -844,7 +846,7 @@ public sealed class AcquisitionQueueService(
                 return;
             }
 
-            await download.RemoveAsync(connection, priorClientItemId, deleteData: true, cancellationToken);
+            await download.RemoveOwnedAsync(connection, acquisitionId, priorClientItemId, deleteData: true, cancellationToken);
             if (await download.GetItemAsync(connection, priorClientItemId, cancellationToken) is not null) {
                 throw new IOException("The prior transfer is still present after the client acknowledged removal.");
             }

@@ -98,7 +98,7 @@ public sealed class DownloadClientCleanupService(
                 client.ApiKey,
                 client.DownloadDirectory);
             var download = clients.Get(client.Kind);
-            await download.RemoveAsync(connection, import.ClientItemId, deleteData: true, cancellationToken);
+            await download.RemoveOwnedAsync(connection, import.Id, import.ClientItemId, deleteData: true, cancellationToken);
             if (await download.GetItemAsync(connection, import.ClientItemId, cancellationToken) is not null) {
                 throw new IOException("The transfer is still present after the client acknowledged removal.");
             }

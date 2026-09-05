@@ -1016,8 +1016,8 @@ public sealed partial class AcquisitionService(
         }
 
         try {
-            await clients.Get(client.Kind).RemoveAsync(
-                ConnectionFor(client), transfer.ClientItemId, deleteData: true, cancellationToken);
+            await clients.Get(client.Kind).RemoveOwnedAsync(
+                ConnectionFor(client), id, transfer.ClientItemId, deleteData: true, cancellationToken);
         } catch (OperationCanceledException) {
             throw;
         } catch (Exception) {
@@ -1072,7 +1072,7 @@ public sealed partial class AcquisitionService(
                 return;
             }
 
-            await download.RemoveAsync(connection, clientItemId, deleteData: true, cancellationToken);
+            await download.RemoveOwnedAsync(connection, id, clientItemId, deleteData: true, cancellationToken);
             if (await download.GetItemAsync(connection, clientItemId, cancellationToken) is not null) {
                 throw new IOException("The transfer is still present after the client acknowledged removal.");
             }

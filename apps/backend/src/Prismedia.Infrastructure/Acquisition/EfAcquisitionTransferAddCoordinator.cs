@@ -10,14 +10,13 @@ namespace Prismedia.Infrastructure.Acquisition;
 /// <summary>
 /// PostgreSQL row-lock boundary for a download-client Add. Teardown updates the same acquisition row, so
 /// it cannot confirm an empty transfer set and delete the owner between remote acceptance and persistence
-/// of the client item id. A transaction-scoped advisory lock also serializes correlation in one download
-/// client category across API and worker processes. The in-memory fallback supplies equivalent process-local
+/// of the client item id. A transaction-scoped advisory lock also serializes correlation across one download
+/// client across API and worker processes. The in-memory fallback supplies equivalent process-local
 /// serialization for tests.
 /// </summary>
 public sealed class EfAcquisitionTransferAddCoordinator(PrismediaDbContext db)
     : IAcquisitionTransferAddCoordinator {
     private static readonly ConcurrentDictionary<Guid, SemaphoreSlim> InMemoryAcquisitionLocks = new();
-    private static readonly ConcurrentDictionary<(Guid ClientId, string Category), SemaphoreSlim> InMemoryCorrelationLocks = new();
 
     /// <inheritdoc />
     public async Task<IAcquisitionTransferAddLease?> AcquireAsync(
@@ -38,10 +37,7 @@ public sealed class EfAcquisitionTransferAddCoordinator(PrismediaDbContext db)
                     return null;
                 }
 
-                var correlationGate = InMemoryCorrelationLocks.GetOrAdd(
-                    (downloadClientConfigId, category),
-                    static _ => new SemaphoreSlim(1, 1));
-                await correlationGate.WaitAsync(cancellationToken);
+                var correlationGate = await DownloadClientOperationLock.AcquireAsync(db, downloadClientConfigId, cancellationToken);
                 return new InMemoryLease(acquisitionGate, correlationGate);
             } catch {
                 acquisitionGate.Release();
@@ -70,14 +66,7 @@ public sealed class EfAcquisitionTransferAddCoordinator(PrismediaDbContext db)
                 return null;
             }
 
-            await using var correlationCommand = db.Database.GetDbConnection().CreateCommand();
-            correlationCommand.Transaction = transaction.GetDbTransaction();
-            correlationCommand.CommandText = "SELECT pg_advisory_xact_lock(hashtextextended(@correlation_scope, 0))";
-            var correlationParameter = correlationCommand.CreateParameter();
-            correlationParameter.ParameterName = "correlation_scope";
-            correlationParameter.Value = $"download-add:{downloadClientConfigId:N}:{category}";
-            correlationCommand.Parameters.Add(correlationParameter);
-            await correlationCommand.ExecuteNonQueryAsync(cancellationToken);
+            await using var correlationLease = await DownloadClientOperationLock.AcquireAsync(db, downloadClientConfigId, cancellationToken);
 
             return new RelationalLease(transaction);
         } catch {
@@ -107,18 +96,17 @@ public sealed class EfAcquisitionTransferAddCoordinator(PrismediaDbContext db)
         }
     }
 
-    private sealed class InMemoryLease(SemaphoreSlim acquisitionGate, SemaphoreSlim correlationGate) : IAcquisitionTransferAddLease {
+    private sealed class InMemoryLease(SemaphoreSlim acquisitionGate, IAsyncDisposable correlationGate) : IAcquisitionTransferAddLease {
         private bool disposed;
 
         public Task CommitAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
-        public ValueTask DisposeAsync() {
+        public async ValueTask DisposeAsync() {
             if (!disposed) {
                 disposed = true;
-                correlationGate.Release();
+                await correlationGate.DisposeAsync();
                 acquisitionGate.Release();
             }
-            return ValueTask.CompletedTask;
         }
     }
 }

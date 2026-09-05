@@ -299,7 +299,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
                         "Upgrade ready").ToJson()),
                 cancellationToken);
         }
-        await RemoveTorrentAsync(target, cancellationToken);
+        await RemoveTorrentAsync(target, childId, cancellationToken);
         logger.LogInformation(
             "AcquisitionUpgradeReplace: replacement for acquisition {Parent} is awaiting required Entity readiness via child {Child}.",
             target.ParentId,
@@ -332,7 +332,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
         string reason,
         CancellationToken cancellationToken) {
         logger.LogInformation("AcquisitionUpgradeReplace: rejecting inspected child {Child}: {Reason}", childId, reason);
-        await RemoveTorrentAsync(target, cancellationToken);
+        await RemoveTorrentAsync(target, childId, cancellationToken);
         if (!await acquisitions.TryTransitionStatusAsync(
                 childId,
                 [AcquisitionStatus.Importing],
@@ -380,7 +380,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
             cancellationToken);
     }
 
-    private async Task RemoveTorrentAsync(UpgradeReplaceTarget target, CancellationToken cancellationToken) {
+    private async Task RemoveTorrentAsync(UpgradeReplaceTarget target, Guid childId, CancellationToken cancellationToken) {
         if (string.IsNullOrWhiteSpace(target.ChildClientItemId)) {
             return;
         }
@@ -390,7 +390,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
         }
 
         var client = target.ChildDownloadClientConfigId is { } id
-            ? await downloadClients.GetAsync(id, cancellationToken) ?? await downloadClients.GetDefaultAsync(cancellationToken)
+            ? await downloadClients.GetAsync(id, cancellationToken)
             : await downloadClients.GetDefaultAsync(cancellationToken);
         if (client is null) {
             return;
@@ -398,7 +398,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
 
         try {
             var connection = new DownloadClientConnection(client.Id, client.Kind, client.BaseUrl, client.Username, client.Password, client.Category, client.ApiKey, client.DownloadDirectory);
-            await clients.Get(client.Kind).RemoveAsync(connection, target.ChildClientItemId, deleteData: true, cancellationToken);
+            await clients.Get(client.Kind).RemoveOwnedAsync(connection, childId, target.ChildClientItemId, deleteData: true, cancellationToken);
         } catch (OperationCanceledException) {
             throw;
         } catch (Exception ex) {

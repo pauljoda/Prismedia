@@ -107,6 +107,11 @@ public interface IDownloadClient {
     /// <summary>Removes a tracked item, optionally deleting its downloaded data.</summary>
     Task RemoveAsync(DownloadClientConnection connection, string clientItemId, bool deleteData, CancellationToken cancellationToken);
 
+    /// <summary>Removes an exact acquisition-owned item; production factories serialize and revalidate ownership first.</summary>
+    Task RemoveOwnedAsync(DownloadClientConnection connection, Guid? acquisitionId, string clientItemId,
+        bool deleteData, CancellationToken cancellationToken, Guid? transferId = null) =>
+        RemoveAsync(connection, clientItemId, deleteData, cancellationToken);
+
     /// <summary>Probes the client for reachability and authentication.</summary>
     Task<DownloadClientConnectionTest> TestAsync(DownloadClientConnection connection, CancellationToken cancellationToken);
 }

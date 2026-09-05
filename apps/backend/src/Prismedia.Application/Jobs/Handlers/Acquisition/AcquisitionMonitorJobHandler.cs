@@ -177,8 +177,9 @@ public sealed class AcquisitionMonitorJobHandler(
                 client.DownloadDirectory);
             var downloadClient = clients.Get(client.Kind);
             if (await downloadClient.GetItemAsync(connection, cleanup.ClientItemId, cancellationToken) is { }) {
-                await downloadClient.RemoveAsync(
+                await downloadClient.RemoveOwnedAsync(
                     connection,
+                    cleanup.AcquisitionId,
                     cleanup.ClientItemId,
                     deleteData: true,
                     cancellationToken);
@@ -245,7 +246,7 @@ public sealed class AcquisitionMonitorJobHandler(
                     "AcquisitionMonitor: seed goal met for {ItemId} (ratio {Ratio}, seeded {Seconds}s); removing from the client.",
                     watch.ClientItemId, properties.Ratio, properties.SeedingTimeSeconds);
             }
-            await downloadClient.RemoveAsync(connection, watch.ClientItemId, deleteData: true, cancellationToken);
+            await downloadClient.RemoveOwnedAsync(connection, watch.AcquisitionId, watch.ClientItemId, deleteData: true, cancellationToken, watch.TransferId);
             if (await downloadClient.GetItemAsync(connection, watch.ClientItemId, cancellationToken) is not null) {
                 throw new IOException("The transfer is still present after the client acknowledged removal.");
             }

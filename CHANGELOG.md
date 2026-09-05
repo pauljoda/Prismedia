@@ -38,6 +38,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Download removal now rechecks shared ownership and seeding goals under the same lock as new grabs, preserving payloads another active request still needs. Upgrade cleanup also stays with its recorded downloader when that client is unavailable.
+
 - Held TV downloads can repair episodes whose catalog links remain after the underlying files disappear; recovery now shares the download admission check for actual files on disk.
 
 - Individual song imports recognize compact artist-and-title filenames while keeping instrumental, live, and other version labels distinct.

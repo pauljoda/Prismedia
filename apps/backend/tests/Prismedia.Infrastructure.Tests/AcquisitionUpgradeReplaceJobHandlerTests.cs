@@ -249,6 +249,25 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
     }
 
     [Fact]
+    public async Task MissingRecordedClientNeverDeletesTheSameItemOnADifferentDefaultClient() {
+        await using var db = CreateContext();
+        var (_, childId, _) = await SeedMediaAsync(db, EntityKind.Movie,
+            ownedCode: "bluray-1080p", childSelectedTitle: "Movie 2020 1080p BluRay MULTISUB");
+        (await db.DownloadTransfers.SingleAsync(row => row.AcquisitionId == childId)).DownloadClientConfigId = Guid.NewGuid();
+        await db.SaveChangesAsync();
+        var client = new RecordingDownloadClient();
+        var unrelatedDefault = new DownloadClientDetail(Guid.NewGuid(), DownloadClientKind.QBittorrent,
+            "Other downloads", "http://other-client", null, "prismedia", true, false, null);
+
+        await RunAsync(db, new RecordingJobQueue(),
+            new FakeReplacer(OwnedFileReplaceResult.Ok("x", BookFormatTier.Unknown)), childId,
+            new FakeMediaUpgradePayloadInspector(new(1080, 1080, false, false, 7200, 7200)),
+            new SingleDownloadClientConfigStore(unrelatedDefault), new SingleDownloadClientFactory(client));
+
+        Assert.Null(client.RemovedClientItemId);
+    }
+
+    [Fact]
     public async Task MeasuredResolutionDowngradeIsRejectedEvenWhenTitleClaimsEqualQualityAndSubtitles() {
         await using var db = CreateContext();
         var (_, childId, _) = await SeedMediaAsync(

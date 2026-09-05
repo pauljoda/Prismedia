@@ -568,7 +568,7 @@ public interface IReleaseLinkResolver {
 
 /// <summary>
 /// Serializes one remote download-client Add with persistence of its transfer pointer. The production
-/// implementation holds the acquisition row lock until the pointer commits and a client/category correlation
+/// implementation holds the acquisition row lock until the pointer commits and a client-wide correlation
 /// lock while the remote id is discovered, so teardown waits for the exact pointer and parallel no-id adds
 /// cannot claim one another's download-client item.
 /// </summary>
