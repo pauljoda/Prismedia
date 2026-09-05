@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Thumbnail chips use larger shared type sizes and retain their normal height. Smaller cards free space for both values by hiding icons earlier, while keeping the two chips on one row.
 - Entity headers emphasize a main date or meaningful date range, with every milestone available in a labeled "More dates" popover. Album headers lead with the artist instead of repeating studio information already shown in Details.
 - Entity detail headers show acquisition status once beside the title across media types. Covers no longer repeat grid badges or create inactive keyboard stops, and decorative artwork is hidden from screen readers.
 - Thumbnail metadata keeps the shared readable badge text size and separate chip outlines even at dense grid sizes. Narrow cards hide decorative icons instead of shrinking the text.

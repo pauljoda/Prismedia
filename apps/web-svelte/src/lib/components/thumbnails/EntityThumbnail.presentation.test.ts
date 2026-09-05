@@ -161,6 +161,13 @@ describe("EntityThumbnail presentation", () => {
     }
   });
 
+  it("scales caption badges with shared type tokens and frees icon space before text is squeezed", () => {
+    expect(captionSource).toContain("--text-caption: var(--text-control)");
+    expect(captionSource).toContain("--text-caption: var(--text-label)");
+    expect(captionSource).toMatch(/@container \(max-width: 12rem\)\s*\{[^}]*\.chips :global\(\.chip svg\)\s*\{ display: none;/);
+    expect(captionSource).not.toContain("min-height: var(--spacing-badge-compact)");
+  });
+
   it.each(["grid", "list"] as const)("lets a %s host own status without losing the thumbnail caption", (layout) => {
     const card = episodeCard();
     const { container } = render(EntityThumbnail, { card, layout, showBadges: false });

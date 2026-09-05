@@ -115,7 +115,13 @@
   .custom-subtitle.title-align-center { justify-content: center; }
   .custom-subtitle.title-align-right { justify-content: flex-end; }
 
-  .chips { display: flex; gap: var(--spacing-control-gap-sm); margin-top: var(--spacing-control-gap-sm); }
+  .chips {
+    /* Keep the shared Badge treatment; scale its caption token with the card. */
+    --text-caption: var(--text-control);
+    display: flex;
+    gap: var(--spacing-control-gap-sm);
+    margin-top: var(--spacing-control-gap-sm);
+  }
   .chips :global(.chip svg) { flex-shrink: 0; color: var(--thumbnail-meta-accent); }
 
   :global(.entity-thumbnail.is-list) .thumbnail-caption {
@@ -136,19 +142,21 @@
   @container (max-width: 220px) {
     .thumbnail-caption { gap: 0.125rem; padding: 0 0.25rem; }
     h3 { font-size: var(--text-label); }
-    .chips { gap: var(--spacing); }
+    .chips { --text-caption: var(--text-label); gap: var(--spacing); }
     .chips :global(.chip) {
-      min-height: var(--spacing-badge-compact);
       padding-inline: var(--spacing);
       gap: var(--spacing);
     }
+  }
+
+  @container (max-width: 12rem) {
+    /* Give the two values the full row before resorting to ellipses. */
+    .chips :global(.chip svg) { display: none; }
   }
 
   @container (max-width: 140px) {
     .thumbnail-caption { gap: 0.1rem; padding: 0 0.2rem; }
     h3 { font-size: var(--text-caption); }
     .subtitle { display: none; }
-    /* Drop decoration before shrinking the shared badge text or losing its outline. */
-    .chips :global(.chip svg) { display: none; }
   }
 </style>
