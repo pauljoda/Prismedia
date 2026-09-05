@@ -19,8 +19,8 @@ public sealed class MediaUpgradePayloadInspectorTests {
             await File.WriteAllTextAsync(Path.Combine(candidate.FullName, "movie.eng.srt"), "1\n00:00:00,000 --> 00:00:01,000\nHello");
             var probe = new FakeMediaProbe(
                 new Dictionary<string, VideoProbeData> {
-                    [ownedFile] = Video(width: 3840, height: 1600),
-                    [candidateFile] = Video(width: 1920, height: 800)
+                    [ownedFile] = Video(width: 3840, height: 1600) with { DurationSeconds = 7200 },
+                    [candidateFile] = Video(width: 1920, height: 800) with { DurationSeconds = 60 }
                 },
                 subtitleFiles: new HashSet<string>());
             var inspector = new MediaUpgradePayloadInspector(
@@ -35,6 +35,8 @@ public sealed class MediaUpgradePayloadInspectorTests {
             Assert.Equal(1080, result.CandidateResolutionTier);
             Assert.False(result.OwnedHasSubtitles);
             Assert.True(result.CandidateHasSubtitles);
+            Assert.Equal(7200, result.OwnedDurationSeconds);
+            Assert.Equal(60, result.CandidateDurationSeconds);
         } finally {
             root.Delete(recursive: true);
         }

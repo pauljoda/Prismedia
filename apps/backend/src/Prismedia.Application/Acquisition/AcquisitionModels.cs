@@ -466,12 +466,16 @@ public sealed record UpgradeReplaceTarget(
 /// Technical facts read from the owned and downloaded video payloads immediately before an automatic
 /// replacement. Resolution tiers come from real stream dimensions rather than release names; subtitle
 /// flags include embedded streams and safe adjacent sidecars that survive the atomic video-file swap.
+/// Durations provide a completeness check against the owned copy without treating a different edition
+/// as a permanently invalid release. Null means the probe could not establish that duration.
 /// </summary>
 public sealed record MediaUpgradePayloadInspection(
     int OwnedResolutionTier,
     int CandidateResolutionTier,
     bool OwnedHasSubtitles,
-    bool CandidateHasSubtitles);
+    bool CandidateHasSubtitles,
+    double? OwnedDurationSeconds = null,
+    double? CandidateDurationSeconds = null);
 
 /// <summary>
 /// Outcome of an in-place owned-file replacement. On success the owned file was atomically swapped for the

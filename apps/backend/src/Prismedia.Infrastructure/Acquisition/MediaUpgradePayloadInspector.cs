@@ -43,7 +43,9 @@ public sealed class MediaUpgradePayloadInspector(
                 ownedResolution.Value,
                 candidateResolution.Value,
                 ownedSubtitles.Count > 0 || sidecarDiscoveries[0].Candidates.Count > 0,
-                candidateSubtitles.Count > 0 || sidecarDiscoveries[1].Candidates.Count > 0);
+                candidateSubtitles.Count > 0 || sidecarDiscoveries[1].Candidates.Count > 0,
+                ownedVideo?.DurationSeconds,
+                candidateVideo?.DurationSeconds);
         } catch (OperationCanceledException) {
             throw;
         } catch (Exception ex) {

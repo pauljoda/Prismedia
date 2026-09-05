@@ -288,6 +288,44 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
         Assert.Equal("bluray-1080p", parent.OwnedMediaQuality);
     }
 
+    [Theory]
+    [InlineData(60)]
+    [InlineData(3600)]
+    public async Task SubstantiallyShorterUpgradeIsHeldWithBothPayloadsPreserved(double candidateDuration) {
+        await using var db = CreateContext();
+        var (parentId, childId, _) = await SeedMediaAsync(
+            db, EntityKind.Movie, VideoQuality.Bluray720p.ToCode(), "Movie 2020 1080p BluRay");
+        var queue = new RecordingJobQueue();
+        var replacer = new FakeReplacer(OwnedFileReplaceResult.Ok("x", BookFormatTier.Unknown));
+
+        await RunAsync(db, queue, replacer, childId,
+            new FakeMediaUpgradePayloadInspector(new(720, 1080, false, false, 7200, candidateDuration)));
+
+        Assert.False(replacer.Called);
+        var child = await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == childId);
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, child.Status);
+        Assert.Contains("shorter", child.StatusMessage);
+        Assert.Equal(VideoQuality.Bluray720p.ToCode(),
+            (await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == parentId)).OwnedMediaQuality);
+        Assert.DoesNotContain(queue.Enqueued, job => job.Type == JobType.AcquisitionFailedHandle);
+        Assert.Empty(await db.AcquisitionBlocklist.ToArrayAsync());
+    }
+
+    [Theory]
+    [InlineData(false, 7000)]
+    [InlineData(true, 3600)]
+    public async Task ModestRuntimeDifferencesAndExplicitlyReviewedCutsCanReplace(bool manualPick, double candidateDuration) {
+        await using var db = CreateContext();
+        var (_, childId, _) = await SeedMediaAsync(
+            db, EntityKind.Movie, VideoQuality.Bluray720p.ToCode(), "Movie 2020 1080p BluRay", manualPick: manualPick);
+        var replacer = new FakeReplacer(OwnedFileReplaceResult.Ok("x", BookFormatTier.Unknown));
+
+        await RunAsync(db, new RecordingJobQueue(), replacer, childId,
+            new FakeMediaUpgradePayloadInspector(new(720, 1080, false, false, 7200, candidateDuration)));
+
+        Assert.True(replacer.Called);
+    }
+
     [Fact]
     public async Task UnexpectedNonAtomicKindAbortsBeforeTouchingFiles() {
         await using var db = CreateContext();
