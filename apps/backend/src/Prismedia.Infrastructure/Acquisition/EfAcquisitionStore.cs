@@ -592,6 +592,7 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
                     .SetProperty(row => row.Status, AcquisitionStatus.Importing)
                     .SetProperty(row => row.StatusMessage, (string?)null)
                     .SetProperty(row => row.ImportClaimJobId, claimJobId)
+                    .SetProperty(row => row.ImportManualReview, allowManualRetry)
                     .SetProperty(row => row.UpdatedAt, now), cancellationToken);
             return await SynchronizeTrackedAcquisitionAsync(id, affected, cancellationToken);
         }
@@ -614,6 +615,7 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         row.Status = AcquisitionStatus.Importing;
         row.StatusMessage = null;
         row.ImportClaimJobId = claimJobId;
+        row.ImportManualReview = allowManualRetry;
         row.UpdatedAt = now;
         await db.SaveChangesAsync(cancellationToken);
         return true;

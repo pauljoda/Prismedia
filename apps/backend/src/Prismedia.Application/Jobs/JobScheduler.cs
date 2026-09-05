@@ -52,6 +52,7 @@ public sealed class JobScheduler(
             ScheduleRecurringBackupsAsync,
             SchedulePluginUpdatesAsync,
             ScheduleAcquisitionMonitorAsync,
+            RecoverHeldTvImportsAsync,
             RecoverDownloadedCompletionJobsAsync,
             RecoverStuckSearchesAsync,
             ScheduleRecycleBinCleanupAsync,
@@ -67,6 +68,12 @@ public sealed class JobScheduler(
                 logger.LogError(ex, "Scheduler step {Step} failed; continuing independent maintenance.", step.Method.Name);
             }
         }
+    }
+
+    private async Task RecoverHeldTvImportsAsync(CancellationToken cancellationToken) {
+        await using var scope = scopeFactory.CreateAsyncScope();
+        await scope.ServiceProvider.GetRequiredService<Acquisition.HeldTvImportRecoveryService>()
+            .RecoverAsync(cancellationToken);
     }
 
     internal async Task ScheduleRecurringScansAsync(CancellationToken cancellationToken) {

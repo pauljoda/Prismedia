@@ -466,6 +466,7 @@ public static class DependencyInjection {
         services.AddScoped<IReleaseCalendarService, EfReleaseCalendarService>();
         services.AddScoped<ICustomFormatStore, EfCustomFormatStore>();
         services.AddScoped<IAcquisitionStore, EfAcquisitionStore>();
+        services.AddScoped<IHeldTvImportRecoveryStore, EfHeldTvImportRecoveryStore>();
         services.AddScoped<IDetachedDownloadCleanupStore, EfDetachedDownloadCleanupStore>();
         services.AddScoped<EfManualAcquisitionStore>();
         services.AddScoped<IManualReplacementStore>(provider =>

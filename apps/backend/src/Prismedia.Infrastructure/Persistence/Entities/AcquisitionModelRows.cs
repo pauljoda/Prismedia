@@ -344,6 +344,12 @@ public sealed class AcquisitionRow {
     /// <summary>Privacy-safe durable per-file import outcome ledger (jsonb), retained after completion.</summary>
     public string? ImportResultJson { get; set; }
 
+    /// <summary>Last retained-payload mapping inputs retried automatically; prevents unchanged held imports looping.</summary>
+    public string? ImportRecoveryFingerprint { get; set; }
+
+    /// <summary>The last initial-import claim was explicitly reviewed; automatic remapping must preserve that decision.</summary>
+    public bool ImportManualReview { get; set; }
+
     /// <summary>
     /// Queue job that exclusively owns the active import, including the short pre-checkpoint planning
     /// window. Retained across retry scheduling for the same job and replaced by an explicit checkpoint retry.
