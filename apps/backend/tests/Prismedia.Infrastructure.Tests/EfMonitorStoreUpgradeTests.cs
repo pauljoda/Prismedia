@@ -13,6 +13,72 @@ namespace Prismedia.Infrastructure.Tests;
 /// off), the one-in-flight interlock, durable intent across repeated misses, and success/failure counters.
 /// </summary>
 public sealed class EfMonitorStoreUpgradeTests {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UnusableAssignedProfileFallsBackToTheKindDefault(bool wrongKind) {
+        await using var db = CreateContext();
+        var store = await SeedMediaUpgradeMonitorAsync(
+            db, EntityKind.VideoEpisode, VideoQuality.Dvd.ToCode(), VideoQuality.Bluray1080p.ToCode());
+        var assignedId = Guid.NewGuid();
+        if (wrongKind) {
+            db.BookAcquisitionProfiles.Add(new BookAcquisitionProfileRow {
+                Id = assignedId, Kind = EntityKind.Movie, DisplayName = "Movie profile",
+                TargetLibraryRootId = Guid.NewGuid(), UpgradeUntilCutoff = false,
+                CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow
+            });
+        }
+        (await db.Acquisitions.SingleAsync()).ProfileId = assignedId;
+        await db.SaveChangesAsync();
+
+        var wanted = Assert.Single((await store.ListCutoffUnmetAsync(1, 20, EntityKind.VideoEpisode, CancellationToken.None)).Items);
+        Assert.Equal(VideoQuality.Bluray1080p.ToCode(), wanted.CutoffQuality);
+        Assert.True(Assert.Single(await store.ListDueMonitorsAsync(360, CancellationToken.None)).IsUpgrade);
+    }
+
+    [Theory]
+    [InlineData(EntityKind.Movie)]
+    [InlineData(EntityKind.VideoEpisode)]
+    public async Task AssignedProfileControlsUpgradeSchedulingAndWantedCutoff(EntityKind kind) {
+        await using var db = CreateContext();
+        var store = await SeedMediaUpgradeMonitorAsync(
+            db, kind, VideoQuality.Dvd.ToCode(), VideoQuality.Dvd.ToCode(), upgradeOn: false);
+        var assigned = new BookAcquisitionProfileRow {
+            Id = Guid.NewGuid(), Kind = AcquisitionProfileKinds.For(kind), DisplayName = "High quality",
+            TargetLibraryRootId = Guid.NewGuid(), AutoPick = true, UpgradeUntilCutoff = true,
+            CutoffQuality = VideoQuality.Bluray1080p.ToCode(),
+            CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow
+        };
+        db.BookAcquisitionProfiles.Add(assigned);
+        (await db.Acquisitions.SingleAsync()).ProfileId = assigned.Id;
+        await db.SaveChangesAsync();
+
+        var wanted = Assert.Single((await store.ListCutoffUnmetAsync(1, 20, kind, CancellationToken.None)).Items);
+        Assert.Equal(assigned.CutoffQuality, wanted.CutoffQuality);
+        var due = Assert.Single(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+        Assert.True(due.IsUpgrade);
+        Assert.Equal(assigned.Id, due.ProfileId);
+    }
+
+    [Fact]
+    public async Task AssignedProfileCanDisableUpgradesEnabledByDefaultProfile() {
+        await using var db = CreateContext();
+        var store = await SeedMediaUpgradeMonitorAsync(
+            db, EntityKind.Movie, VideoQuality.Dvd.ToCode(), VideoQuality.Bluray1080p.ToCode());
+        var assigned = new BookAcquisitionProfileRow {
+            Id = Guid.NewGuid(), Kind = EntityKind.Movie, DisplayName = "Keep current copy",
+            TargetLibraryRootId = Guid.NewGuid(), AutoPick = true, UpgradeUntilCutoff = false,
+            CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow
+        };
+        db.BookAcquisitionProfiles.Add(assigned);
+        (await db.Acquisitions.SingleAsync()).ProfileId = assigned.Id;
+        await db.SaveChangesAsync();
+
+        Assert.Empty((await store.ListCutoffUnmetAsync(1, 20, EntityKind.Movie, CancellationToken.None)).Items);
+        Assert.Empty(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+        Assert.Equal(MonitorStatus.Fulfilled, (await db.Monitors.SingleAsync()).Status);
+    }
+
     [Fact]
     public async Task ImportedAudiobookFulfillsWithoutEnteringEbookUpgradeLoop() {
         await using var db = CreateContext();

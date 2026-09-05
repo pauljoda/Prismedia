@@ -300,6 +300,7 @@ public sealed partial class EfMonitorStore(
     /// both vocabularies (the book source/format tiers, and the media ladder <see cref="CutoffQuality"/> code).
     /// </summary>
     private sealed record UpgradePolicy(
+        Guid Id,
         EntityKind Kind,
         bool UpgradeUntilCutoff,
         bool AutoPick,
@@ -307,6 +308,21 @@ public sealed partial class EfMonitorStore(
         BookFormatTier CutoffFormatTier,
         string? CutoffQuality,
         int? CutoffFormatScore);
+
+    /// <summary>Batch-resolved profiles with the same explicit-choice and kind fallback as release scoring.</summary>
+    private sealed class UpgradePolicies(IReadOnlyList<UpgradePolicy> profiles) {
+        private readonly Dictionary<Guid, UpgradePolicy> byId = profiles.ToDictionary(profile => profile.Id);
+        private readonly Dictionary<EntityKind, UpgradePolicy> byKind = profiles
+            .GroupBy(profile => profile.Kind)
+            .ToDictionary(group => group.Key, group => group.First());
+
+        public UpgradePolicy? Resolve(Guid? profileId, EntityKind kind) {
+            var profileKind = AcquisitionProfileKinds.For(kind);
+            return profileId is { } id && byId.TryGetValue(id, out var chosen) && chosen.Kind == profileKind
+                ? chosen
+                : byKind.GetValueOrDefault(profileKind);
+        }
+    }
 
     /// <summary>
     /// The next-search cadence for a barren monitor: the base interval scaled by exponential backoff keyed on
@@ -319,22 +335,15 @@ public sealed partial class EfMonitorStore(
         TimeSpan.FromMinutes(Math.Min(interval.TotalMinutes * Math.Pow(2, barrenSearches), BackoffCap.TotalMinutes));
 
     /// <summary>
-    /// Resolves the governing <see cref="UpgradePolicy"/> per profile kind the same way the profile store
-    /// does — the default profile of a kind first, then the oldest — and returns a lookup keyed by profile
-    /// kind (the first row per kind wins). Shared by the due sweep and the cutoff-unmet list so both judge
-    /// cutoffs against the same profiles.
+    /// Loads upgrade policies once for a monitor batch. An explicit compatible profile wins; missing or
+    /// incompatible choices fall back to the kind's default, then oldest profile, as release scoring does.
     /// </summary>
-    private async Task<Dictionary<EntityKind, UpgradePolicy>> ResolveUpgradePoliciesAsync(CancellationToken cancellationToken) {
+    private async Task<UpgradePolicies> ResolveUpgradePoliciesAsync(CancellationToken cancellationToken) {
         var profiles = await db.BookAcquisitionProfiles.AsNoTracking()
             .OrderByDescending(p => p.IsDefault).ThenBy(p => p.CreatedAt)
-            .Select(p => new UpgradePolicy(p.Kind, p.UpgradeUntilCutoff, p.AutoPick, p.CutoffSourceTier, p.CutoffFormatTier, p.CutoffQuality, p.CutoffFormatScore))
+            .Select(p => new UpgradePolicy(p.Id, p.Kind, p.UpgradeUntilCutoff, p.AutoPick, p.CutoffSourceTier, p.CutoffFormatTier, p.CutoffQuality, p.CutoffFormatScore))
             .ToArrayAsync(cancellationToken);
-        var policyByKind = new Dictionary<EntityKind, UpgradePolicy>();
-        foreach (var policy in profiles) {
-            policyByKind.TryAdd(policy.Kind, policy);
-        }
-
-        return policyByKind;
+        return new UpgradePolicies(profiles);
     }
 
     /// <summary>
@@ -439,12 +448,12 @@ public sealed partial class EfMonitorStore(
         if (targetEntityId is null && targetMonitorId is null) {
             await ReconcilePassiveTargetsAsync(cancellationToken);
         }
-        // The default profile of each kind governs its upgrades. Upgrade-seeking is fully automatic, so it
+        // The acquisition's resolved profile governs its upgrades. Upgrade-seeking is fully automatic, so it
         // requires both the cutoff toggle and auto-grab; without auto-grab there is no path to act on a found
         // upgrade. Books gate on the source/format cutoff tiers; media kinds (movies, single episodes) gate on
-        // the ladder cutoff-quality code. Resolved per profile kind (default first, then oldest), the same way
-        // the profile store resolves rules.
-        var policyByKind = await ResolveUpgradePoliciesAsync(cancellationToken);
+        // the ladder cutoff-quality code. Explicit compatible choices precede the kind's default and oldest
+        // profiles, matching the profile store's rule resolution.
+        var policies = await ResolveUpgradePoliciesAsync(cancellationToken);
 
         // Tracked load (we mutate statuses during reconciliation), joined to each acquisition's status and
         // accepted-candidate count, plus the in-flight upgrade child's status when the interlock is set.
@@ -594,7 +603,7 @@ public sealed partial class EfMonitorStore(
                         continue;
                     }
 
-                    var policy = policyByKind.GetValueOrDefault(AcquisitionProfileKinds.For(monitor.Kind));
+                    var policy = policies.Resolve(row.AcquisitionProfileId, monitor.Kind);
                     var verdict = EvaluateCutoff(
                         monitor.Kind,
                         policy,
@@ -765,7 +774,7 @@ public sealed partial class EfMonitorStore(
         var take = Math.Clamp(pageSize <= 0 ? DefaultWantedPageSize : pageSize, 1, MaxWantedPageSize);
         var skip = Math.Max(0, page - 1) * take;
 
-        var policyByKind = await ResolveUpgradePoliciesAsync(cancellationToken);
+        var policies = await ResolveUpgradePoliciesAsync(cancellationToken);
 
         // The SQL filter is "active monitor whose acquisition IS Imported" (of the requested kind). That is a
         // superset of the true cutoff-unmet set — it also holds fulfilled-but-not-yet-swept monitors and
@@ -790,6 +799,7 @@ public sealed partial class EfMonitorStore(
                 monitor.LastSearchedAt,
                 monitor.BarrenSearches,
                 monitor.Author,
+                acquisition.ProfileId,
                 acquisition.OwnedSourceTier,
                 acquisition.OwnedFormatTier,
                 acquisition.OwnedMediaQuality,
@@ -808,7 +818,7 @@ public sealed partial class EfMonitorStore(
 
         var items = new List<WantedListItem>(rows.Length);
         foreach (var row in rows) {
-            var policy = policyByKind.GetValueOrDefault(AcquisitionProfileKinds.For(row.Kind));
+            var policy = policies.Resolve(row.ProfileId, row.Kind);
             var verdict = EvaluateCutoff(
                 row.Kind, policy, row.UpgradeQualityCaptured,
                 new BookQualityRank(row.OwnedSourceTier, row.OwnedFormatTier),
