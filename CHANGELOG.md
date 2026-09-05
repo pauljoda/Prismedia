@@ -36,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Movie and TV searches now reject releases labeled as samples or trailers before downloading, while preserving matches whose actual titles contain those words.
 - Retrying retained TV downloads can now repair missing links to combined episodes using byte-verified files already in the library, including packs that also add new episodes, without replacing identical media.
 - Background request enrichment now restores missing episode and other ordering metadata while preserving existing library corrections, so incomplete requests can recover without being recreated.
 - Existing requests now use corrected library season, episode, and volume numbers for subsequent searches and imports instead of retaining stale request-time mappings.

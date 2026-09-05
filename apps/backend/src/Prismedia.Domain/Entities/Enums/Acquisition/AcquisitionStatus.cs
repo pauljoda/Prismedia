@@ -102,7 +102,7 @@ public enum TransferOwnershipState {
 /// still surfaced to the user with its reason so the choice is transparent rather than silently hidden.
 /// </summary>
 public enum ReleaseRejectionReason {
-    /// <summary>The release does not appear to contain a supported book payload.</summary>
+    /// <summary>The release does not appear to contain a supported full work, such as a sample, trailer, or unsupported book payload.</summary>
     [Code("unsupported-format")]
     UnsupportedFormat,
 

@@ -9,6 +9,44 @@ namespace Prismedia.Application.Tests.Acquisition;
 /// the shared acceptance gates.
 /// </summary>
 public sealed class MediaReleaseDecisionEnginesTests {
+    [Theory]
+    [InlineData(EntityKind.Movie, "Example.1999.720p.BDRip.XviD.Sample-GROUP")]
+    [InlineData(EntityKind.Movie, "Example.1999.1080p.Trailer.x264-GROUP")]
+    [InlineData(EntityKind.VideoSeason, "Example.S01.1080p.WEB-DL.Sample-GROUP")]
+    [InlineData(EntityKind.VideoEpisode, "Example.S01E01.1080p.WEB-DL.Sample-GROUP")]
+    public void VideoSearchRejectsStandaloneSamplesAndTrailers(EntityKind kind, string title) {
+        IAcquisitionDecisionEngine engine = kind == EntityKind.Movie
+            ? new MovieReleaseDecisionEngine() : new TvReleaseDecisionEngine(kind);
+        var rules = BookAcquisitionRules.Default with {
+            TargetTitle = "Example", SeasonNumber = kind == EntityKind.Movie ? null : 1,
+            EpisodeNumber = kind == EntityKind.VideoEpisode ? 1 : null
+        };
+        var result = Assert.Single(engine.Evaluate([(Release(title, seeders: 10), null, "Indexer")], rules));
+        Assert.False(result.Accepted);
+        Assert.Contains(ReleaseRejectionReason.UnsupportedFormat, result.Rejections);
+    }
+
+    [Theory]
+    [InlineData("Sample This", "Sample.This.2012.1080p.WEB-DL", true)]
+    [InlineData("Sample This", "Sample.This.2012.1080p.WEB-DL.Sample", false)]
+    [InlineData("Trailer Park Boys", "Trailer.Park.Boys.2006.1080p.WEB-DL", true)]
+    [InlineData("Sampler", "Sampler.2020.1080p.WEB-DL", true)]
+    public void PreviewWordsInsideTheWorkTitleDoNotRejectFullReleases(string target, string release, bool accepted) {
+        var result = Assert.Single(new MovieReleaseDecisionEngine().Evaluate(
+            [(Release(release, seeders: 10), null, "Indexer")], BookAcquisitionRules.Default with { TargetTitle = target }));
+        Assert.Equal(accepted, result.Accepted);
+    }
+
+    [Fact]
+    public void ProviderEpisodeTitleCanContainPreviewWords() {
+        var result = Assert.Single(new TvReleaseDecisionEngine(EntityKind.VideoEpisode).Evaluate(
+            [(Release("Example.S01E01.The.Sample.1080p.WEB-DL", seeders: 10), null, "Indexer")],
+            BookAcquisitionRules.Default with {
+                TargetTitle = "Example", TargetEpisodeTitle = "The Sample", SeasonNumber = 1, EpisodeNumber = 1
+            }));
+        Assert.True(result.Accepted);
+    }
+
     [Fact]
     public void CategoriesNarrowToTheKindRangeAndFallBackToItsTopLevel() {
         var book = new BookAcquisitionPolicyModule();
