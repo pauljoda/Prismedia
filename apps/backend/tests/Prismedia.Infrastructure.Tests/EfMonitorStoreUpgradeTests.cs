@@ -14,6 +14,61 @@ namespace Prismedia.Infrastructure.Tests;
 /// </summary>
 public sealed class EfMonitorStoreUpgradeTests {
     [Theory]
+    [InlineData(EntityKind.Movie, false)]
+    [InlineData(EntityKind.Movie, true)]
+    [InlineData(EntityKind.VideoEpisode, false)]
+    [InlineData(EntityKind.VideoEpisode, true)]
+    public async Task RaisingProfileCutoffAfterImportReopensUpgradeSearch(EntityKind kind, bool initiallyEnabled) {
+        await using var db = CreateContext();
+        var store = await SeedMediaUpgradeMonitorAsync(
+            db, kind, VideoQuality.Dvd.ToCode(), VideoQuality.Dvd.ToCode(),
+            upgradeOn: initiallyEnabled, attachEntity: true, subtitleStatusKnown: true, hasSubtitles: true);
+        var acquisitionId = (await db.Acquisitions.SingleAsync()).Id;
+        Assert.Empty(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+        Assert.Empty(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+
+        var profile = await db.BookAcquisitionProfiles.SingleAsync();
+        profile.UpgradeUntilCutoff = true;
+        profile.CutoffQuality = VideoQuality.Bluray1080p.ToCode();
+        await db.SaveChangesAsync();
+
+        var due = Assert.Single(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+        Assert.True(due.IsUpgrade);
+        Assert.Equal(acquisitionId, due.AcquisitionId);
+        Assert.Single((await store.ListCutoffUnmetAsync(1, 20, kind, CancellationToken.None)).Items);
+
+        (await db.Monitors.SingleAsync()).Status = MonitorStatus.Paused;
+        await db.SaveChangesAsync();
+        Assert.Empty(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task RaisingEbookCutoffAfterImportReopensUpgradeSearch() {
+        await using var db = CreateContext();
+        var store = await SeedUpgradeMonitorAsync(db, BookQualityRank.Floor, BookQualityRank.Floor);
+        var acquisition = await db.Acquisitions.SingleAsync();
+        var entityId = Guid.NewGuid();
+        db.Entities.Add(new EntityRow {
+            Id = entityId, KindCode = EntityKind.Book.ToCode(), Title = "An owned ebook",
+            CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow
+        });
+        acquisition.EntityId = entityId;
+        (await db.Monitors.SingleAsync()).EntityId = entityId;
+        await db.SaveChangesAsync();
+        Assert.Empty(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+        Assert.Empty(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+
+        var profile = await db.BookAcquisitionProfiles.SingleAsync();
+        profile.CutoffSourceTier = BookSourceTier.Retail;
+        profile.CutoffFormatTier = BookFormatTier.Reflowable;
+        await db.SaveChangesAsync();
+
+        var due = Assert.Single(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+        Assert.True(due.IsUpgrade);
+        Assert.Equal(acquisition.Id, due.AcquisitionId);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task UnusableAssignedProfileFallsBackToTheKindDefault(bool wrongKind) {
@@ -307,7 +362,7 @@ public sealed class EfMonitorStoreUpgradeTests {
     }
 
     [Fact]
-    public async Task EntityBackedMovieAtQualityCutoffWithSubtitlesFulfills() {
+    public async Task EntityBackedMovieAtQualityCutoffRetainsBaselineWithoutSearching() {
         await using var db = CreateContext();
         var store = await SeedMediaUpgradeMonitorAsync(
             db,
@@ -321,7 +376,7 @@ public sealed class EfMonitorStoreUpgradeTests {
         Assert.Empty(await store.ListDueMonitorsAsync(360, CancellationToken.None));
         var monitor = Assert.Single(await store.ListAsync(CancellationToken.None));
         Assert.Equal(MonitorStatus.Active, monitor.Status);
-        Assert.Null(monitor.AcquisitionId);
+        Assert.Equal((await db.Acquisitions.SingleAsync()).Id, monitor.AcquisitionId);
     }
 
     [Fact]

@@ -583,17 +583,10 @@ public sealed partial class EfMonitorStore(
 
             switch (row.AcquisitionStatus) {
                 case AcquisitionStatus.Imported:
-                    // The wanted item is in hand. An upgrade-capable kind (a book, or a single-file movie/
-                    // episode) with its profile's upgrade loop on keeps seeking a higher-quality release; every
-                    // other kind — a season pack, an album, or any kind whose profile has upgrades off —
-                    // fulfills on import. The cutoff comparison speaks each kind's own vocabulary; the shared
-                    // evaluator below owns that vocabulary so the due sweep and the cutoff-unmet list agree.
-                    // DIVERGENCE FROM SONARR (deliberate): once cutoff is met this monitor fulfills, so a
-                    // PROPER/REPACK revision upgrade only ever happens while the owned copy is still BELOW
-                    // cutoff (via MediaUpgradeSpecification's same-quality-higher-revision accept). Sonarr keeps
-                    // chasing propers even past cutoff (its cutoff gates quality, not revision); Prismedia does
-                    // not re-open a fulfilled monitor purely to acquire a better revision, keeping the loop
-                    // bounded and avoiding late re-grabs of content the user has likely already consumed.
+                    // Imported atomic files retain their quality baseline even with upgrades off or at
+                    // cutoff. The durable Entity monitor can then respond to later profile changes without
+                    // re-requesting an already owned item. Acquisition-only legacy monitors still fulfill;
+                    // structural units detach their completed attempt and continue child discovery.
                     if (monitor.BookRendition == BookRendition.Audiobook) {
                         if (CompleteEntityAcquisition(monitor, now) is { } terminalStatus) {
                             statusTransitions.Add((monitor.Id, terminalStatus));
@@ -615,9 +608,6 @@ public sealed partial class EfMonitorStore(
                         row.SubtitleStatusKnown,
                         row.HasSubtitles);
                     if (!verdict.KindUpgrades) {
-                        // The acquisition is complete, but the Entity intent remains active. New monitors
-                        // carry EntityId, so detach transient acquisition bookkeeping; legacy rows without an
-                        // Entity target retain their historical Fulfilled terminal state.
                         if (CompleteEntityAcquisition(monitor, now) is { } terminalStatus) {
                             statusTransitions.Add((monitor.Id, terminalStatus));
                         } else {
@@ -1316,10 +1306,19 @@ public sealed partial class EfMonitorStore(
             Prismedia.Contracts.System.ApiProblemCodes.AcquisitionInvalid,
             "This Entity is being changed by another cleanup operation and cannot be reactivated until it finishes.");
 
-    /// <summary>Detaches completed acquisition bookkeeping while retaining stable Entity monitoring.</summary>
+    /// <summary>
+    /// Retains the imported quality baseline for upgrade-capable Entity monitors, so later profile changes
+    /// can resume upgrades. Other stable Entities detach completed acquisition bookkeeping.
+    /// </summary>
     private static MonitorStatus? CompleteEntityAcquisition(MonitorRow monitor, DateTimeOffset now) {
         if (monitor.EntityId is null) {
             return MonitorStatus.Fulfilled;
+        }
+
+        if (monitor.BookRendition != BookRendition.Audiobook
+            && EntityKindRegistry.Describe(monitor.Kind).UpgradeMode is
+                EntityUpgradeMode.AtomicBookFile or EntityUpgradeMode.AtomicMediaFile) {
+            return null;
         }
 
         monitor.AcquisitionId = null;

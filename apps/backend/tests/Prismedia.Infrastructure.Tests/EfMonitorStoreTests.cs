@@ -465,7 +465,7 @@ public sealed class EfMonitorStoreTests {
     }
 
     [Fact]
-    public async Task ImportedStableEntityMonitorDetachesAcquisitionAndStaysActive() {
+    public async Task ImportedStableBookMonitorRetainsBaselineAndStaysActive() {
         await using var db = CreateContext();
         var entityId = Guid.NewGuid();
         var now = DateTimeOffset.UtcNow;
@@ -485,7 +485,7 @@ public sealed class EfMonitorStoreTests {
 
         var monitor = Assert.Single(await db.Monitors.AsNoTracking().ToArrayAsync());
         Assert.Equal(entityId, monitor.EntityId);
-        Assert.Null(monitor.AcquisitionId);
+        Assert.Equal(acquisitionId, monitor.AcquisitionId);
         Assert.Equal(MonitorStatus.Active, monitor.Status);
     }
 
