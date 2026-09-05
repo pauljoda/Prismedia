@@ -504,8 +504,7 @@ public sealed record WantedListItemView(
 
 /// <summary>
 /// One page of a Wanted list: the page's rows plus the total count of matching rows for the pagination
-/// controls. For Missing, <see cref="Total"/> is exact; for Cutoff Unmet it is an upper bound (the count of
-/// imported+active monitors, before the per-page cutoff refinement) — see the endpoint summary.
+/// controls. Both lists return exact totals after applying their current eligibility rules.
 /// </summary>
 public sealed record WantedPageView(IReadOnlyList<WantedListItemView> Items, int Total);
 

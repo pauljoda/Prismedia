@@ -200,8 +200,35 @@ public sealed class EfMonitorStoreWantedTests {
 
         var page = await store.ListCutoffUnmetAsync(1, 50, null, CancellationToken.None);
 
-        Assert.Empty(page.Items); // both at/above cutoff are refined out per page
-        Assert.Equal(2, page.Total); // total is the imported+active upper bound (documented)
+        Assert.Empty(page.Items);
+        Assert.Equal(0, page.Total);
+    }
+
+    [Fact]
+    public async Task CutoffPagingSkipsSatisfiedCopiesBeforeSelectingPages() {
+        await using var db = CreateContext();
+        await SeedImportedMediaMonitorAsync(db, EntityKind.Movie,
+            VideoQuality.Webdl720p.ToCode(), VideoQuality.Bluray1080p.ToCode(), "Second missing");
+        await SeedImportedMediaMonitorAsync(db, EntityKind.Movie,
+            VideoQuality.Webdl720p.ToCode(), VideoQuality.Bluray1080p.ToCode(), "First missing");
+        await SeedImportedMediaMonitorAsync(db, EntityKind.Movie,
+            VideoQuality.Bluray1080p.ToCode(), VideoQuality.Bluray1080p.ToCode(), "At cutoff");
+        var now = DateTimeOffset.UtcNow;
+        foreach (var monitor in db.Monitors.Local) {
+            monitor.CreatedAt = monitor.Title == "At cutoff" ? now
+                : monitor.Title == "First missing" ? now.AddDays(-1) : now.AddDays(-2);
+        }
+        await db.SaveChangesAsync();
+        var store = new EfMonitorStore(db);
+
+        var first = await store.ListCutoffUnmetAsync(1, 1, EntityKind.Movie, default);
+        var second = await store.ListCutoffUnmetAsync(2, 1, EntityKind.Movie, default);
+        var beyond = await store.ListCutoffUnmetAsync(3, 1, EntityKind.Movie, default);
+
+        Assert.Equal("First missing", Assert.Single(first.Items).Title);
+        Assert.Equal("Second missing", Assert.Single(second.Items).Title);
+        Assert.Empty(beyond.Items);
+        Assert.All(new[] { first, second, beyond }, page => Assert.Equal(2, page.Total));
     }
 
     [Fact]

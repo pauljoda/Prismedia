@@ -152,7 +152,7 @@ public interface IMonitorStore {
         EntityKind? kind,
         CancellationToken cancellationToken);
 
-    /// <summary>Returns one SQL-paged Wanted Cutoff Unmet surface.</summary>
+    /// <summary>Returns one Wanted Cutoff Unmet page after current-policy filtering, with an exact matching total.</summary>
     Task<WantedPage> ListCutoffUnmetAsync(
         int page,
         int pageSize,

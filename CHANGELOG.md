@@ -38,6 +38,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Cutoff Unmet now counts and paginates only items that still need upgrades, so completed upgrades no longer leave a nonzero count or hide missing upgrades behind empty pages.
+
 - Automatic movie imports and video upgrades now check the current profile against probed audio languages, and initial movie imports hold files whose resolution contradicts the release label. Explicit standard-definition disc encodes no longer inherit an HD quality rating.
 
 - Language preferences now match equivalent two-letter, three-letter, and named language declarations without treating short words in release titles as language tags.

@@ -773,15 +773,13 @@ public sealed partial class EfMonitorStore(
 
     public async Task<WantedPage> ListCutoffUnmetAsync(int page, int pageSize, EntityKind? kind, CancellationToken cancellationToken) {
         var take = Math.Clamp(pageSize <= 0 ? DefaultWantedPageSize : pageSize, 1, MaxWantedPageSize);
-        var skip = Math.Max(0, page - 1) * take;
+        var skip = (long)(Math.Max(1, page) - 1) * take;
 
         var policies = await ResolveUpgradePoliciesAsync(cancellationToken);
 
-        // The SQL filter is "active monitor whose acquisition IS Imported" (of the requested kind). That is a
-        // superset of the true cutoff-unmet set — it also holds fulfilled-but-not-yet-swept monitors and
-        // at-cutoff copies — so Total is an UPPER BOUND (documented on the port). The exact cutoff verdict
-        // needs per-kind profiles and the owned-quality math, which we run in memory over the materialized
-        // page only (never over the whole 5k set).
+        // Profile and subtitle-aware cutoff decisions must precede pagination. Stream the scalar projection
+        // once and retain only the requested page, sharing the monitor sweep's policy math without loading
+        // an entire catalog or issuing per-item queries. Count only actual cutoff-unmet matches.
         var query =
             from monitor in db.Monitors.AsNoTracking()
             where monitor.Status == MonitorStatus.Active && monitor.AcquisitionId != null
@@ -789,7 +787,7 @@ public sealed partial class EfMonitorStore(
             from acquisition in joined
             where acquisition.Status == AcquisitionStatus.Imported
             where kind == null || monitor.Kind == kind
-            orderby monitor.CreatedAt descending
+            orderby monitor.CreatedAt descending, monitor.Id
             select new {
                 monitor.Id,
                 monitor.AcquisitionId,
@@ -814,11 +812,9 @@ public sealed partial class EfMonitorStore(
                 acquisition.PosterUrl
             };
 
-        var total = await query.CountAsync(cancellationToken);
-        var rows = await query.Skip(skip).Take(take).ToArrayAsync(cancellationToken);
-
-        var items = new List<WantedListItem>(rows.Length);
-        foreach (var row in rows) {
+        var total = 0;
+        var items = new List<WantedListItem>(take);
+        await foreach (var row in query.AsAsyncEnumerable().WithCancellation(cancellationToken)) {
             var policy = policies.Resolve(row.ProfileId, row.Kind);
             var verdict = EvaluateCutoff(
                 row.Kind, policy, row.UpgradeQualityCaptured,
@@ -833,6 +829,10 @@ public sealed partial class EfMonitorStore(
             // cutoff. A not-yet-captured copy stays — it is genuinely below any cutoff until proven otherwise,
             // matching the sweep leaving it Active.
             if (!verdict.KindUpgrades || (verdict.HaveOwned && verdict.CutoffMet)) {
+                continue;
+            }
+            var position = total++;
+            if (position < skip || items.Count >= take) {
                 continue;
             }
 

@@ -31,8 +31,7 @@ public sealed class MonitorService(
 
     /// <summary>
     /// A page of the Wanted "Cutoff Unmet" list: monitored items in hand but below their kind's cutoff,
-    /// newest-monitor-first. See <see cref="IMonitorStore.ListCutoffUnmetAsync"/> for the paging semantics
-    /// and why the page total is an upper bound.
+    /// newest-monitor-first. Both pagination and the total count apply after current-policy cutoff filtering.
     /// </summary>
     public async Task<WantedPageView> ListCutoffUnmetAsync(int page, int pageSize, EntityKind? kind, CancellationToken cancellationToken) =>
         ToView(await monitors.ListCutoffUnmetAsync(page, pageSize, kind, cancellationToken));
