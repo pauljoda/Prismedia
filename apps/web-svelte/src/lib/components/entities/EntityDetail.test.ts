@@ -498,6 +498,7 @@ describe("EntityDetail", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Edit details" }));
     expect(screen.queryByRole("textbox", { name: "Classification" })).not.toBeInTheDocument();
     await fireEvent.input(screen.getByRole("textbox", { name: "Title" }), { target: { value: "Updated title" } });
+    expect(screen.getByRole("textbox", { name: "Title" }).compareDocumentPosition(screen.getByRole("button", { name: "Save changes" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
 
     expect(onMetadataSave).toHaveBeenCalledWith({
@@ -535,6 +536,8 @@ describe("EntityDetail", () => {
 
     await fireEvent.click(screen.getByRole("button", { name: "Edit Details" }));
     expect(screen.getByRole("region", { name: "Editable fields" })).toBeInTheDocument();
+    const saveAction = screen.getByRole("button", { name: "Save Details" });
+    expect(screen.getByRole("textbox", { name: "Classification" }).compareDocumentPosition(saveAction) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await fireEvent.input(screen.getByRole("textbox", { name: "Title" }), {
       target: { value: "Big Buck Bunny Remastered" },
     });
@@ -592,6 +595,8 @@ describe("EntityDetail", () => {
     await fireEvent.click(screen.getByRole("tab", { name: "Details" }));
 
     expect(screen.getByRole("dialog", { name: "Discard unsaved edits?" })).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { name: "Discard unsaved edits?" })).toHaveLength(1);
+    expect(screen.getByRole("dialog", { name: "Discard unsaved edits?" })).toHaveAccessibleDescription("Changing tabs will leave the current edit session.");
     expect(screen.getByRole("tab", { name: "Links" })).toHaveAttribute("aria-selected", "true");
 
     await fireEvent.click(screen.getByRole("button", { name: "Stay here" }));
@@ -625,6 +630,28 @@ describe("EntityDetail", () => {
 
     expect(screen.getByText("Invalid URL")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save Links" })).toBeDisabled();
+  });
+
+  it("keeps a rejected save beside the footer actions and retains the draft for retry", async () => {
+    const onMetadataSave = vi.fn().mockRejectedValueOnce(new Error("Could not save changes")).mockResolvedValueOnce(undefined);
+    render(EntityDetail, {
+      card: buildCard(),
+      onMetadataSave,
+    });
+    await fireEvent.click(screen.getByRole("button", { name: "Edit details" }));
+    await fireEvent.input(screen.getByRole("textbox", { name: "Title" }), { target: { value: "Unsaved title" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    const error = await screen.findByRole("alert");
+    const save = screen.getByRole("button", { name: "Save changes" });
+    expect(error).toHaveTextContent("Could not save changes");
+    expect(error.compareDocumentPosition(save) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "Title" })).toHaveValue("Unsaved title");
+    expect(save).not.toBeDisabled();
+
+    await fireEvent.click(save);
+    expect(onMetadataSave).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: "Title" })).not.toBeInTheDocument());
   });
 
   it("edits external IDs separately from URL links", async () => {

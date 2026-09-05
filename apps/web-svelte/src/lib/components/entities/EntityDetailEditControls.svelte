@@ -23,10 +23,7 @@
   }: Props = $props();
 </script>
 
-<div class="flex flex-col gap-3 border-b border-border-subtle px-6 py-3 sm:px-8">
-  <div class="w-full min-w-0">
-    <FormActions {onSave} {onCancel} {saving} {saveDisabled} {saveLabel} {cancelLabel} />
-  </div>
+<div class="flex flex-col gap-3 border-t border-border-subtle px-6 py-4 sm:px-8">
   {#if errors.length > 0}
     <Alert.Root variant="destructive">
       <Alert.Title>Changes need attention</Alert.Title>
@@ -37,4 +34,7 @@
       </Alert.Description>
     </Alert.Root>
   {/if}
+  <div class="w-full min-w-0">
+    <FormActions {onSave} {onCancel} {saving} {saveDisabled} {saveLabel} {cancelLabel} />
+  </div>
 </div>

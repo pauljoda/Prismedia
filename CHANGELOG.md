@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Entity editors place Save and Cancel after the fields, with validation and save errors beside those actions. The unsaved-changes prompt uses a compact shared dialog with stacked phone actions instead of stretching across the screen.
 - Metadata cards share the available row width without empty reserved columns. Source paths and fingerprints use full-width, selectable values below their labels, and repeated labels no longer prevent cards from rendering.
 - Thumbnail chips retain colored icons and use smaller shared caption sizes than their titles. The two values stay on one row with compact text and icons on the narrowest cards.
 - Entity headers emphasize a main date or meaningful date range, with every milestone available in a labeled "More dates" popover. Album headers lead with the artist instead of repeating studio information already shown in Details.

@@ -478,6 +478,9 @@
   {#if isEditingActiveTab || hasStandaloneBodyContent || afterBody || standaloneMetadataSections.length > 0 || extraSections}
     <div class="detail-content-card detail-content-card--standalone">
       {#if isEditingActiveTab}
+        <div class="detail-tab-sections">
+          <EntityDetailEditLayout sections={standaloneSections.filter(sectionHasContent)} item={renderDetailSection} />
+        </div>
         <EntityDetailEditControls
           cancelLabel="Cancel editing"
           errors={editErrors}
@@ -487,12 +490,6 @@
           saveLabel="Save changes"
           saving={savingEdit}
         />
-      {/if}
-
-      {#if isEditingActiveTab}
-        <div class="detail-tab-sections">
-          <EntityDetailEditLayout sections={standaloneSections.filter(sectionHasContent)} item={renderDetailSection} />
-        </div>
       {:else if hasStandaloneBodyContent}
         <div class="detail-body">
           {@render descriptionContent()}
@@ -691,17 +688,6 @@
           id={`entity-detail-panel-${activeTab.id}`}
           aria-labelledby={`entity-detail-tab-${activeTab.id}`}
         >
-          {#if isEditingActiveTab}
-            <EntityDetailEditControls
-              cancelLabel={`Cancel ${activeTab.label}`}
-              errors={editErrors}
-              onCancel={cancelEdit}
-              onSave={() => void saveEdit()}
-              {saveDisabled}
-              saveLabel={`Save ${activeTab.label}`}
-              saving={savingEdit}
-            />
-          {/if}
           {#key activeTab.id}
             <div class="detail-tab-sections">
               {#if activeTabSections.length === 0 && !isEditingActiveTab}
@@ -733,6 +719,17 @@
               {/if}
             </div>
           {/key}
+          {#if isEditingActiveTab}
+            <EntityDetailEditControls
+              cancelLabel={`Cancel ${activeTab.label}`}
+              errors={editErrors}
+              onCancel={cancelEdit}
+              onSave={() => void saveEdit()}
+              {saveDisabled}
+              saveLabel={`Save ${activeTab.label}`}
+              saving={savingEdit}
+            />
+          {/if}
         </Tabs.Content>
       {/if}
       </Tabs.Root>
