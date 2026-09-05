@@ -211,7 +211,8 @@ public sealed class AcquisitionMonitorJobHandler(
         CancellationToken cancellationToken) {
         var client = await ResolveClientAsync(watch.DownloadClientConfigId, clientCache, cancellationToken);
         if (client is null) {
-            await acquisitions.ClearTransferSeedingAsync(watch.TransferId, cancellationToken);
+            // An unavailable owner is not evidence that its item was removed. Keep the watch durable so
+            // configuration recovery resumes cleanup and the scheduler continues polling this transfer.
             return;
         }
 

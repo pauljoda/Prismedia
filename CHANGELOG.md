@@ -38,6 +38,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Download cleanup now keeps retrying when its recorded downloader configuration is temporarily unavailable, then resumes cleanup when that client returns.
+
 - Automatic video upgrades preserve both files for review when probing fails or either runtime is missing or invalid, preventing uncertain replacements and premature release blocklisting.
 
 - Cutoff Unmet now counts and paginates only items that still need upgrades, so completed upgrades no longer leave a nonzero count or hide missing upgrades behind empty pages.

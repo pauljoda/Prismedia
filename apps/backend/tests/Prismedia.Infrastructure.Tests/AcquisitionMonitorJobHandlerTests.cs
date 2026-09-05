@@ -162,6 +162,31 @@ public sealed class AcquisitionMonitorJobHandlerTests {
     }
 
     [Fact]
+    public async Task PostImportCleanupSurvivesAnUnavailableClientAndResumesWhenItReturns() {
+        await using var db = CreateContext();
+        var acquisitionId = await SeedDownloadingAsync(db, DateTimeOffset.UtcNow);
+        (await db.Acquisitions.SingleAsync(row => row.Id == acquisitionId)).Status = AcquisitionStatus.Imported;
+        var transfer = await db.DownloadTransfers.SingleAsync(row => row.AcquisitionId == acquisitionId);
+        transfer.SeedingSince = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync();
+        var removed = false;
+
+        await RunAsync(db, new RecordingJobQueue(), [], null, acquisitionId,
+            downloadClientConfigs: new FakeDownloadClientConfigStore(clientExists: false));
+
+        Assert.NotNull((await db.DownloadTransfers.AsNoTracking().SingleAsync()).SeedingSince);
+        Assert.True(await AcquisitionTestFactory.Store(db).HasActiveTransfersAsync(CancellationToken.None));
+
+        await RunAsync(db, new RecordingJobQueue(), [], null, acquisitionId,
+            properties: new DownloadItemProperties(1, 0, 0, 0, 0, 0, "/downloads"),
+            onRemove: (_, deleteData) => { Assert.True(deleteData); removed = true; });
+
+        Assert.True(removed);
+        Assert.Null((await db.DownloadTransfers.AsNoTracking().SingleAsync()).SeedingSince);
+        Assert.False(await AcquisitionTestFactory.Store(db).HasActiveTransfersAsync(CancellationToken.None));
+    }
+
+    [Fact]
     public async Task PostImportWatchWithoutASeedGoalRemovesTheClientItem() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
