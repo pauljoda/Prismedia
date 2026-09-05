@@ -98,12 +98,16 @@
 
 <style>
   .cards {
+    --preferred-columns: max(1, min(calc(var(--col-count, 5) - 1), 4));
     display: grid;
+    /* Keep the requested density where it fits, but leave room for readable captions. */
     grid-template-columns: repeat(
-      max(1, min(calc(var(--col-count, 5) - 1), 4)),
-      minmax(0, 1fr)
+      auto-fill,
+      minmax(min(100%, max(var(--spacing-thumbnail-min), calc(
+        (100% + var(--spacing-thumbnail-gap)) / var(--preferred-columns) - var(--spacing-thumbnail-gap)
+      ))), 1fr)
     );
-    gap: 0.75rem;
+    gap: var(--spacing-thumbnail-gap);
     align-items: start;
     overflow-anchor: none;
     contain: layout;
@@ -143,13 +147,13 @@
 
   @media (min-width: 640px) {
     .cards {
-      grid-template-columns: repeat(max(1, min(var(--col-count, 5), 4)), minmax(0, 1fr));
+      --preferred-columns: max(1, min(var(--col-count, 5), 4));
     }
   }
 
   @media (min-width: 1024px) {
     .cards {
-      grid-template-columns: repeat(var(--col-count, 5), minmax(0, 1fr));
+      --preferred-columns: var(--col-count, 5);
     }
   }
 

@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Captioned Entity grids now reduce their column count in narrow spaces before squeezing metadata into unreadable fragments. The density preference is preserved, and artwork-only media walls remain unrestricted.
 - Collection previews now show a clearly counted sample of full Entity thumbnails instead of library controls that only filtered the sample. Resolution and gallery-type rules use removable choices, and preview loading, failures, and empty results are distinct. Changing rules cancels obsolete previews.
 - Collection relationship rules now use searchable Entity selections with artwork for tags, people, studios, and series. Exact names, including commas, and existing series IDs are preserved; future names can still be entered without creating library Entities.
 - Collection rules use labeled, responsive fields and a searchable Entity-type picker instead of cramped toggle strips. Saved nested groups remain visible and intact during editing, and incomplete rules show guidance instead of misleading empty results.

@@ -44,6 +44,9 @@
   --spacing-icon-lg: 1.125rem;
   --spacing-badge: 1.5rem;
   --spacing-badge-compact: 1.25rem;
+  /* Captioned grids may reduce column count before sacrificing metadata legibility. */
+  --spacing-thumbnail-min: 8rem;
+  --spacing-thumbnail-gap: 0.75rem;
   --text-control: 0.875rem;
   --text-label: 0.8125rem;
   --text-caption: 0.75rem;
