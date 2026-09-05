@@ -5,6 +5,13 @@ namespace Prismedia.Application.Tests.Acquisition;
 
 public sealed class VideoQualityDetectionTests {
     [Theory]
+    [InlineData("Film.2000.480p.BluRay.x264")]
+    [InlineData("Film.2000.576p.BDRip.x264")]
+    [InlineData("Film.2000.480p.Remux")]
+    public void AnExplicitSdEncodeDoesNotInheritAnHdDiscResolution(string release) =>
+        Assert.Equal(VideoQuality.Sdtv, VideoQualityDetection.Detect(release));
+
+    [Theory]
     [InlineData("Film.2000.DVD9.720p.HDDVD.x264", VideoQuality.Bluray720p)]
     [InlineData("Film.2000.720p.HD-DVD.x264", VideoQuality.Bluray720p)]
     [InlineData("Film.2000.1080p.HD.DVD.x264", VideoQuality.Bluray1080p)]

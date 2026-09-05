@@ -36,6 +36,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Automatic movie imports and video upgrades now check the current profile against probed audio languages, and initial movie imports hold files whose resolution contradicts the release label. Explicit standard-definition disc encodes no longer inherit an HD quality rating.
+
 - Language preferences now match equivalent two-letter, three-letter, and named language declarations without treating short words in release titles as language tags.
 
 - Incomplete seasons can retry season packs after individual episode searches are exhausted, with a six-hour retry limit, protection for active downloads and manual review, and early rejection of previously observed packs that cannot fill current gaps.

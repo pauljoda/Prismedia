@@ -428,7 +428,9 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
     [InlineData(false, 7200)]
     [InlineData(true, 0)]
     [InlineData(true, double.NaN)]
-    public async Task MovieImportProbesBeforeBindingTheDirectPlayableMovie(bool readable, double duration) {
+    [InlineData(true, 7200, "Film.2020.2160p.WEB-DL", false)]
+    [InlineData(true, 7200, "Film.2020.2160p.WEB-DL", true)]
+    public async Task MovieImportProbesBeforeBindingTheDirectPlayableMovie(bool readable, double duration, string? selectedTitle = null, bool manualPick = false) {
         await using var db = CreateContext();
         var rootPath = Directory.CreateDirectory(Path.Combine(_workRoot, "movies")).FullName;
         var payloadPath = Directory.CreateDirectory(Path.Combine(_workRoot, "movie-download")).FullName;
@@ -455,12 +457,17 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             new MergedImportTestSupport.VideoProbe(readable, duration),
             NullLogger<MovieAcquisitionImportEngine>.Instance);
         var import = ImportContext(db, EntityKind.Movie, wantedId, "Film", payloadPath, year: 2020);
+        if (selectedTitle is not null) {
+            (await db.Acquisitions.SingleAsync(row => row.Id == import.Id)).SelectedReleaseJson =
+                System.Text.Json.JsonSerializer.Serialize(new SelectedRelease(selectedTitle, null, null, manualPick));
+            await db.SaveChangesAsync();
+        }
         var queue = new MergedImportTestSupport.RecordingJobQueue();
 
         await engine.ImportAsync(JobContext(db, import.Id, queue), import, CancellationToken.None);
 
         var entity = await db.Entities.AsNoTracking().SingleAsync(row => row.Id == wantedId);
-        if (!readable || !double.IsFinite(duration) || duration <= 0) {
+        if (!readable || !double.IsFinite(duration) || duration <= 0 || selectedTitle is not null && !manualPick) {
             Assert.True(entity.IsWanted);
             Assert.False(await HasSourceInSubtreeAsync(db, wantedId));
             Assert.Equal(AcquisitionStatus.ManualImportRequired, (await db.Acquisitions.SingleAsync(row => row.Id == import.Id)).Status);

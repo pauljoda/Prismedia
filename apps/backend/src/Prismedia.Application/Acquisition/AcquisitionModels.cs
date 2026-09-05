@@ -480,7 +480,8 @@ public sealed record MediaUpgradePayloadInspection(
     bool OwnedHasSubtitles,
     bool CandidateHasSubtitles,
     double? OwnedDurationSeconds = null,
-    double? CandidateDurationSeconds = null);
+    double? CandidateDurationSeconds = null,
+    IReadOnlyList<string?>? CandidateAudioLanguages = null);
 
 /// <summary>
 /// Outcome of an in-place owned-file replacement. On success the owned file was atomically swapped for the

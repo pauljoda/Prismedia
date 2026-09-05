@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Prismedia.Application.Jobs.Ports;
+using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Acquisition;
 using Prismedia.Infrastructure.Media.Sidecars;
 
@@ -21,7 +22,10 @@ public sealed class MediaUpgradePayloadInspectorTests {
             var probe = new FakeMediaProbe(
                 new Dictionary<string, VideoProbeData> {
                     [ownedFile] = Video(width: 3840, height: 1600) with { DurationSeconds = 7200 },
-                    [candidateFile] = Video(width: 1920, height: 800) with { DurationSeconds = 60 }
+                    [candidateFile] = Video(width: 1920, height: 800) with { DurationSeconds = 60, Streams = [
+                        new MediaStreamProbeData(1, StreamKind.Audio.ToCode(), null, "tur", null, null, null, null, null, null, null, true, false),
+                        new MediaStreamProbeData(2, StreamKind.Audio.ToCode(), null, "eng", null, null, null, null, null, null, null, false, false)
+                    ] }
                 },
                 subtitleFiles: new HashSet<string>());
             var inspector = new MediaUpgradePayloadInspector(
@@ -38,6 +42,7 @@ public sealed class MediaUpgradePayloadInspectorTests {
             Assert.True(result.CandidateHasSubtitles);
             Assert.Equal(7200, result.OwnedDurationSeconds);
             Assert.Equal(60, result.CandidateDurationSeconds);
+            Assert.Equal(["tur", "eng"], result.CandidateAudioLanguages);
         } finally {
             root.Delete(recursive: true);
         }

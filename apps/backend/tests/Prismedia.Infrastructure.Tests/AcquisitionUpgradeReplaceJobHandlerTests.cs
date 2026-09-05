@@ -312,6 +312,38 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
     }
 
     [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    public async Task KnownAudioMustMatchTheCurrentProfileBeforeAutomaticReplacement(bool manualPick, bool hasEnglish) {
+        await using var db = CreateContext();
+        var (parentId, childId, _) = await SeedMediaAsync(db, EntityKind.Movie,
+            VideoQuality.Bluray720p.ToCode(), "Movie 2020 1080p BluRay", manualPick: manualPick);
+        var profile = new BookAcquisitionProfileRow {
+            Id = Guid.NewGuid(), Kind = EntityKind.Movie, DisplayName = "English",
+            PreferredLanguages = ["en"], TargetLibraryRootId = Guid.NewGuid()
+        };
+        db.BookAcquisitionProfiles.Add(profile);
+        (await db.Acquisitions.SingleAsync(row => row.Id == parentId)).ProfileId = profile.Id;
+        await db.SaveChangesAsync();
+        var queue = new RecordingJobQueue();
+        var replacer = new FakeReplacer(OwnedFileReplaceResult.Ok("x", BookFormatTier.Unknown));
+
+        await RunAsync(db, queue, replacer, childId, new FakeMediaUpgradePayloadInspector(
+            new(720, 1080, false, false, 7200, 7200, hasEnglish ? ["tur", "eng"] : ["tur"])));
+
+        Assert.Equal(manualPick || hasEnglish, replacer.Called);
+        if (!manualPick && !hasEnglish) {
+            Assert.Equal(AcquisitionStatus.ManualImportRequired,
+                (await db.Acquisitions.SingleAsync(row => row.Id == childId)).Status);
+            Assert.Equal(VideoQuality.Bluray720p.ToCode(),
+                (await db.Acquisitions.SingleAsync(row => row.Id == parentId)).OwnedMediaQuality);
+            Assert.DoesNotContain(queue.Enqueued, job => job.Type == JobType.AcquisitionFailedHandle);
+            Assert.Empty(await db.AcquisitionBlocklist.ToArrayAsync());
+        }
+    }
+
+    [Theory]
     [InlineData(false, 7000)]
     [InlineData(true, 3600)]
     public async Task ModestRuntimeDifferencesAndExplicitlyReviewedCutsCanReplace(bool manualPick, double candidateDuration) {

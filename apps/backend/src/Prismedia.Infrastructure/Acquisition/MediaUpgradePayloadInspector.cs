@@ -33,8 +33,8 @@ public sealed class MediaUpgradePayloadInspector(
             if (sidecarDiscoveries.Count != 2 || sidecarDiscoveries.Any(discovery => !discovery.IsComplete)) {
                 return null;
             }
-            var ownedResolution = ResolutionTier(ownedVideo);
-            var candidateResolution = ResolutionTier(candidateVideo);
+            var ownedResolution = VideoPayloadProfileValidation.ResolutionTier(ownedVideo);
+            var candidateResolution = VideoPayloadProfileValidation.ResolutionTier(candidateVideo);
             if (ownedResolution is null || candidateResolution is null) {
                 return null;
             }
@@ -45,27 +45,14 @@ public sealed class MediaUpgradePayloadInspector(
                 ownedSubtitles.Count > 0 || sidecarDiscoveries[0].Candidates.Count > 0,
                 candidateSubtitles.Count > 0 || sidecarDiscoveries[1].Candidates.Count > 0,
                 ownedVideo?.DurationSeconds,
-                candidateVideo?.DurationSeconds);
+                candidateVideo?.DurationSeconds,
+                candidateVideo is null ? null : VideoPayloadProfileValidation.AudioLanguages(candidateVideo));
         } catch (OperationCanceledException) {
             throw;
         } catch (Exception ex) {
             logger.LogWarning(ex, "Could not inspect a downloaded media-upgrade payload.");
             return null;
         }
-    }
-
-    private static int? ResolutionTier(VideoProbeData? video) {
-        if (video?.Width is not > 0 || video.Height is not > 0) {
-            return null;
-        }
-
-        var longEdge = Math.Max(video.Width.Value, video.Height.Value);
-        return longEdge switch {
-            >= 3_000 => 2160,
-            >= 1_600 => 1080,
-            >= 1_100 => 720,
-            _ => 480
-        };
     }
 
 }

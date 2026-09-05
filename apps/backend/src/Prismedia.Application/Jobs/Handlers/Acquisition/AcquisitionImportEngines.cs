@@ -752,6 +752,13 @@ public sealed class MovieAcquisitionImportEngine(
             return;
         }
 
+        if (selected is not { ManualPick: true }
+            && VideoPayloadProfileValidation.Validate(video, ownedMediaQuality,
+                await profiles.GetRulesAsync(import.ProfileId, EntityKind.Movie, cancellationToken)) is { } profileHold) {
+            await acquisitions.SetStatusAsync(import.Id, AcquisitionStatus.ManualImportRequired, profileHold, cancellationToken);
+            return;
+        }
+
         // A movie that already lives on disk merges into its existing folder (or safely holds an owned-file
         // upgrade for review), never a template-derived parallel folder — that would mint a duplicate movie.
         if (import.EntityId is { } linkedEntityId

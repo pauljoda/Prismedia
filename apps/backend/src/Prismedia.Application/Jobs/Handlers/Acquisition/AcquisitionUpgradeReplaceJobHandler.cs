@@ -187,6 +187,10 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
         }
 
         if (!target.ChildManualPick) {
+            if (VideoPayloadProfileValidation.ValidateProfile(candidateCode, inspection?.CandidateAudioLanguages, rules) is { } profileHold) {
+                await acquisitions.SetStatusAsync(childId, AcquisitionStatus.ManualImportRequired, profileHold, cancellationToken);
+                return;
+            }
             if (mediaUpgradeInspector is not null && inspection is null) {
                 await RejectDownloadedCandidateAsync(
                     context,

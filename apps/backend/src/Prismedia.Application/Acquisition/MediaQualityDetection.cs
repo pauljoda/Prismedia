@@ -12,6 +12,7 @@ public static class VideoQualityDetection {
         var source = DetectSource(title);
         var resolution = DetectResolution(title);
         return (source, resolution) switch {
+            (Source.Bluray or Source.Remux, Resolution.R480) => VideoQuality.Sdtv,
             (Source.Remux, Resolution.R2160) => VideoQuality.Remux2160p,
             (Source.Remux, _) => VideoQuality.Remux1080p,
             (Source.Bluray, Resolution.R2160) => VideoQuality.Bluray2160p,
@@ -54,7 +55,7 @@ public static class VideoQualityDetection {
         Has(title, "2160p", "4k", "uhd") ? Resolution.R2160 :
         Has(title, "1080p", "1080i") ? Resolution.R1080 :
         Has(title, "720p") ? Resolution.R720 :
-        Has(title, "480p", "480i", "sdtv") ? Resolution.R480 :
+        Has(title, "480p", "480i", "576p", "576i", "sdtv") ? Resolution.R480 :
         Resolution.None;
 
     private static bool Has(string title, params string[] tokens) =>
