@@ -64,6 +64,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Entity thumbnail captions keep two metadata values on one row. Compact sizing reduces padding and removes decorative chip framing on the smallest cards so values stay readable; full metadata remains on detail pages.
+
 - New collection rules no longer silently restrict video fields to standalone Videos, excluding Movies and Episodes. Entity-type choices now follow the same backend policy as rule evaluation, while existing explicit restrictions remain unchanged.
 - Acquisition labels now agree across library cards, Downloads, and child activity. Pending, downloaded, and importing stages stay distinct, while attention states name the next step: Choose release or Review import.
 - Entity metadata combines repeated provider destinations into one link with aligned, readable IDs, without changing the editable source data. Personal milestones now appear under Dates rather than Release dates.

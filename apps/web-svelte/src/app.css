@@ -43,9 +43,11 @@
   --spacing-icon: 1rem;
   --spacing-icon-lg: 1.125rem;
   --spacing-badge: 1.5rem;
+  --spacing-badge-compact: 1.25rem;
   --text-control: 0.875rem;
   --text-label: 0.8125rem;
   --text-caption: 0.75rem;
+  --text-caption-compact: 0.6875rem;
 
   /* ── Dark semantic surfaces ── */
   --color-bg: #000000;

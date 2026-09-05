@@ -133,6 +133,25 @@ describe("EntityThumbnail presentation", () => {
     expect(chips.map((chip) => chip.getAttribute("aria-label"))).toEqual(["season 2", "episode 18"]);
   });
 
+  it.each(["grid", "list"] as const)("keeps %s captions to two metadata chips on one row", (layout) => {
+    const card = episodeCard();
+    card.meta = [
+      { icon: THUMBNAIL_META_ICON.duration, label: "03:52" },
+      { icon: THUMBNAIL_META_ICON.video, label: "1080p" },
+      { icon: THUMBNAIL_META_ICON.video, label: "H264" },
+      { icon: THUMBNAIL_META_ICON.video, label: "MOV" },
+    ];
+    const { container } = render(EntityThumbnail, { props: { card, layout } });
+    const chips = [...container.querySelectorAll(".chips .chip")];
+    expect(container.querySelector(".chips")).toHaveClass("flex-nowrap");
+    expect(chips).toHaveLength(2);
+    expect(chips.map(chip => chip.textContent?.trim())).toEqual(["03:52", "1080p"]);
+    for (const chip of chips) {
+      expect(chip).toHaveClass("max-w-full", "min-w-0", "shrink");
+      expect(chip.querySelector(".chip-label")).toHaveClass("truncate");
+    }
+  });
+
   it("replaces the entity-family fallback with an artwork-derived accent after the cover decodes", async () => {
     const pixels = new Uint8ClampedArray(12 * 12 * 4);
     for (let y = 0; y < 12; y += 1) {

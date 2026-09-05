@@ -18,6 +18,8 @@
   }
 
   let { card, mediaOnly, layout, showWantedBadge, subtitleContent, titleAlign, titleSize }: Props = $props();
+  // Captions are a compact summary: two chips share one row, truncating long labels.
+  const maxMetadataChips = 2;
 </script>
 
 {#if !mediaOnly}
@@ -41,16 +43,17 @@
     {#if layout === "list"}<EntityThumbnailBadges {card} {showWantedBadge} inline />{/if}
 
     {#if card.meta?.length}
-      <div class="chips">
-        {#each card.meta.slice(0, 5) as item (item.icon + item.label)}
+      <div class="chips flex-nowrap">
+        {#each card.meta.slice(0, maxMetadataChips) as item (item.icon + item.label)}
           <Badge
             variant="outline"
-            class="chip"
+            class="chip min-w-0 max-w-full shrink"
             style={`--thumbnail-meta-accent: ${thumbnailMetaAccentForIcon(item.icon)}`}
             aria-label={`${item.icon} ${item.label}`}
+            title={item.label}
           >
             <EntityThumbnailIcon icon={item.icon} />
-            {item.label}
+            <span class="chip-label truncate">{item.label}</span>
           </Badge>
         {/each}
       </div>
@@ -111,8 +114,8 @@
   .custom-subtitle.title-align-center { justify-content: center; }
   .custom-subtitle.title-align-right { justify-content: flex-end; }
 
-  .chips { display: flex; flex-wrap: wrap; gap: var(--spacing-control-gap-sm); margin-top: var(--spacing-control-gap-sm); }
-  .chips :global(.chip svg) { color: var(--thumbnail-meta-accent); }
+  .chips { display: flex; gap: var(--spacing-control-gap-sm); margin-top: var(--spacing-control-gap-sm); }
+  .chips :global(.chip svg) { flex-shrink: 0; color: var(--thumbnail-meta-accent); }
 
   :global(.entity-thumbnail.is-list) .thumbnail-caption {
     flex: 1 1 0;
@@ -132,11 +135,20 @@
   @container (max-width: 220px) {
     .thumbnail-caption { gap: 0.125rem; padding: 0 0.25rem; }
     h3 { font-size: var(--text-label); }
+    .chips { gap: var(--spacing); }
+    .chips :global(.chip) {
+      min-height: var(--spacing-badge-compact);
+      padding-inline: var(--spacing);
+      gap: var(--spacing);
+      font-size: clamp(var(--text-caption-compact), 8cqi, var(--text-caption));
+    }
   }
 
   @container (max-width: 140px) {
     .thumbnail-caption { gap: 0.1rem; padding: 0 0.2rem; }
     h3 { font-size: var(--text-caption); }
     .subtitle { display: none; }
+    .chips :global(.chip) { padding: 0; border: 0; }
+    .chips :global(.chip svg) { display: none; }
   }
 </style>
