@@ -1,11 +1,12 @@
 <script lang="ts">
   import "../app.css";
 
-  import { afterNavigate, beforeNavigate, goto } from "$app/navigation";
+  import { afterNavigate, beforeNavigate, goto, onNavigate } from "$app/navigation";
   import { page } from "$app/state";
-  import { onMount, tick } from "svelte";
+  import { onDestroy, onMount, tick } from "svelte";
   import type { Snapshot } from "@sveltejs/kit";
   import { cn } from "@prismedia/ui-svelte";
+  import { EntityArtworkTransition, provideEntityArtworkTransition } from "$lib/motion/entity-artwork-transition";
   import Sidebar from "$lib/components/Sidebar.svelte";
   import CanvasHeader from "$lib/components/CanvasHeader.svelte";
   import MobileNav from "$lib/components/MobileNav.svelte";
@@ -61,6 +62,10 @@
     page.url.pathname === "/login" || page.url.pathname.startsWith("/setup"),
   );
   const downloadsWorkspace = $derived(page.url.pathname === "/downloads");
+  const artworkTransition = new EntityArtworkTransition();
+  provideEntityArtworkTransition(artworkTransition);
+  onNavigate((navigation) => artworkTransition.navigate(navigation));
+  onDestroy(() => artworkTransition.dispose());
 
   // Defense-in-depth for client-side navigations after boot: the root load guard only
   // runs on full loads, so mid-session transitions check the in-memory session.

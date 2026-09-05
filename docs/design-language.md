@@ -255,6 +255,7 @@ shared class-merging utility so ordinary layout overrides replace them correctly
 - Focus is visible through shape, border, and motion as well as color.
 - Text and controls meet contrast requirements over both artwork and glass.
 - Motion respects `prefers-reduced-motion`.
+- Grid-to-detail artwork travel is a one-shot enhancement of an ordinary thumbnail link, not a global page transition. Use the shared artwork transition controller and motion tokens; animate only the image, not titles, metadata, or chrome. History, modified clicks, selection, and lightbox actions keep their existing behavior. Missing or slow destination artwork must fall back promptly rather than delay navigation. Reduced motion skips artwork travel entirely.
 - Blocking loaders expose one status announcement; decorative beams and prism layers are hidden from assistive technology.
 - Color pickers store validated six-digit hex values and retain visible labels.
 

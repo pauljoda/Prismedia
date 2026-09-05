@@ -190,6 +190,7 @@
   --duration-normal: 180ms;
   --duration-moderate: 250ms;
   --duration-slow: 400ms;
+  --duration-artwork-travel: var(--duration-slow);
 }
 
 /* shadcn-svelte bases inherit Prismedia's existing palette and geometry. */
@@ -1414,6 +1415,50 @@
   scrollbar-width: none;
   &::-webkit-scrollbar {
     display: none;
+  }
+}
+
+/* A one-shot thumbnail activation opts in. Root content switches immediately;
+   only the matching artwork travels above it. History navigation is untouched. */
+html[data-entity-artwork-transition]::view-transition {
+  pointer-events: none;
+}
+html[data-entity-artwork-transition]::view-transition-old(root) {
+  animation: none;
+  opacity: 0;
+}
+html[data-entity-artwork-transition]::view-transition-new(root) {
+  animation: none;
+}
+html[data-entity-artwork-transition] .poster-frame,
+html[data-entity-artwork-transition] .poster-frame .entity-thumbnail,
+html[data-entity-artwork-transition] .poster-frame .media {
+  background: transparent;
+  border-color: transparent;
+  box-shadow: none;
+}
+html[data-entity-artwork-transition] .poster-frame .sequence-rail {
+  visibility: hidden;
+}
+html[data-entity-artwork-transition]::view-transition-group(entity-artwork) {
+  animation-duration: var(--duration-artwork-travel);
+  animation-timing-function: var(--ease-default);
+  overflow: clip;
+  border-radius: var(--radius-sm);
+}
+html[data-entity-artwork-transition]::view-transition-old(entity-artwork),
+html[data-entity-artwork-transition]::view-transition-new(entity-artwork) {
+  height: 100%;
+  width: 100%;
+  object-fit: cover;
+  mix-blend-mode: normal;
+  animation-duration: var(--duration-artwork-travel);
+}
+@media (prefers-reduced-motion: reduce) {
+  html[data-entity-artwork-transition]::view-transition-group(*),
+  html[data-entity-artwork-transition]::view-transition-old(*),
+  html[data-entity-artwork-transition]::view-transition-new(*) {
+    animation: none;
   }
 }
 

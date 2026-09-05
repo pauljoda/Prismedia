@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Clicking an Entity grid thumbnail carries its artwork into the detail header on supported browsers. Back and forward navigation stay immediate, reduced motion skips the effect, and slow or unavailable artwork falls back to normal navigation.
 - Identify's content-type buttons now grow with their labels and queue counts, keeping icons and text aligned without overlapping adjacent rows on desktop or phones.
 - Entity editors warn before leaving a page with unsaved changes, including browser back navigation, refresh, and closing the tab.
 - Entity editors place Save and Cancel after the fields, with validation and save errors beside those actions. The unsaved-changes prompt uses a compact shared dialog with stacked phone actions instead of stretching across the screen.

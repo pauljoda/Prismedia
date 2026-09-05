@@ -75,6 +75,9 @@
   import EntityDetailEditControls from "./EntityDetailEditControls.svelte";
   import EntityDetailMetadataSection from "./EntityDetailMetadataSection.svelte";
   import { EntityDetailEditController } from "./entity-detail-edit-controller.svelte";
+  import { useEntityArtworkTransition } from "$lib/motion/entity-artwork-transition";
+
+  const artworkTransition = useEntityArtworkTransition();
 
   type Props = EntityDetailProps;
 
@@ -572,7 +575,7 @@
             ondragover={preventAssetDrag}
           >
             {#if posterCard}
-              <EntityThumbnail card={posterCard} linkable={false} mediaOnly={true} showBadges={false} interactive={false} hoverPreviewsEnabled={false} />
+              <EntityThumbnail card={posterCard} linkable={false} mediaOnly={true} showBadges={false} interactive={false} hoverPreviewsEnabled={false} imageLoading="eager" onArtworkLoad={(image) => artworkTransition?.receive(card.entity.id, image)} />
             {/if}
           </div>
         {/if}

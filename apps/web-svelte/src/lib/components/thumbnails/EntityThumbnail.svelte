@@ -5,6 +5,9 @@
   import EntityThumbnailArtwork from "./EntityThumbnailArtwork.svelte";
   import EntityThumbnailInfo from "./EntityThumbnailInfo.svelte";
   import type { EntityThumbnailProps } from "./entity-thumbnail-props";
+  import { useEntityArtworkTransition } from "$lib/motion/entity-artwork-transition";
+
+  const artworkTransition = useEntityArtworkTransition();
 
   let {
     artworkReactive = true,
@@ -77,6 +80,7 @@
       return;
     }
     toggleSurfaceSelection();
+    if (effectiveHref && layout === "grid") artworkTransition?.arm(event, card.entity.id);
   }
   function handleSurfaceKeydown(event: KeyboardEvent) {
     if (!interactive || (event.key !== "Enter" && event.key !== " ")) return;
