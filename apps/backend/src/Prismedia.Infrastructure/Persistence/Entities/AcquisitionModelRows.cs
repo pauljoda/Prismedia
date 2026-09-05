@@ -482,6 +482,10 @@ public sealed class DetachedDownloadCleanupRow {
     public Guid? SourceAcquisitionId { get; set; }
     public Guid DownloadClientConfigId { get; set; }
     public string ClientItemId { get; set; } = string.Empty;
+    /// <summary>Prismedia-visible payload path retained even if the client history disappears.</summary>
+    public string? ContentPath { get; set; }
+    /// <summary>Upgraded library source whose presence must be protected during completed-payload cleanup.</summary>
+    public string? ImportedSourcePath { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }

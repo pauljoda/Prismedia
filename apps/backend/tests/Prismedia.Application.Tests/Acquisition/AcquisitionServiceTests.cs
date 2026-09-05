@@ -2421,6 +2421,7 @@ public sealed class AcquisitionServiceTests {
     }
 
     private sealed class RecordingDetachedDownloadCleanupStore : IDetachedDownloadCleanupStore {
+        public Task<bool> PreserveUpgradeAsync(Guid acquisitionId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public List<(Guid AcquisitionId, Guid DownloadClientConfigId, string ClientItemId)> Detachments { get; } = [];
         public Exception? Failure { get; init; }
         public bool DetachResult { get; init; } = true;

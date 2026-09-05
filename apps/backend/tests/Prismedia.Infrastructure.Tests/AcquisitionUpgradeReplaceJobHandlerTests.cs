@@ -19,6 +19,33 @@ namespace Prismedia.Infrastructure.Tests;
 /// </summary>
 public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
     [Fact]
+    public async Task SuccessfulUpgradePreservesCleanupOwnershipWhenItsDownloaderIsUnavailable() {
+        await using var db = CreateContext();
+        var (parentId, childId, _) = await SeedMediaAsync(db, EntityKind.Movie,
+            ownedCode: "bluray-1080p", childSelectedTitle: "Movie 2020 2160p BluRay");
+        var clientId = Guid.NewGuid();
+        db.DownloadClientConfigs.Add(new DownloadClientConfigRow { Id = clientId, Kind = DownloadClientKind.Sabnzbd,
+            DisplayName = "Downloads", BaseUrl = "http://client", Category = "validation" });
+        var transfer = await db.DownloadTransfers.SingleAsync(row => row.AcquisitionId == childId);
+        transfer.DownloadClientConfigId = clientId;
+        transfer.ContentPath = "/downloads/upgrade";
+        await db.SaveChangesAsync();
+        var queue = new RecordingJobQueue();
+
+        await RunAsync(db, queue, new FakeReplacer(OwnedFileReplaceResult.Ok("/library/Film.mkv", BookFormatTier.Unknown)),
+            childId, new FakeMediaUpgradePayloadInspector(new(OwnedResolutionTier: 1080, CandidateResolutionTier: 2160,
+                OwnedHasSubtitles: false, CandidateHasSubtitles: false, OwnedDurationSeconds: 7200, CandidateDurationSeconds: 7200)));
+        await FinalizeAsync(db, queue);
+
+        Assert.False(await db.Acquisitions.AnyAsync(row => row.Id == childId));
+        var cleanup = Assert.Single(await db.DetachedDownloadCleanups.ToArrayAsync());
+        Assert.Equal(clientId, cleanup.DownloadClientConfigId);
+        Assert.Equal("hash", cleanup.ClientItemId);
+        Assert.Equal("/downloads/upgrade", cleanup.ContentPath);
+        Assert.Equal((await db.Acquisitions.FindAsync(parentId))!.FinalSourcePath, cleanup.ImportedSourcePath);
+    }
+
+    [Fact]
     public async Task SuccessfulSwapUpdatesOwnedQualityAndReadinessFinalizerConsumesTheChild() {
         await using var db = CreateContext();
         var (parentId, childId, monitorId) = await SeedAsync(db, childSelectedTitle: "Some Book (retail) (epub)");
@@ -521,7 +548,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
             CreatedAt = now, UpdatedAt = now
         });
         db.DownloadTransfers.Add(new DownloadTransferRow {
-            Id = Guid.NewGuid(), AcquisitionId = childId, ClientItemId = "hash", ContentPath = "/downloads/Movie", Progress = 1, CreatedAt = now, UpdatedAt = now
+            Id = Guid.NewGuid(), AcquisitionId = childId, DownloadClientConfigId = SeedClient(db), ClientItemId = "hash", ContentPath = "/downloads/Movie", Progress = 1, CreatedAt = now, UpdatedAt = now
         });
         var monitorId = Guid.NewGuid();
         db.Monitors.Add(new MonitorRow {
@@ -558,7 +585,8 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
         var payload = AcquisitionFinalizeJobPayload.Parse(reconcile.PayloadJson!);
         var handler = new AcquisitionFinalizeJobHandler(
             AcquisitionTestFactory.Store(db),
-            new EfMonitorStore(db));
+            new EfMonitorStore(db),
+            new EfDetachedDownloadCleanupStore(db));
         var now = DateTimeOffset.UtcNow;
         var job = new JobRunSnapshot(
             Guid.NewGuid(),
@@ -602,7 +630,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
             CreatedAt = now, UpdatedAt = now
         });
         db.DownloadTransfers.Add(new DownloadTransferRow {
-            Id = Guid.NewGuid(), AcquisitionId = childId, ClientItemId = "hash", ContentPath = "/downloads/Some Book", Progress = 1, CreatedAt = now, UpdatedAt = now
+            Id = Guid.NewGuid(), AcquisitionId = childId, DownloadClientConfigId = SeedClient(db), ClientItemId = "hash", ContentPath = "/downloads/Some Book", Progress = 1, CreatedAt = now, UpdatedAt = now
         });
         var monitorId = Guid.NewGuid();
         db.Monitors.Add(new MonitorRow {
@@ -611,6 +639,13 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
         });
         await db.SaveChangesAsync();
         return (parentId, childId, monitorId);
+    }
+
+    private static Guid SeedClient(PrismediaDbContext db) {
+        var id = Guid.NewGuid();
+        db.DownloadClientConfigs.Add(new DownloadClientConfigRow { Id = id, Kind = DownloadClientKind.QBittorrent,
+            DisplayName = "Downloads", BaseUrl = "http://client", Category = "validation" });
+        return id;
     }
 
     private static PrismediaDbContext CreateContext() =>

@@ -10,7 +10,7 @@ namespace Prismedia.Infrastructure.Acquisition;
 /// Atomically transfers exact client-item ownership out of an acquisition and retains it until a monitor
 /// confirms removal from the recorded download client.
 /// </summary>
-public sealed class EfDetachedDownloadCleanupStore(PrismediaDbContext db) : IDetachedDownloadCleanupStore {
+public sealed partial class EfDetachedDownloadCleanupStore(PrismediaDbContext db, IAcquisitionUploadStorage? uploads = null) : IDetachedDownloadCleanupStore {
     /// <inheritdoc />
     public async Task<bool> DetachAsync(
         Guid acquisitionId,
@@ -39,6 +39,7 @@ public sealed class EfDetachedDownloadCleanupStore(PrismediaDbContext db) : IDet
             SourceAcquisitionId = acquisitionId,
             DownloadClientConfigId = downloadClientConfigId,
             ClientItemId = clientItemId,
+            ContentPath = transfer.ContentPath,
             CreatedAt = now,
             UpdatedAt = now
         });

@@ -6,6 +6,12 @@ namespace Prismedia.Application.Acquisition;
 /// </summary>
 public interface IDetachedDownloadCleanupStore {
     /// <summary>
+    /// Preserves an importing upgrade's exact downloader ownership before its temporary acquisition is
+    /// consumed. Idempotent after handoff; false keeps an unknown owner or changed lifecycle intact.
+    /// </summary>
+    Task<bool> PreserveUpgradeAsync(Guid acquisitionId, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Atomically moves the exact current transfer into detached cleanup. False means the pointer changed,
     /// the recorded owner is unavailable, or another lifecycle operation won the race.
     /// </summary>

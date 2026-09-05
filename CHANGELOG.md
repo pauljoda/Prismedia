@@ -38,6 +38,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Successful upgrades now retain exact downloader cleanup ownership after their temporary requests are consumed, so downloader outages and restarts cannot silently abandon the completed payload.
+
 - Download removal now rechecks shared ownership and seeding goals under the same lock as new grabs, preserving payloads another active request still needs. Upgrade cleanup also stays with its recorded downloader when that client is unavailable.
 
 - Held TV downloads can repair episodes whose catalog links remain after the underlying files disappear; recovery now shares the download admission check for actual files on disk.

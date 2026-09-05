@@ -12,6 +12,77 @@ namespace Prismedia.Infrastructure.Tests;
 /// </summary>
 public sealed class EfDetachedDownloadCleanupStoreTests {
     [Fact]
+    [Trait("Category", "PostgreSQL")]
+    public async Task UpgradeHandoffIsIdempotentAndSurvivesDeletionOfTheTemporaryOwner() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var (owner, transferId) = await SeedUpgradeAsync(db);
+        var store = new EfDetachedDownloadCleanupStore(db);
+
+        Assert.True(await store.PreserveUpgradeAsync(owner, default));
+        Assert.True(await store.PreserveUpgradeAsync(owner, default));
+        Assert.Empty(await db.DownloadTransfers.ToArrayAsync());
+        await db.Acquisitions.Where(row => row.Id == owner).ExecuteDeleteAsync();
+        db.ChangeTracker.Clear();
+
+        var cleanup = Assert.Single(await db.DetachedDownloadCleanups.ToArrayAsync());
+        Assert.Equal(transferId, cleanup.Id);
+        Assert.Null(cleanup.SourceAcquisitionId);
+        Assert.Equal("/downloads/upgrade", cleanup.ContentPath);
+        Assert.Equal("/library/Film.mkv", cleanup.ImportedSourcePath);
+        Assert.True(await store.PreserveUpgradeAsync(owner, default));
+    }
+
+    [Theory]
+    [InlineData(AcquisitionStatus.Downloading)]
+    [InlineData(AcquisitionStatus.ManualImportRequired)]
+    [InlineData(AcquisitionStatus.Stopping)]
+    public async Task UpgradeHandoffPreservesAnUnreadyOrClaimedLifecycle(AcquisitionStatus status) {
+        await using var db = CreateContext();
+        var (owner, _) = await SeedUpgradeAsync(db);
+        (await db.Acquisitions.FindAsync(owner))!.Status = status;
+        await db.SaveChangesAsync();
+
+        Assert.False(await new EfDetachedDownloadCleanupStore(db).PreserveUpgradeAsync(owner, default));
+
+        Assert.Single(await db.DownloadTransfers.ToArrayAsync());
+        Assert.Empty(await db.DetachedDownloadCleanups.ToArrayAsync());
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task UpgradeHandoffPreservesIncompleteTransfersAndUnknownClients(bool incomplete) {
+        await using var db = CreateContext();
+        var (owner, transferId) = await SeedUpgradeAsync(db);
+        var transfer = (await db.DownloadTransfers.FindAsync(transferId))!;
+        if (incomplete) transfer.Progress = 0.5;
+        else transfer.DownloadClientConfigId = null;
+        await db.SaveChangesAsync();
+
+        Assert.False(await new EfDetachedDownloadCleanupStore(db).PreserveUpgradeAsync(owner, default));
+
+        Assert.Single(await db.DownloadTransfers.ToArrayAsync());
+        Assert.Empty(await db.DetachedDownloadCleanups.ToArrayAsync());
+    }
+
+    private static async Task<(Guid Owner, Guid Transfer)> SeedUpgradeAsync(PrismediaDbContext db) {
+        var parent = new AcquisitionRow { Id = Guid.NewGuid(), Status = AcquisitionStatus.Imported,
+            Kind = EntityKind.Movie, Title = "Film", FinalSourcePath = "/library/Film.mkv" };
+        var child = new AcquisitionRow { Id = Guid.NewGuid(), Status = AcquisitionStatus.Importing,
+            Kind = EntityKind.Movie, Title = "Film", UpgradeOfAcquisitionId = parent.Id };
+        var client = new DownloadClientConfigRow { Id = Guid.NewGuid(), Kind = DownloadClientKind.Sabnzbd,
+            DisplayName = "Downloads", BaseUrl = "http://client", Category = "validation" };
+        var transfer = new DownloadTransferRow { Id = Guid.NewGuid(), AcquisitionId = child.Id,
+            DownloadClientConfigId = client.Id, ClientItemId = "upgrade-item", ContentPath = "/downloads/upgrade", Progress = 1 };
+        db.Acquisitions.AddRange(parent, child);
+        db.DownloadClientConfigs.Add(client);
+        db.DownloadTransfers.Add(transfer);
+        await db.SaveChangesAsync();
+        return (child.Id, transfer.Id);
+    }
+
+    [Fact]
     public async Task DetachMovesTheExactTransferIntoIndependentCleanup() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;

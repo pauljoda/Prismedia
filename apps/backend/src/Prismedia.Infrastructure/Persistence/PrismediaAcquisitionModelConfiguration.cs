@@ -351,6 +351,8 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.SourceAcquisitionId).HasColumnName("source_acquisition_id");
             entity.Property(row => row.DownloadClientConfigId).HasColumnName("download_client_config_id");
             entity.Property(row => row.ClientItemId).HasColumnName("client_item_id").HasMaxLength(256).IsRequired();
+            entity.Property(row => row.ContentPath).HasColumnName("content_path").HasMaxLength(2048);
+            entity.Property(row => row.ImportedSourcePath).HasColumnName("imported_source_path").HasMaxLength(2048);
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
             entity.HasIndex(row => row.SourceAcquisitionId);

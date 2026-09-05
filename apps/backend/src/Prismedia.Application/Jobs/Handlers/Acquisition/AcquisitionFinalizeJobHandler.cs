@@ -11,10 +11,14 @@ namespace Prismedia.Application.Jobs.Handlers;
 [JobDefinition(JobType.AcquisitionFinalize)]
 public sealed class AcquisitionFinalizeJobHandler(
     IAcquisitionStore acquisitions,
-    IMonitorStore monitors) : IJobHandler {
+    IMonitorStore monitors,
+    IDetachedDownloadCleanupStore detachedCleanups) : IJobHandler {
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var payload = AcquisitionFinalizeJobPayload.Parse(context.Job.PayloadJson);
         if (payload.UpgradeParentAcquisitionId is not null) {
+            if (!await detachedCleanups.PreserveUpgradeAsync(payload.AcquisitionId, cancellationToken)) {
+                throw new IOException("Upgrade cleanup ownership could not be preserved; the acquisition remains available for retry.");
+            }
             if (!string.IsNullOrWhiteSpace(payload.ReplacementBackupPath)
                 && Directory.Exists(payload.ReplacementBackupPath)) {
                 Directory.Delete(payload.ReplacementBackupPath, recursive: true);
