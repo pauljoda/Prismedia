@@ -1,5 +1,6 @@
 using System.Net;
 using System.Text;
+using System.Text.Json;
 using Prismedia.Application.Acquisition;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Acquisition;
@@ -15,6 +16,26 @@ namespace Prismedia.Infrastructure.Tests;
 public sealed class SabnzbdDownloadClientTests {
     private static readonly DownloadClientConnection Connection =
         new(Guid.NewGuid(), DownloadClientKind.Sabnzbd, "http://sab:8080", null, null, "prismedia", ApiKey: "secret-key");
+
+    [Theory]
+    [InlineData("prismedia", "/complete/prismedia")]
+    [InlineData("prismedia*", "/complete/prismedia")]
+    [InlineData("", "/complete")]
+    [InlineData("/other-volume", "/other-volume")]
+    [InlineData("C:\\Downloads", "C:\\Downloads")]
+    public async Task CompletedDirectoryUsesTheResolvedRootAndExactCategoryOverride(string directory, string expected) {
+        var handler = new CannedHandler(uri => JsonSerializer.Serialize(uri.Contains($"{SabnzbdProtocol.ModeParam}={SabnzbdProtocol.ModeStatus}")
+            ? new Dictionary<string, object> { [SabnzbdProtocol.Status] = new Dictionary<string, object> { [SabnzbdProtocol.CompleteDirectory] = "/complete" } }
+            : new Dictionary<string, object> { [SabnzbdProtocol.Config] = new Dictionary<string, object> {
+                [SabnzbdProtocol.Categories] = new[] { new Dictionary<string, object> {
+                    [SabnzbdProtocol.HistoryName] = Connection.Category, [SabnzbdProtocol.CategoryDirectory] = directory } } } }));
+        var client = new SabnzbdDownloadClient(new HttpClient(handler));
+
+        Assert.Equal(expected, Assert.Single(await client.GetCompletedDirectoriesAsync(Connection, default)));
+        Assert.Contains(handler.Requests, uri => uri.Contains($"{SabnzbdProtocol.SkipDashboardParam}=1"));
+        Assert.Contains(handler.Requests, uri => uri.Contains($"{SabnzbdProtocol.SectionParam}={SabnzbdProtocol.Categories}"));
+        Assert.False(client.DeletesCompletedPayload);
+    }
 
     [Fact]
     public async Task AddReturnsTheNzoIdAndAuthenticatesWithTheApiKey() {

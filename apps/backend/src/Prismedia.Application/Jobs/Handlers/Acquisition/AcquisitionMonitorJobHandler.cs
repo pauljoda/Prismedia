@@ -176,7 +176,8 @@ public sealed class AcquisitionMonitorJobHandler(
                 client.ApiKey,
                 client.DownloadDirectory);
             var downloadClient = clients.Get(client.Kind);
-            if (await downloadClient.GetItemAsync(connection, cleanup.ClientItemId, cancellationToken) is { }) {
+            if (!downloadClient.DeletesCompletedPayload
+                || await downloadClient.GetItemAsync(connection, cleanup.ClientItemId, cancellationToken) is { }) {
                 await downloadClient.RemoveOwnedAsync(
                     connection,
                     cleanup.AcquisitionId,
@@ -222,6 +223,10 @@ public sealed class AcquisitionMonitorJobHandler(
             var downloadClient = clients.Get(client.Kind);
             var properties = await downloadClient.GetPropertiesAsync(connection, watch.ClientItemId, cancellationToken);
             if (properties is null) {
+                if (!downloadClient.DeletesCompletedPayload) {
+                    await downloadClient.RemoveOwnedAsync(connection, watch.AcquisitionId, watch.ClientItemId,
+                        deleteData: true, cancellationToken, watch.TransferId);
+                }
                 logger.LogDebug("AcquisitionMonitor: seeding torrent {ItemId} is gone from the client; ending its watch.", watch.ClientItemId);
                 await acquisitions.ClearTransferSeedingAsync(watch.TransferId, cancellationToken);
                 return;

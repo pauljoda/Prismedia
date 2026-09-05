@@ -12,8 +12,11 @@ namespace Prismedia.Infrastructure.Acquisition;
 /// the ma_username/ma_password pair. Torrent-only telemetry (piece states, seeds/peers) is reported
 /// as empty — usenet transfers have no swarm.
 /// </summary>
-public sealed class SabnzbdDownloadClient(HttpClient http) : IDownloadClient {
+public sealed partial class SabnzbdDownloadClient(HttpClient http) : IDownloadClient {
     public DownloadClientKind Kind => DownloadClientKind.Sabnzbd;
+
+    /// <summary>SABnzbd history deletion removes incomplete data only; completed files require local cleanup.</summary>
+    public bool DeletesCompletedPayload => false;
 
     public async Task<string> AddAsync(DownloadClientConnection connection, DownloadAddRequest request, CancellationToken cancellationToken) {
         var root = await GetAsync(connection, SabnzbdProtocol.ModeAddUrl, new Dictionary<string, string> {

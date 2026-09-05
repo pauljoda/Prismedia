@@ -7,7 +7,7 @@ using Prismedia.Infrastructure.Persistence.Entities;
 
 namespace Prismedia.Infrastructure.Tests;
 
-public sealed class AcquisitionDownloadRemovalTests {
+public sealed partial class AcquisitionDownloadRemovalTests {
     [Theory]
     [InlineData(AcquisitionStatus.Queued)]
     [InlineData(AcquisitionStatus.Downloading)]
@@ -152,6 +152,10 @@ public sealed class AcquisitionDownloadRemovalTests {
 
     private sealed class Client : IDownloadClient {
         public DownloadClientKind Kind => DownloadClientKind.Sabnzbd;
+        public bool DeletesCompletedPayload { get; init; } = true;
+        public IReadOnlyList<string> CompletedDirectories { get; init; } = [];
+        public Task<IReadOnlyList<string>> GetCompletedDirectoriesAsync(DownloadClientConnection connection, CancellationToken token) => Task.FromResult(CompletedDirectories);
+        public DownloadItemStatus? Item { get; init; }
         public bool Removed { get; private set; }
         public Func<Task>? BeforeRemove { get; init; }
         public DownloadItemProperties? Properties { get; init; }
@@ -162,7 +166,7 @@ public sealed class AcquisitionDownloadRemovalTests {
         public Task<DownloadItemProperties?> GetPropertiesAsync(DownloadClientConnection connection, string itemId, CancellationToken token) => Task.FromResult(Properties);
         public Task<string> AddAsync(DownloadClientConnection connection, DownloadAddRequest request, CancellationToken token) => throw new NotSupportedException();
         public Task<string> AddTorrentFileAsync(DownloadClientConnection connection, string name, byte[] data, CancellationToken token) => throw new NotSupportedException();
-        public Task<DownloadItemStatus?> GetItemAsync(DownloadClientConnection connection, string itemId, CancellationToken token) => throw new NotSupportedException();
+        public Task<DownloadItemStatus?> GetItemAsync(DownloadClientConnection connection, string itemId, CancellationToken token) => Task.FromResult(Item);
         public Task<IReadOnlyList<DownloadItemStatus>> ListItemsAsync(DownloadClientConnection connection, CancellationToken token) => throw new NotSupportedException();
         public Task<IReadOnlyList<DownloadItemFile>> GetFilesAsync(DownloadClientConnection connection, string itemId, CancellationToken token) => throw new NotSupportedException();
         public Task<byte[]> GetPieceStatesAsync(DownloadClientConnection connection, string itemId, CancellationToken token) => throw new NotSupportedException();

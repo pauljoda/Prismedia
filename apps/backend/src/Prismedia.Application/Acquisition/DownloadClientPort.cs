@@ -5,7 +5,7 @@ namespace Prismedia.Application.Acquisition;
 
 /// <summary>Connection details a download client needs to act on a transfer.</summary>
 /// <param name="ApiKey">API key for clients that authenticate with one (SABnzbd); null for cookie/session clients.</param>
-/// <param name="DownloadDirectory">Prismedia-visible completed-download root shared with slskd batch destinations.</param>
+/// <param name="DownloadDirectory">Configured local completed-download root, used by slskd destinations and completed-payload cleanup.</param>
 public sealed record DownloadClientConnection(
     Guid Id,
     DownloadClientKind Kind,
@@ -106,6 +106,13 @@ public interface IDownloadClient {
 
     /// <summary>Removes a tracked item, optionally deleting its downloaded data.</summary>
     Task RemoveAsync(DownloadClientConnection connection, string clientItemId, bool deleteData, CancellationToken cancellationToken);
+
+    /// <summary>Whether the client's removal API deletes completed payloads as well as incomplete data.</summary>
+    bool DeletesCompletedPayload => true;
+
+    /// <summary>Client-visible completed roots for this connection's category; local cleanup must stay strictly below one.</summary>
+    Task<IReadOnlyList<string>> GetCompletedDirectoriesAsync(DownloadClientConnection connection, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<string>>([]);
 
     /// <summary>Removes an exact acquisition-owned item; production factories serialize and revalidate ownership first.</summary>
     Task RemoveOwnedAsync(DownloadClientConnection connection, Guid? acquisitionId, string clientItemId,

@@ -7,7 +7,7 @@ using Prismedia.Infrastructure.Persistence;
 namespace Prismedia.Infrastructure.Acquisition;
 
 /// <summary>Revalidates exact download ownership under the same client-wide lock used by remote adds.</summary>
-public sealed class EfAcquisitionDownloadRemoval(PrismediaDbContext db) : IAcquisitionDownloadRemoval {
+public sealed class EfAcquisitionDownloadRemoval(PrismediaDbContext db, EfCompletedDownloadPayloadCleanup? completedPayloads = null) : IAcquisitionDownloadRemoval {
     private static readonly AcquisitionStatus[] ReleasedStatuses = [
         AcquisitionStatus.Imported, AcquisitionStatus.Failed, AcquisitionStatus.Cancelled, AcquisitionStatus.Stopping
     ];
@@ -62,6 +62,11 @@ public sealed class EfAcquisitionDownloadRemoval(PrismediaDbContext db) : IAcqui
                     throw new IOException("Another acquisition's seeding goal is still pending; the shared download was preserved.");
                 }
             }
+        }
+        if (deleteData && !client.DeletesCompletedPayload) {
+            var cleanup = completedPayloads ?? throw new InvalidOperationException("Completed payload cleanup is not configured.");
+            await cleanup.DeleteAsync(client, connection, acquisitionId, clientItemId,
+                await client.GetItemAsync(connection, clientItemId, cancellationToken), cancellationToken);
         }
         await client.RemoveAsync(connection, clientItemId, deleteData, cancellationToken);
         if (transaction is not null) await transaction.CommitAsync(cancellationToken);

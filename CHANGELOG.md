@@ -38,6 +38,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- SABnzbd imports now remove completed download files as well as client history, while preserving library copies, shared active payloads, and unsafe filesystem links. Existing completed Usenet transfers receive a guarded cleanup retry to recover files left by earlier versions.
+
 - Successful upgrades now retain exact downloader cleanup ownership after their temporary requests are consumed, so downloader outages and restarts cannot silently abandon the completed payload.
 
 - Download removal now rechecks shared ownership and seeding goals under the same lock as new grabs, preserving payloads another active request still needs. Upgrade cleanup also stays with its recorded downloader when that client is unavailable.

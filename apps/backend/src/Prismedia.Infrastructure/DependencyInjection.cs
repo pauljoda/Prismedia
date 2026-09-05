@@ -517,6 +517,7 @@ public static class DependencyInjection {
         services.AddScoped(_ => new SlskdDownloadClient(new HttpClient()));
         services.AddScoped<IDownloadClient>(provider => provider.GetRequiredService<SlskdDownloadClient>());
         services.AddScoped<IAcquisitionDownloadRemoval, EfAcquisitionDownloadRemoval>();
+        services.AddScoped<EfCompletedDownloadPayloadCleanup>();
         services.AddScoped<IDownloadClientFactory, DownloadClientFactory>();
         services.AddScoped<IAcquisitionImportPlanner, AcquisitionImportPlanner>();
         services.AddScoped<IImportFileMover, ImportFileMover>();

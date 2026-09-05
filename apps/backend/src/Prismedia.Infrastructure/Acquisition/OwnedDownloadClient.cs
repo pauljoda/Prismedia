@@ -6,6 +6,8 @@ namespace Prismedia.Infrastructure.Acquisition;
 /// <summary>Preserves adapter behavior while routing acquisition-owned deletion through the shared ownership boundary.</summary>
 internal sealed class OwnedDownloadClient(IDownloadClient inner, IAcquisitionDownloadRemoval removal) : IDownloadClient {
     public DownloadClientKind Kind => inner.Kind;
+    public bool DeletesCompletedPayload => inner.DeletesCompletedPayload;
+    public Task<IReadOnlyList<string>> GetCompletedDirectoriesAsync(DownloadClientConnection connection, CancellationToken token) => inner.GetCompletedDirectoriesAsync(connection, token);
     public Task<string> AddAsync(DownloadClientConnection connection, DownloadAddRequest request, CancellationToken token) => inner.AddAsync(connection, request, token);
     public Task<string> AddTorrentFileAsync(DownloadClientConnection connection, string fileName, byte[] payload, CancellationToken token) => inner.AddTorrentFileAsync(connection, fileName, payload, token);
     public Task<DownloadItemStatus?> GetItemAsync(DownloadClientConnection connection, string itemId, CancellationToken token) => inner.GetItemAsync(connection, itemId, token);

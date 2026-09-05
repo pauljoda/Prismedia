@@ -88,6 +88,8 @@ public static class SabnzbdProtocol {
     public const string NzoIdsParam = "nzo_ids";
     public const string LimitParam = "limit";
     public const string DeleteFilesParam = "del_files";
+    public const string SkipDashboardParam = "skip_dashboard";
+    public const string SectionParam = "section";
     public const string NzbFileField = "name";
 
     // ── modes ───────────────────────────────────────────────────
@@ -98,6 +100,8 @@ public static class SabnzbdProtocol {
     public const string ModeAddFile = "addfile";
     public const string ModeGetFiles = "get_files";
     public const string ModeGetCategories = "get_cats";
+    public const string ModeStatus = Status;
+    public const string ModeGetConfig = "get_config";
     public const string OperationDelete = "delete";
 
     // ── response fields ─────────────────────────────────────────
@@ -110,6 +114,10 @@ public static class SabnzbdProtocol {
     public const string History = "history";
     public const string Slots = "slots";
     public const string Categories = "categories";
+    public const string Config = "config";
+    public const string CompleteDirectory = "completedir";
+    public const string CategoryDirectory = "dir";
+    public const string DefaultCategory = "*";
     public const string Files = "files";
     public const string NzoId = "nzo_id";
     public const string Filename = "filename";
