@@ -149,7 +149,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
             new RecordingJobQueue(),
             replacer,
             childId,
-            new FakeMediaUpgradePayloadInspector(new(1080, 1080, false, true)));
+            new FakeMediaUpgradePayloadInspector(new(1080, 1080, false, true, 7200, 7200)));
 
         Assert.True(replacer.Called);
     }
@@ -182,7 +182,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
             new RecordingJobQueue(),
             replacer,
             childId,
-            new FakeMediaUpgradePayloadInspector(new(1080, 1080, false, true)));
+            new FakeMediaUpgradePayloadInspector(new(1080, 1080, false, true, 7200, 7200)));
 
         Assert.False(replacer.Called);
     }
@@ -203,7 +203,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
             queue,
             replacer,
             childId,
-            new FakeMediaUpgradePayloadInspector(new(1080, 1080, false, false)));
+            new FakeMediaUpgradePayloadInspector(new(1080, 1080, false, false, 7200, 7200)));
 
         Assert.False(replacer.Called);
         Assert.Equal(AcquisitionStatus.Failed, (await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == childId)).Status);
@@ -240,7 +240,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
             new RecordingJobQueue(),
             new FakeReplacer(OwnedFileReplaceResult.Ok("x", BookFormatTier.Unknown)),
             childId,
-            new FakeMediaUpgradePayloadInspector(new(1080, 1080, false, false)),
+            new FakeMediaUpgradePayloadInspector(new(1080, 1080, false, false, 7200, 7200)),
             new SingleDownloadClientConfigStore(detail),
             new SingleDownloadClientFactory(client));
 
@@ -264,7 +264,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
             queue,
             replacer,
             childId,
-            new FakeMediaUpgradePayloadInspector(new(2160, 1080, false, true)));
+            new FakeMediaUpgradePayloadInspector(new(2160, 1080, false, true, 7200, 7200)));
 
         Assert.False(replacer.Called);
         Assert.Contains(queue.Enqueued, job => job.Type == JobType.AcquisitionFailedHandle);
@@ -286,6 +286,54 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
         Assert.True(replacer.Called);
         var parent = await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == parentId);
         Assert.Equal("bluray-1080p", parent.OwnedMediaQuality);
+    }
+
+    [Theory]
+    [InlineData(null, 7200d)]
+    [InlineData(7200d, null)]
+    [InlineData(7200d, double.NaN)]
+    [InlineData(double.NaN, 7200d)]
+    [InlineData(7200d, double.PositiveInfinity)]
+    [InlineData(double.PositiveInfinity, 7200d)]
+    [InlineData(7200d, -1d)]
+    [InlineData(7200d, 0d)]
+    [InlineData(0d, 7200d)]
+    public async Task UnknownOrInvalidRuntimeHoldsAutomaticReplacement(double? ownedDuration, double? candidateDuration) {
+        await AssertUncertainInspectionIsHeldAsync(new(720, 1080, false, false, ownedDuration, candidateDuration));
+    }
+
+    [Fact]
+    public async Task FailedInspectionPreservesTheDownloadForReviewInsteadOfPermanentlyRejectingIt() {
+        await AssertUncertainInspectionIsHeldAsync(null);
+    }
+
+    private static async Task AssertUncertainInspectionIsHeldAsync(MediaUpgradePayloadInspection? inspection) {
+        await using var db = CreateContext();
+        var (parentId, childId, monitorId) = await SeedMediaAsync(
+            db, EntityKind.Movie, VideoQuality.Bluray720p.ToCode(), "Movie 2020 1080p BluRay");
+        var queue = new RecordingJobQueue();
+        var replacer = new FakeReplacer(OwnedFileReplaceResult.Ok("x", BookFormatTier.Unknown));
+
+        var clientId = Guid.NewGuid();
+        (await db.DownloadTransfers.SingleAsync(row => row.AcquisitionId == childId)).DownloadClientConfigId = clientId;
+        await db.SaveChangesAsync();
+        var client = new RecordingDownloadClient();
+        var detail = new DownloadClientDetail(clientId, DownloadClientKind.QBittorrent, "Downloads",
+            "http://download-client", null, "prismedia", true, false, null);
+
+        await RunAsync(db, queue, replacer, childId, new FakeMediaUpgradePayloadInspector(inspection),
+            new SingleDownloadClientConfigStore(detail), new SingleDownloadClientFactory(client));
+
+        Assert.False(replacer.Called);
+        Assert.Null(client.RemovedClientItemId);
+        var child = await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == childId);
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, child.Status);
+        Assert.Contains("preserved", child.StatusMessage);
+        Assert.Equal(VideoQuality.Bluray720p.ToCode(),
+            (await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == parentId)).OwnedMediaQuality);
+        Assert.Equal(childId, (await db.Monitors.SingleAsync(row => row.Id == monitorId)).UpgradeChildAcquisitionId);
+        Assert.DoesNotContain(queue.Enqueued, job => job.Type == JobType.AcquisitionFailedHandle);
+        Assert.Empty(await db.AcquisitionBlocklist.ToArrayAsync());
     }
 
     [Theory]

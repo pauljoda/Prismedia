@@ -191,12 +191,14 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
                 await acquisitions.SetStatusAsync(childId, AcquisitionStatus.ManualImportRequired, profileHold, cancellationToken);
                 return;
             }
-            if (mediaUpgradeInspector is not null && inspection is null) {
-                await RejectDownloadedCandidateAsync(
-                    context,
-                    target,
+            if (mediaUpgradeInspector is not null
+                && (inspection is not { OwnedDurationSeconds: > 0, CandidateDurationSeconds: > 0 }
+                    || !double.IsFinite(inspection.OwnedDurationSeconds.Value)
+                    || !double.IsFinite(inspection.CandidateDurationSeconds.Value))) {
+                await acquisitions.SetStatusAsync(
                     childId,
-                    "The downloaded payload could not be safely inspected as one owned and one candidate video file.",
+                    AcquisitionStatus.ManualImportRequired,
+                    "The owned and downloaded video could not both be inspected with a reliable runtime. Review the replacement; both files were preserved.",
                     cancellationToken);
                 return;
             }
