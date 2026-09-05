@@ -10,6 +10,56 @@ using Prismedia.Infrastructure.Persistence.Entities;
 namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EfAcquisitionStoreTests {
+    [Theory]
+    [InlineData(null, null)]
+    [InlineData(1, 99)]
+    public async Task CorrectedEpisodePositionsHealExistingSearchAndImportRequests(int? oldSeason, int? oldEpisode) {
+        await using var db = CreateContext();
+        var seasonId = AddWantedEntity(db, EntityKind.VideoSeason.ToCode(), "Season two");
+        var episodeId = AddWantedEntity(db, EntityKind.VideoEpisode.ToCode(), "Paired episode", seasonId);
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+        var acquisition = await store.CreateAsync(new AcquisitionMetadata(
+            "Paired episode", null, "Example show", null, null, null,
+            Kind: EntityKind.VideoEpisode, EntityId: episodeId,
+            SeasonNumber: oldSeason, EpisodeNumber: oldEpisode), CancellationToken.None);
+
+        // A later provider refresh or user correction repairs the library without recreating requests.
+        db.EntityPositions.AddRange(
+            new EntityPositionRow { EntityId = seasonId, Code = EntityPositionCodes.Season, Value = 2 },
+            new EntityPositionRow { EntityId = episodeId, Code = EntityPositionCodes.Episode, Value = 4 },
+            new EntityPositionRow { EntityId = episodeId, Code = EntityPositionCodes.AbsoluteEpisode, Value = 54 });
+        await db.SaveChangesAsync();
+
+        var search = await store.GetSearchInputAsync(acquisition.Id, CancellationToken.None);
+        var import = await store.GetImportContextAsync(acquisition.Id, CancellationToken.None);
+        Assert.Equal(2, search!.SeasonNumber);
+        Assert.Equal(4, search.EpisodeNumber);
+        Assert.Equal(54, search.AbsoluteEpisodeNumber);
+        Assert.Equal(2, import!.SeasonNumber);
+        Assert.Equal(4, import.EpisodeNumber);
+    }
+
+    [Theory]
+    [InlineData(EntityKind.VideoSeason, EntityPositionCodes.Season)]
+    [InlineData(EntityKind.Book, EntityPositionCodes.Volume)]
+    public async Task CorrectedUnitPositionsHealExistingSearchAndImportRequests(EntityKind kind, string code) {
+        await using var db = CreateContext();
+        var entityId = AddWantedEntity(db, kind.ToCode(), "Requested unit");
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+        var acquisition = await store.CreateAsync(new AcquisitionMetadata(
+            "Requested unit", null, null, null, null, null, Kind: kind, EntityId: entityId,
+            SeasonNumber: 1, VolumeNumber: 1), CancellationToken.None);
+        db.EntityPositions.Add(new EntityPositionRow { EntityId = entityId, Code = code, Value = 3 });
+        await db.SaveChangesAsync();
+
+        var search = await store.GetSearchInputAsync(acquisition.Id, CancellationToken.None);
+        var import = await store.GetImportContextAsync(acquisition.Id, CancellationToken.None);
+        Assert.Equal(3, kind == EntityKind.VideoSeason ? search!.SeasonNumber : search!.VolumeNumber);
+        Assert.Equal(3, kind == EntityKind.VideoSeason ? import!.SeasonNumber : import!.VolumeNumber);
+    }
+
     [Fact]
     public async Task ListHidesPassiveAcquisitionsWhoseTargetEntityNoLongerExists() {
         await using var db = CreateContext();

@@ -159,19 +159,52 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         var year = row.EntityId is { } entityId && MediaQualityLadder.IsVideoKind(row.Kind)
             ? await ResolveWorkYearAsync(entityId, cancellationToken) ?? row.Year
             : row.Year;
-        var absoluteEpisodeNumber = row.EntityId is { } targetEntityId
-            && row.Kind == EntityKind.VideoEpisode
-                ? await db.EntityPositions.AsNoTracking()
-                    .Where(position => position.EntityId == targetEntityId
-                        && position.Code == EntityPositionCodes.AbsoluteEpisode)
-                    .Select(position => (int?)position.Value)
-                    .SingleOrDefaultAsync(cancellationToken)
-                : null;
+        var positions = await ResolveCurrentPositionsAsync(row.EntityId, row.Kind, cancellationToken);
 
         return new AcquisitionSearchInput(
             row.Id, row.Title, row.Author, row.Kind, row.EntityId, year, row.ProfileId,
-            row.Series, row.SeasonNumber, row.EpisodeNumber, row.VolumeNumber, row.BookRendition,
-            absoluteEpisodeNumber);
+            row.Series, positions.Season ?? row.SeasonNumber, positions.Episode ?? row.EpisodeNumber,
+            positions.Volume ?? row.VolumeNumber, row.BookRendition, positions.AbsoluteEpisode);
+    }
+
+    /// <summary>
+    /// Uses the library's current ordering after metadata repair, with request-time values retained by
+    /// callers only where the library has no position. Search and import must agree on the same target;
+    /// an old request must not keep downloading or placing the episode it was mistakenly created for.
+    /// </summary>
+    private async Task<(int? Season, int? Episode, int? Volume, int? AbsoluteEpisode)> ResolveCurrentPositionsAsync(
+        Guid? entityId,
+        EntityKind kind,
+        CancellationToken cancellationToken) {
+        if (entityId is not { } id || kind is not (EntityKind.VideoSeason or EntityKind.VideoEpisode or EntityKind.Book)) {
+            return default;
+        }
+
+        var entity = await db.Entities.AsNoTracking()
+            .Where(entity => entity.Id == id && entity.KindCode == kind.ToCode())
+            .Select(entity => new { entity.ParentEntityId })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (entity is null) {
+            return default;
+        }
+
+        var positions = await db.EntityPositions.AsNoTracking()
+            .Where(position => position.EntityId == id
+                || (kind == EntityKind.VideoEpisode
+                    && position.EntityId == entity.ParentEntityId
+                    && position.Code == EntityPositionCodes.Season))
+            .Select(position => new { position.EntityId, position.Code, position.Value })
+            .ToArrayAsync(cancellationToken);
+        int? Own(string code) => positions.FirstOrDefault(position => position.EntityId == id && position.Code == code)?.Value;
+        var season = kind is EntityKind.VideoSeason or EntityKind.VideoEpisode
+            ? Own(EntityPositionCodes.Season)
+                ?? positions.FirstOrDefault(position => position.EntityId == entity.ParentEntityId && position.Code == EntityPositionCodes.Season)?.Value
+            : null;
+        return (
+            season,
+            kind == EntityKind.VideoEpisode ? Own(EntityPositionCodes.Episode) : null,
+            kind == EntityKind.Book ? Own(EntityPositionCodes.Volume) : null,
+            kind == EntityKind.VideoEpisode ? Own(EntityPositionCodes.AbsoluteEpisode) : null);
     }
 
     /// <summary>
@@ -1297,11 +1330,14 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             ? ImportPlacementCheckpointJson.Deserialize(row.ImportCheckpointJson)
             : null;
 
+        var positions = await ResolveCurrentPositionsAsync(row.EntityId, row.Kind, cancellationToken);
         var context = new AcquisitionImportContext(
             row.Id, row.Title, row.Author, row.Series, row.Year, row.PosterUrl, externalIdentity,
             row.ProfileId, transfer?.ContentPath, transfer?.ClientItemId, transfer?.DownloadClientConfigId, row.Kind,
-            row.Description, row.TargetLibraryRootId, row.SeasonNumber, row.EpisodeNumber, row.EntityId, row.FinalSourcePath,
-            tvImportCheckpoint, importPlacementCheckpoint, row.BookRendition, row.UpgradeOfAcquisitionId, row.VolumeNumber);
+            row.Description, row.TargetLibraryRootId, positions.Season ?? row.SeasonNumber,
+            positions.Episode ?? row.EpisodeNumber, row.EntityId, row.FinalSourcePath,
+            tvImportCheckpoint, importPlacementCheckpoint, row.BookRendition, row.UpgradeOfAcquisitionId,
+            positions.Volume ?? row.VolumeNumber);
         context.EnsureCheckpointApplicability();
         return context;
     }
