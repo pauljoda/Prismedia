@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
+using System.Data.Common;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Acquisition;
 using Prismedia.Infrastructure.Persistence;
@@ -12,6 +14,45 @@ namespace Prismedia.Infrastructure.Tests;
 /// placeholders out of the owned-file map (they must stay bindable by the post-import scan).
 /// </summary>
 public sealed class EfImportTargetIndexTests {
+    [Fact]
+    [Trait("Category", "PostgreSQL")]
+    public async Task OwnedEpisodeLookupDoesNotAddQueriesForEverySeason() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var setup = database.CreateContext();
+        var ids = SeedSeries(setup, "/media/tv/Long Series");
+        await setup.SaveChangesAsync();
+        var counter = new QueryCounter();
+        await using var measured = new PrismediaDbContext(new DbContextOptionsBuilder<PrismediaDbContext>()
+            .UseNpgsql(setup.Database.GetConnectionString()).AddInterceptors(counter).Options);
+        var index = new EfImportTargetIndex(measured);
+        Assert.Single((await index.GetTvLayoutAsync(ids.SeriesId, default))!.Seasons);
+        var initialQueries = counter.Reads;
+        for (var seasonNumber = 2; seasonNumber <= 60; seasonNumber++) {
+            var season = AddEntity(setup, EntityKind.VideoSeason.ToCode(), ids.SeriesId, seasonNumber);
+            var path = $"/media/tv/Long Series/Season {seasonNumber:00}";
+            AddFolderSource(setup, season, path);
+            AddEntity(setup, EntityKind.VideoEpisode.ToCode(), season, 1, sourcePath: path + "/episode.mkv");
+        }
+        await setup.SaveChangesAsync();
+        counter.Reads = 0;
+
+        var expanded = await index.GetTvLayoutAsync(ids.SeriesId, default);
+
+        Assert.Equal(60, expanded!.Seasons.Count);
+        Assert.All(expanded.Seasons.Values, season => Assert.Single(season.EpisodeFileByNumber));
+        Assert.True(counter.Reads <= initialQueries,
+            $"Owned-file lookup grew from {initialQueries} queries for one season to {counter.Reads} for sixty seasons.");
+    }
+
+    private sealed class QueryCounter : DbCommandInterceptor {
+        public int Reads { get; set; }
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(DbCommand command,
+            CommandEventData eventData, InterceptionResult<DbDataReader> result, CancellationToken cancellationToken = default) {
+            Reads++;
+            return ValueTask.FromResult(result);
+        }
+    }
+
     [Fact]
     public async Task MissingEpisodeNumbersAreScopedToTheRequestedEntityAndSeason() {
         await using var db = CreateContext();

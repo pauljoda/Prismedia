@@ -63,22 +63,24 @@ public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIn
             .ToArrayAsync(cancellationToken);
 
         var episodeCode = EntityKindRegistry.PlayableVideoKindFor(PlayableVideoScanPlacement.Episode).ToCode();
+        var seasonIds = seasonRows.Where(season => season.SortOrder is not null).Select(season => season.Id).Distinct().ToArray();
+        var episodeRows = await (
+            from episode in db.Entities.AsNoTracking()
+            where episode.ParentEntityId != null && seasonIds.Contains(episode.ParentEntityId.Value)
+                && episode.KindCode == episodeCode
+            join file in db.EntityFiles.AsNoTracking().Where(file => file.Role == EntityFileRole.Source)
+                on episode.Id equals file.EntityId
+            select new { SeasonId = episode.ParentEntityId!.Value, episode.SortOrder, file.Path })
+            .ToArrayAsync(cancellationToken);
+        var episodesBySeason = episodeRows.ToLookup(episode => episode.SeasonId);
         var seasons = new Dictionary<int, TvSeasonDiskLayout>();
         foreach (var season in seasonRows) {
             if (season.SortOrder is not { } seasonNumber || seasons.ContainsKey(seasonNumber)) {
                 continue;
             }
 
-            var episodeRows = await (
-                from episode in db.Entities.AsNoTracking()
-                where episode.ParentEntityId == season.Id && episode.KindCode == episodeCode
-                join file in db.EntityFiles.AsNoTracking().Where(file => file.Role == EntityFileRole.Source)
-                    on episode.Id equals file.EntityId
-                select new { episode.SortOrder, file.Path })
-                .ToArrayAsync(cancellationToken);
-
             var episodesByNumber = new Dictionary<int, string>();
-            foreach (var episode in episodeRows) {
+            foreach (var episode in episodesBySeason[season.Id]) {
                 if (episode.SortOrder is { } episodeNumber) {
                     episodesByNumber.TryAdd(episodeNumber, episode.Path);
                 }
