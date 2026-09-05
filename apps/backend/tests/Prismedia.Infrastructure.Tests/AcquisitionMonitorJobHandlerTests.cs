@@ -22,6 +22,37 @@ namespace Prismedia.Infrastructure.Tests;
 public sealed class AcquisitionMonitorJobHandlerTests {
     private static readonly Guid ClientId = Guid.NewGuid();
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task EarlyFileCheckUsesCurrentProviderMappingBeforeRejectingPairedEpisode(bool titlesAvailable) {
+        await using var db = CreateContext();
+        var acquisitionId = await SeedDownloadingAsync(db, DateTimeOffset.UtcNow);
+        var acquisition = await db.Acquisitions.SingleAsync(row => row.Id == acquisitionId);
+        acquisition.Kind = EntityKind.VideoEpisode;
+        acquisition.EntityId = Guid.NewGuid();
+        acquisition.Title = "Second Story";
+        acquisition.Series = "Show";
+        acquisition.SeasonNumber = 1;
+        acquisition.EpisodeNumber = 2;
+        await db.SaveChangesAsync();
+        await AcquisitionTestFactory.Store(db).SetSelectedReleaseAsync(
+            acquisitionId, new SelectedRelease("Show S01 720p WEB", "Indexer", "hashX"), CancellationToken.None);
+        var queue = new RecordingJobQueue();
+        var downloading = new DownloadItemStatus("hashX", "Show", 0.6, "downloading", false, "/save", "/save/show");
+
+        await RunAsync(db, queue, [downloading], null, acquisitionId,
+            files: [new("Show.S01E01.First.Story.Second.Story.mkv", 1_000_000, 0.6)],
+            importTargets: new EpisodeTitleIndex(titlesAvailable ? [new(1, "First Story"), new(2, "Second Story")] : []));
+
+        Assert.Equal(AcquisitionStatus.Downloading, await StatusOf(db, acquisitionId));
+        if (titlesAvailable) {
+            Assert.Empty(queue.Enqueued);
+        } else {
+            Assert.Equal(JobType.AcquisitionFailedHandle, Assert.Single(queue.Enqueued).Type);
+        }
+    }
+
     [Fact]
     public async Task DetachedCleanupCompletesWhenThePriorClientItemIsAlreadyGone() {
         await using var db = CreateContext();
@@ -616,7 +647,9 @@ public sealed class AcquisitionMonitorJobHandlerTests {
         DownloadClientConnectionTest? health = null,
         Exception? listingFailure = null,
         DownloadItemProperties? properties = null,
-        Action<string, bool>? onRemove = null) {
+        Action<string, bool>? onRemove = null,
+        IReadOnlyList<DownloadItemFile>? files = null,
+        IImportTargetIndex? importTargets = null) {
         var handler = new AcquisitionMonitorJobHandler(
             AcquisitionTestFactory.Store(db),
             new EfDetachedDownloadCleanupStore(db),
@@ -630,10 +663,12 @@ public sealed class AcquisitionMonitorJobHandlerTests {
                 health,
                 listingFailure,
                 properties,
-                onRemove)),
+                onRemove,
+                files)),
             new RemotePathMapper(new NoRemotePathMappings()),
             new EfAcquisitionHistoryStore(db),
-            NullLogger<AcquisitionMonitorJobHandler>.Instance);
+            NullLogger<AcquisitionMonitorJobHandler>.Instance,
+            importTargets: importTargets);
         var job = new JobRunSnapshot(
             Guid.NewGuid(), JobType.AcquisitionMonitor, JobRunStatus.Running, 0, null, "{}",
             null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null);
@@ -714,7 +749,8 @@ public sealed class AcquisitionMonitorJobHandlerTests {
         DownloadClientConnectionTest? health = null,
         Exception? listingFailure = null,
         DownloadItemProperties? properties = null,
-        Action<string, bool>? onRemove = null) : IDownloadClient {
+        Action<string, bool>? onRemove = null,
+        IReadOnlyList<DownloadItemFile>? files = null) : IDownloadClient {
         private bool _removed;
 
         public DownloadClientKind Kind => DownloadClientKind.QBittorrent;
@@ -737,7 +773,7 @@ public sealed class AcquisitionMonitorJobHandlerTests {
                 await beforePayloadInspection();
             }
 
-            return [];
+            return files ?? [];
         }
         public Task<DownloadItemProperties?> GetPropertiesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) =>
             Task.FromResult(properties);
@@ -752,6 +788,13 @@ public sealed class AcquisitionMonitorJobHandlerTests {
         }
         public Task<DownloadClientConnectionTest> TestAsync(DownloadClientConnection connection, CancellationToken cancellationToken) =>
             Task.FromResult(health ?? new DownloadClientConnectionTest(true, "Connected."));
+    }
+
+    private sealed class EpisodeTitleIndex(IReadOnlyList<TvEpisodeTitle> titles) : IImportTargetIndex {
+        public Task<IReadOnlyList<TvEpisodeTitle>> GetSeasonEpisodeTitlesAsync(Guid entityId, int seasonNumber, CancellationToken cancellationToken) => Task.FromResult(titles);
+        public Task<TvSeriesDiskLayout?> GetTvLayoutAsync(Guid entityId, CancellationToken cancellationToken) => Task.FromResult<TvSeriesDiskLayout?>(null);
+        public Task<MovieDiskTarget?> GetMovieTargetAsync(Guid entityId, CancellationToken cancellationToken) => Task.FromResult<MovieDiskTarget?>(null);
+        public Task<AlbumDiskTarget?> GetAlbumTargetAsync(Guid entityId, CancellationToken cancellationToken) => Task.FromResult<AlbumDiskTarget?>(null);
     }
 
     private sealed class FakeDownloadClientFactory(IDownloadClient client) : IDownloadClientFactory {

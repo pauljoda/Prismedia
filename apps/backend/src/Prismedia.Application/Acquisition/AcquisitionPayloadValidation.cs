@@ -29,6 +29,7 @@ public static class AcquisitionPayloadValidation {
     /// <param name="completeSeriesSelected">True when the selected release names a complete-series pack, which legitimately spans seasons.</param>
     /// <param name="episodeTitle">Provider-authored episode title used as independent single-file evidence.</param>
     /// <param name="absoluteEpisodeNumber">Provider-authored absolute episode position used as independent single-file evidence.</param>
+    /// <param name="episodeTitles">Current provider episode identities used by the import planner to align combined files.</param>
     public static string? FindConflict(
         IReadOnlyList<string> filePaths,
         Domain.Entities.EntityKind kind,
@@ -38,7 +39,8 @@ public static class AcquisitionPayloadValidation {
         int? episodeNumber = null,
         bool completeSeriesSelected = false,
         string? episodeTitle = null,
-        int? absoluteEpisodeNumber = null) {
+        int? absoluteEpisodeNumber = null,
+        IReadOnlyList<TvEpisodeTitle>? episodeTitles = null) {
         if (filePaths.Count == 0 || !MediaQualityLadder.IsVideoKind(kind)) {
             return null;
         }
@@ -55,6 +57,20 @@ public static class AcquisitionPayloadValidation {
         }
 
         if (seasonNumber is { } season) {
+            // Aired files may bundle multiple provider episodes under one numeric label. Use the
+            // import planner's title alignment before treating that label as evidence of absence.
+            if (episodeNumber is not null && episodeTitles is { Count: > 0 }) {
+                var mapped = TvImportPlanBuilder.PlanUnits(
+                    filePaths.Select(path => new ImportCandidateFile(path, 0)).ToArray(),
+                    expectedTitle ?? string.Empty,
+                    season,
+                    episodeNumber,
+                    episodeTitles: episodeTitles);
+                if (!mapped.Blocked && mapped.Units.Count > 0) {
+                    return null;
+                }
+            }
+
             return FindTvUnitConflict(
                 filePaths,
                 season,
@@ -79,6 +95,7 @@ public static class AcquisitionPayloadValidation {
         bool completeSeriesSelected,
         TvEpisodeIdentifierSet episodeIdentifiers) {
         var coversSought = false;
+        var hasUnresolvedVideo = false;
         var contrary = default(string?);
         foreach (var path in filePaths) {
             if (!MovieImportPlanBuilder.VideoExtensions.Contains(Path.GetExtension(path))) {
@@ -102,7 +119,12 @@ public static class AcquisitionPayloadValidation {
             }
 
             if (declared is not { } markers) {
+                hasUnresolvedVideo = true;
                 continue;
+            }
+
+            if (episodeNumber is not null && markers.Season == season && markers.Episodes.Count == 0) {
+                hasUnresolvedVideo = true;
             }
 
             var covers = episodeNumber is { } episode
@@ -118,7 +140,7 @@ public static class AcquisitionPayloadValidation {
             }
         }
 
-        if (coversSought || contrary is null) {
+        if (coversSought || hasUnresolvedVideo || contrary is null) {
             return null;
         }
 

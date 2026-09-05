@@ -23,7 +23,8 @@ public sealed class AcquisitionMonitorJobHandler(
     IAcquisitionHistoryStore history,
     ILogger<AcquisitionMonitorJobHandler> logger,
     AcquisitionCompletionService? completion = null,
-    IJobGraphService? graphs = null) : IJobHandler {
+    IJobGraphService? graphs = null,
+    IImportTargetIndex? importTargets = null) : IJobHandler {
     /// <summary>
     /// How long a torrent may stay absent from the download client's listing before the acquisition is
     /// treated as removed. Presence is checked against the client's full listing (see
@@ -557,6 +558,12 @@ public sealed class AcquisitionMonitorJobHandler(
                 return null;
             }
 
+            var episodeTitles = importTargets is not null
+                && input.EntityId is { } entityId
+                && input.SeasonNumber is { } season
+                && input.EpisodeNumber is not null
+                    ? await importTargets.GetSeasonEpisodeTitlesAsync(entityId, season, cancellationToken)
+                    : [];
             return AcquisitionPayloadValidation.FindConflict(
                 files.Select(file => file.Name).ToArray(),
                 input.Kind,
@@ -566,7 +573,8 @@ public sealed class AcquisitionMonitorJobHandler(
                 input.EpisodeNumber,
                 TvReleaseTokens.NamesCompleteSeries(selected.Title),
                 input.Title,
-                input.AbsoluteEpisodeNumber);
+                input.AbsoluteEpisodeNumber,
+                episodeTitles);
         } catch (OperationCanceledException) {
             throw;
         } catch (Exception ex) {

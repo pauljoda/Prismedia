@@ -151,6 +151,39 @@ public sealed class AcquisitionPayloadValidationTests {
             [], EntityKind.Movie, "Dune", 1984));
     }
 
+    [Theory]
+    [InlineData("unidentified.mkv")]
+    [InlineData("Show.S01.mkv")]
+    public void IncompleteEpisodeEvidenceCannotProveTheRequestedEpisodeIsAbsent(string unresolvedFile) {
+        Assert.Null(AcquisitionPayloadValidation.FindConflict(
+            ["Show.S01E01.mkv", unresolvedFile],
+            EntityKind.VideoEpisode, "Show", null, seasonNumber: 1, episodeNumber: 2));
+    }
+
+    [Fact]
+    public void IncompleteSeasonEvidenceCannotProveTheRequestedSeasonIsAbsent() {
+        Assert.Null(AcquisitionPayloadValidation.FindConflict(
+            ["Show.S03E01.mkv", "unidentified.mkv"],
+            EntityKind.VideoSeason, "Show", null, seasonNumber: 1));
+    }
+
+    [Fact]
+    public void ProviderAlignedPairedFilePassesTheSameMappingUsedByImport() {
+        Assert.Null(AcquisitionPayloadValidation.FindConflict(
+            ["Show.S01E01.First.Story.Second.Story.mkv"],
+            EntityKind.VideoEpisode, "Show", null, seasonNumber: 1, episodeNumber: 2,
+            episodeTitles: [new(1, "First Story"), new(2, "Second Story")]));
+    }
+
+    [Theory]
+    [InlineData("Show.S03E01.First.Story.Second.Story.mkv")]
+    [InlineData("Show.2020.S01E01.First.Story.Second.Story.mkv")]
+    public void ProviderTitlesDoNotOverrideAConflictingSeasonOrYear(string file) {
+        Assert.NotNull(AcquisitionPayloadValidation.FindConflict(
+            [file], EntityKind.VideoEpisode, "Show", 1999, seasonNumber: 1, episodeNumber: 2,
+            episodeTitles: [new(1, "First Story"), new(2, "Second Story")]));
+    }
+
     private static (int Season, int[] Episodes)? Normalize((int Season, IReadOnlyList<int> Episodes)? unit) =>
         unit is { } value ? (value.Season, value.Episodes.ToArray()) : null;
 

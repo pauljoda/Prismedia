@@ -21,7 +21,8 @@ public sealed class AcquisitionImportJobHandler(
     IDownloadPayloadReader payloads,
     IAcquisitionHistoryStore history,
     ILogger<AcquisitionImportJobHandler> logger,
-    IEntityLifecycleMutationLease? lifecycle = null) : IJobHandler {
+    IEntityLifecycleMutationLease? lifecycle = null,
+    IImportTargetIndex? importTargets = null) : IJobHandler {
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var payload = AcquisitionJobPayload.Parse(context.Job.PayloadJson);
         AcquisitionImportContext? import;
@@ -208,6 +209,12 @@ public sealed class AcquisitionImportJobHandler(
         }
 
         var input = await acquisitions.GetSearchInputAsync(acquisitionId, cancellationToken);
+        var episodeTitles = importTargets is not null
+            && import.EntityId is { } entityId
+            && import.SeasonNumber is { } season
+            && import.EpisodeNumber is not null
+                ? await importTargets.GetSeasonEpisodeTitlesAsync(entityId, season, cancellationToken)
+                : [];
         return AcquisitionPayloadValidation.FindConflict(
             payloadFiles,
             import.Kind,
@@ -217,7 +224,8 @@ public sealed class AcquisitionImportJobHandler(
             import.EpisodeNumber,
             selected is not null && TvReleaseTokens.NamesCompleteSeries(selected.Title),
             input?.Title,
-            input?.AbsoluteEpisodeNumber);
+            input?.AbsoluteEpisodeNumber,
+            episodeTitles);
     }
 
     /// <summary>Records a durable ImportFailed event (a manual-import hold or an import exception) against the acquisition. Best-effort.</summary>

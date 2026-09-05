@@ -36,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Early download checks now use the same provider episode alignment as TV imports, preserving useful paired-episode files and deferring rejection when file names cannot prove an episode is absent.
 - Automatic movie searches no longer select individually posted CD parts as complete movies.
 - Movie and TV searches now reject releases labeled as samples or trailers before downloading, while preserving matches whose actual titles contain those words.
 - Retrying retained TV downloads can now repair missing links to combined episodes using byte-verified files already in the library, including packs that also add new episodes, without replacing identical media.
