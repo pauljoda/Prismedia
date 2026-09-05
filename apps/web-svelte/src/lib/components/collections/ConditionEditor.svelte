@@ -4,11 +4,12 @@
   import { COLLECTION_RULE_OPERATOR as OP } from "$lib/api/generated/codes";
   import { COLLECTION_ENTITY_TYPES, COLLECTION_RULE_FIELDS, type CollectionConditionValue,
     type CollectionRuleCondition, type CollectionOperator } from "$lib/collections/models";
-  import { collectionFieldOptions, defaultConditionValue, isNullaryOperator } from "$lib/collections/rule-editor";
+  import { collectionFieldOptions, conditionValueForOperator, defaultConditionValue, isNullaryOperator } from "$lib/collections/rule-editor";
   import { displayNameForEntityKind } from "$lib/entities/entity-codes";
   import DateField from "$lib/components/forms/DateField.svelte";
   import FormField from "$lib/components/forms/FormField.svelte";
   import RuleEntityPicker from "./RuleEntityPicker.svelte";
+  import RuleQuantityValue from "./RuleQuantityValue.svelte";
   import { collectionRuleReferences } from "$lib/collections/rule-references";
 
   interface Props {
@@ -66,13 +67,14 @@
 
   function changeOperator(value: string) {
     const next = field.operators.find(operator => operator === value);
-    if (next) onChange({ ...condition, operator: next, value: defaultConditionValue(field, next) });
+    if (next) onChange({ ...condition, operator: next,
+      value: conditionValueForOperator(field, condition.operator, next, condition.value) });
   }
 
   function changeRange(index: number, value: string) {
     const next: [string, string] = [range[0] ?? "", range[1] ?? ""];
     next[index] = value;
-    changeValue(field.fieldType === "date" ? next : [Number(next[0]) || 0, Number(next[1]) || 0]);
+    changeValue(next);
   }
 
   function addType(value: string) {
@@ -92,21 +94,14 @@
         <Select id={id + "-operator"} ariaLabel="Rule operator" options={operatorOptions}
           value={condition.operator} {disabled} onchange={changeOperator} />
       </FormField>
-      {#if between}
+      {#if field.fieldType === "number" && !nullary}
+        {#key field.field}
+          <RuleQuantityValue {field} value={condition.value} {between} {disabled} onChange={changeValue} />
+        {/key}
+      {:else if between}
           <Field.Group role="group" aria-label="Value range" class="grid min-w-0 grid-cols-1 @lg/rule:grid-cols-2">
-            {#if field.fieldType === "date"}
-              <DateField label="From" value={range[0] ?? ""} {disabled} onChange={(value) => changeRange(0, value)} />
-              <DateField label="To" value={range[1] ?? ""} {disabled} onChange={(value) => changeRange(1, value)} />
-            {:else}
-              <FormField label="Minimum" htmlFor={id + "-min"}>
-                <TextInput id={id + "-min"} aria-label="Range minimum" type="number" value={range[0] ?? ""}
-                  {disabled} oninput={(e) => changeRange(0, e.currentTarget.value)} />
-              </FormField>
-              <FormField label="Maximum" htmlFor={id + "-max"}>
-                <TextInput id={id + "-max"} aria-label="Range maximum" type="number" value={range[1] ?? ""}
-                  {disabled} oninput={(e) => changeRange(1, e.currentTarget.value)} />
-              </FormField>
-            {/if}
+            <DateField label="From" value={range[0] ?? ""} {disabled} onChange={(value) => changeRange(0, value)} />
+            <DateField label="To" value={range[1] ?? ""} {disabled} onChange={(value) => changeRange(1, value)} />
           </Field.Group>
       {:else if !nullary}
         {#if collectionRuleReferences[field.field]}
@@ -131,9 +126,6 @@
                 value={Array.isArray(condition.value) ? condition.value.join(", ") : ""}
                 placeholder={field.enumValues?.join(", ")} {disabled}
                 oninput={(e) => changeValue(e.currentTarget.value.split(",").map(value => value.trim()).filter(Boolean))} />
-            {:else if field.fieldType === "number"}
-              <TextInput id={id + "-value"} aria-label="Number value" type="number" value={scalarValue} {disabled}
-                oninput={(e) => changeValue(Number(e.currentTarget.value) || 0)} />
             {:else if field.fieldType === "enum" && field.enumValues}
               <Select id={id + "-value"} ariaLabel="Enum value" options={field.enumValues.map(value => ({ value, label: value }))}
                 value={scalarValue} {disabled} onchange={changeValue} />

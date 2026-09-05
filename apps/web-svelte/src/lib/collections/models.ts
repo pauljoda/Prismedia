@@ -5,6 +5,7 @@ import type {
   CollectionModeCode,
   CollectionRuleFieldCode,
   CollectionRuleOperatorCode,
+  CollectionRuleGroupOperatorCode,
 } from "$lib/api/generated/codes";
 import { COLLECTION_RULE_FIELD as FIELD, COLLECTION_RULE_OPERATOR as OP, COLLECTION_RULE_TARGET_KINDS, GALLERY_TYPE, MEDIA_RESOLUTION_TIERS } from "$lib/api/generated/codes";
 import { ENTITY_KIND, ENTITY_KIND_DEFINITIONS } from "$lib/entities/entity-codes";
@@ -40,7 +41,7 @@ export interface CollectionRuleCondition {
 
 export interface CollectionRuleGroup {
   type: "group";
-  operator: "and" | "or" | "not";
+  operator: CollectionRuleGroupOperatorCode;
   children: CollectionRuleNode[];
 }
 

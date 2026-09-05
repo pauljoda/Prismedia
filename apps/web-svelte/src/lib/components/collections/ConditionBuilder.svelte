@@ -18,7 +18,7 @@
   const logicOptions = [
     { value: COLLECTION_RULE_GROUP_OPERATOR.and, label: "All" },
     { value: COLLECTION_RULE_GROUP_OPERATOR.or, label: "Any" },
-    { value: COLLECTION_RULE_GROUP_OPERATOR.not, label: "None" },
+    { value: COLLECTION_RULE_GROUP_OPERATOR.not, label: "Not all" },
   ];
 
   function replaceChild(index: number, child: CollectionRuleNode) {
@@ -44,6 +44,9 @@
     <ChoiceGroup type="single" options={logicOptions} value={rule.operator}
       ariaLabel="Rule combination logic" {disabled}
       onValueChange={(operator) => onChange({ ...rule, operator })} />
+    {#if rule.operator === COLLECTION_RULE_GROUP_OPERATOR.not}
+      <Field.Description>Exclude items that match every condition in this group.</Field.Description>
+    {/if}
   </Field.Field>
 
   <!-- Rules have no persistent row IDs. Positional components retain focus during immutable edits. -->

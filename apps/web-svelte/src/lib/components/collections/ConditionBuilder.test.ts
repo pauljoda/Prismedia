@@ -3,7 +3,7 @@ import type { ComponentProps } from "svelte";
 import { describe, expect, it, vi } from "vitest";
 import type { CollectionRuleGroup } from "$lib/collections/models";
 import { ENTITY_KIND } from "$lib/entities/entity-codes";
-import { COLLECTION_RULE_FIELD as FIELD, COLLECTION_RULE_OPERATOR as OP } from "$lib/api/generated/codes";
+import { COLLECTION_RULE_FIELD as FIELD, COLLECTION_RULE_OPERATOR as OP, COLLECTION_RULE_GROUP_OPERATOR as GROUP } from "$lib/api/generated/codes";
 import ConditionBuilder from "./ConditionBuilder.svelte";
 import { COLLECTION_RULE_FIELDS } from "$lib/collections/models";
 
@@ -26,6 +26,83 @@ function baseProps(overrides: Partial<ConditionBuilderProps> = {}): ConditionBui
 }
 
 describe("ConditionBuilder", () => {
+  it("names negated conjunction honestly without changing the saved operator", () => {
+    const rule = { ...initialRule(), operator: GROUP.not };
+    render(ConditionBuilder, { props: baseProps({ rule }) });
+    expect(screen.getByRole("radio", { name: "Not all" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.queryByRole("radio", { name: "None" })).not.toBeInTheDocument();
+    expect(screen.getByText("Exclude items that match every condition in this group.")).toBeVisible();
+  });
+
+  it("changes duration units without changing the rule and converts only edited numbers", async () => {
+    const rule = initialRule();
+    rule.children = [{ type: "condition", field: FIELD.duration, operator: OP.greaterThan, value: 900, entityTypes: [] }];
+    const onChange = vi.fn();
+    render(ConditionBuilder, { props: baseProps({ rule, onChange }) });
+    expect(screen.getByRole("spinbutton", { name: "Duration value" })).toHaveValue(900);
+    await fireEvent.click(screen.getByRole("radio", { name: "Minutes" }));
+    expect(screen.getByRole("spinbutton", { name: "Duration value" })).toHaveValue(15);
+    expect(onChange).not.toHaveBeenCalled();
+    await fireEvent.input(screen.getByRole("spinbutton", { name: "Duration value" }), { target: { value: "20" } });
+    expect(onChange.mock.lastCall?.[0].children[0].value).toBe(1200);
+  });
+
+  it("does not turn an empty numeric input into a zero-valued rule", async () => {
+    const rule = initialRule();
+    rule.children = [{ type: "condition", field: FIELD.duration, operator: OP.greaterThan, value: 900, entityTypes: [] }];
+    const onChange = vi.fn();
+    render(ConditionBuilder, { props: baseProps({ rule, onChange }) });
+    await fireEvent.input(screen.getByRole("spinbutton", { name: "Duration value" }), { target: { value: "" } });
+    expect(onChange.mock.lastCall?.[0].children[0].value).toBeNull();
+  });
+
+  it("converts both file-size range bounds with one shared unit choice", async () => {
+    const rule = initialRule();
+    rule.children = [{ type: "condition", field: FIELD.fileSize, operator: OP.between,
+      value: [1048576, 2097152], entityTypes: [] }];
+    const onChange = vi.fn();
+    render(ConditionBuilder, { props: baseProps({ rule, onChange }) });
+    await fireEvent.click(screen.getByRole("radio", { name: "MiB" }));
+    expect(screen.getByRole("spinbutton", { name: "File Size minimum" })).toHaveValue(1);
+    expect(screen.getByRole("spinbutton", { name: "File Size maximum" })).toHaveValue(2);
+    expect(onChange).not.toHaveBeenCalled();
+    await fireEvent.input(screen.getByRole("spinbutton", { name: "File Size maximum" }), { target: { value: "3" } });
+    expect(onChange.mock.lastCall?.[0].children[0].value).toEqual([1048576, 3145728]);
+  });
+
+  it("preserves entered values when selecting a compatible comparison", async () => {
+    const onChange = vi.fn();
+    render(ConditionBuilder, { props: baseProps({ onChange }) });
+    await fireEvent.keyDown(screen.getByRole("button", { name: "Rule operator" }), { key: "ArrowDown" });
+    await fireEvent.pointerUp(screen.getByRole("option", { name: "Does not contain" }));
+    expect(onChange.mock.lastCall?.[0].children[0]).toMatchObject({ operator: OP.notContains, value: "cats" });
+  });
+
+  it("keeps cleared range bounds incomplete and preserves the untouched bound", async () => {
+    const rule = initialRule();
+    rule.children = [{ type: "condition", field: FIELD.duration, operator: OP.between, value: [60, 120], entityTypes: [] }];
+    const onChange = vi.fn();
+    render(ConditionBuilder, { props: baseProps({ rule, onChange }) });
+    await fireEvent.click(screen.getByRole("radio", { name: "Minutes" }));
+    await fireEvent.input(screen.getByRole("spinbutton", { name: "Duration minimum" }), { target: { value: "" } });
+    expect(onChange.mock.lastCall?.[0].children[0].value).toEqual(["", "120"]);
+  });
+
+  it("disables numeric values and their unit choices together", () => {
+    const rule = initialRule();
+    rule.children = [{ type: "condition", field: FIELD.duration, operator: OP.greaterThan, value: 900, entityTypes: [] }];
+    render(ConditionBuilder, { props: baseProps({ rule, disabled: true }) });
+    expect(screen.getByRole("spinbutton", { name: "Duration value" })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: "Minutes" })).toBeDisabled();
+  });
+
+  it("does not add physical-unit choices to ratings", () => {
+    const rule = initialRule();
+    rule.children = [{ type: "condition", field: FIELD.rating, operator: OP.equals, value: 4, entityTypes: [] }];
+    render(ConditionBuilder, { props: baseProps({ rule }) });
+    expect(screen.getByRole("spinbutton", { name: "Rating value" })).toHaveValue(4);
+    expect(screen.queryByRole("group", { name: "Rating unit" })).not.toBeInTheDocument();
+  });
   it("starts video rules without a hidden standalone-video restriction", async () => {
     const onChange = vi.fn();
     render(ConditionBuilder, { props: baseProps({ onChange }) });

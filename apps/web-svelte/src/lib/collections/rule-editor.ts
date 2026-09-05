@@ -16,6 +16,20 @@ export function defaultConditionValue(field: CollectionRuleFieldDef, operator: C
   return "";
 }
 
+/** Preserve entered values while switching comparisons that use the same input shape. */
+export function conditionValueForOperator(
+  field: CollectionRuleFieldDef,
+  previous: CollectionOperator,
+  next: CollectionOperator,
+  value: CollectionConditionValue,
+): CollectionConditionValue {
+  if (isNullaryOperator(previous) || isNullaryOperator(next)) return defaultConditionValue(field, next);
+  if ((previous === OP.between) !== (next === OP.between)) return defaultConditionValue(field, next);
+  const previousMultiple = previous === OP.in || previous === OP.notIn;
+  const nextMultiple = next === OP.in || next === OP.notIn;
+  return previousMultiple === nextMultiple ? value : defaultConditionValue(field, next);
+}
+
 export const collectionFieldOptions = COLLECTION_RULE_FIELDS.map(field => ({ value: field.field, label: field.label }));
 
 /** A preview must describe complete conditions, including every saved nested group. */
