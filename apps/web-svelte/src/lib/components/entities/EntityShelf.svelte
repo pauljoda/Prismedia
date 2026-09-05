@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Component, Snippet } from "svelte";
   import { ChevronLeft, ChevronRight } from "@lucide/svelte";
-  import { Badge, Button } from "@prismedia/ui-svelte";
+  import { Badge, Button, cn } from "@prismedia/ui-svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import { entityAccentForKind } from "$lib/entities/entity-accent";
   import { toAspectRatioNumeric, type EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
@@ -82,7 +82,7 @@
 
 <section
   aria-label={label}
-  class={compact ? "compact-shelf" : undefined}
+  class={cn("min-w-0", compact && "compact-shelf")}
   style:--entity-accent={shelfAccent.primary}
   style:--entity-accent-secondary={shelfAccent.secondary}
 >
@@ -137,7 +137,6 @@
   .shelf-header { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; min-height: 2rem; margin-bottom: 0.75rem; padding-inline: 0.75rem; }
   .shelf-title { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin: 0; font-family: var(--font-heading); font-size: 1.125rem; font-weight: 600; }
   .shelf-items { padding-inline: 0.75rem; scrollbar-width: thin; scroll-padding-inline: 0.75rem; }
-  .compact-shelf { min-width: 0; }
   .compact-shelf .shelf-header, .compact-shelf .shelf-items { padding-inline: 0; }
   .compact-shelf .shelf-title { font-size: 0.875rem; }
   .shelf-marker {

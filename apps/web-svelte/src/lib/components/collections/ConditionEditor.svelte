@@ -21,12 +21,17 @@
   let { condition, onChange, onRemove, disabled = false, libraryOptions = [] }: Props = $props();
   const id = $props.id();
   let typeQuery = $state("");
+  let valueQuery = $state("");
   const field = $derived(COLLECTION_RULE_FIELDS.find(field => field.field === condition.field) ?? COLLECTION_RULE_FIELDS[0]);
   const nullary = $derived(isNullaryOperator(condition.operator));
   const between = $derived(condition.operator === OP.between);
   const multiple = $derived(condition.operator === OP.in || condition.operator === OP.notIn);
   const scalarValue = $derived(Array.isArray(condition.value) || condition.value == null ? "" : String(condition.value));
   const range = $derived(Array.isArray(condition.value) ? condition.value.map(String) : ["", ""]);
+  const selectedValues = $derived(Array.isArray(condition.value) ? condition.value.map(value => ({ value: String(value), label: String(value) })) : []);
+  const valueOptions = $derived((field.enumValues ?? [])
+    .filter(value => !selectedValues.some(selected => selected.value === value) && value.toLocaleLowerCase().includes(valueQuery.toLocaleLowerCase()))
+    .map(value => ({ value, label: value })));
   const kinds = COLLECTION_ENTITY_TYPES.map(value => ({ value, label: displayNameForEntityKind(value) }));
   const selectedKinds = $derived(kinds.filter(kind => condition.entityTypes.includes(kind.value)));
   const availableKinds = $derived(kinds.filter(kind =>
@@ -54,6 +59,7 @@
     const next = COLLECTION_RULE_FIELDS.find(field => field.field === value);
     if (!next) return;
     typeQuery = "";
+    valueQuery = "";
     onChange({ ...condition, field: next.field, entityTypes: next.entityTypes,
       operator: next.operators[0], value: defaultConditionValue(next, next.operators[0]) });
   }
@@ -109,6 +115,14 @@
           {/key}
         {:else if field.fieldType === "date"}
           <DateField label="Date" value={scalarValue} {disabled} onChange={changeValue} />
+        {:else if multiple && field.enumValues}
+          <FormField label={field.label} htmlFor={id + "-value"}>
+            <ChoicePicker id={id + "-value"} label={`${field.label} values`} multiple
+              selected={selectedValues} options={valueOptions} bind:query={valueQuery} {disabled}
+              placeholder={selectedValues.length ? "Add another…" : "Choose values…"}
+              onSelect={(value) => changeValue([...selectedValues.map(item => item.value), value])}
+              onRemove={(value) => changeValue(selectedValues.filter(item => item.value !== value).map(item => item.value))} />
+          </FormField>
         {:else}
           <FormField label={multiple ? "Values" : "Value"} htmlFor={id + "-value"}
             helper={multiple ? "Separate values with commas." : undefined}>

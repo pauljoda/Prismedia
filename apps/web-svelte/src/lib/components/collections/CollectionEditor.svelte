@@ -40,7 +40,7 @@
   } from "$lib/collections/models";
   import { rulesReadyForPreview } from "$lib/collections/rule-editor";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
-  import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
+  import EntityShelf from "$lib/components/entities/EntityShelf.svelte";
   import TextAreaField from "$lib/components/forms/TextAreaField.svelte";
   import TextField from "$lib/components/forms/TextField.svelte";
   import { entityCardToThumbnailCard } from "$lib/entities/entity-grid";
@@ -85,6 +85,7 @@
   let previewCards = $state<EntityThumbnailCard[]>([]);
   let libraryRoots = $state<LibraryRoot[]>([]);
   let previewToken = 0;
+  let previewController: AbortController | undefined;
 
   const showRules = $derived(mode === COLLECTION_MODE.dynamic || mode === COLLECTION_MODE.hybrid);
   const hasConditions = $derived(ruleTree.children.length > 0);
@@ -102,10 +103,14 @@
   const previewSummary = $derived.by(() => {
     if (!hasConditions) return "Add rules to preview";
     if (!rulesReady) return "Fill in rule values";
+    if (previewError) return "Preview failed";
     if (previewing && previewCards.length === 0) return "Building preview";
     if (previewTotal === null) return "Ready to preview";
     return `${previewTotal} matching ${previewTotal === 1 ? "item" : "items"}`;
   });
+  const previewLabel = $derived(previewTotal !== null && previewCards.length < previewTotal
+    ? `Preview sample · ${previewCards.length} of ${previewTotal}`
+    : `Preview · ${previewCards.length} matching ${previewCards.length === 1 ? "item" : "items"}`);
 
   onMount(() => {
     const controller = new AbortController();
@@ -167,13 +172,13 @@
       resetPreview();
       return;
     }
-
-
+    resetPreview();
+    previewing = true;
     const timer = setTimeout(() => {
       void runPreview();
     }, 500);
 
-    return () => { clearTimeout(timer); previewToken += 1; };
+    return () => { clearTimeout(timer); previewToken += 1; previewController?.abort(); };
   });
 
   function normalizeMode(value: string | null | undefined): CollectionModeCode {
@@ -202,6 +207,8 @@
   }
 
   function resetPreview() {
+    previewController?.abort();
+    previewController = undefined;
     previewTotal = null;
     previewCards = [];
     previewError = null;
@@ -249,10 +256,12 @@
   async function runPreview() {
     if (!showRules || !hasConditions || !rulesReady) return;
     const token = ++previewToken;
+    resetPreview();
+    const controller = new AbortController();
+    previewController = controller;
     previewing = true;
-    previewError = null;
     try {
-      const preview = await previewCollectionRules(JSON.stringify(ruleTree));
+      const preview = await previewCollectionRules(JSON.stringify(ruleTree), { signal: controller.signal });
       if (token !== previewToken) return;
       previewTotal = preview.total;
       const nextCards: EntityThumbnailCard[] = [];
@@ -286,7 +295,7 @@
   <title>{isNew ? "New Collection" : `Edit ${collection?.title ?? "Collection"}`} · Prismedia</title>
 </svelte:head>
 
-<section class="grid max-w-[96rem] gap-4">
+<section class="grid min-w-0 max-w-[96rem] gap-4">
   <header class="flex flex-wrap items-end justify-between gap-4 border-b border-border-subtle pb-3">
     <div>
       <p class="text-kicker mb-1">Library · Collection</p>
@@ -402,7 +411,7 @@
   </section>
 
   {#if showRules}
-    <section class="grid gap-3">
+    <section class="grid min-w-0 gap-3">
       <div class="surface-panel overflow-hidden">
         <div class="flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle px-4 py-3">
           <div>
@@ -437,38 +446,23 @@
         </div>
       </div>
 
-      {#if previewError}
-        <div class="flex items-center gap-3 rounded-sm border border-error/50 bg-surface-2 px-4 py-2.5 text-[0.8rem] text-error-text">
-          <ShieldAlert class="h-4 w-4 flex-shrink-0" />
-          <span class="flex-1">{previewError}</span>
-          <Button variant="outline" size="sm"
-            type="button"
-
-            onclick={() => (previewError = null)}
-          >
-            Dismiss
-          </Button>
-        </div>
-      {/if}
-
       {#if !rulesReady}
         <StatePlaceholder icon={SlidersHorizontal}
           title={hasConditions ? "Complete your conditions" : "Build a collection rule"}
           description={hasConditions ? "Enter the missing values to preview matching items." : "Add a condition to choose what belongs in this collection."} />
+      {:else if previewError}
+        <StatePlaceholder icon={ShieldAlert} title="Couldn't load preview" description={previewError}>
+          <Button variant="outline" onclick={() => void runPreview()}>Retry preview</Button>
+        </StatePlaceholder>
+      {:else if previewing || previewTotal === null}
+        <StatePlaceholder icon={Eye} title="Loading matching items" busy />
+      {:else if previewCards.length}
+        <EntityShelf label={previewLabel} cards={previewCards} sizing="height" />
+      {:else if previewTotal > 0}
+        <StatePlaceholder icon={Eye} title="No preview artwork available"
+          description={`${previewTotal} matching items were found. Their thumbnails could not be loaded.`} />
       {:else}
-      <EntityGrid
-        selectable={false}
-        cards={previewCards}
-        dockControls={false}
-        emptyTitle={hasConditions && rulesReady ? "No matching items" : "Rule preview"}
-        emptyMessage={hasConditions && rulesReady ? "No items match the current rule set." : "No preview sample is available."}
-        initialPageSize={48}
-        initialSortBy="kind"
-        loading={previewing && previewCards.length === 0}
-        pageSizeOptions={[24, 48, 96]}
-        prefsKey="collection-rule-preview"
-        showPagination={previewCards.length > 0}
-      />
+        <StatePlaceholder icon={Eye} title="No matching items" description="No items match the current rule set." />
       {/if}
     </section>
   {/if}

@@ -10,6 +10,10 @@ const cards = ["Actor", "Director"].map((subtitle) => ({
 }));
 
 describe("EntityShelf navigation", () => {
+  it("can shrink inside a grid without its thumbnails widening the page", () => {
+    render(EntityShelf, { label: "Preview", cards, item });
+    expect(screen.getByRole("region", { name: "Preview" })).toHaveClass("min-w-0");
+  });
   let resize: () => void;
   beforeEach(() => {
     vi.stubGlobal("ResizeObserver", class {

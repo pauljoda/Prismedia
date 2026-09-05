@@ -5,6 +5,7 @@ import type { CollectionRuleGroup } from "$lib/collections/models";
 import { ENTITY_KIND } from "$lib/entities/entity-codes";
 import { COLLECTION_RULE_FIELD as FIELD, COLLECTION_RULE_OPERATOR as OP } from "$lib/api/generated/codes";
 import ConditionBuilder from "./ConditionBuilder.svelte";
+import { COLLECTION_RULE_FIELDS } from "$lib/collections/models";
 
 type ConditionBuilderProps = ComponentProps<typeof ConditionBuilder>;
 
@@ -25,6 +26,32 @@ function baseProps(overrides: Partial<ConditionBuilderProps> = {}): ConditionBui
 }
 
 describe("ConditionBuilder", () => {
+  it.each([FIELD.resolution, FIELD.galleryType])("uses removable choices for %s instead of comma-separated input", async field => {
+    const definition = COLLECTION_RULE_FIELDS.find(item => item.field === field)!;
+    const [first, second] = definition.enumValues!;
+    const rule = initialRule();
+    rule.children = [{ type: "condition", field, operator: OP.in, value: [first], entityTypes: [] }];
+    const onChange = vi.fn();
+    render(ConditionBuilder, { props: baseProps({ rule, onChange }) });
+    expect(screen.queryByLabelText("Multi value (comma separated)")).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: `Add ${definition.label} values` }));
+    expect(screen.queryByRole("option", { name: first })).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("option", { name: second }));
+    expect(onChange.mock.lastCall?.[0].children[0].value).toEqual([first, second]);
+    await fireEvent.click(screen.getByRole("button", { name: `Remove ${first}` }));
+    expect(onChange.mock.lastCall?.[0].children[0].value).toEqual([]);
+  });
+
+  it("preserves saved option values outside the current suggestions until explicitly removed", async () => {
+    const rule = initialRule();
+    rule.children = [{ type: "condition", field: FIELD.resolution, operator: OP.in, value: ["legacy-value"], entityTypes: [] }];
+    const onChange = vi.fn();
+    render(ConditionBuilder, { props: baseProps({ rule, onChange }) });
+    expect(screen.getByText("legacy-value")).toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
+    await fireEvent.click(screen.getByRole("button", { name: "Remove legacy-value" }));
+    expect(onChange.mock.lastCall?.[0].children[0].value).toEqual([]);
+  });
   it("updates a condition from the shared field selector", async () => {
     const onChange = vi.fn();
     render(ConditionBuilder, { props: baseProps({ onChange }) });
