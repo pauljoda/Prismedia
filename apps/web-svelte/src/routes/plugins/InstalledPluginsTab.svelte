@@ -7,13 +7,11 @@
     KeyRound,
     Loader2,
     Package,
-    Search,
     Sparkles,
     Trash2,
     Users,
-    X,
   } from "@lucide/svelte";
-  import { Badge, Button, TextInput } from "@prismedia/ui-svelte";
+  import { Badge, Button, SearchInput } from "@prismedia/ui-svelte";
   import { ENTITY_KIND } from "$lib/api/generated/codes";
   import type { PluginProvider } from "$lib/api/generated/model";
   import PluginCapabilityChips from "$lib/components/plugins/PluginCapabilityChips.svelte";
@@ -89,28 +87,13 @@
 
 <section class="space-y-2">
   <div class="surface-well flex items-center gap-2 px-3 py-2 flex-wrap">
-    <div class="relative">
-      <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-text-disabled" />
-      <TextInput
-        size="sm"
-        class="w-56 pl-8"
-        placeholder="Search installed..."
-        value={search}
-        oninput={(event) => (search = event.currentTarget.value)}
-      />
-      {#if search}
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon"
-          onclick={() => (search = "")}
-          aria-label="Clear search"
-          class="absolute right-1 top-1/2 h-6 w-6 -translate-y-1/2 rounded-xs text-text-disabled hover:bg-transparent hover:text-text-muted"
-        >
-          <X class="h-3 w-3" />
-        </Button>
-      {/if}
-    </div>
+    <SearchInput
+      name="installed-plugin-search"
+      ariaLabel="Search installed plugins"
+      class="w-56"
+      placeholder="Search installed..."
+      bind:value={search}
+    />
     {#if !isSfw}
       <div class="w-px h-4 bg-border-subtle mx-1"></div>
       {#each ["all", "scene", "performer"] as const as filter (filter)}

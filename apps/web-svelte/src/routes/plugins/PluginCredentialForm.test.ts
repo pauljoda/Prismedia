@@ -24,6 +24,15 @@ function baseProps(overrides: Partial<PluginCredentialFormProps> = {}): PluginCr
 }
 
 describe("PluginCredentialForm", () => {
+  it("isolates replacement secrets from the surrounding page's login autofill", () => {
+    render(PluginCredentialForm, { props: baseProps() });
+    const input = screen.getByLabelText(/api key/i) as HTMLInputElement;
+    expect(input.form).not.toBeNull();
+    expect(input.form).toHaveAttribute("autocomplete", "off");
+    expect(input).toHaveAttribute("autocomplete", "new-password");
+    expect(input).toHaveAttribute("name", "auth-test-api_key");
+  });
+
   it("keeps save disabled until a credential value is entered", async () => {
     render(PluginCredentialForm, {
       props: baseProps(),

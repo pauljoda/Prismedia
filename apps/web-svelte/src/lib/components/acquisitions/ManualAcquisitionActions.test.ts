@@ -51,6 +51,12 @@ describe("ManualAcquisitionActions", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Search term" }));
 
     await waitFor(() => expect(mocks.searchManualReplacement).toHaveBeenLastCalledWith("entity-1", "criterion 2160p"));
+    const callCount = mocks.searchManualReplacement.mock.calls.length;
+    await fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+    expect(input).toHaveValue("");
+    expect(input).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Search term" })).toBeDisabled();
+    expect(mocks.searchManualReplacement).toHaveBeenCalledTimes(callCount);
   });
 
   it("reports browser upload progress before handing off to import", async () => {

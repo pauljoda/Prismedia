@@ -13,6 +13,8 @@ describe("SearchableSelect", () => {
     await fireEvent.input(screen.getByRole("combobox", { name: labels.searchLabel }), { target: { value: "item-59" } });
     expect(screen.getAllByRole("option")).toHaveLength(1);
     expect(screen.getByRole("option", { name: "Item 59" })).toBeInTheDocument();
+    await fireEvent.input(screen.getByRole("combobox", { name: labels.searchLabel }), { target: { value: "" } });
+    expect(screen.getAllByRole("option")).toHaveLength(50);
   });
 
   it("skips disabled choices when navigating with the keyboard", async () => {

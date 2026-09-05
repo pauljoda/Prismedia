@@ -20,6 +20,7 @@ describe("SearchInput", () => {
 
     expect(clearButton).toHaveAttribute("title", "Clear search");
     expect(input).toHaveAttribute("data-slot", "input-group-control");
+    expect(input).toHaveAttribute("autocomplete", "off");
     expect(clearButton).toHaveAttribute("data-slot", "input-group-button");
 
     await fireEvent.click(clearButton);
@@ -28,6 +29,11 @@ describe("SearchInput", () => {
     expect(input.value).toBe("");
     expect(document.activeElement).toBe(input);
     expect(onClear).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("button", { name: "Clear search" })).not.toBeInTheDocument();
+    await fireEvent.input(input, { target: { value: "second query" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+    expect(input).toHaveValue("");
+    expect(onClear).toHaveBeenCalledTimes(2);
   });
 
   it("keeps loading state visible without replacing the editable query", () => {

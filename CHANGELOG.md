@@ -75,6 +75,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Opening plugin credentials no longer autofills the plugin search with your Prismedia login and hides the editor. Plugin searches now use the shared clear control and return focus to the empty search field.
 - Plugin navigation now uses the shared keyboard-accessible tabs. Confirmation dialogs focus Cancel, preserve failed actions for retry, and prevent dismissal while work is in progress. Request messages, dashboard placeholders, and diagnostic job history use the shared UI components.
 
 - Resolution filters now use the same source tiers as thumbnail badges, including cropped widescreen video. Grid and collection choices include 8K, 1440p, and lower-resolution SD, while unknown dimensions remain unclassified. Existing resolution-based collections may show corrected matches.

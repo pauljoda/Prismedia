@@ -33,6 +33,11 @@ function baseProps(overrides: Partial<PrismediaCommunityTabProps> = {}): Prismed
 }
 
 describe("PrismediaCommunityTab", () => {
+  it("keeps the community filter out of credential autofill", () => {
+    render(PrismediaCommunityTab, { props: baseProps() });
+    expect(screen.getByRole("searchbox", { name: "Search community plugins" })).toHaveAttribute("autocomplete", "off");
+  });
+
   it("submits configured credentials through the provider callback", async () => {
     const onSaveAuth = vi.fn();
     render(PrismediaCommunityTab, {
@@ -59,5 +64,9 @@ describe("PrismediaCommunityTab", () => {
     });
 
     expect(screen.getByText("No plugins match your search.")).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+    expect(screen.getByRole("searchbox")).toHaveValue("");
+    expect(screen.getByRole("searchbox")).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Configure" })).toBeInTheDocument();
   });
 });

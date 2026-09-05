@@ -11,6 +11,21 @@ function entry(id: string, title: string, tone: DownloadManagerEntry["item"]["to
 }
 
 describe("DownloadManagerTable", () => {
+  it("clears text filtering without changing the selected download status", async () => {
+    render(DownloadManagerTable, {
+      entries: [entry("one", "First transfer", "downloading"), entry("two", "Second transfer", "attention")],
+      thumbnails: new Map(), onSelect: vi.fn(), onRemove: vi.fn(),
+    });
+    await fireEvent.click(screen.getByRole("radio", { name: "Attention 1" }));
+    const search = screen.getByRole("searchbox", { name: "Filter downloads" });
+    await fireEvent.input(search, { target: { value: "no matches" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+    expect(search).toHaveValue("");
+    expect(search).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Inspect Second transfer" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Inspect First transfer" })).not.toBeInTheDocument();
+  });
+
   it("uses a single-choice status filter and never clears the current choice", async () => {
     render(DownloadManagerTable, {
       entries: [entry("one", "First transfer", "downloading"), entry("two", "Second transfer", "attention")],

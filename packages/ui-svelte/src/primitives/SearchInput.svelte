@@ -50,6 +50,7 @@
     bind:ref={element}
     bind:value
     type="search"
+    autocomplete="off"
     aria-label={ariaLabel}
     class={cn("[&::-webkit-search-cancel-button]:appearance-none [&::-webkit-search-decoration]:appearance-none", inputClass)}
     {...rest}
