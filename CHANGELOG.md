@@ -38,6 +38,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Interrupted TV imports restore every episode covered by a combined file, including files renamed during placement, and retain incomplete mapping evidence for review.
+
 - SABnzbd imports now remove completed download files as well as client history, while preserving library copies, shared active payloads, and unsafe filesystem links. Existing completed Usenet transfers receive a guarded cleanup retry to recover files left by earlier versions.
 
 - Successful upgrades now retain exact downloader cleanup ownership after their temporary requests are consumed, so downloader outages and restarts cannot silently abandon the completed payload.

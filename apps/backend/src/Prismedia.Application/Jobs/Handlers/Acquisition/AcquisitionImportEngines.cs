@@ -1681,20 +1681,15 @@ public sealed class TvAcquisitionImportEngine(
 
         var root = await ResolveOwningVideoRootAsync(seriesFolder, cancellationToken)
             ?? throw new InvalidOperationException("The placed TV files are no longer inside an enabled video library root.");
-        var importedEpisodes = new List<ImportedTvEpisode>(files.Count);
-        foreach (var file in files) {
-            var parsed = TvReleaseTokens.ParseEpisode(Path.GetFileNameWithoutExtension(file));
-            if (parsed is null && files.Count == 1 && import.SeasonNumber is { } season && import.EpisodeNumber is { } episode) {
-                parsed = (season, episode);
-            }
-
-            if (parsed is { } unit) {
-                importedEpisodes.Add(new ImportedTvEpisode(file, unit.Season, unit.Episode, []));
-            }
-        }
-
-        if (importedEpisodes.Count == 0) {
-            throw new InvalidOperationException("The placed TV files no longer carry recognizable episode numbers.");
+        var unnumbered = import.EntityId is { } requestedEntity
+            && await targets.HasUnnumberedWantedTvEpisodesAsync(requestedEntity, import.SeasonNumber, cancellationToken);
+        var importedEpisodes = unnumbered ? null : TvPlacedImportRecovery.Plan(files, root.Path, seriesFolder, SeriesOf(import),
+            import.SeasonNumber, import.EpisodeNumber, await EpisodeTitlesForAsync(import, cancellationToken),
+            await acquisitions.GetTransferInfoAsync(import.Id, cancellationToken));
+        if (importedEpisodes is null || importedEpisodes.Count == 0) {
+            await acquisitions.SetStatusAsync(import.Id, AcquisitionStatus.ManualImportRequired,
+                "The placed TV files have incomplete or ambiguous episode mapping evidence. Their files were preserved for review.", cancellationToken);
+            return true;
         }
 
         var seasonFolders = importedEpisodes

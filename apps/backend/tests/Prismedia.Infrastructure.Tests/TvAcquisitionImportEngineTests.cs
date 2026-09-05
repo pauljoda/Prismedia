@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using System.Text.Json;
 using Prismedia.Application.Acquisition;
 using Prismedia.Application.Jobs;
 using Prismedia.Application.Jobs.Handlers;
@@ -12,6 +13,7 @@ using Prismedia.Infrastructure.Jobs;
 using Prismedia.Infrastructure.Media.Persistence;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
+using Prismedia.Infrastructure.Serialization;
 
 namespace Prismedia.Infrastructure.Tests;
 
@@ -24,6 +26,66 @@ namespace Prismedia.Infrastructure.Tests;
 /// </summary>
 public sealed class TvAcquisitionImportEngineTests : IDisposable {
     private readonly string _workRoot = Directory.CreateTempSubdirectory("prismedia-tv-import-").FullName;
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PlacedFileRecoveryRestoresBothEpisodesFromACombinedFile(bool renamedWithLedger) {
+        await using var db = CreateContext();
+        var harness = await HarnessAsync(db, ownedEpisodeName: "Show - s01e01.mkv", payloadFiles: [],
+            releaseTitle: "Show S01", wantedEpisodeNumbers: [2, 3]);
+        var sourceName = "Show.S01E02-E03.mkv";
+        var placed = Path.Combine(harness.SeasonFolder, renamedWithLedger ? "Show - S01E02.mkv" : sourceName);
+        await File.WriteAllTextAsync(placed, "paired episode payload");
+        var acquisition = await db.Acquisitions.SingleAsync(row => row.Id == harness.Import.Id);
+        acquisition.FinalSourcePath = harness.SeasonFolder;
+        if (renamedWithLedger) {
+            acquisition.ImportResultJson = JsonSerializer.Serialize(new AcquisitionImportFileLedger(AcquisitionImportPhase.Importing, [
+                new("paired", sourceName, new FileInfo(placed).Length, sourceName, Path.GetRelativePath(harness.LibraryRoot, placed),
+                    AcquisitionImportFileRole.Media, AcquisitionImportContentKind.Video, AcquisitionImportFileStatus.Imported,
+                    AcquisitionImportDecision.PlaceNew, null)
+            ]), new JsonSerializerOptions { Converters = { new CodecJsonConverterFactory() } });
+        }
+        await db.SaveChangesAsync();
+
+        await harness.Engine.ImportAsync(harness.Context, harness.Import with { FinalSourcePath = harness.SeasonFolder }, default);
+
+        var episodes = await db.Entities.AsNoTracking().Where(row => row.ParentEntityId == harness.SeasonId
+            && (row.SortOrder == 2 || row.SortOrder == 3)).OrderBy(row => row.SortOrder).ToArrayAsync();
+        Assert.Equal(2, episodes.Length);
+        Assert.All(episodes, episode => Assert.False(episode.IsWanted));
+        foreach (var episode in episodes) {
+            Assert.Equal(placed, (await db.EntityFiles.AsNoTracking().SingleAsync(row => row.EntityId == episode.Id
+                && row.Role == EntityFileRole.Source)).Path);
+        }
+        Assert.Equal("paired episode payload", await File.ReadAllTextAsync(placed));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PlacedFileRecoveryPreservesIncompleteMappingEvidenceForReview(bool unnumberedWanted) {
+        await using var db = CreateContext();
+        var harness = await HarnessAsync(db, ownedEpisodeName: "Show - s01e01.mkv", payloadFiles: [],
+            releaseTitle: "Show S01", wantedEpisodeNumbers: [2, 3]);
+        var placed = Path.Combine(harness.SeasonFolder, "Show.S01E02-E03.mkv");
+        await File.WriteAllTextAsync(placed, "paired episode payload");
+        if (unnumberedWanted) {
+            (await db.Entities.SingleAsync(row => row.Id == harness.WantedEpisodeId)).SortOrder = null;
+        } else {
+            await File.WriteAllTextAsync(Path.Combine(harness.SeasonFolder, "unidentified.mkv"), "unidentified video");
+        }
+        (await db.Acquisitions.SingleAsync()).FinalSourcePath = harness.SeasonFolder;
+        await db.SaveChangesAsync();
+
+        await harness.Engine.ImportAsync(harness.Context, harness.Import with { FinalSourcePath = harness.SeasonFolder }, default);
+
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, await StatusOf(db, harness.Import.Id));
+        Assert.True((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == harness.WantedEpisodeId)).IsWanted);
+        Assert.False(await db.EntityFiles.AnyAsync(row => row.EntityId == harness.WantedEpisodeId && row.Role == EntityFileRole.Source));
+        Assert.Equal("paired episode payload", await File.ReadAllTextAsync(placed));
+        Assert.True(File.Exists(harness.OwnedEpisodePath));
+    }
 
     [Theory]
     [InlineData(false)]
