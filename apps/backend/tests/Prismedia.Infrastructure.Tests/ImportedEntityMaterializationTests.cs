@@ -498,6 +498,60 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
     }
 
     [Fact]
+    public async Task StandaloneSongImportPreservesItsRequestedIdentityAndIgnoresOtherTracks() {
+        await using var db = CreateContext();
+        var rootPath = Directory.CreateDirectory(Path.Combine(_workRoot, "single-library")).FullName;
+        var payloadPath = Directory.CreateDirectory(Path.Combine(_workRoot, "single-download")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(payloadPath, "Artist - Selected Song.flac"), "selected-audio");
+        await File.WriteAllTextAsync(Path.Combine(payloadPath, "Artist - Other Song.flac"), "unrequested-audio");
+        var root = new RootPersistence(rootPath, scanAudio: true);
+        db.LibraryRoots.Add(new LibraryRootRow { Id = root.Root.Id, Path = rootPath, Label = "Music", ScanAudio = true });
+        var wantedId = AddWantedEntity(db, EntityKind.AudioTrack, "Selected Song");
+        db.EntityExternalIds.Add(new EntityExternalIdRow {
+            Id = Guid.NewGuid(), EntityId = wantedId, Provider = ExternalIdProviders.MusicBrainz,
+            Value = "selected-recording", CreatedAt = DateTimeOffset.UtcNow
+        });
+        var id = await AddAcquisitionAsync(db, EntityKind.AudioTrack, wantedId, "Selected Song");
+        var store = AcquisitionTestFactory.Store(db);
+        var engine = new MusicAcquisitionImportEngine(store, new EfBookAcquisitionProfileStore(db), root,
+            new DownloadPayloadReader(), new ImportFileMover(), Torrents(store), new EfImportTargetIndex(db),
+            new EfAcquisitionBlocklistStore(db), new EfAcquisitionHistoryStore(db), AlbumMaterializer(db, root),
+            NullLogger<MusicAcquisitionImportEngine>.Instance);
+        var import = new AcquisitionImportContext(id, "Selected Song", "Artist", "Album", null, null, null,
+            null, payloadPath, null, null, Kind: EntityKind.AudioTrack, EntityId: wantedId, TargetLibraryRootId: root.Root.Id);
+
+        var queue = new MergedImportTestSupport.RecordingJobQueue();
+        await engine.ImportAsync(JobContext(db, id, queue), import, default);
+
+        var retained = await db.Entities.AsNoTracking().SingleAsync(row => row.Id == wantedId);
+        Assert.False(retained.IsWanted, (await db.Acquisitions.SingleAsync(row => row.Id == id)).StatusMessage);
+        Assert.Equal("Selected Song", retained.Title);
+        Assert.True(await db.EntityExternalIds.AnyAsync(row => row.EntityId == wantedId && row.Value == "selected-recording"));
+        Assert.NotNull(retained.ParentEntityId);
+        Assert.Equal(EntityKind.AudioLibrary.ToCode(), (await db.Entities.SingleAsync(row => row.Id == retained.ParentEntityId)).KindCode);
+        var source = Assert.Single(await db.EntityFiles.Where(row => row.EntityId == wantedId && row.Role == EntityFileRole.Source).ToArrayAsync());
+        Assert.Equal("selected-audio", await File.ReadAllTextAsync(source.Path));
+        Assert.Single(await db.Entities.Where(row => row.KindCode == EntityKind.AudioTrack.ToCode()).ToArrayAsync());
+        Assert.DoesNotContain(queue.Enqueued, job => job.Type == JobType.MonitoredSearch);
+    }
+
+    [Fact]
+    public async Task ExactSongImportCannotMoveATrackOutOfAnotherAlbum() {
+        await using var db = CreateContext();
+        var oldAlbum = AddWantedEntity(db, EntityKind.AudioLibrary, "Original album");
+        var newAlbum = AddWantedEntity(db, EntityKind.AudioLibrary, "New album");
+        var wantedId = AddWantedEntity(db, EntityKind.AudioTrack, "Song", oldAlbum);
+        await db.SaveChangesAsync();
+
+        var result = await new AcquisitionHintApplier(db).ReconcileWantedAudioTrackAsync(
+            newAlbum, Path.Combine(_workRoot, "Song.flac"), "Song", 0, default, wantedId);
+
+        Assert.Null(result);
+        Assert.Equal(oldAlbum, (await db.Entities.SingleAsync(row => row.Id == wantedId)).ParentEntityId);
+        Assert.Empty(await db.EntityFiles.Where(row => row.EntityId == wantedId).ToArrayAsync());
+    }
+
+    [Fact]
     public async Task PartialAlbumImportReusesArtistPrefixedTrackAndQueuesMissingTrackFallback() {
         await using var db = CreateContext();
         var rootPath = Directory.CreateDirectory(Path.Combine(_workRoot, "music")).FullName;

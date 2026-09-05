@@ -205,6 +205,19 @@ public sealed class EfImportTargetIndexTests {
         Assert.Equal(selectedId, Assert.Single(tracks).EntityId);
     }
 
+    [Fact]
+    public async Task AStandaloneSongDoesNotRequireAnAlbumToBecomeAnImportTarget() {
+        await using var db = CreateContext();
+        var selectedId = AddEntity(db, EntityKind.AudioTrack.ToCode(), parent: null, sortOrder: null, wanted: true);
+        db.Entities.Local.Single(entity => entity.Id == selectedId).Title = "Selected song";
+        await db.SaveChangesAsync();
+
+        var track = Assert.Single(await new EfImportTargetIndex(db).GetRequestedAudioTracksAsync(selectedId, default));
+
+        Assert.Equal(selectedId, track.EntityId);
+        Assert.Equal("Selected song", track.Title);
+    }
+
     private static (Guid SeriesId, Guid SeasonId, Guid EpisodeId) SeedSeries(PrismediaDbContext db, string seriesFolder) {
         var seriesId = AddEntity(db, EntityKind.VideoSeries.ToCode(), parent: null, sortOrder: null);
         AddFolderSource(db, seriesId, seriesFolder);

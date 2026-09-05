@@ -70,7 +70,8 @@ public sealed partial class AcquisitionHintApplier {
 
         var audioTrackCode = EntityKind.AudioTrack.ToCode();
         var candidates = await db.Entities.AsNoTracking()
-            .Where(entity => entity.ParentEntityId == audioLibraryId
+            .Where(entity => (entity.ParentEntityId == audioLibraryId
+                    || targetEntityId != null && entity.Id == targetEntityId && entity.ParentEntityId == null)
                 && entity.KindCode == audioTrackCode
                 && entity.IsWanted
                 && !db.EntityFiles.Any(file => file.EntityId == entity.Id && file.Role == EntityFileRole.Source))
@@ -95,16 +96,22 @@ public sealed partial class AcquisitionHintApplier {
 
         var retainedId = matching[0].Id;
         WantedAudioTrackReconciliation? reconciliation = null;
-        if (!await _lifecycle.ExecuteAsync(
-                retainedId,
+        if (!await _lifecycle.ExecuteManyAsync(
+                [retainedId, audioLibraryId],
                 async leaseCancellationToken => {
                     var retained = await db.Entities.FirstOrDefaultAsync(
                         entity => entity.Id == retainedId
-                            && entity.ParentEntityId == audioLibraryId
+                            && (entity.ParentEntityId == audioLibraryId
+                                || targetEntityId == entity.Id && entity.ParentEntityId == null)
                             && entity.KindCode == audioTrackCode
                             && entity.IsWanted,
                         leaseCancellationToken);
                     if (retained is null || await HasSourceFileAsync(retained.Id, leaseCancellationToken)) {
+                        return;
+                    }
+                    if (retained.ParentEntityId is null && !await db.Entities.AsNoTracking().AnyAsync(
+                            entity => entity.Id == audioLibraryId && entity.KindCode == EntityKind.AudioLibrary.ToCode(),
+                            leaseCancellationToken)) {
                         return;
                     }
 
@@ -248,6 +255,9 @@ public sealed partial class AcquisitionHintApplier {
                     }
 
                     retained.IsWanted = false;
+                    // A standalone recording request gains its storage album only after its exact planner
+                    // target and source ownership have been verified. Never move an existing album track.
+                    retained.ParentEntityId ??= audioLibraryId;
                     retained.SortOrder ??= sortOrder;
                     retained.UpdatedAt = now;
                     await db.SaveChangesAsync(leaseCancellationToken);

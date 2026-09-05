@@ -11,6 +11,19 @@ namespace Prismedia.Application.Tests.Requests;
 /// </summary>
 public sealed class RequestServicesTests {
     [Fact]
+    public async Task IndividualSongsCanBeDiscoveredThroughTheSelectedPlugin() {
+        var source = new FakePluginSearchSource();
+        var fields = new Dictionary<string, string> { ["title"] = "A Song", ["artist"] = "An Artist" };
+
+        await new RequestPluginSearchService(source).SearchAsync(
+            new RequestPluginSearchRequest(RequestMediaKind.Track, "musicbrainz", fields), false, default);
+
+        Assert.Equal(EntityKind.AudioTrack, source.LastDescriptor?.AcquisitionKind);
+        Assert.Same(fields, source.LastFields);
+        Assert.True(RequestKindRegistry.Find(RequestMediaKind.Track)?.Committable);
+    }
+
+    [Fact]
     public void EbookAndAudiobookAreParallelBookRenditions() {
         var ebook = RequestKindRegistry.Find(RequestMediaKind.Book);
         var audiobook = RequestKindRegistry.Find(RequestMediaKind.Audiobook);

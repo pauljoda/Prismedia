@@ -175,7 +175,7 @@ public static class MusicImportPlanBuilder {
             .ToArray();
         var requestedSelections = requestedTracks is null
             ? null
-            : SelectRequestedAudio(supportedAudio, requestedTracks);
+            : SelectRequestedAudio(supportedAudio, requestedTracks, artist);
         var audio = requestedSelections is null
             ? supportedAudio
             : requestedSelections.Select(selection => selection.File).ToArray();
@@ -213,9 +213,10 @@ public static class MusicImportPlanBuilder {
     /// </summary>
     private static AudioSelection[] SelectRequestedAudio(
         IReadOnlyList<ImportCandidateFile> audio,
-        IReadOnlyList<RequestedAudioTrack> requestedTracks) {
+        IReadOnlyList<RequestedAudioTrack> requestedTracks,
+        string artist) {
         var titleProposals = requestedTracks
-            .Select(track => ResolveTitleProposal(track, audio))
+            .Select(track => ResolveTitleProposal(track, audio, artist))
             .OfType<AudioSelection>()
             .ToArray();
         var selected = RemoveFileConflicts(titleProposals).ToList();
@@ -239,11 +240,12 @@ public static class MusicImportPlanBuilder {
 
     private static AudioSelection? ResolveTitleProposal(
         RequestedAudioTrack track,
-        IReadOnlyList<ImportCandidateFile> audio) {
+        IReadOnlyList<ImportCandidateFile> audio,
+        string artist) {
         var candidates = audio
             .Where(file => AudioTrackTitleText.MatchesMetadataTitle(
                 track.Title,
-                FileNameWithoutExtension(file.RelativePath)))
+                FileNameWithoutExtension(file.RelativePath), artist))
             .ToArray();
         var resolved = Unique(candidates);
         if (resolved is null && track.Position is not null) {

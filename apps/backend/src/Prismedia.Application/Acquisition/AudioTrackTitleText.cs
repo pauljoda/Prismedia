@@ -29,8 +29,9 @@ public static partial class AudioTrackTitleText {
     /// Whether a scanned filename safely identifies one metadata-authored track title. Exact normalized
     /// equality is preferred; a numbered filename may also carry a leading artist credit before the exact
     /// title, which is common in Soulseek folders and remains unambiguous only when the caller finds one match.
+    /// Unnumbered artist prefixes require an exact match to the supplied artist.
     /// </summary>
-    public static bool MatchesMetadataTitle(string? metadataTitle, string? scannedTitle) {
+    public static bool MatchesMetadataTitle(string? metadataTitle, string? scannedTitle, string? artist = null) {
         var metadata = ReleaseTitleText.Tokens(Normalize(metadataTitle));
         var scanned = ReleaseTitleText.Tokens(Normalize(scannedTitle));
         if (metadata.Count == 0 || scanned.Count < metadata.Count) {
@@ -39,7 +40,8 @@ public static partial class AudioTrackTitleText {
         if (metadata.SequenceEqual(scanned, StringComparer.Ordinal)) {
             return true;
         }
-        if (!LeadingTrackNumber().IsMatch(scannedTitle ?? string.Empty)) {
+        var numbered = LeadingTrackNumber().IsMatch(scannedTitle ?? string.Empty);
+        if (!numbered && string.IsNullOrWhiteSpace(artist)) {
             return false;
         }
 
@@ -47,6 +49,12 @@ public static partial class AudioTrackTitleText {
         var withoutTrackNumber = LeadingTrackNumber().Replace(withoutBitrate, string.Empty);
         var artistAndTitle = ArtistTitleSeparator().Split(withoutTrackNumber, 2);
         if (artistAndTitle.Length < 2) {
+            return false;
+        }
+        // Standalone Soulseek files often omit album numbering. Accept their prefix only when it
+        // matches the requested artist, so a similarly named song by another artist cannot bind here.
+        if (!numbered && !ReleaseTitleText.Tokens(Normalize(artist))
+                .SequenceEqual(ReleaseTitleText.Tokens(Normalize(artistAndTitle[0])), StringComparer.Ordinal)) {
             return false;
         }
 

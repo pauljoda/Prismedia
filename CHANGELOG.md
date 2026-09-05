@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Individual songs can now be searched and requested through Discover. Song imports preserve the selected recording's identity and select only its matching audio from a larger downloaded album.
+
 - M4B audiobooks now import embedded chapter windows, expose them as distinct Book chapters, and map matching ebook chapters to those windows without splitting or duplicating the source file.
 - Comics now have dedicated title, volume, and installment catalogs on the web, with capability-driven reading, right-to-left spreads, double-page handling, and sequence-aware continuation across ordered releases.
 - Loose comic-page folders can now become verified, naturally ordered managed CBZ sources at explicit comic boundaries. Prismedia keeps the original pages as protected provenance, rebuilds only when their content changes, and prunes only its own generated copies.

@@ -4,6 +4,15 @@ namespace Prismedia.Application.Tests.Acquisition;
 
 public sealed class AudioTrackTitleTextTests {
     [Theory]
+    [InlineData("Pharrell Williams - Happy", "Pharrell Williams", true)]
+    [InlineData("Other Artist - Happy", "Pharrell Williams", false)]
+    [InlineData("Pharrell Williams - Not Happy", "Pharrell Williams", false)]
+    [InlineData("Pharrell Williams - Happy (Live)", "Pharrell Williams", false)]
+    [InlineData("Pharrell Williams - Happy", null, false)]
+    public void StandaloneArtistPrefixRequiresTheRequestedArtistAndExactTitle(string filename, string? artist, bool expected) =>
+        Assert.Equal(expected, AudioTrackTitleText.MatchesMetadataTitle("Happy", filename, artist));
+
+    [Theory]
     [InlineData(
         "Bow Down (Inspired by \"Dragon Ball\")",
         "01. Bow Down (Inspired by Dragon Ball )")]

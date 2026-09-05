@@ -76,7 +76,7 @@ public sealed class AudioTrackEntityKindDefinition() : EntityKindDefinition<Audi
             ProfileEntityKind: EntityKind.AudioLibrary,
             ReviewSelection: RequestReviewSelection.Root,
             IsContainer: false, ChildKind: null, Committable: true,
-            AcquisitionKind: EntityKind.AudioTrack, Discoverable: false, AcquireFromEntity: true)
+            AcquisitionKind: EntityKind.AudioTrack, AcquireFromEntity: true)
     ];
 
     /// <inheritdoc />

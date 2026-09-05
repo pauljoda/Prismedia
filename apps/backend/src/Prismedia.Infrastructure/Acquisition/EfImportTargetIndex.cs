@@ -127,6 +127,14 @@ public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIn
     public async Task<IReadOnlyList<RequestedAudioTrack>> GetRequestedAudioTracksAsync(
         Guid entityId,
         CancellationToken cancellationToken) {
+        var trackCode = EntityKind.AudioTrack.ToCode();
+        var directTrack = await db.Entities.AsNoTracking()
+            .Where(entity => entity.Id == entityId && entity.KindCode == trackCode)
+            .Select(entity => new RequestedAudioTrack(entity.Id, entity.Title, entity.SortOrder))
+            .FirstOrDefaultAsync(cancellationToken);
+        if (directTrack is not null) {
+            return [directTrack];
+        }
         var albumId = await ResolveAncestorOfKindAsync(
             entityId,
             EntityKind.AudioLibrary.ToCode(),
@@ -135,19 +143,10 @@ public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIn
             return [];
         }
 
-        var entityKind = await db.Entities.AsNoTracking()
-            .Where(entity => entity.Id == entityId)
-            .Select(entity => entity.KindCode)
-            .FirstOrDefaultAsync(cancellationToken);
-        var trackCode = EntityKind.AudioTrack.ToCode();
-        var directTrackId = string.Equals(entityKind, trackCode, StringComparison.Ordinal)
-            ? entityId
-            : (Guid?)null;
-
         return await db.Entities.AsNoTracking()
             .Where(track => track.ParentEntityId == albumId
                 && track.KindCode == trackCode
-                && (directTrackId != null ? track.Id == directTrackId : track.IsWanted))
+                && track.IsWanted)
             .OrderBy(track => track.SortOrder)
             .ThenBy(track => track.Title)
             .Select(track => new RequestedAudioTrack(track.Id, track.Title, track.SortOrder))
