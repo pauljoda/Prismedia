@@ -1572,7 +1572,7 @@ export const REQUEST_KIND_MANIFEST = [
   { kind: "comic-installment", label: "Comic Installment", plural: "Comic Installments", committable: true, childNoun: null, entityKind: "comic-installment", pluginEntityKind: "comic-installment", acquisitionKind: "comic-installment", profileKind: "comic-series", rootFlag: "scanBooks", discoverable: false, reviewSelection: "root" },
   { kind: "artist", label: "Artist", plural: "Artists", committable: true, childNoun: "album", entityKind: "music-artist", pluginEntityKind: "music-artist", acquisitionKind: "audio-library", profileKind: "audio-library", rootFlag: "scanAudio", discoverable: true, reviewSelection: "direct-children" },
   { kind: "album", label: "Album", plural: "Albums", committable: true, childNoun: "track", entityKind: "audio-library", pluginEntityKind: "audio-library", acquisitionKind: "audio-library", profileKind: "audio-library", rootFlag: "scanAudio", discoverable: true, reviewSelection: "root" },
-  { kind: "track", label: "Track", plural: "Tracks", committable: true, childNoun: null, entityKind: "audio-track", pluginEntityKind: "audio-track", acquisitionKind: "audio-track", profileKind: "audio-library", rootFlag: "scanAudio", discoverable: false, reviewSelection: "root" },
+  { kind: "track", label: "Track", plural: "Tracks", committable: true, childNoun: null, entityKind: "audio-track", pluginEntityKind: "audio-track", acquisitionKind: "audio-track", profileKind: "audio-library", rootFlag: "scanAudio", discoverable: true, reviewSelection: "root" },
 ] as const satisfies readonly RequestKindManifestEntry[];
 
 export const ENTITY_KINDS_SUPPORTING_FILE_DELETION = [
