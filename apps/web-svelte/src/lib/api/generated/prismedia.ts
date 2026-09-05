@@ -12322,7 +12322,7 @@ export const getListCutoffUnmetWantedUrl = (params?: ListCutoffUnmetWantedParams
 }
 
 /**
- * @summary A page of the Wanted 'Cutoff Unmet' list — imported monitored items still below their kind's quality cutoff, newest first. Paged (pageSize clamped 1–200) and optionally filtered by kind. Note: the page total is an UPPER BOUND (the count of imported+active monitors before the per-page cutoff refinement), not an exact count.
+ * @summary A page of the Wanted 'Cutoff Unmet' list — imported monitored items still below their kind's quality cutoff, newest first. Paged (pageSize clamped 1–200) and optionally filtered by kind, with an exact total after current-policy cutoff filtering.
  */
 export const listCutoffUnmetWanted = async (params?: ListCutoffUnmetWantedParams, options?: RequestInit): Promise<listCutoffUnmetWantedResponse> => {
 
