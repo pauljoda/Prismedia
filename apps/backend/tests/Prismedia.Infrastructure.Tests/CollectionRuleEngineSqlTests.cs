@@ -11,6 +11,29 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class CollectionRuleEngineSqlTests {
     [Theory]
+    [InlineData(CollectionRuleOperator.In)]
+    [InlineData(CollectionRuleOperator.NotIn)]
+    public void ResolutionSqlUsesTheOrderedSourceClassification(CollectionRuleOperator op) {
+        var query = new CollectionRuleEngine(null!, null!).BuildQuery(
+            Rule(CollectionRuleField.Resolution, op, new[] { MediaResolutionTier.FullHd.ToCode() }),
+            EntityKind.Movie.ToCode());
+        Assert.NotNull(query);
+        var (sql, parameters) = query.Value;
+        Assert.Contains("CASE WHEN", sql);
+        Assert.Contains(op == CollectionRuleOperator.In ? "ELSE NULL END) IN" : "ELSE NULL END) NOT IN", sql);
+        var parameterIndex = 1; // First parameter is the selected tier.
+        foreach (var tier in MediaResolutionPolicy.Tiers) {
+            var width = parameters[parameterIndex++];
+            var height = parameters[parameterIndex++];
+            var code = parameters[parameterIndex++];
+            Assert.Equal(tier.MinimumWidth, width.Value);
+            Assert.Equal(tier.MinimumHeight, height.Value);
+            Assert.Equal(tier.Tier.ToCode(), code.Value);
+            Assert.Contains($"WHEN (t.width >= {width.ParameterName} OR t.height >= {height.ParameterName}) THEN {code.ParameterName}", sql);
+        }
+    }
+
+    [Theory]
     [MemberData(nameof(RepresentativeRuleCases))]
     public void RepresentativeRuleFieldsBuildSqlForSupportedKinds(
         string field,

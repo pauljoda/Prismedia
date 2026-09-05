@@ -6,7 +6,7 @@ import type {
   CollectionRuleFieldCode,
   CollectionRuleOperatorCode,
 } from "$lib/api/generated/codes";
-import { COLLECTION_RULE_FIELD as FIELD, COLLECTION_RULE_OPERATOR as OP, COLLECTION_RULE_TARGET_KINDS, GALLERY_TYPE } from "$lib/api/generated/codes";
+import { COLLECTION_RULE_FIELD as FIELD, COLLECTION_RULE_OPERATOR as OP, COLLECTION_RULE_TARGET_KINDS, GALLERY_TYPE, MEDIA_RESOLUTION_TIERS } from "$lib/api/generated/codes";
 import { ENTITY_KIND, ENTITY_KIND_DEFINITIONS } from "$lib/entities/entity-codes";
 
 export type CollectionMode = CollectionModeCode;
@@ -68,7 +68,7 @@ const fieldDefinitions: Omit<CollectionRuleFieldDef, "entityTypes">[] = [
   { field: FIELD.createdAt, label: "Added Date", fieldType: "date", operators: [OP.greaterThan, OP.lessThan, OP.between] },
   { field: FIELD.fileSize, label: "File Size", fieldType: "number", operators: [OP.greaterThan, OP.lessThan, OP.between] },
   { field: FIELD.duration, label: "Duration", fieldType: "number", operators: [OP.greaterThan, OP.lessThan, OP.between, OP.isNull, OP.isNotNull] },
-  { field: FIELD.resolution, label: "Resolution", fieldType: "enum", operators: [OP.in, OP.notIn], enumValues: ["4K", "1080p", "720p", "480p"] },
+  { field: FIELD.resolution, label: "Resolution", fieldType: "enum", operators: [OP.in, OP.notIn], enumValues: MEDIA_RESOLUTION_TIERS.map(tier => tier.code) },
   { field: FIELD.codec, label: "Codec", fieldType: "text", operators: [OP.equals, OP.notEquals, OP.in, OP.notIn] },
   { field: FIELD.interactive, label: "Interactive", fieldType: "boolean", operators: [OP.isTrue, OP.isFalse] },
   { field: FIELD.accessCount, label: "Play Count", fieldType: "number", operators: [OP.equals, OP.greaterThan, OP.lessThan, OP.greaterEqual, OP.lessEqual, OP.between] },

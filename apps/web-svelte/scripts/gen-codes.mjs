@@ -46,6 +46,11 @@ async function main() {
   const manifest = await response.json();
 
   const sections = [];
+  if (!manifest.mediaResolutionTiers) throw new Error("Manifest is missing media resolution tiers");
+  sections.push(
+    `// source: MediaResolutionPolicy\n` +
+    `export const MEDIA_RESOLUTION_TIERS = ${JSON.stringify(manifest.mediaResolutionTiers, null, 2)} as const satisfies readonly { code: MediaResolutionTierCode; minimumWidth: number; minimumHeight: number }[];\n`,
+  );
   if (!manifest.collectionRuleTargetKinds) throw new Error("Manifest is missing collection rule target kinds");
   sections.push(
     `// source: CollectionRuleFieldPolicy\n` +

@@ -64,6 +64,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Resolution filters now use the same source tiers as thumbnail badges, including cropped widescreen video. Grid and collection choices include 8K, 1440p, and lower-resolution SD, while unknown dimensions remain unclassified. Existing resolution-based collections may show corrected matches.
+
 - Entity thumbnail captions keep two metadata values on one row. Compact sizing reduces padding and removes decorative chip framing on the smallest cards so values stay readable; full metadata remains on detail pages.
 
 - New collection rules no longer silently restrict video fields to standalone Videos, excluding Movies and Episodes. Entity-type choices now follow the same backend policy as rule evaluation, while existing explicit restrictions remain unchanged.

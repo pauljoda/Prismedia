@@ -8,7 +8,7 @@ import {
   type EntityCapabilityKind,
 } from "$lib/api/capabilities";
 import { numberValue, formatDurationString, durationToSeconds } from "$lib/utils/format";
-import { resolutionBadge } from "$lib/player/media-badges";
+import { resolutionBadge } from "$lib/entities/media-resolution";
 import type {
   EntityCapability,
   EntityCard,

@@ -2,6 +2,45 @@
 // Do not edit by hand. Run `pnpm api:generate` (with the dev API running) to refresh.
 /* eslint-disable */
 
+// source: MediaResolutionPolicy
+export const MEDIA_RESOLUTION_TIERS = [
+  {
+    "code": "8K",
+    "minimumWidth": 7600,
+    "minimumHeight": 4300
+  },
+  {
+    "code": "4K",
+    "minimumWidth": 3800,
+    "minimumHeight": 2000
+  },
+  {
+    "code": "1440p",
+    "minimumWidth": 2540,
+    "minimumHeight": 1400
+  },
+  {
+    "code": "1080p",
+    "minimumWidth": 1800,
+    "minimumHeight": 1000
+  },
+  {
+    "code": "720p",
+    "minimumWidth": 1200,
+    "minimumHeight": 700
+  },
+  {
+    "code": "480p",
+    "minimumWidth": 640,
+    "minimumHeight": 480
+  },
+  {
+    "code": "SD",
+    "minimumWidth": 1,
+    "minimumHeight": 1
+  }
+] as const satisfies readonly { code: MediaResolutionTierCode; minimumWidth: number; minimumHeight: number }[];
+
 // source: CollectionRuleFieldPolicy
 export const COLLECTION_RULE_TARGET_KINDS = {
   "title": [
@@ -1106,6 +1145,19 @@ export const MEDIA_PROCESS_KIND = {
 } as const;
 
 export type MediaProcessKindCode = (typeof MEDIA_PROCESS_KIND)[keyof typeof MEDIA_PROCESS_KIND];
+
+// source: enum MediaResolutionTier
+export const MEDIA_RESOLUTION_TIER = {
+  uhd8K: "8K",
+  uhd4K: "4K",
+  qhd: "1440p",
+  fullHd: "1080p",
+  hd: "720p",
+  standard480: "480p",
+  sd: "SD",
+} as const;
+
+export type MediaResolutionTierCode = (typeof MEDIA_RESOLUTION_TIER)[keyof typeof MEDIA_RESOLUTION_TIER];
 
 // source: enum MetadataPatchField
 export const METADATA_PATCH_FIELD = {

@@ -83,6 +83,17 @@ function card(id: string, kind: EntityKind, title: string, capabilities: EntityC
 }
 
 describe("entity grid helpers", () => {
+  it("matches cropped video by the same resolution displayed on its thumbnail", () => {
+    const cropped = entityCardToThumbnailCard(card("cropped", ENTITY_KIND.movie, "Cropped", [
+      { ...technical(), width: 1920, height: 808 },
+    ]));
+    const options = buildCapabilityFilterOptions([cropped], ENTITY_KIND.movie);
+    expect(applyEntityGridState([cropped], gridState({ filterIds: ["technical:resolution:1080p"] }), options))
+      .toHaveLength(1);
+    expect(applyEntityGridState([cropped], gridState({ filterIds: ["technical:resolution:720p"] }), options))
+      .toHaveLength(0);
+  });
+
   const cards = [
     entityCardToThumbnailCard(card("1", "video", "Safe Video", [flags(false), rating(5), image(), technical()])),
     entityCardToThumbnailCard(card("2", "gallery", "Hidden Gallery", [flags(true), rating(2), image(), stats()])),

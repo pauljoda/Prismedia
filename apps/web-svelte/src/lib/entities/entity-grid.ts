@@ -1,5 +1,6 @@
 import {
   ACQUISITION_STATUS,
+  MEDIA_RESOLUTION_TIERS,
   ENTITY_LIST_SORT,
   THUMBNAIL_HOVER_KIND,
   THUMBNAIL_META_ICON,
@@ -16,7 +17,7 @@ import {
   type EntityCapabilityKind,
 } from "$lib/api/capabilities";
 import { numberValue, formatDurationString, durationToSeconds, normalized } from "$lib/utils/format";
-import { resolutionBadge } from "$lib/player/media-badges";
+import { resolutionBadge } from "$lib/entities/media-resolution";
 import type { EntityCard, EntityCapability, ListEntitiesParams } from "$lib/api/generated/model";
 import type { EntityThumbnail } from "$lib/api/generated/model";
 import { isDeletableMediaKind } from "$lib/api/entity-deletion";
@@ -757,7 +758,7 @@ export function buildCapabilityFilterOptions(
   }
 
   if (hasTechnical) {
-    for (const resolution of ["4K", "1080p", "720p", "480p"]) {
+    for (const { code: resolution } of MEDIA_RESOLUTION_TIERS) {
       addUniqueOption(options, {
         id: `technical:resolution:${resolution}`,
         label: resolution,
@@ -890,13 +891,11 @@ export function buildCapabilityFilterOptions(
           }
           if (capability.width && capability.height) addOption(options, { id: "technical:dimensions", label: "Has dimensions", capabilityKind: CAPABILITY_KIND.technical, value: "dimensions" });
           {
-            const height = numberValue(capability.height);
-            if (height) {
-              if (height >= 2160) addOption(options, { id: "technical:resolution:4K", label: "4K", capabilityKind: CAPABILITY_KIND.technical, value: "resolution:4K" });
-              if (height >= 1080 && height < 2160) addOption(options, { id: "technical:resolution:1080p", label: "1080p", capabilityKind: CAPABILITY_KIND.technical, value: "resolution:1080p" });
-              if (height >= 720 && height < 1080) addOption(options, { id: "technical:resolution:720p", label: "720p", capabilityKind: CAPABILITY_KIND.technical, value: "resolution:720p" });
-              if (height > 0 && height < 720) addOption(options, { id: "technical:resolution:480p", label: "480p", capabilityKind: CAPABILITY_KIND.technical, value: "resolution:480p" });
-            }
+            const resolution = resolutionBadge(capability.width, capability.height);
+            if (resolution) addOption(options, {
+              id: `technical:resolution:${resolution}`, label: resolution,
+              capabilityKind: CAPABILITY_KIND.technical, value: `resolution:${resolution}`,
+            });
           }
           if (capability.codec) addOption(options, { id: `technical:codec:${capability.codec}`, label: `Codec: ${capability.codec}`, capabilityKind: CAPABILITY_KIND.technical, value: `codec:${capability.codec}` });
           break;
@@ -1042,13 +1041,8 @@ function entityMatchesFilter(capabilities: EntityCapability[], filter: EntityGri
       }
       if (filter.value === "dimensions") return Boolean(technical.width && technical.height);
       if (filter.value?.startsWith("resolution:")) {
-        const height = numberValue(technical.height);
-        if (!height) return false;
         const resolution = filter.value.slice("resolution:".length);
-        if (resolution === "4K") return height >= 2160;
-        if (resolution === "1080p") return height >= 1080 && height < 2160;
-        if (resolution === "720p") return height >= 720 && height < 1080;
-        if (resolution === "480p") return height > 0 && height < 720;
+        return resolutionBadge(technical.width, technical.height) === resolution;
       }
       if (filter.value?.startsWith("codec:")) return normalized(technical.codec) === normalized(filter.value.slice("codec:".length));
       return true;

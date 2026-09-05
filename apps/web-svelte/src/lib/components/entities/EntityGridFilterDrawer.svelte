@@ -1,6 +1,7 @@
 <script lang="ts">
   import { ToggleButton } from "@prismedia/ui-svelte";
   import { CalendarRange } from "@lucide/svelte";
+  import { MEDIA_RESOLUTION_TIERS } from "$lib/api/generated/codes";
   import { TextInput,  cn  } from "@prismedia/ui-svelte";
   import {
     CAPABILITY_KIND,
@@ -92,7 +93,7 @@
   const REFERENCE_FILTER_IDS = ["taxonomy:referenced", "taxonomy:orphaned"];
   const AVAILABILITY_FILTER_IDS = AVAILABILITY_FILTER_DEFS.map((definition) => definition.id);
 
-  const resolutions = ["4K", "1080p", "720p", "480p"];
+  const resolutions = MEDIA_RESOLUTION_TIERS.map(tier => tier.code);
   const durationChoices = [
     { id: "lt300", label: "< 5 min" },
     { id: "300-900", label: "5-15 min" },

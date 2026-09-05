@@ -13,6 +13,16 @@ namespace Prismedia.Api.Tests;
 /// </summary>
 public sealed partial class GeneratedCodesParityTests {
     [Fact]
+    public void ResolutionThresholdsMatchTheGeneratedClientInPriorityOrder() {
+        var source = File.ReadAllText(RepoPath(GeneratedCodesPath));
+        var match = Regex.Match(source, @"export const MEDIA_RESOLUTION_TIERS = (\[[\s\S]*?\]) as const");
+        Assert.True(match.Success, "Regenerate source-resolution thresholds from the dev API.");
+        var actual = JsonSerializer.Deserialize<MediaResolutionManifestEntry[]>(match.Groups[1].Value,
+            new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+        Assert.Equal(CodesManifest.Build().MediaResolutionTiers, actual);
+    }
+
+    [Fact]
     public void CollectionRuleTargetKindsMatchTheGeneratedClient() {
         var source = File.ReadAllText(RepoPath(GeneratedCodesPath));
         var match = Regex.Match(source, @"export const COLLECTION_RULE_TARGET_KINDS = (\{[\s\S]*?\}) as const satisfies");
