@@ -197,6 +197,10 @@ shared class-merging utility so ordinary layout overrides replace them correctly
 - Acquisition status labels and icons come from the shared lifecycle presentation.
   Keep pending, transfer, and import stages distinct. Attention labels name the
   decision, such as Choose release or Review import, rather than a generic Action.
+- Entity headers summarize dates with one labeled release milestone or a meaningful
+  lifespan, broadcast, or career range. Additional dates belong in the shared
+  "More dates" popover with aligned labels and values, not a long inline inventory.
+  This is presentation only; stored dates and acquisition timing remain unchanged.
 - Detail sections attach behind the header's lower corners, with square top
   edges and rounded bottom edges. The shared header owns the overlap depth.
 - Artwork editing lives in a shared disclosure with labeled poster/header

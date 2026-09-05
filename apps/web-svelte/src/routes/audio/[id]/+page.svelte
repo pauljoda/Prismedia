@@ -308,9 +308,7 @@
       {#snippet heroMeta()}
         {#if artistLink}
           <a href={resolveEntityHref(ENTITY_KIND.musicArtist, artistLink.id)} class="meta-item is-studio">{artistLink.title}</a>
-        {/if}
-        {#if studio}
-          {#if artistLink}<span class="meta-sep"></span>{/if}
+        {:else if studio}
           <a href={resolveEntityHref(ENTITY_KIND.studio, studio.id)} class="meta-item is-studio">{studio.title}</a>
         {/if}
         <EntityDetailHeroDates {dates} leadingSeparator={Boolean(artistLink || studio)} />

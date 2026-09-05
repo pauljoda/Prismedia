@@ -1050,7 +1050,7 @@
     gap: 0.15rem 0;
     min-width: 0;
     max-width: 100%;
-    font-size: 0.82rem;
+    font-size: var(--text-label);
     color: var(--detail-text-muted);
     overflow-wrap: anywhere;
   }
@@ -1059,7 +1059,7 @@
     min-width: 0;
     max-width: 100%;
     white-space: normal;
-    font-size: 0.82rem;
+    font-size: var(--text-label);
     overflow-wrap: anywhere;
     word-break: normal;
   }
@@ -1072,10 +1072,8 @@
   }
 
   .meta-row :global(.meta-item .meta-item-label) {
-    margin-right: 0.3rem;
-    font-size: 0.72rem;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
+    margin-right: var(--spacing);
+    font-size: var(--text-caption);
     color: var(--detail-text-muted);
   }
 
