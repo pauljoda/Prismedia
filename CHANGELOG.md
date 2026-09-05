@@ -36,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Editing an owned title's quality profile now reopens eligible upgrade searches on the next monitor pass without inheriting the previous profile's retry cooldown.
 - HD-DVD releases now use their HD disc quality tier instead of passing profiles restricted to standard DVD.
 - Download polling and interrupted-request recovery continue when an unrelated recurring maintenance check fails.
 - Automatic video upgrades now compare measured runtimes and preserve both files for review when a replacement is substantially shorter than the owned copy.

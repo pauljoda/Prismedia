@@ -307,7 +307,11 @@ public sealed partial class EfMonitorStore(
         BookSourceTier CutoffSourceTier,
         BookFormatTier CutoffFormatTier,
         string? CutoffQuality,
-        int? CutoffFormatScore);
+        int? CutoffFormatScore,
+        DateTimeOffset UpdatedAt);
+
+    private static bool ProfileChangedSinceSearch(UpgradePolicy? policy, DateTimeOffset? lastSearchedAt) =>
+        policy is not null && lastSearchedAt is { } last && policy.UpdatedAt > last;
 
     /// <summary>Batch-resolved profiles with the same explicit-choice and kind fallback as release scoring.</summary>
     private sealed class UpgradePolicies(IReadOnlyList<UpgradePolicy> profiles) {
@@ -341,7 +345,7 @@ public sealed partial class EfMonitorStore(
     private async Task<UpgradePolicies> ResolveUpgradePoliciesAsync(CancellationToken cancellationToken) {
         var profiles = await db.BookAcquisitionProfiles.AsNoTracking()
             .OrderByDescending(p => p.IsDefault).ThenBy(p => p.CreatedAt)
-            .Select(p => new UpgradePolicy(p.Id, p.Kind, p.UpgradeUntilCutoff, p.AutoPick, p.CutoffSourceTier, p.CutoffFormatTier, p.CutoffQuality, p.CutoffFormatScore))
+            .Select(p => new UpgradePolicy(p.Id, p.Kind, p.UpgradeUntilCutoff, p.AutoPick, p.CutoffSourceTier, p.CutoffFormatTier, p.CutoffQuality, p.CutoffFormatScore, p.UpdatedAt))
             .ToArrayAsync(cancellationToken);
         return new UpgradePolicies(profiles);
     }
@@ -627,9 +631,15 @@ public sealed partial class EfMonitorStore(
                     }
 
                     // Exponential backoff keyed on consecutive barren searches, capped, so an item that never
-                    // gets a better release does not hammer indexers.
+                    // gets a better release does not hammer indexers. A changed governing profile is a new
+                    // search opportunity; its first search should not inherit the old policy's failures.
+                    var profileChanged = ProfileChangedSinceSearch(policy, monitor.LastSearchedAt);
+                    if (profileChanged && monitor.BarrenSearches != 0) {
+                        monitor.BarrenSearches = 0;
+                        changed = true;
+                    }
                     var backoff = BackoffFor(interval, monitor.BarrenSearches);
-                    if (forceImmediate || monitor.LastSearchedAt is null || now - monitor.LastSearchedAt >= backoff) {
+                    if (forceImmediate || profileChanged || monitor.LastSearchedAt is null || now - monitor.LastSearchedAt >= backoff) {
                         due.Add(new DueMonitor(
                             monitor.Id, acquisitionId, monitor.Title,
                             IsUpgrade: true, EntityId: monitor.EntityId,
@@ -830,7 +840,8 @@ public sealed partial class EfMonitorStore(
                 AcquisitionStatus.Imported,
                 row.LastSearchedAt,
                 // Cutoff-unmet re-searches are upgrade searches, governed by the barren-search backoff.
-                NextSearchAt: row.LastSearchedAt is { } last ? last + BackoffFor(WantedBaseInterval, row.BarrenSearches) : null,
+                NextSearchAt: row.LastSearchedAt is { } last && !ProfileChangedSinceSearch(policy, last)
+                    ? last + BackoffFor(WantedBaseInterval, row.BarrenSearches) : null,
                 verdict.OwnedQuality,
                 verdict.CutoffQuality,
                 row.BarrenSearches,

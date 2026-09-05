@@ -13,6 +13,51 @@ namespace Prismedia.Infrastructure.Tests;
 /// off), the one-in-flight interlock, durable intent across repeated misses, and success/failure counters.
 /// </summary>
 public sealed class EfMonitorStoreUpgradeTests {
+    [Fact]
+    public async Task EditedProfileReopensAnUpgradeBeforeTheOldBarrenSearchCooldown() {
+        await using var db = CreateContext();
+        var store = await SeedMediaUpgradeMonitorAsync(db, EntityKind.Movie,
+            VideoQuality.Bluray720p.ToCode(), VideoQuality.Bluray1080p.ToCode(),
+            attachEntity: true, subtitleStatusKnown: true, hasSubtitles: true);
+        var monitor = await db.Monitors.SingleAsync();
+        monitor.LastSearchedAt = DateTimeOffset.UtcNow.AddMinutes(-1);
+        monitor.BarrenSearches = 5;
+        var profile = await db.BookAcquisitionProfiles.SingleAsync();
+        profile.CreatedAt = DateTimeOffset.UtcNow.AddDays(-10);
+        profile.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync();
+
+        Assert.Null(Assert.Single((await store.ListCutoffUnmetAsync(1, 20, EntityKind.Movie, CancellationToken.None)).Items).NextSearchAt);
+        Assert.True(Assert.Single(await store.ListDueMonitorsAsync(360, CancellationToken.None)).IsUpgrade);
+        Assert.Equal(0, monitor.BarrenSearches);
+
+        await store.MarkSearchedAsync(monitor.Id, CancellationToken.None);
+        Assert.Empty(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task EditingAnotherProfileDoesNotResetAnAssignedProfilesCooldown() {
+        await using var db = CreateContext();
+        var store = await SeedMediaUpgradeMonitorAsync(db, EntityKind.Movie,
+            VideoQuality.Bluray720p.ToCode(), VideoQuality.Bluray1080p.ToCode(),
+            attachEntity: true, subtitleStatusKnown: true, hasSubtitles: true);
+        var profile = await db.BookAcquisitionProfiles.SingleAsync();
+        profile.CreatedAt = profile.UpdatedAt = DateTimeOffset.UtcNow.AddDays(-10);
+        (await db.Acquisitions.SingleAsync()).ProfileId = profile.Id;
+        var monitor = await db.Monitors.SingleAsync();
+        monitor.LastSearchedAt = DateTimeOffset.UtcNow.AddMinutes(-1);
+        monitor.BarrenSearches = 5;
+        db.BookAcquisitionProfiles.Add(new BookAcquisitionProfileRow {
+            Id = Guid.NewGuid(), Kind = EntityKind.Movie, DisplayName = "Other HD", AutoPick = true,
+            UpgradeUntilCutoff = true, CutoffQuality = VideoQuality.Bluray2160p.ToCode(),
+            TargetLibraryRootId = Guid.NewGuid(), CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        Assert.Empty(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+        Assert.Equal(5, monitor.BarrenSearches);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
