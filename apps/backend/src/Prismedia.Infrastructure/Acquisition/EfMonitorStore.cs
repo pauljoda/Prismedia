@@ -524,17 +524,12 @@ public sealed partial class EfMonitorStore(
             // still-in-flight child (anything not terminal/barren) means an upgrade is genuinely in progress —
             // leave it alone (this is the one-upgrade-at-a-time interlock that protects the in-flight grab).
             if (monitor.UpgradeChildAcquisitionId is not null) {
-                // Downloaded/Importing are included so a child orphaned by a crash between marking it Downloaded
-                // and enqueuing the replace job (or before the replace job ran) can't freeze the interlock
-                // forever — the sweep reclaims it as a barren attempt. In the normal path the replace handler
-                // clears the interlock first, so the sweep never sees a set interlock for a resolved child; if a
-                // sweep does race a live replace job, the swap still completes correctly (it keys off the child,
-                // not the interlock) — at worst the attempt is miscounted as barren, which is benign.
+                // Downloaded is a durable completion ticket recovered by the job scheduler; Importing
+                // belongs to the replacement job and its retries. Neither is a failed attempt. Keep the
+                // interlock until replacement resolves, including across the completion enqueue crash window.
                 var childSettled = row.ChildStatus is null
                         or AcquisitionStatus.Failed
                         or AcquisitionStatus.Cancelled
-                        or AcquisitionStatus.Downloaded
-                        or AcquisitionStatus.Importing
                     || (row.ChildStatus == AcquisitionStatus.AwaitingSelection && row.ChildAcceptedCount == 0);
                 if (childSettled) {
                     monitor.UpgradeChildAcquisitionId = null;

@@ -344,22 +344,25 @@ public sealed class EfMonitorStoreUpgradeTests {
         Assert.Equal(1, monitor.BarrenSearches);
     }
 
-    [Fact]
-    public async Task CrashOrphanedDownloadedChildReleasesTheInterlock() {
-        // The child reached Downloaded but the replace job was never enqueued/ran (a crash window). The sweep
-        // must reclaim the interlock so the monitor is not frozen forever, counting it as a barren attempt.
+    [Theory]
+    [InlineData(AcquisitionStatus.Downloaded)]
+    [InlineData(AcquisitionStatus.Importing)]
+    public async Task CompletedTransferKeepsItsUpgradeInterlockUntilReplacementResolves(AcquisitionStatus status) {
         await using var db = CreateContext();
         var store = await SeedUpgradeMonitorAsync(db, owned: new(BookSourceTier.Web, BookFormatTier.Reflowable), cutoff: new(BookSourceTier.Retail, BookFormatTier.Reflowable));
         var monitorId = (await store.ListAsync(CancellationToken.None))[0].Id;
         var childId = await store.CreateUpgradeChildAsync(monitorId, CancellationToken.None);
-        (await db.Acquisitions.FirstAsync(a => a.Id == childId)).Status = AcquisitionStatus.Downloaded;
+        (await db.Acquisitions.FirstAsync(a => a.Id == childId)).Status = status;
         await db.SaveChangesAsync();
 
-        await store.ListDueMonitorsAsync(360, CancellationToken.None);
-
-        var monitor = await db.Monitors.AsNoTracking().FirstAsync(m => m.Id == monitorId);
-        Assert.Null(monitor.UpgradeChildAcquisitionId); // interlock reclaimed — not stuck
-        Assert.Equal(1, monitor.BarrenSearches);
+        // Completion-ticket recovery and durable job retries own unfinished replacements. A sweep
+        // must not permit another grab while those already-downloaded bytes can still be applied.
+        Assert.Empty(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+        Assert.Empty(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+        Assert.Null(await store.CreateUpgradeChildAsync(monitorId, CancellationToken.None));
+        var monitor = await db.Monitors.AsNoTracking().SingleAsync(m => m.Id == monitorId);
+        Assert.Equal(childId, monitor.UpgradeChildAcquisitionId);
+        Assert.Equal(0, monitor.BarrenSearches);
     }
 
     [Fact]
