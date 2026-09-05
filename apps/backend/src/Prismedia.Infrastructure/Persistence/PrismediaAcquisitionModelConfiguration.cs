@@ -311,6 +311,7 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.InfoHash).HasColumnName("info_hash").HasMaxLength(128);
             entity.Property(row => row.InfoUrl).HasColumnName("info_url").HasMaxLength(4096);
             entity.Property(row => row.PublishedAt).HasColumnName("published_at");
+            entity.Property(row => row.Language).HasColumnName("language");
             entity.Property(row => row.Score).HasColumnName("score");
             entity.Property(row => row.Accepted).HasColumnName("accepted");
             entity.Property(row => row.RejectionsJson).HasColumnName("rejections_json").HasColumnType("jsonb");

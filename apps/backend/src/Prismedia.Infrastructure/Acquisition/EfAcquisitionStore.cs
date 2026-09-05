@@ -920,6 +920,7 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
                 InfoHash = release.InfoHash,
                 InfoUrl = release.InfoUrl,
                 PublishedAt = release.PublishedAt,
+                Language = release.Language,
                 Score = scored.Score,
                 Accepted = scored.Accepted,
                 RejectionsJson = JsonSerializer.Serialize(scored.Rejections.Select(reason => reason.ToCode()).ToArray()),
@@ -934,7 +935,8 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             .FirstOrDefaultAsync(candidate => candidate.Id == candidateId && candidate.AcquisitionId == acquisitionId, cancellationToken);
         return row is null
             ? null
-            : new AcquisitionQueueCandidate(row.Id, row.Title, row.IndexerName, row.DownloadUrl, row.MagnetUrl, row.InfoHash, row.InfoUrl, row.Protocol, row.IndexerConfigId);
+            : new AcquisitionQueueCandidate(row.Id, row.Title, row.IndexerName, row.DownloadUrl, row.MagnetUrl, row.InfoHash, row.InfoUrl,
+                row.Protocol, row.IndexerConfigId, row.SizeBytes, row.Seeders, row.Peers, row.Language, row.PublishedAt);
     }
 
     public async Task<IReadOnlyList<AcquisitionCandidateRef>> ListAcceptedCandidatesAsync(Guid acquisitionId, CancellationToken cancellationToken) {

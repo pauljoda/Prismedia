@@ -50,57 +50,13 @@ public sealed class AcquisitionSearchRunner(
             return new AcquisitionSearchOutcome([], []);
         }
 
-        var rules = (await profiles.GetRulesAsync(input.ProfileId, input.Kind, cancellationToken)) with {
-            TargetTitle = input.WorkTitle,
-            TargetEpisodeTitle = input.EpisodeNumber is null ? null : input.Title,
-            TargetAbsoluteEpisodeNumber = input.EpisodeNumber is null ? null : input.AbsoluteEpisodeNumber,
-            TargetYear = input.Year,
-            TargetAuthor = input.Author,
-            BookRendition = input.BookRendition
-        };
-
-        // The proper/repack policy is an app-global fact set per search (never by a profile), the same way
-        // the protocol and TV-unit facts ride the rules: it feeds the pure scoring/upgrade functions so a
-        // proper ranks (and upgrades) exactly as the setting dictates.
-        var properPolicy = (await settings.GetProperDownloadSettingsAsync(cancellationToken)).Policy;
-        rules = rules with { ProperPolicy = properPolicy };
-
-        if (upgradeOwnedQuality is { } owned) {
-            // IsUpgradeSearch is the single truth for whether the upgrade gates apply; a non-null record means
-            // this is an upgrade search regardless of which vocabulary axis carries the owned quality. The book
-            // gate reads OwnedQuality (default = Floor when the child is a media kind, harmlessly ignored) and
-            // the media gate reads OwnedMediaQuality (+ OwnedMediaRevision for the same-quality proper case).
-            rules = rules with {
-                IsUpgradeSearch = true,
-                OwnedQuality = owned.BookRank ?? default,
-                OwnedMediaQuality = owned.MediaQualityCode,
-                OwnedMediaRevision = owned.MediaRevision,
-                OwnedFormatScore = owned.FormatScore,
-                OwnedHasSubtitles = owned.HasSubtitles
-            };
-        }
-
-        // Results are actionable only when an enabled download client speaks their protocol. An empty
-        // capability set therefore produces no results rather than advertising releases that cannot be
-        // queued. A sole protocol also overrides any stale preference automatically.
         var protocols = (await downloadClients.GetEnabledProtocolsAsync(cancellationToken)).Distinct().ToArray();
-        if (protocols.Length == 0) {
-            return new AcquisitionSearchOutcome([], []);
-        }
-        rules = rules with { AllowedProtocols = protocols };
+        if (protocols.Length == 0) return new AcquisitionSearchOutcome([], []);
+        var rules = AcquisitionRuleContext.Apply(
+            await profiles.GetRulesAsync(input.ProfileId, input.Kind, cancellationToken), input, upgradeOwnedQuality,
+            (await settings.GetProperDownloadSettingsAsync(cancellationToken)).Policy, protocols);
         var preferredProtocol = await AcquisitionProtocolPreference.ResolveAsync(downloadClients, settings, cancellationToken)
             ?? protocols[0];
-
-        // TV unit context rides the rules the same way the upgrade fields do: set per search from the
-        // acquisition, never by a profile, so the unit-match specification knows what is sought.
-        if (input.SeasonNumber is not null) {
-            rules = rules with { SeasonNumber = input.SeasonNumber, EpisodeNumber = input.EpisodeNumber };
-        }
-
-        // Book/comic unit context, same pattern: the sought volume gates wrong-volume releases.
-        if (input.VolumeNumber is not null) {
-            rules = rules with { VolumeNumber = input.VolumeNumber };
-        }
 
         var blocklisted = await blocklist.GetIdentitiesAsync(cancellationToken);
         var excluded = payloadAdmission is null ? new HashSet<string>() : await payloadAdmission.GetExcludedAsync(input, cancellationToken);

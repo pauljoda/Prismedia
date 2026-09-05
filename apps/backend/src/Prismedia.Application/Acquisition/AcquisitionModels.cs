@@ -322,7 +322,12 @@ public sealed record AcquisitionQueueCandidate(
     string? InfoHash,
     string? InfoUrl,
     DownloadProtocol Protocol,
-    Guid? IndexerConfigId = null);
+    Guid? IndexerConfigId = null,
+    long SizeBytes = 0,
+    int? Seeders = null,
+    int? Peers = null,
+    string? Language = null,
+    DateTimeOffset? PublishedAt = null);
 
 /// <summary>
 /// The download client accepted an Add request but proved that it created no new item and could not

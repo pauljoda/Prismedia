@@ -36,6 +36,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Automatic grabs now recheck current profiles, request metadata, and owned quality before starting a new download, preserving indexer language and size evidence. Explicit manual picks and already-started downloader handoffs retain their existing behavior.
+
 - Movie imports now probe the primary video before placing files in the library and preserve unreadable payloads for review.
 
 - Invalid media-kind and other coded API values now return validation errors instead of internal server errors.

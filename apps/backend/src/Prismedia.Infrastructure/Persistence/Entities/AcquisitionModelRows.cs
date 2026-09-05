@@ -421,6 +421,8 @@ public sealed class ReleaseCandidateRow {
     public string? InfoHash { get; set; }
     public string? InfoUrl { get; set; }
     public DateTimeOffset? PublishedAt { get; set; }
+    /// <summary>Indexer-supplied language evidence, retained for current-profile validation at automatic grab time.</summary>
+    public string? Language { get; set; }
 
     /// <summary>Engine ranking score; higher is preferred among accepted candidates.</summary>
     public double Score { get; set; }

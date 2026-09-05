@@ -29,7 +29,8 @@ public sealed class AcquisitionQueueService(
     ILogger<AcquisitionQueueService> logger,
     VideoScanConcurrencyGate? scanGate = null,
     IJobGraphService? graphs = null,
-    TvPayloadAdmission? payloadAdmission = null) : IAcquisitionQueueService {
+    TvPayloadAdmission? payloadAdmission = null,
+    IAcquisitionCandidateValidator? candidateValidator = null) : IAcquisitionQueueService {
     /// <summary>Queues a chosen candidate: resolves a usable link (direct, magnet, or scraped from the info page) and hands it to a download client.</summary>
     public async Task<AcquisitionDetail?> QueueAsync(
         Guid acquisitionId,
@@ -76,7 +77,13 @@ public sealed class AcquisitionQueueService(
                 "This release is blocklisted from a previous failed attempt. Remove it from the blocklist to download it again.");
         }
 
-        if (!manualPick && payloadAdmission is not null
+        if (!manualPick && !IsAdding(existingAttempt) && candidateValidator is not null
+            && (await candidateValidator.ValidateAsync(acquisitionId, candidate, cancellationToken)).Count > 0) {
+            throw new AcquisitionConfigurationException(ApiProblemCodes.AcquisitionInvalid,
+                "This release no longer satisfies the current request or quality profile. Search again to review current matches.");
+        }
+
+        if (!manualPick && !IsAdding(existingAttempt) && payloadAdmission is not null
             && await acquisitions.GetSearchInputAsync(acquisitionId, cancellationToken) is { } input
             && (await payloadAdmission.GetExcludedAsync(input, cancellationToken)).Contains(
                 ReleaseIdentity.For(candidate.InfoHash, candidate.IndexerName, candidate.Title))) {

@@ -21,6 +21,26 @@ public sealed class AcquisitionServiceTests {
     private const string ClientItemId = "download-owned-by-recorded-client";
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FreshAutomaticGrabsRevalidateWhileExplicitManualPicksKeepTheirAuthority(bool manualPick) {
+        var harness = Harness(new AcquisitionTransferInfo(AcquisitionStatus.AwaitingSelection, null, null, null));
+        PrepareQueueCandidate(harness.Store);
+        var validator = new RejectingCandidateValidator();
+        var queue = QueueService(harness, new RecordingTransferAddCoordinator(), candidateValidator: validator);
+        if (manualPick) {
+            await queue.QueueAsync(AcquisitionId, CandidateId, CancellationToken.None, manualPick: true);
+            Assert.Equal(0, validator.Calls);
+            Assert.Equal(1, harness.Downloads.AddCount);
+        } else {
+            await Assert.ThrowsAsync<AcquisitionConfigurationException>(() => queue.QueueAsync(AcquisitionId, CandidateId, CancellationToken.None));
+            Assert.Equal(1, validator.Calls);
+            Assert.Equal(0, harness.Downloads.AddCount);
+            Assert.Equal(AcquisitionStatus.AwaitingSelection, harness.Store.Status);
+        }
+    }
+
+    [Theory]
     [InlineData(AcquisitionStatus.WaitingForRelease)]
     [InlineData(AcquisitionStatus.ManualSearchRequired)]
     public async Task ReleasedAcquisitionSchedulesAutomaticSearchOnce(AcquisitionStatus status) {
@@ -1093,12 +1113,14 @@ public sealed class AcquisitionServiceTests {
                 CancellationToken.None).GetAwaiter().GetResult()
         };
 
-        await QueueService(harness, transferAdds)
+        var validator = new RejectingCandidateValidator();
+        await QueueService(harness, transferAdds, candidateValidator: validator)
             .QueueAsync(AcquisitionId, CandidateId, CancellationToken.None);
 
         Assert.Equal(0, harness.Downloads.AddCount);
         Assert.Equal("original-client-item", harness.Store.TransferPointer?.ClientItemId);
         Assert.True(transferAdds.Lease.Committed);
+        Assert.Equal(0, validator.Calls);
     }
 
     [Fact]
@@ -1873,7 +1895,8 @@ public sealed class AcquisitionServiceTests {
         TestHarness harness,
         IAcquisitionTransferAddCoordinator transferAdds,
         IJobGraphService? graphs = null,
-        IDetachedDownloadCleanupStore? detachedCleanups = null) =>
+        IDetachedDownloadCleanupStore? detachedCleanups = null,
+        IAcquisitionCandidateValidator? candidateValidator = null) =>
         new(
             harness.Store,
             new ThrowingBlocklistStore(),
@@ -1887,7 +1910,16 @@ public sealed class AcquisitionServiceTests {
             detachedCleanups ?? new RecordingDetachedDownloadCleanupStore(),
             harness.History,
             NullLogger<AcquisitionQueueService>.Instance,
-            graphs: graphs);
+            graphs: graphs,
+            candidateValidator: candidateValidator);
+
+    private sealed class RejectingCandidateValidator : IAcquisitionCandidateValidator {
+        public int Calls { get; private set; }
+        public Task<IReadOnlyList<ReleaseRejectionReason>> ValidateAsync(Guid acquisitionId, AcquisitionQueueCandidate candidate, CancellationToken cancellationToken) {
+            Calls++;
+            return Task.FromResult<IReadOnlyList<ReleaseRejectionReason>>([ReleaseRejectionReason.QualityNotAllowed]);
+        }
+    }
 
     private sealed record TestHarness(
         AcquisitionService Service,
