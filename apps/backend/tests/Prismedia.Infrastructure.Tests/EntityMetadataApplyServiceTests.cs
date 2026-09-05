@@ -15,6 +15,47 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EntityMetadataApplyServiceTests {
     [Fact]
+    public async Task PositionEnrichmentRepairsMissingNumbersAndPreservesExistingOrdering() {
+        await using var db = CreateContext();
+        var entityId = Guid.NewGuid();
+        SeedEntity(db, entityId, EntityKind.VideoEpisode.ToCode(), "Existing episode");
+        db.EntityPositions.AddRange(
+            new EntityPositionRow { EntityId = entityId, Code = EntityPositionCodes.Episode, Value = 4 },
+            new EntityPositionRow { EntityId = entityId, Code = EntityPositionCodes.AbsoluteEpisode, Value = 54 });
+        await db.SaveChangesAsync();
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+
+        for (var attempt = 0; attempt < 2; attempt++) {
+            var result = await service.FillMissingPositionsAsync(entityId, EntityKind.VideoEpisode,
+                new Dictionary<string, int> { [EntityPositionCodes.Season] = 2, [EntityPositionCodes.Episode] = 99 },
+                CancellationToken.None);
+            Assert.Equal(EntityMetadataPatchResult.Applied, result);
+        }
+
+        Assert.Equal(2, (await db.EntityPositions.FindAsync([entityId, EntityPositionCodes.Season]))!.Value);
+        Assert.Equal(4, (await db.EntityPositions.FindAsync([entityId, EntityPositionCodes.Episode]))!.Value);
+        Assert.Equal(54, (await db.EntityPositions.FindAsync([entityId, EntityPositionCodes.AbsoluteEpisode]))!.Value);
+        Assert.Equal(4, (await db.Entities.FindAsync(entityId))!.SortOrder);
+        Assert.Equal(3, await db.EntityPositions.CountAsync());
+    }
+
+    [Fact]
+    public async Task PositionEnrichmentDoesNotMutateAnotherEntityKind() {
+        await using var db = CreateContext();
+        var entityId = Guid.NewGuid();
+        SeedEntity(db, entityId, EntityKind.VideoSeason.ToCode(), "Season");
+        await db.SaveChangesAsync();
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+
+        var result = await service.FillMissingPositionsAsync(entityId, EntityKind.VideoEpisode,
+            new Dictionary<string, int> { [EntityPositionCodes.Episode] = 4 }, CancellationToken.None);
+
+        Assert.Equal(EntityMetadataPatchResult.KindMismatch, result);
+        Assert.Empty(await db.EntityPositions.ToArrayAsync());
+        Assert.Null((await db.Entities.FindAsync(entityId))!.SortOrder);
+    }
+
+    [Fact]
     public async Task ApplyPatchHidesSharedCollectionFromNonOwnerMutation() {
         await using var db = CreateContext();
         var collectionId = Guid.NewGuid();

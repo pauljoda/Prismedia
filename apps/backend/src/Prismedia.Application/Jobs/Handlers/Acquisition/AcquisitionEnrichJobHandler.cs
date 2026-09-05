@@ -9,7 +9,7 @@ namespace Prismedia.Application.Jobs.Handlers;
 
 /// <summary>
 /// Enriches a request from its originating metadata plugin after the interactive commit: resolves the
-/// cover, fuller description, and dates by persistent work identity and, for structural acquisition units,
+/// cover, fuller description, dates, and missing positions by persistent work identity and, for structural acquisition units,
 /// materializes their child graph from the same provider response. Best-effort — a provider miss or error
 /// leaves held descriptive metadata untouched; a successful release-date miss records that the date-entry
 /// prompt is now appropriate while the request remains WaitingForRelease. A transient provider error remains retryable. Import still runs authoritative
@@ -24,7 +24,8 @@ public sealed class AcquisitionEnrichJobHandler(
     IEntityMetadataPatchService? entityMetadata = null,
     IMonitorStore? monitors = null,
     IAcquisitionReleaseTimingService? releaseTiming = null,
-    IAcquisitionRequestService? requests = null) : IJobHandler {
+    IAcquisitionRequestService? requests = null,
+    IEntityPositionEnricher? entityPositions = null) : IJobHandler {
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var payload = AcquisitionJobPayload.Parse(context.Job.PayloadJson);
         var import = await acquisitions.GetImportContextAsync(payload.AcquisitionId, cancellationToken);
@@ -75,6 +76,18 @@ public sealed class AcquisitionEnrichJobHandler(
                 enrichment.PosterUrl,
                 enrichment.Year,
                 cancellationToken);
+
+            if (import.EntityId is { } positionEntityId
+                && entityPositions is not null
+                && enrichment.Patch is { Positions.Count: > 0 } positionPatch) {
+                // Position repair precedes date publication: release-date changes can immediately queue
+                // search, which must see the repaired target rather than the original incomplete request.
+                await entityPositions.FillMissingPositionsAsync(
+                    positionEntityId,
+                    import.Kind,
+                    positionPatch.Positions,
+                    cancellationToken);
+            }
 
             if (import.EntityId is { } entityId
                 && entityMetadata is not null

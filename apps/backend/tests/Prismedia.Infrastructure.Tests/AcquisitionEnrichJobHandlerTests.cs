@@ -12,6 +12,7 @@ using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Acquisition;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
+using Prismedia.Infrastructure.Plugins;
 
 namespace Prismedia.Infrastructure.Tests;
 
@@ -21,6 +22,33 @@ namespace Prismedia.Infrastructure.Tests;
 /// returns nothing.
 /// </summary>
 public sealed class AcquisitionEnrichJobHandlerTests {
+    [Fact]
+    public async Task LeafEnrichmentRepairsMissingEpisodeIdentityWithoutRecreatingTheRequest() {
+        await using var db = CreateContext();
+        var entityId = Guid.NewGuid();
+        var id = await SeedAsync(db, "tmdbepisode", "123:2:4", null, entityId);
+        var row = await db.Acquisitions.SingleAsync(row => row.Id == id);
+        row.Kind = EntityKind.VideoEpisode;
+        db.Entities.Add(new EntityRow {
+            Id = entityId, KindCode = EntityKind.VideoEpisode.ToCode(), Title = "Existing wanted episode", IsWanted = true
+        });
+        await db.SaveChangesAsync();
+        var patch = EmptyPatch() with {
+            Positions = new Dictionary<string, int> {
+                [EntityPositionCodes.Season] = 2, [EntityPositionCodes.Episode] = 4
+            }
+        };
+
+        await RunAsync(db, new FakeEnricher(new RequestMetadataEnrichment(null, null, null, patch)), id);
+
+        Assert.Equal(4, (await db.Entities.FindAsync(entityId))!.SortOrder);
+        var input = await AcquisitionTestFactory.Store(db).GetSearchInputAsync(id, CancellationToken.None);
+        Assert.Equal(2, input!.SeasonNumber);
+        Assert.Equal(4, input.EpisodeNumber);
+        Assert.Single(await db.Entities.ToArrayAsync());
+        Assert.Single(await db.Acquisitions.ToArrayAsync());
+    }
+
     [Fact]
     public async Task FillsGapsFromTheProviderLookup() {
         await using var db = CreateContext();
@@ -236,7 +264,8 @@ public sealed class AcquisitionEnrichJobHandlerTests {
             NullLogger<AcquisitionEnrichJobHandler>.Instance,
             metadata,
             monitors,
-            releaseTiming);
+            releaseTiming,
+            entityPositions: new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath())));
         var job = new JobRunSnapshot(
             Guid.NewGuid(), JobType.AcquisitionEnrich, JobRunStatus.Running, 0, null,
             AcquisitionJobPayload.Serialize(id), null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null);

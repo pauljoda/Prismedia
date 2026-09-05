@@ -196,6 +196,8 @@ public static class DependencyInjection {
             settings: provider.GetRequiredService<Prismedia.Application.Settings.SettingsService>()));
         services.AddScoped<IEntityMetadataPatchService>(provider =>
             provider.GetRequiredService<EntityMetadataApplyService>());
+        services.AddScoped<IEntityPositionEnricher>(provider =>
+            provider.GetRequiredService<EntityMetadataApplyService>());
         services.AddScoped<IEntityManagementService, EntityManagementService>();
         services.AddScoped<IMediaEntityDeletionService, MediaEntityDeletionService>();
         services.AddScoped<IIdentifyTargetEligibilityService, EfIdentifyTargetEligibilityService>();
