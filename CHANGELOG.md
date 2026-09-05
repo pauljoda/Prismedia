@@ -36,6 +36,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Video upgrades now inspect and replace the main file when a sample companion is present, while multiple possible feature files still require review.
+
 - Held automatic TV imports now retry retained files when corrected mapping inputs can fill library gaps. Unchanged holds do not loop across restarts; incomplete transfers, explicit manual reviews, and paused monitoring remain protected.
 - Editing an owned title's quality profile now reopens eligible upgrade searches on the next monitor pass without inheriting the previous profile's retry cooldown.
 - HD-DVD releases now use their HD disc quality tier instead of passing profiles restricted to standard DVD.

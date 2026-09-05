@@ -74,9 +74,11 @@ public sealed class OwnedFileReplacerTests : IDisposable {
         var download = Dir("download");
         var owned = WriteFile(library, "Movie (2020).mkv", "old 720p copy");
         WriteFile(download, "Movie.2020.1080p.BluRay.mkv", "new 1080p copy, larger");
+        var sample = WriteFile(download, "Movie.2020.sample.mkv", "sample bytes");
 
         // Video passes a pass-through format tier; the kind selects the video file finder and swap rules.
         var result = await _replacer.ReplaceAsync(library, download, BookFormatTier.Unknown, CancellationToken.None, EntityKind.Movie);
+        Assert.Equal("sample bytes", await File.ReadAllTextAsync(sample));
 
         Assert.True(result.Succeeded);
         Assert.Equal(owned, result.SwappedPath);

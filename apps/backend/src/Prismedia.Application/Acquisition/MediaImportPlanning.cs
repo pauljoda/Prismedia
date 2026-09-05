@@ -83,6 +83,9 @@ public static partial class MovieImportPlanBuilder {
     [GeneratedRegex(@"(?:^|[\s._\-\[(])sample(?:$|[\s._\-\])])", RegexOptions.IgnoreCase)]
     private static partial Regex SampleTokenRegex();
 
+    /// <summary>Whether a video's basename explicitly labels it as a sample companion.</summary>
+    public static bool IsSampleFile(string path) => SampleTokenRegex().IsMatch(Path.GetFileNameWithoutExtension(path));
+
     /// <summary>
     /// Plans the import of a downloaded movie release given the acquisition's metadata and the profile's
     /// naming template (<paramref name="template"/> defaults to <see cref="MediaNamingTemplates.MovieDefault"/>;
@@ -104,7 +107,7 @@ public static partial class MovieImportPlanBuilder {
         // Samples are decoys, not features — but if the release contains ONLY sample-named videos,
         // trust the payload over the naming.
         var candidates = videos
-            .Where(file => !SampleTokenRegex().IsMatch(Path.GetFileNameWithoutExtension(file.RelativePath)))
+            .Where(file => !IsSampleFile(file.RelativePath))
             .ToArray();
         if (candidates.Length == 0) {
             candidates = videos;

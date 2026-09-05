@@ -75,12 +75,12 @@ public sealed class OwnedFileReplacer(
         var extensions = isVideo ? MovieImportPlanBuilder.VideoExtensions : ImportPlanBuilder.SupportedExtensions;
         var fileNoun = isVideo ? "video" : "book";
 
-        var owned = FindSingleFile(ownedFolder, extensions);
+        var owned = isVideo ? VideoUpgradeFileSelection.Find(ownedFolder) : FindSingleFile(ownedFolder, extensions);
         if (owned is null) {
             return (OwnedFileReplaceResult.Failed($"Could not find a single owned {fileNoun} file to replace."));
         }
 
-        var incoming = FindSingleFile(newContentPath, extensions);
+        var incoming = isVideo ? VideoUpgradeFileSelection.Find(newContentPath) : FindSingleFile(newContentPath, extensions);
         if (incoming is null) {
             return (OwnedFileReplaceResult.Failed($"The upgrade download has no single importable {fileNoun} file."));
         }

@@ -16,6 +16,7 @@ public sealed class MediaUpgradePayloadInspectorTests {
             var candidateFile = Path.Combine(candidate.FullName, "movie.mkv");
             await File.WriteAllBytesAsync(ownedFile, [1]);
             await File.WriteAllBytesAsync(candidateFile, [1]);
+            await File.WriteAllBytesAsync(Path.Combine(candidate.FullName, "movie.sample.mkv"), [1]);
             await File.WriteAllTextAsync(Path.Combine(candidate.FullName, "movie.eng.srt"), "1\n00:00:00,000 --> 00:00:01,000\nHello");
             var probe = new FakeMediaProbe(
                 new Dictionary<string, VideoProbeData> {

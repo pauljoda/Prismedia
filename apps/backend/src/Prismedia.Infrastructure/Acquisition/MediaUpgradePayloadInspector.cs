@@ -17,8 +17,8 @@ public sealed class MediaUpgradePayloadInspector(
         string candidateContentPath,
         CancellationToken cancellationToken) {
         try {
-            var ownedFile = FindSingleVideo(ownedContentPath);
-            var candidateFile = FindSingleVideo(candidateContentPath);
+            var ownedFile = VideoUpgradeFileSelection.Find(ownedContentPath);
+            var candidateFile = VideoUpgradeFileSelection.Find(candidateContentPath);
             if (ownedFile is null || candidateFile is null) {
                 return null;
             }
@@ -68,19 +68,4 @@ public sealed class MediaUpgradePayloadInspector(
         };
     }
 
-    private static string? FindSingleVideo(string path) {
-        if (File.Exists(path)) {
-            return MovieImportPlanBuilder.VideoExtensions.Contains(Path.GetExtension(path)) ? path : null;
-        }
-
-        if (!Directory.Exists(path)) {
-            return null;
-        }
-
-        var videos = Directory.EnumerateFiles(path, "*", SearchOption.AllDirectories)
-            .Where(file => MovieImportPlanBuilder.VideoExtensions.Contains(Path.GetExtension(file)))
-            .Take(2)
-            .ToArray();
-        return videos.Length == 1 ? videos[0] : null;
-    }
 }
