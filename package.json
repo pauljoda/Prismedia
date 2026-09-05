@@ -1,6 +1,6 @@
 {
   "name": "prismedia",
-  "version": "3.6.32",
+  "version": "3.6.33",
   "private": true,
   "packageManager": "pnpm@10.30.3",
   "scripts": {

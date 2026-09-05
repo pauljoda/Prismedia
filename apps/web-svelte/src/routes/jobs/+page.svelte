@@ -11,7 +11,7 @@
     Loader2,
     RefreshCw,
   } from "@lucide/svelte";
-  import { Button, StatusLed, cn } from "@prismedia/ui-svelte";
+  import { Button, Disclosure, StatusLed, cn } from "@prismedia/ui-svelte";
   import {
     cancelJobGraph,
     clearJobFailures,
@@ -378,11 +378,7 @@
     </section>
   {/if}
 
-  <details class="surface-panel overflow-hidden">
-    <summary class="cursor-pointer px-4 py-3 text-sm font-medium text-text-muted">
-      Flat node history for diagnosis · {dashboard?.recentJobs.length ?? 0} recent nodes
-    </summary>
-    <div class="border-t border-border-subtle p-4">
+  <Disclosure title="Diagnostic job history" icon={Clock} count={dashboard?.recentJobs.length ?? 0}>
       {#if visibleFailedGroups.length > 0}
         <div class="mb-3 flex items-center justify-between gap-3">
           <div class="flex items-center gap-2">
@@ -430,8 +426,7 @@
           <p class="px-3 py-4 text-center text-sm text-text-disabled">No node history is available.</p>
         {/if}
       </div>
-    </div>
-  </details>
+  </Disclosure>
 </div>
 
 <style>

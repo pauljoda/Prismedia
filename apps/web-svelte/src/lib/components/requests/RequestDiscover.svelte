@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { AlertTriangle, Loader2, PackageSearch, PlugZap } from "@lucide/svelte";
-  import { Button, ChoiceGroup } from "@prismedia/ui-svelte";
+  import { Alert, Button, ChoiceGroup } from "@prismedia/ui-svelte";
+  import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { ENTITY_KIND, type RequestMediaKindCode } from "$lib/api/generated/codes";
@@ -372,33 +373,23 @@
             Loading discovery sources…
           </div>
         {:else if providersError}
-          <div class="flex items-start gap-2 rounded-xs border border-error/20 bg-error-muted px-3 py-2 text-[0.78rem] text-error-text" role="alert">
-            <AlertTriangle class="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            {providersError}
-          </div>
+          <Alert.Root variant="destructive">
+            <AlertTriangle />
+            <Alert.Description>{providersError}</Alert.Description>
+          </Alert.Root>
         {:else if eligibleProviders.length === 0}
-          <div class="empty-rack-slot flex items-start gap-2 p-4 text-[0.78rem] text-text-muted" role="status">
-            <PlugZap class="mt-0.5 h-4 w-4 shrink-0 text-text-disabled" />
-            <p>
-              No installed provider can search and review
-              {selectedKindInfo?.plural.toLowerCase() ?? "this kind"}.
-              Enable a compatible provider in Plugins first.
-            </p>
-          </div>
+          <StatePlaceholder icon={PlugZap} title="No compatible provider"
+            description={`Enable a provider in Plugins that supports ${selectedKindInfo?.plural.toLowerCase() ?? "this kind"}.`} />
         {/if}
       {/if}
     </div>
   </section>
 
   {#if searchError}
-    <div class="surface-panel border-l-2 border-error px-4 py-2.5 text-sm text-error-text" role="alert">
-      {searchError}
-    </div>
+    <Alert.Root variant="destructive"><AlertTriangle /><Alert.Description>{searchError}</Alert.Description></Alert.Root>
   {/if}
   {#each providerWarnings as warning (warning)}
-    <div class="surface-panel border-l-2 border-warning px-4 py-2.5 text-sm text-warning-text" role="status">
-      {warning}
-    </div>
+    <Alert.Root role="status"><AlertTriangle /><Alert.Description>{warning}</Alert.Description></Alert.Root>
   {/each}
 
   {#if selectedKind && activeProvider}

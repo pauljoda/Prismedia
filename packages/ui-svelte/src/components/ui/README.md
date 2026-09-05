@@ -1,10 +1,12 @@
 # Shared component bases
 
-This directory contains source copied with shadcn-svelte CLI 1.6.0 from the official registry, then themed for Prismedia. The foundation includes Button, Input, InputGroup, Textarea, Badge, Card, Field, Label, Tabs, Collapsible, Select, Switch, Separator, DropdownMenu, Popover, ToggleGroup, Slider, Command, Dialog, Sheet, Checkbox, RadioGroup, Progress, Alert, Empty, Skeleton, and Table. Toggle is also exposed as ToggleButton. Bits UI provides behavior for interactive composites; simple controls retain native HTML semantics. The lockfile records the tested runtime version.
+This directory contains source copied with shadcn-svelte CLI 1.6 from the official registry, then themed for Prismedia. The foundation includes Button, Input, InputGroup, Textarea, Badge, Card, Field, Label, Tabs, Collapsible, Select, Switch, Separator, DropdownMenu, Popover, ToggleGroup, Slider, Command, Dialog, AlertDialog, Sheet, Checkbox, RadioGroup, Progress, Alert, Empty, Skeleton, and Table. Toggle is also exposed as ToggleButton. Bits UI provides behavior for interactive composites; simple controls retain native HTML semantics. The lockfile records the tested runtime version.
 
 Application code imports these bases from `@prismedia/ui-svelte`. Select and Toggle retain their existing adapter APIs; DropdownMenu, Popover, ToggleGroup, and Command expose namespaced composition parts. `SearchableSelect` composes Command and Popover for local single-choice catalogs. Domain fetching, settings persistence, entity relationships, and validation belong outside this directory.
 
 ## Building on the foundation
+
+- Use AlertDialog for confirmations, through the app's ConfirmDialog wrapper. Its async action controls dismissal, errors remain available for retry, and Cancel receives initial focus. Keep general forms and editors in Dialog.
 
 - Button, Badge, TextInput, SearchInput, and Panel keep their established import paths as thin adapters. Button maps legacy `primary`/`danger` and `md` names to the base variants. Badge retains quiet default and semantic status variants. Panel uses Card without imposing new internal spacing on existing consumers.
 - Compose new panels from Card. Existing Panel consumers retain their page composition. Settings keeps its list of destinations, colored section icons, and established preference layouts; media artwork grids retain their purpose-built layout.

@@ -26,6 +26,7 @@ export * as Item from "./components/ui/item";
 export * as DialogBase from "./components/ui/dialog";
 export * as Sheet from "./components/ui/sheet";
 export * as Alert from "./components/ui/alert";
+export * as AlertDialog from "./components/ui/alert-dialog";
 export * as Empty from "./components/ui/empty";
 export * as Table from "./components/ui/table";
 export * as RadioGroup from "./components/ui/radio-group";

@@ -18,7 +18,7 @@
     PlayCircle,
     History,
   } from "@lucide/svelte";
-  import { buttonVariants, cn } from "@prismedia/ui-svelte";
+  import { buttonVariants, cn, Skeleton } from "@prismedia/ui-svelte";
   import type { EntityCard } from "$lib/api/entities";
   import { fetchEntityShelfCached } from "$lib/entities/shelf-cache";
   import { entityCardToThumbnailCard } from "$lib/entities/entity-grid";
@@ -230,8 +230,8 @@
     <div class="flex gap-3 overflow-hidden pt-1 pb-5 px-3">
       {#each Array(7) as _, i (i)}
         <div class="flex-none" style:width="clamp(140px, 18vw, 220px)">
-          <div class="aspect-video rounded-lg bg-surface-2 animate-pulse"></div>
-          <div class="mt-2 h-3 w-3/4 rounded-sm bg-surface-2 animate-pulse"></div>
+          <Skeleton class="aspect-video rounded-lg" />
+          <Skeleton class="mt-2 h-3 w-3/4" />
         </div>
       {/each}
     </div>

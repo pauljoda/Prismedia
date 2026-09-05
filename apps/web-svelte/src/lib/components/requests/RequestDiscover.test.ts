@@ -197,7 +197,7 @@ describe("RequestDiscover", () => {
 
     await fireEvent.click(screen.getByRole("button", { name: "Books" }));
 
-    expect(await screen.findByText(/No installed provider can search and review books/i)).toBeInTheDocument();
+    expect(await screen.findByText("No compatible provider")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Source:/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Search" })).not.toBeInTheDocument();
   });
