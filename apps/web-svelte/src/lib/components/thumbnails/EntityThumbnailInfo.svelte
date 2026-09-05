@@ -140,7 +140,6 @@
       min-height: var(--spacing-badge-compact);
       padding-inline: var(--spacing);
       gap: var(--spacing);
-      font-size: clamp(var(--text-caption-compact), 8cqi, var(--text-caption));
     }
   }
 
@@ -148,7 +147,7 @@
     .thumbnail-caption { gap: 0.1rem; padding: 0 0.2rem; }
     h3 { font-size: var(--text-caption); }
     .subtitle { display: none; }
-    .chips :global(.chip) { padding: 0; border: 0; }
+    /* Drop decoration before shrinking the shared badge text or losing its outline. */
     .chips :global(.chip svg) { display: none; }
   }
 </style>

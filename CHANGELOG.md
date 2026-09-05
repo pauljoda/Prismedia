@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Thumbnail metadata keeps the shared readable badge text size and separate chip outlines even at dense grid sizes. Narrow cards hide decorative icons instead of shrinking the text.
 - Collection rules display numeric units and allow duration, file-size, and audio units to be changed without rewriting saved thresholds. Compatible comparison changes retain entered values, empty numeric drafts stay incomplete, and the existing negated-all logic is labeled "Not all" accurately.
 - Captioned Entity grids now reduce their column count in narrow spaces before squeezing metadata into unreadable fragments. The density preference is preserved, and artwork-only media walls remain unrestricted.
 - Collection previews now show a clearly counted sample of full Entity thumbnails instead of library controls that only filtered the sample. Resolution and gallery-type rules use removable choices, and preview loading, failures, and empty results are distinct. Changing rules cancels obsolete previews.

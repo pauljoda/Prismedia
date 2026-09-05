@@ -3,6 +3,7 @@ import { tick } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ACQUISITION_STATUS, CAPABILITY_KIND, THUMBNAIL_META_ICON } from "$lib/api/generated/codes";
 import EntityThumbnail from "./EntityThumbnail.svelte";
+import captionSource from "./EntityThumbnailInfo.svelte?raw";
 import {
   comicInstallmentCard,
   episodeCard,
@@ -149,6 +150,14 @@ describe("EntityThumbnail presentation", () => {
     for (const chip of chips) {
       expect(chip).toHaveClass("max-w-full", "min-w-0", "shrink");
       expect(chip.querySelector(".chip-label")).toHaveClass("truncate");
+    }
+  });
+
+  it("retains the shared badge font size and outline in compact captions", () => {
+    const chipOverrides = [...captionSource.matchAll(/\.chips :global\(\.chip\)\s*\{([^}]+)\}/g)];
+    expect(chipOverrides.length).toBeGreaterThan(0);
+    for (const [, declarations] of chipOverrides) {
+      expect(declarations).not.toMatch(/font-size\s*:|border\s*:/);
     }
   });
 
