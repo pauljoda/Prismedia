@@ -3,6 +3,7 @@ using Prismedia.Application.Requests;
 using Prismedia.Application.Settings;
 using Prismedia.Contracts.Entities;
 using Prismedia.Domain.Entities;
+using Prismedia.Domain.Media;
 
 namespace Prismedia.Api.Codegen;
 
@@ -165,6 +166,7 @@ public sealed record RequestKindManifestEntry(
 /// <param name="ProblemCodes">Machine-readable API problem codes.</param>
 /// <param name="ThumbnailMetaIcons">Stable compact-thumbnail metadata icon codes.</param>
 /// <param name="EntityStatCodes">Prismedia-owned persisted statistic codes.</param>
+/// <param name="CollectionRuleTargetKinds">Supported Entity kinds for each collection-rule field.</param>
 public sealed record CodesManifest(
     IReadOnlyDictionary<string, IReadOnlyList<CodeEntry>> Enums,
     IReadOnlyDictionary<string, CodeFamilyManifestEntry> CodeFamilies,
@@ -175,7 +177,8 @@ public sealed record CodesManifest(
     IReadOnlyList<ConstantEntry> SettingKeys,
     IReadOnlyList<ConstantEntry> ProblemCodes,
     IReadOnlyList<ConstantEntry> ThumbnailMetaIcons,
-    IReadOnlyList<ConstantEntry> EntityStatCodes) {
+    IReadOnlyList<ConstantEntry> EntityStatCodes,
+    IReadOnlyDictionary<string, IReadOnlyList<string>> CollectionRuleTargetKinds) {
     /// <summary>Reflects the current backend registries into a fresh manifest.</summary>
     public static CodesManifest Build() {
         var enums = BuildEnums();
@@ -192,7 +195,10 @@ public sealed record CodesManifest(
                 .ToArray(),
             ReflectConstants(typeof(Contracts.System.ApiProblemCodes)),
             ReflectConstants(typeof(EntityThumbnailMetaIcons)),
-            ReflectConstants(typeof(EntityStatCodes)));
+            ReflectConstants(typeof(EntityStatCodes)),
+            Enum.GetValues<CollectionRuleField>().ToDictionary(field => field.ToCode(),
+                field => (IReadOnlyList<string>)CollectionRuleFieldPolicy.SupportedKinds(field)
+                    .Select(kind => kind.ToCode()).Order(StringComparer.Ordinal).ToArray()));
     }
 
     private static IReadOnlyDictionary<string, IReadOnlyList<CodeEntry>> BuildEnums() {

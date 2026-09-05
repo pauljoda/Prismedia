@@ -26,6 +26,25 @@ function baseProps(overrides: Partial<ConditionBuilderProps> = {}): ConditionBui
 }
 
 describe("ConditionBuilder", () => {
+  it("starts video rules without a hidden standalone-video restriction", async () => {
+    const onChange = vi.fn();
+    render(ConditionBuilder, { props: baseProps({ onChange }) });
+    await fireEvent.keyDown(screen.getByRole("button", { name: "Rule field" }), { key: "ArrowDown" });
+    await fireEvent.pointerUp(screen.getByRole("option", { name: "Resolution" }));
+    expect(onChange.mock.lastCall?.[0].children[0]).toMatchObject({ field: FIELD.resolution, entityTypes: [] });
+  });
+
+  it("offers all supported video kinds without rewriting an existing explicit restriction", async () => {
+    const rule = initialRule();
+    rule.children = [{ type: "condition", field: FIELD.resolution, operator: OP.in, value: [], entityTypes: [ENTITY_KIND.video] }];
+    const onChange = vi.fn();
+    render(ConditionBuilder, { props: baseProps({ rule, onChange }) });
+    expect(onChange).not.toHaveBeenCalled();
+    await fireEvent.click(screen.getByRole("button", { name: "Add entity types" }));
+    expect(screen.getByRole("option", { name: "Movie" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Video Episode" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Image" })).not.toBeInTheDocument();
+  });
   it.each([FIELD.resolution, FIELD.galleryType])("uses removable choices for %s instead of comma-separated input", async field => {
     const definition = COLLECTION_RULE_FIELDS.find(item => item.field === field)!;
     const [first, second] = definition.enumValues!;

@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using System.Text.Json;
 using Prismedia.Api.Codegen;
 
 namespace Prismedia.Api.Tests;
@@ -11,6 +12,17 @@ namespace Prismedia.Api.Tests;
 /// letting push CI catch a backend codec or definition change that was not regenerated.
 /// </summary>
 public sealed partial class GeneratedCodesParityTests {
+    [Fact]
+    public void CollectionRuleTargetKindsMatchTheGeneratedClient() {
+        var source = File.ReadAllText(RepoPath(GeneratedCodesPath));
+        var match = Regex.Match(source, @"export const COLLECTION_RULE_TARGET_KINDS = (\{[\s\S]*?\}) as const satisfies");
+        Assert.True(match.Success, "Regenerate collection rule target kinds from the dev API.");
+        var actual = JsonSerializer.Deserialize<Dictionary<string, string[]>>(match.Groups[1].Value)!;
+        var expected = CodesManifest.Build().CollectionRuleTargetKinds;
+        Assert.Equal(expected.Keys.Order(), actual.Keys.Order());
+        foreach (var (field, kinds) in expected) Assert.Equal(kinds.Order(), actual[field].Order());
+    }
+
     private const string GeneratedCodesPath = "apps/web-svelte/src/lib/api/generated/codes.ts";
 
     [GeneratedRegex(

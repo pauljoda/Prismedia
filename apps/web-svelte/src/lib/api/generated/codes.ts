@@ -2,6 +2,223 @@
 // Do not edit by hand. Run `pnpm api:generate` (with the dev API running) to refresh.
 /* eslint-disable */
 
+// source: CollectionRuleFieldPolicy
+export const COLLECTION_RULE_TARGET_KINDS = {
+  "title": [
+    "audio-library",
+    "audio-track",
+    "book",
+    "comic-installment",
+    "comic-series",
+    "gallery",
+    "image",
+    "movie",
+    "music-artist",
+    "video",
+    "video-episode",
+    "video-series"
+  ],
+  "rating": [
+    "audio-library",
+    "audio-track",
+    "book",
+    "comic-installment",
+    "comic-series",
+    "gallery",
+    "image",
+    "movie",
+    "music-artist",
+    "video",
+    "video-episode",
+    "video-series"
+  ],
+  "date": [
+    "audio-library",
+    "audio-track",
+    "book",
+    "comic-installment",
+    "comic-series",
+    "gallery",
+    "image",
+    "movie",
+    "music-artist",
+    "video",
+    "video-episode",
+    "video-series"
+  ],
+  "organized": [
+    "audio-library",
+    "audio-track",
+    "book",
+    "comic-installment",
+    "comic-series",
+    "gallery",
+    "image",
+    "movie",
+    "music-artist",
+    "video",
+    "video-episode",
+    "video-series"
+  ],
+  "isNsfw": [
+    "audio-library",
+    "audio-track",
+    "book",
+    "comic-installment",
+    "comic-series",
+    "gallery",
+    "image",
+    "movie",
+    "music-artist",
+    "video",
+    "video-episode",
+    "video-series"
+  ],
+  "tags": [
+    "audio-library",
+    "audio-track",
+    "book",
+    "comic-installment",
+    "comic-series",
+    "gallery",
+    "image",
+    "movie",
+    "music-artist",
+    "video",
+    "video-episode",
+    "video-series"
+  ],
+  "performers": [
+    "audio-library",
+    "audio-track",
+    "book",
+    "comic-installment",
+    "comic-series",
+    "gallery",
+    "image",
+    "movie",
+    "music-artist",
+    "video",
+    "video-episode",
+    "video-series"
+  ],
+  "studio": [
+    "audio-library",
+    "audio-track",
+    "book",
+    "comic-installment",
+    "comic-series",
+    "gallery",
+    "image",
+    "movie",
+    "music-artist",
+    "video",
+    "video-episode",
+    "video-series"
+  ],
+  "libraryRootId": [
+    "audio-library",
+    "audio-track",
+    "book",
+    "comic-installment",
+    "comic-series",
+    "gallery",
+    "image",
+    "movie",
+    "music-artist",
+    "video",
+    "video-episode",
+    "video-series"
+  ],
+  "fileSize": [
+    "audio-track",
+    "image",
+    "movie",
+    "video",
+    "video-episode"
+  ],
+  "duration": [
+    "audio-track",
+    "movie",
+    "video",
+    "video-episode"
+  ],
+  "height": [
+    "image"
+  ],
+  "width": [
+    "image"
+  ],
+  "codec": [
+    "movie",
+    "video",
+    "video-episode"
+  ],
+  "bitRate": [
+    "audio-track"
+  ],
+  "bit_rate": [
+    "audio-track"
+  ],
+  "channels": [
+    "audio-track"
+  ],
+  "sampleRate": [
+    "audio-track"
+  ],
+  "sample_rate": [
+    "audio-track"
+  ],
+  "accessCount": [
+    "audio-track",
+    "movie",
+    "video",
+    "video-episode"
+  ],
+  "skipCount": [
+    "audio-track",
+    "movie",
+    "video",
+    "video-episode"
+  ],
+  "resolution": [
+    "movie",
+    "video",
+    "video-episode"
+  ],
+  "videoSeriesId": [
+    "video-episode"
+  ],
+  "galleryType": [
+    "gallery"
+  ],
+  "imageCount": [
+    "gallery"
+  ],
+  "format": [
+    "image"
+  ],
+  "createdAt": [
+    "audio-library",
+    "audio-track",
+    "book",
+    "comic-installment",
+    "comic-series",
+    "gallery",
+    "image",
+    "movie",
+    "music-artist",
+    "video",
+    "video-episode",
+    "video-series"
+  ],
+  "interactive": [
+    "movie",
+    "video",
+    "video-episode"
+  ]
+} as const satisfies Record<CollectionRuleFieldCode, readonly EntityKindCode[]>;
+
 // source: enum AcquisitionCheckpointProtocol
 export const ACQUISITION_CHECKPOINT_PROTOCOL = {
   placement: "placement",

@@ -3,7 +3,10 @@ import type {
   CollectionCoverModeCode,
   CollectionItemSourceCode,
   CollectionModeCode,
+  CollectionRuleFieldCode,
+  CollectionRuleOperatorCode,
 } from "$lib/api/generated/codes";
+import { COLLECTION_RULE_FIELD as FIELD, COLLECTION_RULE_OPERATOR as OP, COLLECTION_RULE_TARGET_KINDS, GALLERY_TYPE } from "$lib/api/generated/codes";
 import { ENTITY_KIND, ENTITY_KIND_DEFINITIONS } from "$lib/entities/entity-codes";
 
 export type CollectionMode = CollectionModeCode;
@@ -23,22 +26,7 @@ export function isCollectionEntityType(kind: string): kind is CollectionEntityTy
   return (COLLECTION_ENTITY_TYPES as readonly string[]).includes(kind);
 }
 
-export type CollectionOperator =
-  | "equals"
-  | "not_equals"
-  | "contains"
-  | "not_contains"
-  | "greater_than"
-  | "less_than"
-  | "greater_equal"
-  | "less_equal"
-  | "between"
-  | "in"
-  | "not_in"
-  | "is_null"
-  | "is_not_null"
-  | "is_true"
-  | "is_false";
+export type CollectionOperator = CollectionRuleOperatorCode;
 
 export type CollectionConditionValue = string | number | boolean | string[] | [number, number] | [string, string] | null;
 
@@ -59,7 +47,7 @@ export interface CollectionRuleGroup {
 export type CollectionRuleNode = CollectionRuleCondition | CollectionRuleGroup;
 
 export interface CollectionRuleFieldDef {
-  field: string;
+  field: CollectionRuleFieldCode;
   label: string;
   fieldType: "text" | "number" | "boolean" | "date" | "relation" | "enum" | "library";
   entityTypes: CollectionEntityType[];
@@ -67,34 +55,40 @@ export interface CollectionRuleFieldDef {
   operators: CollectionOperator[];
 }
 
-export const COLLECTION_RULE_FIELDS: CollectionRuleFieldDef[] = [
-  { field: "title", label: "Title", fieldType: "text", entityTypes: [], operators: ["contains", "not_contains", "equals", "not_equals"] },
-  { field: "rating", label: "Rating", fieldType: "number", entityTypes: [], operators: ["equals", "not_equals", "greater_than", "less_than", "greater_equal", "less_equal", "between", "is_null", "is_not_null"] },
-  { field: "date", label: "Date", fieldType: "date", entityTypes: [], operators: ["equals", "not_equals", "greater_than", "less_than", "between", "is_null", "is_not_null"] },
-  { field: "organized", label: "Organized", fieldType: "boolean", entityTypes: [], operators: ["is_true", "is_false"] },
-  { field: "isNsfw", label: "NSFW", fieldType: "boolean", entityTypes: [], operators: ["is_true", "is_false"] },
-  { field: "tags", label: "Tags", fieldType: "relation", entityTypes: [], operators: ["in", "not_in"] },
-  { field: "performers", label: "Performers", fieldType: "relation", entityTypes: [], operators: ["in", "not_in"] },
-  { field: "studio", label: "Studio", fieldType: "relation", entityTypes: [], operators: ["in", "not_in", "is_null", "is_not_null"] },
-  { field: "libraryRootId", label: "Library", fieldType: "library", entityTypes: [], operators: ["equals", "not_equals"] },
-  { field: "createdAt", label: "Added Date", fieldType: "date", entityTypes: [], operators: ["greater_than", "less_than", "between"] },
-  { field: "fileSize", label: "File Size", fieldType: "number", entityTypes: [ENTITY_KIND.video, ENTITY_KIND.image, ENTITY_KIND.audioTrack], operators: ["greater_than", "less_than", "between"] },
-  { field: "duration", label: "Duration", fieldType: "number", entityTypes: [ENTITY_KIND.video, ENTITY_KIND.audioTrack], operators: ["greater_than", "less_than", "between", "is_null", "is_not_null"] },
-  { field: "resolution", label: "Resolution", fieldType: "enum", entityTypes: [ENTITY_KIND.video], operators: ["in", "not_in"], enumValues: ["4K", "1080p", "720p", "480p"] },
-  { field: "codec", label: "Codec", fieldType: "text", entityTypes: [ENTITY_KIND.video], operators: ["equals", "not_equals", "in", "not_in"] },
-  { field: "interactive", label: "Interactive", fieldType: "boolean", entityTypes: [ENTITY_KIND.video], operators: ["is_true", "is_false"] },
-  { field: "accessCount", label: "Play Count", fieldType: "number", entityTypes: [ENTITY_KIND.video, ENTITY_KIND.audioTrack], operators: ["equals", "greater_than", "less_than", "greater_equal", "less_equal", "between"] },
-  { field: "skipCount", label: "Skip Count", fieldType: "number", entityTypes: [ENTITY_KIND.video, ENTITY_KIND.audioTrack], operators: ["equals", "greater_than", "less_than", "greater_equal", "less_equal", "between"] },
-  { field: "videoSeriesId", label: "Series", fieldType: "relation", entityTypes: [ENTITY_KIND.video], operators: ["equals", "in", "not_in"] },
-  { field: "galleryType", label: "Gallery Type", fieldType: "enum", entityTypes: [ENTITY_KIND.gallery], operators: ["equals", "not_equals", "in"], enumValues: ["folder", "zip", "virtual"] },
-  { field: "imageCount", label: "Image Count", fieldType: "number", entityTypes: [ENTITY_KIND.gallery], operators: ["greater_than", "less_than", "greater_equal", "less_equal", "between"] },
-  { field: "width", label: "Width", fieldType: "number", entityTypes: [ENTITY_KIND.image], operators: ["greater_than", "less_than", "between"] },
-  { field: "height", label: "Height", fieldType: "number", entityTypes: [ENTITY_KIND.image], operators: ["greater_than", "less_than", "between"] },
-  { field: "format", label: "Format", fieldType: "text", entityTypes: [ENTITY_KIND.image], operators: ["equals", "not_equals", "in", "not_in"] },
-  { field: "bitRate", label: "Bit Rate", fieldType: "number", entityTypes: [ENTITY_KIND.audioTrack], operators: ["greater_than", "less_than", "between"] },
-  { field: "sampleRate", label: "Sample Rate", fieldType: "number", entityTypes: [ENTITY_KIND.audioTrack], operators: ["equals", "greater_than", "less_than", "between"] },
-  { field: "channels", label: "Channels", fieldType: "number", entityTypes: [ENTITY_KIND.audioTrack], operators: ["equals", "greater_than", "less_than"] },
+const fieldDefinitions: Omit<CollectionRuleFieldDef, "entityTypes">[] = [
+  { field: FIELD.title, label: "Title", fieldType: "text", operators: [OP.contains, OP.notContains, OP.equals, OP.notEquals] },
+  { field: FIELD.rating, label: "Rating", fieldType: "number", operators: [OP.equals, OP.notEquals, OP.greaterThan, OP.lessThan, OP.greaterEqual, OP.lessEqual, OP.between, OP.isNull, OP.isNotNull] },
+  { field: FIELD.date, label: "Date", fieldType: "date", operators: [OP.equals, OP.notEquals, OP.greaterThan, OP.lessThan, OP.between, OP.isNull, OP.isNotNull] },
+  { field: FIELD.organized, label: "Organized", fieldType: "boolean", operators: [OP.isTrue, OP.isFalse] },
+  { field: FIELD.isNsfw, label: "NSFW", fieldType: "boolean", operators: [OP.isTrue, OP.isFalse] },
+  { field: FIELD.tags, label: "Tags", fieldType: "relation", operators: [OP.in, OP.notIn] },
+  { field: FIELD.performers, label: "Performers", fieldType: "relation", operators: [OP.in, OP.notIn] },
+  { field: FIELD.studio, label: "Studio", fieldType: "relation", operators: [OP.in, OP.notIn, OP.isNull, OP.isNotNull] },
+  { field: FIELD.libraryRootId, label: "Library", fieldType: "library", operators: [OP.equals, OP.notEquals] },
+  { field: FIELD.createdAt, label: "Added Date", fieldType: "date", operators: [OP.greaterThan, OP.lessThan, OP.between] },
+  { field: FIELD.fileSize, label: "File Size", fieldType: "number", operators: [OP.greaterThan, OP.lessThan, OP.between] },
+  { field: FIELD.duration, label: "Duration", fieldType: "number", operators: [OP.greaterThan, OP.lessThan, OP.between, OP.isNull, OP.isNotNull] },
+  { field: FIELD.resolution, label: "Resolution", fieldType: "enum", operators: [OP.in, OP.notIn], enumValues: ["4K", "1080p", "720p", "480p"] },
+  { field: FIELD.codec, label: "Codec", fieldType: "text", operators: [OP.equals, OP.notEquals, OP.in, OP.notIn] },
+  { field: FIELD.interactive, label: "Interactive", fieldType: "boolean", operators: [OP.isTrue, OP.isFalse] },
+  { field: FIELD.accessCount, label: "Play Count", fieldType: "number", operators: [OP.equals, OP.greaterThan, OP.lessThan, OP.greaterEqual, OP.lessEqual, OP.between] },
+  { field: FIELD.skipCount, label: "Skip Count", fieldType: "number", operators: [OP.equals, OP.greaterThan, OP.lessThan, OP.greaterEqual, OP.lessEqual, OP.between] },
+  { field: FIELD.videoSeriesId, label: "Series", fieldType: "relation", operators: [OP.equals, OP.in, OP.notIn] },
+  { field: FIELD.galleryType, label: "Gallery Type", fieldType: "enum", operators: [OP.equals, OP.notEquals, OP.in], enumValues: [GALLERY_TYPE.folder, GALLERY_TYPE.zip, GALLERY_TYPE.virtual] },
+  { field: FIELD.imageCount, label: "Image Count", fieldType: "number", operators: [OP.greaterThan, OP.lessThan, OP.greaterEqual, OP.lessEqual, OP.between] },
+  { field: FIELD.width, label: "Width", fieldType: "number", operators: [OP.greaterThan, OP.lessThan, OP.between] },
+  { field: FIELD.height, label: "Height", fieldType: "number", operators: [OP.greaterThan, OP.lessThan, OP.between] },
+  { field: FIELD.format, label: "Format", fieldType: "text", operators: [OP.equals, OP.notEquals, OP.in, OP.notIn] },
+  { field: FIELD.bitRate, label: "Bit Rate", fieldType: "number", operators: [OP.greaterThan, OP.lessThan, OP.between] },
+  { field: FIELD.sampleRate, label: "Sample Rate", fieldType: "number", operators: [OP.equals, OP.greaterThan, OP.lessThan, OP.between] },
+  { field: FIELD.channels, label: "Channels", fieldType: "number", operators: [OP.equals, OP.greaterThan, OP.lessThan] },
 ];
+
+/** Field applicability is generated from the same policy used by the rule engine. */
+export const COLLECTION_RULE_FIELDS: CollectionRuleFieldDef[] = fieldDefinitions.map(field => ({
+  ...field,
+  entityTypes: COLLECTION_RULE_TARGET_KINDS[field.field].filter(isCollectionEntityType),
+}));
 
 export const EMPTY_COLLECTION_RULE: CollectionRuleGroup = {
   type: "group",

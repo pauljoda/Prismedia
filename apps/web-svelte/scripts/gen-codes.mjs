@@ -46,6 +46,11 @@ async function main() {
   const manifest = await response.json();
 
   const sections = [];
+  if (!manifest.collectionRuleTargetKinds) throw new Error("Manifest is missing collection rule target kinds");
+  sections.push(
+    `// source: CollectionRuleFieldPolicy\n` +
+    `export const COLLECTION_RULE_TARGET_KINDS = ${JSON.stringify(manifest.collectionRuleTargetKinds, null, 2)} as const satisfies Record<CollectionRuleFieldCode, readonly EntityKindCode[]>;\n`,
+  );
 
   const usedConstNames = new Set();
   const usedTypeNames = new Set();

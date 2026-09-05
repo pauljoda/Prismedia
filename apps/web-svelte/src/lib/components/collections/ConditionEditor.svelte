@@ -60,7 +60,7 @@
     if (!next) return;
     typeQuery = "";
     valueQuery = "";
-    onChange({ ...condition, field: next.field, entityTypes: next.entityTypes,
+    onChange({ ...condition, field: next.field, entityTypes: [],
       operator: next.operators[0], value: defaultConditionValue(next, next.operators[0]) });
   }
 

@@ -29,44 +29,6 @@ public sealed class CollectionRuleEngine(
     private static readonly IEntityContainmentPolicy CollectionPolicy =
         EntityKindRegistry.Get<CollectionEntityKindDefinition>();
 
-    private static readonly IReadOnlySet<string> PlayableVideoKinds = EntityKindRegistry.All
-        .Where(definition => definition is IPlayableVideoKindDefinition)
-        .Select(definition => definition.Code)
-        .ToHashSet(StringComparer.Ordinal);
-
-    private static readonly IReadOnlySet<string> EpisodicPlayableVideoKinds = EntityKindRegistry.All
-        .OfType<IPlayableVideoKindDefinition>()
-        .Where(definition => definition.IsEpisodic)
-        .Select(definition => EntityKindRegistry.ToCode(definition.Kind))
-        .ToHashSet(StringComparer.Ordinal);
-
-    private static readonly IReadOnlyDictionary<CollectionRuleField, IReadOnlySet<string>> FieldTargetKinds =
-        new Dictionary<CollectionRuleField, IReadOnlySet<string>> {
-        [CollectionRuleField.FileSize] = Kinds(PlayableVideoKinds, EntityKind.Image, EntityKind.AudioTrack),
-        [CollectionRuleField.Duration] = Kinds(PlayableVideoKinds, EntityKind.AudioTrack),
-        [CollectionRuleField.Height] = Kinds(EntityKind.Image),
-        [CollectionRuleField.Width] = Kinds(EntityKind.Image),
-        [CollectionRuleField.Codec] = PlayableVideoKinds,
-        [CollectionRuleField.BitRate] = Kinds(EntityKind.AudioTrack),
-        [CollectionRuleField.BitRateLegacy] = Kinds(EntityKind.AudioTrack),
-        [CollectionRuleField.Channels] = Kinds(EntityKind.AudioTrack),
-        [CollectionRuleField.SampleRate] = Kinds(EntityKind.AudioTrack),
-        [CollectionRuleField.SampleRateLegacy] = Kinds(EntityKind.AudioTrack),
-        [CollectionRuleField.AccessCount] = Kinds(PlayableVideoKinds, EntityKind.AudioTrack),
-        [CollectionRuleField.SkipCount] = Kinds(PlayableVideoKinds, EntityKind.AudioTrack),
-        [CollectionRuleField.Resolution] = PlayableVideoKinds,
-        [CollectionRuleField.VideoSeriesId] = EpisodicPlayableVideoKinds,
-        [CollectionRuleField.LibraryRootId] = Kinds(CollectionPolicy.ContainableKinds
-            .Select(EntityKindRegistry.Describe)
-            .Where(definition => definition.LibraryVisibility.Mode != EntityLibraryVisibilityMode.Unscoped)
-            .Select(definition => definition.Code)
-            .ToArray()),
-        [CollectionRuleField.GalleryType] = Kinds(EntityKind.Gallery),
-        [CollectionRuleField.ImageCount] = Kinds(EntityKind.Gallery),
-        [CollectionRuleField.Format] = Kinds(EntityKind.Image),
-        [CollectionRuleField.Interactive] = PlayableVideoKinds,
-    };
-
     public async Task<IReadOnlyList<CollectionRuleMatch>> EvaluateAsync(
         string ruleTreeJson,
         Guid userId,
@@ -237,22 +199,10 @@ public sealed class CollectionRuleEngine(
         entityTypes.Any(entityType => KindEquals(entityType, kindCode));
 
     private static bool FieldAppliesToKind(CollectionRuleField field, string kindCode) =>
-        !FieldTargetKinds.TryGetValue(field, out var kinds) || kinds.Contains(kindCode);
+        kindCode.TryDecodeAs<EntityKind>(out var kind) && CollectionRuleFieldPolicy.SupportedKinds(field).Contains(kind);
 
     private static bool KindEquals(string actual, string expected) =>
         actual.Equals(expected, StringComparison.OrdinalIgnoreCase);
-
-    private static IReadOnlySet<string> Kinds(params EntityKind[] kinds) =>
-        new HashSet<string>(kinds.Select(EntityKindRegistry.ToCode), StringComparer.Ordinal);
-
-    private static IReadOnlySet<string> Kinds(IReadOnlySet<string> initialKinds, params EntityKind[] kinds) {
-        var kindCodes = new HashSet<string>(initialKinds, StringComparer.Ordinal);
-        kindCodes.UnionWith(kinds.Select(EntityKindRegistry.ToCode));
-        return kindCodes;
-    }
-
-    private static IReadOnlySet<string> Kinds(params string[] kindCodes) =>
-        new HashSet<string>(kindCodes, StringComparer.Ordinal);
 
     // ── Scalar field translation ──
 
