@@ -45,13 +45,17 @@ public sealed record AcquisitionImportFileLedger(
     public static AcquisitionImportFileLedger Create(
         TvImportCheckpoint checkpoint,
         string libraryRootPath,
-        IReadOnlyList<MergedImportItem> merged,
-        bool reconciledExisting) => new(
+        IReadOnlyList<MergedImportItem> merged) => new(
         AcquisitionImportPhase.Importing,
         merged.Select(item => {
             var entry = CreateMergedEntry(item, libraryRootPath, PayloadRootFor(checkpoint, item.SourceRelativePath), true);
-            return reconciledExisting
-                ? entry with { Status = AcquisitionImportFileStatus.Imported, Decision = AcquisitionImportDecision.AdoptExisting }
+            var unit = checkpoint.Units.FirstOrDefault(unit => FileSystemPathComparison.Equals(
+                unit.SourceRelativePath, item.SourceRelativePath));
+            return unit?.AdoptedExistingTarget == true
+                ? entry with {
+                    Status = unit.FinalPath is null ? AcquisitionImportFileStatus.PendingImport : AcquisitionImportFileStatus.Imported,
+                    Decision = AcquisitionImportDecision.AdoptExisting
+                }
                 : entry;
         }).ToArray());
 

@@ -36,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Retrying retained TV downloads can now repair missing links to combined episodes using byte-verified files already in the library, including packs that also add new episodes, without replacing identical media.
 - Background request enrichment now restores missing episode and other ordering metadata while preserving existing library corrections, so incomplete requests can recover without being recreated.
 - Existing requests now use corrected library season, episode, and volume numbers for subsequent searches and imports instead of retaining stale request-time mappings.
 - Automatic TV imports preserve completed downloads for review when requested episodes lack episode numbers, preventing duplicate catalog entries while season metadata is incomplete.

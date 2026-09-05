@@ -1256,7 +1256,9 @@ public sealed class TvAcquisitionImportEngine(
             unitsPlan.Units, layout,
             season => TvImportPlanBuilder.SeasonFolderSegment(series, season, profile?.PathTemplate),
             incomingPosition, incomingRevision, rules.ProperPolicy, import.AllowFormatChange);
-        if (merged.Any(item => item.Action == MergeFileAction.HoldStructuralConflict)) {
+        var matchingExisting = TvImportExecutionSupport.MatchingExistingFiles(merged, payload);
+        if (merged.Any(item => item.Action == MergeFileAction.HoldStructuralConflict
+                && !matchingExisting.Contains(item.SourceRelativePath))) {
             await acquisitions.SetStatusAsync(
                 import.Id,
                 AcquisitionStatus.ManualImportRequired,
@@ -1275,13 +1277,15 @@ public sealed class TvAcquisitionImportEngine(
             .Where(item => item.Action is MergeFileAction.PlaceNew or MergeFileAction.ReplaceUpgrade)
             .ToArray();
         var formatChanges = merged.Count(item => item.Action == MergeFileAction.DropFormatChange);
-        var reconciledExisting = executable.Length == 0
-            && TvImportExecutionSupport.AllDroppedFilesMatchPayload(merged, payload);
-        if (executable.Length == 0 && !reconciledExisting) {
+        var checkpointItems = merged
+            .Where(item => item.Action is MergeFileAction.PlaceNew or MergeFileAction.ReplaceUpgrade
+                || matchingExisting.Contains(item.SourceRelativePath))
+            .ToArray();
+        var reconciledExisting = executable.Length == 0 && checkpointItems.Length > 0;
+        if (checkpointItems.Length == 0) {
             await HandleNothingUsableAsync(import, selected, formatChanges > 0, cancellationToken);
             return;
         }
-        var checkpointItems = reconciledExisting ? merged.ToArray() : executable;
         var skipped = merged.Count - checkpointItems.Length;
         var message = reconciledExisting
             ? "The downloaded episodes already existed in the library and were reconciled."
@@ -1307,7 +1311,7 @@ public sealed class TvAcquisitionImportEngine(
                     unit.Episode,
                     unit.ExtraEpisodes,
                     item.Action == MergeFileAction.ReplaceUpgrade ? item.OwnedFilePath : null,
-                    AdoptedExistingTarget: reconciledExisting);
+                    AdoptedExistingTarget: matchingExisting.Contains(item.SourceRelativePath));
             }).ToArray(),
             TransferClientItemId: NormalizeClientItemId(import.ClientItemId),
             AttemptId: Guid.NewGuid(),
@@ -1315,7 +1319,7 @@ public sealed class TvAcquisitionImportEngine(
         checkpoint = checkpoint with {
             LibraryRootPath = owningRoot.Path,
             ImportFileLedger = AcquisitionImportFileLedger.Create(
-                checkpoint, owningRoot.Path, merged, reconciledExisting),
+                checkpoint, owningRoot.Path, merged),
             DiscardRemainingPayload = payload.Files.Count(file => TvImportPlanBuilder.IsVideoFile(file.RelativePath)) > checkpointItems.Length
         };
         if (await PrepareTvCheckpointAsync(import, payload, checkpoint, cancellationToken) is not { } preparedCheckpoint) {

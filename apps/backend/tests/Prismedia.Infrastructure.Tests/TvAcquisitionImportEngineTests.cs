@@ -58,6 +58,63 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         }
     }
 
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public async Task RetainedIdenticalPairedFileRepairsMissingEpisodeOwnerWithoutReplacingBytes(bool identical, bool includeNewEpisode) {
+        await using var db = CreateContext();
+        var harness = await HarnessAsync(db,
+            ownedEpisodeName: "Show - S01E01-E02 1080p WEB-DL.mkv",
+            payloadFiles: includeNewEpisode
+                ? ["Show.S01E01-E02.1080p.WEB-DL.mkv", "Show.S01E03.1080p.WEB-DL.mkv"]
+                : ["Show.S01E01-E02.1080p.WEB-DL.mkv"],
+            releaseTitle: "Show S01 1080p WEB-DL",
+            payloadContent: identical ? "owned-bytes" : "other-bytes",
+            wantedEpisodeNumbers: includeNewEpisode ? [2, 3] : [2]);
+
+        await harness.Engine.ImportAsync(harness.Context, harness.Import, CancellationToken.None);
+
+        Assert.Equal("owned-bytes", await File.ReadAllTextAsync(harness.OwnedEpisodePath));
+        if (!identical) {
+            Assert.Equal(AcquisitionStatus.ManualImportRequired, await StatusOf(db, harness.Import.Id));
+            Assert.True((await db.Entities.FindAsync(harness.WantedEpisodeId))!.IsWanted);
+            return;
+        }
+        Assert.Equal(AcquisitionStatus.Importing, await StatusOf(db, harness.Import.Id));
+        Assert.False((await db.Entities.FindAsync(harness.WantedEpisodeId))!.IsWanted);
+        Assert.Equal(harness.OwnedEpisodePath, (await db.EntityFiles.SingleAsync(file =>
+            file.EntityId == harness.WantedEpisodeId && file.Role == EntityFileRole.Source)).Path);
+        Assert.Equal(includeNewEpisode ? 2 : 1, Directory.GetFiles(harness.SeasonFolder, "*.mkv").Length);
+        Assert.Empty(await db.AcquisitionBlocklist.ToArrayAsync());
+        var checkpoint = (await AcquisitionTestFactory.Store(db).GetImportContextAsync(harness.Import.Id, CancellationToken.None))!.TvImportCheckpoint!;
+        Assert.True(checkpoint.Units.Single(unit => unit.EpisodeNumber == 1).AdoptedExistingTarget);
+        if (includeNewEpisode) {
+            Assert.False(checkpoint.Units.Single(unit => unit.EpisodeNumber == 3).AdoptedExistingTarget);
+        }
+    }
+
+    [Fact]
+    public async Task IdenticalBytesDoNotCollapseTwoOwnedFilesIntoOnePairedFile() {
+        await using var db = CreateContext();
+        var harness = await HarnessAsync(db, "Show - S01E01 1080p WEB-DL.mkv",
+            ["Show.S01E01-E02.1080p.WEB-DL.mkv"], "Show S01 1080p WEB-DL", payloadContent: "owned-bytes");
+        var secondPath = Path.Combine(harness.SeasonFolder, "Show - S01E02.mkv");
+        await File.WriteAllTextAsync(secondPath, "owned-bytes");
+        var episode = await db.Entities.FindAsync(harness.WantedEpisodeId);
+        episode!.IsWanted = false;
+        db.EntityFiles.Add(new EntityFileRow {
+            Id = Guid.NewGuid(), EntityId = episode.Id, Role = EntityFileRole.Source, Path = secondPath
+        });
+        await db.SaveChangesAsync();
+
+        await harness.Engine.ImportAsync(harness.Context, harness.Import, CancellationToken.None);
+
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, await StatusOf(db, harness.Import.Id));
+        Assert.Equal(secondPath, (await db.EntityFiles.SingleAsync(file => file.EntityId == episode.Id)).Path);
+        Assert.Equal(2, Directory.GetFiles(harness.SeasonFolder, "*.mkv").Length);
+    }
+
     [Fact]
     public async Task MergesNewEpisodeIntoTheExistingSeasonFolder() {
         await using var db = CreateContext();

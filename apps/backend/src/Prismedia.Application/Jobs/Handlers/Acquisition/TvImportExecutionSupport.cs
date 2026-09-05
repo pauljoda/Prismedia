@@ -1,5 +1,6 @@
 using System.Security.Cryptography;
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Files;
 using Prismedia.Application.Jobs.Scanning;
 using Prismedia.Domain.Entities;
 
@@ -37,16 +38,21 @@ internal static class TvImportExecutionSupport {
         }
     }
 
-    /// <summary>Returns true when every rejected owned file is the exact payload file already in place.</summary>
-    public static bool AllDroppedFilesMatchPayload(
+    /// <summary>
+    /// Finds payload files already present byte-for-byte in one owned file. A missing second episode
+    /// owner can be repaired without replacing those bytes. Multi-file ownership conflicts have no
+    /// single owned path and remain held; matching names or lengths alone never authorize adoption.
+    /// </summary>
+    public static IReadOnlySet<string> MatchingExistingFiles(
         IReadOnlyList<MergedImportItem> merged,
         DownloadPayload payload) =>
-        merged.Count > 0
-        && merged.All(item => item.Action == MergeFileAction.DropNotUpgrade
+        merged.Where(item => item.Action is MergeFileAction.DropNotUpgrade or MergeFileAction.HoldStructuralConflict
             && item.OwnedFilePath is { } ownedFilePath
             && FilesHaveSameContent(
                 ownedFilePath,
-                Path.GetFullPath(Path.Combine(payload.ContentRoot, item.SourceRelativePath))));
+                Path.GetFullPath(Path.Combine(payload.ContentRoot, item.SourceRelativePath))))
+            .Select(item => item.SourceRelativePath)
+            .ToHashSet(FileSystemPathComparison.Comparer);
 
     /// <summary>Compares two existing files by length and SHA-256 without surfacing transient IO errors.</summary>
     public static bool FilesHaveSameContent(string firstPath, string secondPath) {
