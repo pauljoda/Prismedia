@@ -61,7 +61,7 @@
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { CREDIT_ROLE, ENTITY_FILE_ROLE, type EntityFileRoleCode } from "$lib/entities/entity-codes";
   import type { EntityDetailEditDraft } from "$lib/entities/entity-detail-edit";
-  import { searchTags } from "$lib/entities/entity-detail-search";
+  import { searchTags } from "$lib/entities/entity-picker-search";
   import type {
     EntityDetailProps,
     EntityDetailSection,

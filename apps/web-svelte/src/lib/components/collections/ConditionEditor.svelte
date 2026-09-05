@@ -8,6 +8,8 @@
   import { displayNameForEntityKind } from "$lib/entities/entity-codes";
   import DateField from "$lib/components/forms/DateField.svelte";
   import FormField from "$lib/components/forms/FormField.svelte";
+  import RuleEntityPicker from "./RuleEntityPicker.svelte";
+  import { collectionRuleReferences } from "$lib/collections/rule-references";
 
   interface Props {
     condition: CollectionRuleCondition;
@@ -101,7 +103,11 @@
             {/if}
           </Field.Group>
       {:else if !nullary}
-        {#if field.fieldType === "date"}
+        {#if collectionRuleReferences[field.field]}
+          {#key field.field}
+            <RuleEntityPicker field={field.field} value={condition.value} {multiple} {disabled} onChange={changeValue} />
+          {/key}
+        {:else if field.fieldType === "date"}
           <DateField label="Date" value={scalarValue} {disabled} onChange={changeValue} />
         {:else}
           <FormField label={multiple ? "Values" : "Value"} htmlFor={id + "-value"}

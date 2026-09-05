@@ -35,7 +35,7 @@
   import {
     searchPeople,
     searchStudios,
-  } from "$lib/entities/entity-detail-search";
+  } from "$lib/entities/entity-picker-search";
   import EntityCastAndCrewSection from "./EntityCastAndCrewSection.svelte";
   import EntityDetailLinks from "./EntityDetailLinks.svelte";
   import type { EntityDetailSection } from "./entity-detail-types";
