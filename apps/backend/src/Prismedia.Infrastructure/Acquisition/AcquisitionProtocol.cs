@@ -151,6 +151,8 @@ public static class ProwlarrProtocol {
     // ── ReleaseResource fields ──────────────────────────────────
     // prism-vocab: external — Prowlarr JSON field names, decoded only at this parse boundary.
     public const string Title = "title";
+    public const string Guid = "guid";
+    public const string IndexerId = "indexerId";
     public const string Size = "size";
     public const string Seeders = "seeders";
     public const string Leechers = "leechers";
@@ -167,6 +169,8 @@ public static class ProwlarrProtocol {
     public const string TypeSearch = "search";
     public const string CategoriesParam = "categories";
     public const string LimitParam = "limit";
+    public const string OffsetParam = "offset";
+    public const string IndexerIdsParam = "indexerIds";
     public const int DefaultLimit = 100;
 }
 

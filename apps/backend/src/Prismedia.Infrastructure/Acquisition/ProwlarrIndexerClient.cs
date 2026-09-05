@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using Microsoft.Extensions.Logging;
 using Prismedia.Application.Acquisition;
 using Prismedia.Application.Jobs;
 using Prismedia.Domain.Entities;
@@ -13,7 +14,9 @@ namespace Prismedia.Infrastructure.Acquisition;
 /// </summary>
 public sealed class ProwlarrIndexerClient(
     HttpClient http,
-    ProwlarrSearchConcurrencyGate? concurrency = null) : IIndexerSearchClient {
+    ProwlarrSearchConcurrencyGate? concurrency = null,
+    ILogger<ProwlarrIndexerClient>? logger = null) : IIndexerSearchClient {
+    private const int MaxPagesPerIndexer = 10;
     public IndexerKind Kind => IndexerKind.Prowlarr;
     /// <inheritdoc />
     public JobExecutionPolicy? ExecutionPolicy => ProwlarrSearchConcurrencyGate.ExecutionPolicy;
@@ -26,26 +29,79 @@ public sealed class ProwlarrIndexerClient(
         using var searchLease = concurrency is null
             ? null
             : await concurrency.EnterAsync(cancellationToken);
-        var path = BuildSearchPath(query);
+        var releases = new List<IndexerRelease>();
+        var seen = new HashSet<(int? IndexerId, string Identity)>();
+        IReadOnlyList<int>? continuingIndexers = null;
+        for (var page = 0; page < MaxPagesPerIndexer; page++) {
+            JsonDocument document;
+            try {
+                document = await ReadPageAsync(
+                    connection, query, page * ProwlarrProtocol.DefaultLimit, continuingIndexers, cancellationToken);
+            } catch (Exception exception) when (page > 0 && !cancellationToken.IsCancellationRequested
+                && exception is HttpRequestException or JsonException or OperationCanceledException) {
+                logger?.LogWarning(exception,
+                    "Prowlarr continuation page {Page} failed; retaining {Count} releases from completed pages.", page + 1, releases.Count);
+                break;
+            }
+
+            using (document) {
+                if (document.RootElement.ValueKind != JsonValueKind.Array) {
+                    break;
+                }
+
+                var counts = new Dictionary<int, int>();
+                var progressingIndexers = new HashSet<int>();
+                foreach (var item in document.RootElement.EnumerateArray()) {
+                    var indexerId = Int(item, ProwlarrProtocol.IndexerId);
+                    if (indexerId is { } id) {
+                        counts[id] = counts.GetValueOrDefault(id) + 1;
+                    }
+                    if (MapRelease(item) is not { } release
+                        || !seen.Add((indexerId, ReleaseIdentity(item, release)))) {
+                        continue;
+                    }
+
+                    releases.Add(release);
+                    if (indexerId is { } progressingId) {
+                        progressingIndexers.Add(progressingId);
+                    }
+                }
+
+                // Limit applies per provider. Only providers with a full page need another request;
+                // repeating the aggregate would re-query every exhausted or slow tracker. Providers
+                // ignoring offsets stop as soon as they repeat a page without adding any new releases.
+                continuingIndexers = counts
+                    .Where(pair => pair.Value >= ProwlarrProtocol.DefaultLimit && progressingIndexers.Contains(pair.Key))
+                    .Select(pair => pair.Key)
+                    .Order()
+                    .ToArray();
+                if (continuingIndexers.Count == 0) {
+                    break;
+                }
+            }
+        }
+        return releases;
+    }
+
+    private async Task<JsonDocument> ReadPageAsync(
+        IndexerConnection connection,
+        IndexerQuery query,
+        int offset,
+        IReadOnlyList<int>? indexerIds,
+        CancellationToken cancellationToken) {
+        var path = BuildSearchPath(query, offset, indexerIds);
         using var request = BuildRequest(connection, HttpMethod.Get, path);
         using var response = await http.SendAsync(request, cancellationToken);
         response.EnsureSuccessStatusCode();
 
         await using var stream = await response.Content.ReadAsStreamAsync(cancellationToken);
-        using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
-        if (document.RootElement.ValueKind != JsonValueKind.Array) {
-            return [];
-        }
-
-        var releases = new List<IndexerRelease>(document.RootElement.GetArrayLength());
-        foreach (var item in document.RootElement.EnumerateArray()) {
-            if (MapRelease(item) is { } release) {
-                releases.Add(release);
-            }
-        }
-
-        return releases;
+        return await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken);
     }
+
+    private static string ReleaseIdentity(JsonElement item, IndexerRelease release) =>
+        Text(item, ProwlarrProtocol.Guid) is { Length: > 0 } guid ? guid
+            : release.InfoHash ?? release.DownloadUrl ?? release.MagnetUrl
+                ?? $"{release.Title}\0{release.SizeBytes.ToString(CultureInfo.InvariantCulture)}";
 
     public async Task<IndexerConnectionTest> TestAsync(IndexerConnection connection, CancellationToken cancellationToken) {
         try {
@@ -65,7 +121,7 @@ public sealed class ProwlarrIndexerClient(
         }
     }
 
-    private static string BuildSearchPath(IndexerQuery query) {
+    private static string BuildSearchPath(IndexerQuery query, int offset, IReadOnlyList<int>? indexerIds) {
         var parameters = new List<string> {
             $"{ProwlarrProtocol.QueryParam}={Uri.EscapeDataString(query.Text)}",
             $"{ProwlarrProtocol.TypeParam}={ProwlarrProtocol.TypeSearch}",
@@ -73,6 +129,12 @@ public sealed class ProwlarrIndexerClient(
         };
         foreach (var category in query.Categories) {
             parameters.Add($"{ProwlarrProtocol.CategoriesParam}={category}");
+        }
+        if (offset > 0) {
+            parameters.Add($"{ProwlarrProtocol.OffsetParam}={offset}");
+        }
+        foreach (var indexerId in indexerIds ?? []) {
+            parameters.Add($"{ProwlarrProtocol.IndexerIdsParam}={indexerId}");
         }
 
         return $"{ProwlarrProtocol.SearchEndpoint}?{string.Join('&', parameters)}";

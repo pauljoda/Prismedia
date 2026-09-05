@@ -488,7 +488,8 @@ public static class DependencyInjection {
         services.AddSingleton<ProwlarrSearchConcurrencyGate>();
         services.AddScoped(provider => new ProwlarrIndexerClient(
             new HttpClient { Timeout = TimeSpan.FromMinutes(5) },
-            provider.GetRequiredService<ProwlarrSearchConcurrencyGate>()));
+            provider.GetRequiredService<ProwlarrSearchConcurrencyGate>(),
+            provider.GetRequiredService<ILogger<ProwlarrIndexerClient>>()));
         services.AddScoped<IIndexerSearchClient>(provider => provider.GetRequiredService<ProwlarrIndexerClient>());
         services.AddScoped(_ => new TorznabIndexerClient(new HttpClient { Timeout = TimeSpan.FromSeconds(60) }));
         services.AddScoped<IIndexerSearchClient>(provider => provider.GetRequiredService<TorznabIndexerClient>());

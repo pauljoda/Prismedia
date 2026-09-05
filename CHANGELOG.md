@@ -36,6 +36,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Prowlarr searches now retrieve additional result pages from providers with more matches, recovering releases hidden beyond the first page without repeating searches against exhausted providers.
+
 - Newly supplied release dates now resume active waiting requests through the automatic search queue, without waiting for the recurring monitor backlog to drain. Paused monitoring and active transfers remain protected.
 
 - Monitored movies, episodes, and ebooks retain their imported quality baseline so enabling upgrades or raising a profile cutoff can resume upgrade searches after the original import.
