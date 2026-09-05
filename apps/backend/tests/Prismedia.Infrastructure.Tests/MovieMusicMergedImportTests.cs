@@ -168,6 +168,7 @@ public sealed class MovieMusicMergedImportTests : IDisposable {
             new EfAcquisitionBlocklistStore(db),
             new EfAcquisitionHistoryStore(db),
             new ExistingReadyMaterializer(),
+            new MergedImportTestSupport.VideoProbe(),
             NullLogger<MovieAcquisitionImportEngine>.Instance);
 
         var import = new AcquisitionImportContext(

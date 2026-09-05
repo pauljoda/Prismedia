@@ -677,6 +677,7 @@ public sealed class MovieAcquisitionImportEngine(
     IAcquisitionBlocklistStore blocklist,
     IAcquisitionHistoryStore history,
     IImportedEntityMaterializer materializer,
+    IMediaProbe mediaProbe,
     ILogger<MovieAcquisitionImportEngine> logger) : IAcquisitionImportEngine {
 
     public async Task ImportAsync(JobContext context, AcquisitionImportContext import, CancellationToken cancellationToken) {
@@ -736,6 +737,20 @@ public sealed class MovieAcquisitionImportEngine(
         }
 
         var templateContext = new ImportTemplateContext(import.Title, import.Author, import.Year);
+        var primaryPlan = MovieImportPlanBuilder.Plan(payload.Files, templateContext, profile?.PathTemplate, ownedMediaQuality);
+        if (primaryPlan.Blocked) {
+            await acquisitions.SetStatusAsync(import.Id, AcquisitionStatus.ManualImportRequired, BlockMessage(primaryPlan.BlockReason), cancellationToken);
+            return;
+        }
+        var primaryPath = Path.GetFullPath(Path.Combine(payload.ContentRoot, primaryPlan.Items[0].SourceRelativePath));
+        var video = await mediaProbe.ProbeVideoAsync(primaryPath, cancellationToken);
+        if (video is not { Width: > 0, Height: > 0, DurationSeconds: > 0 }
+            || !double.IsFinite(video.DurationSeconds.Value)) {
+            await acquisitions.SetStatusAsync(import.Id, AcquisitionStatus.ManualImportRequired,
+                "The primary movie file could not be verified as readable video with a valid runtime. The download was preserved for review.",
+                cancellationToken);
+            return;
+        }
 
         // A movie that already lives on disk merges into its existing folder (or safely holds an owned-file
         // upgrade for review), never a template-derived parallel folder — that would mint a duplicate movie.
@@ -759,9 +774,9 @@ public sealed class MovieAcquisitionImportEngine(
                 target,
                 existingRoot,
                 profile,
-                templateContext,
                 selected,
                 ownedMediaQuality,
+                primaryPlan,
                 cancellationToken);
             return;
         }
@@ -775,7 +790,7 @@ public sealed class MovieAcquisitionImportEngine(
 
         var plan = ImportTargetResolver.Resolve(
             payload.ContentRoot, root.Path,
-            MovieImportPlanBuilder.Plan(payload.Files, templateContext, profile?.PathTemplate, ownedMediaQuality));
+            primaryPlan);
         if (plan.Blocked) {
             await acquisitions.SetStatusAsync(import.Id, AcquisitionStatus.ManualImportRequired, BlockMessage(plan.BlockReason), cancellationToken);
             return;
@@ -839,16 +854,10 @@ public sealed class MovieAcquisitionImportEngine(
         MovieDiskTarget target,
         LibraryRootData root,
         BookImportProfile? profile,
-        ImportTemplateContext templateContext,
         SelectedRelease? selected,
         string? qualityCode,
+        ImportPlan plan,
         CancellationToken cancellationToken) {
-        var plan = MovieImportPlanBuilder.Plan(payload.Files, templateContext, profile?.PathTemplate, qualityCode);
-        if (plan.Blocked) {
-            await acquisitions.SetStatusAsync(import.Id, AcquisitionStatus.ManualImportRequired, BlockMessage(plan.BlockReason), cancellationToken);
-            return;
-        }
-
         var item = plan.Items[0];
         var sourceAbsolute = Path.GetFullPath(Path.Combine(payload.ContentRoot, item.SourceRelativePath));
         var fileName = item.TargetRelativePath.Split('/')[^1];

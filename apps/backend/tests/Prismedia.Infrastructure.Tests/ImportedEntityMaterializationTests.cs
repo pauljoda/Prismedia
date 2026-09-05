@@ -423,8 +423,12 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         Assert.Equal(childId, finalization.AcquisitionId);
     }
 
-    [Fact]
-    public async Task MovieImportBindsTheDirectPlayableMovieWithoutQueueingAFullLibraryScan() {
+    [Theory]
+    [InlineData(true, 7200)]
+    [InlineData(false, 7200)]
+    [InlineData(true, 0)]
+    [InlineData(true, double.NaN)]
+    public async Task MovieImportProbesBeforeBindingTheDirectPlayableMovie(bool readable, double duration) {
         await using var db = CreateContext();
         var rootPath = Directory.CreateDirectory(Path.Combine(_workRoot, "movies")).FullName;
         var payloadPath = Directory.CreateDirectory(Path.Combine(_workRoot, "movie-download")).FullName;
@@ -448,6 +452,7 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
             new EfAcquisitionBlocklistStore(db),
             new EfAcquisitionHistoryStore(db),
             materializer,
+            new MergedImportTestSupport.VideoProbe(readable, duration),
             NullLogger<MovieAcquisitionImportEngine>.Instance);
         var import = ImportContext(db, EntityKind.Movie, wantedId, "Film", payloadPath, year: 2020);
         var queue = new MergedImportTestSupport.RecordingJobQueue();
@@ -455,6 +460,15 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         await engine.ImportAsync(JobContext(db, import.Id, queue), import, CancellationToken.None);
 
         var entity = await db.Entities.AsNoTracking().SingleAsync(row => row.Id == wantedId);
+        if (!readable || !double.IsFinite(duration) || duration <= 0) {
+            Assert.True(entity.IsWanted);
+            Assert.False(await HasSourceInSubtreeAsync(db, wantedId));
+            Assert.Equal(AcquisitionStatus.ManualImportRequired, (await db.Acquisitions.SingleAsync(row => row.Id == import.Id)).Status);
+            Assert.Equal("video-bytes", await File.ReadAllTextAsync(Path.Combine(payloadPath, "Film.2020.mkv")));
+            Assert.Empty(queue.Enqueued);
+            Assert.Empty(await db.AcquisitionBlocklist.ToArrayAsync());
+            return;
+        }
         Assert.False(entity.IsWanted);
         Assert.True(await HasSourceInSubtreeAsync(db, wantedId));
         Assert.DoesNotContain(await db.Entities.AsNoTracking().ToArrayAsync(), row =>

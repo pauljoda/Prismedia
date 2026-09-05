@@ -8,6 +8,14 @@ namespace Prismedia.Infrastructure.Tests;
 
 /// <summary>Shared fakes for the merged-import engine tests (TV, movie, music).</summary>
 internal static class MergedImportTestSupport {
+    internal sealed class VideoProbe(bool readable = true, double duration = 7200) : IMediaProbe {
+        public Task<VideoProbeData?> ProbeVideoAsync(string filePath, CancellationToken cancellationToken) =>
+            Task.FromResult<VideoProbeData?>(readable ? new(duration, 1000, 1920, 1080, 24, null, null, null, null, null, null) : null);
+        public Task<AudioProbeData?> ProbeAudioAsync(string filePath, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<ImageProbeData?> ProbeImageAsync(string filePath, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<SubtitleStreamData>> ProbeSubtitleStreamsAsync(string filePath, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
     internal sealed class SingleRootPersistence(
         string path,
         bool autoGenerateMetadata = false) : ILibraryScanRootPersistence {
