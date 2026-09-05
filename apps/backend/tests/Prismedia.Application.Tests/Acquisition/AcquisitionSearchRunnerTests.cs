@@ -13,6 +13,37 @@ namespace Prismedia.Application.Tests.Acquisition;
 /// </summary>
 public sealed class AcquisitionSearchRunnerTests {
     [Fact]
+    public async Task ObservedSeasonCoverageFiltersAutomaticSearchAndReopensWhenUpgradesAreEnabled() {
+        var root = Directory.CreateTempSubdirectory("prismedia-search-coverage-");
+        try {
+            var owned = Path.Combine(root.FullName, "Show.S01E01E02.mkv");
+            await File.WriteAllTextAsync(owned, "owned");
+            var profiles = new FakeProfileStore();
+            var known = new IndexerRelease("Show S01 720p WEB-DL", 1_000_000_000, 20, 2, DownloadProtocol.Torrent,
+                "http://dl", null, "known", null, null, null);
+            var unknown = known with { Title = "Show S01 1080p WEB-DL", InfoHash = "unknown" };
+            var admission = new TvPayloadAdmission(new RecordedCoverage(ReleaseIdentity.For("known", null, null)),
+                new CoverageTargets(root.FullName, owned), profiles);
+            var runner = new AcquisitionSearchRunner(new FakeIndexerConfigStore(),
+                new FakeClientFactory(new FakeIndexerSearchClient([known, unknown])), profiles,
+                new FakeBlocklistStore("unrelated"), new FakeDownloadClientConfigStore(DownloadProtocol.Torrent),
+                new FakeIndexerStatusStore(), new IndexerQueryWindow(), Policies(new TvAcquisitionPolicyModule()), Settings(), admission);
+            var input = new AcquisitionSearchInput(Guid.NewGuid(), "Season 1", null, EntityKind.VideoSeason,
+                Guid.NewGuid(), Series: "Show", SeasonNumber: 1);
+
+            var outcome = await runner.RunAsync(input, CancellationToken.None);
+            var rejected = Assert.Single(outcome.Candidates, candidate => !candidate.Accepted);
+            Assert.Equal("known", rejected.Release.InfoHash);
+            Assert.Contains(ReleaseRejectionReason.NotAnUpgrade, rejected.Rejections);
+            Assert.DoesNotContain(ReleaseRejectionReason.Blocklisted, rejected.Rejections);
+            Assert.Equal("unknown", Assert.Single(outcome.Candidates, candidate => candidate.Accepted).Release.InfoHash);
+
+            profiles.Upgrades = true;
+            Assert.All((await runner.RunAsync(input, CancellationToken.None)).Candidates, candidate => Assert.True(candidate.Accepted));
+        } finally { root.Delete(true); }
+    }
+
+    [Fact]
     public void PersistedCandidatesKeepQualityAheadOfProtocolPreferenceForAutomation() {
         var torrent = new AcquisitionCandidateRef(Guid.NewGuid(), "Torrent", "Indexer", "torrent", DownloadProtocol.Torrent, 100);
         var usenet = new AcquisitionCandidateRef(Guid.NewGuid(), "Usenet", "Indexer", null, DownloadProtocol.Usenet, 1);
@@ -677,6 +708,8 @@ public sealed class AcquisitionSearchRunnerTests {
     }
 
     private sealed class FakeProfileStore : IBookAcquisitionProfileStore {
+        public bool Upgrades { get; set; }
+        public Task<bool> GetAutoUpgradeAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken) => Task.FromResult(Upgrades);
         public Task<BookAcquisitionRules> GetRulesAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken) => Task.FromResult(BookAcquisitionRules.Default);
         public Task<BookImportProfile?> GetImportProfileAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> GetAutoPickAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken) => throw new NotSupportedException();
@@ -689,6 +722,23 @@ public sealed class AcquisitionSearchRunnerTests {
         public Task<BookAcquisitionProfileView?> GetAsync(Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<BookAcquisitionProfileView> SaveAsync(BookAcquisitionProfileSaveCommand command, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class RecordedCoverage(string identity) : ITvPayloadObservationStore {
+        public Task RecordAsync(Guid acquisitionId, TvPayloadObservation observation, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<IReadOnlyList<TvPayloadObservation>> ListAsync(AcquisitionSearchInput input, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<TvPayloadObservation>>([new(identity, DateTimeOffset.UtcNow, [new("Show.S01E01E02.mkv", 1000)])]);
+    }
+
+    private sealed class CoverageTargets(string root, string owned) : IImportTargetIndex {
+        public Task<TvSeriesDiskLayout?> GetTvLayoutAsync(Guid entityId, CancellationToken cancellationToken) =>
+            Task.FromResult<TvSeriesDiskLayout?>(new(entityId, root, new Dictionary<int, TvSeasonDiskLayout> {
+                [1] = new(Guid.NewGuid(), root, new Dictionary<int, string> { [1] = owned, [2] = owned })
+            }));
+        public Task<IReadOnlyList<TvEpisodeTitle>> GetSeasonEpisodeTitlesAsync(Guid entityId, int seasonNumber, CancellationToken cancellationToken) =>
+            Task.FromResult<IReadOnlyList<TvEpisodeTitle>>([new(1, "First Story"), new(2, "Second Story")]);
+        public Task<MovieDiskTarget?> GetMovieTargetAsync(Guid entityId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<AlbumDiskTarget?> GetAlbumTargetAsync(Guid entityId, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
     private sealed class FakeBlocklistStore(string identity) : IAcquisitionBlocklistStore {

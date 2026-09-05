@@ -19,6 +19,32 @@ namespace Prismedia.Infrastructure.Tests;
 /// The release that failed is carried in the job payload (not re-read), so the tests pass it explicitly.
 /// </summary>
 public sealed class AcquisitionFailedHandleJobHandlerTests {
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task CoverageRecoveryRechecksIntentAndNeverCreatesAPermanentBlock(bool enableUpgrades, bool pause) {
+        await using var db = CreateContext();
+        var (id, candidateA, candidateB) = await SeedTwoCandidatesAsync(db, autoRedownload: true);
+        using var fixture = await TvPayloadAdmissionFixture.CreateAsync(db, await db.Acquisitions.SingleAsync(row => row.Id == id));
+        await AcquisitionTestFactory.Store(db).SetSelectedReleaseAsync(id, Selected(candidateA), CancellationToken.None);
+        await fixture.Service.RememberAsync(id, candidateA.Identity, fixture.Files, CancellationToken.None);
+        fixture.Profile.UpgradeUntilCutoff = enableUpgrades;
+        if (pause) (await db.Monitors.SingleAsync()).Status = MonitorStatus.Paused;
+        await db.SaveChangesAsync();
+        var queue = new RecordingQueueService();
+
+        await RunAsync(db, queue, id, Selected(candidateA), payloadAdmission: fixture.Service, recheckTvCoverage: true);
+
+        Assert.Empty(await db.AcquisitionBlocklist.ToArrayAsync());
+        if (enableUpgrades || pause) {
+            Assert.Empty(queue.Calls);
+            Assert.Equal(AcquisitionStatus.Downloading, await StatusOf(db, id));
+        } else {
+            Assert.Equal((id, candidateB.CandidateId), Assert.Single(queue.Calls));
+        }
+    }
+
     [Fact]
     public async Task BlocklistsFailedReleaseAndReQueuesNextBestWhenAutoRedownloadOn() {
         await using var db = CreateContext();
@@ -251,7 +277,9 @@ public sealed class AcquisitionFailedHandleJobHandlerTests {
         IAcquisitionQueueService queue,
         Guid acquisitionId,
         SelectedRelease? selected,
-        DownloadClientCleanupService? cleanup = null) {
+        DownloadClientCleanupService? cleanup = null,
+        TvPayloadAdmission? payloadAdmission = null,
+        bool recheckTvCoverage = false) {
         var store = AcquisitionTestFactory.Store(db);
         var downloadClientConfigs = new EfDownloadClientConfigStore(db);
         if (selected is not null) {
@@ -274,8 +302,13 @@ public sealed class AcquisitionFailedHandleJobHandlerTests {
                 downloadClientConfigs,
                 new MergedImportTestSupport.ThrowingClientFactory(),
                 NullLogger<DownloadClientCleanupService>.Instance),
-            NullLogger<AcquisitionFailedHandleJobHandler>.Instance);
-        await handler.HandleAsync(new JobContext(Job(acquisitionId, selected), new ThrowingJobQueue()), CancellationToken.None);
+            NullLogger<AcquisitionFailedHandleJobHandler>.Instance,
+            payloadAdmission: payloadAdmission,
+            monitors: new EfMonitorStore(db));
+        var job = Job(acquisitionId, selected);
+        if (recheckTvCoverage) job = job with { PayloadJson = AcquisitionFailedPayload.Serialize(acquisitionId, BlocklistReason.NotAnUpgrade,
+            TvPayloadAdmission.NoBenefitMessage, selected, recheckTvCoverage: true) };
+        await handler.HandleAsync(new JobContext(job, new ThrowingJobQueue()), CancellationToken.None);
     }
 
     private static ReleaseCandidateRow Candidate(Guid acquisitionId, string title, bool accepted, double score) =>

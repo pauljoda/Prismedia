@@ -6,6 +6,8 @@ namespace Prismedia.Application.Acquisition;
 /// <summary>
 /// Payload for the failed-download handler: which acquisition failed, why (the blocklist reason), a
 /// human-readable detail, and a snapshot of the release that was downloading.
+/// <see cref="RecheckTvCoverage"/> marks a temporary coverage decision: recovery must revalidate the
+/// observed files against current monitoring intent and must never add a global blocklist entry.
 /// <para>
 /// The release is captured here at enqueue time rather than re-read from the acquisition's mutable
 /// <c>SelectedReleaseJson</c> when the handler runs: a user can manually re-queue a different candidate
@@ -13,9 +15,10 @@ namespace Prismedia.Application.Acquisition;
 /// replacement instead of the release that actually failed. Pinning it in the payload removes that race.
 /// </para>
 /// </summary>
-public sealed record AcquisitionFailedPayload(Guid AcquisitionId, BlocklistReason Reason, string? Message, SelectedRelease? Selected) {
-    public static string Serialize(Guid acquisitionId, BlocklistReason reason, string? message, SelectedRelease? selected) =>
-        JsonSerializer.Serialize(new AcquisitionFailedPayload(acquisitionId, reason, message, selected));
+public sealed record AcquisitionFailedPayload(Guid AcquisitionId, BlocklistReason Reason, string? Message, SelectedRelease? Selected,
+    bool RecheckTvCoverage = false) {
+    public static string Serialize(Guid acquisitionId, BlocklistReason reason, string? message, SelectedRelease? selected, bool recheckTvCoverage = false) =>
+        JsonSerializer.Serialize(new AcquisitionFailedPayload(acquisitionId, reason, message, selected, recheckTvCoverage));
 
     public static AcquisitionFailedPayload Parse(string payloadJson) =>
         JsonSerializer.Deserialize<AcquisitionFailedPayload>(payloadJson)

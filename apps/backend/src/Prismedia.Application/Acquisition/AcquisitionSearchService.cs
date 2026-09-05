@@ -17,7 +17,8 @@ public sealed class AcquisitionSearchRunner(
     IIndexerStatusStore indexerStatuses,
     IndexerQueryWindow queryWindow,
     IAcquisitionPolicyRegistry policies,
-    SettingsService settings) {
+    SettingsService settings,
+    TvPayloadAdmission? payloadAdmission = null) {
     private static readonly TimeSpan HealthProbeTimeout = TimeSpan.FromSeconds(15);
     /// <param name="upgradeOwnedQuality">
     /// When set, runs this as an upgrade search: the engine accepts only releases that strictly beat this
@@ -102,7 +103,12 @@ public sealed class AcquisitionSearchRunner(
         }
 
         var blocklisted = await blocklist.GetIdentitiesAsync(cancellationToken);
+        var excluded = payloadAdmission is null ? new HashSet<string>() : await payloadAdmission.GetExcludedAsync(input, cancellationToken);
         var engine = policy.DecisionEngineFor(input.Kind);
+        ScoredRelease ApplyCoverage(ScoredRelease candidate) => excluded.Contains(ReleaseIdentity.For(
+            candidate.Release.InfoHash, candidate.IndexerName, candidate.Release.Title))
+                ? candidate with { Accepted = false, Rejections = candidate.Rejections.Append(ReleaseRejectionReason.NotAnUpgrade).Distinct().ToArray() }
+                : candidate;
 
         // Every query variant contributes to one decision set. Stopping at the first acceptable rung
         // made indexer query wording decide the winner before quality, formats, protocol, health and
@@ -150,7 +156,7 @@ public sealed class AcquisitionSearchRunner(
             var hasAcceptedPrimary = engine.Evaluate(
                 releases.Where(candidate => protocols.Contains(candidate.Release.Protocol)).ToArray(),
                 rules,
-                blocklisted).Any(candidate => candidate.Accepted);
+                blocklisted).Select(ApplyCoverage).Any(candidate => candidate.Accepted);
             if (!hasAcceptedPrimary && fallbackQueries.Length > 0) {
                 await SearchQueriesAsync(fallbackQueries);
             }
@@ -161,6 +167,7 @@ public sealed class AcquisitionSearchRunner(
             .Where(candidate => protocols.Contains(candidate.Release.Protocol))
             .ToArray();
         var candidates = engine.Evaluate(supported, rules, blocklisted)
+            .Select(ApplyCoverage)
             .GroupBy(candidate => ReleaseIdentity.For(
                 candidate.Release.InfoHash,
                 candidate.IndexerName,

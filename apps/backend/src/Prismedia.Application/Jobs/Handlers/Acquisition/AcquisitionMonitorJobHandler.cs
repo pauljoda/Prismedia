@@ -24,7 +24,8 @@ public sealed class AcquisitionMonitorJobHandler(
     ILogger<AcquisitionMonitorJobHandler> logger,
     AcquisitionCompletionService? completion = null,
     IJobGraphService? graphs = null,
-    IImportTargetIndex? importTargets = null) : IJobHandler {
+    IImportTargetIndex? importTargets = null,
+    TvPayloadAdmission? payloadAdmission = null) : IJobHandler {
     /// <summary>
     /// How long a torrent may stay absent from the download client's listing before the acquisition is
     /// treated as removed. Presence is checked against the client's full listing (see
@@ -422,9 +423,11 @@ public sealed class AcquisitionMonitorJobHandler(
             } else {
                 if (await FindPayloadConflictAsync(downloadClient, connection, transfer, cancellationToken) is { } conflict) {
                     logger.LogWarning(
-                        "AcquisitionMonitor: transfer {TransferId} contains the wrong content ({Conflict}); abandoning it for recovery.",
-                        transfer.TransferId, conflict);
-                    await EnqueueFailedHandleAsync(context, transfer.AcquisitionId, BlocklistReason.WrongContent, conflict, cancellationToken);
+                        "AcquisitionMonitor: transfer {TransferId} failed payload admission ({Conflict}); abandoning it for recovery.",
+                        transfer.TransferId, conflict.Message);
+                    await EnqueueFailedHandleAsync(context, transfer.AcquisitionId,
+                        conflict.RecheckTvCoverage ? BlocklistReason.NotAnUpgrade : BlocklistReason.WrongContent,
+                        conflict.Message, cancellationToken, conflict.RecheckTvCoverage);
                     return;
                 }
 
@@ -537,7 +540,7 @@ public sealed class AcquisitionMonitorJobHandler(
     /// <see cref="AcquisitionPayloadValidation"/> — a client hiccup or an empty (pre-metadata) file list
     /// never fails a download. Errors resolve to null so a files-endpoint failure can't break polling.
     /// </summary>
-    private async Task<string?> FindPayloadConflictAsync(
+    private async Task<(string Message, bool RecheckTvCoverage)?> FindPayloadConflictAsync(
         IDownloadClient downloadClient,
         DownloadClientConnection connection,
         ActiveTransfer transfer,
@@ -564,7 +567,7 @@ public sealed class AcquisitionMonitorJobHandler(
                 && input.EpisodeNumber is not null
                     ? await importTargets.GetSeasonEpisodeTitlesAsync(entityId, season, cancellationToken)
                     : [];
-            return AcquisitionPayloadValidation.FindConflict(
+            var conflict = AcquisitionPayloadValidation.FindConflict(
                 files.Select(file => file.Name).ToArray(),
                 input.Kind,
                 input.WorkTitle,
@@ -575,6 +578,15 @@ public sealed class AcquisitionMonitorJobHandler(
                 input.Title,
                 input.AbsoluteEpisodeNumber,
                 episodeTitles);
+            if (conflict is not null) return (conflict, false);
+            if (payloadAdmission is not null && input.Kind == EntityKind.VideoSeason) {
+                var payloadFiles = files.Select(file => new ImportCandidateFile(file.Name, file.SizeBytes)).ToArray();
+                if (await payloadAdmission.HasNoBenefitAsync(input, payloadFiles, cancellationToken)) {
+                    await payloadAdmission.RememberAsync(input.Id, selected.Identity, payloadFiles, cancellationToken);
+                    return (TvPayloadAdmission.NoBenefitMessage, true);
+                }
+            }
+            return null;
         } catch (OperationCanceledException) {
             throw;
         } catch (Exception ex) {
@@ -751,7 +763,7 @@ public sealed class AcquisitionMonitorJobHandler(
     /// that failed. Enqueue is deduped by target, so repeated passes while the job is pending enqueue it at
     /// most once.
     /// </summary>
-    private async Task EnqueueFailedHandleAsync(JobContext context, Guid acquisitionId, BlocklistReason reason, string message, CancellationToken cancellationToken) {
+    private async Task EnqueueFailedHandleAsync(JobContext context, Guid acquisitionId, BlocklistReason reason, string message, CancellationToken cancellationToken, bool recheckTvCoverage = false) {
         if (await acquisitions.GetStatusAsync(acquisitionId, cancellationToken) == AcquisitionStatus.Stopping) {
             return;
         }
@@ -759,7 +771,7 @@ public sealed class AcquisitionMonitorJobHandler(
         var selected = await acquisitions.GetSelectedReleaseAsync(acquisitionId, cancellationToken);
         var request = new EnqueueJobRequest(
             JobType.AcquisitionFailedHandle,
-            PayloadJson: AcquisitionFailedPayload.Serialize(acquisitionId, reason, message, selected),
+            PayloadJson: AcquisitionFailedPayload.Serialize(acquisitionId, reason, message, selected, recheckTvCoverage),
             TargetEntityId: acquisitionId.ToString(),
             TargetLabel: "Recover failed download",
             Origin: JobGraphOrigin.Interactive);

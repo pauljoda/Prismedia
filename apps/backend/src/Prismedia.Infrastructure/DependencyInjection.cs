@@ -467,6 +467,7 @@ public static class DependencyInjection {
         services.AddScoped<ICustomFormatStore, EfCustomFormatStore>();
         services.AddScoped<IAcquisitionStore, EfAcquisitionStore>();
         services.AddScoped<IHeldTvImportRecoveryStore, EfHeldTvImportRecoveryStore>();
+        services.AddScoped<ITvPayloadObservationStore, EfTvPayloadObservationStore>();
         services.AddScoped<IDetachedDownloadCleanupStore, EfDetachedDownloadCleanupStore>();
         services.AddScoped<EfManualAcquisitionStore>();
         services.AddScoped<IManualReplacementStore>(provider =>

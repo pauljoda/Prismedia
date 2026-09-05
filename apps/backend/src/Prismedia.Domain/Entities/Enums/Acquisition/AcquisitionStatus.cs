@@ -142,7 +142,7 @@ public enum ReleaseRejectionReason {
     [Code("quality-not-allowed")]
     QualityNotAllowed,
 
-    /// <summary>An upgrade search: the candidate is not a strict improvement over the owned copy, so it would not upgrade it.</summary>
+    /// <summary>The candidate would not improve the owned copy, or observed episode coverage adds nothing under the current profile.</summary>
     [Code("not-an-upgrade")]
     NotAnUpgrade,
 

@@ -347,6 +347,9 @@ public sealed class AcquisitionRow {
     /// <summary>Last retained-payload mapping inputs retried automatically; prevents unchanged held imports looping.</summary>
     public string? ImportRecoveryFingerprint { get; set; }
 
+    /// <summary>Bounded downloader file-list evidence, reevaluated against current episode coverage and profile policy.</summary>
+    public string? TvPayloadObservationsJson { get; set; }
+
     /// <summary>The last initial-import claim was explicitly reviewed; automatic remapping must preserve that decision.</summary>
     public bool ImportManualReview { get; set; }
 

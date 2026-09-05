@@ -252,6 +252,7 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.ImportCheckpointJson).HasColumnName("tv_import_checkpoint_json").HasColumnType("jsonb");
             entity.Property(row => row.ImportResultJson).HasColumnName("import_result_json").HasColumnType("jsonb");
             entity.Property(row => row.ImportRecoveryFingerprint).HasColumnName("import_recovery_fingerprint");
+            entity.Property(row => row.TvPayloadObservationsJson).HasColumnName("tv_payload_observations_json").HasColumnType("jsonb");
             entity.Property(row => row.ImportManualReview).HasColumnName("import_manual_review").HasDefaultValue(false);
             entity.Property(row => row.ImportClaimJobId).HasColumnName("import_claim_job_id");
             entity.Property(row => row.OwnedSourceTier)

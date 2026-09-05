@@ -21,12 +21,33 @@ public sealed class AcquisitionFailedHandleJobHandler(
     IDownloadClientConfigStore downloadClients,
     SettingsService settings,
     DownloadClientCleanupService cleanup,
-    ILogger<AcquisitionFailedHandleJobHandler> logger) : IJobHandler {
+    ILogger<AcquisitionFailedHandleJobHandler> logger,
+    TvPayloadAdmission? payloadAdmission = null,
+    IMonitorStore? monitors = null) : IJobHandler {
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var payload = AcquisitionFailedPayload.Parse(context.Job.PayloadJson);
+        if (payload.RecheckTvCoverage) {
+            var input = await acquisitions.GetSearchInputAsync(payload.AcquisitionId, cancellationToken);
+            if (monitors is null || input?.EntityId is not { } entityId) return;
+            await monitors.ExecuteIfActiveEntityMutationAsync(entityId,
+                token => HandleCoreAsync(context, payload, token), cancellationToken);
+            return;
+        }
+        await HandleCoreAsync(context, payload, cancellationToken);
+    }
+
+    private async Task HandleCoreAsync(JobContext context, AcquisitionFailedPayload payload, CancellationToken cancellationToken) {
         var acquisitionId = payload.AcquisitionId;
         var selected = payload.Selected;
         var failureMessage = payload.Message ?? "Download failed.";
+
+        // A coverage decision expires as soon as files, mappings, or profile intent change. Recheck
+        // before claiming/removing the transfer; unlike a corrupt release this is never a global block.
+        if (payload.RecheckTvCoverage) {
+            var currentInput = await acquisitions.GetSearchInputAsync(acquisitionId, cancellationToken);
+            if (payloadAdmission is null || currentInput is null || selected is null
+                || !(await payloadAdmission.GetExcludedAsync(currentInput, cancellationToken)).Contains(selected.Identity)) return;
+        }
 
         // The queued job is only evidence about the exact release/status snapshot that produced it. Claim
         // that snapshot before history, blocklisting, or requeue side effects. A user cancellation or newer
@@ -70,10 +91,12 @@ public sealed class AcquisitionFailedHandleJobHandler(
             return;
         }
 
-        await blocklist.AddAsync(
-            new BlocklistAddRequest(selected.Identity, payload.Reason, selected.Title, selected.IndexerName, selected.InfoHash, acquisitionId, payload.Message),
-            cancellationToken);
-        await RecordFailedAsync(acquisitionId, input, AcquisitionHistoryEvent.Blocklisted, selected.Title, selected.IndexerName, $"Blocklisted ({payload.Reason.ToCode()}).", cancellationToken);
+        if (!payload.RecheckTvCoverage) {
+            await blocklist.AddAsync(
+                new BlocklistAddRequest(selected.Identity, payload.Reason, selected.Title, selected.IndexerName, selected.InfoHash, acquisitionId, payload.Message),
+                cancellationToken);
+            await RecordFailedAsync(acquisitionId, input, AcquisitionHistoryEvent.Blocklisted, selected.Title, selected.IndexerName, $"Blocklisted ({payload.Reason.ToCode()}).", cancellationToken);
+        }
 
         if (!await profiles.GetAutoRedownloadAsync(input.ProfileId, input.Kind, cancellationToken)) {
             // Release blocklisted, but the profile leaves recovery to the user. This handler owns the
@@ -84,9 +107,10 @@ public sealed class AcquisitionFailedHandleJobHandler(
 
         var blocklisted = await blocklist.GetIdentitiesAsync(cancellationToken);
         var candidates = await acquisitions.ListAcceptedCandidatesAsync(acquisitionId, cancellationToken);
+        var excluded = payloadAdmission is null ? new HashSet<string>() : await payloadAdmission.GetExcludedAsync(input, cancellationToken);
         var preferredProtocol = await AcquisitionProtocolPreference.ResolveAsync(downloadClients, settings, cancellationToken);
         var next = AcquisitionProtocolPreference.Order(
-                candidates.Where(candidate => !blocklisted.Contains(candidate.Identity)),
+                candidates.Where(candidate => !blocklisted.Contains(candidate.Identity) && !excluded.Contains(candidate.Identity)),
                 preferredProtocol,
                 candidate => candidate.Protocol,
                 candidate => candidate.Score,

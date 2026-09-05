@@ -28,7 +28,8 @@ public sealed class AcquisitionQueueService(
     IAcquisitionHistoryStore history,
     ILogger<AcquisitionQueueService> logger,
     VideoScanConcurrencyGate? scanGate = null,
-    IJobGraphService? graphs = null) : IAcquisitionQueueService {
+    IJobGraphService? graphs = null,
+    TvPayloadAdmission? payloadAdmission = null) : IAcquisitionQueueService {
     /// <summary>Queues a chosen candidate: resolves a usable link (direct, magnet, or scraped from the info page) and hands it to a download client.</summary>
     public async Task<AcquisitionDetail?> QueueAsync(
         Guid acquisitionId,
@@ -73,6 +74,13 @@ public sealed class AcquisitionQueueService(
             throw new AcquisitionConfigurationException(
                 ApiProblemCodes.AcquisitionInvalid,
                 "This release is blocklisted from a previous failed attempt. Remove it from the blocklist to download it again.");
+        }
+
+        if (!manualPick && payloadAdmission is not null
+            && await acquisitions.GetSearchInputAsync(acquisitionId, cancellationToken) is { } input
+            && (await payloadAdmission.GetExcludedAsync(input, cancellationToken)).Contains(
+                ReleaseIdentity.For(candidate.InfoHash, candidate.IndexerName, candidate.Title))) {
+            throw new AcquisitionConfigurationException(ApiProblemCodes.AcquisitionInvalid, TvPayloadAdmission.NoBenefitMessage);
         }
 
         var url = await ResolveUrlAsync(candidate, cancellationToken);

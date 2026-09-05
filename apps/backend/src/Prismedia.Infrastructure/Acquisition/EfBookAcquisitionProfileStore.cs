@@ -37,6 +37,10 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
         return row?.AutoRedownload ?? false;
     }
 
+    /// <inheritdoc />
+    public async Task<bool> GetAutoUpgradeAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken) =>
+        (await ResolveRowAsync(profileId, kind, cancellationToken))?.UpgradeUntilCutoff ?? true;
+
     public async Task<AcquisitionReleaseTimingPolicy> GetReleaseTimingAsync(
         Guid? profileId,
         EntityKind kind,

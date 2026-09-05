@@ -136,6 +136,9 @@ public interface IBookAcquisitionProfileStore {
     /// <summary>True when the resolved profile auto-blocklists a failed download and grabs the next-best candidate.</summary>
     Task<bool> GetAutoRedownloadAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken);
 
+    /// <summary>Whether the resolved profile permits upgrades; unknown policy conservatively permits further inspection.</summary>
+    Task<bool> GetAutoUpgradeAsync(Guid? profileId, EntityKind kind, CancellationToken cancellationToken) => Task.FromResult(true);
+
     /// <summary>The resolved profile's automatic release-search gate, or immediate when none is configured.</summary>
     Task<AcquisitionReleaseTimingPolicy> GetReleaseTimingAsync(
         Guid? profileId,

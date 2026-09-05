@@ -22,6 +22,24 @@ namespace Prismedia.Infrastructure.Tests;
 public sealed class AcquisitionMonitorJobHandlerTests {
     private static readonly Guid ClientId = Guid.NewGuid();
 
+    [Fact]
+    public async Task EarlyOwnedSeasonCoverageRequestsContextualRecoveryWithoutGloballyBlockingTheRelease() {
+        await using var db = CreateContext();
+        var id = await SeedDownloadingAsync(db, DateTimeOffset.UtcNow);
+        using var fixture = await TvPayloadAdmissionFixture.CreateAsync(db, await db.Acquisitions.SingleAsync(row => row.Id == id));
+        var queue = new RecordingJobQueue();
+        var downloading = new DownloadItemStatus("hashX", "Show", 0.01, "downloading", false, "/save", "/save/show");
+        await RunAsync(db, queue, [downloading], null, id,
+            files: fixture.Files.Select(file => new DownloadItemFile(file.RelativePath, file.SizeBytes, 0.01)).ToArray(),
+            payloadAdmission: fixture.Service);
+
+        var job = Assert.Single(queue.Enqueued);
+        Assert.Equal(JobType.AcquisitionFailedHandle, job.Type);
+        Assert.True(AcquisitionFailedPayload.Parse(job.PayloadJson!).RecheckTvCoverage);
+        Assert.Contains(fixture.Selected.Identity, await fixture.Service.GetExcludedAsync(fixture.Input, CancellationToken.None));
+        Assert.Empty(await db.AcquisitionBlocklist.ToArrayAsync());
+    }
+
     [Theory]
     [InlineData(true)]
     [InlineData(false)]
@@ -649,7 +667,8 @@ public sealed class AcquisitionMonitorJobHandlerTests {
         DownloadItemProperties? properties = null,
         Action<string, bool>? onRemove = null,
         IReadOnlyList<DownloadItemFile>? files = null,
-        IImportTargetIndex? importTargets = null) {
+        IImportTargetIndex? importTargets = null,
+        TvPayloadAdmission? payloadAdmission = null) {
         var handler = new AcquisitionMonitorJobHandler(
             AcquisitionTestFactory.Store(db),
             new EfDetachedDownloadCleanupStore(db),
@@ -668,7 +687,8 @@ public sealed class AcquisitionMonitorJobHandlerTests {
             new RemotePathMapper(new NoRemotePathMappings()),
             new EfAcquisitionHistoryStore(db),
             NullLogger<AcquisitionMonitorJobHandler>.Instance,
-            importTargets: importTargets);
+            importTargets: importTargets,
+            payloadAdmission: payloadAdmission);
         var job = new JobRunSnapshot(
             Guid.NewGuid(), JobType.AcquisitionMonitor, JobRunStatus.Running, 0, null, "{}",
             null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null);
