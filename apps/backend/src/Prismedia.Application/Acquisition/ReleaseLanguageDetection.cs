@@ -16,7 +16,8 @@ public static partial class ReleaseLanguageDetection {
 
     // Alias token → canonical language name. Tokens are matched whole between separator characters,
     // so short codes only count when they stand alone in the title (e.g. ".GER." but not "GERM").
-    // Two-letter codes are deliberately absent — they collide with too many ordinary title words.
+    // Two-letter codes normalize structured attributes and profile preferences only. Detect deliberately
+    // excludes short title tokens because they collide with ordinary words such as "no" and "it".
     private static readonly IReadOnlyDictionary<string, string> Aliases =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) {
             ["english"] = "english", ["eng"] = "english",
@@ -43,6 +44,12 @@ public static partial class ReleaseLanguageDetection {
             ["turkish"] = "turkish", ["tur"] = "turkish",
             ["czech"] = "czech", ["cze"] = "czech",
             ["hungarian"] = "hungarian", ["hun"] = "hungarian",
+            ["en"] = "english", ["fr"] = "french", ["de"] = "german", ["es"] = "spanish",
+            ["it"] = "italian", ["pt"] = "portuguese", ["ru"] = "russian", ["ja"] = "japanese",
+            ["ko"] = "korean", ["zh"] = "chinese", ["hi"] = "hindi", ["nl"] = "dutch",
+            ["pl"] = "polish", ["sv"] = "swedish", ["da"] = "danish", ["no"] = "norwegian",
+            ["fi"] = "finnish", ["ar"] = "arabic", ["tr"] = "turkish", ["cs"] = "czech", ["hu"] = "hungarian",
+            ["dut"] = "dutch", ["pol"] = "polish", ["nor"] = "norwegian", ["fin"] = "finnish", ["ces"] = "czech",
             [Multi] = Multi, ["multilang"] = Multi, ["multilanguage"] = Multi, ["dual"] = Multi
         };
 
