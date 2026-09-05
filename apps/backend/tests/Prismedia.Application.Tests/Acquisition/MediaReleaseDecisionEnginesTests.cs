@@ -10,6 +10,22 @@ namespace Prismedia.Application.Tests.Acquisition;
 /// </summary>
 public sealed class MediaReleaseDecisionEnginesTests {
     [Theory]
+    [InlineData(VideoQuality.Dvd, false)]
+    [InlineData(VideoQuality.Bluray720p, true)]
+    public void HdDvdSourceObeysTheHdProfileInsteadOfTheDiscCapacityLabel(VideoQuality allowed, bool accepted) {
+        var rules = BookAcquisitionRules.Default with {
+            TargetTitle = "Example", AllowedQualities = [allowed.ToCode()]
+        };
+        var result = Assert.Single(new MovieReleaseDecisionEngine().Evaluate(
+            [(Release("Example.1999.DVD9.720p.HDDVD.x264-GROUP", seeders: 10), null, "Indexer")], rules));
+
+        Assert.Equal(accepted, result.Accepted);
+        if (!accepted) {
+            Assert.Contains(ReleaseRejectionReason.QualityNotAllowed, result.Rejections);
+        }
+    }
+
+    [Theory]
     [InlineData("Example.1999.DVDRip.XviD.AC3.CD1-GROUP", false)]
     [InlineData("Example.1999.DVDRip.XviD.AC3.CD2-GROUP", false)]
     [InlineData("Example.1999.DVDRip.XviD.CD.02-GROUP", false)]

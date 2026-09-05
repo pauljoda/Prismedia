@@ -42,7 +42,7 @@ public static class VideoQualityDetection {
 
     private static Source DetectSource(string title) =>
         Has(title, "remux") ? Source.Remux :
-        Has(title, "bluray", "blu-ray", "bdrip", "brrip", "bd25", "bd50") ? Source.Bluray :
+        Has(title, "bluray", "blu-ray", "bdrip", "brrip", "bd25", "bd50", "hddvd", "hd-dvd") ? Source.Bluray :
         Has(title, "web-dl", "webdl", "web dl") ? Source.Webdl :
         Has(title, "webrip", "web-rip") ? Source.Webrip :
         Has(title, "web") ? Source.Webdl :

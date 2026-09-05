@@ -36,6 +36,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- HD-DVD releases now use their HD disc quality tier instead of passing profiles restricted to standard DVD.
 - Download polling and interrupted-request recovery continue when an unrelated recurring maintenance check fails.
 - Automatic video upgrades now compare measured runtimes and preserve both files for review when a replacement is substantially shorter than the owned copy.
 - Early download checks now use the same provider episode alignment as TV imports, preserving useful paired-episode files and deferring rejection when file names cannot prove an episode is absent.
