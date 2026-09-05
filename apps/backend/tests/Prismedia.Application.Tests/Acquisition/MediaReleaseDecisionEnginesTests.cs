@@ -10,6 +10,22 @@ namespace Prismedia.Application.Tests.Acquisition;
 /// </summary>
 public sealed class MediaReleaseDecisionEnginesTests {
     [Theory]
+    [InlineData("Example.1999.DVDRip.XviD.AC3.CD1-GROUP", false)]
+    [InlineData("Example.1999.DVDRip.XviD.AC3.CD2-GROUP", false)]
+    [InlineData("Example.1999.DVDRip.XviD.CD.02-GROUP", false)]
+    [InlineData("Example.1999.DVDRip.XviD.2CD-GROUP", true)]
+    [InlineData("Example.1999.DVDRip.XviD-GROUP", true)]
+    public void MovieSearchRejectsIndividualCdParts(string title, bool accepted) {
+        var result = Assert.Single(new MovieReleaseDecisionEngine().Evaluate(
+            [(Release(title, seeders: 10), null, "Indexer")],
+            BookAcquisitionRules.Default with { TargetTitle = "Example" }));
+        Assert.Equal(accepted, result.Accepted);
+        if (!accepted) {
+            Assert.Contains(ReleaseRejectionReason.UnsupportedFormat, result.Rejections);
+        }
+    }
+
+    [Theory]
     [InlineData(EntityKind.Movie, "Example.1999.720p.BDRip.XviD.Sample-GROUP")]
     [InlineData(EntityKind.Movie, "Example.1999.1080p.Trailer.x264-GROUP")]
     [InlineData(EntityKind.VideoSeason, "Example.S01.1080p.WEB-DL.Sample-GROUP")]

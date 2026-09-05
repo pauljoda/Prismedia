@@ -16,6 +16,7 @@ public sealed class MovieReleaseDecisionEngine(EntityKind kind = EntityKind.Movi
         new TitleIdentitySpecification(),
         new MediaYearSpecification(),
         new VideoPreviewSpecification(),
+        new MoviePartialReleaseSpecification(),
         new ProtocolSpecification(),
         new DownloadLinkSpecification(),
         new MinSeedersSpecification(),
