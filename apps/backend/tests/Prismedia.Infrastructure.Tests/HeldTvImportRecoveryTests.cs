@@ -14,6 +14,56 @@ public sealed class HeldTvImportRecoveryTests : IDisposable {
     private readonly Guid rootId = Guid.NewGuid();
     public void Dispose() => Directory.Delete(root, true);
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task APartialImportCanHealOnlyWhenItsLedgerRetainsReviewVideos(bool retained) {
+        await using var db = CreateContext();
+        var (service, acquisition, episodes) = await SeedAsync(db);
+        episodes[0].SortOrder = 1;
+        episodes[1].SortOrder = 2;
+        acquisition.FinalSourcePath = Path.Combine(root, "already-imported.mkv");
+        await File.WriteAllTextAsync(acquisition.FinalSourcePath, "previous library bytes");
+        if (retained) {
+            acquisition.ImportResultJson = AcquisitionImportFileLedgerJson.Serialize(
+                new AcquisitionImportFileLedger(AcquisitionImportPhase.Imported, []).RetainUnmappedTvVideos([
+                    new("Show.S01E01E02.First.Story.Second.Story.mkv", 10)
+                ]));
+        }
+        await db.SaveChangesAsync();
+
+        await service.RecoverAsync(default);
+
+        Assert.Equal(retained ? AcquisitionStatus.Downloaded : AcquisitionStatus.ManualImportRequired, acquisition.Status);
+        Assert.Equal("previous library bytes", await File.ReadAllTextAsync(acquisition.FinalSourcePath));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PartialImportRecoveryRechecksTheExactRetainedEvidence(bool postgres) {
+        await using var database = postgres ? await PostgresTestDatabase.CreateAsync() : null;
+        await using var db = database?.CreateContext() ?? CreateContext();
+        var (_, acquisition, _) = await SeedAsync(db);
+        acquisition.FinalSourcePath = Path.Combine(root, "previous.mkv");
+        acquisition.ImportResultJson = AcquisitionImportFileLedgerJson.Serialize(
+            new AcquisitionImportFileLedger(AcquisitionImportPhase.Imported, []).RetainUnmappedTvVideos([new("extra.mkv", 10)]));
+        await db.SaveChangesAsync();
+        var store = new EfHeldTvImportRecoveryStore(db);
+        var held = Assert.Single(await store.ListAsync(default));
+        Assert.True(await store.TryResumeAsync(held, "mapping-one", default));
+        acquisition.Status = AcquisitionStatus.ManualImportRequired;
+        acquisition.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync();
+        var newer = Assert.Single(await store.ListAsync(default));
+        acquisition.ImportResultJson = AcquisitionImportFileLedgerJson.Serialize(new(AcquisitionImportPhase.Imported, []));
+        await db.SaveChangesAsync();
+
+        Assert.False(await store.TryResumeAsync(newer, "mapping-two", default));
+        Assert.Empty(await store.ListAsync(default));
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, acquisition.Status);
+    }
+
     [Fact]
     public async Task CorrectedEpisodeIdentitiesResumeTheRetainedPayloadOnlyOncePerMapping() {
         await using var db = CreateContext();

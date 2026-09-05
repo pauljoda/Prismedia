@@ -9,7 +9,10 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Application.Acquisition;
 
 /// <summary>An automatic TV import still waiting for review, with its exact held-state observation.</summary>
-public sealed record HeldTvImport(Guid Id, Guid EntityId, DateTimeOffset HeldAt, string? RecoveryFingerprint);
+/// <param name="FinalSourcePath">Previously imported location, retained during partial-payload recovery.</param>
+/// <param name="ImportResultSnapshot">Opaque persisted ledger snapshot used to reject stale recovery writes.</param>
+public sealed record HeldTvImport(Guid Id, Guid EntityId, DateTimeOffset HeldAt, string? RecoveryFingerprint,
+    string? FinalSourcePath = null, string? ImportResultSnapshot = null);
 
 /// <summary>Durable compare-and-swap boundary for retrying a retained TV payload after mapping inputs change.</summary>
 public interface IHeldTvImportRecoveryStore {
@@ -57,8 +60,11 @@ public sealed class HeldTvImportRecoveryService(
         if (import is not { SeasonNumber: { } season, ContentPath: { } contentPath }
             || import.EntityId != held.EntityId || selected is null || selected.ManualPick
             || import.TvImportCheckpoint is not null || import.ImportPlacementCheckpoint is not null
-            || !string.IsNullOrWhiteSpace(import.FinalSourcePath)
             || await targets.HasUnnumberedWantedTvEpisodesAsync(held.EntityId, season, cancellationToken)) {
+            return;
+        }
+        if (!string.IsNullOrWhiteSpace(import.FinalSourcePath)
+            && (await acquisitions.GetTransferInfoAsync(held.Id, cancellationToken))?.ImportResult?.HasRetainedTvVideos() != true) {
             return;
         }
 

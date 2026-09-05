@@ -8,25 +8,30 @@ namespace Prismedia.Infrastructure.Acquisition;
 /// <summary>Persists retained TV retry observations alongside the acquisition's durable completion state.</summary>
 public sealed class EfHeldTvImportRecoveryStore(PrismediaDbContext db) : IHeldTvImportRecoveryStore {
     /// <inheritdoc />
-    public async Task<IReadOnlyList<HeldTvImport>> ListAsync(CancellationToken cancellationToken) =>
-        await WithCompletedPayload().AsNoTracking()
+    public async Task<IReadOnlyList<HeldTvImport>> ListAsync(CancellationToken cancellationToken) {
+        var held = await WithCompletedPayload().AsNoTracking()
             .Where(row => row.Status == AcquisitionStatus.ManualImportRequired
                 && (row.Kind == EntityKind.VideoSeason || row.Kind == EntityKind.VideoEpisode)
                 && row.EntityId != null && !row.ImportManualReview
-                && row.ImportCheckpointJson == null && row.FinalSourcePath == null
+                && row.ImportCheckpointJson == null
                 && row.UpgradeOfAcquisitionId == null)
             .OrderBy(row => row.UpdatedAt)
-            .Select(row => new HeldTvImport(row.Id, row.EntityId!.Value, row.UpdatedAt, row.ImportRecoveryFingerprint))
+            .Select(row => new HeldTvImport(row.Id, row.EntityId!.Value, row.UpdatedAt, row.ImportRecoveryFingerprint,
+                row.FinalSourcePath, row.ImportResultJson))
             .ToArrayAsync(cancellationToken);
+        return held.Where(CanReconsiderPayload).ToArray();
+    }
 
     /// <inheritdoc />
     public async Task<bool> TryResumeAsync(HeldTvImport held, string fingerprint, CancellationToken cancellationToken) {
+        if (!CanReconsiderPayload(held)) return false;
         if (db.Database.IsRelational()) {
             var affected = await WithCompletedPayload()
                 .Where(row => row.Id == held.Id && row.Status == AcquisitionStatus.ManualImportRequired
                     && row.UpdatedAt == held.HeldAt && row.EntityId == held.EntityId
                     && row.ImportRecoveryFingerprint != fingerprint && !row.ImportManualReview
-                    && row.ImportCheckpointJson == null && row.FinalSourcePath == null && row.UpgradeOfAcquisitionId == null
+                    && row.ImportCheckpointJson == null && row.FinalSourcePath == held.FinalSourcePath
+                    && row.ImportResultJson == held.ImportResultSnapshot && row.UpgradeOfAcquisitionId == null
                     && (row.Kind == EntityKind.VideoSeason || row.Kind == EntityKind.VideoEpisode))
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(row => row.ImportRecoveryFingerprint, fingerprint)
@@ -43,7 +48,8 @@ public sealed class EfHeldTvImportRecoveryStore(PrismediaDbContext db) : IHeldTv
         var row = await WithCompletedPayload().FirstOrDefaultAsync(row => row.Id == held.Id, cancellationToken);
         if (row is null || row.Status != AcquisitionStatus.ManualImportRequired || row.UpdatedAt != held.HeldAt
             || row.EntityId != held.EntityId || row.ImportRecoveryFingerprint == fingerprint || row.ImportManualReview
-            || row.ImportCheckpointJson != null || row.FinalSourcePath != null || row.UpgradeOfAcquisitionId != null
+            || row.ImportCheckpointJson != null || row.FinalSourcePath != held.FinalSourcePath
+            || row.ImportResultJson != held.ImportResultSnapshot || row.UpgradeOfAcquisitionId != null
             || row.Kind is not (EntityKind.VideoSeason or EntityKind.VideoEpisode)) {
             return false;
         }
@@ -68,6 +74,10 @@ public sealed class EfHeldTvImportRecoveryStore(PrismediaDbContext db) : IHeldTv
             .OrderByDescending(transfer => transfer.CreatedAt)
             .Select(transfer => transfer.Progress >= 1 && !string.IsNullOrWhiteSpace(transfer.ContentPath))
             .FirstOrDefault());
+
+    private static bool CanReconsiderPayload(HeldTvImport held) => held.FinalSourcePath is null
+        || AcquisitionImportFileLedgerJson.TryDeserialize(held.ImportResultSnapshot, out var ledger)
+            && ledger?.HasRetainedTvVideos() == true;
 
     private const string ResumeMessage = "Mapping inputs changed; retrying the retained TV download to fill library gaps.";
 }

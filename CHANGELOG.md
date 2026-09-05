@@ -38,6 +38,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Automatic TV recovery can reconsider retained extras after a partial import when improved mapping evidence can fill a library gap, while preserving explicit review choices and newer download attempts.
+
 - Partial TV imports keep unmatched videos for review while cataloging matched episodes. Saved import recovery and downloader cleanup preserve those files until their mapping is resolved or the download is explicitly rejected.
 
 - Interrupted TV imports restore every episode covered by a combined file, including files renamed during placement, and retain incomplete mapping evidence for review.
