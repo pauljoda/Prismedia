@@ -71,46 +71,20 @@
         {@const hasPending = kindInfo.pending > 0}
         {@const KindIcon = entityKindIcon(kindInfo.kind)}
         {@const kindAccent = entityAccentForKind(kindInfo.kind).primary}
-        <Button variant="outline" size="sm"
+        <Button variant="outline"
           type="button"
-          class={cn(
-            "surface-card flex flex-col gap-2.5 p-3.5 text-left transition-all",
-            hasPending && "border-border-accent-strong",
-          )}
+          class="grid h-auto min-h-control-lg w-full grid-cols-[auto_minmax(0,1fr)_auto] gap-3 whitespace-normal p-3 text-left"
           onclick={() => store.navigateToKind(kindInfo.kind)}
         >
-          <div class="flex items-center justify-between">
-            <div
-              class={cn(
-                "grid h-9 w-9 place-items-center rounded-xs border",
-                hasPending
-                  ? "border-border-accent bg-accent-950/40 text-text-accent-bright"
-                  : "border-border-subtle bg-surface-3 text-text-secondary",
-              )}
-            >
-              <KindIcon class="h-[18px] w-[18px]" color={kindAccent} aria-hidden="true" />
-            </div>
-          </div>
-
-          <div>
-            <div
-              class={cn(
-                "font-heading text-[0.95rem] font-semibold",
-                hasPending ? "text-text-accent-bright" : "text-text-primary",
-              )}
-            >
-              {kindInfo.label}
-            </div>
-            <div class="font-mono text-[0.66rem] text-text-muted">{kindInfo.kind}</div>
-          </div>
-
-          <div class="flex items-center gap-4 border-t border-border-subtle pt-2.5">
+          <KindIcon color={kindAccent} aria-hidden="true" />
+          <span class="flex min-w-0 flex-col gap-1">
+            <span>{kindInfo.label}</span>
+            <span class="break-words font-mono text-caption text-muted-foreground">{kindInfo.kind}</span>
             {#if hasPending}
-              <span class="font-mono text-[0.66rem] text-text-accent">{kindInfo.pending} queued</span>
+              <span class="text-caption">{kindInfo.pending} queued</span>
             {/if}
-            <div class="flex-1"></div>
-            <ChevronRight class={cn("h-3.5 w-3.5", hasPending ? "text-text-accent" : "text-text-muted")} />
-          </div>
+          </span>
+          <ChevronRight aria-hidden="true" />
         </Button>
       {/each}
     </div>

@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Identify's content-type buttons now grow with their labels and queue counts, keeping icons and text aligned without overlapping adjacent rows on desktop or phones.
 - Entity editors warn before leaving a page with unsaved changes, including browser back navigation, refresh, and closing the tab.
 - Entity editors place Save and Cancel after the fields, with validation and save errors beside those actions. The unsaved-changes prompt uses a compact shared dialog with stacked phone actions instead of stretching across the screen.
 - Metadata cards share the available row width without empty reserved columns. Source paths and fingerprints use full-width, selectable values below their labels, and repeated labels no longer prevent cards from rendering.
