@@ -24,14 +24,19 @@ public sealed class DownloadClientCleanupService(
         HandleImportedAsync(import, mode, discardRemainingPayload: false, cancellationToken);
 
     /// <summary>
-    /// Finishes transfer cleanup, forcing immediate data removal when the importer kept only a requested
-    /// subset. A partial payload cannot remain a trustworthy seeding source after its extras are discarded.
+    /// Finishes transfer cleanup after preserving any videos retained for review. Redundant payloads
+    /// may be discarded immediately; partial moved payloads cannot remain trustworthy seeding sources.
     /// </summary>
     public async Task HandleImportedAsync(
         AcquisitionImportContext import,
         ImportMode mode,
         bool discardRemainingPayload,
         CancellationToken cancellationToken) {
+        var transfer = await acquisitions.GetTransferInfoAsync(import.Id, cancellationToken);
+        if (transfer?.ImportResult?.HasRetainedTvVideos() == true) {
+            logger.LogDebug("AcquisitionImport: acquisition {Id} retained unmapped videos for review.", import.Id);
+            return;
+        }
         if (uploads?.Owns(import.ClientItemId) == true) {
             await uploads.DeleteAsync(import.ClientItemId!, cancellationToken);
             return;

@@ -116,6 +116,20 @@ public sealed record AcquisitionImportFileLedger(
 
     public AcquisitionImportFileLedger Complete() => this with { Phase = AcquisitionImportPhase.Imported };
 
+    /// <summary>Persists omitted TV videos as review evidence before any planned files are moved.</summary>
+    public AcquisitionImportFileLedger RetainUnmappedTvVideos(IReadOnlyList<ImportCandidateFile> payload) => this with {
+        Files = Files.Concat(TvImportPlanBuilder.UnmappedVideos(payload, Files.Select(file => file.SourceRelativePath))
+            .Select(file => new AcquisitionImportFileLedgerEntry(
+                StableId(Normalize(file.RelativePath)), Path.GetFileName(file.RelativePath), file.SizeBytes,
+                Normalize(file.RelativePath), null, AcquisitionImportFileRole.Media, AcquisitionImportContentKind.Video,
+                AcquisitionImportFileStatus.Skipped, AcquisitionImportDecision.Ambiguous, null))).ToArray()
+    };
+
+    /// <summary>Whether a partial TV import still owns videos awaiting an explicit mapping or rejection.</summary>
+    public bool HasRetainedTvVideos() => Files.Any(file => file.Role == AcquisitionImportFileRole.Media
+        && file.ContentKind == AcquisitionImportContentKind.Video && file.Status == AcquisitionImportFileStatus.Skipped
+        && file.Decision == AcquisitionImportDecision.Ambiguous);
+
     public AcquisitionImportFileLedger WithDecision(AcquisitionImportDecision decision) => this with {
         Files = Files.Select(file => file with { Decision = decision }).ToArray()
     };

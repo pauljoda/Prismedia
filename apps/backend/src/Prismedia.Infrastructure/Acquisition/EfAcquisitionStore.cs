@@ -820,8 +820,12 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             FormatScore: ownedFormatScore,
             Message: message);
 
-        row.Status = AcquisitionStatus.Imported;
-        row.StatusMessage = message;
+        AcquisitionImportFileLedgerJson.TryDeserialize(row.ImportResultJson, out var importResult);
+        var retainedVideos = importResult?.HasRetainedTvVideos() == true;
+        row.Status = retainedVideos ? AcquisitionStatus.ManualImportRequired : AcquisitionStatus.Imported;
+        row.StatusMessage = retainedVideos
+            ? "Matched episodes were imported. Additional videos were retained in the download for mapping review."
+            : message;
         row.OwnedSourceTier = ownedQuality.Source;
         row.OwnedFormatTier = ownedQuality.Format;
         // A media kind (movie/TV/music) records its ladder code and revision; book kinds leave both at the
@@ -836,14 +840,15 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         row.UpgradeQualityCaptured = true;
         row.ImportCheckpointJson = null;
         row.ImportClaimJobId = null;
-        if (AcquisitionImportFileLedgerJson.TryDeserialize(row.ImportResultJson, out var importResult)
-            && importResult is not null) {
+        if (importResult is not null) {
             row.ImportResultJson = AcquisitionImportFileLedgerJson.Serialize(importResult.Complete());
         }
         row.UpdatedAt = DateTimeOffset.UtcNow;
 
-        await RetireSupersededPassiveDuplicatesAsync(row, cancellationToken);
-        await RetireFulfilledPassiveSubtreeAcquisitionsAsync(row, cancellationToken);
+        if (!retainedVideos) {
+            await RetireSupersededPassiveDuplicatesAsync(row, cancellationToken);
+            await RetireFulfilledPassiveSubtreeAcquisitionsAsync(row, cancellationToken);
+        }
 
         await db.SaveChangesAsync(cancellationToken);
 

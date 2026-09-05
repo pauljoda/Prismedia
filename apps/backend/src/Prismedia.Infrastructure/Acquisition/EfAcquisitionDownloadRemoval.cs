@@ -43,6 +43,17 @@ public sealed class EfAcquisitionDownloadRemoval(PrismediaDbContext db, EfComple
         }
         var other = transfers.Where(row => row.AcquisitionId != acquisitionId
             && string.Equals(row.ClientItemId, clientItemId, StringComparison.OrdinalIgnoreCase)).ToArray();
+        if (deleteData) {
+            var ownerIds = other.Select(row => row.AcquisitionId)
+                .Concat(acquisitionId is { } currentOwner ? [currentOwner] : []).Distinct().ToArray();
+            var reviewOwners = await db.Acquisitions.AsNoTracking().Where(row => ownerIds.Contains(row.Id)
+                && row.Status != AcquisitionStatus.Stopping && row.Status != AcquisitionStatus.Cancelled
+                && row.Status != AcquisitionStatus.Failed).Select(row => row.ImportResultJson).ToArrayAsync(cancellationToken);
+            if (reviewOwners.Any(json => AcquisitionImportFileLedgerJson.TryDeserialize(json, out var ledger)
+                && ledger?.HasRetainedTvVideos() == true)) {
+                throw new IOException("Unmapped videos in this download are retained for review; its data was preserved.");
+            }
+        }
         if (other.Length > 0) {
             var ownerIds = other.Select(row => row.AcquisitionId).ToArray();
             var states = await db.Acquisitions.AsNoTracking().Where(row => ownerIds.Contains(row.Id))

@@ -9,6 +9,29 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed partial class AcquisitionDownloadRemovalTests {
     [Theory]
+    [InlineData(AcquisitionStatus.Importing, false)]
+    [InlineData(AcquisitionStatus.Imported, false)]
+    [InlineData(AcquisitionStatus.ManualImportRequired, false)]
+    [InlineData(AcquisitionStatus.Stopping, true)]
+    public async Task RemovalPreservesReviewVideosUntilExplicitTeardown(AcquisitionStatus status, bool removes) {
+        await using var db = Context();
+        var (owner, clientId, transfer) = await SeedAsync(db);
+        var acquisition = await db.Acquisitions.SingleAsync(row => row.Id == owner);
+        acquisition.Status = status;
+        acquisition.ImportResultJson = AcquisitionImportFileLedgerJson.Serialize(
+            new AcquisitionImportFileLedger(AcquisitionImportPhase.Imported, [])
+                .RetainUnmappedTvVideos([new("Show.S02E01.mkv", 100)]));
+        await db.SaveChangesAsync();
+        var client = new Client();
+        var removal = () => new DownloadClientFactory([client], new EfAcquisitionDownloadRemoval(db)).Get(client.Kind)
+            .RemoveOwnedAsync(Connection(clientId), owner, "same-item", true, default, transfer);
+
+        if (removes) await removal();
+        else await Assert.ThrowsAsync<IOException>(removal);
+        Assert.Equal(removes, client.Removed);
+    }
+
+    [Theory]
     [InlineData(AcquisitionStatus.Queued)]
     [InlineData(AcquisitionStatus.Downloading)]
     [InlineData(AcquisitionStatus.Downloaded)]

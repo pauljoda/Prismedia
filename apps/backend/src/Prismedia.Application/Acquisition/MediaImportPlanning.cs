@@ -390,6 +390,16 @@ public static partial class TvImportPlanBuilder {
     /// <summary>Whether a payload path is supported TV media.</summary>
     public static bool IsVideoFile(string path) => VideoExtensions.Contains(Path.GetExtension(path));
 
+    /// <summary>Finds real videos omitted from a plan, excluding samples and derivatives of an accounted-for original.</summary>
+    public static IReadOnlyList<ImportCandidateFile> UnmappedVideos(
+        IReadOnlyList<ImportCandidateFile> files, IEnumerable<string> accountedPaths) {
+        var accounted = accountedPaths.ToHashSet(FileSystemPathComparison.Comparer);
+        return files.Where(file => IsVideoFile(file.RelativePath)
+            && !SampleTokenRegex().IsMatch(Path.GetFileNameWithoutExtension(file.RelativePath))
+            && !accounted.Contains(file.RelativePath)
+            && !HasInternetArchiveOriginalSibling(file.RelativePath, accounted)).ToArray();
+    }
+
     /// <summary>
     /// Infers one file's episode from explicit numbering or one unambiguous provider-title match. This is
     /// shared by automatic planning and the manual review projection so the prefilled dropdown never claims

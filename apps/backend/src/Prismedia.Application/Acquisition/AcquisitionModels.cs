@@ -843,8 +843,8 @@ public sealed record TvImportCheckpoint(
     public AcquisitionImportFileLedger? ImportFileLedger { get; init; }
 
     /// <summary>
-    /// Whether supported payload media outside the requested season/episode scope was intentionally
-    /// excluded. The transfer is torn down after the selected files are safe in the library.
+    /// Whether accounted-for redundant media can be discarded after selected files are safe in the
+    /// library. Unmapped videos recorded for review prevent transfer teardown.
     /// </summary>
     public bool DiscardRemainingPayload { get; init; }
 }

@@ -487,6 +487,19 @@ public sealed class TvImportPlanBuilderTests {
     }
 
     [Fact]
+    public void TvReviewRetentionDistinguishesUnmappedVideosFromSamplesAndKnownDerivatives() {
+        var files = new[] {
+            File("pack/Show.S01E01.mp4"), File("pack/Show.S01E01.ia.mp4"),
+            File("pack/Show.S01E01.sample.mp4"), File("pack/artwork.jpg"),
+            File("pack/Show.S02E01.mp4"), File("pack/unknown.ia.mp4")
+        };
+
+        var retained = TvImportPlanBuilder.UnmappedVideos(files, ["pack/Show.S01E01.mp4"]);
+
+        Assert.Equal(["pack/Show.S02E01.mp4", "pack/unknown.ia.mp4"], retained.Select(file => file.RelativePath).ToArray());
+    }
+
+    [Fact]
     public void CustomTemplateFlowsThroughToEpisodePathsAndTheSeriesFolderStaysConsistent() {
         const string template = "{Series}/S{Season:00}/{Series} {Season:00}x{Episode:00} [{Quality}].{ext}";
         var plan = TvImportPlanBuilder.Plan([

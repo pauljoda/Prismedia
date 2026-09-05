@@ -121,6 +121,95 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
     }
 
     [Theory]
+    [InlineData(true, "Show.S02E01.mkv")]
+    [InlineData(false, "Show.S02E01.mkv")]
+    [InlineData(true, "unidentified.mkv")]
+    [InlineData(false, "unidentified.mkv")]
+    public async Task AutomaticSeasonImportRetainsUnmappedExtraVideosForReview(bool existingLayout, string extraName) {
+        await using var db = CreateContext();
+        var harness = await HarnessAsync(db, ownedEpisodeName: "Show - s01e01.mkv",
+            payloadFiles: ["Show.S01E02.mkv", extraName], releaseTitle: "Show S01");
+        if (!existingLayout) {
+            db.EntitySources.RemoveRange(await db.EntitySources
+                .Where(row => row.EntityId == harness.SeriesId || row.EntityId == harness.SeasonId).ToArrayAsync());
+            foreach (var entity in await db.Entities.Where(row => row.Id == harness.SeriesId || row.Id == harness.SeasonId).ToArrayAsync()) {
+                entity.IsWanted = true;
+            }
+            await db.SaveChangesAsync();
+        }
+
+        await harness.Engine.ImportAsync(harness.Context, harness.Import, default);
+
+        var store = AcquisitionTestFactory.Store(db);
+        await store.MarkImportedWithQualityAsync(harness.Import.Id, BookQualityRank.Floor, "Imported", default);
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, await StatusOf(db, harness.Import.Id));
+        Assert.Equal("payload-bytes", await File.ReadAllTextAsync(Path.Combine(harness.Import.ContentPath!, extraName)));
+        Assert.False(File.Exists(Path.Combine(harness.Import.ContentPath!, "Show.S01E02.mkv")));
+        Assert.False((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == harness.WantedEpisodeId)).IsWanted);
+        var ledger = (await store.GetTransferInfoAsync(harness.Import.Id, default))!.ImportResult!;
+        Assert.True(ledger.HasRetainedTvVideos());
+        Assert.Contains(ledger.Files, file => file.SourceRelativePath == extraName
+            && file.Status == AcquisitionImportFileStatus.Skipped && file.DestinationRelativePath is null);
+        Assert.Null((await db.Acquisitions.SingleAsync()).ImportCheckpointJson);
+    }
+
+    [Fact]
+    public async Task ExplicitMappingFinishesRetainedPayloadWithoutReplayingTheAlreadyImportedFile() {
+        await using var db = CreateContext();
+        var harness = await HarnessAsync(db, ownedEpisodeName: "Show - s01e01.mkv",
+            payloadFiles: ["Show.S01E02.mkv", "unidentified.mkv"], releaseTitle: "Show S01", wantedEpisodeNumbers: [2, 3]);
+        var store = AcquisitionTestFactory.Store(db);
+        await harness.Engine.ImportAsync(harness.Context, harness.Import, default);
+        await store.MarkImportedWithQualityAsync(harness.Import.Id, BookQualityRank.Floor, "Imported", default);
+        var originalSource = await db.EntityFiles.AsNoTracking().SingleAsync(row => row.EntityId == harness.WantedEpisodeId
+            && row.Role == EntityFileRole.Source);
+        var third = await db.Entities.SingleAsync(row => row.ParentEntityId == harness.SeasonId && row.SortOrder == 3);
+        var acquisition = await db.Acquisitions.SingleAsync();
+        acquisition.Status = AcquisitionStatus.Importing;
+        acquisition.ImportClaimJobId = harness.Context.Job.Id;
+        await db.SaveChangesAsync();
+        var retry = (await store.GetImportContextAsync(harness.Import.Id, default))! with {
+            ManualFileMappings = [new ManualImportFileMapping("unidentified.mkv", third.Id, 1, 3)]
+        };
+
+        await harness.ResumeEngine.ImportAsync(harness.Context, retry, default);
+        await store.MarkImportedWithQualityAsync(harness.Import.Id, BookQualityRank.Floor, "Imported", default);
+
+        Assert.Equal(AcquisitionStatus.Imported, await StatusOf(db, harness.Import.Id));
+        Assert.False((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == third.Id)).IsWanted);
+        Assert.Equal("payload-bytes", await File.ReadAllTextAsync(originalSource.Path));
+        Assert.Equal(originalSource.Id, (await db.EntityFiles.AsNoTracking().SingleAsync(row => row.EntityId == harness.WantedEpisodeId
+            && row.Role == EntityFileRole.Source)).Id);
+        Assert.False(File.Exists(Path.Combine(harness.Import.ContentPath!, "unidentified.mkv")));
+        Assert.False((await store.GetTransferInfoAsync(harness.Import.Id, default))!.ImportResult!.HasRetainedTvVideos());
+    }
+
+    [Fact]
+    public async Task LegacyCheckpointRecoversOmittedExtraVideosBeforeFinishingTheImport() {
+        await using var db = CreateContext();
+        var harness = await HarnessAsync(db, ownedEpisodeName: "Show - s01e01.mkv",
+            payloadFiles: ["Show.S01E02.mkv", "Show.S02E01.mkv"], releaseTitle: "Show S01", failMaterialization: true);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => harness.Engine.ImportAsync(harness.Context, harness.Import, default));
+        var store = AcquisitionTestFactory.Store(db);
+        var checkpoint = (await store.GetImportContextAsync(harness.Import.Id, default))!.TvImportCheckpoint!;
+        var legacy = checkpoint with {
+            ImportFileLedger = checkpoint.ImportFileLedger! with {
+                Files = checkpoint.ImportFileLedger.Files.Where(file => file.SourceRelativePath != "Show.S02E01.mkv").ToArray()
+            },
+            DiscardRemainingPayload = true
+        };
+        await store.SetTvImportCheckpointAsync(harness.Import.Id, legacy, default);
+
+        await harness.ResumeEngine.ImportAsync(harness.Context, (await store.GetImportContextAsync(harness.Import.Id, default))!, default);
+        await store.MarkImportedWithQualityAsync(harness.Import.Id, BookQualityRank.Floor, "Imported", default);
+
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, await StatusOf(db, harness.Import.Id));
+        Assert.False((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == harness.WantedEpisodeId)).IsWanted);
+        Assert.True((await store.GetTransferInfoAsync(harness.Import.Id, default))!.ImportResult!.HasRetainedTvVideos());
+        Assert.Equal("payload-bytes", await File.ReadAllTextAsync(Path.Combine(harness.Import.ContentPath!, "Show.S02E01.mkv")));
+    }
+
+    [Theory]
     [InlineData(true, false)]
     [InlineData(true, true)]
     [InlineData(false, false)]
@@ -239,7 +328,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
     }
 
     [Fact]
-    public async Task CompleteSeriesPayloadImportsOnlyTheRequestedSeason() {
+    public async Task CompleteSeriesPayloadImportsRequestedSeasonAndRetainsOtherSeasonForReview() {
         await using var db = CreateContext();
         var harness = await HarnessAsync(
             db,
@@ -253,7 +342,9 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         Assert.False(File.Exists(Path.Combine(harness.SeriesFolder, "Season 02", "Show - S02E01.mkv")));
         var checkpoint = await AcquisitionTestFactory.Store(db)
             .GetImportContextAsync(harness.Import.Id, CancellationToken.None);
-        Assert.True(checkpoint!.TvImportCheckpoint!.DiscardRemainingPayload);
+        Assert.False(checkpoint!.TvImportCheckpoint!.DiscardRemainingPayload);
+        Assert.True(checkpoint.TvImportCheckpoint.ImportFileLedger!.HasRetainedTvVideos());
+        Assert.True(File.Exists(Path.Combine(harness.Import.ContentPath!, "Show.S02E01.1080p.WEB-DL.mkv")));
     }
 
     [Fact]

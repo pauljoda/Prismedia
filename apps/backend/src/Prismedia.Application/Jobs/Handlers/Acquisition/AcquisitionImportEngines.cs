@@ -1437,6 +1437,12 @@ public sealed class TvAcquisitionImportEngine(
         }
 
         checkpoint = checkpoint with { Units = units };
+        var ledger = (checkpoint.ImportFileLedger
+            ?? AcquisitionImportFileLedger.Create(checkpoint, checkpoint.LibraryRootPath!)).RetainUnmappedTvVideos(payload.Files);
+        checkpoint = checkpoint with {
+            ImportFileLedger = ledger,
+            DiscardRemainingPayload = checkpoint.DiscardRemainingPayload && !ledger.HasRetainedTvVideos()
+        };
         // Persist the complete plan before ExecuteTvCheckpointAsync performs its first filesystem mutation.
         // The executor refreshes the binding hint on every run, including durable resumes.
         if (await acquisitions.TryCreateTvImportCheckpointAsync(import.Id, checkpoint, cancellationToken)) {
@@ -1471,6 +1477,17 @@ public sealed class TvAcquisitionImportEngine(
         var seriesFolder = Path.GetFullPath(checkpoint.SeriesFolderPath);
         if (!IsAtOrUnderFolder(seriesFolder, Path.GetFullPath(root.Path)) || checkpoint.Units.Count == 0) {
             throw new InvalidOperationException("The TV import checkpoint is invalid for its library root.");
+        }
+
+        // Older interrupted plans omitted unknown videos from their ledger. Recover that evidence
+        // before resuming placement or cleanup, including plans whose selected files already moved.
+        if (payload is not null) {
+            var previousLedger = checkpoint.ImportFileLedger ?? AcquisitionImportFileLedger.Create(checkpoint, root.Path);
+            var recoveredLedger = previousLedger.RetainUnmappedTvVideos(payload.Files);
+            if (recoveredLedger.Files.Count != previousLedger.Files.Count) {
+                checkpoint = checkpoint with { ImportFileLedger = recoveredLedger, DiscardRemainingPayload = false };
+                await acquisitions.SetTvImportCheckpointAsync(import.Id, checkpoint, cancellationToken);
+            }
         }
 
         // Recreate the broad, unconsumed identity/binding hint before EVERY run. A prior process may have
@@ -1656,6 +1673,11 @@ public sealed class TvAcquisitionImportEngine(
             return false;
         }
 
+        var transfer = await acquisitions.GetTransferInfoAsync(import.Id, cancellationToken);
+        // A partial import's final path describes the files already cataloged, not its remaining review
+        // payload. Replanning that payload is essential when metadata or explicit mappings improve.
+        if (transfer?.ImportResult?.HasRetainedTvVideos() == true) return false;
+
         var checkpoint = Path.GetFullPath(import.FinalSourcePath);
         var files = EnumerateCheckpointVideos(checkpoint);
         if (files.Count == 0) {
@@ -1685,7 +1707,7 @@ public sealed class TvAcquisitionImportEngine(
             && await targets.HasUnnumberedWantedTvEpisodesAsync(requestedEntity, import.SeasonNumber, cancellationToken);
         var importedEpisodes = unnumbered ? null : TvPlacedImportRecovery.Plan(files, root.Path, seriesFolder, SeriesOf(import),
             import.SeasonNumber, import.EpisodeNumber, await EpisodeTitlesForAsync(import, cancellationToken),
-            await acquisitions.GetTransferInfoAsync(import.Id, cancellationToken));
+            transfer);
         if (importedEpisodes is null || importedEpisodes.Count == 0) {
             await acquisitions.SetStatusAsync(import.Id, AcquisitionStatus.ManualImportRequired,
                 "The placed TV files have incomplete or ambiguous episode mapping evidence. Their files were preserved for review.", cancellationToken);
