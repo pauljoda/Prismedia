@@ -26,9 +26,13 @@ public sealed class CodecJsonConverterFactory : JsonConverterFactory {
         private readonly ICodec<TValue> _codec = CodecRegistry.Get<TValue>();
 
         public override TValue Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options) {
-            var code = reader.GetString()
-                ?? throw new JsonException($"Expected a string code for {typeof(TValue).Name}.");
-            return _codec.Decode(code);
+            if (reader.TokenType != JsonTokenType.String || reader.GetString() is not { } code
+                || !_codec.TryDecode(code, out var value)) {
+                // HTTP JSON binding recognizes JsonException as invalid client input. Letting codec
+                // or reader exceptions escape turns unknown codes and numeric values into HTTP 500s.
+                throw new JsonException($"Expected a recognized string code for {typeof(TValue).Name}.");
+            }
+            return value;
         }
 
         public override void Write(Utf8JsonWriter writer, TValue value, JsonSerializerOptions options) =>

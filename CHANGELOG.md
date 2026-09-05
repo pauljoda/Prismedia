@@ -36,6 +36,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Invalid media-kind and other coded API values now return validation errors instead of internal server errors.
+
 - Automatic season downloads can stop early when their file lists prove they only contain already-owned episodes and upgrades are disabled. File-list evidence is rechecked against current mappings, files, and profile settings instead of permanently blocklisting the release; unknown content remains eligible.
 
 - Video upgrades now inspect and replace the main file when a sample companion is present, while multiple possible feature files still require review.

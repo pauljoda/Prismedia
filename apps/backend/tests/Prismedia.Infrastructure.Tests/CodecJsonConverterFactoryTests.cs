@@ -11,6 +11,21 @@ public sealed class CodecJsonConverterFactoryTests {
     };
 
     [Fact]
+    public void UnknownCodeIsAJsonValidationError() {
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<EntityKind>("\"not-a-kind\"", Options));
+    }
+
+    [Theory]
+    [InlineData("42")]
+    [InlineData("true")]
+    [InlineData("{}")]
+    [InlineData("[]")]
+    [InlineData("null")]
+    public void NonStringCodesAreJsonValidationErrors(string json) {
+        Assert.Throws<JsonException>(() => JsonSerializer.Deserialize<EntityKind>(json, Options));
+    }
+
+    [Fact]
     public void EveryEntityKindRoundTripsWithItsExistingWireCode() {
         foreach (var code in CodecRegistry.Get<EntityKind>().Codes) {
             var json = JsonSerializer.Serialize(code);
