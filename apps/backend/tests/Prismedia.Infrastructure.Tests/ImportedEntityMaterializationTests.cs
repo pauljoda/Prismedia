@@ -497,13 +497,16 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
         Assert.Equal(AcquisitionStatus.Importing, await StatusOfAsync(db, import.Id));
     }
 
-    [Fact]
-    public async Task StandaloneSongImportPreservesItsRequestedIdentityAndIgnoresOtherTracks() {
+    [Theory]
+    [InlineData("Artist - Selected Song.flac")]
+    [InlineData("01-artist-selected_song.flac")]
+    public async Task StandaloneSongImportPreservesItsRequestedIdentityAndIgnoresOtherTracks(string selectedFilename) {
         await using var db = CreateContext();
         var rootPath = Directory.CreateDirectory(Path.Combine(_workRoot, "single-library")).FullName;
         var payloadPath = Directory.CreateDirectory(Path.Combine(_workRoot, "single-download")).FullName;
-        await File.WriteAllTextAsync(Path.Combine(payloadPath, "Artist - Selected Song.flac"), "selected-audio");
+        await File.WriteAllTextAsync(Path.Combine(payloadPath, selectedFilename), "selected-audio");
         await File.WriteAllTextAsync(Path.Combine(payloadPath, "Artist - Other Song.flac"), "unrequested-audio");
+        await File.WriteAllTextAsync(Path.Combine(payloadPath, "02-artist-selected_song_(instrumental).flac"), "instrumental-audio");
         var root = new RootPersistence(rootPath, scanAudio: true);
         db.LibraryRoots.Add(new LibraryRootRow { Id = root.Root.Id, Path = rootPath, Label = "Music", ScanAudio = true });
         var wantedId = AddWantedEntity(db, EntityKind.AudioTrack, "Selected Song");

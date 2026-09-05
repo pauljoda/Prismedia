@@ -5,6 +5,12 @@ namespace Prismedia.Application.Tests.Acquisition;
 public sealed class AudioTrackTitleTextTests {
     [Theory]
     [InlineData("Pharrell Williams - Happy", "Pharrell Williams", true)]
+    [InlineData("01-pharrell_williams-happy", "Pharrell Williams", true)]
+    [InlineData("pharrell_williams-happy", "Pharrell Williams", true)]
+    [InlineData("01-pharrell_williams-happy_(instrumental)", "Pharrell Williams", false)]
+    [InlineData("01-other_artist-happy", "Pharrell Williams", false)]
+    [InlineData("01-pharrell_williams-not_happy", "Pharrell Williams", false)]
+    [InlineData("01-pharrell_williams-happy", null, false)]
     [InlineData("Other Artist - Happy", "Pharrell Williams", false)]
     [InlineData("Pharrell Williams - Not Happy", "Pharrell Williams", false)]
     [InlineData("Pharrell Williams - Happy (Live)", "Pharrell Williams", false)]

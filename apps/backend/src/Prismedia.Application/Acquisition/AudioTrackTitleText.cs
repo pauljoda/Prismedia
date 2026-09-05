@@ -40,6 +40,15 @@ public static partial class AudioTrackTitleText {
         if (metadata.SequenceEqual(scanned, StringComparer.Ordinal)) {
             return true;
         }
+        // Compact scene filenames omit spaces around the artist/title separator. An exact known
+        // artist followed by the exact requested title proves the same identity without guessing where
+        // to split artist names or song titles that contain hyphens. Version labels remain significant.
+        var artistTokens = ReleaseTitleText.Tokens(Normalize(artist));
+        if (artistTokens.Count > 0
+            && scanned.SequenceEqual(artistTokens.Concat(metadata), StringComparer.Ordinal)) {
+            return true;
+        }
+
         var numbered = LeadingTrackNumber().IsMatch(scannedTitle ?? string.Empty);
         if (!numbered && string.IsNullOrWhiteSpace(artist)) {
             return false;
