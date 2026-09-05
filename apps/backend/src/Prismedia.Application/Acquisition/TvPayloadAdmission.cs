@@ -38,11 +38,7 @@ public sealed class TvPayloadAdmission(
         if (titles.Count == 0) return null;
         var layout = await targets.GetTvLayoutAsync(entityId, cancellationToken);
         if (layout is null || !Directory.Exists(layout.SeriesFolderPath)) return null;
-        var existingPaths = layout.Seasons.Values.SelectMany(value => value.EpisodeFileByNumber.Values)
-            .Distinct(StringComparer.Ordinal).Where(path => File.Exists(path) && new FileInfo(path).Length > 0)
-            .ToHashSet(StringComparer.Ordinal);
-        var owned = layout.Seasons.SelectMany(pair => pair.Value.EpisodeFileByNumber
-            .Where(file => existingPaths.Contains(file.Value)).Select(file => (pair.Key, file.Key))).ToHashSet();
+        var owned = TvOwnedEpisodeCoverage.Read(layout);
         return new(input.WorkTitle, season, titles, owned);
     }
 

@@ -85,11 +85,12 @@ public sealed class HeldTvImportRecoveryService(
         }
         var layout = await targets.GetTvLayoutAsync(held.EntityId, cancellationToken);
         var knownEpisodes = titles.Select(title => title.Episode).ToHashSet();
+        var owned = TvOwnedEpisodeCoverage.Read(layout);
         // Reopening a review must offer a real catalog gap. Completely owned packs stay held; they
         // cannot repair missing links and their quality/edition review is a separate user decision.
         var fillsGap = plan.Units.Any(unit => unit.ExtraEpisodes.Prepend(unit.Episode)
             .Any(episode => knownEpisodes.Contains(episode)
-                && layout?.Seasons.GetValueOrDefault(unit.Season)?.EpisodeFileByNumber.ContainsKey(episode) != true));
+                && !owned.Contains((unit.Season, episode))));
         if (!fillsGap) {
             return;
         }
@@ -117,6 +118,8 @@ public sealed class HeldTvImportRecoveryService(
                 file.RelativePath, file.SizeBytes,
                 ModifiedAt = File.GetLastWriteTimeUtc(Path.Combine(payload.ContentRoot, file.RelativePath))
             }).ToArray(),
+            PresentEpisodes = owned.OrderBy(episode => episode.Season).ThenBy(episode => episode.Episode)
+                .Select(episode => new { episode.Season, episode.Episode }).ToArray(),
             Owned = layout?.Seasons.OrderBy(pair => pair.Key).Select(pair => new {
                 Season = pair.Key,
                 Files = pair.Value.EpisodeFileByNumber.OrderBy(file => file.Key).ToArray()

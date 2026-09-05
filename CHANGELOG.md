@@ -38,6 +38,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Held TV downloads can repair episodes whose catalog links remain after the underlying files disappear; recovery now shares the download admission check for actual files on disk.
+
 - Individual song imports recognize compact artist-and-title filenames while keeping instrumental, live, and other version labels distinct.
 
 - Download cleanup now keeps retrying when its recorded downloader configuration is temporarily unavailable, then resumes cleanup when that client returns.

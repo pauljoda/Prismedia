@@ -95,9 +95,10 @@ public sealed class HeldTvImportRecoveryTests : IDisposable {
     }
 
     [Theory]
-    [InlineData(1, AcquisitionStatus.Downloaded)]
-    [InlineData(2, AcquisitionStatus.ManualImportRequired)]
-    public async Task ACombinedFileIsReconsideredOnlyWhenItCanFillAMissingOwner(int ownedEpisodes, AcquisitionStatus expected) {
+    [InlineData(1, false, AcquisitionStatus.Downloaded)]
+    [InlineData(2, false, AcquisitionStatus.ManualImportRequired)]
+    [InlineData(2, true, AcquisitionStatus.Downloaded)]
+    public async Task ACombinedFileIsReconsideredOnlyWhenItCanFillAMissingOwner(int ownedEpisodes, bool missingFile, AcquisitionStatus expected) {
         await using var db = CreateContext();
         var (service, acquisition, episodes) = await SeedAsync(db);
         var season = await db.Entities.SingleAsync(entity => entity.Id == acquisition.EntityId);
@@ -116,10 +117,12 @@ public sealed class HeldTvImportRecoveryTests : IDisposable {
         }
         await db.SaveChangesAsync();
 
+        if (missingFile) File.Delete(ownedPath);
         await service.RecoverAsync(CancellationToken.None);
 
         Assert.Equal(expected, acquisition.Status);
-        Assert.Equal("test bytes", await File.ReadAllTextAsync(ownedPath));
+        if (missingFile) Assert.False(File.Exists(ownedPath));
+        else Assert.Equal("test bytes", await File.ReadAllTextAsync(ownedPath));
         Assert.Equal(ownedEpisodes, await db.EntityFiles.CountAsync());
     }
 
