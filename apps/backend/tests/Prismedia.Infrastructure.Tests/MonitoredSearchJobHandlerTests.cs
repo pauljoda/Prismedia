@@ -11,6 +11,26 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class MonitoredSearchJobHandlerTests {
     [Fact]
+    public async Task ExhaustedEpisodeFallbackEnqueuesFreshPackThroughNormalSearch() {
+        var previousId = Guid.NewGuid();
+        var retryId = Guid.NewGuid();
+        var monitors = new FakeMonitorStore([
+            new DueMonitor(Guid.NewGuid(), previousId, "Series S01", EntityKind.VideoSeason,
+                EntityId: Guid.NewGuid(), MissingChildFallback: true)
+        ]) { PackRetryId = retryId };
+        var acquisitions = new FakeAcquisitionLifecycleStore(previousId, retryId);
+        acquisitions.Statuses[previousId] = AcquisitionStatus.Imported;
+        acquisitions.Statuses[retryId] = AcquisitionStatus.Searching;
+        var queue = new RecordingJobQueue();
+
+        await Handler(monitors, acquisitions).HandleAsync(new JobContext(Job(), queue), default);
+
+        Assert.Equal(retryId.ToString(), Assert.Single(queue.Enqueued).TargetEntityId);
+        Assert.Equal(AcquisitionStatus.Imported, acquisitions.Statuses[previousId]);
+        Assert.Single(monitors.Searched);
+    }
+
+    [Fact]
     public async Task LegacyUntargetedJobProcessesOnlyOneDueMonitor() {
         var a = Guid.NewGuid();
         var b = Guid.NewGuid();
@@ -435,6 +455,8 @@ public sealed class MonitoredSearchJobHandlerTests {
         public Dictionary<Guid, IReadOnlyList<DueMonitor>> ImmediateWork { get; } = [];
         public int DueListCalls { get; private set; }
         public Guid? ChildId { get; set; }
+        public Guid? PackRetryId { get; set; }
+        public Task<Guid?> CreateSeasonPackRetryAsync(Guid monitorId, CancellationToken cancellationToken) => Task.FromResult(PackRetryId);
         public Task<IReadOnlyList<DueMonitor>> ListDueMonitorsAsync(int defaultIntervalMinutes, CancellationToken cancellationToken) {
             DueListCalls += 1;
             return Task.FromResult(due);

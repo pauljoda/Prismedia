@@ -501,9 +501,15 @@ public sealed partial class EfMonitorStore(
         var due = new List<DueMonitor>();
         var changed = false;
         var statusTransitions = new List<(Guid MonitorId, MonitorStatus Status)>();
+        var coveredEpisodeIds = await EpisodesCoveredByWorkingPacksAsync(rows
+            .Where(row => row.Monitor.Kind == EntityKind.VideoEpisode && row.Monitor.EntityId != null)
+            .Select(row => row.Monitor.EntityId!.Value).Distinct().ToArray(), cancellationToken);
 
         foreach (var row in rows) {
             var monitor = row.Monitor;
+            if (monitor.EntityId is { } episodeId && coveredEpisodeIds.Contains(episodeId)) {
+                continue;
+            }
             // Entity-only intent has no current acquisition. Groupings run discovery; source-backed leaves
             // remain satisfied; fileless leaves re-enter the request pipeline in the handler.
             if (monitor.AcquisitionId is null && monitor.EntityId is { } watchedEntityId) {

@@ -62,6 +62,12 @@ public sealed class MonitoredSearchJobHandler(
             return null;
         }
 
+        if (monitor.Kind == EntityKind.VideoSeason && monitor.EntityId is not null
+            && (monitor.MissingChildFallback || monitor.AcquisitionId is null)
+            && await monitors.CreateSeasonPackRetryAsync(monitor.MonitorId, cancellationToken) is { } packRetryId) {
+            monitor = monitor with { AcquisitionId = packRetryId, MissingChildFallback = false };
+        }
+
         // An imported structural unit that left gaps falls back to direct child acquisitions. The
         // Request registry and shared child traversal decide what those children are; this handler has
         // no season/episode, artist/album, or book/volume branch.
@@ -177,7 +183,12 @@ public sealed class MonitoredSearchJobHandler(
         if (searchStatus is null || !AcquisitionSearchJobHandler.CanScheduleSearch(searchStatus.Value)) {
             return null;
         }
-        if (searchStatus != AcquisitionStatus.Searching
+        if (monitor.Kind == EntityKind.VideoEpisode && !monitor.IsUpgrade) {
+            if (!await monitors.TryStartEpisodeSearchAsync(
+                    monitor.MonitorId, searchTarget, acquisitions, cancellationToken)) {
+                return null;
+            }
+        } else if (searchStatus != AcquisitionStatus.Searching
             && !await acquisitions.TryTransitionStatusAsync(
                 searchTarget,
                 [searchStatus.Value],

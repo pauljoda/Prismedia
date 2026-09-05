@@ -215,6 +215,26 @@ public interface IMonitorStore {
     /// <summary>Claims the monitor's one upgrade slot and creates its child acquisition.</summary>
     Task<Guid?> CreateUpgradeChildAsync(Guid monitorId, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// Creates a fresh season search after its missing episodes exhaust individual searches. The adapter
+    /// rechecks monitor intent, child work, import reconciliation, and a bounded pack retry cadence atomically.
+    /// </summary>
+    Task<Guid?> CreateSeasonPackRetryAsync(Guid monitorId, CancellationToken cancellationToken) =>
+        Task.FromResult<Guid?>(null);
+
+    /// <summary>
+    /// Claims an episode monitor's search while serializing with season-pack recovery. Returns false when
+    /// a pack is already working on this season or the exact episode attempt no longer permits a search.
+    /// </summary>
+    async Task<bool> TryStartEpisodeSearchAsync(
+        Guid monitorId, Guid acquisitionId, IAcquisitionLifecycleStore acquisitions,
+        CancellationToken cancellationToken) {
+        var status = await acquisitions.GetStatusAsync(acquisitionId, cancellationToken);
+        return status is { } current && Jobs.Handlers.AcquisitionSearchJobHandler.CanScheduleSearch(current)
+            && (current == AcquisitionStatus.Searching || await acquisitions.TryTransitionStatusAsync(
+                acquisitionId, [current], AcquisitionStatus.Searching, null, cancellationToken));
+    }
+
     /// <summary>Releases an upgrade slot and records whether its replacement succeeded.</summary>
     Task ResolveUpgradeChildAsync(Guid childId, bool succeeded, CancellationToken cancellationToken);
 }

@@ -36,6 +36,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Incomplete seasons can retry season packs after individual episode searches are exhausted, with a six-hour retry limit, protection for active downloads and manual review, and early rejection of previously observed packs that cannot fill current gaps.
+
 - Automatic grabs now recheck current profiles, request metadata, and owned quality before starting a new download, preserving indexer language and size evidence. Explicit manual picks and already-started downloader handoffs retain their existing behavior.
 
 - Movie imports now probe the primary video before placing files in the library and preserve unreadable payloads for review.
