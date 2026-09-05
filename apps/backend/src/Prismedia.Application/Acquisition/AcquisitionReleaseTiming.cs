@@ -64,7 +64,8 @@ public interface IAcquisitionReleaseDateChangeHandler {
 public sealed class AcquisitionReleaseDateChangeHandler(
     IAcquisitionStore acquisitions,
     IAcquisitionReleaseTimingService releaseTiming,
-    IMonitorStore monitors) : IAcquisitionReleaseDateChangeHandler {
+    IMonitorStore monitors,
+    IAcquisitionRequestService? requests = null) : IAcquisitionReleaseDateChangeHandler {
     public async Task HandleAsync(Guid entityId, CancellationToken cancellationToken) {
         var details = await acquisitions.ListForEntityAsync(entityId, cancellationToken);
         foreach (var detail in details.Where(detail => detail.Summary.Status is
@@ -91,6 +92,9 @@ public sealed class AcquisitionReleaseDateChangeHandler(
 
             if (timing.CanSearch) {
                 await monitors.MarkSearchDueByAcquisitionAsync(detail.Summary.Id, cancellationToken);
+                if (requests is not null) {
+                    await requests.ResumeReleasedAsync(detail.Summary.Id, cancellationToken);
+                }
             }
         }
     }

@@ -7,6 +7,44 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Application.Acquisition;
 
 public sealed partial class AcquisitionService {
+    /// <inheritdoc />
+    public async Task<bool> ResumeReleasedAsync(Guid acquisitionId, CancellationToken cancellationToken) {
+        if (releaseTiming is null
+            || await monitors.GetByAcquisitionAsync(acquisitionId, cancellationToken) is not {
+                Status: MonitorStatus.Active, EntityId: { } entityId
+            }) {
+            return false;
+        }
+
+        var scheduled = false;
+        await monitors.ExecuteIfActiveEntityMutationAsync(entityId, async leaseCancellationToken => {
+            // Re-read the exact acquisition inside the monitor lease: date refresh must not revive
+            // cancelled work or an older attempt that the monitor has since replaced.
+            if (await monitors.GetByAcquisitionAsync(acquisitionId, leaseCancellationToken) is not {
+                    Status: MonitorStatus.Active, AcquisitionId: { } linkedId
+                } || linkedId != acquisitionId) {
+                return;
+            }
+            var detail = await store.GetAsync(acquisitionId, leaseCancellationToken);
+            if (detail?.Summary.Status is not (
+                    AcquisitionStatus.WaitingForRelease or AcquisitionStatus.ManualSearchRequired)) {
+                return;
+            }
+            var import = await store.GetImportContextAsync(acquisitionId, leaseCancellationToken);
+            if (import is null || import.EntityId != entityId
+                || !(await releaseTiming.EvaluateAsync(
+                    entityId, import.ProfileId, import.Kind, leaseCancellationToken)).CanSearch) {
+                return;
+            }
+
+            var refreshed = await ScheduleSearchAsync(
+                detail, manualReview: false, explicitRevival: false, customQuery: null,
+                parentContext: null, JobGraphOrigin.Background, leaseCancellationToken);
+            scheduled = refreshed?.Summary.Status == AcquisitionStatus.Searching;
+        }, cancellationToken);
+        return scheduled;
+    }
+
     /// <summary>
     /// Re-runs the release search for an existing acquisition on demand (the manual counterpart to monitoring).
     /// Enqueues the standard <see cref="JobType.AcquisitionSearch"/> — deduped per acquisition, and the handler

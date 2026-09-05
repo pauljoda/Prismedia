@@ -36,6 +36,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Newly supplied release dates now resume active waiting requests through the automatic search queue, without waiting for the recurring monitor backlog to drain. Paused monitoring and active transfers remain protected.
+
 - Monitored movies, episodes, and ebooks retain their imported quality baseline so enabling upgrades or raising a profile cutoff can resume upgrade searches after the original import.
 
 - Automatic upgrades and the Cutoff Unmet list now honor the acquisition’s assigned quality profile, so a different default profile cannot silently disable upgrades or trigger unwanted ones.

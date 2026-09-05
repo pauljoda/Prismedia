@@ -16,6 +16,13 @@ namespace Prismedia.Application.Acquisition;
 /// couple to the full acquisition API service.
 /// </summary>
 public interface IAcquisitionRequestService {
+    /// <summary>
+    /// Resumes a release-gated acquisition when its date is ready and its exact monitor remains active.
+    /// Returns true only when automatic search work was scheduled.
+    /// </summary>
+    Task<bool> ResumeReleasedAsync(Guid acquisitionId, CancellationToken cancellationToken) =>
+        Task.FromResult(false);
+
     /// <summary>Persists a new acquisition and enqueues the background search job that fills in candidates.</summary>
     Task<AcquisitionSummary> CreateAndSearchAsync(AcquisitionCreateRequest request, CancellationToken cancellationToken);
 

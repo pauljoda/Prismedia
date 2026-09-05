@@ -20,6 +20,113 @@ public sealed class AcquisitionServiceTests {
     private static readonly Guid UsenetClientId = Guid.Parse("44444444-4444-4444-4444-444444444444");
     private const string ClientItemId = "download-owned-by-recorded-client";
 
+    [Theory]
+    [InlineData(AcquisitionStatus.WaitingForRelease)]
+    [InlineData(AcquisitionStatus.ManualSearchRequired)]
+    public async Task ReleasedAcquisitionSchedulesAutomaticSearchOnce(AcquisitionStatus status) {
+        var harness = Harness(TransferInfo(RecordedClientId, status),
+            releaseTiming: new FixedReleaseTimingService(AcquisitionReleaseTimingDecision.Ready));
+        harness.Store.ImportContext = new AcquisitionImportContext(
+            AcquisitionId, "A released episode", null, null, null, null, null, null,
+            null, null, null, EntityKind.VideoEpisode, EntityId: WantedEntityId);
+        harness.Monitors.EntityMonitorStatus = MonitorStatus.Active;
+
+        Assert.True(await harness.Service.ResumeReleasedAsync(AcquisitionId, CancellationToken.None));
+        Assert.False(await harness.Service.ResumeReleasedAsync(AcquisitionId, CancellationToken.None));
+
+        Assert.Equal(AcquisitionStatus.Searching, harness.Store.Status);
+        var search = Assert.Single(harness.Queue.Requests);
+        Assert.Equal(JobType.AcquisitionSearch, search.Type);
+        Assert.Equal(JobGraphOrigin.Background, search.Origin);
+        Assert.False(AcquisitionJobPayload.Parse(search.PayloadJson!).ManualReview);
+    }
+
+    [Theory]
+    [InlineData(MonitorStatus.Paused)]
+    [InlineData(MonitorStatus.Stopping)]
+    [InlineData(MonitorStatus.DeletingFiles)]
+    [InlineData(MonitorStatus.Fulfilled)]
+    public async Task ReleasedAcquisitionPreservesInactiveMonitoring(MonitorStatus status) {
+        var harness = Harness(TransferInfo(RecordedClientId, AcquisitionStatus.WaitingForRelease),
+            releaseTiming: new FixedReleaseTimingService(AcquisitionReleaseTimingDecision.Ready));
+        harness.Store.ImportContext = new AcquisitionImportContext(
+            AcquisitionId, "A released episode", null, null, null, null, null, null,
+            null, null, null, EntityKind.VideoEpisode, EntityId: WantedEntityId);
+        harness.Monitors.EntityMonitorStatus = status;
+
+        Assert.False(await harness.Service.ResumeReleasedAsync(AcquisitionId, CancellationToken.None));
+        Assert.Empty(harness.Queue.Requests);
+        Assert.Equal(AcquisitionStatus.WaitingForRelease, harness.Store.Status);
+    }
+
+    [Fact]
+    public async Task FutureReleaseDoesNotResumeEvenWithActiveMonitor() {
+        var harness = Harness(TransferInfo(RecordedClientId, AcquisitionStatus.WaitingForRelease),
+            releaseTiming: new FixedReleaseTimingService(new AcquisitionReleaseTimingDecision(false)));
+        harness.Store.ImportContext = new AcquisitionImportContext(
+            AcquisitionId, "A released episode", null, null, null, null, null, null,
+            null, null, null, EntityKind.VideoEpisode, EntityId: WantedEntityId);
+        harness.Monitors.EntityMonitorStatus = MonitorStatus.Active;
+
+        Assert.False(await harness.Service.ResumeReleasedAsync(AcquisitionId, CancellationToken.None));
+        Assert.Empty(harness.Queue.Requests);
+    }
+
+    [Fact]
+    public async Task DateChangeResumesWaitingAcquisitionWithoutWaitingForMonitorDrain() {
+        var timing = new FixedReleaseTimingService(AcquisitionReleaseTimingDecision.Ready);
+        var harness = Harness(TransferInfo(RecordedClientId, AcquisitionStatus.WaitingForRelease), releaseTiming: timing);
+        harness.Store.ImportContext = new AcquisitionImportContext(
+            AcquisitionId, "A released episode", null, null, null, null, null, null,
+            null, null, null, EntityKind.VideoEpisode, EntityId: WantedEntityId);
+        harness.Monitors.EntityMonitorStatus = MonitorStatus.Active;
+        var handler = new AcquisitionReleaseDateChangeHandler(harness.Store, timing, harness.Monitors, harness.Service);
+
+        await handler.HandleAsync(WantedEntityId, CancellationToken.None);
+        await handler.HandleAsync(WantedEntityId, CancellationToken.None);
+
+        Assert.Equal(AcquisitionStatus.Searching, harness.Store.Status);
+        Assert.Equal(JobType.AcquisitionSearch, Assert.Single(harness.Queue.Requests).Type);
+    }
+
+    [Fact]
+    public async Task EnrichmentCompletionResumesAnAlreadyAvailableReleaseDate() {
+        var timing = new FixedReleaseTimingService(AcquisitionReleaseTimingDecision.Ready);
+        var harness = Harness(TransferInfo(RecordedClientId, AcquisitionStatus.WaitingForRelease), releaseTiming: timing);
+        harness.Store.ImportContext = new AcquisitionImportContext(
+            AcquisitionId, "A released episode", null, null, null, null, null, null,
+            null, null, null, EntityKind.VideoEpisode, EntityId: WantedEntityId);
+        harness.Monitors.EntityMonitorStatus = MonitorStatus.Active;
+        var provider = new UnusedMetadataProvider();
+        var handler = new AcquisitionEnrichJobHandler(
+            harness.Store, provider, provider, NullLogger<AcquisitionEnrichJobHandler>.Instance,
+            monitors: harness.Monitors, releaseTiming: timing, requests: harness.Service);
+        var job = new JobRunSnapshot(
+            Guid.NewGuid(), JobType.AcquisitionEnrich, JobRunStatus.Running, 0, null,
+            AcquisitionJobPayload.Serialize(AcquisitionId), null, null, null,
+            DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null);
+
+        await handler.HandleAsync(new JobContext(job, harness.Queue), CancellationToken.None);
+
+        Assert.Equal(AcquisitionStatus.Searching, harness.Store.Status);
+        Assert.Equal(JobType.AcquisitionSearch, Assert.Single(harness.Queue.Requests).Type);
+    }
+
+    [Theory]
+    [InlineData(AcquisitionStatus.Cancelled)]
+    [InlineData(AcquisitionStatus.Searching)]
+    [InlineData(AcquisitionStatus.Downloading)]
+    [InlineData(AcquisitionStatus.Imported)]
+    public async Task ReleaseNotificationDoesNotRestartOtherAcquisitionStates(AcquisitionStatus status) {
+        var harness = Harness(TransferInfo(RecordedClientId, status),
+            releaseTiming: new FixedReleaseTimingService(AcquisitionReleaseTimingDecision.Ready));
+        harness.Monitors.EntityMonitorStatus = MonitorStatus.Active;
+
+        Assert.False(await harness.Service.ResumeReleasedAsync(AcquisitionId, CancellationToken.None));
+        Assert.Equal(status, harness.Store.Status);
+        Assert.Empty(harness.Queue.Requests);
+    }
+
     [Fact]
     public async Task FilesReturnsTheRetainedCompletedLedger() {
         var ledger = new AcquisitionImportFileLedger(
@@ -2407,6 +2514,16 @@ public sealed class AcquisitionServiceTests {
     }
 
     /// <summary>Minimal monitor-store fake recording retargets — the only member the service's delete path uses.</summary>
+    private sealed class UnusedMetadataProvider : IRequestMetadataEnricher, IRequestChildHydrator {
+        public Task<RequestMetadataEnrichment?> LookupByIdAsync(
+            EntityKind kind, ExternalIdentity identity, bool hideNsfw, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("No provider lookup is needed without an external identity.");
+
+        public Task<RequestChildHydrationResult?> HydrateAsync(
+            Guid entityId, bool hideNsfw, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("No provider hydration is needed without an external identity.");
+    }
+
     private sealed class RecordingMonitorStore : IMonitorStore {
         public Guid MonitorId { get; } = Guid.NewGuid();
         public List<(Guid From, Guid To)> Retargets { get; } = [];
@@ -2446,7 +2563,7 @@ public sealed class AcquisitionServiceTests {
         public Task<MonitorView?> GetByAcquisitionAsync(Guid acquisitionId, CancellationToken cancellationToken) =>
             Task.FromResult<MonitorView?>(acquisitionId == AcquisitionId
                 ? new MonitorView(
-                    MonitorId, EntityKind.Book, AcquisitionId, MonitorStatus.Fulfilled, "Dune", "Frank Herbert",
+                    MonitorId, EntityKind.Book, AcquisitionId, EntityMonitorStatus ?? MonitorStatus.Fulfilled, "Dune", "Frank Herbert",
                     AcquisitionStatus.Imported, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, WantedEntityId)
                 : null);
         public Task<bool> HasActiveMonitorsAsync(CancellationToken cancellationToken) => throw new NotSupportedException();

@@ -23,7 +23,8 @@ public sealed class AcquisitionEnrichJobHandler(
     ILogger<AcquisitionEnrichJobHandler> logger,
     IEntityMetadataPatchService? entityMetadata = null,
     IMonitorStore? monitors = null,
-    IAcquisitionReleaseTimingService? releaseTiming = null) : IJobHandler {
+    IAcquisitionReleaseTimingService? releaseTiming = null,
+    IAcquisitionRequestService? requests = null) : IJobHandler {
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var payload = AcquisitionJobPayload.Parse(context.Job.PayloadJson);
         var import = await acquisitions.GetImportContextAsync(payload.AcquisitionId, cancellationToken);
@@ -97,7 +98,7 @@ public sealed class AcquisitionEnrichJobHandler(
 
     /// <summary>
     /// Re-evaluates a release gate after one completed provider pass. A newly available or removed gate is
-    /// made due for the monitor to claim; a still-missing configured date enables the explicit date prompt;
+    /// scheduled automatically while its monitor remains active; a still-missing date enables the date prompt;
     /// a known future date remains on its normal low-frequency monitor cadence.
     /// </summary>
     private async Task CompleteReleaseTimingRefreshAsync(
@@ -122,6 +123,9 @@ public sealed class AcquisitionEnrichJobHandler(
                 cancellationToken);
             if (monitors is not null) {
                 await monitors.MarkSearchDueByAcquisitionAsync(import.Id, cancellationToken);
+            }
+            if (requests is not null) {
+                await requests.ResumeReleasedAsync(import.Id, cancellationToken);
             }
             return;
         }
