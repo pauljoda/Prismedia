@@ -12,6 +12,31 @@ namespace Prismedia.Infrastructure.Tests;
 /// placeholders out of the owned-file map (they must stay bindable by the post-import scan).
 /// </summary>
 public sealed class EfImportTargetIndexTests {
+    [Fact]
+    public async Task MissingEpisodeNumbersAreScopedToTheRequestedEntityAndSeason() {
+        await using var db = CreateContext();
+        var ids = SeedSeries(db, "/media/tv/Show");
+        var otherSeasonId = AddEntity(db, EntityKind.VideoSeason.ToCode(), ids.SeriesId, 2);
+        var unnumberedId = AddEntity(db, EntityKind.VideoEpisode.ToCode(), otherSeasonId, null, wanted: true);
+        await db.SaveChangesAsync();
+        var index = new EfImportTargetIndex(db);
+
+        Assert.False(await index.HasUnnumberedWantedTvEpisodesAsync(ids.SeasonId, null, CancellationToken.None));
+        Assert.False(await index.HasUnnumberedWantedTvEpisodesAsync(ids.SeriesId, 1, CancellationToken.None));
+        Assert.True(await index.HasUnnumberedWantedTvEpisodesAsync(ids.SeriesId, 2, CancellationToken.None));
+        Assert.True(await index.HasUnnumberedWantedTvEpisodesAsync(ids.SeriesId, null, CancellationToken.None));
+        Assert.False(await index.HasUnnumberedWantedTvEpisodesAsync(ids.EpisodeId, 1, CancellationToken.None));
+        Assert.True(await index.HasUnnumberedWantedTvEpisodesAsync(unnumberedId, 2, CancellationToken.None));
+
+        (await db.Entities.SingleAsync(row => row.Id == otherSeasonId)).SortOrder = null;
+        await db.SaveChangesAsync();
+        Assert.True(await index.HasUnnumberedWantedTvEpisodesAsync(otherSeasonId, 2, CancellationToken.None));
+
+        (await db.Entities.SingleAsync(row => row.Id == unnumberedId)).SortOrder = 3;
+        await db.SaveChangesAsync();
+        Assert.False(await index.HasUnnumberedWantedTvEpisodesAsync(ids.SeriesId, null, CancellationToken.None));
+    }
+
     [Theory]
     [InlineData("series")]
     [InlineData("season")]

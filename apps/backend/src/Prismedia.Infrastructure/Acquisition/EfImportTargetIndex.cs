@@ -13,6 +13,35 @@ namespace Prismedia.Infrastructure.Acquisition;
 /// </summary>
 public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIndex {
     /// <inheritdoc />
+    public async Task<bool> HasUnnumberedWantedTvEpisodesAsync(
+        Guid entityId, int? seasonNumber, CancellationToken cancellationToken) {
+        var episodeCode = EntityKindRegistry.PlayableVideoKindFor(PlayableVideoScanPlacement.Episode).ToCode();
+        var target = await db.Entities.AsNoTracking()
+            .Where(entity => entity.Id == entityId)
+            .Select(entity => new { entity.KindCode, entity.IsWanted, entity.SortOrder })
+            .FirstOrDefaultAsync(cancellationToken);
+        if (target?.KindCode == episodeCode) {
+            return target.IsWanted && target.SortOrder is null;
+        }
+
+        var seriesId = await ResolveAncestorOfKindAsync(entityId, EntityKind.VideoSeries.ToCode(), cancellationToken);
+        if (seriesId is null) {
+            return false;
+        }
+        var seasonCode = EntityKind.VideoSeason.ToCode();
+        var scopedSeasonId = target?.KindCode == seasonCode ? entityId : (Guid?)null;
+        return await (
+            from episode in db.Entities.AsNoTracking()
+            join season in db.Entities.AsNoTracking() on episode.ParentEntityId equals season.Id
+            where episode.KindCode == episodeCode && episode.IsWanted && episode.SortOrder == null
+                && season.KindCode == seasonCode && season.ParentEntityId == seriesId
+                && (scopedSeasonId != null
+                    ? season.Id == scopedSeasonId
+                    : seasonNumber == null || season.SortOrder == seasonNumber)
+            select episode.Id).AnyAsync(cancellationToken);
+    }
+
+    /// <inheritdoc />
     public async Task<TvSeriesDiskLayout?> GetTvLayoutAsync(Guid entityId, CancellationToken cancellationToken) {
         var seriesId = await ResolveAncestorOfKindAsync(entityId, EntityKind.VideoSeries.ToCode(), cancellationToken);
         if (seriesId is null) {

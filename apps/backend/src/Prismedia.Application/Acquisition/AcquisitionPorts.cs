@@ -405,6 +405,14 @@ public interface IImportTargetIndex {
         Task.FromResult<IReadOnlyList<TvEpisodeTitle>>([]);
 
     /// <summary>
+    /// Whether the linked request scope contains wanted episodes without season-relative numbers.
+    /// Automatic numeric placement must wait for those identities to avoid creating duplicate episodes.
+    /// A direct episode checks only itself; season and series requests check the relevant season children.
+    /// </summary>
+    Task<bool> HasUnnumberedWantedTvEpisodesAsync(Guid entityId, int? seasonNumber, CancellationToken cancellationToken) =>
+        Task.FromResult(false);
+
+    /// <summary>
     /// The provider-authored tracks the linked acquisition is allowed to import. An album returns all
     /// still-wanted child tracks; a direct track acquisition returns only that track.
     /// </summary>

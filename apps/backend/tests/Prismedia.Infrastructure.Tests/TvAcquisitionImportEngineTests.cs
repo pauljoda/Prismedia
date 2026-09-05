@@ -25,6 +25,31 @@ namespace Prismedia.Infrastructure.Tests;
 public sealed class TvAcquisitionImportEngineTests : IDisposable {
     private readonly string _workRoot = Directory.CreateTempSubdirectory("prismedia-tv-import-").FullName;
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task UnnumberedWantedEpisodesHoldAutomaticImportWithoutMovingFiles(bool existingLayout) {
+        await using var db = CreateContext();
+        var harness = await HarnessAsync(db, ownedEpisodeName: "Show - s01e01.mkv",
+            payloadFiles: ["Show.S01E02-E03.1080p.WEB-DL.mkv"], releaseTitle: "Show S01 1080p WEB-DL");
+        var wanted = await db.Entities.SingleAsync(row => row.Id == harness.WantedEpisodeId);
+        wanted.SortOrder = null;
+        if (!existingLayout) {
+            db.EntitySources.RemoveRange(await db.EntitySources
+                .Where(row => row.EntityId == harness.SeriesId || row.EntityId == harness.SeasonId).ToArrayAsync());
+        }
+        await db.SaveChangesAsync();
+        var entityCount = await db.Entities.CountAsync();
+
+        await harness.Engine.ImportAsync(harness.Context, harness.Import, CancellationToken.None);
+
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, await StatusOf(db, harness.Import.Id));
+        Assert.True(File.Exists(Path.Combine(harness.Import.ContentPath!, "Show.S01E02-E03.1080p.WEB-DL.mkv")));
+        Assert.Equal(entityCount, await db.Entities.CountAsync());
+        Assert.False(await db.EntityFiles.AnyAsync(row => row.EntityId == wanted.Id && row.Role == EntityFileRole.Source));
+        Assert.Null((await db.Acquisitions.SingleAsync()).ImportCheckpointJson);
+    }
+
     public void Dispose() {
         try {
             Directory.Delete(_workRoot, recursive: true);

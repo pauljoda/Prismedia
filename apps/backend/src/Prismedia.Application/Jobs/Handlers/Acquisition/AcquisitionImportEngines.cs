@@ -1110,6 +1110,17 @@ public sealed class TvAcquisitionImportEngine(
             return;
         }
 
+        if (import.ManualFileMappings is not { Count: > 0 }
+            && import.EntityId is { } targetEntityId
+            && await targets.HasUnnumberedWantedTvEpisodesAsync(targetEntityId, import.SeasonNumber, cancellationToken)) {
+            await acquisitions.SetStatusAsync(
+                import.Id,
+                AcquisitionStatus.ManualImportRequired,
+                "Requested episodes are missing episode numbers. Refresh the season metadata before retrying the import; the downloaded files are preserved.",
+                cancellationToken);
+            return;
+        }
+
         // An acquisition linked to a series already on disk merges into its existing tree — placing a
         // template-derived parallel folder would mint a duplicate series (the scan's binds refuse
         // entities that already own files). Everything else keeps the template placement.
