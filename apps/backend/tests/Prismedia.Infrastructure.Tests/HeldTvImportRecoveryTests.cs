@@ -124,6 +124,30 @@ public sealed class HeldTvImportRecoveryTests : IDisposable {
     }
 
     [Fact]
+    public async Task ACompletedOlderAttemptCannotAuthorizeImportOfANewerPartialTransfer() {
+        await using var db = CreateContext();
+        var (service, acquisition, episodes) = await SeedAsync(db);
+        episodes[0].SortOrder = 1;
+        episodes[1].SortOrder = 2;
+        var completed = await db.DownloadTransfers.SingleAsync();
+        var store = new EfHeldTvImportRecoveryStore(db);
+        var held = Assert.Single(await store.ListAsync(CancellationToken.None));
+        db.DownloadTransfers.Add(new DownloadTransferRow {
+            Id = Guid.NewGuid(), AcquisitionId = acquisition.Id, ClientItemId = "partial-retry",
+            ContentPath = completed.ContentPath, Progress = 0.5,
+            CreatedAt = completed.CreatedAt.AddSeconds(1), UpdatedAt = completed.UpdatedAt.AddSeconds(1)
+        });
+        await db.SaveChangesAsync();
+
+        Assert.False(await store.TryResumeAsync(held, "changed-mapping", CancellationToken.None));
+        Assert.Empty(await store.ListAsync(CancellationToken.None));
+        await service.RecoverAsync(CancellationToken.None);
+
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, acquisition.Status);
+        Assert.Null(acquisition.ImportRecoveryFingerprint);
+    }
+
+    [Fact]
     public async Task ResumeCannotOverwriteANewerHoldOrCancellation() {
         await using var db = CreateContext();
         var (_, acquisition, _) = await SeedAsync(db);
@@ -158,7 +182,7 @@ public sealed class HeldTvImportRecoveryTests : IDisposable {
         await File.WriteAllTextAsync(Path.Combine(payload, "Show.S01E01E02.First.Story.Second.Story.mkv"), "test bytes");
         db.DownloadTransfers.Add(new DownloadTransferRow {
             Id = Guid.NewGuid(), AcquisitionId = acquisition.Id, ClientItemId = "retained-payload",
-            ContentPath = payload, CreatedAt = now, UpdatedAt = now
+            ContentPath = payload, Progress = 1, CreatedAt = now, UpdatedAt = now
         });
         db.Monitors.Add(new MonitorRow {
             Id = Guid.NewGuid(), AcquisitionId = acquisition.Id, EntityId = season.Id,

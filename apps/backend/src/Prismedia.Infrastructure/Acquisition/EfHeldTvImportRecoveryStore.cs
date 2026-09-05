@@ -9,7 +9,7 @@ namespace Prismedia.Infrastructure.Acquisition;
 public sealed class EfHeldTvImportRecoveryStore(PrismediaDbContext db) : IHeldTvImportRecoveryStore {
     /// <inheritdoc />
     public async Task<IReadOnlyList<HeldTvImport>> ListAsync(CancellationToken cancellationToken) =>
-        await db.Acquisitions.AsNoTracking()
+        await WithCompletedPayload().AsNoTracking()
             .Where(row => row.Status == AcquisitionStatus.ManualImportRequired
                 && (row.Kind == EntityKind.VideoSeason || row.Kind == EntityKind.VideoEpisode)
                 && row.EntityId != null && !row.ImportManualReview
@@ -22,7 +22,7 @@ public sealed class EfHeldTvImportRecoveryStore(PrismediaDbContext db) : IHeldTv
     /// <inheritdoc />
     public async Task<bool> TryResumeAsync(HeldTvImport held, string fingerprint, CancellationToken cancellationToken) {
         if (db.Database.IsRelational()) {
-            var affected = await db.Acquisitions
+            var affected = await WithCompletedPayload()
                 .Where(row => row.Id == held.Id && row.Status == AcquisitionStatus.ManualImportRequired
                     && row.UpdatedAt == held.HeldAt && row.EntityId == held.EntityId
                     && row.ImportRecoveryFingerprint != fingerprint && !row.ImportManualReview
@@ -40,7 +40,7 @@ public sealed class EfHeldTvImportRecoveryStore(PrismediaDbContext db) : IHeldTv
             }
             return affected == 1;
         }
-        var row = await db.Acquisitions.FirstOrDefaultAsync(row => row.Id == held.Id, cancellationToken);
+        var row = await WithCompletedPayload().FirstOrDefaultAsync(row => row.Id == held.Id, cancellationToken);
         if (row is null || row.Status != AcquisitionStatus.ManualImportRequired || row.UpdatedAt != held.HeldAt
             || row.EntityId != held.EntityId || row.ImportRecoveryFingerprint == fingerprint || row.ImportManualReview
             || row.ImportCheckpointJson != null || row.FinalSourcePath != null || row.UpgradeOfAcquisitionId != null
@@ -60,6 +60,14 @@ public sealed class EfHeldTvImportRecoveryStore(PrismediaDbContext db) : IHeldTv
             return false;
         }
     }
+
+    // Match GetImportContextAsync's latest-transfer selection. A stale completed transfer cannot
+    // authorize a newer incomplete payload, including when it appears after ListAsync's observation.
+    private IQueryable<Persistence.Entities.AcquisitionRow> WithCompletedPayload() => db.Acquisitions
+        .Where(row => db.DownloadTransfers.Where(transfer => transfer.AcquisitionId == row.Id)
+            .OrderByDescending(transfer => transfer.CreatedAt)
+            .Select(transfer => transfer.Progress >= 1 && !string.IsNullOrWhiteSpace(transfer.ContentPath))
+            .FirstOrDefault());
 
     private const string ResumeMessage = "Mapping inputs changed; retrying the retained TV download to fill library gaps.";
 }
