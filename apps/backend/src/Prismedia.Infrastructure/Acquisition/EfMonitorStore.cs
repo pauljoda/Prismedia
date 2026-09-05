@@ -1024,6 +1024,20 @@ public sealed partial class EfMonitorStore(
         if (targeting is not null) {
             row.TargetLibraryRootId = targeting.TargetLibraryRootId;
             row.ProfileId = targeting.ProfileId;
+            // Imported acquisitions are the owned-quality baseline for future upgrades. Keep their
+            // policy in sync with explicit monitoring choices, including a reset to the kind default.
+            // An active transfer keeps the profile and destination it was selected against.
+            if (row.AcquisitionId is { } baselineId) {
+                var baseline = await db.Acquisitions.FirstOrDefaultAsync(
+                    acquisition => acquisition.Id == baselineId
+                        && acquisition.Status == AcquisitionStatus.Imported,
+                    cancellationToken);
+                if (baseline is not null) {
+                    baseline.ProfileId = targeting.ProfileId;
+                    baseline.TargetLibraryRootId = targeting.TargetLibraryRootId;
+                    baseline.UpdatedAt = now;
+                }
+            }
         }
 
         // Likewise the monitoring preset: an explicit request records the chosen preset (governing whether

@@ -14,6 +14,80 @@ namespace Prismedia.Infrastructure.Tests;
 /// </summary>
 public sealed class EfMonitorStoreUpgradeTests {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OnlyAnExplicitDefaultChoiceClearsAnOwnedProfile(bool resetToDefault) {
+        await using var db = CreateContext();
+        var store = await SeedMediaUpgradeMonitorAsync(
+            db, EntityKind.Movie, VideoQuality.Dvd.ToCode(), VideoQuality.Bluray1080p.ToCode(),
+            attachEntity: true, subtitleStatusKnown: true, hasSubtitles: true);
+        var acquisition = await db.Acquisitions.SingleAsync();
+        var low = new BookAcquisitionProfileRow {
+            Id = Guid.NewGuid(), Kind = EntityKind.Movie, DisplayName = "Keep DVD",
+            TargetLibraryRootId = Guid.NewGuid(), UpgradeUntilCutoff = false,
+            CutoffQuality = VideoQuality.Dvd.ToCode(),
+            CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow
+        };
+        db.BookAcquisitionProfiles.Add(low);
+        acquisition.ProfileId = low.Id;
+        (await db.Monitors.SingleAsync()).ProfileId = low.Id;
+        await db.SaveChangesAsync();
+        Assert.Empty(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+
+        await store.StartForEntityAsync(acquisition.EntityId!.Value, EntityKind.Movie, acquisition.Title,
+            resetToDefault ? new AcquisitionTargeting(null, null) : null, null, CancellationToken.None);
+
+        var due = await store.ListDueMonitorsAsync(360, CancellationToken.None);
+        if (resetToDefault) {
+            Assert.True(Assert.Single(due).IsUpgrade);
+            Assert.Null(acquisition.ProfileId);
+        } else {
+            Assert.Empty(due);
+            Assert.Equal(low.Id, acquisition.ProfileId);
+        }
+    }
+
+    [Theory]
+    [InlineData(EntityKind.Movie)]
+    [InlineData(EntityKind.VideoEpisode)]
+    public async Task SelectingAHigherProfileForAnOwnedEntityControlsItsNextUpgrade(EntityKind kind) {
+        await using var db = CreateContext();
+        var store = await SeedMediaUpgradeMonitorAsync(
+            db, kind, VideoQuality.Dvd.ToCode(), VideoQuality.Dvd.ToCode(),
+            upgradeOn: false, attachEntity: true, subtitleStatusKnown: true, hasSubtitles: true);
+        var acquisition = await db.Acquisitions.SingleAsync();
+        acquisition.ProfileId = (await db.BookAcquisitionProfiles.SingleAsync()).Id;
+        var high = new BookAcquisitionProfileRow {
+            Id = Guid.NewGuid(), Kind = AcquisitionProfileKinds.For(kind), DisplayName = "Upgrade to HD",
+            TargetLibraryRootId = Guid.NewGuid(), AutoPick = true, UpgradeUntilCutoff = true,
+            CutoffQuality = VideoQuality.Bluray1080p.ToCode(),
+            CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow
+        };
+        db.BookAcquisitionProfiles.Add(high);
+        await db.SaveChangesAsync();
+        Assert.Empty(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+
+        await store.StartForEntityAsync(acquisition.EntityId!.Value, kind, acquisition.Title,
+            new AcquisitionTargeting(null, high.Id), null, CancellationToken.None);
+
+        var due = Assert.Single(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+        Assert.True(due.IsUpgrade);
+        Assert.Equal(high.Id, due.ProfileId);
+        Assert.Single((await store.ListCutoffUnmetAsync(1, 20, kind, CancellationToken.None)).Items);
+        var childId = await store.CreateUpgradeChildAsync(due.MonitorId, CancellationToken.None);
+        var child = await db.Acquisitions.SingleAsync(row => row.Id == childId);
+        Assert.Equal(high.Id, child.ProfileId);
+        child.Status = AcquisitionStatus.Downloading;
+        await db.SaveChangesAsync();
+
+        await store.StartForEntityAsync(acquisition.EntityId.Value, kind, acquisition.Title,
+            new AcquisitionTargeting(null, null), null, CancellationToken.None);
+        Assert.Equal(high.Id, child.ProfileId);
+        Assert.Null(acquisition.ProfileId);
+        Assert.Empty(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+    }
+
+    [Theory]
     [InlineData(EntityKind.Movie, false)]
     [InlineData(EntityKind.Movie, true)]
     [InlineData(EntityKind.VideoEpisode, false)]
