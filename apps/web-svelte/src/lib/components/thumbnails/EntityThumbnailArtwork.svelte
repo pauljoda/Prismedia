@@ -41,6 +41,7 @@
     onSelectedChange?: (selected: boolean) => void;
     selectable: boolean;
     selected: boolean;
+    showBadges: boolean;
     showWantedBadge: boolean;
   }
 
@@ -62,6 +63,7 @@
     onSelectedChange,
     selectable,
     selected,
+    showBadges,
     showWantedBadge,
   }: Props = $props();
 
@@ -398,7 +400,7 @@
   {#if isImageSequenceHover && sequenceAssets.length > 1 && !hoverBroken}
     <div class="sequence-rail" aria-hidden="true">{#each sequenceAssets as sequenceAsset, sequenceIndex (sequenceAsset.src)}<span class:is-active={activeSequenceIndex === sequenceIndex}></span>{/each}</div>
   {/if}
-  <EntityThumbnailOverlays {card} {onSelectedChange} {selectable} {selected} {showWantedBadge} showBadges={layout !== "list" || mediaOnly} />
+  <EntityThumbnailOverlays {card} {onSelectedChange} {selectable} {selected} {showWantedBadge} showBadges={showBadges && (layout !== "list" || mediaOnly)} />
 </div>
 
 <style>

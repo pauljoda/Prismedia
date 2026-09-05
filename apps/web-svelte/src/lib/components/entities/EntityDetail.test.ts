@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/sve
 import { FileText, Play } from "@lucide/svelte";
 import { createRawSnippet } from "svelte";
 import { describe, expect, it, vi } from "vitest";
-import { ACQUISITION_STATUS, CAPABILITY_KIND } from "$lib/api/generated/codes";
+import { ACQUISITION_STATUS, CAPABILITY_KIND, ENTITY_KIND } from "$lib/api/generated/codes";
 import type { EntityDetailCard, EntityDetailCardFull } from "$lib/entities/entity-detail";
 import type { EntityDetailSection } from "./EntityDetail.svelte";
 import EntityDetail from "./EntityDetail.test-harness.svelte";
@@ -176,6 +176,7 @@ describe("EntityDetail", () => {
       },
     };
 
+    card.entity.capabilities = card.posterCard.entity.capabilities;
     const { container } = render(EntityDetail, {
       props: {
         card,
@@ -186,8 +187,27 @@ describe("EntityDetail", () => {
 
     expect(container.querySelector(".poster-frame .entity-thumbnail")).toBeInTheDocument();
     expect(container.querySelector(".poster-frame img")).toHaveAttribute("src", "/covers/book.jpg");
-    expect(screen.getAllByLabelText("Wanted — Waiting for release")).toHaveLength(2);
+    expect(screen.getAllByLabelText("Acquisition status: Waiting for release")).toHaveLength(1);
+    expect(container.querySelector(".poster-frame .thumbnail-badges")).toBeNull();
+    expect(container.querySelector(".poster-frame [tabindex]")).toBeNull();
+    expect(container.querySelector(".hero-backdrop")).toHaveAttribute("aria-hidden", "true");
   });
+
+  it.each([ENTITY_KIND.book, ENTITY_KIND.movie, ENTITY_KIND.video, ENTITY_KIND.audio, ENTITY_KIND.videoSeason, ENTITY_KIND.comicInstallment])(
+    "shows one acquisition status for a wanted %s even without artwork",
+    async (kind) => {
+      const card = buildCard();
+      card.entity.kind = kind;
+      card.entity.capabilities = [{ kind: CAPABILITY_KIND.flags, isWanted: true, isFavorite: false, isNsfw: false, isOrganized: false }];
+      const { rerender } = render(EntityDetail, { card });
+      expect(screen.getByLabelText("Acquisition status: Wanted")).toHaveTextContent("Wanted");
+      await rerender({ card, wantedStatus: ACQUISITION_STATUS.downloading });
+      expect(screen.getByLabelText("Acquisition status: Downloading")).toHaveTextContent("Downloading");
+      expect(screen.queryByLabelText("Acquisition status: Wanted")).not.toBeInTheDocument();
+      await rerender({ card: { ...card, entity: { ...card.entity, capabilities: [] } } });
+      expect(screen.queryByLabelText(/^Acquisition status:/)).not.toBeInTheDocument();
+    },
+  );
 
   it("shows editable poster and header drop zones when artwork is missing", async () => {
     const onMetadataSave = vi.fn().mockResolvedValue(undefined);

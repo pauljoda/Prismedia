@@ -161,6 +161,13 @@ describe("EntityThumbnail presentation", () => {
     }
   });
 
+  it.each(["grid", "list"] as const)("lets a %s host own status without losing the thumbnail caption", (layout) => {
+    const card = episodeCard();
+    const { container } = render(EntityThumbnail, { card, layout, showBadges: false });
+    expect(container.querySelector(".thumbnail-badges")).toBeNull();
+    expect(container.querySelector(".thumbnail-caption h3")).toHaveTextContent(card.entity.title);
+  });
+
   it("replaces the entity-family fallback with an artwork-derived accent after the cover decodes", async () => {
     const pixels = new Uint8ClampedArray(12 * 12 * 4);
     for (let y = 0; y < 12; y += 1) {

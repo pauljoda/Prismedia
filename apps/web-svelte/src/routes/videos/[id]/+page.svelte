@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { Badge as UiBadge } from "@prismedia/ui-svelte";
   import { onMount } from "svelte";
   import { beforeNavigate, goto } from "$app/navigation";
   import { page } from "$app/state";
@@ -62,7 +61,6 @@
     writeTranscriptDockPreference,
     writeTranscriptDockWidth,
   } from "./video-page-state";
-  import { acquisitionStatusDisplay } from "$lib/requests/acquisition-status-display";
 
   let playbackPlan = $state.raw<VideoPlaybackPlanResponse | null>(null);
   let librarySettings = $state<LibrarySettings | null>(null);
@@ -162,7 +160,6 @@
     onStatusChanged: () => detail.reload({ showLoading: false }),
     onPruned: () => goto(seriesRef ? `/series/${seriesRef.id}` : "/videos"),
   });
-  const wantedStateLabel = $derived(acquisitionStatusDisplay(acq.acquisition?.summary.status).label);
   const fileManagement = {
     onDeleted: () => goto(seriesRef ? `/series/${seriesRef.id}` : "/videos"),
     onReverted: () => refreshAfterManagedFileRevert(acq, () => detail.reload({ showLoading: false })),
@@ -882,10 +879,6 @@
       tabs={wantedDetailTabs}
       sections={detailSections}
     >
-      {#snippet heroBadges()}
-        <UiBadge variant="outline">{wantedStateLabel}</UiBadge>
-      {/snippet}
-
       {#snippet sectionContent(section)}
         {#if section.id === "acquisition"}
           <EntityAcquisitionCard

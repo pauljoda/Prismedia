@@ -5,6 +5,8 @@
   import type { Snippet } from "svelte";
   import type { EntityDetailCard } from "$lib/entities/entity-detail";
   import EntityActionButton from "./EntityActionButton.svelte";
+  import { isWanted } from "$lib/api/capabilities";
+  import { acquisitionStatusDisplay } from "$lib/requests/acquisition-status-display";
   import type { EntityDetailActionButton, EntityDetailProps } from "./entity-detail-types";
 
   interface Props {
@@ -26,6 +28,7 @@
     ratingBusy: boolean;
     savingEdit: boolean;
     showFlagActions: boolean;
+    wantedStatus?: EntityDetailProps["wantedStatus"];
   }
 
   let {
@@ -47,9 +50,14 @@
     ratingBusy,
     savingEdit,
     showFlagActions,
+    wantedStatus,
   }: Props = $props();
 
   const providerIdentityLabel = $derived(card.providerIdentity?.pluginId ?? "");
+  const wanted = $derived(isWanted(card.entity.capabilities));
+  const acquisitionStatus = $derived(acquisitionStatusDisplay(
+    wantedStatus === undefined ? card.posterCard?.wantedStatus : wantedStatus,
+  ));
   const providerIdentityTitle = $derived.by(() => {
     const identity = card.providerIdentity;
     if (!identity) return "";
@@ -64,8 +72,15 @@
   </div>
 {/if}
 
-{#if card.providerIdentity || heroBadges}
+{#if wanted || card.providerIdentity || heroBadges}
   <div class="position-badges">
+    {#if wanted}
+      {@const StatusIcon = acquisitionStatus.icon}
+      <Badge variant="outline" aria-label={`Acquisition status: ${acquisitionStatus.label}`}>
+        <StatusIcon data-icon="inline-start" aria-hidden="true" />
+        {acquisitionStatus.label}
+      </Badge>
+    {/if}
     {#if card.providerIdentity}
       {#if card.providerIdentity.url}
         <a

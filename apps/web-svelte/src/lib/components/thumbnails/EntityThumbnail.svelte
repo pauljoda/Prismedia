@@ -26,6 +26,7 @@
     selectable = false,
     selectMode = false,
     selected = false,
+    showBadges = true,
     showWantedBadge = true,
     subtitleContent,
     titleAlign = "left",
@@ -134,9 +135,10 @@
     {onSelectedChange}
     {selectable}
     {selected}
+    {showBadges}
     {showWantedBadge}
   />
-  <EntityThumbnailInfo {card} {mediaOnly} {layout} {showWantedBadge} {subtitleContent} {titleAlign} {titleSize} />
+  <EntityThumbnailInfo {card} {mediaOnly} {layout} {showBadges} {showWantedBadge} {subtitleContent} {titleAlign} {titleSize} />
 </svelte:element>
 
 <style>

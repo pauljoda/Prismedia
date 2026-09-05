@@ -27,7 +27,7 @@
   import EntityAcquisitionCard from "$lib/components/acquisitions/EntityAcquisitionCard.svelte";
   import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
   import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
-  import { getCapability, isWanted } from "$lib/api/capabilities";
+  import { getCapability } from "$lib/api/capabilities";
   import { updateEntityProgress } from "$lib/api/consumption";
   import { fetchEntityReaderManifest } from "$lib/api/entity-reader";
   import {
@@ -51,7 +51,6 @@
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
   import type { EntityReaderManifestResponse } from "$lib/api/generated/model";
   import { requestableDirectChildCards } from "$lib/requests/requestable-entity-children";
-  import { acquisitionStatusDisplay } from "$lib/requests/acquisition-status-display";
   import {
     CAPABILITY_KIND,
     CREDIT_ROLE,
@@ -121,7 +120,6 @@
   const progress = $derived(
     entity ? getCapability(entity.capabilities, CAPABILITY_KIND.progress) : undefined,
   );
-  const entityWanted = $derived(!!entity && isWanted(entity.capabilities));
   const readTargetId = $derived.by(() => {
     if (pageSequence) return entity?.id ?? null;
     if (progress?.currentEntityId && allInstallmentCards.some((item) => item.entity.id === progress.currentEntityId)) {
@@ -183,7 +181,6 @@
     onStatusChanged: refreshEntity,
     onPruned: () => goto(entity?.kind === ENTITY_KIND.comicSeries ? "/comics" : `/comics/${parentSeries?.id ?? seriesId}`),
   });
-  const wantedStateLabel = $derived(acquisitionStatusDisplay(acq.acquisition?.summary.status).label);
   const fileManagement = {
     onDeleted: () => goto(entity?.kind === ENTITY_KIND.comicSeries ? "/comics" : `/comics/${parentSeries?.id ?? seriesId}`),
     onReverted: () => refreshAfterManagedFileRevert(acq, refreshEntity),
@@ -362,9 +359,6 @@
         {/snippet}
 
         {#snippet heroBadges()}
-          {#if entityWanted}
-            <UiBadge variant="outline">{wantedStateLabel}</UiBadge>
-          {/if}
           {#if installmentMetadata}
             <UiBadge variant="outline">{installmentKindLabel(installmentMetadata.installmentKind)}</UiBadge>
           {/if}

@@ -12,12 +12,13 @@
     mediaOnly: boolean;
     layout: "grid" | "list";
     showWantedBadge: boolean;
+    showBadges?: boolean;
     subtitleContent?: Snippet<[EntityThumbnailCard]>;
     titleAlign: "left" | "center" | "right";
     titleSize: "default" | "compact";
   }
 
-  let { card, mediaOnly, layout, showWantedBadge, subtitleContent, titleAlign, titleSize }: Props = $props();
+  let { card, mediaOnly, layout, showBadges = true, showWantedBadge, subtitleContent, titleAlign, titleSize }: Props = $props();
   // Captions are a compact summary: two chips share one row, truncating long labels.
   const maxMetadataChips = 2;
 </script>
@@ -40,7 +41,7 @@
       {/if}
     </div>
 
-    {#if layout === "list"}<EntityThumbnailBadges {card} {showWantedBadge} inline />{/if}
+    {#if showBadges && layout === "list"}<EntityThumbnailBadges {card} {showWantedBadge} inline />{/if}
 
     {#if card.meta?.length}
       <div class="chips flex-nowrap">

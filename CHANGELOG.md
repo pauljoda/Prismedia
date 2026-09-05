@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Entity detail headers show acquisition status once beside the title across media types. Covers no longer repeat grid badges or create inactive keyboard stops, and decorative artwork is hidden from screen readers.
 - Thumbnail metadata keeps the shared readable badge text size and separate chip outlines even at dense grid sizes. Narrow cards hide decorative icons instead of shrinking the text.
 - Collection rules display numeric units and allow duration, file-size, and audio units to be changed without rewriting saved thresholds. Compatible comparison changes retain entered values, empty numeric drafts stay incomplete, and the existing negated-all logic is labeled "Not all" accurately.
 - Captioned Entity grids now reduce their column count in narrow spaces before squeezing metadata into unreadable fragments. The density preference is preserved, and artwork-only media walls remain unrestricted.

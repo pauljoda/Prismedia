@@ -12,7 +12,7 @@
   import { PROGRESS_UNIT } from "$lib/api/generated/codes";
   import { fetchEntity, type EntityCardFull } from "$lib/api/entities";
   import { updateEntityProgress } from "$lib/api/consumption";
-  import { getCapability, isWanted } from "$lib/api/capabilities";
+  import { getCapability } from "$lib/api/capabilities";
   import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
   import { getChildIds } from "$lib/entities/entity-children";
   import type { EntityDetailCredit, EntityDetailTag } from "$lib/entities/entity-detail";
@@ -38,7 +38,6 @@
     type EntityDetailTab,
   } from "$lib/components/entities/EntityDetail.svelte";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
-  import { acquisitionStatusDisplay } from "$lib/requests/acquisition-status-display";
 
   let parentSeries = $state<EntityCardFull | null>(null);
   let episodeCards = $state<EntityThumbnailCard[]>([]);
@@ -124,7 +123,6 @@
     onStatusChanged: () => detail.reload({ showLoading: false }),
     onPruned: () => goto(`/series/${seriesId}`),
   });
-  const wantedStateLabel = $derived(acquisitionStatusDisplay(acq.acquisition?.summary.status).label);
   const fileManagement = {
     onDeleted: () => goto(`/series/${seriesId}`),
     onReverted: () => refreshAfterManagedFileRevert(acq, () => detail.reload({ showLoading: false })),
@@ -162,7 +160,6 @@
     ];
   });
 
-  const seasonWanted = $derived(!!season && isWanted(season.capabilities));
 
   async function loadEpisodeCards(
     seasonDetail: EntityCardFull,
@@ -269,9 +266,6 @@
       {/snippet}
 
       {#snippet heroBadges()}
-        {#if seasonWanted}
-          <UiBadge variant="outline">{wantedStateLabel}</UiBadge>
-        {/if}
         {#if seasonNumber != null}
           <UiBadge variant="outline">S{String(seasonNumber).padStart(2, "0")}</UiBadge>
         {/if}

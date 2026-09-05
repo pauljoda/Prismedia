@@ -30,6 +30,8 @@ export interface EntityThumbnailProps {
   selectable?: boolean;
   selectMode?: boolean;
   selected?: boolean;
+  /** Hide grid/list badge overlays when a detail header already presents this information. */
+  showBadges?: boolean;
   /** Show wanted/status on grid artwork or in list captions. Off where the host renders status itself. */
   showWantedBadge?: boolean;
   subtitleContent?: Snippet<[EntityThumbnailCard]>;

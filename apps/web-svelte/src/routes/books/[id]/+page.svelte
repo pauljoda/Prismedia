@@ -99,7 +99,6 @@
     type EpubContentsEntry,
   } from "$lib/entities/epub-contents";
   import { acquisitionStatusShouldPoll } from "$lib/requests/acquisition-status";
-  import { acquisitionStatusDisplay } from "$lib/requests/acquisition-status-display";
   import { monitorIsActive } from "$lib/requests/monitor-status";
 
   const playback = useAudioPlayback()!;
@@ -353,7 +352,6 @@
     onStatusChanged: () => detail.reload({ showLoading: false }),
     onPruned: () => goto("/books"),
   });
-  const wantedStateLabel = $derived(acquisitionStatusDisplay(acq.acquisition?.summary.status).label);
   const fileManagement = {
     onDeleted: () => goto("/books"),
     onReverted: () => refreshAfterManagedFileRevert(
@@ -1049,9 +1047,6 @@
       {/snippet}
 
       {#snippet heroBadges()}
-        {#if entityWanted}
-          <UiBadge variant="outline">{wantedStateLabel}</UiBadge>
-        {/if}
         {#if canonicalPercent > 0}
           <UiBadge variant="outline">Progress {canonicalPercent}%</UiBadge>
         {/if}

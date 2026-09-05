@@ -335,24 +335,22 @@
   const saveEdit = edit.save;
 
   function posterCardForDisplay(): EntityThumbnailCard | null {
-    const withWantedStatus = (posterCard: EntityThumbnailCard): EntityThumbnailCard =>
-      wantedStatus === undefined ? posterCard : { ...posterCard, wantedStatus };
     const poster = displayPoster;
     if (poster) {
-      return withWantedStatus({
+      return {
         ...(card.posterCard ?? entityReferenceToThumbnailCard(card.entity)),
         cover: { src: poster.src, alt: poster.alt, role: ENTITY_FILE_ROLE.poster },
         hover: { kind: THUMBNAIL_HOVER_KIND.none },
-      });
+      };
     }
 
     if (!isEditingActiveTab) {
-      return card.posterCard ? withWantedStatus(card.posterCard) : null;
+      return card.posterCard;
     }
-    return withWantedStatus({
+    return {
       ...entityReferenceToThumbnailCard(card.entity, { cover: null }),
       hover: { kind: THUMBNAIL_HOVER_KIND.none },
-    });
+    };
   }
 
   function roleSupported(role: EntityFileRoleCode): boolean {
@@ -576,7 +574,7 @@
             ondragover={preventAssetDrag}
           >
             {#if posterCard}
-              <EntityThumbnail card={posterCard} linkable={false} mediaOnly={true} />
+              <EntityThumbnail card={posterCard} linkable={false} mediaOnly={true} showBadges={false} interactive={false} hoverPreviewsEnabled={false} />
             {/if}
           </div>
         {/if}
@@ -598,6 +596,7 @@
             {editActionLabel}
             editing={isEditingActiveTab}
             {heroBadges}
+            {wantedStatus}
             {isFavorite}
             {isNsfw}
             {isOrganized}
@@ -636,7 +635,7 @@
         {@render heroContent()}
       </div>
     {:else if heroMode === "poster-blur"}
-      <div class="hero-backdrop poster-mode">
+      <div class="hero-backdrop poster-mode" aria-hidden="true">
         <div class="hero-backdrop-thumbnail">
           {#if posterCard}
             <EntityThumbnail
@@ -644,6 +643,8 @@
               linkable={false}
               mediaOnly={true}
               interactive={false}
+              showBadges={false}
+              hoverPreviewsEnabled={false}
               onArtworkLoad={captureArtworkPalette}
             />
           {/if}
