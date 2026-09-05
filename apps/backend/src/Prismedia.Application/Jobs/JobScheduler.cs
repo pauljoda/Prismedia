@@ -26,15 +26,7 @@ public sealed class JobScheduler(
 
         while (!stoppingToken.IsCancellationRequested) {
             try {
-                await ScheduleRecurringScansAsync(stoppingToken);
-                await ScheduleRecurringCollectionRefreshAsync(stoppingToken);
-                await ScheduleRecurringBackupsAsync(stoppingToken);
-                await SchedulePluginUpdatesAsync(stoppingToken);
-                await ScheduleAcquisitionMonitorAsync(stoppingToken);
-                await RecoverDownloadedCompletionJobsAsync(stoppingToken);
-                await RecoverStuckSearchesAsync(stoppingToken);
-                await ScheduleRecycleBinCleanupAsync(stoppingToken);
-                await ScheduleGridThumbnailSweepAsync(stoppingToken);
+                await RunTickAsync(stoppingToken);
             } catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) {
                 break;
             } catch (Exception ex) {
@@ -45,6 +37,34 @@ public sealed class JobScheduler(
                 await Task.Delay(CheckInterval, stoppingToken);
             } catch (OperationCanceledException) {
                 break;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Runs independent maintenance scopes even when an earlier scope fails. Cancellation still stops
+    /// the whole tick; an unavailable backup or settings service cannot starve acquisition recovery.
+    /// </summary>
+    internal async Task RunTickAsync(CancellationToken cancellationToken) {
+        Func<CancellationToken, Task>[] steps = [
+            ScheduleRecurringScansAsync,
+            ScheduleRecurringCollectionRefreshAsync,
+            ScheduleRecurringBackupsAsync,
+            SchedulePluginUpdatesAsync,
+            ScheduleAcquisitionMonitorAsync,
+            RecoverDownloadedCompletionJobsAsync,
+            RecoverStuckSearchesAsync,
+            ScheduleRecycleBinCleanupAsync,
+            ScheduleGridThumbnailSweepAsync,
+        ];
+        foreach (var step in steps) {
+            cancellationToken.ThrowIfCancellationRequested();
+            try {
+                await step(cancellationToken);
+            } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) {
+                throw;
+            } catch (Exception ex) {
+                logger.LogError(ex, "Scheduler step {Step} failed; continuing independent maintenance.", step.Method.Name);
             }
         }
     }

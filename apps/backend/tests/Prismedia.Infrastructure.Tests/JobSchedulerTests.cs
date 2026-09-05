@@ -17,6 +17,38 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class JobSchedulerTests {
     [Fact]
+    public async Task RecurringMaintenanceFailuresDoNotStarveDownloadedRecovery() {
+        var acquisitionId = Guid.NewGuid();
+        var queue = new SchedulerJobQueue();
+        // The minimal host has no backup service or transfer store. Their failures must not prevent
+        // the independently available durable completion ticket from reaching its importer.
+        await using var provider = CreateProvider(
+            new SchedulerSettingsPersistence([]), queue,
+            new SchedulerAcquisitionLifecycleStore([new(acquisitionId, EntityKind.Movie, false)]),
+            new SchedulerImportEngineFactory([EntityKind.Movie]));
+
+        await CreateScheduler(provider, DateTimeOffset.UtcNow).RunTickAsync(CancellationToken.None);
+
+        AssertCompletionRequest(
+            Assert.Single(queue.Enqueued, request => request.TargetEntityId == acquisitionId.ToString()),
+            acquisitionId, JobType.AcquisitionImport);
+        Assert.Contains(queue.Enqueued, request => request.Type == JobType.GridThumbnailSweep);
+    }
+
+    [Fact]
+    public async Task CancelledSchedulerTickDoesNotQueueLaterMaintenance() {
+        var queue = new SchedulerJobQueue();
+        await using var provider = CreateProvider(new SchedulerSettingsPersistence([]), queue);
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            CreateScheduler(provider, DateTimeOffset.UtcNow).RunTickAsync(cancellation.Token));
+
+        Assert.Empty(queue.Enqueued);
+    }
+
+    [Fact]
     public async Task ScheduleAcquisitionMonitorAsyncKeepsTransferPollingAheadOfSearchFanout() {
         await using var db = new PrismediaDbContext(
             new DbContextOptionsBuilder<PrismediaDbContext>()
