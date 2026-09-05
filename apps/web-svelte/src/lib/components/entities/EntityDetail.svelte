@@ -71,6 +71,7 @@
   import { paletteFromImage, type ArtworkPalette } from "$lib/entities/artwork-palette";
   import { EntityDetailArtworkController } from "./entity-detail-artwork-controller.svelte";
   import EntityDetailDirtyTabDialog from "./EntityDetailDirtyTabDialog.svelte";
+  import UnsavedChangesGuard from "$lib/components/forms/UnsavedChangesGuard.svelte";
   import EntityDetailEditControls from "./EntityDetailEditControls.svelte";
   import EntityDetailMetadataSection from "./EntityDetailMetadataSection.svelte";
   import { EntityDetailEditController } from "./entity-detail-edit-controller.svelte";
@@ -739,6 +740,7 @@
   {/if}
 </article>
 
+<UnsavedChangesGuard dirty={edit.dirty} />
 <EntityDetailDirtyTabDialog open={Boolean(pendingTabId)} onStay={stayOnDirtyTab} onDiscard={discardDirtyTab} />
 
 <style>

@@ -1,6 +1,8 @@
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { FileText, Play } from "@lucide/svelte";
 import { createRawSnippet } from "svelte";
+import * as navigation from "$app/navigation";
+import type { BeforeNavigate } from "@sveltejs/kit";
 import { describe, expect, it, vi } from "vitest";
 import { ACQUISITION_STATUS, CAPABILITY_KIND, ENTITY_KIND, FINGERPRINT_ALGORITHM } from "$lib/api/generated/codes";
 import type { EntityDetailCard, EntityDetailCardFull } from "$lib/entities/entity-detail";
@@ -39,6 +41,31 @@ function buildCard(): EntityDetailCard {
 }
 
 describe("EntityDetail", () => {
+  it("protects the shared editor draft on route navigation and releases the guard after cancel", async () => {
+    let guard: ((event: BeforeNavigate) => void) | undefined;
+    const hook = vi.spyOn(navigation, "beforeNavigate").mockImplementation((callback) => { guard = callback; });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    try {
+      render(EntityDetail, { card: buildCard(), onMetadataSave: vi.fn() });
+      await fireEvent.click(screen.getByRole("button", { name: "Edit details" }));
+      await fireEvent.input(screen.getByRole("textbox", { name: "Title" }), { target: { value: "Unsaved title" } });
+      const cancel = vi.fn();
+      const event = { type: "link", willUnload: false, cancel } as unknown as BeforeNavigate;
+      expect(guard).toBeDefined();
+      guard!(event);
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(screen.getByRole("textbox", { name: "Title" })).toHaveValue("Unsaved title");
+      await fireEvent.click(screen.getAllByRole("button", { name: "Cancel editing" })[1]);
+      cancel.mockClear();
+      guard!(event);
+      expect(cancel).not.toHaveBeenCalled();
+      expect(confirm).toHaveBeenCalledOnce();
+    } finally {
+      hook.mockRestore();
+      confirm.mockRestore();
+    }
+  });
+
   it("moves detail-tab focus with arrow keys before committing with Enter", async () => {
     const card = buildCard();
     card.description = "Details content";
