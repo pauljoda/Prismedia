@@ -161,10 +161,12 @@ describe("EntityThumbnail presentation", () => {
     }
   });
 
-  it("scales caption badges with shared type tokens and frees icon space before text is squeezed", () => {
-    expect(captionSource).toContain("--text-caption: var(--text-control)");
-    expect(captionSource).toContain("--text-caption: var(--text-label)");
-    expect(captionSource).toMatch(/@container \(max-width: 12rem\)\s*\{[^}]*\.chips :global\(\.chip svg\)\s*\{ display: none;/);
+  it("retains colored icons and keeps metadata subordinate to thumbnail titles", () => {
+    expect(captionSource).not.toContain("--text-caption: var(--text-control)");
+    expect(captionSource).not.toContain("--text-caption: var(--text-label)");
+    expect(captionSource).toContain("--text-caption: var(--text-caption-compact)");
+    expect(captionSource).toContain("color: var(--thumbnail-meta-accent)");
+    expect(captionSource).not.toMatch(/\.chips :global\(\.chip svg\)\s*\{[^}]*display:\s*none/);
     expect(captionSource).not.toContain("min-height: var(--spacing-badge-compact)");
   });
 

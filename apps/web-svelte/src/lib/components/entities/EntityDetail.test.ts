@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor, within } from "@testing-library/sve
 import { FileText, Play } from "@lucide/svelte";
 import { createRawSnippet } from "svelte";
 import { describe, expect, it, vi } from "vitest";
-import { ACQUISITION_STATUS, CAPABILITY_KIND, ENTITY_KIND } from "$lib/api/generated/codes";
+import { ACQUISITION_STATUS, CAPABILITY_KIND, ENTITY_KIND, FINGERPRINT_ALGORITHM } from "$lib/api/generated/codes";
 import type { EntityDetailCard, EntityDetailCardFull } from "$lib/entities/entity-detail";
 import type { EntityDetailSection } from "./EntityDetail.svelte";
 import EntityDetail from "./EntityDetail.test-harness.svelte";
@@ -325,7 +325,10 @@ describe("EntityDetail", () => {
         { code: "release", label: "Released", value: "2008-05-30", display: "May 30, 2008", sortable: "2008-05-30" },
       ],
       technical: [{ label: "Resolution", value: "1920×1080 (1080p)" }],
-      fingerprints: [{ algorithm: "oshash", value: "a1b2c3d4" }],
+      fingerprints: [
+        { algorithm: FINGERPRINT_ALGORITHM.oshash, value: "a1b2c3d4" },
+        { algorithm: FINGERPRINT_ALGORITHM.oshash, value: "e5f6a7b8" },
+      ],
       markers: [],
       subtitles: [],
       progress: { index: 12, total: 18, percent: 67, unit: "episodes", mode: "watching", completed: false },
@@ -372,7 +375,15 @@ describe("EntityDetail", () => {
     expect(screen.getByText("Episode 2")).toBeInTheDocument();
     expect(screen.getByText("animation")).toBeInTheDocument();
     expect(screen.getByText("Stash compat")).toBeInTheDocument();
-    expect(screen.getByText("oshash")).toBeInTheDocument();
+    expect(screen.getAllByText("Oshash")).toHaveLength(2);
+    expect(screen.getByText("a1b2c3d4")).toBeInTheDocument();
+    expect(screen.getByText("e5f6a7b8")).toBeInTheDocument();
+    for (const name of ["Sources", "Fingerprints"]) {
+      expect(screen.getByRole("heading", { name }).closest('[data-slot="card"]')?.querySelector("dl"))
+        .toHaveClass("is-stacked", "is-monospace");
+    }
+    expect(screen.getByRole("heading", { name: "Dates" }).closest('[data-slot="card"]')?.querySelector("dl"))
+      .not.toHaveClass("is-stacked");
   });
 
   it("renders reference sections with non-selectable entity thumbnails", () => {

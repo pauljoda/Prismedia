@@ -116,8 +116,6 @@
   .custom-subtitle.title-align-right { justify-content: flex-end; }
 
   .chips {
-    /* Keep the shared Badge treatment; scale its caption token with the card. */
-    --text-caption: var(--text-control);
     display: flex;
     gap: var(--spacing-control-gap-sm);
     margin-top: var(--spacing-control-gap-sm);
@@ -142,21 +140,21 @@
   @container (max-width: 220px) {
     .thumbnail-caption { gap: 0.125rem; padding: 0 0.25rem; }
     h3 { font-size: var(--text-label); }
-    .chips { --text-caption: var(--text-label); gap: var(--spacing); }
+    .chips { gap: var(--spacing); }
     .chips :global(.chip) {
       padding-inline: var(--spacing);
       gap: var(--spacing);
     }
   }
 
-  @container (max-width: 12rem) {
-    /* Give the two values the full row before resorting to ellipses. */
-    .chips :global(.chip svg) { display: none; }
-  }
-
   @container (max-width: 140px) {
     .thumbnail-caption { gap: 0.1rem; padding: 0 0.2rem; }
     h3 { font-size: var(--text-caption); }
     .subtitle { display: none; }
+    .chips {
+      /* Keep both meaning-carrying icons; metadata stays quieter than the title. */
+      --text-caption: var(--text-caption-compact);
+      --spacing-icon-sm: var(--text-caption-compact);
+    }
   }
 </style>

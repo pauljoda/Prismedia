@@ -189,7 +189,10 @@ define spacing inside control groups. Keep semantic tokens registered in the
 shared class-merging utility so ordinary layout overrides replace them correctly.
 
 - Interactive tags use button styling. Static counts use Badge, with neutral
-  text and restrained colored icons. Do not shrink captions to fit a thumbnail.
+  text and restrained colored icons. Thumbnail metadata stays smaller than the
+  title, keeps its identifying icons, and shows at most two chips on one row.
+  Use the compact caption and icon tokens on the narrowest cards, not arbitrary
+  text scaling or icon removal.
 - Related entities retain full normal thumbnails, even when a group has one item.
 - Thumbnail status, rating, and source markers use shared Badges. Grid markers
   stay on the artwork; list markers join the caption so small images remain clear.
@@ -201,6 +204,9 @@ shared class-merging utility so ordinary layout overrides replace them correctly
   lifespan, broadcast, or career range. Additional dates belong in the shared
   "More dates" popover with aligned labels and values, not a long inline inventory.
   This is presentation only; stored dates and acquisition timing remain unchanged.
+- Metadata cards share each row's available width rather than reserving empty
+  columns. Short facts keep aligned labels and values; long paths and fingerprints
+  use the full card width below their labels and remain selectable.
 - Detail sections attach behind the header's lower corners, with square top
   edges and rounded bottom edges. The shared header owns the overlap depth.
 - Artwork editing lives in a shared disclosure with labeled poster/header

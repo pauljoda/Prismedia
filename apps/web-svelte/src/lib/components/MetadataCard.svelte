@@ -16,9 +16,13 @@
     children?: Snippet;
     wide?: boolean;
     capped?: boolean;
+    /** Place values below their labels when paths or identifiers need the full card width. */
+    stacked?: boolean;
+    /** Use the shared utility typeface for literal paths, hashes, and source identifiers. */
+    monospace?: boolean;
   }
 
-  let { title, icon: Icon, rows, children, wide = false, capped = false }: Props = $props();
+  let { title, icon: Icon, rows, children, wide = false, capped = false, stacked = false, monospace = false }: Props = $props();
   const cardClass = $derived([
     "metadata-card min-w-0",
     wide ? "metadata-card-wide" : "",
@@ -27,7 +31,6 @@
 
   /** Makes backend-style field names readable while preserving deliberate codes such as TMDB. */
   function displayLabel(label: string): string {
-    if (!/[_-]|[a-z\d][A-Z]/.test(label)) return label;
     const words = label
       .replace(/([a-z\d])([A-Z])/g, "$1 $2")
       .replace(/[_-]+/g, " ")
@@ -53,8 +56,9 @@
     </Card.Content>
   {:else if rows && rows.length > 0}
     <Card.Content class={capped ? "min-h-0 overflow-y-auto overscroll-contain" : undefined}>
-      <dl class="metadata-card-rows">
-        {#each rows as row (row.label)}
+      <dl class="metadata-card-rows" class:is-stacked={stacked} class:is-monospace={monospace}>
+        <!-- Read-only rows have no unique identity: labels and even complete rows may repeat. -->
+        {#each rows as row}
           <div class="metadata-card-row">
             <dt>{displayLabel(row.label)}</dt>
             <dd>{row.value}</dd>
@@ -83,9 +87,9 @@
   .metadata-card-row {
     display: grid;
     grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
-    gap: 0.85rem;
+    gap: var(--spacing-control-gap);
     align-items: baseline;
-    padding: 0.45rem 0;
+    padding: var(--spacing-control-gap) 0;
     border-bottom: 1px solid var(--color-border-subtle, rgba(164, 172, 185, 0.07));
   }
 
@@ -101,7 +105,7 @@
   .metadata-card-row dt {
     color: var(--color-text-muted, #8a93a6);
     font-family: var(--font-body, Inter, sans-serif);
-    font-size: 0.75rem;
+    font-size: var(--text-caption);
     font-weight: 500;
     overflow-wrap: anywhere;
   }
@@ -110,10 +114,22 @@
     margin: 0;
     min-width: 0;
     overflow-wrap: anywhere;
-    color: var(--color-text, #f4efe6);
+    color: var(--color-text-primary);
     font-family: var(--font-body, Inter, sans-serif);
-    font-size: 0.8125rem;
+    font-size: var(--text-label);
     font-weight: 500;
     font-variant-numeric: tabular-nums;
+  }
+
+  .is-stacked .metadata-card-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--spacing);
+  }
+
+  .is-monospace dd {
+    font-family: var(--font-mono);
+    font-size: var(--text-caption);
+    font-weight: 400;
+    user-select: text;
   }
 </style>

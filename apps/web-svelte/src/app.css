@@ -47,6 +47,7 @@
   /* Captioned grids may reduce column count before sacrificing metadata legibility. */
   --spacing-thumbnail-min: 8rem;
   --spacing-thumbnail-gap: 0.75rem;
+  --spacing-metadata-card-min: 16rem;
   --text-control: 0.875rem;
   --text-label: 0.8125rem;
   --text-caption: 0.75rem;

@@ -246,6 +246,8 @@
   <MetadataCard
     title="Source"
     icon={Database}
+    stacked
+    monospace
     rows={[
       ...(cardFull.sources ?? []).map((source) => ({ label: source.code, value: source.value })),
       ...(cardFull.fingerprints ?? []).map((fingerprint) => ({ label: String(fingerprint.algorithm), value: fingerprint.value })),
@@ -255,12 +257,16 @@
   <MetadataCard
     title="Sources"
     icon={Database}
+    stacked
+    monospace
     rows={(cardFull.sources ?? []).map((source) => ({ label: source.code, value: source.value }))}
   />
 {:else if section.id === "fingerprints" && (cardFull.fingerprints?.length ?? 0) > 0}
   <MetadataCard
     title="Fingerprints"
     icon={Fingerprint}
+    stacked
+    monospace
     rows={(cardFull.fingerprints ?? []).map((fingerprint) => ({ label: String(fingerprint.algorithm), value: fingerprint.value }))}
   />
 {:else if sectionContent}

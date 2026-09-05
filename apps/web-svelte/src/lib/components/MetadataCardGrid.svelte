@@ -14,20 +14,23 @@
 
 <style>
   .metadata-card-grid {
-    container-type: inline-size;
-    display: grid;
+    display: flex;
+    flex-wrap: wrap;
     align-items: start;
-    grid-template-columns: repeat(auto-fill, minmax(min(100%, 16rem), 1fr));
-    gap: 0.75rem;
+    gap: calc(var(--spacing) * 3);
+  }
+
+  .metadata-card-grid > :global(.metadata-card) {
+    flex: 1 1 var(--spacing-metadata-card-min);
   }
 
   .metadata-card-grid > :global(:not(.metadata-card)) {
-    grid-column: 1 / -1;
+    flex: 1 1 100%;
+    min-width: 0;
   }
 
-  @container (min-width: 32.75rem) {
-    .metadata-card-grid > :global(.metadata-card-wide) {
-      grid-column: span 2;
-    }
+  .metadata-card-grid > :global(.metadata-card-wide) {
+    flex-grow: 2;
+    flex-basis: calc(var(--spacing-metadata-card-min) * 2 + var(--spacing) * 3);
   }
 </style>

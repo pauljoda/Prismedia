@@ -25,10 +25,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
-- Thumbnail chips use larger shared type sizes and retain their normal height. Smaller cards free space for both values by hiding icons earlier, while keeping the two chips on one row.
+- Metadata cards share the available row width without empty reserved columns. Source paths and fingerprints use full-width, selectable values below their labels, and repeated labels no longer prevent cards from rendering.
+- Thumbnail chips retain colored icons and use smaller shared caption sizes than their titles. The two values stay on one row with compact text and icons on the narrowest cards.
 - Entity headers emphasize a main date or meaningful date range, with every milestone available in a labeled "More dates" popover. Album headers lead with the artist instead of repeating studio information already shown in Details.
 - Entity detail headers show acquisition status once beside the title across media types. Covers no longer repeat grid badges or create inactive keyboard stops, and decorative artwork is hidden from screen readers.
-- Thumbnail metadata keeps the shared readable badge text size and separate chip outlines even at dense grid sizes. Narrow cards hide decorative icons instead of shrinking the text.
+- Thumbnail metadata keeps separate chip outlines even at dense grid sizes.
 - Collection rules display numeric units and allow duration, file-size, and audio units to be changed without rewriting saved thresholds. Compatible comparison changes retain entered values, empty numeric drafts stay incomplete, and the existing negated-all logic is labeled "Not all" accurately.
 - Captioned Entity grids now reduce their column count in narrow spaces before squeezing metadata into unreadable fragments. The density preference is preserved, and artwork-only media walls remain unrestricted.
 - Collection previews now show a clearly counted sample of full Entity thumbnails instead of library controls that only filtered the sample. Resolution and gallery-type rules use removable choices, and preview loading, failures, and empty results are distinct. Changing rules cancels obsolete previews.
