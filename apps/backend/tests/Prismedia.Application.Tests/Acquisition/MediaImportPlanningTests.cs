@@ -926,6 +926,60 @@ public sealed class MediaImportMergeTests {
 /// S01E02 carries 3+4), so numeric placement would import the wrong content into almost every slot.
 /// </summary>
 public sealed class TvEpisodeTitleAlignmentTests {
+    [Theory]
+    [InlineData("Show.S03E01.mkv")]
+    [InlineData("Show.S03E01-E02.mkv")]
+    public void ExplicitOtherSeasonCannotFallBackToTheRequestedEpisode(string filename) {
+        var plan = TvImportPlanBuilder.PlanUnits([File(filename)], "Show", seasonNumber: 2, episodeNumber: 1);
+
+        Assert.True(plan.Blocked);
+        Assert.Equal(ImportBlockReason.NoMatchingTvUnit, plan.BlockReason);
+    }
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(2)]
+    public void ExplicitEpisodeRangesRetainEveryCoveredEpisodeWithoutProviderTitles(int? requestedEpisode) {
+        var plan = TvImportPlanBuilder.PlanUnits([
+            File("Show.S02E01-E02.First.Story.&.Second.Story.480p.WEB-DL.mkv")
+        ], "Show", seasonNumber: 2, episodeNumber: requestedEpisode);
+
+        Assert.False(plan.Blocked);
+        var unit = Assert.Single(plan.Units);
+        Assert.Equal(1, unit.Episode);
+        Assert.Equal([2], unit.ExtraEpisodes);
+    }
+
+    [Fact]
+    public void PartialTitleMetadataDoesNotDiscardExplicitEpisodeCoverage() {
+        var plan = TvImportPlanBuilder.PlanUnits([
+            File("Show.S02E01-E02.First.Story.&.Second.Story.mkv"),
+            File("Show.S02E03-E04.Third.Story.&.Fourth.Story.mkv")
+        ], "Show", seasonNumber: 2, episodeNumber: null, episodeTitles: [
+            new(1, "First Story"), new(3, "Third Story"), new(4, "Fourth Story")
+        ]);
+
+        Assert.False(plan.Blocked);
+        Assert.Equal([2], plan.Units.Single(unit => unit.Episode == 1).ExtraEpisodes);
+        Assert.Equal([4], plan.Units.Single(unit => unit.Episode == 3).ExtraEpisodes);
+    }
+
+    [Theory]
+    [InlineData(2, false)]
+    [InlineData(20, true)]
+    public void OneKnownHalfCannotReidentifyAnEntireExplicitBundle(int knownEpisode, bool shouldBlock) {
+        var plan = TvImportPlanBuilder.PlanUnits([
+            File("Show.S02E01-E02.First.Story.&.Second.Story.mkv")
+        ], "Show", seasonNumber: 2, episodeNumber: null, episodeTitles: [new(knownEpisode, "Second Story")]);
+
+        Assert.Equal(shouldBlock, plan.Blocked);
+        if (!shouldBlock) {
+            var unit = Assert.Single(plan.Units);
+            Assert.Equal(1, unit.Episode);
+            Assert.Equal([2], unit.ExtraEpisodes);
+        }
+    }
+
     private static readonly TvEpisodeTitle[] CliffordTitles = [
         new(1, "My Best Friend"),
         new(2, "Cleo's Fair Share"),

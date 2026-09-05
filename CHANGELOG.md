@@ -36,6 +36,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- TV imports now preserve every explicitly numbered episode in combined files, including when provider titles are incomplete, and reject conflicting season or partial bundle identification instead of silently importing only one episode.
+
 - Completed upgrade downloads keep their protection against duplicate upgrades while waiting for import, applying a replacement, or recovering after a restart.
 
 - Changing the quality profile of an owned monitored title now governs its next upgrade search, including switching back to the default profile, while an ongoing upgrade keeps its selected profile.

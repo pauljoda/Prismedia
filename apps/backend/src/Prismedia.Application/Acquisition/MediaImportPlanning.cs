@@ -37,8 +37,8 @@ public sealed record TvPlanUnit(string SourceRelativePath, int Season, int Episo
     public string FileName => TargetRelativePath.Split('/')[^1];
 
     /// <summary>
-    /// Episodes this file COVERS beyond <see cref="Episode"/> (title-aligned multi-episode files: a
-    /// single file whose name carries two provider episode titles satisfies both numbers). Empty for
+    /// Episodes this file COVERS beyond <see cref="Episode"/> through explicit episode tokens or
+    /// aligned provider titles. A combined file satisfies every covered number. Empty for
     /// ordinary single-episode files. The import binds these to the same placed file so the extra
     /// episodes play the shared file instead of staying wanted forever.
     /// </summary>
@@ -371,7 +371,8 @@ public static class MusicImportPlanBuilder {
 public static partial class TvImportPlanBuilder {
     private readonly record struct EpisodeInference(
         (int Season, int Episode)? Unit,
-        bool RecognizedDifferentSeason = false);
+        bool RecognizedDifferentSeason = false,
+        IReadOnlyList<int>? DeclaredEpisodes = null);
 
     /// <summary>Video extensions the TV importer accepts. Mirrors scan discovery's video set.</summary>
     private static readonly IReadOnlySet<string> VideoExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
@@ -400,7 +401,10 @@ public static partial class TvImportPlanBuilder {
         int? requestedSeason,
         IReadOnlyList<TvEpisodeTitle> episodeTitles) {
         var sourceName = Path.GetFileNameWithoutExtension(sourceRelativePath);
-        var unit = TvReleaseTokens.ParseEpisode(sourceName);
+        var declared = TvReleaseTokens.ParseEpisodes(sourceName);
+        (int Season, int Episode)? unit = declared is { } episodes
+            ? (episodes.Season, episodes.Episodes[0])
+            : null;
         var declaredSeason = unit?.Season ?? TvReleaseTokens.ParseSeason(sourceName);
 
         // A structured unit and a strong title/absolute identifier are independent evidence. A unique
@@ -408,6 +412,7 @@ public static partial class TvImportPlanBuilder {
         // scene number. Multi-title tails remain the established bundled-episode case and are realigned
         // as a group later.
         if (unit is { } structured
+            && declared?.Episodes.Count == 1
             && (requestedSeason is null || structured.Season == requestedSeason)
             && TvReleaseTokens.EpisodeTitleTail(sourceName) is { } tail) {
             var tailMatches = MatchingEpisodeNumbers(tail, episodeTitles);
@@ -432,7 +437,7 @@ public static partial class TvImportPlanBuilder {
         var inferred = unit is { } candidate && !recognizedDifferentSeason
             ? ((int Season, int Episode)?)candidate
             : null;
-        return new EpisodeInference(inferred, recognizedDifferentSeason);
+        return new EpisodeInference(inferred, recognizedDifferentSeason, declared?.Episodes);
     }
 
     private static int[] MatchingEpisodeNumbers(
@@ -563,6 +568,9 @@ public static partial class TvImportPlanBuilder {
         foreach (var video in videos.OrderBy(file => file.RelativePath, StringComparer.OrdinalIgnoreCase)) {
             var inference = InferEpisodeEvidence(video.RelativePath, seasonNumber, episodeTitles ?? []);
             hasRecognizedDifferentUnit |= inference.RecognizedDifferentSeason;
+            if (inference.RecognizedDifferentSeason) {
+                continue;
+            }
             var unit = inference.Unit;
 
             // A tokenless file is only placeable when the acquisition itself IS one episode.
@@ -577,7 +585,9 @@ public static partial class TvImportPlanBuilder {
             }
             var naming = NamingContext(series, season, episode, quality, Path.GetExtension(video.RelativePath));
             units.Add(new TvPlanUnit(
-                video.RelativePath, season, episode, MediaNamingTemplates.RenderTvPath(template, naming)));
+                video.RelativePath, season, episode, MediaNamingTemplates.RenderTvPath(template, naming)) {
+                ExtraEpisodes = inference.DeclaredEpisodes?.Skip(1).ToArray() ?? []
+            });
         }
 
         // No file declared a placeable unit — importing by guesswork would scatter episodes; stop for
@@ -589,13 +599,17 @@ public static partial class TvImportPlanBuilder {
         }
 
         if (episodeTitles is { Count: > 0 }) {
-            units = RealignByEpisodeTitles(
+            var aligned = RealignByEpisodeTitles(
                 units,
                 episodeTitles,
                 series,
                 template,
                 quality,
                 evidenceSeason: seasonNumber);
+            if (aligned is null) {
+                return TvUnitsPlan.Block(ImportBlockReason.AmbiguousMultiplePrimaries);
+            }
+            units = aligned;
         }
 
         if (episodeNumber is { } requestedEpisode) {
@@ -632,7 +646,7 @@ public static partial class TvImportPlanBuilder {
     /// tails match nothing keep their numeric placement, and if the realignment would land two files on
     /// the same episode, the whole payload keeps its numeric numbers — never guess against a conflict.
     /// </summary>
-    private static List<TvPlanUnit> RealignByEpisodeTitles(
+    private static List<TvPlanUnit>? RealignByEpisodeTitles(
         List<TvPlanUnit> units,
         IReadOnlyList<TvEpisodeTitle> episodeTitles,
         string series,
@@ -660,6 +674,20 @@ public static partial class TvImportPlanBuilder {
             if (matched.Length == 0) {
                 realigned.Add(unit);
                 continue;
+            }
+
+            if (unit.ExtraEpisodes.Count > 0) {
+                var declaredEpisodes = unit.ExtraEpisodes.Prepend(unit.Episode).ToHashSet();
+                if (matched.All(declaredEpisodes.Contains)) {
+                    // A partial provider catalog may describe only one half. Preserve the other
+                    // explicit episode claims when the available title evidence agrees with them.
+                    realigned.Add(unit);
+                    continue;
+                }
+                if (matched.Length < declaredEpisodes.Count) {
+                    // One conflicting title cannot establish the identity of the remaining halves.
+                    return null;
+                }
             }
 
             var primary = matched[0];
