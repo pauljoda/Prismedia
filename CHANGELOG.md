@@ -38,6 +38,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Generic episode labels no longer masquerade as absolute numbering or override explicit season and episode markers. Tokenless downloads require descriptive titles or verified absolute positions before automatic mapping.
+
 - Prowlarr searches skip indexers whose download protocol has no enabled downloader, reducing unnecessary requests while preserving results when provider discovery is unavailable.
 
 - Complete episode metadata refreshes retire absolute numbers the provider no longer supports, keeping later searches from using stale numbering while preserving existing file bindings. Partial metadata enrichment retains existing ordering.

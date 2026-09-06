@@ -415,8 +415,8 @@ public sealed class TvImportPlanBuilderTests {
             File("pack/Sesame Street - Episode 0131 (November 9, 1970).mp4"),
             File("pack/Sesame Street - Episode 0132 (November 10, 1970).mp4"),
         ], "Sesame Street", seasonNumber: 2, episodeNumber: null, episodeTitles: [
-            new TvEpisodeTitle(1, "Episode 131"),
-            new TvEpisodeTitle(2, "Episode 132")
+            new TvEpisodeTitle(1, "Episode 131", AbsoluteEpisode: 131),
+            new TvEpisodeTitle(2, "Episode 132", AbsoluteEpisode: 132)
         ]);
 
         Assert.False(plan.Blocked);
@@ -426,13 +426,13 @@ public sealed class TvImportPlanBuilderTests {
     }
 
     [Fact]
-    public void TokenlessSeasonPackFallsBackToGenericEpisodeTitleNumberTokens() {
+    public void TokenlessSeasonPackUsesVerifiedAbsolutePositionsForGenericTitles() {
         var plan = TvImportPlanBuilder.Plan([
             File("pack/Sesame Street 1316 Season 11 - American Archive.mp4"),
             File("pack/Sesame Street 1317 Season 11 - American Archive.mp4"),
         ], "Sesame Street", seasonNumber: 11, episodeNumber: null, episodeTitles: [
-            new TvEpisodeTitle(1, "Episode 1316"),
-            new TvEpisodeTitle(2, "Episode 1317")
+            new TvEpisodeTitle(1, "Episode 1316", AbsoluteEpisode: 1316),
+            new TvEpisodeTitle(2, "Episode 1317", AbsoluteEpisode: 1317)
         ]);
 
         Assert.False(plan.Blocked);
@@ -467,7 +467,7 @@ public sealed class TvImportPlanBuilderTests {
             File("pack/Sesame Street - Episode 0131 (November 9, 1970).ia.mp4"),
             File("pack/Sesame Street - Episode 0131 (November 9, 1970).mp4"),
         ], "Sesame Street", seasonNumber: 2, episodeNumber: null, episodeTitles: [
-            new TvEpisodeTitle(1, "Episode 131")
+            new TvEpisodeTitle(1, "Episode 131", AbsoluteEpisode: 131)
         ]);
 
         var item = Assert.Single(plan.Items);

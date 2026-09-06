@@ -79,7 +79,7 @@ public static class TvCrossSeasonImportEvidence {
     }
 
     internal static bool IsDistinctiveTitle(string title) =>
-        TvEpisodeIdentifiers.Create(title, null).Numeric.Count == 0
+        !TvEpisodeIdentifiers.IsGenericTitle(title)
         && ReleaseTitleIdentity.ComparableTokens(title).Count >= 2;
 
     internal static bool TitlesOverlap(IReadOnlyList<TvEpisodeTitle> episodes) =>

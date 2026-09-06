@@ -264,7 +264,7 @@ public sealed class AcquisitionSearchRunnerTests {
         var outcome = await runner.RunAsync(
             new AcquisitionSearchInput(
                 Guid.NewGuid(), "Episode 131", null, EntityKind.VideoEpisode,
-                Series: "Sesame Street", SeasonNumber: 2, EpisodeNumber: 1),
+                Series: "Sesame Street", SeasonNumber: 2, EpisodeNumber: 1, AbsoluteEpisodeNumber: 131),
             CancellationToken.None);
 
         Assert.Equal(
@@ -324,7 +324,7 @@ public sealed class AcquisitionSearchRunnerTests {
         var outcome = await runner.RunAsync(
             new AcquisitionSearchInput(
                 Guid.NewGuid(), "Episode 131", null, EntityKind.VideoEpisode,
-                Series: "Sesame Street", SeasonNumber: 2, EpisodeNumber: 1),
+                Series: "Sesame Street", SeasonNumber: 2, EpisodeNumber: 1, AbsoluteEpisodeNumber: 131),
             CancellationToken.None);
 
         Assert.Equal(["Sesame Street S02E01", "Sesame Street 2x01"], client.Queries);

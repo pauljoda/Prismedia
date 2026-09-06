@@ -12,34 +12,31 @@ public static partial class TvEpisodeIdentifiers {
     [GeneratedRegex(@"^\s*episode[\s._-]*0*(?<number>\d{1,6})\s*$", RegexOptions.IgnoreCase)]
     private static partial Regex GenericEpisodeTitleRegex();
 
+    /// <summary>Recognizes an unqualified episode-number label, which alone proves no numbering system.</summary>
+    public static bool IsGenericTitle(string? title) => GenericEpisodeTitleRegex().IsMatch(title ?? string.Empty);
+
     /// <summary>
-    /// Returns the authored title followed by its exact numeric identities. Numeric identities include
-    /// the persisted absolute episode position and the number from an exact generic title such as
-    /// <c>Episode 1316</c>. Season-relative bare numbers are deliberately excluded.
+    /// Returns a descriptive provider title and independently supplied absolute position. Generic
+    /// labels such as <c>Episode 1</c> repeat across seasons and cannot establish absolute identity.
+    /// A generic title is usable only when its number agrees with the supplied absolute position.
     /// </summary>
     public static TvEpisodeIdentifierSet Create(string? providerTitle, int? absoluteEpisodeNumber) {
         var identifiers = new List<string>();
         var numericIdentifiers = new List<string>();
-        Add(identifiers, providerTitle);
+        var genericTitle = GenericEpisodeTitleRegex().Match(providerTitle ?? string.Empty);
+        var usableTitle = !genericTitle.Success
+            || (int.TryParse(genericTitle.Groups["number"].Value, CultureInfo.InvariantCulture, out var titleNumber)
+                && titleNumber > 0 && titleNumber == absoluteEpisodeNumber)
+            ? providerTitle : null;
+        Add(identifiers, usableTitle);
 
         if (absoluteEpisodeNumber is > 0) {
-            AddNumeric(absoluteEpisodeNumber.Value);
-        }
-
-        var genericTitle = GenericEpisodeTitleRegex().Match(providerTitle ?? string.Empty);
-        if (genericTitle.Success
-            && int.TryParse(genericTitle.Groups["number"].Value, CultureInfo.InvariantCulture, out var titleNumber)
-            && titleNumber > 0) {
-            AddNumeric(titleNumber);
-        }
-
-        return new TvEpisodeIdentifierSet(identifiers, numericIdentifiers, providerTitle);
-
-        void AddNumeric(int number) {
-            var value = number.ToString(CultureInfo.InvariantCulture);
+            var value = absoluteEpisodeNumber.Value.ToString(CultureInfo.InvariantCulture);
             Add(numericIdentifiers, value);
             Add(identifiers, value);
         }
+
+        return new TvEpisodeIdentifierSet(identifiers, numericIdentifiers, usableTitle);
     }
 
     private static void Add(ICollection<string> values, string? value) {
@@ -59,7 +56,7 @@ public sealed record TvEpisodeIdentifierSet(
     public bool Matches(string candidate) =>
         All.Any(identifier => ReleaseTitleIdentity.ContainsMeaningfulRun(candidate, identifier));
 
-    /// <summary>Whether an absolute or generic episode-number identity occurs in the candidate.</summary>
+    /// <summary>Whether an independently supplied absolute episode identity occurs in the candidate.</summary>
     public bool MatchesNumeric(string candidate) =>
         Numeric.Any(identifier => ReleaseTitleIdentity.ContainsMeaningfulRun(candidate, identifier));
 

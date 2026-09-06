@@ -1676,7 +1676,7 @@ public sealed class AcquisitionServiceTests {
         ]));
         var targets = new FixedImportTargetIndex([
             new TvEpisodeTitle(1, "First Day", firstEpisodeId),
-            new TvEpisodeTitle(2, "Episode 1317", secondEpisodeId),
+            new TvEpisodeTitle(2, "Episode 1317", secondEpisodeId, AbsoluteEpisode: 1317),
         ]);
         var harness = Harness(
             TransferInfo(RecordedClientId, AcquisitionStatus.ManualImportRequired),

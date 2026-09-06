@@ -51,7 +51,7 @@ public sealed class TvAcquisitionImportPlanner(IImportTargetIndex targets, IMoni
         var generic = catalog.Where(season => season.SeasonNumber == unit.Season).SelectMany(season => season.Episodes)
             .Any(episode => positions.Contains(episode.Episode)
                 && (TvReleaseTokens.ParseEpisodes(episode.Title) is not null
-                    || TvEpisodeIdentifiers.Create(episode.Title, null).Numeric.Count > 0));
+                    || TvEpisodeIdentifiers.IsGenericTitle(episode.Title)));
         if (!generic) return false;
         var tail = TvReleaseTokens.EpisodeTitleTail(Path.GetFileNameWithoutExtension(unit.SourceRelativePath));
         // Only the leading descriptive phrase can justify another catalog read. Codec, quality,
