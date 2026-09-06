@@ -271,7 +271,11 @@ public sealed partial class LibraryScanPersistenceService {
                             cancellationToken);
                         await SetEntityLibraryRootAsync(ownerId, item.LibraryRootId, cancellationToken);
                     }
-                    if (ownerIds.Length == 1) {
+                    // Shared-file coverage is an existing catalog decision, potentially made by a
+                    // reviewed import. Filename coordinates may locate processing work, but cannot
+                    // move those owners or replace their established episode identities.
+                    var sharedEpisodes = item.ScanPlacement == PlayableVideoScanPlacement.Episode && expectedOwners.Length > 1;
+                    if (ownerIds.Length == 1 && !sharedEpisodes) {
                         await MaterializePlayableStructureAsync(
                             ownerIds[0],
                             item,
@@ -332,7 +336,10 @@ public sealed partial class LibraryScanPersistenceService {
             .Where(owner => owner.SortOrder == item.StructuralSortOrder)
             .Select(owner => owner.Id)
             .ToArray();
-        if (matches.Length <= 1) {
+        if (matches.Length == 0) {
+            return expectedOwners.Select(owner => owner.Id).ToArray();
+        }
+        if (matches.Length == 1) {
             return matches;
         }
 

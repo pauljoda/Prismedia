@@ -42,6 +42,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Rescanning a file shared by multiple episodes preserves its saved episode owners and seasons when filename numbering disagrees, avoiding duplicate episodes and reverted mappings.
+
 - Complete paired episode titles can distinguish their season when one title repeats elsewhere; competing complete matches remain held for review, and foreign extras still require monitoring.
 
 - TV files that clearly name several distinct episodes can cover those episodes even without season-and-episode markers, allowing complete paired files to import and previously unnecessary packs to reopen when coverage is missing.

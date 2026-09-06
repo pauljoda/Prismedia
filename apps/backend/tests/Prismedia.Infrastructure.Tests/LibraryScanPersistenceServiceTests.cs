@@ -1191,6 +1191,46 @@ public sealed class LibraryScanPersistenceServiceTests {
             position.Value == 1);
     }
 
+    [Theory]
+    [InlineData(2, 5, 6)]
+    [InlineData(2, 1, 2)]
+    [InlineData(1, 1, 2)]
+    public async Task RescanningSharedFilesCannotReplaceSavedCoverageWithConflictingFilenameCoordinates(
+        int scannedSeason, int firstNumber, int secondNumber) {
+        await using var db = CreateContext();
+        var series = new EntityRow { Id = Guid.NewGuid(), KindCode = EntityKind.VideoSeries.ToCode(), Title = "Show" };
+        var season = new EntityRow { Id = Guid.NewGuid(), KindCode = EntityKind.VideoSeason.ToCode(), Title = "Season 1",
+            ParentEntityId = series.Id, SortOrder = 1 };
+        var first = new EntityRow { Id = Guid.NewGuid(), KindCode = EntityKind.VideoEpisode.ToCode(), Title = "First Story",
+            ParentEntityId = season.Id, SortOrder = 5 };
+        var second = new EntityRow { Id = Guid.NewGuid(), KindCode = EntityKind.VideoEpisode.ToCode(), Title = "Second Story",
+            ParentEntityId = season.Id, SortOrder = 6 };
+        var path = $"/media/Show/Season {scannedSeason}/Show.S{scannedSeason:00}E{firstNumber:00}-E{secondNumber:00}.mkv";
+        var sources = new[] { first, second }.Select(entity => new EntityFileRow {
+            Id = Guid.NewGuid(), EntityId = entity.Id, Role = EntityFileRole.Source, Path = path
+        }).ToArray();
+        db.Entities.AddRange(series, season, first, second);
+        db.EntityFiles.AddRange(sources);
+        await db.SaveChangesAsync();
+        var rootId = Guid.NewGuid();
+        var items = new[] { firstNumber, secondNumber }.Select(number => new VideoUpsertItem(path,
+            Path.GetFileNameWithoutExtension(path), rootId, false, PlayableVideoScanPlacement.Episode,
+            new VideoSeriesScanInfo("/media/Show", "Show"),
+            new VideoSeasonScanInfo($"/media/Show/Season {scannedSeason}", $"Season {scannedSeason}", scannedSeason),
+            EpisodeNumber: number)).ToArray();
+
+        var ids = await new LibraryScanPersistenceService(db).UpsertVideosBatchAsync(items, default);
+
+        Assert.Equal(items.Length, ids.Count);
+        Assert.All(ids, id => Assert.Contains(id, new[] { first.Id, second.Id }));
+        Assert.Equal(2, await db.Entities.CountAsync(entity => entity.KindCode == EntityKind.VideoEpisode.ToCode()));
+        Assert.Equal(season.Id, (await db.Entities.FindAsync(first.Id))!.ParentEntityId);
+        Assert.Equal(season.Id, (await db.Entities.FindAsync(second.Id))!.ParentEntityId);
+        Assert.Equal(5, first.SortOrder);
+        Assert.Equal(6, second.SortOrder);
+        Assert.Equal(sources.Select(source => source.Id).Order(), (await db.EntityFiles.ToArrayAsync()).Select(source => source.Id).Order());
+    }
+
     [Fact]
     public async Task UpsertVideosBatchToleratesOneFileSharedByTwoEpisodes() {
         // A multi-episode file (S01E05-E06) is bound as the source of BOTH episodes it covers, so one
