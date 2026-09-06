@@ -20,7 +20,15 @@ public static partial class ReleaseTitleRelevance {
     /// words become negative.
     /// </summary>
     public static double Score(IndexerRelease release, BookAcquisitionRules rules) {
-        var targetTokens = ReleaseTitleText.Tokens(rules.TargetTitle).ToArray();
+        var score = ScoreTitle(release, rules, rules.TargetTitle);
+        foreach (var title in rules.TargetAlternativeTitles) {
+            score = Math.Max(score, ScoreTitle(release, rules, title));
+        }
+        return score;
+    }
+
+    private static double ScoreTitle(IndexerRelease release, BookAcquisitionRules rules, string? title) {
+        var targetTokens = ReleaseTitleText.Tokens(title).ToArray();
         if (targetTokens.Length == 0) {
             return 0;
         }

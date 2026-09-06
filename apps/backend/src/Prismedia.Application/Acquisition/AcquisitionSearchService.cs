@@ -35,8 +35,9 @@ public sealed class AcquisitionSearchRunner(
         }
 
         var policy = policies.Get(input.Kind);
+        var queryInputs = AcquisitionWorkTitles.QueryInputs(input);
         var queries = string.IsNullOrWhiteSpace(customQuery)
-            ? policy.BuildQueries(input)
+            ? queryInputs.SelectMany(policy.BuildQueries).Distinct(StringComparer.OrdinalIgnoreCase).ToArray()
             : [customQuery.Trim()];
 
         // An indexer inside its failure-backoff window is skipped for this search rather than
@@ -106,7 +107,8 @@ public sealed class AcquisitionSearchRunner(
         // exact-unit result set first; only when every candidate is rejected do we spend the extra query
         // budget on title-only releases. Reviewed custom searches remain exactly the term the user chose.
         if (string.IsNullOrWhiteSpace(customQuery)) {
-            var fallbackQueries = policy.BuildFallbackQueries(input)
+            var fallbackQueries = queryInputs.SelectMany(policy.BuildFallbackQueries)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
                 .Except(queries, StringComparer.OrdinalIgnoreCase)
                 .ToArray();
             var hasAcceptedPrimary = engine.Evaluate(

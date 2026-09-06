@@ -1722,7 +1722,7 @@ public sealed class TvAcquisitionImportEngine(
             && await targets.HasUnnumberedWantedTvEpisodesAsync(requestedEntity, import.SeasonNumber, cancellationToken);
         var importedEpisodes = unnumbered ? null : TvPlacedImportRecovery.Plan(files, root.Path, seriesFolder, SeriesOf(import),
             import.SeasonNumber, import.EpisodeNumber, await EpisodeTitlesForAsync(import, cancellationToken),
-            transfer);
+            transfer, import.AlternativeWorkTitles);
         if (importedEpisodes is null || importedEpisodes.Count == 0) {
             await acquisitions.SetStatusAsync(import.Id, AcquisitionStatus.ManualImportRequired,
                 "The placed TV files have incomplete or ambiguous episode mapping evidence. Their files were preserved for review.", cancellationToken);

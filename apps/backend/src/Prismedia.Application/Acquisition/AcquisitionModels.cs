@@ -94,6 +94,9 @@ public sealed record BookAcquisitionRules(
     /// <summary>The independently acquired book rendition; null outside books and for legacy ad-hoc rules.</summary>
     public BookRendition? BookRendition { get; init; }
 
+    /// <summary>Formal names of this exact work, validated against its currently linked provider identity.</summary>
+    public IReadOnlyList<string> TargetAlternativeTitles { get; init; } = [];
+
     /// <summary>
     /// The profile's scored custom formats (Sonarr-style named release classifiers). Each matching format
     /// adds its score to a release's preference points (see <see cref="MediaReleaseEvaluation.PreferenceScore"/>).
@@ -290,6 +293,9 @@ public sealed record AcquisitionSearchInput(
             return Title;
         }
     }
+
+    /// <summary>Formal alternative work names; these never change the requested episode or numbering system.</summary>
+    public IReadOnlyList<string> AlternativeWorkTitles { get; init; } = [];
 }
 
 /// <summary>
@@ -737,6 +743,9 @@ public sealed record AcquisitionImportContext(
     /// job payload only; automatic imports never set it.
     /// </summary>
     public bool AllowFormatChange { get; init; }
+
+    /// <summary>Current provider-qualified work titles used to inspect files while preserving canonical library naming.</summary>
+    public IReadOnlyList<string> AlternativeWorkTitles { get; init; } = [];
 
     /// <summary>
     /// Exact user-reviewed Entity-to-file choices for a held bundle import. Null means ordinary automatic

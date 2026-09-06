@@ -11,6 +11,7 @@ public static class AcquisitionRuleContext {
         UpgradeOwnedQuality? owned, ProperDownloadPolicy properPolicy, IReadOnlyList<DownloadProtocol> protocols) {
         rules = rules with {
             TargetTitle = input.WorkTitle,
+            TargetAlternativeTitles = input.AlternativeWorkTitles,
             TargetEpisodeTitle = input.EpisodeNumber is null ? null : input.Title,
             TargetAbsoluteEpisodeNumber = input.EpisodeNumber is null ? null : input.AbsoluteEpisodeNumber,
             TargetYear = input.Year, TargetAuthor = input.Author, BookRendition = input.BookRendition,

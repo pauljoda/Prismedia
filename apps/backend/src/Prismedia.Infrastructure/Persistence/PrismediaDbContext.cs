@@ -40,6 +40,8 @@ public sealed class PrismediaDbContext : DbContext {
 
     public DbSet<EntityProviderIdentityRow> EntityProviderIdentities => Set<EntityProviderIdentityRow>();
 
+    public DbSet<EntityAlternativeTitleRow> EntityAlternativeTitles => Set<EntityAlternativeTitleRow>();
+
     public DbSet<EntityMarkerRow> EntityMarkers => Set<EntityMarkerRow>();
 
     public DbSet<EntitySubtitleRow> EntitySubtitles => Set<EntitySubtitleRow>();

@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Movie and TV acquisition can search verified original, translated, and romanized titles from the selected metadata provider. Those names share strict identity checks and quality ranking through download validation, import, and coverage recovery.
+
 - Discover now includes a Track category for searching and requesting individual songs. Song imports preserve the selected recording's identity and select only its matching audio from a larger downloaded album.
 
 - M4B audiobooks now import embedded chapter windows, expose them as distinct Book chapters, and map matching ebook chapters to those windows without splitting or duplicating the source file.

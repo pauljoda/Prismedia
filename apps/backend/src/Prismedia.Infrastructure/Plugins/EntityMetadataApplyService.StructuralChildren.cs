@@ -300,6 +300,7 @@ public sealed partial class EntityMetadataApplyService {
             node.Provider,
             node.Patch.ExternalIds,
             cancellationToken);
+        await ReplaceProviderAlternativeTitlesAsync(entity, node, now, cancellationToken);
         if (isRelationship) {
             await ApplyRelationshipArtworkAsync(entity, node, now, cancellationToken);
         }

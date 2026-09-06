@@ -101,6 +101,7 @@ public sealed class EfTvOwnedEpisodeCoverageRepair(PrismediaDbContext db, IImpor
         var paths = owned.Select(file => file.Path).Distinct().ToArray();
         var allOwners = await db.EntityFiles.AsNoTracking().Where(file => file.Role == EntityFileRole.Source && paths.Contains(file.Path))
             .ToArrayAsync(token);
+        var alternativeWorkTitles = await EfAcquisitionWorkTitles.ReadAsync(db, seriesId, token);
         var result = new List<Candidate>();
         foreach (var path in paths.Order(FileSystemPathComparison.Comparer)) {
             token.ThrowIfCancellationRequested();
@@ -118,7 +119,7 @@ public sealed class EfTvOwnedEpisodeCoverageRepair(PrismediaDbContext db, IImpor
                     || source.CreatedAt > receipt.UpdatedAt || source.UpdatedAt > receipt.UpdatedAt
                     || observation.LastWriteUtc > source.CreatedAt.UtcDateTime)) continue;
             var plan = TvOwnedEpisodeCoveragePlanner.Plan(entry.SourceRelativePath, series.Title, season.SortOrder.Value,
-                catalog, sources.Select(source => source.EntityId).ToArray());
+                catalog, sources.Select(source => source.EntityId).ToArray(), alternativeWorkTitles);
             if (plan is null || plan.SeasonEntityId != seasonId
                 || plan.MissingEpisodes.Any(episode => owned.Any(file => file.EntityId == episode.EntityId))) continue;
             result.Add(new(path, receipt.Id, receipt.UpdatedAt, receipt.ImportResultJson!, series.Title,

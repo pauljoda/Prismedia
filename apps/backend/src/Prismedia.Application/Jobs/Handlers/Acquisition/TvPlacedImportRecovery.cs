@@ -13,7 +13,7 @@ public static class TvPlacedImportRecovery {
     /// </summary>
     public static IReadOnlyList<ImportedTvEpisode>? Plan(IReadOnlyList<string> files, string libraryRoot,
         string seriesFolder, string series, int? season, int? episode, IReadOnlyList<TvEpisodeTitle> titles,
-        AcquisitionTransferInfo? transfer) {
+        AcquisitionTransferInfo? transfer, IReadOnlyList<string>? alternativeWorkTitles = null) {
         if (transfer?.ImportResultUnavailable == true) return null;
         var originalNames = new Dictionary<string, string>(FileSystemPathComparison.Comparer);
         foreach (var entry in transfer?.ImportResult?.Files ?? []) {
@@ -32,7 +32,7 @@ public static class TvPlacedImportRecovery {
             if (length <= 0) return null;
             candidates.Add(new(original, length));
         }
-        var plan = TvImportPlanBuilder.PlanUnits(candidates, series, season, episode, episodeTitles: titles);
+        var plan = TvImportPlanBuilder.PlanUnits(candidates, series, season, episode, episodeTitles: titles, alternativeWorkTitles: alternativeWorkTitles);
         if (plan.Blocked) return null;
         var planned = plan.Units.Select(unit => unit.SourceRelativePath).ToHashSet(FileSystemPathComparison.Comparer);
         if (episode is null && candidates.Any(file => !planned.Contains(file.RelativePath)

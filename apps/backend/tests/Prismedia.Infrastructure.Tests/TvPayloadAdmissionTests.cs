@@ -9,6 +9,23 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class TvPayloadAdmissionTests {
     [Fact]
+    public async Task FormalParentNumbersDoNotHideAlreadyOwnedAbsoluteCoverage() {
+        await using var db = CreateContext();
+        using var fixture = await TvPayloadAdmissionFixture.CreateAsync(db);
+        var first = await db.Entities.SingleAsync(entity => entity.ParentEntityId == fixture.Input.EntityId && entity.SortOrder == 1);
+        db.EntityPositions.AddRange(
+            new EntityPositionRow { EntityId = first.Id, Code = EntityPositionCodes.AbsoluteEpisode, Value = 54 },
+            new EntityPositionRow { EntityId = fixture.SecondEpisode.Id, Code = EntityPositionCodes.AbsoluteEpisode, Value = 104 });
+        await db.SaveChangesAsync();
+        var input = fixture.Input with { AlternativeWorkTitles = ["Room 104"] };
+        ImportCandidateFile[] files = [new("Room.104 - 54.mkv", 1000)];
+        Assert.False(await fixture.Service.HasNoBenefitAsync(fixture.Input, files, default));
+        Assert.True(await fixture.Service.HasNoBenefitAsync(input, files, default));
+        await fixture.Service.RememberAsync(input.Id, fixture.Selected.Identity, files, default);
+        Assert.Contains(fixture.Selected.Identity, await fixture.Service.GetExcludedAsync(input, default));
+    }
+
+    [Fact]
     public async Task ForeignTitleEvidenceCannotBeRejectedAsAnAlreadyOwnedRequestedEpisode() {
         await using var db = CreateContext();
         using var fixture = await TvPayloadAdmissionFixture.CreateAsync(db);

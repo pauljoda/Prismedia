@@ -8,6 +8,16 @@ public sealed class TvOwnedEpisodeCoveragePlannerTests {
     private readonly Guid secondId = Guid.NewGuid();
 
     [Fact]
+    public void VerifiedAlternativeTitlesCanRepairCoverageWithoutMovingExistingOwners() {
+        var plan = TvOwnedEpisodeCoveragePlanner.Plan("Romanized.Show.S01E01-E02.Hidden.Garden.&.Mountain.Journey.mkv",
+            "Show", 1, Catalog(), [firstId], ["Romanized Show"]);
+        Assert.NotNull(plan);
+        Assert.Equal(secondId, Assert.Single(plan.MissingEpisodes).EntityId);
+        Assert.Null(TvOwnedEpisodeCoveragePlanner.Plan("Romanized.Show.Sequel.S01E01-E02.Hidden.Garden.&.Mountain.Journey.mkv",
+            "Show", 1, Catalog(), [firstId], ["Romanized Show"]));
+    }
+
+    [Fact]
     public void PairedTitlesRecoverOnlyTheMissingHalfOfAnAlreadyOwnedFile() {
         var plan = TvOwnedEpisodeCoveragePlanner.Plan("Show.S01E01-E02.Hidden.Garden.&.Mountain.Journey.mkv", "Show", 1,
             Catalog(), [firstId]);

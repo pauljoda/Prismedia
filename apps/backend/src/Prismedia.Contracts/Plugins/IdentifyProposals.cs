@@ -1,4 +1,5 @@
 using Prismedia.Domain.Entities;
+using System.Text.Json.Serialization;
 
 namespace Prismedia.Contracts.Plugins;
 
@@ -57,6 +58,14 @@ public sealed record EntityMetadataPatch(
     /// legacy <see cref="Dates"/> key and let providers express distinct release milestones.
     /// </summary>
     public IReadOnlyList<EntityMetadataDatePatch> DateEntries { get; init; } = [];
+
+    /// <summary>
+    /// Formal alternative names for this exact provider work, such as its original, translated, or
+    /// romanized title. Franchise names, season labels, and unqualified scene synonyms do not belong
+    /// here. Null preserves existing evidence during partial metadata updates; an empty list clears it.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<string>? AlternativeTitles { get; init; }
 }
 
 /// <summary>A typed metadata date whose meaning is stable across providers.</summary>

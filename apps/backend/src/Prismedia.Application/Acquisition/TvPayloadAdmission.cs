@@ -40,14 +40,14 @@ public sealed class TvPayloadAdmission(
         if (layout is null || !Directory.Exists(layout.SeriesFolderPath)) return null;
         var owned = TvOwnedEpisodeCoverage.Read(layout);
         var catalog = await targets.GetSeriesEpisodeCatalogAsync(entityId, cancellationToken);
-        return new(input.WorkTitle, season, titles, owned, catalog);
+        return new(input.WorkTitle, season, titles, owned, catalog, input.AlternativeWorkTitles);
     }
 
     private static bool HasNoBenefit(CoverageContext context, IReadOnlyList<ImportCandidateFile> files) {
         // A filename can claim an owned requested-season slot while its titles identify useful
         // foreign content. Import planning retains or maps that evidence; admission must not discard it.
-        if (TvCrossSeasonImportEvidence.Find(files, context.Season, context.Catalog, context.Series).Count > 0) return false;
-        var plan = TvImportPlanBuilder.PlanUnits(files, context.Series, context.Season, null, episodeTitles: context.Titles);
+        if (TvCrossSeasonImportEvidence.Find(files, context.Season, context.Catalog, context.Series, context.AlternativeWorkTitles).Count > 0) return false;
+        var plan = TvImportPlanBuilder.PlanUnits(files, context.Series, context.Season, null, episodeTitles: context.Titles, alternativeWorkTitles: context.AlternativeWorkTitles);
         if (plan.Blocked || plan.Units.Count == 0) return false;
         var plannedFiles = plan.Units.Select(unit => unit.SourceRelativePath).ToHashSet(StringComparer.Ordinal);
         // Unmapped or out-of-season videos may contain something useful. An archive listing cannot
@@ -81,7 +81,7 @@ public sealed class TvPayloadAdmission(
     }
 
     private sealed record CoverageContext(string Series, int Season, IReadOnlyList<TvEpisodeTitle> Titles,
-        IReadOnlySet<(int, int)> Owned, IReadOnlyList<TvSeasonEpisodeCatalog> Catalog);
+        IReadOnlySet<(int, int)> Owned, IReadOnlyList<TvSeasonEpisodeCatalog> Catalog, IReadOnlyList<string> AlternativeWorkTitles);
 
     // Any other unplanned file may conceal additional media (archives, obfuscated payloads, or future
     // formats). Only recognizable non-video companions can be ignored when proving no coverage gain.

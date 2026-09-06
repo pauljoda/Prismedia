@@ -584,7 +584,7 @@ public sealed class AcquisitionMonitorJobHandler(
                 TvReleaseTokens.NamesCompleteSeries(selected.Title),
                 input.Title,
                 input.AbsoluteEpisodeNumber,
-                episodeTitles);
+                episodeTitles, input.AlternativeWorkTitles);
             if (conflict is not null) return (conflict, false);
             if (payloadAdmission is not null && input.Kind == EntityKind.VideoSeason) {
                 var payloadFiles = files.Select(file => new ImportCandidateFile(file.Name, file.SizeBytes)).ToArray();

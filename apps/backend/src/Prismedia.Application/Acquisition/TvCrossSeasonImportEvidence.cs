@@ -18,16 +18,17 @@ public static class TvCrossSeasonImportEvidence {
     /// <summary>Finds foreign or conflicting files; ordinary requested-season files remain with the standard planner.</summary>
     public static IReadOnlyList<TvCrossSeasonFileEvidence> Find(
         IReadOnlyList<ImportCandidateFile> files, int requestedSeason, IReadOnlyList<TvSeasonEpisodeCatalog> catalog,
-        string? seriesTitle = null) {
+        string? seriesTitle = null,
+        IReadOnlyList<string>? alternativeWorkTitles = null) {
         var result = new List<TvCrossSeasonFileEvidence>();
         var videos = TvImportPlanBuilder.UnmappedVideos(files, []);
         var paths = videos.Select(file => file.RelativePath).ToHashSet(FileSystemPathComparison.Comparer);
         foreach (var file in videos.Where(file => !TvImportPlanBuilder.HasInternetArchiveOriginalSibling(file.RelativePath, paths))) {
             var name = Path.GetFileNameWithoutExtension(file.RelativePath);
             var declared = TvReleaseTokens.ParseEpisodes(name);
-            var seriesAgrees = declared is null || seriesTitle is null || ReleaseTitleIdentity.Match(name, seriesTitle).TitleMatched;
+            var seriesAgrees = declared is null || seriesTitle is null || AcquisitionWorkTitles.Match(name, seriesTitle, alternativeWorkTitles ?? []).TitleMatched;
             var tail = declared is null
-                ? ReleaseTitleIdentity.WithoutLeadingWorkTitle(name, seriesTitle)
+                ? AcquisitionWorkTitles.EpisodeEvidence(name, seriesTitle, alternativeWorkTitles ?? [])
                 : TvReleaseTokens.EpisodeTitleTail(name) ?? string.Empty;
             var matches = catalog.SelectMany(season => season.Episodes
                     .Where(episode => IsDistinctiveTitle(episode.Title)

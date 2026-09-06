@@ -106,7 +106,7 @@ public sealed class HeldTvImportRecoveryService(
         if (AcquisitionPayloadValidation.FindConflict(
                 payload.Files.Select(file => file.RelativePath).ToArray(), import.Kind, series, search?.Year ?? import.Year,
                 resumesForeignExtras ? null : season, import.EpisodeNumber, TvReleaseTokens.NamesCompleteSeries(selected.Title),
-                search?.Title ?? import.Title, search?.AbsoluteEpisodeNumber, titles) is not null) {
+                search?.Title ?? import.Title, search?.AbsoluteEpisodeNumber, titles, search?.AlternativeWorkTitles ?? import.AlternativeWorkTitles) is not null) {
             return;
         }
 

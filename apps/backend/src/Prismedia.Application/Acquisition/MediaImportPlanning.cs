@@ -421,14 +421,16 @@ public static partial class TvImportPlanBuilder {
         string sourceRelativePath,
         int? requestedSeason,
         IReadOnlyList<TvEpisodeTitle> episodeTitles,
-        string? seriesTitle = null) =>
-        InferEpisodeEvidence(sourceRelativePath, requestedSeason, new TvEpisodeEvidenceIndex(episodeTitles), seriesTitle).Unit;
+        string? seriesTitle = null,
+        IReadOnlyList<string>? alternativeWorkTitles = null) =>
+        InferEpisodeEvidence(sourceRelativePath, requestedSeason, new TvEpisodeEvidenceIndex(episodeTitles), seriesTitle, alternativeWorkTitles ?? []).Unit;
 
     private static EpisodeInference InferEpisodeEvidence(
         string sourceRelativePath,
         int? requestedSeason,
         TvEpisodeEvidenceIndex evidence,
-        string? seriesTitle) {
+        string? seriesTitle,
+        IReadOnlyList<string> alternativeWorkTitles) {
         var sourceName = Path.GetFileNameWithoutExtension(sourceRelativePath);
         var declared = TvReleaseTokens.ParseEpisodes(sourceName);
         (int Season, int Episode)? unit = declared is { } episodes
@@ -454,7 +456,7 @@ public static partial class TvImportPlanBuilder {
             && requestedSeason is { } titleSeason
             && (declaredSeason is null || declaredSeason == titleSeason)
             && evidence.Count > 0) {
-            var titleMatches = evidence.Match(ReleaseTitleIdentity.WithoutLeadingWorkTitle(sourceName, seriesTitle));
+            var titleMatches = evidence.Match(AcquisitionWorkTitles.EpisodeEvidence(sourceName, seriesTitle, alternativeWorkTitles));
             if (titleMatches.Length == 1) {
                 unit = (titleSeason, titleMatches[0]);
             }
@@ -540,8 +542,9 @@ public static partial class TvImportPlanBuilder {
         int? episodeNumber,
         string? template = null,
         string? quality = null,
-        IReadOnlyList<TvEpisodeTitle>? episodeTitles = null) {
-        var units = PlanUnits(files, series, seasonNumber, episodeNumber, template, quality, episodeTitles);
+        IReadOnlyList<TvEpisodeTitle>? episodeTitles = null,
+        IReadOnlyList<string>? alternativeWorkTitles = null) {
+        var units = PlanUnits(files, series, seasonNumber, episodeNumber, template, quality, episodeTitles, alternativeWorkTitles);
         if (units.Blocked) {
             return ImportPlan.Block(units.BlockReason!.Value);
         }
@@ -563,7 +566,8 @@ public static partial class TvImportPlanBuilder {
         int? episodeNumber,
         string? template = null,
         string? quality = null,
-        IReadOnlyList<TvEpisodeTitle>? episodeTitles = null) {
+        IReadOnlyList<TvEpisodeTitle>? episodeTitles = null,
+        IReadOnlyList<string>? alternativeWorkTitles = null) {
         var videos = files
             .Where(file => VideoExtensions.Contains(Path.GetExtension(file.RelativePath)))
             .Where(file => !SampleTokenRegex().IsMatch(Path.GetFileNameWithoutExtension(file.RelativePath)))
@@ -585,7 +589,7 @@ public static partial class TvImportPlanBuilder {
         var evidence = new TvEpisodeEvidenceIndex(episodeTitles ?? []);
         var hasRecognizedDifferentUnit = false;
         foreach (var video in videos.OrderBy(file => file.RelativePath, StringComparer.OrdinalIgnoreCase)) {
-            var inference = InferEpisodeEvidence(video.RelativePath, seasonNumber, evidence, series);
+            var inference = InferEpisodeEvidence(video.RelativePath, seasonNumber, evidence, series, alternativeWorkTitles ?? []);
             hasRecognizedDifferentUnit |= inference.RecognizedDifferentSeason;
             if (inference.RecognizedDifferentSeason) {
                 continue;

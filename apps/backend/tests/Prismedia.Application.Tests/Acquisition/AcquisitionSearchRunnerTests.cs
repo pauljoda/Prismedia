@@ -12,6 +12,35 @@ namespace Prismedia.Application.Tests.Acquisition;
 /// dropping the blocklist argument back to its default.
 /// </summary>
 public sealed class AcquisitionSearchRunnerTests {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FormalWorkNamesShareOneRankedDecisionSetAndPreserveCustomQueries(bool custom) {
+        var input = new AcquisitionSearchInput(Guid.NewGuid(), "Final Message", null, EntityKind.VideoEpisode,
+            Series: "Primary Series", SeasonNumber: 2, EpisodeNumber: 1, AbsoluteEpisodeNumber: 83) {
+            AlternativeWorkTitles = ["Romanized Series", "Romanized.Series"]
+        };
+        var lower = new IndexerRelease("Primary Series - 83 720p WEB-DL", 500_000_000, 20, 2,
+            DownloadProtocol.Torrent, "https://download.test/lower", null, "lower", null, null, null);
+        var higher = lower with { Title = "Romanized Series - 83 1080p WEB-DL", InfoHash = "higher" };
+        var policy = new TvAcquisitionPolicyModule();
+        var primaryQueries = policy.BuildQueries(input);
+        var aliasQueries = policy.BuildQueries(input with { Series = "Romanized Series" });
+        var results = primaryQueries.ToDictionary(query => query, _ => (IReadOnlyList<IndexerRelease>)[lower]);
+        foreach (var query in aliasQueries) results[query] = [higher];
+        results["chosen query"] = [lower, higher];
+        var client = new QueryAwareIndexerSearchClient(results);
+        var runner = new AcquisitionSearchRunner(new FakeIndexerConfigStore(), new FakeClientFactory(client),
+            new FakeProfileStore(), new FakeBlocklistStore("unrelated"),
+            new FakeDownloadClientConfigStore(DownloadProtocol.Torrent), new FakeIndexerStatusStore(),
+            new IndexerQueryWindow(), Policies(policy), Settings());
+        var outcome = await runner.RunAsync(input, default, customQuery: custom ? "chosen query" : null);
+        Assert.Equal(2, outcome.Candidates.Count);
+        Assert.All(outcome.Candidates, candidate => Assert.True(candidate.Accepted));
+        Assert.Equal("higher", outcome.Candidates[0].Release.InfoHash);
+        Assert.Equal(custom ? ["chosen query"] : primaryQueries.Concat(aliasQueries).Distinct().ToArray(), client.Queries);
+    }
+
     [Fact]
     public async Task ObservedSeasonCoverageFiltersAutomaticSearchAndReopensWhenUpgradesAreEnabled() {
         var root = Directory.CreateTempSubdirectory("prismedia-search-coverage-");

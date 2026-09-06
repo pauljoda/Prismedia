@@ -79,6 +79,19 @@ internal static class EntityRelationshipModelConfiguration {
                 .OnDelete(DeleteBehavior.Cascade);
         });
 
+        modelBuilder.Entity<EntityAlternativeTitleRow>(entity => {
+            entity.ToTable("entity_alternative_titles");
+            entity.HasKey(row => new { row.EntityId, row.Title });
+            entity.Property(row => row.EntityId).HasColumnName("entity_id");
+            entity.Property(row => row.Title).HasColumnName("title")
+                .HasMaxLength(Prismedia.Application.Acquisition.AcquisitionWorkTitles.MaximumTitleLength).IsRequired();
+            entity.Property(row => row.PluginId).HasColumnName("plugin_id").HasMaxLength(128).IsRequired();
+            entity.Property(row => row.IdentityNamespace).HasColumnName("identity_namespace").HasMaxLength(128).IsRequired();
+            entity.Property(row => row.IdentityValue).HasColumnName("identity_value").IsRequired();
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.HasOne<EntityRow>().WithMany().HasForeignKey(row => row.EntityId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<EntityProviderIdentityRow>(entity => {
             entity.ToTable("entity_provider_identities", table => {
                 table.HasCheckConstraint(

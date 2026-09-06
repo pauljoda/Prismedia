@@ -35,4 +35,6 @@ export interface EntityMetadataPatch {
   rating?: number | string | null;
   flags?: null | EntityMetadataFlagsPatch;
   dateEntries?: EntityMetadataDatePatch[];
+  /** @nullable */
+  alternativeTitles?: string[] | null;
 }

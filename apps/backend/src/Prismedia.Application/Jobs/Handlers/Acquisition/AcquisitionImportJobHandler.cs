@@ -239,7 +239,7 @@ public sealed class AcquisitionImportJobHandler(
             selected is not null && TvReleaseTokens.NamesCompleteSeries(selected.Title),
             input?.Title,
             input?.AbsoluteEpisodeNumber,
-            episodeTitles);
+            episodeTitles, input?.AlternativeWorkTitles ?? import.AlternativeWorkTitles);
     }
 
     /// <summary>Records a durable ImportFailed event (a manual-import hold or an import exception) against the acquisition. Best-effort.</summary>

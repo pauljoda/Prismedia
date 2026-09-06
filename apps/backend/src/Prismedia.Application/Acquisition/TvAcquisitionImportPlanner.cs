@@ -92,7 +92,7 @@ public sealed class TvAcquisitionImportPlanner(IImportTargetIndex targets, IMoni
             return new(TvImportPlanBuilder.PlanManualUnits(payload.Files, manualMappings, series, profile?.PathTemplate, quality), []);
         }
         var evidence = import.SeasonNumber is { } requestedSeason
-            ? TvCrossSeasonImportEvidence.Find(payload.Files, requestedSeason, catalog, series)
+            ? TvCrossSeasonImportEvidence.Find(payload.Files, requestedSeason, catalog, series, import.AlternativeWorkTitles)
             : [];
         var excluded = evidence.Select(file => file.SourceRelativePath).ToHashSet(FileSystemPathComparison.Comparer);
         var ordinaryFiles = payload.Files.Where(file => !excluded.Contains(file.RelativePath)).ToArray();
@@ -101,12 +101,12 @@ public sealed class TvAcquisitionImportPlanner(IImportTargetIndex targets, IMoni
             ? await targets.GetSeasonEpisodeTitlesAsync(linkedId, number, cancellationToken) : [];
         var ordinaryVideos = TvImportPlanBuilder.UnmappedVideos(ordinaryFiles, []);
         if (excluded.Count > 0 && import.EpisodeNumber is not null && ordinaryVideos.Count == 1
-            && TvImportPlanBuilder.InferEpisode(ordinaryVideos[0].RelativePath, import.SeasonNumber, titles, series) is null) {
+            && TvImportPlanBuilder.InferEpisode(ordinaryVideos[0].RelativePath, import.SeasonNumber, titles, series, import.AlternativeWorkTitles) is null) {
             return new(TvUnitsPlan.Block(ImportBlockReason.AmbiguousMultiplePrimaries), []);
         }
         var ordinaryPlan = ordinaryFiles.Any(file => TvImportPlanBuilder.IsVideoFile(file.RelativePath))
             ? TvImportPlanBuilder.PlanUnits(ordinaryFiles, series, import.SeasonNumber, import.EpisodeNumber,
-                profile?.PathTemplate, quality, titles)
+                profile?.PathTemplate, quality, titles, import.AlternativeWorkTitles)
             : TvUnitsPlan.For([]);
         if (ordinaryPlan.Blocked) {
             return new(ordinaryPlan, []);

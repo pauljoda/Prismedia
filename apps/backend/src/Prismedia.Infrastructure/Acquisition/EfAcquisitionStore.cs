@@ -157,15 +157,18 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         // movie's release year — which is what scene naming appends to disambiguate same-name works,
         // so the search gates compare against that instead.
         var contextEntityId = await ResolveContextEntityIdAsync(row.EntityId, row.UpgradeOfAcquisitionId, row.Kind, cancellationToken);
-        var year = contextEntityId is { } entityId && MediaQualityLadder.IsVideoKind(row.Kind)
-            ? await ResolveWorkYearAsync(entityId, cancellationToken) ?? row.Year
-            : row.Year;
+        var work = contextEntityId is { } entityId && MediaQualityLadder.IsVideoKind(row.Kind)
+            ? await ResolveWorkIdentityAsync(entityId, cancellationToken)
+            : (Year: (int?)null, Titles: (IReadOnlyList<string>)Array.Empty<string>());
+        var year = work.Year ?? row.Year;
         var positions = await ResolveCurrentPositionsAsync(contextEntityId, row.Kind, cancellationToken);
 
         return new AcquisitionSearchInput(
             row.Id, row.Title, row.Author, row.Kind, row.EntityId, year, row.ProfileId,
             row.Series, positions.Season ?? row.SeasonNumber, positions.Episode ?? row.EpisodeNumber,
-            positions.Volume ?? row.VolumeNumber, row.BookRendition, positions.AbsoluteEpisode);
+            positions.Volume ?? row.VolumeNumber, row.BookRendition, positions.AbsoluteEpisode) {
+            AlternativeWorkTitles = work.Titles
+        };
     }
 
     /// <summary>
@@ -238,10 +241,10 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
 
     /// <summary>
     /// The year identity of the work an entity belongs to: the first ancestor that owns an acquisition
-    /// profile, within a cycle-safe ancestor walk. Null when the graph or dates are missing, so callers keep
-    /// their request-time fallback.
+    /// profile, within a cycle-safe ancestor walk, together with its current provider's formal titles.
+    /// A missing year preserves request-time fallback; missing or retired identity evidence supplies no alternatives.
     /// </summary>
-    private async Task<int?> ResolveWorkYearAsync(Guid entityId, CancellationToken cancellationToken) {
+    private async Task<(int? Year, IReadOnlyList<string> Titles)> ResolveWorkIdentityAsync(Guid entityId, CancellationToken cancellationToken) {
         var currentId = (Guid?)entityId;
         var workId = entityId;
         AcquisitionProfileDefinition? workProfile = null;
@@ -266,23 +269,26 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         }
 
         if (workProfile is null) {
-            return null;
+            return (null, []);
         }
 
         var dates = await db.EntityDates.AsNoTracking()
             .Where(date => date.EntityId == workId && date.SortableValue != null)
             .Select(date => new { date.Code, date.SortableValue })
             .ToArrayAsync(cancellationToken);
+        int? year = null;
         foreach (var dateType in workProfile.SupportedReleaseDateTypes) {
             var canonicalCode = dateType.ToCode();
             var match = dates.FirstOrDefault(date => date.Code == canonicalCode)
                 ?? dates.FirstOrDefault(date => EntityDateTypeRegistry.Decode(date.Code) == dateType);
             if (match?.SortableValue is { } sortable) {
-                return sortable.Year;
+                year = sortable.Year;
+                break;
             }
         }
 
-        return null;
+        var titles = await EfAcquisitionWorkTitles.ReadAsync(db, workId, cancellationToken);
+        return (year, titles);
     }
 
     public async Task<AcquisitionStatus?> GetStatusAsync(Guid id, CancellationToken cancellationToken) {
@@ -1370,13 +1376,18 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
 
         var contextEntityId = await ResolveContextEntityIdAsync(row.EntityId, row.UpgradeOfAcquisitionId, row.Kind, cancellationToken);
         var positions = await ResolveCurrentPositionsAsync(contextEntityId, row.Kind, cancellationToken);
+        var work = contextEntityId is { } entityId && MediaQualityLadder.IsVideoKind(row.Kind)
+            ? await ResolveWorkIdentityAsync(entityId, cancellationToken)
+            : (Year: (int?)null, Titles: (IReadOnlyList<string>)Array.Empty<string>());
         var context = new AcquisitionImportContext(
             row.Id, row.Title, row.Author, row.Series, row.Year, row.PosterUrl, externalIdentity,
             row.ProfileId, transfer?.ContentPath, transfer?.ClientItemId, transfer?.DownloadClientConfigId, row.Kind,
             row.Description, row.TargetLibraryRootId, positions.Season ?? row.SeasonNumber,
             positions.Episode ?? row.EpisodeNumber, row.EntityId, row.FinalSourcePath,
             tvImportCheckpoint, importPlacementCheckpoint, row.BookRendition, row.UpgradeOfAcquisitionId,
-            positions.Volume ?? row.VolumeNumber);
+            positions.Volume ?? row.VolumeNumber) {
+            AlternativeWorkTitles = work.Titles
+        };
         context.EnsureCheckpointApplicability();
         return context;
     }

@@ -109,14 +109,14 @@ public sealed partial class AcquisitionService {
         var catalogPlan = await new TvAcquisitionImportPlanner(manualImportTargets, providerEvidence: manualCatalogEvidence)
             .PlanAsync(import, payload, null, null, cancellationToken);
         var foreignFiles = TvCrossSeasonImportEvidence.Find(payload.Files, seasonNumber, catalogPlan.Catalog,
-                string.IsNullOrWhiteSpace(import.Series) ? import.Title : import.Series)
+                string.IsNullOrWhiteSpace(import.Series) ? import.Title : import.Series, import.AlternativeWorkTitles)
             .Select(file => file.SourceRelativePath).ToHashSet(FileSystemPathComparison.Comparer);
         var suggestions = payload.Files
             .Where(file => TvImportPlanBuilder.IsVideoFile(file.RelativePath) && !foreignFiles.Contains(file.RelativePath))
             .Select(file => new {
                 file.RelativePath,
                 Inferred = TvImportPlanBuilder.InferEpisode(file.RelativePath, seasonNumber, episodes,
-                    string.IsNullOrWhiteSpace(import.Series) ? import.Title : import.Series)
+                    string.IsNullOrWhiteSpace(import.Series) ? import.Title : import.Series, import.AlternativeWorkTitles)
             })
             .Where(item => item.Inferred is not null)
             .Select(item => new {

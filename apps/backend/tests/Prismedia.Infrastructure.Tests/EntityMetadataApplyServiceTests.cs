@@ -2189,6 +2189,7 @@ public sealed class EntityMetadataApplyServiceTests {
             Confidence: 1,
             MatchReason: "external-id",
             Patch: EmptyPatch() with {
+                AlternativeTitles = ["Formal Translated Name"],
                 ExternalIds = new Dictionary<string, string> {
                     ["tmdb"] = "603",
                     ["imdb"] = "tt0133093"
@@ -2201,10 +2202,11 @@ public sealed class EntityMetadataApplyServiceTests {
         await service.ApplyAsync(
             entityId,
             proposal,
-            selectedFields: ["externalIds"],
+            selectedFields: [MetadataPatchField.ExternalIds.ToCode(), MetadataPatchField.Title.ToCode()],
             selectedImages: null,
             CancellationToken.None);
 
+        Assert.Contains(await db.EntityAlternativeTitles.ToArrayAsync(), row => row.Title == "Formal Translated Name");
         var binding = await providerIdentities.GetAsync(entityId, CancellationToken.None);
         Assert.NotNull(binding);
         Assert.Equal("tmdb", binding.PluginId);

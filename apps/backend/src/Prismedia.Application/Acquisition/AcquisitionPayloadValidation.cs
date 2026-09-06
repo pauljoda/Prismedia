@@ -30,6 +30,7 @@ public static class AcquisitionPayloadValidation {
     /// <param name="episodeTitle">Provider-authored episode title used as independent single-file evidence.</param>
     /// <param name="absoluteEpisodeNumber">Provider-authored absolute episode position used as independent single-file evidence.</param>
     /// <param name="episodeTitles">Current provider episode identities used by the import planner to align combined files.</param>
+    /// <param name="alternativeWorkTitles">Formal names scoped to the same current provider work identity.</param>
     public static string? FindConflict(
         IReadOnlyList<string> filePaths,
         Domain.Entities.EntityKind kind,
@@ -40,7 +41,8 @@ public static class AcquisitionPayloadValidation {
         bool completeSeriesSelected = false,
         string? episodeTitle = null,
         int? absoluteEpisodeNumber = null,
-        IReadOnlyList<TvEpisodeTitle>? episodeTitles = null) {
+        IReadOnlyList<TvEpisodeTitle>? episodeTitles = null,
+        IReadOnlyList<string>? alternativeWorkTitles = null) {
         if (filePaths.Count == 0 || !MediaQualityLadder.IsVideoKind(kind)) {
             return null;
         }
@@ -49,7 +51,7 @@ public static class AcquisitionPayloadValidation {
         // root folder usually repeats the release name, and per-episode files often repeat it too.
         if (expectedYear is { } year && !string.IsNullOrWhiteSpace(expectedTitle)) {
             foreach (var segment in DistinctSegments(filePaths)) {
-                var identity = ReleaseTitleIdentity.Match(segment, expectedTitle);
+                var identity = AcquisitionWorkTitles.Match(segment, expectedTitle, alternativeWorkTitles ?? []);
                 if (identity is { TitleMatched: true, TitleYear: { } named } && Math.Abs(named - year) > YearToleranceYears) {
                     return $"The download's files name \"{expectedTitle} {named}\", but {expectedTitle} ({year}) was expected.";
                 }
@@ -65,7 +67,7 @@ public static class AcquisitionPayloadValidation {
                     expectedTitle ?? string.Empty,
                     season,
                     episodeNumber,
-                    episodeTitles: episodeTitles);
+                    episodeTitles: episodeTitles, alternativeWorkTitles: alternativeWorkTitles);
                 if (!mapped.Blocked && mapped.Units.Count > 0) {
                     return null;
                 }
@@ -76,7 +78,7 @@ public static class AcquisitionPayloadValidation {
                 season,
                 episodeNumber,
                 completeSeriesSelected,
-                TvEpisodeIdentifiers.Create(episodeTitle, absoluteEpisodeNumber), expectedTitle);
+                TvEpisodeIdentifiers.Create(episodeTitle, absoluteEpisodeNumber), expectedTitle, alternativeWorkTitles ?? []);
         }
 
         return null;
@@ -94,7 +96,7 @@ public static class AcquisitionPayloadValidation {
         int? episodeNumber,
         bool completeSeriesSelected,
         TvEpisodeIdentifierSet episodeIdentifiers,
-        string? seriesTitle) {
+        string? seriesTitle, IReadOnlyList<string> alternativeWorkTitles) {
         var coversSought = false;
         var hasUnresolvedVideo = false;
         var contrary = default(string?);
@@ -113,7 +115,7 @@ public static class AcquisitionPayloadValidation {
 
             if (episodeNumber is not null
                 && declaredEpisodes is null
-                && episodeIdentifiers.Matches(ReleaseTitleIdentity.WithoutLeadingWorkTitle(name, seriesTitle))
+                && episodeIdentifiers.Matches(AcquisitionWorkTitles.EpisodeEvidence(name, seriesTitle, alternativeWorkTitles))
                 && (declared is null || declared.Value.Season == season)) {
                 coversSought = true;
                 break;

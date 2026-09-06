@@ -10,10 +10,11 @@ public sealed record TvOwnedEpisodeCoveragePlan(Guid SeasonEntityId, int SeasonN
 public static class TvOwnedEpisodeCoveragePlanner {
     /// <summary>Returns a conservative additive coverage proposal, or null when evidence conflicts or no gap exists.</summary>
     public static TvOwnedEpisodeCoveragePlan? Plan(string originalFileName, string seriesTitle, int requestedSeason,
-        IReadOnlyList<TvSeasonEpisodeCatalog> catalog, IReadOnlyCollection<Guid> existingOwnerIds) {
+        IReadOnlyList<TvSeasonEpisodeCatalog> catalog, IReadOnlyCollection<Guid> existingOwnerIds,
+        IReadOnlyList<string>? alternativeWorkTitles = null) {
         var name = Path.GetFileNameWithoutExtension(originalFileName);
-        if (existingOwnerIds.Count == 0 || !ReleaseTitleIdentity.Match(name, seriesTitle).TitleMatched) return null;
-        var coverage = ReadCoverage(originalFileName, seriesTitle, requestedSeason, catalog);
+        if (existingOwnerIds.Count == 0 || !AcquisitionWorkTitles.Match(name, seriesTitle, alternativeWorkTitles ?? []).TitleMatched) return null;
+        var coverage = ReadCoverage(originalFileName, seriesTitle, requestedSeason, catalog, alternativeWorkTitles);
         if (coverage is not { Season.SeasonEntityId: { } seasonId } || coverage.Episodes.Count < 2) return null;
         var episodes = coverage.Episodes;
         if (episodes.Any(episode => episode.EntityId is null)
@@ -24,7 +25,7 @@ public static class TvOwnedEpisodeCoveragePlanner {
 
         // Historical filenames are useful evidence, but numeric ranges alone are not enough to add
         // coverage to an existing library file. Every proposed half needs its distinctive catalog title.
-        var tail = TvReleaseTokens.EpisodeTitleTail(name) ?? name;
+        var tail = TvReleaseTokens.EpisodeTitleTail(name) ?? AcquisitionWorkTitles.EpisodeEvidence(name, seriesTitle, alternativeWorkTitles ?? []);
         if (episodes.Any(episode => !TvCrossSeasonImportEvidence.IsDistinctiveTitle(episode.Title)
                 || !ReleaseTitleIdentity.ContainsMeaningfulRun(tail, episode.Title))
             || TvCrossSeasonImportEvidence.TitlesOverlap(episodes)) return null;
@@ -32,16 +33,16 @@ public static class TvOwnedEpisodeCoveragePlanner {
     }
 
     private static Coverage? ReadCoverage(string originalFileName, string seriesTitle, int requestedSeason,
-        IReadOnlyList<TvSeasonEpisodeCatalog> catalog) {
+        IReadOnlyList<TvSeasonEpisodeCatalog> catalog, IReadOnlyList<string>? alternativeWorkTitles) {
         ImportCandidateFile[] files = [new(originalFileName, 1)];
-        var foreign = TvCrossSeasonImportEvidence.Find(files, requestedSeason, catalog, seriesTitle);
+        var foreign = TvCrossSeasonImportEvidence.Find(files, requestedSeason, catalog, seriesTitle, alternativeWorkTitles);
         if (foreign.Count > 0) {
             var file = foreign[0];
             return file.Destination is { SeasonEntityId: not null } destination ? new(destination, file.Episodes) : null;
         }
         var seasons = catalog.Where(season => season.SeasonNumber == requestedSeason).ToArray();
         if (seasons.Length != 1 || seasons[0].SeasonEntityId is null) return null;
-        var plan = TvImportPlanBuilder.PlanUnits(files, seriesTitle, requestedSeason, null, episodeTitles: seasons[0].Episodes);
+        var plan = TvImportPlanBuilder.PlanUnits(files, seriesTitle, requestedSeason, null, episodeTitles: seasons[0].Episodes, alternativeWorkTitles: alternativeWorkTitles);
         if (plan.Blocked || plan.Units.Count != 1) return null;
         var unit = plan.Units[0];
         var positions = unit.ExtraEpisodes.Prepend(unit.Episode).ToHashSet();

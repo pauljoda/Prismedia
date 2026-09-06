@@ -51,8 +51,20 @@ public sealed class EfAcquisitionStoreTests {
             SortableValue = new DateOnly(2021, 1, 1), UpdatedAt = DateTimeOffset.UtcNow
         });
         await db.SaveChangesAsync();
+        db.EntityProviderIdentities.Add(new EntityProviderIdentityRow {
+            EntityId = seriesId, PluginId = "provider", IdentityNamespace = "provider", IdentityValue = "work"
+        });
+        db.EntityExternalIds.Add(new EntityExternalIdRow {
+            Id = Guid.NewGuid(), EntityId = seriesId, Provider = "provider", Value = "work"
+        });
+        db.EntityAlternativeTitles.Add(new EntityAlternativeTitleRow {
+            EntityId = seriesId, Title = "Translated Show", PluginId = "provider", IdentityNamespace = "provider", IdentityValue = "work"
+        });
+        await db.SaveChangesAsync();
         var search = await store.GetSearchInputAsync(childId, default);
         var import = await store.GetImportContextAsync(childId, default);
+        Assert.Equal(["Translated Show"], search!.AlternativeWorkTitles);
+        Assert.Equal(["Translated Show"], import!.AlternativeWorkTitles);
         Assert.Equal(2, search!.SeasonNumber);
         Assert.Equal(4, search.EpisodeNumber);
         Assert.Equal(54, search.AbsoluteEpisodeNumber);

@@ -110,12 +110,8 @@ public sealed class TitleIdentitySpecification : IReleaseSpecification {
     public ReleaseRejectionReason Reason => ReleaseRejectionReason.TitleMismatch;
 
     public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) {
-        var identity = rules.EpisodeNumber is not null
-            ? ReleaseTitleIdentity.MatchWithEpisodeIdentifiers(
-                release.Title,
-                rules.TargetTitle,
-                TvEpisodeIdentifiers.Create(rules.TargetEpisodeTitle, rules.TargetAbsoluteEpisodeNumber))
-            : ReleaseTitleIdentity.Match(release.Title, rules.TargetTitle);
+        var identity = AcquisitionWorkTitles.Match(release.Title, rules.TargetTitle, rules.TargetAlternativeTitles,
+            rules.EpisodeNumber is not null ? TvEpisodeIdentifiers.Create(rules.TargetEpisodeTitle, rules.TargetAbsoluteEpisodeNumber) : null);
         return identity.TitleMatched ? null : Reason;
     }
 }
@@ -137,7 +133,7 @@ public sealed class MediaYearSpecification : IReleaseSpecification {
             return null;
         }
 
-        var identity = ReleaseTitleIdentity.Match(release.Title, rules.TargetTitle);
+        var identity = AcquisitionWorkTitles.Match(release.Title, rules.TargetTitle, rules.TargetAlternativeTitles);
         return identity.TitleYear is { } year && Math.Abs(year - targetYear) > ToleranceYears ? Reason : null;
     }
 }
@@ -178,7 +174,7 @@ public sealed class TvUnitSpecification : IReleaseSpecification {
 
             return TvEpisodeIdentifiers
                 .Create(rules.TargetEpisodeTitle, rules.TargetAbsoluteEpisodeNumber)
-                .Matches(ReleaseTitleIdentity.WithoutLeadingWorkTitle(release.Title, rules.TargetTitle))
+                .Matches(AcquisitionWorkTitles.EpisodeEvidence(release.Title, rules.TargetTitle, rules.TargetAlternativeTitles))
                 ? null
                 : Reason;
         }
@@ -380,7 +376,7 @@ public sealed class TvReleaseDecisionEngine(EntityKind kind) : IAcquisitionDecis
             var identifiers = TvEpisodeIdentifiers.Create(
                 rules.TargetEpisodeTitle,
                 rules.TargetAbsoluteEpisodeNumber);
-            var episodeEvidence = ReleaseTitleIdentity.WithoutLeadingWorkTitle(release.Title, rules.TargetTitle);
+            var episodeEvidence = AcquisitionWorkTitles.EpisodeEvidence(release.Title, rules.TargetTitle, rules.TargetAlternativeTitles);
             if (identifiers.MatchesNumeric(episodeEvidence)) {
                 return AbsoluteEpisodeBoost;
             }
