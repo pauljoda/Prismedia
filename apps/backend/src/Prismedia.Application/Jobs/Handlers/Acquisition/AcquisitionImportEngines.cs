@@ -1061,6 +1061,7 @@ public sealed class TvAcquisitionImportEngine(
     VideoScanConcurrencyGate scanGate,
     ILogger<TvAcquisitionImportEngine> logger,
     IMediaUpgradePayloadInspector mediaUpgradeInspector,
+    IMediaProbe mediaProbe,
     IMonitorStore? monitors = null,
     ITvEpisodeCatalogEvidenceSource? catalogEvidence = null) : IAcquisitionImportEngine {
 
@@ -1499,6 +1500,12 @@ public sealed class TvAcquisitionImportEngine(
                 checkpoint = checkpoint with { ImportFileLedger = recoveredLedger, DiscardRemainingPayload = false };
                 await acquisitions.SetTvImportCheckpointAsync(import.Id, checkpoint, cancellationToken);
             }
+        }
+
+        if (await new TvNewFileValidation(mediaProbe, profiles, targets, monitors)
+                .ValidateAsync(import, payload, checkpoint, selected, cancellationToken) is { } newFileHold) {
+            await acquisitions.SetStatusAsync(import.Id, AcquisitionStatus.ManualImportRequired, newFileHold, cancellationToken);
+            return;
         }
 
         // Recreate the broad, unconsumed identity/binding hint before EVERY run. A prior process may have

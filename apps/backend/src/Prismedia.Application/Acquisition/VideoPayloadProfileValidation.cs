@@ -18,11 +18,17 @@ public static class VideoPayloadProfileValidation {
             >= 3_000 => 2160, >= 1_600 => 1080, >= 1_100 => 720, _ => 480
         } : null;
 
-    /// <summary>Returns an explanation when a measured movie contradicts its claimed resolution or current profile.</summary>
+    /// <summary>Uses each file's quality claim, falling back to its selected release only when the file has none.</summary>
+    public static VideoQuality ClaimedQuality(string fileName, string? releaseTitle) {
+        var quality = VideoQualityDetection.Detect(Path.GetFileNameWithoutExtension(fileName));
+        return quality == VideoQuality.Unknown && releaseTitle is not null ? VideoQualityDetection.Detect(releaseTitle) : quality;
+    }
+
+    /// <summary>Returns an explanation when a measured video contradicts its claimed resolution or current profile.</summary>
     public static string? Validate(VideoProbeData video, string? claimedQuality, BookAcquisitionRules rules) {
         if (ResolutionTier(video) is { } measured
             && MediaQualityLadder.VideoResolutionTierOf(claimedQuality) is { } claimed && measured < claimed) {
-            return "The movie file's measured resolution is lower than the release's claimed quality. The download was preserved for review.";
+            return "The video file's measured resolution is lower than the release's claimed quality. The download was preserved for review.";
         }
         return ValidateProfile(claimedQuality, AudioLanguages(video), rules);
     }

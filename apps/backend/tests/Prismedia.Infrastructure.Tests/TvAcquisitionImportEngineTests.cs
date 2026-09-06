@@ -8,6 +8,7 @@ using Prismedia.Application.Jobs.Handlers.Scan;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Jobs.Scanning;
 using Prismedia.Domain.Entities;
+using Prismedia.Contracts.Media;
 using Prismedia.Infrastructure.Acquisition;
 using Prismedia.Infrastructure.Jobs;
 using Prismedia.Infrastructure.Media.Persistence;
@@ -26,6 +27,165 @@ namespace Prismedia.Infrastructure.Tests;
 /// </summary>
 public sealed class TvAcquisitionImportEngineTests : IDisposable {
     private readonly string _workRoot = Directory.CreateTempSubdirectory("prismedia-tv-import-").FullName;
+
+    [Theory]
+    [InlineData(true, "unreadable", true)]
+    [InlineData(false, "unreadable", true)]
+    [InlineData(true, "invalid runtime", true)]
+    [InlineData(false, "invalid runtime", true)]
+    [InlineData(true, "lower resolution", true)]
+    [InlineData(false, "lower resolution", true)]
+    [InlineData(true, "profile changed", true)]
+    [InlineData(false, "profile changed", true)]
+    [InlineData(true, "wrong audio", true)]
+    [InlineData(false, "wrong audio", true)]
+    [InlineData(true, "verified", false)]
+    [InlineData(false, "verified", false)]
+    [InlineData(true, "manual quality", false)]
+    [InlineData(false, "manual quality", false)]
+    [InlineData(true, "manual unreadable", true)]
+    [InlineData(false, "manual unreadable", true)]
+    public async Task NewEpisodePlacementChecksActualVideoAndCurrentProfile(bool merged, string scenario, bool held) {
+        await using var db = CreateContext();
+        var video = new VideoProbeData(1200, 1000, 1920, 1080, 24, null, null, null, null, null, null,
+            [new(0, StreamKind.Audio.ToCode(), null, "eng", null, null, null, null, null, null, null, false, false)]);
+        var probe = new NewEpisodeProbe(scenario switch {
+            "unreadable" or "manual unreadable" => null,
+            "invalid runtime" => video with { DurationSeconds = double.NaN },
+            "lower resolution" => video with { Width = 1280, Height = 720 },
+            "wrong audio" => video with { Streams = [new(0, StreamKind.Audio.ToCode(), null, "jpn", null, null, null, null, null, null, null, false, false)] },
+            _ => video
+        });
+        const string fileName = "Show.S01E02.WEB-DL.1080p.mkv";
+        var harness = await HarnessAsync(db, "Show.S01E01.WEB-DL.720p.mkv", [fileName], "Show S01 WEB-DL 1080p",
+            linkEntity: merged, mediaProbe: probe);
+        db.BookAcquisitionProfiles.Add(new BookAcquisitionProfileRow {
+            Id = Guid.NewGuid(), Kind = AcquisitionProfileKinds.For(EntityKind.VideoSeason), DisplayName = "Validation profile", IsDefault = true,
+            AllowedQualities = [scenario is "profile changed" or "manual quality" ? VideoQuality.Webdl2160p.ToCode() : VideoQuality.Webdl1080p.ToCode()],
+            PreferredLanguages = ["en"]
+        });
+        if (scenario.StartsWith("manual")) {
+            var store = AcquisitionTestFactory.Store(db);
+            var release = (await store.GetSelectedReleaseAsync(harness.Import.Id, default))!;
+            await store.SetSelectedReleaseAsync(harness.Import.Id, release with { ManualPick = true }, default);
+        }
+        await db.SaveChangesAsync();
+
+        await harness.Engine.ImportAsync(harness.Context, harness.Import, default);
+
+        var acquisition = await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == harness.Import.Id);
+        Assert.Equal(held ? AcquisitionStatus.ManualImportRequired : AcquisitionStatus.Importing, acquisition.Status);
+        Assert.Single(probe.Paths);
+        Assert.Equal("owned-bytes", await File.ReadAllTextAsync(harness.OwnedEpisodePath));
+        if (held) {
+            Assert.Equal("payload-bytes", await File.ReadAllTextAsync(Path.Combine(harness.Import.ContentPath!, fileName)));
+            Assert.False(await db.EntityFiles.AnyAsync(row => row.EntityId == harness.WantedEpisodeId && row.Role == EntityFileRole.Source));
+        }
+    }
+
+    [Fact]
+    public async Task InvalidLaterEpisodeHoldsTheWholePendingPackBeforeAnyPlacement() {
+        await using var db = CreateContext();
+        var video = new VideoProbeData(1200, 1000, 1920, 1080, 24, null, null, null, null, null, null);
+        var probe = new NewEpisodeProbe(video) {
+            Resolve = path => path.Contains("E03") ? video with { Width = 1280, Height = 720 } : video
+        };
+        string[] files = ["Show.S01E02.WEB-DL.1080p.mkv", "Show.S01E03.WEB-DL.1080p.mkv"];
+        var harness = await HarnessAsync(db, "Show.S01E01.WEB-DL.720p.mkv", files, "Show S01 WEB-DL 1080p",
+            wantedEpisodeNumbers: [2, 3], mediaProbe: probe);
+
+        await harness.Engine.ImportAsync(harness.Context, harness.Import, default);
+
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, await StatusOf(db, harness.Import.Id));
+        Assert.Equal(2, probe.Paths.Count);
+        foreach (var file in files) Assert.Equal("payload-bytes", await File.ReadAllTextAsync(Path.Combine(harness.Import.ContentPath!, file)));
+        Assert.Single(await db.EntityFiles.Where(row => row.Role == EntityFileRole.Source).ToArrayAsync());
+        Assert.All((await AcquisitionTestFactory.Store(db).GetImportContextAsync(harness.Import.Id, default))!.TvImportCheckpoint!.Units,
+            unit => Assert.Null(unit.FinalPath));
+    }
+
+    [Fact]
+    public async Task PendingNewEpisodeRechecksProfileAndResumesWithoutRedownload() {
+        await using var db = CreateContext();
+        var probe = new NewEpisodeProbe(new(1200, 1000, 1920, 1080, 24, null, null, null, null, null, null));
+        const string file = "Show.S01E02.WEB-DL.1080p.mkv";
+        var harness = await HarnessAsync(db, "Show.S01E01.WEB-DL.720p.mkv", [file], "Show S01 WEB-DL 2160p",
+            failPlacementOnCall: 1, mediaProbe: probe);
+        await Assert.ThrowsAsync<IOException>(() => harness.Engine.ImportAsync(harness.Context, harness.Import, default));
+        var store = AcquisitionTestFactory.Store(db);
+        var resume = (await store.GetImportContextAsync(harness.Import.Id, default))!;
+        var profile = new BookAcquisitionProfileRow { Id = Guid.NewGuid(),
+            Kind = AcquisitionProfileKinds.For(EntityKind.VideoSeason), DisplayName = "Current profile", IsDefault = true,
+            AllowedQualities = [VideoQuality.Webdl2160p.ToCode()] };
+        db.BookAcquisitionProfiles.Add(profile);
+        await db.SaveChangesAsync();
+
+        await harness.ResumeEngine.ImportAsync(harness.Context, resume, default);
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, await StatusOf(db, harness.Import.Id));
+        Assert.Equal("payload-bytes", await File.ReadAllTextAsync(Path.Combine(harness.Import.ContentPath!, file)));
+        Assert.Equal(2, probe.Paths.Count);
+        profile.AllowedQualities = [VideoQuality.Webdl1080p.ToCode()];
+        await db.SaveChangesAsync();
+        var heldImport = (await store.GetImportContextAsync(harness.Import.Id, default))!;
+        Assert.True(await store.TryClaimTvImportCheckpointAsync(harness.Import.Id, heldImport.TvImportCheckpoint!, harness.Context.Job.Id, default));
+        await harness.ResumeEngine.ImportAsync(harness.Context, (await store.GetImportContextAsync(harness.Import.Id, default))!, default);
+
+        Assert.Equal(AcquisitionStatus.Importing, await StatusOf(db, harness.Import.Id));
+        Assert.Equal(3, probe.Paths.Count);
+        Assert.Equal("payload-bytes", await File.ReadAllTextAsync((await db.EntityFiles.SingleAsync(row => row.EntityId == harness.WantedEpisodeId)).Path));
+        Assert.Equal(resume.TvImportCheckpoint!.AttemptId,
+            (await store.GetImportContextAsync(harness.Import.Id, default))!.TvImportCheckpoint!.AttemptId);
+    }
+
+    [Fact]
+    public async Task AlreadyPlacedEpisodeFinishesRecoveryWithoutReprobingTheConsumedPayload() {
+        await using var db = CreateContext();
+        var probe = new NewEpisodeProbe(new(1200, 1000, 1920, 1080, 24, null, null, null, null, null, null));
+        var harness = await HarnessAsync(db, "Show.S01E01.WEB-DL.720p.mkv", ["Show.S01E02.WEB-DL.1080p.mkv"], "Show S01 WEB-DL 1080p",
+            failMaterialization: true, mediaProbe: probe);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => harness.Engine.ImportAsync(harness.Context, harness.Import, default));
+        Assert.Single(probe.Paths);
+        var store = AcquisitionTestFactory.Store(db);
+        var resume = (await store.GetImportContextAsync(harness.Import.Id, default))!;
+        probe.Resolve = _ => throw new InvalidOperationException("Placed files must not be treated as pending payloads");
+
+        await harness.ResumeEngine.ImportAsync(harness.Context, resume, default);
+
+        Assert.Single(probe.Paths);
+        Assert.Equal("payload-bytes", await File.ReadAllTextAsync((await db.EntityFiles.SingleAsync(row => row.EntityId == harness.WantedEpisodeId)).Path));
+    }
+
+    [Fact]
+    public async Task NewMonitoredExtraUsesItsOwnSeasonsProfile() {
+        await using var db = CreateContext();
+        var probe = new NewEpisodeProbe(new(1200, 1000, 1920, 1080, 24, null, null, null, null, null, null));
+        const string extra = "Show.S02E03.Hidden.Garden.WEB-DL.1080p.mkv";
+        var harness = await HarnessAsync(db, "Show.S01E01.WEB-DL.720p.mkv", ["Show.S01E02.WEB-DL.1080p.mkv", extra], "Show S01 WEB-DL 1080p", mediaProbe: probe);
+        var season = AddWantedEntity(db, EntityKind.VideoSeason.ToCode(), harness.SeriesId, 2);
+        var episode = AddWantedEntity(db, EntityKind.VideoEpisode.ToCode(), season, 3);
+        db.Entities.Local.Single(row => row.Id == episode).Title = "Hidden Garden";
+        var profile = new BookAcquisitionProfileRow { Id = Guid.NewGuid(),
+            Kind = AcquisitionProfileKinds.For(EntityKind.VideoSeason), DisplayName = "Extra season profile", IsDefault = false,
+            AllowedQualities = [VideoQuality.Webdl2160p.ToCode()] };
+        db.BookAcquisitionProfiles.Add(profile);
+        await db.SaveChangesAsync();
+        var monitor = await new EfMonitorStore(db).StartForEntityAsync(season, EntityKind.VideoSeason, "Season 2", null, null, default);
+        (await db.Monitors.SingleAsync(row => row.Id == monitor.Id)).ProfileId = profile.Id;
+        await db.SaveChangesAsync();
+
+        await harness.Engine.ImportAsync(harness.Context, harness.Import, default);
+
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, await StatusOf(db, harness.Import.Id));
+        Assert.True(File.Exists(Path.Combine(harness.Import.ContentPath!, extra)));
+        Assert.False(await db.EntityFiles.AnyAsync(row => row.EntityId == episode && row.Role == EntityFileRole.Source));
+        profile.AllowedQualities = [VideoQuality.Webdl1080p.ToCode()];
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+        var heldImport = (await store.GetImportContextAsync(harness.Import.Id, default))!;
+        Assert.True(await store.TryClaimTvImportCheckpointAsync(harness.Import.Id, heldImport.TvImportCheckpoint!, harness.Context.Job.Id, default));
+        await harness.ResumeEngine.ImportAsync(harness.Context, (await store.GetImportContextAsync(harness.Import.Id, default))!, default);
+        Assert.True(await db.EntityFiles.AnyAsync(row => row.EntityId == episode && row.Role == EntityFileRole.Source));
+    }
 
     [Theory]
     [InlineData(true, false, 2)]
@@ -1379,7 +1539,8 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         bool autoGenerateMetadata = false,
         bool enableMissingFallback = false,
         Action? beforeCheckpoint = null,
-        IMediaUpgradePayloadInspector? upgradeInspector = null) {
+        IMediaUpgradePayloadInspector? upgradeInspector = null,
+        IMediaProbe? mediaProbe = null) {
         var libraryRoot = Directory.CreateDirectory(Path.Combine(_workRoot, "library")).FullName;
         var seriesFolder = Directory.CreateDirectory(Path.Combine(libraryRoot, "Show (2008)")).FullName;
         var seasonFolder = Directory.CreateDirectory(Path.Combine(seriesFolder, deletedSeason ? "Season 01" : "S01")).FullName;
@@ -1517,6 +1678,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
                     Resolution(candidate) ?? Resolution(releaseTitle) ?? 720,
                     false, false, 1200, 1200)
             },
+            mediaProbe ?? new NewEpisodeProbe(new(1200, 1000, 3840, 2160, 24, null, null, null, null, null, null)),
             monitorStore);
 
         static int? Resolution(string title) => MediaQualityLadder.VideoResolutionTierOf(VideoQualityDetection.Detect(title).ToCode());
@@ -1597,6 +1759,18 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
 
     private static PrismediaDbContext CreateContext() =>
         new(new DbContextOptionsBuilder<PrismediaDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+
+    private sealed class NewEpisodeProbe(VideoProbeData? video) : IMediaProbe {
+        public List<string> Paths { get; } = [];
+        public Func<string, VideoProbeData?>? Resolve { get; set; }
+        public Task<VideoProbeData?> ProbeVideoAsync(string path, CancellationToken token) {
+            Paths.Add(path);
+            return Task.FromResult(Resolve is null ? video : Resolve(path));
+        }
+        public Task<AudioProbeData?> ProbeAudioAsync(string path, CancellationToken token) => throw new NotSupportedException();
+        public Task<ImageProbeData?> ProbeImageAsync(string path, CancellationToken token) => throw new NotSupportedException();
+        public Task<IReadOnlyList<SubtitleStreamData>> ProbeSubtitleStreamsAsync(string path, CancellationToken token) => throw new NotSupportedException();
+    }
 
     private sealed class MeasuredUpgradeInspector(MediaUpgradePayloadInspection? result) : IMediaUpgradePayloadInspector {
         public int Calls { get; private set; }

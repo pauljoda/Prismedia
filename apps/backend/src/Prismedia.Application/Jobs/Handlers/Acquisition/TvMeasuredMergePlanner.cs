@@ -83,8 +83,7 @@ internal sealed class TvMeasuredMergePlanner(IMediaUpgradePayloadInspector inspe
     private static (VideoQuality Quality, int Revision) Claim(TvPlanUnit unit, SelectedRelease? selected) {
         // A heterogeneous pack's highest-quality filename says nothing about the other files.
         var fileName = Path.GetFileNameWithoutExtension(unit.SourceRelativePath);
-        var quality = VideoQualityDetection.Detect(fileName);
-        if (quality == VideoQuality.Unknown && selected is not null) quality = VideoQualityDetection.Detect(selected.Title);
+        var quality = VideoPayloadProfileValidation.ClaimedQuality(unit.SourceRelativePath, selected?.Title);
         return (quality, Math.Max(ReleaseRevisionDetection.Detect(fileName),
             selected is null ? 1 : ReleaseRevisionDetection.Detect(selected.Title)));
     }

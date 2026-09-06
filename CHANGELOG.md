@@ -42,6 +42,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- New TV episode files are now inspected before a pack starts placement, with per-file quality and destination-season profile checks that also apply when retrying pending files.
+
 - Automatic episode mapping repair now follows canonical season numbers, including specials, and retains conflicting season ownership for review.
 
 - TV specials in season zero now support import recovery and confident cross-season matching, importing monitored specials while retaining unmonitored extras for review.
