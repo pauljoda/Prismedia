@@ -114,7 +114,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
                     BeforeEnqueue = () => throw new IOException("Interrupted after the filesystem swap, before the lifecycle commit")
                 };
                 var interruption = await Record.ExceptionAsync(() => RunAsync(db, queue,
-                    new OwnedFileReplacer(new MergedImportTestSupport.NoRecycleBin(), NullLogger<OwnedFileReplacer>.Instance), childId,
+                    new OwnedFileReplacer(new MergedImportTestSupport.NoRecycleBin(), NullLogger<OwnedFileReplacer>.Instance, new TestVideoPayloadVerifier()), childId,
                     new FakeMediaUpgradePayloadInspector(new(720, 1080, false, false, 1200, 1200))));
                 Assert.True(interruption is IOException, interruption?.ToString() ?? (await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == childId)).StatusMessage);
             }
@@ -139,7 +139,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
                 Assert.True(await store.TryTransitionStatusAsync(childId, [AcquisitionStatus.Failed], AcquisitionStatus.Downloaded, "Retry", default));
                 var queue = new RecordingJobQueue();
                 await RunAsync(db, queue,
-                    new OwnedFileReplacer(new MergedImportTestSupport.NoRecycleBin(), NullLogger<OwnedFileReplacer>.Instance), childId,
+                    new OwnedFileReplacer(new MergedImportTestSupport.NoRecycleBin(), NullLogger<OwnedFileReplacer>.Instance, new TestVideoPayloadVerifier()), childId,
                     new FakeMediaUpgradePayloadInspector(new(720, 1080, false, false, 1200, 1200)));
                 if (kind == EntityKind.Book) Assert.Equal(BookSourceTier.Retail, (await db.Acquisitions.FindAsync(parentId))!.OwnedSourceTier);
                 else Assert.Equal(VideoQuality.Webdl1080p.ToCode(), (await db.Acquisitions.FindAsync(parentId))!.OwnedMediaQuality);

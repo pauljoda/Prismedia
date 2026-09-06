@@ -525,6 +525,7 @@ public static class DependencyInjection {
         services.AddScoped<IImportFileMover, ImportFileMover>();
         services.AddScoped<IOwnedFileReplacer, OwnedFileReplacer>();
         services.AddScoped<IMediaUpgradePayloadInspector, MediaUpgradePayloadInspector>();
+        services.AddScoped<IVideoPayloadVerifier, VideoPayloadVerifier>();
         services.AddScoped<IAcquisitionHintApplier>(provider => new AcquisitionHintApplier(
             provider.GetRequiredService<PrismediaDbContext>(),
             provider.GetRequiredService<IEntityExternalIdentityStore>(),

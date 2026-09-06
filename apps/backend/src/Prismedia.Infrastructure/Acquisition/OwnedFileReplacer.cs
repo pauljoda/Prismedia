@@ -24,6 +24,7 @@ namespace Prismedia.Infrastructure.Acquisition;
 public sealed class OwnedFileReplacer(
     IRecycleBin recycleBin,
     ILogger<OwnedFileReplacer> logger,
+    IVideoPayloadVerifier videoVerifier,
     ISubtitleSidecarDiscovery? subtitleSidecars = null) : IOwnedFileReplacer {
     public Task<OwnedFileReplaceResult> ReplaceAsync(
         string ownedFolder,
@@ -126,6 +127,9 @@ public sealed class OwnedFileReplacer(
             return OwnedFileReplaceResult.Failed("A previous replacement candidate is still staged beside the owned file. Resume or review that attempt before replacing it.");
         }
         var stagedIncoming = false;
+        if (isVideo && await videoVerifier.FindFailureAsync(incoming, cancellationToken) is { } verificationFailure) {
+            return OwnedFileReplaceResult.Failed(verificationFailure);
+        }
         IReadOnlyList<StagedSubtitleSidecar> stagedSubtitleSidecars;
         try {
             stagedSubtitleSidecars = await StageSubtitleSidecarsAsync(

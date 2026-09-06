@@ -666,7 +666,7 @@ internal static class ImportRootResolution {
 /// moved, copied, or hardlinked before the completed download is cleaned up or left to seed.
 /// </summary>
 [AcquisitionStrategy(AcquisitionNamingFamily.Movie)]
-public sealed class MovieAcquisitionImportEngine(
+public sealed partial class MovieAcquisitionImportEngine(
     IAcquisitionStore acquisitions,
     IBookAcquisitionProfileStore profiles,
     ILibraryScanRootPersistence roots,
@@ -678,7 +678,8 @@ public sealed class MovieAcquisitionImportEngine(
     IAcquisitionHistoryStore history,
     IImportedEntityMaterializer materializer,
     IMediaProbe mediaProbe,
-    ILogger<MovieAcquisitionImportEngine> logger) : IAcquisitionImportEngine {
+    ILogger<MovieAcquisitionImportEngine> logger,
+    IVideoPayloadVerifier videoVerifier) : IAcquisitionImportEngine {
 
     public async Task ImportAsync(JobContext context, AcquisitionImportContext import, CancellationToken cancellationToken) {
         var profile = await profiles.GetImportProfileAsync(import.ProfileId, EntityKind.Movie, cancellationToken);
@@ -705,6 +706,10 @@ public sealed class MovieAcquisitionImportEngine(
                     cancellationToken);
                 return;
             }
+
+            if (!await VerifyVideoFilesAsync(context, import.Id, durableCheckpoint.Units.Where(unit => unit.IsMedia)
+                    .Select(unit => File.Exists(unit.SourceAbsolutePath) ? unit.SourceAbsolutePath
+                        : unit.FinalPath ?? unit.TargetAbsolutePath), cancellationToken)) return;
 
             var resumed = await ImportPlacementExecution.ExecuteAsync(
                 acquisitions,
@@ -758,6 +763,8 @@ public sealed class MovieAcquisitionImportEngine(
             await acquisitions.SetStatusAsync(import.Id, AcquisitionStatus.ManualImportRequired, profileHold, cancellationToken);
             return;
         }
+
+        if (!await VerifyVideoFilesAsync(context, import.Id, [primaryPath], cancellationToken)) return;
 
         // A movie that already lives on disk merges into its existing folder (or safely holds an owned-file
         // upgrade for review), never a template-derived parallel folder — that would mint a duplicate movie.
@@ -1062,6 +1069,7 @@ public sealed class TvAcquisitionImportEngine(
     ILogger<TvAcquisitionImportEngine> logger,
     IMediaUpgradePayloadInspector mediaUpgradeInspector,
     IMediaProbe mediaProbe,
+    IVideoPayloadVerifier videoVerifier,
     IMonitorStore? monitors = null,
     ITvEpisodeCatalogEvidenceSource? catalogEvidence = null) : IAcquisitionImportEngine {
 
@@ -1502,8 +1510,8 @@ public sealed class TvAcquisitionImportEngine(
             }
         }
 
-        if (await new TvNewFileValidation(mediaProbe, profiles, targets, monitors)
-                .ValidateAsync(import, payload, checkpoint, selected, cancellationToken) is { } newFileHold) {
+        if (await new TvNewFileValidation(mediaProbe, profiles, targets, monitors, videoVerifier)
+                .ValidateAsync(context, import, payload, checkpoint, selected, cancellationToken) is { } newFileHold) {
             await acquisitions.SetStatusAsync(import.Id, AcquisitionStatus.ManualImportRequired, newFileHold, cancellationToken);
             return;
         }

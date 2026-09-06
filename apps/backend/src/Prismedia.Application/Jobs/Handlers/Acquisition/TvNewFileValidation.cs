@@ -6,9 +6,9 @@ namespace Prismedia.Application.Jobs.Handlers;
 
 /// <summary>Inspects every pending new episode before a checkpoint places any files, including on retry.</summary>
 internal sealed class TvNewFileValidation(IMediaProbe probe, IBookAcquisitionProfileStore profiles,
-    IImportTargetIndex targets, IMonitorStore? monitors) {
+    IImportTargetIndex targets, IMonitorStore? monitors, IVideoPayloadVerifier verifier) {
     /// <summary>Returns a review reason for unreadable or disallowed new files; installed units and replacements keep their own recovery rules.</summary>
-    public async Task<string?> ValidateAsync(AcquisitionImportContext import, DownloadPayload? payload,
+    public async Task<string?> ValidateAsync(JobContext context, AcquisitionImportContext import, DownloadPayload? payload,
         TvImportCheckpoint checkpoint, SelectedRelease? selected, CancellationToken token) {
         var pending = checkpoint.Units.Where(unit => unit.PreviousFilePath is null && !unit.AdoptedExistingTarget
             && (unit.FinalPath is null || !File.Exists(unit.FinalPath)))
@@ -44,6 +44,7 @@ internal sealed class TvNewFileValidation(IMediaProbe probe, IBookAcquisitionPro
             }
         }
 
+        var verified = 0;
         foreach (var (unit, path) in pending) {
             var video = await probe.ProbeVideoAsync(path!, token);
             if (video is not { Width: > 0, Height: > 0, DurationSeconds: > 0 }
@@ -54,6 +55,10 @@ internal sealed class TvNewFileValidation(IMediaProbe probe, IBookAcquisitionPro
                     VideoPayloadProfileValidation.ClaimedQuality(unit.SourceRelativePath, selected?.Title).ToCode(),
                     rulesBySeason[unit.SeasonNumber]) is { } reason) {
                 return $"{Path.GetFileName(unit.SourceRelativePath)}: {reason}";
+            }
+            await context.ReportProgressAsync(30, $"Verifying episode {++verified} of {pending.Length}", token);
+            if (await verifier.FindFailureAsync(path!, token) is { } failure) {
+                return $"{Path.GetFileName(unit.SourceRelativePath)}: {failure}";
             }
         }
         return null;

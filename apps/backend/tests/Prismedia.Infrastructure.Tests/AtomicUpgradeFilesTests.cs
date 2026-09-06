@@ -187,7 +187,7 @@ public sealed class AtomicUpgradeFilesTests {
     private sealed class Fixture(IRecycleBin? bin = null) : IDisposable {
         private readonly string root = Directory.CreateTempSubdirectory("atomic-replacement-").FullName;
         public AtomicUpgradeFiles Files { get; } = new(new OwnedFileReplacer(new MergedImportTestSupport.NoRecycleBin(),
-            NullLogger<OwnedFileReplacer>.Instance), bin ?? new MergedImportTestSupport.NoRecycleBin());
+            NullLogger<OwnedFileReplacer>.Instance, new TestVideoPayloadVerifier()), bin ?? new MergedImportTestSupport.NoRecycleBin());
         public async Task<AtomicUpgradeCheckpoint> PrepareAsync() {
             var owned = Path.Combine(root, "owned.epub");
             var incoming = Path.Combine(Directory.CreateDirectory(Path.Combine(root, "download")).FullName, "incoming.epub");

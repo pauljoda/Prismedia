@@ -29,6 +29,30 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
     private readonly string _workRoot = Directory.CreateTempSubdirectory("prismedia-tv-import-").FullName;
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CorruptDecodePreservesPendingEpisodesEvenWhenManuallySelected(bool manual) {
+        await using var db = CreateContext();
+        const string file = "Show.S01E02.WEB-DL.1080p.mkv";
+        var verifier = new TestVideoPayloadVerifier("The downloaded video could not be decoded completely.");
+        var harness = await HarnessAsync(db, "Show.S01E01.WEB-DL.720p.mkv", [file], "Show S01 WEB-DL 1080p",
+            videoVerifier: verifier);
+        if (manual) {
+            var store = AcquisitionTestFactory.Store(db);
+            var selected = (await store.GetSelectedReleaseAsync(harness.Import.Id, default))!;
+            await store.SetSelectedReleaseAsync(harness.Import.Id, selected with { ManualPick = true }, default);
+        }
+
+        await harness.Engine.ImportAsync(harness.Context, harness.Import, default);
+
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, await StatusOf(db, harness.Import.Id));
+        Assert.Single(verifier.Paths);
+        Assert.Equal("owned-bytes", await File.ReadAllTextAsync(harness.OwnedEpisodePath));
+        Assert.Equal("payload-bytes", await File.ReadAllTextAsync(Path.Combine(harness.Import.ContentPath!, file)));
+        Assert.False(await db.EntityFiles.AnyAsync(row => row.EntityId == harness.WantedEpisodeId && row.Role == EntityFileRole.Source));
+    }
+
+    [Theory]
     [InlineData(true, "unreadable", true)]
     [InlineData(false, "unreadable", true)]
     [InlineData(true, "invalid runtime", true)]
@@ -1540,7 +1564,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         bool enableMissingFallback = false,
         Action? beforeCheckpoint = null,
         IMediaUpgradePayloadInspector? upgradeInspector = null,
-        IMediaProbe? mediaProbe = null) {
+        IMediaProbe? mediaProbe = null, IVideoPayloadVerifier? videoVerifier = null) {
         var libraryRoot = Directory.CreateDirectory(Path.Combine(_workRoot, "library")).FullName;
         var seriesFolder = Directory.CreateDirectory(Path.Combine(libraryRoot, "Show (2008)")).FullName;
         var seasonFolder = Directory.CreateDirectory(Path.Combine(seriesFolder, deletedSeason ? "Season 01" : "S01")).FullName;
@@ -1647,10 +1671,10 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
                 ? new ThrowAfterReplacementStageReplacer()
                 : failAfterReplacementEvidence
                     ? new FailAfterReplacementEvidenceReplacer()
-                    : new OwnedFileReplacer(new MergedImportTestSupport.NoRecycleBin(), NullLogger<OwnedFileReplacer>.Instance);
+                    : new OwnedFileReplacer(new MergedImportTestSupport.NoRecycleBin(), NullLogger<OwnedFileReplacer>.Instance, new TestVideoPayloadVerifier());
         var resumeReplacer = new OwnedFileReplacer(
             new MergedImportTestSupport.NoRecycleBin(),
-            NullLogger<OwnedFileReplacer>.Instance);
+            NullLogger<OwnedFileReplacer>.Instance, new TestVideoPayloadVerifier());
         var scanGate = new VideoScanConcurrencyGate();
         var engine = CreateEngine(firstMaterializer, firstMover, firstReplacer);
         var resumeEngine = CreateEngine(realMaterializer, realMover, resumeReplacer);
@@ -1679,6 +1703,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
                     false, false, 1200, 1200)
             },
             mediaProbe ?? new NewEpisodeProbe(new(1200, 1000, 3840, 2160, 24, null, null, null, null, null, null)),
+            videoVerifier ?? new TestVideoPayloadVerifier(),
             monitorStore);
 
         static int? Resolution(string title) => MediaQualityLadder.VideoResolutionTierOf(VideoQualityDetection.Detect(title).ToCode());
