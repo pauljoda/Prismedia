@@ -21,11 +21,15 @@ public sealed class AcquisitionWorkTitlesTests {
     public void UnchangedWorkSpellingsDoNotCreateFallbackQueries(string title) =>
         Assert.Empty(AcquisitionWorkTitles.AccentFallbackQueryInputs(new AcquisitionSearchInput(Guid.NewGuid(), title, null, EntityKind.Movie)));
 
-    [Fact]
-    public void AccentVariantsHaveEqualWorkRelevance() {
-        var rules = BookAcquisitionRules.Default with { TargetTitle = "Café" };
-        var release = new IndexerRelease("Cafe 2024 1080p WEB-DL", 1000, null, null, DownloadProtocol.Usenet, "https://download.test/item", null, null, null, null, null);
-        Assert.Equal(ReleaseTitleRelevance.Score(release with { Title = "Café 2024 1080p WEB-DL" }, rules),
+    [Theory]
+    [InlineData("Café", "Cafe")]
+    [InlineData("Look Out!", "Look Out")]
+    [InlineData("Who's There?", "Whos There")]
+    [InlineData("“Falling Stars”", "Falling Stars")]
+    public void EquivalentTitleSpellingsHaveEqualWorkRelevance(string canonical, string variant) {
+        var rules = BookAcquisitionRules.Default with { TargetTitle = canonical };
+        var release = new IndexerRelease($"{variant} 2024 1080p WEB-DL", 1000, null, null, DownloadProtocol.Usenet, "https://download.test/item", null, null, null, null, null);
+        Assert.Equal(ReleaseTitleRelevance.Score(release with { Title = $"{canonical} 2024 1080p WEB-DL" }, rules),
             ReleaseTitleRelevance.Score(release, rules));
     }
 

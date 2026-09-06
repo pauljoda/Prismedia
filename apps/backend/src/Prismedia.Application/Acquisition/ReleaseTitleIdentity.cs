@@ -169,7 +169,8 @@ public static partial class ReleaseTitleIdentity {
         }
 
         var tokens = new List<string>();
-        foreach (var token in ReleaseTitleText.Tokens(value.Replace("&", " and "))) {
+        foreach (var token in ReleaseTitleText.Tokens(
+                     ReleaseTitleText.NormalizeIdentityPunctuation(value.Replace("&", " and ")))) {
             var folded = NormalizeNumericToken(FoldDiacritics(token));
             if (folded.Length > 0 && !IgnoredWords.Contains(folded)) {
                 tokens.Add(folded);

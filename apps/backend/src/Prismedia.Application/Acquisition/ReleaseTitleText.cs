@@ -45,6 +45,9 @@ public static partial class ReleaseTitleText {
             : normalized.Split(' ', StringSplitOptions.RemoveEmptyEntries);
     }
 
+    /// <summary>Separates sentence punctuation around words for work and episode identity comparisons.</summary>
+    internal static string NormalizeIdentityPunctuation(string value) => WordPunctuation().Replace(value, " ");
+
     /// <summary>Reads raw tokens with their end offsets using the same separator vocabulary as normalization.</summary>
     internal static IEnumerable<(string Value, int End)> TokenSegments(string value) {
         var start = 0;
@@ -76,6 +79,11 @@ public static partial class ReleaseTitleText {
 
     [GeneratedRegex(@"[\s._\-:;()\[\]{}+,]+", RegexOptions.CultureInvariant)]
     private static partial Regex SeparatorRuns();
+
+    // Work/episode identity tolerates sentence punctuation, but strict audio-track reconciliation
+    // retains it. Requiring adjacent words also preserves symbol-only names such as "!!!".
+    [GeneratedRegex(@"(?<=[\p{L}\p{N}])[!?""“”]+|[!?""“”]+(?=[\p{L}\p{N}])", RegexOptions.CultureInvariant)]
+    private static partial Regex WordPunctuation();
 
     [GeneratedRegex(@"\s+", RegexOptions.CultureInvariant)]
     private static partial Regex WhitespaceRuns();

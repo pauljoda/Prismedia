@@ -31,6 +31,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Movie and episode title matching tolerates sentence punctuation and quotation marks around words while preserving meaningful numbers and symbol-only names.
+
 - Equally ranked acquisition releases keep a stable order across review and automatic selection.
 
 - Large TV packs reuse episode evidence across files and alignment passes, reducing repeated parsing and memory allocation during import planning.

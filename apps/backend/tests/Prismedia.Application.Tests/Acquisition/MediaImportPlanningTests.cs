@@ -940,6 +940,18 @@ public sealed class MediaImportMergeTests {
 /// </summary>
 public sealed class TvEpisodeTitleAlignmentTests {
     [Theory]
+    [InlineData("Show SE2 EP083 - Look Out.avi", "Look Out!")]
+    [InlineData("Show SE2 EP083 - Look Out!.avi", "Look Out")]
+    [InlineData("Show SE2 EP083 - Whos There.avi", "Who's There?")]
+    public void TitlePunctuationCanResolveAnEpisodeWithoutAssumingItsAbsoluteNumber(string filename, string title) {
+        var plan = TvImportPlanBuilder.PlanUnits([File(filename)], "Show", seasonNumber: 2,
+            episodeNumber: null, episodeTitles: [new(1, title)]);
+
+        Assert.False(plan.Blocked);
+        Assert.Equal(1, Assert.Single(plan.Units).Episode);
+    }
+
+    [Theory]
     [InlineData("Show.S03E01.mkv")]
     [InlineData("Show.S03E01-E02.mkv")]
     public void ExplicitOtherSeasonCannotFallBackToTheRequestedEpisode(string filename) {

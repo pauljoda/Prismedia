@@ -11,6 +11,19 @@ namespace Prismedia.Application.Tests.Acquisition;
 /// </summary>
 public sealed class ReleaseTitleIdentityTests {
     [Theory]
+    [InlineData("Look.Out.2020.1080p.WEB-DL", "Look Out!", true)]
+    [InlineData("Whos.There.2020.1080p.WEB-DL", "Who's There?", true)]
+    [InlineData("\"Falling.Stars\".2020.1080p.WEB-DL", "Falling Stars", true)]
+    [InlineData("Falling.Stars.2020.1080p.WEB-DL", "“Falling Stars”", true)]
+    [InlineData("Look.Out.Again.2020.1080p.WEB-DL", "Look Out!", false)]
+    [InlineData("Look.Out.2.2020.1080p.WEB-DL", "Look Out!", false)]
+    [InlineData("!!!.2020.FLAC", "!!!", true)]
+    [InlineData("???.2020.FLAC", "!!!", false)]
+    public void SentencePunctuationDoesNotChangeWordsOrEraseSymbolOnlyTitles(string release, string target, bool matched) {
+        Assert.Equal(matched, ReleaseTitleIdentity.Match(release, target).TitleMatched);
+    }
+
+    [Theory]
     [InlineData("[REC].2007.1080p.BluRay", "[REC]", true)]
     [InlineData("[ReleaseGroup] [REC].2007.1080p.BluRay", "[REC]", true)]
     [InlineData("ReleaseGroup Example.2007.1080p.BluRay", "Example", false)]
