@@ -211,13 +211,22 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
                 return;
             }
 
+            var comparableOwnedLabel = inspection is null
+                || MediaQualityLadder.VideoResolutionTierOf(target.ParentOwnedMediaQuality) == inspection.OwnedResolutionTier;
+            if (inspection is { } facts) {
+                higherQuality = facts.CandidateResolutionTier > facts.OwnedResolutionTier
+                    || comparableOwnedLabel && higherQuality;
+                sameQualityBetterRevision &= comparableOwnedLabel;
+                sameQualityBetterFormatScore &= comparableOwnedLabel;
+            }
             var actualResolutionDowngrade = inspection is { } measured
                 && measured.CandidateResolutionTier < measured.OwnedResolutionTier;
             var claimedResolution = MediaQualityLadder.VideoResolutionTierOf(candidateCode);
             var payloadContradictsClaimedResolution = claimedResolution is { } claimed
                 && inspection is { } inspected
                 && inspected.CandidateResolutionTier < claimed;
-            var sameQualityAddsSubtitles = candidatePosition == ownedPosition
+            var sameQualityAddsSubtitles = (comparableOwnedLabel ? candidatePosition == ownedPosition
+                    : inspection is { } comparable && comparable.CandidateResolutionTier == comparable.OwnedResolutionTier)
                 && !target.ParentHasSubtitles
                 && inspection is {
                     OwnedHasSubtitles: false,

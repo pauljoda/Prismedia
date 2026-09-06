@@ -11,6 +11,52 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EfAcquisitionStoreTests {
     [Theory]
+    [InlineData("current", false)]
+    [InlineData("current", true)]
+    [InlineData("stale size", false)]
+    [InlineData("detached source", false)]
+    [InlineData("multiple sources", false)]
+    [InlineData("failed probe", false)]
+    [InlineData("missing dimensions", false)]
+    public async Task UpgradeSearchUsesOnlyTheCurrentSourcesMeasuredResolution(string evidence, bool postgres) {
+        await using var database = postgres ? await PostgresTestDatabase.CreateAsync() : null;
+        await using var db = database?.CreateContext() ?? CreateContext();
+        var entityId = AddWantedEntity(db, EntityKind.Movie.ToCode(), "Movie");
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+        var parent = await store.CreateAsync(new AcquisitionMetadata("Movie", null, null, null, null, null,
+            Kind: EntityKind.Movie, EntityId: entityId), default);
+        var child = await store.CreateAsync(new AcquisitionMetadata("Movie", null, null, null, null, null,
+            Kind: EntityKind.Movie), default);
+        var baseline = await db.Acquisitions.SingleAsync(row => row.Id == parent.Id);
+        baseline.Status = AcquisitionStatus.Imported;
+        baseline.OwnedMediaQuality = VideoQuality.Unknown.ToCode();
+        (await db.Acquisitions.SingleAsync(row => row.Id == child.Id)).UpgradeOfAcquisitionId = parent.Id;
+        var now = DateTimeOffset.UtcNow;
+        var sourceId = Guid.NewGuid();
+        db.EntityFiles.Add(new EntityFileRow { Id = sourceId, EntityId = entityId, Role = EntityFileRole.Source,
+            Path = "/library/Movie/movie.mkv", SizeBytes = evidence == "stale size" ? 1001 : 1000,
+            CreatedAt = now, UpdatedAt = now });
+        await db.SaveChangesAsync();
+        db.MediaSources.Add(new MediaSourceRow { Id = Guid.NewGuid(), EntityId = entityId,
+            EntityFileId = evidence == "detached source" ? Guid.NewGuid() : sourceId,
+            Path = "/library/Movie/movie.mkv", SizeBytes = 1000, Width = 1920,
+            Height = evidence == "missing dimensions" ? null : 800, CreatedAt = now, UpdatedAt = now });
+        if (evidence == "multiple sources") {
+            db.EntityFiles.Add(new EntityFileRow { Id = Guid.NewGuid(), EntityId = entityId,
+                Role = EntityFileRole.Source, Path = "/library/Movie/another.mkv", SizeBytes = 1000, CreatedAt = now, UpdatedAt = now });
+        }
+        if (evidence == "failed probe") db.EntityTechnical.Add(new EntityTechnicalRow { EntityId = entityId, ProbeFailedAt = now, UpdatedAt = now });
+        await db.SaveChangesAsync();
+
+        var owned = await store.GetUpgradeOwnedQualityAsync(child.Id, default);
+
+        Assert.NotNull(owned);
+        Assert.Equal(evidence == "current" ? 1080 : (int?)null, owned.VideoResolutionTier);
+        Assert.Equal(VideoQuality.Unknown.ToCode(), owned.MediaQualityCode);
+    }
+
+    [Theory]
     [InlineData(false, 1)]
     [InlineData(false, 2)]
     [InlineData(true, 1)]

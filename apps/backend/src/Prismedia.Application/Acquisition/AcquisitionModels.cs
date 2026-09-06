@@ -68,6 +68,9 @@ public sealed record BookAcquisitionRules(
     /// <summary>Owned media quality code for an upgrade search (set per search by the runner, like the book owned rank).</summary>
     public string? OwnedMediaQuality { get; init; }
 
+    /// <summary>Resolution measured from the current owned video, independent of its filename or import label.</summary>
+    public int? OwnedVideoResolutionTier { get; init; }
+
     /// <summary>
     /// Owned media revision for an upgrade search (set per search by the runner from the parent's stored
     /// revision, like <see cref="OwnedMediaQuality"/>). Under <see cref="ProperDownloadPolicy.PreferAndUpgrade"/>
@@ -444,7 +447,10 @@ public sealed record UpgradeOwnedQuality(
     string? MediaQualityCode,
     int MediaRevision = 1,
     int FormatScore = 0,
-    bool HasSubtitles = false);
+    bool HasSubtitles = false) {
+    /// <summary>Resolution measured from the current single owned video; null when its source evidence is ambiguous or unavailable.</summary>
+    public int? VideoResolutionTier { get; init; }
+}
 
 /// <summary>
 /// Everything the upgrade-replace job needs to swap a downloaded upgrade child's file in for the owned copy:

@@ -257,7 +257,19 @@ public sealed class MediaUpgradeSpecification(EntityKind kind) : IReleaseSpecifi
         }
 
         var owned = MediaQualityLadder.PositionOf(kind, rules.OwnedMediaQuality);
-        var (_, candidate) = MediaQualityLadder.Detect(kind, release.Title);
+        var (candidateCode, candidate) = MediaQualityLadder.Detect(kind, release.Title);
+        if (MediaQualityLadder.IsVideoKind(kind) && rules.OwnedVideoResolutionTier is > 0 and var measured) {
+            var candidateResolution = MediaQualityLadder.VideoResolutionTierOf(candidateCode);
+            if (candidateResolution is null || candidateResolution < measured) return Reason;
+            if (MediaQualityLadder.VideoResolutionTierOf(rules.OwnedMediaQuality) != measured) {
+                // An unknown or stale source label cannot justify a same-resolution source/revision gain.
+                // Subtitle-only exploration needs a concrete hint before spending a download on it.
+                return candidateResolution > measured
+                    || candidateResolution == measured && rules.OwnedHasSubtitles == false
+                        && ReleaseSubtitleDetection.HasSubtitleHint(release.Title)
+                    ? null : Reason;
+            }
+        }
         if (candidate > owned) {
             return null;
         }

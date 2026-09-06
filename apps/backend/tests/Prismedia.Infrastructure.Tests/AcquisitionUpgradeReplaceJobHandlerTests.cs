@@ -18,6 +18,26 @@ namespace Prismedia.Infrastructure.Tests;
 /// (e.g. no longer an upgrade, or the replacer refused) leaves the owned book untouched and counts barren.
 /// </summary>
 public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
+    [Theory]
+    [InlineData(VideoQuality.Unknown, 1080, 1080, false, false)]
+    [InlineData(VideoQuality.Unknown, 720, 1080, false, true)]
+    [InlineData(VideoQuality.Webdl720p, 1080, 1080, false, false)]
+    [InlineData(VideoQuality.Bluray2160p, 720, 1080, false, true)]
+    [InlineData(VideoQuality.Unknown, 1080, 1080, true, true)]
+    public async Task ReplacementUsesMeasuredDominanceWhenTheOwnedQualityLabelIsUnknownOrStale(
+        VideoQuality ownedLabel, int ownedResolution, int candidateResolution, bool addsSubtitles, bool replace) {
+        await using var db = CreateContext();
+        var (_, childId, _) = await SeedMediaAsync(db, EntityKind.Movie, ownedLabel.ToCode(),
+            addsSubtitles ? "Movie 2020 1080p WEB-DL MULTISUB" : "Movie 2020 1080p WEB-DL");
+        var replacer = new FakeReplacer(OwnedFileReplaceResult.Ok("/library/Movie (2020)/Movie (2020).mkv", BookFormatTier.Unknown));
+
+        await RunAsync(db, new RecordingJobQueue(), replacer, childId,
+            new FakeMediaUpgradePayloadInspector(new(ownedResolution, candidateResolution,
+                false, addsSubtitles, 7200, 7200)));
+
+        Assert.Equal(replace, replacer.Called);
+    }
+
     [Fact]
     public async Task SuccessfulUpgradePreservesCleanupOwnershipWhenItsDownloaderIsUnavailable() {
         await using var db = CreateContext();

@@ -42,6 +42,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Upgrade searches and automatic grabs check the owned video’s measured resolution, avoiding downloads justified only by an unknown or stale quality label. Replacement rechecks the same measured improvement and verified subtitle gains.
+
 - Movie and episode monitors can recover a lost link to a matching completed import and resume the normal quality-profile upgrade checks while preserving their files and user choices.
 
 - Video upgrade checks reuse a single probe for picture, audio, and text-subtitle evidence per file, reducing repeated inspection work for large season packs.

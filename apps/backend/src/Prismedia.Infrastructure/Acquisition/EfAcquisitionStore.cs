@@ -709,7 +709,8 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
 
         // The parent carries owned quality in its kind's vocabulary; the child inherits the parent's kind, so a
         // media parent populates the ladder code and a book parent the source/format rank. Reading BOTH and
-        // discriminating by kind keeps this one query, symmetric with CreateUpgradeChildAsync copying the parent.
+        // discriminating by kind preserves the same parent snapshot used by CreateUpgradeChildAsync.
+        // Current source-linked dimensions below supplement that recorded quality without rewriting it.
         var parent = await db.Acquisitions.AsNoTracking()
             .Where(row => row.Id == id)
             .Select(row => new { row.Kind, row.EntityId, row.OwnedSourceTier, row.OwnedFormatTier, row.OwnedMediaQuality, row.OwnedMediaRevision, row.OwnedFormatScore })
@@ -722,7 +723,10 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             && parent.EntityId is { } entityId
             && await db.EntitySubtitles.AsNoTracking().AnyAsync(row => row.EntityId == entityId, cancellationToken);
         return MediaQualityLadder.IsUpgradeCapableKind(parent.Kind) || MediaQualityLadder.IsAudioKind(parent.Kind)
-            ? new UpgradeOwnedQuality(null, parent.OwnedMediaQuality, parent.OwnedMediaRevision, parent.OwnedFormatScore, hasSubtitles)
+            ? new UpgradeOwnedQuality(null, parent.OwnedMediaQuality, parent.OwnedMediaRevision, parent.OwnedFormatScore, hasSubtitles) {
+                VideoResolutionTier = MediaQualityLadder.IsVideoKind(parent.Kind) && parent.EntityId is { } ownerId
+                    ? await GetOwnedVideoResolutionAsync(ownerId, cancellationToken) : null
+            }
             : new UpgradeOwnedQuality(new BookQualityRank(parent.OwnedSourceTier, parent.OwnedFormatTier), null, FormatScore: parent.OwnedFormatScore);
     }
 

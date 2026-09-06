@@ -10,8 +10,11 @@ public static class VideoPayloadProfileValidation {
     public const double MinimumAutomaticRuntimeRatio = 0.8;
 
     /// <summary>Resolution tier measured from the long edge, allowing the normal letterbox crop of theatrical releases.</summary>
-    public static int? ResolutionTier(VideoProbeData? video) => video is { Width: > 0, Height: > 0 }
-        ? Math.Max(video.Width.Value, video.Height.Value) switch {
+    public static int? ResolutionTier(VideoProbeData? video) => ResolutionTier(video?.Width, video?.Height);
+
+    /// <summary>Maps measured stream dimensions to the same cropped-video resolution tier used during import.</summary>
+    public static int? ResolutionTier(int? width, int? height) => width is > 0 && height is > 0
+        ? Math.Max(width.Value, height.Value) switch {
             >= 3_000 => 2160, >= 1_600 => 1080, >= 1_100 => 720, _ => 480
         } : null;
 

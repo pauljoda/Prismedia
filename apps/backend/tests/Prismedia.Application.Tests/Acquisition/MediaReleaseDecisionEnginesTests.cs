@@ -9,6 +9,52 @@ namespace Prismedia.Application.Tests.Acquisition;
 /// the shared acceptance gates.
 /// </summary>
 public sealed class MediaReleaseDecisionEnginesTests {
+    [Fact]
+    public void SharedSearchAndGrabContextCarriesMeasuredOwnershipIntoTheUpgradeGate() {
+        var input = new AcquisitionSearchInput(Guid.NewGuid(), "Movie", null, EntityKind.Movie, null);
+        var owned = new UpgradeOwnedQuality(null, VideoQuality.Unknown.ToCode()) { VideoResolutionTier = 1080 };
+        var rules = AcquisitionRuleContext.Apply(BookAcquisitionRules.Default, input, owned,
+            ProperDownloadPolicy.PreferAndUpgrade, [DownloadProtocol.Torrent]);
+
+        var rejection = new MediaUpgradeSpecification(EntityKind.Movie).Evaluate(Release("Movie 720p WEB-DL", seeders: 10), rules);
+
+        Assert.Equal(ReleaseRejectionReason.NotAnUpgrade, rejection);
+    }
+
+    [Theory]
+    [InlineData(VideoQuality.Unknown, 1080, "Movie 720p WEB-DL", false)]
+    [InlineData(VideoQuality.Unknown, 1080, "Movie 1080p WEB-DL", false)]
+    [InlineData(VideoQuality.Unknown, 1080, "Movie 2160p WEB-DL", true)]
+    [InlineData(VideoQuality.Webdl720p, 1080, "Movie 1080p BluRay", false)]
+    [InlineData(VideoQuality.Bluray2160p, 720, "Movie 1080p WEB-DL", true)]
+    [InlineData(VideoQuality.Webdl1080p, 1080, "Movie 1080p BluRay", true)]
+    public void MeasuredOwnedResolutionGatesUpgradesBeforeDownloading(VideoQuality ownedLabel, int measuredResolution,
+        string candidate, bool accepted) {
+        var rules = BookAcquisitionRules.Default with {
+            Kind = EntityKind.Movie, IsUpgradeSearch = true, OwnedMediaQuality = ownedLabel.ToCode(),
+            OwnedVideoResolutionTier = measuredResolution, OwnedHasSubtitles = true
+        };
+
+        var rejection = new MediaUpgradeSpecification(EntityKind.Movie).Evaluate(Release(candidate, seeders: 10), rules);
+
+        Assert.Equal(accepted ? null : ReleaseRejectionReason.NotAnUpgrade, rejection);
+    }
+
+    [Theory]
+    [InlineData("Movie 1080p WEB-DL", false)]
+    [InlineData("Movie 1080p WEB-DL Multi-Sub", true)]
+    [InlineData("Movie 720p WEB-DL Multi-Sub", false)]
+    public void UnknownSourceQualityNeedsEvidenceForASpeculativeSameResolutionSubtitleUpgrade(string title, bool accepted) {
+        var rules = BookAcquisitionRules.Default with {
+            Kind = EntityKind.Movie, IsUpgradeSearch = true, OwnedMediaQuality = VideoQuality.Unknown.ToCode(),
+            OwnedVideoResolutionTier = 1080, OwnedHasSubtitles = false
+        };
+
+        var rejection = new MediaUpgradeSpecification(EntityKind.Movie).Evaluate(Release(title, seeders: 10), rules);
+
+        Assert.Equal(accepted ? null : ReleaseRejectionReason.NotAnUpgrade, rejection);
+    }
+
     [Theory]
     [InlineData("[AnimeRG] Naruto Shippuden - 500 [1080p] [Multi-Sub] [x265]", true)]
     [InlineData("[AnimeRG] Naruto Shippuden - 499 [1080p]", false)]

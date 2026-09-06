@@ -21,7 +21,8 @@ public static class AcquisitionRuleContext {
         if (input.VolumeNumber is not null) rules = rules with { VolumeNumber = input.VolumeNumber };
         return owned is null ? rules : rules with {
             IsUpgradeSearch = true, OwnedQuality = owned.BookRank ?? default, OwnedMediaQuality = owned.MediaQualityCode,
-            OwnedMediaRevision = owned.MediaRevision, OwnedFormatScore = owned.FormatScore, OwnedHasSubtitles = owned.HasSubtitles
+            OwnedMediaRevision = owned.MediaRevision, OwnedFormatScore = owned.FormatScore, OwnedHasSubtitles = owned.HasSubtitles,
+            OwnedVideoResolutionTier = owned.VideoResolutionTier
         };
     }
 }
