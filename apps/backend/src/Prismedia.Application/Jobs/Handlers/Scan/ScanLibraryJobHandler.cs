@@ -256,6 +256,12 @@ public sealed class ScanLibraryJobHandler(
         for (var batchStart = 0; batchStart < files.Count; batchStart += BatchSize) {
             var batchEnd = Math.Min(batchStart + BatchSize, files.Count);
             var batchItems = new List<VideoUpsertItem>(batchEnd - batchStart);
+            // Filename-based wanted binding is discovery, not authority to extend a saved mapping.
+            // Read once per batch; the acquisition materializer separately binds its proven coverage.
+            var ownedPaths = acquisitionHints is null ? new HashSet<string>(FileSystemPathComparison.Comparer)
+                : (await videos.ListPlayableVideoSourceOwnersAsync(
+                    files.Skip(batchStart).Take(batchEnd - batchStart).ToArray(), cancellationToken))
+                    .Select(owner => owner.FilePath).ToHashSet(FileSystemPathComparison.Comparer);
 
             for (var i = batchStart; i < batchEnd; i++) {
                 var filePath = files[i];
@@ -275,7 +281,9 @@ public sealed class ScanLibraryJobHandler(
                 }
 
                 using (timer.Phase("wanted-bind")) {
-                    await VideoWantedBinding.BindAsync(acquisitionHints, item, cancellationToken);
+                    if (!ownedPaths.Contains(filePath)) {
+                        await VideoWantedBinding.BindAsync(acquisitionHints, item, cancellationToken);
+                    }
                 }
 
                 batchItems.Add(item);

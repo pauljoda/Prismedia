@@ -85,6 +85,53 @@ public sealed class ImportedEntityMaterializationTests : IDisposable {
     }
 
     [Fact]
+    public async Task VideoRescanCannotFulfillAnUnrelatedWantedEpisodeFromASharedFilesOldNumber() {
+        await using var db = CreateContext();
+        var rootPath = Directory.CreateDirectory(Path.Combine(_workRoot, "tv-rescan")).FullName;
+        var seriesPath = Directory.CreateDirectory(Path.Combine(rootPath, "Show")).FullName;
+        var seasonPath = Directory.CreateDirectory(Path.Combine(seriesPath, "Season 01")).FullName;
+        var filePath = Path.Combine(seasonPath, "Show.S01E01.mkv");
+        await File.WriteAllTextAsync(filePath, "shared-video-bytes");
+        var root = new RootPersistence(rootPath, scanVideos: true);
+        var seriesId = AddWantedEntity(db, EntityKind.VideoSeries, "Show");
+        var seasonId = AddWantedEntity(db, EntityKind.VideoSeason, "Season 1", seriesId, 1);
+        foreach (var (id, path) in new[] { (seriesId, seriesPath), (seasonId, seasonPath) }) {
+            db.Entities.Local.Single(entity => entity.Id == id).IsWanted = false;
+            db.EntitySources.Add(new EntitySourceRow {
+                EntityId = id, Code = EntitySourceCode.Folder.ToCode(), Value = path,
+                UpdatedAt = DateTimeOffset.UtcNow
+            });
+        }
+        var wantedId = AddWantedEntity(db, EntityKind.VideoEpisode, "Different Story", seasonId, 1);
+        var ownerIds = new[] {
+            AddWantedEntity(db, EntityKind.VideoEpisode, "First Story", seasonId, 5),
+            AddWantedEntity(db, EntityKind.VideoEpisode, "Second Story", seasonId, 6)
+        };
+        foreach (var ownerId in ownerIds) {
+            db.Entities.Local.Single(entity => entity.Id == ownerId).IsWanted = false;
+            db.EntityFiles.Add(new EntityFileRow {
+                Id = Guid.NewGuid(), EntityId = ownerId, Role = EntityFileRole.Source, Path = filePath
+            });
+        }
+        await db.SaveChangesAsync();
+        var sourceIds = await db.EntityFiles.Select(source => source.Id).ToArrayAsync();
+        var persistence = new LibraryScanPersistenceService(db);
+        var scan = new ScanLibraryJobHandler(NullLogger<ScanLibraryJobHandler>.Instance,
+            Discovery(), root, persistence, persistence, acquisitionHints: new AcquisitionHintApplier(db));
+        var now = DateTimeOffset.UtcNow;
+        var job = new JobRunSnapshot(Guid.NewGuid(), JobType.ScanLibrary, JobRunStatus.Running, 0, null,
+            JsonSerializer.Serialize(new { libraryRootId = root.Root.Id }), null, null, null, now, now, null);
+
+        await scan.HandleAsync(new JobContext(job, new MergedImportTestSupport.RecordingJobQueue()), default);
+
+        Assert.True((await db.Entities.AsNoTracking().SingleAsync(entity => entity.Id == wantedId)).IsWanted);
+        Assert.Equal(ownerIds.Order(), (await db.EntityFiles.Select(source => source.EntityId).ToArrayAsync()).Order());
+        Assert.Equal(sourceIds.Order(), (await db.EntityFiles.Select(source => source.Id).ToArrayAsync()).Order());
+        Assert.Equal(new[] { 5, 6 }, await db.Entities.Where(entity => ownerIds.Contains(entity.Id))
+            .OrderBy(entity => entity.SortOrder).Select(entity => entity.SortOrder!.Value).ToArrayAsync());
+    }
+
+    [Fact]
     public async Task BookImportBindsWantedEntityBeforeImported() {
         await using var db = CreateContext();
         var rootPath = Directory.CreateDirectory(Path.Combine(_workRoot, "books")).FullName;
