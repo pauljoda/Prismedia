@@ -49,6 +49,12 @@ public static partial class ReleaseTitleIdentity {
     /// disables the gate entirely (ad-hoc evaluations without a known work).
     /// </summary>
     public static Result Match(string releaseTitle, string? targetTitle) {
+        var result = MatchCore(releaseTitle, targetTitle);
+        var withoutGroup = result.TitleMatched ? releaseTitle : WithoutLeadingReleaseGroup(releaseTitle);
+        return withoutGroup == releaseTitle ? result : MatchCore(withoutGroup, targetTitle);
+    }
+
+    private static Result MatchCore(string releaseTitle, string? targetTitle) {
         var target = ComparableTokens(targetTitle);
         if (target.Count == 0) {
             return NoTarget;
@@ -85,7 +91,16 @@ public static partial class ReleaseTitleIdentity {
         string releaseTitle,
         string? targetTitle,
         TvEpisodeIdentifierSet episodeIdentifiers) {
-        var ordinary = Match(releaseTitle, targetTitle);
+        var result = MatchEpisodeCore(releaseTitle, targetTitle, episodeIdentifiers);
+        var withoutGroup = result.TitleMatched ? releaseTitle : WithoutLeadingReleaseGroup(releaseTitle);
+        return withoutGroup == releaseTitle ? result : MatchEpisodeCore(withoutGroup, targetTitle, episodeIdentifiers);
+    }
+
+    private static Result MatchEpisodeCore(
+        string releaseTitle,
+        string? targetTitle,
+        TvEpisodeIdentifierSet episodeIdentifiers) {
+        var ordinary = MatchCore(releaseTitle, targetTitle);
         if (ordinary.TitleMatched) {
             return ordinary;
         }
@@ -104,6 +119,17 @@ public static partial class ReleaseTitleIdentity {
             .Any(identifier => tail.Take(identifier.Count).SequenceEqual(identifier, StringComparer.Ordinal));
         return boundaryMatched ? new Result(true, null) : ordinary;
     }
+
+    // One bounded leading group label may precede the actual work title. Try the unmodified title
+    // first so titles such as [REC] remain intact; the suffix still has to name the complete work.
+    // Multipart Usenet counters, nested brackets, and free-form prefixes are not group labels.
+    private static string WithoutLeadingReleaseGroup(string value) =>
+        value.AsSpan().TrimStart().StartsWith("[")
+            ? LeadingReleaseGroupRegex().Replace(value, string.Empty, 1)
+            : value;
+
+    [GeneratedRegex(@"^\s*\[(?=[^\]\r\n]{0,63}\p{L})[\p{L}\p{N} _!&.+-]{1,64}\]\s*", RegexOptions.CultureInvariant)]
+    private static partial Regex LeadingReleaseGroupRegex();
 
     /// <summary>
     /// The comparison tokens of a title-like value: separator-normalized, diacritics folded, "&amp;"

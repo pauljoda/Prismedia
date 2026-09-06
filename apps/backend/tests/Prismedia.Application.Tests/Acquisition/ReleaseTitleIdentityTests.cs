@@ -10,6 +10,15 @@ namespace Prismedia.Application.Tests.Acquisition;
 /// the 2019 reboot's 1080p pack because nothing compared years and quality outranked everything.
 /// </summary>
 public sealed class ReleaseTitleIdentityTests {
+    [Theory]
+    [InlineData("[REC].2007.1080p.BluRay", "[REC]", true)]
+    [InlineData("[ReleaseGroup] [REC].2007.1080p.BluRay", "[REC]", true)]
+    [InlineData("ReleaseGroup Example.2007.1080p.BluRay", "Example", false)]
+    [InlineData("[ReleaseGroup] Dune.Part.Two.2024.1080p.WEB-DL", "Dune", false)]
+    public void ReleaseGroupFallbackPreservesBracketedTitlesAndStrictWorkBoundaries(string release, string target, bool matched) {
+        Assert.Equal(matched, ReleaseTitleIdentity.Match(release, target).TitleMatched);
+    }
+
     [Fact]
     public void MeaningfulRunsTreatZeroPaddedEpisodeNumbersAsTheSameValue() {
         Assert.True(ReleaseTitleIdentity.ContainsMeaningfulRun(

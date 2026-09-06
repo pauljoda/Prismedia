@@ -10,6 +10,38 @@ namespace Prismedia.Application.Tests.Acquisition;
 /// </summary>
 public sealed class MediaReleaseDecisionEnginesTests {
     [Theory]
+    [InlineData("[AnimeRG] Naruto Shippuden - 500 [1080p] [Multi-Sub] [x265]", true)]
+    [InlineData("[AnimeRG] Naruto Shippuden - 499 [1080p]", false)]
+    [InlineData("[Naruto Shippuden] Boruto - 500 [1080p]", false)]
+    [InlineData("[AnimeRG] Naruto Shippuden Movie - 500 [1080p]", false)]
+    public void LeadingReleaseGroupDoesNotReplaceTheRequiredSeriesAndEpisodeIdentity(string title, bool accepted) {
+        var rules = BookAcquisitionRules.Default with {
+            TargetTitle = "Naruto Shippuden", TargetEpisodeTitle = "The Message",
+            SeasonNumber = 20, EpisodeNumber = 500, TargetAbsoluteEpisodeNumber = 500
+        };
+        var result = Assert.Single(new TvReleaseDecisionEngine(EntityKind.VideoEpisode).Evaluate(
+            [(Release(title, seeders: 10), null, "Indexer")], rules));
+
+        Assert.Equal(accepted, result.Accepted);
+    }
+
+    [Theory]
+    [InlineData("[ReleaseGroup] Example.Show.2007.S01E01.1080p.WEB-DL", true)]
+    [InlineData("[ReleaseGroup] Example.Show.2020.S01E01.1080p.WEB-DL", false)]
+    public void LeadingReleaseGroupKeepsTheTitleYearGuard(string title, bool accepted) {
+        var rules = BookAcquisitionRules.Default with {
+            TargetTitle = "Example Show", TargetYear = 2007, SeasonNumber = 1, EpisodeNumber = 1
+        };
+        var result = Assert.Single(new TvReleaseDecisionEngine(EntityKind.VideoEpisode).Evaluate(
+            [(Release(title, seeders: 10), null, "Indexer")], rules));
+
+        Assert.Equal(accepted, result.Accepted);
+        if (!accepted) {
+            Assert.Contains(ReleaseRejectionReason.WrongYear, result.Rejections);
+        }
+    }
+
+    [Theory]
     [InlineData(VideoQuality.Dvd, false)]
     [InlineData(VideoQuality.Bluray720p, true)]
     public void HdDvdSourceObeysTheHdProfileInsteadOfTheDiscCapacityLabel(VideoQuality allowed, bool accepted) {
