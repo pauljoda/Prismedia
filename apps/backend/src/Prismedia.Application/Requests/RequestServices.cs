@@ -68,6 +68,15 @@ public sealed record RequestReviewProgressUpdate(
 /// requiring a library entity to exist before the request is committed.
 /// </summary>
 public interface IPluginRequestProgressiveReviewSource {
+    /// <summary>
+    /// Returns the currently eligible provider revision for review reuse, or null when the selected
+    /// route is unavailable. A changed revision requires a new review session.
+    /// </summary>
+    Task<string?> GetReviewProviderRevisionAsync(
+        RequestReviewRequest request,
+        bool hideNsfw,
+        CancellationToken cancellationToken);
+
     /// <summary>Returns the core root proposal plus direct child and relationship shells.</summary>
     Task<RequestReviewResponse?> StartReviewAsync(
         RequestReviewRequest request,

@@ -28,16 +28,22 @@ public sealed class RequestReviewPreparationService(
         bool hideNsfw,
         CancellationToken cancellationToken) {
         CleanupExpired();
-        var key = ReviewKey.From(request, hideNsfw);
         await _startGate.WaitAsync(cancellationToken);
         try {
-            if (TryReusable(key, out var existing)) {
-                return existing.Snapshot();
-            }
-
             var scope = scopeFactory.CreateAsyncScope();
             try {
                 var source = scope.ServiceProvider.GetRequiredService<IPluginRequestProgressiveReviewSource>();
+                var providerRevision = await source.GetReviewProviderRevisionAsync(request, hideNsfw, cancellationToken);
+                if (providerRevision is null) {
+                    await scope.DisposeAsync();
+                    return null;
+                }
+                var key = ReviewKey.From(request, hideNsfw, providerRevision);
+                if (TryReusable(key, out var existing)) {
+                    await scope.DisposeAsync();
+                    return existing.Snapshot();
+                }
+
                 var seed = await source.StartReviewAsync(request, hideNsfw, cancellationToken);
                 if (seed is null) {
                     await scope.DisposeAsync();
@@ -134,14 +140,16 @@ public sealed class RequestReviewPreparationService(
         string PluginId,
         string IdentityNamespace,
         string IdentityValue,
-        bool HideNsfw) {
-        public static ReviewKey From(RequestReviewRequest request, bool hideNsfw) =>
+        bool HideNsfw,
+        string ProviderRevision) {
+        public static ReviewKey From(RequestReviewRequest request, bool hideNsfw, string providerRevision) =>
             new(
                 request.Kind,
                 request.PluginId.Trim().ToLowerInvariant(),
                 request.ExternalIdentity.Namespace.Trim().ToLowerInvariant(),
                 request.ExternalIdentity.Value,
-                hideNsfw);
+                hideNsfw,
+                providerRevision);
     }
 
     private sealed class ReviewState(

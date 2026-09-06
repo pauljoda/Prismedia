@@ -23,6 +23,23 @@ public sealed class PluginRequestMetadataSource(
     : IPluginRequestSearchSource, IRequestMetadataEnricher, IPluginRequestReviewSource,
       IPluginRequestProgressiveReviewSource,
       IPluginRequestProposalSource {
+    /// <inheritdoc />
+    public async Task<string?> GetReviewProviderRevisionAsync(
+        RequestReviewRequest request,
+        bool hideNsfw,
+        CancellationToken cancellationToken) {
+        var descriptor = RequestKindRegistry.Find(request.Kind);
+        if (descriptor is null) {
+            return null;
+        }
+        var provider = await ValidateExplicitRouteAsync(
+            descriptor.PluginEntityKind,
+            new PluginIdentityRoute(request.PluginId, request.ExternalIdentity),
+            hideNsfw,
+            cancellationToken);
+        return provider?.Version;
+    }
+
     private static readonly string SearchAction = IdentifyAction.Search.ToCode();
     private static readonly string LookupIdAction = IdentifyAction.LookupId.ToCode();
 

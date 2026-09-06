@@ -122,6 +122,8 @@ public sealed class TvProviderEpisodeCatalogSourceTests {
     }
 
     private sealed class RecordingReviews : IPluginRequestProgressiveReviewSource {
+        public Task<string?> GetReviewProviderRevisionAsync(RequestReviewRequest request, bool hideNsfw, CancellationToken cancellationToken) =>
+            Task.FromResult<string?>("1.0.0");
         public List<RequestReviewRequest> Requests { get; } = [];
         public Func<RequestReviewResponse, RequestReviewResponse> Transform { get; set; } = response => response;
         public Task<RequestReviewResponse?> StartReviewAsync(RequestReviewRequest request, bool hideNsfw, CancellationToken cancellationToken) {

@@ -38,7 +38,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
-- Metadata reviews refresh cached catalogs after provider updates, and background lookups respect current provider availability before reusing cached results.
+- Reopening metadata reviews refreshes both cached catalogs and completed review sessions after provider updates. Review and background lookups respect current provider availability before reusing cached results.
 
 - Generic TV episode placeholders no longer suppress provider checks when downloaded filenames contain descriptive episode titles, helping detect mislabeled files from absent seasons without adding lookups for quality-only filenames.
 

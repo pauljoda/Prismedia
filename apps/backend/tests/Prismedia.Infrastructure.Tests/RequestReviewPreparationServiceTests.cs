@@ -52,6 +52,37 @@ public sealed class RequestReviewPreparationServiceTests {
         Assert.Equal("Episode 1", Assert.Single(Assert.Single(completed.Proposal.Children).Children).Patch.Title);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReopeningAReviewRechecksTheProviderRevisionAndAvailability(bool unavailable) {
+        var source = new ControlledProgressiveReviewSource(empty: true);
+        using var services = new ServiceCollection()
+            .AddSingleton<IPluginRequestProgressiveReviewSource>(source)
+            .BuildServiceProvider();
+        var service = new RequestReviewPreparationService(
+            services.GetRequiredService<IServiceScopeFactory>(), new TestApplicationLifetime());
+        var request = new RequestReviewRequest(RequestMediaKind.Series, "series-metadata", new ExternalIdentity("tmdb", "series:updated"));
+        var first = await service.StartAsync(request, false, CancellationToken.None);
+        var cached = await service.StartAsync(request, false, CancellationToken.None);
+        Assert.Equal(first!.Enrichment!.ReviewId, cached!.Enrichment!.ReviewId);
+        Assert.Equal(1, source.StartCount);
+        source.ProviderRevision = unavailable ? null : "2.0.1";
+
+        var refreshed = await service.StartAsync(request, false, CancellationToken.None);
+
+        if (unavailable) {
+            Assert.Null(refreshed);
+            Assert.Equal(1, source.StartCount);
+        } else {
+            Assert.NotNull(refreshed);
+            Assert.NotEqual(first.Enrichment.ReviewId, refreshed.Enrichment!.ReviewId);
+            Assert.Equal(2, source.StartCount);
+        }
+        // A pinned open review remains readable; reopening must choose current provider evidence.
+        Assert.NotNull(service.Get(first.Enrichment.ReviewId));
+    }
+
     [Fact]
     public async Task FailedEnrichmentLeavesThePartialReviewUsableWithoutIdentifyingForever() {
         var source = new ControlledProgressiveReviewSource(fail: true);
@@ -88,7 +119,10 @@ public sealed class RequestReviewPreparationServiceTests {
         Assert.Contains("Provider failed", failed.Enrichment.Error, StringComparison.Ordinal);
     }
 
-    private sealed class ControlledProgressiveReviewSource(bool fail = false) : IPluginRequestProgressiveReviewSource {
+    private sealed class ControlledProgressiveReviewSource(bool fail = false, bool empty = false) : IPluginRequestProgressiveReviewSource {
+        public string? ProviderRevision { get; set; } = "2.0.0";
+        public Task<string?> GetReviewProviderRevisionAsync(RequestReviewRequest request, bool hideNsfw, CancellationToken cancellationToken) =>
+            Task.FromResult(ProviderRevision);
         public int StartCount { get; private set; }
         public TaskCompletionSource EnrichmentStarted { get; } =
             new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -100,7 +134,11 @@ public sealed class RequestReviewPreparationServiceTests {
             bool hideNsfw,
             CancellationToken cancellationToken) {
             StartCount++;
-            return Task.FromResult<RequestReviewResponse?>(Review(request, hydrated: false));
+            var review = Review(request, hydrated: false);
+            if (empty) {
+                review = review with { Proposal = review.Proposal with { Children = [], Relationships = [] } };
+            }
+            return Task.FromResult<RequestReviewResponse?>(review);
         }
 
         public async Task<RequestReviewResponse> EnrichReviewAsync(
