@@ -19,6 +19,97 @@ namespace Prismedia.Infrastructure.Tests;
 /// </summary>
 public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
     [Theory]
+    [InlineData(EntityKind.Book, false, false)]
+    [InlineData(EntityKind.Book, true, false)]
+    [InlineData(EntityKind.Movie, false, false)]
+    [InlineData(EntityKind.Movie, true, false)]
+    [InlineData(EntityKind.VideoEpisode, false, false)]
+    [InlineData(EntityKind.VideoEpisode, true, false)]
+    [InlineData(EntityKind.Movie, false, true)]
+    [InlineData(EntityKind.Movie, true, true)]
+    public async Task InstalledUpgradeRetriesReadinessWithoutReplacingAgain(EntityKind kind, bool cleanupAlreadyPreserved, bool postgres) {
+        await using var database = postgres ? await PostgresTestDatabase.CreateAsync() : null;
+        await using var db = database?.CreateContext() ?? CreateContext();
+        var (parentId, childId, _) = kind == EntityKind.Book ? await SeedAsync(db, "Some Book (retail) (epub)")
+            : await SeedMediaAsync(db, kind, VideoQuality.Webdl720p.ToCode(), "Movie 2020 1080p WEB-DL");
+        var folder = Directory.CreateTempSubdirectory("prismedia-upgrade-ready-").FullName;
+        try {
+            var installed = Path.Combine(folder, kind == EntityKind.Book ? "book.epub" : "video.mkv");
+            await File.WriteAllTextAsync(installed, "installed-upgrade-bytes");
+            var parent = (await db.Acquisitions.FindAsync(parentId))!;
+            parent.FinalSourcePath = installed;
+            var sourceId = Guid.NewGuid();
+            db.EntityFiles.Add(new EntityFileRow { Id = sourceId, EntityId = parent.EntityId!.Value,
+                Role = EntityFileRole.Source, Path = installed, Source = FileSourceKind.Scan.ToCode() });
+            await db.SaveChangesAsync();
+            var firstQueue = new RecordingJobQueue {
+                BeforeEnqueue = postgres ? async () => {
+                    await using var observer = database!.CreateContext();
+                    Assert.Null((await observer.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == childId)).FinalSourcePath);
+                    Assert.Equal(VideoQuality.Webdl720p.ToCode(), (await observer.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == parentId)).OwnedMediaQuality);
+                } : null
+            };
+            await RunAsync(db, firstQueue, new FakeReplacer(OwnedFileReplaceResult.Ok(installed,
+                    kind == EntityKind.Book ? BookFormatTier.Reflowable : BookFormatTier.Unknown)), childId,
+                new FakeMediaUpgradePayloadInspector(new(720, 1080, false, false, 1200, 1200)));
+            Assert.Equal(installed, (await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == childId)).FinalSourcePath);
+            if (cleanupAlreadyPreserved) Assert.True(await new EfDetachedDownloadCleanupStore(db).PreserveUpgradeAsync(childId, default));
+            var store = AcquisitionTestFactory.Store(db);
+            await store.SetStatusAsync(childId, AcquisitionStatus.Failed, "Required processing interrupted", default);
+            Assert.True((await store.GetAsync(childId, default))!.Summary.HasResumableImport);
+            var installedImport = (await store.GetImportContextAsync(childId, default))!;
+            Assert.False(await ImportCheckpointLifecycle.CanAbandonAsync(installedImport, default));
+            Assert.False(await ImportCheckpointLifecycle.TryAbandonAsync(store, installedImport, default));
+            Assert.False(await store.TryClaimFailedRecoveryAsync(childId, [AcquisitionStatus.Failed],
+                await store.GetSelectedReleaseAsync(childId, default), "Stale download failure", default));
+            Assert.True(await store.TryTransitionStatusAsync(childId, [AcquisitionStatus.Failed], AcquisitionStatus.Downloaded, "Retry", default));
+            var resumed = new RecordingJobQueue();
+            var replacer = new FakeReplacer(OwnedFileReplaceResult.Failed("The downloaded primary was already consumed"));
+
+            await RunAsync(db, resumed, replacer, childId, new FakeMediaUpgradePayloadInspector(null));
+
+            Assert.False(replacer.Called);
+            Assert.Single(resumed.Enqueued, request => request.Type == JobType.ReconcileEntity);
+            Assert.Equal(AcquisitionStatus.Importing, (await db.Acquisitions.FindAsync(childId))!.Status);
+            Assert.Single(await db.AcquisitionHistory.Where(row => row.Event == AcquisitionHistoryEvent.Upgraded).ToArrayAsync());
+            Assert.Equal(installed, (await db.EntityFiles.AsNoTracking().SingleAsync(row => row.Id == sourceId)).Path);
+            Assert.Equal("installed-upgrade-bytes", await File.ReadAllTextAsync(installed));
+            await FinalizeAsync(db, resumed);
+            Assert.False(await db.Acquisitions.AnyAsync(row => row.Id == childId));
+            Assert.Single(await db.DetachedDownloadCleanups.ToArrayAsync());
+        } finally { Directory.Delete(folder, true); }
+    }
+
+    [Theory]
+    [InlineData("missing file")]
+    [InlineData("missing source")]
+    [InlineData("changed source path")]
+    public async Task InstalledUpgradeWithChangedOwnershipHoldsWithoutAnotherSwap(string change) {
+        await using var db = CreateContext();
+        var (parentId, childId, _) = await SeedMediaAsync(db, EntityKind.Movie, VideoQuality.Webdl1080p.ToCode(), "Movie 2020 1080p WEB-DL");
+        var folder = Directory.CreateTempSubdirectory("prismedia-upgrade-changed-").FullName;
+        try {
+            var installed = Path.Combine(folder, "video.mkv");
+            if (change != "missing file") await File.WriteAllTextAsync(installed, "installed-upgrade-bytes");
+            var parent = (await db.Acquisitions.FindAsync(parentId))!;
+            parent.FinalSourcePath = installed;
+            (await db.Acquisitions.FindAsync(childId))!.FinalSourcePath = installed;
+            if (change != "missing source") db.EntityFiles.Add(new EntityFileRow { Id = Guid.NewGuid(), EntityId = parent.EntityId!.Value,
+                Role = EntityFileRole.Source, Path = change == "changed source path" ? Path.Combine(folder, "different.mkv") : installed });
+            await db.SaveChangesAsync();
+            var queue = new RecordingJobQueue();
+            var replacer = new FakeReplacer(OwnedFileReplaceResult.Failed("Must not swap"));
+
+            await RunAsync(db, queue, replacer, childId, new FakeMediaUpgradePayloadInspector(new(1080, 1080, false, false, 1200, 1200)));
+
+            Assert.False(replacer.Called);
+            Assert.Empty(queue.Enqueued);
+            Assert.Equal(AcquisitionStatus.ManualImportRequired, (await db.Acquisitions.FindAsync(childId))!.Status);
+            Assert.True(await db.DownloadTransfers.AnyAsync(row => row.AcquisitionId == childId));
+        } finally { Directory.Delete(folder, true); }
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task ASharedEpisodeFileCannotBeReplacedByAnAtomicUpgrade(bool manualPick) {
@@ -824,10 +915,12 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
 
     private sealed class RecordingJobQueue : IJobQueueService {
         public List<EnqueueJobRequest> Enqueued { get; } = [];
-        public Task<JobRunSnapshot> EnqueueAsync(EnqueueJobRequest request, CancellationToken cancellationToken) {
+        public Func<Task>? BeforeEnqueue { get; init; }
+        public async Task<JobRunSnapshot> EnqueueAsync(EnqueueJobRequest request, CancellationToken cancellationToken) {
+            if (BeforeEnqueue is not null) await BeforeEnqueue();
             Enqueued.Add(request);
             var now = DateTimeOffset.UtcNow;
-            return Task.FromResult(new JobRunSnapshot(Guid.NewGuid(), request.Type, JobRunStatus.Queued, 0, null, request.PayloadJson ?? "{}", request.TargetEntityKind, request.TargetEntityId, request.TargetLabel, now, null, null));
+            return new JobRunSnapshot(Guid.NewGuid(), request.Type, JobRunStatus.Queued, 0, null, request.PayloadJson ?? "{}", request.TargetEntityKind, request.TargetEntityId, request.TargetLabel, now, null, null);
         }
         public Task<bool> HasPendingAsync(JobType type, string? targetEntityId, CancellationToken cancellationToken) => Task.FromResult(false);
         public Task UpdateProgressAsync(Guid id, int progress, string? message, CancellationToken cancellationToken) => Task.CompletedTask;

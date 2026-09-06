@@ -94,6 +94,12 @@ public sealed class AcquisitionCompletionService(
             && EntityKindRegistry.Describe(kind).UpgradeMode != EntityUpgradeMode.Import
             ? JobType.AcquisitionUpgradeReplace
             : JobType.AcquisitionImport;
+
+    /// <summary>Whether an atomic replacement child records an installation awaiting final readiness.</summary>
+    public static bool HasInstalledUpgradeReceipt(EntityKind kind, Guid? upgradeOfAcquisitionId,
+        BookRendition? bookRendition, string? finalSourcePath) =>
+        upgradeOfAcquisitionId is not null && !string.IsNullOrWhiteSpace(finalSourcePath)
+        && CompletionJobType(kind, true, bookRendition) == JobType.AcquisitionUpgradeReplace;
 }
 
 /// <summary>Accepts local bytes through the upload adapter and joins the shared completed-acquisition flow.</summary>

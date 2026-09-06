@@ -42,6 +42,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Upgrades whose files were installed successfully can now retry interrupted media processing without replacing or downloading the file again, while changed ownership remains held for review.
+
 - Successful upgrades now retain their download until required media processing finishes, then hand cleanup to the durable retry queue.
 
 - New TV episode files are now inspected before a pack starts placement, with per-file quality and destination-season profile checks that also apply when retrying pending files.

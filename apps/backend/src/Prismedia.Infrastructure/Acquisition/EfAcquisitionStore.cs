@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Files;
 using Prismedia.Contracts.Acquisition;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
@@ -579,6 +580,7 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             var affected = await db.Acquisitions
                 .Where(row => row.Id == id
                     && expected.Contains(row.Status)
+                    && (row.UpgradeOfAcquisitionId == null || row.FinalSourcePath == null || row.FinalSourcePath == "")
                     && row.SelectedReleaseJson == selectedJson)
                 .ExecuteUpdateAsync(setters => setters
                     .SetProperty(row => row.Status, AcquisitionStatus.Failed)
@@ -590,6 +592,7 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         var row = await db.Acquisitions.FirstOrDefaultAsync(value => value.Id == id, cancellationToken);
         if (row is null
             || !expected.Contains(row.Status)
+            || row.UpgradeOfAcquisitionId is not null && !string.IsNullOrEmpty(row.FinalSourcePath)
             || !string.Equals(row.SelectedReleaseJson, selectedJson, StringComparison.Ordinal)) {
             return false;
         }
@@ -758,6 +761,10 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         var parentHasSubtitles = parent.EntityId is { } entityId
             && MediaQualityLadder.IsVideoKind(parent.Kind)
             && await db.EntitySubtitles.AsNoTracking().AnyAsync(row => row.EntityId == entityId, cancellationToken);
+        var installedPath = HasInstalledUpgradeReceipt(child) ? child.FinalSourcePath : null;
+        var installedSources = installedPath is not null && parent.EntityId is { } installedEntityId
+            ? await db.EntityFiles.AsNoTracking().Where(row => row.EntityId == installedEntityId && row.Role == EntityFileRole.Source)
+                .Select(row => row.Path).ToArrayAsync(cancellationToken) : [];
 
         return new UpgradeReplaceTarget(
             parentId,
@@ -776,7 +783,10 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             selected?.ManualPick == true,
             parentHasSubtitles) {
             ParentVideoSourceShared = MediaQualityLadder.IsVideoKind(parent.Kind) && parent.EntityId is { } sharedOwner
-                && await OwnedVideoEvidence.IsSharedAsync(db, sharedOwner, cancellationToken)
+                && await OwnedVideoEvidence.IsSharedAsync(db, sharedOwner, cancellationToken),
+            InstalledUpgradePath = installedPath,
+            InstalledUpgradeSourceCurrent = installedPath is not null && installedSources.Length == 1
+                && FileSystemPathComparison.Equals(installedSources[0], installedPath)
         };
     }
 
@@ -1841,10 +1851,13 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         bool hasResumablePayload = false) =>
         new(row.Id, row.Status, row.StatusMessage, row.Title, row.Author, row.Series, row.Year, row.PosterUrl,
             progress, row.CreatedAt, row.UpdatedAt, row.Description, row.Kind, row.EntityId,
-            HasResumableImport: row.ImportCheckpointJson is not null || hasResumablePayload,
+            HasResumableImport: row.ImportCheckpointJson is not null || hasResumablePayload || HasInstalledUpgradeReceipt(row),
             row.BookRendition,
             row.JobGraphId,
             row.ReleaseDateMetadataUnavailable);
+
+    private static bool HasInstalledUpgradeReceipt(AcquisitionRow row) =>
+        AcquisitionCompletionService.HasInstalledUpgradeReceipt(row.Kind, row.UpgradeOfAcquisitionId, row.BookRendition, row.FinalSourcePath);
 
     private static ReleaseCandidateView ToView(ReleaseCandidateRow row) =>
         new(row.Id, row.IndexerName, row.Title, row.SizeBytes, row.Seeders, row.Peers, row.Protocol, row.Accepted,

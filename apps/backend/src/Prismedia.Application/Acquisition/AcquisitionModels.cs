@@ -492,6 +492,10 @@ public sealed record UpgradeReplaceTarget(
     bool ParentHasSubtitles = false) {
     /// <summary>Current source coverage requires a multi-entity merge instead of atomic replacement.</summary>
     public bool ParentVideoSourceShared { get; init; }
+    /// <summary>Installed file recorded on this child in the same database commit as owned quality and reconciliation.</summary>
+    public string? InstalledUpgradePath { get; init; }
+    /// <summary>The recorded installation still matches the parent's sole current Source binding.</summary>
+    public bool InstalledUpgradeSourceCurrent { get; init; }
 }
 
 /// <summary>
@@ -721,6 +725,10 @@ public sealed record AcquisitionImportContext(
     int? VolumeNumber = null) {
     /// <summary>Checkpoint protocol selected by this acquisition's governing profile definition.</summary>
     public AcquisitionCheckpointProtocol CheckpointProtocol => AcquisitionProfileKinds.CheckpointProtocolFor(Kind);
+
+    /// <summary>An atomic replacement committed its installation and must finish readiness before this attempt can be superseded.</summary>
+    public bool HasInstalledUpgradeReceipt => AcquisitionCompletionService.HasInstalledUpgradeReceipt(
+        Kind, UpgradeOfAcquisitionId, BookRendition, FinalSourcePath);
 
     /// <summary>
     /// Returns the dedicated television checkpoint when the profile selected the television protocol.

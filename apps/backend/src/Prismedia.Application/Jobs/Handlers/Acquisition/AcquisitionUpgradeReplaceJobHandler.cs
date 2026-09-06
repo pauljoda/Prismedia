@@ -95,6 +95,21 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
             return;
         }
 
+        if (target.InstalledUpgradePath is { } installedPath) {
+            // This receipt proves that the installation, quality update, and reconciliation enqueue
+            // committed together. A later readiness failure resumes processing, not another swap of
+            // the already consumed download. Pre-commit filesystem interruptions need their own recovery.
+            if (!target.InstalledUpgradeSourceCurrent || !File.Exists(installedPath)
+                || new FileInfo(installedPath).Length == 0) {
+                await acquisitions.SetStatusAsync(childId, AcquisitionStatus.ManualImportRequired,
+                    "The installed upgrade no longer matches an available owned Source. Review its current file binding; no replacement or cleanup was attempted.",
+                    cancellationToken);
+                return;
+            }
+            await FinishAsync(context, target, childId, cancellationToken);
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(target.ParentFinalSourcePath) || string.IsNullOrWhiteSpace(target.ChildContentPath)) {
             await AbortAsync(childId, "The owned book location or the upgrade download path is unknown.", cancellationToken);
             return;
@@ -141,17 +156,16 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
             return;
         }
 
-        // The parent now owns the better file. Record its new owned quality FIRST (source from the release
-        // title, format from the installed file): this is the load-bearing bookkeeping for the upgrade loop, so
-        // doing it before the best-effort cleanup means a crash mid-completion leaves the loop seeing the
-        // upgrade rather than retrying it. Then refresh metadata via a re-scan, clean up the torrent, release
-        // the upgrade slot (counting the attempt), and remove the now-consumed child acquisition.
+        // Publish the installed path, owned quality, and reconciliation together in the lifecycle commit.
+        // Source comes from the selected release and format from the installed file. Once committed,
+        // the receipt lets interrupted readiness resume without swapping the consumed payload again.
         var detectedSource = BookFormatDetection.DetectSource(target.ChildSelectedTitle!);
         var newOwned = new BookQualityRank(
             target.ChildManualPick && detectedSource == BookSourceTier.Unknown
                 ? target.ParentOwnedQuality.Source
                 : detectedSource,
             result.NewFormat);
+        await acquisitions.SetFinalSourcePathAsync(childId, result.SwappedPath!, cancellationToken);
         await acquisitions.UpdateOwnedQualityAsync(target.ParentId, newOwned, cancellationToken);
         await RecordUpgradedAsync(
             target,
@@ -269,10 +283,9 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
             return;
         }
 
-        // Record the parent's new owned ladder code, revision, AND custom-format score (all from the child
-        // release) FIRST — the load-bearing bookkeeping — before the best-effort cleanup, mirroring the book
-        // path. Advancing the revision and format score alongside the code is what lets a same-quality proper
-        // or format-score upgrade settle instead of re-firing.
+        // Commit the installation receipt with the parent's quality, revision, and custom-format score.
+        // Advancing all three together lets a same-quality proper or format-score upgrade settle;
+        // transfer cleanup waits for the subsequent required-readiness finalizer.
         var resolvedCode = target.ChildManualPick && candidatePosition == 0
             ? target.ParentOwnedMediaQuality ?? VideoQuality.Unknown.ToCode()
             : candidateCode;
@@ -282,6 +295,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
         var resolvedFormatScore = target.ChildManualPick && candidatePosition == 0
             ? target.ParentOwnedFormatScore
             : candidateFormatScore;
+        await acquisitions.SetFinalSourcePathAsync(childId, result.SwappedPath!, cancellationToken);
         await acquisitions.UpdateOwnedMediaQualityAsync(target.ParentId, resolvedCode, resolvedRevision, resolvedFormatScore, cancellationToken);
         await RecordUpgradedAsync(
             target,

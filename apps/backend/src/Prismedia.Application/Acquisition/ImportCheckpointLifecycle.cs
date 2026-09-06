@@ -20,6 +20,7 @@ public static class ImportCheckpointLifecycle {
         CancellationToken cancellationToken,
         VideoScanConcurrencyGate? scanGate = null) {
         import.EnsureCheckpointApplicability();
+        if (import.HasInstalledUpgradeReceipt) return false;
         return import.CheckpointProtocol switch {
             AcquisitionCheckpointProtocol.Placement =>
                 import.PlacementCheckpoint is not { } checkpoint || CanAbandon(checkpoint),
@@ -40,6 +41,7 @@ public static class ImportCheckpointLifecycle {
         CancellationToken cancellationToken,
         VideoScanConcurrencyGate? scanGate = null) {
         import.EnsureCheckpointApplicability();
+        if (import.HasInstalledUpgradeReceipt) return false;
         switch (import.CheckpointProtocol) {
             case AcquisitionCheckpointProtocol.Placement:
                 if (import.PlacementCheckpoint is not { } checkpoint) {
