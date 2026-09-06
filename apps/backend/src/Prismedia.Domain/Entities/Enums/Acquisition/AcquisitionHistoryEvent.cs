@@ -16,6 +16,10 @@ public enum AcquisitionHistoryEvent {
     [Code("imported")]
     Imported,
 
+    /// <summary>Proven episode coverage repaired a previous automatic import without downloading or replacing bytes.</summary>
+    [Code("mapping-repaired")]
+    MappingRepaired,
+
     /// <summary>The completed payload could not be imported automatically (a hold or a failure during import).</summary>
     [Code("import-failed")]
     ImportFailed,

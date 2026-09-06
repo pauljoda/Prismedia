@@ -11,6 +11,7 @@ export type AcquisitionHistoryEvent = typeof AcquisitionHistoryEvent[keyof typeo
 export const AcquisitionHistoryEvent = {
   grabbed: 'grabbed',
   imported: 'imported',
+  'mapping-repaired': 'mapping-repaired',
   'import-failed': 'import-failed',
   'download-failed': 'download-failed',
   blocklisted: 'blocklisted',

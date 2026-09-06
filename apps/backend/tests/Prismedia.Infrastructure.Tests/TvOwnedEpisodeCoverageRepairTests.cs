@@ -14,6 +14,225 @@ public sealed class TvOwnedEpisodeCoverageRepairTests : IDisposable {
     private readonly string root = Directory.CreateTempSubdirectory("prismedia-owned-coverage-").FullName;
     public void Dispose() => Directory.Delete(root, true);
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task WrongScannerOwnerIsRetiredOnlyAfterItsStableSourceIsBoundToTheProvenWantedPair(bool foreign) {
+        await using var db = CreateContext();
+        var (fixture, destination, first) = await SeedWrongOwnerAsync(db, foreign);
+        db.EntityTechnical.Add(new EntityTechnicalRow { EntityId = first.Id, DurationSeconds = 10, ProbeFailedAt = DateTimeOffset.UtcNow });
+        db.UserEntityStates.Add(new UserEntityStateRow { UserId = Guid.NewGuid(), EntityId = first.Id, IsFavorite = true, ResumeSeconds = 12 });
+        await db.SaveChangesAsync();
+        var queued = new List<Guid>();
+
+        Assert.Equal(2, await Service(db).RepairAsync(fixture.Monitor.Id, destination.Id,
+            (id, _) => { queued.Add(id); return Task.CompletedTask; }, default));
+        Assert.Equal(0, await Service(db).RepairAsync(fixture.Monitor.Id, destination.Id,
+            (_, _) => throw new InvalidOperationException("A completed repair must not repeat"), default));
+
+        Assert.Equal(new[] { first.Id, fixture.Missing.Id }.Order(), queued.Order());
+        var source = await db.EntityFiles.AsNoTracking().SingleAsync(row => row.Id == fixture.Source.Id);
+        Assert.Equal(first.Id, source.EntityId);
+        Assert.Equal(fixture.Source.Path, source.Path);
+        Assert.False(await db.Entities.AnyAsync(row => row.Id == fixture.Owner.Id));
+        Assert.False((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == first.Id)).IsWanted);
+        Assert.False((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == fixture.Missing.Id)).IsWanted);
+        Assert.False(await db.EntityTechnical.AnyAsync(row => row.EntityId == first.Id));
+        var retainedState = await db.UserEntityStates.SingleAsync(row => row.EntityId == first.Id);
+        Assert.True(retainedState.IsFavorite);
+        Assert.Equal(12, retainedState.ResumeSeconds);
+        Assert.Equal(2, await db.EntityFiles.CountAsync(row => row.Role == EntityFileRole.Source && row.Path == source.Path));
+        Assert.Equal("unchanged paired video", await File.ReadAllTextAsync(source.Path));
+        var history = await db.AcquisitionHistory.SingleAsync();
+        Assert.Equal(AcquisitionHistoryEvent.MappingRepaired, history.Event);
+        Assert.Contains(fixture.Owner.Title, history.Message);
+        if (foreign) Assert.False(await db.EntitySources.AnyAsync(row => row.EntityId == destination.Id));
+    }
+
+    [Theory]
+    [InlineData("paused")]
+    [InlineData("manual-receipt")]
+    [InlineData("manual-name")]
+    [InlineData("provider-identity")]
+    [InlineData("playback-history")]
+    [InlineData("user-state")]
+    [InlineData("changed-file")]
+    [InlineData("changed-source")]
+    [InlineData("occupied-target")]
+    [InlineData("extra-owner")]
+    [InlineData("newer-manual-receipt")]
+    [InlineData("active-source-job")]
+    [InlineData("position-disagrees")]
+    public async Task WrongOwnerWithProtectedOrSupersededEvidenceRemainsAvailableForReview(string change) {
+        await using var db = CreateContext();
+        var (fixture, destination, first) = await SeedWrongOwnerAsync(db, true);
+        switch (change) {
+            case "paused": fixture.Monitor.Status = MonitorStatus.Paused; break;
+            case "manual-receipt": fixture.Receipt.ImportManualReview = true; break;
+            case "manual-name": fixture.Owner.Title = "My reviewed episode"; break;
+            case "provider-identity": db.EntityExternalIds.Add(new EntityExternalIdRow {
+                EntityId = fixture.Owner.Id, Provider = "test-provider", Value = "reviewed-episode"
+            }); break;
+            case "playback-history": db.EntityConsumptionEvents.Add(new EntityConsumptionEventRow {
+                Id = Guid.NewGuid(), EntityId = fixture.Owner.Id, Kind = ConsumptionEventKind.Completed,
+                OccurredAt = DateTimeOffset.UtcNow, CreatedAt = DateTimeOffset.UtcNow
+            }); break;
+            case "user-state": db.UserEntityStates.Add(new UserEntityStateRow {
+                UserId = Guid.NewGuid(), EntityId = fixture.Owner.Id, IsFavorite = true
+            }); break;
+            case "changed-file": await File.AppendAllTextAsync(fixture.Source.Path, "changed"); break;
+            case "changed-source": fixture.Source.UpdatedAt = fixture.Receipt.UpdatedAt.AddMinutes(1); break;
+            case "occupied-target": db.EntityFiles.Add(Source(first.Id, Path.Combine(root, "other.mkv"), DateTimeOffset.UtcNow)); break;
+            case "extra-owner":
+                var other = Episode(fixture.Season.Id, 50, "Another Story", false);
+                db.Entities.Add(other); db.EntityFiles.Add(Source(other.Id, fixture.Source.Path, fixture.Source.CreatedAt)); break;
+            case "newer-manual-receipt": db.Acquisitions.Add(new AcquisitionRow {
+                Id = Guid.NewGuid(), EntityId = fixture.Season.Id, Kind = EntityKind.VideoSeason,
+                Status = AcquisitionStatus.Imported, ImportManualReview = true, ImportResultJson = fixture.Receipt.ImportResultJson,
+                UpdatedAt = fixture.Receipt.UpdatedAt.AddMinutes(1)
+            }); break;
+            case "active-source-job": db.JobRuns.Add(new JobRunRow {
+                Id = Guid.NewGuid(), Type = JobType.ProbeVideo, Status = JobRunStatus.Running,
+                TargetEntityId = fixture.Owner.Id.ToString()
+            }); break;
+            case "position-disagrees": db.EntityPositions.Add(new EntityPositionRow {
+                EntityId = fixture.Owner.Id, Code = EntityPositionCodes.Episode, Value = 50
+            }); break;
+        }
+        await db.SaveChangesAsync();
+
+        Assert.Equal(0, await Service(db).RepairAsync(fixture.Monitor.Id, destination.Id,
+            (_, _) => throw new InvalidOperationException("Protected owner must remain unchanged"), default));
+        Assert.Equal(fixture.Owner.Id, (await db.EntityFiles.AsNoTracking().SingleAsync(row => row.Id == fixture.Source.Id)).EntityId);
+        Assert.True((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == first.Id)).IsWanted);
+        Assert.Empty(await db.AcquisitionHistory.ToArrayAsync());
+    }
+
+    [Fact]
+    public async Task RemappingQueueFailureRollsBackTheStableSourceRetirementAndHistory() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        Fixture fixture; EntityRow destination; EntityRow first;
+        await using (var setup = database.CreateContext()) (fixture, destination, first) = await SeedWrongOwnerAsync(setup, true);
+        await using (var db = database.CreateContext()) {
+            await Assert.ThrowsAsync<InvalidOperationException>(() => Service(db).RepairAsync(fixture.Monitor.Id,
+                destination.Id, (_, _) => throw new InvalidOperationException("queue unavailable"), default));
+        }
+        await using (var db = database.CreateContext()) {
+            Assert.Equal(fixture.Owner.Id, (await db.EntityFiles.SingleAsync(row => row.Id == fixture.Source.Id)).EntityId);
+            Assert.True(await db.Entities.AnyAsync(row => row.Id == fixture.Owner.Id));
+            Assert.True((await db.Entities.SingleAsync(row => row.Id == first.Id)).IsWanted);
+            Assert.Empty(await db.AcquisitionHistory.ToArrayAsync());
+            Assert.Equal(2, await Service(db).RepairAsync(fixture.Monitor.Id, destination.Id, (_, _) => Task.CompletedTask, default));
+            Assert.Equal(first.Id, (await db.EntityFiles.AsNoTracking().SingleAsync(row => row.Id == fixture.Source.Id)).EntityId);
+            Assert.Equal(AcquisitionHistoryEvent.MappingRepaired, (await db.AcquisitionHistory.SingleAsync()).Event);
+        }
+    }
+
+    [Fact]
+    public async Task PausingTheDestinationWhileRemappingWaitsPreservesTheOriginalOwner() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var (fixture, destination, first) = await SeedWrongOwnerAsync(db, true);
+        var lease = new BeforeLease(new EfEntityLifecycleMutationLease(db, new EfEntityHierarchyReader(db)), async () => {
+            await using var concurrent = database.CreateContext();
+            await concurrent.Monitors.Where(row => row.Id == fixture.Monitor.Id)
+                .ExecuteUpdateAsync(update => update.SetProperty(row => row.Status, MonitorStatus.Paused));
+        });
+        Assert.Equal(0, await Service(db, lease).RepairAsync(fixture.Monitor.Id, destination.Id,
+            (_, _) => throw new InvalidOperationException("Paused destination must not enqueue"), default));
+        Assert.Equal(fixture.Owner.Id, (await db.EntityFiles.AsNoTracking().SingleAsync(row => row.Id == fixture.Source.Id)).EntityId);
+        Assert.True((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == first.Id)).IsWanted);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ProviderOrPlaybackEvidenceAddedWhileRemappingWaitsInvalidatesItsSnapshot(bool providerChanges) {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var (fixture, destination, first) = await SeedWrongOwnerAsync(db, true);
+        var lease = new BeforeLease(new EfEntityLifecycleMutationLease(db, new EfEntityHierarchyReader(db)), async () => {
+            await using var concurrent = database.CreateContext();
+            if (providerChanges) concurrent.EntityExternalIds.Add(new EntityExternalIdRow {
+                EntityId = first.Id, Provider = "test-provider", Value = "new-identity"
+            });
+            else concurrent.EntityConsumptionEvents.Add(new EntityConsumptionEventRow {
+                Id = Guid.NewGuid(), EntityId = fixture.Owner.Id, Kind = ConsumptionEventKind.Completed,
+                CreatedAt = DateTimeOffset.UtcNow, OccurredAt = DateTimeOffset.UtcNow
+            });
+            await concurrent.SaveChangesAsync();
+        });
+        Assert.Equal(0, await Service(db, lease).RepairAsync(fixture.Monitor.Id, destination.Id,
+            (_, _) => throw new InvalidOperationException("Changed evidence must not enqueue"), default));
+        Assert.Equal(fixture.Owner.Id, (await db.EntityFiles.AsNoTracking().SingleAsync(row => row.Id == fixture.Source.Id)).EntityId);
+        Assert.True((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == first.Id)).IsWanted);
+    }
+
+    [Theory]
+    [InlineData("automatic", 2)]
+    [InlineData("manual-origin", 0)]
+    [InlineData("manual-between", 0)]
+    [InlineData("missing-origin", 0)]
+    [InlineData("changed-original-path", 0)]
+    public async Task AdoptionRetriesNeedAnUnbrokenAutomaticReceiptChain(string change, int expected) {
+        await using var db = CreateContext();
+        var (fixture, destination, first) = await SeedWrongOwnerAsync(db, true);
+        AcquisitionImportFileLedgerJson.TryDeserialize(fixture.Receipt.ImportResultJson, out var ledger);
+        var adopted = ledger! with { Files = ledger.Files.Select(entry => entry with {
+            Decision = AcquisitionImportDecision.AdoptExisting
+        }).ToArray() };
+        AcquisitionRow Adoption(int seconds) => new() {
+            Id = Guid.NewGuid(), EntityId = fixture.Season.Id, Kind = EntityKind.VideoSeason, Status = AcquisitionStatus.Imported,
+            TargetLibraryRootId = fixture.Receipt.TargetLibraryRootId, FinalSourcePath = fixture.Receipt.FinalSourcePath,
+            SelectedReleaseJson = fixture.Receipt.SelectedReleaseJson, ImportResultJson = AcquisitionImportFileLedgerJson.Serialize(adopted),
+            CreatedAt = fixture.Receipt.UpdatedAt.AddSeconds(seconds), UpdatedAt = fixture.Receipt.UpdatedAt.AddSeconds(seconds + 1)
+        };
+        var middle = Adoption(10);
+        var latest = Adoption(20);
+        db.Acquisitions.AddRange(middle, latest);
+        if (change == "manual-origin") fixture.Receipt.ImportManualReview = true;
+        if (change == "manual-between") middle.ImportManualReview = true;
+        if (change == "missing-origin") db.Acquisitions.Remove(fixture.Receipt);
+        if (change == "changed-original-path") latest.ImportResultJson = AcquisitionImportFileLedgerJson.Serialize(adopted with {
+            Files = adopted.Files.Select(entry => entry with { SourceRelativePath = "another-payload/" + entry.SourceRelativePath }).ToArray()
+        });
+        await db.SaveChangesAsync();
+
+        Assert.Equal(expected, await Service(db).RepairAsync(fixture.Monitor.Id, destination.Id, (_, _) => Task.CompletedTask, default));
+        var owner = (await db.EntityFiles.AsNoTracking().SingleAsync(row => row.Id == fixture.Source.Id)).EntityId;
+        Assert.Equal(expected == 0 ? fixture.Owner.Id : first.Id, owner);
+        Assert.Equal(expected == 0, (await db.Entities.AsNoTracking().SingleAsync(row => row.Id == first.Id)).IsWanted);
+    }
+
+    private async Task<(Fixture Fixture, EntityRow Destination, EntityRow First)> SeedWrongOwnerAsync(
+        PrismediaDbContext db, bool foreign) {
+        var fixture = await SeedAsync(db);
+        var oldPath = fixture.Source.Path;
+        fixture.Source.Path = Path.Combine(Path.GetDirectoryName(oldPath)!, "Show - S01E49.mkv");
+        File.Move(oldPath, fixture.Source.Path);
+        AcquisitionImportFileLedgerJson.TryDeserialize(fixture.Receipt.ImportResultJson, out var ledger);
+        fixture.Receipt.ImportResultJson = AcquisitionImportFileLedgerJson.Serialize(ledger! with {
+            Files = ledger.Files.Select(entry => entry with { DestinationRelativePath = Path.GetRelativePath(root, fixture.Source.Path) }).ToArray()
+        });
+        fixture.Owner.Title = Path.GetFileNameWithoutExtension(fixture.Source.Path);
+        fixture.Owner.SortOrder = 49;
+        var destination = fixture.Season;
+        if (foreign) {
+            destination = new EntityRow { Id = Guid.NewGuid(), KindCode = EntityKind.VideoSeason.ToCode(),
+                Title = "Season 2", ParentEntityId = fixture.Season.ParentEntityId, SortOrder = 2,
+                CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow };
+            db.Entities.Add(destination);
+            await db.SaveChangesAsync();
+            fixture.Missing.ParentEntityId = destination.Id;
+            fixture.Monitor.EntityId = destination.Id;
+            fixture.Monitor.AcquisitionId = null;
+        }
+        var first = Episode(destination.Id, 1, "Hidden Garden", true);
+        db.Entities.Add(first);
+        await db.SaveChangesAsync();
+        return (fixture, destination, first);
+    }
+
     [Fact]
     public async Task ImportedPairRestoresOnlyMissingLinkAndPreservesExistingSourceAndFile() {
         await using var db = CreateContext();

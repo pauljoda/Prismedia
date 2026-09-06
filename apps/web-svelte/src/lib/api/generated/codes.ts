@@ -14,6 +14,7 @@ export type AcquisitionCheckpointProtocolCode = (typeof ACQUISITION_CHECKPOINT_P
 export const ACQUISITION_HISTORY_EVENT = {
   grabbed: "grabbed",
   imported: "imported",
+  mappingRepaired: "mapping-repaired",
   importFailed: "import-failed",
   downloadFailed: "download-failed",
   blocklisted: "blocklisted",

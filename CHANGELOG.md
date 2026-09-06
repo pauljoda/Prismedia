@@ -42,6 +42,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Monitored TV seasons can recover confidently identified episode pairs from older automatic imports that assigned a file to the wrong scanner placeholder. Recovery preserves the file and its stable source identity, retains manual mappings and playback history for review, and records the correction in acquisition history.
 - TV upgrade planning includes owned episodes even when their season has no dedicated folder, protecting shared files from replacements that would lose episode coverage.
 - Rescanning a file shared by multiple episodes preserves its saved episode owners and seasons when filename numbering disagrees, avoiding duplicate episodes, reverted mappings, and incorrectly fulfilled wanted episodes.
 

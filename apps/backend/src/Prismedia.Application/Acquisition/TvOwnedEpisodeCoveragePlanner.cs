@@ -4,27 +4,54 @@ namespace Prismedia.Application.Acquisition;
 public sealed record TvOwnedEpisodeCoveragePlan(Guid SeasonEntityId, int SeasonNumber, IReadOnlyList<TvEpisodeTitle> MissingEpisodes);
 
 /// <summary>
+/// Complete title-proven coverage replacing one incorrect file owner. The writer must prove that the
+/// old owner is an unreviewed scanner placeholder and that every destination remains monitored and wanted.
+/// </summary>
+public sealed record TvOwnedEpisodeRemappingPlan(Guid SeasonEntityId, int SeasonNumber, IReadOnlyList<TvEpisodeTitle> Episodes);
+
+/// <summary>
 /// Finds missing episode links from original import names and current catalog titles. The writer must
 /// independently verify file provenance, current ownership, monitoring, and lifecycle state before applying a plan.
 /// </summary>
 public static class TvOwnedEpisodeCoveragePlanner {
+    /// <summary>
+    /// Proposes complete paired coverage for a file whose sole saved owner is outside that coverage.
+    /// Numbers alone, occupied destinations, and partly correct shared mappings require review.
+    /// </summary>
+    public static TvOwnedEpisodeRemappingPlan? PlanReassignment(string originalFileName, string seriesTitle,
+        int requestedSeason, IReadOnlyList<TvSeasonEpisodeCatalog> catalog, IReadOnlyCollection<Guid> existingOwnerIds,
+        IReadOnlyList<string>? alternativeWorkTitles = null) {
+        if (existingOwnerIds.Count != 1) return null;
+        var coverage = ReadVerifiedCoverage(originalFileName, seriesTitle, requestedSeason, catalog, alternativeWorkTitles);
+        if (coverage is null || coverage.Episodes.Any(episode => !episode.IsWanted
+                || existingOwnerIds.Contains(episode.EntityId!.Value))) return null;
+        return new(coverage.Season.SeasonEntityId!.Value, coverage.Season.SeasonNumber, coverage.Episodes);
+    }
+
     /// <summary>Returns a conservative additive coverage proposal, or null when evidence conflicts or no gap exists.</summary>
     public static TvOwnedEpisodeCoveragePlan? Plan(string originalFileName, string seriesTitle, int requestedSeason,
         IReadOnlyList<TvSeasonEpisodeCatalog> catalog, IReadOnlyCollection<Guid> existingOwnerIds,
         IReadOnlyList<string>? alternativeWorkTitles = null) {
+        if (existingOwnerIds.Count == 0) return null;
+        var coverage = ReadVerifiedCoverage(originalFileName, seriesTitle, requestedSeason, catalog, alternativeWorkTitles);
+        if (coverage is null || existingOwnerIds.Any(owner => !coverage.Episodes.Any(episode => episode.EntityId == owner))) return null;
+        var missing = coverage.Episodes.Where(episode => !existingOwnerIds.Contains(episode.EntityId!.Value)).ToArray();
+        return missing.Length == 0 || missing.Any(episode => !episode.IsWanted) ? null
+            : new(coverage.Season.SeasonEntityId!.Value, coverage.Season.SeasonNumber, missing);
+    }
+
+    private static Coverage? ReadVerifiedCoverage(string originalFileName, string seriesTitle, int requestedSeason,
+        IReadOnlyList<TvSeasonEpisodeCatalog> catalog, IReadOnlyList<string>? alternativeWorkTitles) {
         var name = Path.GetFileNameWithoutExtension(originalFileName);
         var workMatched = AcquisitionWorkTitles.Match(name, seriesTitle, alternativeWorkTitles ?? []).TitleMatched;
         var titleEvidence = AcquisitionWorkTitles.EpisodeEvidence(name, seriesTitle, alternativeWorkTitles ?? []);
-        if (existingOwnerIds.Count == 0 || !workMatched
+        if (!workMatched
             && (TvReleaseTokens.ParseEpisodes(name) is not null || titleEvidence == name)) return null;
         var coverage = ReadCoverage(originalFileName, seriesTitle, requestedSeason, catalog, alternativeWorkTitles);
-        if (coverage is not { Season.SeasonEntityId: { } seasonId } || coverage.Episodes.Count < 2) return null;
+        if (coverage is not { Season.SeasonEntityId: not null } || coverage.Episodes.Count < 2) return null;
         var episodes = coverage.Episodes;
         if (episodes.Any(episode => episode.EntityId is null)
-            || episodes.Select(episode => episode.EntityId).Distinct().Count() != episodes.Count
-            || existingOwnerIds.Any(owner => !episodes.Any(episode => episode.EntityId == owner))) return null;
-        var missing = episodes.Where(episode => !existingOwnerIds.Contains(episode.EntityId!.Value)).ToArray();
-        if (missing.Length == 0 || missing.Any(episode => !episode.IsWanted)) return null;
+            || episodes.Select(episode => episode.EntityId).Distinct().Count() != episodes.Count) return null;
 
         // Historical filenames are useful evidence, but numeric ranges alone are not enough to add
         // coverage to an existing library file. Every proposed half needs its distinctive catalog title.
@@ -34,7 +61,7 @@ public static class TvOwnedEpisodeCoveragePlanner {
             || TvCrossSeasonImportEvidence.TitlesOverlap(episodes)) return null;
         if (!workMatched && !new TvEpisodeEvidenceIndex(episodes).HasDistinctLeadingTitles(
                 titleEvidence, episodes.Select(episode => episode.Episode).ToArray())) return null;
-        return new(seasonId, coverage.Season.SeasonNumber, missing);
+        return coverage;
     }
 
     private static Coverage? ReadCoverage(string originalFileName, string seriesTitle, int requestedSeason,

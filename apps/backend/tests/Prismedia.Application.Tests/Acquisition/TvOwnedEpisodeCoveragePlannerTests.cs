@@ -7,6 +7,44 @@ public sealed class TvOwnedEpisodeCoveragePlannerTests {
     private readonly Guid firstId = Guid.NewGuid();
     private readonly Guid secondId = Guid.NewGuid();
 
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void CompleteDistinctTitlesCanReplaceOneWrongOwnerWithWantedCanonicalEpisodes(int destinationSeason) {
+        var catalog = Catalog().Select(season => season with {
+            SeasonNumber = destinationSeason, Episodes = season.Episodes.Select(episode => episode with { IsWanted = true }).ToArray()
+        }).ToArray();
+        var plan = TvOwnedEpisodeCoveragePlanner.PlanReassignment(
+            "Show.S01E49.Hidden.Garden.&.Mountain.Journey.mkv", "Show", 1, catalog, [Guid.NewGuid()]);
+
+        Assert.NotNull(plan);
+        Assert.Equal(seasonId, plan.SeasonEntityId);
+        Assert.Equal(destinationSeason, plan.SeasonNumber);
+        Assert.Equal(new[] { firstId, secondId }, plan.Episodes.Select(episode => episode.EntityId!.Value));
+    }
+
+    [Theory]
+    [InlineData("Show.S01E01-E02.mkv")]
+    [InlineData("Show.S01E01-E02.Hidden.Garden.mkv")]
+    [InlineData("Show.Sequel.S01E01-E02.Hidden.Garden.&.Mountain.Journey.mkv")]
+    public void ReassignmentRequiresCompleteWorkAndEpisodeTitleEvidence(string name) {
+        var catalog = Catalog().Select(season => season with {
+            Episodes = season.Episodes.Select(episode => episode with { IsWanted = true }).ToArray()
+        }).ToArray();
+        Assert.Null(TvOwnedEpisodeCoveragePlanner.PlanReassignment(name, "Show", 1, catalog, [Guid.NewGuid()]));
+    }
+
+    [Fact]
+    public void ReassignmentCannotReplaceAnAlreadyOwnedOrPartlyCorrectMapping() {
+        const string name = "Show.S01E01-E02.Hidden.Garden.&.Mountain.Journey.mkv";
+        Assert.Null(TvOwnedEpisodeCoveragePlanner.PlanReassignment(name, "Show", 1, Catalog(), [Guid.NewGuid()]));
+        var catalog = Catalog().Select(season => season with {
+            Episodes = season.Episodes.Select(episode => episode with { IsWanted = true }).ToArray()
+        }).ToArray();
+        Assert.Null(TvOwnedEpisodeCoveragePlanner.PlanReassignment(name, "Show", 1, catalog, [firstId]));
+        Assert.Null(TvOwnedEpisodeCoveragePlanner.PlanReassignment(name, "Show", 1, catalog, [Guid.NewGuid(), Guid.NewGuid()]));
+    }
+
     [Fact]
     public void ATitleOnlyPairCanHealTheMissingOwnerButASequelCannot() {
         var plan = TvOwnedEpisodeCoveragePlanner.Plan("Show - Hidden Garden & Mountain Journey.mkv", "Show", 1,

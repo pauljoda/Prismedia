@@ -9,6 +9,7 @@ export function acquisitionHistoryEventLabel(event: AcquisitionHistoryEventCode)
 const ACQUISITION_HISTORY_EVENT_LABEL: Record<AcquisitionHistoryEventCode, string> = {
   [ACQUISITION_HISTORY_EVENT.grabbed]: "Grabbed",
   [ACQUISITION_HISTORY_EVENT.imported]: "Imported",
+  [ACQUISITION_HISTORY_EVENT.mappingRepaired]: "Mapping repaired",
   [ACQUISITION_HISTORY_EVENT.importFailed]: "Import failed",
   [ACQUISITION_HISTORY_EVENT.downloadFailed]: "Download failed",
   [ACQUISITION_HISTORY_EVENT.blocklisted]: "Blocklisted",
@@ -17,13 +18,14 @@ const ACQUISITION_HISTORY_EVENT_LABEL: Record<AcquisitionHistoryEventCode, strin
 };
 
 /**
- * Badge treatment for an event: success for the two happy outcomes (imported, upgraded), error for the
+ * Badge treatment for an event: success for imports, upgrades, and mapping repairs; error for the
  * three failure/removal events, accent for the in-motion grab. Colour never carries meaning alone — the
  * event label sits inside the badge.
  */
 export function acquisitionHistoryEventVariant(event: AcquisitionHistoryEventCode): BadgeVariant {
   switch (event) {
     case ACQUISITION_HISTORY_EVENT.imported:
+    case ACQUISITION_HISTORY_EVENT.mappingRepaired:
     case ACQUISITION_HISTORY_EVENT.upgraded:
       return "success";
     case ACQUISITION_HISTORY_EVENT.importFailed:

@@ -9,12 +9,14 @@ using Prismedia.Infrastructure.Persistence.Entities;
 
 namespace Prismedia.Infrastructure.Acquisition;
 
-/// <summary>Validates import receipts and current file ownership before adding missing shared-file links.</summary>
-public sealed class EfTvOwnedEpisodeCoverageRepair(PrismediaDbContext db, IImportTargetIndex targets,
+/// <summary>Validates import receipts and current ownership before restoring confidently proven shared-file coverage.</summary>
+public sealed partial class EfTvOwnedEpisodeCoverageRepair(PrismediaDbContext db, IImportTargetIndex targets,
     IEntityLifecycleMutationLease lifecycle) : ITvOwnedEpisodeCoverageRepair {
     /// <inheritdoc />
     public async Task<int> RepairAsync(Guid monitorId, Guid seasonId,
         Func<Guid, CancellationToken, Task> enqueueReconciliation, CancellationToken cancellationToken) {
+        var remapped = await RepairIncorrectOwnersAsync(monitorId, seasonId, enqueueReconciliation, cancellationToken);
+        if (remapped > 0) return remapped;
         var proposed = await ReadCandidatesAsync(monitorId, seasonId, cancellationToken);
         if (proposed.Count == 0) return 0;
         var ids = proposed.SelectMany(candidate => candidate.Sources.Select(source => source.EntityId)
