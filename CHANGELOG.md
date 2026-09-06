@@ -42,6 +42,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Automatic TV imports held with a saved episode plan can resume when current quality rules or retained files change. Retries preserve the original mapping and partial imports, respect manual review and paused monitoring, and avoid repeating unchanged work.
+
 - Completed upgrades now follow the configured recycle-bin or latest-backup policy after committing recovery state, preventing routine upgrades from accumulating recovery copies. Newly recycled files receive the full retention window even when their original modification dates are old.
 
 - The bundled worker now restarts after a crash or forced termination, allowing interrupted background jobs to recover without leaving the worker offline.

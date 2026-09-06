@@ -21,13 +21,17 @@ public sealed partial class EfAcquisitionStore {
             if (!string.Equals(canonical, encode(expected), StringComparison.Ordinal)) return null;
             using var original = JsonDocument.Parse(raw);
             using var normalized = JsonDocument.Parse(canonical);
-            return HasUnknownMembers(original.RootElement, normalized.RootElement) ? null : raw;
+            return CheckpointJsonCompatibility.HasUnknownMembers(original.RootElement, normalized.RootElement) ? null : raw;
         } catch (InvalidDataException) {
             return null;
         }
     }
 
-    private static bool HasUnknownMembers(JsonElement original, JsonElement normalized) {
+}
+
+/// <summary>Rejects unknown persisted checkpoint members while allowing older omitted optional fields.</summary>
+internal static class CheckpointJsonCompatibility {
+    internal static bool HasUnknownMembers(JsonElement original, JsonElement normalized) {
         if (original.ValueKind == JsonValueKind.Object) {
             if (normalized.ValueKind != JsonValueKind.Object) return true;
             foreach (var property in original.EnumerateObject()) {

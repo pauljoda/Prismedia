@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Acquisition;
 using Prismedia.Domain.Entities;
@@ -13,24 +14,31 @@ public sealed class EfHeldTvImportRecoveryStore(PrismediaDbContext db) : IHeldTv
             .Where(row => row.Status == AcquisitionStatus.ManualImportRequired
                 && (row.Kind == EntityKind.VideoSeason || row.Kind == EntityKind.VideoEpisode)
                 && row.EntityId != null && !row.ImportManualReview
-                && row.ImportCheckpointJson == null
+                && row.ImportClaimJobId == null
                 && row.UpgradeOfAcquisitionId == null)
             .OrderBy(row => row.UpdatedAt)
-            .Select(row => new HeldTvImport(row.Id, row.EntityId!.Value, row.UpdatedAt, row.ImportRecoveryFingerprint,
-                row.FinalSourcePath, row.ImportResultJson))
+            .Select(row => new {
+                Row = row,
+                Transfer = db.DownloadTransfers.Where(transfer => transfer.AcquisitionId == row.Id)
+                    .OrderByDescending(transfer => transfer.CreatedAt).First()
+            })
             .ToArrayAsync(cancellationToken);
-        return held.Where(CanReconsiderPayload).ToArray();
+        return held.Select(item => new HeldTvImport(item.Row.Id, item.Row.EntityId!.Value,
+            item.Row.UpdatedAt, item.Row.ImportRecoveryFingerprint, item.Row.FinalSourcePath, item.Row.ImportResultJson,
+            item.Row.ImportCheckpointJson, item.Row.SelectedReleaseJson,
+            item.Transfer.Id, item.Transfer.ContentPath, item.Transfer.ClientItemId)).Where(CanReconsiderPayload).ToArray();
     }
 
     /// <inheritdoc />
     public async Task<bool> TryResumeAsync(HeldTvImport held, string fingerprint, CancellationToken cancellationToken) {
         if (!CanReconsiderPayload(held)) return false;
         if (db.Database.IsRelational()) {
-            var affected = await WithCompletedPayload()
+            var affected = await WithObservedPayload(held)
                 .Where(row => row.Id == held.Id && row.Status == AcquisitionStatus.ManualImportRequired
                     && row.UpdatedAt == held.HeldAt && row.EntityId == held.EntityId
                     && row.ImportRecoveryFingerprint != fingerprint && !row.ImportManualReview
-                    && row.ImportCheckpointJson == null && row.FinalSourcePath == held.FinalSourcePath
+                    && row.ImportCheckpointJson == held.CheckpointSnapshot && row.FinalSourcePath == held.FinalSourcePath
+                    && row.SelectedReleaseJson == held.SelectedReleaseSnapshot && row.ImportClaimJobId == null
                     && row.ImportResultJson == held.ImportResultSnapshot && row.UpgradeOfAcquisitionId == null
                     && (row.Kind == EntityKind.VideoSeason || row.Kind == EntityKind.VideoEpisode))
                 .ExecuteUpdateAsync(setters => setters
@@ -45,10 +53,11 @@ public sealed class EfHeldTvImportRecoveryStore(PrismediaDbContext db) : IHeldTv
             }
             return affected == 1;
         }
-        var row = await WithCompletedPayload().FirstOrDefaultAsync(row => row.Id == held.Id, cancellationToken);
+        var row = await WithObservedPayload(held).FirstOrDefaultAsync(row => row.Id == held.Id, cancellationToken);
         if (row is null || row.Status != AcquisitionStatus.ManualImportRequired || row.UpdatedAt != held.HeldAt
             || row.EntityId != held.EntityId || row.ImportRecoveryFingerprint == fingerprint || row.ImportManualReview
-            || row.ImportCheckpointJson != null || row.FinalSourcePath != held.FinalSourcePath
+            || row.ImportCheckpointJson != held.CheckpointSnapshot || row.FinalSourcePath != held.FinalSourcePath
+            || row.SelectedReleaseJson != held.SelectedReleaseSnapshot || row.ImportClaimJobId != null
             || row.ImportResultJson != held.ImportResultSnapshot || row.UpgradeOfAcquisitionId != null
             || row.Kind is not (EntityKind.VideoSeason or EntityKind.VideoEpisode)) {
             return false;
@@ -75,9 +84,35 @@ public sealed class EfHeldTvImportRecoveryStore(PrismediaDbContext db) : IHeldTv
             .Select(transfer => transfer.Progress >= 1 && !string.IsNullOrWhiteSpace(transfer.ContentPath))
             .FirstOrDefault());
 
-    private static bool CanReconsiderPayload(HeldTvImport held) => held.FinalSourcePath is null
-        || AcquisitionImportFileLedgerJson.TryDeserialize(held.ImportResultSnapshot, out var ledger)
-            && ledger?.HasRetainedTvVideos() == true;
+    private IQueryable<Persistence.Entities.AcquisitionRow> WithObservedPayload(HeldTvImport held) => WithCompletedPayload()
+        .Where(row => db.DownloadTransfers.Where(transfer => transfer.AcquisitionId == row.Id)
+            .OrderByDescending(transfer => transfer.CreatedAt)
+            .Select(transfer => transfer.Id == held.TransferId && transfer.ContentPath == held.TransferContentPath
+                && transfer.ClientItemId == held.TransferClientItemId).FirstOrDefault());
 
-    private const string ResumeMessage = "Mapping inputs changed; retrying the retained TV download to fill library gaps.";
+    private static bool CanReconsiderPayload(HeldTvImport held) {
+        try {
+            if (held.SelectedReleaseSnapshot is null
+                || JsonSerializer.Deserialize<SelectedRelease>(held.SelectedReleaseSnapshot) is not { ManualPick: false }) return false;
+            if (held.CheckpointSnapshot is { } json) {
+                if (AtomicUpgradeCheckpointJson.IsAtomic(json)) return false;
+                var checkpoint = TvImportCheckpointJson.Deserialize(json);
+                if (checkpoint is null) return false;
+                using var original = JsonDocument.Parse(json);
+                using var canonical = JsonDocument.Parse(TvImportCheckpointJson.Serialize(checkpoint));
+                if (CheckpointJsonCompatibility.HasUnknownMembers(original.RootElement, canonical.RootElement)) return false;
+                return checkpoint.TransferClientItemId == held.TransferClientItemId
+                    && checkpoint.Units.All(unit => unit.PreviousFilePath is null)
+                    && checkpoint.Units.Any(unit => !unit.AdoptedExistingTarget
+                        && (unit.FinalPath is null || !File.Exists(unit.FinalPath)));
+            }
+            return held.FinalSourcePath is null
+                || AcquisitionImportFileLedgerJson.TryDeserialize(held.ImportResultSnapshot, out var ledger)
+                    && ledger?.HasRetainedTvVideos() == true;
+        } catch (Exception ex) when (ex is InvalidDataException or JsonException) {
+            return false;
+        }
+    }
+
+    private const string ResumeMessage = "Import inputs changed; retrying the retained TV download with its saved recovery state.";
 }

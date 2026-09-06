@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
+using Prismedia.Application.Files;
 using Prismedia.Application.Jobs;
 using Prismedia.Application.Jobs.Handlers;
 using Prismedia.Application.Jobs.Ports;
@@ -11,12 +12,19 @@ namespace Prismedia.Application.Acquisition;
 /// <summary>An automatic TV import still waiting for review, with its exact held-state observation.</summary>
 /// <param name="FinalSourcePath">Previously imported location, retained during partial-payload recovery.</param>
 /// <param name="ImportResultSnapshot">Opaque persisted ledger snapshot used to reject stale recovery writes.</param>
+/// <param name="CheckpointSnapshot">Exact saved television plan; recovery must preserve its elected units.</param>
+/// <param name="SelectedReleaseSnapshot">Exact release authority observed before reconsideration.</param>
+/// <param name="TransferId">Latest completed transfer, compared again when publishing recovery.</param>
+/// <param name="TransferContentPath">Observed payload boundary; a changed location invalidates the observation.</param>
+/// <param name="TransferClientItemId">Observed downloader item; a different attempt cannot reuse this plan.</param>
 public sealed record HeldTvImport(Guid Id, Guid EntityId, DateTimeOffset HeldAt, string? RecoveryFingerprint,
-    string? FinalSourcePath = null, string? ImportResultSnapshot = null);
+    string? FinalSourcePath = null, string? ImportResultSnapshot = null,
+    string? CheckpointSnapshot = null, string? SelectedReleaseSnapshot = null,
+    Guid? TransferId = null, string? TransferContentPath = null, string? TransferClientItemId = null);
 
 /// <summary>Durable compare-and-swap boundary for retrying a retained TV payload after mapping inputs change.</summary>
 public interface IHeldTvImportRecoveryStore {
-    /// <summary>Lists held television attempts without an in-progress placement checkpoint or upgrade replacement.</summary>
+    /// <summary>Lists automatic held television payloads, including saved new-file plans, without active claims or upgrade replacements.</summary>
     Task<IReadOnlyList<HeldTvImport>> ListAsync(CancellationToken cancellationToken);
 
     /// <summary>
@@ -77,10 +85,15 @@ public sealed class HeldTvImportRecoveryService(
         var selected = await acquisitions.GetSelectedReleaseAsync(held.Id, cancellationToken);
         if (import is not { SeasonNumber: { } season, ContentPath: { } contentPath }
             || import.EntityId != held.EntityId || selected is null || selected.ManualPick
-            || import.TvImportCheckpoint is not null || import.ImportPlacementCheckpoint is not null
-            || await targets.HasUnnumberedWantedTvEpisodesAsync(held.EntityId, season, cancellationToken)) {
+            || import.ImportPlacementCheckpoint is not null || import.AtomicUpgradeCheckpoint is not null
+            || import.UpgradeOfAcquisitionId is not null) {
             return;
         }
+        if (import.TvImportCheckpoint is { } checkpoint) {
+            await ReconsiderCheckpointAsync(held, import, checkpoint, selected, cancellationToken);
+            return;
+        }
+        if (await targets.HasUnnumberedWantedTvEpisodesAsync(held.EntityId, season, cancellationToken)) return;
         var retainedPartial = !string.IsNullOrWhiteSpace(import.FinalSourcePath)
             && (await acquisitions.GetTransferInfoAsync(held.Id, cancellationToken))?.ImportResult?.HasRetainedTvVideos() == true;
         if (!string.IsNullOrWhiteSpace(import.FinalSourcePath) && !retainedPartial) {
@@ -155,14 +168,73 @@ public sealed class HeldTvImportRecoveryService(
                 Files = pair.Value.EpisodeFileByNumber.OrderBy(file => file.Key).ToArray()
             }).ToArray()
         })));
+        await ResumeIfChangedAsync(held, fingerprint, cancellationToken);
+    }
+
+    private async Task ReconsiderCheckpointAsync(HeldTvImport held, AcquisitionImportContext import,
+        TvImportCheckpoint checkpoint, SelectedRelease selected, CancellationToken cancellationToken) {
+        if (held.CheckpointSnapshot is null || checkpoint.TransferClientItemId != import.ClientItemId) return;
+        // A saved plan is an immutable election. Observe its pending bytes and current validation
+        // settings without rebuilding episode mappings or probing the whole payload every tick.
+        var pending = checkpoint.Units.Where(unit => unit.PreviousFilePath is null && !unit.AdoptedExistingTarget
+            && (unit.FinalPath is null || !File.Exists(unit.FinalPath))).ToArray();
+        if (checkpoint.Units.Any(unit => unit.PreviousFilePath is not null)
+            || !pending.Any(unit => File.Exists(unit.SourceAbsolutePath))) return;
+        var payload = payloads.Read(import.ContentPath!);
+        if (payload is null || DangerousFileDetection.FindDangerousFile(
+                payload.Files.Select(file => file.RelativePath).ToArray()) is not null) return;
+        if (pending.Any(unit => unit.SourceAbsolutePath is null || !FileSystemPathComparison.Equals(
+                Path.GetFullPath(unit.SourceAbsolutePath), Path.GetFullPath(Path.Combine(payload.ContentRoot, unit.SourceRelativePath))))) return;
+        var root = await roots.GetLibraryRootAsync(checkpoint.LibraryRootId, cancellationToken);
+        if (root is not { ScanVideos: true } || !Directory.Exists(root.Path)) return;
+
+        var requestedRules = await profiles.GetRulesAsync(import.ProfileId, import.Kind, cancellationToken);
+        var foreignNumbers = pending.Select(unit => unit.SeasonNumber).Distinct()
+            .Where(number => number != import.SeasonNumber).Order().ToArray();
+        var catalog = foreignNumbers.Length > 0
+            ? await targets.GetSeriesEpisodeCatalogAsync(held.EntityId, cancellationToken) : [];
+        var destinationRules = new List<HeldDestinationRules>();
+        foreach (var number in foreignNumbers) {
+            var destinations = catalog.Where(season => season.SeasonNumber == number).ToArray();
+            if (destinations.Length != 1 || destinations[0].SeasonEntityId is not { } destinationId
+                || await monitors.GetByEntityAsync(destinationId, cancellationToken) is not { } monitor) return;
+            // Monitoring was captured when the plan elected the extras. Match the importer's current
+            // destination profile lookup without re-electing episodes when that monitor later pauses.
+            destinationRules.Add(new(number, destinationId, monitor.ProfileId,
+                await profiles.GetRulesAsync(monitor.ProfileId, EntityKind.VideoSeason, cancellationToken)));
+        }
+        var fingerprint = Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(new {
+            ValidationEngine = typeof(TvNewFileValidation).Assembly.ManifestModule.ModuleVersionId,
+            checkpoint.AttemptId, checkpoint.LibraryRootId, checkpoint.SeriesFolderPath, checkpoint.ImportMode,
+            checkpoint.AllowFormatChange, checkpoint.TransferClientItemId, checkpoint.Units,
+            import.ProfileId, import.Kind, import.SeasonNumber, Rules = requestedRules, DestinationRules = destinationRules,
+            Root = new { root.Id, root.Path }, Selected = selected,
+            Files = checkpoint.Units.Select(unit => new {
+                Source = ObserveFile(unit.SourceAbsolutePath), Target = ObserveFile(unit.TargetAbsolutePath)
+            }).ToArray()
+        })));
+        await ResumeIfChangedAsync(held, fingerprint, cancellationToken);
+    }
+
+    private static HeldFileObservation? ObserveFile(string? path) {
+        if (string.IsNullOrWhiteSpace(path)) return null;
+        var file = new FileInfo(path);
+        return new(path, file.Exists ? file.Length : null, file.Exists ? file.LastWriteTimeUtc : null);
+    }
+
+    private sealed record HeldDestinationRules(int Season, Guid EntityId, Guid? ProfileId, BookAcquisitionRules Rules);
+
+    private sealed record HeldFileObservation(string Path, long? Length, DateTime? ModifiedAt);
+
+    private async Task ResumeIfChangedAsync(HeldTvImport held, string fingerprint, CancellationToken cancellationToken) {
         if (fingerprint == held.RecoveryFingerprint) {
             return;
         }
         // Provider lookups must not keep a monitor row locked. Recheck current intent only when
-        // publishing the completion ticket; the importer elects its own fresh placement afterwards.
+        // publishing the completion ticket; the importer validates and resumes any saved placement.
         await monitors.ExecuteIfActiveEntityMutationAsync(held.EntityId, async token => {
             if (await recovery.TryResumeAsync(held, fingerprint, token)) {
-                logger.LogInformation("Held TV acquisition {Id} has a new mapping that can fill library gaps; resuming its retained payload.", held.Id);
+                logger.LogInformation("Held TV acquisition {Id} has changed import inputs; resuming its retained payload.", held.Id);
             }
         }, cancellationToken);
     }

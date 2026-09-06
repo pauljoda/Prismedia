@@ -341,6 +341,222 @@ public sealed class HeldTvImportRecoveryTests : IDisposable {
         Assert.Equal(AcquisitionStatus.Cancelled, acquisition.Status);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SavedNewFilePlanRetriesOnceWhenItsProfileOrRetainedFileChanges(bool changeProfile) {
+        await using var db = CreateContext();
+        var (service, acquisition, _) = await SeedAsync(db);
+        var checkpoint = await SaveNewFileCheckpointAsync(db, acquisition);
+        var profile = new BookAcquisitionProfileRow {
+            Id = Guid.NewGuid(), Kind = EntityKind.VideoSeries, DisplayName = "Current TV rules",
+            AllowedQualities = [VideoQuality.Webdl1080p.ToCode()]
+        };
+        db.BookAcquisitionProfiles.Add(profile);
+        acquisition.ProfileId = profile.Id;
+        await db.SaveChangesAsync();
+
+        await service.RecoverAsync(default);
+        Assert.Equal(AcquisitionStatus.Downloaded, acquisition.Status);
+        var fingerprint = acquisition.ImportRecoveryFingerprint;
+        Assert.NotNull(fingerprint);
+        // A failed retry keeps the elected plan; its new queue claim is not a validation input.
+        acquisition.Status = AcquisitionStatus.ManualImportRequired;
+        acquisition.ImportCheckpointJson = TvImportCheckpointJson.Serialize(checkpoint with { ClaimJobId = Guid.NewGuid() });
+        await db.SaveChangesAsync();
+        await CreateService(db).RecoverAsync(default);
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, acquisition.Status);
+        Assert.Equal(fingerprint, acquisition.ImportRecoveryFingerprint);
+
+        if (changeProfile) profile.AllowedQualities = [VideoQuality.Webdl720p.ToCode()];
+        else await File.AppendAllTextAsync(checkpoint.Units[0].SourceAbsolutePath!, " repaired payload");
+        await db.SaveChangesAsync();
+        var exactPlan = acquisition.ImportCheckpointJson;
+        await CreateService(db).RecoverAsync(default);
+
+        Assert.Equal(AcquisitionStatus.Downloaded, acquisition.Status);
+        Assert.NotEqual(fingerprint, acquisition.ImportRecoveryFingerprint);
+        Assert.Equal(exactPlan, acquisition.ImportCheckpointJson);
+        Assert.False(File.Exists(checkpoint.Units[0].TargetAbsolutePath));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SavedPlanRecoveryPreservesCompletedUnitsAndChecksTheExactObservation(bool postgres) {
+        await using var database = postgres ? await PostgresTestDatabase.CreateAsync() : null;
+        await using var db = database?.CreateContext() ?? CreateContext();
+        var (_, acquisition, _) = await SeedAsync(db);
+        var checkpoint = await SaveNewFileCheckpointAsync(db, acquisition);
+        var placed = Path.Combine(checkpoint.SeriesFolderPath, "placed.mkv");
+        await File.WriteAllTextAsync(placed, "already imported bytes");
+        checkpoint = checkpoint with { Units = [.. checkpoint.Units,
+            new("placed.mkv", placed, 1, 2, [], FinalPath: placed,
+                SourceAbsolutePath: Path.Combine(root, "payload", "placed.mkv"))] };
+        acquisition.ImportCheckpointJson = TvImportCheckpointJson.Serialize(checkpoint);
+        acquisition.FinalSourcePath = placed;
+        await db.SaveChangesAsync();
+        var store = new EfHeldTvImportRecoveryStore(db);
+        var held = Assert.Single(await store.ListAsync(default));
+        Assert.True(await store.TryResumeAsync(held, "inputs-one", default));
+        Assert.Equal(checkpoint.AttemptId, TvImportCheckpointJson.Deserialize(acquisition.ImportCheckpointJson)!.AttemptId);
+        Assert.Equal(placed, acquisition.FinalSourcePath);
+        Assert.Equal("already imported bytes", await File.ReadAllTextAsync(placed));
+        acquisition.Status = AcquisitionStatus.ManualImportRequired;
+        await db.SaveChangesAsync();
+        var newer = Assert.Single(await store.ListAsync(default));
+        acquisition.ImportCheckpointJson = TvImportCheckpointJson.Serialize(checkpoint with { AttemptId = Guid.NewGuid() });
+        await db.SaveChangesAsync();
+        Assert.False(await store.TryResumeAsync(newer, "inputs-two", default));
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task CompleteTransferChangesInvalidateSavedPlanRecovery(bool postgres, bool newerTransfer) {
+        await using var database = postgres ? await PostgresTestDatabase.CreateAsync() : null;
+        await using var db = database?.CreateContext() ?? CreateContext();
+        var (_, acquisition, _) = await SeedAsync(db);
+        await SaveNewFileCheckpointAsync(db, acquisition);
+        var store = new EfHeldTvImportRecoveryStore(db);
+        var held = Assert.Single(await store.ListAsync(default));
+        var transfer = await db.DownloadTransfers.SingleAsync();
+        if (newerTransfer) db.DownloadTransfers.Add(new DownloadTransferRow {
+            Id = Guid.NewGuid(), AcquisitionId = acquisition.Id, ClientItemId = transfer.ClientItemId,
+            ContentPath = transfer.ContentPath, Progress = 1, CreatedAt = transfer.CreatedAt.AddSeconds(1)
+        });
+        else transfer.ContentPath = Path.Combine(root, "different-payload");
+        await db.SaveChangesAsync();
+
+        Assert.False(await store.TryResumeAsync(held, "changed-inputs", default));
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, acquisition.Status);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AManualReleaseChangeAfterObservationCannotBeAutomaticallyResumed(bool postgres) {
+        await using var database = postgres ? await PostgresTestDatabase.CreateAsync() : null;
+        await using var db = database?.CreateContext() ?? CreateContext();
+        var (_, acquisition, _) = await SeedAsync(db);
+        await SaveNewFileCheckpointAsync(db, acquisition);
+        var store = new EfHeldTvImportRecoveryStore(db);
+        var held = Assert.Single(await store.ListAsync(default));
+        // Do not change UpdatedAt: the release itself is part of the observed authority.
+        acquisition.SelectedReleaseJson = System.Text.Json.JsonSerializer.Serialize(
+            new SelectedRelease("Show S01 720p WEB", "Indexer", "held-test", ManualPick: true));
+        await db.SaveChangesAsync();
+
+        Assert.False(await store.TryResumeAsync(held, "changed-inputs", default));
+        Assert.Empty(await store.ListAsync(default));
+    }
+
+    [Fact]
+    public async Task UnknownCheckpointMembersStayHeldWithoutQueuingAnUnclaimablePlan() {
+        await using var db = CreateContext();
+        var (service, acquisition, _) = await SeedAsync(db);
+        await SaveNewFileCheckpointAsync(db, acquisition);
+        acquisition.ImportCheckpointJson = acquisition.ImportCheckpointJson![..^1] + ",\"FuturePolicy\":true}";
+        await db.SaveChangesAsync();
+
+        Assert.Empty(await new EfHeldTvImportRecoveryStore(db).ListAsync(default));
+        await service.RecoverAsync(default);
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, acquisition.Status);
+    }
+
+    [Theory]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(false, false, true)]
+    public async Task SavedPlansPreservePausedManualAndActiveClaimAuthority(bool paused, bool manual, bool claimed) {
+        await using var db = CreateContext();
+        var (service, acquisition, _) = await SeedAsync(db);
+        await SaveNewFileCheckpointAsync(db, acquisition);
+        if (paused) (await db.Monitors.SingleAsync()).Status = MonitorStatus.Paused;
+        acquisition.ImportManualReview = manual;
+        if (claimed) acquisition.ImportClaimJobId = Guid.NewGuid();
+        await db.SaveChangesAsync();
+
+        await service.RecoverAsync(default);
+
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, acquisition.Status);
+        Assert.Null(acquisition.ImportRecoveryFingerprint);
+    }
+
+    [Fact]
+    public async Task AnElectedExtrasDestinationProfileChangeResumesTheSamePlanWithoutReelecting() {
+        await using var db = CreateContext();
+        var (service, acquisition, _) = await SeedAsync(db);
+        var checkpoint = await SaveNewFileCheckpointAsync(db, acquisition);
+        var requestedSeason = await db.Entities.SingleAsync(entity => entity.Id == acquisition.EntityId);
+        var destination = new EntityRow {
+            Id = Guid.NewGuid(), ParentEntityId = requestedSeason.ParentEntityId,
+            KindCode = EntityKind.VideoSeason.ToCode(), Title = "Season 2", SortOrder = 2
+        };
+        db.Entities.Add(destination);
+        db.Entities.Add(new EntityRow { Id = Guid.NewGuid(), ParentEntityId = destination.Id,
+            KindCode = EntityKind.VideoEpisode.ToCode(), Title = "Extra episode", SortOrder = 1, IsWanted = true });
+        var profile = new BookAcquisitionProfileRow { Id = Guid.NewGuid(), Kind = EntityKind.VideoSeries,
+            DisplayName = "Extra season rules", AllowedQualities = [VideoQuality.Webdl1080p.ToCode()] };
+        db.BookAcquisitionProfiles.Add(profile);
+        db.Monitors.Add(new MonitorRow { Id = Guid.NewGuid(), EntityId = destination.Id, Kind = EntityKind.VideoSeason,
+            Title = "Season 2", ProfileId = profile.Id, Status = MonitorStatus.Paused });
+        checkpoint = checkpoint with { Units = [checkpoint.Units[0] with { SeasonNumber = 2 }] };
+        acquisition.ImportCheckpointJson = TvImportCheckpointJson.Serialize(checkpoint);
+        await db.SaveChangesAsync();
+        await service.RecoverAsync(default);
+        Assert.Equal(AcquisitionStatus.Downloaded, acquisition.Status);
+        acquisition.Status = AcquisitionStatus.ManualImportRequired;
+        await db.SaveChangesAsync();
+        await service.RecoverAsync(default);
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, acquisition.Status);
+        profile.AllowedQualities = [VideoQuality.Webdl720p.ToCode()];
+        await db.SaveChangesAsync();
+
+        await service.RecoverAsync(default);
+
+        Assert.Equal(AcquisitionStatus.Downloaded, acquisition.Status);
+        Assert.Equal(TvImportCheckpointJson.Serialize(checkpoint), acquisition.ImportCheckpointJson);
+        Assert.Equal(MonitorStatus.Paused, (await db.Monitors.SingleAsync(row => row.EntityId == destination.Id)).Status);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FullyPlacedAndReplacementPlansKeepTheirDedicatedRecovery(bool replacement) {
+        await using var db = CreateContext();
+        var (service, acquisition, _) = await SeedAsync(db);
+        var checkpoint = await SaveNewFileCheckpointAsync(db, acquisition);
+        var unit = checkpoint.Units[0];
+        await File.WriteAllTextAsync(unit.TargetAbsolutePath, "owned bytes");
+        unit = replacement ? unit with {
+            PreviousFilePath = unit.TargetAbsolutePath,
+            ReplacementBackupPath = OwnedFileReplacementArtifacts.CheckpointBackupPath(unit.TargetAbsolutePath, checkpoint.AttemptId),
+            ReplacementEvidencePath = OwnedFileReplacementArtifacts.CheckpointEvidencePath(unit.TargetAbsolutePath, checkpoint.AttemptId)
+        } : unit with { FinalPath = unit.TargetAbsolutePath };
+        acquisition.ImportCheckpointJson = TvImportCheckpointJson.Serialize(checkpoint with { Units = [unit] });
+        await db.SaveChangesAsync();
+
+        Assert.Empty(await new EfHeldTvImportRecoveryStore(db).ListAsync(default));
+        await service.RecoverAsync(default);
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, acquisition.Status);
+        Assert.Equal("owned bytes", await File.ReadAllTextAsync(unit.TargetAbsolutePath));
+    }
+
+    private async Task<TvImportCheckpoint> SaveNewFileCheckpointAsync(PrismediaDbContext db, AcquisitionRow acquisition) {
+        var seriesFolder = Directory.CreateDirectory(Path.Combine(root, "Show")).FullName;
+        var name = "Show.S01E01E02.First.Story.Second.Story.mkv";
+        var checkpoint = new TvImportCheckpoint(rootId, seriesFolder, ImportMode.Move, false, "Imported", false,
+            [new(name, Path.Combine(seriesFolder, "episode.mkv"), 1, 1, [],
+                SourceAbsolutePath: Path.Combine(root, "payload", name))],
+            TransferClientItemId: "retained-payload", AttemptId: Guid.NewGuid(), ClaimJobId: Guid.NewGuid());
+        acquisition.ImportCheckpointJson = TvImportCheckpointJson.Serialize(checkpoint);
+        await db.SaveChangesAsync();
+        return checkpoint;
+    }
+
     private async Task<(HeldTvImportRecoveryService Service, AcquisitionRow Acquisition, EntityRow[] Episodes)> SeedAsync(PrismediaDbContext db) {
         var now = DateTimeOffset.UtcNow;
         var series = new EntityRow { Id = Guid.NewGuid(), KindCode = EntityKind.VideoSeries.ToCode(), Title = "Show", CreatedAt = now, UpdatedAt = now };

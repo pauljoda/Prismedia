@@ -192,6 +192,15 @@ an exact placement plan before touching disk and checkpoint each unit so a
 worker restart resumes the same move, copy, or hardlink instead of inventing a
 second target.
 
+Held automatic TV imports share a bounded recovery sweep. Unplanned payloads can
+be reconsidered when catalog evidence fills a real gap; saved new-file plans keep
+their elected units and observe current profile rules and file facts instead.
+The durable input fingerprint excludes queue claim identity, so a retry that
+still fails validation does not loop. Recovery compares the exact held ledger,
+checkpoint, selected release, and latest completed transfer under the active
+Entity monitor lease before publishing a normal completion ticket. Manual review,
+replacement plans, and fully placed plans retain their dedicated recovery paths.
+
 Atomic book, movie, and individual-episode upgrades use the same acquisition
 checkpoint slot with an explicit replacement protocol. One Entity lifecycle
 transaction commits the exact Source id, release, transfer, and file preparation
