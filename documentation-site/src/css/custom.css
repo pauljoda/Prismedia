@@ -300,6 +300,13 @@ table {
   border-radius: var(--prismedia-radius-md);
 }
 
+/* Keep wide reference tables inside the article on narrow screens. */
+.theme-doc-markdown table {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
 th {
   color: var(--prismedia-text-primary);
   background: var(--prismedia-surface-2);
