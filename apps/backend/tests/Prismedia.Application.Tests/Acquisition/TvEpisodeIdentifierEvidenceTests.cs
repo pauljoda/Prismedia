@@ -6,6 +6,21 @@ namespace Prismedia.Application.Tests.Acquisition;
 /// <summary>Generic catalog labels cannot establish an episode's place in another numbering system.</summary>
 public sealed class TvEpisodeIdentifierEvidenceTests {
     [Theory]
+    [InlineData("S02E01", "S02E02")]
+    [InlineData("2x01", "2x02")]
+    [InlineData("Season 2 Episode 1", "Season 2 Episode 2")]
+    public void StructuredCatalogPlaceholdersCannotRealignAnotherEpisode(string firstTitle, string secondTitle) {
+        var titles = new TvEpisodeTitle[] { new(1, firstTitle), new(2, secondTitle) };
+        var file = new ImportCandidateFile($"Example Show S02E02 {firstTitle}.mkv", 1000);
+        var plan = TvImportPlanBuilder.PlanUnits([file], "Example Show", 2, null, episodeTitles: titles);
+
+        Assert.False(plan.Blocked);
+        Assert.Equal(2, Assert.Single(plan.Units).Episode);
+        Assert.True(TvEpisodeIdentifiers.IsGenericTitle(firstTitle));
+        Assert.Null(TvEpisodeIdentifiers.Create(firstTitle, 1).ProviderTitle);
+    }
+
+    [Theory]
     [InlineData(null)]
     [InlineData(83)]
     public void SeasonRelativePlaceholderDoesNotAuthorizeAnAbsoluteRelease(int? absolute) {

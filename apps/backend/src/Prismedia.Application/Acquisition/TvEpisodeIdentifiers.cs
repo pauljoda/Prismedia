@@ -12,8 +12,13 @@ public static partial class TvEpisodeIdentifiers {
     [GeneratedRegex(@"^\s*episode[\s._-]*0*(?<number>\d{1,6})\s*$", RegexOptions.IgnoreCase)]
     private static partial Regex GenericEpisodeTitleRegex();
 
+    [GeneratedRegex(@"^\s*(?:s\d{1,3}[\s._-]*e\d{1,6}|\d{1,3}x\d{1,6}|season[\s._-]*\d{1,3}[\s._-]*episode[\s._-]*\d{1,6})\s*$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex StructuredEpisodeTitleRegex();
+
     /// <summary>Recognizes an unqualified episode-number label, which alone proves no numbering system.</summary>
-    public static bool IsGenericTitle(string? title) => GenericEpisodeTitleRegex().IsMatch(title ?? string.Empty);
+    public static bool IsGenericTitle(string? title) =>
+        GenericEpisodeTitleRegex().IsMatch(title ?? string.Empty)
+        || StructuredEpisodeTitleRegex().IsMatch(title ?? string.Empty);
 
     /// <summary>
     /// Returns a descriptive provider title and independently supplied absolute position. Generic
@@ -24,8 +29,9 @@ public static partial class TvEpisodeIdentifiers {
         var identifiers = new List<string>();
         var numericIdentifiers = new List<string>();
         var genericTitle = GenericEpisodeTitleRegex().Match(providerTitle ?? string.Empty);
-        var usableTitle = !genericTitle.Success
-            || (int.TryParse(genericTitle.Groups["number"].Value, CultureInfo.InvariantCulture, out var titleNumber)
+        var usableTitle = !IsGenericTitle(providerTitle)
+            || (genericTitle.Success
+                && int.TryParse(genericTitle.Groups["number"].Value, CultureInfo.InvariantCulture, out var titleNumber)
                 && titleNumber > 0 && titleNumber == absoluteEpisodeNumber)
             ? providerTitle : null;
         Add(identifiers, usableTitle);

@@ -40,6 +40,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Generated season-and-episode catalog labels no longer override a download's explicit episode numbering as if they were descriptive titles.
+
 - Book upgrade requests retain the requested volume and rendition, so ebook upgrades cannot silently accept audio or a different volume.
 
 - Upgrade searches and imports follow the original item's repaired numbering, including verified absolute episode numbers, without changing file ownership before replacement.
