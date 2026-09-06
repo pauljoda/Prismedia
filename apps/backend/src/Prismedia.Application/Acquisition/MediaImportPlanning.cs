@@ -658,8 +658,8 @@ public static partial class TvImportPlanBuilder {
     /// numeric placement would import the wrong content into almost every episode slot). A file whose
     /// name-tail matches one or more provider titles is re-anchored at the LOWEST matched number and
     /// records the rest as covered extras (the import binds them to the same placed file). Files whose
-    /// tails match nothing keep their numeric placement, and if the realignment would land two files on
-    /// the same episode, the whole payload keeps its numeric numbers — never guess against a conflict.
+    /// tails match nothing keep their numeric placement. Conflicting title-derived claims are held for
+    /// review; reverting to the original numbering would discard the evidence of a mismatched ordering.
     /// </summary>
     private static List<TvPlanUnit>? RealignByEpisodeTitles(
         List<TvPlanUnit> units,
@@ -723,10 +723,10 @@ public static partial class TvImportPlanBuilder {
             return units;
         }
 
-        // A conflict (two files claiming one slot) means the title evidence is unreliable here —
-        // keep the numeric truth for the whole payload rather than half-applying a guess.
+        // The original numbers cannot settle a collision in stronger title evidence. Keep the payload
+        // for review rather than assigning apparently distinct but contradicted numeric slots.
         var slots = realigned.Select(unit => (unit.Season, unit.Episode)).ToArray();
-        return slots.Distinct().Count() == slots.Length ? realigned : units;
+        return slots.Distinct().Count() == slots.Length ? realigned : null;
     }
 
     private static bool HasInternetArchiveOriginalSibling(string relativePath, IReadOnlySet<string> videoPaths) {

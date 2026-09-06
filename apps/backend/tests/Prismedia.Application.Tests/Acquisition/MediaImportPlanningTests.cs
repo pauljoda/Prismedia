@@ -1075,6 +1075,18 @@ public sealed class TvEpisodeTitleAlignmentTests {
     }
 
     [Fact]
+    public void ConflictingBundledTitleMappingsCannotRevertToDistinctNumericLabels() {
+        var plan = TvImportPlanBuilder.PlanUnits([
+            File("Pack/Show.S01E01.SPECIAL.DELIVERY.FERRY.TALE.mkv"),
+            File("Pack/Show.S01E02.SPECIAL.DELIVERY.FERRY.TALE.mkv"),
+        ], "Show", seasonNumber: 1, episodeNumber: null, episodeTitles: CliffordTitles);
+
+        Assert.True(plan.Blocked);
+        Assert.Equal(ImportBlockReason.AmbiguousMultiplePrimaries, plan.BlockReason);
+        Assert.Empty(plan.Units);
+    }
+
+    [Fact]
     public void NoTitlesMeansNoRealignment() {
         var plan = TvImportPlanBuilder.PlanUnits([
             File("Pack/Show_S01E02_SPECIAL DELIVERY_FERRY TALE.mkv"),
