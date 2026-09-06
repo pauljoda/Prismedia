@@ -13,6 +13,32 @@ namespace Prismedia.Infrastructure.Tests;
 /// off), the one-in-flight interlock, durable intent across repeated misses, and success/failure counters.
 /// </summary>
 public sealed class EfMonitorStoreUpgradeTests {
+    [Theory]
+    [InlineData("Some Book Vol. 4 epub", ReleaseRejectionReason.WrongVolume)]
+    [InlineData("Some Book Vol. 3 mp3", ReleaseRejectionReason.UnsupportedFormat)]
+    public async Task BookUpgradesRetainVolumeAndRenditionReleaseGates(string title, ReleaseRejectionReason expected) {
+        await using var db = CreateContext();
+        var monitors = await SeedUpgradeMonitorAsync(db,
+            owned: new(BookSourceTier.Web, BookFormatTier.Reflowable),
+            cutoff: new(BookSourceTier.Retail, BookFormatTier.Reflowable), bookRendition: BookRendition.Ebook);
+        var parent = await db.Acquisitions.SingleAsync();
+        parent.VolumeNumber = 3;
+        await db.SaveChangesAsync();
+        var monitorId = (await monitors.ListAsync(default))[0].Id;
+        var childId = await monitors.CreateUpgradeChildAsync(monitorId, default);
+        var input = await AcquisitionTestFactory.Store(db).GetSearchInputAsync(childId!.Value, default);
+        var rules = AcquisitionRuleContext.Apply(BookAcquisitionRules.Default, input!, null,
+            ProperDownloadPolicy.PreferAndUpgrade, [DownloadProtocol.Torrent]);
+        var release = new IndexerRelease(title, 1_000_000, 10, 2, DownloadProtocol.Torrent,
+            "https://indexer.test/download", null, null, null, null, null);
+
+        var candidate = Assert.Single(new BookReleaseDecisionEngine().Evaluate([(release, null, "Indexer")], rules));
+        Assert.False(candidate.Accepted);
+        Assert.Contains(expected, candidate.Rejections);
+        Assert.True(Assert.Single(new BookReleaseDecisionEngine().Evaluate(
+            [(release with { Title = "Some Book Vol. 3 epub" }, null, "Indexer")], rules)).Accepted);
+    }
+
     [Fact]
     public async Task EditedProfileReopensAnUpgradeBeforeTheOldBarrenSearchCooldown() {
         await using var db = CreateContext();

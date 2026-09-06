@@ -740,6 +740,7 @@ public sealed partial class EfMonitorStore(
             // category range, and the replace/import paths speak the right vocabulary. (Books happened to work
             // on the default kind; a movie/episode upgrade child would misbehave without this.)
             Kind = parent.Kind,
+            BookRendition = parent.BookRendition,
             ProfileId = parent.ProfileId,
             TargetLibraryRootId = parent.TargetLibraryRootId,
             Status = AcquisitionStatus.Pending,
@@ -748,6 +749,7 @@ public sealed partial class EfMonitorStore(
             Series = parent.Series,
             SeasonNumber = parent.SeasonNumber,
             EpisodeNumber = parent.EpisodeNumber,
+            VolumeNumber = parent.VolumeNumber,
             Year = parent.Year,
             PosterUrl = parent.PosterUrl,
             IdentityNamespace = parent.IdentityNamespace,
