@@ -7,10 +7,11 @@ import ArrowIcon from '../components/marketing/ArrowIcon';
 import AmbientLight from '../components/marketing/AmbientLight';
 import BrandLink from '../components/marketing/BrandLink';
 import PlatformShowcase from '../components/marketing/PlatformShowcase';
+import ProductScreenshot from '../components/marketing/ProductScreenshot';
 import MarketingFooter from '../components/marketing/MarketingFooter';
 import {APP_STORE_URL, GITHUB_URL, TESTFLIGHT_URL} from '../components/marketing/links';
 import PrismStory from '../components/marketing/PrismStory';
-import {ENTITY_KIND, MEDIA_FAMILIES, familyStyle} from '../components/marketing/media-families';
+import {ENTITY_KIND, familyStyle} from '../components/marketing/media-families';
 import styles from './index.module.css';
 
 const TITLE = 'A clear home for all your media.';
@@ -47,18 +48,12 @@ function SectionRoute() {
   return null;
 }
 
-function ProductImage({src, alt, className, eager = false, width = 1280, height = 720}: {
-  src: string; alt: string; className?: string; eager?: boolean; width?: number; height?: number;
-}) {
-  return <img src={useBaseUrl(src)} alt={alt} width={width} height={height} className={className} loading={eager ? 'eager' : 'lazy'} decoding="async" />;
-}
-
 function Frame({children, className = ''}: {children: ReactNode; className?: string}) {
   return <figure className={`${styles.frame} ${className}`}>{children}</figure>;
 }
 
 function Phone({src, alt, className = ''}: {src: string; alt: string; className?: string}) {
-  return <figure className={`${styles.phone} ${className}`}><ProductImage src={src} alt={alt} width={1206} height={2622} /></figure>;
+  return <figure className={`${styles.phone} ${className}`}><ProductScreenshot src={src} alt={alt} width={1206} height={2622} sizes="(max-width: 760px) 45vw, 240px" /></figure>;
 }
 
 function MediaLabel({children, style}: {children: ReactNode; style?: CSSProperties}) {
@@ -76,9 +71,6 @@ function Hero() {
       <Link className={`marketing-glass ${styles.secondaryAction}`} to="/docs/getting-started/install">Read the setup guide <ArrowIcon /></Link>
     </div>
     <PlatformShowcase />
-    <ul className={styles.mediaRail} aria-label="Explore supported media">
-      {MEDIA_FAMILIES.filter((family) => family.kind !== ENTITY_KIND.collection).map((family) => <li key={family.kind} style={family.style}><Link to={family.href}><i aria-hidden="true" />{family.label}</Link></li>)}
-    </ul>
   </header>;
 }
 
@@ -113,10 +105,10 @@ function Experiences() {
     <div className={styles.experiences}>
       <article className={styles.watchExperience} style={familyStyle(ENTITY_KIND.movie)}>
         <div className={styles.experienceCopy}><h3>Sit down with a film.<br />Stay for the next episode.</h3><MediaLabel style={familyStyle(ENTITY_KIND.movie)}>Movies &amp; series</MediaLabel><p>Artwork and details help you find something to watch. Subtitles, playback controls, and your place in the story stay close at hand.</p><Link className={styles.textLink} to="/docs/using/playback">Explore video playback <ArrowIcon /></Link></div>
-        <Frame><ProductImage src="/img/showcase/tvos-movies-live.webp" alt="A real movie collection in the native Apple TV app" width={3840} height={2160} /></Frame>
+        <Frame><ProductScreenshot src="/img/showcase/web-playback-live.webp" alt="A film paused in the Prismedia web player, with subtitles, seek controls, and playback settings" width={2338} height={1314} sizes="(max-width: 760px) calc(100vw - 56px), (max-width: 1280px) 55vw, 680px" /></Frame>
       </article>
       <article className={styles.readExperience} style={familyStyle(ENTITY_KIND.book)}>
-        <div className={styles.experienceCopy}><h3>The same book.<br />Two ways into it.</h3><MediaLabel style={familyStyle(ENTITY_KIND.book)}>Books, comics &amp; audiobooks</MediaLabel><p>Make the page comfortable, or settle into the audiobook. Keep text and audio on one book page, with separate reading and listening positions.</p><Link className={styles.textLink} to="/docs/library/books">Explore reading and listening <ArrowIcon /></Link></div>
+        <div className={styles.experienceCopy}><h3>The same book.<br />Two ways into it.</h3><MediaLabel style={familyStyle(ENTITY_KIND.book)}>Books, comics &amp; audiobooks</MediaLabel><p>Adjust the type and page appearance, or listen to the audiobook. Keep text and audio on one book page, with separate reading and listening positions.</p><Link className={styles.textLink} to="/docs/library/books">Explore reading and listening <ArrowIcon /></Link></div>
         <div className={styles.readingPhones}><Phone src="/img/showcase/ios-reader-settings-live.webp" alt="The native reader settings for typography and page appearance" /><Phone src="/img/showcase/ios-book-live.webp" alt="A book with reading, listening, and combined progress in the native app" /></div>
       </article>
       <article className={styles.musicExperience} style={familyStyle(ENTITY_KIND.audio)}>
@@ -136,8 +128,8 @@ function Acquisition() {
     <div><h2 id="acquisition-title">From finding it<br />to having it here.</h2><p className={styles.bodyCopy}>Connect the indexers and download clients you already use. Search through metadata providers, review a release, and follow it into the library. Prismedia handles acquisition and imports while keeping the item's identity and history together.</p><Link className={styles.textLink} to="/docs/using/requests">Understand requests and acquisition <ArrowIcon /></Link></div>
     <ol className={styles.acquisitionFlow}>
       <li><span>01</span><div><h3>Find a title</h3><p>Your metadata providers</p></div></li>
-      <li><span>02</span><div><h3>Choose a release</h3><p>Your indexers</p></div></li>
-      <li><span>03</span><div><h3>Follow the download</h3><p>Your download clients</p></div></li>
+      <li><span>02</span><div><h3>Choose a release</h3><p>Prowlarr, Torznab, or Newznab</p></div></li>
+      <li><span>03</span><div><h3>Follow the download</h3><p>qBittorrent, Transmission, or SABnzbd</p></div></li>
       <li><span>04</span><div><h3>Open it in your library</h3><p>Prismedia verifies and imports the files</p></div></li>
     </ol>
   </section>;
@@ -158,7 +150,7 @@ function Platforms() {
 function ProductFilm() {
   const film = useBaseUrl('/video/prismedia-launch.mp4');
   const poster = useBaseUrl('/img/showcase/prismedia-launch-poster.webp');
-  return <section className={`${styles.wrap} ${styles.filmSection}`} aria-labelledby="film-title">
+  return <section id="tour" className={`${styles.wrap} ${styles.filmSection}`} aria-labelledby="film-title">
     <div><h2 id="film-title">Spend a moment<br />inside the library.</h2><p>See browsing, playback, reading, and listening across the web and Apple apps.</p></div>
     <video controls muted playsInline preload="none" poster={poster} aria-label="72-second silent Prismedia product tour"><source src={film} type="video/mp4" /><p><a href={film}>Download the product tour.</a></p></video>
   </section>;
@@ -183,7 +175,7 @@ export default function Home(): ReactNode {
     <SectionRoute />
     <div className={styles.page} data-marketing-page>
       <AmbientLight />
-      <main><Hero /><PrismStory /><Workflow /><Experiences /><Acquisition /><Platforms /><ProductFilm /><FounderStory /><SelfHosting /></main>
+      <main><Hero /><PrismStory /><Experiences /><ProductFilm /><Workflow /><Acquisition /><Platforms /><FounderStory /><SelfHosting /></main>
       <MarketingFooter />
     </div>
   </Layout>;

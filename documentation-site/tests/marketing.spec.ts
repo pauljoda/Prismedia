@@ -103,7 +103,21 @@ test('hero actions lead to source, native downloads, and setup alongside all thr
   await expect(page.locator('.marketing-prism')).toHaveCount(1);
   const tv = page.getByRole('img', {name: 'Browse a movie collection in the native Apple TV app'});
   await expect(tv).toBeVisible();
-  await expect.poll(() => tv.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(3840);
+  await expect.poll(() => tv.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBeGreaterThan(0);
+  await expect(tv.locator('..')).toHaveAttribute('href', /\/tvos-movies-live\.webp$/);
   await expect(page.getByRole('img', {name: 'Browse a movie collection in the Prismedia web app'})).toBeVisible();
   await expect(page.getByRole('img', {name: 'Explore a book in the native iPhone app'})).toBeVisible();
+});
+
+test('narrow phones can open the menu without overlapping service links', async ({page}) => {
+  await page.setViewportSize({width: 320, height: 720});
+  await page.goto('./');
+  const toggle = page.getByRole('button', {name: 'Toggle navigation bar'});
+  await toggle.click();
+  await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+  await expect(page.locator('.navbar-sidebar').getByRole('link', {name: /GitHub/})).toBeVisible();
+  await page.locator('.navbar-sidebar').getByRole('link', {name: 'How it works', exact: true}).click();
+  await expect(page).toHaveURL(/#workflow$/);
+  await expect.poll(() => page.locator('#workflow').evaluate((section) => Math.abs(section.getBoundingClientRect().top - 75))).toBeLessThan(2);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

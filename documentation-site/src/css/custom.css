@@ -459,6 +459,19 @@ blockquote {
 }
 
 @media (max-width: 996px) {
+  /* Service links live in the mobile menu; custom glass styles must not
+     override Docusaurus' collapsed navigation and squeeze the menu button. */
+  .navbar__items > .navbar__github,
+  .navbar__items > .navbar__testflight {
+    display: none;
+  }
+
+  .navbar__toggle {
+    min-width: 44px;
+    min-height: 44px;
+    flex-shrink: 0;
+  }
+
   .navbar {
     background: var(--prismedia-surface-1);
     backdrop-filter: none;

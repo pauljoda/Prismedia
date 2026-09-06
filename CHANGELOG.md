@@ -25,6 +25,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Product screenshots now load at sizes suited to the screen while retaining full-resolution originals; the mobile navigation keeps its menu and brand clear on narrow phones.
+- The homepage adds a real web playback demonstration, brings the product tour closer to the experience examples, and names supported indexers and download clients.
 - The homepage explains server setup earlier, links directly to the practical library workflow, and brings product demonstrations ahead of the founder story.
 - The homepage closes with clearer community links and useful setup, media, and native-app shortcuts.
 - The homepage shows fresh high-resolution web and native product captures, including a 4K Apple TV view in the stacked hero. Primary links now lead to the source repository, native downloads, and setup.

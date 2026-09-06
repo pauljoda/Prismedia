@@ -61,6 +61,7 @@
 
 .hero {
   padding-top: 82px;
+  padding-bottom: 72px;
   text-align: center;
 }
 
@@ -130,26 +131,7 @@
   height: auto;
 }
 
-.mediaRail {
-  padding: 52px 0 42px;
-  margin: 0;
-  list-style: none;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 18px 30px;
-}
-
-.mediaRail a {
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  min-height: 44px;
-  font-size: 12px;
-  color: var(--prismedia-text-secondary);
-}
-
-.mediaRail i, .mediaLabel i {
+.mediaLabel i {
   display: inline-block;
   width: 17px;
   height: 2px;
@@ -554,17 +536,6 @@
   .hero .actions a { width: 100%; justify-content: center; }
   .hero .actions a:first-child, .hero .actions a:last-child { grid-column: 1 / -1; }
 
-  .mediaRail {
-    gap: 0 20px;
-    padding: 26px 0 28px;
-  }
-  .mediaRail a {
-    font-size: 11px;
-  }
-  .mediaRail i {
-    width: 12px;
-  }
-
   .section {
     padding-block: 58px;
   }
@@ -678,7 +649,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .experiences > article, .mediaRail a {
+  .experiences > article {
     transition: none;
   }
 }
