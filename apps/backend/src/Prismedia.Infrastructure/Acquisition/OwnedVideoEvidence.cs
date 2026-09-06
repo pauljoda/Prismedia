@@ -1,12 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Acquisition;
 using Prismedia.Domain.Entities;
+using Prismedia.Infrastructure.Persistence;
 
 namespace Prismedia.Infrastructure.Acquisition;
 
-public sealed partial class EfAcquisitionStore {
+internal static class OwnedVideoEvidence {
     /// <summary>Reads dimensions only from the current single source's matching probe; detached, failed, or size-stale metadata is not upgrade evidence.</summary>
-    private async Task<int?> GetOwnedVideoResolutionAsync(Guid entityId, CancellationToken cancellationToken) {
+    internal static async Task<int?> ReadResolutionAsync(PrismediaDbContext db, Guid entityId, CancellationToken cancellationToken) {
         var sources = await db.EntityFiles.AsNoTracking()
             .Where(file => file.EntityId == entityId && file.Role == EntityFileRole.Source)
             .Select(file => new { file.Id, file.Path, file.SizeBytes }).Take(2).ToArrayAsync(cancellationToken);

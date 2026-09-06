@@ -725,7 +725,7 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         return MediaQualityLadder.IsUpgradeCapableKind(parent.Kind) || MediaQualityLadder.IsAudioKind(parent.Kind)
             ? new UpgradeOwnedQuality(null, parent.OwnedMediaQuality, parent.OwnedMediaRevision, parent.OwnedFormatScore, hasSubtitles) {
                 VideoResolutionTier = MediaQualityLadder.IsVideoKind(parent.Kind) && parent.EntityId is { } ownerId
-                    ? await GetOwnedVideoResolutionAsync(ownerId, cancellationToken) : null
+                    ? await OwnedVideoEvidence.ReadResolutionAsync(db, ownerId, cancellationToken) : null
             }
             : new UpgradeOwnedQuality(new BookQualityRank(parent.OwnedSourceTier, parent.OwnedFormatTier), null, FormatScore: parent.OwnedFormatScore);
     }

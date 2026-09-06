@@ -452,13 +452,13 @@ public sealed partial class EfMonitorStore(
         if (targetEntityId is null && targetMonitorId is null) {
             await ReconcilePassiveTargetsAsync(cancellationToken);
         }
-        await RestoreOwnedBaselinesAsync(targetEntityId, targetMonitorId, cancellationToken);
+        var policies = await ResolveUpgradePoliciesAsync(cancellationToken);
+        await RestoreOwnedBaselinesAsync(targetEntityId, targetMonitorId, policies, cancellationToken);
         // The acquisition's resolved profile governs its upgrades. Upgrade-seeking is fully automatic, so it
         // requires both the cutoff toggle and auto-grab; without auto-grab there is no path to act on a found
         // upgrade. Books gate on the source/format cutoff tiers; media kinds (movies, single episodes) gate on
         // the ladder cutoff-quality code. Explicit compatible choices precede the kind's default and oldest
         // profiles, matching the profile store's rule resolution.
-        var policies = await ResolveUpgradePoliciesAsync(cancellationToken);
 
         // Tracked load (we mutate statuses during reconciliation), joined to each acquisition's status and
         // accepted-candidate count, plus the in-flight upgrade child's status when the interlock is set.

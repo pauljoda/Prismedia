@@ -42,6 +42,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Monitored movies and episodes already in the library can enter automatic quality upgrades without prior download history, using verified file metadata and preserving existing ownership.
+
 - Upgrade searches and automatic grabs check the owned video’s measured resolution, avoiding downloads justified only by an unknown or stale quality label. Replacement rechecks the same measured improvement and verified subtitle gains.
 
 - Movie and episode monitors can recover a lost link to a matching completed import and resume the normal quality-profile upgrade checks while preserving their files and user choices.
