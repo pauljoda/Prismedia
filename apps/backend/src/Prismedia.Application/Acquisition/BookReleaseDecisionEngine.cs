@@ -406,7 +406,7 @@ public sealed class BookReleaseDecisionEngine(EntityKind kind = EntityKind.Book)
                 indexerConfigId,
                 indexerName,
                 rejections.Count == 0,
-                BookReleaseScore.Of(release, rules),
+                ReleaseLanguageDetection.RankScore(release, rules, BookReleaseScore.Of(release, rules)),
                 rejections));
         }
 

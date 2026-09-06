@@ -254,9 +254,9 @@ public sealed class BookReleaseDecisionEngineTests {
             (Release(title: "Some Book epub", seeders: 10), null, "Test Indexer")
         ], rules);
 
-        // The unmarked release counts as the top preference (English) and outranks the German copy.
+        // Explicit preferred language evidence outranks an unmarked copy.
         Assert.Equal(
-            ["Some Book epub", "Some Book GERMAN epub"],
+            ["Some Book GERMAN epub", "Some Book epub"],
             result.Select(candidate => candidate.Release.Title).ToArray());
     }
 

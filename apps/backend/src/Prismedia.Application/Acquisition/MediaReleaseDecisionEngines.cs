@@ -433,7 +433,7 @@ internal static class MediaReleaseEvaluation {
             }
 
             scored.Add(new ScoredRelease(
-                release, indexerConfigId, indexerName, rejections.Count == 0, score(release, rules), rejections));
+                release, indexerConfigId, indexerName, rejections.Count == 0, ReleaseLanguageDetection.RankScore(release, rules, score(release, rules)), rejections));
         }
 
         return scored
@@ -486,7 +486,7 @@ internal static class MediaReleaseEvaluation {
     /// The profile-preference component of a release's score, in shared preference points: each preferred
     /// term is worth 100, each matched custom weighted term contributes its own weight (so 100 equals one
     /// preferred term, negatives push down), the release's language earns up to 50 per step of the ordered
-    /// preferred-language list (an unmarked or multi release counts as the top preference), and every
+    /// preferred-language list (unspecified multi earns 25, unmarked earns none), and every
     /// matching custom format adds its score directly (so 100 custom-format points equal one preferred term).
     /// Every engine multiplies this by its own boost so preference always compares the same way across kinds.
     /// </summary>
@@ -504,30 +504,9 @@ internal static class MediaReleaseEvaluation {
             + CustomFormatEvaluation.Score(title, rules, release.Language);
     }
 
-    /// <summary>
-    /// Ranks a release by where its declared language sits in the ordered preferred-language list:
-    /// the first preference earns <c>50 × list length</c>, each later preference 50 less. Unmarked and
-    /// multi releases count as the first preference (the acceptance gate has already filtered
-    /// declared-but-unpreferred languages).
-    /// </summary>
+    /// <summary>Explicit preferred audio earns 50 points per preference step; uncertain multi earns 25.</summary>
     private static double LanguagePreferenceBonus(IndexerRelease release, BookAcquisitionRules rules) {
-        var preferred = rules.PreferredLanguages;
-        if (preferred.Count == 0) {
-            return 0;
-        }
-
-        var declared = ReleaseLanguageDetection.Detect(release.Title, release.Language);
-        if (declared.Count == 0 || declared.Contains(ReleaseLanguageDetection.Multi)) {
-            return preferred.Count * 50;
-        }
-
-        for (var i = 0; i < preferred.Count; i++) {
-            if (declared.Contains(ReleaseLanguageDetection.Canonicalize(preferred[i]))) {
-                return (preferred.Count - i) * 50;
-            }
-        }
-
-        // Declares only unpreferred languages — no bonus (the acceptance gate rejects it anyway).
-        return 0;
+        var rank = ReleaseLanguageDetection.PreferenceRank(release.Title, release.Language, rules.PreferredLanguages);
+        return rank > 1 ? (rank - 1) * 50 : rank * 25;
     }
 }

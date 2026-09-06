@@ -6,12 +6,11 @@ namespace Prismedia.Application.Acquisition;
 /// Detects the language(s) a release declares, from the indexer's language attribute and from language
 /// tokens in the release title (FRENCH, GERMAN, ITA, MULTi, …). Canonical names are lowercase English
 /// language names; user-entered preferred languages are normalized through the same alias table so
-/// "eng", "English", and an indexer's "ENGLISH" all compare equal. A release that names no language is
-/// treated as unmarked — assumed to be the user's top preference (English by default) — because the
-/// overwhelming convention is that only non-English (or multi) audio gets tagged.
+/// "eng", "English", and an indexer's "ENGLISH" all compare equal. Subtitle declarations are excluded.
+/// Unmarked and multi-audio releases remain uncertain; neither confirms a particular audio language.
 /// </summary>
 public static partial class ReleaseLanguageDetection {
-    /// <summary>Canonical marker for a multi-language release: it satisfies any preferred language.</summary>
+    /// <summary>Canonical marker for unspecified multiple audio languages; allows fallback without confirming a language.</summary>
     public const string Multi = "multi";
 
     // Alias token → canonical language name. Tokens are matched whole between separator characters,
@@ -50,11 +49,61 @@ public static partial class ReleaseLanguageDetection {
             ["pl"] = "polish", ["sv"] = "swedish", ["da"] = "danish", ["no"] = "norwegian",
             ["fi"] = "finnish", ["ar"] = "arabic", ["tr"] = "turkish", ["cs"] = "czech", ["hu"] = "hungarian",
             ["dut"] = "dutch", ["pol"] = "polish", ["nor"] = "norwegian", ["fin"] = "finnish", ["ces"] = "czech",
-            [Multi] = Multi, ["multilang"] = Multi, ["multilanguage"] = Multi, ["dual"] = Multi
+            [Multi] = Multi, ["multilang"] = Multi, ["multilanguage"] = Multi
         };
 
-    [GeneratedRegex(@"[\s._\-()\[\]{}+,]+")]
+    [GeneratedRegex(@"[\s._\-()\[\]{}+,/;|]+")]
     private static partial Regex TokenSeparatorRegex();
+
+    // Subtitle labels qualify the adjacent language list, not the audio. Brackets delimit lists so
+    // a subtitle clause cannot consume an independent audio declaration outside it.
+    private const string LanguageSeparator = @"[\s._+,/;\-]+";
+    private const string SubtitleMarker = @"(?:subs?|subtitles?|subbed)";
+    private static readonly string LanguageTokenPattern = @"(?:" + string.Join("|", Aliases.Keys.Select(Regex.Escape)) + ")";
+    private static readonly Regex SubtitleSuffix = new(
+        @"(?<![\p{L}\p{N}])" + LanguageTokenPattern + "(?:" + LanguageSeparator + LanguageTokenPattern + ")*"
+        + @"[\s._+,/;\-]*" + SubtitleMarker + @"(?![\p{L}\p{N}])",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
+    private static readonly Regex SubtitlePrefix = new(
+        @"(?<![\p{L}\p{N}])" + SubtitleMarker + LanguageSeparator + LanguageTokenPattern
+        + "(?:" + LanguageSeparator + LanguageTokenPattern + @")*(?![\p{L}\p{N}])",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
+
+    [GeneratedRegex(@"\bmulti[\s._-]*(?:subs?|subtitles?|subbed)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex MultiSubtitleRegex();
+
+    [GeneratedRegex(@"\bdual[\s._-]+audio\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex DualAudioRegex();
+
+    [GeneratedRegex(@"[\[(](?<languages>[a-z]{2}(?:\s*[+/,]\s*[a-z]{2})+)[\])]", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex ExplicitShortLanguageListRegex();
+
+    /// <summary>
+    /// Returns the strongest preferred audio declaration, in preference order. Explicit matches rank
+    /// above unspecified multi-audio, then unmarked releases. Zero also covers unpreferred languages;
+    /// the acceptance gate decides whether those releases are eligible at all.
+    /// </summary>
+    public static int PreferenceRank(string title, string? attributeLanguage, IReadOnlyList<string> preferred) {
+        if (preferred.Count == 0) return 0;
+        var declared = Detect(title, attributeLanguage);
+        for (var i = 0; i < preferred.Count; i++) {
+            if (declared.Contains(Canonicalize(preferred[i]))) return preferred.Count - i + 1;
+        }
+        return declared.Contains(Multi) ? 1 : 0;
+    }
+
+    /// <summary>
+    /// Encodes language precedence in the durable score, so search, persisted picks and retries agree.
+    /// Other ranking signals occupy a bounded band; ordinary profile scores remain unchanged within it.
+    /// Clearing preferred languages leaves all ordering to the user's weighted rules.
+    /// </summary>
+    public static double RankScore(IndexerRelease release, BookAcquisitionRules rules, double score) {
+        if (rules.PreferredLanguages.Count == 0) return score;
+        const double bandWidth = 1_000_000_000_000;
+        const double secondaryLimit = bandWidth / 4;
+        return PreferenceRank(release.Title, release.Language, rules.PreferredLanguages) * bandWidth
+            + Math.Clamp(score, -secondaryLimit, secondaryLimit);
+    }
 
     /// <summary>
     /// Normalizes a language string (a user preference or an indexer attribute) to its canonical name.
@@ -72,10 +121,20 @@ public static partial class ReleaseLanguageDetection {
     public static IReadOnlySet<string> Detect(string title, string? attributeLanguage) {
         var declared = new HashSet<string>(StringComparer.Ordinal);
         if (!string.IsNullOrWhiteSpace(attributeLanguage)) {
-            declared.Add(Canonicalize(attributeLanguage));
+            foreach (var attribute in attributeLanguage.Split([',', '/', ';', '|', '+'], StringSplitOptions.RemoveEmptyEntries)) {
+                declared.Add(Canonicalize(attribute));
+            }
         }
 
-        foreach (var token in TokenSeparatorRegex().Split(title)) {
+        var audioTitle = SubtitlePrefix.Replace(SubtitleSuffix.Replace(MultiSubtitleRegex().Replace(title, " "), " "), " ");
+        if (DualAudioRegex().IsMatch(audioTitle)) declared.Add(Multi);
+        foreach (Match match in ExplicitShortLanguageListRegex().Matches(audioTitle)) {
+            var tokens = TokenSeparatorRegex().Split(match.Groups["languages"].Value);
+            if (tokens.All(Aliases.ContainsKey)) {
+                foreach (var token in tokens) declared.Add(Canonicalize(token));
+            }
+        }
+        foreach (var token in TokenSeparatorRegex().Split(audioTitle)) {
             if (token.Length >= 3 && Aliases.TryGetValue(token, out var canonical)) {
                 declared.Add(canonical);
             }

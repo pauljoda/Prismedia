@@ -10,6 +10,28 @@ namespace Prismedia.Application.Tests.Acquisition;
 /// </summary>
 public sealed class MediaReleaseDecisionEnginesTests {
     [Fact]
+    public void ExplicitPreferredAudioOutranksAmbiguousMultiEvenAtHigherQuality() {
+        var rules = BookAcquisitionRules.Default with { Kind = EntityKind.Movie, PreferredLanguages = ["English", "German"] };
+        var titles = new[] { "Movie 2160p BluRay MULTi", "Movie 2160p BluRay", "Movie 720p WEB-DL ENG", "Movie 1080p WEB-DL GER MULTi" };
+        var results = new MovieReleaseDecisionEngine().Evaluate(titles.Select(title =>
+            (Release(title, seeders: 10), (Guid?)null, "Indexer")).ToArray(), rules);
+
+        Assert.All(results, row => Assert.True(row.Accepted));
+        Assert.Equal(titles[2], results[0].Release.Title);
+        Assert.Equal(titles[3], results[1].Release.Title);
+        Assert.Equal(titles[0], results[2].Release.Title);
+        Assert.Equal(titles[1], results[3].Release.Title);
+        Assert.Equal(results.Select(row => row.Release.Title), results.OrderByDescending(row => row.Score).Select(row => row.Release.Title));
+    }
+
+    [Fact]
+    public void ForeignAudioWithPreferredSubtitlesDoesNotPassTheAudioGate() {
+        var rules = BookAcquisitionRules.Default with { PreferredLanguages = ["English"] };
+        var result = new LanguageSpecification().Evaluate(Release("Movie 1080p JPN Audio [ENG Subs]", seeders: 10), rules);
+        Assert.Equal(ReleaseRejectionReason.LanguageMismatch, result);
+    }
+
+    [Fact]
     public void SharedSearchAndGrabContextCarriesMeasuredOwnershipIntoTheUpgradeGate() {
         var input = new AcquisitionSearchInput(Guid.NewGuid(), "Movie", null, EntityKind.Movie, null);
         var owned = new UpgradeOwnedQuality(null, VideoQuality.Unknown.ToCode()) { VideoResolutionTier = 1080 };

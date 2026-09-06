@@ -929,7 +929,7 @@
                 <TextInput size="sm" value={profileTerms.ignored} oninput={(e) => (profileTerms.ignored = e.currentTarget.value)} placeholder="scan, retail rip" /></label>
               <label class="space-y-1"><span class="text-label text-text-muted">Weighted terms<span class="ml-1 text-text-muted">— "term: weight" entries; a match adds its weight to the ranking (100 equals one preferred term, negatives push down)</span></span>
                 <TextInput size="sm" value={profileTerms.weighted} oninput={(e) => (profileTerms.weighted = e.currentTarget.value)} placeholder="remux: 150, x265: 50, upscale: -200" /></label>
-              <label class="space-y-1"><span class="text-label text-text-muted">Preferred languages<span class="ml-1 text-text-muted">— in order of preference; releases tagged only with other languages are skipped, untagged ones count as the first entry</span></span>
+              <label class="space-y-1"><span class="text-label text-text-muted">Preferred languages<span class="ml-1 text-text-muted">— in order of preference; explicit matches rank first, unspecified multi-audio then unmarked releases remain fallbacks. Releases naming only other audio languages are skipped</span></span>
                 <TextInput size="sm" value={profileTerms.languages} oninput={(e) => (profileTerms.languages = e.currentTarget.value)} placeholder="English" /></label>
             </div>
             {#if formatsForKind.length > 0}
