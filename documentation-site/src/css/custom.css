@@ -1,3 +1,4 @@
+@import './marketing-glass.css';
 @import '@fontsource/geist-sans/400.css';
 @import '@fontsource/geist-sans/600.css';
 @import '@fontsource/geist-sans/700.css';
@@ -174,21 +175,25 @@ a {
 }
 
 .navbar__testflight {
+  color: var(--prismedia-text-primary);
   margin-left: 0.25rem;
-  padding: 0.48rem 0.72rem;
-  color: #111214 !important;
-  background: var(--prismedia-neutral-strong);
-  border: 1px solid rgba(255, 255, 255, 0.42);
-  border-radius: var(--prismedia-radius-sm);
+  padding: 0.55rem 0.85rem;
+  min-height: 38px;
   font-family: var(--ifm-heading-font-family);
   font-size: 0.78rem;
-  font-weight: 700;
+  font-weight: 500;
 }
 
-.navbar__testflight:hover {
-  color: #000 !important;
-  background: #fff;
+.navbar__testflight::before, .navbar__github::before {
+  content: '';
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  background: center / contain no-repeat url('../../static/img/brands/testflight.png');
 }
+.navbar__github { display: inline-flex; align-items: center; gap: 8px; }
+.navbar__github::before { background-image: url('../../static/img/brands/github.svg'); filter: invert(1); }
 
 .navbar-sidebar,
 .navbar-sidebar__brand,

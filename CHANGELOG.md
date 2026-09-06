@@ -25,6 +25,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- The homepage shows fresh high-resolution web and native product captures, including a 4K Apple TV view in the stacked hero. Primary links now lead to the source repository, native downloads, and setup.
+- The public homepage adds a subtle spectrum atmosphere, a prism glass primary action, and familiar download and community buttons. The prism uses the Prismedia logo and connected media branches; motion follows system preferences.
+
 - Redesign the public homepage around a clearer introduction, the story behind Prismedia, and an interactive prism that follows scrolling. Media accents match the app, with a complete static illustration on phones and for reduced motion.
 
 - Replacement searches open in the main acquisition area instead of inside More acquisition actions. Closing the search returns to the current acquisition without changing the existing files.

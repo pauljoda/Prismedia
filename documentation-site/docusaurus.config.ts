@@ -115,7 +115,7 @@ const config: Config = {
     ],
     colorMode: {
       defaultMode: 'dark',
-      disableSwitch: false,
+      disableSwitch: true,
       respectPrefersColorScheme: false,
     },
     navbar: {
@@ -159,12 +159,13 @@ const config: Config = {
           href: 'https://github.com/pauljoda/Prismedia',
           label: 'GitHub',
           position: 'right',
+          className: 'navbar__github',
         },
         {
           href: 'https://testflight.apple.com/join/c9bgDxr7',
-          label: 'Test early builds',
+          label: 'TestFlight',
           position: 'right',
-          className: 'navbar__testflight',
+          className: 'navbar__testflight marketing-glass',
         },
       ],
     },

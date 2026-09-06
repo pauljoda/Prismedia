@@ -1,0 +1,48 @@
+.field {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  background: #050609;
+}
+
+.drift {
+  position: absolute;
+  inset: -3%;
+  transform: translate3d(var(--pointer-x, 0px), var(--pointer-y, 0px), 0);
+  transition: transform 1.8s cubic-bezier(.16, 1, .3, 1);
+}
+
+.light {
+  position: absolute;
+  width: 66%;
+  height: 76%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(ellipse, color-mix(in srgb, var(--beam-color) 18%, transparent), transparent 67%);
+}
+
+.orbit {
+  position: absolute;
+  inset: 0;
+  animation: breathe 38s ease-in-out infinite alternate;
+  animation-play-state: paused;
+}
+
+.orbit:nth-child(even) { animation-direction: alternate-reverse; animation-duration: 46s; animation-delay: -17s; }
+.field[data-active='true'] .orbit { animation-play-state: running; }
+.field[data-active='false'] .drift { transition: none; }
+
+@keyframes breathe {
+  from { transform: translate(-1%, -1%) scale(1); }
+  to { transform: translate(1%, 2%) scale(1.03); }
+}
+
+@media (max-width: 760px) {
+  .light { width: 120%; height: 58%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .orbit { animation: none; }
+  .drift { transform: none; transition: none; }
+}

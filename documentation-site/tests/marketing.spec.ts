@@ -10,9 +10,10 @@ async function seekPrism(page: Page, progress: number) {
 
 async function drawnBeams(page: Page) {
   // Typed OM resolves calc() before parsing, unlike strokeDashoffset's CSS string.
-  return page.locator('#product svg path[pathLength]').evaluateAll((paths) =>
-    paths.map((path) => Number.parseFloat(String(path.computedStyleMap().get('stroke-dashoffset')))),
-  );
+  return page.locator('#product').evaluate((section) => {
+    const paths = [section.querySelector('[data-white-light]')!, ...section.querySelectorAll('[data-spectrum-line]')];
+    return paths.map((path) => Number.parseFloat(String(path.computedStyleMap().get('stroke-dashoffset'))));
+  });
 }
 
 test('scrolling brings the white light in before the spectrum and reverses when scrolling back', async ({page}) => {
@@ -22,9 +23,9 @@ test('scrolling brings the white light in before the spectrum and reverses when 
   await expect(page.locator('#product')).toHaveAttribute('data-motion', 'true');
   await seekPrism(page, 0);
   await expect.poll(async () => (await drawnBeams(page))[0]).toBeCloseTo(1, 1);
-  await seekPrism(page, 0.26);
+  await seekPrism(page, 0.34);
   await expect.poll(async () => (await drawnBeams(page))[0]).toBeCloseTo(0, 1);
-  expect((await drawnBeams(page)).slice(3).every((offset) => offset > 0.95)).toBe(true);
+  expect((await drawnBeams(page)).slice(1).every((offset) => offset > 0.95)).toBe(true);
   await seekPrism(page, 1);
   await expect.poll(async () => (await drawnBeams(page)).every((offset) => offset < 0.01)).toBe(true);
   await seekPrism(page, 0);
@@ -68,5 +69,41 @@ test('the page and complete prism remain useful without JavaScript', async ({bro
   await expect(page.getByRole('heading', {level: 1})).toHaveText('A clear home for all your media.');
   expect((await drawnBeams(page)).every((offset) => offset === 0)).toBe(true);
   await expect(page.getByRole('link', {name: 'Read the setup guide'})).toBeVisible();
+  await expect(page.getByRole('img', {name: 'Browse a movie collection in the native Apple TV app'})).toBeVisible();
   await context.close();
+});
+
+test('the atmosphere responds to the pointer and respects system motion preferences', async ({page}) => {
+  await page.goto('./');
+  const atmosphere = page.locator('[data-atmosphere]');
+  await expect(atmosphere).toHaveAttribute('data-active', 'true');
+  await page.mouse.move(1200, 600);
+  await expect.poll(() => atmosphere.evaluate((element) => element.style.getPropertyValue('--pointer-x'))).not.toBe('');
+  await page.emulateMedia({reducedMotion: 'reduce'});
+  await expect(atmosphere).toHaveAttribute('data-active', 'false');
+  expect(await atmosphere.evaluate((element) => element.style.getPropertyValue('--pointer-x'))).toBe('');
+  await expect(page.getByRole('button', {name: /background motion/})).toHaveCount(0);
+});
+
+test('media branches can be explored with the keyboard', async ({page}) => {
+  await page.goto('./');
+  await seekPrism(page, 1);
+  const movie = page.getByRole('link', {name: 'Movies: A place for every film'});
+  await movie.focus();
+  await expect(movie).toBeFocused();
+  await movie.press('Enter');
+  await expect(page).toHaveURL(/\/docs\/library\/videos$/);
+});
+test('hero actions lead to source, native downloads, and setup alongside all three device views', async ({page}) => {
+  await page.goto('./');
+  const hero = page.locator('header').filter({has: page.getByRole('heading', {level: 1})});
+  const actions = hero.locator('a.marketing-glass');
+  await expect(actions).toHaveText(['View on GitHub', 'Apple TV', 'TestFlight', 'Read the setup guide']);
+  await expect(actions.first()).toHaveAttribute('href', 'https://github.com/pauljoda/Prismedia');
+  await expect(page.locator('.marketing-prism')).toHaveCount(1);
+  const tv = page.getByRole('img', {name: 'Browse a movie collection in the native Apple TV app'});
+  await expect(tv).toBeVisible();
+  await expect.poll(() => tv.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(3840);
+  await expect(page.getByRole('img', {name: 'Browse a movie collection in the Prismedia web app'})).toBeVisible();
+  await expect(page.getByRole('img', {name: 'Explore a book in the native iPhone app'})).toBeVisible();
 });

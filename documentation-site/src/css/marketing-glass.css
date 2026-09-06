@@ -1,0 +1,52 @@
+/* Neutral glass for ordinary controls; dispersed light lives inside primary actions. */
+.marketing-glass {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: 46px;
+  padding: 12px 18px;
+  border: 1px solid #cbd5ec35;
+  border-radius: 10px;
+  background: linear-gradient(130deg, #ffffff10, #ffffff03 55%), rgb(20 23 31 / .78);
+  color: #edf0f8;
+  box-shadow: inset 0 1px 0 #ffffff0d, 0 6px 20px #0003;
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.4;
+  text-decoration: none;
+  cursor: pointer;
+  transition: background-color 220ms, border-color 220ms, box-shadow 220ms, transform 220ms;
+}
+.marketing-glass:hover, .marketing-glass:focus-visible {
+  color: #fff;
+  background-color: #2b303c;
+  border-color: #d9e1f46b;
+  text-decoration: none;
+}
+.marketing-glass:focus-visible { outline: 2px solid #e6edf8; outline-offset: 4px; }
+.marketing-glass:active { transform: translateY(1px); }
+
+.marketing-prism {
+  background:
+    linear-gradient(115deg, #ffffff24, #ffffff00 48%, #ffffff0b),
+    radial-gradient(ellipse at 0% 100%, color-mix(in srgb, var(--prismedia-material-cyan) 48%, transparent), transparent 65%),
+    radial-gradient(ellipse at 55% 120%, color-mix(in srgb, var(--prismedia-material-magenta) 38%, transparent), transparent 66%),
+    radial-gradient(ellipse at 105% 0%, color-mix(in srgb, var(--prismedia-material-yellow) 46%, transparent), transparent 62%),
+    rgb(25 29 40 / .85);
+  border-color: #d8e3f65c;
+  color: #fff;
+  box-shadow: inset 0 1px 0 #ffffff35, inset 0 -1px 0 #ffffff0d, 0 8px 28px #0005;
+}
+.marketing-prism:hover, .marketing-prism:focus-visible {
+  background-color: #404754;
+  box-shadow: inset 0 1px 0 #ffffff55, 0 10px 30px #0005;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .marketing-glass { transition: none; }
+}

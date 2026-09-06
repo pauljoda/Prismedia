@@ -1,5 +1,9 @@
 .page {
-  background: var(--prismedia-bg);
+  position: relative;
+  isolation: isolate;
+  /* Contain decorative light without creating a scroll container for the sticky prism. */
+  overflow-x: clip;
+  background: #050609;
   color: var(--prismedia-text-primary);
 }
 
@@ -75,7 +79,7 @@
   display: flex;
   align-items: center;
   flex-wrap: wrap;
-  gap: 16px 30px;
+  gap: 14px 16px;
   margin-top: 30px;
 }
 
@@ -83,27 +87,9 @@
   justify-content: center;
 }
 
-.primaryAction {
-  display: inline-flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 28px;
-  min-height: 48px;
-  padding: 13px 18px;
-  background: #e2e3e6;
-  border: 1px solid #e2e3e6;
-  border-radius: var(--prismedia-radius-sm);
-  color: #151619;
-  font-size: 13px;
-  font-weight: 600;
-  transition: background-color 150ms, border-color 150ms;
-}
-
-.primaryAction:hover {
-  background: #fff;
-  color: #000;
-  border-color: #fff;
-  text-decoration: none;
+.secondaryAction {
+  background-color: #14182280;
+  color: #cbd1e0;
 }
 
 .textLink {
@@ -115,19 +101,11 @@
   min-height: 44px;
 }
 
-.heroProduct {
-  position: relative;
-  width: 100%;
-  max-width: 1060px;
-  margin: 62px auto 0;
-  padding-right: 92px;
-  text-align: left;
-}
-
 .frame {
   margin: 0;
   border: 1px solid #303238;
   background: #111214;
+  box-shadow: 0 18px 50px #0005;
   border-radius: var(--prismedia-radius-md);
   overflow: hidden;
 }
@@ -136,30 +114,6 @@
   display: block;
   width: 100%;
   height: auto;
-}
-
-.frameBar {
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  padding: 12px 15px;
-  color: #a2a6ae;
-  border-bottom: 1px solid #24262b;
-  font-size: 10px;
-  line-height: 1;
-}
-
-.windowDots {
-  display: flex;
-  gap: 5px;
-}
-
-.windowDots i {
-  display: block;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: #62656c;
 }
 
 .phone {
@@ -174,19 +128,6 @@
   display: block;
   width: 100%;
   height: auto;
-}
-
-.heroPhone {
-  position: absolute;
-  bottom: -10px;
-  right: 0;
-  width: 20%;
-  box-shadow: 0 22px 46px #0008;
-}
-
-.heroCaption {
-  font-size: 11px;
-  margin: 18px 0 0 3px;
 }
 
 .mediaRail {
@@ -212,7 +153,7 @@
   display: inline-block;
   width: 17px;
   height: 2px;
-  background: linear-gradient(90deg, var(--family-color), var(--family-secondary));
+  background: var(--family-color);
 }
 
 .section {
@@ -297,7 +238,9 @@
 
 .experiences > article {
   border: 1px solid #282a30;
-  background: #111214;
+  background: radial-gradient(ellipse at 0 0, color-mix(in srgb, var(--family-color) 8%, transparent), transparent 60%), #111319;
+  box-shadow: 0 12px 36px #0003;
+  transition: border-color 220ms, box-shadow 220ms;
   border-radius: var(--prismedia-radius-lg);
   overflow: hidden;
 }
@@ -485,11 +428,6 @@
   margin: 35px 0 0;
 }
 
-.utility {
-  color: #a6aab3;
-  font: 400 11px var(--ifm-font-family-monospace);
-}
-
 .filmSection {
   display: grid;
   grid-template-columns: .7fr 1fr;
@@ -585,12 +523,16 @@
   min-height: 44px;
 }
 
+.mediaRail a { padding: 0 10px; border-radius: 6px; transition: background-color 180ms; }
+.mediaRail a:hover, .mediaRail a:focus-visible { background: color-mix(in srgb, var(--family-color) 12%, transparent); text-decoration: none; }
+.mediaRail i { background: var(--beam-color); }
+.experiences > article:hover, .experiences > article:focus-within { border-color: color-mix(in srgb, var(--family-color) 50%, #353c4c); box-shadow: 0 16px 48px #0005; }
+.experienceCopy .textLink:hover { color: color-mix(in srgb, var(--family-color) 40%, white); }
+.projectMark { filter: drop-shadow(0 8px 24px #5567bd40); }
+
 @media (min-width: 1600px) {
   .wrap {
     max-width: 1280px;
-  }
-  .heroProduct {
-    max-width: 1160px;
   }
 }
 
@@ -637,18 +579,15 @@
     margin-top: 25px;
   }
   .hero .actions {
-    flex-direction: column;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+    max-width: 370px;
+    margin-inline: auto;
   }
-  .heroProduct {
-    margin-top: 34px;
-    padding-right: 0;
-  }
-  .heroCaption {
-    font-size: 10px;
-  }
-  .heroPhone {
-    display: none;
-  }
+  .hero .actions a { width: 100%; justify-content: center; }
+  .hero .actions a:first-child, .hero .actions a:last-child { grid-column: 1 / -1; }
+
   .mediaRail {
     gap: 0 20px;
     padding: 26px 0 28px;
@@ -659,10 +598,7 @@
   .mediaRail i {
     width: 12px;
   }
-  .frameBar {
-    padding: 10px 12px;
-    font-size: 9px;
-  }
+
   .section {
     padding-block: 58px;
   }
@@ -790,7 +726,7 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .primaryAction {
+  .experiences > article, .mediaRail a {
     transition: none;
   }
 }

@@ -29,7 +29,8 @@ pnpm docs:check
 ```
 
 The marketing page's browser checks cover the scroll sequence, reduced motion,
-mobile layout, folder-guide navigation, and the JavaScript-disabled fallback.
+device previews, keyboard navigation through media branches, mobile
+layout, folder-guide navigation, and the JavaScript-disabled fallback.
 Build the site first with `pnpm docs:check`, then run:
 
 ```bash
@@ -48,5 +49,14 @@ definitions and shared UI color tokens, so the site follows the app's spectrum.
 Keep instructional copy and real product images central. The prism is enhanced
 with scroll motion on larger screens; smaller screens, reduced-motion settings,
 and pages without JavaScript show the complete illustration.
+
+The spectrum atmosphere follows the app's background treatment. It drifts slowly
+and responds to a mouse or trackpad. Motion stops when the page is hidden, outside
+the viewport, or reduced motion is requested. The main GitHub action carries color
+inside its glass surface; other actions use neutral surfaces and familiar service
+icons. The site has a fixed dark theme.
+The prism illustration uses the published logo artwork, a continuous incoming
+light path, and one consistent color per media branch. The hero layers real web, iPhone,
+and Apple TV views; each screenshot links to the full-resolution image.
 
 Deployment is handled by `.github/workflows/documentation-site.yml`.
