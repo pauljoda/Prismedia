@@ -31,6 +31,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Language preferences and audio rules recognize common regional tags such as PT-BR, EN-US, and FR-CA, including underscore variants, without mistaking subtitle labels for audio.
+
 - Movie and episode title matching tolerates sentence punctuation and quotation marks around words while preserving meaningful numbers and symbol-only names.
 
 - Equally ranked acquisition releases keep a stable order across review and automatic selection.

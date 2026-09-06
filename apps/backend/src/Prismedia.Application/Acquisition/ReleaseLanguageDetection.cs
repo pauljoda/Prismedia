@@ -20,17 +20,22 @@ public static partial class ReleaseLanguageDetection {
     private static readonly IReadOnlyDictionary<string, string> Aliases =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase) {
             ["english"] = "english", ["eng"] = "english",
+            ["en-us"] = "english", ["en-gb"] = "english",
             ["french"] = "french", ["fre"] = "french", ["fra"] = "french",
+            ["fr-fr"] = "french", ["fr-ca"] = "french",
             ["truefrench"] = "french", ["vff"] = "french", ["vfq"] = "french",
             ["german"] = "german", ["ger"] = "german", ["deu"] = "german", ["deutsch"] = "german",
             ["spanish"] = "spanish", ["spa"] = "spanish", ["esp"] = "spanish",
+            ["es-es"] = "spanish", ["es-mx"] = "spanish", ["es-419"] = "spanish",
             ["castellano"] = "spanish", ["latino"] = "spanish",
             ["italian"] = "italian", ["ita"] = "italian",
             ["portuguese"] = "portuguese", ["por"] = "portuguese", ["dublado"] = "portuguese",
+            ["pt-br"] = "portuguese", ["ptbr"] = "portuguese", ["pt-pt"] = "portuguese",
             ["russian"] = "russian", ["rus"] = "russian",
             ["japanese"] = "japanese", ["jpn"] = "japanese", ["jap"] = "japanese",
             ["korean"] = "korean", ["kor"] = "korean",
             ["chinese"] = "chinese", ["chi"] = "chinese", ["zho"] = "chinese",
+            ["zh-cn"] = "chinese", ["zh-tw"] = "chinese",
             ["mandarin"] = "chinese", ["cantonese"] = "chinese",
             ["hindi"] = "hindi", ["hin"] = "hindi",
             ["dutch"] = "dutch", ["nld"] = "dutch", ["flemish"] = "dutch",
@@ -62,7 +67,14 @@ public static partial class ReleaseLanguageDetection {
     // a subtitle clause cannot consume an independent audio declaration outside it.
     private const string LanguageSeparator = @"[\s._+,/;\-]+";
     private const string SubtitleMarker = @"(?:subs?|subtitles?|subbed)";
-    private static readonly string LanguageTokenPattern = @"(?:" + string.Join("|", Aliases.Keys.Select(Regex.Escape)) + ")";
+    private static readonly string LanguageTokenPattern = @"(?:" + string.Join("|", Aliases.Keys.Select(AliasPattern)) + ")";
+    // An explicit regional tag is stronger than an isolated two-letter word. Keep it intact before
+    // ordinary release separators split it, and use the same vocabulary when excluding subtitles.
+    private static readonly Regex RegionalLanguageTokens = new(
+        @"(?<![\p{L}\p{N}])(?:" + string.Join("|", Aliases.Keys.Where(alias => alias.Contains('-')).Select(AliasPattern))
+        + @")(?![\p{L}\p{N}])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant, TimeSpan.FromMilliseconds(100));
+
+    private static string AliasPattern(string alias) => string.Join("[-_]", alias.Split('-').Select(Regex.Escape));
     private static readonly Regex SubtitleSuffix = new(
         @"(?<![\p{L}\p{N}])" + LanguageTokenPattern + "(?:" + LanguageSeparator + LanguageTokenPattern + ")*"
         + @"[\s._+,/;\-]*" + SubtitleMarker + @"(?![\p{L}\p{N}])",
@@ -114,7 +126,9 @@ public static partial class ReleaseLanguageDetection {
     /// </summary>
     public static string Canonicalize(string language) {
         var trimmed = language.Trim();
-        return Aliases.TryGetValue(trimmed, out var canonical) ? canonical : trimmed.ToLowerInvariant();
+        return Aliases.TryGetValue(trimmed, out var canonical)
+            || Aliases.TryGetValue(trimmed.Replace('_', '-'), out canonical)
+            ? canonical : trimmed.ToLowerInvariant();
     }
 
     /// <summary>
@@ -131,6 +145,7 @@ public static partial class ReleaseLanguageDetection {
 
         var audioTitle = SubtitlePrefix.Replace(SubtitleSuffix.Replace(MultiSubtitleRegex().Replace(title, " "), " "), " ");
         if (DualAudioRegex().IsMatch(audioTitle)) declared.Add(Multi);
+        foreach (Match match in RegionalLanguageTokens.Matches(audioTitle)) declared.Add(Canonicalize(match.Value));
         foreach (Match match in ExplicitShortLanguageListRegex().Matches(audioTitle)) {
             var tokens = TokenSeparatorRegex().Split(match.Groups["languages"].Value);
             if (tokens.All(Aliases.ContainsKey)) {

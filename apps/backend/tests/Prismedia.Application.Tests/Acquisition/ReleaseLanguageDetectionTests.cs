@@ -4,6 +4,38 @@ namespace Prismedia.Application.Tests.Acquisition;
 
 public sealed class ReleaseLanguageDetectionTests {
     [Theory]
+    [InlineData("PT-BR", "Portuguese")]
+    [InlineData("PT_BR", "Portuguese")]
+    [InlineData("PTBR", "Portuguese")]
+    [InlineData("PT-PT", "Portuguese")]
+    [InlineData("EN-US", "English")]
+    [InlineData("EN-GB", "English")]
+    [InlineData("FR-CA", "French")]
+    [InlineData("FR-FR", "French")]
+    [InlineData("ES-MX", "Spanish")]
+    [InlineData("ES-ES", "Spanish")]
+    [InlineData("ES-419", "Spanish")]
+    [InlineData("ZH-CN", "Chinese")]
+    [InlineData("ZH-TW", "Chinese")]
+    public void RegionalDeclarationsAgreeAcrossTitlesAttributesAndPreferences(string tag, string language) {
+        var canonical = ReleaseLanguageDetection.Canonicalize(language);
+        Assert.Equal(canonical, ReleaseLanguageDetection.Canonicalize(tag));
+        Assert.Contains(canonical, ReleaseLanguageDetection.Detect($"Example.1980.Multi.{tag}-Group", null));
+        Assert.Contains(canonical, ReleaseLanguageDetection.Detect("Example", tag));
+        Assert.Equal(2, ReleaseLanguageDetection.PreferenceRank($"Example.Multi.{tag}", null, [language]));
+    }
+
+    [Theory]
+    [InlineData("Example.1080p.PT-BR.Subs")]
+    [InlineData("Example.1080p.Subtitles.PT_BR")]
+    [InlineData("Example.1080p.[PTBR Subs]")]
+    [InlineData("Example.1080p.EN-US+PT-BR.Subs")]
+    [InlineData("Example.No-Go.1980.1080p")]
+    [InlineData("Example.1980.PT-BRX")]
+    public void RegionalTagsDoNotTurnSubtitlesOrPartialWordsIntoAudio(string title) =>
+        Assert.Empty(ReleaseLanguageDetection.Detect(title, null));
+
+    [Theory]
     [InlineData("en", "eng")]
     [InlineData("fr", "fra")]
     [InlineData("de", "ger")]
