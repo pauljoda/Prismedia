@@ -48,13 +48,18 @@ public sealed record TvPlanUnit(string SourceRelativePath, int Season, int Episo
 /// <summary>
 /// One provider episode of the season being imported: its season-relative number, title, and optional
 /// absolute number for filename alignment, plus its stable Entity identity when the caller is building a
-/// user-facing manual mapping review.
+/// user-facing manual mapping review. <see cref="TvEpisodeTitle.IsWanted"/> distinguishes missing
+/// catalog slots from owned episodes when deciding whether a foreign-season extra can fill a gap.
 /// </summary>
 public sealed record TvEpisodeTitle(
     int Episode,
     string Title,
     Guid? EntityId = null,
-    int? AbsoluteEpisode = null);
+    int? AbsoluteEpisode = null,
+    bool IsWanted = true);
+
+/// <summary>Current local episode identities within one season; absence does not prove provider catalog completeness.</summary>
+public sealed record TvSeasonEpisodeCatalog(Guid SeasonEntityId, int SeasonNumber, IReadOnlyList<TvEpisodeTitle> Episodes);
 
 /// <summary>The unit-level TV plan: either blocked (same reasons as <see cref="ImportPlan"/>) or the placeable units.</summary>
 public sealed record TvUnitsPlan(bool Blocked, ImportBlockReason? BlockReason, IReadOnlyList<TvPlanUnit> Units) {
@@ -729,7 +734,7 @@ public static partial class TvImportPlanBuilder {
         return slots.Distinct().Count() == slots.Length ? realigned : null;
     }
 
-    private static bool HasInternetArchiveOriginalSibling(string relativePath, IReadOnlySet<string> videoPaths) {
+    internal static bool HasInternetArchiveOriginalSibling(string relativePath, IReadOnlySet<string> videoPaths) {
         var extension = Path.GetExtension(relativePath);
         var stem = Path.GetFileNameWithoutExtension(relativePath);
         if (!stem.EndsWith(".ia", StringComparison.OrdinalIgnoreCase)) {

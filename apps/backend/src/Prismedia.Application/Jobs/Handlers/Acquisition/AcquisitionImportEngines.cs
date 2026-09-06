@@ -1155,21 +1155,8 @@ public sealed class TvAcquisitionImportEngine(
         }
 
         var series = SeriesOf(import);
-        var unitsPlan = import.ManualFileMappings is { Count: > 0 } manualMappings
-            ? TvImportPlanBuilder.PlanManualUnits(
-                payload.Files,
-                manualMappings,
-                series,
-                profile?.PathTemplate,
-                ownedMediaQuality)
-            : TvImportPlanBuilder.PlanUnits(
-                payload.Files,
-                series,
-                import.SeasonNumber,
-                import.EpisodeNumber,
-                profile?.PathTemplate,
-                ownedMediaQuality,
-                await EpisodeTitlesForAsync(import, cancellationToken));
+        var catalogPlan = await PlanWithCatalogAsync(import, payload, profile, ownedMediaQuality, cancellationToken);
+        var unitsPlan = catalogPlan.Plan;
         var plan = unitsPlan.Blocked
             ? ResolvedImportPlan.Block(unitsPlan.BlockReason!.Value)
             : ImportTargetResolver.Resolve(
@@ -1208,7 +1195,7 @@ public sealed class TvAcquisitionImportEngine(
             LibraryRootPath = root.Path,
             DiscardRemainingPayload = payload.Files.Count(file => TvImportPlanBuilder.IsVideoFile(file.RelativePath)) > unitsPlan.Units.Count
         };
-        if (await PrepareTvCheckpointAsync(import, payload, checkpoint, cancellationToken) is not { } preparedCheckpoint) {
+        if (await PrepareTvCheckpointAsync(import, payload, checkpoint, catalogPlan.MonitoredExtras, cancellationToken) is not { } preparedCheckpoint) {
             return;
         }
         checkpoint = preparedCheckpoint;
@@ -1238,16 +1225,8 @@ public sealed class TvAcquisitionImportEngine(
         string? qualityCode,
         CancellationToken cancellationToken) {
         var series = SeriesOf(import);
-        var unitsPlan = import.ManualFileMappings is { Count: > 0 } manualMappings
-            ? TvImportPlanBuilder.PlanManualUnits(
-                payload.Files,
-                manualMappings,
-                series,
-                profile?.PathTemplate,
-                qualityCode)
-            : TvImportPlanBuilder.PlanUnits(
-                payload.Files, series, import.SeasonNumber, import.EpisodeNumber, profile?.PathTemplate, qualityCode,
-                await EpisodeTitlesForAsync(import, cancellationToken));
+        var catalogPlan = await PlanWithCatalogAsync(import, payload, profile, qualityCode, cancellationToken);
+        var unitsPlan = catalogPlan.Plan;
         if (unitsPlan.Blocked) {
             await acquisitions.SetStatusAsync(import.Id, AcquisitionStatus.ManualImportRequired, BlockMessage(unitsPlan.BlockReason), cancellationToken);
             return;
@@ -1338,7 +1317,7 @@ public sealed class TvAcquisitionImportEngine(
                 checkpoint, owningRoot.Path, merged),
             DiscardRemainingPayload = payload.Files.Count(file => TvImportPlanBuilder.IsVideoFile(file.RelativePath)) > checkpointItems.Length
         };
-        if (await PrepareTvCheckpointAsync(import, payload, checkpoint, cancellationToken) is not { } preparedCheckpoint) {
+        if (await PrepareTvCheckpointAsync(import, payload, checkpoint, catalogPlan.MonitoredExtras, cancellationToken) is not { } preparedCheckpoint) {
             return;
         }
         checkpoint = preparedCheckpoint;
@@ -1352,10 +1331,84 @@ public sealed class TvAcquisitionImportEngine(
             cancellationToken);
     }
 
+    private sealed record CatalogImportPlan(TvUnitsPlan Plan, IReadOnlyList<Guid> MonitoredExtras);
+
+    private async Task<CatalogImportPlan> PlanWithCatalogAsync(
+        AcquisitionImportContext import, DownloadPayload payload, BookImportProfile? profile,
+        string? quality, CancellationToken cancellationToken) {
+        var series = SeriesOf(import);
+        if (import.ManualFileMappings is { Count: > 0 } manualMappings) {
+            return new(TvImportPlanBuilder.PlanManualUnits(payload.Files, manualMappings, series, profile?.PathTemplate, quality), []);
+        }
+        var catalog = import.EntityId is { } entityId && import.SeasonNumber is not null
+            ? await targets.GetSeriesEpisodeCatalogAsync(entityId, cancellationToken)
+            : [];
+        var evidence = import.SeasonNumber is { } requestedSeason
+            ? TvCrossSeasonImportEvidence.Find(payload.Files, requestedSeason, catalog, series)
+            : [];
+        var excluded = evidence.Select(file => file.SourceRelativePath).ToHashSet(FileSystemPathComparison.Comparer);
+        var ordinaryFiles = payload.Files.Where(file => !excluded.Contains(file.RelativePath)).ToArray();
+        var seasonTitles = catalog.Where(season => season.SeasonNumber == import.SeasonNumber).ToArray();
+        var titles = seasonTitles.Length == 1 ? seasonTitles[0].Episodes : await EpisodeTitlesForAsync(import, cancellationToken);
+        var ordinaryVideos = TvImportPlanBuilder.UnmappedVideos(ordinaryFiles, []);
+        if (excluded.Count > 0 && import.EpisodeNumber is not null && ordinaryVideos.Count == 1
+            && TvImportPlanBuilder.InferEpisode(ordinaryVideos[0].RelativePath, import.SeasonNumber, titles) is null) {
+            return new(TvUnitsPlan.Block(ImportBlockReason.AmbiguousMultiplePrimaries), []);
+        }
+        var ordinaryPlan = ordinaryFiles.Any(file => TvImportPlanBuilder.IsVideoFile(file.RelativePath))
+            ? TvImportPlanBuilder.PlanUnits(ordinaryFiles, series, import.SeasonNumber, import.EpisodeNumber,
+                profile?.PathTemplate, quality, titles)
+            : TvUnitsPlan.For([]);
+        if (ordinaryPlan.Blocked) {
+            return new(ordinaryPlan, []);
+        }
+        var foreignIds = evidence.Where(file => file.Destination is not null)
+            .Select(file => file.Destination!.SeasonEntityId).Distinct().ToArray();
+        var active = monitors is not null
+            ? (await monitors.ListByEntityIdsAsync(foreignIds, cancellationToken))
+                .Where(pair => pair.Value.Status == MonitorStatus.Active)
+                .OrderBy(pair => pair.Value.Id).Select(pair => pair.Key).ToArray()
+            : [];
+        // Extras fill missing catalog slots. Replacing an owned foreign-season file needs that season's
+        // own profile and measured upgrade evaluation, not the requested season's settings.
+        var importableExtras = evidence.Where(file => file.Destination is { } destination
+            && active.Contains(destination.SeasonEntityId) && file.Episodes.All(episode => episode.IsWanted)).ToArray();
+        var mappings = importableExtras
+            .SelectMany(file => file.Episodes.Select(episode => new ManualImportFileMapping(
+                file.SourceRelativePath, episode.EntityId!.Value, file.Destination!.SeasonNumber, episode.Episode))).ToArray();
+        if (mappings.Length == 0) {
+            return new(ordinaryPlan.Units.Count > 0 ? ordinaryPlan : TvUnitsPlan.Block(ImportBlockReason.NoMatchingTvUnit), []);
+        }
+        var extrasPlan = TvImportPlanBuilder.PlanManualUnits(payload.Files, mappings, series, profile?.PathTemplate, quality);
+        if (extrasPlan.Blocked) {
+            return new(extrasPlan, []);
+        }
+        var units = ordinaryPlan.Units.Concat(extrasPlan.Units).ToArray();
+        var claims = units.SelectMany(unit => unit.ExtraEpisodes.Prepend(unit.Episode).Select(episode => (unit.Season, episode))).ToArray();
+        return claims.Distinct().Count() == claims.Length
+            ? new(TvUnitsPlan.For(units), active.Where(id => importableExtras.Any(file => file.Destination!.SeasonEntityId == id)).ToArray())
+            : new(TvUnitsPlan.Block(ImportBlockReason.AmbiguousMultiplePrimaries), []);
+    }
+
+    // Elect the complete immutable plan while destination monitors are locked, then commit before any
+    // filesystem work. A later pause cannot invalidate a partially executed, crash-recoverable plan.
+    private async Task ElectMonitoredExtrasAsync(
+        IReadOnlyList<Guid> entityIds, int index, Func<CancellationToken, Task> save, CancellationToken cancellationToken) {
+        if (index == entityIds.Count) {
+            await save(cancellationToken);
+            return;
+        }
+        if (monitors is not null) {
+            await monitors.ExecuteIfActiveEntityMutationAsync(entityIds[index],
+                token => ElectMonitoredExtrasAsync(entityIds, index + 1, save, token), cancellationToken);
+        }
+    }
+
     private async Task<TvImportCheckpoint?> PrepareTvCheckpointAsync(
         AcquisitionImportContext import,
         DownloadPayload payload,
         TvImportCheckpoint checkpoint,
+        IReadOnlyList<Guid> monitoredExtras,
         CancellationToken cancellationToken) {
         // Resolve every new-file collision before the plan is persisted. Execute then uses the exact
         // checkpoint path without choosing another suffix after a crash. Upgrade targets are already
@@ -1457,8 +1510,16 @@ public sealed class TvAcquisitionImportEngine(
         };
         // Persist the complete plan before ExecuteTvCheckpointAsync performs its first filesystem mutation.
         // The executor refreshes the binding hint on every run, including durable resumes.
-        if (await acquisitions.TryCreateTvImportCheckpointAsync(import.Id, checkpoint, cancellationToken)) {
+        var created = false;
+        await ElectMonitoredExtrasAsync(monitoredExtras, 0, async token => {
+            created = await acquisitions.TryCreateTvImportCheckpointAsync(import.Id, checkpoint, token);
+        }, cancellationToken);
+        if (created) {
             return checkpoint;
+        }
+        if (monitoredExtras.Count > 0) {
+            await acquisitions.TryHoldInitialImportAsync(import.Id, checkpoint.ClaimJobId,
+                "A destination season changed before its extra episodes could be imported. The payload is preserved for review.", cancellationToken);
         }
 
         logger.LogInformation(

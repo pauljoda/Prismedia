@@ -13,6 +13,35 @@ namespace Prismedia.Infrastructure.Acquisition;
 /// </summary>
 public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIndex {
     /// <inheritdoc />
+    public async Task<IReadOnlyList<TvSeasonEpisodeCatalog>> GetSeriesEpisodeCatalogAsync(
+        Guid entityId, CancellationToken cancellationToken) {
+        var seriesId = await ResolveAncestorOfKindAsync(entityId, EntityKind.VideoSeries.ToCode(), cancellationToken);
+        if (seriesId is null) {
+            return [];
+        }
+        var seasonCode = EntityKind.VideoSeason.ToCode();
+        var episodeCode = EntityKind.VideoEpisode.ToCode();
+        var rows = await (
+            from season in db.Entities.AsNoTracking()
+            join episode in db.Entities.AsNoTracking() on season.Id equals episode.ParentEntityId
+            where season.ParentEntityId == seriesId && season.KindCode == seasonCode && season.SortOrder != null
+                && episode.KindCode == episodeCode && episode.SortOrder != null
+            select new {
+                SeasonId = season.Id,
+                SeasonNumber = season.SortOrder!.Value,
+                Episode = new TvEpisodeTitle(episode.SortOrder!.Value, episode.Title, episode.Id,
+                    db.EntityPositions.Where(position => position.EntityId == episode.Id
+                        && position.Code == EntityPositionCodes.AbsoluteEpisode)
+                        .Select(position => (int?)position.Value).FirstOrDefault(), episode.IsWanted)
+            }).ToArrayAsync(cancellationToken);
+        return rows.GroupBy(row => (row.SeasonId, row.SeasonNumber))
+            .OrderBy(group => group.Key.SeasonNumber).ThenBy(group => group.Key.SeasonId)
+            .Select(group => new TvSeasonEpisodeCatalog(group.Key.SeasonId, group.Key.SeasonNumber,
+                group.Select(row => row.Episode).OrderBy(episode => episode.Episode).ToArray()))
+            .ToArray();
+    }
+
+    /// <inheritdoc />
     public async Task<bool> HasUnnumberedWantedTvEpisodesAsync(
         Guid entityId, int? seasonNumber, CancellationToken cancellationToken) {
         var episodeCode = EntityKindRegistry.PlayableVideoKindFor(PlayableVideoScanPlacement.Episode).ToCode();
@@ -121,7 +150,7 @@ public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIn
                     .Where(position => position.EntityId == episode.Id
                         && position.Code == EntityPositionCodes.AbsoluteEpisode)
                     .Select(position => (int?)position.Value)
-                    .FirstOrDefault()))
+                    .FirstOrDefault(), episode.IsWanted))
             .ToListAsync(cancellationToken);
     }
 

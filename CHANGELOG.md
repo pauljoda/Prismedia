@@ -38,6 +38,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- TV imports can fill monitored seasons with confidently identified extra episodes from a season pack, including paired files with conflicting release numbering. Unmonitored, ambiguous, and already-owned extras remain available for review.
+
+- Import planning rechecks current monitor state before electing cross-season placements, preserves elected plans through restart recovery, and cannot revive cancelled or superseded imports when a destination changes.
+
 - TV imports hold conflicting paired-episode title matches for review instead of reverting to contradictory release numbering.
 
 - Resuming a partial TV import retains the original filenames and measured sizes of files imported in earlier passes, preserving evidence needed for later mapping recovery.

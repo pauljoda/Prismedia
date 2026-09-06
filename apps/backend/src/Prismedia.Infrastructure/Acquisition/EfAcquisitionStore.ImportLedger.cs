@@ -87,6 +87,29 @@ public sealed partial class EfAcquisitionStore {
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    /// <inheritdoc />
+    public async Task<bool> TryHoldInitialImportAsync(Guid id, Guid claimJobId, string message, CancellationToken cancellationToken) {
+        var now = DateTimeOffset.UtcNow;
+        if (db.Database.IsRelational()) {
+            var affected = await db.Acquisitions.Where(row => row.Id == id && row.Status == AcquisitionStatus.Importing
+                    && row.ImportClaimJobId == claimJobId && row.ImportCheckpointJson == null)
+                .ExecuteUpdateAsync(update => update.SetProperty(row => row.Status, AcquisitionStatus.ManualImportRequired)
+                    .SetProperty(row => row.StatusMessage, message).SetProperty(row => row.ImportClaimJobId, (Guid?)null)
+                    .SetProperty(row => row.UpdatedAt, now), cancellationToken);
+            return await SynchronizeTrackedAcquisitionAsync(id, affected, cancellationToken);
+        }
+        var row = await db.Acquisitions.FirstOrDefaultAsync(row => row.Id == id, cancellationToken);
+        if (row is null || row.Status != AcquisitionStatus.Importing || row.ImportClaimJobId != claimJobId || row.ImportCheckpointJson is not null) {
+            return false;
+        }
+        row.Status = AcquisitionStatus.ManualImportRequired;
+        row.StatusMessage = message;
+        row.ImportClaimJobId = null;
+        row.UpdatedAt = now;
+        await db.SaveChangesAsync(cancellationToken);
+        return true;
+    }
+
     public async Task<bool> TryCreateTvImportCheckpointAsync(
         Guid acquisitionId,
         TvImportCheckpoint checkpoint,

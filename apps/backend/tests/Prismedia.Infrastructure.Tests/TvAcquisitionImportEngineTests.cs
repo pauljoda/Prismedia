@@ -28,6 +28,123 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
     private readonly string _workRoot = Directory.CreateTempSubdirectory("prismedia-tv-import-").FullName;
 
     [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    [InlineData(false, true)]
+    public async Task IdentifiedForeignSeasonEpisodesImportOnlyWhenThatSeasonIsMonitored(bool monitored, bool mislabeled) {
+        await using var db = CreateContext();
+        var extraName = mislabeled
+            ? "Show.S01E49-E50.Hidden.Garden.&.Mountain.Journey.mkv"
+            : "Show.S02E03-E04.Hidden.Garden.&.Mountain.Journey.mkv";
+        var harness = await HarnessAsync(db, ownedEpisodeName: "Show - s01e01.mkv",
+            payloadFiles: ["Show.S01E02.mkv", extraName], releaseTitle: "Show S01");
+        var otherSeason = AddWantedEntity(db, EntityKind.VideoSeason.ToCode(), harness.SeriesId, 2);
+        var first = AddWantedEntity(db, EntityKind.VideoEpisode.ToCode(), otherSeason, 3);
+        var second = AddWantedEntity(db, EntityKind.VideoEpisode.ToCode(), otherSeason, 4);
+        db.Entities.Local.Single(row => row.Id == first).Title = "Hidden Garden";
+        db.Entities.Local.Single(row => row.Id == second).Title = "Mountain Journey";
+        await db.SaveChangesAsync();
+        if (monitored) {
+            await new EfMonitorStore(db).StartForEntityAsync(otherSeason, EntityKind.VideoSeason, "Show Season 2",
+                targeting: null, preset: null, cancellationToken: default);
+        }
+
+        await harness.Engine.ImportAsync(harness.Context, harness.Import, default);
+
+        await AcquisitionTestFactory.Store(db).MarkImportedWithQualityAsync(harness.Import.Id, BookQualityRank.Floor, "Imported", default);
+        Assert.False((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == harness.WantedEpisodeId)).IsWanted);
+        Assert.False(await db.Entities.AnyAsync(row => row.ParentEntityId == harness.SeasonId && row.SortOrder == 49));
+        var foreignSources = await db.EntityFiles.AsNoTracking().Where(row => (row.EntityId == first || row.EntityId == second)
+            && row.Role == EntityFileRole.Source).ToArrayAsync();
+        Assert.Equal(monitored ? 2 : 0, foreignSources.Length);
+        Assert.Equal(!monitored, File.Exists(Path.Combine(harness.Import.ContentPath!, extraName)));
+        Assert.Equal(monitored ? AcquisitionStatus.Imported : AcquisitionStatus.ManualImportRequired,
+            await StatusOf(db, harness.Import.Id));
+        if (monitored) {
+            Assert.Single(foreignSources.Select(source => source.Path).Distinct());
+            Assert.All(foreignSources, source => Assert.Contains("Season 02", source.Path));
+        }
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ForeignSeasonMonitorPauseIsResolvedBeforePlacementAndDurablePlansSurviveRetry(bool pauseAfterElection) {
+        await using var db = CreateContext();
+        var extraName = "Show.S02E03.Hidden.Garden.mkv";
+        Guid? monitorId = null;
+        var harness = await HarnessAsync(db, ownedEpisodeName: "Show - s01e01.mkv",
+            payloadFiles: ["Show.S01E02.mkv", extraName], releaseTitle: "Show S01",
+            failPlacementOnCall: pauseAfterElection ? 1 : null,
+            beforeCheckpoint: pauseAfterElection ? null : () => {
+                db.Monitors.Single(row => row.Id == monitorId).Status = MonitorStatus.Paused;
+                db.SaveChanges();
+            });
+        var season = AddWantedEntity(db, EntityKind.VideoSeason.ToCode(), harness.SeriesId, 2);
+        var episode = AddWantedEntity(db, EntityKind.VideoEpisode.ToCode(), season, 3);
+        db.Entities.Local.Single(row => row.Id == episode).Title = "Hidden Garden";
+        await db.SaveChangesAsync();
+        monitorId = (await new EfMonitorStore(db).StartForEntityAsync(season, EntityKind.VideoSeason, "Show Season 2",
+            null, null, default)).Id;
+        var store = AcquisitionTestFactory.Store(db);
+        if (pauseAfterElection) {
+            await Assert.ThrowsAsync<IOException>(() => harness.Engine.ImportAsync(harness.Context, harness.Import, default));
+            Assert.NotNull((await db.Acquisitions.AsNoTracking().SingleAsync()).ImportCheckpointJson);
+            db.Monitors.Single(row => row.Id == monitorId).Status = MonitorStatus.Paused;
+            await db.SaveChangesAsync();
+            await harness.ResumeEngine.ImportAsync(harness.Context, (await store.GetImportContextAsync(harness.Import.Id, default))!, default);
+            await store.MarkImportedWithQualityAsync(harness.Import.Id, BookQualityRank.Floor, "Imported", default);
+            Assert.True(await db.EntityFiles.AnyAsync(row => row.EntityId == episode && row.Role == EntityFileRole.Source));
+        } else {
+            await harness.Engine.ImportAsync(harness.Context, harness.Import, default);
+            Assert.Null((await db.Acquisitions.AsNoTracking().SingleAsync()).ImportCheckpointJson);
+            Assert.False(await db.EntityFiles.AnyAsync(row => row.EntityId == episode && row.Role == EntityFileRole.Source));
+            Assert.True(File.Exists(Path.Combine(harness.Import.ContentPath!, extraName)));
+            Assert.True(File.Exists(Path.Combine(harness.Import.ContentPath!, "Show.S01E02.mkv")));
+        }
+    }
+
+    [Fact]
+    public async Task ExcludingForeignFilesCannotTurnAnUnidentifiedFileIntoASingleEpisodeGuess() {
+        await using var db = CreateContext();
+        var harness = await HarnessAsync(db, ownedEpisodeName: "Show - s01e01.mkv",
+            payloadFiles: ["unidentified.mkv", "Show.S02E03.mkv"], releaseTitle: "Show S01E02");
+
+        await harness.Engine.ImportAsync(harness.Context, harness.Import with { EpisodeNumber = 2 }, default);
+
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, await StatusOf(db, harness.Import.Id));
+        Assert.True(File.Exists(Path.Combine(harness.Import.ContentPath!, "unidentified.mkv")));
+        Assert.False(await db.EntityFiles.AnyAsync(row => row.EntityId == harness.WantedEpisodeId && row.Role == EntityFileRole.Source));
+    }
+
+    [Fact]
+    public async Task OwnedForeignEpisodeIsRetainedInsteadOfUpgradedUnderTheRequestedSeasonsProfile() {
+        await using var db = CreateContext();
+        const string extraName = "Show.S02E03.Hidden.Garden.2160p.WEB-DL.mkv";
+        var harness = await HarnessAsync(db, ownedEpisodeName: "Show - s01e01.mkv",
+            payloadFiles: ["Show.S01E02.mkv", extraName], releaseTitle: "Show S01 2160p WEB-DL");
+        var folder = Directory.CreateDirectory(Path.Combine(harness.SeriesFolder, "Season 02")).FullName;
+        var owned = Path.Combine(folder, "Show.S02E03.1080p.WEB-DL.mkv");
+        await File.WriteAllTextAsync(owned, "original foreign episode");
+        var season = AddFolderEntity(db, EntityKind.VideoSeason.ToCode(), harness.SeriesId, 2, folder);
+        var episode = AddEntity(db, EntityKind.VideoEpisode.ToCode(), season, 3, owned);
+        db.Entities.Local.Single(row => row.Id == episode).Title = "Hidden Garden";
+        await db.SaveChangesAsync();
+        await new EfMonitorStore(db).StartForEntityAsync(season, EntityKind.VideoSeason, "Show Season 2", null, null, default);
+        var originalSource = await db.EntityFiles.AsNoTracking().SingleAsync(row => row.EntityId == episode && row.Role == EntityFileRole.Source);
+
+        await harness.Engine.ImportAsync(harness.Context, harness.Import, default);
+        await AcquisitionTestFactory.Store(db).MarkImportedWithQualityAsync(harness.Import.Id, BookQualityRank.Floor, "Imported", default);
+
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, await StatusOf(db, harness.Import.Id));
+        Assert.Equal("original foreign episode", await File.ReadAllTextAsync(owned));
+        Assert.True(File.Exists(Path.Combine(harness.Import.ContentPath!, extraName)));
+        Assert.Equal(originalSource.Id, (await db.EntityFiles.AsNoTracking().SingleAsync(row => row.EntityId == episode
+            && row.Role == EntityFileRole.Source)).Id);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task PlacedFileRecoveryRestoresBothEpisodesFromACombinedFile(bool renamedWithLedger) {
@@ -1120,7 +1237,8 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         bool failSameFormatAfterStage = false,
         bool failAfterReplacementEvidence = false,
         bool autoGenerateMetadata = false,
-        bool enableMissingFallback = false) {
+        bool enableMissingFallback = false,
+        Action? beforeCheckpoint = null) {
         var libraryRoot = Directory.CreateDirectory(Path.Combine(_workRoot, "library")).FullName;
         var seriesFolder = Directory.CreateDirectory(Path.Combine(libraryRoot, "Show (2008)")).FullName;
         var seasonFolder = Directory.CreateDirectory(Path.Combine(seriesFolder, deletedSeason ? "Season 01" : "S01")).FullName;
@@ -1179,7 +1297,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
 
         var store = AcquisitionTestFactory.Store(db);
         await store.SetSelectedReleaseAsync(acquisitionId, new SelectedRelease(releaseTitle, "Indexer", "hash-1"), CancellationToken.None);
-        IMonitorStore? monitorStore = null;
+        IMonitorStore? monitorStore = new EfMonitorStore(db);
         if (enableMissingFallback) {
             var enabledMonitorStore = new EfMonitorStore(db);
             await enabledMonitorStore.StartAsync(
@@ -1218,6 +1336,9 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
             : failAfterPlacementOnCall is { } failAfterCall
                 ? new FailOnCallImportFileMover(realMover, failAfterCall, failAfterPlacement: true)
                 : realMover;
+        if (beforeCheckpoint is not null) {
+            firstMover = new BeforeCheckpointMover(firstMover, beforeCheckpoint);
+        }
         IOwnedFileReplacer firstReplacer = failCrossFormatAfterInstall
             ? new ThrowAfterCrossFormatInstallReplacer()
             : failSameFormatAfterStage
@@ -1342,6 +1463,19 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
                 ? throw new InvalidOperationException("Synthetic catalog failure.")
                 : inner.MaterializeAsync(context, request, cancellationToken);
         }
+    }
+
+    private sealed class BeforeCheckpointMover(IImportFileMover inner, Action beforeCheckpoint) : IImportFileMover {
+        public string ResolveExactTargetPath(string desiredTargetPath, IReadOnlyCollection<string> reservedTargetPaths) {
+            beforeCheckpoint();
+            return inner.ResolveExactTargetPath(desiredTargetPath, reservedTargetPaths);
+        }
+
+        public Task<string> PlaceAsync(ResolvedImportItem item, ImportMode mode, CancellationToken cancellationToken) =>
+            inner.PlaceAsync(item, mode, cancellationToken);
+
+        public Task<string> PlaceExactAsync(ResolvedImportItem item, ImportMode mode, CancellationToken cancellationToken) =>
+            inner.PlaceExactAsync(item, mode, cancellationToken);
     }
 
     private sealed class FailOnCallImportFileMover(

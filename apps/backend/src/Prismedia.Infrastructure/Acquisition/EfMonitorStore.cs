@@ -1018,9 +1018,10 @@ public sealed partial class EfMonitorStore(
                 && db.Database.ProviderName?.Contains("Npgsql", StringComparison.OrdinalIgnoreCase) == true) {
                 monitor = await db.Monitors
                     .FromSqlInterpolated($"SELECT * FROM monitors WHERE id = {candidate.Id} FOR UPDATE")
+                    .AsNoTracking()
                     .SingleOrDefaultAsync(cancellationToken);
             } else {
-                monitor = await db.Monitors.FirstOrDefaultAsync(
+                monitor = await db.Monitors.AsNoTracking().FirstOrDefaultAsync(
                     row => row.Id == candidate.Id,
                     cancellationToken);
             }

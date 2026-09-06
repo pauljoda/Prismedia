@@ -111,7 +111,7 @@ public static partial class ReleaseTitleIdentity {
     /// identity comparison share. Numeric tokens compare by value, so provider title <c>Episode 131</c>
     /// matches a release/file spelling it <c>Episode 0131</c> without weakening the number itself.
     /// </summary>
-    private static IReadOnlyList<string> ComparableTokens(string? value) {
+    internal static IReadOnlyList<string> ComparableTokens(string? value) {
         if (string.IsNullOrWhiteSpace(value)) {
             return [];
         }

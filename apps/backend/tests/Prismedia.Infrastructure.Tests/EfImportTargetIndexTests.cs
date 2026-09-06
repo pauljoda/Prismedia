@@ -27,6 +27,9 @@ public sealed class EfImportTargetIndexTests {
         var index = new EfImportTargetIndex(measured);
         Assert.Single((await index.GetTvLayoutAsync(ids.SeriesId, default))!.Seasons);
         var initialQueries = counter.Reads;
+        counter.Reads = 0;
+        Assert.Single(await index.GetSeriesEpisodeCatalogAsync(ids.SeriesId, default));
+        var initialCatalogQueries = counter.Reads;
         for (var seasonNumber = 2; seasonNumber <= 60; seasonNumber++) {
             var season = AddEntity(setup, EntityKind.VideoSeason.ToCode(), ids.SeriesId, seasonNumber);
             var path = $"/media/tv/Long Series/Season {seasonNumber:00}";
@@ -42,6 +45,10 @@ public sealed class EfImportTargetIndexTests {
         Assert.All(expanded.Seasons.Values, season => Assert.Single(season.EpisodeFileByNumber));
         Assert.True(counter.Reads <= initialQueries,
             $"Owned-file lookup grew from {initialQueries} queries for one season to {counter.Reads} for sixty seasons.");
+        counter.Reads = 0;
+        Assert.Equal(60, (await index.GetSeriesEpisodeCatalogAsync(ids.SeriesId, default)).Count);
+        Assert.True(counter.Reads <= initialCatalogQueries,
+            $"Episode catalog lookup grew from {initialCatalogQueries} to {counter.Reads} queries.");
     }
 
     private sealed class QueryCounter : DbCommandInterceptor {

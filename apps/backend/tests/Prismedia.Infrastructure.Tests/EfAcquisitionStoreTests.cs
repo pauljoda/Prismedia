@@ -11,6 +11,37 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EfAcquisitionStoreTests {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task HoldingAnUnelectedImportPreservesOtherClaimsCheckpointsAndCancellation(bool postgres) {
+        await using var database = postgres ? await PostgresTestDatabase.CreateAsync() : null;
+        await using var db = database?.CreateContext() ?? CreateContext();
+        var id = AddCheckpointAcquisition(db);
+        var row = db.Acquisitions.Local.Single(value => value.Id == id);
+        var jobId = Guid.NewGuid();
+        row.Status = AcquisitionStatus.Importing;
+        row.ImportClaimJobId = jobId;
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+        Assert.False(await store.TryHoldInitialImportAsync(id, Guid.NewGuid(), "Review", default));
+        row.ImportCheckpointJson = "{}";
+        await db.SaveChangesAsync();
+        Assert.False(await store.TryHoldInitialImportAsync(id, jobId, "Review", default));
+        row.ImportCheckpointJson = null;
+        row.Status = AcquisitionStatus.Cancelled;
+        await db.SaveChangesAsync();
+        Assert.False(await store.TryHoldInitialImportAsync(id, jobId, "Review", default));
+        Assert.Equal(AcquisitionStatus.Cancelled, await store.GetStatusAsync(id, default));
+        row.Status = AcquisitionStatus.Importing;
+        await db.SaveChangesAsync();
+
+        Assert.True(await store.TryHoldInitialImportAsync(id, jobId, "Review", default));
+        var held = await db.Acquisitions.AsNoTracking().SingleAsync(value => value.Id == id);
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, held.Status);
+        Assert.Null(held.ImportClaimJobId);
+    }
+
+    [Theory]
     [InlineData(null, null)]
     [InlineData(1, 99)]
     public async Task CorrectedEpisodePositionsHealExistingSearchAndImportRequests(int? oldSeason, int? oldEpisode) {

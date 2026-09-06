@@ -396,6 +396,10 @@ public sealed record AlbumDiskTarget(
 /// no on-disk folder — callers then keep the ordinary template placement.
 /// </summary>
 public interface IImportTargetIndex {
+    /// <summary>Current episode identities across the linked series, including seasons without files on disk.</summary>
+    Task<IReadOnlyList<TvSeasonEpisodeCatalog>> GetSeriesEpisodeCatalogAsync(Guid entityId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlyList<TvSeasonEpisodeCatalog>>([]);
+
     /// <summary>The existing series layout for a linked series/season/episode entity, or null when fileless.</summary>
     Task<TvSeriesDiskLayout?> GetTvLayoutAsync(Guid entityId, CancellationToken cancellationToken);
 
@@ -606,6 +610,10 @@ public interface IAcquisitionStore : IAcquisitionLifecycleStore {
         Guid claimJobId,
         bool allowManualRetry,
         CancellationToken cancellationToken);
+
+    /// <summary>Holds only this job's untouched import claim; later jobs, checkpoints, and terminal states remain unchanged.</summary>
+    Task<bool> TryHoldInitialImportAsync(Guid id, Guid claimJobId, string message, CancellationToken cancellationToken) =>
+        Task.FromResult(false);
 
     /// <summary>
     /// Atomically moves an acquisition with a corrupt durable import checkpoint to manual review. Downloaded,

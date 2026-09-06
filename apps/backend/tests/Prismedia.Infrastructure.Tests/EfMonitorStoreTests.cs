@@ -9,6 +9,34 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EfMonitorStoreTests {
     [Fact]
+    [Trait("Category", "PostgreSQL")]
+    public async Task ActiveMutationLeaseRechecksAPausedMonitorEvenWhenTheContextPreviouslyTrackedIt() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var entityId = Guid.NewGuid();
+        db.Entities.Add(new EntityRow {
+            Id = entityId, KindCode = EntityKind.VideoSeries.ToCode(), Title = "Show",
+            CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var store = new EfMonitorStore(db);
+        var monitor = await store.StartForEntityAsync(entityId, EntityKind.VideoSeries, "Show", null, null, default);
+        await using (var other = database.CreateContext()) {
+            await other.Monitors.Where(row => row.Id == monitor.Id).ExecuteUpdateAsync(update =>
+                update.SetProperty(row => row.Status, MonitorStatus.Paused));
+        }
+        var invoked = false;
+
+        var elected = await store.ExecuteIfActiveEntityMutationAsync(entityId, _ => {
+            invoked = true;
+            return Task.CompletedTask;
+        }, default);
+
+        Assert.False(elected);
+        Assert.False(invoked);
+    }
+
+    [Fact]
     public async Task BatchStartRecordsEveryExplicitEntityIntentBeforeAcquisitionWorkExists() {
         await using var db = CreateContext();
         var store = new EfMonitorStore(db);
