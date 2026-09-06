@@ -9,6 +9,23 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class TvPayloadAdmissionTests {
     [Fact]
+    public async Task ForeignTitleEvidenceCannotBeRejectedAsAnAlreadyOwnedRequestedEpisode() {
+        await using var db = CreateContext();
+        using var fixture = await TvPayloadAdmissionFixture.CreateAsync(db);
+        var requestedSeason = await db.Entities.SingleAsync(entity => entity.Id == fixture.Input.EntityId);
+        var foreignSeason = new EntityRow { Id = Guid.NewGuid(), KindCode = EntityKind.VideoSeason.ToCode(),
+            ParentEntityId = requestedSeason.ParentEntityId, SortOrder = 2, Title = "Season 2" };
+        db.Entities.AddRange(foreignSeason, new EntityRow { Id = Guid.NewGuid(), KindCode = EntityKind.VideoEpisode.ToCode(),
+            ParentEntityId = foreignSeason.Id, SortOrder = 3, Title = "Hidden Garden", IsWanted = true });
+        await db.SaveChangesAsync();
+        ImportCandidateFile[] files = [new("Show.S01E01.Hidden.Garden.mkv", 1000)];
+
+        Assert.False(await fixture.Service.HasNoBenefitAsync(fixture.Input, files, default));
+        await fixture.Service.RememberAsync(fixture.Input.Id, fixture.Selected.Identity, files, default);
+        Assert.Empty(await fixture.Service.GetExcludedAsync(fixture.Input, default));
+    }
+
+    [Fact]
     public async Task APartialSeasonPackMustActuallyReachTheMissingEpisode() {
         await using var db = CreateContext();
         using var fixture = await TvPayloadAdmissionFixture.CreateAsync(db);
