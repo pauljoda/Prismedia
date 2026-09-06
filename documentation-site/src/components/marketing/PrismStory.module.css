@@ -42,7 +42,7 @@
 .mobileLegend { display: none; }
 
 @media (min-width: 761px) and (min-height: 640px) and (prefers-reduced-motion: no-preference) {
-  .story[data-motion='true'] { min-height: 200svh; }
+  .story[data-motion='true'] { min-height: 165svh; }
   .story[data-motion='true'] .sticky { position: sticky; top: 60px; height: calc(100svh - 60px); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; padding-top: 32px; padding-bottom: 28px; }
   .story[data-motion='true'] .illustration { display: flex; align-items: center; justify-content: center; }
   .story[data-motion='true'] .optics { max-height: 100%; width: 100%; }

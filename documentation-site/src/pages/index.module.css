@@ -323,16 +323,21 @@
   flex-grow: 1;
 }
 
-.galleryExperience {
-  grid-column: 1 / -1;
+.galleryNote {
   display: grid;
-  grid-template-columns: 1fr 1.2fr;
-  gap: 30px;
-  align-items: center;
+  grid-template-columns: 1fr 1.4fr;
+  gap: 48px;
+  margin-top: 40px;
+  padding-top: 32px;
+  border-top: 1px solid color-mix(in srgb, var(--family-color) 50%, #282a30);
 }
 
-.galleryExperience .frame {
-  margin: 32px 32px 32px 0;
+.galleryNote h3 { margin: 0; }
+.galleryNote p {
+  font-size: 15px;
+  line-height: 1.8;
+  max-width: 65ch;
+  margin-bottom: 8px;
 }
 
 .split {
@@ -614,14 +619,15 @@
   .experienceCopy h3 {
     font-size: 29px;
   }
-  .watchExperience, .galleryExperience {
+  .watchExperience {
     display: block;
   }
-  .watchExperience .frame, .galleryExperience .frame {
+  .watchExperience .frame {
     margin: 0 0 25px 20px;
     border-radius: 8px 0 0 8px;
     border-right: 0;
   }
+  .galleryNote { grid-template-columns: 1fr; gap: 16px; margin-top: 28px; padding-top: 28px; }
   .readingPhones {
     padding-inline: 25px;
     max-height: 330px;

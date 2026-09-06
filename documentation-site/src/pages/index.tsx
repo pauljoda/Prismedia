@@ -29,7 +29,7 @@ const PRODUCT_SCHEMA = {
   isAccessibleForFree: true,
   sameAs: [GITHUB_URL, APP_STORE_URL, TESTFLIGHT_URL],
 };
-const SECTION_IDS = new Set(['product', 'experiences', 'platforms', 'self-hosting']);
+const SECTION_IDS = new Set(['product', 'workflow', 'experiences', 'platforms', 'self-hosting']);
 
 // Preserve existing links from the documentation navigation and published material.
 function SectionRoute() {
@@ -68,7 +68,7 @@ function MediaLabel({children, style}: {children: ReactNode; style?: CSSProperti
 function Hero() {
   return <header className={`${styles.wrap} ${styles.hero}`}>
     <h1>A clear home for <br />all your media.</h1>
-    <p className={styles.lede}>Movies, music, books, and everything between.<br />Find, organize, and enjoy your collection in one self-hosted app.</p>
+    <p className={styles.lede}>Find, organize, and enjoy your movies, music, and books.<br />Run Prismedia on your own server, then connect from the web or native Apple apps.</p>
     <div className={styles.actions}>
       <BrandLink href={GITHUB_URL} icon="/img/brands/github.svg" primary>View on GitHub</BrandLink>
       <BrandLink href={APP_STORE_URL} icon="/img/brands/app-store.svg">Apple TV</BrandLink>
@@ -100,8 +100,8 @@ function Workflow() {
     ['02', 'Give each item its details', 'Review metadata and artwork from your chosen providers. People, series, and collections connect the library.'],
     ['03', 'Make yourself at home', 'Watch a film, put on an album, or open a book. Return to the things you are enjoying with personal progress.'],
   ];
-  return <section className={`${styles.wrap} ${styles.section}`} aria-labelledby="workflow-title">
-    <h2 id="workflow-title">A familiar way in.</h2>
+  return <section id="workflow" className={`${styles.wrap} ${styles.section}`} aria-labelledby="workflow-title">
+    <h2 id="workflow-title">From a folder to your library.</h2>
     <div className={styles.steps}>{steps.map(([number, title, copy]) => <article key={number}><span className={styles.stepNumber}>{number}</span><h3>{title}</h3><p>{copy}</p></article>)}</div>
     <Link className={styles.textLink} to="/docs/getting-started/first-library">Walk through your first library <ArrowIcon /></Link>
   </section>;
@@ -123,10 +123,10 @@ function Experiences() {
         <div className={styles.experienceCopy}><h3>Put something on.<br />Let it play.</h3><MediaLabel style={familyStyle(ENTITY_KIND.audio)}>Artists, albums &amp; tracks</MediaLabel><p>Browse your albums, build a queue, and keep listening as you move through the library.</p><Link className={styles.textLink} to="/docs/library/audio">Explore your music library <ArrowIcon /></Link></div>
         <Phone src="/img/showcase/ios-music-live.webp" alt="Prismedia's native music player with album artwork and playback controls" />
       </article>
-      <article className={styles.galleryExperience} style={familyStyle(ENTITY_KIND.gallery)}>
-        <div className={styles.experienceCopy}><h3>Room to look<br />a little closer.</h3><MediaLabel style={familyStyle(ENTITY_KIND.gallery)}>Images &amp; galleries</MediaLabel><p>Browse images, move through galleries, and organize visual collections with people and tags.</p><Link className={styles.textLink} to="/docs/library/images-galleries">Explore images and galleries <ArrowIcon /></Link></div>
-        <Frame><ProductImage src="/img/screenshots/galleries.png" alt="Prismedia gallery library with artwork and collection details" /></Frame>
-      </article>
+    </div>
+    <div className={styles.galleryNote} style={familyStyle(ENTITY_KIND.gallery)}>
+      <h3>Bring your images, too.</h3>
+      <div><p>Add individual images or a folder of photos as a gallery. Browse the collection with people and tags, alongside the rest of your media.</p><Link className={styles.textLink} to="/docs/library/images-galleries">Organize images and galleries <ArrowIcon /></Link></div>
     </div>
   </section>;
 }
@@ -183,7 +183,7 @@ export default function Home(): ReactNode {
     <SectionRoute />
     <div className={styles.page} data-marketing-page>
       <AmbientLight />
-      <main><Hero /><PrismStory /><FounderStory /><Workflow /><Experiences /><Acquisition /><Platforms /><ProductFilm /><SelfHosting /></main>
+      <main><Hero /><PrismStory /><Workflow /><Experiences /><Acquisition /><Platforms /><ProductFilm /><FounderStory /><SelfHosting /></main>
       <MarketingFooter />
     </div>
   </Layout>;

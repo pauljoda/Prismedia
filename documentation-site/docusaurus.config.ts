@@ -126,7 +126,7 @@ const config: Config = {
       },
       items: [
         {
-          to: '/?section=product',
+          to: '/?section=workflow',
           label: 'How it works',
           position: 'left',
           activeBaseRegex: disablePathOnlyActiveState,

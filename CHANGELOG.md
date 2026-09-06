@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- The homepage explains server setup earlier, links directly to the practical library workflow, and brings product demonstrations ahead of the founder story.
 - The homepage closes with clearer community links and useful setup, media, and native-app shortcuts.
 - The homepage shows fresh high-resolution web and native product captures, including a 4K Apple TV view in the stacked hero. Primary links now lead to the source repository, native downloads, and setup.
 - The public homepage adds a subtle spectrum atmosphere, a prism glass primary action, and familiar download and community buttons. The prism uses the Prismedia logo and connected media branches; motion follows system preferences.
