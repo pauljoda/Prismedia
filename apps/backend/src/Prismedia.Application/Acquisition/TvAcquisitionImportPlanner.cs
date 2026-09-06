@@ -101,7 +101,7 @@ public sealed class TvAcquisitionImportPlanner(IImportTargetIndex targets, IMoni
             ? await targets.GetSeasonEpisodeTitlesAsync(linkedId, number, cancellationToken) : [];
         var ordinaryVideos = TvImportPlanBuilder.UnmappedVideos(ordinaryFiles, []);
         if (excluded.Count > 0 && import.EpisodeNumber is not null && ordinaryVideos.Count == 1
-            && TvImportPlanBuilder.InferEpisode(ordinaryVideos[0].RelativePath, import.SeasonNumber, titles) is null) {
+            && TvImportPlanBuilder.InferEpisode(ordinaryVideos[0].RelativePath, import.SeasonNumber, titles, series) is null) {
             return new(TvUnitsPlan.Block(ImportBlockReason.AmbiguousMultiplePrimaries), []);
         }
         var ordinaryPlan = ordinaryFiles.Any(file => TvImportPlanBuilder.IsVideoFile(file.RelativePath))

@@ -40,6 +40,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- TV searches and file mapping distinguish the series name from episode evidence, preventing numbers or repeated words in a show's title from identifying the wrong episode.
+
 - Generated season-and-episode catalog labels no longer override a download's explicit episode numbering as if they were descriptive titles.
 
 - Book upgrade requests retain the requested volume and rendition, so ebook upgrades cannot silently accept audio or a different volume.

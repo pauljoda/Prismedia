@@ -76,7 +76,7 @@ public static class AcquisitionPayloadValidation {
                 season,
                 episodeNumber,
                 completeSeriesSelected,
-                TvEpisodeIdentifiers.Create(episodeTitle, absoluteEpisodeNumber));
+                TvEpisodeIdentifiers.Create(episodeTitle, absoluteEpisodeNumber), expectedTitle);
         }
 
         return null;
@@ -93,7 +93,8 @@ public static class AcquisitionPayloadValidation {
         int season,
         int? episodeNumber,
         bool completeSeriesSelected,
-        TvEpisodeIdentifierSet episodeIdentifiers) {
+        TvEpisodeIdentifierSet episodeIdentifiers,
+        string? seriesTitle) {
         var coversSought = false;
         var hasUnresolvedVideo = false;
         var contrary = default(string?);
@@ -112,7 +113,7 @@ public static class AcquisitionPayloadValidation {
 
             if (episodeNumber is not null
                 && declaredEpisodes is null
-                && episodeIdentifiers.Matches(name)
+                && episodeIdentifiers.Matches(ReleaseTitleIdentity.WithoutLeadingWorkTitle(name, seriesTitle))
                 && (declared is null || declared.Value.Season == season)) {
                 coversSought = true;
                 break;

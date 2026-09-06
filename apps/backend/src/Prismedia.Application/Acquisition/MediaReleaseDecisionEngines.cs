@@ -178,7 +178,7 @@ public sealed class TvUnitSpecification : IReleaseSpecification {
 
             return TvEpisodeIdentifiers
                 .Create(rules.TargetEpisodeTitle, rules.TargetAbsoluteEpisodeNumber)
-                .Matches(release.Title)
+                .Matches(ReleaseTitleIdentity.WithoutLeadingWorkTitle(release.Title, rules.TargetTitle))
                 ? null
                 : Reason;
         }
@@ -380,11 +380,12 @@ public sealed class TvReleaseDecisionEngine(EntityKind kind) : IAcquisitionDecis
             var identifiers = TvEpisodeIdentifiers.Create(
                 rules.TargetEpisodeTitle,
                 rules.TargetAbsoluteEpisodeNumber);
-            if (identifiers.MatchesNumeric(release.Title)) {
+            var episodeEvidence = ReleaseTitleIdentity.WithoutLeadingWorkTitle(release.Title, rules.TargetTitle);
+            if (identifiers.MatchesNumeric(episodeEvidence)) {
                 return AbsoluteEpisodeBoost;
             }
 
-            return identifiers.MatchesProviderTitle(release.Title)
+            return identifiers.MatchesProviderTitle(episodeEvidence)
                 ? ProviderEpisodeTitleBoost
                 : 0;
         }

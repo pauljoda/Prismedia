@@ -3,6 +3,17 @@ using Prismedia.Application.Acquisition;
 namespace Prismedia.Application.Tests.Acquisition;
 
 public sealed class TvCrossSeasonImportEvidenceTests {
+    [Fact]
+    public void ParentSeriesWordsCannotIdentifyAForeignEpisodeWithTheSameTitle() {
+        var foreign = Season(2, (3, "Grand Adventure"));
+        Assert.Empty(TvCrossSeasonImportEvidence.Find(
+            [new("The.Grand.Adventure.1080p.mkv", 100)], 1, [foreign], "The Grand Adventure"));
+
+        var identified = Assert.Single(TvCrossSeasonImportEvidence.Find(
+            [new("The.Grand.Adventure.-.Grand.Adventure.1080p.mkv", 100)], 1, [foreign], "The Grand Adventure"));
+        Assert.Equal(foreign.SeasonEntityId, identified.Destination!.SeasonEntityId);
+    }
+
     [Theory]
     [InlineData("Show.S01E49-E50.Hidden.Garden.&.Mountain.Journey.mkv")]
     [InlineData("Show.S02E03-E04.Hidden.Garden.&.Mountain.Journey.mkv")]

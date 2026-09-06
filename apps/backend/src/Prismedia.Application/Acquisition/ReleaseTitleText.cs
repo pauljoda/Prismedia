@@ -27,6 +27,16 @@ public static partial class ReleaseTitleText {
             : normalized.Split(' ', StringSplitOptions.RemoveEmptyEntries);
     }
 
+    /// <summary>Reads raw tokens with their end offsets using the same separator vocabulary as normalization.</summary>
+    internal static IEnumerable<(string Value, int End)> TokenSegments(string value) {
+        var start = 0;
+        foreach (Match separator in SeparatorRuns().Matches(value)) {
+            if (separator.Index > start) yield return (value[start..separator.Index], separator.Index);
+            start = separator.Index + separator.Length;
+        }
+        if (start < value.Length) yield return (value[start..], value.Length);
+    }
+
     /// <summary>True when <paramref name="value"/> contains <paramref name="term"/> after separator normalization.</summary>
     public static bool ContainsTerm(string? value, string? term) {
         var normalizedTerm = Normalize(term);

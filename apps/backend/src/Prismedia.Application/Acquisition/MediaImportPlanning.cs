@@ -420,13 +420,15 @@ public static partial class TvImportPlanBuilder {
     public static (int Season, int Episode)? InferEpisode(
         string sourceRelativePath,
         int? requestedSeason,
-        IReadOnlyList<TvEpisodeTitle> episodeTitles) =>
-        InferEpisodeEvidence(sourceRelativePath, requestedSeason, new TvEpisodeEvidenceIndex(episodeTitles)).Unit;
+        IReadOnlyList<TvEpisodeTitle> episodeTitles,
+        string? seriesTitle = null) =>
+        InferEpisodeEvidence(sourceRelativePath, requestedSeason, new TvEpisodeEvidenceIndex(episodeTitles), seriesTitle).Unit;
 
     private static EpisodeInference InferEpisodeEvidence(
         string sourceRelativePath,
         int? requestedSeason,
-        TvEpisodeEvidenceIndex evidence) {
+        TvEpisodeEvidenceIndex evidence,
+        string? seriesTitle) {
         var sourceName = Path.GetFileNameWithoutExtension(sourceRelativePath);
         var declared = TvReleaseTokens.ParseEpisodes(sourceName);
         (int Season, int Episode)? unit = declared is { } episodes
@@ -452,7 +454,7 @@ public static partial class TvImportPlanBuilder {
             && requestedSeason is { } titleSeason
             && (declaredSeason is null || declaredSeason == titleSeason)
             && evidence.Count > 0) {
-            var titleMatches = evidence.Match(sourceName);
+            var titleMatches = evidence.Match(ReleaseTitleIdentity.WithoutLeadingWorkTitle(sourceName, seriesTitle));
             if (titleMatches.Length == 1) {
                 unit = (titleSeason, titleMatches[0]);
             }
@@ -583,7 +585,7 @@ public static partial class TvImportPlanBuilder {
         var evidence = new TvEpisodeEvidenceIndex(episodeTitles ?? []);
         var hasRecognizedDifferentUnit = false;
         foreach (var video in videos.OrderBy(file => file.RelativePath, StringComparer.OrdinalIgnoreCase)) {
-            var inference = InferEpisodeEvidence(video.RelativePath, seasonNumber, evidence);
+            var inference = InferEpisodeEvidence(video.RelativePath, seasonNumber, evidence, series);
             hasRecognizedDifferentUnit |= inference.RecognizedDifferentSeason;
             if (inference.RecognizedDifferentSeason) {
                 continue;

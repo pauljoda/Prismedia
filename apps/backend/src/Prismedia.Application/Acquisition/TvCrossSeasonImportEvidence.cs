@@ -26,7 +26,9 @@ public static class TvCrossSeasonImportEvidence {
             var name = Path.GetFileNameWithoutExtension(file.RelativePath);
             var declared = TvReleaseTokens.ParseEpisodes(name);
             var seriesAgrees = declared is null || seriesTitle is null || ReleaseTitleIdentity.Match(name, seriesTitle).TitleMatched;
-            var tail = declared is null ? name : TvReleaseTokens.EpisodeTitleTail(name) ?? string.Empty;
+            var tail = declared is null
+                ? ReleaseTitleIdentity.WithoutLeadingWorkTitle(name, seriesTitle)
+                : TvReleaseTokens.EpisodeTitleTail(name) ?? string.Empty;
             var matches = catalog.SelectMany(season => season.Episodes
                     .Where(episode => IsDistinctiveTitle(episode.Title)
                         && ReleaseTitleIdentity.ContainsMeaningfulRun(tail, episode.Title))

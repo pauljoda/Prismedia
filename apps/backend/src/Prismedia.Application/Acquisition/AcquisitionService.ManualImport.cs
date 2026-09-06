@@ -115,7 +115,8 @@ public sealed partial class AcquisitionService {
             .Where(file => TvImportPlanBuilder.IsVideoFile(file.RelativePath) && !foreignFiles.Contains(file.RelativePath))
             .Select(file => new {
                 file.RelativePath,
-                Inferred = TvImportPlanBuilder.InferEpisode(file.RelativePath, seasonNumber, episodes)
+                Inferred = TvImportPlanBuilder.InferEpisode(file.RelativePath, seasonNumber, episodes,
+                    string.IsNullOrWhiteSpace(import.Series) ? import.Title : import.Series)
             })
             .Where(item => item.Inferred is not null)
             .Select(item => new {

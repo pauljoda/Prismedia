@@ -6,6 +6,32 @@ namespace Prismedia.Application.Tests.Acquisition;
 /// <summary>Generic catalog labels cannot establish an episode's place in another numbering system.</summary>
 public sealed class TvEpisodeIdentifierEvidenceTests {
     [Theory]
+    [InlineData("The 100", "The.100", 100)]
+    [InlineData("Room 104", "[Group 57] Room.104", 104)]
+    public void SeriesTitleNumbersCannotProveAnAbsoluteEpisode(string series, string filenamePrefix, int titleNumber) {
+        var filename = filenamePrefix + " 1080p";
+        var rules = BookAcquisitionRules.Default with {
+            Kind = EntityKind.VideoEpisode, TargetTitle = series, SeasonNumber = 2, EpisodeNumber = 1,
+            TargetEpisodeTitle = "Unrelated Story", TargetAbsoluteEpisodeNumber = titleNumber
+        };
+        Assert.False(Assert.Single(new TvReleaseDecisionEngine(EntityKind.VideoEpisode).Evaluate(
+            [(Release(filename), null, "Indexer")], rules)).Accepted);
+        Assert.True(TvImportPlanBuilder.PlanUnits([new(filename + ".mkv", 1000)], series, 2, null,
+            episodeTitles: [new(1, "Unrelated Story", AbsoluteEpisode: titleNumber)]).Blocked);
+    }
+
+    [Theory]
+    [InlineData("The 100", "The.100", 100)]
+    [InlineData("Room 104", "[Group 104] Room.104", 104)]
+    public void SeriesTitleNumbersDoNotMakeARealAbsoluteEpisodeAmbiguous(string series, string filenamePrefix, int titleNumber) {
+        var plan = TvImportPlanBuilder.PlanUnits([new(filenamePrefix + " - 57 [H.264 AAC 2.0].mkv", 1000)], series, 2, null,
+            episodeTitles: [new(1, "Unrelated Story", AbsoluteEpisode: titleNumber), new(2, "Actual Story", AbsoluteEpisode: 57)]);
+
+        Assert.False(plan.Blocked);
+        Assert.Equal(2, Assert.Single(plan.Units).Episode);
+    }
+
+    [Theory]
     [InlineData("S02E01", "S02E02")]
     [InlineData("2x01", "2x02")]
     [InlineData("Season 2 Episode 1", "Season 2 Episode 2")]

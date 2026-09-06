@@ -54,6 +54,31 @@ public static partial class ReleaseTitleIdentity {
         return withoutGroup == releaseTitle ? result : MatchCore(withoutGroup, targetTitle);
     }
 
+    /// <summary>
+    /// Removes a matching leading work title and optional release-group prefix before reading episode
+    /// evidence. Numbers and words belonging to the parent work cannot identify one of its episodes.
+    /// Preserves raw suffix punctuation so codecs and audio channels retain their technical meaning.
+    /// This only separates context; callers still apply their ordinary work-identity gates.
+    /// </summary>
+    public static string WithoutLeadingWorkTitle(string candidate, string? workTitle) {
+        var target = ComparableTokens(workTitle);
+        if (target.Count == 0) return candidate;
+        return Suffix(candidate) ?? Suffix(WithoutLeadingReleaseGroup(candidate)) ?? candidate;
+
+        string? Suffix(string value) {
+            var index = 0;
+            foreach (var segment in ReleaseTitleText.TokenSegments(value)) {
+                var tokens = ComparableTokens(segment.Value);
+                for (var offset = 0; offset < tokens.Count; offset++) {
+                    if (tokens[offset] != target[index]) return null;
+                    index++;
+                    if (index == target.Count) return offset == tokens.Count - 1 ? value[segment.End..] : null;
+                }
+            }
+            return null;
+        }
+    }
+
     private static Result MatchCore(string releaseTitle, string? targetTitle) {
         var target = ComparableTokens(targetTitle);
         if (target.Count == 0) {
