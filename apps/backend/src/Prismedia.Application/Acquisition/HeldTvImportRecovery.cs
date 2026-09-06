@@ -38,14 +38,16 @@ public sealed class HeldTvImportRecoveryService(
     IBookAcquisitionProfileStore profiles,
     ILibraryScanRootPersistence roots,
     IMonitorStore monitors,
-    ILogger<HeldTvImportRecoveryService> logger) {
+    ILogger<HeldTvImportRecoveryService> logger,
+    ITvEpisodeCatalogEvidenceSource? catalogEvidence = null) {
     /// <summary>Checks held payloads under their active Entity monitor, preserving paused and destructive lifecycle intent.</summary>
     public async Task RecoverAsync(CancellationToken cancellationToken) {
         foreach (var held in await recovery.ListAsync(cancellationToken)) {
             cancellationToken.ThrowIfCancellationRequested();
             try {
-                await monitors.ExecuteIfActiveEntityMutationAsync(held.EntityId,
-                    token => ReconsiderAsync(held, token), cancellationToken);
+                if ((await monitors.GetByEntityAsync(held.EntityId, cancellationToken))?.Status == MonitorStatus.Active) {
+                    await ReconsiderAsync(held, cancellationToken);
+                }
             } catch (OperationCanceledException) {
                 throw;
             } catch (Exception ex) {
@@ -78,7 +80,7 @@ public sealed class HeldTvImportRecoveryService(
         var search = await acquisitions.GetSearchInputAsync(held.Id, cancellationToken);
         var series = search?.WorkTitle ?? (string.IsNullOrWhiteSpace(import.Series) ? import.Title : import.Series);
         var profile = await profiles.GetImportProfileAsync(import.ProfileId, import.Kind, cancellationToken);
-        var catalogPlan = await new TvAcquisitionImportPlanner(targets, monitors).PlanAsync(
+        var catalogPlan = await new TvAcquisitionImportPlanner(targets, monitors, catalogEvidence).PlanAsync(
             import with { Series = series }, payload, profile, MediaQualityLadder.Detect(import.Kind, selected.Title).Code, cancellationToken);
         var plan = catalogPlan.Plan;
         if (plan.Blocked) {
@@ -140,8 +142,12 @@ public sealed class HeldTvImportRecoveryService(
         if (fingerprint == held.RecoveryFingerprint) {
             return;
         }
-        if (await recovery.TryResumeAsync(held, fingerprint, cancellationToken)) {
-            logger.LogInformation("Held TV acquisition {Id} has a new mapping that can fill library gaps; resuming its retained payload.", held.Id);
-        }
+        // Provider lookups must not keep a monitor row locked. Recheck current intent only when
+        // publishing the completion ticket; the importer elects its own fresh placement afterwards.
+        await monitors.ExecuteIfActiveEntityMutationAsync(held.EntityId, async token => {
+            if (await recovery.TryResumeAsync(held, fingerprint, token)) {
+                logger.LogInformation("Held TV acquisition {Id} has a new mapping that can fill library gaps; resuming its retained payload.", held.Id);
+            }
+        }, cancellationToken);
     }
 }

@@ -70,6 +70,7 @@ public static class DependencyInjection {
         services.AddScoped<Acquisition.AcquisitionCompletionService>();
         services.AddScoped<Acquisition.HeldTvImportRecoveryService>();
         services.AddScoped<Acquisition.TvAcquisitionImportPlanner>();
+        services.AddScoped<Acquisition.ITvEpisodeCatalogEvidenceSource, Acquisition.TvProviderEpisodeCatalogSource>();
         services.AddScoped<Acquisition.TvPayloadAdmission>();
         services.AddScoped<Acquisition.AcquisitionUploadService>();
         services.AddScoped<Acquisition.AcquisitionService>();

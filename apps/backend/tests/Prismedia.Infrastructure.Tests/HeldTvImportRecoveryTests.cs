@@ -17,6 +17,33 @@ public sealed class HeldTvImportRecoveryTests : IDisposable {
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task ProviderReadsRunOutsideTheMonitorLockAndPausingDuringLookupPreventsRecovery(bool pause) {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var (_, acquisition, episodes) = await SeedAsync(db);
+        episodes[0].SortOrder = 1;
+        episodes[1].SortOrder = 2;
+        await db.SaveChangesAsync();
+        await File.WriteAllTextAsync(Path.Combine(root, "payload", "Show.S01E99.mkv"), "unknown episode");
+        var hadTransaction = false;
+        var evidence = new RecordingEvidence(async token => {
+            hadTransaction = db.Database.CurrentTransaction is not null;
+            if (pause) {
+                (await db.Monitors.SingleAsync(token)).Status = MonitorStatus.Paused;
+                await db.SaveChangesAsync(token);
+            }
+        });
+
+        await CreateService(db, evidence).RecoverAsync(default);
+
+        Assert.Equal(1, evidence.Calls);
+        Assert.False(hadTransaction);
+        Assert.Equal(pause ? AcquisitionStatus.ManualImportRequired : AcquisitionStatus.Downloaded, acquisition.Status);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task MonitoringARetainedForeignSeasonResumesOnlyItsConfidentMissingEpisodes(bool mislabeled) {
         await using var db = CreateContext();
         var (service, acquisition, episodes) = await SeedAsync(db);
@@ -291,10 +318,20 @@ public sealed class HeldTvImportRecoveryTests : IDisposable {
         return (CreateService(db), acquisition, episodes);
     }
 
-    private HeldTvImportRecoveryService CreateService(PrismediaDbContext db) => new(
+    private HeldTvImportRecoveryService CreateService(PrismediaDbContext db, ITvEpisodeCatalogEvidenceSource? evidence = null) => new(
         new EfHeldTvImportRecoveryStore(db), AcquisitionTestFactory.Store(db), new EfImportTargetIndex(db),
         new DownloadPayloadReader(), new EfBookAcquisitionProfileStore(db), new Roots(root, rootId), new EfMonitorStore(db),
-        NullLogger<HeldTvImportRecoveryService>.Instance);
+        NullLogger<HeldTvImportRecoveryService>.Instance, evidence);
+
+    private sealed class RecordingEvidence(Func<CancellationToken, Task> read) : ITvEpisodeCatalogEvidenceSource {
+        public int Calls { get; private set; }
+        public async Task<IReadOnlyList<TvSeasonEpisodeCatalog>> ReadAsync(Guid linkedEntityId, int requestedSeason,
+            IReadOnlyList<ImportCandidateFile> files, CancellationToken cancellationToken) {
+            Calls++;
+            await read(cancellationToken);
+            return [];
+        }
+    }
 
     private static PrismediaDbContext CreateContext() => new(new DbContextOptionsBuilder<PrismediaDbContext>()
         .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);

@@ -1060,7 +1060,8 @@ public sealed class TvAcquisitionImportEngine(
     IImportedVideoMaterializer materializer,
     VideoScanConcurrencyGate scanGate,
     ILogger<TvAcquisitionImportEngine> logger,
-    IMonitorStore? monitors = null) : IAcquisitionImportEngine {
+    IMonitorStore? monitors = null,
+    ITvEpisodeCatalogEvidenceSource? catalogEvidence = null) : IAcquisitionImportEngine {
 
     public async Task ImportAsync(JobContext context, AcquisitionImportContext import, CancellationToken cancellationToken) {
         var profile = await profiles.GetImportProfileAsync(import.ProfileId, import.Kind, cancellationToken);
@@ -1155,7 +1156,7 @@ public sealed class TvAcquisitionImportEngine(
         }
 
         var series = SeriesOf(import);
-        var catalogPlan = await new TvAcquisitionImportPlanner(targets, monitors).PlanAsync(import, payload, profile, ownedMediaQuality, cancellationToken);
+        var catalogPlan = await new TvAcquisitionImportPlanner(targets, monitors, catalogEvidence).PlanAsync(import, payload, profile, ownedMediaQuality, cancellationToken);
         var unitsPlan = catalogPlan.Plan;
         var plan = unitsPlan.Blocked
             ? ResolvedImportPlan.Block(unitsPlan.BlockReason!.Value)
@@ -1225,7 +1226,7 @@ public sealed class TvAcquisitionImportEngine(
         string? qualityCode,
         CancellationToken cancellationToken) {
         var series = SeriesOf(import);
-        var catalogPlan = await new TvAcquisitionImportPlanner(targets, monitors).PlanAsync(import, payload, profile, qualityCode, cancellationToken);
+        var catalogPlan = await new TvAcquisitionImportPlanner(targets, monitors, catalogEvidence).PlanAsync(import, payload, profile, qualityCode, cancellationToken);
         var unitsPlan = catalogPlan.Plan;
         if (unitsPlan.Blocked) {
             await acquisitions.SetStatusAsync(import.Id, AcquisitionStatus.ManualImportRequired, BlockMessage(unitsPlan.BlockReason), cancellationToken);

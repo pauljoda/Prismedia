@@ -33,13 +33,13 @@ public static class TvCrossSeasonImportEvidence {
                     .Select(episode => (Season: season, Episode: episode)))
                 .ToArray();
             if (matches.Any(match => match.Season.SeasonNumber != requestedSeason)) {
-                var destinations = matches.Select(match => match.Season.SeasonEntityId).Distinct().ToArray();
+                var destinations = matches.Select(match => match.Season.SeasonNumber).Distinct().ToArray();
                 var episodes = matches.Select(match => match.Episode).OrderBy(episode => episode.Episode).ToArray();
                 var destination = destinations.Length == 1 ? matches[0].Season : null;
                 var unambiguous = seriesAgrees && destination is { SeasonNumber: > 0 }
                     && catalog.Count(season => season.SeasonNumber == destination.SeasonNumber) == 1
                     && episodes.Length >= (declared?.Episodes.Count ?? 1)
-                    && episodes.All(episode => episode.EntityId is not null)
+                    && episodes.All(episode => episode.EntityId is not null || episode.ProviderIdentity is not null)
                     && episodes.Select(episode => episode.Episode).Distinct().Count() == episodes.Length
                     && !TitlesOverlap(episodes);
                 result.Add(new(file.RelativePath, unambiguous ? destination : null, unambiguous ? episodes : []));
@@ -56,7 +56,7 @@ public static class TvCrossSeasonImportEvidence {
                 ? seasons[0].Episodes.Where(episode => numeric.Episodes.Contains(episode.Episode)).ToArray()
                 : [];
             var valid = seriesAgrees && numeric.Season > 0 && matches.Length == 0 && known.Length == numeric.Episodes.Count
-                && known.All(episode => episode.EntityId is not null)
+                && known.All(episode => episode.EntityId is not null || episode.ProviderIdentity is not null)
                 && known.Select(episode => episode.Episode).Distinct().Count() == known.Length;
             result.Add(new(file.RelativePath, valid ? seasons[0] : null, valid ? known : []));
         }

@@ -38,6 +38,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Unresolved TV imports can consult nearby seasons from the linked metadata provider to retain mislabeled extras whose correct season is absent locally. Lookups preserve local corrections, verify season identities, and allow monitoring to be paused while provider requests run.
+
 - Retained TV extras automatically resume when their destination season becomes monitored and the shared import planner can fill a catalog gap, without redownloading earlier imported episodes or bypassing year checks.
 
 - TV imports can fill monitored seasons with confidently identified extra episodes from a season pack, including paired files with conflicting release numbering. Unmonitored, ambiguous, and already-owned extras remain available for review.

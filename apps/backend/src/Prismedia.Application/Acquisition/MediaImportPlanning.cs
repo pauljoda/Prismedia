@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using Prismedia.Application.Files;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Acquisition;
 
@@ -56,10 +57,16 @@ public sealed record TvEpisodeTitle(
     string Title,
     Guid? EntityId = null,
     int? AbsoluteEpisode = null,
-    bool IsWanted = true);
+    bool IsWanted = true) {
+    /// <summary>Provider identity for an episode not yet materialized into a local Entity.</summary>
+    public ExternalIdentity? ProviderIdentity { get; init; }
+}
 
-/// <summary>Current local episode identities within one season; absence does not prove provider catalog completeness.</summary>
-public sealed record TvSeasonEpisodeCatalog(Guid SeasonEntityId, int SeasonNumber, IReadOnlyList<TvEpisodeTitle> Episodes);
+/// <summary>Episode identities within one season; a provider-only season has no local Entity id.</summary>
+public sealed record TvSeasonEpisodeCatalog(Guid? SeasonEntityId, int SeasonNumber, IReadOnlyList<TvEpisodeTitle> Episodes) {
+    /// <summary>Provider identity establishing a season that may not exist locally yet.</summary>
+    public ExternalIdentity? ProviderIdentity { get; init; }
+}
 
 /// <summary>The unit-level TV plan: either blocked (same reasons as <see cref="ImportPlan"/>) or the placeable units.</summary>
 public sealed record TvUnitsPlan(bool Blocked, ImportBlockReason? BlockReason, IReadOnlyList<TvPlanUnit> Units) {

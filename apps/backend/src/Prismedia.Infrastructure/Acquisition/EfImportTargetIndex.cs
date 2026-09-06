@@ -13,6 +13,10 @@ namespace Prismedia.Infrastructure.Acquisition;
 /// </summary>
 public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIndex {
     /// <inheritdoc />
+    public Task<Guid?> GetTvSeriesEntityIdAsync(Guid entityId, CancellationToken cancellationToken) =>
+        ResolveAncestorOfKindAsync(entityId, EntityKind.VideoSeries.ToCode(), cancellationToken);
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<TvSeasonEpisodeCatalog>> GetSeriesEpisodeCatalogAsync(
         Guid entityId, CancellationToken cancellationToken) {
         var seriesId = await ResolveAncestorOfKindAsync(entityId, EntityKind.VideoSeries.ToCode(), cancellationToken);

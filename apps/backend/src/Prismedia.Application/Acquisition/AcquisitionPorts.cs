@@ -396,6 +396,9 @@ public sealed record AlbumDiskTarget(
 /// no on-disk folder — callers then keep the ordinary template placement.
 /// </summary>
 public interface IImportTargetIndex {
+    /// <summary>The linked TV series identity, including fileless requested series.</summary>
+    Task<Guid?> GetTvSeriesEntityIdAsync(Guid entityId, CancellationToken cancellationToken) => Task.FromResult<Guid?>(null);
+
     /// <summary>Current episode identities across the linked series, including seasons without files on disk.</summary>
     Task<IReadOnlyList<TvSeasonEpisodeCatalog>> GetSeriesEpisodeCatalogAsync(Guid entityId, CancellationToken cancellationToken) =>
         Task.FromResult<IReadOnlyList<TvSeasonEpisodeCatalog>>([]);
