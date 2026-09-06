@@ -64,13 +64,15 @@ public sealed partial class EfTvOwnedEpisodeCoverageRepair(PrismediaDbContext db
                 && row.Kind == EntityKind.VideoSeason && row.Status == MonitorStatus.Active, token)) return [];
         var seasonCode = EntityKind.VideoSeason.ToCode();
         var season = await db.Entities.AsNoTracking().SingleOrDefaultAsync(row => row.Id == seasonId && row.KindCode == seasonCode, token);
-        if (season is not { SortOrder: > 0, ParentEntityId: { } seriesId }) return [];
+        if (season is not { ParentEntityId: { } seriesId }) return [];
         var catalog = await targets.GetSeriesEpisodeCatalogAsync(seasonId, token);
         var requested = catalog.Where(item => item.SeasonEntityId == seasonId).ToArray();
         if (requested.Length != 1 || !requested[0].Episodes.Any(episode => episode.IsWanted)) return [];
         var layout = await targets.GetTvLayoutAsync(seasonId, token);
-        if (layout is null || !layout.Seasons.TryGetValue(season.SortOrder.Value, out var diskSeason)
-            || diskSeason.SeasonEntityId != seasonId || diskSeason.FolderPath is null) return [];
+        var seasonNumber = requested[0].SeasonNumber;
+        if (layout is null || !layout.Seasons.TryGetValue(seasonNumber, out var diskSeason)
+            || diskSeason.SeasonEntityId != seasonId || diskSeason.HasUnresolvedOwnership
+            || diskSeason.FolderPath is null) return [];
         var series = await db.Entities.AsNoTracking().SingleOrDefaultAsync(row => row.Id == seriesId, token);
         if (series?.KindCode != EntityKind.VideoSeries.ToCode()) return [];
         var episodeIds = requested[0].Episodes.Select(episode => episode.EntityId).OfType<Guid>().ToArray();
@@ -107,7 +109,8 @@ public sealed partial class EfTvOwnedEpisodeCoverageRepair(PrismediaDbContext db
         var result = new List<Candidate>();
         foreach (var path in paths.Order(FileSystemPathComparison.Comparer)) {
             token.ThrowIfCancellationRequested();
-            if (!IsCurrentLibraryPath(root.Path, diskSeason.FolderPath, path)) continue;
+            if (layout.UnresolvedSourcePaths.Contains(path)
+                || !IsCurrentLibraryPath(root.Path, diskSeason.FolderPath, path)) continue;
             var entries = ledger.Files.Where(file => file.DestinationRelativePath is not null
                 && FileSystemPathComparison.Equals(file.DestinationRelativePath.Replace('\\', '/'), Path.GetRelativePath(root.Path, path).Replace('\\', '/'))).ToArray();
             if (entries.Length != 1 || entries[0] is not { Status: AcquisitionImportFileStatus.Imported,
@@ -120,10 +123,11 @@ public sealed partial class EfTvOwnedEpisodeCoverageRepair(PrismediaDbContext db
                 || sources.Any(source => source.SizeBytes != entry.SizeBytes || source.Source != FileSourceKind.Scan.ToCode()
                     || source.CreatedAt > receipt.UpdatedAt || source.UpdatedAt > receipt.UpdatedAt
                     || observation.LastWriteUtc > source.CreatedAt.UtcDateTime)) continue;
-            var plan = TvOwnedEpisodeCoveragePlanner.Plan(entry.SourceRelativePath, series.Title, season.SortOrder.Value,
+            var plan = TvOwnedEpisodeCoveragePlanner.Plan(entry.SourceRelativePath, series.Title, seasonNumber,
                 catalog, sources.Select(source => source.EntityId).ToArray(), alternativeWorkTitles);
             if (plan is null || plan.SeasonEntityId != seasonId
-                || plan.MissingEpisodes.Any(episode => owned.Any(file => file.EntityId == episode.EntityId))) continue;
+                || plan.MissingEpisodes.Any(episode => diskSeason.AmbiguousEpisodeNumbers.Contains(episode.Episode)
+                    || owned.Any(file => file.EntityId == episode.EntityId))) continue;
             result.Add(new(path, receipt.Id, receipt.UpdatedAt, receipt.ImportResultJson!, series.Title,
                 root.Path, plan, entry, sources, observation));
         }

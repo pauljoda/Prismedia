@@ -76,15 +76,16 @@ public sealed partial class EfTvOwnedEpisodeCoverageRepair {
         if (!await db.Monitors.AsNoTracking().AnyAsync(row => row.Id == monitorId && row.EntityId == destinationId
                 && row.Kind == EntityKind.VideoSeason && row.Status == MonitorStatus.Active, token)) return [];
         var destination = await db.Entities.AsNoTracking().SingleOrDefaultAsync(row => row.Id == destinationId, token);
-        if (destination is not { SortOrder: > 0, ParentEntityId: { } seriesId }
+        if (destination is not { ParentEntityId: { } seriesId }
             || destination.KindCode != EntityKind.VideoSeason.ToCode()) return [];
         var catalog = await targets.GetSeriesEpisodeCatalogAsync(destinationId, token);
-        if (catalog.Count(season => season.SeasonEntityId == destinationId) != 1
-            || catalog.Single(season => season.SeasonEntityId == destinationId).Episodes.Count(episode => episode.IsWanted) < 2) return [];
+        var requested = catalog.Where(season => season.SeasonEntityId == destinationId).ToArray();
+        if (requested.Length != 1 || requested[0].Episodes.Count(episode => episode.IsWanted) < 2) return [];
         var series = await db.Entities.AsNoTracking().SingleOrDefaultAsync(row => row.Id == seriesId, token);
         if (series?.KindCode != EntityKind.VideoSeries.ToCode()) return [];
         var layout = await targets.GetTvLayoutAsync(destinationId, token);
-        if (layout is null) return [];
+        if (layout is null || !layout.Seasons.TryGetValue(requested[0].SeasonNumber, out var destinationSeason)
+            || destinationSeason.SeasonEntityId != destinationId || destinationSeason.HasUnresolvedOwnership) return [];
         var seasonIds = catalog.Select(season => season.SeasonEntityId).OfType<Guid>().ToArray();
         var episodeCode = EntityKind.VideoEpisode.ToCode();
         var owners = await db.Entities.AsNoTracking().Where(row => row.KindCode == episodeCode && row.ParentEntityId != null
@@ -121,6 +122,7 @@ public sealed partial class EfTvOwnedEpisodeCoverageRepair {
                 || declared.Value.Episodes.Count != 1 || owner.SortOrder != declared.Value.Episodes[0]
                 || !layout.Seasons.TryGetValue(declared.Value.Season, out var sourceSeason)
                 || sourceSeason.SeasonEntityId != owner.ParentEntityId || sourceSeason.FolderPath is null
+                || sourceSeason.HasUnresolvedOwnership || layout.UnresolvedSourcePaths.Contains(source.Path)
                 || allOwners.Count(row => row.Path == source.Path) != 1
                 || sources.Count(row => row.EntityId == owner.Id) != 1
                 || !receipts.TryGetValue(sourceSeason.SeasonEntityId, out var receipt)) continue;
@@ -148,7 +150,8 @@ public sealed partial class EfTvOwnedEpisodeCoverageRepair {
                 || source.UpdatedAt > receipt.UpdatedAt || observation.LastWriteUtc > source.CreatedAt.UtcDateTime) continue;
             var plan = TvOwnedEpisodeCoveragePlanner.PlanReassignment(entry.SourceRelativePath, series.Title,
                 declared.Value.Season, catalog, [owner.Id], alternatives);
-            if (plan is null || plan.SeasonEntityId != destinationId) continue;
+            if (plan is null || plan.SeasonEntityId != destinationId
+                || plan.Episodes.Any(episode => destinationSeason.AmbiguousEpisodeNumbers.Contains(episode.Episode))) continue;
             var targetsIds = plan.Episodes.Select(episode => episode.EntityId!.Value).ToArray();
             if (await db.EntityFiles.AsNoTracking().AnyAsync(row => targetsIds.Contains(row.EntityId)
                 && row.Role == EntityFileRole.Source, token) || await HasProtectedRemappingContentAsync(owner, declared.Value.Season, token)) continue;

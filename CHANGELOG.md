@@ -42,6 +42,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Automatic episode mapping repair now follows canonical season numbers, including specials, and retains conflicting season ownership for review.
+
 - TV specials in season zero now support import recovery and confident cross-season matching, importing monitored specials while retaining unmonitored extras for review.
 
 - Library healing and refresh now regenerate file fingerprints when existing hashes belong to an old source, another item, or a generated asset.

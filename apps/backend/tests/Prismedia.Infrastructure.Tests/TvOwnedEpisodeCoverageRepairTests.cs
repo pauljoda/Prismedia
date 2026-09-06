@@ -15,6 +15,83 @@ public sealed class TvOwnedEpisodeCoverageRepairTests : IDisposable {
     public void Dispose() => Directory.Delete(root, true);
 
     [Theory]
+    [InlineData(1, 3, false)]
+    [InlineData(1, 3, true)]
+    [InlineData(0, null, false)]
+    [InlineData(0, null, true)]
+    [InlineData(0, 0, false)]
+    [InlineData(0, 0, true)]
+    public async Task MissingCoverageUsesCanonicalSeasonNumbersIncludingSpecials(int seasonNumber, int? displayOrder, bool postgres) {
+        await using var database = postgres ? await PostgresTestDatabase.CreateAsync() : null;
+        await using var db = database?.CreateContext() ?? CreateContext();
+        var fixture = await SeedAsync(db);
+        fixture.Season.SortOrder = displayOrder;
+        db.EntityPositions.Add(new EntityPositionRow { EntityId = fixture.Season.Id, Code = EntityPositionCodes.Season, Value = seasonNumber });
+        fixture.Receipt.SeasonNumber = seasonNumber;
+        AcquisitionImportFileLedgerJson.TryDeserialize(fixture.Receipt.ImportResultJson, out var ledger);
+        fixture.Receipt.ImportResultJson = AcquisitionImportFileLedgerJson.Serialize(ledger! with {
+            Files = ledger.Files.Select(entry => entry with {
+                SourceRelativePath = entry.SourceRelativePath.Replace("S01", $"S{seasonNumber:00}")
+            }).ToArray()
+        });
+        await db.SaveChangesAsync();
+
+        Assert.Equal(1, await Service(db).RepairAsync(fixture.Monitor.Id, fixture.Season.Id, (_, _) => Task.CompletedTask, default));
+        Assert.Equal(fixture.Owner.Id, (await db.EntityFiles.AsNoTracking().SingleAsync(row => row.Id == fixture.Source.Id)).EntityId);
+        Assert.Equal(fixture.Source.Path, (await db.EntityFiles.AsNoTracking().SingleAsync(row => row.EntityId == fixture.Missing.Id)).Path);
+        Assert.Equal("unchanged paired video", await File.ReadAllTextAsync(fixture.Source.Path));
+    }
+
+    [Theory]
+    [InlineData(2, null, false)]
+    [InlineData(2, null, true)]
+    [InlineData(0, null, false)]
+    [InlineData(0, null, true)]
+    [InlineData(0, 0, false)]
+    [InlineData(0, 0, true)]
+    public async Task WrongOwnerRepairUsesCanonicalDestinationIncludingSpecials(int seasonNumber, int? displayOrder, bool postgres) {
+        await using var database = postgres ? await PostgresTestDatabase.CreateAsync() : null;
+        await using var db = database?.CreateContext() ?? CreateContext();
+        var (fixture, destination, first) = await SeedWrongOwnerAsync(db, true);
+        destination.SortOrder = displayOrder;
+        db.EntityPositions.Add(new EntityPositionRow { EntityId = destination.Id, Code = EntityPositionCodes.Season, Value = seasonNumber });
+        await db.SaveChangesAsync();
+
+        Assert.Equal(2, await Service(db).RepairAsync(fixture.Monitor.Id, destination.Id, (_, _) => Task.CompletedTask, default));
+        Assert.Equal(first.Id, (await db.EntityFiles.AsNoTracking().SingleAsync(row => row.Id == fixture.Source.Id)).EntityId);
+        Assert.False(await db.Entities.AnyAsync(row => row.Id == fixture.Owner.Id));
+        Assert.Equal("unchanged paired video", await File.ReadAllTextAsync(fixture.Source.Path));
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task DuplicateCanonicalSeasonOwnershipHoldsRepairForReview(bool reassign, bool postgres) {
+        await using var database = postgres ? await PostgresTestDatabase.CreateAsync() : null;
+        await using var db = database?.CreateContext() ?? CreateContext();
+        Fixture fixture;
+        EntityRow destination;
+        if (reassign) (fixture, destination, _) = await SeedWrongOwnerAsync(db, true);
+        else { fixture = await SeedAsync(db); destination = fixture.Season; }
+        // An empty duplicate season is absent from the episode catalog, but still conflicts with
+        // the physical ownership layout. No repair may elect one of those season identities.
+        db.Entities.Add(new EntityRow {
+            Id = Guid.NewGuid(), KindCode = EntityKind.VideoSeason.ToCode(),
+            ParentEntityId = destination.ParentEntityId, SortOrder = destination.SortOrder,
+            Title = "Conflicting season", CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        Assert.Equal(0, await Service(db).RepairAsync(fixture.Monitor.Id, destination.Id,
+            (_, _) => Task.CompletedTask, default));
+        Assert.Equal(fixture.Owner.Id, (await db.EntityFiles.AsNoTracking().SingleAsync(row => row.Id == fixture.Source.Id)).EntityId);
+        Assert.True((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == fixture.Missing.Id)).IsWanted);
+        Assert.Equal("unchanged paired video", await File.ReadAllTextAsync(fixture.Source.Path));
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task WrongScannerOwnerIsRetiredOnlyAfterItsStableSourceIsBoundToTheProvenWantedPair(bool foreign) {
