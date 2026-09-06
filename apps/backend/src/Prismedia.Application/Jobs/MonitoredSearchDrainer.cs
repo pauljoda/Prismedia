@@ -86,7 +86,9 @@ internal sealed class MonitoredSearchWorker(
     ILogger<MonitoredSearchWorker> logger) : BackgroundService {
     private static readonly TimeSpan QueuedDelay = TimeSpan.FromSeconds(1);
     private static readonly TimeSpan BusyDelay = TimeSpan.FromSeconds(5);
-    private static readonly TimeSpan IdleDelay = TimeSpan.FromMinutes(15);
+    // Polling checks current local intent; ListDueMonitorsAsync still owns each monitor's indexer
+    // interval and backoff. A long idle sleep otherwise hides new requests and profile changes.
+    private static readonly TimeSpan IdleDelay = TimeSpan.FromSeconds(30);
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken) {
         logger.LogInformation("Sequential monitored-search worker started.");

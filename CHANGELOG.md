@@ -40,6 +40,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Idle monitoring notices new requests and profile changes within its next 30-second check, while retaining configured indexer search intervals and failed-search backoff.
+
 - Absolute episode matching distinguishes episode numbers from codecs, audio channels, file sizes, and other technical numbers, and recognizes numbered anime revisions such as `500v2`.
 
 - Generic episode labels no longer masquerade as absolute numbering or override explicit season and episode markers. Tokenless downloads require descriptive titles or verified absolute positions before automatic mapping.
