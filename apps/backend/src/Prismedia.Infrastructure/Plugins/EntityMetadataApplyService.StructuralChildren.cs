@@ -387,6 +387,15 @@ public sealed partial class EntityMetadataApplyService {
 
         if (patch.Positions.Count > 0) {
             var normalizedPositions = EntityMetadataPositionRules.Normalize(patch.Positions);
+            // A complete canonical episode numbering snapshot replaces its optional absolute alias.
+            // Sparse patches and fill-missing enrichment retain positions they do not address.
+            if (entity.KindCode == EntityKind.VideoEpisode.ToCode()
+                && normalizedPositions.TryGetValue(EntityPositionCodes.Season, out var season) && season >= 0
+                && normalizedPositions.TryGetValue(EntityPositionCodes.Episode, out var episode) && episode > 0
+                && !normalizedPositions.ContainsKey(EntityPositionCodes.AbsoluteEpisode)
+                && await _db.EntityPositions.FindAsync([entity.Id, EntityPositionCodes.AbsoluteEpisode], cancellationToken) is { } obsolete) {
+                _db.EntityPositions.Remove(obsolete);
+            }
             await UpsertPositionsAsync(entity, normalizedPositions, now, cancellationToken);
         }
 

@@ -38,6 +38,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Complete episode metadata refreshes retire absolute numbers the provider no longer supports, keeping later searches from using stale numbering while preserving existing file bindings. Partial metadata enrichment retains existing ordering.
+
 - Leading bracketed release-group labels no longer hide otherwise matching video releases. Series, episode, sequel, and remake-year checks still apply to the title that follows.
 
 - Reopening metadata reviews refreshes both cached catalogs and completed review sessions after provider updates. Review and background lookups respect current provider availability before reusing cached results.

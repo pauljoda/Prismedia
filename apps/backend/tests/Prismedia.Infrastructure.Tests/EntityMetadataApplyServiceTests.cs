@@ -14,6 +14,40 @@ using DomainEntityExternalId = Prismedia.Domain.Entities.EntityExternalId;
 namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EntityMetadataApplyServiceTests {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CompleteChildEpisodeNumberingRetiresAnUnsupportedAbsolutePositionWithoutChangingItsFile(bool completeNumbering) {
+        await using var db = CreateContext();
+        var seasonId = Guid.NewGuid();
+        var episodeId = Guid.NewGuid();
+        var sourceId = Guid.NewGuid();
+        SeedEntity(db, seasonId, EntityKind.VideoSeason.ToCode(), "Season 1");
+        SeedEntity(db, episodeId, EntityKind.VideoEpisode.ToCode(), "Episode", parentEntityId: seasonId, sortOrder: 1);
+        db.EntityPositions.Add(new EntityPositionRow { EntityId = episodeId, Code = EntityPositionCodes.AbsoluteEpisode, Value = 54 });
+        db.EntityFiles.Add(new EntityFileRow {
+            Id = sourceId, EntityId = episodeId, Role = EntityFileRole.Source,
+            Path = "/media/owned-episode.mkv", MimeType = "video/x-matroska"
+        });
+        await db.SaveChangesAsync();
+        var positions = new Dictionary<string, int> { [EntityPositionCodes.Episode] = 1 };
+        if (completeNumbering) positions[EntityPositionCodes.Season] = 1;
+        var child = new EntityMetadataProposal("provider:episode:1", "provider", EntityKind.VideoEpisode, 1, "structural-child",
+            EmptyPatch() with { Positions = positions }, [], [], [], TargetEntityId: episodeId);
+        var proposal = new EntityMetadataProposal("provider:season:1", "provider", EntityKind.VideoSeason, 1, "external-id",
+            EmptyPatch(), [], [child], [], TargetEntityId: seasonId);
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+
+        await service.ApplyAsync(seasonId, proposal, selectedFields: [], selectedImages: null, CancellationToken.None);
+
+        var absolute = await db.EntityPositions.FindAsync([episodeId, EntityPositionCodes.AbsoluteEpisode]);
+        if (completeNumbering) Assert.Null(absolute);
+        else Assert.Equal(54, absolute!.Value);
+        var source = await db.EntityFiles.SingleAsync(row => row.EntityId == episodeId);
+        Assert.Equal(sourceId, source.Id);
+        Assert.Equal("/media/owned-episode.mkv", source.Path);
+    }
+
     [Fact]
     public async Task PositionEnrichmentRepairsMissingNumbersAndPreservesExistingOrdering() {
         await using var db = CreateContext();
