@@ -42,6 +42,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Picking another release now preserves an installed upgrade's recovery state until its remaining media processing finishes.
+
 - Upgrades whose files were installed successfully can now retry interrupted media processing without replacing or downloading the file again, while changed ownership remains held for review.
 
 - Successful upgrades now retain their download until required media processing finishes, then hand cleanup to the durable retry queue.

@@ -601,6 +601,11 @@ public sealed class AcquisitionQueueService(
                 ApiProblemCodes.AcquisitionInvalid,
                 ImportCheckpointLifecycle.CorruptCheckpointMessage);
         }
+        if (import?.HasInstalledUpgradeReceipt == true) {
+            throw new AcquisitionConfigurationException(
+                ApiProblemCodes.AcquisitionInvalid,
+                ImportCheckpointLifecycle.CheckpointMustFinishMessage);
+        }
         AcquisitionImportContext? interruptedImport = null;
         if (import is { TvImportCheckpoint: not null } or { ImportPlacementCheckpoint: not null }) {
             var abandoned = await ImportCheckpointLifecycle.TryAbandonAsync(

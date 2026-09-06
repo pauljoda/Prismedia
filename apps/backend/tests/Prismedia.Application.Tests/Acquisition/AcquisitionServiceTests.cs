@@ -1036,6 +1036,30 @@ public sealed class AcquisitionServiceTests {
         Assert.True(harness.Store.SelectedRelease?.ManualPick);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task InstalledUpgradeCannotQueueAnotherReleaseBeforeReadinessFinishes(bool manualPick) {
+        var harness = Harness(new AcquisitionTransferInfo(AcquisitionStatus.Failed, null, ClientItemId, RecordedClientId));
+        PrepareQueueCandidate(harness.Store);
+        harness.Store.ImportContext = PartialBookImportContext() with {
+            ImportPlacementCheckpoint = null,
+            UpgradeOfAcquisitionId = Guid.NewGuid(),
+            FinalSourcePath = "/library/Dune.epub"
+        };
+        harness.Store.HasResumableImport = true;
+
+        var exception = await Assert.ThrowsAsync<AcquisitionConfigurationException>(() =>
+            QueueService(harness, new RecordingTransferAddCoordinator()).QueueAsync(
+                AcquisitionId, CandidateId, CancellationToken.None, manualPick: manualPick));
+
+        Assert.Contains("partially applied import", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(harness.ImportCleanup.Cleaned);
+        Assert.Empty(harness.Downloads.Removals);
+        Assert.Equal(0, harness.Downloads.AddCount);
+        Assert.Equal(AcquisitionStatus.Failed, harness.Store.Status);
+    }
+
     [Fact]
     public async Task ManualReleasePickDiscardsPartialImportBeforeQueueingTheOverride() {
         var harness = Harness(new AcquisitionTransferInfo(
