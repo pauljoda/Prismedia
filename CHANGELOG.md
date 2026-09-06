@@ -38,6 +38,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Monitored TV seasons can restore missing episode links from confidently identified paired files already in the library before requesting another download. Repairs preserve existing files and owners, respect manual mappings and paused monitors, and retry safely if reconciliation cannot be queued.
+
 - Repeated episode titles in other seasons no longer block a TV file when its requested-season numbers and complete titles agree; conflicting or incomplete evidence still requires review.
 
 - Held TV recovery limits slow provider work per scheduler tick and rotates through the backlog, keeping download handoffs and monitoring responsive.

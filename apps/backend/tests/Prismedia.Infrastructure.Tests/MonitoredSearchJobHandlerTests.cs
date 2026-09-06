@@ -11,6 +11,36 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class MonitoredSearchJobHandlerTests {
     [Fact]
+    public async Task ExistingFileCoverageIsRepairedBeforeRequestingAnotherSeasonPack() {
+        var acquisitionId = Guid.NewGuid();
+        var episodeId = Guid.NewGuid();
+        var monitors = new FakeMonitorStore([
+            new DueMonitor(Guid.NewGuid(), acquisitionId, "Show S01", EntityKind.VideoSeason,
+                EntityId: Guid.NewGuid(), MissingChildFallback: true)
+        ]) { PackRetryId = Guid.NewGuid() };
+        var acquisitions = new FakeAcquisitionLifecycleStore(acquisitionId, monitors.PackRetryId.Value);
+        acquisitions.Statuses[acquisitionId] = AcquisitionStatus.Imported;
+        var queue = new RecordingJobQueue();
+
+        await Handler(monitors, acquisitions, ownedTvCoverage: new FixedCoverageRepair(episodeId))
+            .HandleAsync(new JobContext(Job(), queue), default);
+
+        var reconciliation = Assert.Single(queue.Enqueued);
+        Assert.Equal(JobType.ReconcileEntity, reconciliation.Type);
+        Assert.Equal(episodeId.ToString(), reconciliation.TargetEntityId);
+        Assert.Equal(AcquisitionStatus.Imported, acquisitions.Statuses[acquisitionId]);
+        Assert.Single(monitors.Searched);
+    }
+
+    private sealed class FixedCoverageRepair(Guid episodeId) : ITvOwnedEpisodeCoverageRepair {
+        public async Task<int> RepairAsync(Guid monitorId, Guid seasonId,
+            Func<Guid, CancellationToken, Task> enqueue, CancellationToken token) {
+            await enqueue(episodeId, token);
+            return 1;
+        }
+    }
+
+    [Fact]
     public async Task ExhaustedEpisodeFallbackEnqueuesFreshPackThroughNormalSearch() {
         var previousId = Guid.NewGuid();
         var retryId = Guid.NewGuid();
@@ -329,14 +359,16 @@ public sealed class MonitoredSearchJobHandlerTests {
     private static MonitoredSearchJobHandler Handler(
         IMonitorStore monitors,
         IAcquisitionLifecycleStore acquisitions,
-        IAcquisitionReleaseTimingService? releaseTiming = null) =>
+        IAcquisitionReleaseTimingService? releaseTiming = null,
+        ITvOwnedEpisodeCoverageRepair? ownedTvCoverage = null) =>
         new(
             monitors,
             acquisitions,
             new SettingsService(new EmptySettingsPersistence()),
             CommitService(monitors),
             NullLogger<MonitoredSearchJobHandler>.Instance,
-            releaseTiming: releaseTiming);
+            releaseTiming: releaseTiming,
+            ownedTvCoverage: ownedTvCoverage);
 
     private static JobRunSnapshot Job(Guid? targetEntityId = null, string payloadJson = "{}") {
         var now = DateTimeOffset.UtcNow;

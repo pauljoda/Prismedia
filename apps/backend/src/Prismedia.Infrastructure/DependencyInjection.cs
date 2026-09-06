@@ -528,6 +528,7 @@ public static class DependencyInjection {
             provider.GetRequiredService<IEntityExternalIdentityStore>(),
             provider.GetRequiredService<IEntityLifecycleMutationLease>()));
         services.AddScoped<IImportTargetIndex, EfImportTargetIndex>();
+        services.AddScoped<ITvOwnedEpisodeCoverageRepair, EfTvOwnedEpisodeCoverageRepair>();
         services.AddScoped<IImportedFilesReader, ImportedFilesReader>();
         services.AddScoped<IDownloadPayloadReader, DownloadPayloadReader>();
         // No auto-redirect: the resolver validates the destination host is public before fetching, and a

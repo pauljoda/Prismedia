@@ -24,7 +24,8 @@ public sealed class MonitoredSearchJobHandler(
     ILogger<MonitoredSearchJobHandler> logger,
     IJobQueueService? jobs = null,
     IAcquisitionReleaseTimingService? releaseTiming = null,
-    IJobGraphService? graphs = null) : IJobHandler {
+    IJobGraphService? graphs = null,
+    ITvOwnedEpisodeCoverageRepair? ownedTvCoverage = null) : IJobHandler {
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var due = await ResolveWorkAsync(context.Job, cancellationToken);
         if (due.Count == 0) {
@@ -60,6 +61,17 @@ public sealed class MonitoredSearchJobHandler(
         // action so a row claimed by destructive lifecycle work afterward is never acted on.
         if (!await monitors.IsActiveAsync(monitor.MonitorId, cancellationToken)) {
             return null;
+        }
+
+        if (ownedTvCoverage is not null && monitor.Kind == EntityKind.VideoSeason && monitor.EntityId is { } seasonId
+            && await ownedTvCoverage.RepairAsync(monitor.MonitorId, seasonId, async (episodeId, token) => {
+                await context.EnqueueIfNeededAsync(EnqueueJobRequest.ForEntity(
+                    JobType.ReconcileEntity, EntityKind.VideoEpisode, episodeId.ToString(), monitor.Title), token);
+            }, cancellationToken) > 0) {
+            // Let ordinary reconciliation settle the restored sources before the next monitor pass
+            // evaluates any remaining gaps or quality upgrades against fresh ownership.
+            await monitors.MarkSearchedAsync(monitor.MonitorId, cancellationToken);
+            return $"Restoring episode coverage in {monitor.Title}";
         }
 
         if (monitor.Kind == EntityKind.VideoSeason && monitor.EntityId is not null
