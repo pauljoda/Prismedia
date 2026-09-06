@@ -42,7 +42,23 @@ public sealed class TvAcquisitionImportPlanner(IImportTargetIndex targets, IMoni
         // That decision has all the evidence it needs; another provider lookup cannot authorize it.
         if (TvImportPlanBuilder.UnmappedVideos(payload.Files, accounted).Count > 0) return true;
         var known = catalog.SelectMany(season => season.Episodes.Select(episode => (season.SeasonNumber, episode.Episode))).ToHashSet();
-        return plan.Plan.Units.Any(unit => unit.ExtraEpisodes.Prepend(unit.Episode).Any(episode => !known.Contains((unit.Season, episode))));
+        return plan.Plan.Units.Any(unit => unit.ExtraEpisodes.Prepend(unit.Episode).Any(episode => !known.Contains((unit.Season, episode))))
+            || plan.Plan.Units.Any(unit => NeedsDescriptiveTitleEvidence(unit, catalog));
+    }
+
+    private static bool NeedsDescriptiveTitleEvidence(TvPlanUnit unit, IReadOnlyList<TvSeasonEpisodeCatalog> catalog) {
+        var positions = unit.ExtraEpisodes.Prepend(unit.Episode).ToHashSet();
+        var generic = catalog.Where(season => season.SeasonNumber == unit.Season).SelectMany(season => season.Episodes)
+            .Any(episode => positions.Contains(episode.Episode)
+                && (TvReleaseTokens.ParseEpisodes(episode.Title) is not null
+                    || TvEpisodeIdentifiers.Create(episode.Title, null).Numeric.Count > 0));
+        if (!generic) return false;
+        var tail = TvReleaseTokens.EpisodeTitleTail(Path.GetFileNameWithoutExtension(unit.SourceRelativePath));
+        // Only the leading descriptive phrase can justify another catalog read. Codec, quality,
+        // language, channel-count, and release-group tails do not supply episode-title evidence.
+        return ReleaseTitleIdentity.ComparableTokens(tail)
+            .TakeWhile(token => token.All(char.IsLetter) && !ReleaseTitleVocabulary.MetadataTokens.Contains(token))
+            .Take(2).Count() == 2;
     }
 
     // Local metadata owns existing positions and titles, including explicit user corrections. Provider

@@ -9,6 +9,38 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class TvProviderCatalogImportPlannerTests {
     [Fact]
+    public async Task AGenericExistingSlotDoesNotHideDescriptiveForeignTitleEvidence() {
+        await using var db = CreateContext();
+        var import = await SeedAsync(db);
+        var provider = new EvidenceSource();
+        var planner = new TvAcquisitionImportPlanner(new EfImportTargetIndex(db), new EfMonitorStore(db), provider);
+
+        var result = await planner.PlanAsync(import,
+            new("/downloads", [new("Show.S02E49.Hidden.Garden.1080p.WEB-DL.mkv", 100)]), null, null, default);
+
+        Assert.Equal(1, provider.Calls);
+        Assert.True(result.Plan.Blocked);
+        Assert.Empty(result.Plan.Units);
+    }
+
+    [Theory]
+    [InlineData("Show.S02E49.1080p.WEB-DL.AAC.2.0.x264-Group.mkv")]
+    [InlineData("Show.S02E49.NF.WEB-DL.DDP.5.1.x265.mkv")]
+    [InlineData("Show.S02E49.10bit.HDR.HEVC.mkv")]
+    [InlineData("Show.S02E49.mkv")]
+    public async Task TechnicalOnlyNamesDoNotMakeGenericSlotsReadMoreProviderCatalogs(string filename) {
+        await using var db = CreateContext();
+        var import = await SeedAsync(db);
+        var provider = new EvidenceSource();
+        var planner = new TvAcquisitionImportPlanner(new EfImportTargetIndex(db), new EfMonitorStore(db), provider);
+
+        var result = await planner.PlanAsync(import, new("/downloads", [new(filename, 100)]), null, null, default);
+
+        Assert.False(result.Plan.Blocked);
+        Assert.Equal(0, provider.Calls);
+    }
+
+    [Fact]
     public async Task ProviderTitlesRetainAMislabeledPairWhenItsActualSeasonDoesNotExistLocally() {
         await using var db = CreateContext();
         var import = await SeedAsync(db);
