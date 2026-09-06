@@ -729,7 +729,8 @@ public sealed partial class EfMonitorStore(
         var parent = await db.Acquisitions.AsNoTracking().FirstOrDefaultAsync(
             acquisition => acquisition.Id == acquisitionId,
             cancellationToken);
-        if (parent is null) {
+        if (parent is null || MediaQualityLadder.IsVideoKind(parent.Kind) && parent.EntityId is { } ownerId
+            && await OwnedVideoEvidence.IsSharedAsync(db, ownerId, cancellationToken)) {
             return null;
         }
 

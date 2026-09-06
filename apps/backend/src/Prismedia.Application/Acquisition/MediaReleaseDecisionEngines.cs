@@ -252,6 +252,7 @@ public sealed class MediaUpgradeSpecification(EntityKind kind) : IReleaseSpecifi
     public ReleaseRejectionReason Reason => ReleaseRejectionReason.NotAnUpgrade;
 
     public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) {
+        if (rules.IsUpgradeSearch && MediaQualityLadder.IsVideoKind(kind) && rules.OwnedVideoSourceShared) return Reason;
         if (!rules.IsUpgradeSearch || rules.OwnedMediaQuality is null) {
             return null;
         }

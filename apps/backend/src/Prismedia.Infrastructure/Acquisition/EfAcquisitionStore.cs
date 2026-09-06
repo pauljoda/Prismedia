@@ -725,7 +725,9 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         return MediaQualityLadder.IsUpgradeCapableKind(parent.Kind) || MediaQualityLadder.IsAudioKind(parent.Kind)
             ? new UpgradeOwnedQuality(null, parent.OwnedMediaQuality, parent.OwnedMediaRevision, parent.OwnedFormatScore, hasSubtitles) {
                 VideoResolutionTier = MediaQualityLadder.IsVideoKind(parent.Kind) && parent.EntityId is { } ownerId
-                    ? await OwnedVideoEvidence.ReadResolutionAsync(db, ownerId, cancellationToken) : null
+                    ? await OwnedVideoEvidence.ReadResolutionAsync(db, ownerId, cancellationToken) : null,
+                VideoSourceShared = MediaQualityLadder.IsVideoKind(parent.Kind) && parent.EntityId is { } sharedOwner
+                    && await OwnedVideoEvidence.IsSharedAsync(db, sharedOwner, cancellationToken)
             }
             : new UpgradeOwnedQuality(new BookQualityRank(parent.OwnedSourceTier, parent.OwnedFormatTier), null, FormatScore: parent.OwnedFormatScore);
     }
@@ -772,7 +774,10 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             parent.ProfileId,
             parent.OwnedFormatScore,
             selected?.ManualPick == true,
-            parentHasSubtitles);
+            parentHasSubtitles) {
+            ParentVideoSourceShared = MediaQualityLadder.IsVideoKind(parent.Kind) && parent.EntityId is { } sharedOwner
+                && await OwnedVideoEvidence.IsSharedAsync(db, sharedOwner, cancellationToken)
+        };
     }
 
     public async Task EnrichMetadataAsync(Guid acquisitionId, string? description, string? posterUrl, int? year, CancellationToken cancellationToken) {

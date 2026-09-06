@@ -88,6 +88,13 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
         Guid childId,
         CancellationToken cancellationToken) {
 
+        if (target.ParentVideoSourceShared) {
+            await acquisitions.SetStatusAsync(childId, AcquisitionStatus.ManualImportRequired,
+                "The owned video now serves multiple entities. A coverage-aware import is required; both files were preserved.",
+                cancellationToken);
+            return;
+        }
+
         if (string.IsNullOrWhiteSpace(target.ParentFinalSourcePath) || string.IsNullOrWhiteSpace(target.ChildContentPath)) {
             await AbortAsync(childId, "The owned book location or the upgrade download path is unknown.", cancellationToken);
             return;

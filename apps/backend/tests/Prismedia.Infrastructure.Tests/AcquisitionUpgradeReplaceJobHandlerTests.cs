@@ -19,6 +19,57 @@ namespace Prismedia.Infrastructure.Tests;
 /// </summary>
 public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ASharedEpisodeFileCannotBeReplacedByAnAtomicUpgrade(bool manualPick) {
+        await using var db = CreateContext();
+        var (parentId, childId, _) = await SeedMediaAsync(db, EntityKind.VideoEpisode,
+            VideoQuality.Webdl720p.ToCode(), "Show S01E01 1080p WEB-DL", manualPick);
+        await ShareOwnedFileAsync(db, parentId);
+        var replacer = new FakeReplacer(OwnedFileReplaceResult.Ok("/library/episode.mkv", BookFormatTier.Unknown));
+
+        await RunAsync(db, new RecordingJobQueue(), replacer, childId,
+            new FakeMediaUpgradePayloadInspector(new(720, 1080, true, true, 1200, 1200)));
+
+        Assert.False(replacer.Called);
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, (await db.Acquisitions.FindAsync(childId))!.Status);
+        Assert.Equal(2, await db.EntityFiles.CountAsync());
+    }
+
+    [Fact]
+    public async Task ASharedEpisodeFileDoesNotStartAnAtomicUpgradeSearch() {
+        await using var db = CreateContext();
+        var (parentId, childId, monitorId) = await SeedMediaAsync(db, EntityKind.VideoEpisode,
+            VideoQuality.Webdl720p.ToCode(), "Show S01E01 1080p WEB-DL");
+        await ShareOwnedFileAsync(db, parentId);
+        (await db.Acquisitions.FindAsync(childId))!.Status = AcquisitionStatus.Cancelled;
+        (await db.Monitors.FindAsync(monitorId))!.UpgradeChildAcquisitionId = null;
+        await db.SaveChangesAsync();
+
+        var acquisitions = AcquisitionTestFactory.Store(db);
+        var owned = await acquisitions.GetUpgradeOwnedQualityAsync(childId, default);
+        var rules = AcquisitionRuleContext.Apply(
+            await new EfBookAcquisitionProfileStore(db).GetRulesAsync(null, EntityKind.VideoEpisode, default),
+            (await acquisitions.GetSearchInputAsync(childId, default))!, owned, ProperDownloadPolicy.PreferAndUpgrade, [DownloadProtocol.Usenet]);
+        var release = new IndexerRelease("Show S01E01 1080p WEB-DL", 1_000_000, null, null,
+            DownloadProtocol.Usenet, null, null, null, null, null, null);
+        Assert.Equal(ReleaseRejectionReason.NotAnUpgrade, new MediaUpgradeSpecification(EntityKind.VideoEpisode).Evaluate(release, rules));
+        Assert.Null(await new EfMonitorStore(db).CreateUpgradeChildAsync(monitorId, default));
+        Assert.Equal(2, await db.Acquisitions.CountAsync());
+    }
+
+    private static async Task ShareOwnedFileAsync(PrismediaDbContext db, Guid parentId) {
+        var parent = (await db.Acquisitions.FindAsync(parentId))!;
+        var now = DateTimeOffset.UtcNow;
+        foreach (var owner in new[] { parent.EntityId!.Value, Guid.NewGuid() }) {
+            db.EntityFiles.Add(new EntityFileRow { Id = Guid.NewGuid(), EntityId = owner,
+                Role = EntityFileRole.Source, Path = parent.FinalSourcePath + "/episode.mkv",
+                Source = FileSourceKind.Scan.ToCode(), CreatedAt = now, UpdatedAt = now });
+        }
+        await db.SaveChangesAsync();
+    }
+
+    [Theory]
     [InlineData(VideoQuality.Unknown, 1080, 1080, false, false)]
     [InlineData(VideoQuality.Unknown, 720, 1080, false, true)]
     [InlineData(VideoQuality.Webdl720p, 1080, 1080, false, false)]

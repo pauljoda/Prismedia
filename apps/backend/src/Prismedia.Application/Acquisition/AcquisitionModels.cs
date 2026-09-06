@@ -71,6 +71,9 @@ public sealed record BookAcquisitionRules(
     /// <summary>Resolution measured from the current owned video, independent of its filename or import label.</summary>
     public int? OwnedVideoResolutionTier { get; init; }
 
+    /// <summary>The owned video serves other entities and cannot be replaced by a single-entity upgrade.</summary>
+    public bool OwnedVideoSourceShared { get; init; }
+
     /// <summary>
     /// Owned media revision for an upgrade search (set per search by the runner from the parent's stored
     /// revision, like <see cref="OwnedMediaQuality"/>). Under <see cref="ProperDownloadPolicy.PreferAndUpgrade"/>
@@ -450,6 +453,9 @@ public sealed record UpgradeOwnedQuality(
     bool HasSubtitles = false) {
     /// <summary>Resolution measured from the current single owned video; null when its source evidence is ambiguous or unavailable.</summary>
     public int? VideoResolutionTier { get; init; }
+
+    /// <summary>True when another entity owns the same physical video source.</summary>
+    public bool VideoSourceShared { get; init; }
 }
 
 /// <summary>
@@ -480,7 +486,10 @@ public sealed record UpgradeReplaceTarget(
     Guid? ParentProfileId = null,
     int ParentOwnedFormatScore = 0,
     bool ChildManualPick = false,
-    bool ParentHasSubtitles = false);
+    bool ParentHasSubtitles = false) {
+    /// <summary>Current source coverage requires a multi-entity merge instead of atomic replacement.</summary>
+    public bool ParentVideoSourceShared { get; init; }
+}
 
 /// <summary>
 /// Technical facts read from the owned and downloaded video payloads immediately before an automatic

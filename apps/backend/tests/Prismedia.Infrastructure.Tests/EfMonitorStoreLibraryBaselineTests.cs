@@ -49,6 +49,17 @@ public sealed class EfMonitorStoreLibraryBaselineTests {
                 Assert.Equal(2, input.SeasonNumber);
                 Assert.Equal(41, input.EpisodeNumber);
             }
+            // Sharing discovered after a child was queued must reach the final replacement boundary too.
+            var otherOwner = Guid.NewGuid();
+            var now = DateTimeOffset.UtcNow;
+            db.Entities.Add(new EntityRow { Id = otherOwner, KindCode = kind.ToCode(), Title = "Other owner", CreatedAt = now, UpdatedAt = now });
+            await db.SaveChangesAsync();
+            db.EntityFiles.Add(new EntityFileRow { Id = Guid.NewGuid(), EntityId = otherOwner, Role = EntityFileRole.Source,
+                Path = fixture.SourcePath, Source = FileSourceKind.Scan.ToCode(), CreatedAt = now, UpdatedAt = now });
+            (await db.Acquisitions.FindAsync(child.Value))!.Status = AcquisitionStatus.Downloaded;
+            await db.SaveChangesAsync();
+            Assert.True((await acquisitions.GetUpgradeOwnedQualityAsync(child.Value, default))!.VideoSourceShared);
+            Assert.True((await acquisitions.GetUpgradeReplaceTargetAsync(child.Value, default))!.ParentVideoSourceShared);
         } finally {
             Directory.Delete(root, recursive: true);
         }
