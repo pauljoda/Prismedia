@@ -16,9 +16,9 @@ Open an EPUB, reveal the reader toolbar, and open **Reader Settings**. Select a 
 | Paper | The reader's default page layout and typography. |
 | Comfortable | Larger text, more generous spacing, and leading-aligned paragraphs. |
 | Focus | Scrolling text with progressive paragraph focus. |
-| Accessible | The accessible font, larger text, expanded spacing, and text normalization. |
+| Accessibility | The accessible font, larger text, expanded spacing, and text normalization. |
 | Night | A dark document theme with adjusted type weight and spacing. |
-| Original | The publisher's font and styling where provided. |
+| Publisher Original | The publisher's font and styling where provided. |
 
 Changing individual settings lets you fine-tune the result. **Restore Reader Defaults** resets the reader preferences. Profiles are useful starting points; choose and adjust the one that is most comfortable for you.
 
@@ -32,7 +32,7 @@ Under **Layout**, choose:
 - **Scroll** for a continuous document.
 - **Margins**, **Alignment**, and **Hyphenation** to adjust how the text fits.
 
-Publisher styling can disable some manual overrides. If a control is unavailable, switch away from the Original profile or turn off publisher styling before adjusting it.
+Publisher styling can disable some manual overrides. If a control is unavailable, switch away from the Publisher Original profile or turn off publisher styling before adjusting it.
 
 ## Use focus while scrolling
 
