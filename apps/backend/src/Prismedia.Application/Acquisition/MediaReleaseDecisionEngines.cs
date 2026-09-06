@@ -180,7 +180,8 @@ public sealed class TvUnitSpecification : IReleaseSpecification {
         }
 
         // Season pack sought: an episode-scoped release can never fulfil it.
-        if (declaredEpisodes is not null) {
+        if (declaredEpisodes is not null || TvAbsoluteEpisodeTokens.NamesSingleEpisode(
+                AcquisitionWorkTitles.EpisodeEvidence(release.Title, rules.TargetTitle, rules.TargetAlternativeTitles))) {
             return Reason;
         }
 

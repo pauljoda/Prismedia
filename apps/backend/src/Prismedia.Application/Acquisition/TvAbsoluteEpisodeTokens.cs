@@ -9,8 +9,16 @@ internal static partial class TvAbsoluteEpisodeTokens {
     [GeneratedRegex(@"(?<![\p{L}\p{N}])(?:[hx][ ._-]*26[45]|(?:aac|ddp?|eac3|ac3|dts(?:[ ._-]*hd)?)[ ._-]*\d{1,2}\.\d(?:\.\d)?|\d{1,6}[ ._-]*(?:bits?|kbps|mbps|khz|hz|kb|mb|gb|tb)|\d{3,5}\s*[x×]\s*\d{3,5}|\d{1,6}\.\d{1,2}(?:\.\d)?|\d{1,5}/\d{1,5}|(?:season|s)[ ._-]*\d{1,3})(?![\p{L}\p{N}])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex TechnicalNumberRegex();
 
-    [GeneratedRegex(@"(?<![\p{L}\p{N}])(?<number>\d{1,6})(?:v[1-9]\d{0,2})?(?![\p{L}\p{N}])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    [GeneratedRegex(@"(?<![\p{L}\p{N}])(?:(?:ep(?:isode)?)[ ._-]*)?(?<number>\d{1,6})(?:v[1-9]\d{0,2})?(?![\p{L}\p{N}])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex AbsoluteNumberRegex();
+
+    [GeneratedRegex(@"(?<![\p{L}\p{N}])ep(?:isode)?s?[ ._-]*(?<first>\d{1,6})(?:[ ._]*-[ ._]*(?:ep(?:isode)?s?[ ._-]*)?(?<last>\d{1,6}))?(?![\p{L}\p{N}])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex ExplicitEpisodeRegex();
+
+    /// <summary>Recognizes an explicitly prefixed single episode, excluding declared ranges.</summary>
+    public static bool NamesSingleEpisode(string candidate) => ExplicitEpisodeRegex().Matches(candidate)
+        .Any(match => !match.Groups["last"].Success
+            || match.Groups["first"].Value == match.Groups["last"].Value);
 
     /// <summary>Reads the numeric identities once for comparison with an entire episode catalog.</summary>
     public static IReadOnlySet<int> ReadNumbers(string candidate) => ReadTokens(candidate).Select(token => token.Number).ToHashSet();

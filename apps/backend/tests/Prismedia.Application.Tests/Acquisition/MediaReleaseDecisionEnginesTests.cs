@@ -9,6 +9,33 @@ namespace Prismedia.Application.Tests.Acquisition;
 /// the shared acceptance gates.
 /// </summary>
 public sealed class MediaReleaseDecisionEnginesTests {
+    [Theory]
+    [InlineData("[Group] Example Show (1997) EP018 Story [ENG DUB]")]
+    [InlineData("Example Show Episode 18 1080p WEB-DL")]
+    [InlineData("Example Show EP.018 1080p")]
+    public void ExplicitAbsoluteSinglesCannotFulfilSeasonPackRequests(string title) {
+        var rules = BookAcquisitionRules.Default with { TargetTitle = "Example Show", SeasonNumber = 2 };
+        Assert.Equal(ReleaseRejectionReason.WrongTvUnit, new TvUnitSpecification().Evaluate(Release(title, seeders: 10), rules));
+    }
+
+    [Theory]
+    [InlineData("Example Show EP018 1080p", true)]
+    [InlineData("Example Show Episode 18 1080p", true)]
+    [InlineData("Example Show EP019 1080p", false)]
+    public void ExplicitAbsolutePrefixesUseTheSameVerifiedEpisodeIdentity(string title, bool accepted) {
+        var rules = BookAcquisitionRules.Default with { TargetTitle = "Example Show", SeasonNumber = 2, EpisodeNumber = 1, TargetAbsoluteEpisodeNumber = 18 };
+        Assert.Equal(accepted ? null : ReleaseRejectionReason.WrongTvUnit, new TvUnitSpecification().Evaluate(Release(title, seeders: 10), rules));
+    }
+
+    [Theory]
+    [InlineData("Episode 18", "Episode 18 Season 2 1080p")]
+    [InlineData("Example Show", "Example Show Episodes 1-82 Complete 1080p")]
+    [InlineData("Example Show", "Example Show EP001-082 1080p")]
+    public void SeriesNamesAndExplicitEpisodeRangesAreNotMisreadAsSingleEpisodePacks(string series, string title) {
+        var rules = BookAcquisitionRules.Default with { TargetTitle = series, SeasonNumber = 2 };
+        Assert.Null(new TvUnitSpecification().Evaluate(Release(title, seeders: 10), rules));
+    }
+
     [Fact]
     public void TechnicalSuffixDetailsDoNotMakeAnExactHdFilmOutrankAnExactUhdFilm() {
         const string recording = "Example.Film.English.HDTS.1080p-Group";

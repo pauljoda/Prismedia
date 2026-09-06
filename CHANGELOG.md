@@ -84,6 +84,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Explicit EP/Episode-numbered releases use verified absolute episode mappings during search and import. Individual episodes no longer pass season-pack searches simply because their names omit a season number.
+
 - Release ranking no longer penalizes complete titles for trailing technical details such as audio channels and encoder names. Explicit HDTS, HDCam, and related recording tags no longer masquerade as broadcast-quality video based on resolution alone.
 
 - Opening an acquisition profile brings its editor into view. Release preference editors use the shared searchable choices and preserve advanced conditions when switching views.

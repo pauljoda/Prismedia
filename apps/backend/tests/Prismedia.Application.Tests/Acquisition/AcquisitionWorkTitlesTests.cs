@@ -5,6 +5,16 @@ namespace Prismedia.Application.Tests.Acquisition;
 
 public sealed class AcquisitionWorkTitlesTests {
     [Theory]
+    [InlineData("Example Show EP018 1080p.mkv")]
+    [InlineData("Example Show Episode 18 1080p.mkv")]
+    public void ExplicitAbsolutePrefixesMapToTheVerifiedCatalogSlot(string filename) {
+        var plan = TvImportPlanBuilder.PlanUnits([new(filename, 1000)], "Example Show", 2, null,
+            episodeTitles: [new(1, "Requested Story", AbsoluteEpisode: 18), new(2, "Other Story", AbsoluteEpisode: 19)]);
+        Assert.False(plan.Blocked);
+        Assert.Equal(1, Assert.Single(plan.Units).Episode);
+    }
+
+    [Theory]
     [InlineData("Romanized Series - 83 [1080p]", true)]
     [InlineData("Primary Series - 83 [1080p]", true)]
     [InlineData("Romanized Series S02E02 1080p", false)]
