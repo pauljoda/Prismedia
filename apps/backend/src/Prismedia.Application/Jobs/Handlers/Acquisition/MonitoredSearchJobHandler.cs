@@ -63,6 +63,12 @@ public sealed partial class MonitoredSearchJobHandler(
             return null;
         }
 
+        if (monitor.OwnedInspectionRequired) {
+            var scheduled = await TryScheduleOwnedInspectionAsync(monitor, context, cancellationToken);
+            await monitors.MarkSearchedAsync(monitor.MonitorId, cancellationToken);
+            return scheduled ? $"Inspecting owned video for {monitor.Title}" : $"Waiting for owned video evidence for {monitor.Title}";
+        }
+
         if (ownedTvCoverage is not null && monitor.Kind == EntityKind.VideoSeason && monitor.EntityId is { } seasonId
             && await ownedTvCoverage.RepairAsync(monitor.MonitorId, seasonId, async (episodeId, token) => {
                 await context.EnqueueIfNeededAsync(EnqueueJobRequest.ForEntity(

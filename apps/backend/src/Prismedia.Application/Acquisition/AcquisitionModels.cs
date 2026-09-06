@@ -424,7 +424,10 @@ public sealed record AcquisitionCandidateRef(
 /// </summary>
 public sealed record DueMonitor(
     Guid MonitorId, Guid? AcquisitionId, string Title, EntityKind Kind, bool IsUpgrade = false, Guid? EntityId = null,
-    bool MissingChildFallback = false, BookRendition? BookRendition = null, Guid? ProfileId = null);
+    bool MissingChildFallback = false, BookRendition? BookRendition = null, Guid? ProfileId = null) {
+    /// <summary>Repair the owned file's inspection evidence before judging or searching an imported baseline.</summary>
+    public bool OwnedInspectionRequired { get; init; }
+}
 
 /// <summary>
 /// The owned quality an upgrade child must beat, expressed in the vocabulary of the child's kind. A book

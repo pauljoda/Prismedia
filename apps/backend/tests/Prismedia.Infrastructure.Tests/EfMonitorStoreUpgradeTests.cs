@@ -47,6 +47,7 @@ public sealed class EfMonitorStoreUpgradeTests {
             db.Monitors.Add(new MonitorRow { Id = monitorId, EntityId = entityId, Kind = EntityKind.Movie,
                 Title = "Movie", Status = MonitorStatus.Active, ProfileId = profileId, CreatedAt = now, UpdatedAt = now });
             await db.SaveChangesAsync();
+            await SeedCurrentVideoProbeAsync(db);
             var lease = new BeforeBaselineLease(new EfEntityLifecycleMutationLease(db, new EfEntityHierarchyReader(db)), async () => {
                 if (!pauseWhileWaiting) return;
                 await using var other = database.CreateContext();
@@ -111,6 +112,7 @@ public sealed class EfMonitorStoreUpgradeTests {
                 monitor.ProfileId = baseline.ProfileId = oldProfileId;
             }
             await db.SaveChangesAsync();
+            await SeedCurrentVideoProbeAsync(db);
             if (explicitDefaultReset) {
                 await store.StartForEntityAsync(baseline.EntityId!.Value, kind, baseline.Title,
                     new AcquisitionTargeting(null, null), null, default);
@@ -895,6 +897,15 @@ public sealed class EfMonitorStoreUpgradeTests {
         monitor.BarrenSearches = barrenSearches;
         await db.SaveChangesAsync();
         return store;
+    }
+
+    private static async Task SeedCurrentVideoProbeAsync(PrismediaDbContext db) {
+        var source = await db.EntityFiles.SingleAsync();
+        var now = DateTimeOffset.UtcNow;
+        db.MediaSources.Add(new MediaSourceRow { Id = Guid.NewGuid(), EntityId = source.EntityId, EntityFileId = source.Id,
+            Path = source.Path, SizeBytes = source.SizeBytes ?? 0, Width = 1280, Height = 720,
+            DurationSeconds = 1200, CreatedAt = now, UpdatedAt = now });
+        await db.SaveChangesAsync();
     }
 
     private static PrismediaDbContext CreateContext() =>

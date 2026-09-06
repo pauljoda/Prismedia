@@ -69,7 +69,7 @@ public sealed partial class EfMonitorStore {
     }
 
     private async Task<EntityFileRow?> FindSingleOwnedSourceAsync(MonitorRow monitor, CancellationToken cancellationToken) {
-        if (monitor.Status != MonitorStatus.Active || monitor.AcquisitionId is not null
+        if (monitor.Status != MonitorStatus.Active
             || monitor.UpgradeChildAcquisitionId is not null || monitor.EntityId is not { } entityId
             || monitor.Kind is not (EntityKind.Movie or EntityKind.VideoEpisode)) return null;
         var kindCode = monitor.Kind.ToCode();
@@ -90,7 +90,8 @@ public sealed partial class EfMonitorStore {
     }
 
     private async Task<AcquisitionRow?> RegisterLibraryBaselineAsync(MonitorRow monitor, UpgradePolicies policies, CancellationToken cancellationToken) {
-        if (policies.Resolve(monitor.ProfileId, monitor.Kind) is not { AutoPick: true, UpgradeUntilCutoff: true }
+        if (monitor.AcquisitionId is not null
+            || policies.Resolve(monitor.ProfileId, monitor.Kind) is not { AutoPick: true, UpgradeUntilCutoff: true }
             || await FindSingleOwnedSourceAsync(monitor, cancellationToken) is not { } source) return null;
         var entityId = source.EntityId;
         // Existing attempts, including uncertain import receipts, must follow their own recovery path.

@@ -481,6 +481,10 @@ public sealed partial class EfMonitorStore(
                 Monitor = monitor,
                 MeasuredWidth = measured == null ? null : measured.Width,
                 MeasuredHeight = measured == null ? null : measured.Height,
+                HasOwnedSource = monitor.EntityId != null && db.EntityFiles.Any(file => file.EntityId == monitor.EntityId
+                    && file.Role == EntityFileRole.Source),
+                SubtitleInspectionComplete = monitor.EntityId != null && db.EntitySubtitleStates.Any(state =>
+                    state.EntityId == monitor.EntityId && state.SubtitlesExtractedAt != null),
                 AcquisitionStatus = acquisition == null ? (AcquisitionStatus?)null : acquisition.Status,
                 AcquisitionEntityId = acquisition == null ? null : acquisition.EntityId,
                 AcquisitionProfileId = acquisition == null ? null : acquisition.ProfileId,
@@ -612,6 +616,20 @@ public sealed partial class EfMonitorStore(
                     }
 
                     var policy = policies.Resolve(row.AcquisitionProfileId, monitor.Kind);
+                    // Existing import receipts can outlive their probe/subtitle inventory. Inspect before
+                    // judging the historical grade, and never turn an unresolved inspection into a grab.
+                    if (policy is { AutoPick: true, UpgradeUntilCutoff: true }
+                        && monitor.Kind is EntityKind.Movie or EntityKind.VideoEpisode
+                        && row.HasOwnedSource && (!row.SubtitleInspectionComplete
+                            || VideoPayloadProfileValidation.ResolutionTier(row.MeasuredWidth, row.MeasuredHeight) is null)) {
+                        if ((forceImmediate || ProfileChangedSinceSearch(policy, monitor.LastSearchedAt)
+                                || monitor.LastSearchedAt is null || now - monitor.LastSearchedAt >= BackoffFor(interval, monitor.BarrenSearches))
+                            && await GetOwnedVideoInspectionNeedsAsync(monitor.Id, cancellationToken) is not null) {
+                            due.Add(new DueMonitor(monitor.Id, acquisitionId, monitor.Title, monitor.Kind,
+                                EntityId: monitor.EntityId, ProfileId: row.AcquisitionProfileId) { OwnedInspectionRequired = true });
+                        }
+                        continue;
+                    }
                     var verdict = EvaluateCutoff(
                         monitor.Kind,
                         policy,

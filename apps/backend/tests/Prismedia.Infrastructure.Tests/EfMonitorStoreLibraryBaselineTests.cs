@@ -8,6 +8,89 @@ using Prismedia.Infrastructure.Persistence.Entities;
 namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EfMonitorStoreLibraryBaselineTests {
+    [Fact]
+    public async Task ImportedInspectionHonorsBackoffButAChangedProfileCanReopenIt() {
+        await using var db = MemoryContext();
+        var root = Directory.CreateTempSubdirectory("prismedia-inspection-cadence-").FullName;
+        try {
+            var fixture = await SeedAsync(db, root, EntityKind.Movie);
+            var profile = await db.BookAcquisitionProfiles.SingleAsync();
+            profile.UpgradeUntilCutoff = true;
+            await db.SaveChangesAsync();
+            await fixture.Store.ListImmediateForMonitorAsync(fixture.MonitorId, default);
+            var monitor = await db.Monitors.SingleAsync();
+            monitor.LastSearchedAt = DateTimeOffset.UtcNow;
+            monitor.BarrenSearches = 4;
+            db.MediaSources.Remove(await db.MediaSources.SingleAsync());
+            await db.SaveChangesAsync();
+
+            Assert.Empty(await fixture.Store.ListDueMonitorsAsync(360, default));
+            profile.UpdatedAt = monitor.LastSearchedAt.Value.AddSeconds(1);
+            await db.SaveChangesAsync();
+
+            Assert.True(Assert.Single(await fixture.Store.ListDueMonitorsAsync(360, default)).OwnedInspectionRequired);
+            Assert.Single(await db.Acquisitions.ToArrayAsync());
+        } finally {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("missing probe", false, true, true)]
+    [InlineData("missing probe", true, true, true)]
+    [InlineData("stale probe", false, true, true)]
+    [InlineData("unknown subtitles", false, true, false)]
+    [InlineData("unknown subtitles", true, true, false)]
+    [InlineData("missing subtitle inventory", false, true, false)]
+    [InlineData("paused", false, false, false)]
+    [InlineData("manual profile", false, false, false)]
+    [InlineData("wrong receipt", false, false, false)]
+    [InlineData("active child", false, false, false)]
+    [InlineData("failed probe", false, false, false)]
+    public async Task ImportedBaselinesRecoverInspectionBeforeAnotherUpgradeSearch(string scenario, bool postgres, bool inspect, bool probeRequired) {
+        await using var database = postgres ? await PostgresTestDatabase.CreateAsync() : null;
+        await using var db = database?.CreateContext() ?? MemoryContext();
+        var root = Directory.CreateTempSubdirectory("prismedia-imported-inspection-").FullName;
+        try {
+            var fixture = await SeedAsync(db, root, EntityKind.Movie);
+            var profile = await db.BookAcquisitionProfiles.SingleAsync();
+            profile.UpgradeUntilCutoff = true;
+            await db.SaveChangesAsync();
+            await fixture.Store.ListImmediateForMonitorAsync(fixture.MonitorId, default);
+            var baseline = await db.Acquisitions.SingleAsync();
+            baseline.OwnedMediaQuality = VideoQuality.Remux2160p.ToCode();
+            if (scenario == "active child") {
+                var child = await fixture.Store.CreateUpgradeChildAsync(fixture.MonitorId, default);
+                (await db.Acquisitions.FindAsync(child))!.Status = AcquisitionStatus.Downloading;
+            }
+            var probe = await db.MediaSources.SingleAsync();
+            if (scenario == "stale probe") probe.SizeBytes++;
+            else if (scenario is "unknown subtitles" or "missing subtitle inventory") db.EntitySubtitleStates.Remove(await db.EntitySubtitleStates.SingleAsync());
+            else db.MediaSources.Remove(probe);
+            // Existing subtitle rows can be stale too: only this case lacks a completed inspection inventory.
+            if (scenario == "unknown subtitles") db.EntitySubtitles.RemoveRange(await db.EntitySubtitles.ToArrayAsync());
+            if (scenario == "paused") (await db.Monitors.SingleAsync()).Status = MonitorStatus.Paused;
+            if (scenario == "manual profile") profile.AutoPick = false;
+            if (scenario == "wrong receipt") baseline.FinalSourcePath += ".retired";
+            if (scenario == "failed probe") db.EntityTechnical.Add(new EntityTechnicalRow { EntityId = fixture.EntityId,
+                ProbeFailedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow });
+            await db.SaveChangesAsync();
+            var ids = await db.Acquisitions.Select(row => row.Id).OrderBy(id => id).ToArrayAsync();
+
+            var needs = await fixture.Store.GetOwnedVideoInspectionNeedsAsync(fixture.MonitorId, default);
+            var due = await fixture.Store.ListImmediateForMonitorAsync(fixture.MonitorId, default);
+
+            Assert.Equal(inspect ? new OwnedVideoInspectionNeeds(probeRequired, true) : null, needs);
+            Assert.Equal(inspect, due.Any(row => row.OwnedInspectionRequired));
+            Assert.DoesNotContain(due, row => row.IsUpgrade);
+            Assert.Equal(ids, await db.Acquisitions.Select(row => row.Id).OrderBy(id => id).ToArrayAsync());
+            Assert.Empty(await db.DownloadTransfers.ToArrayAsync());
+            Assert.Equal("owned video bytes", await File.ReadAllTextAsync(fixture.SourcePath));
+        } finally {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData("current", false, true)]
     [InlineData("current", true, true)]

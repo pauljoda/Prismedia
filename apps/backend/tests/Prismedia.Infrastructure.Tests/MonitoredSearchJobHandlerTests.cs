@@ -44,15 +44,19 @@ public sealed class MonitoredSearchJobHandlerTests {
     }
 
     [Theory]
-    [InlineData(true, false)]
-    [InlineData(false, false)]
-    [InlineData(true, true)]
-    public async Task OwnedVideoInspectionPrecedesOneBoundedMonitoringContinuation(bool needsProbe, bool alreadyAttempted) {
+    [InlineData(true, false, false)]
+    [InlineData(false, false, false)]
+    [InlineData(true, true, false)]
+    [InlineData(true, false, true)]
+    [InlineData(false, false, true)]
+    [InlineData(true, true, true)]
+    public async Task OwnedVideoInspectionPrecedesOneBoundedMonitoringContinuation(bool needsProbe, bool alreadyAttempted, bool imported) {
         var id = Guid.NewGuid(); var entityId = Guid.NewGuid();
-        var monitors = new FakeMonitorStore([new DueMonitor(id, null, "Owned episode", EntityKind.VideoEpisode, EntityId: entityId)]) {
-            InspectionNeeds = new(needsProbe, true)
+        var due = new DueMonitor(id, imported ? Guid.NewGuid() : null, "Owned episode", EntityKind.VideoEpisode, EntityId: entityId) {
+            OwnedInspectionRequired = imported
         };
-        monitors.ImmediateWork[entityId] = [new DueMonitor(id, null, "Owned episode", EntityKind.VideoEpisode, EntityId: entityId)];
+        var monitors = new FakeMonitorStore([due]) { InspectionNeeds = new(needsProbe, true) };
+        monitors.ImmediateWork[entityId] = [due];
         var queue = new RecordingJobQueue();
         var job = Job(payloadJson: new MonitoredSearchPayload(id) { OwnedInspectionAttempted = alreadyAttempted }.ToJson()) with { GraphId = Guid.NewGuid() };
 
