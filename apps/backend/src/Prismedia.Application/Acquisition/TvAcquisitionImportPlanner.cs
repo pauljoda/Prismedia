@@ -38,7 +38,9 @@ public sealed class TvAcquisitionImportPlanner(IImportTargetIndex targets, IMoni
         var accounted = plan.Plan.Units.Select(unit => unit.SourceRelativePath)
             .Concat(TvCrossSeasonImportEvidence.Find(payload.Files, requestedSeason, catalog)
                 .Where(file => file.Destination is not null).Select(file => file.SourceRelativePath));
-        if (plan.Plan.Blocked || TvImportPlanBuilder.UnmappedVideos(payload.Files, accounted).Count > 0) return true;
+        // A fully recognized foreign payload may be held solely because its season is unmonitored.
+        // That decision has all the evidence it needs; another provider lookup cannot authorize it.
+        if (TvImportPlanBuilder.UnmappedVideos(payload.Files, accounted).Count > 0) return true;
         var known = catalog.SelectMany(season => season.Episodes.Select(episode => (season.SeasonNumber, episode.Episode))).ToHashSet();
         return plan.Plan.Units.Any(unit => unit.ExtraEpisodes.Prepend(unit.Episode).Any(episode => !known.Contains((unit.Season, episode))));
     }

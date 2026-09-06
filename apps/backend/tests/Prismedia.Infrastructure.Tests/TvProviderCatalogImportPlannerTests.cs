@@ -43,6 +43,25 @@ public sealed class TvProviderCatalogImportPlannerTests {
     }
 
     [Fact]
+    public async Task AConfidentUnmonitoredExtraDoesNotRepeatProviderLookups() {
+        await using var db = CreateContext();
+        var import = await SeedAsync(db);
+        var requestedSeason = await db.Entities.SingleAsync(entity => entity.Id == import.EntityId);
+        var foreignSeason = new EntityRow { Id = Guid.NewGuid(), ParentEntityId = requestedSeason.ParentEntityId,
+            KindCode = EntityKind.VideoSeason.ToCode(), Title = "Season 3", SortOrder = 3 };
+        db.Entities.AddRange(foreignSeason, new EntityRow { Id = Guid.NewGuid(), ParentEntityId = foreignSeason.Id,
+            KindCode = EntityKind.VideoEpisode.ToCode(), Title = "Hidden Garden", SortOrder = 56, IsWanted = true });
+        await db.SaveChangesAsync();
+        var provider = new EvidenceSource();
+        var planner = new TvAcquisitionImportPlanner(new EfImportTargetIndex(db), new EfMonitorStore(db), provider);
+
+        var result = await planner.PlanAsync(import, new("/downloads", [new("Show.S03E56.Hidden.Garden.mkv", 100)]), null, null, default);
+
+        Assert.True(result.Plan.Blocked);
+        Assert.Equal(0, provider.Calls);
+    }
+
+    [Fact]
     public async Task ConfidentLocalTitleAlignmentKeepsCurrentPositionsWithoutProviderRenumbering() {
         await using var db = CreateContext();
         var import = await SeedAsync(db);
