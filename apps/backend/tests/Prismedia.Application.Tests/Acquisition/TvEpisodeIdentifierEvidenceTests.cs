@@ -42,11 +42,66 @@ public sealed class TvEpisodeIdentifierEvidenceTests {
     }
 
     [Fact]
+    public void FinalPackRealignmentCannotReintroduceUnverifiedGenericTitleEvidence() {
+        var plan = TvImportPlanBuilder.PlanUnits([new("Example Show S02E02 Episode 1.mkv", 1000)],
+            "Example Show", 2, null, episodeTitles: [new(1, "Episode 1"), new(2, "Episode 2")]);
+
+        Assert.False(plan.Blocked);
+        Assert.Equal(2, Assert.Single(plan.Units).Episode);
+    }
+
+    [Fact]
     public void VerifiedAbsolutePositionStillMapsAGenericEpisode() {
         var unit = TvImportPlanBuilder.InferEpisode("Example Show - 83.mkv", 2,
             [new(1, "Episode 1", AbsoluteEpisode: 83)]);
 
         Assert.Equal((2, 1), unit);
+    }
+
+    [Theory]
+    [InlineData("Example Show 1080p H.264", 264)]
+    [InlineData("Example Show 720p AAC 2.0", 2)]
+    [InlineData("Example Show 720p DDP 5.1", 5)]
+    [InlineData("Example Show 720p 10 bit", 10)]
+    [InlineData("Example Show 720p 500 MB", 500)]
+    public void TechnicalNumbersCannotEstablishAbsoluteEpisodeIdentity(string filename, int absolute) {
+        var identifiers = TvEpisodeIdentifiers.Create("An Unrelated Story", absolute);
+
+        Assert.False(identifiers.Matches(filename));
+        Assert.False(identifiers.MatchesNumeric(filename));
+        Assert.Null(TvImportPlanBuilder.InferEpisode(filename + ".mkv", 2,
+            [new(1, "An Unrelated Story", AbsoluteEpisode: absolute)]));
+    }
+
+    [Theory]
+    [InlineData("Example Show - 500v2 [1080p]", 500)]
+    [InlineData("Example Show - 0264 [H.264]", 264)]
+    [InlineData("Example Show - 2 [AAC 2.0]", 2)]
+    public void EpisodeNumbersRemainUsableAlongsideTechnicalMetadataAndRevisions(string filename, int absolute) {
+        Assert.True(TvEpisodeIdentifiers.Create("An Unrelated Story", absolute).MatchesNumeric(filename));
+        var candidate = new TvReleaseDecisionEngine(EntityKind.VideoEpisode).Evaluate(
+            [(Release(filename), null, "Indexer")], BookAcquisitionRules.Default with {
+                Kind = EntityKind.VideoEpisode, TargetTitle = "Example Show", SeasonNumber = 2, EpisodeNumber = 1,
+                TargetEpisodeTitle = "An Unrelated Story", TargetAbsoluteEpisodeNumber = absolute
+            }).Single();
+        Assert.True(candidate.Accepted, string.Join(", ", candidate.Rejections));
+    }
+
+    [Theory]
+    [InlineData(ProperDownloadPolicy.PreferAndUpgrade, true)]
+    [InlineData(ProperDownloadPolicy.DoNotUpgrade, false)]
+    [InlineData(ProperDownloadPolicy.DoNotPrefer, false)]
+    public void AttachedEpisodeRevisionsRespectTheProfileUpgradePolicy(ProperDownloadPolicy policy, bool accepted) {
+        var candidate = new TvReleaseDecisionEngine(EntityKind.VideoEpisode).Evaluate(
+            [(Release("Example Show - 500v2 [1080p WEB-DL]"), null, "Indexer")], BookAcquisitionRules.Default with {
+                Kind = EntityKind.VideoEpisode, TargetTitle = "Example Show", SeasonNumber = 20, EpisodeNumber = 500,
+                TargetEpisodeTitle = "The Final Message", TargetAbsoluteEpisodeNumber = 500,
+                IsUpgradeSearch = true, OwnedMediaQuality = VideoQuality.Webdl1080p.ToCode(), OwnedMediaRevision = 1,
+                ProperPolicy = policy
+            }).Single();
+
+        Assert.Equal(accepted, candidate.Accepted);
+        if (!accepted) Assert.Contains(ReleaseRejectionReason.NotAnUpgrade, candidate.Rejections);
     }
 
     private static IndexerRelease Release(string title) =>

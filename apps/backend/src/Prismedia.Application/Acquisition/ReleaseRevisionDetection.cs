@@ -49,7 +49,7 @@ public static partial class ReleaseRevisionDetection {
             revision = Math.Max(revision, bump);
         }
 
-        // Anime-style version tokens: a word-bounded "vN" (" v2", ".v3.") maps directly to that version.
+        // Anime-style revisions may stand alone or attach to an explicit/absolute episode token.
         foreach (Match match in AnimeVersionRegex().Matches(normalized)) {
             if (int.TryParse(match.Groups["v"].Value, out var version) && version > 0) {
                 revision = Math.Max(revision, version);
@@ -64,9 +64,9 @@ public static partial class ReleaseRevisionDetection {
     [GeneratedRegex(@"\b(?:proper|repack|rerip)(?<n>\d+)?\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex ProperRepackRegex();
 
-    // A version token must be separator-bounded on the left (start, space, dot, dash, underscore, bracket)
-    // so it never fires inside a word like "revamp" or a codec token; the digits run to a word boundary.
-    [GeneratedRegex(@"(?:^|[.\s_\-\[\(])v(?<v>\d+)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    // Standalone versions and episode-attached revisions share the same boundary; codec tokens and
+    // words containing digits do not qualify as an episode prefix.
+    [GeneratedRegex(@"(?:^|[.\s_\-\[\(])(?:\d{1,6}|s\d{1,3}e\d{1,4})?v(?<v>\d+)\b", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex AnimeVersionRegex();
 }
 

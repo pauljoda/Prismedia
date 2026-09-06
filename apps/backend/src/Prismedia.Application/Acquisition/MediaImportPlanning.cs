@@ -692,8 +692,8 @@ public static partial class TvImportPlanBuilder {
             var matched = tail is null
                 ? []
                 : episodeTitles
-                    .Where(candidate => !string.IsNullOrWhiteSpace(candidate.Title) &&
-                        ReleaseTitleIdentity.ContainsMeaningfulRun(tail, candidate.Title))
+                    .Where(candidate => TvEpisodeIdentifiers.Create(candidate.Title, candidate.AbsoluteEpisode)
+                        .MatchesProviderTitle(tail))
                     .Select(candidate => candidate.Episode)
                     .Distinct()
                     .OrderBy(episode => episode)

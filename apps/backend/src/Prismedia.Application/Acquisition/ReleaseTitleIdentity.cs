@@ -117,7 +117,8 @@ public static partial class ReleaseTitleIdentity {
             .Select(ComparableTokens)
             .Where(identifier => identifier.Count > 0 && identifier.Count <= tail.Length)
             .Any(identifier => tail.Take(identifier.Count).SequenceEqual(identifier, StringComparer.Ordinal));
-        return boundaryMatched ? new Result(true, null) : ordinary;
+        return boundaryMatched || TvAbsoluteEpisodeTokens.Matches(string.Join(' ', tail), episodeIdentifiers.Numeric, leadingOnly: true)
+            ? new Result(true, null) : ordinary;
     }
 
     // One bounded leading group label may precede the actual work title. Try the unmodified title

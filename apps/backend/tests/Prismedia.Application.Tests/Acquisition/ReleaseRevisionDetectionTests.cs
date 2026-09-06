@@ -17,6 +17,9 @@ public sealed class ReleaseRevisionDetectionTests {
     [InlineData("Show_S01E05_1080p_WEB_DL_PROPER", 2)]
     [InlineData("[SubGroup] Anime - 05 [1080p] v3", 3)]
     [InlineData("[SubGroup] Anime - 05.v2.1080p", 2)]
+    [InlineData("[SubGroup] Anime - 500v2 [1080p]", 2)]
+    [InlineData("[SubGroup] Anime S02E03v3 [1080p]", 3)]
+    [InlineData("Show 1080p X264v2", 1)]
     [InlineData("Show S01E05 PROPER 1080p WEB", 2)]
     public void DetectsRevisionFromTokens(string title, int expected) =>
         Assert.Equal(expected, ReleaseRevisionDetection.Detect(title));

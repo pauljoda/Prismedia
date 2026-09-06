@@ -54,11 +54,11 @@ public sealed record TvEpisodeIdentifierSet(
     string? ProviderTitle) {
     /// <summary>Whether any episode identity occurs as a normalized contiguous token run.</summary>
     public bool Matches(string candidate) =>
-        All.Any(identifier => ReleaseTitleIdentity.ContainsMeaningfulRun(candidate, identifier));
+        MatchesProviderTitle(candidate) || MatchesNumeric(candidate);
 
     /// <summary>Whether an independently supplied absolute episode identity occurs in the candidate.</summary>
     public bool MatchesNumeric(string candidate) =>
-        Numeric.Any(identifier => ReleaseTitleIdentity.ContainsMeaningfulRun(candidate, identifier));
+        TvAbsoluteEpisodeTokens.Matches(candidate, Numeric);
 
     /// <summary>Whether the provider-authored title occurs in the candidate.</summary>
     public bool MatchesProviderTitle(string candidate) =>
