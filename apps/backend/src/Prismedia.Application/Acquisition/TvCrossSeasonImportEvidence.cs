@@ -63,11 +63,11 @@ public static class TvCrossSeasonImportEvidence {
         return result;
     }
 
-    private static bool IsDistinctiveTitle(string title) =>
+    internal static bool IsDistinctiveTitle(string title) =>
         TvEpisodeIdentifiers.Create(title, null).Numeric.Count == 0
         && ReleaseTitleIdentity.ComparableTokens(title).Count >= 2;
 
-    private static bool TitlesOverlap(IReadOnlyList<TvEpisodeTitle> episodes) =>
+    internal static bool TitlesOverlap(IReadOnlyList<TvEpisodeTitle> episodes) =>
         episodes.Where((episode, index) => episodes.Skip(index + 1).Any(other =>
             ReleaseTitleIdentity.ContainsMeaningfulRun(episode.Title, other.Title)
             || ReleaseTitleIdentity.ContainsMeaningfulRun(other.Title, episode.Title))).Any();
