@@ -249,7 +249,7 @@ public sealed class LanguageSpecification : IReleaseSpecification {
             return null;
         }
 
-        var declared = ReleaseLanguageDetection.Detect(release.Title, release.Language);
+        var declared = ReleaseLanguageDetection.Detect(release.Title, release.Language, rules);
         if (declared.Count == 0 || declared.Contains(ReleaseLanguageDetection.Multi)) {
             return null;
         }

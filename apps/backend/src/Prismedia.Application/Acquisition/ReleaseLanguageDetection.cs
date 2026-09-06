@@ -107,6 +107,10 @@ public static partial class ReleaseLanguageDetection {
         return declared.Contains(Multi) ? 1 : 0;
     }
 
+    /// <summary>Ranks audio declarations after excluding known work and episode title words.</summary>
+    public static int PreferenceRank(IndexerRelease release, BookAcquisitionRules rules) =>
+        PreferenceRank(AudioEvidence(release.Title, rules), release.Language, rules.PreferredLanguages);
+
     /// <summary>
     /// Encodes language precedence in the durable score, so search, persisted picks and retries agree.
     /// Other ranking signals occupy a bounded band; ordinary profile scores remain unchanged within it.
@@ -116,7 +120,7 @@ public static partial class ReleaseLanguageDetection {
         if (rules.PreferredLanguages.Count == 0) return score;
         const double bandWidth = 1_000_000_000_000;
         const double secondaryLimit = bandWidth / 4;
-        return PreferenceRank(release.Title, release.Language, rules.PreferredLanguages) * bandWidth
+        return PreferenceRank(release, rules) * bandWidth
             + Math.Clamp(score, -secondaryLimit, secondaryLimit);
     }
 
@@ -129,6 +133,23 @@ public static partial class ReleaseLanguageDetection {
         return Aliases.TryGetValue(trimmed, out var canonical)
             || Aliases.TryGetValue(trimmed.Replace('_', '-'), out canonical)
             ? canonical : trimmed.ToLowerInvariant();
+    }
+
+    /// <summary>Reads audio declarations while preserving title words for separate identity and regex rules.</summary>
+    public static IReadOnlySet<string> Detect(string title, string? attributeLanguage, BookAcquisitionRules rules) =>
+        Detect(AudioEvidence(title, rules), attributeLanguage);
+
+    private static string AudioEvidence(string title, BookAcquisitionRules rules) {
+        var evidence = AcquisitionWorkTitles.EpisodeEvidence(title, rules.TargetTitle, rules.TargetAlternativeTitles);
+        if (!string.IsNullOrWhiteSpace(rules.TargetEpisodeTitle)
+            && TvReleaseTokens.ParseEpisodes(evidence) is { } unit
+            && unit.Season == rules.SeasonNumber && unit.Episodes.Count == 1
+            && unit.Episodes[0] == rules.EpisodeNumber
+            && TvReleaseTokens.EpisodeTitleTail(evidence) is { } tail) {
+            var suffix = ReleaseTitleIdentity.WithoutLeadingWorkTitle(tail, rules.TargetEpisodeTitle);
+            if (suffix.Length < tail.Length) evidence = evidence[..^tail.Length] + suffix;
+        }
+        return evidence;
     }
 
     /// <summary>

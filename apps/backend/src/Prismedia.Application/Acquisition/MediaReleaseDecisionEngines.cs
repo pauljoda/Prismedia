@@ -507,7 +507,7 @@ internal static class MediaReleaseEvaluation {
 
     /// <summary>Explicit preferred audio earns 50 points per preference step; uncertain multi earns 25.</summary>
     private static double LanguagePreferenceBonus(IndexerRelease release, BookAcquisitionRules rules) {
-        var rank = ReleaseLanguageDetection.PreferenceRank(release.Title, release.Language, rules.PreferredLanguages);
+        var rank = ReleaseLanguageDetection.PreferenceRank(release, rules);
         return rank > 1 ? (rank - 1) * 50 : rank * 25;
     }
 }

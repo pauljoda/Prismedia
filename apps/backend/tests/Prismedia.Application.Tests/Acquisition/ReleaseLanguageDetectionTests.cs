@@ -1,8 +1,52 @@
 using Prismedia.Application.Acquisition;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Tests.Acquisition;
 
 public sealed class ReleaseLanguageDetectionTests {
+    [Theory]
+    [InlineData("The French Connection", "The.French.Connection.1971.1080p.BluRay", null, true)]
+    [InlineData("The French Connection", "The.French.Connection.1971.1080p.FRENCH.BluRay", null, false)]
+    [InlineData("The French Connection", "The.French.Connection.1971.1080p.BluRay", "French", false)]
+    [InlineData("English Teacher", "English.Teacher.S01E01.1080p.GER", null, false)]
+    public void WorkTitleWordsAreNotAudioDeclarations(string work, string title, string? attribute, bool accepted) {
+        var release = new IndexerRelease(title, 1000, null, null, DownloadProtocol.Usenet,
+            "https://download.test/item", null, null, null, attribute, null);
+        var rules = BookAcquisitionRules.Default with { TargetTitle = work, PreferredLanguages = ["English"] };
+        Assert.Equal(accepted ? null : ReleaseRejectionReason.LanguageMismatch,
+            new LanguageSpecification().Evaluate(release, rules));
+    }
+
+    [Fact]
+    public void LanguageScoresIgnoreFormalWorkAliasesButTitleRegexesKeepTheOriginalText() {
+        const string title = "[Group] The.French.Connection.1971.1080p.BluRay";
+        var rules = BookAcquisitionRules.Default with {
+            Kind = EntityKind.Movie, TargetTitle = "Canonical title", TargetAlternativeTitles = ["The French Connection"],
+            PreferredLanguages = ["French"],
+            CustomFormats = [
+                new("French audio", 100, [new(CustomFormatConditionType.Language, "French", false, true)]),
+                new("Literal title", 25, [new(CustomFormatConditionType.ReleaseTitle, "French", false, true)])]
+        };
+        var release = new IndexerRelease(title, 1000, null, null, DownloadProtocol.Usenet,
+            "https://download.test/item", null, null, null, null, null);
+        Assert.Equal(25, CustomFormatEvaluation.Score(title, rules));
+        Assert.Equal(123, ReleaseLanguageDetection.RankScore(release, rules, 123));
+    }
+
+    [Fact]
+    public void KnownEpisodeTitleWordsDoNotOverrideAnIndependentAudioTag() {
+        const string title = "Show.S02E03.French.Lesson.1080p.GER";
+        var rules = BookAcquisitionRules.Default with {
+            Kind = EntityKind.VideoEpisode, TargetTitle = "Show", SeasonNumber = 2, EpisodeNumber = 3,
+            TargetEpisodeTitle = "French Lesson", PreferredLanguages = ["French"],
+            CustomFormats = [new("French audio", 100, [new(CustomFormatConditionType.Language, "French", false, true)])]
+        };
+        var release = new IndexerRelease(title, 1000, null, null, DownloadProtocol.Usenet,
+            "https://download.test/item", null, null, null, null, null);
+        Assert.Equal(ReleaseRejectionReason.LanguageMismatch, new LanguageSpecification().Evaluate(release, rules));
+        Assert.Equal(0, CustomFormatEvaluation.Score(title, rules));
+    }
+
     [Theory]
     [InlineData("PT-BR", "Portuguese")]
     [InlineData("PT_BR", "Portuguese")]

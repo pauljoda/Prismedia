@@ -60,7 +60,7 @@ public static class CustomFormatEvaluation {
             return 0;
         }
 
-        var context = new ReleaseContext(title, rules.Kind, attributeLanguage);
+        var context = new ReleaseContext(title, rules, attributeLanguage);
         var total = 0;
         foreach (var format in rules.CustomFormats) {
             if (Matches(format, context)) {
@@ -143,11 +143,11 @@ public static class CustomFormatEvaluation {
 
     /// <summary>Per-release detection results, computed once and shared across a format's conditions.</summary>
     private readonly struct ReleaseContext {
-        public ReleaseContext(string title, EntityKind kind, string? attributeLanguage) {
+        public ReleaseContext(string title, BookAcquisitionRules rules, string? attributeLanguage) {
             Title = title ?? string.Empty;
-            Kind = kind;
+            Kind = rules.Kind;
             ReleaseGroup = ReleaseGroupDetection.Detect(Title);
-            Languages = ReleaseLanguageDetection.Detect(Title, attributeLanguage);
+            Languages = ReleaseLanguageDetection.Detect(Title, attributeLanguage, rules);
         }
 
         public string Title { get; }
