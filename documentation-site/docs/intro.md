@@ -6,7 +6,9 @@ description: What Prismedia is, what it manages, and how the pieces fit together
 
 # About Prismedia
 
-Prismedia is a private, self-hosted media library for a trusted user or household on a private LAN. It is video-first, but movies, series, images, galleries, comics, eBooks, audio, people, studios, tags, and collections are all first-class library entities.
+Prismedia is a private, self-hosted home for movies, series, music, books, audiobooks, comics, images, and galleries. It is built for a trusted user or household on a private LAN.
+
+Each item has one place in the library, from finding and identifying it to importing its files and watching, reading, or listening. Prismedia calls that item an **Entity**. People, studios, tags, and collections connect items across media types.
 
 It ships as one Docker image. PostgreSQL 16, ffmpeg, the .NET API, the .NET worker, and the static Svelte frontend all run together behind port `8008`.
 
@@ -20,7 +22,7 @@ It ships as one Docker image. PostgreSQL 16, ffmpeg, the .NET API, the .NET work
 - Managing files and scan exclusions from the browser when your media mount is writable.
 - Running local background work for scans, probes, thumbnails, sprites, waveforms, HLS, subtitles, identify, and imports.
 - Identifying and enriching metadata through native plugins and wrapped Stash community scrapers, while keeping Prismedia's schema independent.
-- Requesting new movies, series, and music through connected **Radarr, Sonarr, and Lidarr** instances, with request history and live download status.
+- Discovering media through metadata plugins, searching your configured indexers, and sending releases to your download clients. Prismedia tracks the transfer and imports the files onto the requested item.
 - Playing video and audio through Prismedia's browser and native playback APIs, with per-user progress and history.
 
 ## Main workspaces
@@ -31,7 +33,7 @@ It ships as one Docker image. PostgreSQL 16, ffmpeg, the .NET API, the .NET work
 | **Browse** | Movies, Series, Videos, Galleries, Images, Comics, eBooks, Audio, Artists, People, Studios, Tags, and Collections. |
 | **Files** | Watched-root file tree with open, upload, new folder, rename, move, rescan, exclude, and delete actions. |
 | **Identify** | Durable review queue for provider matches and metadata proposals. |
-| **Request** | Search connected Radarr/Sonarr/Lidarr instances and request movies, series, artists, and albums. |
+| **Request** | Discover media through plugins, request items, review releases, and follow downloads and imports. |
 | **Plugins** | Native plugins and wrapped Stash community scrapers. |
 | **Jobs** | Worker heartbeat, active queues, recent work, failures, and manual queue actions. |
 | **Settings** | Library roots, user accounts, playback, subtitles, generation, worker, storage, and diagnostics. |
@@ -69,6 +71,7 @@ The frontend is a client only. Public HTTP contracts live in the .NET backend, a
 ## What to read next
 
 - [Install & Run](./getting-started/install.md) gets the container running.
+- [Organize Your Media Folders](./getting-started/organize-folders.md) explains mounts, watched roots, and recommended layouts.
 - [Your First Library & Scan](./getting-started/first-library.md) walks through the first scan.
 - [Identify & Enrich Your Media](./getting-started/identify-walkthrough.md) adds metadata and artwork.
 - [Library & Scanning](./library/overview.md) explains exactly how folder layout becomes media.

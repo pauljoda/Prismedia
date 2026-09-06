@@ -90,9 +90,22 @@ Database Backups creates one automatic database backup per day, keeps seven days
 
 See [Backups & Restore](../deployment/backups.md) for retention, storage paths, and restore details.
 
-## Request services
+<span id="request-services" />
 
-Connect Radarr, Sonarr, and Lidarr instances for the [Request](./requests.md) workflow. Each service needs its URL and API key, and a **required connection test** verifies it and pulls its root folders, quality/metadata profiles, and tags before defaults can be chosen and the service saved. Per-service defaults cover the root folder, quality profile, search-on-request behavior, Arr tags applied to every request, and (Radarr) minimum availability. Multiple instances of the same type are supported; one per type is the default.
+## Acquisition
+
+Open **Settings → Acquisition** to connect the indexers and download clients used by the [Request](./requests.md) workflow. Metadata search is provided separately by enabled plugins.
+
+Configure:
+
+- **Indexers** to find releases.
+- **Download clients** to transfer the releases you select.
+- **Acquisition profiles** to choose the media kind, target library root, quality preferences, naming template, and import mode.
+- **Remote path mappings** when a download client reports a path that differs from the path Prismedia can access.
+
+An import profile can move files, copy them, or create hardlinks. Copying keeps a separate library copy; hardlinks require the source and destination to be on the same filesystem. Choose the mode to match your storage and seeding requirements.
+
+Add a compatible watched root before creating the profile. See [Organize Your Media Folders](../getting-started/organize-folders.md#downloads-and-imports) for the difference between completed downloads and the library destination.
 
 ## Worker
 

@@ -9,6 +9,7 @@ const sidebars: SidebarsConfig = {
       collapsed: false,
       items: [
         'getting-started/install',
+        'getting-started/organize-folders',
         'getting-started/first-library',
         'getting-started/identify-walkthrough',
       ],

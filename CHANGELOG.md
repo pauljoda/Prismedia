@@ -542,6 +542,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Removed development-only route shells and redundant prerelease UI panels so the app surface and release notes focus on the production Prismedia experience.
 
 ### Docs
+
+- Explain media folder organization with Docker path examples, watched-root settings, and common scan corrections. Update book and comic grouping guidance and replace outdated external request-service instructions with Prismedia acquisition setup.
 - Prepared the native App Store listing, exact-size iPhone, iPad, and Apple TV
   screenshot galleries, review notes, privacy answers, licensed
   demonstration-media ledger, and an isolated Apple review deployment that

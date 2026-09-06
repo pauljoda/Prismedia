@@ -8,13 +8,15 @@ description: Add a watched library root, choose what it scans, run the scan, and
 
 After the container starts, Prismedia needs at least one **watched library root**. A root is a folder inside the container — usually somewhere under `/media` — plus the media types you want scanned from that folder.
 
+Start with [Organize Your Media Folders](./organize-folders.md) if you are choosing your layout. It shows which path to enter, the toggles for each folder, and what should appear after scanning.
+
 ## 1. Open the app
 
 Open [http://localhost:8008](http://localhost:8008). The container serves the built web app and API from the same port.
 
 ## 2. Add a watched root
 
-Go to **Settings → Watched Libraries** and add a root such as `/media`, `/media/movies`, or `/media/books`.
+Go to **Settings → Watched Libraries** and add a root such as `/media/movies` or `/media/books`. For a mixed collection, start with one root per media folder rather than enabling every scan type on `/media`.
 
 ![Settings](/img/screenshots/settings.png)
 

@@ -18,15 +18,9 @@ Single-file books: .epub  .pdf
 Audiobooks:         .m4b  .m4a  .mp3
 ```
 
-These share the **Books** library but show up under focused sidebar sections:
+Enable **Books** on the watched root for all three formats. Prose books and audiobooks share a Book item; serialized comics have their own series, optional volumes, and readable installments. A comic issue or released chapter is an installment, distinct from a prose book's internal chapter markers.
 
-| Sidebar section | Shows |
-| --- | --- |
-| **Books** | Everything (comics, manga, eBooks, novels, and audiobooks). |
-| **Comics** | Book types `comic` and `manga`. |
-| **eBooks** | Book types `book` and `novel`, limited to EPUB/PDF formats. |
-
-Book **type** (Book / Comic / Manga / Novel) and **format** (Comic Archive / EPUB / PDF / Audio) are also filterable from the library filter drawer. EPUB defaults to type *Novel*; PDF defaults to type *Book*; audio-only books default to type *Novel*; comic archives are *Comic*/*Manga* (with `ComicInfo.xml`'s `Manga` flag taken into account).
+For a complete starting layout and root settings, see [Organize Your Media Folders](../getting-started/organize-folders.md).
 
 ## Comic archives (`.cbz` / `.zip`)
 
@@ -38,29 +32,31 @@ A comic archive is opened and its image members become **pages**. Recognized pag
 
 ### Folder layout → entity
 
-Folder depth below the root determines the Book → Volume → Chapter structure:
+Folders below the root provide the comic series and optional volume. Each archive becomes one readable installment:
 
 ```text
-/media/comics/
-├── One Shot.cbz                              → Book "One Shot"  (single archive)
-│
-├── Saga/
-│   ├── Chapter 001.cbz                       → Book "Saga" › Chapter "Chapter 001"
-│   └── Chapter 002.cbz                       → Book "Saga" › Chapter "Chapter 002"
-│
-└── Berserk/
+/media/comics/                           ← watched root, Books enabled
+├── One Shot.cbz                        → Series "One Shot" › one installment
+├── Example Comic/
+│   ├── Issue 001.cbz                   → Series "Example Comic" › installment
+│   └── Issue 002.cbz                   → Series "Example Comic" › installment
+└── Example Manga/
     ├── Volume 01/
-    │   ├── Chapter 001.cbz                    → Book "Berserk" › Volume "Volume 01" › Chapter
-    │   └── Chapter 002.cbz                    → Book "Berserk" › Volume "Volume 01" › Chapter
+    │   ├── Chapter 001.cbz             → Series › Volume 01 › installment
+    │   └── Chapter 002.cbz             → Series › Volume 01 › installment
     └── Volume 02/
-        └── Chapter 003.cbz                    → Book "Berserk" › Volume "Volume 02" › Chapter
+        └── Chapter 003.cbz             → Series › Volume 02 › installment
 ```
 
 | Layout | Becomes |
 | --- | --- |
-| `book.cbz` at the root | A standalone single book. |
-| `Series/Chapter.cbz` | Book named after the folder, with each archive a chapter. |
-| `Series/Volume NN/Chapter.cbz` | Book → Volume → Chapter. |
+| `One Shot.cbz` at the root | A comic series with one readable installment. |
+| `Series/Issue.cbz` | A series with each archive as a direct installment. |
+| `Series/Volume NN/Chapter.cbz` | A series with a volume containing installments. |
+
+These examples assume no metadata overrides. `ComicInfo.xml` can supply the series name and volume number; a volume number can group installments even without a volume folder. Root-level archives with the same metadata series name can group together.
+
+Pages are stored as an ordered manifest inside the installment, not as separate library items. Archives without safe readable pages are skipped. Explicitly bounded loose-page comic folders can also generate managed CBZ copies; Prismedia preserves their original page files. For a predictable starting layout, use one CBZ per issue or released chapter.
 
 ### `ComicInfo.xml`
 
@@ -68,7 +64,7 @@ A `ComicInfo.xml` at the root of the archive enriches the entity:
 
 | Element(s) | Used for |
 | --- | --- |
-| `Title`, `Series` | Chapter/book title and series grouping (Series can override the folder name). |
+| `Title`, `Series` | Installment title and series grouping (Series can override the folder name). |
 | `Number`, `Count`, `Volume` | Issue/chapter number, total, and volume. |
 | `Summary` | Description. |
 | `Year` / `Month` / `Day` | Normalized date. |
@@ -78,7 +74,7 @@ A `ComicInfo.xml` at the root of the archive enriches the entity:
 | `LanguageISO` | Language. |
 | `Writer`, `Penciller`, `Inker`, `Colorist`, `Letterer`, `CoverArtist`, `Editor`, `Translator` | People/creators (split on `;`/`,`). |
 | `Genre`, `Tags`, `Characters`, `SeriesGroup`, `StoryArc`, `Manga`, `AgeRating` | Tags. |
-| `AgeRating` | Flags the book NSFW when it reads as adult/mature/explicit/18+/etc. |
+| `AgeRating` | Marks the comic restricted when it reads as adult/mature/explicit/18+/etc. |
 
 ## Single-file books (`.epub` / `.pdf`)
 
@@ -92,18 +88,18 @@ Each `.epub` or `.pdf` scans into **one book entity** — there are no separate 
 ### Folder layout → entity
 
 ```text
-/media/ebooks/
-├── Dune.epub                         → eBook "Dune"  (standalone at root)
-├── The Hobbit.pdf                    → eBook "The Hobbit"  (standalone at root)
-│
-└── Mistborn/
-    ├── The Final Empire.epub         → Series "Mistborn" › book
-    ├── The Well of Ascension.epub    → Series "Mistborn" › book
-    └── The Hero of Ages.epub         → Series "Mistborn" › book
+/media/books/                            ← watched root, Books enabled
+├── Example Book.epub                   → Standalone book
+└── Example Author/                     → Author grouping
+    ├── First Book/
+    │   └── First Book.epub             → Book under that author
+    └── Second Book/
+        └── Second Book.pdf             → Book under that author
 ```
 
 - A root-level `.epub`/`.pdf` is a standalone book.
-- `.epub`/`.pdf` files inside a folder are grouped into a folder-backed **book series**: the Books library shows the folder once, and its detail page opens into the books inside.
+- For files in subfolders, the first folder beneath the watched root provides an **author grouping**. The displayed author name prefers embedded creator metadata and otherwise uses the folder name.
+- A folder is not automatically a prose book series. Prefer `Author/Title/Book.epub` so the fallback names are meaningful, and use metadata to describe series relationships.
 
 ## Audiobooks (`.m4b` / `.m4a` / `.mp3`)
 
