@@ -94,6 +94,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Interrupted TV imports now verify already-placed video before finishing episode recovery, preserving damaged files and their recovery state for review.
+
 - Reviewed episode selections replace an untouched held import plan, so excluding a damaged file no longer retries it anyway. Partially applied plans keep their recovery evidence.
 
 - Known operating-system companion files no longer keep fully owned season packs eligible for redundant downloads when upgrades are disabled. Missing episodes still reopen the pack.

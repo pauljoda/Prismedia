@@ -31,6 +31,35 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task RecoveryDecodesPlacedNewEpisodeBeforeCatalogingIt(bool checkpointRecordedPlacement) {
+        await using var db = CreateContext();
+        const string file = "Show.S01E02.WEB-DL.1080p.mkv";
+        var verifier = new TestVideoPayloadVerifier();
+        var harness = await HarnessAsync(db, "Show.S01E01.WEB-DL.720p.mkv", [file], "Show S01 WEB-DL 1080p",
+            failMaterialization: checkpointRecordedPlacement,
+            failAfterPlacementOnCall: checkpointRecordedPlacement ? null : 1, videoVerifier: verifier);
+        await Assert.ThrowsAnyAsync<Exception>(() => harness.Engine.ImportAsync(harness.Context, harness.Import, default));
+        var resume = (await AcquisitionTestFactory.Store(db).GetImportContextAsync(harness.Import.Id, default))!;
+        var unit = Assert.Single(resume.TvImportCheckpoint!.Units);
+        Assert.Equal(checkpointRecordedPlacement, unit.FinalPath is not null);
+        Assert.False(File.Exists(Path.Combine(harness.Import.ContentPath!, file)));
+        Assert.True(File.Exists(unit.TargetAbsolutePath));
+        verifier.Paths.Clear();
+        verifier.Failure = "The downloaded video could not be decoded completely.";
+
+        await harness.ResumeEngine.ImportAsync(harness.Context, resume, default);
+
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, await StatusOf(db, harness.Import.Id));
+        Assert.Equal(unit.TargetAbsolutePath, Assert.Single(verifier.Paths));
+        Assert.Equal("payload-bytes", await File.ReadAllTextAsync(unit.TargetAbsolutePath));
+        Assert.Equal("owned-bytes", await File.ReadAllTextAsync(harness.OwnedEpisodePath));
+        Assert.False(await db.EntityFiles.AnyAsync(row => row.EntityId == harness.WantedEpisodeId && row.Role == EntityFileRole.Source));
+        Assert.NotNull((await AcquisitionTestFactory.Store(db).GetImportContextAsync(harness.Import.Id, default))!.TvImportCheckpoint);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task CorruptDecodePreservesPendingEpisodesEvenWhenManuallySelected(bool manual) {
         await using var db = CreateContext();
         const string file = "Show.S01E02.WEB-DL.1080p.mkv";
@@ -373,6 +402,25 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
                 && row.Role == EntityFileRole.Source)).Path);
         }
         Assert.Equal("paired episode payload", await File.ReadAllTextAsync(placed));
+    }
+
+    [Fact]
+    public async Task LegacyPlacedFileRecoveryDecodesBeforeClearingWantedEpisodes() {
+        await using var db = CreateContext();
+        var verifier = new TestVideoPayloadVerifier("The downloaded video could not be decoded completely.");
+        var harness = await HarnessAsync(db, "Show - s01e01.mkv", [], "Show S01", videoVerifier: verifier);
+        var placed = Path.Combine(harness.SeasonFolder, "Show.S01E02.mkv");
+        await File.WriteAllTextAsync(placed, "damaged episode payload");
+        (await db.Acquisitions.SingleAsync()).FinalSourcePath = placed;
+        await db.SaveChangesAsync();
+
+        await harness.Engine.ImportAsync(harness.Context, harness.Import with { FinalSourcePath = placed }, default);
+
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, await StatusOf(db, harness.Import.Id));
+        Assert.Equal(placed, Assert.Single(verifier.Paths));
+        Assert.True((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == harness.WantedEpisodeId)).IsWanted);
+        Assert.False(await db.EntityFiles.AnyAsync(row => row.EntityId == harness.WantedEpisodeId && row.Role == EntityFileRole.Source));
+        Assert.Equal("damaged episode payload", await File.ReadAllTextAsync(placed));
     }
 
     [Theory]

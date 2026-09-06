@@ -1760,6 +1760,12 @@ public sealed class TvAcquisitionImportEngine(
             return true;
         }
 
+        if (await TvPlacedFileValidation.ValidateAsync(context, importedEpisodes.Select(episode => episode.FilePath),
+                videoVerifier, cancellationToken) is { } recoveryHold) {
+            await acquisitions.SetStatusAsync(import.Id, AcquisitionStatus.ManualImportRequired, recoveryHold, cancellationToken);
+            return true;
+        }
+
         var seasonFolders = importedEpisodes
             .Select(episode => Path.GetDirectoryName(episode.FilePath)!)
             .Distinct(FileSystemPathComparison.Comparer)

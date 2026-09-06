@@ -4,12 +4,22 @@ using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Jobs.Handlers;
 
-/// <summary>Inspects every pending new episode before a checkpoint places any files, including on retry.</summary>
+/// <summary>Verifies recovered files and inspects pending new episodes before a checkpoint advances.</summary>
 internal sealed class TvNewFileValidation(IMediaProbe probe, IBookAcquisitionProfileStore profiles,
     IImportTargetIndex targets, IMonitorStore? monitors, IVideoPayloadVerifier verifier) {
-    /// <summary>Returns a review reason for unreadable or disallowed new files; installed units and replacements keep their own recovery rules.</summary>
+    /// <summary>Returns a review reason for damaged recovered files or unreadable/disallowed pending files.</summary>
     public async Task<string?> ValidateAsync(JobContext context, AcquisitionImportContext import, DownloadPayload? payload,
         TvImportCheckpoint checkpoint, SelectedRelease? selected, CancellationToken token) {
+        // A crash may happen either side of recording the move. In both cases the library-side
+        // bytes still need integrity verification before recovery publishes their catalog bindings.
+        // Already placed units retain their elected profile decision; only pending files recheck it.
+        var recovered = checkpoint.Units.Where(unit => !unit.AdoptedExistingTarget)
+            .Select(unit => !string.IsNullOrWhiteSpace(unit.FinalPath) && File.Exists(unit.FinalPath)
+                ? unit.FinalPath
+                : unit.PreviousFilePath is null && !File.Exists(SourcePath(unit, payload)) && File.Exists(unit.TargetAbsolutePath)
+                    ? unit.TargetAbsolutePath : null).OfType<string>();
+        if (await TvPlacedFileValidation.ValidateAsync(context, recovered, verifier, token) is { } recoveryHold) return recoveryHold;
+
         var pending = checkpoint.Units.Where(unit => unit.PreviousFilePath is null && !unit.AdoptedExistingTarget
             && (unit.FinalPath is null || !File.Exists(unit.FinalPath)))
             .Select(unit => (Unit: unit, Path: SourcePath(unit, payload)))
