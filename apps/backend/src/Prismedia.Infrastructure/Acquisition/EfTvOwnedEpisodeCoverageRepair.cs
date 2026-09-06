@@ -71,12 +71,6 @@ public sealed class EfTvOwnedEpisodeCoverageRepair(PrismediaDbContext db, IImpor
             || diskSeason.SeasonEntityId != seasonId) return [];
         var series = await db.Entities.AsNoTracking().SingleOrDefaultAsync(row => row.Id == seriesId, token);
         if (series?.KindCode != EntityKind.VideoSeries.ToCode()) return [];
-        var root = await (from ownership in db.EntityLibraryRoots.AsNoTracking()
-            join library in db.LibraryRoots.AsNoTracking() on ownership.LibraryRootId equals library.Id
-            where ownership.EntityId == seriesId && library.Enabled
-            select library).SingleOrDefaultAsync(token);
-        if (root is null) return [];
-
         var episodeIds = requested[0].Episodes.Select(episode => episode.EntityId).OfType<Guid>().ToArray();
         var scopeIds = episodeIds.Append(seasonId).Append(seriesId).ToArray();
         // The newest receipt is selected BEFORE checking manual intent. A later manual replacement
@@ -84,6 +78,13 @@ public sealed class EfTvOwnedEpisodeCoverageRepair(PrismediaDbContext db, IImpor
         var receipt = await db.Acquisitions.AsNoTracking()
             .Where(row => row.EntityId == seasonId && row.ImportResultJson != null)
             .OrderByDescending(row => row.UpdatedAt).ThenByDescending(row => row.Id).FirstOrDefaultAsync(token);
+        // Older wanted-series imports may have folder provenance without a direct root association.
+        // Their captured request root is usable only while it still exists and contains the current
+        // season/file layout. Never substitute a current default or a guessed ancestor directory.
+        var rootId = await db.EntityLibraryRoots.AsNoTracking().Where(row => row.EntityId == seriesId)
+            .Select(row => row.LibraryRootId).SingleOrDefaultAsync(token) ?? receipt?.TargetLibraryRootId;
+        var root = await db.LibraryRoots.AsNoTracking().SingleOrDefaultAsync(row => row.Id == rootId && row.Enabled, token);
+        if (root is null) return [];
         if (receipt is null || receipt.Kind != EntityKind.VideoSeason || receipt.Status != AcquisitionStatus.Imported
             || receipt.ImportManualReview || receipt.ImportCheckpointJson != null || !AutomaticRelease(receipt.SelectedReleaseJson)
             || receipt.TeardownIntent != null || receipt.TargetLibraryRootId is { } chosenRoot && chosenRoot != root.Id

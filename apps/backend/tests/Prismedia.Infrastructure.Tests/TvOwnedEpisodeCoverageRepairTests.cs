@@ -46,6 +46,9 @@ public sealed class TvOwnedEpisodeCoverageRepairTests : IDisposable {
     [InlineData("replacement")]
     [InlineData("newer-manual-receipt")]
     [InlineData("duplicate-position")]
+    [InlineData("missing-root")]
+    [InlineData("disabled-root")]
+    [InlineData("changed-root")]
     public async Task ChangedOrAmbiguousEvidenceDoesNotAlterCoverage(string change) {
         await using var db = CreateContext();
         var fixture = await SeedAsync(db);
@@ -72,12 +75,29 @@ public sealed class TvOwnedEpisodeCoverageRepairTests : IDisposable {
                     UpdatedAt = fixture.Receipt.UpdatedAt.AddSeconds(1) });
                 break;
             case "duplicate-position": db.Entities.Add(Episode(fixture.Season.Id, 2, "Mountain Journey", true)); break;
+            case "missing-root":
+                db.EntityLibraryRoots.RemoveRange(await db.EntityLibraryRoots.ToArrayAsync());
+                fixture.Receipt.TargetLibraryRootId = null;
+                break;
+            case "disabled-root": (await db.LibraryRoots.SingleAsync()).Enabled = false; break;
+            case "changed-root": (await db.LibraryRoots.SingleAsync()).Path = Path.Combine(root, "other-library"); break;
         }
         await db.SaveChangesAsync();
 
         Assert.Equal(0, await Service(db).RepairAsync(fixture.Monitor.Id, fixture.Season.Id,
             (_, _) => throw new InvalidOperationException("Rejected evidence must not enqueue"), default));
         Assert.True((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == fixture.Missing.Id)).IsWanted);
+    }
+
+    [Fact]
+    public async Task ImportedReceiptSuppliesItsCapturedRootWhenAnOlderSeriesHasNoRootAssociation() {
+        await using var db = CreateContext();
+        var fixture = await SeedAsync(db);
+        db.EntityLibraryRoots.RemoveRange(await db.EntityLibraryRoots.ToArrayAsync());
+        await db.SaveChangesAsync();
+
+        Assert.Equal(1, await Service(db).RepairAsync(fixture.Monitor.Id, fixture.Season.Id,
+            (_, _) => Task.CompletedTask, default));
     }
 
     [Fact]
