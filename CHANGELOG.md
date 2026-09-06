@@ -42,6 +42,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- TV specials in season zero now support import recovery and confident cross-season matching, importing monitored specials while retaining unmonitored extras for review.
+
 - Library healing and refresh now regenerate file fingerprints when existing hashes belong to an old source, another item, or a generated asset.
 
 - Failed book and video replacements now preserve downloaded candidates for retry, retain interrupted staging files, and keep successful upgrades installed when backup recycling fails.

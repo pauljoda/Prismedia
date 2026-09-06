@@ -59,7 +59,7 @@ public static class TvCrossSeasonImportEvidence {
                 var destinations = matches.Select(match => match.Season.SeasonNumber).Distinct().ToArray();
                 var episodes = matches.Select(match => match.Episode).OrderBy(episode => episode.Episode).ToArray();
                 var destination = destinations.Length == 1 ? matches[0].Season : null;
-                var unambiguous = seriesAgrees && destination is { SeasonNumber: > 0 }
+                var unambiguous = seriesAgrees && destination is { SeasonNumber: >= 0 }
                     && catalog.Count(season => season.SeasonNumber == destination.SeasonNumber) == 1
                     && episodes.Length >= (declared?.Episodes.Count ?? 1)
                     && episodes.All(episode => episode.EntityId is not null || episode.ProviderIdentity is not null)
@@ -78,7 +78,7 @@ public static class TvCrossSeasonImportEvidence {
             var known = seasons.Length == 1
                 ? seasons[0].Episodes.Where(episode => numeric.Episodes.Contains(episode.Episode)).ToArray()
                 : [];
-            var valid = seriesAgrees && numeric.Season > 0 && matches.Length == 0 && known.Length == numeric.Episodes.Count
+            var valid = seriesAgrees && numeric.Season >= 0 && matches.Length == 0 && known.Length == numeric.Episodes.Count
                 && known.All(episode => episode.EntityId is not null || episode.ProviderIdentity is not null)
                 && known.Select(episode => episode.Episode).Distinct().Count() == known.Length;
             result.Add(new(file.RelativePath, valid ? seasons[0] : null, valid ? known : []));
@@ -102,7 +102,7 @@ public static class TvCrossSeasonImportEvidence {
             }
             return index.HasDistinctLeadingTitles(tail, group.Select(match => match.Episode.Episode).ToArray());
         }).Take(2).ToArray();
-        if (complete.Length != 1 || complete[0].Count() < 2 || complete[0].Key.SeasonNumber <= 0
+        if (complete.Length != 1 || complete[0].Count() < 2 || complete[0].Key.SeasonNumber < 0
             || complete[0].Any(match => match.Episode.EntityId is null && match.Episode.ProviderIdentity is null)) return null;
         var resolved = complete[0];
         return new(sourcePath, resolved.Key, resolved.Select(match => match.Episode).OrderBy(episode => episode.Episode).ToArray());

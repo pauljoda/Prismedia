@@ -1966,6 +1966,30 @@ public sealed class EfAcquisitionStoreTests {
     }
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SpecialsCheckpointsCanBeReadAndClaimedForRecovery(bool postgres) {
+        await using var database = postgres ? await PostgresTestDatabase.CreateAsync() : null;
+        await using var db = database?.CreateContext() ?? CreateContext();
+        var acquisitionId = AddCheckpointAcquisition(db);
+        await db.SaveChangesAsync();
+        var checkpoint = ValidTvCheckpoint();
+        checkpoint = checkpoint with { Units = [checkpoint.Units[0] with { SeasonNumber = 0 }] };
+        var row = await db.Acquisitions.SingleAsync(value => value.Id == acquisitionId);
+        row.Status = AcquisitionStatus.ManualImportRequired;
+        row.SeasonNumber = 0;
+        row.ImportCheckpointJson = TvImportCheckpointJson.Serialize(checkpoint);
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+
+        var recovered = (await store.GetImportContextAsync(acquisitionId, default))!.TelevisionCheckpoint!;
+        Assert.Equal(0, Assert.Single(recovered.Units).SeasonNumber);
+        var retryJob = Guid.NewGuid();
+        Assert.True(await store.TryClaimTvImportCheckpointAsync(acquisitionId, recovered, retryJob, default));
+        Assert.Equal(retryJob, (await store.GetImportContextAsync(acquisitionId, default))!.TelevisionCheckpoint!.ClaimJobId);
+    }
+
+    [Theory]
     [InlineData("unknown-import-mode")]
     [InlineData("empty-library-id")]
     [InlineData("empty-attempt-id")]
@@ -1982,7 +2006,7 @@ public sealed class EfAcquisitionStoreTests {
     [InlineData("relative-target-path")]
     [InlineData("blank-source-absolute-path")]
     [InlineData("relative-source-absolute-path")]
-    [InlineData("zero-season")]
+    [InlineData("negative-season")]
     [InlineData("zero-episode")]
     [InlineData("null-covered-episodes")]
     [InlineData("invalid-covered-episode")]
@@ -2078,7 +2102,7 @@ public sealed class EfAcquisitionStoreTests {
             case "relative-target-path": unit["TargetAbsolutePath"] = "Show.S01E01.mkv"; break;
             case "blank-source-absolute-path": unit["SourceAbsolutePath"] = " "; break;
             case "relative-source-absolute-path": unit["SourceAbsolutePath"] = "Show.S01E01.mkv"; break;
-            case "zero-season": unit["SeasonNumber"] = 0; break;
+            case "negative-season": unit["SeasonNumber"] = -1; break;
             case "zero-episode": unit["EpisodeNumber"] = 0; break;
             case "null-covered-episodes": unit["CoveredEpisodeNumbers"] = null; break;
             case "invalid-covered-episode": unit["CoveredEpisodeNumbers"] = new JsonArray(0); break;

@@ -75,8 +75,8 @@ internal static class TvImportCheckpointJson {
         if (!IsUnderFolder(target, seriesFolder)) {
             Invalid($"{prefix}.TargetAbsolutePath must be inside SeriesFolderPath.");
         }
-        if (unit.SeasonNumber <= 0) {
-            Invalid($"{prefix}.SeasonNumber must be positive.");
+        if (unit.SeasonNumber < 0) {
+            Invalid($"{prefix}.SeasonNumber must be nonnegative; zero identifies specials.");
         }
         if (unit.EpisodeNumber <= 0) {
             Invalid($"{prefix}.EpisodeNumber must be positive.");

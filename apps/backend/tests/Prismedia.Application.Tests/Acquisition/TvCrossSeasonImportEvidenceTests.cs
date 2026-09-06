@@ -3,6 +3,25 @@ using Prismedia.Application.Acquisition;
 namespace Prismedia.Application.Tests.Acquisition;
 
 public sealed class TvCrossSeasonImportEvidenceTests {
+    [Theory]
+    [InlineData(false, true)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    public void NumericSpecialsRequireKnownUniqueCatalogSlots(bool duplicateSeason, bool knownEpisode) {
+        var specials = Season(0, (3, "Special Story"));
+        TvSeasonEpisodeCatalog[] catalog = duplicateSeason ? [specials, Season(0, (3, "Special Story"))] : [specials];
+        var match = Assert.Single(TvCrossSeasonImportEvidence.Find(
+            [new($"Show.S00E{(knownEpisode ? 3 : 99):00}.mkv", 100)], 1, catalog, "Show"));
+
+        if (!duplicateSeason && knownEpisode) {
+            Assert.Equal(specials.SeasonEntityId, match.Destination?.SeasonEntityId);
+            Assert.Equal(3, Assert.Single(match.Episodes).Episode);
+        } else {
+            Assert.Null(match.Destination);
+            Assert.Empty(match.Episodes);
+        }
+    }
+
     [Fact]
     public void ACompetingCompoundEpisodeTitleKeepsThePairAmbiguous() {
         var requested = Season(1, (1, "Hidden Garden"), (2, "Mountain Journey"));
@@ -178,10 +197,12 @@ public sealed class TvCrossSeasonImportEvidenceTests {
     }
 
     [Fact]
-    public void SpecialsRemainForReviewUntilTheirPlacementProtocolSupportsThem() {
-        var match = Find("Show.S00E03.Hidden.Garden.mkv", Season(0, (3, "Hidden Garden")));
+    public void SpecialsWithVerifiedTitlesUseTheSamePlacementRulesAsRegularSeasons() {
+        var specials = Season(0, (3, "Hidden Garden"));
+        var match = Find("Show.S00E03.Hidden.Garden.mkv", specials);
 
-        Assert.Null(match.Destination);
+        Assert.Equal(specials.SeasonEntityId, match.Destination?.SeasonEntityId);
+        Assert.Equal(3, Assert.Single(match.Episodes).Episode);
     }
 
     [Fact]
