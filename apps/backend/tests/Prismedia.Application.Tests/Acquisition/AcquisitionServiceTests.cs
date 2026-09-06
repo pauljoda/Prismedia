@@ -1627,6 +1627,24 @@ public sealed class AcquisitionServiceTests {
         Assert.Empty(harness.History.Entries);
     }
 
+    [Theory]
+    [InlineData(EntityKind.Movie, null, JobType.AcquisitionUpgradeReplace)]
+    [InlineData(EntityKind.VideoEpisode, null, JobType.AcquisitionUpgradeReplace)]
+    [InlineData(EntityKind.Book, null, JobType.AcquisitionUpgradeReplace)]
+    [InlineData(EntityKind.Book, BookRendition.Audiobook, JobType.AcquisitionImport)]
+    public async Task ExplicitUpgradeRetryUsesTheKindsReplacementContract(EntityKind kind, BookRendition? rendition, JobType expectedJob) {
+        var harness = Harness(TransferInfo(RecordedClientId, AcquisitionStatus.ManualImportRequired));
+        harness.Store.ImportContext = new AcquisitionImportContext(
+            AcquisitionId, "Owned work", null, null, null, null, null, null, "/downloads/upgrade", null, null,
+            kind, BookRendition: rendition, UpgradeOfAcquisitionId: Guid.NewGuid());
+
+        await harness.Service.RetryImportAsync(AcquisitionId, allowFormatChange: false, default);
+
+        Assert.Equal(expectedJob, Assert.Single(harness.Queue.Requests).Type);
+        Assert.Equal(expectedJob == JobType.AcquisitionUpgradeReplace ? AcquisitionStatus.Downloaded : AcquisitionStatus.ManualImportRequired,
+            harness.Store.Status);
+    }
+
     [Fact]
     public async Task FailedDurableImportCanEnqueueAnExplicitResume() {
         var harness = Harness(TransferInfo(RecordedClientId, AcquisitionStatus.Failed));

@@ -17,6 +17,36 @@ public sealed class AcquisitionImportJobHandlerCheckpointTests : IDisposable {
     private readonly string _root = Directory.CreateTempSubdirectory("prismedia-import-job-checkpoint-").FullName;
 
     [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    [InlineData(true, true)]
+    public async Task PreviouslyQueuedUpgradeImportsRouteThroughReplacementBeforeAnyImportClaim(bool manualRetry, bool cancelled) {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var child = new AcquisitionRow { Id = Guid.NewGuid(), Kind = EntityKind.VideoEpisode,
+            UpgradeOfAcquisitionId = Guid.NewGuid(), Status = cancelled ? AcquisitionStatus.Cancelled : manualRetry ? AcquisitionStatus.ManualImportRequired : AcquisitionStatus.Downloaded,
+            Title = "Episode", Series = "Show", SeasonNumber = 1, EpisodeNumber = 1, CreatedAt = now, UpdatedAt = now };
+        db.Acquisitions.Add(child);
+        await db.SaveChangesAsync();
+        var queue = new MergedImportTestSupport.RecordingJobQueue();
+        var engine = new RecordingEngine(EntityKind.VideoEpisode);
+        var handler = new AcquisitionImportJobHandler(AcquisitionTestFactory.Store(db), new SingleEngineFactory(engine),
+            new DownloadPayloadReader(), new EfAcquisitionHistoryStore(db), NullLogger<AcquisitionImportJobHandler>.Instance);
+        var context = new JobContext(new JobRunSnapshot(Guid.NewGuid(), JobType.AcquisitionImport, JobRunStatus.Running,
+            0, null, AcquisitionJobPayload.Serialize(child.Id, manualRetry: manualRetry), null, child.Id.ToString(), "Episode", now, now, null), queue);
+
+        await handler.HandleAsync(context, default);
+
+        if (cancelled) Assert.Empty(queue.Enqueued);
+        else Assert.Equal(JobType.AcquisitionUpgradeReplace, Assert.Single(queue.Enqueued).Type);
+        Assert.False(engine.Called);
+        await db.Entry(child).ReloadAsync();
+        Assert.Null(child.ImportClaimJobId);
+        Assert.Equal(cancelled ? AcquisitionStatus.Cancelled : AcquisitionStatus.Downloaded, child.Status);
+    }
+
+    [Theory]
     [InlineData(true, true, false, true)]
     [InlineData(false, true, false, false)]
     [InlineData(true, false, false, false)]

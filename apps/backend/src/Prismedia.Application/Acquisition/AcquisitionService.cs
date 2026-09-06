@@ -1170,9 +1170,24 @@ public sealed partial class AcquisitionService(
             return detail;
         }
 
+        AcquisitionImportContext? import = null;
+        try {
+            import = await store.GetImportContextAsync(id, cancellationToken);
+        } catch (InvalidDataException) {
+            // The normal import handler owns the existing corrupt-checkpoint review path.
+        }
+        var jobType = AcquisitionCompletionService.CompletionJobType(
+            import?.Kind ?? detail.Summary.Kind, import?.UpgradeOfAcquisitionId is not null,
+            import?.BookRendition ?? detail.Summary.BookRendition);
+        if (jobType == JobType.AcquisitionUpgradeReplace
+            && !await store.TryTransitionStatusAsync(id, [detail.Summary.Status], AcquisitionStatus.Downloaded,
+                "Retrying the downloaded upgrade with current ownership checks.", cancellationToken)) {
+            return await store.GetAsync(id, cancellationToken);
+        }
+
         var importJob = await queue.EnqueueAsync(
             new EnqueueJobRequest(
-                JobType.AcquisitionImport,
+                jobType,
                 PayloadJson: AcquisitionJobPayload.Serialize(id, allowFormatChange, manualRetry: true),
                 TargetEntityId: id.ToString(),
                 TargetLabel: detail.Summary.Title,

@@ -41,6 +41,21 @@ public sealed class AcquisitionImportJobHandler(
         if (import is null) {
             return;
         }
+        // Old queued imports and explicit retries must preserve the atomic upgrade boundary.
+        // Dispatch before claiming a normal import or allowing its engines to place any bytes.
+        if (AcquisitionCompletionService.CompletionJobType(import.Kind, import.UpgradeOfAcquisitionId is not null,
+                import.BookRendition) == JobType.AcquisitionUpgradeReplace) {
+            if (payload.ManualRetry) {
+                if (!await acquisitions.TryTransitionStatusAsync(payload.AcquisitionId,
+                    [AcquisitionStatus.Downloaded, AcquisitionStatus.ManualImportRequired, AcquisitionStatus.Failed, AcquisitionStatus.AwaitingSelection],
+                    AcquisitionStatus.Downloaded, "Retrying the downloaded upgrade with current ownership checks.", cancellationToken)) return;
+            } else if (await acquisitions.GetStatusAsync(payload.AcquisitionId, cancellationToken)
+                is not (AcquisitionStatus.Downloaded or AcquisitionStatus.Importing)) return;
+            await context.EnqueueIfNeededAsync(new EnqueueJobRequest(JobType.AcquisitionUpgradeReplace,
+                PayloadJson: AcquisitionJobPayload.Serialize(payload.AcquisitionId),
+                TargetEntityId: payload.AcquisitionId.ToString(), TargetLabel: import.Title), cancellationToken);
+            return;
+        }
         import.EnsureCheckpointApplicability();
 
         TvImportCheckpoint? tvCheckpoint = null;
