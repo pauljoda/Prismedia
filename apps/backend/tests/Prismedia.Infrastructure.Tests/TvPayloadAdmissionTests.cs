@@ -128,6 +128,8 @@ public sealed class TvPayloadAdmissionTests {
     [InlineData("more.rar")]
     [InlineData("sample.zip")]
     [InlineData("obfuscated.bin")]
+    [InlineData("episodes.db")]
+    [InlineData("Thumbs.db.7z")]
     public async Task UnexplainedPayloadMembersRemainEligible(string unknownFile) {
         await using var db = CreateContext();
         using var fixture = await TvPayloadAdmissionFixture.CreateAsync(db);
@@ -141,6 +143,24 @@ public sealed class TvPayloadAdmissionTests {
         using var fixture = await TvPayloadAdmissionFixture.CreateAsync(db);
         Assert.True(await fixture.Service.HasNoBenefitAsync(fixture.Input,
             [.. fixture.Files, new("Show.sample.mkv", 100), new("Show.srt", 50)], CancellationToken.None));
+    }
+
+    [Theory]
+    [InlineData("Season/Thumbs.db")]
+    [InlineData("Season/thumbs.DB")]
+    [InlineData("Season/.DS_Store")]
+    [InlineData("Season/desktop.ini")]
+    public async Task OperatingSystemCompanionsDoNotMakeAnOwnedPackUseful(string companion) {
+        await using var db = CreateContext();
+        using var fixture = await TvPayloadAdmissionFixture.CreateAsync(db);
+        ImportCandidateFile[] files = [.. fixture.Files, new(companion, 500)];
+        Assert.True(await fixture.Service.HasNoBenefitAsync(fixture.Input, files, default));
+        await fixture.Service.RememberAsync(fixture.Input.Id, fixture.Selected.Identity, files, default);
+        Assert.Contains(fixture.Selected.Identity, await fixture.Service.GetExcludedAsync(fixture.Input, default));
+
+        db.EntityFiles.Remove(await db.EntityFiles.SingleAsync(file => file.EntityId == fixture.SecondEpisode.Id));
+        await db.SaveChangesAsync();
+        Assert.Empty(await fixture.Service.GetExcludedAsync(fixture.Input, default));
     }
 
     [Fact]

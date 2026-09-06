@@ -92,6 +92,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Known operating-system companion files no longer keep fully owned season packs eligible for redundant downloads when upgrades are disabled. Missing episodes still reopen the pack.
+
 - Movie and TV searches retry Latin-accent spelling variants when the original queries find no acceptable release. Equivalent accent spellings also receive equal title relevance without changing the requested work or episode numbering.
 
 - Explicit EP/Episode-numbered releases use verified absolute episode mappings during search and import. Individual episodes no longer pass season-pack searches simply because their names omit a season number.

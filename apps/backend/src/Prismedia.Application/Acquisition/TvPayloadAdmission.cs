@@ -54,7 +54,8 @@ public sealed class TvPayloadAdmission(
         // establish episode coverage either; wait until the downloader exposes actual video members.
         if (files.Any(file => !plannedFiles.Contains(file.RelativePath)
             && !(TvImportPlanBuilder.IsVideoFile(file.RelativePath) && MovieImportPlanBuilder.IsSampleFile(file.RelativePath))
-            && !KnownCompanionExtensions.Contains(Path.GetExtension(file.RelativePath)))) return false;
+            && !KnownCompanionExtensions.Contains(Path.GetExtension(file.RelativePath))
+            && !KnownCompanionNames.Contains(Path.GetFileName(file.RelativePath)))) return false;
         var known = context.Titles.Select(title => title.Episode).ToHashSet();
         foreach (var unit in plan.Units) {
             foreach (var episode in unit.ExtraEpisodes.Prepend(unit.Episode)) {
@@ -87,5 +88,10 @@ public sealed class TvPayloadAdmission(
     // formats). Only recognizable non-video companions can be ignored when proving no coverage gain.
     private static readonly IReadOnlySet<string> KnownCompanionExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
         ".nfo", ".txt", ".jpg", ".jpeg", ".png", ".srt", ".ass", ".ssa", ".sub", ".idx", ".vtt", ".sfv", ".par2"
+    };
+
+    // Exact OS metadata filenames are companions; other database/INI files remain unexplained.
+    private static readonly IReadOnlySet<string> KnownCompanionNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
+        "Thumbs.db", ".DS_Store", "desktop.ini"
     };
 }
