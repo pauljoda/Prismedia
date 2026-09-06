@@ -42,6 +42,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Fileless monitored items now retain their own selected quality profile and library when automatic maintenance or recovery starts a request, including separate ebook and audiobook choices.
+
 - Automatic TV imports held with a saved episode plan can resume when current quality rules or retained files change. Retries preserve the original mapping and partial imports, respect manual review and paused monitoring, and avoid repeating unchanged work.
 
 - Completed upgrades now follow the configured recycle-bin or latest-backup policy after committing recovery state, preventing routine upgrades from accumulating recovery copies. Newly recycled files receive the full retention window even when their original modification dates are old.

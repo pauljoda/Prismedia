@@ -656,10 +656,10 @@ public sealed partial class RequestCommitService(
             return await RequestContainerChildrenAsync(entity, hideNsfw, cancellationToken);
         }
 
-        // No explicit choices: inherit the nearest followed ancestor's (a phantom episode of a
-        // monitored series should land where the series' request chose), else kind defaults apply.
+        // No explicit choices: preserve this rendition's direct monitor first, then inherit the
+        // nearest followed ancestor so phantom episodes retain their series' destination and profile.
         if (targeting is null || targeting.IsEmpty) {
-            targeting = await InheritedTargetingAsync(entity, cancellationToken);
+            targeting = await ResolveStoredTargetingAsync(entity, descriptor.BookRendition, cancellationToken);
         }
         targeting = await ResolveInteractiveTargetingAsync(
             descriptor,
@@ -868,10 +868,15 @@ public sealed partial class RequestCommitService(
         return items.Count == 0 ? null : new RequestCommitResponse(entity.EntityId, items);
     }
 
-    /// <summary>The stored library/profile choices of the entity's nearest monitored ancestor, or none.</summary>
-    private async Task<AcquisitionTargeting> InheritedTargetingAsync(MonitorableEntity entity, CancellationToken cancellationToken) {
+    /// <summary>Preserves the direct rendition monitor's choices before inheriting a monitored ancestor's targeting.</summary>
+    private async Task<AcquisitionTargeting> ResolveStoredTargetingAsync(
+        MonitorableEntity entity, BookRendition? bookRendition, CancellationToken cancellationToken) {
+        if (await monitors.GetByEntityAsync(entity.EntityId, bookRendition, cancellationToken) is { } direct) {
+            var targeting = new AcquisitionTargeting(direct.TargetLibraryRootId, direct.ProfileId);
+            if (!targeting.IsEmpty) return targeting;
+        }
         var parentId = entity.ParentEntityId;
-        var visited = new HashSet<Guid>();
+        var visited = new HashSet<Guid> { entity.EntityId };
         while (parentId is { } id && visited.Add(id)) {
             if (await monitors.GetTargetingByEntityAsync(id, cancellationToken) is { } stored) {
                 return stored;

@@ -1112,6 +1112,48 @@ public sealed class RequestCommitServiceTests {
         Assert.Equal(2, acquisition.EpisodeNumber);
     }
 
+    [Theory]
+    [InlineData(null, BookRendition.Ebook)]
+    [InlineData(BookRendition.Audiobook, BookRendition.Audiobook)]
+    public async Task DirectTargetingUsesTheRequestedBookRendition(BookRendition? requested, BookRendition expected) {
+        var (service, writer, acquisitions, monitors) = ServiceWithMonitors(Leaf(EntityKind.Book, "Book", "W1"));
+        var entityId = FakeWantedEntityWriter.EntityIdFor("W1");
+        writer.Container = new MonitorableEntity(entityId, EntityKind.Book, "Wanted book", [new ExternalIdentity(Provider, "W1")]);
+        monitors.DirectEntityIds.Add(entityId);
+        monitors.RenditionTargetings[BookRendition.Ebook] = new(Guid.NewGuid(), Guid.NewGuid());
+        monitors.RenditionTargetings[BookRendition.Audiobook] = new(Guid.NewGuid(), Guid.NewGuid());
+
+        Assert.NotNull(await service.RequestEntityAsync(entityId, hideNsfw: true, CancellationToken.None,
+            bookRendition: requested));
+
+        var created = Assert.Single(acquisitions.Created);
+        Assert.Equal(expected, created.BookRendition);
+        Assert.Equal(monitors.RenditionTargetings[expected].ProfileId, created.ProfileId);
+        Assert.Equal(monitors.RenditionTargetings[expected].TargetLibraryRootId, created.TargetLibraryRootId);
+    }
+
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task DirectMonitorChoicesSurviveFilelessMaintenanceAndRecovery(bool graphMaintenance, bool hasParent) {
+        var (service, writer, acquisitions, monitors) = ServiceWithMonitors(Leaf(EntityKind.Book, "Book", "W1"));
+        var entityId = FakeWantedEntityWriter.EntityIdFor("W1");
+        writer.Container = new MonitorableEntity(entityId, EntityKind.Book, "Wanted book",
+            [new ExternalIdentity(Provider, "W1")], ParentEntityId: hasParent ? Guid.NewGuid() : null);
+        monitors.DirectEntityIds.Add(entityId);
+        monitors.DirectTargeting = new AcquisitionTargeting(Guid.NewGuid(), Guid.NewGuid());
+        monitors.StoredTargeting = new AcquisitionTargeting(Guid.NewGuid(), Guid.NewGuid());
+
+        Assert.True(graphMaintenance ? await service.MaintainAsync(entityId, CancellationToken.None)
+            : await service.RequestIfMonitoredAndFilelessAsync(entityId, CancellationToken.None));
+
+        var created = Assert.Single(acquisitions.Created);
+        Assert.Equal(monitors.DirectTargeting.ProfileId, created.ProfileId);
+        Assert.Equal(monitors.DirectTargeting.TargetLibraryRootId, created.TargetLibraryRootId);
+    }
+
     [Fact]
     public async Task FilelessDirectlyMonitoredLeafRequestsItselfAndReusesTheNormalPipeline() {
         var (service, writer, acquisitions, monitors) = ServiceWithMonitors(Leaf(EntityKind.Book, "Book", "W1"));
@@ -2903,6 +2945,8 @@ public sealed class RequestCommitServiceTests {
         public List<AcquisitionTargeting?> EntityMonitorTargetings { get; } = [];
         public List<MonitorPreset?> EntityMonitorPresets { get; } = [];
         public AcquisitionTargeting? StoredTargeting { get; set; }
+        public AcquisitionTargeting? DirectTargeting { get; set; }
+        public Dictionary<BookRendition, AcquisitionTargeting> RenditionTargetings { get; } = [];
         public HashSet<Guid> DirectEntityIds { get; } = [];
         public Dictionary<Guid, MonitorStatus> EntityStatuses { get; } = [];
         public List<Guid> EntityLifecycleMutationIds { get; } = [];
@@ -2945,8 +2989,17 @@ public sealed class RequestCommitServiceTests {
                     EntityKind.Book,
                     "Entity",
                     entityId: entityId,
-                    status: EntityStatuses.GetValueOrDefault(entityId, MonitorStatus.Active))
+                    status: EntityStatuses.GetValueOrDefault(entityId, MonitorStatus.Active)) with {
+                    TargetLibraryRootId = DirectTargeting?.TargetLibraryRootId, ProfileId = DirectTargeting?.ProfileId
+                }
                 : null);
+
+        public async Task<MonitorView?> GetByEntityAsync(Guid entityId, BookRendition? bookRendition, CancellationToken cancellationToken) {
+            var view = await GetByEntityAsync(entityId, cancellationToken);
+            return view is not null && bookRendition is { } rendition && RenditionTargetings.TryGetValue(rendition, out var targeting)
+                ? view with { BookRendition = rendition, TargetLibraryRootId = targeting.TargetLibraryRootId, ProfileId = targeting.ProfileId }
+                : view;
+        }
 
         public async Task<bool> ExecuteIfActiveEntityMutationAsync(
             Guid entityId,

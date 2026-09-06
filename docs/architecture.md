@@ -177,6 +177,11 @@ passes or provider-only pseudo-Entities.
 
 ## Acquisition Policy Modules
 
+A request with no explicit targeting first preserves the direct monitor's library
+and profile for its requested rendition, then inherits the nearest monitored
+ancestor, then uses kind defaults. Background maintenance and fileless recovery
+share this resolution with ordinary Entity requests.
+
 The acquisition core owns orchestration, persistence, queueing, and download
 clients. Media-specific behavior lives behind `IAcquisitionPolicyModule`:
 

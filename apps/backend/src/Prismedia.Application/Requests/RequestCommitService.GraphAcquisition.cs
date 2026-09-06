@@ -99,7 +99,7 @@ public sealed partial class RequestCommitService {
         }
 
         if (targeting is null || targeting.IsEmpty) {
-            targeting = await InheritedTargetingAsync(entity, cancellationToken);
+            targeting = await ResolveStoredTargetingAsync(entity, descriptor.BookRendition, cancellationToken);
         }
 
         // A recent season pack cannot exist while episodes are undated or still in the future. Use the
