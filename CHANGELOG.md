@@ -38,6 +38,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Repeated episode titles in other seasons no longer block a TV file when its requested-season numbers and complete titles agree; conflicting or incomplete evidence still requires review.
+
 - Held TV recovery limits slow provider work per scheduler tick and rotates through the backlog, keeping download handoffs and monitoring responsive.
 
 - Manual TV mapping reviews suppress misleading episode suggestions and explain when local or provider titles identify content from another season.

@@ -33,6 +33,21 @@ public static class TvCrossSeasonImportEvidence {
                     .Select(episode => (Season: season, Episode: episode)))
                 .ToArray();
             if (matches.Any(match => match.Season.SeasonNumber != requestedSeason)) {
+                var requested = catalog.Where(season => season.SeasonNumber == requestedSeason)
+                    .SelectMany(season => season.Episodes)
+                    .Where(episode => ReleaseTitleIdentity.ContainsMeaningfulRun(tail, episode.Title)).ToArray();
+                // Reruns and recurring titles may appear in several seasons. Agreement between every
+                // requested episode number and its complete title evidence outweighs those repeats.
+                // Conflicting numbering or an incomplete pair still stays ambiguous below.
+                if (seriesAgrees && declared is { } numbered && numbered.Season == requestedSeason
+                    && catalog.Count(season => season.SeasonNumber == requestedSeason) == 1
+                    && requested.Length == numbered.Episodes.Count
+                    && requested.All(episode => episode.EntityId is not null || episode.ProviderIdentity is not null)
+                    && requested.Select(episode => episode.Episode).ToHashSet().SetEquals(numbered.Episodes)
+                    && matches.All(match => requested.Any(episode =>
+                        ReleaseTitleIdentity.ComparableTokens(episode.Title)
+                            .SequenceEqual(ReleaseTitleIdentity.ComparableTokens(match.Episode.Title))))
+                    && !TitlesOverlap(requested)) continue;
                 var destinations = matches.Select(match => match.Season.SeasonNumber).Distinct().ToArray();
                 var episodes = matches.Select(match => match.Episode).OrderBy(episode => episode.Episode).ToArray();
                 var destination = destinations.Length == 1 ? matches[0].Season : null;

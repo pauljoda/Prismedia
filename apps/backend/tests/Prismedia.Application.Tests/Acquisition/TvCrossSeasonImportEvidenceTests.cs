@@ -31,6 +31,45 @@ public sealed class TvCrossSeasonImportEvidenceTests {
         Assert.Null(match.Destination);
     }
 
+    [Theory]
+    [InlineData("Show.S01E01.Hidden.Garden.mkv")]
+    [InlineData("Show.S01E01-E02.Hidden.Garden.&.Mountain.Journey.mkv")]
+    public void MatchingRequestedNumbersAndCompleteTitlesAreNotInvalidatedByForeignRepeats(string filename) {
+        var requested = Season(1, (1, "Hidden Garden"), (2, "Mountain Journey"));
+        var repeat = Season(2, (3, "Hidden Garden"));
+
+        Assert.Empty(TvCrossSeasonImportEvidence.Find([new(filename, 100)], 1, [requested, repeat], "Show"));
+    }
+
+    [Fact]
+    public void ACompleteNumberedPairCanIncludeASingleWordTitle() {
+        var requested = Season(1, (1, "Puzzlewood"), (2, "Mountain Journey"));
+        var repeat = Season(2, (3, "Mountain Journey"));
+
+        Assert.Empty(TvCrossSeasonImportEvidence.Find(
+            [new("Show.S01E01-E02.Puzzlewood.&.Mountain.Journey.mkv", 100)], 1, [requested, repeat], "Show"));
+    }
+
+    [Fact]
+    public void CompleteRequestedTitlesDoNotHideAnAdditionalForeignTitle() {
+        var requested = Season(1, (1, "Hidden Garden"), (2, "Mountain Journey"));
+        var foreign = Season(2, (3, "Hidden Garden"), (4, "Ocean Adventure"));
+
+        var match = Find("Show.S01E01-E02.Hidden.Garden.&.Mountain.Journey.&.Ocean.Adventure.mkv", requested, foreign);
+
+        Assert.Null(match.Destination);
+    }
+
+    [Fact]
+    public void RepeatedTitlesDoNotResolveConflictingRequestedNumbers() {
+        var requested = Season(1, (1, "Hidden Garden"), (2, "Mountain Journey"));
+        var repeat = Season(2, (3, "Hidden Garden"), (4, "Mountain Journey"));
+
+        var match = Find("Show.S01E49-E50.Hidden.Garden.&.Mountain.Journey.mkv", requested, repeat);
+
+        Assert.Null(match.Destination);
+    }
+
     [Fact]
     public void AShorterTitleInsideAnotherDoesNotProveTwoCoveredEpisodes() {
         var match = Find("Show.S01E49-E50.Long.Mountain.Journey.mkv",
