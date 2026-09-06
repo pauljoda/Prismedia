@@ -12,16 +12,25 @@ internal static partial class TvAbsoluteEpisodeTokens {
     [GeneratedRegex(@"(?<![\p{L}\p{N}])(?<number>\d{1,6})(?:v[1-9]\d{0,2})?(?![\p{L}\p{N}])", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex AbsoluteNumberRegex();
 
+    /// <summary>Reads the numeric identities once for comparison with an entire episode catalog.</summary>
+    public static IReadOnlySet<int> ReadNumbers(string candidate) => ReadTokens(candidate).Select(token => token.Number).ToHashSet();
+
     /// <summary>Tests known absolute identities, optionally only at the beginning of a work-title suffix.</summary>
     public static bool Matches(string candidate, IReadOnlyList<string> identities, bool leadingOnly = false) {
         if (identities.Count == 0) return false;
+        foreach (var token in ReadTokens(candidate)) {
+            if (leadingOnly && token.Index != 0) return false;
+            if (identities.Contains(token.Number.ToString(CultureInfo.InvariantCulture))) return true;
+        }
+        return false;
+    }
+
+    private static IEnumerable<(int Number, int Index)> ReadTokens(string candidate) {
         // Equal-length masking preserves token boundaries and positions for leading-identity checks.
         var content = TechnicalNumberRegex().Replace(candidate, match => new string(' ', match.Length));
         foreach (Match match in AbsoluteNumberRegex().Matches(content)) {
-            if (leadingOnly && match.Index != 0) return false;
-            if (int.TryParse(match.Groups["number"].Value, CultureInfo.InvariantCulture, out var number)
-                && identities.Contains(number.ToString(CultureInfo.InvariantCulture))) return true;
+            if (int.TryParse(match.Groups["number"].Value, CultureInfo.InvariantCulture, out var number))
+                yield return (number, match.Index);
         }
-        return false;
     }
 }

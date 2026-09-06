@@ -421,12 +421,12 @@ public static partial class TvImportPlanBuilder {
         string sourceRelativePath,
         int? requestedSeason,
         IReadOnlyList<TvEpisodeTitle> episodeTitles) =>
-        InferEpisodeEvidence(sourceRelativePath, requestedSeason, episodeTitles).Unit;
+        InferEpisodeEvidence(sourceRelativePath, requestedSeason, new TvEpisodeEvidenceIndex(episodeTitles)).Unit;
 
     private static EpisodeInference InferEpisodeEvidence(
         string sourceRelativePath,
         int? requestedSeason,
-        IReadOnlyList<TvEpisodeTitle> episodeTitles) {
+        TvEpisodeEvidenceIndex evidence) {
         var sourceName = Path.GetFileNameWithoutExtension(sourceRelativePath);
         var declared = TvReleaseTokens.ParseEpisodes(sourceName);
         (int Season, int Episode)? unit = declared is { } episodes
@@ -442,7 +442,7 @@ public static partial class TvImportPlanBuilder {
             && declared?.Episodes.Count == 1
             && (requestedSeason is null || structured.Season == requestedSeason)
             && TvReleaseTokens.EpisodeTitleTail(sourceName) is { } tail) {
-            var tailMatches = MatchingEpisodeNumbers(tail, episodeTitles);
+            var tailMatches = evidence.Match(tail);
             if (tailMatches.Length == 1 && tailMatches[0] != structured.Episode) {
                 unit = (structured.Season, tailMatches[0]);
             }
@@ -451,8 +451,8 @@ public static partial class TvImportPlanBuilder {
         if (unit is null
             && requestedSeason is { } titleSeason
             && (declaredSeason is null || declaredSeason == titleSeason)
-            && episodeTitles.Count > 0) {
-            var titleMatches = MatchingEpisodeNumbers(sourceName, episodeTitles);
+            && evidence.Count > 0) {
+            var titleMatches = evidence.Match(sourceName);
             if (titleMatches.Length == 1) {
                 unit = (titleSeason, titleMatches[0]);
             }
@@ -466,17 +466,6 @@ public static partial class TvImportPlanBuilder {
             : null;
         return new EpisodeInference(inferred, recognizedDifferentSeason, declared?.Episodes);
     }
-
-    private static int[] MatchingEpisodeNumbers(
-        string sourceName,
-        IReadOnlyList<TvEpisodeTitle> episodeTitles) =>
-        episodeTitles
-            .Where(candidate => TvEpisodeIdentifiers
-                .Create(candidate.Title, candidate.AbsoluteEpisode)
-                .Matches(sourceName))
-            .Select(candidate => candidate.Episode)
-            .Distinct()
-            .ToArray();
 
     /// <summary>
     /// Builds exact placement units from a user-reviewed mapping. Unselected payload files are deliberately
@@ -591,9 +580,10 @@ public static partial class TvImportPlanBuilder {
             .ToArray();
 
         var units = new List<TvPlanUnit>(videos.Length);
+        var evidence = new TvEpisodeEvidenceIndex(episodeTitles ?? []);
         var hasRecognizedDifferentUnit = false;
         foreach (var video in videos.OrderBy(file => file.RelativePath, StringComparer.OrdinalIgnoreCase)) {
-            var inference = InferEpisodeEvidence(video.RelativePath, seasonNumber, episodeTitles ?? []);
+            var inference = InferEpisodeEvidence(video.RelativePath, seasonNumber, evidence);
             hasRecognizedDifferentUnit |= inference.RecognizedDifferentSeason;
             if (inference.RecognizedDifferentSeason) {
                 continue;
@@ -628,7 +618,7 @@ public static partial class TvImportPlanBuilder {
         if (episodeTitles is { Count: > 0 }) {
             var aligned = RealignByEpisodeTitles(
                 units,
-                episodeTitles,
+                evidence,
                 series,
                 template,
                 quality,
@@ -675,7 +665,7 @@ public static partial class TvImportPlanBuilder {
     /// </summary>
     private static List<TvPlanUnit>? RealignByEpisodeTitles(
         List<TvPlanUnit> units,
-        IReadOnlyList<TvEpisodeTitle> episodeTitles,
+        TvEpisodeEvidenceIndex evidence,
         string series,
         string? template,
         string? quality,
@@ -691,13 +681,7 @@ public static partial class TvImportPlanBuilder {
             var tail = TvReleaseTokens.EpisodeTitleTail(Path.GetFileNameWithoutExtension(unit.SourceRelativePath));
             var matched = tail is null
                 ? []
-                : episodeTitles
-                    .Where(candidate => TvEpisodeIdentifiers.Create(candidate.Title, candidate.AbsoluteEpisode)
-                        .MatchesProviderTitle(tail))
-                    .Select(candidate => candidate.Episode)
-                    .Distinct()
-                    .OrderBy(episode => episode)
-                    .ToArray();
+                : evidence.Match(tail, titlesOnly: true);
             if (matched.Length == 0) {
                 realigned.Add(unit);
                 continue;
