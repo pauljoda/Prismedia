@@ -1,10 +1,10 @@
 ---
 sidebar_position: 6
-title: Stash Compatibility
-description: Wrap a Stash YAML scraper for use as an Prismedia plugin.
+title: Wrap a Stash Scraper
+description: Package a Stash YAML scraper as a Prismedia plugin, with action mappings and authentication settings.
 ---
 
-# Stash Compatibility
+# Wrap a Stash Scraper
 
 The Stash community has hundreds of YAML-defined site scrapers — battle-tested for the long tail of porn-site metadata. Prismedia runs them through a compatibility adapter so you don't have to rewrite them in TypeScript or Python.
 

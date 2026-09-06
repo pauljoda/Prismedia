@@ -98,7 +98,7 @@ test('hero actions lead to source, native downloads, and setup alongside all thr
   await page.goto('./');
   const hero = page.locator('header').filter({has: page.getByRole('heading', {level: 1})});
   const actions = hero.locator('a.marketing-glass');
-  await expect(actions).toHaveText(['View on GitHub', 'Apple TV', 'TestFlight', 'Read the setup guide']);
+  await expect(actions).toHaveText(['View on GitHub', 'Apple TV App Store', 'TestFlight iPhone & iPad', 'Read the setup guide']);
   await expect(actions.first()).toHaveAttribute('href', 'https://github.com/pauljoda/Prismedia');
   await expect(page.locator('.marketing-prism')).toHaveCount(1);
   const tv = page.getByRole('img', {name: 'Browse a movie collection in the native Apple TV app'});
@@ -120,4 +120,22 @@ test('narrow phones can open the menu without overlapping service links', async 
   await expect(page).toHaveURL(/#workflow$/);
   await expect.poll(() => page.locator('#workflow').evaluate((section) => Math.abs(section.getBoundingClientRect().top - 75))).toBeLessThan(2);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test('device frames stay inside the showcase across screen sizes without captions', async ({page}) => {
+  await page.goto('./');
+  const showcase = page.locator('[aria-label="Prismedia on web, iPhone, and Apple TV"]');
+  await expect(showcase.locator('figcaption')).toHaveCount(0);
+  for (const width of [320, 390, 768, 1045, 1440, 1920]) {
+    await page.setViewportSize({width, height: 1000});
+    const contained = await showcase.evaluate((element) => {
+      const container = element.getBoundingClientRect();
+      return Array.from(element.querySelectorAll('figure')).every((figure) => {
+        const frame = figure.getBoundingClientRect();
+        return frame.left >= container.left && frame.right <= container.right;
+      });
+    });
+    expect(contained, `Device frame outside the showcase at ${width}px`).toBe(true);
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
 });

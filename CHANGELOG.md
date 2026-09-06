@@ -25,6 +25,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- The public site includes a complete icon set and website manifest, a refreshed social preview, clearer native download labels, and page-specific search and sharing metadata.
 - Product screenshots now load at sizes suited to the screen while retaining full-resolution originals; the mobile navigation keeps its menu and brand clear on narrow phones.
 - The homepage adds a real web playback demonstration, brings the product tour closer to the experience examples, and names supported indexers and download clients.
 - The homepage explains server setup earlier, links directly to the practical library workflow, and brings product demonstrations ahead of the founder story.

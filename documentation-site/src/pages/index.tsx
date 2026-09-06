@@ -13,22 +13,36 @@ import {APP_STORE_URL, GITHUB_URL, TESTFLIGHT_URL} from '../components/marketing
 import PrismStory from '../components/marketing/PrismStory';
 import {ENTITY_KIND, familyStyle} from '../components/marketing/media-families';
 import styles from './index.module.css';
+import {SITE_URL, SITE_DESCRIPTION, SOCIAL_IMAGE_PATH} from '../../site-metadata';
 
-const TITLE = 'A clear home for all your media.';
-const DESCRIPTION = 'Bring movies, series, music, books, audiobooks, comics, images, and galleries into one private, self-hosted library. Find, organize, watch, listen, and read with Prismedia.';
+const TITLE = 'Self-hosted media library';
 const PRODUCT_SCHEMA = {
   '@context': 'https://schema.org',
-  '@type': 'SoftwareApplication',
-  name: 'Prismedia',
-  applicationCategory: 'MultimediaApplication',
-  operatingSystem: 'Web, iOS, iPadOS, tvOS',
-  description: DESCRIPTION,
-  url: 'https://pauljoda.github.io/Prismedia/',
-  image: 'https://pauljoda.github.io/Prismedia/img/prismedia-social-card.png',
-  softwareRequirements: 'A self-hosted Prismedia server; Docker for server installation',
-  license: `${GITHUB_URL}/blob/main/LICENSE`,
-  isAccessibleForFree: true,
-  sameAs: [GITHUB_URL, APP_STORE_URL, TESTFLIGHT_URL],
+  '@graph': [
+    {
+      '@type': 'WebSite',
+      '@id': `${SITE_URL}#website`,
+      name: 'Prismedia',
+      url: SITE_URL,
+      description: SITE_DESCRIPTION,
+      inLanguage: 'en',
+      about: {'@id': `${SITE_URL}#software`},
+    },
+    {
+      '@type': 'SoftwareApplication',
+      '@id': `${SITE_URL}#software`,
+      name: 'Prismedia',
+      applicationCategory: 'MultimediaApplication',
+      operatingSystem: 'Web, iOS, iPadOS, tvOS',
+      description: SITE_DESCRIPTION,
+      url: SITE_URL,
+      image: new URL(SOCIAL_IMAGE_PATH, SITE_URL).href,
+      softwareRequirements: 'A self-hosted Prismedia server; Docker for server installation',
+      license: `${GITHUB_URL}/blob/main/LICENSE`,
+      isAccessibleForFree: true,
+      sameAs: [GITHUB_URL, APP_STORE_URL, TESTFLIGHT_URL],
+    },
+  ],
 };
 const SECTION_IDS = new Set(['product', 'workflow', 'experiences', 'platforms', 'self-hosting']);
 
@@ -66,8 +80,8 @@ function Hero() {
     <p className={styles.lede}>Find, organize, and enjoy your movies, music, and books.<br />Run Prismedia on your own server, then connect from the web or native Apple apps.</p>
     <div className={styles.actions}>
       <BrandLink href={GITHUB_URL} icon="/img/brands/github.svg" primary>View on GitHub</BrandLink>
-      <BrandLink href={APP_STORE_URL} icon="/img/brands/app-store.svg">Apple TV</BrandLink>
-      <BrandLink href={TESTFLIGHT_URL} icon="/img/brands/testflight.png">TestFlight</BrandLink>
+      <BrandLink href={APP_STORE_URL} icon="/img/brands/app-store.svg" hint="App Store">Apple TV</BrandLink>
+      <BrandLink href={TESTFLIGHT_URL} icon="/img/brands/testflight.png" hint="iPhone & iPad">TestFlight</BrandLink>
       <Link className={`marketing-glass ${styles.secondaryAction}`} to="/docs/getting-started/install">Read the setup guide <ArrowIcon /></Link>
     </div>
     <PlatformShowcase />
@@ -137,7 +151,7 @@ function Acquisition() {
 
 function Platforms() {
   return <section id="platforms" className={`${styles.wrap} ${styles.section}`} aria-labelledby="platforms-title">
-    <div className={styles.sectionHeading}><div><h2 id="platforms-title">One collection.<br />A considered experience on each.</h2></div><p>The responsive web app and native Apple apps connect to your Prismedia server. Each screen has room to work the way it should.</p></div>
+    <div className={styles.sectionHeading}><div><h2 id="platforms-title">One collection.<br />At home on every screen.</h2></div><p>The responsive web app and native Apple apps connect to your Prismedia server. Each screen has room to work the way it should.</p></div>
     <div className={styles.platformGrid}>
       <article><span className={styles.platformLabel}>Web</span><h3>The whole library<br />in your browser.</h3><p>Browse and enjoy your media, manage files, identify titles, and follow background work. The layout adapts from desktop to phone.</p><Link className={styles.textLink} to="/docs/getting-started/install">Set up your server <ArrowIcon /></Link></article>
       <article><span className={styles.platformLabel}>iPhone &amp; iPad</span><h3>Made for touch.<br />Ready for a good book.</h3><p>Native browsing, playback, reading, and listening, with controls shaped for your device.</p><BrandLink href={TESTFLIGHT_URL} icon="/img/brands/testflight.png">TestFlight</BrandLink></article>
@@ -170,7 +184,7 @@ function SelfHosting() {
 }
 
 export default function Home(): ReactNode {
-  return <Layout title={TITLE} description={DESCRIPTION} noFooter>
+  return <Layout title={TITLE} description={SITE_DESCRIPTION} noFooter>
     <script type="application/ld+json" dangerouslySetInnerHTML={{__html: JSON.stringify(PRODUCT_SCHEMA)}} />
     <SectionRoute />
     <div className={styles.page} data-marketing-page>

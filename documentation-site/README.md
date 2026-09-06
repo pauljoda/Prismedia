@@ -60,3 +60,37 @@ light path, and one consistent color per media branch. The hero layers real web,
 and Apple TV views; each screenshot links to the full-resolution image.
 
 Deployment is handled by `.github/workflows/documentation-site.yml`.
+
+## Website identity and search metadata
+
+`site-metadata.ts` owns the production origin, base path, homepage description,
+and social artwork identity. Docusaurus generates canonical URLs, page-specific
+Open Graph titles and descriptions, and `sitemap.xml`. Every documentation page
+should have its own frontmatter description. Do not add global Twitter title or
+description overrides: those replace the page-specific Open Graph fallback when
+a guide is shared.
+
+The shared `site.webmanifest` describes the public website. It uses relative URLs
+for its identity, scope, icons, and shortcuts, so they resolve under the GitHub
+Pages project path. It opens in the browser and does not promise offline access
+or replace the self-hosted Prismedia app. Browser, Apple touch, and maskable icons
+use the actual app artwork; see `static/img/icons/README.md`.
+
+The 1200 × 630 social image is rendered from `branding/social-card.html`. Refresh
+it after changing the homepage direction or product screenshots:
+
+```bash
+node documentation-site/scripts/render-social-card.mjs
+```
+
+As with the browser tests, `PLAYWRIGHT_CHANNEL=chrome` selects installed Chrome.
+The metadata tests verify all sitemap pages, canonical URLs, distinct descriptions,
+the 404 exclusion, icon dimensions, and manifest shortcut destinations.
+
+GitHub Pages hosts this project beneath `/Prismedia/`. Crawlers read `robots.txt`
+from the origin root; the project's copy cannot set rules for the whole host.
+Google also selects its search favicon at the hostname level. A dedicated domain
+would give the project control over those two surfaces. After deploying, submit
+the published sitemap in Search Console and verify the indexed pages there.
+Structured data describes the website and software without invented ratings or
+reviews; it does not guarantee a particular search-result appearance.

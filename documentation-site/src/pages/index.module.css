@@ -86,6 +86,7 @@
 
 .hero .actions {
   justify-content: center;
+  align-items: stretch;
 }
 
 .secondaryAction {
