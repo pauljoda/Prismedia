@@ -10,6 +10,34 @@ namespace Prismedia.Application.Tests.Acquisition;
 /// </summary>
 public sealed class MediaReleaseDecisionEnginesTests {
     [Fact]
+    public void TechnicalSuffixDetailsDoNotMakeAnExactHdFilmOutrankAnExactUhdFilm() {
+        const string recording = "Example.Film.English.HDTS.1080p-Group";
+        const string disc = "Example Film (2024) (2160p UHD BluRay x265 DV HDR DDP 7.1 English - Encoder Group)";
+        var rules = BookAcquisitionRules.Default with { Kind = EntityKind.Movie, TargetTitle = "Example Film", TargetYear = 2024, PreferredLanguages = ["English"] };
+        var result = new MovieReleaseDecisionEngine().Evaluate([
+            (Release(recording, seeders: 10), null, "Indexer"),
+            (Release(disc, seeders: 10), null, "Indexer")], rules);
+        Assert.All(result, candidate => Assert.True(candidate.Accepted));
+        Assert.Equal(disc, result[0].Release.Title);
+    }
+
+    [Theory]
+    [InlineData("Example.Film.2024.1080p.WEB-DL.DDP.5.1-GROUP")]
+    [InlineData("Example Film (2024) (2160p UHD BluRay x265 DV HDR DDP 7.1 English - Encoder Group)")]
+    public void TechnicalSuffixesDoNotChangeWorkTitleRelevance(string title) {
+        var rules = BookAcquisitionRules.Default with { TargetTitle = "Example Film" };
+        Assert.Equal(ReleaseTitleRelevance.Score(Release("Example Film", seeders: 10), rules),
+            ReleaseTitleRelevance.Score(Release(title, seeders: 10), rules));
+    }
+
+    [Fact]
+    public void ExtraWorkWordsBeforeTechnicalMetadataStillReduceTitleRelevance() {
+        var rules = BookAcquisitionRules.Default with { TargetTitle = "Example Film" };
+        Assert.True(ReleaseTitleRelevance.Score(Release("Example Film Returns 2024 1080p WEB-DL", seeders: 10), rules)
+            < ReleaseTitleRelevance.Score(Release("Example Film 2024 1080p WEB-DL", seeders: 10), rules));
+    }
+
+    [Fact]
     public void ExplicitPreferredAudioOutranksAmbiguousMultiEvenAtHigherQuality() {
         var rules = BookAcquisitionRules.Default with { Kind = EntityKind.Movie, PreferredLanguages = ["English", "German"] };
         var titles = new[] { "Movie 2160p BluRay MULTi", "Movie 2160p BluRay", "Movie 720p WEB-DL ENG", "Movie 1080p WEB-DL GER MULTi" };

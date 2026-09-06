@@ -55,13 +55,19 @@ public static partial class ReleaseTitleRelevance {
 
     private static IEnumerable<string> ContentTokens(string title, BookAcquisitionRules rules, IReadOnlySet<string> targetTokens) {
         var releaseGroupTokens = ReleaseTitleText.Tokens(ReleaseGroupDetection.Detect(title)).ToHashSet(StringComparer.Ordinal);
+        var remainingTitleTokens = new HashSet<string>(targetTokens, StringComparer.Ordinal);
         foreach (var token in ReleaseTitleText.Tokens(title)) {
             if (targetTokens.Contains(token)) {
+                remainingTitleTokens.Remove(token);
                 yield return token;
                 continue;
             }
 
-            if (!IsMetadataToken(token, rules, releaseGroupTokens)) {
+            if (IsMetadataToken(token, rules, releaseGroupTokens)) {
+                // Once the whole work title is present, its technical suffix is not extra content.
+                // This also covers channel counts and encoder names without an ever-growing word list.
+                if (remainingTitleTokens.Count == 0) yield break;
+            } else {
                 yield return token;
             }
         }

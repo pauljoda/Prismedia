@@ -7,11 +7,16 @@ namespace Prismedia.Application.Acquisition;
 /// tokens. Pure title truth — no payload probing — mirroring the other release-token detectors.
 /// </summary>
 public static class VideoQualityDetection {
+    // prism-vocab: external — explicit recording-source tags; bare CAM/TS are ambiguous title words.
+    private static readonly string[] RecordingSourceTokens = ["hdcam", "hdts", "hdtc", "camrip", "telesync", "telecine"];
+
     /// <summary>The ladder position a release title declares, or <see cref="VideoQuality.Unknown"/>.</summary>
     public static VideoQuality Detect(string title) {
         var source = DetectSource(title);
         var resolution = DetectResolution(title);
         return (source, resolution) switch {
+            // A recording's encoded dimensions do not establish a broadcast, web, or disc source.
+            (Source.Recording, _) => VideoQuality.Unknown,
             (Source.Bluray or Source.Remux, Resolution.R480) => VideoQuality.Sdtv,
             (Source.Remux, Resolution.R2160) => VideoQuality.Remux2160p,
             (Source.Remux, _) => VideoQuality.Remux1080p,
@@ -38,10 +43,11 @@ public static class VideoQualityDetection {
         };
     }
 
-    private enum Source { None, Dvd, Hdtv, Webrip, Webdl, Bluray, Remux }
+    private enum Source { None, Recording, Dvd, Hdtv, Webrip, Webdl, Bluray, Remux }
     private enum Resolution { None, R480, R720, R1080, R2160 }
 
     private static Source DetectSource(string title) =>
+        ReleaseTitleText.ContainsToken(title, RecordingSourceTokens) ? Source.Recording :
         Has(title, "remux") ? Source.Remux :
         Has(title, "bluray", "blu-ray", "bdrip", "brrip", "bd25", "bd50", "hddvd", "hd-dvd") ? Source.Bluray :
         Has(title, "web-dl", "webdl", "web dl") ? Source.Webdl :

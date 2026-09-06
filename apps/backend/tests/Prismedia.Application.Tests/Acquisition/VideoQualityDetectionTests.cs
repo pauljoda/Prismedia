@@ -5,6 +5,18 @@ namespace Prismedia.Application.Tests.Acquisition;
 
 public sealed class VideoQualityDetectionTests {
     [Theory]
+    [InlineData("Film.2000.1080p.HDTS.English")]
+    [InlineData("Film.2000.2160p.HDCAM.English")]
+    [InlineData("Film.2000.1080p.CAMRip")]
+    [InlineData("Film.2000.1080p.TeleSync")]
+    public void TheaterRecordingsDoNotInheritTheBareResolutionBroadcastQuality(string title) =>
+        Assert.Equal(VideoQuality.Unknown, VideoQualityDetection.Detect(title));
+
+    [Fact]
+    public void AWorkNamedCamStillUsesItsDeclaredSource() =>
+        Assert.Equal(VideoQuality.Webdl1080p, VideoQualityDetection.Detect("Cam.2018.1080p.WEB-DL"));
+
+    [Theory]
     [InlineData("Film.2000.480p.BluRay.x264")]
     [InlineData("Film.2000.576p.BDRip.x264")]
     [InlineData("Film.2000.480p.Remux")]
