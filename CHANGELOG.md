@@ -42,6 +42,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Interrupted TV imports recheck pending episode replacements against current file quality and profile preferences before swapping files, while preserving already completed replacements.
+
 - Imported movies and episodes with missing or stale inspection data now inspect their existing file before resuming automatic upgrade decisions, without creating another download during recovery.
 
 - Upgrade monitoring and the Wanted list now keep searching when a current file probe shows that an older release label overstates the resolution needed by the quality cutoff.

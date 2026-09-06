@@ -31,30 +31,11 @@ internal sealed class TvMeasuredMergePlanner(IMediaUpgradePayloadInspector inspe
             if (item.OwnedFilePath is not { } owned || matchingExisting.Contains(item.SourceRelativePath)) {
                 continue;
             }
-            var inspection = await inspector.InspectAsync(owned,
-                Path.GetFullPath(Path.Combine(payload.ContentRoot, item.SourceRelativePath)), cancellationToken);
-            var (quality, revision) = claims[item.SourceRelativePath];
-            var ownedQuality = VideoQualityDetection.Detect(Path.GetFileNameWithoutExtension(owned));
-            var knownLowerQuality = item.Action == MergeFileAction.DropNotUpgrade && inspection is { } facts
-                && MediaQualityLadder.VideoResolutionTierOf(ownedQuality.ToCode()) == facts.OwnedResolutionTier
-                && MediaQualityLadder.VideoResolutionTierOf(quality.ToCode()) == facts.CandidateResolutionTier;
-            if (HoldReason(inspection, quality, rules, knownLowerQuality) is { } reason) {
-                return new(initial, matchingExisting, reason);
-            }
-            var measured = inspection!;
-            var higherResolution = measured.CandidateResolutionTier > measured.OwnedResolutionTier;
-            // A stale filename must not make an already-1080p copy look like a 720p source upgrade.
-            var comparableSourceClaims = MediaQualityLadder.VideoResolutionTierOf(ownedQuality.ToCode()) == measured.OwnedResolutionTier;
-            var unit = unitsBySource[item.SourceRelativePath];
-            var action = comparableSourceClaims
-                ? TvExistingTargetMerge.DecideAgainstOwned(unit.FileName, owned, (int)quality,
-                    revision, rules.ProperPolicy, allowFormatChange)
-                : MergeFileAction.DropNotUpgrade;
-            if (higherResolution) {
-                action = allowFormatChange || string.Equals(Path.GetExtension(unit.FileName), Path.GetExtension(owned), StringComparison.OrdinalIgnoreCase)
-                    ? MergeFileAction.ReplaceUpgrade : MergeFileAction.DropFormatChange;
-            }
-            decisions[item.SourceRelativePath] = action;
+            var decision = await EvaluateReplacementAsync(unitsBySource[item.SourceRelativePath], owned,
+                Path.GetFullPath(Path.Combine(payload.ContentRoot, item.SourceRelativePath)),
+                claims[item.SourceRelativePath], rules, allowFormatChange, cancellationToken);
+            if (decision.HoldReason is { } reason) return new(initial, matchingExisting, reason);
+            decisions[item.SourceRelativePath] = decision.Action;
         }
         return new(Plan((unit, _) => decisions.GetValueOrDefault(unit.SourceRelativePath, MergeFileAction.DropNotUpgrade)),
             matchingExisting, null);
@@ -62,6 +43,41 @@ internal sealed class TvMeasuredMergePlanner(IMediaUpgradePayloadInspector inspe
         IReadOnlyList<MergedImportItem> Plan(Func<TvPlanUnit, string, MergeFileAction> evaluate) =>
             TvExistingTargetMerge.Plan(units, layout, seasonSegment, 0, 1, rules.ProperPolicy,
                 allowFormatChange, evaluate);
+    }
+
+    /// <summary>Revalidates a pending checkpoint replacement against current bytes and policy; already installed units do not use this gate.</summary>
+    public async Task<string?> ValidateReplacementAsync(TvImportCheckpointUnit checkpointUnit, string ownedPath,
+        string candidatePath, SelectedRelease? selected, BookAcquisitionRules rules, bool allowFormatChange,
+        CancellationToken cancellationToken) {
+        var unit = new TvPlanUnit(checkpointUnit.SourceRelativePath, checkpointUnit.SeasonNumber,
+            checkpointUnit.EpisodeNumber, Path.GetFileName(checkpointUnit.TargetAbsolutePath));
+        var decision = await EvaluateReplacementAsync(unit, ownedPath, candidatePath, Claim(unit, selected),
+            rules, allowFormatChange, cancellationToken);
+        return decision.HoldReason ?? (decision.Action == MergeFileAction.ReplaceUpgrade ? null
+            : "The pending episode replacement no longer proves an upgrade over the current file. Both files were preserved for review.");
+    }
+
+    private async Task<(MergeFileAction Action, string? HoldReason)> EvaluateReplacementAsync(TvPlanUnit unit,
+        string owned, string candidate, (VideoQuality Quality, int Revision) claim, BookAcquisitionRules rules,
+        bool allowFormatChange, CancellationToken cancellationToken) {
+        var (quality, revision) = claim;
+        var initialAction = TvExistingTargetMerge.DecideAgainstOwned(unit.FileName, owned, (int)quality,
+            revision, rules.ProperPolicy, allowFormatChange);
+        var inspection = await inspector.InspectAsync(owned, candidate, cancellationToken);
+        var ownedQuality = VideoQualityDetection.Detect(Path.GetFileNameWithoutExtension(owned));
+        var knownLowerQuality = initialAction == MergeFileAction.DropNotUpgrade && inspection is { } facts
+            && MediaQualityLadder.VideoResolutionTierOf(ownedQuality.ToCode()) == facts.OwnedResolutionTier
+            && MediaQualityLadder.VideoResolutionTierOf(quality.ToCode()) == facts.CandidateResolutionTier;
+        if (HoldReason(inspection, quality, rules, knownLowerQuality) is { } reason) return (initialAction, reason);
+        var measured = inspection!;
+        // A stale filename must not make an already-1080p copy look like a 720p source upgrade.
+        var comparableSourceClaims = MediaQualityLadder.VideoResolutionTierOf(ownedQuality.ToCode()) == measured.OwnedResolutionTier;
+        var action = comparableSourceClaims ? initialAction : MergeFileAction.DropNotUpgrade;
+        if (measured.CandidateResolutionTier > measured.OwnedResolutionTier) {
+            action = allowFormatChange || string.Equals(Path.GetExtension(unit.FileName), Path.GetExtension(owned), StringComparison.OrdinalIgnoreCase)
+                ? MergeFileAction.ReplaceUpgrade : MergeFileAction.DropFormatChange;
+        }
+        return (action, null);
     }
 
     private static (VideoQuality Quality, int Revision) Claim(TvPlanUnit unit, SelectedRelease? selected) {

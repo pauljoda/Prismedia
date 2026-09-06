@@ -1172,6 +1172,50 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         Assert.Equal(AcquisitionStatus.Importing, await StatusOf(db, harness.Import.Id));
     }
 
+    [Theory]
+    [InlineData("unchanged", false)]
+    [InlineData("profile changed", true)]
+    [InlineData("owned upgraded", true)]
+    [InlineData("candidate lower resolution", true)]
+    [InlineData("candidate shortened", true)]
+    [InlineData("inspection failed", true)]
+    [InlineData("no measured gain", true)]
+    public async Task ResumingAPendingReplacementRechecksCurrentMeasuredEvidence(string scenario, bool held) {
+        await using var db = CreateContext();
+        MediaUpgradePayloadInspection? current = new(720, 1080, false, false, 1200, 1200);
+        var inspector = new MeasuredUpgradeInspector(null) { Resolve = (_, _) => current };
+        var harness = await HarnessAsync(db, ownedEpisodeName: "Show - s01e01 720p WEB.mkv",
+            payloadFiles: ["Show.S01E01.1080p.WEB-DL.mkv"], releaseTitle: "Show S01 1080p WEB-DL",
+            payloadContent: "incoming-upgrade", failSameFormatAfterStage: true, upgradeInspector: inspector);
+        var sourceId = (await db.EntityFiles.SingleAsync(row => row.EntityId == harness.OwnedEpisodeId)).Id;
+        await Assert.ThrowsAsync<IOException>(() => harness.Engine.ImportAsync(harness.Context, harness.Import, default));
+        var resume = (await AcquisitionTestFactory.Store(db).GetImportContextAsync(harness.Import.Id, default))!;
+        switch (scenario) {
+            case "profile changed": db.BookAcquisitionProfiles.Add(new BookAcquisitionProfileRow { Id = Guid.NewGuid(),
+                Kind = AcquisitionProfileKinds.For(EntityKind.VideoSeason), DisplayName = "UHD only", IsDefault = true,
+                AllowedQualities = [VideoQuality.Webdl2160p.ToCode()], CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow }); break;
+            case "owned upgraded": current = current with { OwnedResolutionTier = 2160 }; break;
+            case "candidate lower resolution": current = current with { CandidateResolutionTier = 720 }; break;
+            case "candidate shortened": current = current with { CandidateDurationSeconds = 300 }; break;
+            case "inspection failed": current = null; break;
+            case "no measured gain": current = current with { OwnedResolutionTier = 1080 }; break;
+        }
+        await db.SaveChangesAsync();
+
+        await harness.ResumeEngine.ImportAsync(harness.Context, resume, default);
+
+        Assert.Equal(held ? AcquisitionStatus.ManualImportRequired : AcquisitionStatus.Importing, await StatusOf(db, harness.Import.Id));
+        Assert.Equal(held ? "owned-bytes" : "incoming-upgrade", await File.ReadAllTextAsync(harness.OwnedEpisodePath));
+        Assert.Equal(sourceId, (await db.EntityFiles.SingleAsync(row => row.EntityId == harness.OwnedEpisodeId
+            && row.Role == EntityFileRole.Source)).Id);
+        if (held) {
+            Assert.Equal("incoming-upgrade", await File.ReadAllTextAsync(Path.Combine(harness.Import.ContentPath!, "Show.S01E01.1080p.WEB-DL.mkv")));
+            Assert.Null(Assert.Single((await AcquisitionTestFactory.Store(db).GetImportContextAsync(harness.Import.Id, default))!.TvImportCheckpoint!.Units).FinalPath);
+        }
+        Assert.Empty(await db.AcquisitionBlocklist.ToArrayAsync());
+        Assert.Equal(2, inspector.Calls);
+    }
+
     [Fact]
     public async Task SameFormatCheckpointResumeCompletesAStagedReplacementInsteadOfAdoptingOldBytes() {
         await using var db = CreateContext();
