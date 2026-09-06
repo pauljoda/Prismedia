@@ -1,3 +1,4 @@
+using System.Text.Json;
 using System.Globalization;
 using Prismedia.Application.Requests;
 using Prismedia.Application.Plugins;
@@ -319,6 +320,7 @@ public sealed class PluginRequestMetadataSource(
         var proposal = await ResolveExplicitProposalAsync(
             descriptor.PluginEntityKind,
             route,
+            provider.Version,
             hideNsfw,
             includeChildren: true,
             forceRefresh,
@@ -439,6 +441,7 @@ public sealed class PluginRequestMetadataSource(
             var resolved = await ResolveExplicitProposalAsync(
                 childDescriptor.PluginEntityKind,
                 new PluginIdentityRoute(provider.Id, identity),
+                provider.Version,
                 hideNsfw,
                 includeChildren: true,
                 forceRefresh,
@@ -515,15 +518,16 @@ public sealed class PluginRequestMetadataSource(
         bool hideNsfw,
         bool includeChildren,
         CancellationToken cancellationToken) =>
-        await ValidateExplicitRouteAsync(descriptor.PluginEntityKind, route, hideNsfw, cancellationToken) is null
-            ? null
-            : await ResolveExplicitProposalAsync(
+        await ValidateExplicitRouteAsync(descriptor.PluginEntityKind, route, hideNsfw, cancellationToken) is { } provider
+            ? await ResolveExplicitProposalAsync(
                 descriptor.PluginEntityKind,
                 route,
+                provider.Version,
                 hideNsfw,
                 includeChildren,
                 forceRefresh: false,
-                cancellationToken);
+                cancellationToken)
+            : null;
 
     /// <inheritdoc />
     public async Task<EntityMetadataProposal?> ResolveFreshProposalAsync(
@@ -532,15 +536,16 @@ public sealed class PluginRequestMetadataSource(
         bool hideNsfw,
         bool includeChildren,
         CancellationToken cancellationToken) =>
-        await ValidateExplicitRouteAsync(descriptor.PluginEntityKind, route, hideNsfw, cancellationToken) is null
-            ? null
-            : await ResolveExplicitProposalAsync(
+        await ValidateExplicitRouteAsync(descriptor.PluginEntityKind, route, hideNsfw, cancellationToken) is { } provider
+            ? await ResolveExplicitProposalAsync(
                 descriptor.PluginEntityKind,
                 route,
+                provider.Version,
                 hideNsfw,
                 includeChildren,
                 forceRefresh: true,
-                cancellationToken);
+                cancellationToken)
+            : null;
 
     /// <summary>
     /// Routes a persistent identity to every capable LookupId plugin for the given media kind, gating
@@ -553,14 +558,32 @@ public sealed class PluginRequestMetadataSource(
         bool includeChildren,
         bool forceRefresh,
         CancellationToken cancellationToken) {
-        var cacheKey = new ProposalCacheKey(entityKind, PluginId: null, identity, hideNsfw, includeChildren);
+        // Resolve current eligibility before consulting a process-wide cache. Changes to any
+        // eligible route can change the deterministic winner, even when the previous winner remains.
+        var routes = await identityRouter.ResolveAsync(
+            entityKind.ToCode(), IdentifyAction.LookupId, [identity], cancellationToken);
+        var providers = await catalog.ListInstalledProvidersAsync(cancellationToken);
+        var eligible = routes
+            .Select(route => (Route: route, Provider: providers.FirstOrDefault(provider =>
+                provider.Id.Equals(route.PluginId, StringComparison.OrdinalIgnoreCase))))
+            .Where(candidate => candidate.Provider is { Enabled: true, MissingAuthKeys.Count: 0 }
+                && (!hideNsfw || !candidate.Provider.IsNsfw))
+            .ToArray();
+        if (eligible.Length == 0) {
+            return null;
+        }
+
+        var providerVersions = JsonSerializer.Serialize(eligible.Select(candidate => new {
+            Id = candidate.Route.PluginId.ToLowerInvariant(), candidate.Provider!.Version
+        }));
+        var cacheKey = new ProposalCacheKey(entityKind, PluginId: null, identity, hideNsfw, includeChildren, providerVersions);
         if (!forceRefresh
             && ProposalCache.TryGetValue(cacheKey, out var hit)
             && DateTimeOffset.UtcNow - hit.At < ProposalTtl) {
             return hit.Resolved;
         }
 
-        var resolved = await ResolveProposalUncachedAsync(entityKind, identity, hideNsfw, includeChildren, cancellationToken);
+        var resolved = await ResolveProposalUncachedAsync(entityKind, eligible.Select(candidate => candidate.Route).ToArray(), hideNsfw, includeChildren, cancellationToken);
         // Only successful resolutions are cached: a transient provider failure should retry, and a
         // gated/unknown id is cheap to re-answer.
         if (resolved is not null) {
@@ -574,6 +597,7 @@ public sealed class PluginRequestMetadataSource(
     private async Task<EntityMetadataProposal?> ResolveExplicitProposalAsync(
         EntityKind entityKind,
         PluginIdentityRoute route,
+        string providerVersion,
         bool hideNsfw,
         bool includeChildren,
         bool forceRefresh,
@@ -583,7 +607,8 @@ public sealed class PluginRequestMetadataSource(
             route.PluginId.ToLowerInvariant(),
             route.Identity,
             hideNsfw,
-            includeChildren);
+            includeChildren,
+            providerVersion);
         if (!forceRefresh
             && ProposalCache.TryGetValue(cacheKey, out var hit)
             && DateTimeOffset.UtcNow - hit.At < ProposalTtl) {
@@ -635,25 +660,8 @@ public sealed class PluginRequestMetadataSource(
     }
 
     private async Task<RoutedRequestProposal?> ResolveProposalUncachedAsync(
-        EntityKind entityKind, ExternalIdentity identity, bool hideNsfw, bool includeChildren, CancellationToken cancellationToken) {
-        var kindCode = entityKind.ToCode();
-        var routes = await identityRouter.ResolveAsync(
-            kindCode,
-            IdentifyAction.LookupId,
-            [identity],
-            cancellationToken);
-        if (routes.Count == 0) {
-            return null;
-        }
-
-        var providers = await catalog.ListInstalledProvidersAsync(cancellationToken);
+        EntityKind entityKind, IReadOnlyList<PluginIdentityRoute> routes, bool hideNsfw, bool includeChildren, CancellationToken cancellationToken) {
         foreach (var route in routes) {
-            var provider = providers.FirstOrDefault(candidate =>
-                candidate.Id.Equals(route.PluginId, StringComparison.OrdinalIgnoreCase));
-            if (provider is null || (hideNsfw && provider.IsNsfw)) {
-                continue;
-            }
-
             if (await RunRouteAsync(entityKind, route, hideNsfw, includeChildren, cancellationToken) is { } proposal) {
                 return new RoutedRequestProposal(route, proposal);
             }
@@ -910,7 +918,8 @@ public sealed class PluginRequestMetadataSource(
         string? PluginId,
         ExternalIdentity Identity,
         bool HideNsfw,
-        bool IncludeChildren);
+        bool IncludeChildren,
+        string ProviderVersions);
 
     private readonly record struct SelectedSearchProvider(
         PluginProvider Provider,

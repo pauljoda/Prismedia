@@ -299,6 +299,76 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
         Assert.Single(runner.Calls);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CachedProposalRefreshesWhenInstalledPluginVersionChanges(bool explicitRoute) {
+        await using var db = await CreateInstalledPluginAsync("cinema-metadata");
+        var catalog = Catalog(db);
+        var runner = new ProposalFactoryRunner((descriptor, request, _) =>
+            MovieProposal(descriptor.Manifest.Id, Assert.Single(request.Query.ExternalIds!), descriptor.Manifest.Version));
+        var source = new PluginRequestMetadataSource(catalog, new PluginIdentityRouter(catalog), new IdentifyRunnerSelector([runner]));
+        var descriptor = RequestKindRegistry.Find(RequestMediaKind.Movie)!;
+        var identity = new ExternalIdentity("tmdb", $"updated:{Guid.NewGuid():N}");
+        async Task<EntityMetadataProposal?> ResolveAsync() => explicitRoute
+            ? await source.ResolveProposalAsync(descriptor, new PluginIdentityRoute("cinema-metadata", identity), false, true, CancellationToken.None)
+            : (await source.ResolveProposalAsync(descriptor, identity, false, true, CancellationToken.None))?.Proposal;
+
+        Assert.Equal("2.0.0", (await ResolveAsync())!.Patch.Title);
+        var manifestPath = Path.Combine(_tempRoot, "cinema-metadata", "manifest.json");
+        var manifest = await File.ReadAllTextAsync(manifestPath);
+        await File.WriteAllTextAsync(manifestPath, manifest.Replace("\"version\": \"2.0.0\"", "\"version\": \"2.0.1\"", StringComparison.Ordinal));
+
+        Assert.Equal("2.0.1", (await ResolveAsync())!.Patch.Title);
+        Assert.Equal("2.0.1", (await ResolveAsync())!.Patch.Title);
+        Assert.Equal(2, runner.Calls.Count);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task CachedIdentityProposalDoesNotBypassCurrentProviderEligibility(bool missingAuth) {
+        await using var db = await CreateInstalledPluginAsync("cinema-metadata");
+        var catalog = Catalog(db);
+        var runner = new CapturingRunner();
+        var source = new PluginRequestMetadataSource(catalog, new PluginIdentityRouter(catalog), new IdentifyRunnerSelector([runner]));
+        var descriptor = RequestKindRegistry.Find(RequestMediaKind.Movie)!;
+        var identity = new ExternalIdentity("tmdb", $"gated:{Guid.NewGuid():N}");
+        Assert.NotNull(await source.ResolveProposalAsync(descriptor, identity, false, true, CancellationToken.None));
+        if (missingAuth) {
+            var manifestPath = Path.Combine(_tempRoot, "cinema-metadata", "manifest.json");
+            var manifest = await File.ReadAllTextAsync(manifestPath);
+            await File.WriteAllTextAsync(manifestPath, manifest.Replace(
+                "\"auth\": []", "\"auth\": [{ \"key\": \"apiKey\", \"label\": \"API key\", \"required\": true, \"url\": null }]", StringComparison.Ordinal));
+        } else {
+            (await db.ProviderConfigs.SingleAsync()).Enabled = false;
+            await db.SaveChangesAsync();
+        }
+
+        Assert.Null(await source.ResolveProposalAsync(descriptor, identity, false, true, CancellationToken.None));
+        Assert.Single(runner.Calls);
+    }
+
+    [Fact]
+    public async Task CachedIdentityProposalReconsidersNewlyEnabledEarlierRoute() {
+        await using var db = await CreateInstalledPluginAsync("alpha-metadata", "zeta-metadata");
+        var earlier = await db.ProviderConfigs.SingleAsync(row => row.ProviderCode == "alpha-metadata");
+        earlier.Enabled = false;
+        await db.SaveChangesAsync();
+        var catalog = Catalog(db);
+        var runner = new CapturingRunner();
+        var source = new PluginRequestMetadataSource(catalog, new PluginIdentityRouter(catalog), new IdentifyRunnerSelector([runner]));
+        var descriptor = RequestKindRegistry.Find(RequestMediaKind.Movie)!;
+        var identity = new ExternalIdentity("tmdb", $"reroute:{Guid.NewGuid():N}");
+        Assert.Equal("zeta-metadata", (await source.ResolveProposalAsync(descriptor, identity, false, true, CancellationToken.None))!.Route.PluginId);
+
+        earlier.Enabled = true;
+        await db.SaveChangesAsync();
+
+        Assert.Equal("alpha-metadata", (await source.ResolveProposalAsync(descriptor, identity, false, true, CancellationToken.None))!.Route.PluginId);
+        Assert.Equal(2, runner.Calls.Count);
+    }
+
     [Fact]
     public async Task FreshResolutionBypassesAndReplacesTheExplicitProposalCache() {
         await using var db = await CreateInstalledPluginAsync("cinema-metadata");

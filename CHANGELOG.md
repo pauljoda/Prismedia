@@ -38,6 +38,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Metadata reviews refresh cached catalogs after provider updates, and background lookups respect current provider availability before reusing cached results.
+
 - Generic TV episode placeholders no longer suppress provider checks when downloaded filenames contain descriptive episode titles, helping detect mislabeled files from absent seasons without adding lookups for quality-only filenames.
 
 - Monitored TV seasons can restore missing episode links from confidently identified paired files already in the library before requesting another download. Repairs preserve existing files and owners, respect manual mappings and paused monitors, and retry safely if reconciliation cannot be queued. The recorded import destination also supports repairs when older series lack library-location metadata.
