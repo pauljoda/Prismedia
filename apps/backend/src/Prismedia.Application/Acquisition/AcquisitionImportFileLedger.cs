@@ -130,6 +130,24 @@ public sealed record AcquisitionImportFileLedger(
         && file.ContentKind == AcquisitionImportContentKind.Video && file.Status == AcquisitionImportFileStatus.Skipped
         && file.Decision == AcquisitionImportDecision.Ambiguous);
 
+    /// <summary>Captures actual payload lengths before a move makes the original paths unavailable.</summary>
+    public AcquisitionImportFileLedger WithObservedSizes(IReadOnlyList<ImportCandidateFile> payload) {
+        var sizes = payload.ToDictionary(file => Normalize(file.RelativePath), file => file.SizeBytes,
+            FileSystemPathComparison.Comparer);
+        return this with { Files = Files.Select(file => file.SizeBytes > 0 ? file
+            : file with { SizeBytes = sizes.GetValueOrDefault(file.SourceRelativePath) }).ToArray() };
+    }
+
+    /// <summary>Retains earlier placed-file evidence when another pass finishes the same partial download.</summary>
+    public AcquisitionImportFileLedger ContinueFrom(AcquisitionImportFileLedger previous) {
+        var sources = Files.Select(file => file.SourceRelativePath).ToHashSet(FileSystemPathComparison.Comparer);
+        var destinations = Files.Where(file => file.Status is AcquisitionImportFileStatus.PendingImport or AcquisitionImportFileStatus.Imported)
+            .Select(file => file.DestinationRelativePath).OfType<string>().ToHashSet(FileSystemPathComparison.Comparer);
+        return this with { Files = previous.Files.Where(file => file.Status == AcquisitionImportFileStatus.Imported
+            && !sources.Contains(file.SourceRelativePath)
+            && (file.DestinationRelativePath is null || !destinations.Contains(file.DestinationRelativePath))).Concat(Files).ToArray() };
+    }
+
     public AcquisitionImportFileLedger WithDecision(AcquisitionImportDecision decision) => this with {
         Files = Files.Select(file => file with { Decision = decision }).ToArray()
     };

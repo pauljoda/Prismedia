@@ -38,6 +38,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Resuming a partial TV import retains the original filenames and measured sizes of files imported in earlier passes, preserving evidence needed for later mapping recovery.
+
 - TV import and recovery checks load owned episodes across all seasons together, avoiding a separate database read for every season in long-running series.
 
 - Automatic TV recovery can reconsider retained extras after a partial import when improved mapping evidence can fill a library gap, while preserving explicit review choices and newer download attempts.

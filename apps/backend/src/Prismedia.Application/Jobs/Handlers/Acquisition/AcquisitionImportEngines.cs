@@ -1438,7 +1438,19 @@ public sealed class TvAcquisitionImportEngine(
 
         checkpoint = checkpoint with { Units = units };
         var ledger = (checkpoint.ImportFileLedger
-            ?? AcquisitionImportFileLedger.Create(checkpoint, checkpoint.LibraryRootPath!)).RetainUnmappedTvVideos(payload.Files);
+            ?? AcquisitionImportFileLedger.Create(checkpoint, checkpoint.LibraryRootPath!))
+            .RetainUnmappedTvVideos(payload.Files).WithObservedSizes(payload.Files);
+        var previous = await acquisitions.GetTransferInfoAsync(import.Id, cancellationToken);
+        if (previous?.ImportResult is { } previousLedger && previousLedger.HasRetainedTvVideos()
+            && previousLedger.Files.Any(file => file.Status == AcquisitionImportFileStatus.Imported)) {
+            if (string.IsNullOrWhiteSpace(previous.FinalSourcePath)
+                || !FileSystemPathComparison.IsSameOrDescendant(checkpoint.LibraryRootPath!, previous.FinalSourcePath)) {
+                await acquisitions.SetStatusAsync(import.Id, AcquisitionStatus.ManualImportRequired,
+                    "The previous partial import belongs to a different library location. Review its retained files before changing the import root.", cancellationToken);
+                return null;
+            }
+            ledger = ledger.ContinueFrom(previousLedger);
+        }
         checkpoint = checkpoint with {
             ImportFileLedger = ledger,
             DiscardRemainingPayload = checkpoint.DiscardRemainingPayload && !ledger.HasRetainedTvVideos()

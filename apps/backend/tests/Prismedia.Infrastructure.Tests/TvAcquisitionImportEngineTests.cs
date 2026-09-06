@@ -153,23 +153,28 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         Assert.Null((await db.Acquisitions.SingleAsync()).ImportCheckpointJson);
     }
 
-    [Fact]
-    public async Task ExplicitMappingFinishesRetainedPayloadWithoutReplayingTheAlreadyImportedFile() {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExplicitMappingFinishesRetainedPayloadWithoutReplayingTheAlreadyImportedFile(bool paired) {
         await using var db = CreateContext();
+        var originalName = paired ? "Show.S01E02-E03.mkv" : "Show.S01E02.mkv";
+        var finalEpisode = paired ? 4 : 3;
         var harness = await HarnessAsync(db, ownedEpisodeName: "Show - s01e01.mkv",
-            payloadFiles: ["Show.S01E02.mkv", "unidentified.mkv"], releaseTitle: "Show S01", wantedEpisodeNumbers: [2, 3]);
+            payloadFiles: [originalName, "unidentified.mkv"], releaseTitle: "Show S01",
+            wantedEpisodeNumbers: paired ? [2, 3, 4] : [2, 3]);
         var store = AcquisitionTestFactory.Store(db);
         await harness.Engine.ImportAsync(harness.Context, harness.Import, default);
         await store.MarkImportedWithQualityAsync(harness.Import.Id, BookQualityRank.Floor, "Imported", default);
         var originalSource = await db.EntityFiles.AsNoTracking().SingleAsync(row => row.EntityId == harness.WantedEpisodeId
             && row.Role == EntityFileRole.Source);
-        var third = await db.Entities.SingleAsync(row => row.ParentEntityId == harness.SeasonId && row.SortOrder == 3);
+        var third = await db.Entities.SingleAsync(row => row.ParentEntityId == harness.SeasonId && row.SortOrder == finalEpisode);
         var acquisition = await db.Acquisitions.SingleAsync();
         acquisition.Status = AcquisitionStatus.Importing;
         acquisition.ImportClaimJobId = harness.Context.Job.Id;
         await db.SaveChangesAsync();
         var retry = (await store.GetImportContextAsync(harness.Import.Id, default))! with {
-            ManualFileMappings = [new ManualImportFileMapping("unidentified.mkv", third.Id, 1, 3)]
+            ManualFileMappings = [new ManualImportFileMapping("unidentified.mkv", third.Id, 1, finalEpisode)]
         };
 
         await harness.ResumeEngine.ImportAsync(harness.Context, retry, default);
@@ -181,7 +186,14 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         Assert.Equal(originalSource.Id, (await db.EntityFiles.AsNoTracking().SingleAsync(row => row.EntityId == harness.WantedEpisodeId
             && row.Role == EntityFileRole.Source)).Id);
         Assert.False(File.Exists(Path.Combine(harness.Import.ContentPath!, "unidentified.mkv")));
-        Assert.False((await store.GetTransferInfoAsync(harness.Import.Id, default))!.ImportResult!.HasRetainedTvVideos());
+        var completedLedger = (await store.GetTransferInfoAsync(harness.Import.Id, default))!.ImportResult!;
+        Assert.False(completedLedger.HasRetainedTvVideos());
+        Assert.Equal(2, completedLedger.Files.Count);
+        Assert.Contains(completedLedger.Files, file => file.SourceRelativePath == originalName);
+        Assert.All(completedLedger.Files, file => {
+            Assert.Equal(AcquisitionImportFileStatus.Imported, file.Status);
+            Assert.Equal("payload-bytes".Length, file.SizeBytes);
+        });
     }
 
     [Fact]
