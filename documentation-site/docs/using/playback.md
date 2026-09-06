@@ -8,6 +8,9 @@ description: Video, subtitles, image lightbox, comic/EPUB/PDF readers, audio, an
 
 Prismedia plays, reads, and previews media through the same entity-detail model. Controls change by media type, but ratings, metadata, artwork, links, and relationships stay consistent.
 
+For step-by-step tasks, see [read and listen to a book](./read-and-listen.md),
+[native reader settings](./reader-settings.md), and [music playback](./music-player.md).
+
 ## Video playback
 
 ![Video detail](/img/screenshots/video-detail.png)

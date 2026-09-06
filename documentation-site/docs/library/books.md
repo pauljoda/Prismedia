@@ -139,6 +139,10 @@ An audio-only title uses the same one-folder-per-book rule:
 
 Audio parts are ordered naturally by their full paths, so zero-padded names such as `01`, `02`, and `03` give predictable playback order. Do not put multipart files from several books in one folder: every unmatched audio file in a subfolder is grouped by that containing folder.
 
+An M4B file with embedded chapter markers can expose multiple ordered chapter windows from that
+single file. Prismedia keeps the source intact and can align those windows with readable chapters.
+Files without embedded chapters retain the file-based part structure.
+
 When audio and readable files share a folder, the scanner attaches audio to the readable Book using these rules:
 
 1. Prefer an EPUB/PDF with the same filename stem, such as `Dune.epub` and `Dune.m4b`.
@@ -162,3 +166,5 @@ Books open in a focused, full-page reader route:
 Every book remembers where you left off, shows a reading-progress panel (status, percentage, position, Resume / Start Over, read/unread toggle), and a progress bar along its cover in grids. See [Playback & Reading](../using/playback.md#book-and-comic-reader).
 
 Books with an audiobook also show **Listen** or **Resume listening**. Multipart audio plays in filename order and stores listening progress independently from EPUB/PDF reading progress.
+
+For the playback workflow, see [Read and Listen to the Same Book](../using/read-and-listen.md) and [Native Reader Settings](../using/reader-settings.md).

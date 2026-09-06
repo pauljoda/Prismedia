@@ -109,6 +109,30 @@ Prismedia must be able to access both the download and the destination. If the d
 
 The acquisition profile controls the destination naming template and whether import moves, copies, or hardlinks files. Moving changes where the files live; copying uses additional storage; hardlinks require the same filesystem. The destination must be writable for imports. See [Requests](../using/requests.md) for the complete workflow.
 
+### An example with a separate download client
+
+Suppose the download client reports `/downloads/complete/Example Film`, but Prismedia sees that same
+host directory as `/incoming/complete/Example Film`. The paths differ because each container has its
+own mount configuration.
+
+| Setting | Example value |
+| --- | --- |
+| Host download directory | `/srv/downloads` |
+| Download client's mount | `/srv/downloads:/downloads` |
+| Prismedia's mount | `/srv/downloads:/incoming` |
+| Remote path prefix reported by the client | `/downloads` |
+| Local path prefix available to Prismedia | `/incoming` |
+| Finished library destination | `/media/movies` |
+
+Add the corresponding remote path mapping in **Settings → Acquisition**. It translates the prefix,
+so `/downloads/complete/Example Film` becomes `/incoming/complete/Example Film`. Prismedia still needs
+the real mount and permission to read that directory, plus write permission at the library destination.
+
+Do not add `/incoming` as a watched library. The acquisition import places verified media in the
+finished library. If both containers already see the files at the same path, a mapping is unnecessary.
+For hardlinks, the source and destination must be on the same filesystem and visible through a
+compatible mount layout; separate Docker mounts can prevent linking even when host paths look related.
+
 ## Check the first scan
 
 Add one root and check it before adding the rest. Newly added roots start scanning automatically.

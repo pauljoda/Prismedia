@@ -32,11 +32,20 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Validate release metadata
+        run: pnpm release:check
+
       - name: Typecheck documentation site
         run: pnpm --filter @prismedia/documentation-site typecheck
 
       - name: Build documentation site
         run: pnpm --filter @prismedia/documentation-site build
+
+      - name: Install browser for public site checks
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Check public pages and search metadata
+        run: pnpm exec playwright test --config documentation-site/playwright.config.mts
 
       - name: Upload Pages artifact
         if: github.event_name != 'pull_request'

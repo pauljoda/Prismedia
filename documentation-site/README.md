@@ -60,6 +60,8 @@ light path, and one consistent color per media branch. The hero layers real web,
 and Apple TV views; each screenshot links to the full-resolution image.
 
 Deployment is handled by `.github/workflows/documentation-site.yml`.
+The manual publishing workflow validates release metadata, builds the site, and runs the
+browser and search-metadata checks before uploading the Pages artifact.
 
 ## Website identity and search metadata
 
@@ -94,3 +96,16 @@ would give the project control over those two surfaces. After deploying, submit
 the published sitemap in Search Console and verify the indexed pages there.
 Structured data describes the website and software without invented ratings or
 reviews; it does not guarantee a particular search-result appearance.
+
+## Feature documentation and video
+
+Keep each feature demonstration paired with a task guide: requests, reading and listening,
+native reader settings, or music playback. Describe prerequisites, the actual action, and how
+to recognize the result. Distinguish web controls from native controls and saved progress from
+live device handoff. Link guides from both the sidebar and the relevant library documentation.
+
+For a published video, use a stable thumbnail and media URL with descriptive visible text.
+Only add `VideoObject` metadata when the final video is available at those URLs, with its real
+duration and publication date. A video should be the main content of a dedicated watch page
+before targeting video search results; adding markup to an incidental homepage video does not
+make it a watch page. Preserve captions or an equivalent text explanation for silent demos.

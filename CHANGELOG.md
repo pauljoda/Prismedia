@@ -555,6 +555,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Docs
 
+- Public-site publishing now checks canonical URLs, unique page descriptions, icons, manifest destinations, and browser behavior before deployment.
+- Add practical guides for native app connection, reading and listening together, EPUB reader settings, and web/native music players; clarify request permissions and download-to-library path mapping.
+
 - Link the released Apple TV app from the README, describe TestFlight as early-build access, and remove the outdated launch-date notice from the homepage.
 
 - Explain media folder organization with Docker path examples, watched-root settings, and common scan corrections. Update book and comic grouping guidance and replace outdated external request-service instructions with Prismedia acquisition setup.

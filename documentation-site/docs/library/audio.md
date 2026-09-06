@@ -73,3 +73,5 @@ Track metadata — title, artist, album, track and disc numbers, and embedded co
 ## Playback
 
 Audio plays through a persistent player bar that keeps playing as you browse, with a queue and "Up Next" list, shuffle, waveform scrubbing, OS media-control integration, and resume/play-count tracking. See [Playback & Reading](../using/playback.md#audio-playback).
+
+For player controls and queues, see [Play Music on Web and Native](../using/music-player.md).

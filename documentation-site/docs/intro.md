@@ -40,6 +40,14 @@ It ships as one Docker image. PostgreSQL 16, ffmpeg, the .NET API, the .NET work
 
 The sidebar is yours to rearrange — rename, reorder, group, hide, and collapse sections — and your layout is saved on the server and follows you across devices. See [Navigation & Mobile Gestures](./using/navigation.md).
 
+## Start with a task
+
+- [Install the server](./getting-started/install.md) and [organize your folders](./getting-started/organize-folders.md).
+- [Connect the native app](./using/native-apps.md) to the same library.
+- [Request a title](./using/requests.md) using your metadata sources, indexers, and download clients.
+- [Read and listen to a book](./using/read-and-listen.md), or [adjust the native reader](./using/reader-settings.md).
+- [Play music and manage the queue](./using/music-player.md) on web and native.
+
 ## Design direction
 
 Prismedia's visual system turns its name into the interface: a neutral, dark app shell separates into spectrum identities for each media family, real artwork colors detail-page atmosphere, and frosted glass is reserved for floating chrome and controls.

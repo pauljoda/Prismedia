@@ -21,6 +21,10 @@ const sidebars: SidebarsConfig = {
       items: [
         'using/browsing',
         'using/playback',
+        'using/native-apps',
+        'using/read-and-listen',
+        'using/reader-settings',
+        'using/music-player',
         'using/navigation',
         'using/identify',
         'using/requests',
