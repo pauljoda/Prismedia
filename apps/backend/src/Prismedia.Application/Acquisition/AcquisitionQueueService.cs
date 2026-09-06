@@ -601,7 +601,7 @@ public sealed class AcquisitionQueueService(
                 ApiProblemCodes.AcquisitionInvalid,
                 ImportCheckpointLifecycle.CorruptCheckpointMessage);
         }
-        if (import?.HasInstalledUpgradeReceipt == true) {
+        if (import?.HasInstalledUpgradeReceipt == true || import?.AtomicUpgradeCheckpoint is not null) {
             throw new AcquisitionConfigurationException(
                 ApiProblemCodes.AcquisitionInvalid,
                 ImportCheckpointLifecycle.CheckpointMustFinishMessage);
@@ -658,6 +658,7 @@ public sealed class AcquisitionQueueService(
         }
 
         var cleared = import.CheckpointProtocol switch {
+            AcquisitionCheckpointProtocol.AtomicUpgrade => false,
             AcquisitionCheckpointProtocol.Television when import.TelevisionCheckpoint is { } checkpoint =>
                 await acquisitions.TryClearTvImportCheckpointAsync(
                     acquisitionId,

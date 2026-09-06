@@ -1,8 +1,8 @@
 namespace Prismedia.Domain.Entities;
 
 /// <summary>
-/// Durable checkpoint shape an acquisition profile uses to resume or safely abandon an interrupted import.
-/// The profile definition selects this independently from its release naming/rendering behavior.
+/// Durable checkpoint shape used to resume or safely abandon an interrupted import or replacement.
+/// Profile definitions select normal placement shapes; atomic replacements elect preparation separately.
 /// </summary>
 public enum AcquisitionCheckpointProtocol {
     /// <summary>Kind-neutral exact file-placement plan used by books, movies, and music.</summary>
@@ -11,5 +11,9 @@ public enum AcquisitionCheckpointProtocol {
 
     /// <summary>Episode-aware plan used by television imports.</summary>
     [Code("television")]
-    Television
+    Television,
+
+    /// <summary>Preparation for replacing an owned file, committed before any filesystem mutation.</summary>
+    [Code("atomic-upgrade")]
+    AtomicUpgrade
 }

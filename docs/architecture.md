@@ -192,6 +192,18 @@ an exact placement plan before touching disk and checkpoint each unit so a
 worker restart resumes the same move, copy, or hardlink instead of inventing a
 second target.
 
+Atomic book, movie, and individual-episode upgrades use the same acquisition
+checkpoint slot with an explicit replacement protocol. One Entity lifecycle
+transaction commits the exact Source id, release, transfer, and file preparation
+before any staging. A second lifecycle transaction revalidates that ownership,
+applies current profile checks, and records the installed path, owned quality,
+history, and reconciliation together. Attempt-specific incoming evidence and the
+original backup survive a rollback of this second transaction. Recovery verifies
+the saved bytes before recognizing an installation or returning a staged file
+for inspection; ambiguous artifacts remain available for review. Successful
+installation releases incoming evidence after commit, while required readiness
+and failed-download handlers own transfer cleanup.
+
 Book, movie, music, and TV policies and import engines register independently.
 Adding a new media kind extends those registries rather than adding conditionals
 to the acquisition service. Metadata plugins remain responsible for upstream

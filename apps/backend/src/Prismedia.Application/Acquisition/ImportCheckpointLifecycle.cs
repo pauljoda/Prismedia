@@ -22,6 +22,7 @@ public static class ImportCheckpointLifecycle {
         import.EnsureCheckpointApplicability();
         if (import.HasInstalledUpgradeReceipt) return false;
         return import.CheckpointProtocol switch {
+            AcquisitionCheckpointProtocol.AtomicUpgrade => false,
             AcquisitionCheckpointProtocol.Placement =>
                 import.PlacementCheckpoint is not { } checkpoint || CanAbandon(checkpoint),
             AcquisitionCheckpointProtocol.Television =>
@@ -43,6 +44,8 @@ public static class ImportCheckpointLifecycle {
         import.EnsureCheckpointApplicability();
         if (import.HasInstalledUpgradeReceipt) return false;
         switch (import.CheckpointProtocol) {
+            case AcquisitionCheckpointProtocol.AtomicUpgrade:
+                return false;
             case AcquisitionCheckpointProtocol.Placement:
                 if (import.PlacementCheckpoint is not { } checkpoint) {
                     return true;

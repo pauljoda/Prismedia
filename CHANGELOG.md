@@ -42,6 +42,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Interrupted book, movie, and episode upgrades now recover from preparation saved before file replacement, preserving the original file and stable library ownership even when the database commit fails. Staging retains verifiable recovery evidence, and rejected downloads wait for durable failure handling before cleanup.
+
 - Picking another release now preserves an installed upgrade's recovery state until its remaining media processing finishes.
 
 - Upgrades whose files were installed successfully can now retry interrupted media processing without replacing or downloading the file again, while changed ownership remains held for review.

@@ -490,7 +490,14 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             && importResult is not null) {
             string? payloadRoot = null;
             string? libraryRoot = null;
-            switch (AcquisitionProfileKinds.CheckpointProtocolFor(row.Kind)) {
+            switch (AtomicUpgradeCheckpointJson.IsAtomic(row.ImportCheckpointJson)
+                ? AcquisitionCheckpointProtocol.AtomicUpgrade : AcquisitionProfileKinds.CheckpointProtocolFor(row.Kind)) {
+                case AcquisitionCheckpointProtocol.AtomicUpgrade: {
+                    var checkpoint = AtomicUpgradeCheckpointJson.Deserialize(row.ImportCheckpointJson!);
+                    payloadRoot = checkpoint.TransferContentPath;
+                    libraryRoot = Path.GetDirectoryName(checkpoint.Files.OwnedPath);
+                    break;
+                }
                 case AcquisitionCheckpointProtocol.Television: {
                     var checkpoint = TvImportCheckpointJson.Deserialize(row.ImportCheckpointJson);
                     if (checkpoint is not null) {
@@ -1385,7 +1392,10 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             .FirstOrDefaultAsync(cancellationToken);
 
         var externalIdentity = ToExternalIdentity(row.IdentityNamespace, row.IdentityValue);
-        var checkpointProtocol = AcquisitionProfileKinds.CheckpointProtocolFor(row.Kind);
+        var atomicUpgradeCheckpoint = AtomicUpgradeCheckpointJson.IsAtomic(row.ImportCheckpointJson)
+            ? AtomicUpgradeCheckpointJson.Deserialize(row.ImportCheckpointJson!) : null;
+        var checkpointProtocol = atomicUpgradeCheckpoint is not null
+            ? AcquisitionCheckpointProtocol.AtomicUpgrade : AcquisitionProfileKinds.CheckpointProtocolFor(row.Kind);
         var tvImportCheckpoint = checkpointProtocol == AcquisitionCheckpointProtocol.Television
             ? TvImportCheckpointJson.Deserialize(row.ImportCheckpointJson)
             : null;
@@ -1405,7 +1415,8 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             positions.Episode ?? row.EpisodeNumber, row.EntityId, row.FinalSourcePath,
             tvImportCheckpoint, importPlacementCheckpoint, row.BookRendition, row.UpgradeOfAcquisitionId,
             positions.Volume ?? row.VolumeNumber) {
-            AlternativeWorkTitles = work.Titles
+            AlternativeWorkTitles = work.Titles,
+            AtomicUpgradeCheckpoint = atomicUpgradeCheckpoint
         };
         context.EnsureCheckpointApplicability();
         return context;

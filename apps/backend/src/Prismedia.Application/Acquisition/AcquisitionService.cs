@@ -339,7 +339,7 @@ public sealed partial class AcquisitionService(
             return new AcquisitionRemovalEligibility(false, ImportCheckpointLifecycle.CorruptCheckpointMessage);
         }
 
-        if (import is not ({ TvImportCheckpoint: not null } or { ImportPlacementCheckpoint: not null })
+        if (import is not { HasImportRecoveryState: true }
             || await ImportCheckpointLifecycle.CanAbandonAsync(import, cancellationToken, scanGate)) {
             return new AcquisitionRemovalEligibility(true);
         }
@@ -864,7 +864,7 @@ public sealed partial class AcquisitionService(
             return;
         }
 
-        if (import is not ({ TvImportCheckpoint: not null } or { ImportPlacementCheckpoint: not null })) {
+        if (import is not { HasImportRecoveryState: true }) {
             return;
         }
 
@@ -990,7 +990,7 @@ public sealed partial class AcquisitionService(
             return new AcquisitionReacquireEligibility(false, ImportCheckpointLifecycle.CorruptCheckpointMessage);
         }
 
-        if (import is not ({ TvImportCheckpoint: not null } or { ImportPlacementCheckpoint: not null })
+        if (import is not { HasImportRecoveryState: true }
             || await ImportCheckpointLifecycle.CanAbandonAsync(
                 import,
                 cancellationToken,
@@ -1123,7 +1123,7 @@ public sealed partial class AcquisitionService(
                 ImportCheckpointLifecycle.CorruptCheckpointMessage);
         }
 
-        if (import is { TvImportCheckpoint: not null } or { ImportPlacementCheckpoint: not null }
+        if (import is { HasImportRecoveryState: true }
             && !await ImportCheckpointLifecycle.TryAbandonAsync(
                 store,
                 import,

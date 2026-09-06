@@ -24,6 +24,9 @@ public sealed class AcquisitionImportResetCleanup(
 
         import.EnsureCheckpointApplicability();
         var catalogChanges = import.CheckpointProtocol switch {
+            // Atomic replacements own an existing Source: generic placement teardown must never delete it.
+            // Explicit removal retains adjacent original/incoming recovery artifacts for manual review.
+            AcquisitionCheckpointProtocol.AtomicUpgrade => EmptyCatalogChanges(),
             AcquisitionCheckpointProtocol.Placement => import.PlacementCheckpoint is { } placement
                 ? CleanupPlacementFiles(placement, cancellationToken)
                 : EmptyCatalogChanges(),

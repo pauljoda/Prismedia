@@ -1060,6 +1060,68 @@ public sealed class AcquisitionServiceTests {
         Assert.Equal(AcquisitionStatus.Failed, harness.Store.Status);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PreparedAtomicReplacementCannotBeOverriddenOrCleanedByAnotherRelease(bool manualPick) {
+        var harness = Harness(new AcquisitionTransferInfo(AcquisitionStatus.Failed, null, ClientItemId, RecordedClientId));
+        PrepareQueueCandidate(harness.Store);
+        var parentId = Guid.NewGuid();
+        var checkpoint = new AtomicUpgradeCheckpoint(Guid.NewGuid(), Guid.NewGuid(), parentId, Guid.NewGuid(), Guid.NewGuid(),
+            EntityKind.Book, new("/library/Dune.epub", "/downloads/Dune.epub", new(10, DateTime.UtcNow),
+                new(20, DateTime.UtcNow), BookFormatTier.Reflowable), "/downloads/Dune.epub", ClientItemId,
+            new("Dune (retail) (epub)", null, null));
+        harness.Store.ImportContext = PartialBookImportContext() with {
+            ImportPlacementCheckpoint = null, UpgradeOfAcquisitionId = parentId, AtomicUpgradeCheckpoint = checkpoint
+        };
+        harness.Store.HasResumableImport = true;
+        Assert.False(await ImportCheckpointLifecycle.CanAbandonAsync(harness.Store.ImportContext, default));
+
+        var exception = await Assert.ThrowsAsync<AcquisitionConfigurationException>(() =>
+            QueueService(harness, new RecordingTransferAddCoordinator()).QueueAsync(
+                AcquisitionId, CandidateId, CancellationToken.None, manualPick: manualPick));
+
+        Assert.Contains("partially applied import", exception.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Empty(harness.ImportCleanup.Cleaned);
+        Assert.Empty(harness.Downloads.Removals);
+        Assert.Equal(0, harness.Downloads.AddCount);
+        Assert.Equal(AcquisitionStatus.Failed, harness.Store.Status);
+    }
+
+    [Theory]
+    [InlineData(false, "cancel")]
+    [InlineData(true, "cancel")]
+    [InlineData(false, "search")]
+    [InlineData(true, "search")]
+    [InlineData(false, "remove")]
+    [InlineData(true, "remove")]
+    public async Task AtomicRecoveryCannotBeDiscardedByOrdinaryAcquisitionActions(bool installed, string action) {
+        var harness = Harness(TransferInfo(RecordedClientId, AcquisitionStatus.Failed));
+        var parent = Guid.NewGuid();
+        harness.Store.ImportContext = PartialBookImportContext() with {
+            ImportPlacementCheckpoint = null,
+            UpgradeOfAcquisitionId = parent,
+            FinalSourcePath = installed ? "/library/Dune.epub" : null,
+            AtomicUpgradeCheckpoint = installed ? null : new(Guid.NewGuid(), Guid.NewGuid(), parent, Guid.NewGuid(), Guid.NewGuid(),
+                EntityKind.Book, new("/library/Dune.epub", "/downloads/Dune.epub", new(10, DateTime.UtcNow),
+                    new(20, DateTime.UtcNow), BookFormatTier.Reflowable), "/downloads/Dune.epub", ClientItemId,
+                new("Dune (retail) (epub)", null, null))
+        };
+        if (action == "remove") {
+            var eligibility = await harness.Service.GetRemovalEligibilityAsync(AcquisitionId, default);
+            Assert.False(eligibility.CanRemove);
+            Assert.Contains("partially applied import", eligibility.Message, StringComparison.OrdinalIgnoreCase);
+        } else {
+            var error = await Assert.ThrowsAsync<AcquisitionConfigurationException>(() => action == "cancel"
+                ? harness.Service.CancelAsync(AcquisitionId, default) : harness.Service.ReSearchAsync(AcquisitionId, default));
+            Assert.Contains("partially applied import", error.Message, StringComparison.OrdinalIgnoreCase);
+        }
+        Assert.Empty(harness.Store.StatusChanges);
+        Assert.Empty(harness.Downloads.Removals);
+        Assert.Empty(harness.Queue.Requests);
+        Assert.False(harness.Store.Deleted);
+    }
+
     [Fact]
     public async Task ManualReleasePickDiscardsPartialImportBeforeQueueingTheOverride() {
         var harness = Harness(new AcquisitionTransferInfo(

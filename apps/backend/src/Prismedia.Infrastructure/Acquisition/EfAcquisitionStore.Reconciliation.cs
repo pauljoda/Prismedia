@@ -75,6 +75,7 @@ public sealed partial class EfAcquisitionStore {
                 && candidate.VolumeNumber == imported.VolumeNumber
                 && candidate.IdentityNamespace == imported.IdentityNamespace
                 && candidate.IdentityValue == imported.IdentityValue
+                && candidate.ImportCheckpointJson == null
                 && OrphanRetirableStatuses.Contains(candidate.Status))
             .ToArrayAsync(cancellationToken);
         if (superseded.Length == 0) {
@@ -124,6 +125,7 @@ public sealed partial class EfAcquisitionStore {
                 && candidate.EntityId != null
                 && subtreeIds.Contains(candidate.EntityId.Value)
                 && candidate.UpgradeOfAcquisitionId == null
+                && candidate.ImportCheckpointJson == null
                 && OrphanRetirableStatuses.Contains(candidate.Status))
             .ToArrayAsync(cancellationToken);
         if (candidates.Length == 0) {

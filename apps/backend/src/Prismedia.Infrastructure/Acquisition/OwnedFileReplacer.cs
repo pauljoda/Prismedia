@@ -144,13 +144,22 @@ public sealed class OwnedFileReplacer(
             // replace the owned file in a single rename. Ordering it this way means the owned path is never
             // momentarily empty — a concurrent scan always sees either the old or the new file, never neither.
             cancellationToken.ThrowIfCancellationRequested();
-            File.Move(incoming, staged);
-            stagedIncoming = true;
             if (retainBackup && evidence is not null) {
+                // Publish incoming evidence before consuming the transfer file. Linking the evidence
+                // into staging also avoids a second cross-device copy when download/library differ.
+                // A crash during handoff leaves either the original input or a provable staged copy.
                 TryDelete(evidence);
-                if (!HardLink.TryCreate(staged, evidence)) {
-                    File.Copy(staged, evidence, overwrite: false);
+                if (!HardLink.TryCreate(incoming, evidence)) {
+                    File.Copy(incoming, evidence, overwrite: false);
                 }
+                if (!HardLink.TryCreate(evidence, staged)) {
+                    File.Copy(evidence, staged, overwrite: false);
+                }
+                stagedIncoming = true;
+                File.Delete(incoming);
+            } else {
+                File.Move(incoming, staged);
+                stagedIncoming = true;
             }
             File.Copy(owned, backup, overwrite: true); // keep the previous file as a recoverable backup
         } catch (Exception ex) {

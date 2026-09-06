@@ -4,7 +4,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Prismedia.Application.Acquisition;
 using Prismedia.Application.Jobs;
 using Prismedia.Application.Jobs.Handlers;
-using Prismedia.Contracts.Acquisition;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Acquisition;
 using Prismedia.Infrastructure.Persistence;
@@ -18,6 +17,143 @@ namespace Prismedia.Infrastructure.Tests;
 /// (e.g. no longer an upgrade, or the replacer refused) leaves the owned book untouched and counts barren.
 /// </summary>
 public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
+    [Fact]
+    public async Task DurableAtomicClaimRejectsCompetingJobsAndChangedSourceOrTransferIdentity() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var (parentId, childId, _) = await SeedAsync(db, "Some Book (retail) (epub)");
+        var parent = (await db.Acquisitions.FindAsync(parentId))!;
+        var path = "/library/Some Book/Book.epub";
+        var source = new EntityFileRow { Id = Guid.NewGuid(), EntityId = parent.EntityId!.Value,
+            Role = EntityFileRole.Source, Path = path, Source = FileSourceKind.Scan.ToCode() };
+        db.EntityFiles.Add(source);
+        await db.SaveChangesAsync();
+        var store = new EfAtomicUpgradeCheckpointStore(db);
+        var files = new AtomicUpgradeFilePlan(path, "/downloads/Some Book/Book.epub",
+            new(10, DateTime.UtcNow), new(20, DateTime.UtcNow), BookFormatTier.Reflowable);
+        var selected = (await AcquisitionTestFactory.Store(db).GetSelectedReleaseAsync(childId, default))!;
+        var preparation = new AtomicUpgradePreparation(parentId, source.EntityId, EntityKind.Book, files,
+            "/downloads/Some Book", "hash", selected);
+        var firstJob = Guid.NewGuid();
+        AtomicUpgradeCheckpoint checkpoint;
+        await using (var transaction = await db.Database.BeginTransactionAsync()) {
+            checkpoint = Assert.IsType<AtomicUpgradeCheckpoint>(await store.TryPrepareAsync(childId, firstJob, preparation, default));
+            await transaction.CommitAsync();
+        }
+        await using var retryTransaction = await db.Database.BeginTransactionAsync();
+        Assert.Equal(checkpoint, await store.GetAsync(childId, default)); // PostgreSQL jsonb normalizes whitespace/order.
+        Assert.True(await store.IsCurrentAsync(childId, checkpoint, default));
+        Assert.False(await store.TryClaimAsync(childId, checkpoint, Guid.NewGuid(), default));
+        Assert.Null(await store.TryPrepareAsync(childId, firstJob, preparation, default));
+
+        var acquisitionStore = AcquisitionTestFactory.Store(db);
+        await acquisitionStore.SetStatusAsync(childId, AcquisitionStatus.Failed, "Interrupted", default);
+        await acquisitionStore.TryTransitionStatusAsync(childId, [AcquisitionStatus.Failed], AcquisitionStatus.Downloaded, "Retry", default);
+        var retryJob = Guid.NewGuid();
+        Assert.True(await store.TryClaimAsync(childId, checkpoint, retryJob, default));
+        Assert.False(await store.IsCurrentAsync(childId, checkpoint, default));
+        checkpoint = checkpoint with { ClaimJobId = retryJob };
+        Assert.True(await store.IsCurrentAsync(childId, checkpoint, default));
+
+        source.Path = "/library/Another Book.epub";
+        await db.SaveChangesAsync();
+        Assert.False(await store.IsCurrentAsync(childId, checkpoint, default));
+        source.Path = path;
+        var otherEntity = new EntityRow { Id = Guid.NewGuid(), KindCode = EntityKind.Book.ToCode(), Title = "Another owner",
+            CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow };
+        db.Entities.Add(otherEntity);
+        await db.SaveChangesAsync();
+        var duplicate = new EntityFileRow { Id = Guid.NewGuid(), EntityId = otherEntity.Id,
+            Role = EntityFileRole.Source, Path = path, Source = FileSourceKind.Scan.ToCode() };
+        db.EntityFiles.Add(duplicate);
+        await db.SaveChangesAsync();
+        Assert.False(await store.IsCurrentAsync(childId, checkpoint, default));
+        db.EntityFiles.Remove(duplicate);
+        var transfer = await db.DownloadTransfers.SingleAsync(row => row.AcquisitionId == childId);
+        transfer.ClientItemId = "new-transfer";
+        await db.SaveChangesAsync();
+        Assert.False(await store.IsCurrentAsync(childId, checkpoint, default));
+        transfer.ClientItemId = "hash";
+        var child = (await db.Acquisitions.FindAsync(childId))!;
+        child.SelectedReleaseJson = JsonSerializer.Serialize(selected with { Title = "Different release" });
+        await db.SaveChangesAsync();
+        Assert.False(await store.IsCurrentAsync(childId, checkpoint, default));
+        child.SelectedReleaseJson = JsonSerializer.Serialize(selected);
+        await db.SaveChangesAsync();
+        Assert.True(await store.IsCurrentAsync(childId, checkpoint, default));
+        Assert.False(await store.TryClearAsync(childId, checkpoint with { ClaimJobId = firstJob }, default));
+        Assert.True(await store.TryClearAsync(childId, checkpoint, default));
+        Assert.Null(await store.GetAsync(childId, default));
+    }
+
+    [Theory]
+    [InlineData(EntityKind.Book)]
+    [InlineData(EntityKind.Movie)]
+    [InlineData(EntityKind.VideoEpisode)]
+    public async Task InterruptedAtomicSwapResumesFromPreparationCommittedBeforeFileMutation(EntityKind kind) {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var folder = Directory.CreateTempSubdirectory("prismedia-upgrade-commit-").FullName;
+        try {
+            var fileName = kind == EntityKind.Book ? "book.epub" : "video.mkv";
+            var owned = Path.Combine(folder, fileName);
+            var incoming = Path.Combine(Directory.CreateDirectory(Path.Combine(folder, "download")).FullName, fileName);
+            await File.WriteAllTextAsync(owned, "original-owned-book");
+            await File.WriteAllTextAsync(incoming, "downloaded-upgrade-book");
+            Guid parentId, childId, sourceId;
+            await using (var db = database.CreateContext()) {
+                (parentId, childId, _) = kind == EntityKind.Book ? await SeedAsync(db, "Some Book (retail) (epub)")
+                    : await SeedMediaAsync(db, kind, VideoQuality.Webdl720p.ToCode(), "Movie 2020 1080p WEB-DL");
+                var parent = (await db.Acquisitions.FindAsync(parentId))!;
+                parent.FinalSourcePath = owned;
+                (await db.DownloadTransfers.SingleAsync(row => row.AcquisitionId == childId)).ContentPath = Path.GetDirectoryName(incoming);
+                sourceId = Guid.NewGuid();
+                db.EntityFiles.Add(new EntityFileRow { Id = sourceId, EntityId = parent.EntityId!.Value,
+                    Role = EntityFileRole.Source, Path = owned, Source = FileSourceKind.Scan.ToCode() });
+                await db.SaveChangesAsync();
+                var queue = new RecordingJobQueue {
+                    BeforeEnqueue = () => throw new IOException("Interrupted after the filesystem swap, before the lifecycle commit")
+                };
+                var interruption = await Record.ExceptionAsync(() => RunAsync(db, queue,
+                    new OwnedFileReplacer(new MergedImportTestSupport.NoRecycleBin(), NullLogger<OwnedFileReplacer>.Instance), childId,
+                    new FakeMediaUpgradePayloadInspector(new(720, 1080, false, false, 1200, 1200))));
+                Assert.True(interruption is IOException, interruption?.ToString() ?? (await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == childId)).StatusMessage);
+            }
+            Assert.Equal("downloaded-upgrade-book", await File.ReadAllTextAsync(owned));
+            Assert.Equal("original-owned-book", await File.ReadAllTextAsync(Assert.Single(Directory.GetFiles(folder, "*.prismedia-bak-*"))));
+            Assert.False(File.Exists(incoming));
+            await using (var db = database.CreateContext()) {
+                var parent = (await db.Acquisitions.FindAsync(parentId))!;
+                var child = (await db.Acquisitions.FindAsync(childId))!;
+                if (kind == EntityKind.Book) Assert.Equal(BookSourceTier.Web, parent.OwnedSourceTier);
+                else Assert.Equal(VideoQuality.Webdl720p.ToCode(), parent.OwnedMediaQuality);
+                Assert.Null(child.FinalSourcePath);
+                // Preparation must survive the later transaction rollback; an installation receipt
+                // written only after the filesystem mutation cannot recover this interruption.
+                Assert.NotNull(child.ImportCheckpointJson);
+                var store = AcquisitionTestFactory.Store(db);
+                var import = await store.GetImportContextAsync(childId, default);
+                Assert.Equal(sourceId, import!.AtomicUpgradeCheckpoint!.SourceFileId);
+                Assert.Equal(AcquisitionCheckpointProtocol.AtomicUpgrade, import.CheckpointProtocol);
+                Assert.True((await store.GetAsync(childId, default))!.Summary.HasResumableImport);
+                await store.SetStatusAsync(childId, AcquisitionStatus.Failed, "Interrupted replacement", default);
+                Assert.True(await store.TryTransitionStatusAsync(childId, [AcquisitionStatus.Failed], AcquisitionStatus.Downloaded, "Retry", default));
+                var queue = new RecordingJobQueue();
+                await RunAsync(db, queue,
+                    new OwnedFileReplacer(new MergedImportTestSupport.NoRecycleBin(), NullLogger<OwnedFileReplacer>.Instance), childId,
+                    new FakeMediaUpgradePayloadInspector(new(720, 1080, false, false, 1200, 1200)));
+                if (kind == EntityKind.Book) Assert.Equal(BookSourceTier.Retail, (await db.Acquisitions.FindAsync(parentId))!.OwnedSourceTier);
+                else Assert.Equal(VideoQuality.Webdl1080p.ToCode(), (await db.Acquisitions.FindAsync(parentId))!.OwnedMediaQuality);
+                Assert.Equal(owned, (await db.Acquisitions.FindAsync(childId))!.FinalSourcePath);
+                Assert.Null((await db.Acquisitions.FindAsync(childId))!.ImportCheckpointJson);
+                Assert.Empty(Directory.GetFiles(folder, "*.prismedia-incoming-*"));
+                Assert.Equal(owned, (await db.EntityFiles.FindAsync(sourceId))!.Path);
+                Assert.Single(queue.Enqueued, request => request.Type == JobType.ReconcileEntity);
+                Assert.Single(await db.AcquisitionHistory.Where(row => row.Event == AcquisitionHistoryEvent.Upgraded).ToArrayAsync());
+                Assert.Equal("downloaded-upgrade-book", await File.ReadAllTextAsync(owned));
+            }
+        } finally { Directory.Delete(folder, true); }
+    }
+
     [Theory]
     [InlineData(EntityKind.Book, false, false)]
     [InlineData(EntityKind.Book, true, false)]
@@ -188,25 +324,19 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
         var (_, childId, _) = book ? await SeedAsync(db, "Some Book (retail) (epub)")
             : await SeedMediaAsync(db, EntityKind.Movie, VideoQuality.Webdl720p.ToCode(), "Movie 2020 1080p WEB-DL");
         var transfer = await db.DownloadTransfers.SingleAsync(row => row.AcquisitionId == childId);
-        var client = new RecordingDownloadClient();
-        var detail = new DownloadClientDetail(transfer.DownloadClientConfigId!.Value, DownloadClientKind.QBittorrent,
-            "Downloads", "http://download-client", null, "prismedia", true, false, null);
         var queue = new RecordingJobQueue();
         var replacer = new FakeReplacer(OwnedFileReplaceResult.Ok(book ? "/library/Book.epub" : "/library/Movie.mkv",
             book ? BookFormatTier.Reflowable : BookFormatTier.Unknown));
 
-        await RunAsync(db, queue, replacer, childId, new FakeMediaUpgradePayloadInspector(new(720, 1080, false, false, 7200, 7200)),
-            new SingleDownloadClientConfigStore(detail), new SingleDownloadClientFactory(client));
+        await RunAsync(db, queue, replacer, childId, new FakeMediaUpgradePayloadInspector(new(720, 1080, false, false, 7200, 7200)));
 
         Assert.True(replacer.Called);
-        Assert.Null(client.RemovedClientItemId);
         Assert.True(await db.DownloadTransfers.AnyAsync(row => row.Id == transfer.Id));
         Assert.Empty(await db.DetachedDownloadCleanups.ToArrayAsync());
         Assert.Equal(AcquisitionStatus.Importing, (await db.Acquisitions.FindAsync(childId))!.Status);
         await FinalizeAsync(db, queue);
         Assert.False(await db.DownloadTransfers.AnyAsync(row => row.Id == transfer.Id));
         Assert.Equal(transfer.Id, Assert.Single(await db.DetachedDownloadCleanups.ToArrayAsync()).Id);
-        Assert.Null(client.RemovedClientItemId);
     }
 
     [Fact]
@@ -264,7 +394,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
     }
 
     [Fact]
-    public async Task ReplacerRefusalAbortsAndCountsBarrenLeavingOwnedUntouched() {
+    public async Task ReplacerRefusalRetainsTheUpgradeSlotForRecovery() {
         await using var db = CreateContext();
         var (parentId, childId, monitorId) = await SeedAsync(db, childSelectedTitle: "Some Book (retail) (epub)");
         var queue = new RecordingJobQueue();
@@ -273,10 +403,10 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
 
         var parent = await db.Acquisitions.AsNoTracking().FirstAsync(a => a.Id == parentId);
         Assert.Equal(BookSourceTier.Web, parent.OwnedSourceTier); // unchanged — owned book untouched
-        Assert.Equal(AcquisitionStatus.Failed, (await db.Acquisitions.AsNoTracking().FirstAsync(a => a.Id == childId)).Status);
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, (await db.Acquisitions.AsNoTracking().FirstAsync(a => a.Id == childId)).Status);
         var monitor = await db.Monitors.AsNoTracking().FirstAsync(m => m.Id == monitorId);
-        Assert.Null(monitor.UpgradeChildAcquisitionId);
-        Assert.Equal(1, monitor.BarrenSearches);
+        Assert.Equal(childId, monitor.UpgradeChildAcquisitionId);
+        Assert.Equal(0, monitor.BarrenSearches);
         Assert.DoesNotContain(queue.Enqueued, job => job.Type == JobType.ScanBook);
     }
 
@@ -431,7 +561,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
     }
 
     [Fact]
-    public async Task RejectedSpeculativeUpgradeDeletesItsDownloadedTransferData() {
+    public async Task RejectedSpeculativeUpgradeDefersCleanupUntilFailureRecoveryIsDurable() {
         await using var db = CreateContext();
         var (_, childId, _) = await SeedMediaAsync(
             db,
@@ -441,48 +571,18 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
         var clientId = Guid.NewGuid();
         (await db.DownloadTransfers.SingleAsync(row => row.AcquisitionId == childId)).DownloadClientConfigId = clientId;
         await db.SaveChangesAsync();
-        var client = new RecordingDownloadClient();
-        var detail = new DownloadClientDetail(
-            clientId,
-            DownloadClientKind.QBittorrent,
-            "Downloads",
-            "http://download-client",
-            Username: null,
-            Category: "prismedia",
-            Enabled: true,
-            HasPassword: false,
-            Password: null);
-
+        var queue = new RecordingJobQueue {
+            BeforeEnqueue = async () => Assert.Equal("hash", (await db.DownloadTransfers.AsNoTracking()
+                .SingleAsync(row => row.AcquisitionId == childId)).ClientItemId)
+        };
         await RunAsync(
             db,
-            new RecordingJobQueue(),
+            queue,
             new FakeReplacer(OwnedFileReplaceResult.Ok("x", BookFormatTier.Unknown)),
             childId,
-            new FakeMediaUpgradePayloadInspector(new(1080, 1080, false, false, 7200, 7200)),
-            new SingleDownloadClientConfigStore(detail),
-            new SingleDownloadClientFactory(client));
+            new FakeMediaUpgradePayloadInspector(new(1080, 1080, false, false, 7200, 7200)));
 
-        Assert.Equal("hash", client.RemovedClientItemId);
-        Assert.True(client.DeletedData);
-    }
-
-    [Fact]
-    public async Task MissingRecordedClientNeverDeletesTheSameItemOnADifferentDefaultClient() {
-        await using var db = CreateContext();
-        var (_, childId, _) = await SeedMediaAsync(db, EntityKind.Movie,
-            ownedCode: "bluray-1080p", childSelectedTitle: "Movie 2020 1080p BluRay MULTISUB");
-        (await db.DownloadTransfers.SingleAsync(row => row.AcquisitionId == childId)).DownloadClientConfigId = Guid.NewGuid();
-        await db.SaveChangesAsync();
-        var client = new RecordingDownloadClient();
-        var unrelatedDefault = new DownloadClientDetail(Guid.NewGuid(), DownloadClientKind.QBittorrent,
-            "Other downloads", "http://other-client", null, "prismedia", true, false, null);
-
-        await RunAsync(db, new RecordingJobQueue(),
-            new FakeReplacer(OwnedFileReplaceResult.Ok("x", BookFormatTier.Unknown)), childId,
-            new FakeMediaUpgradePayloadInspector(new(1080, 1080, false, false, 7200, 7200)),
-            new SingleDownloadClientConfigStore(unrelatedDefault), new SingleDownloadClientFactory(client));
-
-        Assert.Null(client.RemovedClientItemId);
+        Assert.Single(queue.Enqueued, job => job.Type == JobType.AcquisitionFailedHandle);
     }
 
     [Fact]
@@ -554,15 +654,10 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
         var clientId = Guid.NewGuid();
         (await db.DownloadTransfers.SingleAsync(row => row.AcquisitionId == childId)).DownloadClientConfigId = clientId;
         await db.SaveChangesAsync();
-        var client = new RecordingDownloadClient();
-        var detail = new DownloadClientDetail(clientId, DownloadClientKind.QBittorrent, "Downloads",
-            "http://download-client", null, "prismedia", true, false, null);
 
-        await RunAsync(db, queue, replacer, childId, new FakeMediaUpgradePayloadInspector(inspection),
-            new SingleDownloadClientConfigStore(detail), new SingleDownloadClientFactory(client));
+        await RunAsync(db, queue, replacer, childId, new FakeMediaUpgradePayloadInspector(inspection));
 
         Assert.False(replacer.Called);
-        Assert.Null(client.RemovedClientItemId);
         var child = await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == childId);
         Assert.Equal(AcquisitionStatus.ManualImportRequired, child.Status);
         Assert.Contains("preserved", child.StatusMessage);
@@ -753,15 +848,13 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
     private static async Task RunAsync(
         PrismediaDbContext db,
         RecordingJobQueue queue,
-        FakeReplacer replacer,
+        IOwnedFileReplacer replacer,
         Guid childId,
-        IMediaUpgradePayloadInspector? inspector = null,
-        IDownloadClientConfigStore? downloadClientConfigs = null,
-        IDownloadClientFactory? downloadClientFactory = null) {
+        IMediaUpgradePayloadInspector? inspector = null) {
         var handler = new AcquisitionUpgradeReplaceJobHandler(
-            AcquisitionTestFactory.Store(db), new EfMonitorStore(db), new EfBookAcquisitionProfileStore(db), replacer,
-            downloadClientConfigs ?? new NullDownloadClientConfigStore(),
-            downloadClientFactory ?? new ThrowingDownloadClientFactory(),
+            AcquisitionTestFactory.Store(db), new EfMonitorStore(db), new EfBookAcquisitionProfileStore(db),
+            replacer is FakeReplacer ? new FakeCheckpoints() : new EfAtomicUpgradeCheckpointStore(db),
+            replacer is FakeReplacer fake ? new FakeAtomicFiles(fake) : new AtomicUpgradeFiles(replacer),
             new EfAcquisitionHistoryStore(db),
             NullLogger<AcquisitionUpgradeReplaceJobHandler>.Instance,
             mediaUpgradeInspector: inspector);
@@ -842,6 +935,29 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
     private static PrismediaDbContext CreateContext() =>
         new(new DbContextOptionsBuilder<PrismediaDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
 
+    // These orchestration tests replace physical preparation and its journal together. The PostgreSQL
+    // interruption test above uses both real adapters and real file mutation across transaction rollback.
+    private sealed class FakeCheckpoints : IAtomicUpgradeCheckpointStore {
+        public Task<AtomicUpgradeCheckpoint?> GetAsync(Guid id, CancellationToken token) => Task.FromResult<AtomicUpgradeCheckpoint?>(null);
+        public Task<AtomicUpgradeCheckpoint?> TryPrepareAsync(Guid id, Guid claim, AtomicUpgradePreparation preparation, CancellationToken token) =>
+            Task.FromResult<AtomicUpgradeCheckpoint?>(new(Guid.NewGuid(), claim, preparation.ParentAcquisitionId,
+                preparation.ParentEntityId, Guid.NewGuid(), preparation.Kind, preparation.Files,
+                preparation.TransferContentPath, preparation.TransferClientItemId, preparation.SelectedRelease));
+        public Task<bool> TryClaimAsync(Guid id, AtomicUpgradeCheckpoint checkpoint, Guid claim, CancellationToken token) => Task.FromResult(true);
+        public Task<bool> IsCurrentAsync(Guid id, AtomicUpgradeCheckpoint checkpoint, CancellationToken token) => Task.FromResult(true);
+        public Task<bool> TryClearAsync(Guid id, AtomicUpgradeCheckpoint checkpoint, CancellationToken token) => Task.FromResult(true);
+    }
+
+    private sealed class FakeAtomicFiles(FakeReplacer replacer) : IAtomicUpgradeFiles {
+        public Task<AtomicUpgradeFilePlan> PrepareAsync(UpgradeReplaceTarget target, CancellationToken token) => Task.FromResult(
+            new AtomicUpgradeFilePlan(target.ParentFinalSourcePath!, target.ChildContentPath!,
+                new(1, DateTime.UtcNow), new(1, DateTime.UtcNow), target.ParentOwnedQuality.Format));
+        public Task<AtomicUpgradeFileRecovery> RecoverAsync(AtomicUpgradeCheckpoint checkpoint, CancellationToken token) => Task.FromResult(new AtomicUpgradeFileRecovery());
+        public Task CompleteAsync(AtomicUpgradeCheckpoint checkpoint, CancellationToken token) => Task.CompletedTask;
+        public Task<OwnedFileReplaceResult> ReplaceAsync(AtomicUpgradeCheckpoint checkpoint, CancellationToken token) =>
+            replacer.ReplaceAsync(checkpoint.Files.OwnedPath, checkpoint.Files.IncomingPath, checkpoint.Files.IncomingFormat, token, checkpoint.Kind);
+    }
+
     private sealed class FakeReplacer(OwnedFileReplaceResult result) : IOwnedFileReplacer {
         public bool Called { get; private set; }
         public EntityKind CalledWithKind { get; private set; }
@@ -850,60 +966,6 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
             CalledWithKind = kind;
             return Task.FromResult(result);
         }
-    }
-
-    private sealed class NullDownloadClientConfigStore : IDownloadClientConfigStore {
-        public Task<DownloadClientDetail?> GetAsync(Guid id, CancellationToken cancellationToken) => Task.FromResult<DownloadClientDetail?>(null);
-        public Task<DownloadClientDetail?> GetDefaultAsync(CancellationToken cancellationToken) => Task.FromResult<DownloadClientDetail?>(null);
-        public Task<DownloadClientDetail?> GetDefaultAsync(Prismedia.Domain.Entities.DownloadProtocol protocol, CancellationToken cancellationToken) => GetDefaultAsync(cancellationToken);
-        public Task<IReadOnlyList<DownloadClientDetail>> ListEnabledAsync(Prismedia.Domain.Entities.DownloadProtocol protocol, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<IReadOnlyList<Prismedia.Domain.Entities.DownloadProtocol>> GetEnabledProtocolsAsync(CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<Prismedia.Domain.Entities.DownloadProtocol>>([Prismedia.Domain.Entities.DownloadProtocol.Torrent]);
-        public Task<IReadOnlyList<DownloadClientSummary>> ListAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<IReadOnlyList<DownloadClientDetail>> ListDetailsAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<DownloadClientSummary> SaveAsync(DownloadClientSaveCommand command, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();
-    }
-
-    private sealed class ThrowingDownloadClientFactory : IDownloadClientFactory {
-        public IDownloadClient Get(DownloadClientKind kind) => throw new NotSupportedException();
-    }
-
-    private sealed class SingleDownloadClientFactory(IDownloadClient client) : IDownloadClientFactory {
-        public IDownloadClient Get(DownloadClientKind kind) => client;
-    }
-
-    private sealed class SingleDownloadClientConfigStore(DownloadClientDetail detail) : IDownloadClientConfigStore {
-        public Task<DownloadClientDetail?> GetAsync(Guid id, CancellationToken cancellationToken) =>
-            Task.FromResult<DownloadClientDetail?>(id == detail.Id ? detail : null);
-        public Task<DownloadClientDetail?> GetDefaultAsync(CancellationToken cancellationToken) => Task.FromResult<DownloadClientDetail?>(detail);
-        public Task<DownloadClientDetail?> GetDefaultAsync(DownloadProtocol protocol, CancellationToken cancellationToken) => GetDefaultAsync(cancellationToken);
-        public Task<IReadOnlyList<DownloadClientDetail>> ListEnabledAsync(DownloadProtocol protocol, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<IReadOnlyList<DownloadProtocol>> GetEnabledProtocolsAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<IReadOnlyList<DownloadClientSummary>> ListAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<IReadOnlyList<DownloadClientDetail>> ListDetailsAsync(CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<DownloadClientSummary> SaveAsync(DownloadClientSaveCommand command, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<bool> DeleteAsync(Guid id, CancellationToken cancellationToken) => throw new NotSupportedException();
-    }
-
-    private sealed class RecordingDownloadClient : IDownloadClient {
-        public DownloadClientKind Kind => DownloadClientKind.QBittorrent;
-        public string? RemovedClientItemId { get; private set; }
-        public bool DeletedData { get; private set; }
-
-        public Task RemoveAsync(DownloadClientConnection connection, string clientItemId, bool deleteData, CancellationToken cancellationToken) {
-            RemovedClientItemId = clientItemId;
-            DeletedData = deleteData;
-            return Task.CompletedTask;
-        }
-
-        public Task<string> AddAsync(DownloadClientConnection connection, DownloadAddRequest request, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<string> AddTorrentFileAsync(DownloadClientConnection connection, string fileName, byte[] torrent, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<DownloadItemStatus?> GetItemAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<IReadOnlyList<DownloadItemStatus>> ListItemsAsync(DownloadClientConnection connection, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<IReadOnlyList<DownloadItemFile>> GetFilesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<DownloadItemProperties?> GetPropertiesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<byte[]> GetPieceStatesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<DownloadClientConnectionTest> TestAsync(DownloadClientConnection connection, CancellationToken cancellationToken) => throw new NotSupportedException();
     }
 
     private sealed class FakeMediaUpgradePayloadInspector(MediaUpgradePayloadInspection? result) : IMediaUpgradePayloadInspector {

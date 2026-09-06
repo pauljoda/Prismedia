@@ -723,12 +723,20 @@ public sealed record AcquisitionImportContext(
     BookRendition? BookRendition = null,
     Guid? UpgradeOfAcquisitionId = null,
     int? VolumeNumber = null) {
-    /// <summary>Checkpoint protocol selected by this acquisition's governing profile definition.</summary>
-    public AcquisitionCheckpointProtocol CheckpointProtocol => AcquisitionProfileKinds.CheckpointProtocolFor(Kind);
+    /// <summary>Atomic preparation overrides the normal family placement protocol when present.</summary>
+    public AcquisitionCheckpointProtocol CheckpointProtocol => AtomicUpgradeCheckpoint is not null
+        ? AcquisitionCheckpointProtocol.AtomicUpgrade : AcquisitionProfileKinds.CheckpointProtocolFor(Kind);
+
+    /// <summary>Preparation committed before an atomic owned-file replacement starts.</summary>
+    public AtomicUpgradeCheckpoint? AtomicUpgradeCheckpoint { get; init; }
 
     /// <summary>An atomic replacement committed its installation and must finish readiness before this attempt can be superseded.</summary>
     public bool HasInstalledUpgradeReceipt => AcquisitionCompletionService.HasInstalledUpgradeReceipt(
         Kind, UpgradeOfAcquisitionId, BookRendition, FinalSourcePath);
+
+    /// <summary>Durable placement or installation evidence that ordinary lifecycle actions must preserve or explicitly abandon.</summary>
+    public bool HasImportRecoveryState => TvImportCheckpoint is not null || ImportPlacementCheckpoint is not null
+        || AtomicUpgradeCheckpoint is not null || HasInstalledUpgradeReceipt;
 
     /// <summary>
     /// Returns the dedicated television checkpoint when the profile selected the television protocol.
@@ -755,6 +763,9 @@ public sealed record AcquisitionImportContext(
         var incompatible = CheckpointProtocol switch {
             AcquisitionCheckpointProtocol.Placement => TvImportCheckpoint is not null,
             AcquisitionCheckpointProtocol.Television => ImportPlacementCheckpoint is not null,
+            AcquisitionCheckpointProtocol.AtomicUpgrade => TvImportCheckpoint is not null || ImportPlacementCheckpoint is not null
+                || AtomicUpgradeCheckpoint!.Kind != Kind || AtomicUpgradeCheckpoint.ParentAcquisitionId != UpgradeOfAcquisitionId
+                || AcquisitionCompletionService.CompletionJobType(Kind, UpgradeOfAcquisitionId is not null, BookRendition) != JobType.AcquisitionUpgradeReplace,
             _ => throw new InvalidOperationException($"Unknown acquisition checkpoint protocol '{CheckpointProtocol}'.")
         };
         if (incompatible) {

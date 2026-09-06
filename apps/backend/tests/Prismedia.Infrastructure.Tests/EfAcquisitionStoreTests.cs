@@ -865,8 +865,10 @@ public sealed class EfAcquisitionStoreTests {
         Assert.True(row.UpgradeQualityCaptured);
     }
 
-    [Fact]
-    public async Task MarkImportedRetiresPassiveDuplicateIdentityAndItsMonitor() {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task MarkImportedRetiresOnlyUncheckpointedPassiveDuplicateIdentityAndItsMonitor(bool hasCheckpoint) {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
         var importedId = Guid.NewGuid();
@@ -876,6 +878,7 @@ public sealed class EfAcquisitionStoreTests {
         db.Acquisitions.AddRange(
             Row(importedId, importedEntityId, AcquisitionStatus.Importing),
             Row(supersededId, supersededEntityId, AcquisitionStatus.AwaitingSelection));
+        if (hasCheckpoint) db.Acquisitions.Local.Single(row => row.Id == supersededId).ImportCheckpointJson = "{}";
         db.Monitors.Add(new MonitorRow {
             Id = Guid.NewGuid(),
             AcquisitionId = supersededId,
@@ -905,10 +908,11 @@ public sealed class EfAcquisitionStoreTests {
 
         Assert.Equal(AcquisitionStatus.Imported, (await db.Acquisitions.FindAsync(importedId))!.Status);
         var superseded = (await db.Acquisitions.FindAsync(supersededId))!;
-        Assert.Equal(AcquisitionStatus.Cancelled, superseded.Status);
-        Assert.Contains("Superseded", superseded.StatusMessage);
-        Assert.False(await db.Monitors.AnyAsync(monitor => monitor.AcquisitionId == supersededId));
-        Assert.False(await db.AcquisitionImportHints.AnyAsync(hint => hint.AcquisitionId == supersededId));
+        Assert.Equal(hasCheckpoint ? AcquisitionStatus.AwaitingSelection : AcquisitionStatus.Cancelled, superseded.Status);
+        Assert.Equal(hasCheckpoint ? "{}" : null, superseded.ImportCheckpointJson);
+        if (!hasCheckpoint) Assert.Contains("Superseded", superseded.StatusMessage);
+        Assert.Equal(hasCheckpoint, await db.Monitors.AnyAsync(monitor => monitor.AcquisitionId == supersededId));
+        Assert.Equal(hasCheckpoint, await db.AcquisitionImportHints.AnyAsync(hint => hint.AcquisitionId == supersededId));
 
         AcquisitionRow Row(Guid id, Guid entityId, AcquisitionStatus status) => new() {
             Id = id,

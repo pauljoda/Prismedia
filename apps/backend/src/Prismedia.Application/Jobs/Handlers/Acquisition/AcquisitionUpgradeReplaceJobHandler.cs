@@ -18,13 +18,11 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
     IAcquisitionStore acquisitions,
     IMonitorStore monitors,
     IBookAcquisitionProfileStore profiles,
-    IOwnedFileReplacer replacer,
-    IDownloadClientConfigStore downloadClients,
-    IDownloadClientFactory clients,
+    IAtomicUpgradeCheckpointStore checkpoints,
+    IAtomicUpgradeFiles files,
     IAcquisitionHistoryStore history,
     ILogger<AcquisitionUpgradeReplaceJobHandler> logger,
     IEntityLifecycleMutationLease? entityLifecycle = null,
-    IAcquisitionUploadStorage? uploads = null,
     IMediaUpgradePayloadInspector? mediaUpgradeInspector = null) : IJobHandler {
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var payload = AcquisitionJobPayload.Parse(context.Job.PayloadJson);
@@ -43,49 +41,79 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
             return;
         }
 
-        // Revalidate and execute the complete swap while holding the direct Active Entity monitor. Managed
-        // Delete files and unmonitor contend on the same monitor/Entity boundary, so a stale queued replace
-        // job either completes before their preflight is revalidated or performs no filesystem mutation.
-        async Task ReplaceAsync(CancellationToken leaseCancellationToken) {
-                var current = await acquisitions.GetUpgradeReplaceTargetAsync(
-                    childId,
-                    leaseCancellationToken);
-                if (current is null
-                    || current.ParentId != target.ParentId
-                    || current.ParentEntityId != parentEntityId) {
+        AtomicUpgradeCheckpoint? checkpoint = null;
+        var prepared = false;
+        async Task PrepareAsync(CancellationToken token) {
+            var current = await acquisitions.GetUpgradeReplaceTargetAsync(childId, token);
+            if (current is null || current.ParentId != target.ParentId || current.ParentEntityId != parentEntityId) return;
+            try {
+                checkpoint = await checkpoints.GetAsync(childId, token);
+                if (checkpoint is not null) {
+                    if (!await checkpoints.TryClaimAsync(childId, checkpoint, context.Job.Id, token)) return;
+                    checkpoint = checkpoint with { ClaimJobId = context.Job.Id };
+                    prepared = true;
                     return;
                 }
-                if (!await acquisitions.TryTransitionStatusAsync(
-                        childId,
-                        [AcquisitionStatus.Downloaded, AcquisitionStatus.Importing],
-                        AcquisitionStatus.Importing,
-                        "Applying downloaded upgrade.",
-                        leaseCancellationToken)) {
+                if (!await acquisitions.TryTransitionStatusAsync(childId,
+                        [AcquisitionStatus.Downloaded, AcquisitionStatus.Importing], AcquisitionStatus.Importing,
+                        "Preparing downloaded upgrade.", token)) return;
+                if (current.InstalledUpgradePath is not null || current.ParentVideoSourceShared
+                    || EntityKindRegistry.Describe(current.ParentKind).UpgradeMode is not (EntityUpgradeMode.AtomicBookFile or EntityUpgradeMode.AtomicMediaFile)
+                    || string.IsNullOrWhiteSpace(current.ChildContentPath) || string.IsNullOrWhiteSpace(current.ParentFinalSourcePath)
+                    || string.IsNullOrWhiteSpace(current.ChildSelectedTitle)) {
+                    prepared = true;
                     return;
                 }
-                await HandleClaimedAsync(context, current, childId, leaseCancellationToken);
+                var plan = await files.PrepareAsync(current, token);
+                var selected = await acquisitions.GetSelectedReleaseAsync(childId, token);
+                if (selected is null) throw new IOException("The upgrade release information is missing.");
+                checkpoint = await checkpoints.TryPrepareAsync(childId, context.Job.Id,
+                    new AtomicUpgradePreparation(current.ParentId, parentEntityId, current.ParentKind, plan,
+                        Path.GetFullPath(current.ChildContentPath), current.ChildClientItemId, selected), token);
+                if (checkpoint is null) throw new IOException("The upgrade no longer has exclusive Source ownership and the original completed transfer.");
+                prepared = true;
+            } catch (InvalidDataException) {
+                await acquisitions.TryHoldCorruptImportCheckpointAsync(childId, context.Job.Id,
+                    ImportCheckpointLifecycle.CorruptCheckpointMessage, token);
+            } catch (IOException exception) {
+                await acquisitions.SetStatusAsync(childId, AcquisitionStatus.ManualImportRequired, exception.Message, token);
+            }
         }
-        var accepted = entityLifecycle is null
-            ? await monitors.ExecuteIfActiveEntityMutationAsync(
-                parentEntityId,
-                ReplaceAsync,
-                cancellationToken)
-            : await entityLifecycle.ExecuteAsync(
-                parentEntityId,
-                ReplaceAsync,
-                cancellationToken);
-        if (!accepted) {
-            logger.LogInformation(
-                "AcquisitionUpgradeReplace: {Child} lost its active Entity lifecycle lease; skipping.",
-                childId);
+        // This lease must commit preparation before the next lease can mutate files. A rollback of
+        // installation, quality, history, or readiness therefore leaves the exact recovery plan durable.
+        if (!await ExecuteLeaseAsync(parentEntityId, PrepareAsync, cancellationToken) || !prepared) return;
+        var installed = false;
+        var executed = await ExecuteLeaseAsync(parentEntityId, async token => {
+            var current = await acquisitions.GetUpgradeReplaceTargetAsync(childId, token);
+            if (current is null || current.ParentId != target.ParentId || current.ParentEntityId != parentEntityId) return;
+            if (checkpoint is not null && !await checkpoints.IsCurrentAsync(childId, checkpoint, token)) {
+                if (await checkpoints.GetAsync(childId, token) != checkpoint) return;
+                await acquisitions.SetStatusAsync(childId, AcquisitionStatus.ManualImportRequired,
+                    "The prepared replacement no longer matches its Source or transfer ownership. Recovery files were retained.", token);
+                return;
+            }
+            await HandleClaimedAsync(context, current, childId, checkpoint, token);
+            installed = (await acquisitions.GetUpgradeReplaceTargetAsync(childId, token))?.InstalledUpgradePath is not null;
+        }, cancellationToken);
+        if (executed && installed && checkpoint is not null) {
+            try {
+                await files.CompleteAsync(checkpoint, CancellationToken.None);
+            } catch (Exception exception) {
+                logger.LogWarning(exception, "Installed upgrade retained; incoming evidence cleanup failed for acquisition {Child}.", childId);
+            }
         }
     }
+
+    private Task<bool> ExecuteLeaseAsync(Guid entityId, Func<CancellationToken, Task> mutation, CancellationToken token) =>
+        entityLifecycle is null ? monitors.ExecuteIfActiveEntityMutationAsync(entityId, mutation, token)
+            : entityLifecycle.ExecuteAsync(entityId, mutation, token);
 
     /// <summary>Validates and applies an upgrade after the stable Entity lifecycle has been leased.</summary>
     private async Task HandleClaimedAsync(
         JobContext context,
         UpgradeReplaceTarget target,
         Guid childId,
+        AtomicUpgradeCheckpoint? checkpoint,
         CancellationToken cancellationToken) {
 
         if (target.ParentVideoSourceShared) {
@@ -121,14 +149,31 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
             return;
         }
 
+        if (checkpoint is null && EntityKindRegistry.Describe(target.ParentKind).UpgradeMode
+                is EntityUpgradeMode.AtomicMediaFile or EntityUpgradeMode.AtomicBookFile) {
+            await acquisitions.SetStatusAsync(childId, AcquisitionStatus.Downloaded,
+                "The payload or ownership changed during preparation; a fresh replacement plan is required.", cancellationToken);
+            return;
+        }
+
+        OwnedFileReplaceResult? recovered = null;
+        if (checkpoint is not null) {
+            var recovery = await files.RecoverAsync(checkpoint, cancellationToken);
+            if (recovery.HoldReason is { } reason) {
+                await acquisitions.SetStatusAsync(childId, AcquisitionStatus.ManualImportRequired, reason, cancellationToken);
+                return;
+            }
+            recovered = recovery.Installed;
+        }
+
         // The parent definition owns the destructive replacement contract. Never infer Book merely because
         // a kind is absent from the media ladder: structural and multi-file kinds must use family import.
         switch (EntityKindRegistry.Describe(target.ParentKind).UpgradeMode) {
             case EntityUpgradeMode.AtomicMediaFile:
-                await HandleMediaAsync(context, target, childId, cancellationToken);
+                await HandleMediaAsync(context, target, childId, checkpoint!, recovered, cancellationToken);
                 break;
             case EntityUpgradeMode.AtomicBookFile:
-                await HandleBookAsync(context, target, childId, cancellationToken);
+                await HandleBookAsync(context, target, childId, checkpoint!, recovered, cancellationToken);
                 break;
             default:
                 await AbortAsync(
@@ -140,19 +185,21 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
     }
 
     /// <summary>The book replace path: source/format Pareto dominance, an in-place same-extension book-file swap, and a book re-scan.</summary>
-    private async Task HandleBookAsync(JobContext context, UpgradeReplaceTarget target, Guid childId, CancellationToken cancellationToken) {
+    private async Task HandleBookAsync(JobContext context, UpgradeReplaceTarget target, Guid childId, AtomicUpgradeCheckpoint checkpoint, OwnedFileReplaceResult? recovered, CancellationToken cancellationToken) {
         // Last gate before touching the file: re-confirm the downloaded release still strictly beats the
         // parent's CURRENT owned quality (it may have changed since the search). The format axis is re-checked
         // against the actual file inside the replacer; here we guard overall dominance from the release title.
         var candidate = BookFormatDetection.DetectQuality(target.ChildSelectedTitle!);
-        if (!target.ChildManualPick && !candidate.StrictlyDominates(target.ParentOwnedQuality)) {
+        if (recovered is null && !target.ChildManualPick && !candidate.StrictlyDominates(target.ParentOwnedQuality)) {
+            if (!await checkpoints.TryClearAsync(childId, checkpoint, cancellationToken))
+                throw new IOException("The rejected replacement preparation changed before it could be released.");
             await AbortAsync(childId, "The downloaded release is no longer an upgrade over the current copy.", cancellationToken);
             return;
         }
 
-        var result = await replacer.ReplaceAsync(target.ParentFinalSourcePath!, target.ChildContentPath!, target.ParentOwnedQuality.Format, cancellationToken, EntityKind.Book);
+        var result = recovered ?? await files.ReplaceAsync(checkpoint, cancellationToken);
         if (!result.Succeeded) {
-            await AbortAsync(childId, result.FailureReason ?? "The upgrade could not be applied.", cancellationToken);
+            await acquisitions.SetStatusAsync(childId, AcquisitionStatus.ManualImportRequired, result.FailureReason ?? "The upgrade could not be applied.", cancellationToken);
             return;
         }
 
@@ -174,10 +221,12 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
             newQuality: $"{newOwned.Source.ToCode()}/{newOwned.Format.ToCode()}",
             cancellationToken);
         await FinishAsync(context, target, childId, cancellationToken);
+        if (!await checkpoints.TryClearAsync(childId, checkpoint, cancellationToken))
+            throw new IOException("The replacement checkpoint changed before installation could commit.");
     }
 
     /// <summary>The movie/single-episode replace path: ladder-position (or same-quality revision) dominance, an in-place same-extension video-file swap, and a library re-scan.</summary>
-    private async Task HandleMediaAsync(JobContext context, UpgradeReplaceTarget target, Guid childId, CancellationToken cancellationToken) {
+    private async Task HandleMediaAsync(JobContext context, UpgradeReplaceTarget target, Guid childId, AtomicUpgradeCheckpoint checkpoint, OwnedFileReplaceResult? recovered, CancellationToken cancellationToken) {
         // Re-confirm the downloaded release still beats the parent's CURRENT owned copy (it may have changed
         // since the search) before touching the file: a strictly higher ladder position, OR the same position
         // with a strictly higher PROPER/REPACK revision or custom-format score (the same accept rules the
@@ -196,14 +245,14 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
             && candidateFormatScore > target.ParentOwnedFormatScore;
 
         MediaUpgradePayloadInspection? inspection = null;
-        if (!target.ChildManualPick && mediaUpgradeInspector is not null) {
+        if (recovered is null && !target.ChildManualPick && mediaUpgradeInspector is not null) {
             inspection = await mediaUpgradeInspector.InspectAsync(
                 target.ParentFinalSourcePath!,
                 target.ChildContentPath!,
                 cancellationToken);
         }
 
-        if (!target.ChildManualPick) {
+        if (recovered is null && !target.ChildManualPick) {
             if (VideoPayloadProfileValidation.ValidateProfile(candidateCode, inspection?.CandidateAudioLanguages, rules) is { } profileHold) {
                 await acquisitions.SetStatusAsync(childId, AcquisitionStatus.ManualImportRequired, profileHold, cancellationToken);
                 return;
@@ -259,6 +308,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
                     context,
                     target,
                     childId,
+                    checkpoint,
                     "The downloaded payload's measured resolution is lower than the owned copy or the release's claimed quality.",
                     cancellationToken);
                 return;
@@ -269,6 +319,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
                     context,
                     target,
                     childId,
+                    checkpoint,
                     "The downloaded payload did not prove an upgrade over the current copy.",
                     cancellationToken);
                 return;
@@ -277,9 +328,9 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
 
         // Video has no book format tier; the replacer's format-tier guard is a pass-through for this kind. The
         // same-extension rule still holds (an mkv → mp4 swap is refused, for entity/progress continuity).
-        var result = await replacer.ReplaceAsync(target.ParentFinalSourcePath!, target.ChildContentPath!, BookFormatTier.Unknown, cancellationToken, target.ParentKind);
+        var result = recovered ?? await files.ReplaceAsync(checkpoint, cancellationToken);
         if (!result.Succeeded) {
-            await AbortAsync(childId, result.FailureReason ?? "The upgrade could not be applied.", cancellationToken);
+            await acquisitions.SetStatusAsync(childId, AcquisitionStatus.ManualImportRequired, result.FailureReason ?? "The upgrade could not be applied.", cancellationToken);
             return;
         }
 
@@ -304,6 +355,8 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
             newQuality: resolvedCode,
             cancellationToken);
         await FinishAsync(context, target, childId, cancellationToken);
+        if (!await checkpoints.TryClearAsync(childId, checkpoint, cancellationToken))
+            throw new IOException("The replacement checkpoint changed before installation could commit.");
     }
 
     /// <summary>
@@ -347,18 +400,19 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
     }
 
     /// <summary>
-    /// Rejects a speculative downloaded upgrade without touching the owned file. The transfer is removed
-    /// with its data, then the existing failed-download recovery flow blocklists this exact release and can
-    /// queue the next accepted candidate on the same upgrade child.
+    /// Commits rejection without touching the owned file or download. The existing failed-download
+    /// handler owns durable cleanup, blocklisting, and selection of the next candidate after this commit.
     /// </summary>
     private async Task RejectDownloadedCandidateAsync(
         JobContext context,
         UpgradeReplaceTarget target,
         Guid childId,
+        AtomicUpgradeCheckpoint checkpoint,
         string reason,
         CancellationToken cancellationToken) {
+        if (!await checkpoints.TryClearAsync(childId, checkpoint, cancellationToken))
+            throw new IOException("The rejected replacement preparation changed before cleanup.");
         logger.LogInformation("AcquisitionUpgradeReplace: rejecting inspected child {Child}: {Reason}", childId, reason);
-        await RemoveTorrentAsync(target, childId, cancellationToken);
         if (!await acquisitions.TryTransitionStatusAsync(
                 childId,
                 [AcquisitionStatus.Importing],
@@ -406,31 +460,4 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
             cancellationToken);
     }
 
-    private async Task RemoveTorrentAsync(UpgradeReplaceTarget target, Guid childId, CancellationToken cancellationToken) {
-        if (string.IsNullOrWhiteSpace(target.ChildClientItemId)) {
-            return;
-        }
-        if (uploads?.Owns(target.ChildClientItemId) == true) {
-            await uploads.DeleteAsync(target.ChildClientItemId, cancellationToken);
-            return;
-        }
-
-        var client = target.ChildDownloadClientConfigId is { } id
-            ? await downloadClients.GetAsync(id, cancellationToken)
-            : await downloadClients.GetDefaultAsync(cancellationToken);
-        if (client is null) {
-            return;
-        }
-
-        try {
-            var connection = new DownloadClientConnection(client.Id, client.Kind, client.BaseUrl, client.Username, client.Password, client.Category, client.ApiKey, client.DownloadDirectory);
-            await clients.Get(client.Kind).RemoveOwnedAsync(connection, childId, target.ChildClientItemId, deleteData: true, cancellationToken);
-        } catch (OperationCanceledException) {
-            throw;
-        } catch (Exception ex) {
-            // The owned copy may already be upgraded, or this may be a rejected speculative candidate;
-            // cleanup failure must not mutate the library file in either case.
-            logger.LogWarning(ex, "AcquisitionUpgradeReplace: failed to remove the upgrade torrent for parent {Parent}.", target.ParentId);
-        }
-    }
 }
