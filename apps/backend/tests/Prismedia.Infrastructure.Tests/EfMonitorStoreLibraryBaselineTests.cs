@@ -111,6 +111,10 @@ public sealed class EfMonitorStoreLibraryBaselineTests {
             Assert.Equal(previousAttempts, await db.Acquisitions.Select(row => row.Id).ToArrayAsync());
             Assert.Null((await db.Monitors.SingleAsync()).AcquisitionId);
             Assert.Empty(await db.DownloadTransfers.ToArrayAsync());
+            var needs = await ((IMonitorStore)fixture.Store).GetOwnedVideoInspectionNeedsAsync(fixture.MonitorId, default);
+            if (scenario == "stale probe") Assert.Equal(new OwnedVideoInspectionNeeds(true, true), needs);
+            else if (scenario == "unknown subtitles") Assert.Equal(new OwnedVideoInspectionNeeds(false, true), needs);
+            else Assert.Null(needs);
         } finally {
             Directory.Delete(root, recursive: true);
         }

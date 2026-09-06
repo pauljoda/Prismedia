@@ -42,6 +42,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Automatic upgrade monitoring inspects existing videos with missing file or subtitle metadata, then resumes searching after inspection without repeatedly probing failed files.
+
 - Retrying a downloaded upgrade now uses the original file-replacement workflow and rechecks current ownership, including when an older import job resumes.
 
 - Individual video upgrades preserve files shared by multiple episodes, blocking automatic grabs and retaining already-downloaded replacements for coverage review.

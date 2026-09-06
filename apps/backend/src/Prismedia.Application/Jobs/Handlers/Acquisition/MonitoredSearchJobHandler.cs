@@ -16,7 +16,7 @@ namespace Prismedia.Application.Jobs.Handlers;
 /// anything on its own. The store reconciles fulfilled/orphaned monitors as part of listing the due set.
 /// </summary>
 [JobDefinition(JobType.MonitoredSearch, SingletonBehavior = JobSingletonBehavior.QueueWideWhenUntargeted)]
-public sealed class MonitoredSearchJobHandler(
+public sealed partial class MonitoredSearchJobHandler(
     IMonitorStore monitors,
     IAcquisitionLifecycleStore acquisitions,
     SettingsService settings,
@@ -102,6 +102,10 @@ public sealed class MonitoredSearchJobHandler(
         // Entity-only intent: containers sync provider children, source-backed leaves remain active,
         // and fileless leaves request themselves. Acquisition-linked dues always take the branch below.
         if (monitor.AcquisitionId is null && monitor.EntityId is { } watchedEntityId) {
+            if (await TryScheduleOwnedInspectionAsync(monitor, context, cancellationToken)) {
+                await monitors.MarkSearchedAsync(monitor.MonitorId, cancellationToken);
+                return $"Inspecting owned video for {monitor.Title}";
+            }
             var maintained = await requests.MaintainAsync(
                 watchedEntityId,
                 monitor.BookRendition,

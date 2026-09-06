@@ -1,3 +1,6 @@
+using Microsoft.EntityFrameworkCore;
+using Prismedia.Infrastructure.Persistence;
+using Prismedia.Infrastructure.Queue;
 using Microsoft.Extensions.Logging.Abstractions;
 using Prismedia.Application.Acquisition;
 using Prismedia.Application.Jobs;
@@ -10,6 +13,71 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Infrastructure.Tests;
 
 public sealed class MonitoredSearchJobHandlerTests {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LegacyOwnedInspectionPromotesOneMonitorIntoAnIdempotentGraph(bool postgres) {
+        await using var database = postgres ? await PostgresTestDatabase.CreateAsync() : null;
+        await using var db = database?.CreateContext() ?? new PrismediaDbContext(new DbContextOptionsBuilder<PrismediaDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+        var due = new DueMonitor(Guid.NewGuid(), null, "Owned episode", EntityKind.VideoEpisode, EntityId: Guid.NewGuid());
+        var monitors = new FakeMonitorStore([due]) { InspectionNeeds = new(true, true) };
+        monitors.ImmediateWork[due.EntityId!.Value] = [due];
+        var queue = new RecordingJobQueue();
+        var graphs = new JobGraphService(db);
+        var handler = Handler(monitors, new FakeAcquisitionLifecycleStore(), graphs: graphs);
+        var job = Job(payloadJson: new MonitoredSearchPayload(due.MonitorId).ToJson());
+
+        await handler.HandleAsync(new JobContext(job, queue), default);
+        await handler.HandleAsync(new JobContext(job, queue), default);
+
+        Assert.Empty(queue.Nodes);
+        var graph = Assert.Single(await graphs.ListAsync(default));
+        Assert.Equal(due.EntityId.ToString(), graph.RootEntityId);
+        var root = Assert.Single((await graphs.GetAsync(graph.Id, default))!.Nodes);
+        Assert.Equal(JobType.MonitoredSearch, root.Type);
+        Assert.True(MonitoredSearchPayload.TryParse(root.PayloadJson, out var payload));
+        Assert.Equal(due.MonitorId, payload.MonitorId);
+        Assert.False(payload.OwnedInspectionAttempted);
+        await handler.HandleAsync(new JobContext(root, queue), default);
+        Assert.Equal(new[] { JobType.ProbeVideo, JobType.ExtractSubtitles, JobType.MonitoredSearch }, queue.Nodes.Select(node => node.Request.Job.Type));
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    public async Task OwnedVideoInspectionPrecedesOneBoundedMonitoringContinuation(bool needsProbe, bool alreadyAttempted) {
+        var id = Guid.NewGuid(); var entityId = Guid.NewGuid();
+        var monitors = new FakeMonitorStore([new DueMonitor(id, null, "Owned episode", EntityKind.VideoEpisode, EntityId: entityId)]) {
+            InspectionNeeds = new(needsProbe, true)
+        };
+        monitors.ImmediateWork[entityId] = [new DueMonitor(id, null, "Owned episode", EntityKind.VideoEpisode, EntityId: entityId)];
+        var queue = new RecordingJobQueue();
+        var job = Job(payloadJson: new MonitoredSearchPayload(id) { OwnedInspectionAttempted = alreadyAttempted }.ToJson()) with { GraphId = Guid.NewGuid() };
+
+        await Handler(monitors, new FakeAcquisitionLifecycleStore()).HandleAsync(new JobContext(job, queue), default);
+
+        if (alreadyAttempted) {
+            Assert.Empty(queue.Nodes);
+        } else {
+            var expected = needsProbe ? new[] { JobType.ProbeVideo, JobType.ExtractSubtitles, JobType.MonitoredSearch }
+                : new[] { JobType.ExtractSubtitles, JobType.MonitoredSearch };
+            Assert.Equal(expected, queue.Nodes.Select(node => node.Request.Job.Type));
+            var predecessor = job.Id;
+            foreach (var node in queue.Nodes) {
+                Assert.Equal([predecessor], node.Request.DependsOn);
+                Assert.Equal(JobNodeImportance.Required, node.Request.Importance);
+                predecessor = node.Result.Id;
+            }
+            Assert.True(MonitoredSearchPayload.TryParse(queue.Nodes[^1].Request.Job.PayloadJson, out var continuation));
+            Assert.Equal(id, continuation.MonitorId);
+            Assert.True(continuation.OwnedInspectionAttempted);
+            Assert.DoesNotContain(queue.Enqueued, request => request.Type == JobType.AcquisitionSearch);
+        }
+        Assert.Single(monitors.Searched);
+    }
+
     [Fact]
     public async Task ExistingFileCoverageIsRepairedBeforeRequestingAnotherSeasonPack() {
         var acquisitionId = Guid.NewGuid();
@@ -360,7 +428,8 @@ public sealed class MonitoredSearchJobHandlerTests {
         IMonitorStore monitors,
         IAcquisitionLifecycleStore acquisitions,
         IAcquisitionReleaseTimingService? releaseTiming = null,
-        ITvOwnedEpisodeCoverageRepair? ownedTvCoverage = null) =>
+        ITvOwnedEpisodeCoverageRepair? ownedTvCoverage = null,
+        IJobGraphService? graphs = null) =>
         new(
             monitors,
             acquisitions,
@@ -368,7 +437,8 @@ public sealed class MonitoredSearchJobHandlerTests {
             CommitService(monitors),
             NullLogger<MonitoredSearchJobHandler>.Instance,
             releaseTiming: releaseTiming,
-            ownedTvCoverage: ownedTvCoverage);
+            ownedTvCoverage: ownedTvCoverage,
+            graphs: graphs);
 
     private static JobRunSnapshot Job(Guid? targetEntityId = null, string payloadJson = "{}") {
         var now = DateTimeOffset.UtcNow;
@@ -480,6 +550,9 @@ public sealed class MonitoredSearchJobHandlerTests {
     }
 
     private sealed class FakeMonitorStore(IReadOnlyList<DueMonitor> due) : IMonitorStore {
+        public OwnedVideoInspectionNeeds? InspectionNeeds { get; init; }
+        public Task<OwnedVideoInspectionNeeds?> GetOwnedVideoInspectionNeedsAsync(Guid id, CancellationToken token) => Task.FromResult(InspectionNeeds);
+
         public IReadOnlyList<DueMonitor> Due => due;
         public List<Guid> Searched { get; } = [];
         public List<Guid> CreatedChildFor { get; } = [];
@@ -594,6 +667,13 @@ public sealed class MonitoredSearchJobHandlerTests {
     }
 
     private sealed class RecordingJobQueue : IJobQueueService {
+        public List<(GraphJobNodeRequest Request, JobRunSnapshot Result)> Nodes { get; } = [];
+        public async Task<JobRunSnapshot> AppendChildGraphNodeAsync(JobRunSnapshot parent, GraphJobNodeRequest request, CancellationToken token) {
+            var result = await EnqueueAsync(request.Job, token);
+            Nodes.Add((request, result));
+            return result;
+        }
+
         public List<EnqueueJobRequest> Enqueued { get; } = [];
         public Exception? EnqueueFailure { get; init; }
         public string? FailTarget { get; init; }

@@ -6,6 +6,11 @@ namespace Prismedia.Application.Jobs;
 /// <summary>Identifies the single durable monitor selected by the background monitor drainer.</summary>
 public sealed record MonitoredSearchPayload(
     [property: JsonPropertyName("monitorId")] Guid MonitorId) {
+    /// <summary>Bounds inspection expansion to one pass before returning to the normal monitor cadence.</summary>
+    [JsonPropertyName("ownedInspectionAttempted")]
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool OwnedInspectionAttempted { get; init; }
+
     /// <summary>Serializes the payload stored on a monitored-search job.</summary>
     public string ToJson() => JsonSerializer.Serialize(this);
 

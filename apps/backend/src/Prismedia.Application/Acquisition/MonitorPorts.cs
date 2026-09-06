@@ -20,6 +20,10 @@ public sealed record EntityMonitorStart(
 /// without EntityId retain terminal compatibility behavior.
 /// </summary>
 public interface IMonitorStore {
+    /// <summary>Returns missing inspection work for a single owned video governed by an automatic upgrade profile.</summary>
+    Task<OwnedVideoInspectionNeeds?> GetOwnedVideoInspectionNeedsAsync(Guid monitorId, CancellationToken cancellationToken) =>
+        Task.FromResult<OwnedVideoInspectionNeeds?>(null);
+
     /// <summary>Starts acquisition work on its stable Entity monitor and reuses legacy acquisition intent.</summary>
     Task<Contracts.Acquisition.MonitorView> StartAsync(
         Guid acquisitionId,
@@ -238,3 +242,6 @@ public interface IMonitorStore {
     /// <summary>Releases an upgrade slot and records whether its replacement succeeded.</summary>
     Task ResolveUpgradeChildAsync(Guid childId, bool succeeded, CancellationToken cancellationToken);
 }
+
+/// <summary>Required metadata work before an existing video can safely enter automatic upgrade monitoring.</summary>
+public sealed record OwnedVideoInspectionNeeds(bool ProbeRequired, bool SubtitlesRequired);
