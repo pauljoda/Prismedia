@@ -44,6 +44,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Built-in format preferences recognize underscore-separated codec and source tags while avoiding matches inside ordinary words.
+
 - Advanced release rules limit expensive regular expressions and prevent invalid or timed-out patterns from matching through exclusion.
 
 - Preferred audio languages now rank explicit matches above uncertain multi-audio and unmarked releases. Subtitle language tags, including Multi-Sub, no longer masquerade as audio evidence.

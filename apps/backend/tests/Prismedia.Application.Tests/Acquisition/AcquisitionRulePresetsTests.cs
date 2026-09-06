@@ -6,6 +6,10 @@ namespace Prismedia.Application.Tests.Acquisition;
 public sealed class AcquisitionRulePresetsTests {
     [Theory]
     [InlineData("H.265 / HEVC", "Example 1080p HEVC", true)]
+    [InlineData("H.265 / HEVC", "Example_2024_2160p_HEVC_TrueHD", true)]
+    [InlineData("Dolby Vision", "Example_2024_REMUX_DV_HDR_HEVC", true)]
+    [InlineData("Dolby Vision", "Example_2024_DVD_Rip", false)]
+    [InlineData("Web download", "Example_2024_WEB_DL_H264", true)]
     [InlineData("H.265 / HEVC", "Example 1080p H.264", false)]
     [InlineData("English audio", "Example 1080p ENG", true)]
     [InlineData("English audio", "Example 1080p MULTi", false)]
