@@ -1413,7 +1413,9 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             return false;
         }
 
-        var expectedJson = TvImportCheckpointJson.Serialize(checkpoint);
+        var expectedJson = await ReadEquivalentCheckpointJsonAsync(acquisitionId, checkpoint,
+            TvImportCheckpointJson.Deserialize, TvImportCheckpointJson.Serialize, cancellationToken);
+        if (expectedJson is null) return false;
         var claimedCheckpoint = checkpoint with { ClaimJobId = claimJobId };
         var claimedJson = TvImportCheckpointJson.Serialize(claimedCheckpoint);
         var canResumeImporting = checkpoint.ClaimJobId == Guid.Empty || checkpoint.ClaimJobId == claimJobId;
@@ -1470,7 +1472,9 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             return false;
         }
 
-        var expectedJson = TvImportCheckpointJson.Serialize(checkpoint);
+        var expectedJson = await ReadEquivalentCheckpointJsonAsync(acquisitionId, checkpoint,
+            TvImportCheckpointJson.Deserialize, TvImportCheckpointJson.Serialize, cancellationToken);
+        if (expectedJson is null) return false;
         var supersedable = new[] {
             AcquisitionStatus.AwaitingSelection,
             AcquisitionStatus.Failed,
@@ -1637,7 +1641,9 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         Guid claimJobId,
         CancellationToken cancellationToken) {
         RequireCheckpointProtocol(checkpoint.Kind, AcquisitionCheckpointProtocol.Placement);
-        var expectedJson = ImportPlacementCheckpointJson.Serialize(checkpoint);
+        var expectedJson = await ReadEquivalentCheckpointJsonAsync(acquisitionId, checkpoint,
+            ImportPlacementCheckpointJson.Deserialize, ImportPlacementCheckpointJson.Serialize, cancellationToken);
+        if (expectedJson is null) return false;
         var claimedCheckpoint = checkpoint with { ClaimJobId = claimJobId };
         var claimedJson = ImportPlacementCheckpointJson.Serialize(claimedCheckpoint);
         var canResumeImporting = checkpoint.ClaimJobId == Guid.Empty || checkpoint.ClaimJobId == claimJobId;
@@ -1690,7 +1696,9 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         ImportPlacementCheckpoint checkpoint,
         CancellationToken cancellationToken) {
         RequireCheckpointProtocol(checkpoint.Kind, AcquisitionCheckpointProtocol.Placement);
-        var expectedJson = ImportPlacementCheckpointJson.Serialize(checkpoint);
+        var expectedJson = await ReadEquivalentCheckpointJsonAsync(acquisitionId, checkpoint,
+            ImportPlacementCheckpointJson.Deserialize, ImportPlacementCheckpointJson.Serialize, cancellationToken);
+        if (expectedJson is null) return false;
         var supersedable = new[] {
             AcquisitionStatus.AwaitingSelection,
             AcquisitionStatus.Failed,
