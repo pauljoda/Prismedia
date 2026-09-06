@@ -1610,6 +1610,14 @@ public sealed class TvAcquisitionImportEngine(
 
                     // A checkpoint fixes placement identity, not the validity of a future destructive swap.
                     // On resume, current profile or file changes can invalidate its earlier measured decision.
+                    if (previousPath is not null && (import.EntityId is not { } ownerScope
+                        || !await targets.CanReplaceTvFileAsync(ownerScope, unit.SeasonNumber, unit.EpisodeNumber,
+                            unit.CoveredEpisodeNumbers, previousPath, cancellationToken))) {
+                        await acquisitions.SetStatusAsync(import.Id, AcquisitionStatus.ManualImportRequired,
+                            "The episode file's current ownership no longer supports this replacement. Review its episode coverage; all files were preserved.",
+                            cancellationToken);
+                        return;
+                    }
                     if (previousPath is not null && import.TvImportCheckpoint is not null) {
                         var currentRules = await profiles.GetRulesAsync(import.ProfileId, import.Kind, cancellationToken);
                         var holdReason = await new TvMeasuredMergePlanner(mediaUpgradeInspector).ValidateReplacementAsync(

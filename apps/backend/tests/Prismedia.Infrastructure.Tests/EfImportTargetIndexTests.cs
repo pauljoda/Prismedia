@@ -16,6 +16,36 @@ namespace Prismedia.Infrastructure.Tests;
 /// </summary>
 public sealed class EfImportTargetIndexTests {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReplacementCoverageIncludesEveryPhysicalOwnerAndAllowsCompleteBundles(bool postgres) {
+        await using var database = postgres ? await PostgresTestDatabase.CreateAsync() : null;
+        await using var db = database?.CreateContext() ?? CreateContext();
+        var ids = SeedSeries(db, "/media/tv/Shared Series");
+        await db.SaveChangesAsync();
+        var wanted = await db.Entities.SingleAsync(row => row.ParentEntityId == ids.SeasonId && row.Id != ids.EpisodeId);
+        var path = (await db.EntityFiles.SingleAsync()).Path;
+        db.EntityPositions.AddRange(
+            new EntityPositionRow { EntityId = ids.SeasonId, Code = EntityPositionCodes.Season, Value = 20 },
+            new EntityPositionRow { EntityId = ids.EpisodeId, Code = EntityPositionCodes.Episode, Value = 500 },
+            new EntityPositionRow { EntityId = wanted.Id, Code = EntityPositionCodes.Episode, Value = 501 });
+        await db.SaveChangesAsync();
+        var index = new EfImportTargetIndex(db);
+        Assert.True(await index.CanReplaceTvFileAsync(ids.SeriesId, 20, 500, [], path, default));
+        Assert.True(await index.CanReplaceTvFileAsync(ids.SeriesId, 20, 501, [500], path, default));
+
+        db.EntityFiles.Add(new EntityFileRow { Id = Guid.NewGuid(), EntityId = wanted.Id, Role = EntityFileRole.Source,
+            Path = path, Source = FileSourceKind.Scan.ToCode(), CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow });
+        await db.SaveChangesAsync();
+
+        Assert.False(await index.CanReplaceTvFileAsync(ids.SeriesId, 20, 500, [], path, default));
+        Assert.True(await index.CanReplaceTvFileAsync(ids.SeriesId, 20, 500, [501], path, default));
+        AddEntity(db, EntityKind.Movie.ToCode(), null, null, sourcePath: path);
+        await db.SaveChangesAsync();
+        Assert.False(await index.CanReplaceTvFileAsync(ids.SeriesId, 20, 500, [501], path, default));
+    }
+
+    [Theory]
     [InlineData(false, false)]
     [InlineData(false, true)]
     [InlineData(true, false)]

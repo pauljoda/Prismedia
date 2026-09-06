@@ -42,6 +42,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Episode replacements now recheck every current file owner before swapping, protecting newly shared episodes, changed mappings, and bundles whose episodes have split across different files during an interrupted import.
+
 - TV imports now use canonical season and episode positions consistently when checking existing files and matching catalog titles, so a different display order cannot hide coverage or create duplicate episode slots.
 
 - Compatible interrupted imports saved by an earlier build can resume or be replaced even when their checkpoint omitted a newer optional field. Changed attempts and unrecognized recovery data remain protected.

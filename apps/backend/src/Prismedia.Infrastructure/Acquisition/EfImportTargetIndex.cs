@@ -35,6 +35,36 @@ public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIn
         ResolveAncestorOfKindAsync(entityId, EntityKind.VideoSeries.ToCode(), cancellationToken);
 
     /// <inheritdoc />
+    public async Task<bool> CanReplaceTvFileAsync(Guid entityId, int seasonNumber, int episodeNumber,
+        IReadOnlyList<int> coveredEpisodeNumbers, string previousPath, CancellationToken cancellationToken) {
+        var claims = coveredEpisodeNumbers.Prepend(episodeNumber).Distinct().ToArray();
+        if (seasonNumber < 0 || claims.Any(number => number <= 0) || string.IsNullOrWhiteSpace(previousPath)) return false;
+        var seriesId = await GetTvSeriesEntityIdAsync(entityId, cancellationToken);
+        if (seriesId is null) return false;
+        var seasonCode = EntityKind.VideoSeason.ToCode();
+        var seasons = await NumberedTvEntities(EntityPositionCodes.Season)
+            .Where(season => season.ParentEntityId == seriesId && season.KindCode == seasonCode && season.Position == seasonNumber)
+            .Select(season => season.Id).Take(2).ToArrayAsync(cancellationToken);
+        if (seasons.Length != 1) return false;
+        var seasonId = seasons[0];
+        var episodeCode = EntityKind.VideoEpisode.ToCode();
+        var episodes = await NumberedTvEntities(EntityPositionCodes.Episode)
+            .Where(episode => episode.ParentEntityId == seasonId && episode.KindCode == episodeCode
+                && episode.Position != null && claims.Contains(episode.Position.Value))
+            .Select(episode => new { episode.Id, episode.Position }).ToArrayAsync(cancellationToken);
+        if (episodes.Length == 0 || episodes.GroupBy(episode => episode.Position).Any(group => group.Count() > 1)) return false;
+        var episodeIds = episodes.Select(episode => episode.Id).ToArray();
+        // Inspect both directions: every owner of these bytes, even outside this series, and every
+        // current source of the claimed episodes. A dictionary choosing one file would hide ambiguity.
+        var sources = await db.EntityFiles.AsNoTracking().Where(source => source.Role == EntityFileRole.Source
+                && (source.Path == previousPath || episodeIds.Contains(source.EntityId)))
+            .Select(source => new { source.EntityId, source.Path }).ToArrayAsync(cancellationToken);
+        return sources.Length > 0 && sources.All(source => episodeIds.Contains(source.EntityId)
+                && FileSystemPathComparison.Equals(source.Path, previousPath))
+            && sources.GroupBy(source => source.EntityId).All(group => group.Count() == 1);
+    }
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<TvSeasonEpisodeCatalog>> GetSeriesEpisodeCatalogAsync(
         Guid entityId, CancellationToken cancellationToken) {
         var seriesId = await ResolveAncestorOfKindAsync(entityId, EntityKind.VideoSeries.ToCode(), cancellationToken);

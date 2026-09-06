@@ -1173,6 +1173,49 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
     }
 
     [Theory]
+    [InlineData("shared owner")]
+    [InlineData("foreign season owner")]
+    [InlineData("changed owner path")]
+    [InlineData("split covered episodes")]
+    public async Task PendingReplacementsRecheckPhysicalEpisodeOwnership(string scenario) {
+        await using var db = CreateContext();
+        var inspector = new MeasuredUpgradeInspector(new(720, 1080, false, false, 1200, 1200));
+        var payloadName = scenario == "split covered episodes" ? "Show.S01E01E02.1080p.WEB-DL.mkv" : "Show.S01E01.1080p.WEB-DL.mkv";
+        var harness = await HarnessAsync(db, ownedEpisodeName: "Show - s01e01 720p WEB.mkv",
+            payloadFiles: [payloadName], releaseTitle: "Show S01 1080p WEB-DL", payloadContent: "incoming-upgrade",
+            failSameFormatAfterStage: true, upgradeInspector: inspector);
+        await Assert.ThrowsAsync<IOException>(() => harness.Engine.ImportAsync(harness.Context, harness.Import, default));
+        var source = await db.EntityFiles.SingleAsync(row => row.EntityId == harness.OwnedEpisodeId && row.Role == EntityFileRole.Source);
+        var otherPath = Path.Combine(harness.SeasonFolder, "other-owned.mkv");
+        if (scenario == "changed owner path") {
+            await File.WriteAllTextAsync(otherPath, "independently-owned-bytes");
+            source.Path = otherPath;
+        } else {
+            var owner = harness.WantedEpisodeId;
+            if (scenario == "foreign season owner") {
+                var season = AddWantedEntity(db, EntityKind.VideoSeason.ToCode(), harness.SeriesId, 2);
+                owner = AddWantedEntity(db, EntityKind.VideoEpisode.ToCode(), season, 1);
+            }
+            if (scenario == "split covered episodes") await File.WriteAllTextAsync(otherPath, "independently-owned-bytes");
+            db.EntityFiles.Add(new EntityFileRow { Id = Guid.NewGuid(), EntityId = owner, Role = EntityFileRole.Source,
+                Path = scenario == "split covered episodes" ? otherPath : harness.OwnedEpisodePath,
+                CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow });
+        }
+        await db.SaveChangesAsync();
+        var before = await db.EntityFiles.OrderBy(row => row.Id).Select(row => new { row.Id, row.Path }).ToArrayAsync();
+        var resume = (await AcquisitionTestFactory.Store(db).GetImportContextAsync(harness.Import.Id, default))!;
+
+        await harness.ResumeEngine.ImportAsync(harness.Context, resume, default);
+
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, await StatusOf(db, harness.Import.Id));
+        Assert.Equal("owned-bytes", await File.ReadAllTextAsync(harness.OwnedEpisodePath));
+        Assert.Equal("incoming-upgrade", await File.ReadAllTextAsync(Path.Combine(harness.Import.ContentPath!, payloadName)));
+        if (File.Exists(otherPath)) Assert.Equal("independently-owned-bytes", await File.ReadAllTextAsync(otherPath));
+        Assert.Equal(before, await db.EntityFiles.OrderBy(row => row.Id).Select(row => new { row.Id, row.Path }).ToArrayAsync());
+        Assert.Equal(1, inspector.Calls);
+    }
+
+    [Theory]
     [InlineData("unchanged", false)]
     [InlineData("profile changed", true)]
     [InlineData("owned upgraded", true)]

@@ -410,6 +410,14 @@ public interface IImportTargetIndex {
     Task<TvSeriesDiskLayout?> GetTvLayoutAsync(Guid entityId, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Whether one replacement can preserve every current owner of <paramref name="previousPath"/>.
+    /// The primary and covered episode numbers are scoped to the linked series and canonical season.
+    /// Unknown ownership, additional owners, split files, or ambiguous catalog positions return false.
+    /// </summary>
+    Task<bool> CanReplaceTvFileAsync(Guid entityId, int seasonNumber, int episodeNumber,
+        IReadOnlyList<int> coveredEpisodeNumbers, string previousPath, CancellationToken cancellationToken) => Task.FromResult(false);
+
+    /// <summary>
     /// The provider season-relative numbers, absolute numbers, and titles of one season under a linked
     /// series/season/episode entity — the alignment reference for imports whose file numbering diverges
     /// from the provider's ("as aired" multi-episode files). Empty when the graph or season is missing.
