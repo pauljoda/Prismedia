@@ -212,6 +212,27 @@ a {
   background-color: var(--prismedia-surface-1);
   border: 1px solid var(--prismedia-border-default);
   border-radius: var(--prismedia-radius-sm);
+  min-height: 40px;
+  font-size: 0.875rem;
+}
+
+:root {
+  --search-local-modal-background: var(--prismedia-surface-1);
+  --search-local-modal-shadow: 0 0 0 1px var(--prismedia-border-strong), 0 16px 48px #000b;
+  --search-local-hit-background: var(--prismedia-surface-2);
+  --search-local-hit-color: var(--prismedia-text-primary);
+  --search-local-hit-shadow: none;
+  --search-local-muted-color: var(--prismedia-text-secondary);
+  --search-local-highlight-color: #c4c9d4;
+  --search-local-hit-active-color: #090a0b;
+  --search-local-input-active-border-color: #c4c9d4;
+}
+
+/* The docs need room for search before the mobile menu takes over. */
+@media (min-width: 997px) and (max-width: 1199px) {
+  .navbar:has(.navbar__search) .navbar__section-link {
+    display: none;
+  }
 }
 
 .theme-doc-sidebar-container {

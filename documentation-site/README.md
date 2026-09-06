@@ -109,3 +109,21 @@ Only add `VideoObject` metadata when the final video is available at those URLs,
 duration and publication date. A video should be the main content of a dedicated watch page
 before targeting video search results; adding markup to an incidental homepage video does not
 make it a watch page. Preserve captions or an equivalent text explanation for silent demos.
+
+## Documentation search
+
+The docs use [`@easyops-cn/docusaurus-search-local`](https://github.com/easyops-cn/docusaurus-search-local).
+A production build generates a content-hashed local index of guide titles, headings,
+and body text. Search runs in the browser without an external search service. The
+search bar appears on documentation and search pages; the marketing header keeps
+its existing navigation. Use **⌘K / Ctrl+K** to focus it.
+
+Search requires a production build and preview (`pnpm docs:build`, then
+`pnpm docs:serve`); the development server does not produce the complete index.
+The results route is excluded from the sitemap and marked `noindex`; the guides
+remain the canonical search-engine destinations. Browser tests exercise keyboard
+navigation, mobile results, base-path links, and the generated index.
+
+The pinned search package has a small pnpm patch to keep its full-results link
+consistent with `trailingSlash: false`. Keep the browser assertion for the
+`/search?q=…` destination when upgrading the package.

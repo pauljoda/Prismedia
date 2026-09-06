@@ -12,7 +12,7 @@ Start with [Organize Your Media Folders](./organize-folders.md) if you are choos
 
 ## 1. Open the app
 
-Open [http://localhost:8008](http://localhost:8008). The container serves the built web app and API from the same port.
+On the computer running Docker, open [http://localhost:8008](http://localhost:8008). From another device, use the server's reachable network address and port. Complete the first-run wizard to create your administrator account, or sign in if setup is already complete.
 
 ## 2. Add a watched root
 
@@ -71,13 +71,21 @@ Use **Files** to inspect the source folder layout, linked entities, exclusions, 
 
 ![Files](/img/screenshots/files.png)
 
-## 5. Set visibility
+## 5. Open an item
+
+Open a scanned item from its library. Play a video or audio file, or open a book in the reader. This checks that the server can read the source file and deliver it to your device.
+
+Artwork and previews may continue appearing as background jobs finish. If the item is missing, in the wrong library, or will not open, use the [troubleshooting checks](../advanced/troubleshooting.md) before adding more roots.
+
+Once this works in the browser, you can [connect the native app](../using/native-apps.md) to the same server.
+
+## 6. Set visibility
 
 Prismedia is designed for private LAN use, but some libraries may still contain content you do not want shown by default. Mark roots or entities as NSFW where appropriate and control visibility from **Settings → Content Visibility**.
 
 Visibility is enforced across browse pages, search, files, identify, jobs context, relationship rails, playback, and OPDS. See [Settings](../using/settings.md).
 
-## 6. Identify metadata
+## 7. Identify metadata
 
 Once your media is scanned, open **Identify** (or use a detail page's Identify action) to fetch provider metadata, review the proposal, and accept the fields and artwork you want.
 

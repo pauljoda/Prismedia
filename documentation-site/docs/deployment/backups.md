@@ -70,10 +70,11 @@ Do not restore unless you are certain. Anything created, scanned, watched, edite
 Database backups are not full instance snapshots. They do not include:
 
 - `/media` files.
+- The `.prismedia-secret` encryption key or an externally configured `PRISMEDIA_SECRET`. Keep the original key with your instance backup so stored plugin credentials remain readable.
 - Generated thumbnails, waveforms, trickplay tiles, HLS cache, or other rebuildable files under `/data/cache`.
 - A safe downgrade path after a forward-only schema migration.
 
-For upgrades and rollbacks, take a host-level snapshot of `/data` before pulling the new image. A `/data` snapshot includes the database files, generated assets, plugin state, and the `.prismedia-secret` file used to decrypt stored credentials.
+For upgrades and rollbacks, stop the container before taking a host-level snapshot or file copy of `/data`, then pull the new image. A `/data` snapshot includes the database files, generated assets, plugin state, and the `.prismedia-secret` file used to decrypt stored credentials.
 
 ## Troubleshooting
 

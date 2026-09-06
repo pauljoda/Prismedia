@@ -555,6 +555,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Docs
 
+- Add local documentation search with keyboard navigation and mobile results, keeping search queries in the browser.
+- Simplify the getting-started path, explain server and client requirements, expand troubleshooting, and correct backup and writable-media guidance. Refresh the README and add focused support and issue-report paths.
 - Public-site publishing now checks canonical URLs, unique page descriptions, icons, manifest destinations, and browser behavior before deployment.
 - Add practical guides for native app connection, reading and listening together, EPUB reader settings, and web/native music players; clarify request permissions and download-to-library path mapping.
 

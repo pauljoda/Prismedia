@@ -19,6 +19,7 @@
     "@docusaurus/faster": "3.10.0",
     "@docusaurus/preset-classic": "3.10.0",
     "@docusaurus/theme-mermaid": "3.10.0",
+    "@easyops-cn/docusaurus-search-local": "0.55.3",
     "@fontsource-variable/inter": "^5.2.8",
     "@fontsource-variable/jetbrains-mono": "^5.2.8",
     "@fontsource/geist-sans": "^5.2.5",

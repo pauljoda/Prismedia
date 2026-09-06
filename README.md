@@ -1,107 +1,52 @@
 <p align="center">
-  <img src="docs/logo.png" width="128" alt="Prismedia colored prism mark" />
+  <img src="docs/logo.png" width="96" alt="Prismedia prism mark" />
 </p>
 
 <h1 align="center">Prismedia</h1>
 
 <p align="center">
-  <strong>Your whole media life. One private home.</strong>
-  <br />
-  A private, self-hosted media library for watching, reading, listening, requesting, and managing across web, iPhone, iPad, and Apple TV.
-</p>
-
-<p align="center">
-  <a href="https://pauljoda.github.io/Prismedia/">
-    <img alt="Visit the Prismedia website" src="https://img.shields.io/badge/Website-Prismedia-c7c9cc?style=for-the-badge&logo=googlechrome&logoColor=111214" />
-  </a>
-  <a href="https://pauljoda.github.io/Prismedia/docs/getting-started/install">
-    <img alt="Quick start guide" src="https://img.shields.io/badge/Get_Started-Docker-202734?style=for-the-badge&logo=docker&logoColor=white" />
-  </a>
-  <a href="https://testflight.apple.com/join/c9bgDxr7">
-    <img alt="Join the Prismedia TestFlight" src="https://img.shields.io/badge/Join-TestFlight-0d96f6?style=for-the-badge&logo=apple&logoColor=white" />
-  </a>
-  <a href="https://www.producthunt.com/products/prismedia?launch=prismedia">
-    <img alt="Follow Prismedia on Product Hunt" src="https://img.shields.io/badge/Follow-Product_Hunt-da552f?style=for-the-badge&logo=producthunt&logoColor=white" />
-  </a>
-  <a href="https://github.com/pauljoda/Prismedia/pkgs/container/prismedia">
-    <img alt="Container image" src="https://img.shields.io/badge/GHCR-prismedia-0b0e12?style=for-the-badge&logo=github&logoColor=white" />
-  </a>
-</p>
-
-<p align="center">
-  <a href="https://github.com/pauljoda/Prismedia/actions/workflows/ci.yml">
-    <img alt="Prismedia CI status" src="https://github.com/pauljoda/Prismedia/actions/workflows/ci.yml/badge.svg?branch=main" />
-  </a>
-  <a href="https://github.com/pauljoda/Prismedia/actions/workflows/documentation-site.yml">
-    <img alt="Prismedia documentation deployment status" src="https://github.com/pauljoda/Prismedia/actions/workflows/documentation-site.yml/badge.svg?branch=main" />
-  </a>
+  <strong>A clear home for all your media.</strong><br />
+  A private, self-hosted library for watching, reading, listening, and managing your collection.
 </p>
 
 <p align="center">
   <a href="https://pauljoda.github.io/Prismedia/">Website</a> &middot;
-  <a href="https://pauljoda.github.io/Prismedia/docs/intro">Docs</a> &middot;
-  <a href="#quick-start">Quick Start</a> &middot;
+  <a href="#quick-start">Quick start</a> &middot;
+  <a href="https://pauljoda.github.io/Prismedia/docs/intro">Guides</a> &middot;
+  <a href="https://apps.apple.com/us/app/prismedia/id6792944211">Apple TV App Store</a> &middot;
   <a href="https://testflight.apple.com/join/c9bgDxr7">TestFlight</a> &middot;
-  <a href="https://www.producthunt.com/products/prismedia?launch=prismedia">Product Hunt</a> &middot;
-  <a href="https://www.reddit.com/r/Prismedia/">Subreddit</a>
+  <a href="https://www.reddit.com/r/Prismedia/">Community</a>
 </p>
 
-<p align="center">
-  <img src="docs/showcase/01-one-private-home.png" alt="One private Prismedia library enters as white light and becomes purpose-built media experiences across the spectrum" width="100%" />
-</p>
+[![Prismedia's web app showing a movie library](documentation-site/static/img/showcase/web-movies-live.webp)](https://pauljoda.github.io/Prismedia/)
 
-## One Library In. Every Experience Out.
+## One library, across media types
 
-Movies, music, books, audiobooks, comics, images, and galleries share the same underlying needs: identity, artwork, files, metadata, relationships, progress, and history. Self-hosted media usually spreads those needs across one app for playback, another for requests, and a suite of services for acquisition and maintenance.
+Movies, series, music, books, audiobooks, comics, images, and galleries share a common flow: find the right item, identify it, organize its files, then watch, read, or listen. Prismedia keeps that flow in one app, with an experience suited to each medium.
 
-Prismedia keeps that shared foundation in one private system, then gives every medium an interface shaped around how it is actually used. The logo makes the idea literal: **one light enters; every medium leaves in its own color.**
+The shared foundation is the **Entity**: a library item that holds its identity, metadata, artwork, files, relationships, and personal progress. A requested title becomes the same item you eventually play or read. The prism represents that idea: one light enters, and the different media experiences take their own colors.
 
-The complete web workspace, native iPhone and iPad experience, and focus-first Apple TV app share one household library. An item remains the same item while it moves from discovery and request through acquisition, identification, organization, playback or reading, and long-term maintenance.
+Run the server on your own computer or NAS. The web app is the complete management workspace; the native apps connect to the same server and account. The Apple TV app is available on the [App Store](https://apps.apple.com/us/app/prismedia/id6792944211), with early native builds, including iPhone and iPad, available through [TestFlight](https://testflight.apple.com/join/c9bgDxr7).
 
-The Apple TV app is available on the [App Store](https://apps.apple.com/us/app/prismedia/id6792944211). [TestFlight](https://testflight.apple.com/join/c9bgDxr7) provides access to early Apple-platform builds.
+## What you can do
 
-<p align="center">
-  <a href="https://pauljoda.github.io/Prismedia/#launch-film-title">
-    <img src="documentation-site/static/img/showcase/prismedia-launch-poster.webp" alt="Prismedia product film showing the web, iPhone, iPad, and Apple TV experiences" width="100%" />
-  </a>
-  <br />
-  <a href="https://pauljoda.github.io/Prismedia/#launch-film-title"><strong>▶ Watch the 72-second silent product film</strong></a>
-</p>
+| Task | In Prismedia |
+| --- | --- |
+| Organize an existing collection | Scan watched folders, browse by medium, and connect items through people, artists, authors, tags, and collections. [Folder guide](https://pauljoda.github.io/Prismedia/docs/getting-started/organize-folders). |
+| Watch | Play video in the browser or native app, with resume, subtitles, and direct playback or conversion according to the client's capabilities. [Playback guide](https://pauljoda.github.io/Prismedia/docs/using/playback). |
+| Read and listen | Read EPUBs, PDFs, and comics; play audiobooks; use the native reader's typography and page settings. Titles with both text and audio can use approximate chapter alignment. [Reading and listening](https://pauljoda.github.io/Prismedia/docs/using/read-and-listen). |
+| Play music | Browse artists, albums, and tracks, then use the web or native player and queue. Playback sessions are separate on each device. [Music players](https://pauljoda.github.io/Prismedia/docs/using/music-player). |
+| Find metadata | Use provider plugins to review matches, artwork, and relationships before applying them. [Identify walkthrough](https://pauljoda.github.io/Prismedia/docs/getting-started/identify-walkthrough). |
+| Request media | Search metadata sources, use your existing indexers and download clients, and follow a request through acquisition and import. [Request setup](https://pauljoda.github.io/Prismedia/docs/using/requests). |
+| Manage the library | Use the browser file manager, household accounts, background jobs, and database backups. [Start with the guides](https://pauljoda.github.io/Prismedia/docs/intro). |
 
-<p align="center">
-  <a href="https://www.producthunt.com/products/prismedia?launch=prismedia">
-    <img alt="Prismedia on Product Hunt" height="54" width="250" src="https://api.producthunt.com/widgets/embed-image/v1/featured.svg?post_id=1205980&amp;theme=dark" />
-  </a>
-</p>
+Prismedia does not include media. You supply your own files or configure your sources. Requests, indexers, and download clients are optional when cataloging a collection you already have.
 
-## From “I Want It” To “Press Play”
+## Quick start
 
-Discovery, requests, acquisition, metadata, files, playback, reading, and listening are one connected lifecycle. Provider identity, download state, artwork, history, and personal progress stay attached to the same library item instead of disappearing at every handoff.
+You need Docker, persistent storage for Prismedia's state, and a media folder on the machine running Docker. The single container includes the database, web app, API, background worker, and media tools.
 
-<p align="center">
-  <img src="docs/showcase/02-one-media-lifecycle.png" alt="Prismedia connects discovery, requests, acquisition, management, and enjoyment in one media lifecycle" width="100%" />
-</p>
-
-## Quick Start
-
-<p align="center">
-  <img src="docs/showcase/06-self-hosted.png" alt="One self-hosted Prismedia image connects the web, iPhone, iPad, and Apple TV experiences for a household" width="100%" />
-</p>
-
-### Docker Run
-
-```bash
-docker run -d \
-  --name prismedia \
-  -p 8008:8008 \
-  -v prismedia-data:/data \
-  -v /path/to/your/media:/media \
-  ghcr.io/pauljoda/prismedia:latest
-```
-
-Open [http://localhost:8008](http://localhost:8008), add `/media` or one of its subfolders as a watched library, then run a scan from **Jobs** or **Settings**.
-
-### Docker Compose
+Save this as `compose.yaml`, replacing `/path/to/your/media` with your existing media folder:
 
 ```yaml
 services:
@@ -118,143 +63,45 @@ volumes:
   prismedia-data:
 ```
 
+From the same directory, run:
+
 ```bash
 docker compose up -d
 ```
 
-### Volumes
+1. Open [http://localhost:8008](http://localhost:8008) on the server computer. From another device, use the server's reachable network address and port.
+2. Complete the setup wizard to create your administrator account.
+3. Add a watched root in **Settings → Watched Libraries**, such as `/media/movies`, and enable its matching scan type. Enter the path **inside the container**.
+4. Check the scan in **Jobs**, then open an item from its library to play or read it.
 
-| Mount | Purpose |
+See [Install & Run](https://pauljoda.github.io/Prismedia/docs/getting-started/install) for Docker run, configuration, and writable versus read-only mounts. The [first-library guide](https://pauljoda.github.io/Prismedia/docs/getting-started/first-library) walks through verifying the scan.
+
+### Storage
+
+| Mount | What belongs there |
 | --- | --- |
-| `/data` | PostgreSQL data, generated cache, thumbnails, waveforms, trickplay, HLS output, plugin state, encryption secret |
-| `/media` | Your mounted media folders |
+| `/data` | Database, accounts, progress, settings, encryption secret, and generated artwork and playback files. Keep this volume when updating or recreating the container. |
+| `/media` | Your source media folders. Use a read-only mount for scanning and playback, or allow writes for imports and file-management operations. |
 
-Mount `/media` read-only if Prismedia should only scan and play files. Mount it read-write if you want browser uploads, renames, moves, deletes, and file-manager organization.
+Keep download staging outside watched roots. [Organize Your Media Folders](https://pauljoda.github.io/Prismedia/docs/getting-started/organize-folders) explains layouts, Docker path mapping, and importing from a separate download client.
 
-### Access
+Back up your media separately from Prismedia's state. Read [Backups & Restore](https://pauljoda.github.io/Prismedia/docs/deployment/backups) before relying on built-in database backups as a full instance backup.
 
-Prismedia has real user accounts: a first-run wizard creates your administrator, and every household member gets their own username and password. The web app and native API use per-user sessions, OPDS readers use the same account credentials, and protected `/api/*` routes require a signed-in user. Admins control per-user library access and NSFW visibility. See [Authentication & User Accounts](https://pauljoda.github.io/Prismedia/docs/deployment/authentication).
+### Updates
 
-### Image Tags
+`latest` and `release` follow the promoted release channel. `beta` and `alpha` are for earlier testing; `dev` follows `main`. Use a published version-pinned tag when you want to keep a specific build.
 
-| Tag | Use |
-| --- | --- |
-| `latest` | Current promoted release. Recommended for normal installs. |
-| `release` / `release-X.Y.Z` | Release channel and version-pinned release images. |
-| `beta` / `beta-X.Y.Z` | Manual beta channel for release candidates. |
-| `alpha` / `alpha-X.Y.Z` | Manual alpha channel for early testing. |
-| `dev` | Latest `main` build. Useful for testing fixes before release. |
-| `sha-<short-sha>` / `X.Y.Z-<short-sha>` | Exact dev build for rollback or bisection. |
+Read [CHANGELOG.md](CHANGELOG.md) and the [upgrade guide](https://pauljoda.github.io/Prismedia/docs/deployment/upgrading) before changing versions. Preserve `/data`; a downgrade after a schema change may require restoring your pre-upgrade snapshot.
 
-Read [CHANGELOG.md](CHANGELOG.md) before upgrading a library you care about.
+## Help and contributions
 
-## What Prismedia Manages
+- [Search the documentation](https://pauljoda.github.io/Prismedia/search) for setup and feature guides.
+- [Troubleshooting](https://pauljoda.github.io/Prismedia/docs/advanced/troubleshooting) covers connection, scanning, imports, and playback.
+- Ask setup and usage questions in [r/Prismedia](https://www.reddit.com/r/Prismedia/).
+- [Open an issue](https://github.com/pauljoda/Prismedia/issues/new/choose) for a bug, missing documentation, or feature suggestion. Remove private details from logs and screenshots.
+- Read [Contributing](https://pauljoda.github.io/Prismedia/docs/developers/contributing) for development conventions.
 
-Video is the foundation, but music, audiobooks, eBooks, comics, images, and galleries are first-class media—not generic files forced into the same grid.
-
-<p align="center">
-  <img src="docs/showcase/05-purpose-built-media.png" alt="Prismedia gives video, music, audiobooks, eBooks, comics, images, and galleries purpose-built native experiences" width="100%" />
-</p>
-
-### Library And Search
-
-Prismedia has dedicated browse surfaces for movies, series, videos, images, galleries, comics, eBooks, audio, artists, people, studios, tags, and collections. The dashboard leads with Continue Watching and Recently Watched; the search page and command palette jump across every entity type.
-
-<p align="center">
-  <img src="docs/screenshots/videos.png" alt="Video library" width="49%" />
-  <img src="docs/screenshots/search.png" alt="Search" width="49%" />
-</p>
-
-### File Manager
-
-The **Files** workspace mirrors watched library roots and gives you practical file operations without leaving the app: open linked entities, create folders, upload, rename, move, rescan, exclude paths from scans, remove exclusions, and delete when the media mount is writable.
-
-<p align="center">
-  <img src="docs/screenshots/files.png" alt="File manager" width="100%" />
-</p>
-
-### Playback And Reading
-
-Videos direct-play when the client can decode them, stream-copy (remux) where possible, and fall back to on-demand HLS only when a transcode is truly needed. Detail pages include subtitles, transcript management, trickplay previews, resume, metadata editing, and artwork controls.
-
-Comics (`.cbz`/`.zip`), EPUBs, and PDFs open in a built-in reader — paged and webtoon comics, reflowable EPUBs, and a full PDF reader with selectable text, zoom, search, outline, and resume. Images and galleries use a lightbox with metadata and linked entities. Audio plays through a persistent bar with a queue, shuffle, waveforms, and OS media-control integration.
-
-<p align="center">
-  <img src="docs/screenshots/video-detail.png" alt="Video detail" width="49%" />
-  <img src="docs/screenshots/audio.png" alt="Audio playback" width="49%" />
-</p>
-
-### Metadata And Identify
-
-The Identify workspace keeps a durable review queue. Add movies, series, videos, books, galleries, images, people, studios, or audio, run providers, review field-by-field proposals, choose artwork, walk into streaming child proposals (seasons/episodes, volumes/chapters, albums/tracks), and accept when the result is right. **Auto Identify** can apply confident matches automatically during scans.
-
-Plugins can be native TypeScript or Python, and Stash community scrapers can be wrapped as providers.
-
-<p align="center">
-  <img src="docs/screenshots/identify.png" alt="Identify queue" width="49%" />
-  <img src="docs/screenshots/plugins.png" alt="Plugins" width="49%" />
-</p>
-
-### Requests
-
-Request is Prismedia's first-party acquisition workspace. Search for books, authors, movies, series, artists, and albums, then let Prismedia create Wanted library entities, search Prowlarr or direct Torznab/Newznab indexers, route releases to qBittorrent, Transmission, or SABnzbd, monitor the download, import the result into the right library, and keep durable History for every grab, import, failure, blocklist, and removal. Wanted and acquired items live on the same library pages with release picking, live progress, monitoring, Missing/Cutoff Unmet lists, and detail metadata from providers such as OpenLibrary, TMDB, and MusicBrainz.
-
-<p align="center">
-  <img src="docs/screenshots/requests.png" alt="Request search" width="49%" />
-  <img src="docs/screenshots/request-detail.png" alt="Request detail" width="49%" />
-</p>
-
-### Web And Native Apple Apps
-
-The responsive web app is the complete library workspace: browse every medium, request and identify items, manage files, tune settings, and inspect background work from one interface.
-
-The native iPhone and iPad app adds adaptive Apple-platform navigation, video and audio playback, dedicated music and audiobook players, and customizable EPUB, PDF, comic, and webtoon reading. Tune typeface, size, weight, line spacing, margins, theme, and brightness. When a title has both text and audio editions, reading and listening progress stay together with separate actions for continuing each experience.
-
-<p align="center">
-  <img src="docs/showcase/04-custom-reader.png" alt="Prismedia's native reader with literary typography, deep customization, and combined reading and audiobook progress" width="100%" />
-</p>
-
-The Apple TV app uses a cinematic, focus-first interface and a custom native player built on the device's codec and playback stack. Supported sources direct-play at original quality—including lossless audio—while the paused chrome keeps title, stream state, resolution, codecs, timeline, audio, subtitles, and playback controls readable from the couch.
-
-<p align="center">
-  <img src="docs/showcase/03-native-playback.png" alt="Prismedia's custom Apple TV player showing direct play, original-quality video, lossless audio, native codecs, and paused playback controls" width="100%" />
-</p>
-
-Get the Apple TV app on the [App Store](https://apps.apple.com/us/app/prismedia/id6792944211). Use [Prismedia TestFlight](https://testflight.apple.com/join/c9bgDxr7) to test early builds for the Apple platforms.
-
-### Collections
-
-Collections are simple groupings for browsing and curation. They can be manual, rule-driven, or hybrid, and they can contain movies, series, galleries, images, books, and audio tracks. They are not a global playback queue; they are an organizational view over your library.
-
-<p align="center">
-  <img src="docs/screenshots/collections.png" alt="Collections" width="100%" />
-</p>
-
-### Jobs, Settings, And Visibility
-
-Long-running work runs in the .NET worker and is visible in **Jobs**: scans, probes, previews, thumbnails, sprites, waveforms, HLS, subtitles, identify, imports, collection refreshes, and maintenance. Settings control watched libraries, user accounts, playback, subtitles, generated storage, worker concurrency, and diagnostics.
-
-<p align="center">
-  <img src="docs/screenshots/jobs.png" alt="Jobs" width="49%" />
-  <img src="docs/screenshots/settings.png" alt="Settings" width="49%" />
-</p>
-
-## Design Language
-
-Prismedia's visual system makes the name literal: neutral white-light chrome holds the whole collection together, then each media family takes a muted color from the prism spectrum. True black and opaque material surfaces keep artwork dominant; a page gets one restrained accent moment, while frosted glass is reserved for navigation, toolbars, menus, dialogs, and other layers that actually float.
-
-The design language lives in [docs/design-language.md](docs/design-language.md) and is mirrored in the [documentation site](https://pauljoda.github.io/Prismedia/docs/developers/design-language).
-
-## Documentation
-
-- [Install & Run](https://pauljoda.github.io/Prismedia/docs/getting-started/install)
-- [Your First Library & Scan](https://pauljoda.github.io/Prismedia/docs/getting-started/first-library)
-- [Identify & Enrich Your Media](https://pauljoda.github.io/Prismedia/docs/getting-started/identify-walkthrough)
-- [Library & Scanning](https://pauljoda.github.io/Prismedia/docs/library/overview)
-- [Requests & Acquisition](https://pauljoda.github.io/Prismedia/docs/using/requests)
-- [Organize Your Media Folders](https://pauljoda.github.io/Prismedia/docs/getting-started/organize-folders)
-- [Reverse Proxy](https://pauljoda.github.io/Prismedia/docs/deployment/reverse-proxy)
-- [Architecture](https://pauljoda.github.io/Prismedia/docs/developers/architecture)
+Metadata providers use Prismedia's .NET plugin protocol; Stash YAML scrapers run through the Stash compatibility adapter. See the [plugin guide](https://pauljoda.github.io/Prismedia/docs/plugins/overview) and [Prismedia-Plugins](https://github.com/pauljoda/Prismedia-Plugins) for the current contract and implementations.
 
 ## Development
 

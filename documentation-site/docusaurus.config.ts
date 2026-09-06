@@ -45,7 +45,19 @@ const config: Config = {
   markdown: {
     mermaid: true,
   },
-  themes: ['@docusaurus/theme-mermaid'],
+  themes: [
+    '@docusaurus/theme-mermaid',
+    [
+      '@easyops-cn/docusaurus-search-local',
+      {
+        hashed: 'filename',
+        indexBlog: false,
+        indexPages: false,
+        highlightSearchTermsOnTargetPage: true,
+        searchBarPosition: 'right',
+      },
+    ],
+  ],
 
   // Set the production url of your site here
   url: SITE_ORIGIN,
@@ -81,6 +93,9 @@ const config: Config = {
         blog: false,
         theme: {
           customCss: './src/css/custom.css',
+        },
+        sitemap: {
+          ignorePatterns: ['**/search'],
         },
       } satisfies Preset.Options,
     ],
@@ -121,24 +136,28 @@ const config: Config = {
           label: 'How it works',
           position: 'left',
           activeBaseRegex: disablePathOnlyActiveState,
+          className: 'navbar__section-link',
         },
         {
           to: '/?section=experiences',
           label: 'Experiences',
           position: 'left',
           activeBaseRegex: disablePathOnlyActiveState,
+          className: 'navbar__section-link',
         },
         {
           to: '/?section=platforms',
           label: 'Platforms',
           position: 'left',
           activeBaseRegex: disablePathOnlyActiveState,
+          className: 'navbar__section-link',
         },
         {
           to: '/?section=self-hosting',
           label: 'Self-hosting',
           position: 'left',
           activeBaseRegex: disablePathOnlyActiveState,
+          className: 'navbar__section-link',
         },
         {
           type: 'docSidebar',

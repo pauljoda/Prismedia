@@ -1,0 +1,49 @@
+name: Bug report
+description: Report a reproducible problem with the server, web app, or native app.
+body:
+  - type: markdown
+    attributes:
+      value: Please check existing issues first. Remove passwords, tokens, private hostnames, and private media details from anything you share.
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Where does it happen?
+      multiple: true
+      options:
+        - Server / Docker
+        - Web browser
+        - iPhone / iPad
+        - Apple TV
+    validations:
+      required: true
+  - type: input
+    id: server_version
+    attributes:
+      label: Server version and image channel or tag
+      description: Use the running version, not the latest version listed on GitHub. If the server cannot start, provide the image tag.
+      placeholder: Version and release / beta / alpha / dev, or image tag
+    validations:
+      required: true
+  - type: input
+    id: client_version
+    attributes:
+      label: Native build or browser, and device / operating system
+      description: Include this when the issue involves playback, reading, connection, or the interface.
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Start from the page or action where the issue begins. Say whether it happens every time.
+    validations:
+      required: true
+  - type: textarea
+    id: expected_actual
+    attributes:
+      label: Expected result and what happened instead
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Relevant errors or screenshots
+      description: A short job error or log excerpt is usually enough. For file or import issues, include a folder / mount example with private names replaced. For playback, include container and codec information rather than the media file.
