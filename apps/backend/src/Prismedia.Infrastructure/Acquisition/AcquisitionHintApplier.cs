@@ -327,26 +327,34 @@ public sealed partial class AcquisitionHintApplier(
         }
 
         var childKindCode = childKind.ToCode();
-        var child = await db.Entities.FirstOrDefaultAsync(
-            row => row.ParentEntityId == parentId && row.KindCode == childKindCode && row.IsWanted && row.SortOrder == sortOrder,
-            cancellationToken);
-        if (child is null) {
+        var candidates = await db.Entities.AsNoTracking().Where(
+            row => row.ParentEntityId == parentId && row.KindCode == childKindCode && row.SortOrder == sortOrder)
+            .Take(2).ToArrayAsync(cancellationToken);
+        if (candidates.Length != 1 || binding == SourceBinding.File && !candidates[0].IsWanted) {
             return null;
         }
+        // Shared files can give a season owned episodes before it has its own physical folder.
+        // Folder provenance must not depend on Wanted; payload binding still requires a wanted child.
+        var child = candidates[0];
         Guid? boundId = null;
         if (!await _lifecycle.ExecuteAsync(
                 child.Id,
                 async leaseCancellationToken => {
+                    var currentIds = await db.Entities.AsNoTracking().Where(row => row.ParentEntityId == parentId
+                            && row.KindCode == childKindCode && row.SortOrder == sortOrder)
+                        .Select(row => row.Id).Take(2).ToArrayAsync(leaseCancellationToken);
+                    if (currentIds.Length != 1 || currentIds[0] != child.Id) return;
                     var current = await db.Entities.FirstOrDefaultAsync(
                         row => row.Id == child.Id
                             && row.ParentEntityId == parentId
                             && row.KindCode == childKindCode
-                            && row.IsWanted
+                            && (binding == SourceBinding.Folder || row.IsWanted)
                             && row.SortOrder == sortOrder,
                         leaseCancellationToken);
                     if (current is null || await HasBindingAsync(current.Id, binding, leaseCancellationToken)) {
                         return;
                     }
+                    await db.Entry(current).ReloadAsync(leaseCancellationToken);
 
                     var now = DateTimeOffset.UtcNow;
                     AddBinding(current.Id, childPath, binding, now);

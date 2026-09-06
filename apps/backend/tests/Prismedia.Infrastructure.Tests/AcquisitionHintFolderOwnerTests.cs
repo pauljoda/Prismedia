@@ -14,6 +14,43 @@ namespace Prismedia.Infrastructure.Tests;
 /// </summary>
 public sealed class AcquisitionHintFolderOwnerTests {
     [Fact]
+    public async Task ASourceBackedSeasonCanGainItsFirstFolderBeforeBindingAnotherWantedEpisode() {
+        await using var db = CreateContext();
+        var seriesId = AddEntity(db, EntityKind.VideoSeries.ToCode(), null, "/media/tv/Show", "Show");
+        var seasonId = AddWantedEntity(db, EntityKind.VideoSeason.ToCode(), seriesId, 3);
+        db.Entities.Local.Single(entity => entity.Id == seasonId).IsWanted = false;
+        var existingEpisodeId = AddEntity(db, EntityKind.VideoEpisode.ToCode(), seasonId,
+            "/media/tv/Show/Season 02/Shared.mkv", "Recovered Story");
+        var wantedEpisodeId = AddWantedEntity(db, EntityKind.VideoEpisode.ToCode(), seasonId, 58);
+        await db.SaveChangesAsync();
+        var sourceId = (await db.EntityFiles.SingleAsync(row => row.EntityId == existingEpisodeId)).Id;
+        var hints = new AcquisitionHintApplier(db);
+
+        Assert.Equal(seasonId, await hints.BindWantedChildFolderBySortOrderAsync(EntityKind.VideoSeason,
+            "/media/tv/Show", 3, "/media/tv/Show/Season 03", default));
+        Assert.Equal(wantedEpisodeId, await hints.BindWantedChildFileBySortOrderAsync(EntityKind.VideoEpisode,
+            "/media/tv/Show/Season 03", 58, "/media/tv/Show/Season 03/Show.S03E58.mkv", default));
+
+        Assert.False((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == wantedEpisodeId)).IsWanted);
+        Assert.Equal("/media/tv/Show/Season 02/Shared.mkv", (await db.EntityFiles.SingleAsync(row => row.Id == sourceId)).Path);
+        Assert.Equal(seasonId, (await db.Entities.AsNoTracking().SingleAsync(row => row.Id == existingEpisodeId)).ParentEntityId);
+    }
+
+    [Fact]
+    public async Task ASeasonFolderCannotSelectOneOfSeveralEntitiesAtTheSamePosition() {
+        await using var db = CreateContext();
+        var seriesId = AddEntity(db, EntityKind.VideoSeries.ToCode(), null, "/media/tv/Show", "Show");
+        var firstId = AddWantedEntity(db, EntityKind.VideoSeason.ToCode(), seriesId, 3);
+        AddWantedEntity(db, EntityKind.VideoSeason.ToCode(), seriesId, 3);
+        db.Entities.Local.Single(entity => entity.Id == firstId).IsWanted = false;
+        await db.SaveChangesAsync();
+
+        Assert.Null(await new AcquisitionHintApplier(db).BindWantedChildFolderBySortOrderAsync(EntityKind.VideoSeason,
+            "/media/tv/Show", 3, "/media/tv/Show/Season 03", default));
+        Assert.False(await db.EntitySources.AnyAsync(row => row.EntityId != seriesId));
+    }
+
+    [Fact]
     public async Task DirectMovieFolderProvenanceDoesNotFulfillTheWantedMovieBeforeItsPayloadExists() {
         await using var db = CreateContext();
         var movieId = AddWantedEntity(db, EntityKind.Movie.ToCode(), parent: null, sortOrder: 0);
