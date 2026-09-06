@@ -389,7 +389,8 @@ public static partial class TvImportPlanBuilder {
     private readonly record struct EpisodeInference(
         (int Season, int Episode)? Unit,
         bool RecognizedDifferentSeason = false,
-        IReadOnlyList<int>? DeclaredEpisodes = null);
+        IReadOnlyList<int>? CoveredEpisodes = null,
+        bool HasAmbiguousEvidence = false);
 
     /// <summary>Video extensions the TV importer accepts. Mirrors scan discovery's video set.</summary>
     private static readonly IReadOnlySet<string> VideoExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
@@ -437,6 +438,7 @@ public static partial class TvImportPlanBuilder {
             ? (episodes.Season, episodes.Episodes[0])
             : null;
         var declaredSeason = unit?.Season ?? TvReleaseTokens.ParseSeason(sourceName);
+        IReadOnlyList<int>? coveredEpisodes = declared?.Episodes;
 
         // A structured unit and a strong title/absolute identifier are independent evidence. A unique
         // provider-title match re-identifies the episode instead of silently trusting a contradictory
@@ -456,9 +458,15 @@ public static partial class TvImportPlanBuilder {
             && requestedSeason is { } titleSeason
             && (declaredSeason is null || declaredSeason == titleSeason)
             && evidence.Count > 0) {
-            var titleMatches = evidence.Match(AcquisitionWorkTitles.EpisodeEvidence(sourceName, seriesTitle, alternativeWorkTitles));
+            var titleEvidence = AcquisitionWorkTitles.EpisodeEvidence(sourceName, seriesTitle, alternativeWorkTitles);
+            var titleMatches = evidence.Match(titleEvidence);
             if (titleMatches.Length == 1) {
                 unit = (titleSeason, titleMatches[0]);
+            } else if (titleMatches.Length > 1 && evidence.HasDistinctLeadingTitles(titleEvidence, titleMatches)) {
+                unit = (titleSeason, titleMatches[0]);
+                coveredEpisodes = titleMatches;
+            } else if (titleMatches.Length > 1) {
+                return new EpisodeInference(null, HasAmbiguousEvidence: true);
             }
         }
 
@@ -468,7 +476,7 @@ public static partial class TvImportPlanBuilder {
         var inferred = unit is { } candidate && !recognizedDifferentSeason
             ? ((int Season, int Episode)?)candidate
             : null;
-        return new EpisodeInference(inferred, recognizedDifferentSeason, declared?.Episodes);
+        return new EpisodeInference(inferred, recognizedDifferentSeason, coveredEpisodes);
     }
 
     /// <summary>
@@ -591,7 +599,7 @@ public static partial class TvImportPlanBuilder {
         foreach (var video in videos.OrderBy(file => file.RelativePath, StringComparer.OrdinalIgnoreCase)) {
             var inference = InferEpisodeEvidence(video.RelativePath, seasonNumber, evidence, series, alternativeWorkTitles ?? []);
             hasRecognizedDifferentUnit |= inference.RecognizedDifferentSeason;
-            if (inference.RecognizedDifferentSeason) {
+            if (inference.RecognizedDifferentSeason || inference.HasAmbiguousEvidence) {
                 continue;
             }
             var unit = inference.Unit;
@@ -609,7 +617,7 @@ public static partial class TvImportPlanBuilder {
             var naming = NamingContext(series, season, episode, quality, Path.GetExtension(video.RelativePath));
             units.Add(new TvPlanUnit(
                 video.RelativePath, season, episode, MediaNamingTemplates.RenderTvPath(template, naming)) {
-                ExtraEpisodes = inference.DeclaredEpisodes?.Skip(1).ToArray() ?? []
+                ExtraEpisodes = inference.CoveredEpisodes?.Skip(1).ToArray() ?? []
             });
         }
 

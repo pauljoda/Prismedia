@@ -42,6 +42,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- TV files that clearly name several distinct episodes can cover those episodes even without season-and-episode markers, allowing complete paired files to import and previously unnecessary packs to reopen when coverage is missing.
+
 - TV searches and file mapping distinguish the series name from episode evidence, preventing numbers or repeated words in a show's title from identifying the wrong episode.
 
 - Generated season-and-episode catalog labels no longer override a download's explicit episode numbering as if they were descriptive titles.

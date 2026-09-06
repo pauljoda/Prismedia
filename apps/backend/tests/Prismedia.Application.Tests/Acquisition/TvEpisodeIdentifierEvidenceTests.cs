@@ -6,6 +6,46 @@ namespace Prismedia.Application.Tests.Acquisition;
 /// <summary>Generic catalog labels cannot establish an episode's place in another numbering system.</summary>
 public sealed class TvEpisodeIdentifierEvidenceTests {
     [Theory]
+    [InlineData(null)]
+    [InlineData(3)]
+    public void AmbiguousTitleEvidenceCannotFallBackToTheRequestedEpisode(int? episode) {
+        var plan = TvImportPlanBuilder.PlanUnits([new("Show - Hidden Garden.mkv", 1000)], "Show", 2, episode,
+            episodeTitles: [new(3, "Hidden Garden"), new(4, "The Hidden Garden")]);
+        Assert.True(plan.Blocked);
+    }
+
+    [Theory]
+    [InlineData("Show - Hidden Garden & Mountain Journey [1080p].mkv")]
+    [InlineData("Hidden.Garden.and.Mountain.Journey.mkv")]
+    [InlineData("Show - Mountain Journey & Hidden Garden.mkv")]
+    public void DistinctTitleOnlyBundlesCoverBothCatalogEpisodes(string file) {
+        var plan = TvImportPlanBuilder.PlanUnits([new(file, 1000)], "Show", 2, null,
+            episodeTitles: [new(3, "Hidden Garden"), new(4, "Mountain Journey")]);
+        Assert.False(plan.Blocked);
+        var unit = Assert.Single(plan.Units);
+        Assert.Equal(3, unit.Episode);
+        Assert.Equal([4], unit.ExtraEpisodes);
+    }
+
+    [Theory]
+    [InlineData("Hidden Garden", "The Hidden Garden")]
+    [InlineData("Garden", "Hidden Garden")]
+    [InlineData("Hidden Garden", "Hidden Garden")]
+    public void OverlappingOrRepeatedTitlesCannotProveATitleOnlyBundle(string first, string second) {
+        Assert.True(TvImportPlanBuilder.PlanUnits([new("Show - Hidden Garden.mkv", 1000)], "Show", 2, null,
+            episodeTitles: [new(3, first), new(4, second)]).Blocked);
+    }
+
+    [Theory]
+    [InlineData("Another Show - Hidden Garden & Mountain Journey.mkv")]
+    [InlineData("Show - Hidden Garden visits Mountain Journey.mkv")]
+    [InlineData("Show - Hidden Garden & Mountain Journey Sequel.mkv")]
+    public void UnexplainedContentWordsCannotProveATitleOnlyBundle(string file) {
+        Assert.True(TvImportPlanBuilder.PlanUnits([new(file, 1000)], "Show", 2, null,
+            episodeTitles: [new(3, "Hidden Garden"), new(4, "Mountain Journey")]).Blocked);
+    }
+
+    [Theory]
     [InlineData("The 100", "The.100", 100)]
     [InlineData("Room 104", "[Group 57] Room.104", 104)]
     public void SeriesTitleNumbersCannotProveAnAbsoluteEpisode(string series, string filenamePrefix, int titleNumber) {

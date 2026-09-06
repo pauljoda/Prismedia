@@ -13,7 +13,10 @@ public static class TvOwnedEpisodeCoveragePlanner {
         IReadOnlyList<TvSeasonEpisodeCatalog> catalog, IReadOnlyCollection<Guid> existingOwnerIds,
         IReadOnlyList<string>? alternativeWorkTitles = null) {
         var name = Path.GetFileNameWithoutExtension(originalFileName);
-        if (existingOwnerIds.Count == 0 || !AcquisitionWorkTitles.Match(name, seriesTitle, alternativeWorkTitles ?? []).TitleMatched) return null;
+        var workMatched = AcquisitionWorkTitles.Match(name, seriesTitle, alternativeWorkTitles ?? []).TitleMatched;
+        var titleEvidence = AcquisitionWorkTitles.EpisodeEvidence(name, seriesTitle, alternativeWorkTitles ?? []);
+        if (existingOwnerIds.Count == 0 || !workMatched
+            && (TvReleaseTokens.ParseEpisodes(name) is not null || titleEvidence == name)) return null;
         var coverage = ReadCoverage(originalFileName, seriesTitle, requestedSeason, catalog, alternativeWorkTitles);
         if (coverage is not { Season.SeasonEntityId: { } seasonId } || coverage.Episodes.Count < 2) return null;
         var episodes = coverage.Episodes;
@@ -29,6 +32,8 @@ public static class TvOwnedEpisodeCoveragePlanner {
         if (episodes.Any(episode => !TvCrossSeasonImportEvidence.IsDistinctiveTitle(episode.Title)
                 || !ReleaseTitleIdentity.ContainsMeaningfulRun(tail, episode.Title))
             || TvCrossSeasonImportEvidence.TitlesOverlap(episodes)) return null;
+        if (!workMatched && !new TvEpisodeEvidenceIndex(episodes).HasDistinctLeadingTitles(
+                titleEvidence, episodes.Select(episode => episode.Episode).ToArray())) return null;
         return new(seasonId, coverage.Season.SeasonNumber, missing);
     }
 

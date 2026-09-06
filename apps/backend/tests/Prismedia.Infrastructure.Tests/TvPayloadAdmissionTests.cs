@@ -9,6 +9,19 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class TvPayloadAdmissionTests {
     [Fact]
+    public async Task PairedTitleOnlyFilesAreReconsideredWhenAnOwnedHalfGoesMissing() {
+        await using var db = CreateContext();
+        using var fixture = await TvPayloadAdmissionFixture.CreateAsync(db);
+        ImportCandidateFile[] files = [new("Show - First Story & Second Story.mkv", 1000)];
+        Assert.True(await fixture.Service.HasNoBenefitAsync(fixture.Input, files, default));
+        await fixture.Service.RememberAsync(fixture.Input.Id, fixture.Selected.Identity, files, default);
+        Assert.Contains(fixture.Selected.Identity, await fixture.Service.GetExcludedAsync(fixture.Input, default));
+        db.EntityFiles.Remove(await db.EntityFiles.SingleAsync(file => file.EntityId == fixture.SecondEpisode.Id));
+        await db.SaveChangesAsync();
+        Assert.Empty(await fixture.Service.GetExcludedAsync(fixture.Input, default));
+    }
+
+    [Fact]
     public async Task FormalParentNumbersDoNotHideAlreadyOwnedAbsoluteCoverage() {
         await using var db = CreateContext();
         using var fixture = await TvPayloadAdmissionFixture.CreateAsync(db);

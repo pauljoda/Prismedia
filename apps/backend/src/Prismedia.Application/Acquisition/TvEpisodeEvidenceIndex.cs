@@ -25,6 +25,27 @@ internal sealed class TvEpisodeEvidenceIndex {
         }
     }
 
+    /// <summary>Proves several matches are separate, complete leading titles rather than overlapping words or numbers.</summary>
+    public bool HasDistinctLeadingTitles(string candidate, IReadOnlyList<int> positions) {
+        var titles = _titles.Values.SelectMany(entries => entries)
+            .Where(title => positions.Contains(title.Episode)).ToList();
+        if (titles.Count != positions.Count || titles.Select(title => title.Episode).Distinct().Count() != positions.Count
+            || titles.Any(title => title.Tokens.Count < 2)) return false;
+        var tokens = ReleaseTitleIdentity.ComparableTokens(candidate);
+        var offset = 0;
+        while (titles.Count > 0) {
+            var starting = titles.Where(title => title.Tokens.Count <= tokens.Count - offset
+                && title.Tokens.SequenceEqual(tokens.Skip(offset).Take(title.Tokens.Count))).ToArray();
+            // Competing runs include repeated catalog titles and titles contained within another one.
+            if (starting.Length != 1) return false;
+            offset += starting[0].Tokens.Count;
+            titles.Remove(starting[0]);
+        }
+        // Only ordinary release metadata may follow the complete title run. Unknown prefix, infix,
+        // and suffix words cannot turn a coincidental pair of title mentions into episode coverage.
+        return ReleaseTitleIdentity.Match(candidate, string.Join(' ', tokens.Take(offset))).TitleMatched;
+    }
+
     /// <summary>Returns every matching catalog slot; multiple identities remain ambiguous to the caller.</summary>
     public int[] Match(string candidate, bool titlesOnly = false) {
         var matches = new HashSet<int>();

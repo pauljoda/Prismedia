@@ -8,6 +8,16 @@ public sealed class TvOwnedEpisodeCoveragePlannerTests {
     private readonly Guid secondId = Guid.NewGuid();
 
     [Fact]
+    public void ATitleOnlyPairCanHealTheMissingOwnerButASequelCannot() {
+        var plan = TvOwnedEpisodeCoveragePlanner.Plan("Show - Hidden Garden & Mountain Journey.mkv", "Show", 1,
+            Catalog(), [firstId]);
+        Assert.NotNull(plan);
+        Assert.Equal(secondId, Assert.Single(plan.MissingEpisodes).EntityId);
+        Assert.Null(TvOwnedEpisodeCoveragePlanner.Plan("Show Sequel - Hidden Garden & Mountain Journey.mkv", "Show", 1,
+            Catalog(), [firstId]));
+    }
+
+    [Fact]
     public void VerifiedAlternativeTitlesCanRepairCoverageWithoutMovingExistingOwners() {
         var plan = TvOwnedEpisodeCoveragePlanner.Plan("Romanized.Show.S01E01-E02.Hidden.Garden.&.Mountain.Journey.mkv",
             "Show", 1, Catalog(), [firstId], ["Romanized Show"]);
