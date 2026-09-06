@@ -58,7 +58,7 @@ Prismedia keeps that shared foundation in one private system, then gives every m
 
 The complete web workspace, native iPhone and iPad experience, and focus-first Apple TV app share one household library. An item remains the same item while it moves from discovery and request through acquisition, identification, organization, playback or reading, and long-term maintenance.
 
-The native Apple apps are open to a limited testing group through [TestFlight](https://testflight.apple.com/join/c9bgDxr7).
+The Apple TV app is available on the [App Store](https://apps.apple.com/us/app/prismedia/id6792944211). [TestFlight](https://testflight.apple.com/join/c9bgDxr7) provides access to early Apple-platform builds.
 
 <p align="center">
   <a href="https://pauljoda.github.io/Prismedia/#launch-film-title">
@@ -220,7 +220,7 @@ The Apple TV app uses a cinematic, focus-first interface and a custom native pla
   <img src="docs/showcase/03-native-playback.png" alt="Prismedia's custom Apple TV player showing direct play, original-quality video, lossless audio, native codecs, and paused playback controls" width="100%" />
 </p>
 
-The iPhone, iPad, and Apple TV apps are currently distributed through the limited [Prismedia TestFlight](https://testflight.apple.com/join/c9bgDxr7).
+Get the Apple TV app on the [App Store](https://apps.apple.com/us/app/prismedia/id6792944211). Use [Prismedia TestFlight](https://testflight.apple.com/join/c9bgDxr7) to test early builds for the Apple platforms.
 
 ### Collections
 

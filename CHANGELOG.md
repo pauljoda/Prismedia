@@ -545,6 +545,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Docs
 
+- Link the released Apple TV app from the README, describe TestFlight as early-build access, and remove the outdated launch-date notice from the homepage.
+
 - Explain media folder organization with Docker path examples, watched-root settings, and common scan corrections. Update book and comic grouping guidance and replace outdated external request-service instructions with Prismedia acquisition setup.
 - Prepared the native App Store listing, exact-size iPhone, iPad, and Apple TV
   screenshot galleries, review notes, privacy answers, licensed

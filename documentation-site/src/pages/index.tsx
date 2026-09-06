@@ -231,7 +231,7 @@ function TestFlightButton({compact = false}: {compact?: boolean}) {
         className={styles.testFlightIcon}
       />
       <span>
-        <small>Join the beta</small>
+        <small>Test early builds</small>
         View in TestFlight
       </span>
     </Link>
@@ -241,7 +241,6 @@ function TestFlightButton({compact = false}: {compact?: boolean}) {
 function ProductHuntBadge() {
   return (
     <div className={styles.productHuntPromo}>
-      <span>Launching August 23, 2026</span>
       <Link
         className={styles.productHuntBadge}
         href={`${PRODUCT_HUNT_URL}&embed=true&utm_source=badge-featured&utm_medium=badge&utm_campaign=badge-prismedia`}
