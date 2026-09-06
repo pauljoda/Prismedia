@@ -16,6 +16,59 @@ namespace Prismedia.Infrastructure.Tests;
 public sealed class AcquisitionImportJobHandlerCheckpointTests : IDisposable {
     private readonly string _root = Directory.CreateTempSubdirectory("prismedia-import-job-checkpoint-").FullName;
 
+    [Theory]
+    [InlineData(true, true, false, true)]
+    [InlineData(false, true, false, false)]
+    [InlineData(true, false, false, false)]
+    [InlineData(true, true, true, false)]
+    public async Task RetainedForeignPayloadPassesUnitValidationOnlyWithActiveCatalogEvidence(
+        bool monitored, bool retained, bool wrongYear, bool expectedDispatch) {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var series = new EntityRow { Id = Guid.NewGuid(), KindCode = EntityKind.VideoSeries.ToCode(), Title = "Show" };
+        var originalSeason = new EntityRow { Id = Guid.NewGuid(), KindCode = EntityKind.VideoSeason.ToCode(),
+            ParentEntityId = series.Id, SortOrder = 1, Title = "Season 1" };
+        var otherSeason = new EntityRow { Id = Guid.NewGuid(), KindCode = EntityKind.VideoSeason.ToCode(),
+            ParentEntityId = series.Id, SortOrder = 2, Title = "Season 2", IsWanted = true };
+        var episode = new EntityRow { Id = Guid.NewGuid(), KindCode = EntityKind.VideoEpisode.ToCode(),
+            ParentEntityId = otherSeason.Id, SortOrder = 3, Title = "Hidden Garden", IsWanted = true };
+        db.Entities.AddRange(series, originalSeason, otherSeason, episode);
+        var content = Directory.CreateDirectory(Path.Combine(_root, "payload")).FullName;
+        var fileName = $"Show.{(wrongYear ? 2024 : 2000)}.S02E03.Hidden.Garden.mkv";
+        await File.WriteAllTextAsync(Path.Combine(content, fileName), "retained video");
+        var acquisition = new AcquisitionRow {
+            Id = Guid.NewGuid(), EntityId = originalSeason.Id, Kind = EntityKind.VideoSeason,
+            Status = AcquisitionStatus.Downloaded, Title = "Season 1", Series = "Show", Year = 2000,
+            SeasonNumber = 1, CreatedAt = now, UpdatedAt = now
+        };
+        if (retained) {
+            acquisition.FinalSourcePath = Path.Combine(_root, "previous.mkv");
+            await File.WriteAllTextAsync(acquisition.FinalSourcePath, "previous imported video");
+            acquisition.ImportResultJson = AcquisitionImportFileLedgerJson.Serialize(
+                new AcquisitionImportFileLedger(AcquisitionImportPhase.Imported, []).RetainUnmappedTvVideos([new(fileName, 14)]));
+        }
+        db.Acquisitions.Add(acquisition);
+        db.DownloadTransfers.Add(new DownloadTransferRow { Id = Guid.NewGuid(), AcquisitionId = acquisition.Id,
+            ClientItemId = "retained-transfer", ContentPath = content, Progress = 1, CreatedAt = now, UpdatedAt = now });
+        await db.SaveChangesAsync();
+        var monitors = new EfMonitorStore(db);
+        if (monitored) await monitors.StartForEntityAsync(otherSeason.Id, EntityKind.VideoSeason, "Season 2", null, null, default);
+        var store = AcquisitionTestFactory.Store(db);
+        await store.SetSelectedReleaseAsync(acquisition.Id, new SelectedRelease("Show 2000 S01", "Indexer", "retained"), default);
+        var engine = new RecordingEngine();
+        var targets = new EfImportTargetIndex(db);
+        var handler = new AcquisitionImportJobHandler(store, new SingleEngineFactory(engine), new DownloadPayloadReader(),
+            new EfAcquisitionHistoryStore(db), NullLogger<AcquisitionImportJobHandler>.Instance,
+            lifecycle: new RecordingLifecycleLease(), importTargets: targets, tvPlanner: new TvAcquisitionImportPlanner(targets, monitors));
+
+        await handler.HandleAsync(ContextFor(acquisition.Id, Guid.NewGuid(), now), default);
+
+        Assert.Equal(expectedDispatch, engine.Called);
+        Assert.Equal(expectedDispatch ? AcquisitionStatus.Importing : AcquisitionStatus.ManualImportRequired,
+            await store.GetStatusAsync(acquisition.Id, default));
+        Assert.True(File.Exists(Path.Combine(content, fileName)));
+    }
+
     public void Dispose() {
         try {
             Directory.Delete(_root, recursive: true);

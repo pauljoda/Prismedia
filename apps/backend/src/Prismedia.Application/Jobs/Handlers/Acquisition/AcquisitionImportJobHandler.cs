@@ -22,7 +22,8 @@ public sealed class AcquisitionImportJobHandler(
     IAcquisitionHistoryStore history,
     ILogger<AcquisitionImportJobHandler> logger,
     IEntityLifecycleMutationLease? lifecycle = null,
-    IImportTargetIndex? importTargets = null) : IJobHandler {
+    IImportTargetIndex? importTargets = null,
+    TvAcquisitionImportPlanner? tvPlanner = null) : IJobHandler {
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var payload = AcquisitionJobPayload.Parse(context.Job.PayloadJson);
         AcquisitionImportContext? import;
@@ -209,6 +210,19 @@ public sealed class AcquisitionImportJobHandler(
         }
 
         var input = await acquisitions.GetSearchInputAsync(acquisitionId, cancellationToken);
+        var expectedSeason = import.SeasonNumber;
+        if (tvPlanner is not null && import.CheckpointProtocol == AcquisitionCheckpointProtocol.Television
+            && !string.IsNullOrWhiteSpace(import.FinalSourcePath)
+            && (await acquisitions.GetTransferInfoAsync(acquisitionId, cancellationToken))?.ImportResult?.HasRetainedTvVideos() == true) {
+            var plan = await tvPlanner.PlanAsync(import,
+                new DownloadPayload(string.Empty, payloadFiles.Select(path => new ImportCandidateFile(path, 0)).ToArray()),
+                null, null, cancellationToken);
+            if (!plan.Plan.Blocked && plan.MonitoredExtras.Count > 0) {
+                // A partial import may now contain only retained extras. The shared planner proves
+                // their destination intent; keep the independent series/year check below.
+                expectedSeason = null;
+            }
+        }
         var episodeTitles = importTargets is not null
             && import.EntityId is { } entityId
             && import.SeasonNumber is { } season
@@ -220,7 +234,7 @@ public sealed class AcquisitionImportJobHandler(
             import.Kind,
             input?.WorkTitle ?? import.Series ?? import.Title,
             input?.Year ?? import.Year,
-            import.SeasonNumber,
+            expectedSeason,
             import.EpisodeNumber,
             selected is not null && TvReleaseTokens.NamesCompleteSeries(selected.Title),
             input?.Title,

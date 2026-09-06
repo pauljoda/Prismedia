@@ -17,6 +17,50 @@ public sealed class HeldTvImportRecoveryTests : IDisposable {
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task MonitoringARetainedForeignSeasonResumesOnlyItsConfidentMissingEpisodes(bool mislabeled) {
+        await using var db = CreateContext();
+        var (service, acquisition, episodes) = await SeedAsync(db);
+        episodes[0].SortOrder = 1;
+        episodes[1].SortOrder = 2;
+        foreach (var episode in episodes) episode.IsWanted = false;
+        var original = Path.Combine(root, "payload", "Show.S01E01E02.First.Story.Second.Story.mkv");
+        File.Delete(original);
+        var foreignName = mislabeled ? "Show.S01E49.Hidden.Garden.mkv" : "Show.S02E03.Hidden.Garden.mkv";
+        await File.WriteAllTextAsync(Path.Combine(root, "payload", foreignName), "retained foreign episode");
+        var season = new EntityRow {
+            Id = Guid.NewGuid(), ParentEntityId = (await db.Entities.SingleAsync(row => row.Id == acquisition.EntityId)).ParentEntityId,
+            KindCode = EntityKind.VideoSeason.ToCode(), Title = "Season 2", SortOrder = 2, IsWanted = true
+        };
+        var extra = new EntityRow {
+            Id = Guid.NewGuid(), ParentEntityId = season.Id, KindCode = EntityKind.VideoEpisode.ToCode(),
+            Title = "Hidden Garden", SortOrder = 3, IsWanted = true
+        };
+        db.Entities.AddRange(season, extra);
+        acquisition.FinalSourcePath = Path.Combine(root, "previous.mkv");
+        await File.WriteAllTextAsync(acquisition.FinalSourcePath, "previous imported video");
+        acquisition.ImportResultJson = AcquisitionImportFileLedgerJson.Serialize(
+            new AcquisitionImportFileLedger(AcquisitionImportPhase.Imported, []).RetainUnmappedTvVideos([new(foreignName, 23)]));
+        await db.SaveChangesAsync();
+
+        await service.RecoverAsync(default);
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, acquisition.Status);
+        await new EfMonitorStore(db).StartForEntityAsync(season.Id, EntityKind.VideoSeason, "Season 2", null, null, default);
+        await service.RecoverAsync(default);
+
+        Assert.Equal(AcquisitionStatus.Downloaded, acquisition.Status);
+        Assert.NotNull(acquisition.ImportRecoveryFingerprint);
+        var fingerprint = acquisition.ImportRecoveryFingerprint;
+        acquisition.Status = AcquisitionStatus.ManualImportRequired;
+        await db.SaveChangesAsync();
+        await service.RecoverAsync(default);
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, acquisition.Status);
+        Assert.Equal(fingerprint, acquisition.ImportRecoveryFingerprint);
+        Assert.Equal("previous imported video", await File.ReadAllTextAsync(acquisition.FinalSourcePath));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task APartialImportCanHealOnlyWhenItsLedgerRetainsReviewVideos(bool retained) {
         await using var db = CreateContext();
         var (service, acquisition, episodes) = await SeedAsync(db);

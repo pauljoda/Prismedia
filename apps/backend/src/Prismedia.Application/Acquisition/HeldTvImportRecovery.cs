@@ -63,39 +63,44 @@ public sealed class HeldTvImportRecoveryService(
             || await targets.HasUnnumberedWantedTvEpisodesAsync(held.EntityId, season, cancellationToken)) {
             return;
         }
-        if (!string.IsNullOrWhiteSpace(import.FinalSourcePath)
-            && (await acquisitions.GetTransferInfoAsync(held.Id, cancellationToken))?.ImportResult?.HasRetainedTvVideos() != true) {
+        var retainedPartial = !string.IsNullOrWhiteSpace(import.FinalSourcePath)
+            && (await acquisitions.GetTransferInfoAsync(held.Id, cancellationToken))?.ImportResult?.HasRetainedTvVideos() == true;
+        if (!string.IsNullOrWhiteSpace(import.FinalSourcePath) && !retainedPartial) {
             return;
         }
 
         var titles = await targets.GetSeasonEpisodeTitlesAsync(held.EntityId, season, cancellationToken);
         var payload = payloads.Read(contentPath);
-        if (titles.Count == 0 || payload is null
+        if (payload is null
             || DangerousFileDetection.FindDangerousFile(payload.Files.Select(file => file.RelativePath).ToArray()) is not null) {
             return;
         }
         var search = await acquisitions.GetSearchInputAsync(held.Id, cancellationToken);
         var series = search?.WorkTitle ?? (string.IsNullOrWhiteSpace(import.Series) ? import.Title : import.Series);
+        var profile = await profiles.GetImportProfileAsync(import.ProfileId, import.Kind, cancellationToken);
+        var catalogPlan = await new TvAcquisitionImportPlanner(targets, monitors).PlanAsync(
+            import with { Series = series }, payload, profile, MediaQualityLadder.Detect(import.Kind, selected.Title).Code, cancellationToken);
+        var plan = catalogPlan.Plan;
+        if (plan.Blocked) {
+            return;
+        }
+        var resumesForeignExtras = retainedPartial && catalogPlan.MonitoredExtras.Count > 0;
         if (AcquisitionPayloadValidation.FindConflict(
                 payload.Files.Select(file => file.RelativePath).ToArray(), import.Kind, series, search?.Year ?? import.Year,
-                season, import.EpisodeNumber, TvReleaseTokens.NamesCompleteSeries(selected.Title),
+                resumesForeignExtras ? null : season, import.EpisodeNumber, TvReleaseTokens.NamesCompleteSeries(selected.Title),
                 search?.Title ?? import.Title, search?.AbsoluteEpisodeNumber, titles) is not null) {
             return;
         }
 
-        var profile = await profiles.GetImportProfileAsync(import.ProfileId, import.Kind, cancellationToken);
-        var plan = TvImportPlanBuilder.PlanUnits(payload.Files, series, season, import.EpisodeNumber,
-            profile?.PathTemplate, MediaQualityLadder.Detect(import.Kind, selected.Title).Code, titles);
-        if (plan.Blocked) {
-            return;
-        }
         var layout = await targets.GetTvLayoutAsync(held.EntityId, cancellationToken);
-        var knownEpisodes = titles.Select(title => title.Episode).ToHashSet();
+        var knownEpisodes = catalogPlan.Catalog.SelectMany(catalogSeason => catalogSeason.Episodes
+                .Select(episode => (Season: catalogSeason.SeasonNumber, episode.Episode)))
+            .Concat(titles.Select(title => (Season: season, title.Episode))).ToHashSet();
         var owned = TvOwnedEpisodeCoverage.Read(layout);
         // Reopening a review must offer a real catalog gap. Completely owned packs stay held; they
         // cannot repair missing links and their quality/edition review is a separate user decision.
         var fillsGap = plan.Units.Any(unit => unit.ExtraEpisodes.Prepend(unit.Episode)
-            .Any(episode => knownEpisodes.Contains(episode)
+            .Any(episode => knownEpisodes.Contains((unit.Season, episode))
                 && !owned.Contains((unit.Season, episode))));
         if (!fillsGap) {
             return;
@@ -120,6 +125,7 @@ public sealed class HeldTvImportRecoveryService(
             Profile = profile,
             Root = new { root.Id, root.Path },
             Titles = titles.OrderBy(title => title.Episode).ThenBy(title => title.EntityId).ToArray(),
+            catalogPlan.Catalog, catalogPlan.MonitoredExtras,
             Files = payload.Files.OrderBy(file => file.RelativePath, StringComparer.Ordinal).Select(file => new {
                 file.RelativePath, file.SizeBytes,
                 ModifiedAt = File.GetLastWriteTimeUtc(Path.Combine(payload.ContentRoot, file.RelativePath))
