@@ -42,6 +42,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Failed book and video replacements now preserve downloaded candidates for retry, retain interrupted staging files, and keep successful upgrades installed when backup recycling fails.
+
 - Movie and episode upgrades now refresh enabled file fingerprints even when the replacement keeps the same source identity, preventing old hashes from describing the new file.
 
 - TV import planning now retains ambiguous episode and season ownership for review instead of selecting an arbitrary file or treating a duplicate episode as missing.

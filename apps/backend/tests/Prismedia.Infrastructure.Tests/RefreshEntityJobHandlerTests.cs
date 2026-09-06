@@ -28,7 +28,7 @@ public sealed class RefreshEntityJobHandlerTests {
             new StubSubtitleSidecarDiscovery([new VideoSubtitleSidecarDiscovery("/media/owned.mkv", [], new string('a', 64), IsComplete: true)]), persistence);
         var queue = new RecordingJobQueue();
         var payload = upgrade ? AcquisitionFinalizeJobPayload.CreateUpgrade(Guid.NewGuid(), Guid.NewGuid(), "Upgrade ready") : null;
-        var job = RefreshJob(id) with { Type = JobType.ReconcileEntity, GraphId = Guid.NewGuid(), PayloadJson = payload?.ToJson() };
+        var job = RefreshJob(id) with { Type = JobType.ReconcileEntity, GraphId = Guid.NewGuid(), PayloadJson = payload?.ToJson() ?? "{}" };
 
         await new ReconcileEntityJobHandler(planner).HandleAsync(new JobContext(job, queue), default);
 

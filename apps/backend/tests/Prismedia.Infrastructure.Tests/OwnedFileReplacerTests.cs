@@ -14,6 +14,92 @@ public sealed class OwnedFileReplacerTests : IDisposable {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "prismedia-replacer-" + Guid.NewGuid().ToString("N"));
     private readonly OwnedFileReplacer _replacer = new(new BinOff(), NullLogger<OwnedFileReplacer>.Instance);
 
+    [Theory]
+    [InlineData(EntityKind.Movie, ".mkv")]
+    [InlineData(EntityKind.Book, ".epub")]
+    public async Task CancellationBeforeReplacementPreservesBothFiles(EntityKind kind, string extension) {
+        var owned = WriteFile(Dir("library"), "Owned" + extension, "owned bytes");
+        var incoming = WriteFile(Dir("download"), "Incoming" + extension, "candidate bytes");
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
+            _replacer.ReplaceAsync(owned, incoming, BookFormatTier.Unknown, cancellation.Token, kind));
+
+        Assert.Equal("owned bytes", await File.ReadAllTextAsync(owned));
+        Assert.Equal("candidate bytes", await File.ReadAllTextAsync(incoming));
+        Assert.False(File.Exists(owned + ".prismedia-new"));
+        Assert.False(File.Exists(owned + ".prismedia-bak"));
+    }
+
+    [Fact]
+    public async Task FailedInstallReturnsTheDownloadedCandidateForRetry() {
+        var owned = WriteFile(Dir("library"), "Owned.mkv", "owned bytes");
+        var incoming = WriteFile(Dir("download"), "Incoming.mp4", "downloaded upgrade bytes");
+        Directory.CreateDirectory(Path.ChangeExtension(owned, ".mp4"));
+
+        var result = await _replacer.ReplaceAsync(owned, incoming, BookFormatTier.Unknown, default,
+            EntityKind.Movie, allowFormatChange: true);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("owned bytes", await File.ReadAllTextAsync(owned));
+        Assert.True(File.Exists(incoming));
+        Assert.Equal("downloaded upgrade bytes", await File.ReadAllTextAsync(incoming));
+    }
+
+    [Theory]
+    [InlineData(EntityKind.Movie, ".mkv")]
+    [InlineData(EntityKind.Book, ".epub")]
+    public async Task FailedBackupStagingReturnsTheDownloadedCandidateForRetry(EntityKind kind, string extension) {
+        var owned = WriteFile(Dir("library"), "Owned" + extension, "owned bytes");
+        var incoming = WriteFile(Dir("download"), "Incoming" + extension, "downloaded upgrade bytes");
+        Directory.CreateDirectory(owned + ".prismedia-bak");
+
+        var result = await _replacer.ReplaceAsync(owned, incoming, BookFormatTier.Unknown, default, kind);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("owned bytes", await File.ReadAllTextAsync(owned));
+        Assert.True(File.Exists(incoming));
+        Assert.Equal("downloaded upgrade bytes", await File.ReadAllTextAsync(incoming));
+        Assert.False(File.Exists(owned + ".prismedia-new"));
+    }
+
+    [Theory]
+    [InlineData(EntityKind.Movie, ".mkv")]
+    [InlineData(EntityKind.Book, ".epub")]
+    public async Task ExistingStagedCandidateIsRetainedInsteadOfOverwritten(EntityKind kind, string extension) {
+        var owned = WriteFile(Dir("library"), "Owned" + extension, "owned bytes");
+        var incoming = WriteFile(Dir("download"), "Incoming" + extension, "current candidate bytes");
+        await File.WriteAllTextAsync(owned + ".prismedia-new", "previous interrupted candidate bytes");
+
+        var result = await _replacer.ReplaceAsync(owned, incoming, BookFormatTier.Unknown, default, kind);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("owned bytes", await File.ReadAllTextAsync(owned));
+        Assert.Equal("current candidate bytes", await File.ReadAllTextAsync(incoming));
+        Assert.Equal("previous interrupted candidate bytes", await File.ReadAllTextAsync(owned + ".prismedia-new"));
+    }
+
+    [Theory]
+    [InlineData(EntityKind.Movie, ".mkv")]
+    [InlineData(EntityKind.Book, ".epub")]
+    public async Task RecycleFailureDoesNotRollBackAnInstalledUpgrade(EntityKind kind, string extension) {
+        var owned = WriteFile(Dir("library"), "Owned" + extension, "owned bytes");
+        var incoming = WriteFile(Dir("download"), "Incoming" + extension, "downloaded upgrade bytes");
+        var replacer = new OwnedFileReplacer(new FailingBin(), NullLogger<OwnedFileReplacer>.Instance);
+
+        var result = await replacer.ReplaceAsync(owned, incoming, BookFormatTier.Unknown, default, kind);
+
+        Assert.True(result.Succeeded);
+        Assert.Equal("downloaded upgrade bytes", await File.ReadAllTextAsync(owned));
+        Assert.Equal("owned bytes", await File.ReadAllTextAsync(owned + ".prismedia-bak"));
+    }
+
+    private sealed class FailingBin : Prismedia.Application.Acquisition.IRecycleBin {
+        public Task<string?> TryMoveToBinAsync(string path, CancellationToken cancellationToken) => throw new IOException("Injected recycle failure");
+        public Task<int> CleanupAsync(CancellationToken cancellationToken) => Task.FromResult(0);
+    }
+
     [Fact]
     public async Task SameExtensionUpgradeReplacesInPlaceAndKeepsABackup() {
         var library = Dir("library");

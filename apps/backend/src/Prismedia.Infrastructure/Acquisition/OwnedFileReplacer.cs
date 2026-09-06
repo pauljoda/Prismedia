@@ -71,6 +71,7 @@ public sealed class OwnedFileReplacer(
         bool retainBackup,
         string? recoveryBackupPath = null,
         string? incomingEvidencePath = null) {
+        cancellationToken.ThrowIfCancellationRequested();
         var isVideo = MediaQualityLadder.IsUpgradeCapableKind(kind);
         var extensions = isVideo ? MovieImportPlanBuilder.VideoExtensions : ImportPlanBuilder.SupportedExtensions;
         var fileNoun = isVideo ? "video" : "book";
@@ -121,6 +122,10 @@ public sealed class OwnedFileReplacer(
         var evidence = !string.IsNullOrWhiteSpace(incomingEvidencePath)
             ? Path.GetFullPath(incomingEvidencePath)
             : null;
+        if (File.Exists(staged) || Directory.Exists(staged)) {
+            return OwnedFileReplaceResult.Failed("A previous replacement candidate is still staged beside the owned file. Resume or review that attempt before replacing it.");
+        }
+        var stagedIncoming = false;
         IReadOnlyList<StagedSubtitleSidecar> stagedSubtitleSidecars;
         try {
             stagedSubtitleSidecars = await StageSubtitleSidecarsAsync(
@@ -138,11 +143,9 @@ public sealed class OwnedFileReplacer(
             // it never touches the owned file), then preserve the original as a backup COPY, then atomically
             // replace the owned file in a single rename. Ordering it this way means the owned path is never
             // momentarily empty — a concurrent scan always sees either the old or the new file, never neither.
-            if (File.Exists(staged)) {
-                File.Delete(staged); // clear a stale staged file from a prior aborted swap
-            }
-
+            cancellationToken.ThrowIfCancellationRequested();
             File.Move(incoming, staged);
+            stagedIncoming = true;
             if (retainBackup && evidence is not null) {
                 TryDelete(evidence);
                 if (!HardLink.TryCreate(staged, evidence)) {
@@ -150,17 +153,19 @@ public sealed class OwnedFileReplacer(
                 }
             }
             File.Copy(owned, backup, overwrite: true); // keep the previous file as a recoverable backup
-        } catch (Exception ex) when (ex is not OperationCanceledException) {
+        } catch (Exception ex) {
             logger.LogWarning(ex, "OwnedFileReplacer: could not stage the upgrade for {Path}.", owned);
             RollBackSubtitleSidecars(stagedSubtitleSidecars);
-            if (!retainBackup) {
-                TryDelete(staged);
+            if (!retainBackup && stagedIncoming) {
+                ReturnStagedCandidate(staged, incoming);
             }
+            if (ex is OperationCanceledException) throw;
             return (OwnedFileReplaceResult.Failed($"Could not stage the upgrade: {ex.Message}"));
         }
 
         var installedNewFile = false;
         try {
+            cancellationToken.ThrowIfCancellationRequested();
             CommitSubtitleSidecars(stagedSubtitleSidecars);
             File.Move(staged, installPath, overwrite: true); // atomic same-directory install
             installedNewFile = true;
@@ -175,21 +180,15 @@ public sealed class OwnedFileReplacer(
             if (!FileSystemPathComparison.Equals(installPath, owned)) {
                 TryDelete(owned);
             }
-
-            // With a recycle bin configured the previous file moves there (purged after the cleanup window);
-            // otherwise it stays beside the new one as the recoverable .prismedia-bak sidecar.
-            if (!retainBackup && await recycleBin.TryMoveToBinAsync(backup, cancellationToken) is { } binned) {
-                logger.LogDebug("OwnedFileReplacer: previous file recycled to {Binned}.", binned);
-            }
-            await FinalizeSubtitleSidecarsAsync(stagedSubtitleSidecars, CancellationToken.None);
-
-            return OwnedFileReplaceResult.Ok(installPath, newFormat);
-        } catch (Exception ex) when (ex is not OperationCanceledException) {
+        } catch (Exception ex) {
             logger.LogWarning(ex, "OwnedFileReplacer: swap failed for {Path}; the original is intact (or restorable from backup).", owned);
             // The atomic replace either fully succeeded or left the owned file as it was; if it somehow left the
-            // owned file missing, restore it from the backup copy. The staged file is discarded.
+            // owned file missing, restore it from the backup copy. Preserve the candidate for a retry.
             try {
                 if (File.Exists(backup) && (installedNewFile || !File.Exists(owned))) {
+                    if (installedNewFile && File.Exists(installPath)) {
+                        File.Move(installPath, staged, overwrite: false);
+                    }
                     File.Copy(backup, owned, overwrite: true);
                     if (!FileSystemPathComparison.Equals(installPath, owned)) {
                         TryDelete(installPath);
@@ -200,10 +199,35 @@ public sealed class OwnedFileReplacer(
             }
 
             RollBackSubtitleSidecars(stagedSubtitleSidecars);
-            if (!retainBackup) {
-                TryDelete(staged);
+            if (!retainBackup && stagedIncoming) {
+                ReturnStagedCandidate(staged, incoming);
             }
-            return (OwnedFileReplaceResult.Failed($"The swap failed and the original was kept: {ex.Message}"));
+            if (ex is OperationCanceledException) throw;
+            return (OwnedFileReplaceResult.Failed($"The swap could not be completed; recovery files were retained: {ex.Message}"));
+        }
+
+        // The install is committed. Optional backup housekeeping cannot undo it or discard its bytes.
+        try {
+            if (!retainBackup && await recycleBin.TryMoveToBinAsync(backup, CancellationToken.None) is { } binned) {
+                logger.LogDebug("OwnedFileReplacer: previous file recycled to {Binned}.", binned);
+            }
+        } catch (Exception ex) {
+            logger.LogWarning(ex, "OwnedFileReplacer: installed upgrade retained; backup cleanup failed at {Backup}.", backup);
+        }
+        try {
+            await FinalizeSubtitleSidecarsAsync(stagedSubtitleSidecars, CancellationToken.None);
+        } catch (Exception ex) {
+            logger.LogWarning(ex, "OwnedFileReplacer: installed upgrade retained; subtitle backup cleanup failed for {Path}.", owned);
+        }
+        return OwnedFileReplaceResult.Ok(installPath, newFormat);
+    }
+
+    private void ReturnStagedCandidate(string staged, string incoming) {
+        try {
+            if (File.Exists(staged)) File.Move(staged, incoming, overwrite: false);
+        } catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) {
+            // A newly occupied/unavailable download path must not cause either candidate to be deleted.
+            logger.LogWarning(ex, "OwnedFileReplacer: downloaded candidate remains recoverable at {Staged}.", staged);
         }
     }
 
