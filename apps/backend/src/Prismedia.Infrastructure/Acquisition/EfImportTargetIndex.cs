@@ -91,8 +91,9 @@ public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIn
             from season in db.Entities.AsNoTracking()
             where season.ParentEntityId == seriesId && season.KindCode == seasonCode
             join source in db.EntitySources.AsNoTracking().Where(source => source.Code == EntitySourceCode.Folder.ToCode())
-                on season.Id equals source.EntityId
-            select new { season.Id, season.SortOrder, Path = source.Value })
+                on season.Id equals source.EntityId into folderSources
+            from source in folderSources.DefaultIfEmpty()
+            select new { season.Id, season.SortOrder, Path = source == null ? null : source.Value })
             .ToArrayAsync(cancellationToken);
 
         var episodeCode = EntityKindRegistry.PlayableVideoKindFor(PlayableVideoScanPlacement.Episode).ToCode();

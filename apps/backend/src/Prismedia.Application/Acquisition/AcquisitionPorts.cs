@@ -363,10 +363,13 @@ public sealed record StampedHintOwner(Guid TopLevelEntityId, string TopLevelKind
 /// </summary>
 public sealed record WantedAudioTrackReconciliation(Guid EntityId, bool NeedsWaveformRegeneration);
 
-/// <summary>One season of an existing on-disk series: its folder and the episode files it already owns, keyed by episode number.</summary>
+/// <summary>
+/// One season's owned episode files, independent of structural folder provenance. A null folder means
+/// new episodes use the configured season template; existing files retain their exact paths and coverage.
+/// </summary>
 public sealed record TvSeasonDiskLayout(
     Guid SeasonEntityId,
-    string FolderPath,
+    string? FolderPath,
     IReadOnlyDictionary<int, string> EpisodeFileByNumber);
 
 /// <summary>An existing on-disk series' folder layout: the series folder and its seasons keyed by season number.</summary>

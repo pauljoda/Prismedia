@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using System.Data.Common;
+using Prismedia.Application.Acquisition;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Acquisition;
 using Prismedia.Infrastructure.Persistence;
@@ -14,6 +15,29 @@ namespace Prismedia.Infrastructure.Tests;
 /// placeholders out of the owned-file map (they must stay bindable by the post-import scan).
 /// </summary>
 public sealed class EfImportTargetIndexTests {
+    [Fact]
+    public async Task SharedOwnershipInASeasonWithoutAFolderStillProtectsEveryEpisodeDuringUpgrades() {
+        await using var db = CreateContext();
+        var ids = SeedSeries(db, "/media/tv/Show");
+        var source = db.EntityFiles.Local.Single();
+        source.Path = "/media/tv/Show/S01/Show.S01E01.720p.WEB-DL.mkv";
+        var otherSeason = AddEntity(db, EntityKind.VideoSeason.ToCode(), ids.SeriesId, 2);
+        AddEntity(db, EntityKind.VideoEpisode.ToCode(), otherSeason, 1, sourcePath: source.Path);
+        await db.SaveChangesAsync();
+
+        var layout = (await new EfImportTargetIndex(db).GetTvLayoutAsync(ids.SeriesId, default))!;
+        var merged = TvExistingTargetMerge.Plan([
+            new("incoming/Show.S01E01.1080p.WEB-DL.mkv", 1, 1, "Show/S01/Show.S01E01.mkv"),
+            new("incoming/Show.S02E02.1080p.WEB-DL.mkv", 2, 2, "Show/S02/Show.S02E02.mkv")
+        ], layout, number => $"Season {number:00}", (int)VideoQuality.Webdl1080p, 1, ProperDownloadPolicy.PreferAndUpgrade);
+
+        Assert.Equal(MergeFileAction.HoldStructuralConflict, merged[0].Action);
+        Assert.Equal(source.Path, layout.Seasons[2].EpisodeFileByNumber[1]);
+        Assert.Null(layout.Seasons[2].FolderPath);
+        Assert.Equal(MergeFileAction.PlaceNew, merged[1].Action);
+        Assert.Equal("/media/tv/Show/Season 02/Show.S02E02.mkv", merged[1].TargetAbsolutePath);
+    }
+
     [Fact]
     [Trait("Category", "PostgreSQL")]
     public async Task OwnedEpisodeLookupDoesNotAddQueriesForEverySeason() {

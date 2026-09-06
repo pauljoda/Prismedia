@@ -42,6 +42,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- TV upgrade planning includes owned episodes even when their season has no dedicated folder, protecting shared files from replacements that would lose episode coverage.
 - Rescanning a file shared by multiple episodes preserves its saved episode owners and seasons when filename numbering disagrees, avoiding duplicate episodes, reverted mappings, and incorrectly fulfilled wanted episodes.
 
 - Complete paired episode titles can distinguish their season when one title repeats elsewhere; competing complete matches remain held for review, and foreign extras still require monitoring.

@@ -68,7 +68,7 @@ public sealed class EfTvOwnedEpisodeCoverageRepair(PrismediaDbContext db, IImpor
         if (requested.Length != 1 || !requested[0].Episodes.Any(episode => episode.IsWanted)) return [];
         var layout = await targets.GetTvLayoutAsync(seasonId, token);
         if (layout is null || !layout.Seasons.TryGetValue(season.SortOrder.Value, out var diskSeason)
-            || diskSeason.SeasonEntityId != seasonId) return [];
+            || diskSeason.SeasonEntityId != seasonId || diskSeason.FolderPath is null) return [];
         var series = await db.Entities.AsNoTracking().SingleOrDefaultAsync(row => row.Id == seriesId, token);
         if (series?.KindCode != EntityKind.VideoSeries.ToCode()) return [];
         var episodeIds = requested[0].Episodes.Select(episode => episode.EntityId).OfType<Guid>().ToArray();
