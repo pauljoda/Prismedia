@@ -39,7 +39,10 @@ public sealed class MediaProbeAdapter(MediaProbeService inner) : IMediaProbe {
                 stream.ElPresentFlag,
                 stream.BlPresentFlag,
                 stream.DvBlSignalCompatibilityId,
-                stream.Hdr10PlusPresentFlag)).ToList());
+                stream.Hdr10PlusPresentFlag)).ToList()) {
+            SubtitleStreams = result.SubtitleStreams?.Select(stream => new SubtitleStreamData(
+                stream.StreamIndex, stream.CodecName, stream.Language, stream.Title)).ToArray()
+        };
     }
 
     public async Task<AudioProbeData?> ProbeAudioAsync(string filePath, CancellationToken cancellationToken) {

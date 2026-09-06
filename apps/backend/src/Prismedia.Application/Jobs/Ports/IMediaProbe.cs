@@ -22,7 +22,10 @@ public sealed record VideoProbeData(
     int? SampleRate,
     int? Channels,
     string? AudioCodec,
-    IReadOnlyList<MediaStreamProbeData>? Streams = null);
+    IReadOnlyList<MediaStreamProbeData>? Streams = null) {
+    /// <summary>Text subtitle streams from the same video probe; null means the adapter did not provide this inventory.</summary>
+    public IReadOnlyList<SubtitleStreamData>? SubtitleStreams { get; init; }
+}
 
 public sealed record AudioProbeData(
     double? DurationSeconds,

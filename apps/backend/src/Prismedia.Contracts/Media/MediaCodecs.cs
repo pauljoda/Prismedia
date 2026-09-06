@@ -15,6 +15,26 @@ public static class MediaCodecs {
     /// <summary>SubRip text subtitles.</summary>
     public const string SubRip = "subrip";
 
+    /// <summary>Presentation Graphics bitmap subtitles.</summary>
+    public const string Pgs = "pgs";
+    /// <summary>VobSub bitmap subtitles.</summary>
+    public const string VobSub = "vobsub";
+    /// <summary>DVB bitmap subtitles.</summary>
+    public const string DvbSubtitle = "dvb_subtitle";
+    /// <summary>HDMV Presentation Graphics bitmap subtitles.</summary>
+    public const string HdmvPgsSubtitle = "hdmv_pgs_subtitle";
+    /// <summary>DivX bitmap subtitles.</summary>
+    public const string XSub = "xsub";
+    /// <summary>DVD bitmap subtitles.</summary>
+    public const string DvdSubtitle = "dvd_subtitle";
+
+    private static readonly HashSet<string> BitmapSubtitleCodecs = new(StringComparer.OrdinalIgnoreCase) {
+        Pgs, VobSub, DvbSubtitle, HdmvPgsSubtitle, XSub, DvdSubtitle
+    };
+
+    /// <summary>Whether a subtitle codec needs bitmap rendering instead of the text subtitle extraction pipeline.</summary>
+    public static bool IsBitmapSubtitle(string codec) => BitmapSubtitleCodecs.Contains(codec);
+
     // ── Video ───────────────────────────────────────────────────────────
     /// <summary>HEVC / H.265 video.</summary>
     public const string Hevc = "hevc";

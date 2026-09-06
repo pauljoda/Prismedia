@@ -24,9 +24,11 @@ public sealed class MediaUpgradePayloadInspector(
             }
 
             var ownedVideo = await mediaProbe.ProbeVideoAsync(ownedFile, cancellationToken);
-            var ownedSubtitles = await mediaProbe.ProbeSubtitleStreamsAsync(ownedFile, cancellationToken);
+            var ownedSubtitles = ownedVideo?.SubtitleStreams
+                ?? await mediaProbe.ProbeSubtitleStreamsAsync(ownedFile, cancellationToken);
             var candidateVideo = await mediaProbe.ProbeVideoAsync(candidateFile, cancellationToken);
-            var candidateSubtitles = await mediaProbe.ProbeSubtitleStreamsAsync(candidateFile, cancellationToken);
+            var candidateSubtitles = candidateVideo?.SubtitleStreams
+                ?? await mediaProbe.ProbeSubtitleStreamsAsync(candidateFile, cancellationToken);
             var sidecarDiscoveries = await subtitleSidecars.DiscoverAsync(
                 [ownedFile, candidateFile],
                 cancellationToken);

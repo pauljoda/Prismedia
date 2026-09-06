@@ -6,6 +6,27 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class MediaProbeServiceTests {
     [Fact]
+    public async Task VideoProbeIncludesOnlyUsableTextSubtitleStreamsFromItsCompleteInventory() {
+        var process = new JsonProcessExecutor("""
+            { "format": { "duration": "1200" }, "streams": [
+                { "index": 0, "codec_type": "video", "codec_name": "h264", "width": 1920, "height": 1080 },
+                { "index": 1, "codec_type": "audio", "codec_name": "aac" },
+                { "index": 2, "codec_type": "subtitle", "codec_name": "subrip", "tags": { "language": "eng", "title": "English" } },
+                { "index": 3, "codec_type": "subtitle", "codec_name": "hdmv_pgs_subtitle" },
+                { "index": 4, "codec_type": "subtitle", "codec_name": "unknown" },
+                { "index": 5, "codec_type": "subtitle", "codec_name": "ass" }
+            ] }
+            """);
+        var video = await new MediaProbeService(process).ProbeVideoAsync("/media/movie.mkv", default);
+
+        Assert.NotNull(video?.SubtitleStreams);
+        Assert.Equal([2, 5], video.SubtitleStreams.Select(stream => stream.StreamIndex));
+        Assert.Equal("English", video.SubtitleStreams[0].Title);
+        Assert.Equal("und", video.SubtitleStreams[1].Language);
+        Assert.Equal(2, video.Streams!.Count);
+    }
+
+    [Fact]
     public async Task ProbeVideoCapturesHdrAndDolbyVisionStreamMetadata() {
         var process = new JsonProcessExecutor("""
             {

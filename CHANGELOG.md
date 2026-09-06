@@ -42,6 +42,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Video upgrade checks reuse a single probe for picture, audio, and text-subtitle evidence per file, reducing repeated inspection work for large season packs.
+
 - Season-pack upgrades inspect each colliding video’s actual resolution, runtime, and audio languages before replacement. Cleaned filenames no longer hide proven improvements, mixed-quality packs are judged file by file, and uncertain replacements preserve both copies for review.
 
 - A season whose existing episodes share files stored elsewhere can adopt its first dedicated folder when more episodes arrive, keeping the wanted episode identities instead of creating duplicates.

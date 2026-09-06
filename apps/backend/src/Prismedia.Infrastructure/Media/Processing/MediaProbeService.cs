@@ -116,7 +116,9 @@ public sealed class MediaProbeService {
 
         return new VideoProbeResult(
             duration, fileSize, width, height, frameRate, bitRate, codec, container,
-            sampleRate, channels, audioCodec, streamResults);
+            sampleRate, channels, audioCodec, streamResults) {
+            SubtitleStreams = streams.ValueKind == JsonValueKind.Array ? ReadTextSubtitleStreams(streams) : null
+        };
     }
 
     /// <summary>
@@ -209,27 +211,25 @@ public sealed class MediaProbeService {
         if (result is null)
             return [];
 
-        var streams = result.RootElement.GetPropertyOrDefault("streams");
-        if (streams.ValueKind != JsonValueKind.Array)
-            return [];
+        return ReadTextSubtitleStreams(result.RootElement.GetPropertyOrDefault("streams"));
+    }
 
-        var imageBased = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
-        {
-            "pgs", "vobsub", "dvb_subtitle", "hdmv_pgs_subtitle", "xsub", "dvd_subtitle"
-        };
-
+    private static IReadOnlyList<SubtitleStreamInfo> ReadTextSubtitleStreams(JsonElement streams) {
+        if (streams.ValueKind != JsonValueKind.Array) return [];
         var results = new List<SubtitleStreamInfo>();
 
         foreach (var stream in streams.EnumerateArray()) {
+            // prism-vocab: external — ffprobe's codec_type at the subtitle decode boundary.
+            if (stream.GetStringOrDefault("codec_type") != "subtitle") continue;
             var codecName = stream.GetStringOrDefault("codec_name");
             if (string.IsNullOrWhiteSpace(codecName)
                 || string.Equals(codecName, MediaCodecs.Unknown, StringComparison.OrdinalIgnoreCase)
-                || imageBased.Contains(codecName))
+                || MediaCodecs.IsBitmapSubtitle(codecName))
                 continue;
 
             var index = stream.GetIntOrDefault("index") ?? 0;
             var streamTags = stream.GetPropertyOrDefault("tags");
-            var language = streamTags.GetStringOrDefault("language") ?? "und";
+            var language = streamTags.GetStringOrDefault("language") ?? SubtitleLanguages.Undetermined;
             var title = streamTags.GetStringOrDefault("title");
 
             results.Add(new SubtitleStreamInfo(index, codecName, language, title));
@@ -377,7 +377,10 @@ public sealed record VideoProbeResult(
     int? SampleRate,
     int? Channels,
     string? AudioCodec,
-    IReadOnlyList<MediaStreamProbeResult>? Streams = null);
+    IReadOnlyList<MediaStreamProbeResult>? Streams = null) {
+    /// <summary>Text subtitle streams from the same video probe; null means the adapter did not provide this inventory.</summary>
+    public IReadOnlyList<SubtitleStreamInfo>? SubtitleStreams { get; init; }
+}
 
 public sealed record MediaStreamProbeResult(
     int StreamIndex,
