@@ -42,6 +42,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Successful upgrades now retain their download until required media processing finishes, then hand cleanup to the durable retry queue.
+
 - New TV episode files are now inspected before a pack starts placement, with per-file quality and destination-season profile checks that also apply when retrying pending files.
 
 - Automatic episode mapping repair now follows canonical season numbers, including specials, and retains conflicting season ownership for review.

@@ -294,8 +294,9 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
 
     /// <summary>
     /// Shared post-swap completion: append exact Entity reconciliation and let its required-readiness
-    /// finalizer release the monitor slot and remove the consumed child. Transfer cleanup can happen now;
-    /// the durable child remains Importing until the replacement is technically ready.
+    /// finalizer preserve cleanup ownership, release the monitor slot, and remove the consumed child.
+    /// Keep the transfer and remaining payload until required readiness succeeds; deleting them during
+    /// this lifecycle transaction would be irreversible if reconciliation or its database commit fails.
     /// </summary>
     private async Task FinishAsync(JobContext context, UpgradeReplaceTarget target, Guid childId, CancellationToken cancellationToken) {
         if (target.ParentEntityId is { } entityId) {
@@ -311,7 +312,6 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
                         "Upgrade ready").ToJson()),
                 cancellationToken);
         }
-        await RemoveTorrentAsync(target, childId, cancellationToken);
         logger.LogInformation(
             "AcquisitionUpgradeReplace: replacement for acquisition {Parent} is awaiting required Entity readiness via child {Child}.",
             target.ParentId,

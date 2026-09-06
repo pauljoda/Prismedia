@@ -89,6 +89,35 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
         Assert.Equal(replace, replacer.Called);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SuccessfulSwapRetainsItsTransferUntilRequiredReadinessFinalizes(bool book) {
+        await using var db = CreateContext();
+        var (_, childId, _) = book ? await SeedAsync(db, "Some Book (retail) (epub)")
+            : await SeedMediaAsync(db, EntityKind.Movie, VideoQuality.Webdl720p.ToCode(), "Movie 2020 1080p WEB-DL");
+        var transfer = await db.DownloadTransfers.SingleAsync(row => row.AcquisitionId == childId);
+        var client = new RecordingDownloadClient();
+        var detail = new DownloadClientDetail(transfer.DownloadClientConfigId!.Value, DownloadClientKind.QBittorrent,
+            "Downloads", "http://download-client", null, "prismedia", true, false, null);
+        var queue = new RecordingJobQueue();
+        var replacer = new FakeReplacer(OwnedFileReplaceResult.Ok(book ? "/library/Book.epub" : "/library/Movie.mkv",
+            book ? BookFormatTier.Reflowable : BookFormatTier.Unknown));
+
+        await RunAsync(db, queue, replacer, childId, new FakeMediaUpgradePayloadInspector(new(720, 1080, false, false, 7200, 7200)),
+            new SingleDownloadClientConfigStore(detail), new SingleDownloadClientFactory(client));
+
+        Assert.True(replacer.Called);
+        Assert.Null(client.RemovedClientItemId);
+        Assert.True(await db.DownloadTransfers.AnyAsync(row => row.Id == transfer.Id));
+        Assert.Empty(await db.DetachedDownloadCleanups.ToArrayAsync());
+        Assert.Equal(AcquisitionStatus.Importing, (await db.Acquisitions.FindAsync(childId))!.Status);
+        await FinalizeAsync(db, queue);
+        Assert.False(await db.DownloadTransfers.AnyAsync(row => row.Id == transfer.Id));
+        Assert.Equal(transfer.Id, Assert.Single(await db.DetachedDownloadCleanups.ToArrayAsync()).Id);
+        Assert.Null(client.RemovedClientItemId);
+    }
+
     [Fact]
     public async Task SuccessfulUpgradePreservesCleanupOwnershipWhenItsDownloaderIsUnavailable() {
         await using var db = CreateContext();
