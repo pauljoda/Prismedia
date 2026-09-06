@@ -71,12 +71,15 @@ public sealed class EntityProcessingGraphPlanner(
             }
 
             var processing = EntityKindRegistry.Describe(kind).Processing;
+            // Atomic replacement changes bytes without changing the Source id, path, or necessarily
+            // size. Cached hashes and dimensions cannot establish readiness for the new file. The graph
+            // reuses completed nodes on retry; do not erase their newly generated persistence results.
+            var upgradedVideo = finalization?.UpgradeParentAcquisitionId is not null && entity.Id == entityId
+                && !string.IsNullOrWhiteSpace(entity.SourcePath) && processing.ProbeJobType == JobType.ProbeVideo;
+            var currentNeeds = upgradedVideo ? entityNeeds with { MissingOshash = true, MissingMd5 = true } : entityNeeds;
             var plan = processing.Plan(EntityProcessingInputAdapter.From(
-                settings, entityNeeds, !string.IsNullOrWhiteSpace(entity.SourcePath)));
-            // Atomic video replacement is fresh evidence that bytes changed, even when size and cached
-            // dimensions happen to match. A retry reuses the completed probe without clearing its results.
-            if (finalization?.UpgradeParentAcquisitionId is not null && entity.Id == entityId
-                && !string.IsNullOrWhiteSpace(entity.SourcePath) && processing.ProbeJobType == JobType.ProbeVideo) {
+                settings, currentNeeds, !string.IsNullOrWhiteSpace(entity.SourcePath)));
+            if (upgradedVideo) {
                 plan = plan with { ProbeJobType = JobType.ProbeVideo };
             }
             var baseDependency = context.Job.Id;

@@ -10,6 +10,38 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class RefreshEntityJobHandlerTests {
     [Theory]
+    [InlineData(EntityKind.Movie, true, false, true)]
+    [InlineData(EntityKind.Movie, false, true, true)]
+    [InlineData(EntityKind.VideoEpisode, true, false, true)]
+    [InlineData(EntityKind.VideoEpisode, false, true, true)]
+    [InlineData(EntityKind.Movie, false, false, true)]
+    [InlineData(EntityKind.VideoEpisode, false, false, true)]
+    [InlineData(EntityKind.Movie, true, true, false)]
+    public async Task AtomicVideoUpgradesRefreshEnabledFingerprintsEvenWhenSourceIdentityIsUnchanged(
+        EntityKind kind, bool oshash, bool md5, bool upgrade) {
+        var id = Guid.NewGuid();
+        var persistence = new RecordingPersistence([new EntityRefreshTarget(id, kind.ToCode(), "Owned video", "/media/owned.mkv")]) {
+            AutoGenerateOshash = oshash, AutoGenerateMd5 = md5
+        };
+        var planner = new EntityProcessingGraphPlanner(NullLogger<EntityProcessingGraphPlanner>.Instance,
+            persistence, persistence, persistence, persistence,
+            new StubSubtitleSidecarDiscovery([new VideoSubtitleSidecarDiscovery("/media/owned.mkv", [], new string('a', 64), IsComplete: true)]), persistence);
+        var queue = new RecordingJobQueue();
+        var payload = upgrade ? AcquisitionFinalizeJobPayload.CreateUpgrade(Guid.NewGuid(), Guid.NewGuid(), "Upgrade ready") : null;
+        var job = RefreshJob(id) with { Type = JobType.ReconcileEntity, GraphId = Guid.NewGuid(), PayloadJson = payload?.ToJson() };
+
+        await new ReconcileEntityJobHandler(planner).HandleAsync(new JobContext(job, queue), default);
+
+        if (upgrade && (oshash || md5)) {
+            var fingerprint = Assert.Single(queue.Nodes, node => node.Job.Type == JobType.FingerprintVideo);
+            var probe = Assert.Single(queue.Nodes, node => node.Job.Type == JobType.ProbeVideo);
+            Assert.Contains(queue.RunIds[probe.NodeKey], fingerprint.DependsOn!);
+        } else {
+            Assert.DoesNotContain(queue.Nodes, node => node.Job.Type == JobType.FingerprintVideo);
+        }
+    }
+
+    [Theory]
     [InlineData(EntityKind.Movie, false)]
     [InlineData(EntityKind.Movie, true)]
     [InlineData(EntityKind.VideoEpisode, false)]
@@ -273,6 +305,8 @@ public sealed class RefreshEntityJobHandlerTests {
         public IReadOnlyList<Guid> LastDownstreamEntityIds { get; private set; } = [];
         public bool AutoGenerateMetadata { get; init; }
         public bool AutoIdentifyEnabled { get; init; }
+        public bool AutoGenerateOshash { get; init; }
+        public bool AutoGenerateMd5 { get; init; }
         public bool NeedsProbe { get; init; }
         public bool NeedsPreview { get; init; }
 
@@ -283,8 +317,8 @@ public sealed class RefreshEntityJobHandlerTests {
         public Task<LibrarySettingsData> GetSettingsAsync(CancellationToken cancellationToken) =>
             Task.FromResult(new LibrarySettingsData(
                 AutoGenerateMetadata,
-                AutoGenerateOshash: false,
-                AutoGenerateMd5: false,
+                AutoGenerateOshash: AutoGenerateOshash,
+                AutoGenerateMd5: AutoGenerateMd5,
                 AutoGeneratePreview: NeedsPreview,
                 GenerateTrickplay: false,
                 TrickplayIntervalSeconds: 10,

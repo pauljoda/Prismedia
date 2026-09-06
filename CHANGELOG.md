@@ -42,6 +42,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Movie and episode upgrades now refresh enabled file fingerprints even when the replacement keeps the same source identity, preventing old hashes from describing the new file.
+
 - TV import planning now retains ambiguous episode and season ownership for review instead of selecting an arbitrary file or treating a duplicate episode as missing.
 
 - Episode replacements now recheck every current file owner before swapping, protecting newly shared episodes, changed mappings, and bundles whose episodes have split across different files during an interrupted import.
