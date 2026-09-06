@@ -38,6 +38,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Held TV recovery limits slow provider work per scheduler tick and rotates through the backlog, keeping download handoffs and monitoring responsive.
+
 - Manual TV mapping reviews suppress misleading episode suggestions and explain when local or provider titles identify content from another season.
 
 - Early season-download checks reconsider cross-season title evidence before declaring a pack already owned, keeping useful or ambiguous extras eligible when release numbering is misleading.

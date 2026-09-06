@@ -14,6 +14,60 @@ public sealed class HeldTvImportRecoveryTests : IDisposable {
     private readonly Guid rootId = Guid.NewGuid();
     public void Dispose() => Directory.Delete(root, true);
 
+    [Fact]
+    public async Task SlowProviderBacklogsYieldBetweenAttemptsAndRotateAcrossServiceScopes() {
+        await using var db = CreateContext();
+        var expected = new List<Guid>();
+        for (var index = 0; index < 3; index++) {
+            var (_, acquisition, episodes) = await SeedAsync(db);
+            episodes[0].SortOrder = 1;
+            episodes[1].SortOrder = 2;
+            acquisition.UpdatedAt = DateTimeOffset.UnixEpoch.AddSeconds(index);
+            expected.Add(acquisition.EntityId!.Value);
+        }
+        await db.SaveChangesAsync();
+        File.Delete(Path.Combine(root, "payload", "Show.S01E01E02.First.Story.Second.Story.mkv"));
+        await File.WriteAllTextAsync(Path.Combine(root, "payload", "unmatched.mkv"), "unresolved video");
+        var clock = new RecoveryTimeProvider();
+        var cursor = new HeldTvImportRecoveryCursor();
+        var evidence = new RecordingEvidence(_ => { clock.Advance(TimeSpan.FromSeconds(20)); return Task.CompletedTask; });
+
+        for (var sweep = 0; sweep < 4; sweep++) {
+            await CreateService(db, evidence, cursor, clock).RecoverAsync(default);
+            Assert.Equal(sweep + 1, evidence.Calls);
+        }
+
+        Assert.Equal(expected.Append(expected[0]), evidence.LinkedIds);
+        Assert.All(await db.Acquisitions.ToArrayAsync(), acquisition => Assert.Equal(AcquisitionStatus.ManualImportRequired, acquisition.Status));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task SweepTimeoutCancelsInFlightProviderWorkButCallerCancellationStillPropagates(bool callerCancels) {
+        await using var db = CreateContext();
+        var (_, acquisition, episodes) = await SeedAsync(db);
+        episodes[0].SortOrder = 1;
+        episodes[1].SortOrder = 2;
+        await db.SaveChangesAsync();
+        File.Delete(Path.Combine(root, "payload", "Show.S01E01E02.First.Story.Second.Story.mkv"));
+        await File.WriteAllTextAsync(Path.Combine(root, "payload", "unmatched.mkv"), "unresolved video");
+        using var caller = new CancellationTokenSource();
+        var clock = new RecoveryTimeProvider();
+        var evidence = new RecordingEvidence(async token => {
+            if (callerCancels) caller.Cancel();
+            else clock.Advance(TimeSpan.FromSeconds(20));
+            await Task.Delay(Timeout.InfiniteTimeSpan, token);
+        });
+        var service = CreateService(db, evidence, new HeldTvImportRecoveryCursor(), clock);
+
+        if (callerCancels) await Assert.ThrowsAnyAsync<OperationCanceledException>(() => service.RecoverAsync(caller.Token));
+        else await service.RecoverAsync(caller.Token);
+
+        Assert.Equal(1, evidence.Calls);
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, acquisition.Status);
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
@@ -318,16 +372,47 @@ public sealed class HeldTvImportRecoveryTests : IDisposable {
         return (CreateService(db), acquisition, episodes);
     }
 
-    private HeldTvImportRecoveryService CreateService(PrismediaDbContext db, ITvEpisodeCatalogEvidenceSource? evidence = null) => new(
+    private HeldTvImportRecoveryService CreateService(PrismediaDbContext db, ITvEpisodeCatalogEvidenceSource? evidence = null,
+        HeldTvImportRecoveryCursor? cursor = null, TimeProvider? clock = null) => new(
         new EfHeldTvImportRecoveryStore(db), AcquisitionTestFactory.Store(db), new EfImportTargetIndex(db),
         new DownloadPayloadReader(), new EfBookAcquisitionProfileStore(db), new Roots(root, rootId), new EfMonitorStore(db),
-        NullLogger<HeldTvImportRecoveryService>.Instance, evidence);
+        NullLogger<HeldTvImportRecoveryService>.Instance, evidence, cursor, clock);
+
+    private sealed class RecoveryTimeProvider : TimeProvider {
+        private long timestamp;
+        private readonly List<RecoveryTimer> timers = [];
+        public override long TimestampFrequency => TimeSpan.TicksPerSecond;
+        public override long GetTimestamp() => timestamp;
+        public override ITimer CreateTimer(TimerCallback callback, object? state, TimeSpan dueTime, TimeSpan period) {
+            var timer = new RecoveryTimer(callback, state, timestamp + dueTime.Ticks);
+            timers.Add(timer);
+            return timer;
+        }
+        public void Advance(TimeSpan duration) {
+            timestamp += duration.Ticks;
+            foreach (var timer in timers) timer.Fire(timestamp);
+        }
+    }
+
+    private sealed class RecoveryTimer(TimerCallback callback, object? state, long dueAt) : ITimer {
+        private bool finished;
+        public void Fire(long timestamp) {
+            if (finished || timestamp < dueAt) return;
+            finished = true;
+            callback(state);
+        }
+        public bool Change(TimeSpan dueTime, TimeSpan period) => throw new NotSupportedException("Recovery uses a fixed one-shot budget.");
+        public void Dispose() => finished = true;
+        public ValueTask DisposeAsync() { Dispose(); return ValueTask.CompletedTask; }
+    }
 
     private sealed class RecordingEvidence(Func<CancellationToken, Task> read) : ITvEpisodeCatalogEvidenceSource {
         public int Calls { get; private set; }
+        public List<Guid> LinkedIds { get; } = [];
         public async Task<IReadOnlyList<TvSeasonEpisodeCatalog>> ReadAsync(Guid linkedEntityId, int requestedSeason,
             IReadOnlyList<ImportCandidateFile> files, CancellationToken cancellationToken) {
             Calls++;
+            LinkedIds.Add(linkedEntityId);
             await read(cancellationToken);
             return [];
         }

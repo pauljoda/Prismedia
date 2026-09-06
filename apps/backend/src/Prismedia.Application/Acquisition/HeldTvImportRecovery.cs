@@ -39,20 +39,36 @@ public sealed class HeldTvImportRecoveryService(
     ILibraryScanRootPersistence roots,
     IMonitorStore monitors,
     ILogger<HeldTvImportRecoveryService> logger,
-    ITvEpisodeCatalogEvidenceSource? catalogEvidence = null) {
+    ITvEpisodeCatalogEvidenceSource? catalogEvidence = null,
+    HeldTvImportRecoveryCursor? recoveryCursor = null,
+    TimeProvider? timeProvider = null) {
+    private static readonly TimeSpan MaximumSweepTime = TimeSpan.FromSeconds(15);
+
     /// <summary>Checks held payloads under their active Entity monitor, preserving paused and destructive lifecycle intent.</summary>
     public async Task RecoverAsync(CancellationToken cancellationToken) {
-        foreach (var held in await recovery.ListAsync(cancellationToken)) {
-            cancellationToken.ThrowIfCancellationRequested();
-            try {
-                if ((await monitors.GetByEntityAsync(held.EntityId, cancellationToken))?.Status == MonitorStatus.Active) {
-                    await ReconsiderAsync(held, cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        var clock = timeProvider ?? TimeProvider.System;
+        var cursor = recoveryCursor ?? new HeldTvImportRecoveryCursor();
+        var started = clock.GetTimestamp();
+        using var budget = new CancellationTokenSource(MaximumSweepTime, clock);
+        using var sweep = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, budget.Token);
+        try {
+            foreach (var held in cursor.Order(await recovery.ListAsync(sweep.Token))) {
+                cancellationToken.ThrowIfCancellationRequested();
+                if (budget.IsCancellationRequested || clock.GetElapsedTime(started) >= MaximumSweepTime) break;
+                cursor.Advance(held);
+                try {
+                    if ((await monitors.GetByEntityAsync(held.EntityId, sweep.Token))?.Status == MonitorStatus.Active) {
+                        await ReconsiderAsync(held, sweep.Token);
+                    }
+                } catch (OperationCanceledException) {
+                    throw;
+                } catch (Exception ex) {
+                    logger.LogWarning(ex, "Could not reconsider held TV acquisition {Id}.", held.Id);
                 }
-            } catch (OperationCanceledException) {
-                throw;
-            } catch (Exception ex) {
-                logger.LogWarning(ex, "Could not reconsider held TV acquisition {Id}.", held.Id);
             }
+        } catch (OperationCanceledException) when (budget.IsCancellationRequested && !cancellationToken.IsCancellationRequested) {
+            logger.LogDebug("Held TV recovery reached its sweep budget; continuing the backlog on the next tick.");
         }
     }
 
