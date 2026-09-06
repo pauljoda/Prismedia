@@ -10,6 +10,31 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class RefreshEntityJobHandlerTests {
     [Theory]
+    [InlineData(EntityKind.Movie, false)]
+    [InlineData(EntityKind.Movie, true)]
+    [InlineData(EntityKind.VideoEpisode, false)]
+    [InlineData(EntityKind.VideoEpisode, true)]
+    public async Task UpgradeFinalizationRequiresFreshVideoProbeEvenWhenOldMetadataLooksReady(EntityKind kind, bool automaticMetadata) {
+        var id = Guid.NewGuid();
+        var persistence = new RecordingPersistence([new EntityRefreshTarget(id, kind.ToCode(), "Owned video", "/media/owned.mkv")]) {
+            AutoGenerateMetadata = automaticMetadata, NeedsProbe = false
+        };
+        var planner = new EntityProcessingGraphPlanner(NullLogger<EntityProcessingGraphPlanner>.Instance,
+            persistence, persistence, persistence, persistence,
+            new StubSubtitleSidecarDiscovery([new VideoSubtitleSidecarDiscovery("/media/owned.mkv", [], new string('a', 64), IsComplete: true)]), persistence);
+        var queue = new RecordingJobQueue();
+        var payload = AcquisitionFinalizeJobPayload.CreateUpgrade(Guid.NewGuid(), Guid.NewGuid(), "Upgrade ready");
+        var job = RefreshJob(id) with { Type = JobType.ReconcileEntity, GraphId = Guid.NewGuid(), PayloadJson = payload.ToJson() };
+
+        await new ReconcileEntityJobHandler(planner).HandleAsync(new JobContext(job, queue), default);
+
+        var probe = Assert.Single(queue.Nodes, node => node.Job.Type == JobType.ProbeVideo);
+        var finalizer = Assert.Single(queue.Nodes, node => node.Job.Type == JobType.AcquisitionFinalize);
+        Assert.Equal(JobNodeImportance.Required, probe.Importance);
+        Assert.Contains(queue.RunIds[probe.NodeKey], finalizer.DependsOn!);
+    }
+
+    [Theory]
     [InlineData(EntityKind.Movie)]
     [InlineData(EntityKind.VideoEpisode)]
     [InlineData(EntityKind.Video)]

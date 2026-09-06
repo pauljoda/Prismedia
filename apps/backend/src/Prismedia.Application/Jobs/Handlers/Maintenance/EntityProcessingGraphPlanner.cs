@@ -73,6 +73,12 @@ public sealed class EntityProcessingGraphPlanner(
             var processing = EntityKindRegistry.Describe(kind).Processing;
             var plan = processing.Plan(EntityProcessingInputAdapter.From(
                 settings, entityNeeds, !string.IsNullOrWhiteSpace(entity.SourcePath)));
+            // Atomic video replacement is fresh evidence that bytes changed, even when size and cached
+            // dimensions happen to match. A retry reuses the completed probe without clearing its results.
+            if (finalization?.UpgradeParentAcquisitionId is not null && entity.Id == entityId
+                && !string.IsNullOrWhiteSpace(entity.SourcePath) && processing.ProbeJobType == JobType.ProbeVideo) {
+                plan = plan with { ProbeJobType = JobType.ProbeVideo };
+            }
             var baseDependency = context.Job.Id;
             if (plan.ProbeJobType is { } probeType) {
                 var probe = await AppendAsync(

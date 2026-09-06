@@ -35,10 +35,14 @@ public sealed partial class LibraryScanPersistenceService {
             .Select(t => t.EntityId)
             .ToListAsync(cancellationToken)).ToHashSet();
 
-        var hasMediaSource = (await _db.MediaSources.AsNoTracking()
-            .Where(source => ids.Contains(source.EntityId) && source.DurationSeconds != null)
-            .Select(source => source.EntityId)
-            .ToListAsync(cancellationToken)).ToHashSet();
+        // A retired file's probe must not make its replacement look ready. Match the current source
+        // identity, path, and known size; legacy sources without a recorded size still use their binding.
+        var hasMediaSource = (await (from source in _db.MediaSources.AsNoTracking()
+            join file in _db.EntityFiles.AsNoTracking() on source.EntityFileId equals file.Id
+            where ids.Contains(source.EntityId) && source.DurationSeconds != null
+                && file.EntityId == source.EntityId && file.Role == EntityFileRole.Source && file.Path == source.Path
+                && (file.SizeBytes == null || file.SizeBytes == source.SizeBytes)
+            select source.EntityId).ToListAsync(cancellationToken)).ToHashSet();
 
         var fingerprintRows = await _db.EntityFileFingerprints.AsNoTracking()
             .Where(f => ids.Contains(f.EntityId) &&

@@ -16,6 +16,32 @@ namespace Prismedia.Infrastructure.Tests;
 public sealed class LibraryScanPersistenceServiceTests {
     private static readonly Guid RootId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
 
+    [Theory]
+    [InlineData("current", false)]
+    [InlineData("size", false)]
+    [InlineData("path", false)]
+    [InlineData("detached", false)]
+    [InlineData("size", true)]
+    public async Task DownstreamReadinessUsesTheCurrentSourceProbe(string evidence, bool postgres) {
+        await using var database = postgres ? await PostgresTestDatabase.CreateAsync() : null;
+        await using var db = database?.CreateContext() ?? CreateContext();
+        var id = Guid.NewGuid(); var now = DateTimeOffset.UtcNow;
+        SeedVideo(db, id);
+        await db.SaveChangesAsync();
+        var file = await db.EntityFiles.SingleAsync();
+        file.SizeBytes = 200;
+        db.EntityTechnical.Add(new EntityTechnicalRow { EntityId = id, DurationSeconds = 60, Width = 1280, Height = 720, UpdatedAt = now });
+        db.MediaSources.Add(new MediaSourceRow { Id = Guid.NewGuid(), EntityId = id,
+            EntityFileId = evidence == "detached" ? null : file.Id,
+            Path = evidence == "path" ? file.Path + ".old" : file.Path,
+            SizeBytes = evidence == "size" ? 100 : 200, DurationSeconds = 60, Width = 1280, Height = 720, CreatedAt = now, UpdatedAt = now });
+        await db.SaveChangesAsync();
+
+        var needs = await new LibraryScanPersistenceService(db).CheckDownstreamNeedsBatchAsync([id], default);
+
+        Assert.Equal(evidence != "current", needs[id].NeedsProbe);
+    }
+
     [Fact]
     public async Task SuccessfulFirstAudioProbePersistsMediaSourceAndSchedulesDefinitionPreview() {
         var sourcePath = Path.Combine(Path.GetTempPath(), $"prismedia-audio-probe-{Guid.NewGuid():N}.flac");
