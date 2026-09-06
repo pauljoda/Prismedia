@@ -44,10 +44,15 @@ public sealed partial class LibraryScanPersistenceService {
                 && (file.SizeBytes == null || file.SizeBytes == source.SizeBytes)
             select source.EntityId).ToListAsync(cancellationToken)).ToHashSet();
 
-        var fingerprintRows = await _db.EntityFileFingerprints.AsNoTracking()
-            .Where(f => ids.Contains(f.EntityId) &&
-                (f.Algorithm == FingerprintAlgorithm.Md5 || f.Algorithm == FingerprintAlgorithm.Oshash))
-            .Select(f => new { f.EntityId, f.Algorithm })
+        // Unbound provider/legacy hashes and fingerprints of retired sources or generated assets do
+        // not establish current-file readiness. Keep those records available until fresh hashing runs.
+        var fingerprintRows = await (
+            from fingerprint in _db.EntityFileFingerprints.AsNoTracking()
+            join source in _db.EntityFiles.AsNoTracking() on fingerprint.EntityFileId equals (Guid?)source.Id
+            where ids.Contains(fingerprint.EntityId) && source.EntityId == fingerprint.EntityId
+                && source.Role == EntityFileRole.Source
+                && (fingerprint.Algorithm == FingerprintAlgorithm.Md5 || fingerprint.Algorithm == FingerprintAlgorithm.Oshash)
+            select new { fingerprint.EntityId, fingerprint.Algorithm })
             .ToListAsync(cancellationToken);
         var hasOshash = fingerprintRows
             .Where(f => f.Algorithm == FingerprintAlgorithm.Oshash)

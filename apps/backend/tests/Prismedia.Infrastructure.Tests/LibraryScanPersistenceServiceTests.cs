@@ -18,6 +18,48 @@ public sealed class LibraryScanPersistenceServiceTests {
 
     [Theory]
     [InlineData("current", false)]
+    [InlineData("current", true)]
+    [InlineData("unbound", false)]
+    [InlineData("unbound", true)]
+    [InlineData("other-entity", false)]
+    [InlineData("other-entity", true)]
+    [InlineData("generated-asset", false)]
+    [InlineData("generated-asset", true)]
+    public async Task FingerprintReadinessRequiresTheCurrentOwnedSource(string binding, bool postgres) {
+        await using var database = postgres ? await PostgresTestDatabase.CreateAsync() : null;
+        await using var db = database?.CreateContext() ?? CreateContext();
+        var id = Guid.NewGuid();
+        SeedVideo(db, id);
+        await db.SaveChangesAsync();
+        Guid? sourceId = (await db.EntityFiles.SingleAsync()).Id;
+        if (binding == "unbound") sourceId = null;
+        if (binding == "other-entity") {
+            var otherId = Guid.NewGuid();
+            SeedSourceEntity(db, otherId, EntityKind.Video.ToCode(), "/media/other.mkv");
+            await db.SaveChangesAsync();
+            sourceId = (await db.EntityFiles.SingleAsync(file => file.EntityId == otherId)).Id;
+        }
+        if (binding == "generated-asset") {
+            sourceId = Guid.NewGuid();
+            db.EntityFiles.Add(new EntityFileRow { Id = sourceId.Value, EntityId = id,
+                Role = EntityFileRole.Preview, Path = "/data/preview.mp4" });
+            await db.SaveChangesAsync();
+        }
+        foreach (var algorithm in new[] { FingerprintAlgorithm.Oshash, FingerprintAlgorithm.Md5 }) {
+            db.EntityFileFingerprints.Add(new EntityFileFingerprintRow { Id = Guid.NewGuid(), EntityId = id,
+                EntityFileId = sourceId, Algorithm = algorithm, Value = new string('a', 32), CreatedAt = DateTimeOffset.UtcNow });
+        }
+        await db.SaveChangesAsync();
+
+        var needs = (await new LibraryScanPersistenceService(db).CheckDownstreamNeedsBatchAsync([id], default))[id];
+
+        Assert.Equal(binding != "current", needs.MissingOshash);
+        Assert.Equal(binding != "current", needs.MissingMd5);
+        Assert.Equal(2, await db.EntityFileFingerprints.CountAsync());
+    }
+
+    [Theory]
+    [InlineData("current", false)]
     [InlineData("size", false)]
     [InlineData("path", false)]
     [InlineData("detached", false)]

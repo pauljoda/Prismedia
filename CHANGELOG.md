@@ -42,6 +42,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Library healing and refresh now regenerate file fingerprints when existing hashes belong to an old source, another item, or a generated asset.
+
 - Failed book and video replacements now preserve downloaded candidates for retry, retain interrupted staging files, and keep successful upgrades installed when backup recycling fails.
 
 - Movie and episode upgrades now refresh enabled file fingerprints even when the replacement keeps the same source identity, preventing old hashes from describing the new file.
