@@ -526,6 +526,11 @@ public static class AcquisitionEndpoints {
             .Produces(StatusCodes.Status204NoContent)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
+        group.MapGet("/rule-presets", () => AcquisitionRulePresets.List())
+            .WithName("ListAcquisitionRulePresets")
+            .WithSummary("Lists editable starter rules for common audio language and format preferences.")
+            .Produces<IReadOnlyList<AcquisitionRulePresetView>>();
+
         group.MapGet("/custom-formats", (
             ICustomFormatStore customFormats,
             CancellationToken cancellationToken) =>

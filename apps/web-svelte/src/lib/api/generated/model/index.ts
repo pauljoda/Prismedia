@@ -29,6 +29,7 @@ export * from './acquisitionManualImportReview';
 export * from './acquisitionManualImportSelection';
 export * from './acquisitionManualImportTarget';
 export * from './acquisitionQueueRequest';
+export * from './acquisitionRulePresetView';
 export * from './acquisitionSearchRequest';
 export * from './acquisitionStatus';
 export * from './acquisitionSummary';

@@ -80,35 +80,37 @@ public static class CustomFormatEvaluation {
         var anyMatched = false;
         foreach (var condition in format.Conditions) {
             var matched = Evaluate(condition, context);
-            if (condition.Required && !matched) {
+            if (matched is null || (condition.Required && !matched.Value)) {
                 return false;
             }
 
-            anyMatched |= matched;
+            anyMatched |= matched.Value;
         }
 
         return anyMatched;
     }
 
     /// <summary>Evaluates one condition against the release, applying the negate flip to the underlying test.</summary>
-    private static bool Evaluate(CustomFormatCondition condition, ReleaseContext context) {
-        var underlying = condition.Type switch {
+    private static bool? Evaluate(CustomFormatCondition condition, ReleaseContext context) {
+        bool? underlying = condition.Type switch {
             CustomFormatConditionType.ReleaseTitle => RegexMatches(condition.Value, context.Title),
             CustomFormatConditionType.ReleaseGroup => RegexMatches(condition.Value, context.ReleaseGroup),
             CustomFormatConditionType.Language => LanguageMatches(condition.Value, context),
             CustomFormatConditionType.Quality => QualityMatches(condition.Value, context),
-            _ => false
+            _ => null
         };
 
-        return condition.Negate ? !underlying : underlying;
+        return underlying is null ? null : condition.Negate ? !underlying.Value : underlying.Value;
     }
 
-    private static bool RegexMatches(string pattern, string? target) {
-        if (string.IsNullOrEmpty(target) || Compile(pattern) is not { } regex) {
-            return false;
+    private static bool? RegexMatches(string pattern, string? target) {
+        if (Compile(pattern) is not { } regex) return null;
+        try {
+            return regex.IsMatch(target ?? string.Empty);
+        } catch (RegexMatchTimeoutException) {
+            // Invalid/over-budget conditions invalidate the format, including negated conditions.
+            return null;
         }
-
-        return regex.IsMatch(target);
     }
 
     private static bool LanguageMatches(string value, ReleaseContext context) {
@@ -133,7 +135,7 @@ public static class CustomFormatEvaluation {
     private static Regex? Compile(string pattern) =>
         RegexCache.GetOrAdd(pattern, static raw => {
             try {
-                return new Regex(raw, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled);
+                return new Regex(raw, RegexOptions.IgnoreCase | RegexOptions.CultureInvariant | RegexOptions.Compiled, TimeSpan.FromMilliseconds(100));
             } catch (ArgumentException) {
                 return null;
             }

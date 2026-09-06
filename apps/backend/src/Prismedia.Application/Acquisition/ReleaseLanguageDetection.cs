@@ -52,6 +52,9 @@ public static partial class ReleaseLanguageDetection {
             [Multi] = Multi, ["multilang"] = Multi, ["multilanguage"] = Multi
         };
 
+    /// <summary>Canonical audio languages available to rule editors, excluding ambiguous multi-audio.</summary>
+    public static IReadOnlyList<string> KnownLanguages => Aliases.Values.Where(value => value != Multi).Distinct().Order().ToArray();
+
     [GeneratedRegex(@"[\s._\-()\[\]{}+,/;|]+")]
     private static partial Regex TokenSeparatorRegex();
 

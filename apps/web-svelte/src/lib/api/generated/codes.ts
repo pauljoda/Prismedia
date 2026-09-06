@@ -6,6 +6,7 @@
 export const ACQUISITION_CHECKPOINT_PROTOCOL = {
   placement: "placement",
   television: "television",
+  atomicUpgrade: "atomic-upgrade",
 } as const;
 
 export type AcquisitionCheckpointProtocolCode = (typeof ACQUISITION_CHECKPOINT_PROTOCOL)[keyof typeof ACQUISITION_CHECKPOINT_PROTOCOL];

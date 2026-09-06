@@ -80,6 +80,15 @@ public sealed class CustomFormatEvaluationTests {
         Assert.Equal(0, CustomFormatEvaluation.Score("Movie unclosed 1080p", rules));
     }
 
+    [Theory]
+    [InlineData("(unclosed", "Example", false)]
+    [InlineData("(unclosed", "Example", true)]
+    [InlineData("^(a+)+$", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa!", true)]
+    public void InvalidOrExcessivelyExpensiveConditionsCannotMatchThroughNegation(string pattern, string title, bool negate) {
+        var rules = RulesWith(EntityKind.Movie, Format("Invalid", 100, Title(pattern, negate)));
+        Assert.Equal(0, CustomFormatEvaluation.Score(title, rules));
+    }
+
     [Fact]
     public void ReleaseGroupConditionMatchesTheDetectedGroup() {
         var rules = RulesWith(EntityKind.Movie,

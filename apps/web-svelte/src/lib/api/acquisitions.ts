@@ -11,6 +11,7 @@ import {
   deleteIndexer,
   listAcquisitionBlocklist,
   listCustomFormats,
+  listAcquisitionRulePresets,
   saveCustomFormat as saveCustomFormatRequest,
   listRemotePathMappings,
   saveRemotePathMapping as saveRemotePathMappingRequest,
@@ -50,6 +51,7 @@ import type {
   AcquisitionBlocklistClearResponse,
   AcquisitionBlocklistEntry,
   CustomFormatSaveRequest,
+  AcquisitionRulePresetView,
   CustomFormatView,
   RemotePathMappingSaveRequest,
   RemotePathMappingView,
@@ -370,4 +372,9 @@ export async function saveCustomFormat(request: CustomFormatSaveRequest): Promis
 
 export async function deleteCustomFormat(id: string): Promise<void> {
   unwrapGenerated(await deleteCustomFormatRequest(id), "Failed to remove custom format", [204]);
+}
+
+/** Starter rules use the same backend condition contracts as user-authored custom formats. */
+export async function fetchAcquisitionRulePresets(): Promise<AcquisitionRulePresetView[]> {
+  return unwrapGenerated(await listAcquisitionRulePresets(), "Failed to load rule presets");
 }

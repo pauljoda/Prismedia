@@ -17,6 +17,7 @@ import type {
   AcquisitionManualImportRequest,
   AcquisitionManualImportReview,
   AcquisitionQueueRequest,
+  AcquisitionRulePresetView,
   AcquisitionSearchRequest,
   AcquisitionSummary,
   AcquisitionTransferView,
@@ -11734,6 +11735,42 @@ export const deleteAcquisitionProfile = async (id: string, options?: RequestInit
   {
     ...options,
     method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type listAcquisitionRulePresetsResponse200 = {
+  data: AcquisitionRulePresetView[]
+  status: 200
+}
+
+export type listAcquisitionRulePresetsResponseSuccess = (listAcquisitionRulePresetsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listAcquisitionRulePresetsResponse = (listAcquisitionRulePresetsResponseSuccess)
+
+export const getListAcquisitionRulePresetsUrl = () => {
+
+
+
+
+  return `/api/acquisitions/rule-presets`
+}
+
+/**
+ * @summary Lists editable starter rules for common audio language and format preferences.
+ */
+export const listAcquisitionRulePresets = async ( options?: RequestInit): Promise<listAcquisitionRulePresetsResponse> => {
+
+  return orvalFetch<listAcquisitionRulePresetsResponse>(getListAcquisitionRulePresetsUrl(),
+  {
+    ...options,
+    method: 'GET'
 
 
   }

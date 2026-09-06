@@ -417,6 +417,14 @@ public sealed record BookAcquisitionProfileSaveRequest(
     EntityDateType? SearchAfterDateType = null,
     int SearchDelayDays = 0);
 
+/// <summary>An editable starter custom format; saving uses the same contract and matching rules as advanced formats.</summary>
+public sealed record AcquisitionRulePresetView(
+    string Name,
+    string Description,
+    int SuggestedScore,
+    IReadOnlyList<CustomFormatConditionView> Conditions,
+    string? AudioLanguage = null);
+
 /// <summary>One condition of a custom format for the API surface (see the application <c>CustomFormatCondition</c>).</summary>
 /// <param name="Type">The release axis this condition tests.</param>
 /// <param name="Value">The pattern/name/code the axis is tested against (a regex, a language name, or a quality code).</param>

@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Acquisition profiles now offer an ordered audio-language picker and editable starter rules for common languages, codecs, HDR, source formats, and lossless audio. Basic and Advanced edit the same reusable custom formats, with scores set per profile.
+
 - Movie and TV acquisition can search verified original, translated, and romanized titles from the selected metadata provider. Those names share strict identity checks and quality ranking through download validation, import, and coverage recovery.
 
 - Discover now includes a Track category for searching and requesting individual songs. Song imports preserve the selected recording's identity and select only its matching audio from a larger downloaded album.
@@ -41,6 +43,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Audio-track detail and saved-queue payloads no longer duplicate embedded artist and album fields outside the Entity's `embedded-audio-metadata` capability.
 
 ### Fixed
+
+- Advanced release rules limit expensive regular expressions and prevent invalid or timed-out patterns from matching through exclusion.
 
 - Preferred audio languages now rank explicit matches above uncertain multi-audio and unmarked releases. Subtitle language tags, including Multi-Sub, no longer masquerade as audio evidence.
 

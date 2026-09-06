@@ -19,7 +19,7 @@
     AcquisitionBlocklistEntry,
     BookAcquisitionProfileSaveRequest,
     BookAcquisitionProfileView,
-    CustomFormatConditionView,
+    AcquisitionRulePresetView,
     CustomFormatSaveRequest,
     CustomFormatView,
     DownloadClientSaveRequest,
@@ -38,6 +38,7 @@
     fetchAcquisitionProfiles,
     fetchBlocklist,
     fetchCustomFormats,
+    fetchAcquisitionRulePresets,
     fetchDownloadClients,
     fetchIndexers,
     fetchRemotePathMappings,
@@ -55,6 +56,8 @@
   import { findSetting, settingKeys } from "$lib/settings/app-settings";
   import AcquisitionProtocolPreference from "$lib/components/settings/AcquisitionProtocolPreference.svelte";
   import AcquisitionBlocklistManager from "$lib/components/settings/AcquisitionBlocklistManager.svelte";
+  import AcquisitionLanguageOrder from "./AcquisitionLanguageOrder.svelte";
+  import AcquisitionRuleFields from "./AcquisitionRuleFields.svelte";
   import AcquisitionReleaseTimingFields from "$lib/components/settings/AcquisitionReleaseTimingFields.svelte";
   import { availableDownloadProtocols } from "$lib/components/settings/acquisition-protocol-preference";
   import { profileSupportsReleaseDate, releaseTimingLabel } from "$lib/components/settings/acquisition-profile-release-timing";
@@ -76,6 +79,7 @@
   let downloadClients = $state<DownloadClientSummary[]>([]);
   let profiles = $state<BookAcquisitionProfileView[]>([]);
   let customFormats = $state<CustomFormatView[]>([]);
+  let rulePresets = $state<AcquisitionRulePresetView[]>([]);
   let blocklist = $state<AcquisitionBlocklistEntry[]>([]);
   let allRoots = $state<LibraryRootSummary[]>([]);
   let loading = $state(true);
@@ -146,7 +150,7 @@
   }
   async function load() {
     try {
-      const [idx, clients, profs, bl, roots, mappings, formats, settings] = await Promise.all([
+      const [idx, clients, profs, bl, roots, mappings, formats, settings, presets] = await Promise.all([
         fetchIndexers(),
         fetchDownloadClients(),
         fetchAcquisitionProfiles(),
@@ -156,6 +160,7 @@
         fetchRemotePathMappings().catch(() => [] as RemotePathMappingView[]),
         fetchCustomFormats().catch(() => [] as CustomFormatView[]),
         fetchSettings(),
+        fetchAcquisitionRulePresets(),
       ]);
       indexers = idx;
       downloadClients = clients;
@@ -164,6 +169,7 @@
       blocklist = bl;
       allRoots = roots;
       customFormats = formats;
+      rulePresets = presets;
       const configuredProtocol = findSetting(settings, settingKeys.acquisitionPreferredProtocol)?.value;
       preferredProtocol = Object.values(DOWNLOAD_PROTOCOL).includes(configuredProtocol as DownloadProtocolCode)
         ? configuredProtocol as DownloadProtocolCode
@@ -385,6 +391,7 @@
   }
   // ── Acquisition profiles (kind-scoped) ──────────────────────
   function newProfile() {
+    profileRuleForm = null;
     profileForm = {
       id: null, displayName: "Default Books", isDefault: !profiles.some((p) => p.kind === ENTITY_KIND.book),
       kind: ENTITY_KIND.book,
@@ -402,6 +409,7 @@
   function setProfileKind(kind: string) {
     if (!profileForm) return;
     const previousKind = profileForm.kind;
+    if (previousKind !== kind) profileRuleForm = null;
     profileForm.kind = kind as typeof profileForm.kind;
     const suitable = rootsForKind(kind);
     if (!suitable.some((r) => r.id === profileForm?.targetLibraryRootId)) {
@@ -423,6 +431,7 @@
     }
   }
   function editProfile(p: BookAcquisitionProfileView) {
+    profileRuleForm = null;
     profileForm = {
       id: p.id, displayName: p.displayName, isDefault: p.isDefault, kind: p.kind, targetLibraryRootId: p.targetLibraryRootId,
       pathTemplate: p.pathTemplate, importMode: p.importMode, allowedFormats: p.allowedFormats, preferredLanguages: p.preferredLanguages,
@@ -492,17 +501,6 @@
 
   // ── Custom formats ──────────────────────────────────────────
   let formatForm = $state<CustomFormatSaveRequest | null>(null);
-  const conditionTypeOptions = [
-    { value: CUSTOM_FORMAT_CONDITION_TYPE.releaseTitle, label: "Release title (regex)" },
-    { value: CUSTOM_FORMAT_CONDITION_TYPE.releaseGroup, label: "Release group (regex)" },
-    { value: CUSTOM_FORMAT_CONDITION_TYPE.language, label: "Language name" },
-    { value: CUSTOM_FORMAT_CONDITION_TYPE.quality, label: "Quality code" },
-  ];
-  function conditionPlaceholder(type: string): string {
-    if (type === CUSTOM_FORMAT_CONDITION_TYPE.language) return "english";
-    if (type === CUSTOM_FORMAT_CONDITION_TYPE.quality) return "bluray-1080p";
-    return "(?i)dual|eng|english";
-  }
   function newFormat() {
     formatForm = {
       id: null, kind: ENTITY_KIND.book, name: "",
@@ -511,14 +509,6 @@
   }
   function editFormat(f: CustomFormatView) {
     formatForm = { id: f.id, kind: f.kind, name: f.name, conditions: f.conditions.map((c) => ({ ...c })) };
-  }
-  function addCondition() {
-    if (!formatForm) return;
-    formatForm.conditions = [...formatForm.conditions, { type: CUSTOM_FORMAT_CONDITION_TYPE.releaseTitle, value: "", negate: false, required: false }];
-  }
-  function removeCondition(index: number) {
-    if (!formatForm || formatForm.conditions.length <= 1) return;
-    formatForm.conditions = formatForm.conditions.filter((_, i) => i !== index);
   }
   async function saveFormat() {
     if (!formatForm) return;
@@ -541,6 +531,31 @@
       await load();
     } catch (err) {
       onError(err instanceof Error ? err.message : "Failed to delete custom format");
+    } finally {
+      busy = false;
+    }
+  }
+
+  let profileRuleForm = $state<CustomFormatSaveRequest | null>(null);
+  let profileRuleScore = $state(100);
+  function editProfileRule(format?: CustomFormatView) {
+    if (!profileForm) return;
+    profileRuleForm = format
+      ? { id: format.id, kind: format.kind, name: format.name, conditions: format.conditions.map((condition) => ({ ...condition })) }
+      : { id: null, kind: profileForm.kind, name: "", conditions: [{ type: CUSTOM_FORMAT_CONDITION_TYPE.releaseTitle, value: "", negate: false, required: true }] };
+    profileRuleScore = format ? Number(profileForm.formatScores?.[format.id] ?? 0) : 100;
+  }
+  async function saveProfileRule() {
+    if (!profileRuleForm || !profileForm) return;
+    busy = true;
+    try {
+      const saved = await saveCustomFormat(profileRuleForm);
+      customFormats = [...customFormats.filter((format) => format.id !== saved.id), saved];
+      profileForm.formatScores = { ...profileForm.formatScores, [saved.id]: profileRuleScore };
+      profileRuleForm = null;
+      onMessage("Rule saved. Save this profile to apply its score.");
+    } catch (error) {
+      onError(error instanceof Error ? error.message : "Failed to save rule");
     } finally {
       busy = false;
     }
@@ -809,7 +824,7 @@
           {/if}
         </div>
         <p class="text-[0.72rem] leading-relaxed text-text-muted">
-          Named, scored release classifiers. Define conditions here, then score each format per profile below.
+          Reusable rules for language and release preferences. Start with Basic or edit exact conditions in Advanced, then assign scores in each profile.
         </p>
         {#each customFormats as f (f.id)}
           <div class="flex items-center justify-between gap-2 rounded-sm border border-border-subtle bg-surface-1 px-3 py-2">
@@ -832,21 +847,7 @@
               <label class="space-y-1"><span class="text-label text-text-muted">Name</span>
                 <TextInput size="sm" value={formatForm.name} oninput={(e) => formatForm && (formatForm.name = e.currentTarget.value)} placeholder="Remux Tier" /></label>
             </div>
-            <div class="space-y-1.5">
-              <span class="text-label text-text-muted">Conditions</span>
-              {#each formatForm.conditions as condition, i (i)}
-                <div class="flex flex-wrap items-center gap-2 rounded-sm border border-border-subtle bg-surface-1 px-2 py-1.5">
-                  <Select size="sm" value={condition.type} options={conditionTypeOptions} onchange={(v) => formatForm && (formatForm.conditions[i].type = v as CustomFormatConditionView["type"])} />
-                  <TextInput size="sm" value={condition.value} oninput={(e) => formatForm && (formatForm.conditions[i].value = e.currentTarget.value)} placeholder={conditionPlaceholder(condition.type)} class="min-w-40 flex-1" />
-                  <label class="flex items-center gap-1.5"><Checkbox checked={condition.negate} onchange={(e) => formatForm && (formatForm.conditions[i].negate = e.currentTarget.checked)} /><span class="text-[0.72rem] text-text-muted">Negate</span></label>
-                  <label class="flex items-center gap-1.5"><Checkbox checked={condition.required} onchange={(e) => formatForm && (formatForm.conditions[i].required = e.currentTarget.checked)} /><span class="text-[0.72rem] text-text-muted">Required</span></label>
-                  {#if formatForm.conditions.length > 1}
-                    <Button size="sm" variant="ghost" onclick={() => removeCondition(i)} disabled={busy}><Trash2 class="h-3.5 w-3.5" /></Button>
-                  {/if}
-                </div>
-              {/each}
-              <Button size="sm" variant="secondary" onclick={addCondition} disabled={busy} class="gap-1.5"><Plus class="h-3.5 w-3.5" /> Add condition</Button>
-            </div>
+            <AcquisitionRuleFields bind:form={formatForm} presets={rulePresets} editing={!!formatForm.id} />
             <div class="flex justify-end gap-1.5">
               <Button size="sm" variant="ghost" onclick={() => (formatForm = null)} disabled={busy}>Cancel</Button>
               <Button size="sm" variant="primary" onclick={saveFormat} disabled={busy || !formatForm.name || formatForm.conditions.some((c) => !c.value)}>Save</Button>
@@ -920,6 +921,9 @@
               <label class="space-y-1"><span class="text-label text-text-muted">Min seeders</span>
                 <TextInput size="sm" value={String(profileForm.minSeeders)} oninput={(e) => profileForm && (profileForm.minSeeders = Number(e.currentTarget.value) || 0)} /></label>
             </div>
+            <AcquisitionLanguageOrder languages={parseTerms(profileTerms.languages)} presets={rulePresets} onchange={(languages) => (profileTerms.languages = languages.join(", "))} />
+            <details class="rounded-sm border border-border-subtle p-3">
+              <summary class="cursor-pointer text-sm text-text-secondary">Advanced title filters and language codes</summary>
             <div class="grid gap-2">
               <label class="space-y-1"><span class="text-label text-text-muted">Preferred terms<span class="ml-1 text-text-muted">— comma-separated; matches rank a release higher (e.g. retail, epub)</span></span>
                 <TextInput size="sm" value={profileTerms.preferred} oninput={(e) => (profileTerms.preferred = e.currentTarget.value)} placeholder="retail, epub" /></label>
@@ -932,16 +936,40 @@
               <label class="space-y-1"><span class="text-label text-text-muted">Preferred languages<span class="ml-1 text-text-muted">— in order of preference; explicit matches rank first, unspecified multi-audio then unmarked releases remain fallbacks. Releases naming only other audio languages are skipped</span></span>
                 <TextInput size="sm" value={profileTerms.languages} oninput={(e) => (profileTerms.languages = e.currentTarget.value)} placeholder="English" /></label>
             </div>
+            </details>
+            <div class="space-y-3 border-t border-border-subtle pt-3">
+              <div class="flex items-center justify-between gap-2">
+                <span class="text-label text-text-secondary">Release preferences</span>
+                <Button size="sm" variant="secondary" onclick={() => editProfileRule()} disabled={busy}>Add rule</Button>
+              </div>
+              <p class="text-xs leading-relaxed text-text-muted">Start with a language, codec or source preference, or create your own title rule. Explicit preferred audio languages above take priority over weighted rules.</p>
+              {#if profileRuleForm}
+                <div class="space-y-3 rounded-sm border border-border-subtle bg-surface-1 p-3">
+                  <label class="block space-y-1"><span class="text-label text-text-secondary">Rule name</span>
+                    <TextInput size="sm" value={profileRuleForm.name} oninput={(event) => profileRuleForm && (profileRuleForm.name = event.currentTarget.value)} /></label>
+                  {#key profileRuleForm.id}
+                    <AcquisitionRuleFields bind:form={profileRuleForm} presets={rulePresets} editing={!!profileRuleForm.id} onpreset={(preset) => (profileRuleScore = Number(preset.suggestedScore))} />
+                  {/key}
+                  <label class="block space-y-1"><span class="text-label text-text-secondary">Score in this profile</span>
+                    <TextInput size="sm" type="number" value={String(profileRuleScore)} oninput={(event) => (profileRuleScore = Number(event.currentTarget.value) || 0)} /></label>
+                  {#if profileRuleForm.id}<p class="text-xs text-text-muted">This rule's conditions are shared with every profile using it. Its score belongs to this profile.</p>{/if}
+                  <div class="flex justify-end gap-2">
+                    <Button size="sm" variant="ghost" onclick={() => (profileRuleForm = null)}>Cancel rule</Button>
+                    <Button size="sm" variant="primary" disabled={busy || !profileRuleForm.name || profileRuleForm.conditions.some((condition) => !condition.value.trim())} onclick={saveProfileRule}>Save rule</Button>
+                  </div>
+                </div>
+              {/if}
+            </div>
             {#if formatsForKind.length > 0}
               <div class="space-y-2">
                 <div class="space-y-0.5">
                   <span class="text-label text-text-muted">Custom format scores</span>
-                  <p class="text-[0.72rem] leading-relaxed text-text-muted">100 points equals one preferred term; negatives act as a soft ban.</p>
+                  <p class="text-[0.72rem] leading-relaxed text-text-muted">100 points equals one preferred term. A score below the minimum rejects the release, including negative totals at a zero minimum.</p>
                 </div>
                 <div class="space-y-1.5">
                   {#each formatsForKind as f (f.id)}
                     <div class="flex items-center justify-between gap-2 rounded-sm border border-border-subtle bg-surface-1 px-3 py-1.5">
-                      <span class="text-sm text-text-primary">{f.name}</span>
+                      <Button size="sm" variant="ghost" onclick={() => editProfileRule(f)} aria-label={`Edit ${f.name}`}>{f.name}</Button>
                       <TextInput size="sm" type="number" class="w-24" value={String((profileForm.formatScores ?? {})[f.id] ?? 0)} oninput={(e) => setFormatScore(f.id, e.currentTarget.value)} placeholder="0" />
                     </div>
                   {/each}
