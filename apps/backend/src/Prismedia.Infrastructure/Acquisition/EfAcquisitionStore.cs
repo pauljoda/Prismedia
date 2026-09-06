@@ -145,7 +145,7 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         var row = await db.Acquisitions
             .AsNoTracking()
             .Where(row => row.Id == id)
-            .Select(row => new { row.Id, row.Title, row.Author, row.Kind, row.EntityId, row.Year, row.ProfileId, row.Series, row.SeasonNumber, row.EpisodeNumber, row.VolumeNumber, row.BookRendition })
+            .Select(row => new { row.Id, row.Title, row.Author, row.Kind, row.EntityId, row.UpgradeOfAcquisitionId, row.Year, row.ProfileId, row.Series, row.SeasonNumber, row.EpisodeNumber, row.VolumeNumber, row.BookRendition })
             .FirstOrDefaultAsync(cancellationToken);
         if (row is null) {
             return null;
@@ -156,15 +156,44 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         // library itself knows the work's year identity — the containing series' premiere year or the
         // movie's release year — which is what scene naming appends to disambiguate same-name works,
         // so the search gates compare against that instead.
-        var year = row.EntityId is { } entityId && MediaQualityLadder.IsVideoKind(row.Kind)
+        var contextEntityId = await ResolveContextEntityIdAsync(row.EntityId, row.UpgradeOfAcquisitionId, row.Kind, cancellationToken);
+        var year = contextEntityId is { } entityId && MediaQualityLadder.IsVideoKind(row.Kind)
             ? await ResolveWorkYearAsync(entityId, cancellationToken) ?? row.Year
             : row.Year;
-        var positions = await ResolveCurrentPositionsAsync(row.EntityId, row.Kind, cancellationToken);
+        var positions = await ResolveCurrentPositionsAsync(contextEntityId, row.Kind, cancellationToken);
 
         return new AcquisitionSearchInput(
             row.Id, row.Title, row.Author, row.Kind, row.EntityId, year, row.ProfileId,
             row.Series, positions.Season ?? row.SeasonNumber, positions.Episode ?? row.EpisodeNumber,
             positions.Volume ?? row.VolumeNumber, row.BookRendition, positions.AbsoluteEpisode);
+    }
+
+    /// <summary>
+    /// Upgrade children reserve ownership for the replacement transaction, but still need their
+    /// existing owner's current metadata. Walk only compatible upgrade ancestors and leave the
+    /// child's actual entity binding unchanged. Corrupt or excessive lineage cannot keep a job busy.
+    /// </summary>
+    private async Task<Guid?> ResolveContextEntityIdAsync(
+        Guid? entityId, Guid? upgradeParentId, EntityKind kind, CancellationToken cancellationToken) {
+        if (entityId is not null) {
+            return entityId;
+        }
+
+        const int maximumUpgradeDepth = 32;
+        var visited = new HashSet<Guid>();
+        while (upgradeParentId is { } parentId && visited.Count < maximumUpgradeDepth && visited.Add(parentId)) {
+            var parent = await db.Acquisitions.AsNoTracking()
+                .Where(row => row.Id == parentId && row.Kind == kind)
+                .Select(row => new { row.EntityId, row.UpgradeOfAcquisitionId })
+                .FirstOrDefaultAsync(cancellationToken);
+            if (parent is null || parent.EntityId is not null) {
+                return parent?.EntityId;
+            }
+
+            upgradeParentId = parent.UpgradeOfAcquisitionId;
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -1339,7 +1368,8 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             ? ImportPlacementCheckpointJson.Deserialize(row.ImportCheckpointJson)
             : null;
 
-        var positions = await ResolveCurrentPositionsAsync(row.EntityId, row.Kind, cancellationToken);
+        var contextEntityId = await ResolveContextEntityIdAsync(row.EntityId, row.UpgradeOfAcquisitionId, row.Kind, cancellationToken);
+        var positions = await ResolveCurrentPositionsAsync(contextEntityId, row.Kind, cancellationToken);
         var context = new AcquisitionImportContext(
             row.Id, row.Title, row.Author, row.Series, row.Year, row.PosterUrl, externalIdentity,
             row.ProfileId, transfer?.ContentPath, transfer?.ClientItemId, transfer?.DownloadClientConfigId, row.Kind,

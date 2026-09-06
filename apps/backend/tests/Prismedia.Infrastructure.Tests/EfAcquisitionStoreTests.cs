@@ -11,6 +11,101 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EfAcquisitionStoreTests {
     [Theory]
+    [InlineData(false, 1)]
+    [InlineData(false, 2)]
+    [InlineData(true, 1)]
+    [InlineData(true, 2)]
+    public async Task UpgradeRequestsInheritRepairedPositionsWithoutTakingOwnership(bool postgres, int depth) {
+        await using var database = postgres ? await PostgresTestDatabase.CreateAsync() : null;
+        await using var db = database?.CreateContext() ?? CreateContext();
+        var seriesId = AddWantedEntity(db, EntityKind.VideoSeries.ToCode(), "Example show");
+        await db.SaveChangesAsync();
+        var seasonId = AddWantedEntity(db, EntityKind.VideoSeason.ToCode(), "Season two", seriesId);
+        await db.SaveChangesAsync();
+        var episodeId = AddWantedEntity(db, EntityKind.VideoEpisode.ToCode(), "Final episode", seasonId);
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+        var parent = await store.CreateAsync(new AcquisitionMetadata(
+            "Final episode", null, "Example show", null, null, null,
+            Kind: EntityKind.VideoEpisode, EntityId: episodeId, SeasonNumber: 1, EpisodeNumber: 99), default);
+        var childId = parent.Id;
+        for (var level = 0; level < depth; level++) {
+            var child = await store.CreateAsync(new AcquisitionMetadata(
+                "Final episode", null, "Example show", null, null, null,
+                Kind: EntityKind.VideoEpisode, SeasonNumber: 1, EpisodeNumber: 99), default);
+            var row = await db.Acquisitions.SingleAsync(row => row.Id == child.Id);
+            row.UpgradeOfAcquisitionId = childId;
+            await db.SaveChangesAsync();
+            childId = child.Id;
+        }
+
+        // Repair after child creation must affect existing upgrade searches and imports too.
+        var absolute = new EntityPositionRow {
+            EntityId = episodeId, Code = EntityPositionCodes.AbsoluteEpisode, Value = 54
+        };
+        db.EntityPositions.AddRange(
+            new EntityPositionRow { EntityId = seasonId, Code = EntityPositionCodes.Season, Value = 2 },
+            new EntityPositionRow { EntityId = episodeId, Code = EntityPositionCodes.Episode, Value = 4 }, absolute);
+        db.EntityDates.Add(new EntityDateRow {
+            EntityId = seriesId, Code = EntityDateType.FirstAir.ToCode(), Value = "2021-01-01",
+            SortableValue = new DateOnly(2021, 1, 1), UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var search = await store.GetSearchInputAsync(childId, default);
+        var import = await store.GetImportContextAsync(childId, default);
+        Assert.Equal(2, search!.SeasonNumber);
+        Assert.Equal(4, search.EpisodeNumber);
+        Assert.Equal(54, search.AbsoluteEpisodeNumber);
+        Assert.Equal(2021, search.Year);
+        Assert.Equal(2, import!.SeasonNumber);
+        Assert.Equal(4, import.EpisodeNumber);
+        Assert.Null(search.EntityId);
+        Assert.Null(import.EntityId);
+        Assert.Null((await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == childId)).EntityId);
+
+        absolute.Value = 55;
+        await db.SaveChangesAsync();
+        Assert.Equal(55, (await store.GetSearchInputAsync(childId, default))!.AbsoluteEpisodeNumber);
+        db.EntityPositions.Remove(absolute);
+        await db.SaveChangesAsync();
+        Assert.Null((await store.GetSearchInputAsync(childId, default))!.AbsoluteEpisodeNumber);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task InvalidUpgradeLineageDoesNotSupplyUnrelatedNumbering(bool cyclic) {
+        await using var db = CreateContext();
+        var entityId = AddWantedEntity(db, EntityKind.VideoEpisode.ToCode(), "Unrelated episode");
+        db.EntityPositions.Add(new EntityPositionRow {
+            EntityId = entityId, Code = EntityPositionCodes.AbsoluteEpisode, Value = 54
+        });
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+        var parent = await store.CreateAsync(new AcquisitionMetadata(
+            "Parent", null, null, null, null, null,
+            Kind: cyclic ? EntityKind.VideoEpisode : EntityKind.Movie, EntityId: cyclic ? null : entityId), default);
+        var child = await store.CreateAsync(new AcquisitionMetadata(
+            "Child", null, null, null, null, null, Kind: EntityKind.VideoEpisode, SeasonNumber: 1, EpisodeNumber: 3), default);
+        (await db.Acquisitions.SingleAsync(row => row.Id == child.Id)).UpgradeOfAcquisitionId = parent.Id;
+        if (cyclic) {
+            (await db.Acquisitions.SingleAsync(row => row.Id == parent.Id)).UpgradeOfAcquisitionId = child.Id;
+        }
+        await db.SaveChangesAsync();
+
+        var search = await store.GetSearchInputAsync(child.Id, default);
+        Assert.Null(search!.AbsoluteEpisodeNumber);
+        Assert.Equal(1, search.SeasonNumber);
+        Assert.Equal(3, search.EpisodeNumber);
+        Assert.Equal(3, (await store.GetImportContextAsync(child.Id, default))!.EpisodeNumber);
+
+        // An explicit owner takes precedence even when an old upgrade link is corrupt.
+        (await db.Acquisitions.SingleAsync(row => row.Id == child.Id)).EntityId = entityId;
+        await db.SaveChangesAsync();
+        Assert.Equal(54, (await store.GetSearchInputAsync(child.Id, default))!.AbsoluteEpisodeNumber);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task HoldingAnUnelectedImportPreservesOtherClaimsCheckpointsAndCancellation(bool postgres) {
