@@ -98,12 +98,15 @@ echo "[prismedia] Starting background worker (supervised)..."
   # appsettings.json (logging thresholds); started from /app they are silently skipped.
   cd /app/worker
   while true; do
+    worker_exit_code=0
+    # The entrypoint uses set -e for startup. Handle a worker failure explicitly so
+    # a crash or signal does not also terminate the supervisor subshell.
     DATABASE_URL="postgresql://postgres@127.0.0.1:5432/prismedia" \
     PRISMEDIA_CACHE_DIR="$CACHE_DIR" \
     PRISMEDIA_DATA_DIR="/data" \
     PRISMEDIA_SECRET="$PRISMEDIA_SECRET" \
-      dotnet /app/worker/Prismedia.Worker.dll
-    echo "[prismedia] Worker exited (code $?). Restarting in 3s..."
+      dotnet /app/worker/Prismedia.Worker.dll || worker_exit_code=$?
+    echo "[prismedia] Worker exited (code $worker_exit_code). Restarting in 3s..."
     sleep 3
   done
 ) &
