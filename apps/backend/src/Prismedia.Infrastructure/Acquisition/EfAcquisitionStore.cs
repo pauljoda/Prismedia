@@ -131,6 +131,10 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             .Where(candidate => candidate.AcquisitionId == id)
             .OrderByDescending(candidate => candidate.Accepted)
             .ThenByDescending(candidate => candidate.Score)
+            // Equal-ranked choices must survive database row movement without changing the pick.
+            .ThenBy(candidate => candidate.Title)
+            .ThenBy(candidate => candidate.IndexerName)
+            .ThenBy(candidate => candidate.Id)
             .ToArrayAsync(cancellationToken);
         var progress = (await LatestProgressAsync([id], cancellationToken)).GetValueOrDefault(id);
         var hasResumablePayload = row.Status == AcquisitionStatus.Failed
@@ -1010,6 +1014,9 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             .AsNoTracking()
             .Where(candidate => candidate.AcquisitionId == acquisitionId && candidate.Accepted)
             .OrderByDescending(candidate => candidate.Score)
+            .ThenBy(candidate => candidate.Title)
+            .ThenBy(candidate => candidate.IndexerName)
+            .ThenBy(candidate => candidate.Id)
             .Select(candidate => new { candidate.Id, candidate.Title, candidate.IndexerName, candidate.InfoHash, candidate.Protocol, candidate.Score, candidate.Seeders, candidate.Peers })
             .ToArrayAsync(cancellationToken);
         return rows.Select(row => new AcquisitionCandidateRef(

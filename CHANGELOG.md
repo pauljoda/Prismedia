@@ -31,6 +31,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Equally ranked acquisition releases keep a stable order across review and automatic selection.
+
 - Large TV packs reuse episode evidence across files and alignment passes, reducing repeated parsing and memory allocation during import planning.
 
 - Replacement searches open in the main acquisition area instead of inside More acquisition actions. Closing the search returns to the current acquisition without changing the existing files.

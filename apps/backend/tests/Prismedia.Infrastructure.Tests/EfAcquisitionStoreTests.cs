@@ -11,6 +11,42 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EfAcquisitionStoreTests {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task TiedReleaseChoicesKeepTheSameOrderAcrossReviewAndAutomaticReads(bool postgres) {
+        await using var database = postgres ? await PostgresTestDatabase.CreateAsync() : null;
+        await using var db = database?.CreateContext() ?? CreateContext();
+        var acquisitionId = Guid.NewGuid();
+        AddCandidate(db, acquisitionId, "last", "Indexer A", "Show S02 Z", 100);
+        AddCandidate(db, acquisitionId, "second-indexer", "Indexer B", "Show S02 A", 100);
+        AddCandidate(db, acquisitionId, "first-indexer", "Indexer A", "Show S02 A", 100);
+        AddCandidate(db, acquisitionId, "best", "Indexer Z", "Show S02 Preferred", 200);
+        AddCandidate(db, acquisitionId, "rejected", "Indexer A", "Show S02 Rejected", 300);
+        db.ReleaseCandidates.Local.Single(row => row.InfoHash == "rejected").Accepted = false;
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+
+        var detail = (await store.GetAsync(acquisitionId, default))!;
+        var accepted = await store.ListAcceptedCandidatesAsync(acquisitionId, default);
+        Assert.Equal(["Show S02 Preferred", "Show S02 A", "Show S02 A", "Show S02 Z"],
+            accepted.Select(candidate => candidate.Title));
+        Assert.Equal(["Indexer Z", "Indexer A", "Indexer B", "Indexer A"],
+            accepted.Select(candidate => candidate.IndexerName));
+        Assert.Equal(accepted.Select(candidate => candidate.CandidateId),
+            detail.Candidates.Where(candidate => candidate.Accepted).Select(candidate => candidate.Id));
+        Assert.False(detail.Candidates[^1].Accepted);
+
+        // Updating metadata can move a PostgreSQL row physically without changing its ranking.
+        db.ReleaseCandidates.Local.Single(row => row.InfoHash == "first-indexer").PublishedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync();
+        db.ChangeTracker.Clear();
+        Assert.Equal(detail.Candidates.Select(candidate => candidate.Id),
+            (await store.GetAsync(acquisitionId, default))!.Candidates.Select(candidate => candidate.Id));
+        Assert.Equal(accepted.Select(candidate => candidate.CandidateId),
+            (await store.ListAcceptedCandidatesAsync(acquisitionId, default)).Select(candidate => candidate.CandidateId));
+    }
+
+    [Theory]
     [InlineData("current", false)]
     [InlineData("current", true)]
     [InlineData("stale size", false)]
