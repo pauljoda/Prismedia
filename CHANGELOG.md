@@ -42,6 +42,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Completed upgrades now follow the configured recycle-bin or latest-backup policy after committing recovery state, preventing routine upgrades from accumulating recovery copies. Newly recycled files receive the full retention window even when their original modification dates are old.
+
 - The bundled worker now restarts after a crash or forced termination, allowing interrupted background jobs to recover without leaving the worker offline.
 
 - Interrupted book, movie, and episode upgrades now recover from preparation saved before file replacement, preserving the original file and stable library ownership even when the database commit fails. Staging retains verifiable recovery evidence, and rejected downloads wait for durable failure handling before cleanup.

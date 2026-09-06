@@ -82,7 +82,7 @@ public static class AppSettings {
             "replaced files next to the upgrade as .prismedia-bak.", "", 30);
         public static readonly SettingDefinition<int> RecycleBinCleanupDays = Int(
             Monitoring.Group, "acquisition.recycleBinCleanupDays", "Recycle bin cleanup (days)",
-            "Files older than this are deleted from the recycle bin by the daily cleanup.",
+            "Files recycled more than this many days ago are deleted by the daily cleanup.",
             7, 40, min: 1, max: 365, step: 1);
         public static readonly SettingDefinition<string> DownloadPropers = Select(
             Monitoring.Group, "acquisition.downloadPropers", "Download propers and repacks",

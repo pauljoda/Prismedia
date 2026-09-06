@@ -7,6 +7,61 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class AtomicUpgradeFilesTests {
     [Fact]
+    public async Task ConfiguredBinReceivesTheOriginalOnlyAfterInstallationCommits() {
+        var bin = new RecordingBin();
+        using var fixture = new Fixture(bin);
+        var checkpoint = await fixture.PrepareAsync();
+        Assert.True((await fixture.Files.ReplaceAsync(checkpoint, default)).Succeeded);
+        Assert.Empty(bin.Received);
+        Assert.Equal("old-owned", await File.ReadAllTextAsync(checkpoint.BackupPath));
+
+        await fixture.Files.CompleteAsync(checkpoint, default);
+
+        Assert.Equal(checkpoint.BackupPath, Assert.Single(bin.Received));
+        Assert.Equal("old-owned", await File.ReadAllTextAsync(checkpoint.BackupPath + ".recycled"));
+        Assert.False(File.Exists(checkpoint.BackupPath));
+        Assert.False(File.Exists(OwnedFileReplacementArtifacts.BackupPath(checkpoint.Files.OwnedPath)));
+        Assert.Equal("new-upgrade", await File.ReadAllTextAsync(checkpoint.Files.OwnedPath));
+        await fixture.Files.CompleteAsync(checkpoint, default);
+        Assert.Single(bin.Received);
+    }
+
+    [Fact]
+    public async Task LateCleanupCannotReplaceANewerOwnedFilesStandardBackup() {
+        using var fixture = new Fixture();
+        var checkpoint = await fixture.PrepareAsync();
+        Assert.True((await fixture.Files.ReplaceAsync(checkpoint, default)).Succeeded);
+        var backup = OwnedFileReplacementArtifacts.BackupPath(checkpoint.Files.OwnedPath);
+        await File.WriteAllTextAsync(backup, "newer-original");
+        await File.WriteAllTextAsync(checkpoint.Files.OwnedPath, "another-installed-version");
+
+        await fixture.Files.CompleteAsync(checkpoint, default);
+
+        Assert.Equal("newer-original", await File.ReadAllTextAsync(backup));
+        Assert.Equal("old-owned", await File.ReadAllTextAsync(checkpoint.BackupPath));
+        Assert.Equal("another-installed-version", await File.ReadAllTextAsync(checkpoint.Files.OwnedPath));
+    }
+
+    [Fact]
+    public async Task CommittedReplacementRetainsOnlyTheLatestOriginalAtTheStandardBackupPath() {
+        using var fixture = new Fixture();
+        var checkpoint = await fixture.PrepareAsync();
+        var standardBackup = OwnedFileReplacementArtifacts.BackupPath(checkpoint.Files.OwnedPath);
+        await File.WriteAllTextAsync(standardBackup, "older-original");
+        Assert.True((await fixture.Files.ReplaceAsync(checkpoint, default)).Succeeded);
+        // Housekeeping must wait until the caller commits the installation receipt.
+        Assert.Equal("older-original", await File.ReadAllTextAsync(standardBackup));
+        Assert.Equal("old-owned", await File.ReadAllTextAsync(checkpoint.BackupPath));
+
+        await fixture.Files.CompleteAsync(checkpoint, default);
+
+        Assert.Equal("old-owned", await File.ReadAllTextAsync(standardBackup));
+        Assert.False(File.Exists(checkpoint.BackupPath));
+        Assert.False(File.Exists(checkpoint.EvidencePath));
+        Assert.Equal("new-upgrade", await File.ReadAllTextAsync(checkpoint.Files.OwnedPath));
+    }
+
+    [Fact]
     public async Task EvidenceFailureCannotConsumeTheOnlyDownloadedCandidate() {
         using var fixture = new Fixture();
         var checkpoint = await fixture.PrepareAsync();
@@ -119,10 +174,20 @@ public sealed class AtomicUpgradeFilesTests {
         Assert.False(File.Exists(checkpoint.BackupPath));
     }
 
-    private sealed class Fixture : IDisposable {
+    private sealed class RecordingBin : IRecycleBin {
+        public List<string> Received { get; } = [];
+        public Task<string?> TryMoveToBinAsync(string path, CancellationToken token) {
+            Received.Add(path);
+            File.Move(path, path + ".recycled");
+            return Task.FromResult<string?>(path + ".recycled");
+        }
+        public Task<int> CleanupAsync(CancellationToken token) => Task.FromResult(0);
+    }
+
+    private sealed class Fixture(IRecycleBin? bin = null) : IDisposable {
         private readonly string root = Directory.CreateTempSubdirectory("atomic-replacement-").FullName;
         public AtomicUpgradeFiles Files { get; } = new(new OwnedFileReplacer(new MergedImportTestSupport.NoRecycleBin(),
-            NullLogger<OwnedFileReplacer>.Instance));
+            NullLogger<OwnedFileReplacer>.Instance), bin ?? new MergedImportTestSupport.NoRecycleBin());
         public async Task<AtomicUpgradeCheckpoint> PrepareAsync() {
             var owned = Path.Combine(root, "owned.epub");
             var incoming = Path.Combine(Directory.CreateDirectory(Path.Combine(root, "download")).FullName, "incoming.epub");

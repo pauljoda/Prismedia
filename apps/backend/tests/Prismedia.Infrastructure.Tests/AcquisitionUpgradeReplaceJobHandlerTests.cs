@@ -854,7 +854,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
         var handler = new AcquisitionUpgradeReplaceJobHandler(
             AcquisitionTestFactory.Store(db), new EfMonitorStore(db), new EfBookAcquisitionProfileStore(db),
             replacer is FakeReplacer ? new FakeCheckpoints() : new EfAtomicUpgradeCheckpointStore(db),
-            replacer is FakeReplacer fake ? new FakeAtomicFiles(fake) : new AtomicUpgradeFiles(replacer),
+            replacer is FakeReplacer fake ? new FakeAtomicFiles(fake) : new AtomicUpgradeFiles(replacer, new MergedImportTestSupport.NoRecycleBin()),
             new EfAcquisitionHistoryStore(db),
             NullLogger<AcquisitionUpgradeReplaceJobHandler>.Instance,
             mediaUpgradeInspector: inspector);

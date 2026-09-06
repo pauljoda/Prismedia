@@ -22,6 +22,10 @@ public sealed class RecycleBin(SettingsService settings, ILogger<RecycleBin> log
             var folder = Path.Combine(config.Path, DateTimeOffset.UtcNow.ToString("yyyy-MM-dd"));
             Directory.CreateDirectory(folder);
             var target = Unique(Path.Combine(folder, Path.GetFileName(filePath)));
+            // A library file may be years old. Its original modification time must not make the
+            // daily cleanup immediately purge a backup that only just entered the recycle bin.
+            // Establish retention before moving it: failure leaves the caller's fallback available.
+            File.SetLastWriteTimeUtc(filePath, DateTime.UtcNow);
             File.Move(filePath, target);
             return target;
         } catch (Exception ex) when (ex is not OperationCanceledException) {

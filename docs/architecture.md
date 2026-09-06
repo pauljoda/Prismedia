@@ -203,6 +203,9 @@ the saved bytes before recognizing an installation or returning a staged file
 for inspection; ambiguous artifacts remain available for review. Successful
 installation releases incoming evidence after commit, while required readiness
 and failed-download handlers own transfer cleanup.
+Post-commit backup housekeeping follows the configured recycle bin or latest
+standard backup policy; a changed owned file keeps the attempt-specific original
+instead of replacing a newer backup.
 
 Book, movie, music, and TV policies and import engines register independently.
 Adding a new media kind extends those registries rather than adding conditionals

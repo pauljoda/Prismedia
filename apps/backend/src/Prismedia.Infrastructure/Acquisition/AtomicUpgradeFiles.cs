@@ -6,7 +6,7 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Infrastructure.Acquisition;
 
 /// <summary>Uses captured file facts and attempt-specific byte evidence to recover same-path atomic replacements.</summary>
-public sealed class AtomicUpgradeFiles(IOwnedFileReplacer replacer) : IAtomicUpgradeFiles {
+public sealed class AtomicUpgradeFiles(IOwnedFileReplacer replacer, IRecycleBin recycleBin) : IAtomicUpgradeFiles {
     /// <inheritdoc />
     public Task<AtomicUpgradeFilePlan> PrepareAsync(UpgradeReplaceTarget target, CancellationToken cancellationToken) {
         cancellationToken.ThrowIfCancellationRequested();
@@ -68,10 +68,16 @@ public sealed class AtomicUpgradeFiles(IOwnedFileReplacer replacer) : IAtomicUpg
     }
 
     /// <inheritdoc />
-    public Task CompleteAsync(AtomicUpgradeCheckpoint checkpoint, CancellationToken cancellationToken) {
+    public async Task CompleteAsync(AtomicUpgradeCheckpoint checkpoint, CancellationToken cancellationToken) {
         cancellationToken.ThrowIfCancellationRequested();
         File.Delete(checkpoint.EvidencePath);
-        return Task.CompletedTask;
+        if (!File.Exists(checkpoint.BackupPath)
+            || await recycleBin.TryMoveToBinAsync(checkpoint.BackupPath, cancellationToken) is not null) return;
+        // Restore the ordinary one-backup policy after commit. If another installation has already
+        // changed the owned file, retain this attempt's original rather than replacing its newer backup.
+        if (Matches(checkpoint.Files.OwnedPath, checkpoint.Files.Incoming)) {
+            File.Move(checkpoint.BackupPath, OwnedFileReplacementArtifacts.BackupPath(checkpoint.Files.OwnedPath), overwrite: true);
+        }
     }
 
     private static AtomicUpgradeFileRecovery Hold() => new(HoldReason:
