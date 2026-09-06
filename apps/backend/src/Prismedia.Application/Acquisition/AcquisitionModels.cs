@@ -208,7 +208,10 @@ public sealed record IndexerConnection(
 public sealed record IndexerQuery(
     string Text,
     IReadOnlyList<int> Categories,
-    EntityKind Kind);
+    EntityKind Kind) {
+    /// <summary>Download protocols the caller can acquire; null leaves the provider scope unrestricted.</summary>
+    public IReadOnlyList<DownloadProtocol>? Protocols { get; init; }
+}
 
 /// <summary>Result of probing an indexer connection.</summary>
 public sealed record IndexerConnectionTest(bool Connected, string? Message);

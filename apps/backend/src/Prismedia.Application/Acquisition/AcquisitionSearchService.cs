@@ -80,7 +80,7 @@ public sealed class AcquisitionSearchRunner(
                     break;
                 }
 
-                var searches = await Task.WhenAll(searchable.Select(config => SearchIndexerAsync(config, text, input, policy, cancellationToken)));
+                var searches = await Task.WhenAll(searchable.Select(config => SearchIndexerAsync(config, text, input, policy, protocols, cancellationToken)));
                 await RecordHealthAsync(searches, cancellationToken);
 
                 foreach (var search in searches) {
@@ -181,6 +181,7 @@ public sealed class AcquisitionSearchRunner(
         string text,
         AcquisitionSearchInput input,
         IAcquisitionPolicyModule policy,
+        IReadOnlyList<DownloadProtocol> protocols,
         CancellationToken cancellationToken) {
         // A rate-limited skip is surfaced (so a thin result set is explainable) but is NOT a failure —
         // it must not climb the backoff ladder.
@@ -194,7 +195,7 @@ public sealed class AcquisitionSearchRunner(
             // Narrow the indexer's configured categories to the acquisition kind's Torznab range, so a
             // movie or album search never queries the book categories the indexer was set up with.
             var categories = connection.Categories;
-            var found = await client.SearchAsync(connection, new IndexerQuery(text, categories, input.Kind), cancellationToken);
+            var found = await client.SearchAsync(connection, new IndexerQuery(text, categories, input.Kind) { Protocols = protocols }, cancellationToken);
             return new IndexerSearchResult(config, found, null);
         } catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested) {
             // HttpClient reports its own Timeout as TaskCanceledException. That is one indexer's

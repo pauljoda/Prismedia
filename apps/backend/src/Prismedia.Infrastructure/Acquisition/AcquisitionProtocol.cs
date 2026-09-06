@@ -154,6 +154,9 @@ public static class ProwlarrProtocol {
     public const string ApiKeyHeader = "X-Api-Key";
 
     public const string SearchEndpoint = "api/v1/search";
+    public const string IndexersEndpoint = "api/v1/indexer";
+    public const string Id = "id";
+    public const string Enable = "enable";
     public const string SystemStatusEndpoint = "api/v1/system/status";
 
     // ── ReleaseResource fields ──────────────────────────────────

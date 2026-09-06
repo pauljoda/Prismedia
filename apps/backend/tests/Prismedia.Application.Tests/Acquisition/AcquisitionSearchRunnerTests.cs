@@ -90,9 +90,10 @@ public sealed class AcquisitionSearchRunnerTests {
         var torrent = new IndexerRelease("Torrent Book (epub)", 5_000_000, 20, 2, DownloadProtocol.Torrent, "http://dl/torrent", "magnet:?x", "hash", null, null, null);
 
         async Task<IReadOnlyList<ScoredRelease>> SearchWith(params DownloadProtocol[] protocols) {
+            var client = new FakeIndexerSearchClient([usenet, torrent]);
             var runner = new AcquisitionSearchRunner(
                 new FakeIndexerConfigStore(),
-                new FakeClientFactory(new FakeIndexerSearchClient([usenet, torrent])),
+                new FakeClientFactory(client),
                 new FakeProfileStore(),
                 new FakeBlocklistStore("unrelated"),
                 new FakeDownloadClientConfigStore(protocols),
@@ -101,6 +102,7 @@ public sealed class AcquisitionSearchRunnerTests {
                 Policies(new BookAcquisitionPolicyModule()),
                 Settings());
             var outcome = await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", null, EntityKind.Book), CancellationToken.None);
+            Assert.All(client.Queries, query => Assert.Equal(protocols, query.Protocols));
             return outcome.Candidates;
         }
 
@@ -668,8 +670,10 @@ public sealed class AcquisitionSearchRunnerTests {
         IndexerKind kind = IndexerKind.Prowlarr) : IIndexerSearchClient {
         public int SearchCount { get; private set; }
         public IndexerKind Kind => kind;
+        public List<IndexerQuery> Queries { get; } = [];
         public Task<IReadOnlyList<IndexerRelease>> SearchAsync(IndexerConnection connection, IndexerQuery query, CancellationToken cancellationToken) {
             SearchCount++;
+            Queries.Add(query);
             return Task.FromResult(releases);
         }
         public Task<IndexerConnectionTest> TestAsync(IndexerConnection connection, CancellationToken cancellationToken) => throw new NotSupportedException();

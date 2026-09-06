@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Text.Json;
 using Microsoft.Extensions.Logging;
@@ -17,11 +18,21 @@ public sealed class ProwlarrIndexerClient(
     ProwlarrSearchConcurrencyGate? concurrency = null,
     ILogger<ProwlarrIndexerClient>? logger = null) : IIndexerSearchClient {
     private const int MaxPagesPerIndexer = 10;
+    private static readonly TimeSpan DiscoveryTimeout = TimeSpan.FromSeconds(3);
+    // The client is scoped to one operation: query variants share discovery without retaining stale
+    // enabled/protocol settings across later searches. Cache metadata, not a caller-specific filter.
+    private readonly ConcurrentDictionary<Guid, Lazy<Task<IReadOnlyList<ProviderProtocol>?>>> _providers = new();
+    private sealed record ProviderProtocol(int Id, DownloadProtocol? Protocol);
     public IndexerKind Kind => IndexerKind.Prowlarr;
     /// <inheritdoc />
     public JobExecutionPolicy? ExecutionPolicy => ProwlarrSearchConcurrencyGate.ExecutionPolicy;
 
     public async Task<IReadOnlyList<IndexerRelease>> SearchAsync(IndexerConnection connection, IndexerQuery query, CancellationToken cancellationToken) {
+        cancellationToken.ThrowIfCancellationRequested();
+        if (query.Protocols is { Count: 0 }) return [];
+        var allowedIndexers = await ResolveIndexerScopeAsync(connection, query.Protocols, cancellationToken);
+        if (allowedIndexers is { Count: 0 }) return [];
+
         // One Prowlarr request fans out across every configured indexer. Large season-to-episode
         // fallback batches can otherwise put a dozen aggregate calls in flight, making Prowlarr queue
         // them until Prismedia's HTTP timeout expires. Two concurrent aggregates kept the live batch
@@ -31,7 +42,7 @@ public sealed class ProwlarrIndexerClient(
             : await concurrency.EnterAsync(cancellationToken);
         var releases = new List<IndexerRelease>();
         var seen = new HashSet<(int? IndexerId, string Identity)>();
-        IReadOnlyList<int>? continuingIndexers = null;
+        IReadOnlyList<int>? continuingIndexers = allowedIndexers;
         for (var page = 0; page < MaxPagesPerIndexer; page++) {
             JsonDocument document;
             try {
@@ -53,6 +64,9 @@ public sealed class ProwlarrIndexerClient(
                 var progressingIndexers = new HashSet<int>();
                 foreach (var item in document.RootElement.EnumerateArray()) {
                     var indexerId = Int(item, ProwlarrProtocol.IndexerId);
+                    if (allowedIndexers is not null && indexerId is { } scopedId && !allowedIndexers.Contains(scopedId)) {
+                        continue;
+                    }
                     if (indexerId is { } id) {
                         counts[id] = counts.GetValueOrDefault(id) + 1;
                     }
@@ -81,6 +95,51 @@ public sealed class ProwlarrIndexerClient(
             }
         }
         return releases;
+    }
+
+    private async Task<IReadOnlyList<int>?> ResolveIndexerScopeAsync(
+        IndexerConnection connection,
+        IReadOnlyList<DownloadProtocol>? protocols,
+        CancellationToken cancellationToken) {
+        if (protocols is null) return null;
+        var providers = await _providers.GetOrAdd(connection.Id, _ => new Lazy<Task<IReadOnlyList<ProviderProtocol>?>>(
+            () => ReadProviderProtocolsAsync(connection, cancellationToken))).Value.WaitAsync(cancellationToken);
+        return providers?.Where(provider => provider.Protocol is null || protocols.Contains(provider.Protocol.Value))
+            .Select(provider => provider.Id).Order().ToArray();
+    }
+
+    private async Task<IReadOnlyList<ProviderProtocol>?> ReadProviderProtocolsAsync(
+        IndexerConnection connection, CancellationToken cancellationToken) {
+        using var discoveryCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        discoveryCancellation.CancelAfter(DiscoveryTimeout);
+        try {
+            using var request = BuildRequest(connection, HttpMethod.Get, ProwlarrProtocol.IndexersEndpoint);
+            using var response = await http.SendAsync(request, discoveryCancellation.Token);
+            response.EnsureSuccessStatusCode();
+            await using var stream = await response.Content.ReadAsStreamAsync(discoveryCancellation.Token);
+            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: discoveryCancellation.Token);
+            if (document.RootElement.ValueKind != JsonValueKind.Array) return null;
+            var providers = new List<ProviderProtocol>();
+            var ids = new HashSet<int>();
+            foreach (var item in document.RootElement.EnumerateArray()) {
+                // Incomplete catalogs cannot safely narrow the search. Unknown protocols remain
+                // eligible so a provider/API upgrade cannot silently hide otherwise usable results.
+                if (item.ValueKind != JsonValueKind.Object || Int(item, ProwlarrProtocol.Id) is not { } id
+                    || id <= 0 || !ids.Add(id)) return null;
+                if (item.TryGetProperty(ProwlarrProtocol.Enable, out var enabled) && enabled.ValueKind == JsonValueKind.False) continue;
+                var raw = Text(item, ProwlarrProtocol.Protocol);
+                DownloadProtocol? protocol = string.Equals(raw, DownloadProtocol.Usenet.ToCode(), StringComparison.OrdinalIgnoreCase)
+                    ? DownloadProtocol.Usenet
+                    : string.Equals(raw, DownloadProtocol.Torrent.ToCode(), StringComparison.OrdinalIgnoreCase)
+                        ? DownloadProtocol.Torrent : null;
+                providers.Add(new ProviderProtocol(id, protocol));
+            }
+            return providers;
+        } catch (Exception exception) when (!cancellationToken.IsCancellationRequested
+            && exception is HttpRequestException or JsonException or OperationCanceledException) {
+            logger?.LogDebug("Prowlarr protocol discovery was unavailable; searching the aggregate provider scope.");
+            return null;
+        }
     }
 
     private async Task<JsonDocument> ReadPageAsync(

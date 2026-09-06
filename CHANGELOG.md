@@ -38,6 +38,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Prowlarr searches skip indexers whose download protocol has no enabled downloader, reducing unnecessary requests while preserving results when provider discovery is unavailable.
+
 - Complete episode metadata refreshes retire absolute numbers the provider no longer supports, keeping later searches from using stale numbering while preserving existing file bindings. Partial metadata enrichment retains existing ordering.
 
 - Leading bracketed release-group labels no longer hide otherwise matching video releases. Series, episode, sequel, and remake-year checks still apply to the title that follows.
