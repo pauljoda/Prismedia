@@ -42,6 +42,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- TV imports now use canonical season and episode positions consistently when checking existing files and matching catalog titles, so a different display order cannot hide coverage or create duplicate episode slots.
+
 - Compatible interrupted imports saved by an earlier build can resume or be replaced even when their checkpoint omitted a newer optional field. Changed attempts and unrecognized recovery data remain protected.
 
 - Interrupted TV imports recheck pending episode replacements against current file quality and profile preferences before swapping files, while preserving already completed replacements.

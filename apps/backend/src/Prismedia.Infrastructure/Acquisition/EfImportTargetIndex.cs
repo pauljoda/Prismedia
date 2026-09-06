@@ -12,6 +12,24 @@ namespace Prismedia.Infrastructure.Acquisition;
 /// folder provenance. Fileless entities resolve to null so imports keep the template placement.
 /// </summary>
 public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIndex {
+    // Canonical positions own numbering. Display order is only a fallback for older unnumbered catalogs.
+    private IQueryable<NumberedTvEntity> NumberedTvEntities(string positionCode) => db.Entities.AsNoTracking()
+        .Select(entity => new NumberedTvEntity {
+            Id = entity.Id, ParentEntityId = entity.ParentEntityId, KindCode = entity.KindCode,
+            Title = entity.Title, IsWanted = entity.IsWanted,
+            Position = db.EntityPositions.Where(position => position.EntityId == entity.Id && position.Code == positionCode)
+                .Select(position => (int?)position.Value).FirstOrDefault() ?? entity.SortOrder
+        });
+
+    private sealed class NumberedTvEntity {
+        public Guid Id { get; init; }
+        public Guid? ParentEntityId { get; init; }
+        public string KindCode { get; init; } = string.Empty;
+        public string Title { get; init; } = string.Empty;
+        public bool IsWanted { get; init; }
+        public int? Position { get; init; }
+    }
+
     /// <inheritdoc />
     public Task<Guid?> GetTvSeriesEntityIdAsync(Guid entityId, CancellationToken cancellationToken) =>
         ResolveAncestorOfKindAsync(entityId, EntityKind.VideoSeries.ToCode(), cancellationToken);
@@ -26,14 +44,14 @@ public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIn
         var seasonCode = EntityKind.VideoSeason.ToCode();
         var episodeCode = EntityKind.VideoEpisode.ToCode();
         var rows = await (
-            from season in db.Entities.AsNoTracking()
-            join episode in db.Entities.AsNoTracking() on season.Id equals episode.ParentEntityId
-            where season.ParentEntityId == seriesId && season.KindCode == seasonCode && season.SortOrder != null
-                && episode.KindCode == episodeCode && episode.SortOrder != null
+            from season in NumberedTvEntities(EntityPositionCodes.Season)
+            join episode in NumberedTvEntities(EntityPositionCodes.Episode) on season.Id equals episode.ParentEntityId
+            where season.ParentEntityId == seriesId && season.KindCode == seasonCode && season.Position != null
+                && episode.KindCode == episodeCode && episode.Position != null
             select new {
                 SeasonId = season.Id,
-                SeasonNumber = season.SortOrder!.Value,
-                Episode = new TvEpisodeTitle(episode.SortOrder!.Value, episode.Title, episode.Id,
+                SeasonNumber = season.Position!.Value,
+                Episode = new TvEpisodeTitle(episode.Position!.Value, episode.Title, episode.Id,
                     db.EntityPositions.Where(position => position.EntityId == episode.Id
                         && position.Code == EntityPositionCodes.AbsoluteEpisode)
                         .Select(position => (int?)position.Value).FirstOrDefault(), episode.IsWanted)
@@ -49,12 +67,12 @@ public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIn
     public async Task<bool> HasUnnumberedWantedTvEpisodesAsync(
         Guid entityId, int? seasonNumber, CancellationToken cancellationToken) {
         var episodeCode = EntityKindRegistry.PlayableVideoKindFor(PlayableVideoScanPlacement.Episode).ToCode();
-        var target = await db.Entities.AsNoTracking()
+        var target = await NumberedTvEntities(EntityPositionCodes.Episode)
             .Where(entity => entity.Id == entityId)
-            .Select(entity => new { entity.KindCode, entity.IsWanted, entity.SortOrder })
+            .Select(entity => new { entity.KindCode, entity.IsWanted, entity.Position })
             .FirstOrDefaultAsync(cancellationToken);
         if (target?.KindCode == episodeCode) {
-            return target.IsWanted && target.SortOrder is null;
+            return target.IsWanted && target.Position is null;
         }
 
         var seriesId = await ResolveAncestorOfKindAsync(entityId, EntityKind.VideoSeries.ToCode(), cancellationToken);
@@ -64,13 +82,13 @@ public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIn
         var seasonCode = EntityKind.VideoSeason.ToCode();
         var scopedSeasonId = target?.KindCode == seasonCode ? entityId : (Guid?)null;
         return await (
-            from episode in db.Entities.AsNoTracking()
-            join season in db.Entities.AsNoTracking() on episode.ParentEntityId equals season.Id
-            where episode.KindCode == episodeCode && episode.IsWanted && episode.SortOrder == null
+            from episode in NumberedTvEntities(EntityPositionCodes.Episode)
+            join season in NumberedTvEntities(EntityPositionCodes.Season) on episode.ParentEntityId equals season.Id
+            where episode.KindCode == episodeCode && episode.IsWanted && episode.Position == null
                 && season.KindCode == seasonCode && season.ParentEntityId == seriesId
                 && (scopedSeasonId != null
                     ? season.Id == scopedSeasonId
-                    : seasonNumber == null || season.SortOrder == seasonNumber)
+                    : seasonNumber == null || season.Position == seasonNumber)
             select episode.Id).AnyAsync(cancellationToken);
     }
 
@@ -88,34 +106,34 @@ public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIn
 
         var seasonCode = EntityKind.VideoSeason.ToCode();
         var seasonRows = await (
-            from season in db.Entities.AsNoTracking()
+            from season in NumberedTvEntities(EntityPositionCodes.Season)
             where season.ParentEntityId == seriesId && season.KindCode == seasonCode
             join source in db.EntitySources.AsNoTracking().Where(source => source.Code == EntitySourceCode.Folder.ToCode())
                 on season.Id equals source.EntityId into folderSources
             from source in folderSources.DefaultIfEmpty()
-            select new { season.Id, season.SortOrder, Path = source == null ? null : source.Value })
+            select new { season.Id, season.Position, Path = source == null ? null : source.Value })
             .ToArrayAsync(cancellationToken);
 
         var episodeCode = EntityKindRegistry.PlayableVideoKindFor(PlayableVideoScanPlacement.Episode).ToCode();
-        var seasonIds = seasonRows.Where(season => season.SortOrder is not null).Select(season => season.Id).Distinct().ToArray();
+        var seasonIds = seasonRows.Where(season => season.Position is not null).Select(season => season.Id).Distinct().ToArray();
         var episodeRows = await (
-            from episode in db.Entities.AsNoTracking()
+            from episode in NumberedTvEntities(EntityPositionCodes.Episode)
             where episode.ParentEntityId != null && seasonIds.Contains(episode.ParentEntityId.Value)
                 && episode.KindCode == episodeCode
             join file in db.EntityFiles.AsNoTracking().Where(file => file.Role == EntityFileRole.Source)
                 on episode.Id equals file.EntityId
-            select new { SeasonId = episode.ParentEntityId!.Value, episode.SortOrder, file.Path })
+            select new { SeasonId = episode.ParentEntityId!.Value, episode.Position, file.Path })
             .ToArrayAsync(cancellationToken);
         var episodesBySeason = episodeRows.ToLookup(episode => episode.SeasonId);
         var seasons = new Dictionary<int, TvSeasonDiskLayout>();
         foreach (var season in seasonRows) {
-            if (season.SortOrder is not { } seasonNumber || seasons.ContainsKey(seasonNumber)) {
+            if (season.Position is not { } seasonNumber || seasons.ContainsKey(seasonNumber)) {
                 continue;
             }
 
             var episodesByNumber = new Dictionary<int, string>();
             foreach (var episode in episodesBySeason[season.Id]) {
-                if (episode.SortOrder is { } episodeNumber) {
+                if (episode.Position is { } episodeNumber) {
                     episodesByNumber.TryAdd(episodeNumber, episode.Path);
                 }
             }
@@ -135,8 +153,8 @@ public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIn
         }
 
         var seasonCode = EntityKind.VideoSeason.ToCode();
-        var seasonId = await db.Entities.AsNoTracking()
-            .Where(season => season.ParentEntityId == seriesId && season.KindCode == seasonCode && season.SortOrder == seasonNumber)
+        var seasonId = await NumberedTvEntities(EntityPositionCodes.Season)
+            .Where(season => season.ParentEntityId == seriesId && season.KindCode == seasonCode && season.Position == seasonNumber)
             .Select(season => (Guid?)season.Id)
             .FirstOrDefaultAsync(cancellationToken);
         if (seasonId is null) {
@@ -144,11 +162,11 @@ public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIn
         }
 
         var episodeCode = EntityKindRegistry.PlayableVideoKindFor(PlayableVideoScanPlacement.Episode).ToCode();
-        return await db.Entities.AsNoTracking()
-            .Where(episode => episode.ParentEntityId == seasonId && episode.KindCode == episodeCode && episode.SortOrder != null)
-            .OrderBy(episode => episode.SortOrder)
+        return await NumberedTvEntities(EntityPositionCodes.Episode)
+            .Where(episode => episode.ParentEntityId == seasonId && episode.KindCode == episodeCode && episode.Position != null)
+            .OrderBy(episode => episode.Position)
             .Select(episode => new TvEpisodeTitle(
-                episode.SortOrder!.Value,
+                episode.Position!.Value,
                 episode.Title,
                 episode.Id,
                 db.EntityPositions

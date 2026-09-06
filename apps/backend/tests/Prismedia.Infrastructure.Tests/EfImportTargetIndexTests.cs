@@ -15,6 +15,41 @@ namespace Prismedia.Infrastructure.Tests;
 /// placeholders out of the owned-file map (they must stay bindable by the post-import scan).
 /// </summary>
 public sealed class EfImportTargetIndexTests {
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task CanonicalEpisodePositionsGovernImportCoverageEvenWhenDisplayOrderDiffers(bool missingDisplayOrder, bool postgres) {
+        await using var database = postgres ? await PostgresTestDatabase.CreateAsync() : null;
+        await using var db = database?.CreateContext() ?? CreateContext();
+        var ids = SeedSeries(db, "/media/tv/Numbered Series");
+        await db.SaveChangesAsync();
+        var season = await db.Entities.SingleAsync(row => row.Id == ids.SeasonId);
+        var episode = await db.Entities.SingleAsync(row => row.Id == ids.EpisodeId);
+        var wanted = await db.Entities.SingleAsync(row => row.ParentEntityId == ids.SeasonId && row.Id != ids.EpisodeId);
+        season.SortOrder = missingDisplayOrder ? null : 3;
+        episode.SortOrder = missingDisplayOrder ? null : 8;
+        wanted.SortOrder = null;
+        db.EntityPositions.AddRange(
+            new EntityPositionRow { EntityId = season.Id, Code = EntityPositionCodes.Season, Value = 20 },
+            new EntityPositionRow { EntityId = episode.Id, Code = EntityPositionCodes.Episode, Value = 500 },
+            new EntityPositionRow { EntityId = wanted.Id, Code = EntityPositionCodes.Episode, Value = 501 });
+        await db.SaveChangesAsync();
+        var index = new EfImportTargetIndex(db);
+
+        var layout = (await index.GetTvLayoutAsync(ids.EpisodeId, default))!;
+        var catalog = Assert.Single(await index.GetSeriesEpisodeCatalogAsync(ids.SeriesId, default));
+
+        Assert.Equal(20, Assert.Single(layout.Seasons).Key);
+        Assert.Equal(500, Assert.Single(layout.Seasons[20].EpisodeFileByNumber).Key);
+        Assert.Equal(20, catalog.SeasonNumber);
+        Assert.Equal([500, 501], catalog.Episodes.Select(row => row.Episode));
+        Assert.Equal([500, 501], (await index.GetSeasonEpisodeTitlesAsync(ids.SeriesId, 20, default)).Select(row => row.Episode));
+        Assert.False(await index.HasUnnumberedWantedTvEpisodesAsync(wanted.Id, 20, default));
+        Assert.False(await index.HasUnnumberedWantedTvEpisodesAsync(ids.SeriesId, 20, default));
+    }
+
     [Fact]
     public async Task SharedOwnershipInASeasonWithoutAFolderStillProtectsEveryEpisodeDuringUpgrades() {
         await using var db = CreateContext();
