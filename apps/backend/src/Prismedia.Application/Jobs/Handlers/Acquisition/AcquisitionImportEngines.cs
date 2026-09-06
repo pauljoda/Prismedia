@@ -1060,6 +1060,7 @@ public sealed class TvAcquisitionImportEngine(
     IImportedVideoMaterializer materializer,
     VideoScanConcurrencyGate scanGate,
     ILogger<TvAcquisitionImportEngine> logger,
+    IMediaUpgradePayloadInspector mediaUpgradeInspector,
     IMonitorStore? monitors = null,
     ITvEpisodeCatalogEvidenceSource? catalogEvidence = null) : IAcquisitionImportEngine {
 
@@ -1237,22 +1238,17 @@ public sealed class TvAcquisitionImportEngine(
             await Fail(import.Id, "The existing series is not inside an enabled video library root.", cancellationToken);
             return;
         }
-        // Incoming quality from the release title; a title that ranks Unknown falls back to the
-        // payload's own file tokens so a well-named pack under a bare title still gates honestly.
-        var incomingPosition = selected is null ? 0 : MediaQualityLadder.Detect(import.Kind, selected.Title).Position;
-        if (incomingPosition <= 0) {
-            incomingPosition = unitsPlan.Units
-                .Select(unit => (int)VideoQualityDetection.Detect(Path.GetFileNameWithoutExtension(unit.SourceRelativePath)))
-                .DefaultIfEmpty(0)
-                .Max();
-        }
-        var incomingRevision = selected is null ? 1 : ReleaseRevisionDetection.Detect(selected.Title);
         var rules = await profiles.GetRulesAsync(import.ProfileId, import.Kind, cancellationToken);
-        var merged = TvExistingTargetMerge.Plan(
+        var mergePlan = await new TvMeasuredMergePlanner(mediaUpgradeInspector).PlanAsync(
             unitsPlan.Units, layout,
             season => TvImportPlanBuilder.SeasonFolderSegment(series, season, profile?.PathTemplate),
-            incomingPosition, incomingRevision, rules.ProperPolicy, import.AllowFormatChange);
-        var matchingExisting = TvImportExecutionSupport.MatchingExistingFiles(merged, payload);
+            payload, selected, rules, import.AllowFormatChange, cancellationToken);
+        if (mergePlan.HoldReason is { } holdReason) {
+            await acquisitions.SetStatusAsync(import.Id, AcquisitionStatus.ManualImportRequired, holdReason, cancellationToken);
+            return;
+        }
+        var merged = mergePlan.Items;
+        var matchingExisting = mergePlan.MatchingExisting;
         if (merged.Any(item => item.Action == MergeFileAction.HoldStructuralConflict
                 && !matchingExisting.Contains(item.SourceRelativePath))) {
             await acquisitions.SetStatusAsync(

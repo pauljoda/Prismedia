@@ -50,6 +50,7 @@ public static class TvExistingTargetMerge {
     /// <param name="incomingQualityPosition">The selected release's ladder ordinal (0 = unknown).</param>
     /// <param name="incomingRevision">The selected release's PROPER/REPACK revision (1 = plain).</param>
     /// <param name="properPolicy">The profile's proper policy — gates the equal-quality revision replace.</param>
+    /// <param name="evaluateOwnedFile">Optional per-file judgment from measured payload evidence; structural coverage guards always remain in force.</param>
     public static IReadOnlyList<MergedImportItem> Plan(
         IReadOnlyList<TvPlanUnit> units,
         TvSeriesDiskLayout layout,
@@ -57,7 +58,8 @@ public static class TvExistingTargetMerge {
         int incomingQualityPosition,
         int incomingRevision,
         ProperDownloadPolicy properPolicy,
-        bool allowFormatChange = false) {
+        bool allowFormatChange = false,
+        Func<TvPlanUnit, string, MergeFileAction>? evaluateOwnedFile = null) {
         var ownedPathBySlot = new Dictionary<(int Season, int Episode), string>();
         var ownedSlotsByPath = new Dictionary<string, HashSet<(int Season, int Episode)>>(FileSystemPathComparison.Comparer);
         foreach (var (seasonNumber, season) in layout.Seasons) {
@@ -124,7 +126,7 @@ public static class TvExistingTargetMerge {
                 continue;
             }
 
-            var action = DecideAgainstOwned(
+            var action = evaluateOwnedFile?.Invoke(unit, owned) ?? DecideAgainstOwned(
                 unit.FileName,
                 owned,
                 incomingQualityPosition,

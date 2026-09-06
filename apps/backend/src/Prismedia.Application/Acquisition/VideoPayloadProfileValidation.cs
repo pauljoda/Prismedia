@@ -6,6 +6,9 @@ namespace Prismedia.Application.Acquisition;
 
 /// <summary>Checks measured video facts before automatic placement or replacement; ambiguous evidence remains reviewable.</summary>
 public static class VideoPayloadProfileValidation {
+    /// <summary>Minimum retained runtime for an automatic replacement; shorter editions require review.</summary>
+    public const double MinimumAutomaticRuntimeRatio = 0.8;
+
     /// <summary>Resolution tier measured from the long edge, allowing the normal letterbox crop of theatrical releases.</summary>
     public static int? ResolutionTier(VideoProbeData? video) => video is { Width: > 0, Height: > 0 }
         ? Math.Max(video.Width.Value, video.Height.Value) switch {

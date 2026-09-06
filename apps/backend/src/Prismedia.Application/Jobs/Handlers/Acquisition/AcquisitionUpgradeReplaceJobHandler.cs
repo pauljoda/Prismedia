@@ -26,10 +26,6 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
     IEntityLifecycleMutationLease? entityLifecycle = null,
     IAcquisitionUploadStorage? uploads = null,
     IMediaUpgradePayloadInspector? mediaUpgradeInspector = null) : IJobHandler {
-    // Different credits, frame rates, and modest edition changes are normal. Losing more than one
-    // fifth of the owned runtime needs review: it may be a sample, a split disc, or a different cut.
-    private const double MinimumAutomaticRuntimeRatio = 0.8;
-
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var payload = AcquisitionJobPayload.Parse(context.Job.PayloadJson);
         var childId = payload.AcquisitionId;
@@ -206,7 +202,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
             if (inspection is { OwnedDurationSeconds: > 0, CandidateDurationSeconds: >= 0 }
                 && double.IsFinite(inspection.OwnedDurationSeconds.Value)
                 && double.IsFinite(inspection.CandidateDurationSeconds.Value)
-                && inspection.CandidateDurationSeconds < inspection.OwnedDurationSeconds * MinimumAutomaticRuntimeRatio) {
+                && inspection.CandidateDurationSeconds < inspection.OwnedDurationSeconds * VideoPayloadProfileValidation.MinimumAutomaticRuntimeRatio) {
                 await acquisitions.SetStatusAsync(
                     childId,
                     AcquisitionStatus.ManualImportRequired,

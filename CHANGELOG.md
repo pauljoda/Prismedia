@@ -42,6 +42,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Season-pack upgrades inspect each colliding video’s actual resolution, runtime, and audio languages before replacement. Cleaned filenames no longer hide proven improvements, mixed-quality packs are judged file by file, and uncertain replacements preserve both copies for review.
+
 - A season whose existing episodes share files stored elsewhere can adopt its first dedicated folder when more episodes arrive, keeping the wanted episode identities instead of creating duplicates.
 - Monitored TV seasons can recover confidently identified episode pairs from older automatic imports that assigned a file to the wrong scanner placeholder. Recovery preserves the file and its stable source identity, retains manual mappings and playback history for review, and records the correction in acquisition history.
 - TV upgrade planning includes owned episodes even when their season has no dedicated folder, protecting shared files from replacements that would lose episode coverage.

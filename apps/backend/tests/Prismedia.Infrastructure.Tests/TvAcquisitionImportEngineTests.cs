@@ -947,6 +947,46 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
     }
 
     [Fact]
+    public async Task MeasuredUpgradeReplacesAnOwnedEpisodeWhoseFilenameHasNoQuality() {
+        await using var db = CreateContext();
+        var inspector = new MeasuredUpgradeInspector(new(720, 1080, false, false, 1200, 1200));
+        var harness = await HarnessAsync(db, ownedEpisodeName: "Show - s01e01.mkv",
+            payloadFiles: ["Show.S01E01.1080p.WEB-DL.mkv"], releaseTitle: "Show S01 1080p WEB-DL",
+            payloadContent: "measured-upgrade", upgradeInspector: inspector);
+        var sourceId = (await db.EntityFiles.SingleAsync(row => row.EntityId == harness.OwnedEpisodeId)).Id;
+
+        await harness.Engine.ImportAsync(harness.Context, harness.Import, default);
+
+        Assert.Equal("measured-upgrade", await File.ReadAllTextAsync(harness.OwnedEpisodePath));
+        Assert.Equal(sourceId, (await db.EntityFiles.SingleAsync(row => row.EntityId == harness.OwnedEpisodeId
+            && row.Role == EntityFileRole.Source)).Id);
+        Assert.Equal(1, inspector.Calls);
+    }
+
+    [Theory]
+    [InlineData(2160, 1080, 1200, 1200)]
+    [InlineData(720, 720, 1200, 1200)]
+    [InlineData(720, 1080, 1200, 300)]
+    [InlineData(720, 1080, 0, 1200)]
+    [InlineData(0, 0, 0, 0)]
+    public async Task MergedUpgradePreservesBothFilesWhenMeasuredEvidenceCannotSupportReplacement(
+        int ownedResolution, int candidateResolution, double ownedRuntime, double candidateRuntime) {
+        await using var db = CreateContext();
+        var inspector = new MeasuredUpgradeInspector(ownedResolution == 0 ? null
+            : new(ownedResolution, candidateResolution, false, false, ownedRuntime, candidateRuntime));
+        var harness = await HarnessAsync(db, ownedEpisodeName: "Show - s01e01 720p WEB.mkv",
+            payloadFiles: ["Show.S01E01.1080p.BluRay.mkv"], releaseTitle: "Show S01 1080p BluRay",
+            upgradeInspector: inspector);
+
+        await harness.Engine.ImportAsync(harness.Context, harness.Import, default);
+
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, await StatusOf(db, harness.Import.Id));
+        Assert.Equal("owned-bytes", await File.ReadAllTextAsync(harness.OwnedEpisodePath));
+        Assert.True(File.Exists(Path.Combine(harness.Import.ContentPath!, "Show.S01E01.1080p.BluRay.mkv")));
+        Assert.Empty(await db.AcquisitionBlocklist.ToArrayAsync());
+    }
+
+    [Fact]
     public async Task StrictUpgradeReplacesTheOwnedFileInPlace() {
         await using var db = CreateContext();
         var harness = await HarnessAsync(db, ownedEpisodeName: "Show - s01e01 720p WEB.mkv", payloadFiles: ["Show.S01E01.1080p.BluRay.mkv"], releaseTitle: "Show S01 1080p BluRay", payloadContent: "upgraded-bytes");
@@ -1245,7 +1285,8 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         bool failAfterReplacementEvidence = false,
         bool autoGenerateMetadata = false,
         bool enableMissingFallback = false,
-        Action? beforeCheckpoint = null) {
+        Action? beforeCheckpoint = null,
+        IMediaUpgradePayloadInspector? upgradeInspector = null) {
         var libraryRoot = Directory.CreateDirectory(Path.Combine(_workRoot, "library")).FullName;
         var seriesFolder = Directory.CreateDirectory(Path.Combine(libraryRoot, "Show (2008)")).FullName;
         var seasonFolder = Directory.CreateDirectory(Path.Combine(seriesFolder, deletedSeason ? "Season 01" : "S01")).FullName;
@@ -1377,7 +1418,15 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
             importedVideoMaterializer,
             scanGate,
             NullLogger<TvAcquisitionImportEngine>.Instance,
+            upgradeInspector ?? new MeasuredUpgradeInspector(null) {
+                Resolve = (owned, candidate) => new(
+                    Resolution(owned) ?? Resolution(releaseTitle) ?? 720,
+                    Resolution(candidate) ?? Resolution(releaseTitle) ?? 720,
+                    false, false, 1200, 1200)
+            },
             monitorStore);
+
+        static int? Resolution(string title) => MediaQualityLadder.VideoResolutionTierOf(VideoQualityDetection.Detect(title).ToCode());
 
         var job = new JobRunSnapshot(
             jobId, JobType.AcquisitionImport, JobRunStatus.Running, 0, null, "{}",
@@ -1455,6 +1504,18 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
 
     private static PrismediaDbContext CreateContext() =>
         new(new DbContextOptionsBuilder<PrismediaDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+
+    private sealed class MeasuredUpgradeInspector(MediaUpgradePayloadInspection? result) : IMediaUpgradePayloadInspector {
+        public int Calls { get; private set; }
+        public Func<string, string, MediaUpgradePayloadInspection?>? Resolve { get; init; }
+        public Task<MediaUpgradePayloadInspection?> InspectAsync(string ownedContentPath, string candidateContentPath,
+            CancellationToken cancellationToken) {
+            Calls++;
+            Assert.True(File.Exists(ownedContentPath));
+            Assert.True(File.Exists(candidateContentPath));
+            return Task.FromResult(Resolve is null ? result : Resolve(ownedContentPath, candidateContentPath));
+        }
+    }
 
     private sealed class FailOnCallImportedVideoMaterializer(
         IImportedVideoMaterializer inner,
