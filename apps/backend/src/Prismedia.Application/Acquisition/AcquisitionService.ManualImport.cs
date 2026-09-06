@@ -218,6 +218,14 @@ public sealed partial class AcquisitionService {
                 episodeNumber));
         }
 
+        // Reviewed mappings must create a new plan instead of silently resuming the rejected one.
+        // The existing lifecycle guard checks real source/target/recovery files under the scan gate,
+        // then clears only the exact held checkpoint. Partially applied plans retain their evidence.
+        if (!await TvImportCheckpointLifecycle.TryAbandonAsync(store, import, cancellationToken, scanGate)) {
+            throw InvalidManualMapping(
+                "The saved import plan changed or already placed files. Finish its recovery before changing episode mappings.");
+        }
+
         var importJob = await queue.EnqueueAsync(
             new EnqueueJobRequest(
                 JobType.AcquisitionImport,

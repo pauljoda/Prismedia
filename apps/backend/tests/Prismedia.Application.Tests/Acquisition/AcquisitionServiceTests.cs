@@ -1841,6 +1841,50 @@ public sealed class AcquisitionServiceTests {
         ], jobPayload.ManualFileMappings);
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task ReviewedMappingsSupersedeOnlyAnUntouchedCurrentTvCheckpoint(bool placementStarted, bool concurrentChange) {
+        var root = Directory.CreateTempSubdirectory("prismedia-reviewed-plan-");
+        try {
+            const string fileName = "Show.S01E01.mkv";
+            var source = Path.Combine(root.FullName, fileName);
+            var target = Path.Combine(root.FullName, "library", fileName);
+            await File.WriteAllTextAsync(source, "download bytes");
+            if (placementStarted) {
+                Directory.CreateDirectory(Path.GetDirectoryName(target)!);
+                File.Copy(source, target);
+            }
+            var episodeId = Guid.NewGuid();
+            var harness = Harness(TransferInfo(RecordedClientId, AcquisitionStatus.ManualImportRequired),
+                manualImportPayloads: new FixedDownloadPayloadReader(new DownloadPayload(root.FullName, [new(fileName, 14)])),
+                manualImportTargets: new FixedImportTargetIndex([new TvEpisodeTitle(1, "First Story", episodeId)]));
+            var checkpoint = new TvImportCheckpoint(Guid.NewGuid(), root.FullName, ImportMode.Copy,
+                false, "Imported", false, [new(fileName, target, 1, 1, [], SourceAbsolutePath: source)]);
+            harness.Store.ImportContext = new AcquisitionImportContext(AcquisitionId, "Season 1", null, "Show", null,
+                null, null, null, root.FullName, ClientItemId, RecordedClientId, EntityKind.VideoSeason,
+                SeasonNumber: 1, EntityId: WantedEntityId, TvImportCheckpoint: checkpoint);
+            harness.Store.RefuseTvCheckpointClear = concurrentChange;
+            var request = new AcquisitionManualImportRequest([new(fileName, episodeId)]);
+
+            if (placementStarted || concurrentChange) {
+                await Assert.ThrowsAsync<AcquisitionConfigurationException>(() =>
+                    harness.Service.SubmitManualImportAsync(AcquisitionId, request, default));
+                Assert.Empty(harness.Queue.Requests);
+                Assert.Equal(checkpoint, harness.Store.ImportContext.TvImportCheckpoint);
+            } else {
+                await harness.Service.SubmitManualImportAsync(AcquisitionId, request, default);
+                Assert.Null(harness.Store.ImportContext.TvImportCheckpoint);
+                Assert.Single(harness.Queue.Requests);
+            }
+            Assert.Equal("download bytes", await File.ReadAllTextAsync(source));
+            if (placementStarted) Assert.Equal("download bytes", await File.ReadAllTextAsync(target));
+        } finally {
+            root.Delete(true);
+        }
+    }
+
     [Fact]
     public async Task ManualTvImportReviewUsesUniqueProviderTitleToCorrectSceneNumbering() {
         var numberedEpisodeId = Guid.NewGuid();
@@ -2178,6 +2222,7 @@ public sealed class AcquisitionServiceTests {
         public Guid? TeardownReplacementId { get; private set; }
         public int BeginTransferAddCalls { get; private set; }
         public AcquisitionImportContext? ImportContext { get; set; }
+        public bool RefuseTvCheckpointClear { get; set; }
         public int ClearedPlacementCheckpoints { get; private set; }
         public List<ActiveTransfer> ActiveTransfers { get; } = [];
         public Guid? JobGraphId { get; set; }
@@ -2434,7 +2479,11 @@ public sealed class AcquisitionServiceTests {
         public Task SetTvImportCheckpointAsync(Guid acquisitionId, TvImportCheckpoint? checkpoint, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> TryCreateTvImportCheckpointAsync(Guid acquisitionId, TvImportCheckpoint checkpoint, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> TryClaimTvImportCheckpointAsync(Guid acquisitionId, TvImportCheckpoint checkpoint, Guid claimJobId, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<bool> TryClearTvImportCheckpointAsync(Guid acquisitionId, TvImportCheckpoint checkpoint, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<bool> TryClearTvImportCheckpointAsync(Guid acquisitionId, TvImportCheckpoint checkpoint, CancellationToken cancellationToken) {
+            if (RefuseTvCheckpointClear || acquisitionId != AcquisitionId || ImportContext?.TvImportCheckpoint != checkpoint) return Task.FromResult(false);
+            ImportContext = ImportContext with { TvImportCheckpoint = null };
+            return Task.FromResult(true);
+        }
         public Task<bool> IsCurrentTvImportCheckpointAsync(Guid acquisitionId, TvImportCheckpoint checkpoint, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> TryCreateImportPlacementCheckpointAsync(Guid acquisitionId, ImportPlacementCheckpoint checkpoint, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<bool> TryAdvanceImportPlacementCheckpointAsync(Guid acquisitionId, ImportPlacementCheckpoint expected, ImportPlacementCheckpoint advanced, CancellationToken cancellationToken) => throw new NotSupportedException();

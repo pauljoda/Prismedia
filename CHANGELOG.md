@@ -94,6 +94,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Reviewed episode selections replace an untouched held import plan, so excluding a damaged file no longer retries it anyway. Partially applied plans keep their recovery evidence.
+
 - Known operating-system companion files no longer keep fully owned season packs eligible for redundant downloads when upgrades are disabled. Missing episodes still reopen the pack.
 
 - Movie and TV searches retry Latin-accent spelling variants when the original queries find no acceptable release. Equivalent accent spellings also receive equal title relevance without changing the requested work or episode numbering.
