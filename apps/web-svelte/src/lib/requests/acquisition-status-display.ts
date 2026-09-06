@@ -6,16 +6,18 @@ import {
   CircleCheck,
   CircleX,
   CloudDownload,
+  FolderInput,
   Hourglass,
   LoaderCircle,
+  PackageCheck,
   Search,
   TriangleAlert,
 } from "@lucide/svelte";
 import { ACQUISITION_STATUS } from "$lib/api/generated/codes";
-import { acquisitionStatusIsKnown } from "$lib/requests/acquisition-status";
+import { acquisitionStatusLabel } from "$lib/requests/acquisition-status";
 
 /** Semantic tone for a compact acquisition-status indicator (badge, chip, or roll-up row). */
-export type AcquisitionDisplayTone =
+export type AcquisitionLifecycleTone =
   | "downloading"
   | "searching"
   | "queued"
@@ -23,8 +25,9 @@ export type AcquisitionDisplayTone =
   | "attention"
   | "failed"
   | "done"
-  | "muted"
-  | "wanted";
+  | "muted";
+
+export type AcquisitionDisplayTone = AcquisitionLifecycleTone | "wanted";
 
 /** Compact display for one acquisition status: a short label, an icon, and a tone for colouring. */
 export interface AcquisitionStatusDisplay {
@@ -40,38 +43,42 @@ export interface AcquisitionStatusDisplay {
  * an unknown status is locked as "Updating" until the generated client understands it.
  */
 export function acquisitionStatusDisplay(status: string | null | undefined): AcquisitionStatusDisplay {
-  if (status != null && !acquisitionStatusIsKnown(status)) {
-    return { label: "Updating", icon: LoaderCircle, tone: "cleanup" };
-  }
+  if (status == null) return { label: "Wanted", icon: Bookmark, tone: "wanted" };
+  return { label: acquisitionStatusLabel(status), ...acquisitionStatusVisual(status) };
+}
 
+/** Shared lifecycle icon and tone for thumbnails, acquisition lists, and child activity. */
+export function acquisitionStatusVisual(status: string): { icon: Component; tone: AcquisitionLifecycleTone } {
   switch (status) {
     case ACQUISITION_STATUS.waitingForRelease:
     case ACQUISITION_STATUS.manualSearchRequired:
-      return { label: "Waiting for release", icon: CalendarClock, tone: "queued" };
+      return { icon: CalendarClock, tone: "queued" };
     case ACQUISITION_STATUS.searching:
+      return { icon: Search, tone: "searching" };
     case ACQUISITION_STATUS.pending:
-      return { label: "Searching", icon: Search, tone: "searching" };
+      return { icon: Hourglass, tone: "searching" };
     case ACQUISITION_STATUS.awaitingSelection:
-      return { label: "Review", icon: Search, tone: "attention" };
+      return { icon: Search, tone: "attention" };
     case ACQUISITION_STATUS.queued:
-      return { label: "Queued", icon: Hourglass, tone: "queued" };
     case ACQUISITION_STATUS.waitingForDownloadClient:
-      return { label: "Waiting for client", icon: Hourglass, tone: "queued" };
+      return { icon: Hourglass, tone: "queued" };
     case ACQUISITION_STATUS.downloading:
+      return { icon: CloudDownload, tone: "downloading" };
     case ACQUISITION_STATUS.downloaded:
+      return { icon: PackageCheck, tone: "downloading" };
     case ACQUISITION_STATUS.importing:
-      return { label: "Downloading", icon: CloudDownload, tone: "downloading" };
+      return { icon: FolderInput, tone: "downloading" };
     case ACQUISITION_STATUS.stopping:
-      return { label: "Cleaning up", icon: LoaderCircle, tone: "cleanup" };
+      return { icon: LoaderCircle, tone: "cleanup" };
     case ACQUISITION_STATUS.imported:
-      return { label: "Imported", icon: CircleCheck, tone: "done" };
+      return { icon: CircleCheck, tone: "done" };
     case ACQUISITION_STATUS.failed:
-      return { label: "Failed", icon: CircleAlert, tone: "failed" };
+      return { icon: CircleAlert, tone: "failed" };
     case ACQUISITION_STATUS.manualImportRequired:
-      return { label: "Action", icon: TriangleAlert, tone: "attention" };
+      return { icon: TriangleAlert, tone: "attention" };
     case ACQUISITION_STATUS.cancelled:
-      return { label: "Cancelled", icon: CircleX, tone: "muted" };
+      return { icon: CircleX, tone: "muted" };
     default:
-      return { label: "Wanted", icon: Bookmark, tone: "wanted" };
+      return { icon: LoaderCircle, tone: "cleanup" };
   }
 }

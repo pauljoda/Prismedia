@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Button, Progress, ToggleButton } from "@prismedia/ui-svelte";
   import { Play, RotateCcw, Eye, Glasses, Headphones } from "@lucide/svelte";
 
   type ProgressKind = "watch" | "read" | "listen";
@@ -45,7 +46,6 @@
     onStartOver,
   }: Props = $props();
 
-  let animating = $state(false);
 
   const clampedPercent = $derived(Math.min(100, Math.max(0, percent)));
   const copy = $derived.by(() => {
@@ -62,8 +62,6 @@
   const showMeter = $derived(!completed && clampedPercent > 0);
 
   function toggle() {
-    animating = true;
-    setTimeout(() => (animating = false), 350);
     onToggleCompleted(!completed);
   }
 </script>
@@ -89,41 +87,34 @@
   {/if}
 
   {#if showMeter}
-    <div class="meter-track" aria-hidden="true">
-      <div class="meter-fill" style:width={`${clampedPercent}%`}></div>
-    </div>
+    <Progress value={clampedPercent} aria-label={`${copy.kicker} progress`} />
   {/if}
 
   <div class="footer">
     <div class="buttons">
       {#if canResume && onResume}
-        <button
-          type="button"
-          class="entity-action-button entity-action-button-primary"
+        <Button
+          variant="primary" size="sm"
           onclick={onResume}
           disabled={busy}
         >
           <Play class="h-3.5 w-3.5" />
           <span class="entity-action-button-label">{resumeLabel}</span>
-        </button>
+        </Button>
       {/if}
       {#if canStartOver && onStartOver}
-        <button type="button" class="entity-action-button" onclick={onStartOver} disabled={busy}>
+        <Button variant="outline" size="sm" onclick={onStartOver} disabled={busy}>
           <RotateCcw class="h-3.5 w-3.5" />
           <span class="entity-action-button-label">Start over</span>
-        </button>
+        </Button>
       {/if}
     </div>
 
-    <button
-      type="button"
-      class="status-toggle"
-      class:active={completed}
-      class:animating
+    <ToggleButton
+      variant="outline" size="sm"
+      bind:pressed={() => completed, () => toggle()}
       title={toggleTitle}
       aria-label={toggleTitle}
-      aria-pressed={completed}
-      onclick={toggle}
       disabled={busy}
     >
       {#if kind === "listen"}
@@ -133,7 +124,7 @@
       {:else}
         <Glasses class="h-4 w-4" />
       {/if}
-    </button>
+    </ToggleButton>
   </div>
 </section>
 
@@ -205,51 +196,4 @@
     gap: 0.5rem;
   }
 
-  /* Mirrors the favorite/organized .action-badge toggles on entity detail pages. */
-  .status-toggle {
-    display: grid;
-    place-items: center;
-    flex: none;
-    width: 1.75rem;
-    height: 1.75rem;
-    padding: 0;
-    border: 1px solid var(--color-border, #1c2235);
-    border-radius: var(--radius-xs, 4px);
-    background: rgba(255, 255, 255, 0.04);
-    color: var(--color-text-disabled, #4a5260);
-    cursor: pointer;
-    transition: color 0.2s, border-color 0.2s, box-shadow 0.2s, transform 0.2s;
-  }
-
-  .status-toggle:hover:not(:disabled) {
-    color: var(--color-text-secondary, #c4c9d4);
-    border-color: var(--color-border-accent-strong, rgba(199, 201, 204, 0.52));
-  }
-
-  .status-toggle.active {
-    color: var(--color-text-accent, #c7c9cc);
-    border-color: rgba(199, 201, 204, 0.5);
-    box-shadow: 0 0 10px rgba(199, 201, 204, 0.2);
-  }
-
-  .status-toggle.animating {
-    animation: badge-pop 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
-  }
-
-  .status-toggle:disabled {
-    opacity: 0.55;
-    cursor: default;
-  }
-
-  @keyframes badge-pop {
-    0% {
-      transform: scale(1);
-    }
-    40% {
-      transform: scale(1.3);
-    }
-    100% {
-      transform: scale(1);
-    }
-  }
 </style>

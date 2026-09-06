@@ -28,7 +28,7 @@
     bulkActions: EntityGridBulkAction[];
     /** Collection-eligible members of the current selection, used by the Add to Collection menu. */
     collectionItems: { entityType: CollectionEntityType; entityId: string }[];
-    canClearFiltersAndSort: boolean;
+    canClearFilters: boolean;
     /** When true, exposes the vertical feed view mode toggle. */
     enableFeedView?: boolean;
     drawerOpen: boolean;
@@ -41,7 +41,7 @@
     onApplyPreset: (preset: FilterPreset) => void;
     /** Fired when the user manually collapses/expands the secondary rows, so the state can persist. */
     onBarsCollapsedChange?: (collapsed: boolean) => void;
-    onClearFiltersAndSort: () => void;
+    onClearFilters: () => void;
     onClearSelection: () => void;
     onDeletePreset: (id: string) => void;
     onDrawerOpenChange: (open: boolean) => void;
@@ -81,7 +81,7 @@
     barsCollapsed: initialBarsCollapsed = false,
     bulkActions,
     collectionItems,
-    canClearFiltersAndSort,
+    canClearFilters,
     enableFeedView = false,
     drawerOpen,
     entityKind,
@@ -91,7 +91,7 @@
     onActiveFilterIdsChange,
     onApplyPreset,
     onBarsCollapsedChange,
-    onClearFiltersAndSort,
+    onClearFilters,
     onClearSelection,
     onDeletePreset,
     onDrawerOpenChange,
@@ -131,7 +131,7 @@
   // toolbar rows that can be collapsed to keep the bar compact (especially on
   // mobile). The toggle only appears when at least one of them is present.
   const hasCollapsibleRows = $derived(
-    selectable || activeFilters.length > 0 || canClearFiltersAndSort,
+    selectable || activeFilters.length > 0 || canClearFilters,
   );
 
   // A persisted value seeds this mount; later prop changes must not overwrite a
@@ -180,13 +180,13 @@
       {viewMode}
     />
 
-    {#if !collapse.barsCollapsed && (activeFilters.length > 0 || canClearFiltersAndSort)}
+    {#if !collapse.barsCollapsed && (activeFilters.length > 0 || canClearFilters)}
       <EntityGridToolbarActiveFilters
         {activeFilterIds}
         {activeFilters}
-        {canClearFiltersAndSort}
+        {canClearFilters}
         {onActiveFilterIdsChange}
-        {onClearFiltersAndSort}
+        {onClearFilters}
       />
     {/if}
 
@@ -205,7 +205,7 @@
         {selectedCount}
         {selectedIds}
         {selectionActive}
-        tuckedAfterPrevious={activeFilters.length > 0 || canClearFiltersAndSort}
+        tuckedAfterPrevious={activeFilters.length > 0 || canClearFilters}
       />
     {/if}
   </div>

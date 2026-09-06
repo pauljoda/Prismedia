@@ -129,4 +129,7 @@
     touch-action: none;
   }
   :global(.resize-handle:hover), :global(.resize-handle:focus-visible) { color: var(--color-text-muted); background: rgb(255 255 255 / 0.06); }
+  @media (max-width: 640px) {
+    .table-head { display: none; }
+  }
 </style>

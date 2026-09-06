@@ -1,5 +1,15 @@
 import "@testing-library/jest-dom/vitest";
 
+// JSDOM does not implement scrolling layout. Shared menus scroll the highlighted
+// item into view through this native API; visual scrolling is checked in-browser.
+if (!globalThis.Element.prototype.scrollIntoView) {
+  Object.defineProperty(globalThis.Element.prototype, "scrollIntoView", {
+    configurable: true,
+    writable: true,
+    value() {},
+  });
+}
+
 if (!globalThis.Element.prototype.animate) {
   Object.defineProperty(globalThis.Element.prototype, "animate", {
     configurable: true,

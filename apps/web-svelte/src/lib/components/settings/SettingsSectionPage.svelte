@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { Captions, Film, Loader2, ScanSearch, Settings as SettingsIcon, ShieldUser } from "@lucide/svelte";
-  import { Button, Panel, StatusLed, cn } from "@prismedia/ui-svelte";
+  import { ToggleGroup, Dialog, Button, Panel, StatusLed, cn } from "@prismedia/ui-svelte";
   import {
     fetchLibraryConfig,
     fetchLibraryRoots,
@@ -398,19 +398,9 @@
             {#if subtitleStyleSetting}
               <div>
                 <div class="text-label text-text-muted mb-2">{subtitleStyleSetting.label}</div>
-                <div class="grid grid-cols-3 gap-2">
+                <ToggleGroup.Root type="single" bind:value={() => valueAsString(subtitleStyleSetting.value), value => { if (value) handleSettingCommit(subtitleStyleSetting.key, value); }} aria-label={subtitleStyleSetting.label} variant="outline" class="grid grid-cols-3 gap-2">
                   {#each subtitleStyleSetting.options as option (option.value)}
-                    {@const active = valueAsString(subtitleStyleSetting.value) === option.value}
-                    <button
-                      type="button"
-                      onclick={() => handleSettingCommit(subtitleStyleSetting.key, option.value)}
-                      class={cn(
-                        "rounded-sm border p-2.5 text-left transition-all duration-fast",
-                        active
-                          ? "border-border-accent bg-surface-3 text-accent-400 shadow-[var(--shadow-glow-accent)]"
-                          : "border-border-default bg-surface-1 text-text-muted hover:border-border-subtle hover:bg-surface-2/60 hover:text-text-primary",
-                      )}
-                    >
+                    <ToggleGroup.Item value={option.value} class="h-auto flex-col items-start whitespace-normal p-2.5 text-left">
                       <span class="block text-[0.72rem] font-medium uppercase tracking-wider">
                         {option.label}
                       </span>
@@ -419,9 +409,9 @@
                           {option.description}
                         </span>
                       {/if}
-                    </button>
+                    </ToggleGroup.Item>
                   {/each}
-                </div>
+                </ToggleGroup.Root>
               </div>
             {/if}
 
@@ -500,19 +490,9 @@
 
 <!-- Metadata storage relocation dialog -->
 {#if metadataStorageDialogOpen}
-  <div class="fixed inset-0 z-50 flex items-center justify-center">
-    <button
-      type="button"
-      class="app-overlay-backdrop absolute inset-0"
-      onclick={metadataStorageBusy ? undefined : closeMetadataStorageDialogCancel}
-      aria-label="Close dialog"
-    ></button>
-    <div
-      class="app-dialog-surface relative mx-4 w-full max-w-md space-y-4 p-6"
-      role="dialog"
-      aria-modal="true"
-      aria-label="Relocate existing video assets?"
-    >
+  <Dialog open={metadataStorageDialogOpen} onClose={closeMetadataStorageDialogCancel} dismissible={!metadataStorageBusy}
+    ariaLabel="Relocate existing video assets?" class="w-full max-w-md sm:max-w-md gap-4 p-6">
+
       <h3 class="text-base font-heading font-semibold text-text-primary">
         Relocate existing video assets?
       </h3>
@@ -555,7 +535,6 @@
           Cancel
         </Button>
       </div>
-    </div>
-  </div>
+  </Dialog>
 {/if}
 {/if}

@@ -1,8 +1,10 @@
-import { fireEvent, render, screen } from "@testing-library/svelte";
+import { fireEvent, render, screen, waitFor, within } from "@testing-library/svelte";
 import { FileText, Play } from "@lucide/svelte";
 import { createRawSnippet } from "svelte";
+import * as navigation from "$app/navigation";
+import type { BeforeNavigate } from "@sveltejs/kit";
 import { describe, expect, it, vi } from "vitest";
-import { ACQUISITION_STATUS, CAPABILITY_KIND } from "$lib/api/generated/codes";
+import { ACQUISITION_STATUS, CAPABILITY_KIND, ENTITY_KIND, FINGERPRINT_ALGORITHM } from "$lib/api/generated/codes";
 import type { EntityDetailCard, EntityDetailCardFull } from "$lib/entities/entity-detail";
 import type { EntityDetailSection } from "./EntityDetail.svelte";
 import EntityDetail from "./EntityDetail.test-harness.svelte";
@@ -39,6 +41,50 @@ function buildCard(): EntityDetailCard {
 }
 
 describe("EntityDetail", () => {
+  it("protects the shared editor draft on route navigation and releases the guard after cancel", async () => {
+    let guard: ((event: BeforeNavigate) => void) | undefined;
+    const hook = vi.spyOn(navigation, "beforeNavigate").mockImplementation((callback) => { guard = callback; });
+    const confirm = vi.spyOn(window, "confirm").mockReturnValue(false);
+    try {
+      render(EntityDetail, { card: buildCard(), onMetadataSave: vi.fn() });
+      await fireEvent.click(screen.getByRole("button", { name: "Edit details" }));
+      await fireEvent.input(screen.getByRole("textbox", { name: "Title" }), { target: { value: "Unsaved title" } });
+      const cancel = vi.fn();
+      const event = { type: "link", willUnload: false, cancel } as unknown as BeforeNavigate;
+      expect(guard).toBeDefined();
+      guard!(event);
+      expect(cancel).toHaveBeenCalledOnce();
+      expect(screen.getByRole("textbox", { name: "Title" })).toHaveValue("Unsaved title");
+      await fireEvent.click(screen.getAllByRole("button", { name: "Cancel editing" })[1]);
+      cancel.mockClear();
+      guard!(event);
+      expect(cancel).not.toHaveBeenCalled();
+      expect(confirm).toHaveBeenCalledOnce();
+    } finally {
+      hook.mockRestore();
+      confirm.mockRestore();
+    }
+  });
+
+  it("moves detail-tab focus with arrow keys before committing with Enter", async () => {
+    const card = buildCard();
+    card.description = "Details content";
+    card.links = [{ label: "Website", url: "https://example.test" }];
+    render(EntityDetail, { card, tabs: [
+      { id: "details", label: "Details", sections: ["description"] },
+      { id: "links", label: "Links", sections: ["links"] },
+    ] });
+    const details = screen.getByRole("tab", { name: "Details" });
+    const links = screen.getByRole("tab", { name: "Links" });
+    details.focus();
+    await fireEvent.keyDown(details, { key: "ArrowRight" });
+    expect(links).toHaveFocus();
+    expect(details).toHaveAttribute("aria-selected", "true");
+    await fireEvent.keyDown(links, { key: "Enter" });
+    expect(links).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tabpanel", { name: "Links" })).toBeInTheDocument();
+  });
+
   it("renders configured hero action buttons with shared styling", async () => {
     const onClick = vi.fn();
     render(EntityDetail, {
@@ -58,6 +104,7 @@ describe("EntityDetail", () => {
     });
 
     const action = screen.getByRole("button", { name: "Play All" });
+    expect(action).toHaveClass("h-control-lg", "gap-control-gap", "px-control-pad-lg");
     await fireEvent.click(action);
 
     expect(onClick).toHaveBeenCalledOnce();
@@ -93,7 +140,7 @@ describe("EntityDetail", () => {
     );
     expect(chip.textContent?.trim()).toBe("metadata-router");
     expect(chip).not.toHaveTextContent("Show:AbC:01:5");
-    expect(chip).toHaveClass("provider-identity-chip");
+    expect(chip).toHaveClass("h-control", "border-border");
     expect(screen.getByText("Wanted")).toBeInTheDocument();
     expect(container.querySelector(".position-badges")?.children).toHaveLength(2);
   });
@@ -156,6 +203,7 @@ describe("EntityDetail", () => {
       },
     };
 
+    card.entity.capabilities = card.posterCard.entity.capabilities;
     const { container } = render(EntityDetail, {
       props: {
         card,
@@ -166,8 +214,27 @@ describe("EntityDetail", () => {
 
     expect(container.querySelector(".poster-frame .entity-thumbnail")).toBeInTheDocument();
     expect(container.querySelector(".poster-frame img")).toHaveAttribute("src", "/covers/book.jpg");
-    expect(screen.getAllByLabelText("Wanted — Waiting for release")).toHaveLength(2);
+    expect(screen.getAllByLabelText("Acquisition status: Waiting for release")).toHaveLength(1);
+    expect(container.querySelector(".poster-frame .thumbnail-badges")).toBeNull();
+    expect(container.querySelector(".poster-frame [tabindex]")).toBeNull();
+    expect(container.querySelector(".hero-backdrop")).toHaveAttribute("aria-hidden", "true");
   });
+
+  it.each([ENTITY_KIND.book, ENTITY_KIND.movie, ENTITY_KIND.video, ENTITY_KIND.audio, ENTITY_KIND.videoSeason, ENTITY_KIND.comicInstallment])(
+    "shows one acquisition status for a wanted %s even without artwork",
+    async (kind) => {
+      const card = buildCard();
+      card.entity.kind = kind;
+      card.entity.capabilities = [{ kind: CAPABILITY_KIND.flags, isWanted: true, isFavorite: false, isNsfw: false, isOrganized: false }];
+      const { rerender } = render(EntityDetail, { card });
+      expect(screen.getByLabelText("Acquisition status: Wanted")).toHaveTextContent("Wanted");
+      await rerender({ card, wantedStatus: ACQUISITION_STATUS.downloading });
+      expect(screen.getByLabelText("Acquisition status: Downloading")).toHaveTextContent("Downloading");
+      expect(screen.queryByLabelText("Acquisition status: Wanted")).not.toBeInTheDocument();
+      await rerender({ card: { ...card, entity: { ...card.entity, capabilities: [] } } });
+      expect(screen.queryByLabelText(/^Acquisition status:/)).not.toBeInTheDocument();
+    },
+  );
 
   it("shows editable poster and header drop zones when artwork is missing", async () => {
     const onMetadataSave = vi.fn().mockResolvedValue(undefined);
@@ -182,11 +249,14 @@ describe("EntityDetail", () => {
 
     await fireEvent.click(screen.getByRole("button", { name: "Edit details" }));
 
-    expect(screen.getByText("Poster empty")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Header empty" })).not.toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Artwork" })).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Edit artwork" }));
+    expect(screen.getAllByText("No image")).toHaveLength(2);
     expect(screen.getByRole("button", { name: "Upload poster" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Upload header" })).toBeInTheDocument();
-    expect(container.querySelector(".header-asset-placeholder")).toBeInTheDocument();
+    expect(container.querySelector(".header-asset-placeholder")).not.toBeInTheDocument();
+    expect(container.querySelector(".hero button[aria-label='Upload poster']")).not.toBeInTheDocument();
+    expect(container.querySelector(".hero button[aria-label='Upload header']")).not.toBeInTheDocument();
     expect(container.querySelector('[data-asset-dropzone="poster"]')).toBeInTheDocument();
     expect(container.querySelector('[data-asset-dropzone="backdrop"]')).toBeInTheDocument();
 
@@ -282,7 +352,10 @@ describe("EntityDetail", () => {
         { code: "release", label: "Released", value: "2008-05-30", display: "May 30, 2008", sortable: "2008-05-30" },
       ],
       technical: [{ label: "Resolution", value: "1920×1080 (1080p)" }],
-      fingerprints: [{ algorithm: "oshash", value: "a1b2c3d4" }],
+      fingerprints: [
+        { algorithm: FINGERPRINT_ALGORITHM.oshash, value: "a1b2c3d4" },
+        { algorithm: FINGERPRINT_ALGORITHM.oshash, value: "e5f6a7b8" },
+      ],
       markers: [],
       subtitles: [],
       progress: { index: 12, total: 18, percent: 67, unit: "episodes", mode: "watching", completed: false },
@@ -315,9 +388,9 @@ describe("EntityDetail", () => {
       },
     });
 
-    expect(screen.getByRole("heading", { name: "Studio" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Studio 1" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Blender Foundation" })).toHaveAttribute("href", "/studios/studio-1");
-    expect(screen.getByRole("heading", { name: "Credits" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Credits 3" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Sacha Goedegebure" })).toHaveAttribute("href", "/people/person-1");
     expect(screen.getByText("Views")).toBeInTheDocument();
     expect(screen.getByText("1842")).toBeInTheDocument();
@@ -328,8 +401,16 @@ describe("EntityDetail", () => {
     expect(screen.getByText("watching")).toBeInTheDocument();
     expect(screen.getByText("Episode 2")).toBeInTheDocument();
     expect(screen.getByText("animation")).toBeInTheDocument();
-    expect(screen.getByText("stash-compat")).toBeInTheDocument();
-    expect(screen.getByText("oshash")).toBeInTheDocument();
+    expect(screen.getByText("Stash compat")).toBeInTheDocument();
+    expect(screen.getAllByText("Oshash")).toHaveLength(2);
+    expect(screen.getByText("a1b2c3d4")).toBeInTheDocument();
+    expect(screen.getByText("e5f6a7b8")).toBeInTheDocument();
+    for (const name of ["Sources", "Fingerprints"]) {
+      expect(screen.getByRole("heading", { name }).closest('[data-slot="card"]')?.querySelector("dl"))
+        .toHaveClass("is-stacked", "is-monospace");
+    }
+    expect(screen.getByRole("heading", { name: "Dates" }).closest('[data-slot="card"]')?.querySelector("dl"))
+      .not.toHaveClass("is-stacked");
   });
 
   it("renders reference sections with non-selectable entity thumbnails", () => {
@@ -361,10 +442,10 @@ describe("EntityDetail", () => {
     });
 
     const thumbnails = container.querySelectorAll(".entity-thumbnail");
-    const creditRails = container.querySelectorAll(".credit-scroller");
 
     expect(thumbnails).toHaveLength(4);
-    expect(creditRails.length).toBeGreaterThan(0);
+    expect(screen.getByRole("region", { name: "Studio" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Credits" })).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Blender Foundation" })).toHaveAttribute("href", "/studios/studio-1");
     expect(screen.getByRole("link", { name: /Sacha Goedegebure/ })).toHaveAttribute("href", "/people/person-1");
     // The primary role surfaces as the credit subtitle.
@@ -397,7 +478,7 @@ describe("EntityDetail", () => {
     });
 
     await fireEvent.click(screen.getByRole("button", { name: "Edit Links" }));
-    await fireEvent.click(screen.getByRole("button", { name: "https://example.test" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Edit https://example.test" }));
     await fireEvent.input(screen.getByRole("textbox", { name: "Links item" }), {
       target: { value: "https://new-link.test" },
     });
@@ -407,6 +488,49 @@ describe("EntityDetail", () => {
     expect(onMetadataSave).toHaveBeenCalledWith({
       fields: ["urls", "externalIds"],
       patch: expect.objectContaining({ urls: ["https://new-link.test"] }),
+    });
+  });
+
+  it("uses the shared edit grid on untabbed pages and keeps non-editable tags read-only", async () => {
+    const card = buildCard();
+    card.tags = [{ id: "tag-comedy", kind: "tag", title: "COMEDY", href: "/tags/tag-comedy" }];
+    render(EntityDetail, {
+      card,
+      standaloneMetadataSectionIds: ["links"],
+      sections: [{ id: "tags", label: "Tags", editable: false }],
+      onMetadataSave: vi.fn().mockResolvedValue(undefined),
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Edit details" }));
+
+    expect(within(screen.getByRole("region", { name: "Editable fields" })).getByRole("textbox", { name: "Title" })).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "References" })).getByRole("textbox", { name: "New Provider" })).toBeInTheDocument();
+    expect(screen.queryByRole("combobox", { name: "Add Tags" })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "COMEDY" })).toBeInTheDocument();
+  });
+
+  it("excludes hidden and non-editable standalone sections from the saved patch", async () => {
+    const card = { ...buildCard(), classification: { value: "Author", label: "Known for", system: "kind" } };
+    const onMetadataSave = vi.fn().mockResolvedValue(undefined);
+    render(EntityDetail, {
+      card,
+      standaloneMetadataSectionIds: ["classification"],
+      sections: [
+        { id: "tags", label: "Tags", editable: false },
+        { id: "classification", label: "Classification", hidden: true },
+      ],
+      onMetadataSave,
+    });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Edit details" }));
+    expect(screen.queryByRole("textbox", { name: "Classification" })).not.toBeInTheDocument();
+    await fireEvent.input(screen.getByRole("textbox", { name: "Title" }), { target: { value: "Updated title" } });
+    expect(screen.getByRole("textbox", { name: "Title" }).compareDocumentPosition(screen.getByRole("button", { name: "Save changes" })) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    await fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    expect(onMetadataSave).toHaveBeenCalledWith({
+      fields: ["title", "description", "rating", "flags"],
+      patch: expect.objectContaining({ title: "Updated title" }),
     });
   });
 
@@ -438,6 +562,9 @@ describe("EntityDetail", () => {
     });
 
     await fireEvent.click(screen.getByRole("button", { name: "Edit Details" }));
+    expect(screen.getByRole("region", { name: "Editable fields" })).toBeInTheDocument();
+    const saveAction = screen.getByRole("button", { name: "Save Details" });
+    expect(screen.getByRole("textbox", { name: "Classification" }).compareDocumentPosition(saveAction) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     await fireEvent.input(screen.getByRole("textbox", { name: "Title" }), {
       target: { value: "Big Buck Bunny Remastered" },
     });
@@ -445,11 +572,11 @@ describe("EntityDetail", () => {
       target: { value: "4.5" },
     });
     await fireEvent.click(screen.getByRole("button", { name: "Favorite" }));
-    await fireEvent.input(screen.getByRole("textbox", { name: "Stats" }), { target: { value: "94" } });
+    await fireEvent.input(screen.getByRole("textbox", { name: "runtimeMinutes Value" }), { target: { value: "94" } });
     await fireEvent.input(screen.getByPlaceholderText("count"), { target: { value: "voteCount" } });
     await fireEvent.input(screen.getByPlaceholderText("12"), { target: { value: "12" } });
     await fireEvent.click(screen.getAllByRole("button", { name: "Add entry" })[0]);
-    await fireEvent.input(screen.getByRole("textbox", { name: "Positions" }), { target: { value: "3" } });
+    await fireEvent.input(screen.getByRole("textbox", { name: "episodeNumber Value" }), { target: { value: "3" } });
     await fireEvent.input(screen.getByRole("textbox", { name: "Classification" }), {
       target: { value: "short" },
     });
@@ -486,7 +613,8 @@ describe("EntityDetail", () => {
     });
 
     await fireEvent.click(screen.getByRole("button", { name: "Edit Links" }));
-    await fireEvent.click(screen.getByRole("button", { name: "https://example.test" }));
+    expect(screen.getByRole("region", { name: "References" })).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Edit https://example.test" }));
     await fireEvent.input(screen.getByRole("textbox", { name: "Links item" }), {
       target: { value: "https://changed.test" },
     });
@@ -494,11 +622,13 @@ describe("EntityDetail", () => {
     await fireEvent.click(screen.getByRole("tab", { name: "Details" }));
 
     expect(screen.getByRole("dialog", { name: "Discard unsaved edits?" })).toBeInTheDocument();
+    expect(screen.getAllByRole("heading", { name: "Discard unsaved edits?" })).toHaveLength(1);
+    expect(screen.getByRole("dialog", { name: "Discard unsaved edits?" })).toHaveAccessibleDescription("Changing tabs will leave the current edit session.");
     expect(screen.getByRole("tab", { name: "Links" })).toHaveAttribute("aria-selected", "true");
 
     await fireEvent.click(screen.getByRole("button", { name: "Stay here" }));
 
-    expect(screen.queryByRole("dialog", { name: "Discard unsaved edits?" })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Discard unsaved edits?" })).not.toBeInTheDocument());
     expect(screen.getByRole("tab", { name: "Links" })).toHaveAttribute("aria-selected", "true");
 
     await fireEvent.click(screen.getByRole("tab", { name: "Details" }));
@@ -506,7 +636,7 @@ describe("EntityDetail", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
 
     expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute("aria-selected", "true");
-    expect(screen.queryByRole("dialog", { name: "Discard unsaved edits?" })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "Discard unsaved edits?" })).not.toBeInTheDocument());
   });
 
   it("shows inline validation and disables save for invalid editable fields", async () => {
@@ -522,11 +652,33 @@ describe("EntityDetail", () => {
     });
 
     await fireEvent.click(screen.getByRole("button", { name: "Edit Links" }));
-    await fireEvent.input(screen.getByRole("textbox", { name: "Links" }), { target: { value: "not-a-url" } });
+    await fireEvent.input(screen.getByRole("textbox", { name: "Add item" }), { target: { value: "not-a-url" } });
     await fireEvent.click(screen.getByRole("button", { name: "Add item" }));
 
     expect(screen.getByText("Invalid URL")).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Save Links" })).toBeDisabled();
+  });
+
+  it("keeps a rejected save beside the footer actions and retains the draft for retry", async () => {
+    const onMetadataSave = vi.fn().mockRejectedValueOnce(new Error("Could not save changes")).mockResolvedValueOnce(undefined);
+    render(EntityDetail, {
+      card: buildCard(),
+      onMetadataSave,
+    });
+    await fireEvent.click(screen.getByRole("button", { name: "Edit details" }));
+    await fireEvent.input(screen.getByRole("textbox", { name: "Title" }), { target: { value: "Unsaved title" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+    const error = await screen.findByRole("alert");
+    const save = screen.getByRole("button", { name: "Save changes" });
+    expect(error).toHaveTextContent("Could not save changes");
+    expect(error.compareDocumentPosition(save) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(screen.getByRole("textbox", { name: "Title" })).toHaveValue("Unsaved title");
+    expect(save).not.toBeDisabled();
+
+    await fireEvent.click(save);
+    expect(onMetadataSave).toHaveBeenCalledTimes(2);
+    await waitFor(() => expect(screen.queryByRole("textbox", { name: "Title" })).not.toBeInTheDocument());
   });
 
   it("edits external IDs separately from URL links", async () => {
@@ -548,10 +700,10 @@ describe("EntityDetail", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Edit Links" }));
 
     expect(screen.queryByText("Links must be absolute http or https URLs.")).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "https://example.test" })).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "External IDs" })).toHaveValue("6515881");
+    expect(screen.getByRole("button", { name: "Edit https://example.test" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "tmdb ID" })).toHaveValue("6515881");
 
-    await fireEvent.input(screen.getByRole("textbox", { name: "External IDs" }), {
+    await fireEvent.input(screen.getByRole("textbox", { name: "tmdb ID" }), {
       target: { value: "6515882" },
     });
     await fireEvent.click(screen.getByRole("button", { name: "Save Links" }));
@@ -581,8 +733,8 @@ describe("EntityDetail", () => {
 
     expect(screen.getByText("Links & Provider IDs")).toBeInTheDocument();
     expect(container.querySelector(".metadata-card-capped")).toBeInTheDocument();
-    expect(screen.getByText("URLs")).toBeInTheDocument();
-    expect(screen.getByText("themoviedb.org")).toBeInTheDocument();
+    expect(screen.getByText("Websites")).toBeInTheDocument();
+    expect(within(screen.getByRole("region", { name: "Websites" })).getByText("themoviedb.org")).toBeInTheDocument();
     expect(screen.getByText("https://www.themoviedb.org/tv/271267")).toBeInTheDocument();
     expect(screen.getByText("Provider IDs")).toBeInTheDocument();
     expect(screen.getByText("tmdb")).toBeInTheDocument();

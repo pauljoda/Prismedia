@@ -15,8 +15,8 @@ describe("AcquisitionProtocolPreference", () => {
       },
     });
 
-    await fireEvent.click(screen.getByLabelText("Preferred download type"));
-    await fireEvent.click(screen.getByRole("option", { name: "Torrent" }));
+    await fireEvent.keyDown(screen.getByLabelText("Preferred download type"), { key: "ArrowDown" });
+    await fireEvent.pointerUp(screen.getByRole("option", { name: "Torrent" }));
 
     expect(onchange).toHaveBeenCalledWith(DOWNLOAD_PROTOCOL.torrent);
   });

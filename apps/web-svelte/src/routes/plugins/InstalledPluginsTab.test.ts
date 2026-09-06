@@ -50,6 +50,30 @@ function baseProps(overrides: Partial<InstalledPluginsTabProps> = {}): Installed
 }
 
 describe("InstalledPluginsTab", () => {
+  it("can repeatedly clear an empty-result query while credentials remain open", async () => {
+    render(InstalledPluginsTab, { props: baseProps({
+      providers: [{ ...provider, auth: [{ key: "api_key", label: "API Key", required: true, url: null }] }],
+      authExpandedFor: "prismedia:tmdb",
+    }) });
+    const search = screen.getByRole("searchbox", { name: "Search installed plugins" });
+    for (const query of ["admin", "no matches"]) {
+      await fireEvent.input(search, { target: { value: query } });
+      expect(screen.queryByRole("form", { name: "Plugin credentials" })).not.toBeInTheDocument();
+      await fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+      expect(search).toHaveValue("");
+      expect(search).toHaveFocus();
+      expect(screen.getByRole("form", { name: "Plugin credentials" })).toBeInTheDocument();
+      expect(screen.getByLabelText(/api key/i)).toHaveValue("");
+    }
+  });
+
+  it("identifies the library filter as search rather than a login username", () => {
+    render(InstalledPluginsTab, { props: baseProps() });
+    const search = screen.getByRole("searchbox", { name: "Search installed plugins" });
+    expect(search).toHaveAttribute("autocomplete", "off");
+    expect((search as HTMLInputElement).form).toBeNull();
+  });
+
   it("filters current plugin providers locally", async () => {
     render(InstalledPluginsTab, {
       props: baseProps(),

@@ -67,9 +67,9 @@
               Password set
             </span>
           {:else}
-            <button
+            <Button variant="outline" size="sm"
               type="button"
-              class="flex items-center gap-1 text-xs text-text-muted transition-colors hover:text-text-accent"
+              class="flex items-center gap-1 text-xs"
               onclick={() => toggle(user.id)}
               aria-expanded={expandedId === user.id}
             >
@@ -77,7 +77,7 @@
               <ChevronDown
                 class={["size-3.5 transition-transform", expandedId === user.id && "rotate-180"]}
               />
-            </button>
+            </Button>
           {/if}
         </div>
         {#if expandedId === user.id}

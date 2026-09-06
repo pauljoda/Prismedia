@@ -35,7 +35,7 @@
   import {
     searchPeople,
     searchStudios,
-  } from "$lib/entities/entity-detail-search";
+  } from "$lib/entities/entity-picker-search";
   import EntityCastAndCrewSection from "./EntityCastAndCrewSection.svelte";
   import EntityDetailLinks from "./EntityDetailLinks.svelte";
   import type { EntityDetailSection } from "./entity-detail-types";
@@ -189,19 +189,19 @@
 {:else if section.id === "links"}
   <EntityDetailLinks links={card.links} />
 {:else if section.id === "studio" && studioCards.length > 0}
-  <section class="detail-section" aria-label={section.label ?? "Studio"}>
+  <div class="detail-section">
     <EntityCastAndCrewSection
       studioCards={studioCards}
       studioLabel={section.label ?? "Studio"}
     />
-  </section>
+  </div>
 {:else if section.id === "credits" && creditCards.length > 0}
-  <section class="detail-section" aria-label={section.label ?? peopleLabel}>
+  <div class="detail-section">
     <EntityCastAndCrewSection
       creditCards={creditCards}
       castLabel={section.label ?? peopleLabel}
     />
-  </section>
+  </div>
 {:else if section.id === "stats" && (cardFull.stats?.length ?? 0) > 0}
   <MetadataCard
     title="Stats"
@@ -246,6 +246,8 @@
   <MetadataCard
     title="Source"
     icon={Database}
+    stacked
+    monospace
     rows={[
       ...(cardFull.sources ?? []).map((source) => ({ label: source.code, value: source.value })),
       ...(cardFull.fingerprints ?? []).map((fingerprint) => ({ label: String(fingerprint.algorithm), value: fingerprint.value })),
@@ -255,12 +257,16 @@
   <MetadataCard
     title="Sources"
     icon={Database}
+    stacked
+    monospace
     rows={(cardFull.sources ?? []).map((source) => ({ label: source.code, value: source.value }))}
   />
 {:else if section.id === "fingerprints" && (cardFull.fingerprints?.length ?? 0) > 0}
   <MetadataCard
     title="Fingerprints"
     icon={Fingerprint}
+    stacked
+    monospace
     rows={(cardFull.fingerprints ?? []).map((fingerprint) => ({ label: String(fingerprint.algorithm), value: fingerprint.value }))}
   />
 {:else if sectionContent}
@@ -287,31 +293,32 @@
 
   .edit-section {
     display: grid;
-    gap: 0.75rem;
+    gap: calc(var(--spacing) * 6);
+  }
+
+  .custom-detail-section {
+    display: flex;
+    flex-direction: column;
+    gap: calc(var(--spacing) * 4);
   }
 
   .edit-flag-chips {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.35rem;
-    min-height: 2.55rem;
+    gap: var(--spacing-control-gap);
+    min-height: var(--spacing-control);
     align-items: center;
-  }
-
-  .edit-flag-chips :global(button) {
-    min-height: 2.55rem;
   }
 
   .section-label {
     display: flex;
     align-items: center;
     gap: 0.45rem;
-    margin: 0 0 0.75rem;
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.68rem;
+    margin: 0;
+    font-family: var(--font-heading, Geist, sans-serif);
+    font-size: 0.875rem;
     font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--detail-text-muted);
+    letter-spacing: -0.01em;
+    color: var(--detail-text);
   }
 </style>

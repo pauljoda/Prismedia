@@ -26,33 +26,29 @@
     Heart,
     Flame,
     CheckCircle,
-    Image as ImageIcon,
     Link,
     ListOrdered,
-    LoaderCircle,
     MonitorCog,
     Pencil,
     Play,
-    Trash2,
-    Upload,
     Users,
   } from "@lucide/svelte";
-  import { Button } from "@prismedia/ui-svelte";
+  import { Button, Tabs } from "@prismedia/ui-svelte";
+  import EntityDetailEditLayout from "./EntityDetailEditLayout.svelte";
+  import EntityDetailArtworkEditor from "./EntityDetailArtworkEditor.svelte";
   import type { EntityDetailCard, EntityDetailCardFull } from "$lib/entities/entity-detail";
   import { renderEntityDescriptionMarkdown } from "$lib/entities/entity-detail-markdown";
   import {
-    hasHero,
-    hasPoster,
     DEFAULT_STANDALONE_METADATA_SECTION_IDS,
   } from "$lib/entities/entity-detail";
   import {
     entityReferenceToThumbnailCard,
-    placeholderGradient,
     toAspectRatioValue,
     type EntityThumbnailCard,
   } from "$lib/entities/entity-thumbnail";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import MetadataCardGrid from "$lib/components/MetadataCardGrid.svelte";
+  import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import EntityDateEditRequest from "./EntityDateEditRequest.svelte";
   import EntityTagChips from "./EntityTagChips.svelte";
   import EntityDetailHeroControls from "./EntityDetailHeroControls.svelte";
@@ -65,7 +61,7 @@
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import { CREDIT_ROLE, ENTITY_FILE_ROLE, type EntityFileRoleCode } from "$lib/entities/entity-codes";
   import type { EntityDetailEditDraft } from "$lib/entities/entity-detail-edit";
-  import { searchTags } from "$lib/entities/entity-detail-search";
+  import { searchTags } from "$lib/entities/entity-picker-search";
   import type {
     EntityDetailProps,
     EntityDetailSection,
@@ -75,9 +71,13 @@
   import { paletteFromImage, type ArtworkPalette } from "$lib/entities/artwork-palette";
   import { EntityDetailArtworkController } from "./entity-detail-artwork-controller.svelte";
   import EntityDetailDirtyTabDialog from "./EntityDetailDirtyTabDialog.svelte";
+  import UnsavedChangesGuard from "$lib/components/forms/UnsavedChangesGuard.svelte";
   import EntityDetailEditControls from "./EntityDetailEditControls.svelte";
   import EntityDetailMetadataSection from "./EntityDetailMetadataSection.svelte";
   import { EntityDetailEditController } from "./entity-detail-edit-controller.svelte";
+  import { useEntityArtworkTransition } from "$lib/motion/entity-artwork-transition";
+
+  const artworkTransition = useEntityArtworkTransition();
 
   type Props = EntityDetailProps;
 
@@ -109,8 +109,6 @@
   }: Props = $props();
 
   let activeTabId = $state("");
-  let posterInput: HTMLInputElement | null = $state(null);
-  let headerInput: HTMLInputElement | null = $state(null);
   let paletteState = $state<{ entityId: string; palette: ArtworkPalette } | null>(null);
 
   const isFavorite = $derived(card.flags.find((f) => f.code === "favorite")?.active ?? false);
@@ -220,16 +218,21 @@
   const posterHasAsset = $derived(Boolean(displayPoster));
   const headerHasAsset = $derived(Boolean(displayHero));
   const canManageImages = $derived(artwork.canManage);
+  const editableArtwork = $derived([
+    { role: ENTITY_FILE_ROLE.poster, label: "Poster", hasAsset: posterHasAsset },
+    { role: ENTITY_FILE_ROLE.backdrop, label: "Header", hasAsset: headerHasAsset },
+  ].filter(asset => artwork.supports(asset.role)));
   const canEdit = $derived(Boolean(onMetadataSave));
   const editActionLabel = $derived(activeTab ? `Edit ${activeTab.label}` : "Edit details");
   const cancelEditActionLabel = $derived(activeTab ? `Cancel ${activeTab.label}` : "Cancel editing");
-  const standaloneEditSections = $derived.by(() => {
+  const standaloneSections = $derived.by(() => {
     const ids = ["description", "tags", ...standaloneMetadataSectionIds];
-    return ids
+    return [...new Set(ids)]
       .map(findSection)
       .filter((section): section is EntityDetailSection => Boolean(section))
-      .filter(sectionEditable);
+      .filter((section) => !section.hidden);
   });
+  const standaloneEditSections = $derived(standaloneSections.filter(sectionEditable));
   const editValidationErrors = $derived(edit.validationErrors);
   const saveDisabled = $derived(edit.saveDisabled);
   const editErrors = $derived.by(() =>
@@ -248,6 +251,7 @@
   }
 
   function sectionEditable(section: EntityDetailSection): boolean {
+    if (section.hidden) return false;
     if (section.editable != null) return section.editable;
     return [
       "description",
@@ -335,43 +339,26 @@
   const saveEdit = edit.save;
 
   function posterCardForDisplay(): EntityThumbnailCard | null {
-    const withWantedStatus = (posterCard: EntityThumbnailCard): EntityThumbnailCard =>
-      wantedStatus === undefined ? posterCard : { ...posterCard, wantedStatus };
     const poster = displayPoster;
     if (poster) {
-      return withWantedStatus({
+      return {
         ...(card.posterCard ?? entityReferenceToThumbnailCard(card.entity)),
         cover: { src: poster.src, alt: poster.alt, role: ENTITY_FILE_ROLE.poster },
         hover: { kind: THUMBNAIL_HOVER_KIND.none },
-      });
+      };
     }
 
     if (!isEditingActiveTab) {
-      return card.posterCard ? withWantedStatus(card.posterCard) : null;
+      return card.posterCard;
     }
-    return withWantedStatus({
+    return {
       ...entityReferenceToThumbnailCard(card.entity, { cover: null }),
       hover: { kind: THUMBNAIL_HOVER_KIND.none },
-    });
+    };
   }
 
   function roleSupported(role: EntityFileRoleCode): boolean {
     return artwork.supports(role);
-  }
-
-  function inputForRole(role: EntityFileRoleCode): HTMLInputElement | null {
-    return role === ENTITY_FILE_ROLE.backdrop ? headerInput : posterInput;
-  }
-
-  function openAssetPicker(role: EntityFileRoleCode) {
-    inputForRole(role)?.click();
-  }
-
-  async function handleAssetInput(role: EntityFileRoleCode, event: Event) {
-    const input = event.currentTarget as HTMLInputElement;
-    const file = input.files?.[0];
-    input.value = "";
-    if (file) await uploadAsset(role, file);
   }
 
   async function handleAssetDrop(role: EntityFileRoleCode, event: DragEvent) {
@@ -389,51 +376,7 @@
     await artwork.uploadAsset(role, file);
   }
 
-  async function clearAsset(role: EntityFileRoleCode) {
-    await artwork.clearAsset(role);
-  }
-
-  function assetBusy(role: EntityFileRoleCode): boolean {
-    return artwork.isBusy(role);
-  }
 </script>
-
-{#snippet assetBusyOverlay(role: EntityFileRoleCode)}
-  {#if assetBusy(role)}
-    <div class="asset-busy-overlay" role="status" aria-label="Uploading artwork">
-      <LoaderCircle class="asset-busy-spinner h-6 w-6" />
-    </div>
-  {/if}
-{/snippet}
-
-{#snippet imageAssetActions(role: EntityFileRoleCode, label: "poster" | "header", hasAsset: boolean)}
-  {#if isEditingActiveTab && canManageImages && roleSupported(role)}
-    <div class="image-asset-actions">
-      <button
-        type="button"
-        class="image-asset-btn"
-        onclick={() => openAssetPicker(role)}
-        disabled={assetBusy(role)}
-        aria-label={`Upload ${label}`}
-      >
-        <Upload class="h-3.5 w-3.5" />
-        <span>{assetBusy(role) ? "Uploading" : "Upload"}</span>
-      </button>
-      {#if hasAsset}
-        <button
-          type="button"
-          class="image-asset-btn"
-          onclick={() => void clearAsset(role)}
-          disabled={assetBusy(role)}
-          aria-label={`Clear ${label}`}
-        >
-          <Trash2 class="h-3.5 w-3.5" />
-          <span>Clear</span>
-        </button>
-      {/if}
-    </div>
-  {/if}
-{/snippet}
 
 {#snippet descriptionContent()}
   {#if renderedDescription}
@@ -539,6 +482,9 @@
   {#if isEditingActiveTab || hasStandaloneBodyContent || afterBody || standaloneMetadataSections.length > 0 || extraSections}
     <div class="detail-content-card detail-content-card--standalone">
       {#if isEditingActiveTab}
+        <div class="detail-tab-sections">
+          <EntityDetailEditLayout sections={standaloneSections.filter(sectionHasContent)} item={renderDetailSection} />
+        </div>
         <EntityDetailEditControls
           cancelLabel="Cancel editing"
           errors={editErrors}
@@ -548,13 +494,6 @@
           saveLabel="Save changes"
           saving={savingEdit}
         />
-      {/if}
-
-      {#if isEditingActiveTab}
-        <div class="detail-body">
-          {@render descriptionEditSection()}
-          {@render tagsEditSection()}
-        </div>
       {:else if hasStandaloneBodyContent}
         <div class="detail-body">
           {@render descriptionContent()}
@@ -572,17 +511,19 @@
       {/if}
 
       <!-- Lower metadata sections -->
-      {#if standaloneMetadataSections.length > 0 || extraSections}
+      {#if (!isEditingActiveTab && standaloneMetadataSections.length > 0) || extraSections}
         <div class="metadata-sections">
           {#if extraSections}
             {@render extraSections()}
           {/if}
 
-          <MetadataCardGrid>
-            {#each standaloneMetadataSections as section (section.id)}
-              {@render renderDetailSection(section)}
-            {/each}
-          </MetadataCardGrid>
+          {#if !isEditingActiveTab}
+            <MetadataCardGrid>
+              {#each standaloneMetadataSections as section (section.id)}
+                {@render renderDetailSection(section)}
+              {/each}
+            </MetadataCardGrid>
+          {/if}
         </div>
       {/if}
     </div>
@@ -599,21 +540,6 @@
     startEdit(tab);
   }}
   onEditStandalone={() => startEdit()}
-/>
-
-<input
-  bind:this={posterInput}
-  class="asset-file-input"
-  type="file"
-  accept="image/*"
-  onchange={(event) => void handleAssetInput(ENTITY_FILE_ROLE.poster, event)}
-/>
-<input
-  bind:this={headerInput}
-  class="asset-file-input"
-  type="file"
-  accept="image/*"
-  onchange={(event) => void handleAssetInput(ENTITY_FILE_ROLE.backdrop, event)}
 />
 
 <article
@@ -636,7 +562,7 @@
   >
 
     {#snippet heroContent()}
-      <div class="hero-content">
+      <div class="hero-content" class:has-poster={posterVisible}>
         {#if posterVisible}
           <div
             class="poster-frame"
@@ -649,16 +575,8 @@
             ondragover={preventAssetDrag}
           >
             {#if posterCard}
-              <EntityThumbnail card={posterCard} linkable={false} mediaOnly={true} />
+              <EntityThumbnail card={posterCard} linkable={false} mediaOnly={true} showBadges={false} interactive={false} hoverPreviewsEnabled={false} imageLoading="eager" onArtworkLoad={(image) => artworkTransition?.receive(card.entity.id, image)} />
             {/if}
-            {#if isEditingActiveTab && !posterHasAsset}
-              <div class="asset-empty-label">
-                <ImageIcon class="h-4 w-4" />
-                <span>Poster empty</span>
-              </div>
-            {/if}
-            {@render imageAssetActions(ENTITY_FILE_ROLE.poster, "poster", posterHasAsset)}
-            {@render assetBusyOverlay(ENTITY_FILE_ROLE.poster)}
           </div>
         {/if}
 
@@ -679,6 +597,7 @@
             {editActionLabel}
             editing={isEditingActiveTab}
             {heroBadges}
+            {wantedStatus}
             {isFavorite}
             {isNsfw}
             {isOrganized}
@@ -695,22 +614,6 @@
       </div>
     {/snippet}
 
-    {#if isEditingActiveTab && !headerHasAsset}
-      <div
-        class="header-asset-placeholder"
-        style:background-image={placeholderGradient(card.entity.title)}
-        aria-hidden="true"
-      >
-        <ImageIcon class="h-8 w-8" />
-      </div>
-    {/if}
-
-    {#if isEditingActiveTab}
-      <div class="header-asset-panel" class:is-empty={!headerHasAsset}>
-        {@render imageAssetActions(ENTITY_FILE_ROLE.backdrop, "header", headerHasAsset)}
-      </div>
-    {/if}
-    {@render assetBusyOverlay(ENTITY_FILE_ROLE.backdrop)}
 
     {#if heroMode === "image"}
       <!-- Sharp banner, mask fades bottom 10%; the page's LCP image, loaded at high priority. -->
@@ -733,7 +636,7 @@
         {@render heroContent()}
       </div>
     {:else if heroMode === "poster-blur"}
-      <div class="hero-backdrop poster-mode">
+      <div class="hero-backdrop poster-mode" aria-hidden="true">
         <div class="hero-backdrop-thumbnail">
           {#if posterCard}
             <EntityThumbnail
@@ -741,6 +644,8 @@
               linkable={false}
               mediaOnly={true}
               interactive={false}
+              showBadges={false}
+              hoverPreviewsEnabled={false}
               onArtworkLoad={captureArtworkPalette}
             />
           {/if}
@@ -754,20 +659,20 @@
     {/if}
   </div>
 
+  {#if isEditingActiveTab && canManageImages && editableArtwork.length}
+    <EntityDetailArtworkEditor assets={editableArtwork} busyRole={artwork.busyRole} onUpload={artwork.uploadAsset} onClear={artwork.clearAsset} />
+  {/if}
+
   {#if hasTabs}
     <div class="detail-tabs">
-      <div class="detail-tab-list" role="tablist" aria-label="Detail sections">
+      <Tabs.Root class="gap-0" activationMode="manual" bind:value={() => activeTab?.id ?? "", requestTab}>
+      <Tabs.List variant="line" class="max-w-full justify-start overflow-x-auto rounded-none" aria-label="Detail sections">
         {#each visibleTabs as tab (tab.id)}
-          {@const active = activeTab?.id === tab.id}
           {@const TabIcon = tab.icon}
-          <button
-            type="button"
-            role="tab"
+          <Tabs.Trigger
+            value={tab.id}
             id={`entity-detail-tab-${tab.id}`}
-            aria-selected={active}
-            aria-controls={`entity-detail-panel-${tab.id}`}
-            class:active
-            onclick={() => requestTab(tab.id)}
+            class="max-sm:group-data-[variant=line]/tabs-list:px-2"
           >
             {#if TabIcon}
               <TabIcon class="detail-tab-icon h-3.5 w-3.5" />
@@ -776,17 +681,48 @@
             {#if tab.count != null && tab.count > 0}
               <strong>{tab.count}</strong>
             {/if}
-          </button>
+          </Tabs.Trigger>
         {/each}
-      </div>
+      </Tabs.List>
 
       {#if activeTab}
-        <div
+        <Tabs.Content
+          value={activeTab.id}
           class="detail-tab-panel detail-content-card detail-content-card--tabbed"
-          role="tabpanel"
           id={`entity-detail-panel-${activeTab.id}`}
           aria-labelledby={`entity-detail-tab-${activeTab.id}`}
         >
+          {#key activeTab.id}
+            <div class="detail-tab-sections">
+              {#if activeTabSections.length === 0 && !isEditingActiveTab}
+                {@const EmptyTabIcon = activeTab.icon ?? Pencil}
+                <StatePlaceholder
+                  icon={EmptyTabIcon}
+                  title={`No ${activeTab.label.toLowerCase()} yet`}
+                >
+                  {#if canEdit}
+                    <Button
+                      type="button"
+                      variant="secondary"
+                      size="sm"
+                      onclick={() => startEdit(activeTab ?? undefined)}
+                    >
+                      <Pencil class="h-3.5 w-3.5" />
+                      Edit {activeTab.label}
+                    </Button>
+                  {/if}
+                </StatePlaceholder>
+              {:else if isEditingActiveTab}
+                <EntityDetailEditLayout sections={activeTabSections} item={renderDetailSection} />
+              {:else}
+                <MetadataCardGrid>
+                  {#each activeTabSections as section (section.id)}
+                    {@render renderDetailSection(section)}
+                  {/each}
+                </MetadataCardGrid>
+              {/if}
+            </div>
+          {/key}
           {#if isEditingActiveTab}
             <EntityDetailEditControls
               cancelLabel={`Cancel ${activeTab.label}`}
@@ -798,41 +734,16 @@
               saving={savingEdit}
             />
           {/if}
-          {#key activeTab.id}
-            <div class="detail-tab-sections">
-              {#if activeTabSections.length === 0 && !isEditingActiveTab}
-                <div class="tab-empty-state">
-                  <p>No {activeTab.label.toLowerCase()} yet.</p>
-                  {#if canEdit}
-                    <Button
-                      type="button"
-                      variant="secondary"
-                      size="sm"
-                      class="font-mono text-[0.68rem] font-bold uppercase tracking-[0.04em]"
-                      onclick={() => startEdit(activeTab ?? undefined)}
-                    >
-                      <Pencil class="h-3.5 w-3.5" />
-                      Edit {activeTab.label}
-                    </Button>
-                  {/if}
-                </div>
-              {:else}
-                <MetadataCardGrid>
-                  {#each activeTabSections as section (section.id)}
-                    {@render renderDetailSection(section)}
-                  {/each}
-                </MetadataCardGrid>
-              {/if}
-            </div>
-          {/key}
-        </div>
+        </Tabs.Content>
       {/if}
+      </Tabs.Root>
     </div>
   {:else}
     {@render defaultDetailContent()}
   {/if}
 </article>
 
+<UnsavedChangesGuard dirty={edit.dirty} />
 <EntityDetailDirtyTabDialog open={Boolean(pendingTabId)} onStay={stayOnDirtyTab} onDiscard={discardDirtyTab} />
 
 <style>
@@ -851,7 +762,6 @@
     --detail-glass-blur: var(--glass-blur-sm);
     --hero-banner-max-height: clamp(13rem, 36vw, 20rem);
     --hero-lower-overlap: clamp(-3.75rem, -6vw, -2rem);
-    --detail-slideout-inset: 5px;
 
     display: grid;
     gap: 0;
@@ -871,16 +781,10 @@
 
   /* ── Hero ────────────────────────────────────────────────── */
 
-  .asset-file-input {
-    position: fixed;
-    width: 1px;
-    height: 1px;
-    opacity: 0;
-    pointer-events: none;
-  }
 
   .hero {
     position: relative;
+    z-index: 1;
     overflow: hidden;
     border-radius: var(--radius-md, 10px);
   }
@@ -985,8 +889,8 @@
     position: absolute;
     inset: 0;
     background:
-      radial-gradient(circle at top left, color-mix(in srgb, var(--detail-accent) 18%, transparent), transparent 58%),
-      radial-gradient(circle at right, color-mix(in srgb, var(--detail-secondary) 12%, transparent), transparent 54%),
+      radial-gradient(circle at top left, color-mix(in srgb, var(--detail-accent) 28%, transparent), transparent 58%),
+      radial-gradient(circle at right, color-mix(in srgb, var(--detail-secondary) 18%, transparent), transparent 54%),
       linear-gradient(180deg, rgb(0 0 0 / 0.3), rgb(0 0 0 / 0.82));
   }
 
@@ -997,8 +901,8 @@
     inset: 0;
     z-index: 0;
     background:
-      radial-gradient(circle at 14% 18%, color-mix(in srgb, var(--detail-accent) 16%, transparent), transparent 46%),
-      radial-gradient(circle at 90% 42%, color-mix(in srgb, var(--detail-secondary) 10%, transparent), transparent 48%),
+      radial-gradient(circle at 14% 18%, color-mix(in srgb, var(--detail-accent) 26%, transparent), transparent 56%),
+      radial-gradient(circle at 90% 42%, color-mix(in srgb, var(--detail-secondary) 16%, transparent), transparent 54%),
       #000;
     background-size: cover;
   }
@@ -1063,154 +967,9 @@
     border-bottom: 0;
   }
 
-  .header-asset-placeholder {
-    position: absolute;
-    inset: 0;
-    z-index: 1;
-    display: grid;
-    place-items: center;
-    background-size: cover;
-    color: color-mix(in srgb, var(--detail-accent) 42%, var(--detail-text-muted));
-    opacity: 0.84;
-  }
 
-  .header-asset-placeholder::before {
-    content: "";
-    position: absolute;
-    inset: 0;
-    background:
-      radial-gradient(circle at 50% 40%, rgba(199, 201, 204, 0.16), transparent 24%),
-      linear-gradient(180deg, rgba(7, 8, 11, 0.18), rgba(7, 8, 11, 0.58));
-  }
 
-  .header-asset-placeholder :global(svg) {
-    position: relative;
-    z-index: 1;
-    opacity: 0.48;
-  }
 
-  .header-asset-panel {
-    position: absolute;
-    inset: 0;
-    z-index: 5;
-    display: flex;
-    align-items: flex-start;
-    justify-content: flex-end;
-    gap: 0.5rem;
-    padding: 0.75rem;
-    pointer-events: none;
-  }
-
-  .header-asset-panel.is-empty {
-    align-items: flex-start;
-    justify-content: center;
-    padding-top: 1rem;
-  }
-
-  .asset-empty-label {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.4rem 0.55rem;
-    border: 1px solid color-mix(in srgb, var(--detail-accent) 28%, var(--detail-border));
-    border-radius: var(--radius-xs, 4px);
-    background: rgba(8, 10, 15, 0.72);
-    color: var(--detail-text-muted);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.68rem;
-    font-weight: 700;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    box-shadow: 0 0 16px rgba(0, 0, 0, 0.35);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-  }
-
-  .poster-frame .asset-empty-label {
-    position: absolute;
-    inset: auto 0.45rem 3.2rem;
-    justify-content: center;
-  }
-
-  .image-asset-actions {
-    position: relative;
-    z-index: 2;
-    display: flex;
-    gap: 0.35rem;
-    pointer-events: auto;
-  }
-
-  /* Spinner shown over the artwork while an upload + thumbnail generation is in flight. */
-  .asset-busy-overlay {
-    position: absolute;
-    inset: 0;
-    z-index: 4;
-    display: grid;
-    place-items: center;
-    background: rgba(7, 8, 11, 0.55);
-    backdrop-filter: blur(2px);
-    -webkit-backdrop-filter: blur(2px);
-    pointer-events: none;
-    border-radius: inherit;
-  }
-
-  .asset-busy-overlay :global(.asset-busy-spinner) {
-    color: var(--detail-accent, #c7c9cc);
-    animation: asset-busy-spin 0.8s linear infinite;
-  }
-
-  @keyframes asset-busy-spin {
-    to {
-      transform: rotate(360deg);
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .asset-busy-overlay :global(.asset-busy-spinner) {
-      animation: none;
-    }
-  }
-
-  .poster-frame .image-asset-actions {
-    position: absolute;
-    right: 0.4rem;
-    bottom: 0.4rem;
-    left: 0.4rem;
-    justify-content: center;
-  }
-
-  .image-asset-btn {
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    gap: 0.3rem;
-    min-height: 1.8rem;
-    padding: 0.3rem 0.5rem;
-    border: 1px solid color-mix(in srgb, var(--detail-accent) 38%, var(--detail-border));
-    border-radius: var(--radius-xs, 4px);
-    background: rgba(8, 10, 15, 0.78);
-    color: var(--detail-text-secondary);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.66rem;
-    font-weight: 700;
-    letter-spacing: 0.03em;
-    text-transform: uppercase;
-    cursor: pointer;
-    box-shadow: 0 0 14px rgba(0, 0, 0, 0.35);
-    backdrop-filter: blur(10px);
-    -webkit-backdrop-filter: blur(10px);
-  }
-
-  .image-asset-btn:hover:not(:disabled) {
-    color: var(--detail-accent);
-    border-color: color-mix(in srgb, var(--detail-accent) 62%, var(--detail-border));
-    box-shadow: 0 2px 10px rgb(0 0 0 / 0.4);
-  }
-
-  .image-asset-btn:disabled {
-    cursor: not-allowed;
-    opacity: 0.55;
-  }
 
   [data-asset-dropzone="poster"],
   [data-asset-dropzone="backdrop"] {
@@ -1226,50 +985,49 @@
     align-self: flex-end;
   }
 
-  @media (max-width: 480px) {
+  @media (max-width: 767px) {
     .hero-content {
-      flex-direction: column;
-      align-items: stretch;
-      gap: 0.85rem;
-      padding: 1.25rem;
-      padding-top: 1.75rem;
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+      align-items: start;
+      column-gap: var(--spacing-control-pad-lg);
+      row-gap: var(--spacing-control-gap);
     }
 
     .hero[data-hero-mode="image"] .hero-content {
       padding-top: calc(1.25rem - var(--hero-lower-overlap));
     }
 
-    [data-poster-size="small"] .poster-frame { --poster-width: min(10rem, 68vw); }
-    [data-poster-size="medium"] .poster-frame { --poster-width: min(11rem, 72vw); }
-    [data-poster-size="large"] .poster-frame { --poster-width: min(12rem, 76vw); }
-
     .poster-frame {
+      grid-column: 1;
+      grid-row: 1 / span 4;
       align-self: center;
-    }
-
-    .hero-text {
-      align-self: stretch;
-      grid-template-columns: minmax(0, 1fr) auto;
-      grid-template-areas:
-        "title title"
-        "meta meta"
-        "rating rating"
-        "badges badges"
-        "actions actions";
-      align-items: center;
-      column-gap: 0.75rem;
-      row-gap: 0.35rem;
       width: 100%;
     }
 
+    .hero-text {
+      display: contents;
+    }
+
+    .hero-content:not(.has-poster) {
+      grid-template-columns: minmax(0, 1fr);
+      --detail-text-column: 1;
+    }
+
     .hero-title {
-      grid-area: title;
+      grid-column: var(--detail-text-column, 2);
+      grid-row: 1;
     }
 
     .meta-row {
-      grid-area: meta;
+      grid-column: var(--detail-text-column, 2);
+      grid-row: 2;
     }
 
+  }
+
+  @media (max-width: 400px) {
+    .poster-frame { grid-row: 1 / span 2; }
   }
 
   .hero-title {
@@ -1294,7 +1052,7 @@
     gap: 0.15rem 0;
     min-width: 0;
     max-width: 100%;
-    font-size: 0.82rem;
+    font-size: var(--text-label);
     color: var(--detail-text-muted);
     overflow-wrap: anywhere;
   }
@@ -1303,7 +1061,7 @@
     min-width: 0;
     max-width: 100%;
     white-space: normal;
-    font-size: 0.82rem;
+    font-size: var(--text-label);
     overflow-wrap: anywhere;
     word-break: normal;
   }
@@ -1316,10 +1074,8 @@
   }
 
   .meta-row :global(.meta-item .meta-item-label) {
-    margin-right: 0.3rem;
-    font-size: 0.72rem;
-    text-transform: uppercase;
-    letter-spacing: 0.06em;
+    margin-right: var(--spacing);
+    font-size: var(--text-caption);
     color: var(--detail-text-muted);
   }
 
@@ -1347,70 +1103,25 @@
   /* ── Detail Body ────────────────────────────────────────── */
 
   .detail-tabs {
-    min-width: 0;
-    margin-inline: var(--detail-slideout-inset);
-  }
-
-  .detail-tab-list {
+    --tabs-indicator: var(--detail-accent);
     position: relative;
-    z-index: 2;
-    display: flex;
-    gap: 0.35rem;
-    min-width: 0;
-    margin-top: -1px;
-    overflow-x: auto;
-    padding: 0.65rem 1.5rem;
-    border: 1px solid var(--detail-border);
-    border-top: 0;
-    border-radius: 0 0 var(--radius-md, 10px) var(--radius-md, 10px);
-    background: var(--detail-glass);
-    scrollbar-width: thin;
-  }
-
-  .detail-tab-list button {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.45rem;
-    min-height: 2rem;
-    padding: 0.35rem 0.75rem;
-    border: 1px solid transparent;
-    border-radius: var(--radius-xs, 4px);
-    background: transparent;
-    color: var(--detail-text-muted);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.72rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
-    white-space: nowrap;
-    cursor: pointer;
-    transition: color 0.15s, border-color 0.15s, background 0.15s, box-shadow 0.15s;
-  }
-
-  .detail-tab-list button:hover {
-    color: var(--detail-text);
-    border-color: var(--color-border-subtle, rgba(148, 158, 178, 0.07));
-    background: var(--detail-surface-raised);
-  }
-
-  .detail-tab-list button.active {
-    color: var(--detail-text);
-    border-color: var(--color-border-default);
-    background: var(--detail-surface-raised);
-    box-shadow: inset 0 -2px 0 color-mix(in srgb, var(--detail-accent) 72%, #c7c9cc);
-  }
-
-  .detail-tab-list strong {
-    color: var(--detail-text-disabled);
-    font-size: 0.65rem;
-    font-weight: 600;
-  }
-
-  .detail-tab-panel {
+    z-index: 0;
     min-width: 0;
   }
 
-  .detail-content-card {
+  /* Attached sections continue behind the hero's lower corners. */
+  .hero + .detail-tabs,
+  .hero + .detail-content-card--standalone {
+    margin-top: calc(-1 * var(--radius-md));
+    padding-top: var(--radius-md);
+    background: var(--color-surface-1);
+  }
+
+  .detail-tabs :global(.detail-tab-panel) {
+    min-width: 0;
+  }
+
+  .entity-detail :global(.detail-content-card) {
     min-width: 0;
     border: 1px solid var(--detail-border);
     border-top: 0;
@@ -1420,34 +1131,19 @@
     overflow: hidden;
   }
 
-  .detail-content-card--tabbed {
+  .entity-detail :global(.detail-content-card--tabbed) {
     position: relative;
     z-index: 1;
-    margin-top: -0.5rem;
-    padding-top: 0.5rem;
+    margin-top: 0;
   }
 
   .detail-content-card--standalone {
-    margin: -1px var(--detail-slideout-inset) 0;
+    margin-top: -1px;
   }
 
   .detail-tab-sections {
     min-width: 0;
     padding: 1rem 1.5rem 1.5rem;
-  }
-
-  .tab-empty-state {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    gap: 0.75rem;
-    padding: 2rem 1rem;
-  }
-
-  .tab-empty-state p {
-    margin: 0;
-    color: var(--detail-text-muted, #8a93a6);
-    font-size: 0.85rem;
   }
 
   .detail-tab-sections .detail-body {
@@ -1479,9 +1175,10 @@
   /* ── Description (markdown) ─────────────────────────────── */
 
   .description-content {
+    max-width: 80ch;
     color: var(--detail-text-secondary);
-    font-size: 0.88rem;
-    line-height: 1.65;
+    font-size: 0.9375rem;
+    line-height: 1.7;
     padding: 0.5rem 0 1rem;
   }
 
@@ -1600,12 +1297,16 @@
 
   .edit-section {
     display: grid;
-    gap: 0.75rem;
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+    gap: calc(var(--spacing) * 4);
   }
 
   .edit-inline-grid {
     display: grid;
-    gap: 0.75rem;
+    grid-template-columns: minmax(0, 1fr);
+    min-width: 0;
+    gap: calc(var(--spacing) * 4);
   }
 
   @media (min-width: 720px) {
@@ -1618,14 +1319,11 @@
   .edit-flag-chips {
     display: flex;
     flex-wrap: wrap;
-    gap: 0.35rem;
-    min-height: 2.55rem;
+    gap: var(--spacing-control-gap);
+    min-height: var(--spacing-control);
     align-items: center;
   }
 
-  .edit-flag-chips :global(button) {
-    min-height: 2.55rem;
-  }
 
   /* ── Shared ─────────────────────────────────────────────── */
 
@@ -1660,10 +1358,6 @@
 
     .metadata-sections {
       padding: 1rem 2rem 2rem;
-    }
-
-    .detail-tab-list {
-      padding-inline: 2rem;
     }
 
     .detail-tab-sections {

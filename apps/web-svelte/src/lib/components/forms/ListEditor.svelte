@@ -1,7 +1,7 @@
 <script lang="ts">
-  import type { Component } from "svelte";
-  import { cn } from "@prismedia/ui-svelte";
-  import { Plus, X, GripVertical } from "@lucide/svelte";
+  import { tick, type Component } from "svelte";
+  import { Button, Field, TextInput } from "@prismedia/ui-svelte";
+  import { Plus, X, Pencil } from "@lucide/svelte";
   import FormField from "./FormField.svelte";
 
   interface Props {
@@ -30,6 +30,9 @@
   let inputError = $state<string | null>(null);
   let editingIndex = $state<number | null>(null);
   let editingValue = $state("");
+  let editingError = $state<string | null>(null);
+  let editingInput = $state<HTMLInputElement | null>(null);
+  const id = $props.id();
 
   function addItem() {
     const trimmed = inputValue.trim();
@@ -53,9 +56,13 @@
     }
   }
 
-  function startEdit(index: number) {
+  async function startEdit(index: number) {
     editingIndex = index;
     editingValue = values[index];
+    editingError = null;
+    await tick();
+    editingInput?.focus();
+    editingInput?.select();
   }
 
   function commitEdit() {
@@ -67,7 +74,7 @@
     }
     if (validate) {
       const err = validate(trimmed);
-      if (err) return;
+      if (err) { editingError = err; return; }
     }
     const next = [...values];
     next[editingIndex] = trimmed;
@@ -77,6 +84,7 @@
 
   function cancelEdit() {
     editingIndex = null;
+    editingError = null;
   }
 
   function handleInputKeydown(e: KeyboardEvent) {
@@ -97,172 +105,77 @@
 </script>
 
 <FormField {label} {icon} {helper} {error}>
-  <div class="list-editor">
+  <Field.Group class="gap-3">
     {#if values.length > 0}
-      <ul class="list-items">
+      <ul class="grid min-w-0 gap-control-gap">
         {#each values as value, i (i)}
-          <li class="list-item">
+          <li class="flex min-w-0 flex-wrap items-center gap-control-gap">
             {#if editingIndex === i}
-              <input
+              <TextInput
                 type="text"
                 bind:value={editingValue}
+                bind:ref={editingInput}
                 onkeydown={handleEditKeydown}
                 onblur={commitEdit}
                 aria-label={label ? `${label} item` : "Item"}
-                class={cn(
-                  "flex-1 min-w-0 border border-border-accent bg-surface-2 px-2.5 py-1.5 text-sm text-text-primary",
-                  "font-mono focus:outline-none focus:shadow-[var(--shadow-focus-accent)]",
-                )}
+                aria-invalid={Boolean(editingError)}
+                aria-describedby={editingError ? `${id}-edit-error` : undefined}
+                class="min-w-0 flex-1"
               />
             {:else}
-              <button
+              <Button variant="ghost"
                 type="button"
-                class="item-value"
+                class="min-w-0 flex-1 justify-start"
                 onclick={() => startEdit(i)}
-                title="Click to edit"
+                title="Edit item"
+                aria-label={`Edit ${value}`}
               >
-                <GripVertical class="grip-icon h-3 w-3 shrink-0" />
+                <Pencil data-icon="inline-start" />
                 <span class="truncate">{value}</span>
-              </button>
+              </Button>
             {/if}
-            <button
+            <Button variant="ghost"
               type="button"
-              class="item-remove"
+              size="icon"
               onclick={() => removeItem(i)}
               aria-label={`Remove ${value}`}
             >
-              <X class="h-3 w-3" />
-            </button>
+              <X />
+            </Button>
+            {#if editingIndex === i && editingError}
+              <Field.Error id={`${id}-edit-error`} class="w-full">{editingError}</Field.Error>
+            {/if}
           </li>
         {/each}
       </ul>
     {/if}
 
-    <div class="list-add-row">
-      <input
-        type="text"
-        bind:value={inputValue}
-        onkeydown={handleInputKeydown}
-        aria-label={label ?? "Add item"}
-        {placeholder}
-        class={cn(
-          "flex-1 min-w-0 rounded-l-xs border bg-surface-2 px-2.5 py-1.5 text-sm text-text-primary shadow-[inset_0_2px_8px_rgba(0,0,0,0.30)]",
-          "font-mono placeholder:text-text-disabled",
-          "focus:border-border-accent focus:outline-none focus:shadow-[inset_0_2px_8px_rgba(0,0,0,0.30),0_0_0_1px_rgba(199, 201, 204,0.35),0_0_8px_rgba(199, 201, 204,0.15)]",
-          inputError ? "border-error/60" : "border-border-subtle",
-        )}
-      />
-      <button
-        type="button"
-        class="add-btn"
-        onclick={addItem}
-        disabled={!inputValue.trim()}
-        aria-label="Add item"
-      >
-        <Plus class="h-3.5 w-3.5" />
-      </button>
-    </div>
-    {#if inputError}
-      <p class="text-[0.7rem] text-error-text">{inputError}</p>
-    {/if}
-  </div>
+    <Field.Field data-invalid={Boolean(inputError)}>
+      <Field.Label for={`${id}-new-item`}>Add item</Field.Label>
+      <div class="flex min-w-0 gap-control-gap">
+        <TextInput
+          id={`${id}-new-item`}
+          type="text"
+          bind:value={inputValue}
+          onkeydown={handleInputKeydown}
+          aria-invalid={Boolean(inputError)}
+          aria-describedby={inputError ? `${id}-error` : undefined}
+          {placeholder}
+          class="min-w-0 flex-1"
+        />
+        <Button variant="secondary"
+          type="button"
+          onclick={addItem}
+          disabled={!inputValue.trim()}
+          aria-label="Add item"
+        >
+          <Plus data-icon="inline-start" />
+          Add
+        </Button>
+      </div>
+      {#if inputError}
+        <Field.Error id={`${id}-error`}>{inputError}</Field.Error>
+      {/if}
+    </Field.Field>
+  </Field.Group>
 </FormField>
-
-<style>
-  .list-editor {
-    display: grid;
-    gap: 0.25rem;
-  }
-
-  .list-items {
-    display: grid;
-    gap: 1px;
-    list-style: none;
-    margin: 0;
-    padding: 0;
-  }
-
-  .list-item {
-    display: flex;
-    align-items: center;
-    gap: 0;
-    min-width: 0;
-  }
-
-  .item-value {
-    flex: 1;
-    min-width: 0;
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.4rem 0.65rem;
-    border: 1px solid var(--color-border-subtle, rgba(164, 172, 185, 0.06));
-    border-right: none;
-    border-radius: var(--radius-xs, 4px) 0 0 var(--radius-xs, 4px);
-    background: var(--color-surface-2, #11151c);
-    color: var(--color-text-primary, #e2e8f0);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.78rem;
-    text-align: left;
-    cursor: text;
-    transition: border-color 0.15s, background 0.15s;
-  }
-
-  .item-value:hover {
-    border-color: var(--color-border-accent, rgba(199, 155, 92, 0.24));
-    background: color-mix(in srgb, var(--color-surface-2) 90%, var(--color-accent));
-  }
-
-  .grip-icon {
-    color: var(--color-text-disabled, #4a5568);
-  }
-
-  .item-remove {
-    display: grid;
-    place-items: center;
-    width: 2rem;
-    align-self: stretch;
-    border: 1px solid var(--color-border-subtle, rgba(164, 172, 185, 0.06));
-    border-radius: 0 var(--radius-xs, 4px) var(--radius-xs, 4px) 0;
-    background: var(--color-surface-2, #11151c);
-    color: var(--color-text-disabled, #4a5568);
-    cursor: pointer;
-    transition: color 0.15s, background 0.15s, border-color 0.15s;
-  }
-
-  .item-remove:hover {
-    color: var(--color-error-text, #fca5a5);
-    background: color-mix(in srgb, var(--color-surface-2) 90%, var(--color-error));
-    border-color: rgba(220, 80, 80, 0.3);
-  }
-
-  .list-add-row {
-    display: flex;
-    gap: 0;
-    margin-top: 0.25rem;
-  }
-
-  .add-btn {
-    display: grid;
-    place-items: center;
-    width: 2.25rem;
-    border: 1px solid var(--color-border-subtle, rgba(164, 172, 185, 0.06));
-    border-left: none;
-    border-radius: 0 var(--radius-xs, 4px) var(--radius-xs, 4px) 0;
-    background: var(--color-surface-2, #11151c);
-    color: var(--color-text-muted, #94a3b8);
-    cursor: pointer;
-    transition: color 0.15s, background 0.15s, border-color 0.15s;
-  }
-
-  .add-btn:hover:not(:disabled) {
-    color: var(--color-accent, #c7c9cc);
-    border-color: var(--color-border-accent, rgba(199, 155, 92, 0.24));
-    background: color-mix(in srgb, var(--color-surface-2) 92%, var(--color-accent));
-  }
-
-  .add-btn:disabled {
-    opacity: 0.35;
-    cursor: default;
-  }
-</style>

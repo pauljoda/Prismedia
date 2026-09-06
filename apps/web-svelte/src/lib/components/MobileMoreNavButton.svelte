@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ChevronUp } from "@lucide/svelte";
-  import { cn } from "@prismedia/ui-svelte";
+  import { Button, cn } from "@prismedia/ui-svelte";
   import { useNsfw } from "$lib/nsfw/store.svelte";
 
   interface Props {
@@ -76,10 +76,10 @@
   });
 </script>
 
-<button
+<Button variant="ghost" size="sm"
   type="button"
   class={cn(
-    "flex flex-1 cursor-pointer select-none touch-manipulation flex-col items-center justify-center gap-1 px-2 py-2 text-[0.65rem] transition-colors duration-fast",
+    "h-auto min-h-control-lg flex flex-1 cursor-pointer select-none touch-manipulation flex-col items-center justify-center gap-1 rounded-none px-2 py-2 text-caption [&_svg]:size-5 transition-colors duration-fast",
     isMoreActive ? "text-text-accent" : "text-text-disabled hover:text-text-muted",
   )}
   style="-webkit-touch-callout:none"
@@ -92,20 +92,6 @@
   onpointercancel={endPointer}
   onlostpointercapture={clearLongPress}
 >
-  <ChevronUp class={cn("more-chevron h-5 w-5", sheetOpen && "more-chevron-open")} />
+  <ChevronUp class={cn("size-5 transition-transform motion-reduce:transition-none", sheetOpen && "rotate-180")} />
   <span>{sheetOpen ? "Close" : "More"}</span>
-</button>
-
-<style>
-  .more-chevron {
-    transition: transform var(--duration-moderate) var(--ease-mechanical);
-  }
-  .more-chevron-open {
-    transform: rotate(180deg);
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .more-chevron {
-      transition: none;
-    }
-  }
-</style>
+</Button>

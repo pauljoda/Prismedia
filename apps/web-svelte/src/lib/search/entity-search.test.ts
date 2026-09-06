@@ -33,6 +33,7 @@ describe("searchEntities", () => {
       "related",
     ]);
     expect(firstSearchResult(response)?.href).toBe("/people/person-1");
+    expect(firstSearchResult(response)?.thumbnail).toEqual(tim);
     expect(calls).toContainEqual(expect.objectContaining({ referencedBy: "person-1" }));
   });
 

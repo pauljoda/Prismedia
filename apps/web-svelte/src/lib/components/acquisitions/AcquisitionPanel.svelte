@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onDestroy, onMount } from "svelte";
-  import { CalendarClock, CloudDownload, FileText, History, Loader2, PencilLine, RefreshCw, RotateCcw, Search, SearchX, Upload, X } from "@lucide/svelte";
-  import { Badge, Button, SearchInput } from "@prismedia/ui-svelte";
+  import { CalendarClock, CircleAlert, CircleCheck, CloudDownload, FileText, History, Loader2, PencilLine, RefreshCw, RotateCcw, Search, SearchX, Upload, X } from "@lucide/svelte";
+  import { Alert, Badge, Button, Card, Disclosure, SearchInput, type BadgeVariant } from "@prismedia/ui-svelte";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
@@ -9,10 +9,10 @@
   import AcquisitionHistoryList from "$lib/components/acquisitions/AcquisitionHistoryList.svelte";
   import ManualImportReview from "$lib/components/acquisitions/ManualImportReview.svelte";
   import ConfirmDialog from "$lib/components/entities/ConfirmDialog.svelte";
-  import PieceStateBar from "$lib/components/acquisitions/PieceStateBar.svelte";
+  import AcquisitionTransferSummary from "$lib/components/acquisitions/AcquisitionTransferSummary.svelte";
   import ReleaseTable from "$lib/components/acquisitions/ReleaseTable.svelte";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
-  import { isTransferActive, transferStageLabel } from "$lib/requests/acquisition-transfer";
+  import { presentAcquisitionTransfer } from "$lib/requests/acquisition-transfer-presentation";
   import { ACQUISITION_STATUS } from "$lib/api/generated/codes";
   import { METADATA_PATCH_FIELD } from "$lib/entities/entity-codes";
   import type {
@@ -46,7 +46,7 @@
     acquisitionStatusLabel,
     acquisitionStatusShouldPoll,
   } from "$lib/requests/acquisition-status";
-  import { formatBytes, formatEta, formatSpeed } from "$lib/utils/format";
+  import { formatBytes } from "$lib/utils/format";
 
   /**
    * The acquisition-specific management surface: status, live transfer, imported files, release
@@ -139,21 +139,53 @@
       status === ACQUISITION_STATUS.importing ||
       status === ACQUISITION_STATUS.imported,
   );
+  const panelTitle = $derived(panelTitleFor(status));
+  const panelDescription = $derived(
+    status === ACQUISITION_STATUS.manualImportRequired
+      ? "Prismedia stopped before adding these files to your library."
+      : null,
+  );
 
-  /**
-   * The user's manual Files toggle. Once set it wins over the status-derived default, so a poll
-   * reassigning `files` can't snap the list shut again; it resets when the imported flag actually
-   * transitions, keeping the collapse-once-imported behavior.
-   */
-  let filesOpen = $state<boolean | null>(null);
-  let lastFilesImported: boolean | null = null;
-  $effect(() => {
+  function panelTitleFor(value: AcquisitionDetail["summary"]["status"] | null): string {
+    if (value === ACQUISITION_STATUS.manualImportRequired) return "Import blocked";
+    if (value === ACQUISITION_STATUS.awaitingSelection) return "Choose a release";
+    if (value === ACQUISITION_STATUS.searching) return "Searching releases";
+    if (value === ACQUISITION_STATUS.queued || value === ACQUISITION_STATUS.downloading) return "Downloading release";
+    if (value === ACQUISITION_STATUS.waitingForDownloadClient) return "Download paused";
+    if (value === ACQUISITION_STATUS.downloaded || value === ACQUISITION_STATUS.importing) return "Adding to your library";
+    if (value === ACQUISITION_STATUS.imported) return "In your library";
+    if (value === ACQUISITION_STATUS.failed) return "Acquisition failed";
+    if (value === ACQUISITION_STATUS.cancelled) return "Acquisition cancelled";
+    if (value === ACQUISITION_STATUS.stopping) return "Cleaning up acquisition";
+    if (value === ACQUISITION_STATUS.waitingForRelease || value === ACQUISITION_STATUS.manualSearchRequired) return "Waiting for release";
+    return value ? acquisitionStatusLabel(value) : "Acquisition";
+  }
+
+  function statusBadgeVariant(value: AcquisitionDetail["summary"]["status"]): BadgeVariant {
+    if (value === ACQUISITION_STATUS.imported) return "success";
+    if (value === ACQUISITION_STATUS.failed || value === ACQUISITION_STATUS.cancelled) return "error";
+    if (value === ACQUISITION_STATUS.manualImportRequired) return "warning";
+    if (acquisitionStatusShouldPoll(value)) return "info";
+    return "default";
+  }
+
+  function statusBadgeLabel(value: AcquisitionDetail["summary"]["status"]): string {
+    if (value === ACQUISITION_STATUS.manualImportRequired) return "Review required";
+    if (value === ACQUISITION_STATUS.waitingForRelease) return "Scheduled";
+    if (value === ACQUISITION_STATUS.manualSearchRequired) return "Date needed";
+    if (value === ACQUISITION_STATUS.searching || value === ACQUISITION_STATUS.stopping) return "In progress";
+    return acquisitionStatusLabel(value);
+  }
+
+  /** The user's Files disclosure choice, scoped to the imported state that produced it. */
+  let filesOpenPreference = $state<{ imported: boolean | null; open: boolean } | null>(null);
+
+  function filesDisclosureOpen(): boolean {
     const imported = files?.imported ?? null;
-    if (imported !== lastFilesImported) {
-      lastFilesImported = imported;
-      filesOpen = null;
-    }
-  });
+    return filesOpenPreference?.imported === imported
+      ? filesOpenPreference.open
+      : !Boolean(imported);
+  }
 
   /** True while a load is in flight, so poll ticks never stack behind a slow transfer probe. */
   let loading = false;
@@ -434,8 +466,7 @@
   // review, failed-search, and manual-import states where searching for another release is a way out.
   const canReSearch = $derived(
     (status === ACQUISITION_STATUS.awaitingSelection && !hasResumableImport) ||
-      (status === ACQUISITION_STATUS.failed && !hasResumableImport) ||
-      status === ACQUISITION_STATUS.manualImportRequired,
+      (status === ACQUISITION_STATUS.failed && !hasResumableImport),
   );
 
   // Search again now returns Searching immediately and uses the ordinary active-status poll. Manual import
@@ -472,7 +503,11 @@
 </script>
 
 {#if error}
-  <div role="alert" class="surface-panel border-l-2 border-error px-4 py-2.5 text-sm text-error-text">{error}</div>
+  <Alert.Root variant="destructive">
+    <CircleAlert />
+    <Alert.Title>Acquisition could not be updated</Alert.Title>
+    <Alert.Description>{error}</Alert.Description>
+  </Alert.Root>
 {/if}
 
 {#if !detail}
@@ -481,62 +516,34 @@
     <span class="text-sm">Loading…</span>
   </div>
 {:else}
-  <div class="space-y-4">
-    <!-- ── Status + actions ── -->
-    <div class="flex flex-wrap items-center justify-between gap-3">
-      <div class="flex min-w-0 flex-wrap items-center gap-2.5">
-        <Badge variant={status === ACQUISITION_STATUS.imported ? "success" : status === ACQUISITION_STATUS.failed ? "error" : "accent"}>
-          {acquisitionStatusLabel(detail.summary.status)}
+  <Card.Root class={status === ACQUISITION_STATUS.manualImportRequired ? "border-warning/30" : undefined}>
+    <Card.Header class="border-b border-border-subtle">
+      <Card.Title role="heading" aria-level={2} class="flex items-center gap-2 text-lg">
+        {#if status === ACQUISITION_STATUS.manualImportRequired || status === ACQUISITION_STATUS.failed}
+          <CircleAlert class="text-warning-text" aria-hidden="true" />
+        {:else if status === ACQUISITION_STATUS.imported}
+          <CircleCheck class="text-success-text" aria-hidden="true" />
+        {:else if isDownloading || isDone}
+          <CloudDownload class="text-info-text" aria-hidden="true" />
+        {:else if status === ACQUISITION_STATUS.waitingForRelease || status === ACQUISITION_STATUS.manualSearchRequired}
+          <CalendarClock class="text-muted-foreground" aria-hidden="true" />
+        {:else}
+          <Search class="text-muted-foreground" aria-hidden="true" />
+        {/if}
+        {panelTitle}
+      </Card.Title>
+      {#if panelDescription}
+        <Card.Description>{panelDescription}</Card.Description>
+      {/if}
+      <Card.Action>
+        <Badge variant={statusBadgeVariant(detail.summary.status)}>
+          {statusBadgeLabel(detail.summary.status)}
         </Badge>
-        {#if detail.summary.statusMessage && !manualImportWarning}
-          <span class="text-sm text-text-muted">{detail.summary.statusMessage}</span>
-        {/if}
-      </div>
-      <div class="flex shrink-0 flex-wrap items-center gap-2">
-        {#if canRetryImport}
-          <Button
-            type="button"
-            variant="primary"
-            class="gap-1.5"
-            disabled={busy}
-            onclick={() => void retryImport(false)}
-            title={status === ACQUISITION_STATUS.downloaded
-                ? "Queue import again without removing the completed download."
-                : "Resume the exact durable import plan from its last completed file."}
-          >
-            <CloudDownload class="h-3.5 w-3.5" />
-            Retry import
-          </Button>
-        {/if}
-        {#if canStartOver}
-          <Button
-            type="button"
-            variant="danger"
-            class="gap-1.5"
-            disabled={busy}
-            onclick={() => (resetConfirmOpen = true)}
-            title="Discard the interrupted import, its partial files, and the current download, then begin a clean search."
-          >
-            <RotateCcw class="h-3.5 w-3.5" />
-            Start over
-          </Button>
-        {/if}
-        {#if canReSearch}
-          <Button type="button" variant="ghost" class="gap-1.5" disabled={busy} onclick={() => void reSearch()}>
-            <RefreshCw class="h-3.5 w-3.5" />
-            Search again
-          </Button>
-        {/if}
-        {#if canCancel}
-          <Button type="button" variant="danger" class="gap-1.5" disabled={busy} onclick={() => void cancel()}>
-            <X class="h-3.5 w-3.5" />
-            Cancel
-          </Button>
-        {/if}
-      </div>
-    </div>
+      </Card.Action>
+    </Card.Header>
 
-    {#if transitionLocked}
+    <Card.Content class="flex min-w-0 flex-col gap-5">
+      {#if transitionLocked}
       <StatePlaceholder
         icon={Loader2}
         title={status === ACQUISITION_STATUS.stopping ? "Cleaning up acquisition" : "Updating acquisition"}
@@ -545,7 +552,7 @@
           : "Prismedia is finishing a newer lifecycle transition. Actions are temporarily unavailable."}
         busy
       />
-    {:else if status === ACQUISITION_STATUS.waitingForRelease || status === ACQUISITION_STATUS.manualSearchRequired}
+      {:else if status === ACQUISITION_STATUS.waitingForRelease || status === ACQUISITION_STATUS.manualSearchRequired}
       <StatePlaceholder
         icon={CalendarClock}
         title="Waiting for release"
@@ -564,7 +571,7 @@
           {/if}
         </div>
       </StatePlaceholder>
-    {:else if status === ACQUISITION_STATUS.searching}
+      {:else if status === ACQUISITION_STATUS.searching}
       <StatePlaceholder
         icon={Search}
         title="Searching indexers"
@@ -572,7 +579,7 @@
         busy
       />
 
-    {:else if status === ACQUISITION_STATUS.waitingForDownloadClient}
+      {:else if status === ACQUISITION_STATUS.waitingForDownloadClient}
       <StatePlaceholder
         icon={CloudDownload}
         title="Waiting for download client"
@@ -580,9 +587,10 @@
         busy
       />
 
-    {:else if status === ACQUISITION_STATUS.manualImportRequired}
+      {:else if status === ACQUISITION_STATUS.manualImportRequired}
       <ManualImportReview
         review={manualImportReview}
+        statusMessage={detail.summary.statusMessage}
         assignments={manualAssignments}
         {busy}
         onAssignmentChange={(targetEntityId, sourceRelativePath) => {
@@ -592,60 +600,22 @@
         onReject={() => (rejectConfirmOpen = true)}
       />
 
-    {:else if isDownloading}
-      <!-- ── Live transfer ── -->
-      <section class="space-y-3">
-        <h2 class="text-kicker text-text-primary">Download</h2>
-        {#if transfer}
-          {@const pct = Math.round(Number(transfer.progress) * 100)}
-          <div class="space-y-3 rounded-sm border border-border-subtle bg-surface-1 p-3.5">
-            <!-- Stage + percent -->
-            <div class="flex items-center justify-between gap-3">
-              <span class="flex items-center gap-2 text-sm font-medium text-text-primary">
-                {#if isTransferActive(transfer.state)}
-                  <Loader2 class="h-3.5 w-3.5 animate-spin text-text-accent" />
-                {/if}
-                {transferStageLabel(transfer.state)}
-              </span>
-              <span class="font-mono text-sm text-text-accent">{pct}%</span>
-            </div>
-            <!-- Progress bar -->
-            <div class="h-2 w-full overflow-hidden rounded-full bg-surface-3">
-              <div class="h-full rounded-full bg-accent-500 transition-all" style:width={`${pct}%`}></div>
-            </div>
-            <!-- Stats -->
-            <div class="grid grid-cols-2 gap-x-4 gap-y-2.5 sm:grid-cols-4">
-              {@render stat("Speed", formatSpeed(Number(transfer.downloadSpeedBytesPerSecond)))}
-              {@render stat("ETA", formatEta(Number(transfer.etaSeconds)))}
-              {@render stat("Seeds / Peers", `${transfer.seeds} / ${transfer.peers}`)}
-              {@render stat("Size", formatBytes(Number(transfer.totalSizeBytes)))}
-            </div>
-            <PieceStateBar pieces={transfer.pieceStates.map(Number)} />
-          </div>
-        {:else}
-          <StatePlaceholder
-            icon={CloudDownload}
-            title="Preparing download"
-            description="Connecting to the download client and waiting for the first progress report…"
-            busy
-          />
-        {/if}
-      </section>
+      {:else if isDownloading}
+      <AcquisitionTransferSummary transfer={presentAcquisitionTransfer(transfer)} />
 
-    {:else if isDone}
+      {:else if isDone}
       <!-- ── Imported / downloaded files — collapsed once imported so a big pack doesn't fill the page ── -->
       {#if files && files.files.length > 0}
-        <details
-          class="group min-w-0 overflow-hidden rounded-sm border border-border-subtle bg-surface-1"
-          open={filesOpen ?? !files.imported}
-          ontoggle={(event) => (filesOpen = event.currentTarget.open)}
+        <Disclosure
+          title="Files"
+          icon={FileText}
+          count={files.files.length}
+          bind:open={() => filesDisclosureOpen(), (next) => (filesOpenPreference = {
+            imported: files?.imported ?? null,
+            open: next,
+          })}
         >
-          <summary class="flex min-w-0 cursor-pointer items-center gap-2 px-3 py-2 text-kicker text-text-primary select-none">
-            <FileText class="h-3.5 w-3.5 text-text-muted" />
-            Files
-            <span class="font-mono text-[0.68rem] font-normal text-text-muted">{files.files.length}</span>
-          </summary>
-          <div class="min-w-0 px-3 pb-3">
+          <div class="min-w-0">
             <div class="overflow-hidden rounded-sm border border-border-subtle">
               {#each files.files as f (f.name)}
                 <div class="flex min-w-0 items-start justify-between gap-3 border-b border-border-subtle px-3 py-2 last:border-b-0">
@@ -658,10 +628,10 @@
               {/each}
             </div>
           </div>
-        </details>
+        </Disclosure>
       {:else}
         <section class="space-y-2">
-          <h2 class="text-kicker text-text-primary">Files</h2>
+          <h2 class="text-sm font-semibold text-text-primary">Files</h2>
           <StatePlaceholder
             icon={FileText}
             title="No files yet"
@@ -671,12 +641,26 @@
         </section>
       {/if}
 
-    {:else}
+      {:else}
       <!-- ── Release review (awaiting selection / failed) ── -->
+      {#if status === ACQUISITION_STATUS.failed && detail.summary.statusMessage}
+        <Alert.Root variant="destructive">
+          <CircleAlert />
+          <Alert.Title>{hasResumableImport ? "Import interrupted" : "Acquisition failed"}</Alert.Title>
+          <Alert.Description>{detail.summary.statusMessage}</Alert.Description>
+        </Alert.Root>
+      {/if}
+      {#if hasResumableImport && detail.candidates.length === 0}
+        <StatePlaceholder
+          icon={CloudDownload}
+          title="Import can be resumed"
+          description="Retry import continues from the last completed file. Start over removes this interrupted import and begins a new search."
+        />
+      {:else}
       <section class="space-y-3">
-        <h2 class="text-kicker text-text-primary">
+        <h2 class="flex items-baseline gap-2 text-sm font-semibold text-text-primary">
           Releases
-          <span class="ml-1.5 font-mono text-[0.68rem] font-normal text-text-muted">{detail.candidates.length}</span>
+          <span class="text-xs font-normal tabular-nums text-text-muted">{detail.candidates.length}</span>
         </h2>
 
         {#if canSearchReleases}
@@ -726,22 +710,68 @@
           </div>
         {/if}
       </section>
+      {/if}
+      {/if}
+    </Card.Content>
+
+    {#if canRetryImport || canStartOver || canReSearch || canCancel}
+      <Card.Footer class="flex flex-wrap justify-start gap-control-gap border-border-subtle">
+        {#if canRetryImport}
+          <Button
+            type="button"
+            variant="primary"
+            disabled={busy}
+            onclick={() => void retryImport(false)}
+            title={status === ACQUISITION_STATUS.downloaded
+                ? "Queue import again without removing the completed download."
+                : "Resume the exact durable import plan from its last completed file."}
+          >
+            <CloudDownload data-icon="inline-start" />
+            Retry import
+          </Button>
+        {/if}
+        {#if canStartOver}
+          <Button
+            type="button"
+            variant="danger"
+            disabled={busy}
+            onclick={() => (resetConfirmOpen = true)}
+            title="Discard the interrupted import, its partial files, and the current download, then begin a clean search."
+          >
+            <RotateCcw data-icon="inline-start" />
+            Start over
+          </Button>
+        {/if}
+        {#if canReSearch}
+          <Button type="button" variant="ghost" disabled={busy} onclick={() => void reSearch()}>
+            <RefreshCw data-icon="inline-start" />
+            Search again
+          </Button>
+        {/if}
+        {#if canCancel}
+          <Button type="button" variant="danger" disabled={busy} onclick={() => void cancel()}>
+            <X data-icon="inline-start" />
+            Cancel
+          </Button>
+        {/if}
+      </Card.Footer>
     {/if}
 
-    <!-- ── History (durable activity log for this item) ── -->
     {#if history.length > 0}
-      <details class="group min-w-0 overflow-hidden rounded-sm border border-border-subtle bg-surface-1">
-        <summary class="flex min-w-0 cursor-pointer items-center gap-2 px-3 py-2 text-kicker text-text-primary select-none">
-          <History class="h-3.5 w-3.5 text-text-muted" />
-          History
-          <span class="font-mono text-[0.68rem] font-normal text-text-muted">{history.length}</span>
-        </summary>
-        <div class="min-w-0 px-3 pb-3">
-          <AcquisitionHistoryList entries={history} />
-        </div>
-      </details>
+      <Card.Footer class="block border-border-subtle bg-transparent p-0">
+        <Disclosure
+          title="History"
+          icon={History}
+          count={history.length}
+          class="rounded-none border-0 bg-transparent"
+        >
+          <div class="min-w-0">
+            <AcquisitionHistoryList entries={history} />
+          </div>
+        </Disclosure>
+      </Card.Footer>
     {/if}
-  </div>
+  </Card.Root>
 {/if}
 
 <ConfirmDialog
@@ -785,10 +815,3 @@
   onConfirm={rejectManualImport}
   onClose={() => (rejectConfirmOpen = false)}
 />
-
-{#snippet stat(label: string, value: string)}
-  <div class="flex flex-col gap-0.5">
-    <span class="text-label text-text-muted">{label}</span>
-    <span class="font-mono text-[0.8rem] text-text-primary">{value}</span>
-  </div>
-{/snippet}

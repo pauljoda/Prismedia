@@ -3,7 +3,7 @@
     Loader2,
     Sparkles,
   } from "@lucide/svelte";
-  import { cn } from "@prismedia/ui-svelte";
+  import { Button, cn } from "@prismedia/ui-svelte";
   import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
   import { entityCardToThumbnailCard } from "$lib/entities/entity-grid";
   import { fetchIdentifyEntities } from "$lib/api/identify-client";
@@ -90,7 +90,7 @@
     </div>
 
     <div class="flex items-center gap-1 rounded-xs border border-border-subtle bg-surface-2 p-0.5">
-      <button
+      <Button variant="outline" size="sm"
         type="button"
         class={cn(
           "rounded-xs px-2 py-1 text-[0.72rem] font-medium transition-colors",
@@ -101,8 +101,8 @@
         onclick={() => (showAll = false)}
       >
         Unorganized
-      </button>
-      <button
+      </Button>
+      <Button variant="outline" size="sm"
         type="button"
         class={cn(
           "rounded-xs px-2 py-1 text-[0.72rem] font-medium transition-colors",
@@ -113,7 +113,7 @@
         onclick={() => (showAll = true)}
       >
         Show all
-      </button>
+      </Button>
     </div>
 
     {#if kindProviders.length > 0}
@@ -128,9 +128,9 @@
     <div class="flex-1"></div>
 
     {#if selectedIds.length > 0 && activeProvider}
-      <button
+      <Button variant="outline" size="sm"
         type="button"
-        class="inline-flex h-7 items-center gap-1.5 rounded-xs border border-border-accent-strong bg-accent-950/40 px-2.5 text-[0.72rem] font-medium text-text-accent transition-colors hover:bg-accent-950/60 disabled:cursor-not-allowed disabled:opacity-40"
+        class="inline-flex h-7 items-center gap-1.5 px-2.5 text-[0.72rem] font-medium disabled:cursor-not-allowed disabled:opacity-40"
         disabled={store.bulkStarting}
         onclick={handleBulkQueue}
       >
@@ -140,7 +140,7 @@
           <Sparkles class="h-3 w-3" />
         {/if}
         Queue {selectedIds.length}
-      </button>
+      </Button>
     {/if}
   </div>
 

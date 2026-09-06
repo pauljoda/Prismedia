@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Badge as UiBadge } from "@prismedia/ui-svelte";
   import {
     BOOK_FORMAT,
     CAPABILITY_KIND,
@@ -98,7 +99,6 @@
     type EpubContentsEntry,
   } from "$lib/entities/epub-contents";
   import { acquisitionStatusShouldPoll } from "$lib/requests/acquisition-status";
-  import { acquisitionStatusDisplay } from "$lib/requests/acquisition-status-display";
   import { monitorIsActive } from "$lib/requests/monitor-status";
 
   const playback = useAudioPlayback()!;
@@ -352,7 +352,6 @@
     onStatusChanged: () => detail.reload({ showLoading: false }),
     onPruned: () => goto("/books"),
   });
-  const wantedStateLabel = $derived(acquisitionStatusDisplay(acq.acquisition?.summary.status).label);
   const fileManagement = {
     onDeleted: () => goto("/books"),
     onReverted: () => refreshAfterManagedFileRevert(
@@ -1048,11 +1047,8 @@
       {/snippet}
 
       {#snippet heroBadges()}
-        {#if entityWanted}
-          <span class="hero-badge wanted">{wantedStateLabel}</span>
-        {/if}
         {#if canonicalPercent > 0}
-          <span class="hero-badge">Progress {canonicalPercent}%</span>
+          <UiBadge variant="outline">Progress {canonicalPercent}%</UiBadge>
         {/if}
       {/snippet}
 

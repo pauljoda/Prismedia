@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ChevronRight, X } from "@lucide/svelte";
-  import { cn } from "@prismedia/ui-svelte";
+  import { Button, cn } from "@prismedia/ui-svelte";
   import { useIdentifyStore } from "./identify-store.svelte";
 
   interface Props {
@@ -29,7 +29,7 @@
 </script>
 
 <div class={cn("flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center md:gap-3", className)}>
-  <button
+  <Button variant="outline" size="sm"
     type="button"
     class={cn(
       "inline-flex w-full items-center justify-center gap-1.5 rounded-xs border font-medium transition-colors md:w-auto",
@@ -41,9 +41,9 @@
   >
     <X class="h-3.5 w-3.5" />
     Reject
-  </button>
+  </Button>
   {#if showNext}
-    <button
+    <Button variant="outline" size="sm"
       type="button"
       class={cn(
         "inline-flex w-full items-center justify-center gap-1.5 rounded-xs border font-medium transition-colors md:w-auto",
@@ -56,6 +56,6 @@
       <X class="h-3.5 w-3.5" />
       Reject and Next
       <ChevronRight class="h-3.5 w-3.5" />
-    </button>
+    </Button>
   {/if}
 </div>

@@ -84,7 +84,6 @@ const OVERSIZED_FILE_CEILINGS: Record<string, number> = {
   "lib/entities/entity-grid.ts": 1250,
   "lib/components/identify/identify-store.svelte.ts": 1200,
   "lib/components/AudioVidStackPlayer.svelte": 1350,
-  "lib/components/PdfReader.svelte": 1100,
 };
 
 const MAX_SOURCE_FILE_LINES = 1000;

@@ -14,6 +14,29 @@ using Prismedia.Infrastructure.Persistence.Entities;
 namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EfEntityReadServiceTests {
+    [Theory]
+    [InlineData(1920, 808, MediaResolutionTier.FullHd)]
+    [InlineData(1920, null, MediaResolutionTier.FullHd)]
+    [InlineData(null, 1080, MediaResolutionTier.FullHd)]
+    [InlineData(320, 240, MediaResolutionTier.Sd)]
+    [InlineData(null, null, null)]
+    [InlineData(0, 0, null)]
+    public async Task ListAsyncProjectsTheSharedVideoResolutionTier(int? width, int? height, MediaResolutionTier? expected) {
+        await using var db = CreateContext();
+        var id = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.Entities.Add(new EntityRow { Id = id, KindCode = EntityKind.Movie.ToCode(), Title = "Source", CreatedAt = now, UpdatedAt = now });
+        db.EntityTechnical.Add(new EntityTechnicalRow { EntityId = id, Width = width, Height = height, UpdatedAt = now });
+        await db.SaveChangesAsync();
+        var user = TestUserContext.Admin();
+        var repository = new EfEntityRepository(db, user, EntityMappers.Kinds(db), EntityMappers.Capabilities(db, user));
+        var service = new EfEntityReadService(db, user, repository, ThumbnailContributors.For(db), new EfEntityProgressTopologyResolver(db));
+        var result = await service.ListAsync(EntityKind.Movie.ToCode(), null, null, null, null, CancellationToken.None);
+        var metadata = Assert.Single(result.Items).Meta;
+        if (expected is { } tier) Assert.Equal([new EntityThumbnailMeta(EntityThumbnailMetaIcons.Video, tier.ToCode())], metadata);
+        else Assert.Empty(metadata);
+    }
+
     [Fact]
     public async Task GetAsyncProjectsRelationshipCodesAndCreditsCapability() {
         await using var db = CreateContext();

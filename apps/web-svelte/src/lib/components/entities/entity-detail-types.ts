@@ -54,7 +54,7 @@ export interface EntityDetailSection {
 
 export interface EntityDetailProps {
   card: EntityDetailCard;
-  /** Current acquisition state shown on the wanted poster badge. */
+  /** Current acquisition state shown once beside the title for wanted Entities. */
   wantedStatus?: AcquisitionStatus | null;
   onRatingChange?: (value: number | null) => void;
   onFavoriteToggle?: () => void;

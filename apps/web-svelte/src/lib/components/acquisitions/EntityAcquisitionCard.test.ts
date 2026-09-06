@@ -1,8 +1,15 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ACQUISITION_STATUS, ENTITY_KIND } from "$lib/api/generated/codes";
 import type { AcquisitionDetail } from "$lib/api/generated/model";
 import Harness from "./EntityAcquisitionCard.test-harness.svelte";
+
+const replacement = vi.hoisted(() => ({ search: vi.fn(), queue: vi.fn() }));
+vi.mock("$lib/api/acquisitions", async (importOriginal) => ({
+  ...await importOriginal<typeof import("$lib/api/acquisitions")>(),
+  searchManualReplacement: replacement.search,
+  queueManualReplacement: replacement.queue,
+}));
 
 vi.mock("$lib/components/acquisitions/AcquisitionPanel.svelte", async () => ({
   default: (await import("./AcquisitionPanel.test-stub.svelte")).default,
@@ -15,6 +22,21 @@ vi.mock("$lib/components/entities/ConfirmDialog.svelte", async () => ({
 describe("EntityAcquisitionCard", () => {
   afterEach(cleanup);
 
+  it("anchors file deletion inside the idle monitoring card footer", () => {
+    render(Harness, {
+      initialAcquisition: null,
+      refresh: vi.fn(async () => {}),
+      showMonitor: true,
+      showFileManagement: true,
+    });
+
+    const action = screen.getByRole("button", { name: "Delete files" });
+    expect(action.closest('[data-slot="card-footer"]')).not.toBeNull();
+    expect(action).toHaveClass("w-full", "justify-start");
+    expect(action).not.toHaveClass("ml-auto");
+    expect(screen.getAllByRole("button", { name: "Delete files" })).toHaveLength(1);
+  });
+
   it("keeps managed file deletion in the Entity acquisition toolbar without an acquisition row", () => {
     render(Harness, {
       initialAcquisition: null,
@@ -26,7 +48,7 @@ describe("EntityAcquisitionCard", () => {
     expect(screen.queryByRole("button", { name: "Notify imported" })).not.toBeInTheDocument();
   });
 
-  it("always offers reviewed replacement search for an on-disk album", () => {
+  it("keeps reviewed replacement search in a quiet secondary-actions disclosure", async () => {
     render(Harness, {
       initialAcquisition: acquisition("album-acquisition"),
       refresh: vi.fn(async () => {}),
@@ -34,7 +56,50 @@ describe("EntityAcquisitionCard", () => {
       entityKind: ENTITY_KIND.audioLibrary,
     });
 
+    expect(screen.queryByRole("button", { name: "Replace" })).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "More acquisition actions" }));
     expect(screen.getByRole("button", { name: "Replace" })).toBeInTheDocument();
+  });
+
+  it("separates the current acquisition from its monitoring settings", () => {
+    render(Harness, {
+      initialAcquisition: acquisition("acquisition-1"),
+      refresh: vi.fn(async () => {}),
+      showMonitor: true,
+      monitorActive: true,
+    });
+
+    const currentAcquisition = screen.getByRole("region", { name: "Current acquisition" });
+    const settings = screen.getByRole("complementary", { name: "Acquisition settings" });
+
+    expect(within(currentAcquisition).getByTestId("acquisition-panel")).toBeInTheDocument();
+    expect(within(settings).getByRole("switch", { name: "Monitor" })).toBeInTheDocument();
+  });
+
+  it.each([true, false])("opens replacement search in the main area and restores the current view (existing acquisition: %s)", async (hasAcquisition) => {
+    replacement.search.mockResolvedValue({ searchId: "review-1", candidates: [] });
+    replacement.queue.mockClear();
+    render(Harness, {
+      initialAcquisition: hasAcquisition ? acquisition("album-acquisition") : null,
+      refresh: vi.fn(async () => {}),
+      showFileManagement: true,
+      entityKind: ENTITY_KIND.audioLibrary,
+    });
+
+    const more = screen.getByRole("button", { name: "More acquisition actions" });
+    await fireEvent.click(more);
+    await fireEvent.click(screen.getByRole("button", { name: "Replace" }));
+    const main = await screen.findByRole("region", { name: "Replacement search" });
+    expect(within(main).getByRole("searchbox")).toHaveFocus();
+    expect(within(screen.getByRole("complementary")).queryByRole("searchbox")).toBeNull();
+    expect(screen.queryByTestId("acquisition-panel")).toBeNull();
+
+    await fireEvent.click(more);
+    expect(within(main).getByRole("heading", { name: "Choose a replacement" })).toBeVisible();
+    await fireEvent.click(screen.getByRole("button", { name: "Close replacement review" }));
+    expect(screen.queryByRole("region", { name: "Replacement search" })).toBeNull();
+    expect(screen.queryByTestId("acquisition-panel") !== null).toBe(hasAcquisition);
+    expect(replacement.queue).not.toHaveBeenCalled();
   });
 
   it("forwards an imported transition to the owning entity page", async () => {

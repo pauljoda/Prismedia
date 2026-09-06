@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Button, Select } from "@prismedia/ui-svelte";
+  import { Button, SearchableSelect } from "@prismedia/ui-svelte";
   import type { AcquisitionRulePresetView } from "$lib/api/generated/model";
   interface Props {
     languages: string[];
@@ -17,7 +17,7 @@
     onchange(next);
   }
 </script>
-<div class="space-y-2">
+<div class="flex flex-col gap-2">
   <span class="text-label text-text-secondary">Preferred audio languages</span>
   <p class="text-xs leading-relaxed text-text-muted">Named audio wins in this order. Unspecified MULTI is a fallback, followed by unmarked releases. Subtitle labels never confirm audio. Leave this empty to control ranking entirely with weighted rules.</p>
   {#each languages as language, index (index)}
@@ -30,7 +30,7 @@
     </div>
   {/each}
   <div class="flex items-center gap-2">
-    <div class="min-w-0 flex-1"><Select size="sm" ariaLabel="Audio language to add" value={selection} options={[{ value: "", label: "Choose an audio language…" }, ...options]} onchange={(value) => (selection = value)} /></div>
+    <div class="min-w-0 flex-1"><SearchableSelect label="Audio language to add" searchLabel="Find an audio language" value={selection} options={options} onchange={(value) => (selection = value)} /></div>
     <Button size="sm" variant="secondary" disabled={!selection || languages.some((language) => language.toLowerCase() === selection.toLowerCase())} onclick={() => { onchange([...languages, selection]); selection = ""; }}>Add language</Button>
   </div>
 </div>

@@ -1,12 +1,10 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { ChevronLeft, ChevronRight } from "@lucide/svelte";
-  import {
-    loadTrickplayFrames,
+  import { Button, loadTrickplayFrames,
     findFrameAtTime,
     timeToTrackPosition,
-    type TrickplayFrame,
-  } from "@prismedia/ui-svelte";
+    type TrickplayFrame, } from "@prismedia/ui-svelte";
 
   interface FilmStripMarker {
     id: string;
@@ -210,14 +208,14 @@
 
 {#if frames && frames.length > 0 && !error}
   <div class="relative flex items-center" style:height="{STRIP_HEIGHT}px">
-    <button
+    <Button variant="ghost" size="sm"
       type="button"
       onclick={() => jumpFrame(-1)}
-      class="relative z-30 flex h-full w-8 flex-shrink-0 items-center justify-center bg-black/80 text-white/50 transition-colors hover:text-white"
+      class="relative z-30 flex h-full w-8 flex-shrink-0 items-center justify-center"
       aria-label="Previous frame"
     >
       <ChevronLeft class="h-4 w-4" />
-    </button>
+    </Button>
 
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
@@ -265,10 +263,10 @@
         >
           {#each markers as marker (marker.id)}
             {@const left = timeToTrackPosition(frames, marker.time, frameWidth)}
-            <button
+            <Button variant="ghost"
               type="button"
-              class="absolute top-0 bottom-0 flex -translate-x-1/2 flex-col items-center pointer-events-auto group/marker"
-              style:left="{left}px"
+              class="h-full p-0 absolute top-0 bottom-0 flex -translate-x-1/2 flex-col items-center pointer-events-auto group/marker"
+              style={`left: ${left}px`}
               aria-label={`Seek to ${marker.title}`}
               title={`Seek to ${marker.title}`}
               onpointerdown={handleMarkerPointerDown}
@@ -278,19 +276,19 @@
               <div class="mb-0.5 whitespace-nowrap rounded-md px-1.5 py-px text-[0.5rem] font-medium tracking-wide uppercase leading-tight bg-black/90 text-accent-300 border border-accent-500/30 transition-colors group-hover/marker:border-accent-400/70 group-hover/marker:text-accent-100 group-focus-visible/marker:border-accent-400/70 group-focus-visible/marker:text-accent-100">
                 {marker.title}
               </div>
-            </button>
+            </Button>
           {/each}
         </div>
       {/if}
     </div>
 
-    <button
+    <Button variant="ghost" size="sm"
       type="button"
       onclick={() => jumpFrame(1)}
-      class="relative z-30 flex h-full w-8 flex-shrink-0 items-center justify-center bg-black/80 text-white/50 transition-colors hover:text-white"
+      class="relative z-30 flex h-full w-8 flex-shrink-0 items-center justify-center"
       aria-label="Next frame"
     >
       <ChevronRight class="h-4 w-4" />
-    </button>
+    </Button>
   </div>
 {/if}

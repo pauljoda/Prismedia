@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ChevronRight, Eye, Loader2, Star } from "@lucide/svelte";
-  import { cn } from "@prismedia/ui-svelte";
+  import { Button, cn } from "@prismedia/ui-svelte";
   import type { EntitySearchCandidate } from "$lib/api/identify-types";
   import { identifyCandidateKey } from "$lib/components/identify/identify-candidate-card";
   import { entityKindIcon } from "$lib/entities/entity-kind-icons";
@@ -100,16 +100,16 @@
           {/if}
         </div>
         {#if hasCover && onPreview}
-          <button
+          <Button variant="ghost" size="sm"
             type="button"
-            class="mt-1.5 inline-flex h-7 w-full items-center justify-center rounded-xs border border-border-default bg-surface-2 text-text-muted transition-colors hover:border-border-accent hover:bg-surface-3 hover:text-text-accent focus-visible:border-border-accent focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-500/60 disabled:cursor-not-allowed disabled:opacity-40"
+            class="mt-1.5 inline-flex h-7 w-full items-center justify-center focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-accent-500/60 disabled:cursor-not-allowed disabled:opacity-40"
             disabled={disabled}
             aria-label={`Preview ${title} artwork`}
             title="Preview artwork"
             onclick={(event) => preview(event, candidate, candidateKey)}
           >
             <Eye class="h-3.5 w-3.5" />
-          </button>
+          </Button>
         {/if}
       </div>
 

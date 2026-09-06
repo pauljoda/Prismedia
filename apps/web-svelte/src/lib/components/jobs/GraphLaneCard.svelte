@@ -107,9 +107,9 @@
   )}
 >
   <div class="flex items-start gap-3 p-3">
-    <button
+    <Button variant="outline" size="sm"
       type="button"
-      class="mt-0.5 rounded-xs p-1 text-text-disabled transition-colors hover:bg-surface-3/60 hover:text-text-primary"
+      class="mt-0.5 p-1"
       onclick={() => void onToggle(graph)}
       aria-label={expanded ? "Collapse lane" : "Expand lane"}
     >
@@ -120,7 +120,7 @@
       {:else}
         <ChevronRight class="h-4 w-4" />
       {/if}
-    </button>
+    </Button>
 
     <div class="min-w-0 flex-1">
       <div class="flex flex-wrap items-center gap-2">

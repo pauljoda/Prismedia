@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Loader2 } from "@lucide/svelte";
-  import { Button, fadeIn, flyUp } from "@prismedia/ui-svelte";
+  import { Button, Dialog } from "@prismedia/ui-svelte";
   import type { UserResponse } from "$lib/api/generated/model";
   import { resetUserPassword } from "$lib/api/users";
   import PasswordField from "$lib/components/forms/PasswordField.svelte";
@@ -44,21 +44,8 @@
 </script>
 
 {#if open && user}
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
-    <button
-      type="button"
-      class="app-overlay-backdrop absolute inset-0"
-      aria-label="Close"
-      onclick={onClose}
-      transition:fadeIn
-    ></button>
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Reset password for ${user.username}`}
-      class="app-dialog-surface relative z-10 w-full max-w-sm overflow-hidden"
-      transition:flyUp
-    >
+  <Dialog {open} onClose={onClose} ariaLabel={`Reset password for ${user.username}`} dismissible={!saving} class="w-full max-w-sm sm:max-w-sm">
+
       <div class="border-b border-border-subtle px-5 py-4">
         <h2 class="text-kicker text-text-primary">Reset password</h2>
         <p class="text-[0.68rem] text-text-muted">
@@ -93,6 +80,5 @@
           Reset password
         </Button>
       </div>
-    </div>
-  </div>
+  </Dialog>
 {/if}

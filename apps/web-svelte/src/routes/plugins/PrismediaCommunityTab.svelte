@@ -6,11 +6,9 @@
     KeyRound,
     Loader2,
     RefreshCw,
-    Search,
     Sparkles,
-    X,
   } from "@lucide/svelte";
-  import { Badge, Button, TextInput } from "@prismedia/ui-svelte";
+  import { Badge, Button, SearchInput } from "@prismedia/ui-svelte";
   import type { PluginProvider } from "$lib/api/generated/model";
   import PluginCapabilityChips from "$lib/components/plugins/PluginCapabilityChips.svelte";
   import { pluginCapabilities } from "$lib/plugins/plugin-capabilities";
@@ -85,28 +83,13 @@
       {plugins.length} plugins available
     </p>
     <div class="flex items-center gap-2">
-      <div class="relative">
-        <Search class="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-text-disabled" />
-        <TextInput
-          size="sm"
-          class="w-64 pl-8"
-          placeholder="Filter by name or ID..."
-          value={search}
-          oninput={(event) => (search = event.currentTarget.value)}
-        />
-        {#if search}
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon"
-            onclick={() => (search = "")}
-            aria-label="Clear search"
-            class="absolute right-1 top-1/2 h-6 w-6 -translate-y-1/2 rounded-xs text-text-disabled hover:bg-transparent hover:text-text-muted"
-          >
-            <X class="h-3 w-3" />
-          </Button>
-        {/if}
-      </div>
+      <SearchInput
+        name="community-plugin-search"
+        ariaLabel="Search community plugins"
+        class="w-64"
+        placeholder="Filter by name or ID..."
+        bind:value={search}
+      />
       <Button variant="secondary" size="sm" onclick={onRefresh} disabled={loading}>
         {#if loading}
           <Loader2 class="h-3.5 w-3.5 animate-spin" />

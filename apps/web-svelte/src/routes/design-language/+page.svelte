@@ -5,15 +5,16 @@
     Checkbox,
     Meter,
     Panel,
-    Select,
     StatusLed,
     TextInput,
     Toggle,
     type LedStatus,
-    type SelectOption,
   } from "@prismedia/ui-svelte";
   import LogoMark from "$lib/components/LogoMark.svelte";
   import PrismediaLoadingMark from "$lib/components/PrismediaLoadingMark.svelte";
+  import UiFoundationPreview from "$lib/components/UiFoundationPreview.svelte";
+  import UiSelectSamples from "$lib/components/UiSelectSamples.svelte";
+  import AcquisitionTransferPreview from "$lib/components/acquisitions/AcquisitionTransferPreview.svelte";
 
   const ledStatuses: LedStatus[] = [
     "active",
@@ -29,14 +30,6 @@
   let demoIndeterminate = $state(true);
   let demoToggle = $state(false);
   let demoToggleSm = $state(true);
-  let demoSelectValue = $state("");
-
-  const demoSelectOptions: SelectOption[] = [
-    { value: "option-a", label: "Option A" },
-    { value: "option-b", label: "Option B" },
-    { value: "option-c", label: "Option C" },
-    { value: "option-d", label: "Option D (disabled)", disabled: true },
-  ];
 
   const corePalette = [
     { label: "Black", hex: "#000000", token: "bg" },
@@ -203,6 +196,10 @@
     <a href="/" class="inline-flex items-center gap-1 text-mono-sm text-text-muted hover:text-text-accent transition-colors">
       ← Back to Dashboard
     </a>
+
+    <UiFoundationPreview />
+
+    <AcquisitionTransferPreview />
 
     <!-- ═══════════════════════════════ COLOR PALETTE ═══════════════════════════════ -->
     <section>
@@ -506,10 +503,10 @@
           <h3 class="text-kicker">ICON ACTIONS</h3>
           <Panel>
             <div class="p-5 flex flex-wrap gap-3">
-              <button class="btn-accent px-3 py-2 text-lg">▶</button>
-              <button class="btn-accent px-3 py-2 text-lg">♡</button>
-              <button class="btn-accent px-3 py-2 text-lg">⬇</button>
-              <button class="btn-accent px-3 py-2 text-lg text-text-muted !border-border-subtle !bg-surface-2">⋯</button>
+              <Button size="icon" aria-label="Play">▶</Button>
+              <Button variant="outline" size="icon" aria-label="Favorite">♡</Button>
+              <Button variant="outline" size="icon" aria-label="Download">⬇</Button>
+              <Button variant="ghost" size="icon" aria-label="More actions">⋯</Button>
             </div>
           </Panel>
         </div>
@@ -618,40 +615,7 @@
           </Panel>
         </div>
 
-        <!-- Select -->
-        <div class="space-y-4">
-          <h3 class="text-kicker">DROPDOWN</h3>
-          <Panel>
-            <div class="p-5 space-y-4">
-              <div>
-                <div class="control-label">Default</div>
-                <Select
-                  options={demoSelectOptions}
-                  bind:value={demoSelectValue}
-                  placeholder="Select an option..."
-                />
-              </div>
-              <div class="grid grid-cols-3 gap-3">
-                <div>
-                  <div class="control-label">Small</div>
-                  <Select options={demoSelectOptions} size="sm" placeholder="Small" />
-                </div>
-                <div>
-                  <div class="control-label">Medium</div>
-                  <Select options={demoSelectOptions} placeholder="Medium" />
-                </div>
-                <div>
-                  <div class="control-label">Large</div>
-                  <Select options={demoSelectOptions} size="lg" placeholder="Large" />
-                </div>
-              </div>
-              <div>
-                <div class="control-label">Disabled</div>
-                <Select options={demoSelectOptions} disabled value="option-a" />
-              </div>
-            </div>
-          </Panel>
-        </div>
+        <UiSelectSamples />
       </div>
 
       <div class="grid lg:grid-cols-2 gap-8 mt-8">
@@ -667,7 +631,7 @@
               <label class="flex items-center gap-2 text-body">
                 <Checkbox
                   checked={demoChecked}
-                  onchange={(e) => (demoChecked = (e.currentTarget as HTMLInputElement).checked)}
+                  onchange={(e) => (demoChecked = e)}
                 />
                 Unchecked
               </label>

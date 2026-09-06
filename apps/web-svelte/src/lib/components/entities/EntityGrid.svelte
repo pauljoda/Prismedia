@@ -297,6 +297,9 @@
       .map((c) => ({ entityType: c.entity.kind as CollectionEntityType, entityId: c.entity.id })),
   );
   const request = $derived(entityGridRequestFromState(gridState, filterOptions));
+  const canClearFilters = $derived(Boolean(
+    activeKind !== ENTITY_GRID_ALL_KINDS || filterIds.length > 0 || !includeNsfw || query,
+  ));
   const pagedCards = $derived(pagination.page(visibleCards));
 
   interface EntityGridSnapshot {
@@ -527,19 +530,13 @@
     if (activePresetId === id) activePresetId = null;
   }
 
-  function clearFiltersAndSort() {
+  function clearFilters() {
     activeKind = ENTITY_GRID_ALL_KINDS;
     activePresetId = null;
     filterIds = [];
     includeNsfw = true;
     query = "";
-    selectedIds = [];
-    sortBy = initialSortBy;
-    sortDir = initialSortDir;
-    viewMode = "grid";
-    mediaWall = initialMediaWall;
     pagination.resetPage();
-    onSelectionChange?.(selectedIds);
   }
 
   function updateSelection(id: string, selected: boolean) {
@@ -642,16 +639,7 @@
     {bulkActions}
     collectionItems={bulkLibraryActions ? collectionItems : []}
     showNsfwAction={bulkLibraryActions}
-    canClearFiltersAndSort={Boolean(
-      activeKind !== ENTITY_GRID_ALL_KINDS ||
-        filterIds.length > 0 ||
-        !includeNsfw ||
-        query ||
-        sortBy !== initialSortBy ||
-        sortDir !== initialSortDir ||
-        mediaWall !== initialMediaWall ||
-        selectedIds.length > 0,
-    )}
+    {canClearFilters}
     {enableFeedView}
     {drawerOpen}
     {entityKind}
@@ -662,7 +650,7 @@
     onActiveFilterIdsChange={setFilterIds}
     onApplyPreset={applyPreset}
     onBarsCollapsedChange={(collapsed) => (barsCollapsed = collapsed)}
-    onClearFiltersAndSort={clearFiltersAndSort}
+    onClearFilters={clearFilters}
     onClearSelection={clearSelection}
     onDeletePreset={deletePreset}
     onDrawerOpenChange={(open) => (drawerOpen = open)}
@@ -726,6 +714,7 @@
       cards={pagedCards}
       {emptyMessage}
       {emptyTitle}
+      onResetFilters={canClearFilters ? clearFilters : undefined}
       hasVisibleCards={visibleCards.length > 0}
       hoverPreviewSuppressed={viewport.areHoverPreviewsSuppressed}
       {loading}
@@ -796,6 +785,11 @@
 
   :global(.entity-grid > :first-child + *) {
     margin-top: 0;
+  }
+
+  /* Type filters belong to the results, not the attached toolbar rows. */
+  .entity-grid > :global(.entity-kind-filters) {
+    margin-top: calc(var(--spacing) * 3);
   }
 
   .entity-grid > :global(.pagination-shell),

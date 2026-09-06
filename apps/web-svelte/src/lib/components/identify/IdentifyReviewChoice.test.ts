@@ -223,7 +223,7 @@ describe("IdentifyReviewChoice", () => {
     });
 
     await fireEvent.click(screen.getByRole("button", { name: "Provider: The Movie Database" }));
-    await fireEvent.mouseDown(screen.getByRole("option", { name: "AniList anilist" }));
+    await fireEvent.click(screen.getByRole("option", { name: "AniList anilist" }));
 
     expect(screen.getByRole("button", { name: "Provider: AniList" })).toBeInTheDocument();
   });

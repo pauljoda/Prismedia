@@ -1,4 +1,5 @@
 <script lang="ts">
+  import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
@@ -399,9 +400,7 @@
     {/if}
 
     {#if !hasSeasons && !hasChildSeries && !hasEpisodes}
-      <div class="empty-children">
-        <p>No seasons, episodes, or sub-series linked to this series yet.</p>
-      </div>
+      <StatePlaceholder icon={Calendar} title="No episodes yet" description="Seasons, episodes, and linked series will appear here." />
     {/if}
     {/if}
   </EntityDetailPageState>
@@ -432,14 +431,6 @@
     opacity: 0.5;
   }
 
-  .empty-children {
-    padding: 2rem;
-    border: 1px solid var(--color-border-subtle, #1c2235);
-    background: var(--color-surface-1, #0c0f15);
-    color: var(--color-text-muted, #8a93a6);
-    text-align: center;
-    font-size: 0.85rem;
-  }
 
 
 </style>

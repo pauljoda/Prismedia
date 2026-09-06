@@ -1,19 +1,12 @@
 import type { Component } from "svelte";
 import {
   BellOff,
-  CalendarClock,
-  CircleAlert,
-  CircleCheck,
-  CircleX,
-  CloudDownload,
   ExternalLink,
   Eye,
-  Hourglass,
   LoaderCircle,
   RotateCw,
   Search,
   Trash2,
-  TriangleAlert,
 } from "@lucide/svelte";
 import {
   ACQUISITION_STATUS,
@@ -33,6 +26,7 @@ import {
   type EntityThumbnailCard,
 } from "$lib/entities/entity-thumbnail";
 import { acquisitionStatusIsKnown, acquisitionStatusLabel } from "$lib/requests/acquisition-status";
+import { acquisitionStatusVisual, type AcquisitionLifecycleTone } from "$lib/requests/acquisition-status-display";
 import {
   monitorHasUnknownStatus,
   monitorIsDeletingFiles,
@@ -46,7 +40,7 @@ import { formatBytes, formatEta, formatRelativeTime, formatSpeed } from "$lib/ut
  * The presentation tone of an acquisition row, driving its status chip colour, progress treatment, and
  * left accent rail. Kept small and semantic so the shared card never branches on raw status codes.
  */
-export type AcquisitionItemTone = "downloading" | "searching" | "queued" | "cleanup" | "attention" | "failed" | "done" | "muted";
+export type AcquisitionItemTone = AcquisitionLifecycleTone;
 
 /**
  * One action on a card. Rendered as a `<button>` when it carries {@link run}, or an `<a>` when it
@@ -100,69 +94,6 @@ export interface AcquisitionListItem {
   primaryAction?: AcquisitionItemAction | null;
   removeAction?: AcquisitionItemAction | null;
   menuActions: AcquisitionItemAction[];
-}
-
-/** Maps an acquisition lifecycle status to a presentation tone. */
-function toneForStatus(status: AcquisitionStatusCode): AcquisitionItemTone {
-  switch (status) {
-    case ACQUISITION_STATUS.downloading:
-    case ACQUISITION_STATUS.downloaded:
-    case ACQUISITION_STATUS.importing:
-      return "downloading";
-    case ACQUISITION_STATUS.queued:
-    case ACQUISITION_STATUS.waitingForDownloadClient:
-    case ACQUISITION_STATUS.waitingForRelease:
-    case ACQUISITION_STATUS.manualSearchRequired:
-      return "queued";
-    case ACQUISITION_STATUS.pending:
-    case ACQUISITION_STATUS.searching:
-      return "searching";
-    case ACQUISITION_STATUS.failed:
-      return "failed";
-    case ACQUISITION_STATUS.awaitingSelection:
-    case ACQUISITION_STATUS.manualImportRequired:
-      return "attention";
-    case ACQUISITION_STATUS.imported:
-      return "done";
-    case ACQUISITION_STATUS.stopping:
-      return "cleanup";
-    case ACQUISITION_STATUS.cancelled:
-      return "muted";
-    default:
-      return "cleanup";
-  }
-}
-
-/** The status chip's icon for a lifecycle status. */
-function iconForStatus(status: AcquisitionStatusCode): Component {
-  switch (status) {
-    case ACQUISITION_STATUS.downloading:
-    case ACQUISITION_STATUS.downloaded:
-    case ACQUISITION_STATUS.importing:
-      return CloudDownload;
-    case ACQUISITION_STATUS.queued:
-    case ACQUISITION_STATUS.waitingForDownloadClient:
-      return Hourglass;
-    case ACQUISITION_STATUS.waitingForRelease:
-    case ACQUISITION_STATUS.manualSearchRequired:
-      return CalendarClock;
-    case ACQUISITION_STATUS.pending:
-    case ACQUISITION_STATUS.searching:
-    case ACQUISITION_STATUS.awaitingSelection:
-      return Search;
-    case ACQUISITION_STATUS.failed:
-      return CircleAlert;
-    case ACQUISITION_STATUS.manualImportRequired:
-      return TriangleAlert;
-    case ACQUISITION_STATUS.imported:
-      return CircleCheck;
-    case ACQUISITION_STATUS.stopping:
-      return LoaderCircle;
-    case ACQUISITION_STATUS.cancelled:
-      return CircleX;
-    default:
-      return LoaderCircle;
-  }
 }
 
 /** The one-line description under the status chip for a download row (null when the progress bar says it all). */
@@ -270,6 +201,7 @@ export function downloadToListItem(
   acting: boolean,
 ): AcquisitionListItem {
   const status = row.status as AcquisitionStatusCode;
+  const statusVisual = acquisitionStatusVisual(status);
   const kind = row.kind as EntityKindCode;
   const href = hrefFor(kind, row.entityId, thumbnail);
   const transitionLocked = status === ACQUISITION_STATUS.stopping || !acquisitionStatusIsKnown(status);
@@ -338,8 +270,8 @@ export function downloadToListItem(
     thumbnail: thumbnailFor(row.entityId ?? row.acquisitionId, kind, row.title, row.posterUrl, href, thumbnail),
     href,
     statusLabel: acquisitionStatusLabel(status),
-    statusIcon: iconForStatus(status),
-    tone: toneForStatus(status),
+    statusIcon: statusVisual.icon,
+    tone: statusVisual.tone,
     progress,
     indeterminate: isIndeterminate(status),
     description: transitionLocked && status !== ACQUISITION_STATUS.stopping
@@ -457,7 +389,7 @@ export function wantedToListItem(
     thumbnail: thumbnailFor(row.entityId ?? row.monitorId, kind, row.title, row.posterUrl, href, thumbnail),
     href,
     statusLabel,
-    statusIcon: transitionLocked ? LoaderCircle : iconForStatus(status),
+    statusIcon: transitionLocked ? LoaderCircle : acquisitionStatusVisual(status).icon,
     // Missing items are actively re-searched; cutoff items own a copy and upgrade quietly.
     tone: transitionLocked ? "cleanup" : variant === "missing" ? "searching" : "attention",
     progress: null,

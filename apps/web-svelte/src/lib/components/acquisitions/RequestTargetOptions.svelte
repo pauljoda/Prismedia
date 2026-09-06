@@ -8,7 +8,7 @@
    */
   import { onMount, type Snippet } from "svelte";
   import { FolderOpen, SlidersHorizontal } from "@lucide/svelte";
-  import { Select } from "@prismedia/ui-svelte";
+  import { cn, Select } from "@prismedia/ui-svelte";
   import { fetchAcquisitionProfiles } from "$lib/api/acquisitions";
   import { fetchAccessibleLibraryRoots, type LibraryRootSummary } from "$lib/api/settings";
   import { ENTITY_KIND } from "$lib/api/generated/codes";
@@ -22,8 +22,10 @@
     profileId: string | null;
     /** Optional action (the Request button) rendered at the end of the options row. */
     actions?: Snippet;
+    /** Settings cards stack full-width fields; request forms can retain an inline row. */
+    stacked?: boolean;
   }
-  let { kindInfo, targetLibraryRootId = $bindable(), profileId = $bindable(), actions }: Props = $props();
+  let { kindInfo, targetLibraryRootId = $bindable(), profileId = $bindable(), actions, stacked = false }: Props = $props();
 
   const nsfw = useNsfw();
 
@@ -98,14 +100,13 @@
 </script>
 
 <!-- Rendered from first paint (selects fill in as the lookups land) so the page never jumps. -->
-<div class="flex flex-wrap items-end gap-3">
-  <label class="min-w-44 flex-1 space-y-1 sm:max-w-64">
-    <span class="text-label flex items-center gap-1.5 text-text-muted">
-      <SlidersHorizontal class="h-3.5 w-3.5" /> Quality profile
+<div class={cn("flex gap-3", stacked ? "flex-col items-stretch" : "flex-wrap items-end")}>
+  <label class={cn("space-y-1.5", stacked ? "min-w-0 w-full" : "min-w-44 flex-1 sm:max-w-64")}>
+    <span class="flex items-center gap-1.5 text-sm font-medium text-text-secondary">
+      <SlidersHorizontal class="h-4 w-4 text-text-muted" /> Quality profile
     </span>
     {#if !loaded || profileOptions.length > 0}
       <Select
-        size="sm"
         disabled={!loaded}
         value={profileId ?? ""}
         options={profileOptions}
@@ -118,13 +119,12 @@
     {/if}
   </label>
 
-  <label class="min-w-44 flex-1 space-y-1 sm:max-w-64">
-    <span class="text-label flex items-center gap-1.5 text-text-muted">
-      <FolderOpen class="h-3.5 w-3.5" /> Import into
+  <label class={cn("space-y-1.5", stacked ? "min-w-0 w-full" : "min-w-44 flex-1 sm:max-w-64")}>
+    <span class="flex items-center gap-1.5 text-sm font-medium text-text-secondary">
+      <FolderOpen class="h-4 w-4 text-text-muted" /> Import into
     </span>
     {#if !loaded || rootOptions.length > 0}
       <Select
-        size="sm"
         disabled={!loaded}
         value={targetLibraryRootId ?? ""}
         options={rootOptions}
@@ -138,7 +138,7 @@
   </label>
 
   {#if actions}
-    <div class="ml-auto flex items-end">
+    <div class={cn("flex items-end", stacked ? "w-full" : "ml-auto")}>
       {@render actions()}
     </div>
   {/if}

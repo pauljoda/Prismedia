@@ -29,20 +29,19 @@
   }
 </script>
 
-<div class="flex flex-wrap items-center gap-2">
+<div class="flex flex-col items-start gap-control-gap">
   <Button
     type="button"
     variant="ghost"
-    size="sm"
-    class="no-lift gap-1.5 px-2.5 py-1 text-xs"
+    class="h-auto min-h-control justify-start whitespace-normal text-left"
     disabled={busy}
     onclick={() => (confirmOpen = true)}
   >
-    <RotateCcw class="h-3.5 w-3.5" />
+    <RotateCcw data-icon="inline-start" />
     Allow blocked releases again
   </Button>
-  {#if message}<p role="status" class="text-[0.72rem] text-text-muted">{message}</p>{/if}
-  {#if error}<p role="alert" class="text-[0.72rem] text-error-text">{error}</p>{/if}
+  {#if message}<p role="status" class="text-caption text-muted-foreground">{message}</p>{/if}
+  {#if error}<p role="alert" class="text-caption text-destructive">{error}</p>{/if}
 </div>
 
 <ConfirmDialog

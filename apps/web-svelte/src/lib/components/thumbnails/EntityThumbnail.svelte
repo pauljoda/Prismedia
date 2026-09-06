@@ -5,6 +5,9 @@
   import EntityThumbnailArtwork from "./EntityThumbnailArtwork.svelte";
   import EntityThumbnailInfo from "./EntityThumbnailInfo.svelte";
   import type { EntityThumbnailProps } from "./entity-thumbnail-props";
+  import { useEntityArtworkTransition } from "$lib/motion/entity-artwork-transition";
+
+  const artworkTransition = useEntityArtworkTransition();
 
   let {
     artworkReactive = true,
@@ -26,6 +29,7 @@
     selectable = false,
     selectMode = false,
     selected = false,
+    showBadges = true,
     showWantedBadge = true,
     subtitleContent,
     titleAlign = "left",
@@ -76,6 +80,7 @@
       return;
     }
     toggleSurfaceSelection();
+    if (effectiveHref && layout === "grid") artworkTransition?.arm(event, card.entity.id);
   }
   function handleSurfaceKeydown(event: KeyboardEvent) {
     if (!interactive || (event.key !== "Enter" && event.key !== " ")) return;
@@ -134,9 +139,10 @@
     {onSelectedChange}
     {selectable}
     {selected}
+    {showBadges}
     {showWantedBadge}
   />
-  <EntityThumbnailInfo {card} {mediaOnly} {subtitleContent} {titleAlign} {titleSize} />
+  <EntityThumbnailInfo {card} {mediaOnly} {layout} {showBadges} {showWantedBadge} {subtitleContent} {titleAlign} {titleSize} />
 </svelte:element>
 
 <style>
@@ -144,7 +150,7 @@
     position: relative;
     display: flex;
     flex-direction: column;
-    gap: 0.5rem;
+    gap: 0.6rem;
     container-type: inline-size;
     min-width: 0;
     color: var(--color-text, #f4efe6);
@@ -156,7 +162,7 @@
   .entity-thumbnail.is-static { pointer-events: none; }
   .entity-thumbnail.is-static:not(.is-list):is(:hover, :focus-visible) :global(.media) { border-color: var(--color-border-subtle, rgb(255 255 255 / 0.08)); box-shadow: var(--shadow-card); transform: none; }
   .entity-thumbnail.is-image-only { gap: 0; }
-  .entity-thumbnail.is-list { flex-direction: row; gap: 0; inline-size: 100%; min-block-size: 5.25rem; overflow: hidden; border: 1px solid rgb(255 255 255 / 0.08); border-radius: 6px; background: rgb(12 12 13 / 0.92); box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.5), 0 2px 6px rgb(0 0 0 / 0.32); transition: transform 200ms var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)), border-color 200ms var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)), box-shadow 200ms var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)); }
+  .entity-thumbnail.is-list { flex-direction: row; gap: 0; inline-size: 100%; min-block-size: 5.25rem; overflow: hidden; border: 1px solid var(--color-border-subtle, rgb(255 255 255 / 0.08)); border-radius: var(--radius-sm, 6px); background: var(--color-surface-1, rgb(12 12 13 / 0.92)); box-shadow: var(--shadow-card); transition: transform 200ms var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)), border-color 200ms var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)), box-shadow 200ms var(--ease-default, cubic-bezier(0.4, 0, 0.2, 1)); }
   .entity-thumbnail.is-list:is(:hover, :focus-visible) { border-color: var(--color-border-default); box-shadow: var(--shadow-card-hover); transform: translateY(-1px); }
   .entity-thumbnail.is-list.is-selected { border-color: var(--color-border-default); box-shadow: inset 2px 0 0 var(--entity-accent), var(--shadow-card-hover); }
   .entity-thumbnail.is-list.is-highlighted { border-color: color-mix(in srgb, var(--entity-accent) 62%, var(--color-border-default)); background: color-mix(in srgb, var(--entity-accent) 10%, rgb(12 12 13 / 0.98)); box-shadow: inset 2px 0 0 var(--entity-accent), var(--shadow-card-hover); }

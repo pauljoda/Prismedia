@@ -104,6 +104,21 @@ describe("TrackListRow", () => {
     expect(onSelectedChange).not.toHaveBeenCalled();
   });
 
+  it("keeps playable tracks quiet and exposes a visible play action", async () => {
+    const onPlay = vi.fn();
+    render(TrackListRow, {
+      track: { ...track("track-present", "Prelude"), isWanted: false, hasSourceMedia: true },
+      index: 0,
+      isActive: false,
+      isPlaying: false,
+      onPlay,
+    });
+
+    expect(screen.queryByText("Present")).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Play Prelude" }));
+    expect(onPlay).toHaveBeenCalledExactlyOnceWith("track-present");
+  });
+
   it("opens a row actions flyout and renames a track without starting playback", async () => {
     const onPlay = vi.fn();
     const onRename = vi.fn().mockResolvedValue(undefined);
@@ -119,10 +134,11 @@ describe("TrackListRow", () => {
       },
     });
 
-    await fireEvent.click(screen.getByRole("button", { name: "Track actions for Prelude in E minor" }));
-    await fireEvent.click(screen.getByRole("menuitem", { name: "Rename" }));
+    await fireEvent.keyDown(screen.getByRole("button", { name: "Track actions for Prelude in E minor" }), { key: "ArrowDown" });
+    await fireEvent.click(await screen.findByRole("menuitem", { name: "Rename" }));
 
     const input = screen.getByLabelText("Track title");
+    await waitFor(() => expect(input).toHaveFocus());
     await fireEvent.input(input, { target: { value: "Prelude, Op. 28 No. 4" } });
     await fireEvent.click(screen.getByRole("button", { name: "Save track title" }));
 

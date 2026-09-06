@@ -49,12 +49,12 @@
       {#each sections as section (section.id)}
         {@const current = section.id === currentSectionId}
         <li>
-          <button
+          <Button variant="ghost"
             type="button"
             onclick={() => choose(section.id)}
             aria-current={current ? "true" : undefined}
             class={cn(
-              "flex w-full items-center justify-between gap-3 rounded-sm border px-3 py-2.5 text-left text-sm transition-colors",
+              "flex h-auto w-full items-center justify-between gap-3 rounded-sm border px-3 py-2.5 text-left text-sm transition-colors",
               current
                 ? "border-border-accent bg-accent-950 text-text-accent"
                 : "border-transparent text-text-secondary hover:border-border-default hover:bg-surface-2 hover:text-text-primary",
@@ -64,7 +64,7 @@
             {#if current}
               <Check class="h-4 w-4 shrink-0" />
             {/if}
-          </button>
+          </Button>
         </li>
       {/each}
     </ul>

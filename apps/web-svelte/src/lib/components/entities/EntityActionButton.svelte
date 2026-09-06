@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { Component } from "svelte";
-  import { cn } from "@prismedia/ui-svelte";
+  import { Button, buttonVariants, cn } from "@prismedia/ui-svelte";
 
   type Variant = "default" | "primary" | "danger";
 
@@ -32,18 +32,17 @@
     ariaDisabled = false,
     ariaLabel,
     title,
-    iconClass = "h-3.5 w-3.5",
+    iconClass,
     iconFill,
     class: className = "",
     onClick,
   }: Props = $props();
 
   const classes = $derived(cn(
-    "entity-action-button",
-    active && "entity-action-button-active",
-    muted && "entity-action-button-muted",
-    variant === "primary" && "entity-action-button-primary",
-    variant === "danger" && "entity-action-button-danger",
+    buttonVariants({ variant: variant === "primary" ? "primary" : variant === "danger" ? "danger" : "outline", size: "lg" }),
+    "entity-detail-action",
+    active && "bg-accent text-foreground",
+    muted && "text-muted-foreground",
     className,
   ));
 
@@ -62,12 +61,12 @@
   >
     {#if icon}
       {@const Icon = icon}
-      <Icon class={iconClass} fill={iconFill} />
+      <Icon data-icon="inline-start" class={iconClass} fill={iconFill} />
     {/if}
-    <span class="entity-action-button-label">{label}</span>
+    <span class="truncate">{label}</span>
   </a>
 {:else}
-  <button
+  <Button variant={variant === "primary" ? "primary" : variant === "danger" ? "danger" : "outline"} size="lg"
     type="button"
     class={classes}
     disabled={disabled}
@@ -78,8 +77,8 @@
   >
     {#if icon}
       {@const Icon = icon}
-      <Icon class={iconClass} fill={iconFill} />
+      <Icon data-icon="inline-start" class={iconClass} fill={iconFill} />
     {/if}
-    <span class="entity-action-button-label">{label}</span>
-  </button>
+    <span class="truncate">{label}</span>
+  </Button>
 {/if}

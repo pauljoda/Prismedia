@@ -1,12 +1,10 @@
 <script lang="ts">
   import { browser } from "$app/environment";
   import { onMount, untrack, type Snippet } from "svelte";
-  import { cn, dur, ease } from "@prismedia/ui-svelte";
-  import { fade } from "svelte/transition";
+  import { Button, Dialog, cn } from "@prismedia/ui-svelte";
   import { getCapability } from "$lib/api/capabilities";
   import { positiveNumberValue } from "$lib/utils/format";
   import { createNavigationKeyHandler } from "$lib/keyboard/navigation-keyboard";
-  import { portal } from "$lib/actions/portal";
   import { CAPABILITY_KIND, ENTITY_KIND } from "$lib/entities/entity-codes";
   import { PLAYBACK_MODE } from "$lib/api/generated/codes";
   import NsfwBlur from "./nsfw/NsfwBlur.svelte";
@@ -50,6 +48,7 @@
   const MAX_SCALE = 8;
   const DOUBLE_TAP_MS = 300;
 
+  let navigationRoot = $state<HTMLDivElement | null>(null);
   let index = $state(untrack(() => initialIndex));
   let scale = $state(1);
   let translateX = $state(0);
@@ -469,11 +468,9 @@
   }
 
   onMount(() => {
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
 
     const onKey = createNavigationKeyHandler({
-      close: onClose,
+      scope: () => navigationRoot,
       prev: goPrev,
       next: goNext,
       extraKeys: {
@@ -504,7 +501,6 @@
 
     return () => {
       window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prevOverflow;
       observer.disconnect();
     };
   });
@@ -517,14 +513,8 @@
   {/each}
 </svelte:head>
 
-<div
-  use:portal
-  class="universal-lightbox"
-  role="dialog"
-  aria-modal="true"
-  in:fade={{ duration: dur.normal, easing: ease.enter }}
-  out:fade={{ duration: dur.fast, easing: ease.exit }}
->
+<Dialog open fullscreen ariaLabel={current?.title ?? "Media viewer"} {onClose}>
+<div bind:this={navigationRoot} class="universal-lightbox">
   <UniversalLightboxChrome
     section="top"
     title={current?.title}
@@ -688,29 +678,27 @@
   {#if entities.length > 1}
     <div class="thumb-strip">
       {#each entities as item, i (item.id)}
-        <button
-          type="button"
+        <Button variant="outline" size="icon"
           onclick={() => (index = i)}
-          bind:this={stripThumbEls[i]}
-          class={cn("thumb-button", i === index && "is-active")}
+          bind:ref={() => stripThumbEls[i] ?? null, next => stripThumbEls[i] = next ?? undefined}
+          class={cn("size-13 shrink-0 overflow-hidden p-0 opacity-60 hover:opacity-100 sm:size-12", i === index && "border-ring opacity-100")}
           aria-label={`Image ${i + 1}`}
         >
           {#if item.coverUrl}
-            <img src={item.coverUrl} alt="" loading="lazy" />
+            <img src={item.coverUrl} alt="" loading="lazy" class="size-full object-cover" />
           {:else}
             <span>{i + 1}</span>
           {/if}
-        </button>
+        </Button>
       {/each}
     </div>
   {/if}
 </div>
+</Dialog>
 
 <style>
   .universal-lightbox {
-    position: fixed;
-    inset: 0;
-    z-index: 2000;
+    position: relative;
     display: flex;
     flex-direction: column;
     width: 100dvw;
@@ -907,30 +895,8 @@
     padding: 0.4rem 0.5rem calc(0.4rem + env(safe-area-inset-bottom, 0px));
   }
 
-  .thumb-button {
-    width: 3rem;
-    aspect-ratio: 1;
-    flex: 0 0 auto;
-    overflow: hidden;
-    border: 1px solid transparent;
-    background: var(--color-surface-2, #101420);
-    color: var(--color-text-muted, #8a93a6);
-    opacity: 0.6;
-    transition: border-color 150ms ease, opacity 150ms ease, box-shadow 150ms ease;
-  }
 
-  .thumb-button:hover,
-  .thumb-button.is-active {
-    border-color: rgb(199 201 204 / 0.45);
-    opacity: 1;
-    box-shadow: 0 0 16px rgb(199 201 204 / 0.2);
-  }
 
-  .thumb-button img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
-  }
 
   @media (max-width: 640px) {
     .keyboard-hints {
@@ -944,9 +910,6 @@
       padding: 0.5rem 0.5rem calc(0.55rem + env(safe-area-inset-bottom, 0px));
     }
 
-    .thumb-button {
-      width: 3.25rem;
-    }
 
   }
 </style>

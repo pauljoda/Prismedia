@@ -359,8 +359,8 @@ describe("reviewed request route", () => {
     render(Page);
 
     await screen.findAllByText("TV Default");
-    await fireEvent.click(screen.getAllByRole("button", { name: "Monitor" })[0]);
-    await fireEvent.click(
+    await fireEvent.keyDown(screen.getAllByRole("button", { name: "Monitor" })[0], { key: "ArrowDown" });
+    await fireEvent.pointerUp(
       within(screen.getByRole("listbox")).getByRole("option", { name: /future only/i }),
     );
     const requestButton = (await screen.findAllByRole("button", { name: "Request" }))[0];

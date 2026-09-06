@@ -17,7 +17,7 @@
     Zap,
   } from "@lucide/svelte";
   import type { Component } from "svelte";
-  import { cn, Toggle } from "@prismedia/ui-svelte";
+  import { Button, RadioGroup, ToggleGroup, buttonVariants,  cn, Toggle  } from "@prismedia/ui-svelte";
   import type { EntityCard } from "$lib/api/generated/model";
   import {
     COLLECTION_COVER_MODE,
@@ -34,16 +34,13 @@
   } from "$lib/api/capabilities";
   import { fetchLibraryRoots, type LibraryRoot } from "$lib/api/settings";
   import {
-    COLLECTION_RULE_FIELDS,
     EMPTY_COLLECTION_RULE,
-    type CollectionConditionValue,
-    type CollectionOperator,
-    type CollectionRuleCondition,
-    type CollectionRuleFieldDef,
     type CollectionRuleGroup,
     type CollectionWriteRequest,
   } from "$lib/collections/models";
-  import EntityGrid from "$lib/components/entities/EntityGrid.svelte";
+  import { rulesReadyForPreview } from "$lib/collections/rule-editor";
+  import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
+  import EntityShelf from "$lib/components/entities/EntityShelf.svelte";
   import TextAreaField from "$lib/components/forms/TextAreaField.svelte";
   import TextField from "$lib/components/forms/TextField.svelte";
   import { entityCardToThumbnailCard } from "$lib/entities/entity-grid";
@@ -85,15 +82,15 @@
   let previewing = $state(false);
   let previewError = $state<string | null>(null);
   let previewTotal = $state<number | null>(null);
-  let previewByType = $state<Record<string, number>>({});
   let previewCards = $state<EntityThumbnailCard[]>([]);
   let libraryRoots = $state<LibraryRoot[]>([]);
   let previewToken = 0;
+  let previewController: AbortController | undefined;
 
   const showRules = $derived(mode === COLLECTION_MODE.dynamic || mode === COLLECTION_MODE.hybrid);
-  const canSave = $derived(title.trim().length > 0 && !saving);
   const hasConditions = $derived(ruleTree.children.length > 0);
-  const rulesReady = $derived(allConditionsRunnable(ruleTree));
+  const rulesReady = $derived(rulesReadyForPreview(ruleTree));
+  const canSave = $derived(title.trim().length > 0 && !saving && (!showRules || rulesReady));
   const libraryOptions = $derived(
     libraryRoots
       .filter((root) => root.enabled !== false)
@@ -106,65 +103,20 @@
   const previewSummary = $derived.by(() => {
     if (!hasConditions) return "Add rules to preview";
     if (!rulesReady) return "Fill in rule values";
+    if (previewError) return "Preview failed";
     if (previewing && previewCards.length === 0) return "Building preview";
     if (previewTotal === null) return "Ready to preview";
     return `${previewTotal} matching ${previewTotal === 1 ? "item" : "items"}`;
   });
+  const previewLabel = $derived(previewTotal !== null && previewCards.length < previewTotal
+    ? `Preview sample · ${previewCards.length} of ${previewTotal}`
+    : `Preview · ${previewCards.length} matching ${previewCards.length === 1 ? "item" : "items"}`);
 
   onMount(() => {
     const controller = new AbortController();
     void loadLibraryRoots(controller.signal);
     return () => controller.abort();
   });
-
-  function isNullaryOperator(op: CollectionOperator): boolean {
-    return op === "is_null" || op === "is_not_null" || op === "is_true" || op === "is_false";
-  }
-
-  function findField(fieldName: string): CollectionRuleFieldDef | null {
-    return COLLECTION_RULE_FIELDS.find((field) => field.field === fieldName) ?? null;
-  }
-
-  function isConditionRunnable(condition: CollectionRuleCondition): boolean {
-    const field = findField(condition.field);
-    if (!field) return false;
-    const op = condition.operator;
-    if (isNullaryOperator(op)) return true;
-    const value = condition.value as CollectionConditionValue;
-    if (value === null || value === undefined) return false;
-    if (op === "between") {
-      if (!Array.isArray(value) || value.length !== 2) return false;
-      if (field.fieldType === "date") {
-        return !Number.isNaN(new Date(String(value[0])).getTime()) &&
-          !Number.isNaN(new Date(String(value[1])).getTime());
-      }
-      return Number.isFinite(Number(value[0])) && Number.isFinite(Number(value[1]));
-    }
-    if (op === "in" || op === "not_in") {
-      return Array.isArray(value) && value.length > 0;
-    }
-    if (field.fieldType === "number") {
-      return typeof value === "number" && Number.isFinite(value);
-    }
-    if (field.fieldType === "date") {
-      if (typeof value !== "string" || value.length === 0) return false;
-      return !Number.isNaN(new Date(value).getTime());
-    }
-    if (field.fieldType === "enum") {
-      return typeof value === "string" && value.length > 0;
-    }
-    if (field.fieldType === "library") {
-      return typeof value === "string" && value.length > 0;
-    }
-    return typeof value === "string" || typeof value === "number" || typeof value === "boolean";
-  }
-
-  function allConditionsRunnable(rule: CollectionRuleGroup): boolean {
-    for (const child of rule.children) {
-      if (child.type === "condition" && !isConditionRunnable(child)) return false;
-    }
-    return true;
-  }
 
   $effect(() => {
     if (isNew) {
@@ -214,18 +166,19 @@
     const ready = rulesReady;
     void snapshot;
 
-    if (!active) {
+    // Invalidate outstanding requests as soon as the rule changes, not after the debounce.
+    previewToken += 1;
+    if (!active || !ready) {
       resetPreview();
       return;
     }
-
-    if (!ready) return;
-
+    resetPreview();
+    previewing = true;
     const timer = setTimeout(() => {
       void runPreview();
     }, 500);
 
-    return () => clearTimeout(timer);
+    return () => { clearTimeout(timer); previewToken += 1; previewController?.abort(); };
   });
 
   function normalizeMode(value: string | null | undefined): CollectionModeCode {
@@ -254,8 +207,9 @@
   }
 
   function resetPreview() {
+    previewController?.abort();
+    previewController = undefined;
     previewTotal = null;
-    previewByType = {};
     previewCards = [];
     previewError = null;
     previewing = false;
@@ -302,15 +256,14 @@
   async function runPreview() {
     if (!showRules || !hasConditions || !rulesReady) return;
     const token = ++previewToken;
+    resetPreview();
+    const controller = new AbortController();
+    previewController = controller;
     previewing = true;
-    previewError = null;
     try {
-      const preview = await previewCollectionRules(JSON.stringify(ruleTree));
+      const preview = await previewCollectionRules(JSON.stringify(ruleTree), { signal: controller.signal });
       if (token !== previewToken) return;
       previewTotal = preview.total;
-      previewByType = Object.fromEntries(
-        Object.entries(preview.byType).filter(([, value]) => typeof value === "number"),
-      ) as Record<string, number>;
       const nextCards: EntityThumbnailCard[] = [];
       for (const item of preview.sample) {
         if (!item.entity) continue;
@@ -342,7 +295,7 @@
   <title>{isNew ? "New Collection" : `Edit ${collection?.title ?? "Collection"}`} · Prismedia</title>
 </svelte:head>
 
-<section class="grid max-w-[96rem] gap-4">
+<section class="grid min-w-0 max-w-[96rem] gap-4">
   <header class="flex flex-wrap items-end justify-between gap-4 border-b border-border-subtle pb-3">
     <div>
       <p class="text-kicker mb-1">Library · Collection</p>
@@ -353,23 +306,16 @@
     <div class="flex items-center gap-2">
       <a
         href={resolve((collection ? `/collections/${collection.id}` : "/collections") as "/")}
-        class={cn(
-          "inline-flex items-center gap-1.5 rounded-sm border border-border-subtle bg-surface-2 px-3 py-2 text-[0.78rem] text-text-muted no-underline transition-colors",
-          "hover:border-border-default hover:text-text-primary",
-        )}
+        class={buttonVariants({ variant: "outline", size: "sm" })}
       >
         <XCircle class="h-3.5 w-3.5" />
         Cancel
       </a>
-      <button
+      <Button variant="primary" size="sm"
         type="button"
         disabled={!canSave}
         onclick={save}
-        class={cn(
-          "inline-flex items-center gap-1.5 rounded-sm border border-border-accent bg-gradient-to-r from-accent-900 via-accent-800 to-accent-900 px-4 py-2 text-[0.78rem] font-medium text-accent-100 shadow-[var(--shadow-glow-accent)] transition-all",
-          "hover:shadow-[var(--shadow-glow-accent-strong)]",
-          "disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none",
-        )}
+        class=""
       >
         {#if saving}
           <Loader2 class="h-3.5 w-3.5 animate-spin" />
@@ -377,7 +323,7 @@
           <Save class="h-3.5 w-3.5" />
         {/if}
         {saving ? "Saving..." : "Save"}
-      </button>
+      </Button>
     </div>
   </header>
 
@@ -437,109 +383,48 @@
           <h3 class="text-kicker m-0 flex items-center gap-1.5">
             <FolderPlus class="h-3 w-3" /> Cover
           </h3>
-          <div class="grid grid-cols-2 gap-1.5" role="radiogroup" aria-label="Cover mode">
+          <ToggleGroup.Root type="single" variant="outline" disabled={saving} aria-label="Cover mode" class="grid grid-cols-2 gap-1.5"
+            bind:value={() => coverMode, next => { const option = coverModes.find(item => item.value === next); if (option) coverMode = option.value; }}>
             {#each coverModes as cm (cm.value)}
-              {@const active = coverMode === cm.value}
-              <button
-                type="button"
-                role="radio"
-                aria-checked={active}
-                disabled={saving}
-                onclick={() => (coverMode = cm.value)}
-                class={cn(
-                  "inline-flex h-8 items-center justify-center gap-1.5 rounded-xs border px-3 text-[0.7rem] font-medium transition-all",
-                  "disabled:cursor-not-allowed disabled:opacity-50",
-                  active
-                    ? "border-border-accent-strong bg-accent-950/30 text-text-accent shadow-[0_0_10px_rgba(199, 201, 204,0.10)]"
-                    : "border-border-subtle bg-surface-2 text-text-muted hover:border-border-default hover:text-text-primary",
-                )}
-              >
-                <FolderPlus class="h-3 w-3" />
-                {cm.label}
-              </button>
+              <ToggleGroup.Item value={cm.value}><FolderPlus />{cm.label}</ToggleGroup.Item>
             {/each}
-          </div>
+          </ToggleGroup.Root>
         </div>
         <div class="grid gap-2">
           <h3 class="text-kicker m-0">Collection Mode</h3>
-          <div class="grid gap-1.5" role="radiogroup" aria-label="Collection mode">
+          <RadioGroup.Root disabled={saving} aria-label="Collection mode" class="gap-1.5"
+            bind:value={() => mode, next => { const option = modes.find(item => item.value === next); if (option) mode = option.value; }}>
             {#each modes as option (option.value)}
-              {@const active = mode === option.value}
               {@const Icon = option.icon}
-              <button
-                type="button"
-                role="radio"
-                aria-checked={active}
-                disabled={saving}
-                onclick={() => (mode = option.value)}
-                class={cn(
-                  "group relative grid gap-1 overflow-hidden rounded-sm border p-3 text-left transition-all duration-normal",
-                  "disabled:cursor-not-allowed disabled:opacity-50",
-                  active
-                    ? "border-border-accent-strong bg-gradient-to-br from-accent-950/40 to-accent-950/10 shadow-[var(--shadow-glow-accent)]"
-                    : "border-border-subtle bg-surface-2 hover:border-border-default",
-                )}
-              >
-                <span class="relative flex items-center gap-1.5">
-                  <Icon class={cn("h-3.5 w-3.5 transition-colors", active ? "text-text-accent" : "text-text-muted")} />
-                  <span
-                    class={cn(
-                      "font-heading text-[0.85rem] font-semibold transition-colors",
-                      active ? "text-text-accent" : "text-text-primary",
-                    )}
-                  >
-                    {option.label}
-                  </span>
-                  {#if active}
-                    <span class="ml-auto font-mono text-[0.55rem] font-bold uppercase tracking-[0.18em] text-text-accent/80">
-                      Active
-                    </span>
-                  {/if}
+              <label class="flex cursor-pointer items-start gap-3 rounded-sm border border-border bg-card p-3 has-[[data-state=checked]]:border-ring">
+                <RadioGroup.Item value={option.value} aria-label={option.label} class="mt-0.5" />
+                <span class="grid gap-1">
+                  <span class="flex items-center gap-2 font-heading text-sm font-medium"><Icon class="size-4" />{option.label}</span>
+                  <span class="text-xs leading-relaxed text-muted-foreground">{option.desc}</span>
                 </span>
-                <span class="relative text-[0.68rem] leading-snug text-text-disabled">
-                  {option.desc}
-                </span>
-              </button>
+              </label>
             {/each}
-          </div>
+          </RadioGroup.Root>
         </div>
       </aside>
     </div>
   </section>
 
   {#if showRules}
-    <section class="grid gap-3">
+    <section class="grid min-w-0 gap-3">
       <div class="surface-panel overflow-hidden">
         <div class="flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle px-4 py-3">
           <div>
-            <p class="text-kicker m-0 flex items-center gap-1.5">
-              <SlidersHorizontal class="h-3 w-3" /> Rule Editor
-            </p>
-            <p class="m-0 mt-1 text-[0.75rem] text-text-muted">{previewSummary}</p>
+            <h2 class="m-0 font-heading text-base font-semibold">Collection rules</h2>
+            <p class="mt-1 text-sm text-muted-foreground" role="status">{previewSummary}</p>
           </div>
           <div class="flex flex-wrap items-center justify-end gap-2">
-            {#if previewTotal !== null && Object.keys(previewByType).length > 0}
-              <div class="flex flex-wrap justify-end gap-1">
-                {#each Object.entries(previewByType) as [kind, count] (kind)}
-                  <span
-                    class="inline-flex items-center gap-1 rounded-xs border border-border-subtle bg-surface-2/70 px-2 py-1 font-mono text-[0.6rem] uppercase tracking-wider text-text-muted tabular-nums"
-                  >
-                    <span>{kind}</span>
-                    <strong class="text-text-accent">{count}</strong>
-                  </span>
-                {/each}
-              </div>
-            {/if}
-            <button
+            <Button variant="outline" size="sm"
               type="button"
               disabled={previewing || !hasConditions || !rulesReady || saving}
               onclick={() => void runPreview()}
               title="Refresh preview"
-              class={cn(
-                "inline-flex h-8 items-center gap-1.5 rounded-xs border border-border-subtle bg-surface-2 px-3 font-mono text-[0.65rem] uppercase tracking-wider text-text-muted transition-colors",
-                "hover:border-border-accent hover:text-text-accent",
-                "disabled:cursor-not-allowed disabled:opacity-40",
-              )}
+              class=""
             >
               {#if previewing}
                 <Loader2 class="h-3 w-3 animate-spin" />
@@ -547,7 +432,7 @@
                 <Eye class="h-3 w-3" />
               {/if}
               {previewing ? "Running" : "Refresh"}
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -561,32 +446,24 @@
         </div>
       </div>
 
-      {#if previewError}
-        <div class="flex items-center gap-3 rounded-sm border border-error/50 bg-surface-2 px-4 py-2.5 text-[0.8rem] text-error-text">
-          <ShieldAlert class="h-4 w-4 flex-shrink-0" />
-          <span class="flex-1">{previewError}</span>
-          <button
-            type="button"
-            class="inline-flex h-7 items-center rounded-xs border border-border-subtle bg-surface-1 px-2 font-mono text-[0.62rem] uppercase tracking-wider text-text-muted transition-colors hover:border-border-accent hover:text-text-accent"
-            onclick={() => (previewError = null)}
-          >
-            Dismiss
-          </button>
-        </div>
+      {#if !rulesReady}
+        <StatePlaceholder icon={SlidersHorizontal}
+          title={hasConditions ? "Complete your conditions" : "Build a collection rule"}
+          description={hasConditions ? "Enter the missing values to preview matching items." : "Add a condition to choose what belongs in this collection."} />
+      {:else if previewError}
+        <StatePlaceholder icon={ShieldAlert} title="Couldn't load preview" description={previewError}>
+          <Button variant="outline" onclick={() => void runPreview()}>Retry preview</Button>
+        </StatePlaceholder>
+      {:else if previewing || previewTotal === null}
+        <StatePlaceholder icon={Eye} title="Loading matching items" busy />
+      {:else if previewCards.length}
+        <EntityShelf label={previewLabel} cards={previewCards} sizing="height" />
+      {:else if previewTotal > 0}
+        <StatePlaceholder icon={Eye} title="No preview artwork available"
+          description={`${previewTotal} matching items were found. Their thumbnails could not be loaded.`} />
+      {:else}
+        <StatePlaceholder icon={Eye} title="No matching items" description="No items match the current rule set." />
       {/if}
-
-      <EntityGrid
-        cards={previewCards}
-        dockControls={false}
-        emptyTitle={hasConditions && rulesReady ? "No matching items" : "Rule preview"}
-        emptyMessage={hasConditions && rulesReady ? "No items match the current rule set." : "No preview sample is available."}
-        initialPageSize={48}
-        initialSortBy="kind"
-        loading={previewing && previewCards.length === 0}
-        pageSizeOptions={[24, 48, 96]}
-        prefsKey="collection-rule-preview"
-        showPagination={previewCards.length > 0}
-      />
     </section>
   {/if}
 </section>

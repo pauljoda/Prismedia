@@ -2,12 +2,8 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import FilmStrip from "./FilmStrip.svelte";
 
-vi.mock("@lucide/svelte", () => ({
-  ChevronLeft: vi.fn(),
-  ChevronRight: vi.fn(),
-}));
-
-vi.mock("@prismedia/ui-svelte", () => ({
+vi.mock("@prismedia/ui-svelte", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@prismedia/ui-svelte")>(),
   loadTrickplayFrames: vi.fn().mockResolvedValue([
     { start: 0, end: 50, x: 0, y: 0, width: 160, height: 90, url: "/0.jpg" },
     { start: 50, end: 100, x: 160, y: 0, width: 160, height: 90, url: "/0.jpg" },

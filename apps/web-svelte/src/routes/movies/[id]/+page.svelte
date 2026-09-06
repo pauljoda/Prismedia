@@ -28,7 +28,7 @@
   } from "$lib/player/playback-negotiation";
   import { durationToSeconds } from "$lib/utils/format";
   import { settingKeys, valuesToLibrarySettings } from "$lib/settings/app-settings";
-  import { getCapability, isPlayableVideo, isWanted } from "$lib/api/capabilities";
+  import { getCapability, isPlayableVideo } from "$lib/api/capabilities";
   import { refreshAfterManagedFileRevert } from "$lib/entities/entity-file-management";
   import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
   import type { EntityDetailCredit, EntityDetailTag } from "$lib/entities/entity-detail";
@@ -59,7 +59,6 @@
     writeTranscriptDockPreference,
     writeTranscriptDockWidth,
   } from "../../videos/[id]/video-page-state";
-  import { acquisitionStatusDisplay } from "$lib/requests/acquisition-status-display";
 
   const detail = useEntityDetailPage<EntityCardFull>({
     loadKey: () => page.params.id ?? "",
@@ -141,7 +140,6 @@
     onStatusChanged: () => detail.reload({ showLoading: false }),
     onPruned: () => goto("/movies"),
   });
-  const wantedStateLabel = $derived(acquisitionStatusDisplay(acq.acquisition?.summary.status).label);
   const fileManagement = {
     onDeleted: () => goto("/movies"),
     onReverted: () => refreshAfterManagedFileRevert(acq, () => detail.reload({ showLoading: false })),
@@ -419,7 +417,6 @@
 
   // ── Data loading ───────────────────────────────────────────────────
 
-  const entityWanted = $derived(!!movie && isWanted(movie.capabilities));
 
   /** Cancelling a wanted movie's request deletes the placeholder entity, so this page no longer exists. */
   function handleAcquisitionCancelled() {
@@ -814,12 +811,6 @@
           <a href={resolveEntityHref(primaryStudio.kind as EntityKindCode, primaryStudio.id)} class="meta-item is-studio">{primaryStudio.title}</a>
         {/if}
         <EntityDetailHeroDates {dates} leadingSeparator={Boolean(primaryStudio)} />
-      {/snippet}
-
-      {#snippet heroBadges()}
-        {#if entityWanted}
-          <span class="hero-badge wanted">{wantedStateLabel}</span>
-        {/if}
       {/snippet}
 
       {#snippet sectionContent(section)}

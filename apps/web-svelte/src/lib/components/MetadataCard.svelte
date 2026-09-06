@@ -7,6 +7,7 @@
 
 <script lang="ts">
   import type { Component, Snippet } from "svelte";
+  import { Card } from "@prismedia/ui-svelte";
 
   interface Props {
     title: string;
@@ -15,72 +16,66 @@
     children?: Snippet;
     wide?: boolean;
     capped?: boolean;
+    /** Place values below their labels when paths or identifiers need the full card width. */
+    stacked?: boolean;
+    /** Use the shared utility typeface for literal paths, hashes, and source identifiers. */
+    monospace?: boolean;
   }
 
-  let { title, icon: Icon, rows, children, wide = false, capped = false }: Props = $props();
+  let { title, icon: Icon, rows, children, wide = false, capped = false, stacked = false, monospace = false }: Props = $props();
+  const cardClass = $derived([
+    "metadata-card min-w-0",
+    wide ? "metadata-card-wide" : "",
+    capped ? "metadata-card-capped" : "",
+  ].filter(Boolean).join(" "));
+
+  /** Makes backend-style field names readable while preserving deliberate codes such as TMDB. */
+  function displayLabel(label: string): string {
+    const words = label
+      .replace(/([a-z\d])([A-Z])/g, "$1 $2")
+      .replace(/[_-]+/g, " ")
+      .trim();
+    return words ? words[0].toUpperCase() + words.slice(1) : label;
+  }
 </script>
 
-<div class="metadata-card" class:metadata-card-wide={wide} class:metadata-card-capped={capped}>
-  <h3 class="metadata-card-title">
-    {#if Icon}
-      <Icon class="h-3.5 w-3.5" />
-    {/if}
-    {title}
-  </h3>
+<Card.Root size="sm" class={cardClass}>
+  <Card.Header>
+    <Card.Title role="heading" aria-level={3} class="flex items-center gap-2 text-foreground">
+      {#if Icon}
+        <Icon class="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+      {/if}
+      {title}
+    </Card.Title>
+  </Card.Header>
   {#if children}
-    <div class="metadata-card-body">
-      {@render children()}
-    </div>
+    <Card.Content class={capped ? "min-h-0 overflow-y-auto overscroll-contain" : undefined}>
+      <div class="metadata-card-body">
+        {@render children()}
+      </div>
+    </Card.Content>
   {:else if rows && rows.length > 0}
-    <dl class="metadata-card-rows">
-      {#each rows as row (row.label)}
-        <div class="metadata-card-row">
-          <dt>{row.label}</dt>
-          <dd>{row.value}</dd>
-        </div>
-      {/each}
-    </dl>
+    <Card.Content class={capped ? "min-h-0 overflow-y-auto overscroll-contain" : undefined}>
+      <dl class="metadata-card-rows" class:is-stacked={stacked} class:is-monospace={monospace}>
+        <!-- Read-only rows have no unique identity: labels and even complete rows may repeat. -->
+        {#each rows as row}
+          <div class="metadata-card-row">
+            <dt>{displayLabel(row.label)}</dt>
+            <dd>{row.value}</dd>
+          </div>
+        {/each}
+      </dl>
+    </Card.Content>
   {/if}
-</div>
+</Card.Root>
 
 <style>
-  .metadata-card {
-    min-width: 0;
-    padding: 0.65rem 0.85rem;
-    border: 1px solid var(--color-border-default, rgba(164, 172, 185, 0.12));
-    border-radius: var(--radius-sm, 6px);
-    background: var(--color-surface-2, #11161d);
-  }
-
-  .metadata-card-capped {
-    display: grid;
-    grid-template-rows: auto minmax(0, 1fr);
+  :global(.metadata-card-capped) {
     max-height: var(--metadata-card-max-height, 24rem);
-  }
-
-  .metadata-card-title {
-    display: flex;
-    align-items: center;
-    gap: 0.4rem;
-    margin: 0 0 0.45rem;
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.6rem;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    text-transform: uppercase;
-    color: var(--color-text-disabled, #5f687a);
   }
 
   .metadata-card-body {
     min-width: 0;
-  }
-
-  .metadata-card-capped .metadata-card-body {
-    min-height: 0;
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    padding-right: 0.25rem;
-    scrollbar-gutter: stable;
   }
 
   .metadata-card-rows {
@@ -91,10 +86,10 @@
 
   .metadata-card-row {
     display: grid;
-    grid-template-columns: minmax(4.5rem, max-content) minmax(0, 1fr);
-    gap: 0.65rem;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+    gap: var(--spacing-control-gap);
     align-items: baseline;
-    padding: 0.3rem 0;
+    padding: var(--spacing-control-gap) 0;
     border-bottom: 1px solid var(--color-border-subtle, rgba(164, 172, 185, 0.07));
   }
 
@@ -109,20 +104,32 @@
 
   .metadata-card-row dt {
     color: var(--color-text-muted, #8a93a6);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.65rem;
-    font-weight: 600;
-    letter-spacing: 0.04em;
-    text-transform: uppercase;
+    font-family: var(--font-body, Inter, sans-serif);
+    font-size: var(--text-caption);
+    font-weight: 500;
+    overflow-wrap: anywhere;
   }
 
   .metadata-card-row dd {
     margin: 0;
     min-width: 0;
     overflow-wrap: anywhere;
-    color: var(--color-text-secondary, #c4c9d4);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.74rem;
+    color: var(--color-text-primary);
+    font-family: var(--font-body, Inter, sans-serif);
+    font-size: var(--text-label);
     font-weight: 500;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .is-stacked .metadata-card-row {
+    grid-template-columns: minmax(0, 1fr);
+    gap: var(--spacing);
+  }
+
+  .is-monospace dd {
+    font-family: var(--font-mono);
+    font-size: var(--text-caption);
+    font-weight: 400;
+    user-select: text;
   }
 </style>

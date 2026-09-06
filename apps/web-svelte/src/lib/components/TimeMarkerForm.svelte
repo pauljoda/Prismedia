@@ -31,7 +31,7 @@
 
 <script lang="ts">
   import { MapPin, X, Loader } from "@lucide/svelte";
-  import { Button } from "@prismedia/ui-svelte";
+  import { TextInput,  Button  } from "@prismedia/ui-svelte";
 
   interface Props {
     title: string;
@@ -131,9 +131,9 @@
   <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
     <div class="space-y-1 sm:col-span-2">
       <label class="text-xs text-text-muted" for="marker-title">Title</label>
-      <input
+      <TextInput
         id="marker-title"
-        class="control-input w-full"
+        class="w-full"
         value={title}
         oninput={(e) => onTitleChange((e.currentTarget as HTMLInputElement).value)}
         placeholder="Marker title"
@@ -143,9 +143,9 @@
     <div class="space-y-1">
       <label class="text-xs text-text-muted" for="marker-start">Start Time</label>
       <div class="flex items-center gap-2">
-        <input
+        <TextInput
           id="marker-start"
-          class="control-input flex-1 min-w-0"
+          class="flex-1 min-w-0"
           bind:value={startText}
           onblur={commitStartTime}
           onkeydown={(e) => {
@@ -153,24 +153,24 @@
           }}
           placeholder="0:00"
         />
-        <button
+        <Button variant="outline" size="sm"
           type="button"
           onclick={onSetCurrentTime}
-          class="flex items-center gap-1 px-2 py-1.5 text-xs text-text-muted hover:text-text-accent surface-well hover:border-border-accent transition-colors"
+          class="flex items-center gap-1 px-2 py-1.5 text-xs surface-well"
           title="Set to current playback time"
         >
           <MapPin class="h-3 w-3" />
           Now
-        </button>
+        </Button>
       </div>
     </div>
 
     <div class="space-y-1">
       <label class="text-xs text-text-muted" for="marker-end">End Time (optional)</label>
       <div class="flex items-center gap-2">
-        <input
+        <TextInput
           id="marker-end"
-          class="control-input flex-1 min-w-0"
+          class="flex-1 min-w-0"
           bind:value={endText}
           onblur={commitEndTime}
           onkeydown={(e) => {
@@ -178,28 +178,28 @@
           }}
           placeholder="—"
         />
-        <button
+        <Button variant="outline" size="sm"
           type="button"
           onclick={onSetCurrentEndTime}
-          class="flex items-center gap-1 px-2 py-1.5 text-xs text-text-muted hover:text-text-accent surface-well hover:border-border-accent transition-colors"
+          class="flex items-center gap-1 px-2 py-1.5 text-xs surface-well"
           title="Set to current playback time"
         >
           <MapPin class="h-3 w-3" />
           Now
-        </button>
+        </Button>
         {#if endSeconds != null}
-          <button
+          <Button variant="destructive" size="sm"
             type="button"
             onclick={() => {
               endText = "";
               onEndSecondsChange(null);
             }}
-            class="flex items-center justify-center p-1.5 text-text-muted hover:text-error-text transition-colors"
+            class="flex items-center justify-center p-1.5"
             title="Clear end time"
             aria-label="Clear end time"
           >
             <X class="h-3 w-3" />
-          </button>
+          </Button>
         {/if}
       </div>
     </div>

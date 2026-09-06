@@ -118,7 +118,7 @@ describe("UniversalLightbox", () => {
       props: { entities: [still], initialIndex: 0, onClose },
     });
 
-    await fireEvent.keyDown(window, { key: "Escape" });
+    await fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
 
     expect(onClose).toHaveBeenCalledTimes(1);
   });

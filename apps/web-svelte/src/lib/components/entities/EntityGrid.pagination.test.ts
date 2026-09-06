@@ -4,6 +4,12 @@ import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
 import { createEntityGridPrefs, type EntityGridPrefs } from "$lib/entities/entity-grid-prefs";
 import EntityGrid from "./EntityGrid.test-harness.svelte";
 
+// These tests assert grid state, not slide timing; the pagination RAF stub does not advance time.
+vi.mock("svelte/transition", async (importOriginal) => ({
+  ...await importOriginal<typeof import("svelte/transition")>(),
+  slide: () => ({ duration: 0 }),
+}));
+
 const GRID_PREFS_DEFAULTS = {
   sortBy: "title",
   sortDir: "asc",
@@ -36,6 +42,7 @@ describe("EntityGrid pagination", () => {
     vi.stubGlobal("cancelAnimationFrame", vi.fn());
     vi.stubGlobal("ResizeObserver", class {
       observe = vi.fn();
+      unobserve = vi.fn();
       disconnect = vi.fn();
     });
     Object.defineProperty(HTMLElement.prototype, "scrollTo", {
@@ -51,6 +58,41 @@ describe("EntityGrid pagination", () => {
   afterEach(() => {
     vi.unstubAllGlobals();
     vi.restoreAllMocks();
+  });
+
+  it("distinguishes no search matches from an empty library and resets without changing sort", async () => {
+    const cards = [card(0), card(1)];
+    render(EntityGrid, {
+      cards,
+      prefsKey: "empty-search-recovery",
+      emptyTitle: "No movies yet",
+      emptyMessage: "Scan a movie folder to get started.",
+      initialSortBy: "title",
+      initialSortDir: "desc",
+    });
+
+    await fireEvent.input(screen.getByRole("searchbox", { name: "Search the library" }), {
+      target: { value: "no-such-title" },
+    });
+    expect(await screen.findByText("No matching items")).toBeInTheDocument();
+    expect(screen.queryByText("Scan a movie folder to get started.")).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Reset search and filters" }));
+    await waitFor(() => expect(screen.getByRole("searchbox", { name: "Search the library" })).toHaveValue(""));
+    expect(screen.queryByText("No matching items")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Sort descending; switch to ascending" })).toBeInTheDocument();
+  });
+
+  it("retains onboarding guidance for an unfiltered empty library", () => {
+    render(EntityGrid, {
+      cards: [],
+      prefsKey: "empty-library-guidance",
+      emptyTitle: "No movies yet",
+      emptyMessage: "Scan a movie folder to get started.",
+    });
+
+    expect(screen.getByText("No movies yet")).toBeInTheDocument();
+    expect(screen.getByText("Scan a movie folder to get started.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Reset search and filters" })).not.toBeInTheDocument();
   });
 
   it("defaults desktop thumbnail grids to the preferred mid-range card size when no saved size exists", async () => {
@@ -130,8 +172,10 @@ describe("EntityGrid pagination", () => {
       },
     });
 
-    await fireEvent.click(screen.getByLabelText("Per page"));
-    await fireEvent.click(screen.getByRole("button", { name: "100" }));
+    const pageSize = screen.getByLabelText("Per page");
+    pageSize.focus();
+    await fireEvent.keyDown(pageSize, { key: "ArrowDown" });
+    await fireEvent.pointerUp(await screen.findByRole("option", { name: "100" }));
 
     await waitFor(() => {
       expect(container.querySelectorAll(".entity-thumbnail").length).toBe(100);
@@ -197,6 +241,72 @@ describe("EntityGrid pagination", () => {
       expect.arrayContaining([cards[0], cards[99]]),
     );
     expect(onCardActivate.mock.calls[0][1]).toHaveLength(100);
+  });
+
+  it("keeps the current page and card order when secondary toolbar rows expand", async () => {
+    const onRequestChange = vi.fn();
+    const { container } = render(EntityGrid, {
+      cards: Array.from({ length: 150 }, (_, index) => card(index)),
+      onRequestChange,
+      prefsKey: "toolbar-expansion-test",
+    });
+    await fireEvent.click(screen.getByLabelText("Next page"));
+    await waitFor(() => expect(screen.getByText("Page 2 / 2")).toBeInTheDocument());
+    const titles = () => Array.from(container.querySelectorAll(".entity-thumbnail h3")).map((el) => el.textContent);
+    const originalTitles = titles();
+    expect(originalTitles).toHaveLength(50);
+    const originalRequests = onRequestChange.mock.calls.length;
+
+    await fireEvent.click(screen.getByRole("button", { name: "Hide filter and selection rows" }));
+    expect(readGridPrefs("toolbar-expansion-test")?.barsCollapsed).toBe(true);
+    await fireEvent.click(screen.getByRole("button", { name: "Show filter and selection rows" }));
+
+    expect(titles()).toEqual(originalTitles);
+    expect(screen.getByText("Page 2 / 2")).toBeInTheDocument();
+    expect(onRequestChange).toHaveBeenCalledTimes(originalRequests);
+    expect(readGridPrefs("toolbar-expansion-test")?.barsCollapsed ?? false).toBe(false);
+  });
+
+  it("does not add a filter reset row for sort, artwork or selection changes", async () => {
+    const { container } = render(EntityGrid, {
+      cards: Array.from({ length: 6 }, (_, index) => card(index)),
+      prefsKey: undefined,
+    });
+    await fireEvent.click(screen.getByRole("button", { name: "Sort ascending; switch to descending" }));
+    expect(container.querySelector(".filter-row")).toBeNull();
+    const sort = screen.getByRole("button", { name: "Sort by" });
+    sort.focus();
+    await fireEvent.keyDown(sort, { key: "ArrowDown" });
+    await fireEvent.pointerUp(await screen.findByRole("option", { name: "Rating" }));
+    expect(container.querySelector(".filter-row")).toBeNull();
+    await fireEvent.click(screen.getByRole("button", { name: "Media wall" }));
+    expect(container.querySelector(".filter-row")).toBeNull();
+    await fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Select all" }));
+    expect(container.querySelector(".filter-row")).toBeNull();
+  });
+
+  it("clears search without resetting sort, artwork layout or selection", async () => {
+    const onSelectionChange = vi.fn();
+    render(EntityGrid, {
+      cards: Array.from({ length: 6 }, (_, index) => card(index)),
+      initialMediaWall: true,
+      onSelectionChange,
+      prefsKey: undefined,
+    });
+    await fireEvent.click(screen.getByRole("button", { name: "Sort ascending; switch to descending" }));
+    await fireEvent.input(screen.getByRole("searchbox"), { target: { value: "Video" } });
+    await fireEvent.click(screen.getByRole("button", { name: "Select" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Select all" }));
+    const selectedIds = onSelectionChange.mock.lastCall?.[0];
+    expect(selectedIds).toHaveLength(6);
+    await fireEvent.click(screen.getByRole("button", { name: "Clear search and filters" }));
+
+    expect(screen.getByRole("searchbox")).toHaveValue("");
+    expect(screen.getByRole("button", { name: "Sort descending; switch to ascending" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Media wall" })).toHaveAttribute("aria-pressed", "true");
+    expect(onSelectionChange.mock.lastCall?.[0]).toEqual(selectedIds);
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Clear search and filters" })).not.toBeInTheDocument());
   });
 
   it("can render grid cards as a metadata-free media wall", async () => {

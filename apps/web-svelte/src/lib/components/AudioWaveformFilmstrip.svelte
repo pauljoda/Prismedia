@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Button } from "@prismedia/ui-svelte";
   import { onMount } from "svelte";
   import { ChevronLeft, ChevronRight } from "@lucide/svelte";
   import { elementSize } from "$lib/hooks/element-size.svelte";
@@ -188,14 +189,14 @@
     style:--waveform-accent={accentPrimary}
     style:--waveform-secondary={accentSecondary}
   >
-    <button
+    <Button variant="ghost" size="sm"
       type="button"
       onclick={() => jump(-1)}
-      class="waveform-jump relative z-30 flex h-full w-8 shrink-0 items-center justify-center transition-colors"
+      class="relative z-30 flex h-full w-8 shrink-0 items-center justify-center"
       aria-label="Scrub back"
     >
       <ChevronLeft class="h-4 w-4" />
-    </button>
+    </Button>
 
     <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
@@ -247,14 +248,14 @@
       {/if}
     </div>
 
-    <button
+    <Button variant="ghost" size="sm"
       type="button"
       onclick={() => jump(1)}
-      class="waveform-jump relative z-30 flex h-full w-8 shrink-0 items-center justify-center transition-colors"
+      class="relative z-30 flex h-full w-8 shrink-0 items-center justify-center"
       aria-label="Scrub forward"
     >
       <ChevronRight class="h-4 w-4" />
-    </button>
+    </Button>
 </div>
 {/if}
 
@@ -263,14 +264,7 @@
     background: var(--color-bg);
   }
 
-  .waveform-jump {
-    color: var(--color-text-muted);
-    background: var(--color-bg);
-  }
 
-  .waveform-jump:hover {
-    color: var(--color-text-primary);
-  }
 
   .waveform-fade--left {
     background: linear-gradient(90deg, var(--color-bg), transparent);

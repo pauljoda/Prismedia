@@ -1,6 +1,6 @@
 <script lang="ts">
   import { BookOpen, Headphones, Layers2 } from "@lucide/svelte";
-  import { Button, Panel } from "@prismedia/ui-svelte";
+  import { Button, Panel, Progress } from "@prismedia/ui-svelte";
 
   interface Props {
     progressPercent: number;
@@ -50,9 +50,7 @@
         <Layers2 class="h-4 w-4" />
         <span>{progressLabel ?? `${Math.round(percent)}%`}</span>
       </div>
-      <div class="meter" aria-hidden="true">
-        <span style:width={`${percent}%`}></span>
-      </div>
+      <Progress value={percent} aria-label="Book progress" class="h-[3px]" style="--progress-fill: linear-gradient(90deg, var(--reading-accent), var(--listening-accent))" />
       {#if activityLabel}
         <span class="activity-label">{activityLabel}</span>
       {/if}
@@ -132,16 +130,6 @@
     color: color-mix(in srgb, var(--reading-accent) 72%, white 20%);
     font-family: var(--font-mono, "JetBrains Mono", monospace);
     font-size: 0.66rem;
-  }
-  .meter {
-    height: 3px;
-    overflow: hidden;
-    background: color-mix(in srgb, var(--reading-accent) 12%, var(--color-border-subtle));
-  }
-  .meter span {
-    display: block;
-    height: 100%;
-    background: linear-gradient(90deg, var(--reading-accent), var(--listening-accent));
   }
   .activity-label {
     color: var(--color-text-muted);

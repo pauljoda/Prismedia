@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Loader2, RefreshCw } from "@lucide/svelte";
-  import { Button, Toggle } from "@prismedia/ui-svelte";
+  import { Button, Card, Toggle } from "@prismedia/ui-svelte";
+  import type { Snippet } from "svelte";
   import type { EntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
   import RequestTargetOptions from "$lib/components/acquisitions/RequestTargetOptions.svelte";
   import type { RequestKindInfo } from "$lib/requests/request-helpers";
@@ -8,9 +9,12 @@
   let {
     acq,
     kindInfo,
+    footer,
   }: {
     acq: EntityAcquisition;
     kindInfo?: RequestKindInfo | null;
+    /** Contextual file actions, kept below monitoring rather than above its heading. */
+    footer?: Snippet;
   } = $props();
 
   let profileId = $state<string | null>(null);
@@ -71,16 +75,27 @@
   });
 </script>
 
-<div class="monitor-control">
-  <div class="monitor-summary">
-    <div class="min-w-0 flex-1">
-      <div class="flex items-center gap-2">
-        <h2 class="text-[0.88rem] font-medium text-text-primary">Monitor</h2>
-        {#if acq.monitorBusy}
-          <Loader2 class="h-3.5 w-3.5 animate-spin text-text-muted" aria-hidden="true" />
-        {/if}
-      </div>
-      <p class="mt-0.5 text-[0.68rem] leading-relaxed text-text-muted">{statusText}</p>
+<Card.Root size="sm">
+  <Card.Header class={kindInfo ? "border-b border-border-subtle" : undefined}>
+    <Card.Title role="heading" aria-level={2} class="flex items-center gap-2">
+      Monitoring
+      {#if acq.monitorBusy}
+        <Loader2 class="animate-spin text-muted-foreground" aria-hidden="true" />
+      {/if}
+    </Card.Title>
+    <Card.Description>{statusText}</Card.Description>
+    <Card.Action>
+      <Toggle
+        {checked}
+        {disabled}
+        onchange={() => void acq.toggleMonitor({ profileId, targetLibraryRootId })}
+        ariaLabel="Monitor"
+      />
+    </Card.Action>
+  </Card.Header>
+
+  {#if acq.monitorStopping || kindInfo}
+    <Card.Content class="flex flex-col gap-3">
       {#if acq.monitorStopping}
         <Button
           type="button"
@@ -88,67 +103,41 @@
           size="sm"
           disabled={acq.monitorBusy}
           onclick={() => void acq.toggleMonitor()}
-          class="no-lift mt-2 gap-1.5"
+          class="no-lift w-full justify-start"
         >
-          <RefreshCw class="h-3.5 w-3.5" />
+          <RefreshCw data-icon="inline-start" />
           Finish unmonitoring
         </Button>
       {/if}
-    </div>
-    <Toggle
-      {checked}
-      {disabled}
-      onchange={() => void acq.toggleMonitor({ profileId, targetLibraryRootId })}
-      ariaLabel="Monitor"
-    />
-  </div>
 
-  {#if kindInfo}
-    <div class="monitor-targeting">
-      <RequestTargetOptions
-        {kindInfo}
-        bind:targetLibraryRootId
-        bind:profileId
-      >
-        {#snippet actions()}
-          {#if acq.monitorActive}
-            <Button
-              type="button"
-              variant="secondary"
-              size="sm"
-              disabled={acq.monitorBusy || !targetingDirty}
-              onclick={() => void acq.updateMonitorTargeting({ profileId, targetLibraryRootId })}
-              class="no-lift"
-            >
-              Apply
-            </Button>
-          {/if}
-        {/snippet}
-      </RequestTargetOptions>
-    </div>
+      {#if kindInfo}
+        <RequestTargetOptions
+          {kindInfo}
+          stacked
+          bind:targetLibraryRootId
+          bind:profileId
+        >
+          {#snippet actions()}
+            {#if acq.monitorActive}
+              <Button
+                type="button"
+                variant="secondary"
+                size="md"
+                disabled={acq.monitorBusy || !targetingDirty}
+                onclick={() => void acq.updateMonitorTargeting({ profileId, targetLibraryRootId })}
+                class="no-lift w-full"
+              >
+                Apply
+              </Button>
+            {/if}
+          {/snippet}
+        </RequestTargetOptions>
+      {/if}
+    </Card.Content>
   {/if}
-</div>
-
-<style>
-  .monitor-control {
-    background: color-mix(in srgb, var(--color-surface-1) 72%, transparent);
-    border: 1px solid var(--color-border-subtle);
-    border-radius: var(--radius-sm);
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-    min-width: 0;
-    padding: 0.8rem 0.9rem;
-  }
-  .monitor-summary {
-    align-items: center;
-    display: flex;
-    gap: 1rem;
-    justify-content: space-between;
-    min-width: 0;
-  }
-  .monitor-targeting {
-    border-top: 1px solid var(--color-border-subtle);
-    padding-top: 0.8rem;
-  }
-</style>
+  {#if footer}
+    <Card.Footer class="border-t border-border-subtle">
+      {@render footer()}
+    </Card.Footer>
+  {/if}
+</Card.Root>

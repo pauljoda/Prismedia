@@ -33,6 +33,46 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 - Large TV packs reuse episode evidence across files and alignment passes, reducing repeated parsing and memory allocation during import planning.
 
+- Replacement searches open in the main acquisition area instead of inside More acquisition actions. Closing the search returns to the current acquisition without changing the existing files.
+- Clicking an Entity grid thumbnail carries its artwork into the detail header on supported browsers. Back and forward navigation stay immediate, reduced motion skips the effect, and slow or unavailable artwork falls back to normal navigation.
+- Identify's content-type buttons now grow with their labels and queue counts, keeping icons and text aligned without overlapping adjacent rows on desktop or phones.
+- Entity editors warn before leaving a page with unsaved changes, including browser back navigation, refresh, and closing the tab.
+- Entity editors place Save and Cancel after the fields, with validation and save errors beside those actions. The unsaved-changes prompt uses a compact shared dialog with stacked phone actions instead of stretching across the screen.
+- Metadata cards share the available row width without empty reserved columns. Source paths and fingerprints use full-width, selectable values below their labels, and repeated labels no longer prevent cards from rendering.
+- Thumbnail chips retain colored icons and use smaller shared caption sizes than their titles. The two values stay on one row with compact text and icons on the narrowest cards.
+- Entity headers emphasize a main date or meaningful date range, with every milestone available in a labeled "More dates" popover. Album headers lead with the artist instead of repeating studio information already shown in Details.
+- Entity detail headers show acquisition status once beside the title across media types. Covers no longer repeat grid badges or create inactive keyboard stops, and decorative artwork is hidden from screen readers.
+- Thumbnail metadata keeps separate chip outlines even at dense grid sizes.
+- Collection rules display numeric units and allow duration, file-size, and audio units to be changed without rewriting saved thresholds. Compatible comparison changes retain entered values, empty numeric drafts stay incomplete, and the existing negated-all logic is labeled "Not all" accurately.
+- Captioned Entity grids now reduce their column count in narrow spaces before squeezing metadata into unreadable fragments. The density preference is preserved, and artwork-only media walls remain unrestricted.
+- Collection previews now show a clearly counted sample of full Entity thumbnails instead of library controls that only filtered the sample. Resolution and gallery-type rules use removable choices, and preview loading, failures, and empty results are distinct. Changing rules cancels obsolete previews.
+- Collection relationship rules now use searchable Entity selections with artwork for tags, people, studios, and series. Exact names, including commas, and existing series IDs are preserved; future names can still be entered without creating library Entities.
+- Collection rules use labeled, responsive fields and a searchable Entity-type picker instead of cramped toggle strips. Saved nested groups remain visible and intact during editing, and incomplete rules show guidance instead of misleading empty results.
+- Broad searches can load further direct and related Entity matches in bounded batches instead of silently stopping at the first page. Existing results stay visible during continuation, with retry for failed pages and no duplicate entries. Shared choice rows also stay within the available width in mobile Safari.
+- Search results use consistently sized Entity thumbnails with library artwork and status badges, clearer group headings, working result expansion, and retry feedback. Rating and type filters update fetched matches immediately; nonfunctional date filters have been removed.
+- Search, Request discovery, mixed-library grids, and download statuses now share spaced choice controls. Required filters stay visibly selected, and reselecting the current Request type preserves the search draft.
+- Downloads now uses readable, status-first rows on phones, opening transfer details in a full-height view with a clear return to the queue. Desktop retains its resizable table and inspector, and status filters use shared single-choice controls.
+- Entity thumbnails use readable shared status and metadata badges. List views place these beside the title instead of over small artwork, and selection checkboxes remain visible over bright images.
+- Collapsible related-content sections now visibly contain their toolbars and thumbnails, with clear Show/Hide controls. Mixed-library type filters use spaced chips with Entity-colored icons instead of cramped connected selectors.
+- Entity detail sections now extend behind the header with square top corners. Artwork editing uses an expandable set of labeled controls instead of buttons over the cover or an empty header overlay.
+- Entity editing now groups fields, dates, and references in a full-width responsive grid with consistently aligned save/cancel controls. Book acquisition rows separate availability from actions and use roomier shared controls.
+- Acquisition downloads now put progress, speed, and time remaining first, with technical details collapsed. Recovery actions share an aligned footer beneath the work area.
+- Entity controls and metadata chips now share readable sizes and spacing. Mobile detail actions keep their labels in an aligned grid below the artwork, and related entities retain full thumbnails.
+- Entity page actions now have larger touch targets and more breathing room. Library heading icons show their media-family color, while detail pages carry artwork colors into the active tab and a clearer background atmosphere.
+- Related-content sections now share consistent headings, counts, and empty states across artists, authors, albums, galleries, series, and seasons. Collapsed sections remember the correct preference when navigating between entities.
+- Track lists now prioritize titles and artists, keep play controls separate from row numbers, and only flag missing media. The Tracks library uses continuous numbering without album disc headings, with shared search and empty-state controls.
+- Entity metadata now consolidates provider links that point to the same website, uses clearer shared link rows, and fits cards to their content with consistently aligned labels and values.
+- Dashboard and related-entity shelves now share visible previous/next controls, with clearer cast counts and readable thumbnail captions at smaller sizes.
+- Entity pages now use clearer full-height tabs, readable metadata and descriptions, calmer tags and credit labels, and consistent shared empty and disclosure surfaces. Acquisition review now leads with the current problem and next action, while monitoring preferences move into a responsive settings column and file audits and history stay out of the primary path.
+- Readers, player settings, file actions, ratings, selection controls, and operational screens now use the shared themed UI foundation. Reader contents and media settings share keyboard dismissal and focus handling, while existing artwork layouts, Settings section identities, and library toolbar placement are preserved.
+- Relationship, tag, and collection pickers now share searchable keyboard navigation, removable selections, and clearer loading and retry states. Editors, dialogs, mobile navigation, progress indicators, and collection choices build on the same themed UI foundations without replacing Settings navigation or library toolbar layouts.
+- Global search now uses a shared command interface with clearer artwork rows, keyboard-accessible recent searches and full-result actions, visible navigation hints, and retry feedback, while preserving grouped results and layered dialog interaction.
+- Shared buttons, search fields, form labels, status badges, detail tabs, and navigation disclosures now build on themed shadcn-svelte components, with quieter toolbar styling and existing page layouts and section identities preserved.
+- Bulk-selection actions and page-size pickers now use shared keyboard-accessible controls with consistent focus handling, while keeping their existing toolbar placement.
+- Library toolbars retain their full-width search row, inline view and thumbnail controls, and separate selection strip while using shared keyboard-accessible controls. Identify provider search now shares keyboard navigation and focus handling with other menus.
+- Account, breadcrumb, and track menus now share keyboard navigation, focus return, and collision-aware positioning. Filter presets use a clearer panel with labeled fields and always-visible management actions.
+
+- Shared dropdowns and settings switches now use accessible component bases with clearer neutral styling, keyboard typeahead, disabled-option handling, and dialog-aware menus. Settings labels are easier to read and selectors expand to full width on small screens.
 - Shared audio players now advance any owning Entity through generic item-to-progress mappings. Book code constructs the chapter mapping, while web and Apple players use the same media-neutral playback and persistence contract as every other audio-capable Entity.
 - Saved audio queues now restore through one compact, exact batch projection instead of loading every queued item independently, preserving numeric durations and player metadata without query growth as queues get longer.
 
@@ -43,6 +83,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Audio-track detail and saved-queue payloads no longer duplicate embedded artist and album fields outside the Entity's `embedded-audio-metadata` capability.
 
 ### Fixed
+
+- Opening an acquisition profile brings its editor into view. Release preference editors use the shared searchable choices and preserve advanced conditions when switching views.
 
 - Built-in format preferences recognize underscore-separated codec and source tags while avoiding matches inside ordinary words.
 
@@ -234,6 +276,28 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 - Automatic upgrades and the Cutoff Unmet list now honor the acquisition’s assigned quality profile, so a different default profile cannot silently disable upgrades or trigger unwanted ones.
 
+- Opening plugin credentials no longer autofills the plugin search with your Prismedia login and hides the editor. Plugin searches now use the shared clear control and return focus to the empty search field.
+- Plugin navigation now uses the shared keyboard-accessible tabs. Confirmation dialogs focus Cancel, preserve failed actions for retry, and prevent dismissal while work is in progress. Request messages, dashboard placeholders, and diagnostic job history use the shared UI components.
+
+- Resolution filters now use the same source tiers as thumbnail badges, including cropped widescreen video. Grid and collection choices include 8K, 1440p, and lower-resolution SD, while unknown dimensions remain unclassified. Existing resolution-based collections may show corrected matches.
+
+- Entity thumbnail captions keep two metadata values on one row. Compact sizing reduces padding and removes decorative chip framing on the smallest cards so values stay readable; full metadata remains on detail pages.
+
+- New collection rules no longer silently restrict video fields to standalone Videos, excluding Movies and Episodes. Entity-type choices now follow the same backend policy as rule evaluation, while existing explicit restrictions remain unchanged.
+- Acquisition labels now agree across library cards, Downloads, and child activity. Pending, downloaded, and importing stages stay distinct, while attention states name the next step: Choose release or Review import.
+- Entity metadata combines repeated provider destinations into one link with aligned, readable IDs, without changing the editable source data. Personal milestones now appear under Dates rather than Release dates.
+- Untabbed Entity pages now use the same responsive editor as tabbed pages. Hidden fields and read-only relationships no longer appear as editable or enter the save selection.
+- Entity detail panels align with the header without dark side gutters, and narrow-screen title/rating fields stay within the shared edit grid.
+- Link editors now identify editing clearly, focus the field, and explain invalid entries. Metadata input errors are associated with their fields, manual upload is keyboard-accessible, and supporting acquisition sections no longer run together.
+- Date fields stay aligned within their columns in iOS Safari while retaining the native calendar picker.
+- Interrupted imports now show the failure reason and available recovery path instead of suggesting an unavailable torrent upload.
+- Metadata chips no longer combine a white background with light text. Mobile navigation icons align consistently, track ratings no longer overlap durations, and acquisition file actions stay inside their card instead of floating between sections.
+- Library searches with no matches now offer a direct reset instead of incorrectly saying the library is empty and asking you to scan folders. Reset preserves sorting and display preferences.
+- Global search no longer shows an older request's results after the query changes or activates a result when Enter is used on Clear.
+- Video playback shortcuts no longer also react to keys used by tabs, menus, sliders, or other focused controls.
+- Changing library sort, artwork layout, or selection no longer reveals a reset row or shifts the toolbar. Clear now removes only search and filters while keeping those browsing preferences.
+- Library sort direction now uses a distinct sorting icon and explicit tooltip so it is not confused with expanding the toolbar.
+- The library toolbar's Clear action now keeps its icon and label aligned in one compact button.
 - Fresh movie-library setup now persists discovered titles in bounded database batches, runs every playback-critical probe before optional enrichment, applies high-cardinality local sidecar relationships in the background, and defers long trickplay generation behind ordinary thumbnails and previews so the library becomes visible and playable without waiting for metadata expansion or background media work.
 - Videos now count as completed after 90% playback, so leaving during credits records the play. Completed items also stop advertising a final-second resume point, while manually marking an item watched still preserves its prior position if it is later marked incomplete.
 - The unified container now reasserts PostgreSQL-safe data-directory permissions immediately before database startup, so a named ACL cannot leave Prismedia stuck in a restart loop after the container restarts.

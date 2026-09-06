@@ -44,6 +44,19 @@ describe("RequestDiscover", () => {
     searchRequestsByPlugin.mockResolvedValue({ results: [], providerErrors: [] });
   });
 
+  it("keeps the current search draft when its selected kind is clicked again", async () => {
+    render(RequestDiscoverHarness);
+    await waitFor(() => expect(fetchPluginProviders).toHaveBeenCalledOnce());
+    await fireEvent.click(screen.getByRole("button", { name: "Series" }));
+    const title = await screen.findByLabelText("Series title");
+    await fireEvent.input(title, { target: { value: "A planned search" } });
+    const selectedKind = screen.getByRole("radio", { name: "Series" });
+    await fireEvent.click(selectedKind);
+    expect(title).toHaveValue("A planned search");
+    expect(selectedKind).toHaveAttribute("aria-checked", "true");
+    expect(searchRequestsByPlugin).not.toHaveBeenCalled();
+  });
+
   it("requires a kind, filters its providers, and swaps to the selected provider's schema", async () => {
     render(RequestDiscoverHarness);
 
@@ -61,7 +74,7 @@ describe("RequestDiscover", () => {
     const listbox = screen.getByRole("listbox");
     expect(within(listbox).getByText("Beta TV Database")).toBeInTheDocument();
     expect(within(listbox).queryByText("Open Library")).not.toBeInTheDocument();
-    await fireEvent.mouseDown(within(listbox).getByRole("option", { name: /beta tv database/i }));
+    await fireEvent.click(within(listbox).getByRole("option", { name: /beta tv database/i }));
 
     expect(await screen.findByLabelText("Show name")).toBeInTheDocument();
     expect(screen.getByLabelText("Episode title")).toBeInTheDocument();
@@ -184,7 +197,7 @@ describe("RequestDiscover", () => {
 
     await fireEvent.click(screen.getByRole("button", { name: "Books" }));
 
-    expect(await screen.findByText(/No installed provider can search and review books/i)).toBeInTheDocument();
+    expect(await screen.findByText("No compatible provider")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Source:/ })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Search" })).not.toBeInTheDocument();
   });

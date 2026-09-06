@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { AlertTriangle, Loader2, X } from "@lucide/svelte";
-  import { Button, Dialog } from "@prismedia/ui-svelte";
+  import { AlertTriangle, Loader2 } from "@lucide/svelte";
+  import { Alert, AlertDialog, buttonVariants } from "@prismedia/ui-svelte";
 
   interface Props {
     open: boolean;
@@ -25,6 +25,7 @@
 
   let busy = $state(false);
   let error = $state<string | null>(null);
+  let cancelButton = $state<HTMLButtonElement | null>(null);
 
   $effect(() => {
     if (open) {
@@ -47,47 +48,37 @@
   }
 </script>
 
-<Dialog {open} {onClose} ariaLabel={title} dismissible={!busy} class="w-[min(92vw,26rem)]">
-  <div class="flex flex-col gap-4 p-5">
-    <div class="flex items-start justify-between gap-4">
-      <h2 class="flex items-center gap-2 font-heading text-base font-semibold tracking-wide text-text-primary">
+<AlertDialog.Root {open} onOpenChange={(next) => { if (!next && !busy) onClose(); }}>
+  {#if open}
+    <AlertDialog.Content escapeKeydownBehavior={busy ? "ignore" : "close"} aria-busy={busy}
+      onOpenAutoFocus={(event) => {
+        if (cancelButton) { event.preventDefault(); cancelButton.focus(); }
+      }}>
+      <AlertDialog.Header>
         {#if danger}
-          <AlertTriangle class="h-4 w-4 text-error-400" />
+          <AlertDialog.Media><AlertTriangle aria-hidden="true" /></AlertDialog.Media>
         {/if}
-        {title}
-      </h2>
-      <Button
-        variant="ghost"
-        size="icon"
-        onclick={onClose}
-        disabled={busy}
-        class="shrink-0"
-        aria-label="Cancel"
-      >
-        <X class="h-4 w-4" />
-      </Button>
-    </div>
-
-    <p class="text-body-sm text-text-muted">{message}</p>
-
-    {#if error}
-      <p class="text-body-sm text-error-400">{error}</p>
-    {/if}
-
-    <div class="flex justify-end gap-2">
-      <Button type="button" variant="ghost" size="md" onclick={onClose} disabled={busy}>Cancel</Button>
-      <Button
-        type="button"
-        variant={danger ? "danger" : "primary"}
-        size="md"
-        onclick={() => void confirm()}
-        disabled={busy}
-      >
-        {#if busy}
-          <Loader2 class="h-4 w-4 animate-spin" />
-        {/if}
-        {confirmLabel}
-      </Button>
-    </div>
-  </div>
-</Dialog>
+        <AlertDialog.Title>{title}</AlertDialog.Title>
+        <AlertDialog.Description>{message}</AlertDialog.Description>
+      </AlertDialog.Header>
+      {#if error}
+        <Alert.Root variant="destructive"><Alert.Description>{error}</Alert.Description></Alert.Root>
+      {/if}
+      <AlertDialog.Footer>
+        <AlertDialog.Cancel bind:ref={cancelButton} disabled={busy} class={buttonVariants({ variant: "secondary", size: "md" })}>Cancel</AlertDialog.Cancel>
+        <AlertDialog.Action
+          class={buttonVariants({ variant: danger ? "danger" : "primary", size: "md" })}
+          onclick={(event) => {
+            // The async action, not the primitive's click handler, owns dismissal.
+            event.preventDefault();
+            void confirm();
+          }}
+          disabled={busy}
+        >
+          {#if busy}<Loader2 class="animate-spin" aria-hidden="true" />{/if}
+          {confirmLabel}
+        </AlertDialog.Action>
+      </AlertDialog.Footer>
+    </AlertDialog.Content>
+  {/if}
+</AlertDialog.Root>

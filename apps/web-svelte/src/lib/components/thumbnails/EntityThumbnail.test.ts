@@ -286,15 +286,15 @@ describe("EntityThumbnail", () => {
     });
 
     const surface = container.querySelector<HTMLElement>(".entity-thumbnail");
-    const checkbox = container.querySelector<HTMLInputElement>(".selection");
+    const checkbox = container.querySelector<HTMLElement>('[role="checkbox"]');
 
     await fireEvent.click(surface!);
     expect(onActivate).toHaveBeenCalledWith(personCard());
     expect(onSelectedChange).not.toHaveBeenCalled();
 
     await fireEvent.click(checkbox!);
-    await fireEvent.change(checkbox!, { target: { checked: false } });
     expect(onSelectedChange).toHaveBeenCalledWith(false);
+    expect(onActivate).toHaveBeenCalledTimes(1);
   });
 
   it("can render as a static visual inside a parent control", () => {

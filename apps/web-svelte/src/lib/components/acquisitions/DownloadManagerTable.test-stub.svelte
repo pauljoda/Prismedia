@@ -16,6 +16,7 @@
 
 {#if error}<p role="alert">{error}</p>{/if}
 <output data-testid="entry-count">{entries.length}</output>
+<button type="button" onclick={() => onSelect(entries[0].item.id)}>Inspect first download</button>
 <button
   type="button"
   disabled={entries.length === 0}

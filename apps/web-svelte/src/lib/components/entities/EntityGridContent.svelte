@@ -1,6 +1,8 @@
 <script lang="ts">
   import { SearchX } from "@lucide/svelte";
+  import { Button } from "@prismedia/ui-svelte";
   import PrismediaLoadingMark from "$lib/components/PrismediaLoadingMark.svelte";
+  import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import type { EntityGridViewMode } from "$lib/entities/entity-grid";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
@@ -16,6 +18,8 @@
     mediaWall: boolean;
     onCardActivate?: (card: EntityThumbnailCard, visibleCards: EntityThumbnailCard[]) => void;
     onCardSelectedChange: (id: string, selected: boolean) => void;
+    /** Present only when the current search or filters can be cleared. */
+    onResetFilters?: () => void;
     selectable: boolean;
     selectedIds: string[];
     selectionActive: boolean;
@@ -33,6 +37,7 @@
     mediaWall,
     onCardActivate,
     onCardSelectedChange,
+    onResetFilters,
     selectable,
     selectedIds,
     selectionActive,
@@ -80,23 +85,29 @@
     {/each}
   </div>
 {:else}
-  <div class="empty" role="status">
-    <span class="empty-icon">
-      <SearchX aria-hidden="true" />
-    </span>
-    <strong>{emptyTitle}</strong>
-    <span>{emptyMessage}</span>
-  </div>
+  <StatePlaceholder
+    icon={SearchX}
+    title={onResetFilters ? "No matching items" : emptyTitle}
+    description={onResetFilters ? "Try another search or clear your filters." : emptyMessage}
+  >
+    {#if onResetFilters}
+      <Button variant="outline" size="sm" onclick={onResetFilters}>Reset search and filters</Button>
+    {/if}
+  </StatePlaceholder>
 {/if}
 
 <style>
   .cards {
+    --preferred-columns: max(1, min(calc(var(--col-count, 5) - 1), 4));
     display: grid;
+    /* Keep the requested density where it fits, but leave room for readable captions. */
     grid-template-columns: repeat(
-      max(1, min(calc(var(--col-count, 5) - 1), 4)),
-      minmax(0, 1fr)
+      auto-fill,
+      minmax(min(100%, max(var(--spacing-thumbnail-min), calc(
+        (100% + var(--spacing-thumbnail-gap)) / var(--preferred-columns) - var(--spacing-thumbnail-gap)
+      ))), 1fr)
     );
-    gap: 0.75rem;
+    gap: var(--spacing-thumbnail-gap);
     align-items: start;
     overflow-anchor: none;
     contain: layout;
@@ -134,59 +145,15 @@
     overflow: hidden;
   }
 
-  .empty {
-    display: grid;
-    gap: 0.35rem;
-    min-height: 12rem;
-    place-content: center;
-    justify-items: center;
-    padding: 2.5rem 1.25rem;
-    background: var(--color-surface-1, #0c0f15);
-    border: 1px solid var(--color-border-subtle, rgba(148, 158, 178, 0.07));
-    border-radius: var(--radius-sm, 6px);
-    box-shadow: inset 0 2px 8px rgba(0,0,0,0.30);
-    color: var(--color-text-muted);
-    text-align: center;
-  }
-
-  .empty > strong,
-  .empty > span:not(.empty-icon) {
-    max-width: 32rem;
-  }
-
-  .empty-icon {
-    display: grid;
-    place-items: center;
-    justify-self: center;
-    width: 2rem;
-    height: 2rem;
-    color: var(--color-text-disabled);
-  }
-
-  .empty-icon :global(svg) {
-    width: 100%;
-    height: 100%;
-  }
-
-  .empty strong {
-    color: var(--color-text-primary);
-    font-family: var(--font-heading, Geist, sans-serif);
-    font-size: 1.1rem;
-  }
-
-  .empty span {
-    font-size: 0.85rem;
-  }
-
   @media (min-width: 640px) {
     .cards {
-      grid-template-columns: repeat(max(1, min(var(--col-count, 5), 4)), minmax(0, 1fr));
+      --preferred-columns: max(1, min(var(--col-count, 5), 4));
     }
   }
 
   @media (min-width: 1024px) {
     .cards {
-      grid-template-columns: repeat(var(--col-count, 5), minmax(0, 1fr));
+      --preferred-columns: var(--col-count, 5);
     }
   }
 

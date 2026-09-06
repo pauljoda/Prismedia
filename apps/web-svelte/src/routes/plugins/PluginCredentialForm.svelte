@@ -36,7 +36,14 @@
   }
 </script>
 
-<div class="border-t border-border-subtle px-4 py-3 space-y-3 bg-surface-1/50">
+<!-- Keep browser login autofill from pairing these secrets with the page search. -->
+<form
+  id={`${inputIdPrefix}-form`}
+  autocomplete="off"
+  aria-label="Plugin credentials"
+  onsubmit={(event) => { event.preventDefault(); if (canSave && !saving) onSave(); }}
+  class="border-t border-border-subtle px-4 py-3 flex flex-col gap-3 bg-surface-1/50"
+>
   <h4 class="text-[0.72rem] font-medium text-text-secondary">Authentication</h4>
   {#each fields as field (field.key)}
     {@const valueKey = getValueKey(field)}
@@ -62,7 +69,9 @@
       </div>
       <TextInput
         id="{inputIdPrefix}-{field.key}"
+        name="{inputIdPrefix}-{field.key}"
         type="password"
+        autocomplete="new-password"
         size="sm"
         value={values[valueKey] ?? ""}
         oninput={(event) => updateValue(field, event.currentTarget.value)}
@@ -82,11 +91,10 @@
       Cancel
     </Button>
     <Button
-      type="button"
+      type="submit"
       variant="primary"
       size="sm"
       disabled={saving || !canSave}
-      onclick={onSave}
       class="h-auto gap-1.5 px-3 py-1.5 text-[0.72rem]"
     >
       {#if saving}
@@ -97,4 +105,4 @@
       Save Credentials
     </Button>
   </div>
-</div>
+</form>

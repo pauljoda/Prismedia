@@ -1,19 +1,26 @@
 <script lang="ts">
+  import { Badge } from "@prismedia/ui-svelte";
   import OverflowTicker from "$lib/components/OverflowTicker.svelte";
   import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
   import { thumbnailMetaAccentForIcon } from "$lib/entities/entity-accent";
   import type { Snippet } from "svelte";
   import EntityThumbnailIcon from "./EntityThumbnailIcon.svelte";
+  import EntityThumbnailBadges from "./EntityThumbnailBadges.svelte";
 
   interface Props {
     card: EntityThumbnailCard;
     mediaOnly: boolean;
+    layout: "grid" | "list";
+    showWantedBadge: boolean;
+    showBadges?: boolean;
     subtitleContent?: Snippet<[EntityThumbnailCard]>;
     titleAlign: "left" | "center" | "right";
     titleSize: "default" | "compact";
   }
 
-  let { card, mediaOnly, subtitleContent, titleAlign, titleSize }: Props = $props();
+  let { card, mediaOnly, layout, showBadges = true, showWantedBadge, subtitleContent, titleAlign, titleSize }: Props = $props();
+  // Captions are a compact summary: two chips share one row, truncating long labels.
+  const maxMetadataChips = 2;
 </script>
 
 {#if !mediaOnly}
@@ -34,17 +41,21 @@
       {/if}
     </div>
 
+    {#if showBadges && layout === "list"}<EntityThumbnailBadges {card} {showWantedBadge} inline />{/if}
+
     {#if card.meta?.length}
-      <div class="chips">
-        {#each card.meta.slice(0, 5) as item (item.icon + item.label)}
-          <span
-            class="chip"
-            style:--thumbnail-meta-accent={thumbnailMetaAccentForIcon(item.icon)}
+      <div class="chips flex-nowrap">
+        {#each card.meta.slice(0, maxMetadataChips) as item (item.icon + item.label)}
+          <Badge
+            variant="outline"
+            class="chip min-w-0 max-w-full shrink"
+            style={`--thumbnail-meta-accent: ${thumbnailMetaAccentForIcon(item.icon)}`}
             aria-label={`${item.icon} ${item.label}`}
+            title={item.label}
           >
             <EntityThumbnailIcon icon={item.icon} />
-            {item.label}
-          </span>
+            <span class="chip-label truncate">{item.label}</span>
+          </Badge>
         {/each}
       </div>
     {/if}
@@ -57,14 +68,14 @@
     z-index: 1;
     display: flex;
     flex-direction: column;
-    gap: 0.125rem;
+    gap: 0.2rem;
     min-width: 0;
     padding: 0 0.25rem;
     overflow: hidden;
     pointer-events: none;
   }
 
-  .thumbnail-caption.has-subtitle { gap: 0.125rem; }
+  .thumbnail-caption.has-subtitle { gap: 0.2rem; }
 
   .copy { display: flex; flex-direction: column; min-width: 0; max-width: 100%; }
 
@@ -73,9 +84,9 @@
     margin: 0;
     min-width: 0;
     overflow: hidden;
-    color: rgb(244 239 230 / 0.95);
+    color: var(--color-text, #f4efe6);
     font-family: var(--font-heading, Geist, sans-serif);
-    font-size: 0.875rem;
+    font-size: var(--text-control);
     font-weight: 600;
     line-height: 1.25;
     letter-spacing: -0.01em;
@@ -83,7 +94,7 @@
     white-space: nowrap;
   }
 
-  .title-size-compact { font-size: 0.75rem; font-weight: 600; line-height: 1.2; }
+  .title-size-compact { font-size: var(--text-label); font-weight: 600; line-height: 1.25; }
   .title-align-left { text-align: left; }
   .title-align-center { text-align: center; }
   .title-align-right { text-align: right; }
@@ -91,13 +102,12 @@
   .subtitle {
     overflow: hidden;
     margin: 0;
-    color: rgb(196 201 212 / 0.82);
+    color: var(--color-text-muted, #8a93a6);
     font-family: var(--font-body, Inter, sans-serif);
-    font-size: 0.6875rem;
-    line-height: 1.25;
+    font-size: var(--text-caption);
+    line-height: 1.35;
     text-overflow: ellipsis;
     white-space: nowrap;
-    text-shadow: 0 1px 3px rgb(0 0 0 / 0.6);
   }
 
   .custom-subtitle { display: flex; min-width: 0; margin-top: 0.125rem; }
@@ -105,30 +115,12 @@
   .custom-subtitle.title-align-center { justify-content: center; }
   .custom-subtitle.title-align-right { justify-content: flex-end; }
 
-  .chips { display: flex; flex-wrap: nowrap; gap: 0.25rem; margin-top: 0.125rem; overflow: hidden; }
-  .chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.2rem;
-    flex: 0 1 auto;
-    min-width: 0;
-    max-width: 100%;
-    min-height: 1.15rem;
-    overflow: hidden;
-    border: 1px solid color-mix(in srgb, var(--thumbnail-meta-accent) 32%, transparent);
-    border-radius: var(--radius-sm, 6px);
-    background: color-mix(in srgb, var(--thumbnail-meta-accent) 11%, transparent);
-    color: rgb(224 228 236 / 0.84);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.625rem;
-    font-weight: 600;
-    line-height: 1;
-    padding: 0.125rem 0.25rem;
-    text-overflow: ellipsis;
-    text-shadow: 0 1px 2px rgb(0 0 0 / 0.5);
-    white-space: nowrap;
+  .chips {
+    display: flex;
+    gap: var(--spacing-control-gap-sm);
+    margin-top: var(--spacing-control-gap-sm);
   }
-  .chip :global(svg) { flex: 0 0 auto; color: var(--thumbnail-meta-accent); }
+  .chips :global(.chip svg) { flex-shrink: 0; color: var(--thumbnail-meta-accent); }
 
   :global(.entity-thumbnail.is-list) .thumbnail-caption {
     flex: 1 1 0;
@@ -147,16 +139,22 @@
 
   @container (max-width: 220px) {
     .thumbnail-caption { gap: 0.125rem; padding: 0 0.25rem; }
-    h3 { font-size: 0.72rem; }
-    .chips { gap: 0.15rem; }
-    .chip { min-height: 0.9rem; padding: 0.08rem 0.2rem; font-size: 0.52rem; }
-    .chip:nth-child(n + 4) { display: none; }
+    h3 { font-size: var(--text-label); }
+    .chips { gap: var(--spacing); }
+    .chips :global(.chip) {
+      padding-inline: var(--spacing);
+      gap: var(--spacing);
+    }
   }
 
   @container (max-width: 140px) {
     .thumbnail-caption { gap: 0.1rem; padding: 0 0.2rem; }
-    h3 { font-size: 0.62rem; }
+    h3 { font-size: var(--text-caption); }
     .subtitle { display: none; }
-    .chip:nth-child(n + 2) { display: none; }
+    .chips {
+      /* Keep both meaning-carrying icons; metadata stays quieter than the title. */
+      --text-caption: var(--text-caption-compact);
+      --spacing-icon-sm: var(--text-caption-compact);
+    }
   }
 </style>

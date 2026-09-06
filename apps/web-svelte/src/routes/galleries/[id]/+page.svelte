@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { Badge as UiBadge } from "@prismedia/ui-svelte";
+  import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { onMount } from "svelte";
@@ -310,7 +312,7 @@
 
       {#snippet heroBadges()}
         {#if galleryMetadata?.galleryType}
-          <span class="hero-badge">{galleryMetadata.galleryType}</span>
+          <UiBadge variant="outline">{galleryMetadata.galleryType}</UiBadge>
         {/if}
       {/snippet}
 
@@ -356,9 +358,7 @@
     {/if}
 
     {#if childCards.length === 0}
-      <div class="empty-children">
-        <p>No images or sub-galleries in this gallery yet.</p>
-      </div>
+      <StatePlaceholder icon={Layers} title="This gallery is empty" description="Images and nested galleries will appear here." />
     {/if}
   {/if}
   </EntityDetailPageState>
@@ -394,6 +394,5 @@
   :global(.meta-sep) { display: inline-block; width: 3px; height: 3px; margin: 0 0.5rem; background: var(--color-text-muted, #8a93a6); opacity: 0.5; }
 
 
-  .empty-children { padding: 2rem; border: 1px solid var(--color-border-subtle, #1c2235); background: var(--color-surface-1, #0c0f15); color: var(--color-text-muted, #8a93a6); text-align: center; font-size: 0.85rem; }
 
 </style>

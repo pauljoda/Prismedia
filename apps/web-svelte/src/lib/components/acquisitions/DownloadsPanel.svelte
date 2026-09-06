@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, tick } from "svelte";
   import { SvelteMap } from "svelte/reactivity";
-  import { ExternalLink, GripHorizontal, HardDriveDownload, Trash2 } from "@lucide/svelte";
-  import { Badge, Button } from "@prismedia/ui-svelte";
+  import { ArrowLeft, ExternalLink, GripHorizontal, HardDriveDownload, Trash2 } from "@lucide/svelte";
+  import { Badge, Button, Empty } from "@prismedia/ui-svelte";
   import type { DownloadQueueItemView, EntityThumbnail } from "$lib/api/generated/model";
   import { deleteAcquisition, fetchDownloadQueue, reSearchAcquisition } from "$lib/api/acquisitions";
   import { fetchEntityThumbnails } from "$lib/api/entities";
@@ -28,7 +28,7 @@
 
   /**
    * The global Downloads workbench. Active acquisitions are grouped through their real Entity ancestry
-   * in a tree table; the selected transfer owns a persistent inspector beneath the queue.
+   * in a tree table. Desktop pairs the queue with an inspector; phones open that inspector on its own.
    */
   let rows = $state.raw<DownloadQueueItemView[]>([]);
   let thumbnails = $state.raw<Map<string, EntityThumbnail>>(new Map());
@@ -36,6 +36,9 @@
   let error = $state<string | null>(null);
   let acting = $state(false);
   let selectedKey = $state<string | null>(null);
+  let mobileDetailOpen = $state(false);
+  let backButton = $state<HTMLButtonElement | null>(null);
+  let queueElement = $state<HTMLElement | null>(null);
   let detailShare = $state(DEFAULT_DOWNLOAD_DETAIL_SHARE);
   let resizingPanes = $state(false);
   let workbenchElement = $state<HTMLElement | null>(null);
@@ -87,6 +90,20 @@
   const paneTemplate = $derived(
     `minmax(13rem, ${1 - detailShare}fr) 0.75rem minmax(12rem, ${detailShare}fr)`,
   );
+
+  async function inspectDownload(key: string) {
+    selectedKey = key;
+    mobileDetailOpen = true;
+    await tick();
+    // The back control is only visible in the phone layout. Desktop keeps row focus.
+    if (backButton?.getClientRects().length) backButton.focus();
+  }
+
+  async function returnToQueue() {
+    mobileDetailOpen = false;
+    await tick();
+    queueElement?.focus({ preventScroll: true });
+  }
 
   /** Fetches the queue's Entities, then walks parent ids until every available ancestor is resolved. */
   async function fetchThumbnailHierarchy(entityIds: string[]): Promise<Map<string, EntityThumbnail>> {
@@ -285,19 +302,21 @@
 
 <div
   bind:this={workbenchElement}
-  class={["downloads-workbench", resizingPanes && "is-resizing"]}
-  style:grid-template-rows={paneTemplate}
+  class={["downloads-workbench", resizingPanes && "is-resizing", mobileDetailOpen && "is-inspecting"]}
+  style:--download-pane-rows={paneTemplate}
 >
-  <DownloadManagerTable
-    {entries}
-    {thumbnails}
-    {loading}
-    {error}
-    {acting}
-    {selectedKey}
-    onSelect={(key) => (selectedKey = key)}
-    onRemove={requestRemove}
-  />
+  <div class="queue-pane" bind:this={queueElement} tabindex="-1">
+    <DownloadManagerTable
+      {entries}
+      {thumbnails}
+      {loading}
+      {error}
+      {acting}
+      {selectedKey}
+      onSelect={inspectDownload}
+      onRemove={requestRemove}
+    />
+  </div>
 
   <Button
     type="button"
@@ -318,12 +337,17 @@
   </Button>
 
   <section bind:this={inspectorElement} class="download-inspector" aria-label="Selected download details">
+    <div class="mobile-inspector-navigation">
+      <Button bind:ref={backButton} variant="ghost" onclick={returnToQueue}>
+        <ArrowLeft data-icon="inline-start" /> Back to downloads
+      </Button>
+    </div>
     {#if selectedNode}
       <DownloadGroupInspector
         node={selectedNode}
         entries={selectedNodeEntries}
         href={selectedNodeHref}
-        onSelectItem={(key) => (selectedKey = key)}
+        onSelectItem={inspectDownload}
       />
     {:else if selectedEntry}
       <header class="inspector-header">
@@ -373,16 +397,20 @@
         {/key}
       </div>
     {:else if loading}
-      <div class="inspector-empty">
-        <HardDriveDownload class="h-6 w-6" />
-        <strong>Loading transfer details…</strong>
-      </div>
+      <Empty.Root class="min-h-0 flex-1 rounded-none border-0 p-6" aria-busy="true">
+        <Empty.Header>
+          <Empty.Media variant="icon"><HardDriveDownload /></Empty.Media>
+          <Empty.Title>Loading transfer details…</Empty.Title>
+        </Empty.Header>
+      </Empty.Root>
     {:else}
-      <div class="inspector-empty">
-        <HardDriveDownload class="h-6 w-6" />
-        <strong>No transfer selected</strong>
-        <span>Select a download row to inspect its controls, files, peers, and history.</span>
-      </div>
+      <Empty.Root class="min-h-0 flex-1 rounded-none border-0 p-6">
+        <Empty.Header>
+          <Empty.Media variant="icon"><HardDriveDownload /></Empty.Media>
+          <Empty.Title>No transfer selected</Empty.Title>
+          <Empty.Description>Select a download to inspect its controls, files, peers, and history.</Empty.Description>
+        </Empty.Header>
+      </Empty.Root>
     {/if}
   </section>
 </div>
@@ -403,11 +431,15 @@
 <style>
   .downloads-workbench {
     display: grid;
+    grid-template-rows: var(--download-pane-rows);
     width: 100%;
     height: 100%;
     min-width: 0;
     min-height: 0;
   }
+  .queue-pane { display: grid; min-width: 0; min-height: 0; }
+  .queue-pane:focus { outline: none; }
+  .mobile-inspector-navigation { display: none; }
   .downloads-workbench.is-resizing { cursor: row-resize; user-select: none; }
   :global(.pane-splitter) {
     position: relative;
@@ -472,14 +504,19 @@
   .inspector-kicker { color: var(--color-text-muted); font-family: var(--font-mono, "JetBrains Mono", monospace); font-size: 0.58rem !important; letter-spacing: 0.1em; text-transform: uppercase; }
   .inspector-actions { display: flex; flex: 0 0 auto; align-items: center; gap: 0.45rem; }
   .inspector-detail { min-width: 0; min-height: 0; flex: 1 1 auto; overflow: auto; padding: 1rem; }
-  .inspector-empty { display: flex; min-height: 0; flex: 1 1 auto; align-items: center; justify-content: center; flex-direction: column; gap: 0.4rem; color: var(--color-text-muted); text-align: center; }
-  .inspector-empty strong { color: var(--color-text-secondary); font-family: var(--font-heading, "Geist", sans-serif); font-size: 0.9rem; }
-  .inspector-empty span { max-width: 28rem; font-size: 0.72rem; }
-
   @media (max-width: 640px) {
-    .download-inspector { border-radius: 0 0 var(--radius-sm, 6px) var(--radius-sm, 6px); }
-    .inspector-header { align-items: flex-start; flex-direction: column; }
-    .inspector-actions { width: 100%; }
-    .inspector-detail { padding: 0.75rem; }
+    .downloads-workbench { grid-template-rows: minmax(0, 1fr); }
+    :global(.pane-splitter), .download-inspector { display: none; }
+    .is-inspecting .queue-pane { display: none; }
+    .is-inspecting .download-inspector { display: flex; overflow: auto; border-radius: var(--radius-md); }
+    .mobile-inspector-navigation { display: flex; flex: none; padding: calc(var(--spacing) * 2); border-bottom: 1px solid var(--color-border-subtle); }
+    .inspector-header { flex: none; align-items: stretch; flex-direction: column; padding: calc(var(--spacing) * 3); gap: calc(var(--spacing) * 3); }
+    .inspector-identity { display: grid; grid-template-columns: auto minmax(0, 1fr); }
+    .inspector-identity > :global([data-slot="badge"]) { grid-column: 2; justify-self: start; }
+    .inspector-artwork { grid-row: span 2; }
+    .inspector-copy strong { white-space: normal; overflow-wrap: anywhere; }
+    .inspector-actions { width: 100%; flex-wrap: wrap; gap: var(--spacing-control-gap); }
+    .inspector-actions :global(button) { flex: 1; }
+    .inspector-detail { flex: none; overflow: visible; padding: calc(var(--spacing) * 3); }
   }
 </style>

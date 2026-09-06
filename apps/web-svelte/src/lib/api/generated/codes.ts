@@ -2,6 +2,262 @@
 // Do not edit by hand. Run `pnpm api:generate` (with the dev API running) to refresh.
 /* eslint-disable */
 
+// source: MediaResolutionPolicy
+export const MEDIA_RESOLUTION_TIERS = [
+  {
+    "code": "8K",
+    "minimumWidth": 7600,
+    "minimumHeight": 4300
+  },
+  {
+    "code": "4K",
+    "minimumWidth": 3800,
+    "minimumHeight": 2000
+  },
+  {
+    "code": "1440p",
+    "minimumWidth": 2540,
+    "minimumHeight": 1400
+  },
+  {
+    "code": "1080p",
+    "minimumWidth": 1800,
+    "minimumHeight": 1000
+  },
+  {
+    "code": "720p",
+    "minimumWidth": 1200,
+    "minimumHeight": 700
+  },
+  {
+    "code": "480p",
+    "minimumWidth": 640,
+    "minimumHeight": 480
+  },
+  {
+    "code": "SD",
+    "minimumWidth": 1,
+    "minimumHeight": 1
+  }
+] as const satisfies readonly { code: MediaResolutionTierCode; minimumWidth: number; minimumHeight: number }[];
+
+// source: CollectionRuleFieldPolicy
+export const COLLECTION_RULE_TARGET_KINDS = {
+  "title": [
+    "audio-library",
+    "audio-track",
+    "book",
+    "comic-installment",
+    "comic-series",
+    "gallery",
+    "image",
+    "movie",
+    "music-artist",
+    "video",
+    "video-episode",
+    "video-series"
+  ],
+  "rating": [
+    "audio-library",
+    "audio-track",
+    "book",
+    "comic-installment",
+    "comic-series",
+    "gallery",
+    "image",
+    "movie",
+    "music-artist",
+    "video",
+    "video-episode",
+    "video-series"
+  ],
+  "date": [
+    "audio-library",
+    "audio-track",
+    "book",
+    "comic-installment",
+    "comic-series",
+    "gallery",
+    "image",
+    "movie",
+    "music-artist",
+    "video",
+    "video-episode",
+    "video-series"
+  ],
+  "organized": [
+    "audio-library",
+    "audio-track",
+    "book",
+    "comic-installment",
+    "comic-series",
+    "gallery",
+    "image",
+    "movie",
+    "music-artist",
+    "video",
+    "video-episode",
+    "video-series"
+  ],
+  "isNsfw": [
+    "audio-library",
+    "audio-track",
+    "book",
+    "comic-installment",
+    "comic-series",
+    "gallery",
+    "image",
+    "movie",
+    "music-artist",
+    "video",
+    "video-episode",
+    "video-series"
+  ],
+  "tags": [
+    "audio-library",
+    "audio-track",
+    "book",
+    "comic-installment",
+    "comic-series",
+    "gallery",
+    "image",
+    "movie",
+    "music-artist",
+    "video",
+    "video-episode",
+    "video-series"
+  ],
+  "performers": [
+    "audio-library",
+    "audio-track",
+    "book",
+    "comic-installment",
+    "comic-series",
+    "gallery",
+    "image",
+    "movie",
+    "music-artist",
+    "video",
+    "video-episode",
+    "video-series"
+  ],
+  "studio": [
+    "audio-library",
+    "audio-track",
+    "book",
+    "comic-installment",
+    "comic-series",
+    "gallery",
+    "image",
+    "movie",
+    "music-artist",
+    "video",
+    "video-episode",
+    "video-series"
+  ],
+  "libraryRootId": [
+    "audio-library",
+    "audio-track",
+    "book",
+    "comic-installment",
+    "comic-series",
+    "gallery",
+    "image",
+    "movie",
+    "music-artist",
+    "video",
+    "video-episode",
+    "video-series"
+  ],
+  "fileSize": [
+    "audio-track",
+    "image",
+    "movie",
+    "video",
+    "video-episode"
+  ],
+  "duration": [
+    "audio-track",
+    "movie",
+    "video",
+    "video-episode"
+  ],
+  "height": [
+    "image"
+  ],
+  "width": [
+    "image"
+  ],
+  "codec": [
+    "movie",
+    "video",
+    "video-episode"
+  ],
+  "bitRate": [
+    "audio-track"
+  ],
+  "bit_rate": [
+    "audio-track"
+  ],
+  "channels": [
+    "audio-track"
+  ],
+  "sampleRate": [
+    "audio-track"
+  ],
+  "sample_rate": [
+    "audio-track"
+  ],
+  "accessCount": [
+    "audio-track",
+    "movie",
+    "video",
+    "video-episode"
+  ],
+  "skipCount": [
+    "audio-track",
+    "movie",
+    "video",
+    "video-episode"
+  ],
+  "resolution": [
+    "movie",
+    "video",
+    "video-episode"
+  ],
+  "videoSeriesId": [
+    "video-episode"
+  ],
+  "galleryType": [
+    "gallery"
+  ],
+  "imageCount": [
+    "gallery"
+  ],
+  "format": [
+    "image"
+  ],
+  "createdAt": [
+    "audio-library",
+    "audio-track",
+    "book",
+    "comic-installment",
+    "comic-series",
+    "gallery",
+    "image",
+    "movie",
+    "music-artist",
+    "video",
+    "video-episode",
+    "video-series"
+  ],
+  "interactive": [
+    "movie",
+    "video",
+    "video-episode"
+  ]
+} as const satisfies Record<CollectionRuleFieldCode, readonly EntityKindCode[]>;
+
 // source: enum AcquisitionCheckpointProtocol
 export const ACQUISITION_CHECKPOINT_PROTOCOL = {
   placement: "placement",
@@ -891,6 +1147,19 @@ export const MEDIA_PROCESS_KIND = {
 } as const;
 
 export type MediaProcessKindCode = (typeof MEDIA_PROCESS_KIND)[keyof typeof MEDIA_PROCESS_KIND];
+
+// source: enum MediaResolutionTier
+export const MEDIA_RESOLUTION_TIER = {
+  uhd8K: "8K",
+  uhd4K: "4K",
+  qhd: "1440p",
+  fullHd: "1080p",
+  hd: "720p",
+  standard480: "480p",
+  sd: "SD",
+} as const;
+
+export type MediaResolutionTierCode = (typeof MEDIA_RESOLUTION_TIER)[keyof typeof MEDIA_RESOLUTION_TIER];
 
 // source: enum MetadataPatchField
 export const METADATA_PATCH_FIELD = {

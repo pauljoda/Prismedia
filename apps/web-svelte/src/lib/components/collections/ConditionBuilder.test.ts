@@ -3,7 +3,9 @@ import type { ComponentProps } from "svelte";
 import { describe, expect, it, vi } from "vitest";
 import type { CollectionRuleGroup } from "$lib/collections/models";
 import { ENTITY_KIND } from "$lib/entities/entity-codes";
+import { COLLECTION_RULE_FIELD as FIELD, COLLECTION_RULE_OPERATOR as OP, COLLECTION_RULE_GROUP_OPERATOR as GROUP } from "$lib/api/generated/codes";
 import ConditionBuilder from "./ConditionBuilder.svelte";
+import { COLLECTION_RULE_FIELDS } from "$lib/collections/models";
 
 type ConditionBuilderProps = ComponentProps<typeof ConditionBuilder>;
 
@@ -24,12 +26,134 @@ function baseProps(overrides: Partial<ConditionBuilderProps> = {}): ConditionBui
 }
 
 describe("ConditionBuilder", () => {
+  it("names negated conjunction honestly without changing the saved operator", () => {
+    const rule = { ...initialRule(), operator: GROUP.not };
+    render(ConditionBuilder, { props: baseProps({ rule }) });
+    expect(screen.getByRole("radio", { name: "Not all" })).toHaveAttribute("aria-checked", "true");
+    expect(screen.queryByRole("radio", { name: "None" })).not.toBeInTheDocument();
+    expect(screen.getByText("Exclude items that match every condition in this group.")).toBeVisible();
+  });
+
+  it("changes duration units without changing the rule and converts only edited numbers", async () => {
+    const rule = initialRule();
+    rule.children = [{ type: "condition", field: FIELD.duration, operator: OP.greaterThan, value: 900, entityTypes: [] }];
+    const onChange = vi.fn();
+    render(ConditionBuilder, { props: baseProps({ rule, onChange }) });
+    expect(screen.getByRole("spinbutton", { name: "Duration value" })).toHaveValue(900);
+    await fireEvent.click(screen.getByRole("radio", { name: "Minutes" }));
+    expect(screen.getByRole("spinbutton", { name: "Duration value" })).toHaveValue(15);
+    expect(onChange).not.toHaveBeenCalled();
+    await fireEvent.input(screen.getByRole("spinbutton", { name: "Duration value" }), { target: { value: "20" } });
+    expect(onChange.mock.lastCall?.[0].children[0].value).toBe(1200);
+  });
+
+  it("does not turn an empty numeric input into a zero-valued rule", async () => {
+    const rule = initialRule();
+    rule.children = [{ type: "condition", field: FIELD.duration, operator: OP.greaterThan, value: 900, entityTypes: [] }];
+    const onChange = vi.fn();
+    render(ConditionBuilder, { props: baseProps({ rule, onChange }) });
+    await fireEvent.input(screen.getByRole("spinbutton", { name: "Duration value" }), { target: { value: "" } });
+    expect(onChange.mock.lastCall?.[0].children[0].value).toBeNull();
+  });
+
+  it("converts both file-size range bounds with one shared unit choice", async () => {
+    const rule = initialRule();
+    rule.children = [{ type: "condition", field: FIELD.fileSize, operator: OP.between,
+      value: [1048576, 2097152], entityTypes: [] }];
+    const onChange = vi.fn();
+    render(ConditionBuilder, { props: baseProps({ rule, onChange }) });
+    await fireEvent.click(screen.getByRole("radio", { name: "MiB" }));
+    expect(screen.getByRole("spinbutton", { name: "File Size minimum" })).toHaveValue(1);
+    expect(screen.getByRole("spinbutton", { name: "File Size maximum" })).toHaveValue(2);
+    expect(onChange).not.toHaveBeenCalled();
+    await fireEvent.input(screen.getByRole("spinbutton", { name: "File Size maximum" }), { target: { value: "3" } });
+    expect(onChange.mock.lastCall?.[0].children[0].value).toEqual([1048576, 3145728]);
+  });
+
+  it("preserves entered values when selecting a compatible comparison", async () => {
+    const onChange = vi.fn();
+    render(ConditionBuilder, { props: baseProps({ onChange }) });
+    await fireEvent.keyDown(screen.getByRole("button", { name: "Rule operator" }), { key: "ArrowDown" });
+    await fireEvent.pointerUp(screen.getByRole("option", { name: "Does not contain" }));
+    expect(onChange.mock.lastCall?.[0].children[0]).toMatchObject({ operator: OP.notContains, value: "cats" });
+  });
+
+  it("keeps cleared range bounds incomplete and preserves the untouched bound", async () => {
+    const rule = initialRule();
+    rule.children = [{ type: "condition", field: FIELD.duration, operator: OP.between, value: [60, 120], entityTypes: [] }];
+    const onChange = vi.fn();
+    render(ConditionBuilder, { props: baseProps({ rule, onChange }) });
+    await fireEvent.click(screen.getByRole("radio", { name: "Minutes" }));
+    await fireEvent.input(screen.getByRole("spinbutton", { name: "Duration minimum" }), { target: { value: "" } });
+    expect(onChange.mock.lastCall?.[0].children[0].value).toEqual(["", "120"]);
+  });
+
+  it("disables numeric values and their unit choices together", () => {
+    const rule = initialRule();
+    rule.children = [{ type: "condition", field: FIELD.duration, operator: OP.greaterThan, value: 900, entityTypes: [] }];
+    render(ConditionBuilder, { props: baseProps({ rule, disabled: true }) });
+    expect(screen.getByRole("spinbutton", { name: "Duration value" })).toBeDisabled();
+    expect(screen.getByRole("radio", { name: "Minutes" })).toBeDisabled();
+  });
+
+  it("does not add physical-unit choices to ratings", () => {
+    const rule = initialRule();
+    rule.children = [{ type: "condition", field: FIELD.rating, operator: OP.equals, value: 4, entityTypes: [] }];
+    render(ConditionBuilder, { props: baseProps({ rule }) });
+    expect(screen.getByRole("spinbutton", { name: "Rating value" })).toHaveValue(4);
+    expect(screen.queryByRole("group", { name: "Rating unit" })).not.toBeInTheDocument();
+  });
+  it("starts video rules without a hidden standalone-video restriction", async () => {
+    const onChange = vi.fn();
+    render(ConditionBuilder, { props: baseProps({ onChange }) });
+    await fireEvent.keyDown(screen.getByRole("button", { name: "Rule field" }), { key: "ArrowDown" });
+    await fireEvent.pointerUp(screen.getByRole("option", { name: "Resolution" }));
+    expect(onChange.mock.lastCall?.[0].children[0]).toMatchObject({ field: FIELD.resolution, entityTypes: [] });
+  });
+
+  it("offers all supported video kinds without rewriting an existing explicit restriction", async () => {
+    const rule = initialRule();
+    rule.children = [{ type: "condition", field: FIELD.resolution, operator: OP.in, value: [], entityTypes: [ENTITY_KIND.video] }];
+    const onChange = vi.fn();
+    render(ConditionBuilder, { props: baseProps({ rule, onChange }) });
+    expect(onChange).not.toHaveBeenCalled();
+    await fireEvent.click(screen.getByRole("button", { name: "Add entity types" }));
+    expect(screen.getByRole("option", { name: "Movie" })).toBeInTheDocument();
+    expect(screen.getByRole("option", { name: "Video Episode" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Image" })).not.toBeInTheDocument();
+  });
+  it.each([FIELD.resolution, FIELD.galleryType])("uses removable choices for %s instead of comma-separated input", async field => {
+    const definition = COLLECTION_RULE_FIELDS.find(item => item.field === field)!;
+    const [first, second] = definition.enumValues!;
+    const rule = initialRule();
+    rule.children = [{ type: "condition", field, operator: OP.in, value: [first], entityTypes: [] }];
+    const onChange = vi.fn();
+    render(ConditionBuilder, { props: baseProps({ rule, onChange }) });
+    expect(screen.queryByLabelText("Multi value (comma separated)")).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: `Add ${definition.label} values` }));
+    expect(screen.queryByRole("option", { name: first })).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("option", { name: second }));
+    expect(onChange.mock.lastCall?.[0].children[0].value).toEqual([first, second]);
+    await fireEvent.click(screen.getByRole("button", { name: `Remove ${first}` }));
+    expect(onChange.mock.lastCall?.[0].children[0].value).toEqual([]);
+  });
+
+  it("preserves saved option values outside the current suggestions until explicitly removed", async () => {
+    const rule = initialRule();
+    rule.children = [{ type: "condition", field: FIELD.resolution, operator: OP.in, value: ["legacy-value"], entityTypes: [] }];
+    const onChange = vi.fn();
+    render(ConditionBuilder, { props: baseProps({ rule, onChange }) });
+    expect(screen.getByText("legacy-value")).toBeInTheDocument();
+    expect(onChange).not.toHaveBeenCalled();
+    await fireEvent.click(screen.getByRole("button", { name: "Remove legacy-value" }));
+    expect(onChange.mock.lastCall?.[0].children[0].value).toEqual([]);
+  });
   it("updates a condition from the shared field selector", async () => {
     const onChange = vi.fn();
     render(ConditionBuilder, { props: baseProps({ onChange }) });
 
-    await fireEvent.click(screen.getByRole("button", { name: "Rule field" }));
-    await fireEvent.click(screen.getByRole("option", { name: "Rating" }));
+    await fireEvent.keyDown(screen.getByRole("button", { name: "Rule field" }), { key: "ArrowDown" });
+    await fireEvent.pointerUp(screen.getByRole("option", { name: "Rating" }));
 
     expect(onChange).toHaveBeenLastCalledWith({
       type: "group",
@@ -52,9 +176,9 @@ describe("ConditionBuilder", () => {
       children: [{ type: "condition", entityTypes: [], field: "title", operator: "contains", value: "cats" }],
     });
 
-    const video = screen.getByRole("button", { name: "Video" });
-    expect(video).toHaveAttribute("aria-pressed", "true");
-    await fireEvent.click(video);
+    expect(screen.getByText("All supported types")).toBeVisible();
+    await fireEvent.click(screen.getByRole("button", { name: "Add entity types" }));
+    await fireEvent.click(screen.getByRole("option", { name: "Video" }));
     expect(onChange).toHaveBeenLastCalledWith({
       type: "group",
       operator: "and",
@@ -94,5 +218,69 @@ describe("ConditionBuilder", () => {
     expect(screen.getByLabelText("Text value")).toBeDisabled();
     expect(screen.getByRole("button", { name: "Remove condition" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Add condition" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Add entity types" })).toBeDisabled();
+  });
+
+  it("preserves nested groups when editing, adding, and removing sibling conditions", async () => {
+    const nested = initialRule();
+    nested.children[0] = { ...nested.children[0], value: "nested" } as typeof nested.children[0];
+    const rule = initialRule();
+    rule.children.unshift(nested);
+    const onChange = vi.fn();
+    render(ConditionBuilder, { props: baseProps({ rule, onChange }) });
+
+    expect(screen.getByDisplayValue("nested")).toBeVisible();
+    await fireEvent.input(screen.getByDisplayValue("cats"), { target: { value: "dogs" } });
+    expect(onChange.mock.lastCall?.[0].children).toEqual([nested, { ...rule.children[1], value: "dogs" }]);
+
+    await fireEvent.click(screen.getAllByRole("button", { name: "Add condition" }).at(-1)!);
+    expect(onChange.mock.lastCall?.[0].children).toHaveLength(3);
+    expect(onChange.mock.lastCall?.[0].children[0]).toEqual(nested);
+
+    await fireEvent.click(screen.getAllByRole("button", { name: "Remove condition" }).at(-1)!);
+    expect(onChange.mock.lastCall?.[0].children).toEqual([nested]);
+  });
+
+  it("removes an explicit type to return to all supported types", async () => {
+    const rule = initialRule();
+    if (rule.children[0].type === "condition") rule.children[0].entityTypes = [ENTITY_KIND.video];
+    const onChange = vi.fn();
+    render(ConditionBuilder, { props: baseProps({ rule, onChange }) });
+    await fireEvent.click(screen.getByRole("button", { name: "Remove Video" }));
+    expect(onChange.mock.lastCall?.[0].children[0].entityTypes).toEqual([]);
+  });
+
+  it("keeps date ranges in the shared native date fields", async () => {
+    const rule = initialRule();
+    rule.children = [{ type: "condition", field: FIELD.date, operator: OP.between,
+      value: ["2026-01-01", "2026-02-01"], entityTypes: [] }];
+    const onChange = vi.fn();
+    render(ConditionBuilder, { props: baseProps({ rule, onChange }) });
+    const from = screen.getByLabelText("From");
+    expect(from).toHaveAttribute("type", "date");
+    expect(from).toHaveClass("appearance-none");
+    expect(screen.getByLabelText("To")).toHaveValue("2026-02-01");
+    await fireEvent.input(from, { target: { value: "2026-01-15" } });
+    expect(onChange.mock.lastCall?.[0].children[0].value).toEqual(["2026-01-15", "2026-02-01"]);
+  });
+
+  it("omits unused comparison values for yes/no conditions", () => {
+    const rule = initialRule();
+    rule.children = [{ type: "condition", field: FIELD.organized, operator: OP.isTrue, value: null, entityTypes: [] }];
+    render(ConditionBuilder, { props: baseProps({ rule }) });
+    expect(screen.getByRole("button", { name: "Rule operator" })).toHaveTextContent("Yes");
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument();
+    expect(screen.queryByText("Value")).not.toBeInTheDocument();
+  });
+
+  it("shows only supported, unselected types in the picker", async () => {
+    const rule = initialRule();
+    rule.children = [{ type: "condition", field: FIELD.duration, operator: OP.greaterThan,
+      value: 60, entityTypes: [ENTITY_KIND.video] }];
+    render(ConditionBuilder, { props: baseProps({ rule }) });
+    await fireEvent.click(screen.getByRole("button", { name: "Add entity types" }));
+    expect(screen.getByRole("option", { name: "Audio Track" })).toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Book" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "Video" })).not.toBeInTheDocument();
   });
 });

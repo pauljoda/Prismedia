@@ -19,6 +19,13 @@ describe("MobileMoreNavButton", () => {
     vi.restoreAllMocks();
   });
 
+  it("stretches to the navigation row instead of retaining a compact button height", () => {
+    const button = renderButton();
+    expect(button).toHaveClass("h-auto", "min-h-control-lg", "text-caption");
+    expect(button).not.toHaveClass("h-control-sm");
+    expect(button.querySelector("svg")).toHaveClass("size-5");
+  });
+
   it("toggles SFW/full NSFW after a two second hold and suppresses the opening click", async () => {
     const onToggleSheet = vi.fn();
     const button = renderButton(onToggleSheet);

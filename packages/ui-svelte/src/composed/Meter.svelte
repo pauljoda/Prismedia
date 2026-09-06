@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Progress from "../components/ui/progress/progress.svelte";
   import { cn } from "../lib/utils";
 
   interface Props {
@@ -19,7 +20,7 @@
     class: className,
   }: Props = $props();
 
-  const pct = $derived(Math.min(100, Math.max(0, (value / max) * 100)));
+  const pct = $derived(max > 0 && Number.isFinite(value) ? Math.min(100, Math.max(0, (value / max) * 100)) : 0);
 </script>
 
 <div class={cn("flex flex-col gap-1", className)}>
@@ -40,10 +41,5 @@
       {/if}
     </div>
   {/if}
-  <div class="meter-track">
-    <div
-      class={variant === "phosphor" ? "meter-fill-phosphor" : "meter-fill"}
-      style:width="{pct}%"
-    ></div>
-  </div>
+  <Progress value={pct} aria-label={label ?? "Progress"} class="h-1.5 rounded-xs" />
 </div>

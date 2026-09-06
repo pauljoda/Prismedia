@@ -3,11 +3,25 @@ using Prismedia.Application.Requests;
 using Prismedia.Application.Settings;
 using Prismedia.Contracts.Entities;
 using Prismedia.Domain.Entities;
+using Prismedia.Domain.Media;
 using System.Reflection;
 
 namespace Prismedia.Api.Tests;
 
 public sealed class CodesManifestContractTests {
+    [Fact]
+    public void CollectionRuleKindsComeFromTheEvaluationPolicy() {
+        var fields = CodesManifest.Build().CollectionRuleTargetKinds;
+        foreach (var field in Enum.GetValues<CollectionRuleField>()) {
+            Assert.Equal(CollectionRuleFieldPolicy.SupportedKinds(field).Select(kind => kind.ToCode()).Order(),
+                fields[field.ToCode()].Order());
+        }
+        Assert.Contains(EntityKind.Movie.ToCode(), fields[CollectionRuleField.Resolution.ToCode()]);
+        Assert.Contains(EntityKind.VideoEpisode.ToCode(), fields[CollectionRuleField.Resolution.ToCode()]);
+        Assert.DoesNotContain(EntityKind.Image.ToCode(), fields[CollectionRuleField.Resolution.ToCode()]);
+        Assert.Equal([EntityKind.VideoEpisode.ToCode()], fields[CollectionRuleField.VideoSeriesId.ToCode()]);
+    }
+
     [Fact]
     public void SettingsManifestUsesExactlyTheDiscoveredDefinitions() {
         var expected = AppSettingsRegistry.DefinitionsByClientName

@@ -1,6 +1,6 @@
 <script lang="ts">
   import { ChevronDown, ChevronUp, EyeOff } from "@lucide/svelte";
-  import { Badge, StatusLed } from "@prismedia/ui-svelte";
+  import { Button, Badge, StatusLed } from "@prismedia/ui-svelte";
   import type { JobRun } from "$lib/jobs/models";
   import {
     displayDescribeTrigger,
@@ -66,19 +66,19 @@
       <p class="text-ephemeral">{formatRelativeTime(job.finishedAt ?? job.updatedAt)}</p>
       <p class="text-mono-sm text-text-disabled">attempt {Math.max(1, job.attempts + 1)}</p>
       <div class="mt-1 flex items-center gap-1">
-        <button
+        <Button variant="outline" size="sm"
           type="button"
           onclick={handleDismiss}
-          class="flex items-center gap-1 px-1.5 py-0.5 text-[0.65rem] text-text-disabled transition-colors hover:text-text-muted"
+          class="flex items-center gap-1 px-1.5 py-0.5 text-[0.65rem]"
           title="Suppress this error type"
         >
           <EyeOff class="h-3 w-3" />
           Suppress
-        </button>
-        <button
+        </Button>
+        <Button variant="outline" size="sm"
           type="button"
           onclick={() => (open = !open)}
-          class="p-0.5 text-text-disabled transition-colors hover:text-text-muted"
+          class="p-0.5"
           title={open ? "Collapse" : "Expand"}
         >
           {#if open}
@@ -86,7 +86,7 @@
           {:else}
             <ChevronDown class="h-3.5 w-3.5" />
           {/if}
-        </button>
+        </Button>
       </div>
     </div>
   </div>

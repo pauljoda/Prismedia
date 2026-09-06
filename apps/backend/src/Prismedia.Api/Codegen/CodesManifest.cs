@@ -3,6 +3,7 @@ using Prismedia.Application.Requests;
 using Prismedia.Application.Settings;
 using Prismedia.Contracts.Entities;
 using Prismedia.Domain.Entities;
+using Prismedia.Domain.Media;
 
 namespace Prismedia.Api.Codegen;
 
@@ -20,6 +21,12 @@ public sealed record ConstantEntry(string Name, string Value);
 /// <param name="ConstantName">Generated constant object name.</param>
 /// <param name="TypeName">Generated code union type name.</param>
 public sealed record CodeFamilyManifestEntry(string ConstantName, string TypeName);
+
+/// <summary>Ordered width-or-height threshold used by every client to classify source resolution.</summary>
+/// <param name="Code">Canonical resolution tier code.</param>
+/// <param name="MinimumWidth">Inclusive minimum width in pixels.</param>
+/// <param name="MinimumHeight">Inclusive minimum height in pixels.</param>
+public sealed record MediaResolutionManifestEntry(string Code, int MinimumWidth, int MinimumHeight);
 
 /// <summary>Cross-client navigation metadata owned by an Entity-kind definition.</summary>
 /// <param name="CanonicalBrowseKind">Entity kind represented by the canonical list destination.</param>
@@ -165,6 +172,8 @@ public sealed record RequestKindManifestEntry(
 /// <param name="ProblemCodes">Machine-readable API problem codes.</param>
 /// <param name="ThumbnailMetaIcons">Stable compact-thumbnail metadata icon codes.</param>
 /// <param name="EntityStatCodes">Prismedia-owned persisted statistic codes.</param>
+/// <param name="CollectionRuleTargetKinds">Supported Entity kinds for each collection-rule field.</param>
+/// <param name="MediaResolutionTiers">Source-resolution thresholds in descending priority order.</param>
 public sealed record CodesManifest(
     IReadOnlyDictionary<string, IReadOnlyList<CodeEntry>> Enums,
     IReadOnlyDictionary<string, CodeFamilyManifestEntry> CodeFamilies,
@@ -175,7 +184,9 @@ public sealed record CodesManifest(
     IReadOnlyList<ConstantEntry> SettingKeys,
     IReadOnlyList<ConstantEntry> ProblemCodes,
     IReadOnlyList<ConstantEntry> ThumbnailMetaIcons,
-    IReadOnlyList<ConstantEntry> EntityStatCodes) {
+    IReadOnlyList<ConstantEntry> EntityStatCodes,
+    IReadOnlyDictionary<string, IReadOnlyList<string>> CollectionRuleTargetKinds,
+    IReadOnlyList<MediaResolutionManifestEntry> MediaResolutionTiers) {
     /// <summary>Reflects the current backend registries into a fresh manifest.</summary>
     public static CodesManifest Build() {
         var enums = BuildEnums();
@@ -192,7 +203,12 @@ public sealed record CodesManifest(
                 .ToArray(),
             ReflectConstants(typeof(Contracts.System.ApiProblemCodes)),
             ReflectConstants(typeof(EntityThumbnailMetaIcons)),
-            ReflectConstants(typeof(EntityStatCodes)));
+            ReflectConstants(typeof(EntityStatCodes)),
+            Enum.GetValues<CollectionRuleField>().ToDictionary(field => field.ToCode(),
+                field => (IReadOnlyList<string>)CollectionRuleFieldPolicy.SupportedKinds(field)
+                    .Select(kind => kind.ToCode()).Order(StringComparer.Ordinal).ToArray()),
+            MediaResolutionPolicy.Tiers.Select(tier => new MediaResolutionManifestEntry(
+                tier.Tier.ToCode(), tier.MinimumWidth, tier.MinimumHeight)).ToArray());
     }
 
     private static IReadOnlyDictionary<string, IReadOnlyList<CodeEntry>> BuildEnums() {

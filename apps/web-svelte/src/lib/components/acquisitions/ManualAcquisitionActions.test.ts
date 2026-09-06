@@ -13,6 +13,14 @@ vi.mock("$lib/api/acquisitions", () => mocks);
 describe("ManualAcquisitionActions", () => {
   beforeEach(() => vi.clearAllMocks());
 
+  it("provides a keyboard-accessible button for choosing upload files", async () => {
+    const { container } = render(ManualAcquisitionActions, { entityId: "entity-1", canReplace: false, canUpload: true, onStarted: vi.fn() });
+    const input = container.querySelector<HTMLInputElement>('input[type="file"]')!;
+    const choose = vi.spyOn(input, "click").mockImplementation(() => {});
+    await fireEvent.click(screen.getByRole("button", { name: "Upload content" }));
+    expect(choose).toHaveBeenCalledOnce();
+  });
+
   it("opens a replacement review without selecting a release", async () => {
     mocks.searchManualReplacement.mockResolvedValue({ searchId: "review-1", candidates: [] });
 
@@ -43,6 +51,12 @@ describe("ManualAcquisitionActions", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Search term" }));
 
     await waitFor(() => expect(mocks.searchManualReplacement).toHaveBeenLastCalledWith("entity-1", "criterion 2160p"));
+    const callCount = mocks.searchManualReplacement.mock.calls.length;
+    await fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
+    expect(input).toHaveValue("");
+    expect(input).toHaveFocus();
+    expect(screen.getByRole("button", { name: "Search term" })).toBeDisabled();
+    expect(mocks.searchManualReplacement).toHaveBeenCalledTimes(callCount);
   });
 
   it("reports browser upload progress before handing off to import", async () => {
@@ -61,7 +75,7 @@ describe("ManualAcquisitionActions", () => {
       onStarted,
     });
 
-    const input = screen.getByLabelText("Upload content");
+    const input = screen.getByLabelText("Content files");
     await fireEvent.change(input, { target: { files: [new File(["content"], "release.zip")] } });
 
     expect(await screen.findByRole("status", { name: "Uploading 42%" })).toBeInTheDocument();

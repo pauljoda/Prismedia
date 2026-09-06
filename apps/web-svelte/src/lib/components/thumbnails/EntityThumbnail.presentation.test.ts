@@ -1,8 +1,9 @@
 import { fireEvent, render } from "@testing-library/svelte";
 import { tick } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { THUMBNAIL_META_ICON } from "$lib/api/generated/codes";
+import { ACQUISITION_STATUS, CAPABILITY_KIND, THUMBNAIL_META_ICON } from "$lib/api/generated/codes";
 import EntityThumbnail from "./EntityThumbnail.svelte";
+import captionSource from "./EntityThumbnailInfo.svelte?raw";
 import {
   comicInstallmentCard,
   episodeCard,
@@ -69,6 +70,38 @@ describe("EntityThumbnail presentation", () => {
     expect(container.querySelector(".bottom-left-badges")).toHaveClass("has-selection");
   });
 
+  it("puts readable status and metadata badges in list captions instead of covering the artwork", () => {
+    const card = episodeCard();
+    const flags = card.entity.capabilities.find((capability) => capability.kind === CAPABILITY_KIND.flags)!;
+    Object.assign(flags, { isWanted: true });
+    card.wantedStatus = ACQUISITION_STATUS.awaitingSelection;
+    card.custom = { ...card.custom, sourceTag: { label: "Source" } };
+    const { container } = render(EntityThumbnail, { props: { card, layout: "list" } });
+    const caption = container.querySelector(".thumbnail-caption")!;
+    expect(caption.querySelector(".wanted-badge")).toHaveTextContent("Choose release");
+    expect(caption.querySelector(".position-badge")).toHaveTextContent("S1 E2");
+    expect(caption.querySelector(".rating-badge")).toHaveTextContent("4");
+    expect(caption.querySelector(".source-badge")).toHaveTextContent("Source");
+    expect(caption.querySelector('[aria-label="NSFW"]')).toBeInTheDocument();
+    expect(container.querySelector(".media .thumbnail-badges")).toBeNull();
+    expect(caption.querySelectorAll('.thumbnail-badges [data-slot="badge"]')).toHaveLength(5);
+  });
+
+  it("retains badges on artwork when a list is explicitly media-only", () => {
+    const { container } = render(EntityThumbnail, { props: { card: episodeCard(), layout: "list", mediaOnly: true } });
+    expect(container.querySelector(".thumbnail-caption")).toBeNull();
+    expect(container.querySelector('.media .position-badge[data-slot="badge"]')).toHaveTextContent("S1 E2");
+  });
+
+  it.each(["grid", "list"] as const)("respects host-owned status in %s layout", (layout) => {
+    const card = episodeCard();
+    const flags = card.entity.capabilities.find((capability) => capability.kind === CAPABILITY_KIND.flags)!;
+    Object.assign(flags, { isWanted: true });
+    const { container } = render(EntityThumbnail, { props: { card, layout, showWantedBadge: false } });
+    expect(container.querySelector(".wanted-badge")).toBeNull();
+    expect(container.querySelector('[aria-label="NSFW"]')).toBeInTheDocument();
+  });
+
   it("shows cached comic installment page metadata when media-only mode is not requested", () => {
     const { container } = render(EntityThumbnail, {
       props: {
@@ -99,6 +132,49 @@ describe("EntityThumbnail presentation", () => {
     const chips = [...container.querySelectorAll(".chip")];
 
     expect(chips.map((chip) => chip.getAttribute("aria-label"))).toEqual(["season 2", "episode 18"]);
+  });
+
+  it.each(["grid", "list"] as const)("keeps %s captions to two metadata chips on one row", (layout) => {
+    const card = episodeCard();
+    card.meta = [
+      { icon: THUMBNAIL_META_ICON.duration, label: "03:52" },
+      { icon: THUMBNAIL_META_ICON.video, label: "1080p" },
+      { icon: THUMBNAIL_META_ICON.video, label: "H264" },
+      { icon: THUMBNAIL_META_ICON.video, label: "MOV" },
+    ];
+    const { container } = render(EntityThumbnail, { props: { card, layout } });
+    const chips = [...container.querySelectorAll(".chips .chip")];
+    expect(container.querySelector(".chips")).toHaveClass("flex-nowrap");
+    expect(chips).toHaveLength(2);
+    expect(chips.map(chip => chip.textContent?.trim())).toEqual(["03:52", "1080p"]);
+    for (const chip of chips) {
+      expect(chip).toHaveClass("max-w-full", "min-w-0", "shrink");
+      expect(chip.querySelector(".chip-label")).toHaveClass("truncate");
+    }
+  });
+
+  it("retains the shared badge font size and outline in compact captions", () => {
+    const chipOverrides = [...captionSource.matchAll(/\.chips :global\(\.chip\)\s*\{([^}]+)\}/g)];
+    expect(chipOverrides.length).toBeGreaterThan(0);
+    for (const [, declarations] of chipOverrides) {
+      expect(declarations).not.toMatch(/font-size\s*:|border\s*:/);
+    }
+  });
+
+  it("retains colored icons and keeps metadata subordinate to thumbnail titles", () => {
+    expect(captionSource).not.toContain("--text-caption: var(--text-control)");
+    expect(captionSource).not.toContain("--text-caption: var(--text-label)");
+    expect(captionSource).toContain("--text-caption: var(--text-caption-compact)");
+    expect(captionSource).toContain("color: var(--thumbnail-meta-accent)");
+    expect(captionSource).not.toMatch(/\.chips :global\(\.chip svg\)\s*\{[^}]*display:\s*none/);
+    expect(captionSource).not.toContain("min-height: var(--spacing-badge-compact)");
+  });
+
+  it.each(["grid", "list"] as const)("lets a %s host own status without losing the thumbnail caption", (layout) => {
+    const card = episodeCard();
+    const { container } = render(EntityThumbnail, { card, layout, showBadges: false });
+    expect(container.querySelector(".thumbnail-badges")).toBeNull();
+    expect(container.querySelector(".thumbnail-caption h3")).toHaveTextContent(card.entity.title);
   });
 
   it("replaces the entity-family fallback with an artwork-derived accent after the cover decodes", async () => {

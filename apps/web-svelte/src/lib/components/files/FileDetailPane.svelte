@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Button } from "@prismedia/ui-svelte";
   import {
     FileArchive,
     Download,
@@ -199,7 +200,7 @@
 <section class="detail-pane" aria-label="File details" ondragover={handleDragOver} ondrop={handleDrop}>
   <div class="detail-header">
     {#if mobile}
-      <button class="icon-button" type="button" onclick={onBack} aria-label="Back to folders">←</button>
+      <Button variant="ghost" size="sm" class="size-7 p-0" type="button" onclick={onBack} aria-label="Back to folders">←</Button>
     {/if}
     <div class="title-lockup">
       <h1>{entry?.name ?? "Select a file"}</h1>
@@ -207,9 +208,9 @@
         <p>{entry.path && entry.path !== "." ? entry.path : "/"}</p>
       {/if}
     </div>
-    <button class="icon-button" type="button" onclick={onRefresh} aria-label="Refresh details">
+    <Button variant="ghost" size="sm" class="size-7 p-0" type="button" onclick={onRefresh} aria-label="Refresh details">
       <RefreshCw class="h-3.5 w-3.5" />
-    </button>
+    </Button>
   </div>
 
   {#if error}
@@ -223,29 +224,29 @@
     </div>
   {:else}
     <div class="detail-toolbar">
-      <button
+      <Button variant="ghost" size="sm"
         type="button"
         onclick={() => onAction?.("download")}
         disabled={downloadBusy}
         aria-label="Download"
       >
         <Download class="h-3.5 w-3.5" />Download
-      </button>
+      </Button>
       {#if isDirectory}
-        <button type="button" onclick={() => fileInput?.click()}><Upload class="h-3.5 w-3.5" />Upload</button>
-        <button type="button" onclick={() => onAction?.("new-folder")}><FolderPlus class="h-3.5 w-3.5" />New folder</button>
-        <button type="button" onclick={() => onAction?.("rescan")}><ScanLine class="h-3.5 w-3.5" />Rescan</button>
+        <Button variant="ghost" size="sm" type="button" onclick={() => fileInput?.click()}><Upload class="h-3.5 w-3.5" />Upload</Button>
+        <Button variant="ghost" size="sm" type="button" onclick={() => onAction?.("new-folder")}><FolderPlus class="h-3.5 w-3.5" />New folder</Button>
+        <Button variant="ghost" size="sm" type="button" onclick={() => onAction?.("rescan")}><ScanLine class="h-3.5 w-3.5" />Rescan</Button>
       {/if}
       {#if !isRoot}
-        <button type="button" onclick={() => onAction?.("rename")}><Pencil class="h-3.5 w-3.5" />Rename</button>
-        <button type="button" onclick={() => onAction?.("move")}><FileArchive class="h-3.5 w-3.5" />Move</button>
+        <Button variant="ghost" size="sm" type="button" onclick={() => onAction?.("rename")}><Pencil class="h-3.5 w-3.5" />Rename</Button>
+        <Button variant="ghost" size="sm" type="button" onclick={() => onAction?.("move")}><FileArchive class="h-3.5 w-3.5" />Move</Button>
         {#if isExcluded}
-          <button type="button" onclick={() => onAction?.("remove-exclusion")}><Undo2 class="h-3.5 w-3.5" />Remove exclusion</button>
+          <Button variant="ghost" size="sm" type="button" onclick={() => onAction?.("remove-exclusion")}><Undo2 class="h-3.5 w-3.5" />Remove exclusion</Button>
         {:else}
-          <button type="button" onclick={() => onAction?.("exclude")}><ShieldOff class="h-3.5 w-3.5" />Exclude</button>
+          <Button variant="ghost" size="sm" type="button" onclick={() => onAction?.("exclude")}><ShieldOff class="h-3.5 w-3.5" />Exclude</Button>
         {/if}
         <div class="toolbar-spacer"></div>
-        <button class="danger" type="button" onclick={() => onAction?.("delete")}><Trash2 class="h-3.5 w-3.5" /></button>
+        <Button variant="destructive" size="icon-sm" aria-label="Delete" type="button" onclick={() => onAction?.("delete")}><Trash2 class="h-3.5 w-3.5" /></Button>
       {/if}
     </div>
 
@@ -363,23 +364,7 @@
     font-size: 0.68rem;
   }
 
-  .icon-button {
-    display: grid;
-    width: 1.75rem;
-    height: 1.75rem;
-    place-items: center;
-    flex-shrink: 0;
-    border: none;
-    border-radius: var(--radius-xs);
-    background: transparent;
-    color: var(--color-text-muted);
-    cursor: pointer;
-  }
 
-  .icon-button:hover {
-    background: var(--color-surface-3);
-    color: var(--color-text-primary);
-  }
 
   .detail-toolbar {
     display: flex;
@@ -398,35 +383,9 @@
     display: none;
   }
 
-  .detail-toolbar button {
-    display: inline-flex;
-    align-items: center;
-    flex: 0 0 auto;
-    gap: 0.3rem;
-    min-height: 1.65rem;
-    padding: 0.2rem 0.5rem;
-    border: none;
-    border-radius: var(--radius-xs);
-    background: transparent;
-    color: var(--color-text-muted);
-    font-size: 0.72rem;
-    cursor: pointer;
-    white-space: nowrap;
-  }
 
-  .detail-toolbar button:hover {
-    background: var(--color-surface-3);
-    color: var(--color-text-primary);
-  }
 
-  .detail-toolbar .danger {
-    color: var(--color-text-muted);
-  }
 
-  .detail-toolbar .danger:hover {
-    color: var(--color-error-text);
-    background: var(--color-error-muted);
-  }
 
   .toolbar-spacer {
     flex: 1 0 0;

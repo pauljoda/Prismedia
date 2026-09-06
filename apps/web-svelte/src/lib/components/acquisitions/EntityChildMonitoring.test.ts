@@ -45,6 +45,15 @@ describe("EntityChildMonitoring", () => {
     vi.restoreAllMocks();
   });
 
+  it("shows idle child rows immediately when they are the primary acquisition content", async () => {
+    const track = childCard("track-1", ENTITY_KIND.audioTrack, "Local track", false);
+    render(EntityChildMonitoring, { cards: [track], initiallyExpanded: true });
+    expect(screen.getByRole("button", { name: /Track activity/ })).toHaveAttribute("aria-expanded", "true");
+    expect(await screen.findByText("On disk")).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: /Track activity/ }));
+    expect(screen.queryByText("On disk")).not.toBeInTheDocument();
+  });
+
   it("opens episode activity and shows an active download even when monitoring is off", async () => {
     const episode = childCard("episode-1", ENTITY_KIND.videoEpisode, "Jet-Assisted Chevy", true);
     episode.latestAcquisitionStatus = ACQUISITION_STATUS.downloading;
@@ -65,7 +74,7 @@ describe("EntityChildMonitoring", () => {
     expect(disclosure).toHaveAttribute("aria-expanded", "true");
     expect(await screen.findByText("Downloading · Not monitored")).toBeInTheDocument();
     expect(screen.getByText("1 downloading")).toBeInTheDocument();
-    expect(screen.getByText(/downloads and search progress appear here/i)).toBeInTheDocument();
+    expect(screen.getByText(/turning it off does not stop active downloads/i)).toBeInTheDocument();
     expect(screen.getByRole("switch", { name: "Monitor Jet-Assisted Chevy" }))
       .toHaveAttribute("aria-checked", "false");
   });

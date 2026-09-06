@@ -168,10 +168,94 @@ Use the shared radius scale: `4`, `6`, `10`, `14`, `18`, and `24px`. Controls mu
 
 ## Interaction and accessibility
 
+### Shared control scale
+
+Web control tokens are defined in `apps/web-svelte/src/app.css`. Components in
+`packages/ui-svelte` consume these tokens through their size variants. Use the
+variant instead of setting a different height, font size, or padding per page.
+The rem values respect the user's type scale.
+
+| Token | Size | Use |
+| --- | --- | --- |
+| `control-xs` | 1.75rem | Dense auxiliary controls |
+| `control-sm` | 2rem | Compact rows and secondary actions |
+| `control` | 2.25rem | Standard buttons, inputs, selects, and toggles |
+| `control-lg` | 2.75rem | Entity page actions |
+| `badge` | 1.5rem minimum | Static metadata, counts, and statuses |
+
+Use `text-control`, `text-label`, and `text-caption` for standard controls,
+compact labels, and metadata respectively. `control-gap` and `control-gap-sm`
+define spacing inside control groups. Keep semantic tokens registered in the
+shared class-merging utility so ordinary layout overrides replace them correctly.
+
+- Interactive tags use button styling. Static counts use Badge, with neutral
+  text and restrained colored icons. Thumbnail metadata stays smaller than the
+  title, keeps its identifying icons, and shows at most two chips on one row.
+  Use the compact caption and icon tokens on the narrowest cards, not arbitrary
+  text scaling or icon removal.
+- Related entities retain full normal thumbnails, even when a group has one item.
+- Thumbnail status, rating, and source markers use shared Badges. Grid markers
+  stay on the artwork; list markers join the caption so small images remain clear.
+  Selection controls keep an opaque neutral backing over artwork.
+- Acquisition status labels and icons come from the shared lifecycle presentation.
+  Keep pending, transfer, and import stages distinct. Attention labels name the
+  decision, such as Choose release or Review import, rather than a generic Action.
+- Entity headers summarize dates with one labeled release milestone or a meaningful
+  lifespan, broadcast, or career range. Additional dates belong in the shared
+  "More dates" popover with aligned labels and values, not a long inline inventory.
+  This is presentation only; stored dates and acquisition timing remain unchanged.
+- Metadata cards share each row's available width rather than reserving empty
+  columns. Short facts keep aligned labels and values; long paths and fingerprints
+  use the full card width below their labels and remain selectable.
+- Detail sections attach behind the header's lower corners, with square top
+  edges and rounded bottom edges. The shared header owns the overlap depth.
+- Artwork editing lives in a shared disclosure with labeled poster/header
+  actions, outside the artwork itself. It distinguishes immediate image changes
+  from the metadata draft and does not paint an empty upload area over the hero.
+- On mobile, Entity page actions form a labeled two-column grid below the
+  artwork and title. At narrow widths, ratings move to their own full-width row.
+- Acquisition work and monitoring settings align at the top on wide screens and
+  stack on narrow screens. File actions belong inside a card, not in the space
+  between cards. Child activity opens initially when it is the only work shown.
+- Downloads keeps its resizable queue and inspector on desktop. Phones show
+  one at a time, with an explicit return to the queue that preserves filtering
+  and selection. Transfer rows put status below Entity identity and label
+  available metrics; wide table columns must not push status off-screen.
+- Entity edit forms use a full-width shared grid: primary fields and dates in one
+  flow, links and source references in another. On narrow screens these flows
+  stack in reading order. Add-entry fields retain visible labels, and form
+  actions align with the panel's padded right edge. Do not cap the editor inside
+  a wider panel and leave its actions floating in the middle.
+- Tabbed and untabbed Entity pages use the same edit layout and section rules.
+  Hidden sections are excluded from editing and saving; read-only relationships
+  remain information rather than offering controls that cannot save.
+- Collapsible grid headings, toolbars, results, and pagination share one card
+  boundary. Keep the heading attached to the content it controls, with a visible
+  Show/Hide cue and an accessible named content region. Do not clip sticky
+  toolbars or menus with an overflow container.
+- Mixed-kind result filters are a wrapping row of separate controls, spaced
+  below the toolbar. Use canonical Entity icons and colors with neutral labels,
+  counts, and selected-state borders.
+- Use the shared `ChoiceGroup` for required single- or multiple-choice filters.
+  It composes the themed ToggleGroup and retains at least one selection. The
+  parent owns the value; selecting the current single choice must not reset
+  page state. Use ToggleGroup directly when deselecting every option is valid.
+- Search results retain the Entity thumbnail projection and use the library's
+  thumbnail mapper. Group headings identify the type; captions explain related
+  matches instead of repeating that type beneath every title. Full thumbnail
+  grids use the canonical artwork aspect ratio, not route-specific kind cases.
+- Availability belongs beside the item name, separate from its actions. Use
+  quiet text for ordinary missing/in-library information; reserve status badges
+  for active work or conditions that need attention. Supporting sections share
+  the same spacing whether supplied by a page or by the Entity base.
+
+### Behavior
+
 - Every primary action works without hover.
 - Focus is visible through shape, border, and motion as well as color.
 - Text and controls meet contrast requirements over both artwork and glass.
 - Motion respects `prefers-reduced-motion`.
+- Grid-to-detail artwork travel is a one-shot enhancement of an ordinary thumbnail link, not a global page transition. Use the shared artwork transition controller and motion tokens; animate only the image, not titles, metadata, or chrome. History, modified clicks, selection, and lightbox actions keep their existing behavior. Missing or slow destination artwork must fall back promptly rather than delay navigation. Reduced motion skips artwork travel entirely.
 - Blocking loaders expose one status announcement; decorative beams and prism layers are hidden from assistive technology.
 - Color pickers store validated six-digit hex values and retain visible labels.
 

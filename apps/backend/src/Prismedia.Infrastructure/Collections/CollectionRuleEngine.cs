@@ -19,53 +19,8 @@ namespace Prismedia.Infrastructure.Collections;
 public sealed class CollectionRuleEngine(
     PrismediaDbContext db,
     EfEntityLibraryVisibilityFilter libraryVisibility) : ICollectionRuleEngine {
-    private static readonly Dictionary<string, (int Min, int Max)> ResolutionMap = new() {
-        ["4K"] = (2160, 99999),
-        ["1080p"] = (1080, 2159),
-        ["720p"] = (720, 1079),
-        ["480p"] = (0, 719)
-    };
-
     private static readonly IEntityContainmentPolicy CollectionPolicy =
         EntityKindRegistry.Get<CollectionEntityKindDefinition>();
-
-    private static readonly IReadOnlySet<string> PlayableVideoKinds = EntityKindRegistry.All
-        .Where(definition => definition is IPlayableVideoKindDefinition)
-        .Select(definition => definition.Code)
-        .ToHashSet(StringComparer.Ordinal);
-
-    private static readonly IReadOnlySet<string> EpisodicPlayableVideoKinds = EntityKindRegistry.All
-        .OfType<IPlayableVideoKindDefinition>()
-        .Where(definition => definition.IsEpisodic)
-        .Select(definition => EntityKindRegistry.ToCode(definition.Kind))
-        .ToHashSet(StringComparer.Ordinal);
-
-    private static readonly IReadOnlyDictionary<CollectionRuleField, IReadOnlySet<string>> FieldTargetKinds =
-        new Dictionary<CollectionRuleField, IReadOnlySet<string>> {
-        [CollectionRuleField.FileSize] = Kinds(PlayableVideoKinds, EntityKind.Image, EntityKind.AudioTrack),
-        [CollectionRuleField.Duration] = Kinds(PlayableVideoKinds, EntityKind.AudioTrack),
-        [CollectionRuleField.Height] = Kinds(EntityKind.Image),
-        [CollectionRuleField.Width] = Kinds(EntityKind.Image),
-        [CollectionRuleField.Codec] = PlayableVideoKinds,
-        [CollectionRuleField.BitRate] = Kinds(EntityKind.AudioTrack),
-        [CollectionRuleField.BitRateLegacy] = Kinds(EntityKind.AudioTrack),
-        [CollectionRuleField.Channels] = Kinds(EntityKind.AudioTrack),
-        [CollectionRuleField.SampleRate] = Kinds(EntityKind.AudioTrack),
-        [CollectionRuleField.SampleRateLegacy] = Kinds(EntityKind.AudioTrack),
-        [CollectionRuleField.AccessCount] = Kinds(PlayableVideoKinds, EntityKind.AudioTrack),
-        [CollectionRuleField.SkipCount] = Kinds(PlayableVideoKinds, EntityKind.AudioTrack),
-        [CollectionRuleField.Resolution] = PlayableVideoKinds,
-        [CollectionRuleField.VideoSeriesId] = EpisodicPlayableVideoKinds,
-        [CollectionRuleField.LibraryRootId] = Kinds(CollectionPolicy.ContainableKinds
-            .Select(EntityKindRegistry.Describe)
-            .Where(definition => definition.LibraryVisibility.Mode != EntityLibraryVisibilityMode.Unscoped)
-            .Select(definition => definition.Code)
-            .ToArray()),
-        [CollectionRuleField.GalleryType] = Kinds(EntityKind.Gallery),
-        [CollectionRuleField.ImageCount] = Kinds(EntityKind.Gallery),
-        [CollectionRuleField.Format] = Kinds(EntityKind.Image),
-        [CollectionRuleField.Interactive] = PlayableVideoKinds,
-    };
 
     public async Task<IReadOnlyList<CollectionRuleMatch>> EvaluateAsync(
         string ruleTreeJson,
@@ -237,22 +192,10 @@ public sealed class CollectionRuleEngine(
         entityTypes.Any(entityType => KindEquals(entityType, kindCode));
 
     private static bool FieldAppliesToKind(CollectionRuleField field, string kindCode) =>
-        !FieldTargetKinds.TryGetValue(field, out var kinds) || kinds.Contains(kindCode);
+        kindCode.TryDecodeAs<EntityKind>(out var kind) && CollectionRuleFieldPolicy.SupportedKinds(field).Contains(kind);
 
     private static bool KindEquals(string actual, string expected) =>
         actual.Equals(expected, StringComparison.OrdinalIgnoreCase);
-
-    private static IReadOnlySet<string> Kinds(params EntityKind[] kinds) =>
-        new HashSet<string>(kinds.Select(EntityKindRegistry.ToCode), StringComparer.Ordinal);
-
-    private static IReadOnlySet<string> Kinds(IReadOnlySet<string> initialKinds, params EntityKind[] kinds) {
-        var kindCodes = new HashSet<string>(initialKinds, StringComparer.Ordinal);
-        kindCodes.UnionWith(kinds.Select(EntityKindRegistry.ToCode));
-        return kindCodes;
-    }
-
-    private static IReadOnlySet<string> Kinds(params string[] kindCodes) =>
-        new HashSet<string>(kindCodes, StringComparer.Ordinal);
 
     // ── Scalar field translation ──
 
@@ -390,7 +333,7 @@ public sealed class CollectionRuleEngine(
         };
     }
 
-    // ── Resolution (maps named tiers to height ranges) ──
+    // ── Resolution (same ordered width-or-height policy as thumbnail badges) ──
 
     private string? TranslateResolution(
         CollectionRuleCondition condition,
@@ -398,22 +341,24 @@ public sealed class CollectionRuleEngine(
         SqlBuildContext ctx) {
         ctx.EnsureJoin("LEFT JOIN entity_technical t ON t.entity_id = e.id");
 
-        var values = GetStringArray(condition.Value);
-        var rangeClauses = new List<string>();
+        var values = GetStringArray(condition.Value)
+            .Where(value => value.TryDecodeAs<MediaResolutionTier>(out _))
+            .Select(value => value.DecodeAs<MediaResolutionTier>().ToCode())
+            .Distinct().Select(value => ctx.AddParam(value, NpgsqlDbType.Text)).ToArray();
+        if (values.Length == 0) return "false";
 
-        foreach (var val in values) {
-            if (!ResolutionMap.TryGetValue(val, out var range)) continue;
-            var minP = ctx.AddParam(range.Min, NpgsqlDbType.Integer);
-            var maxP = ctx.AddParam(range.Max, NpgsqlDbType.Integer);
-            rangeClauses.Add($"(t.height >= {minP} AND t.height <= {maxP})");
-        }
-
-        if (rangeClauses.Count == 0) return "false";
-
-        var combined = string.Join(" OR ", rangeClauses);
+        var cases = MediaResolutionPolicy.Tiers.Select(tier => {
+            var width = ctx.AddParam(tier.MinimumWidth, NpgsqlDbType.Integer);
+            var height = ctx.AddParam(tier.MinimumHeight, NpgsqlDbType.Integer);
+            var code = ctx.AddParam(tier.Tier.ToCode(), NpgsqlDbType.Text);
+            return $"WHEN (t.width >= {width} OR t.height >= {height}) THEN {code}";
+        });
+        // NULL remains unknown for both IN and NOT IN; missing media must not become an SD match.
+        var classification = $"(CASE {string.Join(" ", cases)} ELSE NULL END)";
+        var selected = string.Join(", ", values);
         return op switch {
-            CollectionRuleOperator.In => $"({combined})",
-            CollectionRuleOperator.NotIn => $"NOT ({combined})",
+            CollectionRuleOperator.In => $"{classification} IN ({selected})",
+            CollectionRuleOperator.NotIn => $"{classification} NOT IN ({selected})",
             _ => null
         };
     }

@@ -10,6 +10,7 @@ import {
   type VideoPlaybackMethodCode,
 } from "$lib/api/generated/codes";
 import { numberValue } from "$lib/utils/format";
+export { resolutionBadge } from "$lib/entities/media-resolution";
 
 /** How the server is delivering the stream, in order of increasing work. */
 export type StreamMethod = VideoPlaybackMethodCode;
@@ -35,27 +36,6 @@ export interface AudioStreamBadgeInput {
 function positiveInt(value: number | string | null | undefined): number {
   const parsed = numberValue(value);
   return parsed !== null && parsed > 0 ? Math.round(parsed) : 0;
-}
-
-/**
- * Maps pixel dimensions to a marketing resolution tier ("4K", "1080p", …). Uses width OR height
- * thresholds so cinematic (letterboxed) sources — a 3840x1600 scope master — still read as 4K, while
- * 4:3 sources are caught by height. Returns null when both dimensions are unknown.
- */
-export function resolutionBadge(
-  width: number | string | null | undefined,
-  height: number | string | null | undefined,
-): string | null {
-  const w = positiveInt(width);
-  const h = positiveInt(height);
-  if (w === 0 && h === 0) return null;
-  if (w >= 7600 || h >= 4300) return "8K";
-  if (w >= 3800 || h >= 2000) return "4K";
-  if (w >= 2540 || h >= 1400) return "1440p";
-  if (w >= 1800 || h >= 1000) return "1080p";
-  if (w >= 1200 || h >= 700) return "720p";
-  if (w >= 640 || h >= 480) return "480p";
-  return "SD";
 }
 
 /**

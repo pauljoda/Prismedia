@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { Button } from "@prismedia/ui-svelte";
+  import ReaderContentsSheet from "./reader/ReaderContentsSheet.svelte";
   import type { Snippet } from "svelte";
   import { onMount, untrack } from "svelte";
   import {
@@ -345,68 +347,68 @@
       {@render companionControls()}
     {/if}
     {#if hasToc}
-      <button
+      <Button variant="outline" size="sm"
         type="button"
         onclick={() => (tocOpen = true)}
-        class="reader-mode-button"
+        class="aria-pressed:bg-accent aria-pressed:text-accent-foreground"
         aria-label="Table of contents"
         title="Contents"
       >
         <List class="h-4 w-4" />
         <span class="hidden sm:inline">Contents</span>
-      </button>
+      </Button>
     {/if}
 
     {#if !isFixedLayout}
       <div class="flex items-center gap-1 border-l border-border-subtle pl-2">
-        <button
+        <Button variant="outline" size="sm"
           type="button"
           onclick={() => setFlow("paginated")}
-          class:active-reader-control={flow === "paginated"}
-          class="reader-mode-button"
+          aria-pressed={flow === "paginated"}
+          class="aria-pressed:bg-accent aria-pressed:text-accent-foreground"
           aria-label="Paged reading"
           title="Paged reading"
         >
           <BookOpen class="h-4 w-4" />
           <span class="hidden sm:inline">Paged</span>
-        </button>
-        <button
+        </Button>
+        <Button variant="outline" size="sm"
           type="button"
           onclick={() => setFlow("scrolled")}
-          class:active-reader-control={flow === "scrolled"}
-          class="reader-mode-button"
+          aria-pressed={flow === "scrolled"}
+          class="aria-pressed:bg-accent aria-pressed:text-accent-foreground"
           aria-label="Scrolled reading"
           title="Scrolled reading"
         >
           <Rows3 class="h-4 w-4" />
           <span class="hidden sm:inline">Scroll</span>
-        </button>
+        </Button>
       </div>
     {/if}
 
     {#if !isFixedLayout}
     <div class="hidden items-center gap-1 border-l border-border-subtle pl-2 sm:flex">
-      <button
+      <Button variant="outline" size="sm"
         type="button"
         onclick={() => changeFont(-10)}
         disabled={fontPercent <= MIN_FONT}
-        class="reader-mode-button"
+        class="aria-pressed:bg-accent aria-pressed:text-accent-foreground"
         aria-label="Decrease font size"
         title="Decrease font size"
       >
         <Minus class="h-4 w-4" />
-      </button>
+      </Button>
       <span class="font-mono text-[0.62rem] tabular-nums text-text-muted">{fontPercent}%</span>
-      <button
+      <Button variant="outline" size="sm"
         type="button"
         onclick={() => changeFont(10)}
         disabled={fontPercent >= MAX_FONT}
-        class="reader-mode-button"
+        class="aria-pressed:bg-accent aria-pressed:text-accent-foreground"
         aria-label="Increase font size"
         title="Increase font size"
       >
         <Plus class="h-4 w-4" />
-      </button>
+      </Button>
     </div>
     {/if}
   {/snippet}
@@ -424,26 +426,26 @@
     {/if}
 
     {#if ready}
-      <button
+      <Button variant="outline" size="sm"
         type="button"
         onclick={goPrev}
         data-reader-control
-        class="reader-nav-button left-2 sm:left-3"
+        class="absolute top-1/2 z-10 hidden size-11 -translate-y-1/2 sm:inline-flex left-2 sm:left-3"
         aria-label="Previous page"
         title="Previous (←)"
       >
         <ChevronLeft class="h-6 w-6" />
-      </button>
-      <button
+      </Button>
+      <Button variant="outline" size="sm"
         type="button"
         onclick={goNext}
         data-reader-control
-        class="reader-nav-button right-2 sm:right-3"
+        class="absolute top-1/2 z-10 hidden size-11 -translate-y-1/2 sm:inline-flex right-2 sm:right-3"
         aria-label="Next page"
         title="Next (→)"
       >
         <ChevronRight class="h-6 w-6" />
-      </button>
+      </Button>
       {#if atEnd}
         <div class="book-reader-end" data-reader-control>End of book</div>
       {/if}
@@ -462,36 +464,20 @@
   </div>
 </ReaderShell>
 
-{#if tocOpen}
-  {@const closeToc = () => (tocOpen = false)}
-  <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-  <div class="toc-overlay" onclick={closeToc}>
-    <!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_static_element_interactions -->
-    <div class="toc-panel" role="dialog" aria-label="Table of contents" tabindex="-1" onclick={(e) => e.stopPropagation()}>
-      <div class="toc-header">
-        <span class="toc-title">Contents</span>
-        <button type="button" class="reader-mode-button" onclick={closeToc} aria-label="Close contents" title="Close">
-          <X class="h-4 w-4" />
-        </button>
-      </div>
-      <nav class="toc-list">
-        {@render tocItems(toc, 0)}
-      </nav>
-    </div>
-  </div>
-{/if}
+<ReaderContentsSheet open={tocOpen} onClose={() => tocOpen = false}>
+  {@render tocItems(toc, 0)}
+</ReaderContentsSheet>
 
 {#snippet tocItems(items: TocEntry[], depth: number)}
   {#each items as entry (entry.label + (entry.href ?? ""))}
-    <button
-      type="button"
-      class="toc-item"
+    <Button variant="ghost"
+      class="h-auto w-full justify-start whitespace-normal py-2 text-left"
       style={`padding-left: ${0.85 + depth * 0.9}rem`}
       disabled={!entry.href}
       onclick={() => openToc(entry)}
     >
       {entry.label}
-    </button>
+    </Button>
     {#if entry.subitems.length > 0}
       {@render tocItems(entry.subitems, depth + 1)}
     {/if}
@@ -553,138 +539,4 @@
     backdrop-filter: blur(var(--glass-blur-sm));
   }
 
-  .reader-mode-button {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    border: 1px solid var(--color-border-default);
-    background: var(--color-overlay-heavy);
-    padding: 0.45rem 0.65rem;
-    border-radius: var(--radius-sm);
-    color: var(--color-text-secondary);
-    font-size: 0.72rem;
-    line-height: 1;
-    backdrop-filter: blur(var(--glass-blur-sm));
-    transition:
-      border-color var(--duration-normal) var(--ease-mechanical),
-      color var(--duration-normal) var(--ease-mechanical),
-      box-shadow var(--duration-normal) var(--ease-mechanical);
-  }
-
-  .reader-mode-button:hover:not(:disabled),
-  .reader-mode-button:focus-visible,
-  .active-reader-control {
-    border-color: var(--color-border-accent-strong);
-    color: var(--color-text-accent-bright);
-    box-shadow: var(--shadow-glow-accent);
-    outline: none;
-  }
-
-  .reader-mode-button:disabled {
-    opacity: 0.5;
-  }
-
-  .reader-nav-button {
-    position: absolute;
-    top: 50%;
-    z-index: 10;
-    display: none;
-    height: 2.75rem;
-    width: 2.75rem;
-    transform: translateY(-50%);
-    align-items: center;
-    justify-content: center;
-    border: 1px solid var(--color-border-default);
-    border-radius: var(--radius-sm);
-    background: var(--color-overlay-heavy);
-    color: var(--color-text-secondary);
-    backdrop-filter: blur(var(--glass-blur-sm));
-    transition:
-      border-color var(--duration-normal) var(--ease-mechanical),
-      color var(--duration-normal) var(--ease-mechanical),
-      box-shadow var(--duration-normal) var(--ease-mechanical);
-  }
-
-  .reader-nav-button:hover,
-  .reader-nav-button:focus-visible {
-    border-color: var(--color-border-accent-strong);
-    color: var(--color-text-accent-bright);
-    box-shadow: var(--shadow-glow-accent);
-    outline: none;
-  }
-
-  .toc-overlay {
-    position: fixed;
-    inset: 0;
-    z-index: 2147483100;
-    display: flex;
-    justify-content: flex-start;
-    background: rgba(4, 5, 7, 0.55);
-    backdrop-filter: blur(var(--glass-blur-sm));
-  }
-
-  .toc-panel {
-    display: flex;
-    width: min(22rem, 86vw);
-    height: 100%;
-    flex-direction: column;
-    border-right: 1px solid var(--color-border-default);
-    background: var(--color-surface-1, #0e1014);
-    box-shadow: var(--shadow-glow-accent);
-  }
-
-  .toc-header {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.5rem;
-    padding: max(0.75rem, env(safe-area-inset-top)) 0.85rem 0.75rem;
-    border-bottom: 1px solid var(--color-border-default);
-  }
-
-  .toc-title {
-    font-family: var(--font-mono, monospace);
-    font-size: 0.68rem;
-    letter-spacing: 0.16em;
-    text-transform: uppercase;
-    color: var(--color-text-accent-bright);
-  }
-
-  .toc-list {
-    flex: 1 1 auto;
-    overflow-y: auto;
-    padding: 0.4rem 0.4rem 1.5rem;
-  }
-
-  .toc-item {
-    display: block;
-    width: 100%;
-    border-radius: var(--radius-sm);
-    padding: 0.5rem 0.85rem;
-    text-align: left;
-    font-size: 0.82rem;
-    color: var(--color-text-secondary);
-    transition:
-      background-color var(--duration-fast) var(--ease-mechanical),
-      color var(--duration-fast) var(--ease-mechanical);
-  }
-
-  .toc-item:hover:not(:disabled),
-  .toc-item:focus-visible {
-    background: var(--color-overlay-heavy);
-    color: var(--color-text-accent-bright);
-    outline: none;
-  }
-
-  .toc-item:disabled {
-    color: var(--color-text-muted);
-    cursor: default;
-  }
-
-  /* Arrows are desktop-only; mobile relies on tap zones and swipe like the comic reader. */
-  @media (min-width: 640px) {
-    .reader-nav-button {
-      display: flex;
-    }
-  }
 </style>

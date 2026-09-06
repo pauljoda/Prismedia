@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
+  import { Collapsible, buttonVariants, cn } from "@prismedia/ui-svelte";
   import { ChevronDown } from "@lucide/svelte";
 
   interface Props {
@@ -33,26 +34,19 @@
   );
   const chevronClass = $derived(`h-3.5 w-3.5 transition-transform${collapsed ? "" : " rotate-180"}`);
 
-  function toggleCollapsed() {
-    collapsed = !collapsed;
-  }
 </script>
 
+<Collapsible.Root bind:open={() => !collapsed, next => collapsed = !next}>
 <section class={sectionClass}>
   <header class="review-section-header">
-    <button
-      type="button"
-      class="review-section-toggle"
-      aria-controls={contentId}
-      aria-expanded={!collapsed}
-      onclick={toggleCollapsed}
+    <Collapsible.Trigger class={cn(buttonVariants({ variant: "ghost", size: "sm" }), "min-w-0 h-auto flex-1 justify-start whitespace-normal px-0 gap-2.5")}
     >
       {@render icon()}
       <span class="text-kicker text-text-accent">{title}</span>
       {#if meta}
         <span class="font-mono text-[0.7rem] text-text-muted">{meta}</span>
       {/if}
-    </button>
+    </Collapsible.Trigger>
 
     {#if actions}
       <div class="review-section-actions">
@@ -60,25 +54,21 @@
       </div>
     {/if}
 
-    <button
-      type="button"
-      class="review-section-collapse"
+    <Collapsible.Trigger class={buttonVariants({ variant: "ghost", size: "icon-sm" })}
       aria-label={collapsed ? "Expand section" : "Collapse section"}
       aria-controls={contentId}
       aria-expanded={!collapsed}
       title={collapsed ? `Expand ${title}` : `Collapse ${title}`}
-      onclick={toggleCollapsed}
     >
       <ChevronDown class={chevronClass} />
-    </button>
+    </Collapsible.Trigger>
   </header>
 
-  {#if !collapsed}
-    <div id={contentId}>
-      {@render children()}
-    </div>
-  {/if}
+  <Collapsible.Content id={contentId}>
+    {#if !collapsed}{@render children()}{/if}
+  </Collapsible.Content>
 </section>
+</Collapsible.Root>
 
 <style>
   .review-lazy-section {
@@ -99,25 +89,7 @@
     border-bottom: 0;
   }
 
-  .review-section-toggle {
-    display: flex;
-    min-width: 0;
-    min-height: 1.5rem;
-    flex: 1 1 auto;
-    align-items: center;
-    gap: 0.625rem;
-    border: 0;
-    background: transparent;
-    color: inherit;
-    padding: 0;
-    text-align: left;
-  }
 
-  .review-section-toggle:focus-visible,
-  .review-section-collapse:focus-visible {
-    outline: 1px solid rgb(199 201 204 / 0.72);
-    outline-offset: 2px;
-  }
 
   .review-section-actions {
     display: flex;
@@ -126,26 +98,5 @@
     gap: 0.75rem;
   }
 
-  .review-section-collapse {
-    display: inline-flex;
-    width: 1.75rem;
-    height: 1.75rem;
-    flex: 0 0 auto;
-    align-items: center;
-    justify-content: center;
-    border: 1px solid transparent;
-    border-radius: var(--radius-xs);
-    background: transparent;
-    color: var(--color-text-muted);
-    transition:
-      background-color 160ms ease,
-      border-color 160ms ease,
-      color 160ms ease;
-  }
 
-  .review-section-collapse:hover {
-    border-color: var(--color-border-default);
-    background: var(--color-surface-3);
-    color: var(--color-text-primary);
-  }
 </style>

@@ -6,6 +6,17 @@ import EntityDatesEditor from "./EntityDatesEditor.svelte";
 describe("EntityDatesEditor", () => {
   afterEach(cleanup);
 
+  it("labels personal milestones as dates rather than release dates", () => {
+    const view = render(EntityDatesEditor, {
+      entityKind: ENTITY_KIND.person,
+      values: [],
+      onChange: vi.fn(),
+    });
+    expect(view.getByRole("group", { name: "Dates" })).toBeInTheDocument();
+    expect(view.queryByText("Release dates")).not.toBeInTheDocument();
+    expect(view.getByLabelText("Birth")).toBeInTheDocument();
+  });
+
   it("shows movie release milestones and writes their canonical date codes", async () => {
     const onChange = vi.fn();
     const view = render(EntityDatesEditor, {

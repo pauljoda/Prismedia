@@ -146,31 +146,31 @@
         <span class="text-mono-tabular text-accent-400 w-24 flex-shrink-0">
           {timeStr}{#if endStr}<span class="text-text-disabled">{endStr}</span>{/if}
         </span>
-        <button
+        <Button variant="outline" size="sm"
           type="button"
           class="flex-1 min-w-0 text-left"
           onclick={() => onSeek?.(marker.seconds)}
           aria-label={`Seek to ${marker.title}`}
         >
           <span class="block text-sm font-medium truncate">{marker.title}</span>
-        </button>
+        </Button>
         <div class="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-          <button
+          <Button variant="outline" size="sm"
             type="button"
             onclick={() => startEditMarker(marker)}
-            class="p-1 text-text-muted hover:text-text-accent transition-colors"
+            class="p-1"
             aria-label="Edit marker"
           >
             <Pencil class="h-3.5 w-3.5" />
-          </button>
-          <button
+          </Button>
+          <Button variant="destructive" size="sm"
             type="button"
             onclick={() => void handleDeleteMarker(marker.id)}
-            class="p-1 text-text-muted hover:text-error-text transition-colors"
+            class="p-1"
             aria-label="Delete marker"
           >
             <Trash2 class="h-3.5 w-3.5" />
-          </button>
+          </Button>
         </div>
       </div>
     {/if}

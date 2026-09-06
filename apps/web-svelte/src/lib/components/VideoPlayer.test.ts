@@ -109,6 +109,30 @@ describe("VideoPlayer", () => {
     expect(screen.getByText("0:25 / 1:40")).toBeInTheDocument();
   });
 
+  it("leaves focused controls and consumed keys to their UI owner", async () => {
+    const { container } = render(VideoPlayer, {
+      src: "/api/videos/video-1/hls/master.m3u8",
+      defaultPlaybackMode: "hls",
+      duration: 100,
+      initialTime: 25,
+    });
+    const tab = document.createElement("button");
+    tab.setAttribute("role", "tab");
+    tab.textContent = "Metadata";
+    container.append(tab);
+
+    await fireEvent.keyDown(tab, { key: "ArrowRight" });
+    expect(screen.getByText("0:25 / 1:40")).toBeInTheDocument();
+
+    const consumed = new KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true });
+    consumed.preventDefault();
+    await fireEvent(window, consumed);
+    expect(screen.getByText("0:25 / 1:40")).toBeInTheDocument();
+
+    await fireEvent.keyDown(window, { key: "ArrowRight" });
+    expect(screen.getByText("0:30 / 1:40")).toBeInTheDocument();
+  });
+
   it("auto-selects the preferred subtitle track when unlocked", async () => {
     const onActiveSubtitleTrackIdChange = vi.fn();
 
@@ -217,13 +241,13 @@ describe("VideoPlayer", () => {
     expect(screen.getByRole("button", { name: "Cast" })).toBeInTheDocument();
     const settingsButton = screen.getByRole("button", { name: "Player settings" });
     await fireEvent.click(settingsButton);
-    expect(screen.getByRole("menu", { name: "Player settings menu" })).toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "Player settings menu" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Quality/ })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: /Audio/ })).toBeInTheDocument();
 
     await fireEvent.click(settingsButton);
     await waitFor(() => {
-      expect(screen.queryByRole("menu", { name: "Player settings menu" })).not.toBeInTheDocument();
+      expect(screen.queryByRole("dialog", { name: "Player settings menu" })).not.toBeInTheDocument();
     });
   });
 

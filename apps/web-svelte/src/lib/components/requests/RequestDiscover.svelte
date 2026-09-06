@@ -1,7 +1,8 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { AlertTriangle, Loader2, PackageSearch, PlugZap } from "@lucide/svelte";
-  import { Button } from "@prismedia/ui-svelte";
+  import { Alert, Button, ChoiceGroup } from "@prismedia/ui-svelte";
+  import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { ENTITY_KIND, type RequestMediaKindCode } from "$lib/api/generated/codes";
@@ -105,6 +106,7 @@
   const orderedKinds = [...DISCOVERABLE_REQUEST_KINDS].sort((left, right) =>
     left.plural.localeCompare(right.plural),
   );
+  const kindChoices = orderedKinds.map(kind => ({ value: kind.kind, label: kind.plural, icon: requestKindIcon(kind.kind), iconColor: requestKindAccent(kind.kind) }));
 
   /**
    * How many installed providers can actually search each kind. Surfacing this on the chooser
@@ -329,22 +331,7 @@
         <span class="font-mono text-[0.72rem] text-text-muted">Content kind</span>
         {#if selectedKind}
           <!-- Once a kind is chosen the chooser collapses to chips so the search surface leads. -->
-          <div class="flex flex-wrap gap-1.5" role="group" aria-label="Choose a content kind">
-            {#each orderedKinds as kind (kind.kind)}
-              {@const KindIcon = requestKindIcon(kind.kind)}
-              {@const kindAccent = requestKindAccent(kind.kind)}
-              <Button
-                type="button"
-                size="sm"
-                variant={selectedKind === kind.kind ? "primary" : "secondary"}
-                aria-pressed={selectedKind === kind.kind}
-                onclick={() => chooseKind(kind.kind)}
-              >
-                <KindIcon class="h-3.5 w-3.5" color={kindAccent} aria-hidden="true" />
-                {kind.plural}
-              </Button>
-            {/each}
-          </div>
+          <ChoiceGroup type="single" options={kindChoices} value={selectedKind} onValueChange={chooseKind} ariaLabel="Choose a content kind" />
         {:else}
           <!--
             Nothing selected is the page's real starting point, so it gets a full chooser rather
@@ -354,11 +341,9 @@
             {#each orderedKinds as kind (kind.kind)}
               {@const KindIcon = requestKindIcon(kind.kind)}
               {@const sources = sourceCountByKind.get(kind.kind) ?? 0}
-              <button
-                type="button"
-                class="kind-card"
-                class:has-no-source={!providersLoading && sources === 0}
-                style:--family-accent={requestKindAccent(kind.kind)}
+              <Button variant="outline"
+                class={`kind-card h-auto ${!providersLoading && sources === 0 ? "has-no-source" : ""}`}
+                style={`--family-accent: ${requestKindAccent(kind.kind)}`}
                 aria-label={kind.plural}
                 aria-describedby={`discover-sources-${kind.kind}`}
                 onclick={() => chooseKind(kind.kind)}
@@ -375,7 +360,7 @@
                     {sources} {sources === 1 ? "source" : "sources"}
                   {/if}
                 </span>
-              </button>
+              </Button>
             {/each}
           </div>
         {/if}
@@ -388,33 +373,23 @@
             Loading discovery sources…
           </div>
         {:else if providersError}
-          <div class="flex items-start gap-2 rounded-xs border border-error/20 bg-error-muted px-3 py-2 text-[0.78rem] text-error-text" role="alert">
-            <AlertTriangle class="mt-0.5 h-3.5 w-3.5 shrink-0" />
-            {providersError}
-          </div>
+          <Alert.Root variant="destructive">
+            <AlertTriangle />
+            <Alert.Description>{providersError}</Alert.Description>
+          </Alert.Root>
         {:else if eligibleProviders.length === 0}
-          <div class="empty-rack-slot flex items-start gap-2 p-4 text-[0.78rem] text-text-muted" role="status">
-            <PlugZap class="mt-0.5 h-4 w-4 shrink-0 text-text-disabled" />
-            <p>
-              No installed provider can search and review
-              {selectedKindInfo?.plural.toLowerCase() ?? "this kind"}.
-              Enable a compatible provider in Plugins first.
-            </p>
-          </div>
+          <StatePlaceholder icon={PlugZap} title="No compatible provider"
+            description={`Enable a provider in Plugins that supports ${selectedKindInfo?.plural.toLowerCase() ?? "this kind"}.`} />
         {/if}
       {/if}
     </div>
   </section>
 
   {#if searchError}
-    <div class="surface-panel border-l-2 border-error px-4 py-2.5 text-sm text-error-text" role="alert">
-      {searchError}
-    </div>
+    <Alert.Root variant="destructive"><AlertTriangle /><Alert.Description>{searchError}</Alert.Description></Alert.Root>
   {/if}
   {#each providerWarnings as warning (warning)}
-    <div class="surface-panel border-l-2 border-warning px-4 py-2.5 text-sm text-warning-text" role="status">
-      {warning}
-    </div>
+    <Alert.Root role="status"><AlertTriangle /><Alert.Description>{warning}</Alert.Description></Alert.Root>
   {/each}
 
   {#if selectedKind && activeProvider}
@@ -448,7 +423,7 @@
     gap: 0.5rem;
   }
 
-  .kind-card {
+  .kind-chooser :global(.kind-card) {
     position: relative;
     display: grid;
     grid-template-columns: 3px auto minmax(0, 1fr);
@@ -467,14 +442,14 @@
       background var(--duration-fast, 120ms) var(--ease-default, ease);
   }
 
-  .kind-card:hover,
-  .kind-card:focus-visible {
+  .kind-chooser :global(.kind-card:hover),
+  .kind-chooser :global(.kind-card:focus-visible) {
     border-color: var(--color-border-default);
     background: var(--color-surface-3);
     outline: none;
   }
 
-  .kind-card:focus-visible {
+  .kind-chooser :global(.kind-card:focus-visible) {
     border-color: var(--color-border-accent-strong);
   }
 
@@ -486,7 +461,7 @@
     opacity: 0.85;
   }
 
-  .kind-card :global(.kind-card-icon) {
+  .kind-chooser :global(.kind-card .kind-card-icon) {
     grid-row: 1 / span 2;
     box-sizing: content-box;
     width: 1.15rem;
@@ -518,16 +493,16 @@
   }
 
   /* A kind with no installed provider stays selectable so the empty-state guidance can explain why. */
-  .kind-card.has-no-source .kind-card-label {
+  .kind-chooser :global(.kind-card.has-no-source .kind-card-label) {
     color: var(--color-text-muted);
   }
 
-  .kind-card.has-no-source .kind-card-rail {
+  .kind-chooser :global(.kind-card.has-no-source .kind-card-rail) {
     opacity: 0.3;
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .kind-card {
+    .kind-chooser :global(.kind-card) {
       transition: none;
     }
   }

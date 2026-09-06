@@ -17,7 +17,7 @@
     Strikethrough,
     Undo2,
   } from "@lucide/svelte";
-  import { cn } from "@prismedia/ui-svelte";
+  import { Button, ToggleButton, cn } from "@prismedia/ui-svelte";
   import NameInputDialog from "$lib/components/entities/NameInputDialog.svelte";
   import FormField from "./FormField.svelte";
 
@@ -50,7 +50,8 @@
   let focused = $state(false);
   let linkDialogOpen = $state(false);
 
-  const id = `md-${Math.random().toString(36).slice(2, 9)}`;
+  const id = $props.id();
+  let transaction = $state(0);
 
   onMount(() => {
     if (!editorElement) return;
@@ -77,6 +78,7 @@
       onUpdate: ({ editor: e }) => {
         onChange((e.storage as Record<string, any>).markdown.getMarkdown());
       },
+      onTransaction: () => { transaction += 1; },
       onFocus: () => (focused = true),
       onBlur: () => (focused = false),
     });
@@ -119,6 +121,7 @@
   }
 
   function toolbarActions(): ToolbarAction[] {
+    transaction;
     if (!editor) return [];
     return [
       {
@@ -193,49 +196,38 @@
         <div class="toolbar-group">
           {#each toolbarActions() as action (action.label)}
             {@const ActionIcon = action.Icon}
-            <button
-              type="button"
-              class="toolbar-btn"
-              class:active={action.active()}
+            <ToggleButton
+              size="sm"
+              pressed={action.active()}
+              {disabled}
               title={action.label}
               aria-label={action.label}
-              aria-pressed={action.active()}
-              onmousedown={(e) => {
-                e.preventDefault();
-                action.command();
-              }}
+              onmousedown={event => event.preventDefault()}
+              onPressedChange={() => action.command()}
             >
               <ActionIcon class="h-3.5 w-3.5" />
-            </button>
+            </ToggleButton>
           {/each}
         </div>
         <div class="toolbar-group">
-          <button
-            type="button"
-            class="toolbar-btn"
+          <Button variant="ghost" size="icon-sm"
             title="Undo"
             aria-label="Undo"
-            disabled={!editor.can().undo()}
-            onmousedown={(e) => {
-              e.preventDefault();
-              editor!.chain().focus().undo().run();
-            }}
+            disabled={disabled || (transaction >= 0 && !editor.can().undo())}
+            onmousedown={event => event.preventDefault()}
+            onclick={() => editor!.chain().focus().undo().run()}
           >
             <Undo2 class="h-3.5 w-3.5" />
-          </button>
-          <button
-            type="button"
-            class="toolbar-btn"
+          </Button>
+          <Button variant="ghost" size="icon-sm"
             title="Redo"
             aria-label="Redo"
-            disabled={!editor.can().redo()}
-            onmousedown={(e) => {
-              e.preventDefault();
-              editor!.chain().focus().redo().run();
-            }}
+            disabled={disabled || (transaction >= 0 && !editor.can().redo())}
+            onmousedown={event => event.preventDefault()}
+            onclick={() => editor!.chain().focus().redo().run()}
           >
             <Redo2 class="h-3.5 w-3.5" />
-          </button>
+          </Button>
         </div>
       </div>
     {/if}
@@ -293,36 +285,9 @@
     gap: 1px;
   }
 
-  .toolbar-btn {
-    display: grid;
-    place-items: center;
-    width: 1.75rem;
-    height: 1.75rem;
-    padding: 0;
-    border: 1px solid transparent;
-    border-radius: var(--radius-xs, 4px);
-    background: transparent;
-    color: var(--color-text-muted, #a4acb9);
-    cursor: pointer;
-    transition: color 0.15s, background 0.15s, border-color 0.15s, box-shadow 0.15s;
-  }
 
-  .toolbar-btn:hover {
-    color: var(--color-text-primary, #f5f2ea);
-    background: var(--color-surface-4, #1f2533);
-  }
 
-  .toolbar-btn.active {
-    color: var(--color-text-accent, #c79b5c);
-    border-color: rgba(199, 155, 92, 0.24);
-    background: rgba(199, 155, 92, 0.08);
-    box-shadow: 0 0 8px rgba(199, 155, 92, 0.1);
-  }
 
-  .toolbar-btn:disabled {
-    opacity: 0.35;
-    cursor: not-allowed;
-  }
 
   .editor-content {
     padding: 0.65rem 0.75rem;

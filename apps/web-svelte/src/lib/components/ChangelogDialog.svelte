@@ -86,6 +86,7 @@
 
 <script lang="ts">
   import type { Snippet } from "svelte";
+  import { Dialog, Button, Skeleton } from "@prismedia/ui-svelte";
   import { RefreshCw, X } from "@lucide/svelte";
   import { fetchReleaseUpdateStatus, type ReleaseUpdateStatus } from "$lib/version";
   import { getChangelog } from "$lib/api/generated/prismedia";
@@ -115,7 +116,6 @@
   let releaseStatus = $state<ReleaseUpdateStatus | null>(null);
   let loading = $state(false);
   let checkingRelease = $state(false);
-  let dialogRef: HTMLDialogElement | null = $state(null);
 
   const blocks = $derived(content ? parseChangelog(content) : []);
   // Dev builds advertise updates by digest, so latestVersion is null while latestUrl is present.
@@ -156,11 +156,6 @@
     }
   }
 
-  $effect(() => {
-    if (!dialogRef) return;
-    if (open) dialogRef.showModal();
-    else if (dialogRef.open) dialogRef.close();
-  });
 
   function handleOpen() {
     open = true;
@@ -168,9 +163,6 @@
     void loadReleaseStatus();
   }
 
-  function handleBackdropClick(event: MouseEvent) {
-    if (event.target === dialogRef) open = false;
-  }
 
   function handleTriggerKeydown(event: KeyboardEvent) {
     if (event.key !== "Enter" && event.key !== " ") return;
@@ -207,13 +199,8 @@
   {@render children()}
 </div>
 
-<dialog
-  bind:this={dialogRef}
-  onclick={handleBackdropClick}
-  onclose={() => (open = false)}
-  aria-label="Prismedia changelog"
-  class="app-dialog-surface changelog-dialog fixed inset-0 m-auto h-[min(86dvh,44rem)] w-[min(94vw,56rem)] flex-col overflow-hidden p-0 text-text-primary open:flex"
->
+<Dialog {open} onClose={() => open = false} ariaLabel="Prismedia changelog"
+  class="h-[min(86dvh,44rem)] w-[min(94vw,56rem)] overflow-hidden">
   <header class="changelog-header relative border-b border-border-subtle px-4 py-3.5 sm:px-5">
     <div class="flex items-start justify-between gap-4">
       <div class="min-w-0 space-y-3">
@@ -229,14 +216,14 @@
         </div>
       </div>
 
-      <button
+      <Button variant="ghost"
         type="button"
         onclick={() => (open = false)}
-        class="control-button h-9 w-9 shrink-0"
+        size="icon" class="size-9 shrink-0"
         aria-label="Close changelog"
       >
         <X class="h-4 w-4" />
-      </button>
+      </Button>
     </div>
 
     <div class="mt-3 flex flex-wrap items-center gap-1.5">
@@ -252,7 +239,7 @@
           {link.label}
         </a>
       {/each}
-      <button
+      <Button variant="ghost"
         type="button"
         onclick={() => void loadReleaseStatus(true)}
         disabled={checkingRelease}
@@ -262,7 +249,7 @@
       >
         <RefreshCw class={checkingRelease ? "h-3.5 w-3.5 animate-spin" : "h-3.5 w-3.5"} />
         Refresh
-      </button>
+      </Button>
     </div>
   </header>
 
@@ -282,7 +269,8 @@
     {/if}
 
     {#if loading}
-      <div class="surface-well animate-pulse px-4 py-8 text-center text-xs uppercase tracking-[0.16em] text-text-disabled">
+      <div class="surface-well px-4 py-8 text-center text-xs uppercase tracking-[0.16em] text-text-disabled">
+        <Skeleton class="mb-3 h-4 w-full" />
         Loading changelog...
       </div>
     {:else if content}
@@ -362,12 +350,9 @@
       </div>
     {/if}
   </div>
-</dialog>
+</Dialog>
 
 <style>
-  .changelog-dialog {
-    color-scheme: dark;
-  }
 
   .changelog-header {
     background: rgb(255 255 255 / 0.018);
@@ -375,7 +360,6 @@
 
   .status-chip,
   .link-button,
-  .control-button,
   .update-banner,
   .inline-code {
     border-radius: var(--radius-xs);
@@ -400,8 +384,7 @@
     color: var(--color-text-accent);
   }
 
-  .link-button,
-  .control-button {
+  .link-button {
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -420,9 +403,7 @@
   }
 
   .link-button:hover,
-  .link-button:focus-visible,
-  .control-button:hover,
-  .control-button:focus-visible {
+  .link-button:focus-visible {
     border-color: var(--color-border-accent);
     background: var(--color-overlay-glass-accent);
     color: var(--color-text-accent);

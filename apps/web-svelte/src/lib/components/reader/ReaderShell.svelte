@@ -2,10 +2,8 @@
   import type { Snippet } from "svelte";
   import { onMount } from "svelte";
   import { ArrowLeft, X } from "@lucide/svelte";
-  import { fade } from "svelte/transition";
-  import { dur, ease } from "@prismedia/ui-svelte";
+  import { Button, Dialog } from "@prismedia/ui-svelte";
   import { createNavigationKeyHandler } from "$lib/keyboard/navigation-keyboard";
-  import { portal } from "$lib/actions/portal";
 
   interface Props {
     title?: string;
@@ -37,7 +35,9 @@
     children,
   }: Props = $props();
 
+  let closeButton = $state<HTMLButtonElement | null>(null);
   let controlsVisible = $state(true);
+  let navigationRoot = $state<HTMLDivElement | null>(null);
   let controlsTimer: number | null = null;
 
   const closeLabel = $derived(closeIcon === "back" ? "Back" : "Close");
@@ -70,11 +70,9 @@
   }
 
   onMount(() => {
-    const prevOverflow = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
 
     const onKey = createNavigationKeyHandler({
-      close: onClose,
+      scope: () => navigationRoot,
       prev: () => onPrev?.(),
       next: () => onNext?.(),
       extraKeys: onActivate ? { " ": () => onActivate() } : undefined,
@@ -84,20 +82,16 @@
     showControls();
     return () => {
       window.removeEventListener("keydown", onKey);
-      document.body.style.overflow = prevOverflow;
       clearControlsTimer();
     };
   });
 </script>
 
+<Dialog open ariaLabel={title} {onClose} fullscreen initialFocus={() => closeButton}>
 <div
-  use:portal
+  bind:this={navigationRoot}
   data-reader-overlay
-  class={`reader-overlay fixed inset-0 flex flex-col bg-black backdrop-blur-sm ${presentation === "page" ? "reader-page-presentation" : ""}`}
-  role="dialog"
-  aria-modal="true"
-  in:fade={{ duration: dur.normal, easing: ease.enter }}
-  out:fade={{ duration: dur.fast, easing: ease.exit }}
+  class={`reader-overlay relative flex flex-col bg-black backdrop-blur-sm ${presentation === "page" ? "reader-page-presentation" : ""}`}
 >
   <!-- svelte-ignore a11y_no_static_element_interactions -->
   <div
@@ -116,10 +110,8 @@
     data-reader-control
     class={`reader-top-layer ${controlsVisible ? "reader-layer-visible" : "reader-layer-hidden"}`}
   >
-    <button
-      type="button"
+    <Button variant="outline" size="icon" bind:ref={closeButton}
       onclick={onClose}
-      class="reader-icon-button"
       aria-label={closeLabel}
       title={closeTitle}
     >
@@ -128,7 +120,7 @@
       {:else}
         <X class="h-5 w-5" />
       {/if}
-    </button>
+    </Button>
 
     <div class="min-w-0 flex-1">
       <h2 class="truncate text-sm font-medium text-text-primary">{title}</h2>
@@ -146,48 +138,18 @@
 
   {@render children()}
 </div>
+</Dialog>
 
 <style>
-  .reader-icon-button {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    border: 1px solid var(--color-border-default);
-    background: var(--color-overlay-heavy);
-    padding: 0.4rem;
-    border-radius: var(--radius-sm);
-    color: var(--color-text-secondary);
-    font-size: 0.72rem;
-    line-height: 1;
-    backdrop-filter: blur(var(--glass-blur-sm));
-    transition:
-      border-color var(--duration-normal) var(--ease-mechanical),
-      color var(--duration-normal) var(--ease-mechanical),
-      box-shadow var(--duration-normal) var(--ease-mechanical);
-  }
 
-  .reader-icon-button:hover,
-  .reader-icon-button:focus-visible {
-    border-color: var(--color-border-accent-strong);
-    color: var(--color-text-accent-bright);
-    box-shadow: var(--shadow-glow-accent);
-    outline: none;
-  }
 
   .reader-overlay {
-    z-index: 2147483000;
     width: 100vw;
-    height: 100vh;
-    min-height: 100vh;
+    height: 100%;
+    min-height: 100%;
     overflow: hidden;
   }
 
-  @supports (height: 100lvh) {
-    .reader-overlay {
-      height: 100lvh;
-      min-height: 100lvh;
-    }
-  }
 
   .reader-hover-zone {
     position: absolute;

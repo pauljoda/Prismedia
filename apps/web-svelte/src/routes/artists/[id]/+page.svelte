@@ -1,4 +1,5 @@
 <script lang="ts">
+  import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import { CloudDownload, Disc3, Info, Play, Shuffle, SlidersHorizontal, Users } from "@lucide/svelte";
@@ -227,9 +228,7 @@
         />
       </EntityGridSection>
     {:else}
-      <div class="empty-children">
-        <p>No albums grouped under this artist yet.</p>
-      </div>
+      <StatePlaceholder icon={Disc3} title="No albums yet" description="Albums linked to this artist will appear here." />
     {/if}
     {/if}
   </EntityDetailPageState>
@@ -240,6 +239,5 @@
 
   :global(.meta-item) { white-space: nowrap; font-size: 0.82rem; }
 
-  .empty-children { padding: 2rem; border: 1px solid var(--color-border-subtle, #1c2235); background: var(--color-surface-1, #0c0f15); color: var(--color-text-muted, #8a93a6); text-align: center; font-size: 0.85rem; }
 
 </style>

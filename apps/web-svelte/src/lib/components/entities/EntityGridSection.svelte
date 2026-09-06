@@ -1,5 +1,6 @@
 <script lang="ts">
   import { browser } from "$app/environment";
+  import { Collapsible, Card, Badge, buttonVariants, cn } from "@prismedia/ui-svelte";
   import { ChevronDown } from "@lucide/svelte";
   import type { Component, Snippet } from "svelte";
 
@@ -21,11 +22,11 @@
     title,
   }: Props = $props();
 
-  // svelte-ignore state_referenced_locally
-  const storageKey = `prismedia:entity-grid-section:${prefsKey}`;
-  // svelte-ignore state_referenced_locally
-  const contentId = `entity-grid-section-${slugify(prefsKey)}`;
-  let collapsed = $state(readStoredCollapsed(storageKey));
+  const storageKey = $derived(`prismedia:entity-grid-section:${prefsKey}`);
+  const sectionId = $props.id();
+  const contentId = `${sectionId}-content`;
+  const titleId = `${sectionId}-title`;
+  let collapsed = $derived(readStoredCollapsed(storageKey));
 
   function readStoredCollapsed(key: string): boolean {
     if (!browser) return false;
@@ -45,134 +46,39 @@
     }
   }
 
-  function toggleCollapsed() {
-    collapsed = !collapsed;
+  function setOpen(open: boolean) {
+    collapsed = !open;
     writeStoredCollapsed(collapsed);
   }
 
-  function slugify(value: string): string {
-    return value.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "grid";
-  }
 </script>
 
-<section class="content-section" class:is-collapsed={collapsed}>
-  <button
-    type="button"
-    class="content-heading"
-    aria-controls={contentId}
-    aria-expanded={!collapsed}
-    title={collapsed ? `Expand ${title}` : `Collapse ${title}`}
-    onclick={toggleCollapsed}
-  >
-    <span class="heading-label">
-      {#if Icon}
-        <Icon class="h-4 w-4" />
-      {/if}
-      <span class="heading-title">{title}</span>
-      <span class="content-count">{count}</span>
-    </span>
-    <span class="section-chevron" class:is-expanded={!collapsed} aria-hidden="true">
-      <ChevronDown />
-    </span>
-  </button>
-
-  {#if !collapsed}
-    <div id={contentId} class="section-body">
-      {@render children()}
-    </div>
-  {/if}
-</section>
-
-<style>
-  .content-section {
-    display: grid;
-    gap: 0.75rem;
-  }
-
-  .content-heading {
-    display: flex;
-    min-width: 0;
-    width: 100%;
-    align-items: center;
-    justify-content: space-between;
-    gap: 0.75rem;
-    margin: 0;
-    border: 1px solid transparent;
-    border-radius: var(--radius-xs, 4px);
-    background: transparent;
-    color: var(--color-text-primary, #f2eed8);
-    cursor: pointer;
-    font-family: var(--font-heading, Geist, sans-serif);
-    font-size: 1.1rem;
-    font-weight: 600;
-    padding: 0.15rem 0.2rem;
-    text-align: left;
-    transition:
-      background-color 160ms ease,
-      border-color 160ms ease,
-      color 160ms ease;
-  }
-
-  .content-heading:hover {
-    border-color: var(--color-border-subtle, rgb(164 172 185 / 0.07));
-    background: color-mix(in srgb, var(--color-surface-2, #11161d) 46%, transparent);
-  }
-
-  .content-heading:focus-visible {
-    outline: 1px solid rgb(199 201 204 / 0.72);
-    outline-offset: 2px;
-  }
-
-  .heading-label {
-    display: flex;
-    min-width: 0;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  .heading-title {
-    overflow-wrap: anywhere;
-  }
-
-  .content-count {
-    flex: 0 0 auto;
-    border: 1px solid var(--color-border, #1c2235);
-    background: var(--color-surface-3, #151a28);
-    color: var(--color-text-muted, #8a93a6);
-    font-family: var(--font-mono, "JetBrains Mono", monospace);
-    font-size: 0.68rem;
-    font-weight: 600;
-    padding: 0.1rem 0.4rem;
-  }
-
-  .section-chevron {
-    display: inline-flex;
-    width: 1rem;
-    height: 1rem;
-    flex: 0 0 auto;
-    align-items: center;
-    justify-content: center;
-    color: var(--color-text-muted, #8a93a6);
-    transition:
-      color 160ms ease,
-      transform 160ms ease;
-  }
-
-  .section-chevron :global(svg) {
-    width: 1rem;
-    height: 1rem;
-  }
-
-  .section-chevron.is-expanded {
-    transform: rotate(180deg);
-  }
-
-  .content-heading:hover .section-chevron,
-  .is-collapsed .section-chevron {
-    color: var(--color-text-accent, #c7c9cc);
-  }
-
-  .section-body {
-    min-width: 0;
-  }
-</style>
+<Collapsible.Root open={!collapsed} onOpenChange={setOpen} class="min-w-0">
+  <Card.Root class="gap-0 py-0">
+    <Card.Header class="p-0">
+      <Card.Title role="heading" aria-level={2}>
+        <Collapsible.Trigger
+          class={cn(buttonVariants({ variant: "ghost", size: "lg" }), "h-auto min-h-control-lg w-full justify-between rounded-md px-4 py-3 data-[state=open]:rounded-b-none")}
+          title={collapsed ? `Expand ${title}` : `Collapse ${title}`}
+        >
+          <span class="flex min-w-0 items-center gap-2">
+            {#if Icon}<Icon class="size-4" />{/if}
+            <span id={titleId} class="whitespace-normal text-left font-heading text-base">{title}</span>
+            <Badge variant="secondary" class="font-mono">{count}</Badge>
+          </span>
+          <span class="flex shrink-0 items-center gap-2 text-muted-foreground">
+            <span>{collapsed ? "Show" : "Hide"}</span>
+            <ChevronDown class={cn("size-4 transition-transform motion-reduce:transition-none", !collapsed && "rotate-180")} aria-hidden="true" />
+          </span>
+        </Collapsible.Trigger>
+      </Card.Title>
+    </Card.Header>
+    <Collapsible.Content id={contentId} role="region" aria-labelledby={titleId} class="min-w-0">
+      <Card.Content class="border-t border-border-subtle p-3 sm:p-4">
+        {#if !collapsed}
+          {@render children()}
+        {/if}
+      </Card.Content>
+    </Collapsible.Content>
+  </Card.Root>
+</Collapsible.Root>

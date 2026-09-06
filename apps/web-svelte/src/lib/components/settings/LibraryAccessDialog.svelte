@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Loader2, UsersRound } from "@lucide/svelte";
-  import { Badge, Button, Checkbox, fadeIn, flyUp } from "@prismedia/ui-svelte";
+  import { Badge, Button, Checkbox, Dialog } from "@prismedia/ui-svelte";
   import { USER_ROLE } from "$lib/api/generated/codes";
   import type { LibraryRoot as GeneratedLibraryRoot, UserResponse } from "$lib/api/generated/model";
   import { listLibraryRoots, replaceLibraryAccess } from "$lib/api/generated/prismedia";
@@ -72,21 +72,8 @@
 </script>
 
 {#if open}
-  <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
-    <button
-      type="button"
-      class="app-overlay-backdrop absolute inset-0"
-      aria-label="Close"
-      onclick={onClose}
-      transition:fadeIn
-    ></button>
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={`Library access for ${rootLabel}`}
-      class="app-dialog-surface relative z-10 flex max-h-[80dvh] w-full max-w-sm flex-col overflow-hidden"
-      transition:flyUp
-    >
+  <Dialog {open} onClose={onClose} ariaLabel={`Library access for ${rootLabel}`} dismissible={!saving} class="w-full max-w-sm sm:max-w-sm">
+
       <div class="border-b border-border-subtle px-5 py-4">
         <h2 class="text-kicker text-text-primary">Library access</h2>
         <p class="text-[0.68rem] text-text-muted">
@@ -109,7 +96,7 @@
                 <Checkbox
                   checked={grantedIds.includes(member.id)}
                   onchange={(event) =>
-                    toggle(member.id, (event.currentTarget as HTMLInputElement).checked)}
+                    toggle(member.id, event)}
                 />
                 <UserAvatar displayName={member.displayName} username={member.username} />
                 <span class="min-w-0 flex-1 truncate text-sm text-text-secondary">{member.displayName}</span>
@@ -138,6 +125,5 @@
           Save access
         </Button>
       </div>
-    </div>
-  </div>
+  </Dialog>
 {/if}

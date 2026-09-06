@@ -226,39 +226,39 @@
 
   <!-- Nav -->
   <div class="flex flex-col gap-2 md:flex-row md:items-center md:gap-3">
-    <button
+    <Button variant="outline" size="sm"
       type="button"
-      class="inline-flex h-10 items-center justify-center gap-1.5 rounded-xs border border-border-default bg-surface-2 px-2.5 text-[0.78rem] text-text-muted transition-colors hover:bg-surface-3 hover:text-text-primary md:h-8 md:flex-none"
+      class="inline-flex h-10 items-center justify-center gap-1.5 px-2.5 text-[0.78rem] md:h-8 md:flex-none"
       onclick={goBackToParent}
     >
       <ChevronLeft class="h-3.5 w-3.5" />
       {parentProposal.patch?.title ?? entity.title}
-    </button>
+    </Button>
     <div class="hidden flex-1 md:block"></div>
     <!-- Sibling nav -->
     {#if parentChildren.length > 1}
       <div class="flex items-center justify-center gap-1.5">
-        <button
+        <Button variant="outline" size="sm"
           type="button"
-          class="inline-flex h-8 w-8 items-center justify-center rounded-xs border border-border-default bg-surface-2 text-text-muted transition-colors hover:bg-surface-3 disabled:opacity-30 md:h-7 md:w-7"
+          class="inline-flex h-8 w-8 items-center justify-center disabled:opacity-30 md:h-7 md:w-7"
           disabled={!prevChild}
           onclick={() => prevChild && goToSibling(prevChild)}
           aria-label="Previous sibling"
         >
           <ChevronUp class="h-3.5 w-3.5" />
-        </button>
+        </Button>
         <span class="font-mono text-[0.72rem] text-text-muted">
           {currentIndex + 1}/{parentChildren.length}
         </span>
-        <button
+        <Button variant="outline" size="sm"
           type="button"
-          class="inline-flex h-8 w-8 items-center justify-center rounded-xs border border-border-default bg-surface-2 text-text-muted transition-colors hover:bg-surface-3 disabled:opacity-30 md:h-7 md:w-7"
+          class="inline-flex h-8 w-8 items-center justify-center disabled:opacity-30 md:h-7 md:w-7"
           disabled={!nextChild}
           onclick={() => nextChild && goToSibling(nextChild)}
           aria-label="Next sibling"
         >
           <ChevronDown class="h-3.5 w-3.5" />
-        </button>
+        </Button>
       </div>
     {/if}
   </div>
@@ -346,7 +346,7 @@
       <div class="flex flex-wrap items-center gap-2 p-3.5">
         {#each looseTags as tag (tag)}
           {@const isExisting = !isNewRelationshipTitle(tag, existingTagTitles)}
-          <button
+          <Button variant="outline" size="sm"
             type="button"
             class={cn(
               "inline-flex min-h-8 items-center gap-1.5 rounded-xs border px-2.5 py-1 text-[0.76rem] transition-colors",
@@ -371,7 +371,7 @@
             )}>
               {isExisting ? "Merge" : "New"}
             </span>
-          </button>
+          </Button>
         {/each}
       </div>
     </ReviewSection>
@@ -393,10 +393,10 @@
         data-artwork-kind={group.kind}
       >
         {#each group.images as image (image.url)}
-          <button
+          <Button variant="ghost" size="sm"
             type="button"
             class={cn(
-              "identify-artwork-tile relative overflow-hidden rounded-xs border bg-surface-3 transition-all",
+              "h-auto p-0 identify-artwork-tile relative overflow-hidden rounded-xs border bg-surface-3 transition-all",
               selectedImages[group.kind] === image.url
                 ? "border-border-accent-strong shadow-[0_0_16px_rgba(199, 201, 204,0.2)]"
                 : "border-border-default hover:border-border-accent",
@@ -427,7 +427,7 @@
                 <span class="font-mono text-[0.58rem] text-text-disabled">{image.width}×{image.height}</span>
               {/if}
             </div>
-          </button>
+          </Button>
         {/each}
       </div>
     </ReviewSection>
@@ -483,37 +483,37 @@
 
   <!-- Action footer -->
   <div class="flex flex-col gap-2 py-2 md:flex-row md:items-center md:gap-3">
-    <button
+    <Button variant="outline" size="sm"
       type="button"
-      class="inline-flex h-10 items-center justify-center gap-1.5 rounded-xs border border-border-default bg-surface-2 px-3 text-[0.78rem] text-text-muted transition-colors hover:bg-surface-3 hover:text-text-primary md:h-9 md:flex-none"
+      class="inline-flex h-10 items-center justify-center gap-1.5 px-3 text-[0.78rem] md:h-9 md:flex-none"
       onclick={goBackToParent}
     >
       <ChevronLeft class="h-3.5 w-3.5" />
       {parentProposal.patch?.title ?? entity.title}
-    </button>
+    </Button>
     {#if parentChildren.length > 1}
       <div class="flex items-center justify-center gap-1.5">
-        <button
+        <Button variant="outline" size="sm"
           type="button"
-          class="inline-flex h-8 w-8 items-center justify-center rounded-xs border border-border-default bg-surface-2 text-text-muted transition-colors hover:bg-surface-3 disabled:opacity-30 md:h-7 md:w-7"
+          class="inline-flex h-8 w-8 items-center justify-center disabled:opacity-30 md:h-7 md:w-7"
           disabled={!prevChild}
           onclick={() => prevChild && goToSibling(prevChild)}
           aria-label="Previous sibling"
         >
           <ChevronUp class="h-3.5 w-3.5" />
-        </button>
+        </Button>
         <span class="font-mono text-[0.72rem] text-text-muted">
           {currentIndex + 1}/{parentChildren.length}
         </span>
-        <button
+        <Button variant="outline" size="sm"
           type="button"
-          class="inline-flex h-8 w-8 items-center justify-center rounded-xs border border-border-default bg-surface-2 text-text-muted transition-colors hover:bg-surface-3 disabled:opacity-30 md:h-7 md:w-7"
+          class="inline-flex h-8 w-8 items-center justify-center disabled:opacity-30 md:h-7 md:w-7"
           disabled={!nextChild}
           onclick={() => nextChild && goToSibling(nextChild)}
           aria-label="Next sibling"
         >
           <ChevronDown class="h-3.5 w-3.5" />
-        </button>
+        </Button>
       </div>
     {/if}
   </div>
@@ -557,7 +557,7 @@
     }
   }
 
-  .identify-artwork-tile::before {
+  .identify-artwork-grid :global(.identify-artwork-tile::before) {
     position: absolute;
     inset: 0;
     z-index: 0;
@@ -571,17 +571,17 @@
     animation: identify-artwork-shimmer 1.2s ease-in-out infinite;
   }
 
-  .identify-artwork-tile.is-loaded::before {
+  .identify-artwork-grid :global(.identify-artwork-tile.is-loaded::before) {
     opacity: 0;
     animation: none;
   }
 
-  .identify-artwork-tile img {
+  .identify-artwork-grid :global(.identify-artwork-tile img) {
     position: relative;
     z-index: 1;
   }
 
-  .identify-artwork-tile > div {
+  .identify-artwork-grid :global(.identify-artwork-tile > div) {
     z-index: 2;
   }
 
@@ -591,7 +591,7 @@
   }
 
   @media (prefers-reduced-motion: reduce) {
-    .identify-artwork-tile::before {
+    .identify-artwork-grid :global(.identify-artwork-tile::before) {
       animation: none;
     }
   }

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Button } from "@prismedia/ui-svelte";
   import { FolderPlus } from "@lucide/svelte";
   import type { EntityMetadataProposal } from "$lib/api/identify-types";
   import {
@@ -33,9 +34,9 @@
     {@const filed = matchedInside(container)}
     <div class="container-tile">
       <div class="container-cover-wrap">
-        <button
+        <Button variant="ghost" size="sm"
           type="button"
-          class="container-cover"
+          class="container-cover h-auto whitespace-normal"
           style="aspect-ratio: {toAspectRatioValue(aspectRatioForKind(container.targetKind))};"
           onclick={() => onWalkChild?.(container)}
           aria-label={`Review new ${title}`}
@@ -46,7 +47,7 @@
             <div class="container-cover-empty"></div>
           {/if}
           <span class="container-new-badge"><FolderPlus class="h-3 w-3" /><span>New</span></span>
-        </button>
+        </Button>
       </div>
       <div class="container-title" title={title}>{title}</div>
       <div class="container-subtitle">{filed} filed inside</div>
@@ -64,8 +65,8 @@
 
   .container-tile { display: grid; gap: 0.3rem; }
   .container-cover-wrap { position: relative; }
-  .container-cover { position: relative; display: block; width: 100%; overflow: hidden; border-radius: var(--radius-sm, 6px); border: 1px solid var(--color-border-accent, #6b5526); background: var(--color-surface-2, #101420); cursor: pointer; }
-  .container-cover img { width: 100%; height: 100%; object-fit: cover; }
+  .container-cover-wrap :global(.container-cover) { position: relative; display: block; width: 100%; overflow: hidden; border-radius: var(--radius-sm, 6px); border: 1px solid var(--color-border-accent, #6b5526); background: var(--color-surface-2, #101420); cursor: pointer; }
+  .container-cover-wrap :global(.container-cover img) { width: 100%; height: 100%; object-fit: cover; }
   .container-cover-empty { width: 100%; height: 100%; background: linear-gradient(135deg, #141925, #0d1119); }
   .container-new-badge { position: absolute; left: 0.3rem; bottom: 0.3rem; display: inline-flex; align-items: center; gap: 0.25rem; border-radius: 4px; border: 1px solid var(--color-border-accent-strong, #9699a1); background: color-mix(in srgb, #060810 65%, transparent); color: var(--color-text-accent, #c7c9cc); font-size: 0.58rem; font-family: var(--font-mono, monospace); padding: 0.12rem 0.35rem; }
   .container-title { font-size: 0.72rem; line-height: 1.2; color: var(--color-text-primary, #f2eed8); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
