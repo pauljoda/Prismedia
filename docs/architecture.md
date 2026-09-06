@@ -180,7 +180,11 @@ passes or provider-only pseudo-Entities.
 A request with no explicit targeting first preserves the direct monitor's library
 and profile for its requested rendition, then inherits the nearest monitored
 ancestor, then uses kind defaults. Background maintenance and fileless recovery
-share this resolution with ordinary Entity requests.
+share this resolution with ordinary Entity requests. Due-work selection can also
+restore both missing targeting fields on an older unselected, fileless request
+from its direct monitor. That repair rechecks current lifecycle and transfer
+state, preserves any existing explicit targeting, and schedules normal search
+instead of reusing candidates evaluated under fallback rules.
 
 The acquisition core owns orchestration, persistence, queueing, and download
 clients. Media-specific behavior lives behind `IAcquisitionPolicyModule`:

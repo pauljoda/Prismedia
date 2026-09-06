@@ -456,6 +456,7 @@ public sealed partial class EfMonitorStore(
         if (targetEntityId is null && targetMonitorId is null) {
             await ReconcilePassiveTargetsAsync(cancellationToken);
         }
+        await RestoreUnselectedTargetingAsync(targetEntityId, targetMonitorId, cancellationToken);
         var policies = await ResolveUpgradePoliciesAsync(cancellationToken);
         await RestoreOwnedBaselinesAsync(targetEntityId, targetMonitorId, policies, cancellationToken);
         // The acquisition's resolved profile governs its upgrades. Upgrade-seeking is fully automatic, so it

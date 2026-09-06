@@ -42,6 +42,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Monitoring can recover older fileless requests that lost both their selected profile and library, then search again using the saved monitor choices. Selected releases, active downloads, manual reviews, and import recovery state remain protected.
+
 - Fileless monitored items now retain their own selected quality profile and library when automatic maintenance or recovery starts a request, including separate ebook and audiobook choices.
 
 - Automatic TV imports held with a saved episode plan can resume when current quality rules or retained files change. Retries preserve the original mapping and partial imports, respect manual review and paused monitoring, and avoid repeating unchanged work.
