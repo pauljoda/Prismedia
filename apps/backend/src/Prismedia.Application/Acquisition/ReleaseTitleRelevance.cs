@@ -28,7 +28,7 @@ public static partial class ReleaseTitleRelevance {
     }
 
     private static double ScoreTitle(IndexerRelease release, BookAcquisitionRules rules, string? title) {
-        var targetTokens = ReleaseTitleText.Tokens(title).ToArray();
+        var targetTokens = ReleaseTitleText.Tokens(ReleaseTitleText.FoldLatinAccents(title ?? string.Empty)).ToArray();
         if (targetTokens.Length == 0) {
             return 0;
         }
@@ -54,9 +54,9 @@ public static partial class ReleaseTitleRelevance {
     }
 
     private static IEnumerable<string> ContentTokens(string title, BookAcquisitionRules rules, IReadOnlySet<string> targetTokens) {
-        var releaseGroupTokens = ReleaseTitleText.Tokens(ReleaseGroupDetection.Detect(title)).ToHashSet(StringComparer.Ordinal);
+        var releaseGroupTokens = ReleaseTitleText.Tokens(ReleaseTitleText.FoldLatinAccents(ReleaseGroupDetection.Detect(title) ?? string.Empty)).ToHashSet(StringComparer.Ordinal);
         var remainingTitleTokens = new HashSet<string>(targetTokens, StringComparer.Ordinal);
-        foreach (var token in ReleaseTitleText.Tokens(title)) {
+        foreach (var token in ReleaseTitleText.Tokens(ReleaseTitleText.FoldLatinAccents(title))) {
             if (targetTokens.Contains(token)) {
                 remainingTitleTokens.Remove(token);
                 yield return token;

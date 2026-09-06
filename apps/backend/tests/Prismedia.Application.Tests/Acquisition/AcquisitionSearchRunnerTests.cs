@@ -13,6 +13,31 @@ namespace Prismedia.Application.Tests.Acquisition;
 /// </summary>
 public sealed class AcquisitionSearchRunnerTests {
     [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task AccentFallbackRunsOnlyAfterAnEmptyAutomaticDecisionSet(bool primaryAccepted, bool custom) {
+        var input = new AcquisitionSearchInput(Guid.NewGuid(), "Season 2", null, EntityKind.VideoSeason,
+            Series: "Café", SeasonNumber: 2);
+        var release = new IndexerRelease("Cafe Season 2 1080p WEB-DL", 500_000_000, 20, 2,
+            DownloadProtocol.Torrent, "https://download.test/pack", null, "pack", null, null, null);
+        var policy = new TvAcquisitionPolicyModule();
+        var primaryQueries = policy.BuildQueries(input);
+        var foldedQueries = policy.BuildQueries(input with { Series = "Cafe" });
+        var results = primaryQueries.ToDictionary(query => query, _ => (IReadOnlyList<IndexerRelease>)(primaryAccepted ? [release] : []));
+        foreach (var query in foldedQueries) results[query] = [release];
+        results["chosen query"] = [release];
+        var client = new QueryAwareIndexerSearchClient(results);
+        var runner = new AcquisitionSearchRunner(new FakeIndexerConfigStore(), new FakeClientFactory(client),
+            new FakeProfileStore(), new FakeBlocklistStore("unrelated"),
+            new FakeDownloadClientConfigStore(DownloadProtocol.Torrent), new FakeIndexerStatusStore(),
+            new IndexerQueryWindow(), Policies(policy), Settings());
+        var outcome = await runner.RunAsync(input, default, customQuery: custom ? "chosen query" : null);
+        Assert.True(Assert.Single(outcome.Candidates).Accepted);
+        Assert.Equal(custom ? ["chosen query"] : primaryAccepted ? primaryQueries : primaryQueries.Concat(foldedQueries).ToArray(), client.Queries);
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task FormalWorkNamesShareOneRankedDecisionSetAndPreserveCustomQueries(bool custom) {

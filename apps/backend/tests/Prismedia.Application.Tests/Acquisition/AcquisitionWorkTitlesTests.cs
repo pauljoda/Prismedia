@@ -5,6 +5,31 @@ namespace Prismedia.Application.Tests.Acquisition;
 
 public sealed class AcquisitionWorkTitlesTests {
     [Theory]
+    [InlineData("Café", "Cafe")]
+    [InlineData("Léon", "Leon")]
+    [InlineData("ガール Café", "ガール Cafe")]
+    public void AccentFallbackPreservesIdentityCoordinatesAndNonLatinSpelling(string title, string folded) {
+        var input = new AcquisitionSearchInput(Guid.NewGuid(), "Final Story", null, EntityKind.VideoEpisode,
+            Year: 2007, Series: title, SeasonNumber: 2, EpisodeNumber: 1, AbsoluteEpisodeNumber: 83);
+        var fallback = Assert.Single(AcquisitionWorkTitles.AccentFallbackQueryInputs(input));
+        Assert.Equal(input with { Series = folded }, fallback);
+    }
+
+    [Theory]
+    [InlineData("ガール")]
+    [InlineData("Plain Title")]
+    public void UnchangedWorkSpellingsDoNotCreateFallbackQueries(string title) =>
+        Assert.Empty(AcquisitionWorkTitles.AccentFallbackQueryInputs(new AcquisitionSearchInput(Guid.NewGuid(), title, null, EntityKind.Movie)));
+
+    [Fact]
+    public void AccentVariantsHaveEqualWorkRelevance() {
+        var rules = BookAcquisitionRules.Default with { TargetTitle = "Café" };
+        var release = new IndexerRelease("Cafe 2024 1080p WEB-DL", 1000, null, null, DownloadProtocol.Usenet, "https://download.test/item", null, null, null, null, null);
+        Assert.Equal(ReleaseTitleRelevance.Score(release with { Title = "Café 2024 1080p WEB-DL" }, rules),
+            ReleaseTitleRelevance.Score(release, rules));
+    }
+
+    [Theory]
     [InlineData("Example Show EP018 1080p.mkv")]
     [InlineData("Example Show Episode 18 1080p.mkv")]
     public void ExplicitAbsolutePrefixesMapToTheVerifiedCatalogSlot(string filename) {

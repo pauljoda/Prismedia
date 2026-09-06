@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Prismedia.Application.Acquisition;
@@ -8,6 +10,22 @@ namespace Prismedia.Application.Acquisition;
 /// those titles by their words while preserving the raw title for display and download actions.
 /// </summary>
 public static partial class ReleaseTitleText {
+    /// <summary>Removes decomposable Latin accents for search spelling variants without changing non-Latin marks.</summary>
+    public static string FoldLatinAccents(string value) {
+        if (value.All(character => character <= 0x7f)) return value;
+        var result = new StringBuilder(value.Length);
+        var latinLetter = false;
+        foreach (var character in value.Normalize(NormalizationForm.FormD)) {
+            if (CharUnicodeInfo.GetUnicodeCategory(character) == UnicodeCategory.NonSpacingMark) {
+                if (!latinLetter) result.Append(character);
+                continue;
+            }
+            latinLetter = character is >= 'a' and <= 'z' or >= 'A' and <= 'Z';
+            result.Append(character);
+        }
+        return result.ToString().Normalize(NormalizationForm.FormC);
+    }
+
     /// <summary>Lowercases a title-like value and collapses common release separators to single spaces.</summary>
     public static string Normalize(string? value) {
         if (string.IsNullOrWhiteSpace(value)) {

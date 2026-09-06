@@ -107,15 +107,22 @@ public sealed class AcquisitionSearchRunner(
         // exact-unit result set first; only when every candidate is rejected do we spend the extra query
         // budget on title-only releases. Reviewed custom searches remain exactly the term the user chose.
         if (string.IsNullOrWhiteSpace(customQuery)) {
-            var fallbackQueries = queryInputs.SelectMany(policy.BuildFallbackQueries)
+            bool HasAccepted() => engine.Evaluate(
+                releases.Where(candidate => protocols.Contains(candidate.Release.Protocol)).ToArray(), rules, blocklisted)
+                .Select(ApplyCoverage).Any(candidate => candidate.Accepted);
+            var accentInputs = AcquisitionWorkTitles.AccentFallbackQueryInputs(input);
+            var accentQueries = accentInputs.SelectMany(policy.BuildQueries)
+                .Distinct(StringComparer.OrdinalIgnoreCase).Except(queries, StringComparer.OrdinalIgnoreCase).ToArray();
+            var hasAccepted = HasAccepted();
+            if (!hasAccepted && accentQueries.Length > 0) {
+                await SearchQueriesAsync(accentQueries);
+                hasAccepted = HasAccepted();
+            }
+            var fallbackQueries = queryInputs.Concat(accentInputs).SelectMany(policy.BuildFallbackQueries)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Except(queries, StringComparer.OrdinalIgnoreCase)
+                .Except(queries.Concat(accentQueries), StringComparer.OrdinalIgnoreCase)
                 .ToArray();
-            var hasAcceptedPrimary = engine.Evaluate(
-                releases.Where(candidate => protocols.Contains(candidate.Release.Protocol)).ToArray(),
-                rules,
-                blocklisted).Select(ApplyCoverage).Any(candidate => candidate.Accepted);
-            if (!hasAcceptedPrimary && fallbackQueries.Length > 0) {
+            if (!hasAccepted && fallbackQueries.Length > 0) {
                 await SearchQueriesAsync(fallbackQueries);
             }
         }

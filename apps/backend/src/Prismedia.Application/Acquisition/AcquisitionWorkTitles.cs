@@ -34,6 +34,19 @@ public static class AcquisitionWorkTitles {
             .ToArray();
     }
 
+    /// <summary>Offers at most one Latin-accent spelling fallback per formal video-work name, preserving all request coordinates.</summary>
+    public static IReadOnlyList<AcquisitionSearchInput> AccentFallbackQueryInputs(AcquisitionSearchInput input) {
+        var family = EntityKindRegistry.Describe(AcquisitionProfileKinds.For(input.Kind)).AcquisitionProfile?.NamingFamily;
+        if (family is not (AcquisitionNamingFamily.Movie or AcquisitionNamingFamily.Television)) return [];
+        return QueryInputs(input)
+            .Select(variant => (Input: variant, Title: ReleaseTitleText.FoldLatinAccents(variant.WorkTitle)))
+            .Where(variant => !string.Equals(variant.Title, variant.Input.WorkTitle, StringComparison.Ordinal))
+            .Select(variant => family == AcquisitionNamingFamily.Television
+                ? variant.Input with { Series = variant.Title }
+                : variant.Input with { Title = variant.Title })
+            .ToArray();
+    }
+
     /// <summary>Tests canonical and formally equivalent names with the same strict identity boundary.</summary>
     public static ReleaseTitleIdentity.Result Match(string candidate, string? primary, IReadOnlyList<string> alternatives,
         TvEpisodeIdentifierSet? episode = null) {
