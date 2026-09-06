@@ -106,8 +106,13 @@ public sealed partial class AcquisitionService {
             return Unavailable("No episode Entities are available for this season.", visibleFiles);
         }
 
+        var catalogPlan = await new TvAcquisitionImportPlanner(manualImportTargets, providerEvidence: manualCatalogEvidence)
+            .PlanAsync(import, payload, null, null, cancellationToken);
+        var foreignFiles = TvCrossSeasonImportEvidence.Find(payload.Files, seasonNumber, catalogPlan.Catalog,
+                string.IsNullOrWhiteSpace(import.Series) ? import.Title : import.Series)
+            .Select(file => file.SourceRelativePath).ToHashSet(FileSystemPathComparison.Comparer);
         var suggestions = payload.Files
-            .Where(file => TvImportPlanBuilder.IsVideoFile(file.RelativePath))
+            .Where(file => TvImportPlanBuilder.IsVideoFile(file.RelativePath) && !foreignFiles.Contains(file.RelativePath))
             .Select(file => new {
                 file.RelativePath,
                 Inferred = TvImportPlanBuilder.InferEpisode(file.RelativePath, seasonNumber, episodes)
@@ -154,6 +159,10 @@ public sealed partial class AcquisitionService {
             ? null
             : $"This download contains potentially dangerous {dangerousFileLabel}: {string.Join(", ", dangerousNames)}. "
                 + "Those files are blocked from mapping. Continue only if you have verified that the selectable media is the expected content.";
+        if (foreignFiles.Count > 0) {
+            var foreignWarning = "Some files may belong to another season. Their numbering is not suggested here; review the destination season before assigning them.";
+            warning = warning is null ? foreignWarning : $"{warning} {foreignWarning}";
+        }
         return new AcquisitionManualImportReview(
             true,
             files,

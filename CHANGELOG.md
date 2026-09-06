@@ -38,6 +38,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Manual TV mapping reviews suppress misleading episode suggestions and explain when local or provider titles identify content from another season.
+
 - Early season-download checks reconsider cross-season title evidence before declaring a pack already owned, keeping useful or ambiguous extras eligible when release numbering is misleading.
 
 - Unresolved TV imports can consult nearby seasons from the linked metadata provider to retain mislabeled extras whose correct season is absent locally. Lookups preserve local corrections, verify season identities, and allow monitoring to be paused while provider requests run.

@@ -1784,6 +1784,34 @@ public sealed class AcquisitionServiceTests {
         Assert.True(harness.Store.Deleted);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ManualReviewDoesNotSuggestTheWrongSlotForForeignSeasonTitles(bool providerOnly) {
+        var first = Guid.NewGuid();
+        var targets = new FixedImportTargetIndex([new(1, "Known Story", first), new(49, "Show - S02E49", Guid.NewGuid())]);
+        var foreign = new TvSeasonEpisodeCatalog(providerOnly ? null : Guid.NewGuid(), 3, [
+            new TvEpisodeTitle(56, "Hidden Garden", providerOnly ? null : Guid.NewGuid()) { ProviderIdentity = new("test-episode", "56") },
+            new TvEpisodeTitle(57, "Mountain Journey", providerOnly ? null : Guid.NewGuid()) { ProviderIdentity = new("test-episode", "57") }
+        ]) { ProviderIdentity = new("test-season", "3") };
+        targets.Catalog = providerOnly ? [] : [foreign];
+        var evidence = new FixedCatalogEvidence([foreign]);
+        var harness = Harness(TransferInfo(RecordedClientId, AcquisitionStatus.ManualImportRequired),
+            manualImportPayloads: new FixedDownloadPayloadReader(new("/downloads/show", [new("Show.S02E01.mkv", 1000),
+                new("Show.S02E49-E50.Hidden.Garden.&.Mountain.Journey.mkv", 1000)])),
+            manualImportTargets: targets, manualCatalogEvidence: providerOnly ? evidence : null);
+        harness.Store.ImportContext = new(AcquisitionId, "Season 2", null, "Show", null, null, null, null,
+            "/downloads/show", ClientItemId, RecordedClientId, EntityKind.VideoSeason, EntityId: WantedEntityId, SeasonNumber: 2);
+
+        var review = await harness.Service.GetManualImportReviewAsync(AcquisitionId, default);
+
+        Assert.True(review.Available);
+        Assert.Equal(first, review.Files[0].SuggestedTargetEntityId);
+        Assert.Null(review.Files[1].SuggestedTargetEntityId);
+        Assert.Contains("another season", review.Warning);
+        Assert.Empty(harness.Queue.Requests);
+    }
+
     private static AcquisitionTransferInfo TransferInfo(
         Guid? downloadClientConfigId,
         AcquisitionStatus status = AcquisitionStatus.Downloading) =>
@@ -1841,7 +1869,8 @@ public sealed class AcquisitionServiceTests {
         IAcquisitionSearchResourcePolicy? searchResources = null,
         IAcquisitionReleaseTimingService? releaseTiming = null,
         IDownloadPayloadReader? manualImportPayloads = null,
-        IImportTargetIndex? manualImportTargets = null) {
+        IImportTargetIndex? manualImportTargets = null,
+        ITvEpisodeCatalogEvidenceSource? manualCatalogEvidence = null) {
         var store = new FakeAcquisitionStore(transfer);
         var downloads = new RecordingDownloadClientFactory();
         var configs = new FakeDownloadClientConfigStore(includeRecordedClient);
@@ -1868,7 +1897,8 @@ public sealed class AcquisitionServiceTests {
             searchResources: searchResources,
             releaseTiming: releaseTiming,
             manualImportPayloads: manualImportPayloads,
-            manualImportTargets: manualImportTargets);
+            manualImportTargets: manualImportTargets,
+            manualCatalogEvidence: manualCatalogEvidence);
 
         return new TestHarness(service, store, downloads, history, monitors, queue, jobCleanup, lifecycle, importCleanup, blocklist);
     }
@@ -2614,7 +2644,15 @@ public sealed class AcquisitionServiceTests {
         public DownloadPayload? Read(string contentPath) => payload;
     }
 
+    private sealed class FixedCatalogEvidence(IReadOnlyList<TvSeasonEpisodeCatalog> catalog) : ITvEpisodeCatalogEvidenceSource {
+        public Task<IReadOnlyList<TvSeasonEpisodeCatalog>> ReadAsync(Guid linkedEntityId, int requestedSeason,
+            IReadOnlyList<ImportCandidateFile> files, CancellationToken cancellationToken) => Task.FromResult(catalog);
+    }
+
     private sealed class FixedImportTargetIndex(IReadOnlyList<TvEpisodeTitle> episodes) : IImportTargetIndex {
+        public IReadOnlyList<TvSeasonEpisodeCatalog> Catalog { get; set; } = [];
+        public Task<IReadOnlyList<TvSeasonEpisodeCatalog>> GetSeriesEpisodeCatalogAsync(Guid entityId, CancellationToken cancellationToken) =>
+            Task.FromResult(Catalog);
         public Task<TvSeriesDiskLayout?> GetTvLayoutAsync(Guid entityId, CancellationToken cancellationToken) =>
             Task.FromResult<TvSeriesDiskLayout?>(null);
         public Task<IReadOnlyList<TvEpisodeTitle>> GetSeasonEpisodeTitlesAsync(

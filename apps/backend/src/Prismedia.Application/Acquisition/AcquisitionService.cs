@@ -276,7 +276,8 @@ public sealed partial class AcquisitionService(
     IJobGraphService? graphs = null,
     IDownloadPayloadReader? manualImportPayloads = null,
     IImportTargetIndex? manualImportTargets = null,
-    DownloadClientCleanupService? downloadCleanup = null) : IAcquisitionRequestService, IAcquisitionGraphCancellation, IAcquisitionTeardownRecovery {
+    DownloadClientCleanupService? downloadCleanup = null,
+    ITvEpisodeCatalogEvidenceSource? manualCatalogEvidence = null) : IAcquisitionRequestService, IAcquisitionGraphCancellation, IAcquisitionTeardownRecovery {
     public Task<IReadOnlyList<AcquisitionSummary>> ListAsync(CancellationToken cancellationToken) =>
         store.ListAsync(cancellationToken);
 
