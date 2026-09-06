@@ -145,33 +145,37 @@ public sealed class EfImportTargetIndex(PrismediaDbContext db) : IImportTargetIn
             .ToArrayAsync(cancellationToken);
 
         var episodeCode = EntityKindRegistry.PlayableVideoKindFor(PlayableVideoScanPlacement.Episode).ToCode();
-        var seasonIds = seasonRows.Where(season => season.Position is not null).Select(season => season.Id).Distinct().ToArray();
+        var seasonIds = seasonRows.Select(season => season.Id).Distinct().ToArray();
         var episodeRows = await (
             from episode in NumberedTvEntities(EntityPositionCodes.Episode)
             where episode.ParentEntityId != null && seasonIds.Contains(episode.ParentEntityId.Value)
                 && episode.KindCode == episodeCode
             join file in db.EntityFiles.AsNoTracking().Where(file => file.Role == EntityFileRole.Source)
-                on episode.Id equals file.EntityId
-            select new { SeasonId = episode.ParentEntityId!.Value, episode.Position, file.Path })
+                on episode.Id equals file.EntityId into sourceFiles
+            from file in sourceFiles.DefaultIfEmpty()
+            select new { SeasonId = episode.ParentEntityId!.Value, episode.Position, Path = file == null ? null : file.Path })
             .ToArrayAsync(cancellationToken);
         var episodesBySeason = episodeRows.ToLookup(episode => episode.SeasonId);
+        var unresolvedPaths = seasonRows.Where(season => season.Position is null).SelectMany(season => episodesBySeason[season.Id])
+            .Where(episode => episode.Path != null).Select(episode => episode.Path!).ToHashSet(FileSystemPathComparison.Comparer);
         var seasons = new Dictionary<int, TvSeasonDiskLayout>();
-        foreach (var season in seasonRows) {
-            if (season.Position is not { } seasonNumber || seasons.ContainsKey(seasonNumber)) {
-                continue;
-            }
-
-            var episodesByNumber = new Dictionary<int, string>();
-            foreach (var episode in episodesBySeason[season.Id]) {
-                if (episode.Position is { } episodeNumber) {
-                    episodesByNumber.TryAdd(episodeNumber, episode.Path);
-                }
-            }
-
-            seasons[seasonNumber] = new TvSeasonDiskLayout(season.Id, season.Path, episodesByNumber);
+        foreach (var group in seasonRows.Where(season => season.Position != null).GroupBy(season => season.Position!.Value)) {
+            var season = group.First();
+            var episodes = group.Select(row => row.Id).Distinct().SelectMany(id => episodesBySeason[id]).ToArray();
+            var numbered = episodes.Where(episode => episode.Position is > 0).GroupBy(episode => episode.Position!.Value).ToArray();
+            var ambiguous = numbered.Where(owners => owners.Count() > 1).Select(owners => owners.Key).ToHashSet();
+            var episodesByNumber = numbered.Where(owners => owners.Count() == 1 && owners.First().Path != null)
+                .ToDictionary(owners => owners.Key, owners => owners.First().Path!);
+            var unresolvedSeason = group.Count() > 1 || episodes.Any(episode => (episode.Position is null or <= 0) && episode.Path != null);
+            unresolvedPaths.UnionWith(episodes.Where(episode => episode.Path != null
+                && (unresolvedSeason || episode.Position is { } number && ambiguous.Contains(number))).Select(episode => episode.Path!));
+            seasons[group.Key] = new TvSeasonDiskLayout(season.Id, season.Path, episodesByNumber) {
+                HasUnresolvedOwnership = unresolvedSeason,
+                AmbiguousEpisodeNumbers = ambiguous
+            };
         }
 
-        return new TvSeriesDiskLayout(seriesId.Value, seriesFolder, seasons);
+        return new TvSeriesDiskLayout(seriesId.Value, seriesFolder, seasons) { UnresolvedSourcePaths = unresolvedPaths };
     }
 
     /// <inheritdoc />

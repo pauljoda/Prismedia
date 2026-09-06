@@ -370,13 +370,22 @@ public sealed record WantedAudioTrackReconciliation(Guid EntityId, bool NeedsWav
 public sealed record TvSeasonDiskLayout(
     Guid SeasonEntityId,
     string? FolderPath,
-    IReadOnlyDictionary<int, string> EpisodeFileByNumber);
+    IReadOnlyDictionary<int, string> EpisodeFileByNumber) {
+    /// <summary>Duplicate seasons or unnumbered owned files prevent a safe interpretation of this season's coverage.</summary>
+    public bool HasUnresolvedOwnership { get; init; }
+
+    /// <summary>Episode numbers with competing entities or sources, excluded from the unambiguous owned-file map.</summary>
+    public IReadOnlySet<int> AmbiguousEpisodeNumbers { get; init; } = new HashSet<int>();
+}
 
 /// <summary>An existing on-disk series' folder layout: the series folder and its seasons keyed by season number.</summary>
 public sealed record TvSeriesDiskLayout(
     Guid SeriesEntityId,
     string SeriesFolderPath,
-    IReadOnlyDictionary<int, TvSeasonDiskLayout> Seasons);
+    IReadOnlyDictionary<int, TvSeasonDiskLayout> Seasons) {
+    /// <summary>Physical paths with unresolved ownership, including owners outside the unambiguous episode map.</summary>
+    public IReadOnlySet<string> UnresolvedSourcePaths { get; init; } = new HashSet<string>();
+}
 
 /// <summary>An existing on-disk movie: its folder and the owned video file when one exists.</summary>
 public sealed record MovieDiskTarget(Guid MovieEntityId, string FolderPath, string? OwnedSourceFilePath);

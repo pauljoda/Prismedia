@@ -18,6 +18,79 @@ public sealed class EfImportTargetIndexTests {
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task AmbiguousOwnersInAnotherSeasonStillProtectTheSharedPhysicalFile(bool postgres) {
+        await using var database = postgres ? await PostgresTestDatabase.CreateAsync() : null;
+        await using var db = database?.CreateContext() ?? CreateContext();
+        var ids = SeedSeries(db, "/media/tv/Shared Ambiguity");
+        await db.SaveChangesAsync();
+        var path = (await db.EntityFiles.SingleAsync()).Path;
+        var otherSeason = AddEntity(db, EntityKind.VideoSeason.ToCode(), ids.SeriesId, 2);
+        await db.SaveChangesAsync();
+        AddEntity(db, EntityKind.VideoEpisode.ToCode(), otherSeason, 1, sourcePath: path);
+        AddEntity(db, EntityKind.VideoEpisode.ToCode(), otherSeason, 1, wanted: true);
+        await db.SaveChangesAsync();
+        var layout = (await new EfImportTargetIndex(db).GetTvLayoutAsync(ids.SeriesId, default))!;
+        var evaluated = 0;
+        var merged = TvExistingTargetMerge.Plan([new("incoming/episode.mkv", 1, 1, "Show/S01/episode.mkv")],
+            layout, number => $"Season {number:00}", (int)VideoQuality.Webdl1080p, 1,
+            ProperDownloadPolicy.PreferAndUpgrade, evaluateOwnedFile: (_, _) => { evaluated++; return MergeFileAction.ReplaceUpgrade; });
+
+        Assert.Equal(MergeFileAction.HoldStructuralConflict, Assert.Single(merged).Action);
+        Assert.Equal(0, evaluated);
+    }
+
+    [Theory]
+    [InlineData("duplicate-owned-episode", false)]
+    [InlineData("duplicate-owned-episode", true)]
+    [InlineData("multiple-sources", false)]
+    [InlineData("duplicate-wanted-episode", false)]
+    [InlineData("duplicate-wanted-episode", true)]
+    [InlineData("duplicate-season", false)]
+    [InlineData("duplicate-season", true)]
+    [InlineData("unnumbered-owner", false)]
+    [InlineData("unnumbered-owner", true)]
+    public async Task AmbiguousEpisodeOwnershipIsHeldBeforePlanningNewFiles(string ambiguity, bool postgres) {
+        await using var database = postgres ? await PostgresTestDatabase.CreateAsync() : null;
+        await using var db = database?.CreateContext() ?? CreateContext();
+        var ids = SeedSeries(db, "/media/tv/Ambiguous Series");
+        await db.SaveChangesAsync();
+        var targetEpisode = ambiguity == "duplicate-wanted-episode" ? 2 : 1;
+        switch (ambiguity) {
+            case "duplicate-owned-episode":
+                AddEntity(db, EntityKind.VideoEpisode.ToCode(), ids.SeasonId, 1, sourcePath: "/media/tv/other.mkv");
+                break;
+            case "multiple-sources":
+                db.EntityFiles.Add(new EntityFileRow { Id = Guid.NewGuid(), EntityId = ids.EpisodeId,
+                    Role = EntityFileRole.Source, Path = "/media/tv/other.mkv", Source = FileSourceKind.Scan.ToCode(),
+                    CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow });
+                break;
+            case "duplicate-wanted-episode":
+                AddEntity(db, EntityKind.VideoEpisode.ToCode(), ids.SeasonId, 2, wanted: true);
+                break;
+            case "duplicate-season":
+                AddEntity(db, EntityKind.VideoSeason.ToCode(), ids.SeriesId, 1);
+                break;
+            case "unnumbered-owner":
+                AddEntity(db, EntityKind.VideoEpisode.ToCode(), ids.SeasonId, null, sourcePath: "/media/tv/unknown.mkv");
+                break;
+        }
+        await db.SaveChangesAsync();
+        var layout = (await new EfImportTargetIndex(db).GetTvLayoutAsync(ids.SeriesId, default))!;
+        var evaluated = 0;
+        var merged = TvExistingTargetMerge.Plan([
+            new("incoming/episode.mkv", 1, targetEpisode, "Show/S01/episode.mkv"),
+            new("incoming/other.mkv", 2, 1, "Show/S02/other.mkv")
+        ], layout, number => $"Season {number:00}", (int)VideoQuality.Webdl1080p, 1,
+            ProperDownloadPolicy.PreferAndUpgrade, evaluateOwnedFile: (_, _) => { evaluated++; return MergeFileAction.ReplaceUpgrade; });
+
+        Assert.Equal(MergeFileAction.HoldStructuralConflict, merged[0].Action);
+        Assert.Equal(MergeFileAction.PlaceNew, merged[1].Action);
+        Assert.Equal(0, evaluated);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task ReplacementCoverageIncludesEveryPhysicalOwnerAndAllowsCompleteBundles(bool postgres) {
         await using var database = postgres ? await PostgresTestDatabase.CreateAsync() : null;
         await using var db = database?.CreateContext() ?? CreateContext();

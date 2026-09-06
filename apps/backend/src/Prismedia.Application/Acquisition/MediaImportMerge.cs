@@ -110,7 +110,10 @@ public static class TvExistingTargetMerge {
                 ?? Path.Combine(layout.SeriesFolderPath, seasonSegment(unit.Season));
             var desiredTarget = Path.Combine(seasonFolder, unit.FileName);
 
-            if (occupiedPaths.Count > 1
+            if (season is { HasUnresolvedOwnership: true }
+                || claimedSlots.Any(slot => season?.AmbiguousEpisodeNumbers.Contains(slot.Episode) == true)
+                || occupiedPaths.Any(path => layout.UnresolvedSourcePaths.Contains(path))
+                || occupiedPaths.Count > 1
                 || occupiedPaths.Any(path => incomingCountByOwnedPath[path] > 1)) {
                 items.Add(new MergedImportItem(
                     unit.SourceRelativePath,

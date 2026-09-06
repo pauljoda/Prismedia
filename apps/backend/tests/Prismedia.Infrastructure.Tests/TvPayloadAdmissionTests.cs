@@ -8,6 +8,32 @@ using Prismedia.Infrastructure.Persistence.Entities;
 namespace Prismedia.Infrastructure.Tests;
 
 public sealed class TvPayloadAdmissionTests {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AmbiguousOwnershipReopensPayloadsWithoutTreatingThemAsAlreadyCovered(bool duplicateSeason) {
+        await using var db = CreateContext();
+        using var fixture = await TvPayloadAdmissionFixture.CreateAsync(db);
+        await fixture.Service.RememberAsync(fixture.Input.Id, fixture.Selected.Identity, fixture.Files, default);
+        Assert.Contains(fixture.Selected.Identity, await fixture.Service.GetExcludedAsync(fixture.Input, default));
+        var season = await db.Entities.SingleAsync(entity => entity.Id == fixture.Input.EntityId);
+        var conflicting = new EntityRow {
+            Id = Guid.NewGuid(), Title = "Conflicting catalog owner",
+            KindCode = (duplicateSeason ? EntityKind.VideoSeason : EntityKind.VideoEpisode).ToCode(),
+            ParentEntityId = duplicateSeason ? season.ParentEntityId : season.Id,
+            SortOrder = duplicateSeason ? 1 : 2
+        };
+        db.Entities.Add(conflicting);
+        await db.SaveChangesAsync();
+
+        Assert.False(await fixture.Service.HasNoBenefitAsync(fixture.Input, fixture.Files, default));
+        Assert.Empty(await fixture.Service.GetExcludedAsync(fixture.Input, default));
+
+        db.Entities.Remove(conflicting);
+        await db.SaveChangesAsync();
+        Assert.Contains(fixture.Selected.Identity, await fixture.Service.GetExcludedAsync(fixture.Input, default));
+    }
+
     [Fact]
     public async Task PairedTitleOnlyFilesAreReconsideredWhenAnOwnedHalfGoesMissing() {
         await using var db = CreateContext();
