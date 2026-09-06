@@ -42,6 +42,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Movie and episode monitors can recover a lost link to a matching completed import and resume the normal quality-profile upgrade checks while preserving their files and user choices.
+
 - Video upgrade checks reuse a single probe for picture, audio, and text-subtitle evidence per file, reducing repeated inspection work for large season packs.
 
 - Season-pack upgrades inspect each colliding video’s actual resolution, runtime, and audio languages before replacement. Cleaned filenames no longer hide proven improvements, mixed-quality packs are judged file by file, and uncertain replacements preserve both copies for review.

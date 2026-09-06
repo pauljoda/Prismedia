@@ -1,5 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Entities;
+using Prismedia.Infrastructure.Entities;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Acquisition;
 using Prismedia.Infrastructure.Persistence;
@@ -13,6 +15,190 @@ namespace Prismedia.Infrastructure.Tests;
 /// off), the one-in-flight interlock, durable intent across repeated misses, and success/failure counters.
 /// </summary>
 public sealed class EfMonitorStoreUpgradeTests {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    [Trait("Category", "PostgreSQL")]
+    public async Task BaselineRestorationRechecksTheMonitorUnderItsLifecycleLease(bool pauseWhileWaiting) {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var root = Directory.CreateTempSubdirectory("prismedia-baseline-postgres-").FullName;
+        try {
+            var now = DateTimeOffset.UtcNow;
+            var rootId = Guid.NewGuid(); var entityId = Guid.NewGuid(); var profileId = Guid.NewGuid();
+            var monitorId = Guid.NewGuid(); var acquisitionId = Guid.NewGuid();
+            var path = Path.Combine(root, "owned.mkv");
+            await File.WriteAllTextAsync(path, "owned video bytes");
+            db.LibraryRoots.Add(new LibraryRootRow { Id = rootId, Path = root, Label = "Validation", Enabled = true,
+                CreatedAt = now, UpdatedAt = now });
+            db.Entities.Add(new EntityRow { Id = entityId, KindCode = EntityKind.Movie.ToCode(), Title = "Movie",
+                CreatedAt = now, UpdatedAt = now });
+            await db.SaveChangesAsync();
+            db.BookAcquisitionProfiles.Add(new BookAcquisitionProfileRow {
+                Id = profileId, Kind = EntityKind.Movie, DisplayName = "HD", IsDefault = true, TargetLibraryRootId = rootId,
+                AutoPick = true, UpgradeUntilCutoff = true, CutoffQuality = VideoQuality.Webdl1080p.ToCode(), CreatedAt = now, UpdatedAt = now
+            });
+            db.EntityFiles.Add(new EntityFileRow { Id = Guid.NewGuid(), EntityId = entityId, Role = EntityFileRole.Source,
+                Path = path, SizeBytes = new FileInfo(path).Length, Source = FileSourceKind.Scan.ToCode(), CreatedAt = now, UpdatedAt = now });
+            db.EntitySubtitleStates.Add(new EntitySubtitleStateRow { EntityId = entityId, SubtitlesExtractedAt = now });
+            db.Acquisitions.Add(new AcquisitionRow { Id = acquisitionId, EntityId = entityId, Kind = EntityKind.Movie,
+                Title = "Movie", Status = AcquisitionStatus.Imported, FinalSourcePath = path, UpgradeQualityCaptured = true,
+                OwnedMediaQuality = VideoQuality.Webdl720p.ToCode(), CreatedAt = now, UpdatedAt = now });
+            db.Monitors.Add(new MonitorRow { Id = monitorId, EntityId = entityId, Kind = EntityKind.Movie,
+                Title = "Movie", Status = MonitorStatus.Active, ProfileId = profileId, CreatedAt = now, UpdatedAt = now });
+            await db.SaveChangesAsync();
+            var lease = new BeforeBaselineLease(new EfEntityLifecycleMutationLease(db, new EfEntityHierarchyReader(db)), async () => {
+                if (!pauseWhileWaiting) return;
+                await using var other = database.CreateContext();
+                await other.Monitors.Where(row => row.Id == monitorId).ExecuteUpdateAsync(update => update.SetProperty(row => row.Status, MonitorStatus.Paused));
+            });
+
+            var due = await new EfMonitorStore(db, lifecycleLease: lease).ListImmediateForMonitorAsync(monitorId, default);
+
+            var persisted = await db.Monitors.AsNoTracking().SingleAsync();
+            if (pauseWhileWaiting) {
+                Assert.Empty(due);
+                Assert.Equal(MonitorStatus.Paused, persisted.Status);
+                Assert.Null(persisted.AcquisitionId);
+            } else {
+                Assert.True(Assert.Single(due).IsUpgrade);
+                Assert.Equal(acquisitionId, persisted.AcquisitionId);
+                Assert.Equal(profileId, (await db.Acquisitions.AsNoTracking().SingleAsync()).ProfileId);
+            }
+        } finally {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    private sealed class BeforeBaselineLease(IEntityLifecycleMutationLease inner, Func<Task> before) : IEntityLifecycleMutationLease {
+        public async Task<bool> ExecuteAsync(Guid entityId, Func<CancellationToken, Task> mutation, CancellationToken cancellationToken) {
+            await before();
+            return await inner.ExecuteAsync(entityId, mutation, cancellationToken);
+        }
+    }
+
+    [Theory]
+    [InlineData(EntityKind.Movie, false, false)]
+    [InlineData(EntityKind.Movie, true, false)]
+    [InlineData(EntityKind.VideoEpisode, false, false)]
+    [InlineData(EntityKind.Movie, false, true)]
+    public async Task AnEntityOnlyMonitorRestoresItsVerifiedImportBaselineBeforeEvaluatingUpgrades(EntityKind kind, bool folderReceipt, bool explicitDefaultReset) {
+        var root = Directory.CreateTempSubdirectory("prismedia-baseline-restore-").FullName;
+        try {
+            await using var db = CreateContext();
+            var store = await SeedMediaUpgradeMonitorAsync(db, kind,
+                VideoQuality.Webdl720p.ToCode(), VideoQuality.Webdl1080p.ToCode(),
+                attachEntity: true, subtitleStatusKnown: true, hasSubtitles: true);
+            var baseline = await db.Acquisitions.SingleAsync();
+            var monitor = await db.Monitors.SingleAsync();
+            var path = Path.Combine(root, "owned.mkv");
+            await File.WriteAllTextAsync(path, "owned video bytes");
+            var sourceId = Guid.NewGuid();
+            db.EntityFiles.Add(new EntityFileRow {
+                Id = sourceId, EntityId = baseline.EntityId!.Value, Role = EntityFileRole.Source,
+                Path = path, SizeBytes = new FileInfo(path).Length, Source = FileSourceKind.Scan.ToCode(),
+                CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow
+            });
+            baseline.FinalSourcePath = folderReceipt ? root : path;
+            monitor.AcquisitionId = null;
+            monitor.ProfileId = (await db.BookAcquisitionProfiles.SingleAsync()).Id;
+            if (explicitDefaultReset) {
+                var oldProfileId = Guid.NewGuid();
+                db.BookAcquisitionProfiles.Add(new BookAcquisitionProfileRow {
+                    Id = oldProfileId, Kind = kind, DisplayName = "Keep current copy", UpgradeUntilCutoff = false,
+                    CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow
+                });
+                monitor.ProfileId = baseline.ProfileId = oldProfileId;
+            }
+            await db.SaveChangesAsync();
+            if (explicitDefaultReset) {
+                await store.StartForEntityAsync(baseline.EntityId!.Value, kind, baseline.Title,
+                    new AcquisitionTargeting(null, null), null, default);
+            }
+
+            var due = Assert.Single(await store.ListImmediateForMonitorAsync(monitor.Id, default));
+
+            Assert.True(due.IsUpgrade);
+            Assert.Equal(baseline.Id, due.AcquisitionId);
+            Assert.Equal(baseline.Id, (await db.Monitors.AsNoTracking().SingleAsync()).AcquisitionId);
+            Assert.Equal(monitor.ProfileId, (await db.Acquisitions.AsNoTracking().SingleAsync()).ProfileId);
+            Assert.Equal(sourceId, (await db.EntityFiles.AsNoTracking().SingleAsync()).Id);
+            Assert.Equal("owned video bytes", await File.ReadAllTextAsync(path));
+            Assert.Single(await db.Acquisitions.ToArrayAsync());
+            Assert.True(Assert.Single(await store.ListImmediateForMonitorAsync(monitor.Id, default)).IsUpgrade);
+        } finally {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
+    [InlineData("paused")]
+    [InlineData("missing file")]
+    [InlineData("different file")]
+    [InlineData("shared file")]
+    [InlineData("multiple sources")]
+    [InlineData("competing receipt")]
+    [InlineData("working upgrade")]
+    [InlineData("changed bytes")]
+    [InlineData("uncaptured quality")]
+    public async Task BaselineRecoveryLeavesUnprovenOrBusyOwnershipAlone(string scenario) {
+        var root = Directory.CreateTempSubdirectory("prismedia-baseline-guard-").FullName;
+        try {
+            await using var db = CreateContext();
+            var store = await SeedMediaUpgradeMonitorAsync(db, EntityKind.Movie,
+                VideoQuality.Webdl720p.ToCode(), VideoQuality.Webdl1080p.ToCode(),
+                attachEntity: true, subtitleStatusKnown: true, hasSubtitles: true);
+            var baseline = await db.Acquisitions.SingleAsync();
+            var monitor = await db.Monitors.SingleAsync();
+            var path = Path.Combine(root, "owned.mkv");
+            await File.WriteAllTextAsync(path, "owned bytes");
+            var source = new EntityFileRow {
+                Id = Guid.NewGuid(), EntityId = baseline.EntityId!.Value, Role = EntityFileRole.Source,
+                Path = path, SizeBytes = new FileInfo(path).Length, Source = FileSourceKind.Scan.ToCode(),
+                CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow
+            };
+            db.EntityFiles.Add(source);
+            baseline.FinalSourcePath = path;
+            monitor.AcquisitionId = null;
+            switch (scenario) {
+                case "paused": monitor.Status = MonitorStatus.Paused; break;
+                case "missing file": File.Delete(path); break;
+                case "different file":
+                    baseline.FinalSourcePath = Path.Combine(root, "different.mkv");
+                    await File.WriteAllTextAsync(baseline.FinalSourcePath, "another movie");
+                    break;
+                case "shared file":
+                case "multiple sources":
+                    db.EntityFiles.Add(new EntityFileRow {
+                        Id = Guid.NewGuid(), EntityId = scenario == "shared file" ? Guid.NewGuid() : baseline.EntityId.Value,
+                        Role = EntityFileRole.Source, Path = path, CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow
+                    });
+                    break;
+                case "competing receipt":
+                case "working upgrade":
+                    db.Acquisitions.Add(new AcquisitionRow {
+                        Id = Guid.NewGuid(), EntityId = scenario == "competing receipt" ? baseline.EntityId : null,
+                        Kind = EntityKind.Movie, Title = "Another receipt",
+                        Status = scenario == "competing receipt" ? AcquisitionStatus.Imported : AcquisitionStatus.Downloading,
+                        UpgradeOfAcquisitionId = scenario == "working upgrade" ? baseline.Id : null,
+                        FinalSourcePath = path, UpgradeQualityCaptured = true,
+                        CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow
+                    });
+                    break;
+                case "changed bytes": source.SizeBytes++; break;
+                case "uncaptured quality": baseline.UpgradeQualityCaptured = false; break;
+            }
+            await db.SaveChangesAsync();
+
+            var due = await store.ListImmediateForMonitorAsync(monitor.Id, default);
+
+            Assert.All(due, item => Assert.False(item.IsUpgrade));
+            Assert.Null((await db.Monitors.AsNoTracking().SingleAsync()).AcquisitionId);
+        } finally {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
     [Theory]
     [InlineData("Some Book Vol. 4 epub", ReleaseRejectionReason.WrongVolume)]
     [InlineData("Some Book Vol. 3 mp3", ReleaseRejectionReason.UnsupportedFormat)]

@@ -452,6 +452,7 @@ public sealed partial class EfMonitorStore(
         if (targetEntityId is null && targetMonitorId is null) {
             await ReconcilePassiveTargetsAsync(cancellationToken);
         }
+        await RestoreOwnedBaselinesAsync(targetEntityId, targetMonitorId, cancellationToken);
         // The acquisition's resolved profile governs its upgrades. Upgrade-seeking is fully automatic, so it
         // requires both the cutoff toggle and auto-grab; without auto-grab there is no path to act on a found
         // upgrade. Books gate on the source/format cutoff tiers; media kinds (movies, single episodes) gate on
@@ -887,6 +888,10 @@ public sealed partial class EfMonitorStore(
         var duplicates = rows.Where(monitor => monitor.Id != row.Id).ToArray();
         if (duplicates.Length > 0) {
             db.Monitors.RemoveRange(duplicates);
+        }
+
+        if (await FindOwnedBaselineAsync(row, cancellationToken) is { } ownedBaseline) {
+            AttachOwnedBaseline(row, ownedBaseline);
         }
 
         // An explicit request's library/profile choices stick to the monitor so later phantom requests
