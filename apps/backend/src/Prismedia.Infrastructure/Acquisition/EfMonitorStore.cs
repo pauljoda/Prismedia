@@ -369,7 +369,8 @@ public sealed partial class EfMonitorStore(
         int ownedFormatScore,
         bool hasEntityTarget = false,
         bool subtitleStatusKnown = false,
-        bool hasSubtitles = false) {
+        bool hasSubtitles = false,
+        int? measuredVideoResolution = null) {
         var upgradeEnabled = policy is { UpgradeUntilCutoff: true, AutoPick: true };
         var isBook = kind == EntityKind.Book;
         var kindUpgrades = upgradeEnabled && (isBook || MediaQualityLadder.IsUpgradeCapableKind(kind));
@@ -405,7 +406,10 @@ public sealed partial class EfMonitorStore(
 
         var ownedPosition = MediaQualityLadder.PositionOf(kind, ownedMediaQuality);
         var cutoffPosition = MediaQualityLadder.PositionOf(kind, cutoffCode);
-        var ladderCutoffMet = cutoffPosition == 0 || ownedPosition >= cutoffPosition;
+        var measuredCutoffMet = measuredVideoResolution is not { } measured
+            || MediaQualityLadder.VideoResolutionTierOf(cutoffCode) is not { } cutoffResolution
+            || measured >= cutoffResolution;
+        var ladderCutoffMet = (cutoffPosition == 0 || ownedPosition >= cutoffPosition) && measuredCutoffMet;
         var formatCutoffMet = policy?.CutoffFormatScore is not { } formatCutoff || ownedFormatScore >= formatCutoff;
         var subtitleCutoffMet = !trackSubtitleAxis || hasSubtitles;
         return (KindUpgrades: true, HaveOwned: true, CutoffMet: ladderCutoffMet && formatCutoffMet && subtitleCutoffMet, ownedMediaQuality, cutoffCode);
@@ -462,6 +466,7 @@ public sealed partial class EfMonitorStore(
 
         // Tracked load (we mutate statuses during reconciliation), joined to each acquisition's status and
         // accepted-candidate count, plus the in-flight upgrade child's status when the interlock is set.
+        var measuredVideos = OwnedVideoEvidence.CurrentSources(db);
         var rows = await (
             from monitor in db.Monitors
             where monitor.Status == MonitorStatus.Active
@@ -469,9 +474,13 @@ public sealed partial class EfMonitorStore(
                 && (targetMonitorId == null || monitor.Id == targetMonitorId)
             join acquisition in db.Acquisitions on monitor.AcquisitionId equals acquisition.Id into joined
             from acquisition in joined.DefaultIfEmpty()
+            join measured in measuredVideos on monitor.EntityId equals measured.EntityId into measurements
+            from measured in measurements.DefaultIfEmpty()
             orderby monitor.LastSearchedAt, monitor.CreatedAt
             select new {
                 Monitor = monitor,
+                MeasuredWidth = measured == null ? null : measured.Width,
+                MeasuredHeight = measured == null ? null : measured.Height,
                 AcquisitionStatus = acquisition == null ? (AcquisitionStatus?)null : acquisition.Status,
                 AcquisitionEntityId = acquisition == null ? null : acquisition.EntityId,
                 AcquisitionProfileId = acquisition == null ? null : acquisition.ProfileId,
@@ -612,7 +621,8 @@ public sealed partial class EfMonitorStore(
                         row.OwnedFormatScore,
                         monitor.EntityId is not null,
                         row.SubtitleStatusKnown,
-                        row.HasSubtitles);
+                        row.HasSubtitles,
+                        VideoPayloadProfileValidation.ResolutionTier(row.MeasuredWidth, row.MeasuredHeight));
                     if (!verdict.KindUpgrades) {
                         if (CompleteEntityAcquisition(monitor, now) is { } terminalStatus) {
                             statusTransitions.Add((monitor.Id, terminalStatus));

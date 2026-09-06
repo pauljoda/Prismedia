@@ -9,6 +9,53 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EfMonitorStoreLibraryBaselineTests {
     [Theory]
+    [InlineData("current", false, true)]
+    [InlineData("current", true, true)]
+    [InlineData("at cutoff", false, false)]
+    [InlineData("at cutoff", true, false)]
+    [InlineData("stale size", false, false)]
+    [InlineData("stale path", false, false)]
+    [InlineData("failed probe", false, false)]
+    [InlineData("multiple sources", false, false)]
+    [InlineData("unknown dimensions", false, false)]
+    public async Task CurrentMeasuredResolutionCanDisproveARecordedCutoff(string scenario, bool postgres, bool upgradeDue) {
+        await using var database = postgres ? await PostgresTestDatabase.CreateAsync() : null;
+        await using var db = database?.CreateContext() ?? MemoryContext();
+        var root = Directory.CreateTempSubdirectory("prismedia-measured-cutoff-").FullName;
+        try {
+            var fixture = await SeedAsync(db, root, EntityKind.Movie);
+            (await db.BookAcquisitionProfiles.SingleAsync()).UpgradeUntilCutoff = true;
+            await db.SaveChangesAsync();
+            await fixture.Store.ListImmediateForMonitorAsync(fixture.MonitorId, default);
+            var baseline = await db.Acquisitions.SingleAsync();
+            baseline.OwnedMediaQuality = VideoQuality.Remux2160p.ToCode();
+            var probe = await db.MediaSources.SingleAsync();
+            switch (scenario) {
+                case "at cutoff": probe.Width = 1920; probe.Height = 800; break;
+                case "stale size": probe.SizeBytes++; break;
+                case "stale path": probe.Path += ".retired"; break;
+                case "failed probe": db.EntityTechnical.Add(new EntityTechnicalRow { EntityId = fixture.EntityId,
+                    ProbeFailedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow }); break;
+                case "multiple sources": db.EntityFiles.Add(new EntityFileRow { Id = Guid.NewGuid(), EntityId = fixture.EntityId,
+                    Role = EntityFileRole.Source, Path = fixture.SourcePath + ".other", Source = FileSourceKind.Scan.ToCode(),
+                    CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow }); break;
+                case "unknown dimensions": probe.Width = null; probe.Height = null; break;
+            }
+            await db.SaveChangesAsync();
+
+            var wanted = await fixture.Store.ListCutoffUnmetAsync(1, 10, EntityKind.Movie, default);
+            var due = await fixture.Store.ListImmediateForMonitorAsync(fixture.MonitorId, default);
+
+            Assert.Equal(upgradeDue ? 1 : 0, wanted.Total);
+            Assert.Equal(upgradeDue, due.Any(row => row.IsUpgrade));
+            Assert.Equal(VideoQuality.Remux2160p.ToCode(), (await db.Acquisitions.SingleAsync()).OwnedMediaQuality);
+            Assert.Empty(await db.DownloadTransfers.ToArrayAsync());
+        } finally {
+            Directory.Delete(root, recursive: true);
+        }
+    }
+
+    [Theory]
     [InlineData(EntityKind.Movie, false)]
     [InlineData(EntityKind.VideoEpisode, false)]
     [InlineData(EntityKind.VideoEpisode, true)]

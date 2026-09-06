@@ -72,15 +72,20 @@ public sealed partial class EfMonitorStore {
         // Profile and subtitle-aware cutoff decisions must precede pagination. Stream the scalar projection
         // once and retain only the requested page, sharing the monitor sweep's policy math without loading
         // an entire catalog or issuing per-item queries. Count only actual cutoff-unmet matches.
+        var measuredVideos = OwnedVideoEvidence.CurrentSources(db);
         var query =
             from monitor in db.Monitors.AsNoTracking()
             where monitor.Status == MonitorStatus.Active && monitor.AcquisitionId != null
             join acquisition in db.Acquisitions.AsNoTracking() on monitor.AcquisitionId equals acquisition.Id into joined
             from acquisition in joined
+            join measured in measuredVideos on monitor.EntityId equals measured.EntityId into measurements
+            from measured in measurements.DefaultIfEmpty()
             where acquisition.Status == AcquisitionStatus.Imported
             where kind == null || monitor.Kind == kind
             orderby monitor.CreatedAt descending, monitor.Id
             select new {
+                MeasuredWidth = measured == null ? null : measured.Width,
+                MeasuredHeight = measured == null ? null : measured.Height,
                 monitor.Id,
                 monitor.AcquisitionId,
                 monitor.EntityId,
@@ -115,7 +120,8 @@ public sealed partial class EfMonitorStore {
                 row.OwnedFormatScore,
                 row.EntityId is not null,
                 row.SubtitleStatusKnown,
-                row.HasSubtitles);
+                row.HasSubtitles,
+                VideoPayloadProfileValidation.ResolutionTier(row.MeasuredWidth, row.MeasuredHeight));
 
             // Drop rows the sweep would (or already did) fulfill: kinds that never upgrade, copies at/above
             // cutoff. A not-yet-captured copy stays — it is genuinely below any cutoff until proven otherwise,
