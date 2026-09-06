@@ -11,7 +11,7 @@ export default function AmbientLight() {
 
   useEffect(() => {
     const field = fieldRef.current;
-    const page = field?.closest('main');
+    const page = field?.closest('[data-marketing-page]');
     if (!field || !page) return;
     const preference = matchMedia('(prefers-reduced-motion: no-preference)');
     const pointer = matchMedia('(pointer: fine)');

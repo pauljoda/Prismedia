@@ -57,7 +57,7 @@ test('phone layout keeps the media labels, setup links, and folder tables within
   expect((await drawnBeams(page)).every((offset) => offset === 0)).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await expect(page.getByRole('link', {name: 'Get the Apple TV app'})).toHaveAttribute('href', 'https://apps.apple.com/us/app/prismedia/id6792944211');
-  await page.getByRole('link', {name: 'Understand your folders'}).click();
+  await page.getByRole('contentinfo').getByRole('link', {name: 'Organize your folders'}).click();
   await expect(page.getByRole('heading', {level: 1})).toHaveText('Organize Your Media Folders');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

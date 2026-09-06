@@ -7,13 +7,12 @@ import ArrowIcon from '../components/marketing/ArrowIcon';
 import AmbientLight from '../components/marketing/AmbientLight';
 import BrandLink from '../components/marketing/BrandLink';
 import PlatformShowcase from '../components/marketing/PlatformShowcase';
+import MarketingFooter from '../components/marketing/MarketingFooter';
+import {APP_STORE_URL, GITHUB_URL, TESTFLIGHT_URL} from '../components/marketing/links';
 import PrismStory from '../components/marketing/PrismStory';
 import {ENTITY_KIND, MEDIA_FAMILIES, familyStyle} from '../components/marketing/media-families';
 import styles from './index.module.css';
 
-const TESTFLIGHT_URL = 'https://testflight.apple.com/join/c9bgDxr7';
-const APP_STORE_URL = 'https://apps.apple.com/us/app/prismedia/id6792944211';
-const GITHUB_URL = 'https://github.com/pauljoda/Prismedia';
 const TITLE = 'A clear home for all your media.';
 const DESCRIPTION = 'Bring movies, series, music, books, audiobooks, comics, images, and galleries into one private, self-hosted library. Find, organize, watch, listen, and read with Prismedia.';
 const PRODUCT_SCHEMA = {
@@ -178,20 +177,14 @@ function SelfHosting() {
   </section>;
 }
 
-function Project() {
-  return <section className={`${styles.wrap} ${styles.project}`} aria-labelledby="project-title">
-    <ProductImage src="/img/logo-mark.png" alt="" className={styles.projectMark} width={640} height={590} />
-    <div><h2 id="project-title">A personal library.<br />A project you can be part of.</h2><p>Prismedia is free for noncommercial use, with its source available to read, learn from, and contribute to under the project's license.</p><div className={styles.projectLinks}><BrandLink href={GITHUB_URL} icon="/img/brands/github.svg">GitHub</BrandLink><Link href={`${GITHUB_URL}/blob/main/LICENSE`}>Read the license <ArrowIcon diagonal /></Link><BrandLink href="https://www.reddit.com/r/Prismedia/" icon="/img/brands/reddit.svg">r/Prismedia</BrandLink></div></div>
-  </section>;
-}
-
 export default function Home(): ReactNode {
-  return <Layout title={TITLE} description={DESCRIPTION}>
+  return <Layout title={TITLE} description={DESCRIPTION} noFooter>
     <script type="application/ld+json" dangerouslySetInnerHTML={{__html: JSON.stringify(PRODUCT_SCHEMA)}} />
     <SectionRoute />
-    <main className={styles.page}>
+    <div className={styles.page} data-marketing-page>
       <AmbientLight />
-      <Hero /><PrismStory /><FounderStory /><Workflow /><Experiences /><Acquisition /><Platforms /><ProductFilm /><SelfHosting /><Project />
-    </main>
+      <main><Hero /><PrismStory /><FounderStory /><Workflow /><Experiences /><Acquisition /><Platforms /><ProductFilm /><SelfHosting /></main>
+      <MarketingFooter />
+    </div>
   </Layout>;
 }

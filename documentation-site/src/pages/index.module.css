@@ -485,50 +485,11 @@
   margin: 0;
 }
 
-.project {
-  padding-block: 95px 110px;
-  display: grid;
-  grid-template-columns: .35fr 1fr;
-  gap: 60px;
-  align-items: start;
-}
-
-.projectMark {
-  width: 85px;
-  height: auto;
-  margin-top: 10px;
-}
-
-.project h2 {
-  font-size: 39px;
-}
-
-.project p {
-  font-size: 14px;
-  max-width: 68ch;
-  line-height: 1.8;
-}
-
-.projectLinks {
-  display: flex;
-  gap: 12px 28px;
-  flex-wrap: wrap;
-  font-size: 12px;
-}
-
-.projectLinks a {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  min-height: 44px;
-}
-
 .mediaRail a { padding: 0 10px; border-radius: 6px; transition: background-color 180ms; }
 .mediaRail a:hover, .mediaRail a:focus-visible { background: color-mix(in srgb, var(--family-color) 12%, transparent); text-decoration: none; }
 .mediaRail i { background: var(--beam-color); }
 .experiences > article:hover, .experiences > article:focus-within { border-color: color-mix(in srgb, var(--family-color) 50%, #353c4c); box-shadow: 0 16px 48px #0005; }
 .experienceCopy .textLink:hover { color: color-mix(in srgb, var(--family-color) 40%, white); }
-.projectMark { filter: drop-shadow(0 8px 24px #5567bd40); }
 
 @media (min-width: 1600px) {
   .wrap {
@@ -707,21 +668,6 @@
   .folderExample {
     padding: 28px;
     margin-top: 15px;
-  }
-  .project {
-    padding-block: 60px 70px;
-    grid-template-columns: 1fr;
-    gap: 26px;
-  }
-  .projectMark {
-    width: 48px;
-    margin-top: 0;
-  }
-  .project h2 {
-    font-size: 33px;
-  }
-  .projectLinks {
-    gap: 6px 22px;
   }
 }
 
