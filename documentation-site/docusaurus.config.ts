@@ -29,7 +29,7 @@ const disablePathOnlyActiveState = 'a^';
 
 const config: Config = {
   title: 'Prismedia',
-  tagline: 'Your whole media life. One private home.',
+  tagline: 'A clear home for all your media.',
   favicon: 'img/favicon-32.png',
 
   // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
@@ -100,7 +100,7 @@ const config: Config = {
       },
       {
         name: 'twitter:title',
-        content: 'Your whole media life. One private home.',
+        content: 'A clear home for all your media.',
       },
       {
         name: 'twitter:description',
@@ -127,7 +127,7 @@ const config: Config = {
       items: [
         {
           to: '/?section=product',
-          label: 'Product',
+          label: 'How it works',
           position: 'left',
           activeBaseRegex: disablePathOnlyActiveState,
         },
@@ -162,7 +162,7 @@ const config: Config = {
         },
         {
           href: 'https://testflight.apple.com/join/c9bgDxr7',
-          label: 'Join TestFlight',
+          label: 'Test early builds',
           position: 'right',
           className: 'navbar__testflight',
         },
@@ -217,7 +217,7 @@ const config: Config = {
               href: 'https://www.reddit.com/r/Prismedia/',
             },
             {
-              label: 'Join TestFlight',
+              label: 'Test early builds',
               href: 'https://testflight.apple.com/join/c9bgDxr7',
             },
             {
