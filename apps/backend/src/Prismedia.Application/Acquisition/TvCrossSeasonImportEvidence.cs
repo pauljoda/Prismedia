@@ -21,6 +21,7 @@ public static class TvCrossSeasonImportEvidence {
         string? seriesTitle = null,
         IReadOnlyList<string>? alternativeWorkTitles = null) {
         var result = new List<TvCrossSeasonFileEvidence>();
+        var titleIndexes = new Dictionary<TvSeasonEpisodeCatalog, TvEpisodeEvidenceIndex>();
         var videos = TvImportPlanBuilder.UnmappedVideos(files, []);
         var paths = videos.Select(file => file.RelativePath).ToHashSet(FileSystemPathComparison.Comparer);
         foreach (var file in videos.Where(file => !TvImportPlanBuilder.HasInternetArchiveOriginalSibling(file.RelativePath, paths))) {
@@ -36,6 +37,10 @@ public static class TvCrossSeasonImportEvidence {
                     .Select(episode => (Season: season, Episode: episode)))
                 .ToArray();
             if (matches.Any(match => match.Season.SeasonNumber != requestedSeason)) {
+                if (declared is null && ResolveCompleteTitleBundle(file.RelativePath, tail, matches, catalog, titleIndexes) is { } complete) {
+                    if (complete.Destination!.SeasonNumber != requestedSeason) result.Add(complete);
+                    continue;
+                }
                 var requested = catalog.Where(season => season.SeasonNumber == requestedSeason)
                     .SelectMany(season => season.Episodes)
                     .Where(episode => ReleaseTitleIdentity.ContainsMeaningfulRun(tail, episode.Title)).ToArray();
@@ -79,6 +84,28 @@ public static class TvCrossSeasonImportEvidence {
             result.Add(new(file.RelativePath, valid ? seasons[0] : null, valid ? known : []));
         }
         return result;
+    }
+
+    private static TvCrossSeasonFileEvidence? ResolveCompleteTitleBundle(string sourcePath, string tail,
+        IReadOnlyList<(TvSeasonEpisodeCatalog Season, TvEpisodeTitle Episode)> matches,
+        IReadOnlyList<TvSeasonEpisodeCatalog> catalog,
+        Dictionary<TvSeasonEpisodeCatalog, TvEpisodeEvidenceIndex> titleIndexes) {
+        var groups = matches.GroupBy(match => match.Season).ToArray();
+        if (groups.Any(group => catalog.Count(season => season.SeasonNumber == group.Key.SeasonNumber) != 1
+                || group.Select(match => match.Episode.Episode).Distinct().Count() != group.Count())) return null;
+        // Compare complete content, including a competing single compound title. A pair is unique
+        // only when no other season can explain the whole title sequence.
+        var complete = groups.Where(group => {
+            if (!titleIndexes.TryGetValue(group.Key, out var index)) {
+                index = new TvEpisodeEvidenceIndex(group.Key.Episodes);
+                titleIndexes.Add(group.Key, index);
+            }
+            return index.HasDistinctLeadingTitles(tail, group.Select(match => match.Episode.Episode).ToArray());
+        }).Take(2).ToArray();
+        if (complete.Length != 1 || complete[0].Count() < 2 || complete[0].Key.SeasonNumber <= 0
+            || complete[0].Any(match => match.Episode.EntityId is null && match.Episode.ProviderIdentity is null)) return null;
+        var resolved = complete[0];
+        return new(sourcePath, resolved.Key, resolved.Select(match => match.Episode).OrderBy(episode => episode.Episode).ToArray());
     }
 
     internal static bool IsDistinctiveTitle(string title) =>

@@ -4,6 +4,53 @@ namespace Prismedia.Application.Tests.Acquisition;
 
 public sealed class TvCrossSeasonImportEvidenceTests {
     [Fact]
+    public void ACompetingCompoundEpisodeTitleKeepsThePairAmbiguous() {
+        var requested = Season(1, (1, "Hidden Garden"), (2, "Mountain Journey"));
+        var compound = Season(2, (3, "Hidden Garden and Mountain Journey"));
+        var match = Assert.Single(TvCrossSeasonImportEvidence.Find(
+            [new("Show - Hidden Garden & Mountain Journey.mkv", 100)], 1, [requested, compound], "Show"));
+        Assert.Null(match.Destination);
+    }
+
+    [Fact]
+    public void ACompleteTitlePairUniquelyIdentifiesTheRequestedSeasonDespiteOneRepeatedTitle() {
+        var requested = Season(1, (1, "Hidden Garden"), (2, "Mountain Journey"));
+        var repeat = Season(2, (3, "Hidden Garden"));
+        Assert.Empty(TvCrossSeasonImportEvidence.Find(
+            [new("Show - Hidden Garden & Mountain Journey.mkv", 100)], 1, [requested, repeat], "Show"));
+    }
+
+    [Fact]
+    public void ACompleteForeignPairOutweighsAnIsolatedTitleRepeatInTheRequestedSeason() {
+        var requested = Season(1, (1, "Hidden Garden"));
+        var destination = Season(2, (3, "Hidden Garden"), (4, "Mountain Journey"));
+        var match = Assert.Single(TvCrossSeasonImportEvidence.Find(
+            [new("Show - Hidden Garden & Mountain Journey.mkv", 100)], 1, [requested, destination], "Show"));
+        Assert.Equal(destination.SeasonEntityId, match.Destination?.SeasonEntityId);
+        Assert.Equal([3, 4], match.Episodes.Select(episode => episode.Episode));
+    }
+
+    [Fact]
+    public void TheSameCompletePairInTwoSeasonsStillNeedsReview() {
+        var requested = Season(1, (1, "Hidden Garden"), (2, "Mountain Journey"));
+        var repeat = Season(2, (3, "Hidden Garden"), (4, "Mountain Journey"));
+        var match = Assert.Single(TvCrossSeasonImportEvidence.Find(
+            [new("Show - Hidden Garden & Mountain Journey.mkv", 100)], 1, [requested, repeat], "Show"));
+        Assert.Null(match.Destination);
+        Assert.Empty(match.Episodes);
+    }
+
+    [Theory]
+    [InlineData("Show - Hidden Garden & Mountain Journey & Ocean Adventure.mkv")]
+    [InlineData("Show Sequel - Hidden Garden & Mountain Journey.mkv")]
+    public void ATitlePairCannotDiscardUnexplainedContentToChooseASeason(string filename) {
+        var requested = Season(1, (1, "Hidden Garden"), (2, "Mountain Journey"));
+        var repeat = Season(2, (3, "Hidden Garden"), (4, "Ocean Adventure"));
+        var match = Assert.Single(TvCrossSeasonImportEvidence.Find([new(filename, 100)], 1, [requested, repeat], "Show"));
+        Assert.Null(match.Destination);
+    }
+
+    [Fact]
     public void ParentSeriesWordsCannotIdentifyAForeignEpisodeWithTheSameTitle() {
         var foreign = Season(2, (3, "Grand Adventure"));
         Assert.Empty(TvCrossSeasonImportEvidence.Find(

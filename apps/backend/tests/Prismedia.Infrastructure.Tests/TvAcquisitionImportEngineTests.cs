@@ -32,11 +32,15 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
     [InlineData(false, false)]
     [InlineData(true, true)]
     [InlineData(false, true)]
-    public async Task IdentifiedForeignSeasonEpisodesImportOnlyWhenThatSeasonIsMonitored(bool monitored, bool mislabeled) {
+    [InlineData(true, null)]
+    [InlineData(false, null)]
+    public async Task IdentifiedForeignSeasonEpisodesImportOnlyWhenThatSeasonIsMonitored(bool monitored, bool? mislabeled) {
         await using var db = CreateContext();
-        var extraName = mislabeled
-            ? "Show.S01E49-E50.Hidden.Garden.&.Mountain.Journey.mkv"
-            : "Show.S02E03-E04.Hidden.Garden.&.Mountain.Journey.mkv";
+        var extraName = mislabeled switch {
+            null => "Show - Hidden Garden & Mountain Journey.mkv",
+            true => "Show.S01E49-E50.Hidden.Garden.&.Mountain.Journey.mkv",
+            false => "Show.S02E03-E04.Hidden.Garden.&.Mountain.Journey.mkv"
+        };
         var harness = await HarnessAsync(db, ownedEpisodeName: "Show - s01e01.mkv",
             payloadFiles: ["Show.S01E02.mkv", extraName], releaseTitle: "Show S01");
         var otherSeason = AddWantedEntity(db, EntityKind.VideoSeason.ToCode(), harness.SeriesId, 2);
@@ -44,6 +48,9 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         var second = AddWantedEntity(db, EntityKind.VideoEpisode.ToCode(), otherSeason, 4);
         db.Entities.Local.Single(row => row.Id == first).Title = "Hidden Garden";
         db.Entities.Local.Single(row => row.Id == second).Title = "Mountain Journey";
+        if (mislabeled is null) {
+            (await db.Entities.SingleAsync(row => row.ParentEntityId == harness.SeasonId && row.SortOrder == 1)).Title = "Hidden Garden";
+        }
         await db.SaveChangesAsync();
         if (monitored) {
             await new EfMonitorStore(db).StartForEntityAsync(otherSeason, EntityKind.VideoSeason, "Show Season 2",
