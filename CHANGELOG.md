@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Automatic qBittorrent acquisitions on supported clients inspect torrent contents before releasing payload downloads. Wrong-content and redundant season packs can enter recovery before transferring media; metadata holds survive restarts and respect cancellation.
+
 - Quality profiles allow verified video replacements to change file containers by default. Turn off “Allow format changes” to require individual approval. Interrupted replacements preserve recovery evidence, episode identity, and playback history across container changes.
 
 - Replace or upload individual TV episodes, including older files imported through season packs. Replacement searches use current episode numbering and monitor preferences; files shared by multiple episodes require coverage-aware review.

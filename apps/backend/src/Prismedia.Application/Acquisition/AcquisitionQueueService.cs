@@ -210,7 +210,7 @@ public sealed class AcquisitionQueueService(
             var clientItemId = recoveredClientItemId
                 ?? await downloadClient.AddAsync(
                     connection,
-                    new DownloadAddRequest(url, candidate.InfoHash, attemptCategory, candidate.Title),
+                    new DownloadAddRequest(url, candidate.InfoHash, attemptCategory, candidate.Title, InspectBeforeDownload: !manualPick),
                     cancellationToken);
             var selectedRelease = new SelectedRelease(
                 candidate.Title,

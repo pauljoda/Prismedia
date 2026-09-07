@@ -187,6 +187,17 @@ public static class ProwlarrProtocol {
 
 /// <summary>qBittorrent WebUI API wire vocabulary (API v2). Referenced by the qBittorrent download client; never retyped.</summary>
 public static class QBittorrentProtocol {
+    public const string WebApiVersionEndpoint = "api/v2/app/webapiVersion";
+    public const string StartEndpoint = "api/v2/torrents/start";
+    public const string LegacyResumeEndpoint = "api/v2/torrents/resume";
+    public const string RemoveTagsEndpoint = "api/v2/torrents/removeTags";
+    public const string TagsField = "tags";
+    public const string StopConditionField = "stopCondition";
+    public const string MetadataReceived = "MetadataReceived";
+    public const string PayloadAdmissionTag = "prismedia-payload-admission";
+    public const string StoppedDownload = "stoppedDL";
+    public const string PausedDownload = "pausedDL";
+
     public const string LoginEndpoint = "api/v2/auth/login";
     public const string VersionEndpoint = "api/v2/app/version";
     public const string CreateCategoryEndpoint = "api/v2/torrents/createCategory";

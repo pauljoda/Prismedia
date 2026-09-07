@@ -22,6 +22,44 @@ namespace Prismedia.Infrastructure.Tests;
 public sealed class AcquisitionMonitorJobHandlerTests {
     private static readonly Guid ClientId = Guid.NewGuid();
 
+    [Theory]
+    [InlineData(true, false, false, 1)]
+    [InlineData(false, false, false, 0)]
+    [InlineData(true, true, false, 0)]
+    [InlineData(true, false, true, 0)]
+    public async Task MetadataHoldRequiresSuccessfulFileAdmission(bool hasFiles, bool wrongContent, bool unavailable, int expectedStarts) {
+        await using var db = CreateContext();
+        var id = await SeedDownloadingAsync(db, DateTimeOffset.UtcNow);
+        var acquisition = await db.Acquisitions.SingleAsync(row => row.Id == id);
+        acquisition.Kind = EntityKind.Movie; acquisition.Title = "Film"; acquisition.Year = 2020;
+        await db.SaveChangesAsync();
+        await AcquisitionTestFactory.Store(db).SetSelectedReleaseAsync(id, new("Film 2020 1080p WEB-DL", "Indexer", "hashX"), default);
+        var status = new DownloadItemStatus("hashX", "Film", 0, "stoppedDL", false, "/save", "/save/Film",
+            AwaitingPayloadAdmission: true);
+        var starts = 0;
+        var queue = new RecordingJobQueue();
+        await RunAsync(db, queue, [status], status, id,
+            beforePayloadInspection: unavailable ? () => throw new IOException("Metadata endpoint unavailable") : null,
+            files: hasFiles ? [new(wrongContent ? "Film.1999.1080p.mkv" : "Film.2020.1080p.WEB-DL.mkv", 100, 0)] : [],
+            onRelease: () => starts++);
+        Assert.Equal(expectedStarts, starts);
+        if (wrongContent) Assert.Equal(JobType.AcquisitionFailedHandle, Assert.Single(queue.Enqueued).Type);
+        else Assert.Empty(queue.Enqueued);
+    }
+
+    [Fact]
+    public async Task UnreadableStoppedMetadataEventuallyUsesStallRecovery() {
+        await using var db = CreateContext();
+        var id = await SeedDownloadingAsync(db, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow.AddMinutes(-90));
+        var stopped = new DownloadItemStatus("hashX", "Book", 0, "stoppedDL", false, "/save", "/save/book",
+            AwaitingPayloadAdmission: true);
+        var queue = new RecordingJobQueue();
+        await RunAsync(db, queue, [stopped], stopped, id, files: []);
+        var job = Assert.Single(queue.Enqueued);
+        Assert.Equal(JobType.AcquisitionFailedHandle, job.Type);
+        Assert.Equal(BlocklistReason.Stalled, AcquisitionFailedPayload.Parse(job.PayloadJson!).Reason);
+    }
+
     [Fact]
     public async Task EarlyOwnedSeasonCoverageRequestsContextualRecoveryWithoutGloballyBlockingTheRelease() {
         await using var db = CreateContext();
@@ -693,7 +731,8 @@ public sealed class AcquisitionMonitorJobHandlerTests {
         Action<string, bool>? onRemove = null,
         IReadOnlyList<DownloadItemFile>? files = null,
         IImportTargetIndex? importTargets = null,
-        TvPayloadAdmission? payloadAdmission = null) {
+        TvPayloadAdmission? payloadAdmission = null,
+        Action? onRelease = null) {
         var handler = new AcquisitionMonitorJobHandler(
             AcquisitionTestFactory.Store(db),
             new EfDetachedDownloadCleanupStore(db),
@@ -708,7 +747,8 @@ public sealed class AcquisitionMonitorJobHandlerTests {
                 listingFailure,
                 properties,
                 onRemove,
-                files)),
+                files,
+                onRelease)),
             new RemotePathMapper(new NoRemotePathMappings()),
             new EfAcquisitionHistoryStore(db),
             NullLogger<AcquisitionMonitorJobHandler>.Instance,
@@ -795,7 +835,8 @@ public sealed class AcquisitionMonitorJobHandlerTests {
         Exception? listingFailure = null,
         DownloadItemProperties? properties = null,
         Action<string, bool>? onRemove = null,
-        IReadOnlyList<DownloadItemFile>? files = null) : IDownloadClient {
+        IReadOnlyList<DownloadItemFile>? files = null,
+        Action? onRelease = null) : IDownloadClient {
         private bool _removed;
 
         public DownloadClientKind Kind => DownloadClientKind.QBittorrent;
@@ -822,6 +863,10 @@ public sealed class AcquisitionMonitorJobHandlerTests {
         }
         public Task<DownloadItemProperties?> GetPropertiesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) =>
             Task.FromResult(properties);
+        public Task ReleasePayloadAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) {
+            onRelease?.Invoke();
+            return Task.CompletedTask;
+        }
         public Task<byte[]> GetPieceStatesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task RemoveAsync(DownloadClientConnection connection, string clientItemId, bool deleteData, CancellationToken cancellationToken) {
             if (onRemove is null) {

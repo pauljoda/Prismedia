@@ -428,14 +428,26 @@ public sealed class AcquisitionMonitorJobHandler(
                         cancellationToken);
                 }
             } else {
-                if (await FindPayloadConflictAsync(downloadClient, connection, transfer, cancellationToken) is { } conflict) {
+                var inspection = await InspectPayloadAsync(downloadClient, connection, transfer, cancellationToken);
+                if (inspection.Conflict is { } conflict) {
                     logger.LogWarning(
                         "AcquisitionMonitor: transfer {TransferId} failed payload admission ({Conflict}); abandoning it for recovery.",
-                        transfer.TransferId, conflict.Message);
+                        transfer.TransferId, conflict);
                     await EnqueueFailedHandleAsync(context, transfer.AcquisitionId,
-                        conflict.RecheckTvCoverage ? BlocklistReason.NotAnUpgrade : BlocklistReason.WrongContent,
-                        conflict.Message, cancellationToken, conflict.RecheckTvCoverage);
+                        inspection.RecheckTvCoverage ? BlocklistReason.NotAnUpgrade : BlocklistReason.WrongContent,
+                        conflict, cancellationToken, inspection.RecheckTvCoverage);
                     return;
+                }
+
+                if (status.AwaitingPayloadAdmission) {
+                    if (inspection.Ready) {
+                        await downloadClient.ReleaseOwnedPayloadAsync(connection, transfer.AcquisitionId,
+                            transfer.TransferId, transfer.ClientItemId, cancellationToken);
+                        return;
+                    }
+                    // Empty or unreadable metadata cannot authorize payload bytes. A genuinely stalled
+                    // metadata fetch still uses the normal bounded stall-recovery window below.
+                    status = status with { IsStalled = true };
                 }
 
                 await AdvanceStallAsync(
@@ -545,27 +557,29 @@ public sealed class AcquisitionMonitorJobHandler(
     /// still downloading instead of being discovered at import. Only automatic picks are validated: a
     /// release the user queued explicitly (or uploaded) is the user's authority. Evidence-based per
     /// <see cref="AcquisitionPayloadValidation"/> — a client hiccup or an empty (pre-metadata) file list
-    /// never fails a download. Errors resolve to null so a files-endpoint failure can't break polling.
+    /// never immediately fails a download. Unavailable metadata keeps an admission hold closed
+    /// until a later inspection succeeds or the normal stall recovery window expires.
     /// </summary>
-    private async Task<(string Message, bool RecheckTvCoverage)?> FindPayloadConflictAsync(
+    private sealed record PayloadInspection(string? Conflict = null, bool RecheckTvCoverage = false, bool Ready = false);
+
+    private async Task<PayloadInspection> InspectPayloadAsync(
         IDownloadClient downloadClient,
         DownloadClientConnection connection,
         ActiveTransfer transfer,
         CancellationToken cancellationToken) {
         try {
             var selected = await acquisitions.GetSelectedReleaseAsync(transfer.AcquisitionId, cancellationToken);
-            if (selected is null || selected.ManualPick) {
-                return null;
-            }
+            if (selected is null) return new();
+            if (selected.ManualPick) return new(Ready: true);
 
             var input = await acquisitions.GetSearchInputAsync(transfer.AcquisitionId, cancellationToken);
             if (input is null) {
-                return null;
+                return new();
             }
 
             var files = await downloadClient.GetFilesAsync(connection, transfer.ClientItemId, cancellationToken);
             if (files.Count == 0) {
-                return null;
+                return new();
             }
 
             var episodeTitles = importTargets is not null
@@ -585,20 +599,20 @@ public sealed class AcquisitionMonitorJobHandler(
                 input.Title,
                 input.AbsoluteEpisodeNumber,
                 episodeTitles, input.AlternativeWorkTitles);
-            if (conflict is not null) return (conflict, false);
+            if (conflict is not null) return new(conflict);
             if (payloadAdmission is not null && input.Kind == EntityKind.VideoSeason) {
                 var payloadFiles = files.Select(file => new ImportCandidateFile(file.Name, file.SizeBytes)).ToArray();
                 if (await payloadAdmission.HasNoBenefitAsync(input, payloadFiles, cancellationToken)) {
                     await payloadAdmission.RememberAsync(input.Id, selected.Identity, payloadFiles, cancellationToken);
-                    return (TvPayloadAdmission.NoBenefitMessage, true);
+                    return new(TvPayloadAdmission.NoBenefitMessage, true);
                 }
             }
-            return null;
+            return new(Ready: true);
         } catch (OperationCanceledException) {
             throw;
         } catch (Exception ex) {
             logger.LogDebug(ex, "AcquisitionMonitor: payload validation skipped for transfer {TransferId}", transfer.TransferId);
-            return null;
+            return new();
         }
     }
 

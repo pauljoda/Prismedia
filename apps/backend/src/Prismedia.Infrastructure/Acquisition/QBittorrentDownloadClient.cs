@@ -42,10 +42,21 @@ public sealed class QBittorrentDownloadClient(HttpClient http) : IDownloadClient
         // proxied link carries no info hash (qBittorrent's add endpoint does not return the hash).
         var before = await CategoryHashesAsync(connection, request.Category, cancellationToken);
 
-        await PostAsync(connection, QBittorrentProtocol.AddEndpoint, new Dictionary<string, string> {
+        if (request.InspectBeforeDownload && !string.IsNullOrWhiteSpace(request.InfoHash)
+            && before.Contains(request.InfoHash)) return request.InfoHash.ToLowerInvariant();
+        if (request.InspectBeforeDownload && string.IsNullOrWhiteSpace(request.InfoHash) && before.Count > 0
+            && await FindByNormalizedNameAsync(connection, request.Category, request.Title, cancellationToken) is { } existing)
+            return existing;
+
+        var form = new Dictionary<string, string> {
             [QBittorrentProtocol.UrlsField] = request.Url,
             [QBittorrentProtocol.CategoryField] = request.Category
-        }, cancellationToken);
+        };
+        if (request.InspectBeforeDownload && await SupportsMetadataAdmissionAsync(connection, cancellationToken)) {
+            form[QBittorrentProtocol.StopConditionField] = QBittorrentProtocol.MetadataReceived;
+            form[QBittorrentProtocol.TagsField] = QBittorrentProtocol.PayloadAdmissionTag;
+        }
+        await PostAsync(connection, QBittorrentProtocol.AddEndpoint, form, cancellationToken);
 
         // A known info hash is the most reliable id; otherwise discover the newly added torrent by diff.
         if (!string.IsNullOrWhiteSpace(request.InfoHash)) {
@@ -72,6 +83,33 @@ public sealed class QBittorrentDownloadClient(HttpClient http) : IDownloadClient
 
         throw new DownloadClientAddUnresolvedException(
             "qBittorrent accepted the add but created no new torrent — the release is likely already present in the client (duplicate add).");
+    }
+
+    private async Task<bool> SupportsMetadataAdmissionAsync(DownloadClientConnection connection, CancellationToken cancellationToken) {
+        using var response = await SendAuthenticatedAsync(connection, HttpMethod.Get,
+            QBittorrentProtocol.WebApiVersionEndpoint, cancellationToken);
+        if (response.StatusCode == HttpStatusCode.NotFound) return false;
+        response.EnsureSuccessStatusCode();
+        return Version.TryParse((await response.Content.ReadAsStringAsync(cancellationToken)).Trim(), out var version)
+            && version >= new Version(2, 8, 15);
+    }
+
+    /// <inheritdoc />
+    public async Task ReleasePayloadAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) {
+        var item = await GetItemAsync(connection, clientItemId, cancellationToken);
+        if (item is not { AwaitingPayloadAdmission: true }) return;
+        if ((await GetFilesAsync(connection, clientItemId, cancellationToken)).Count == 0) return;
+        var hashes = new Dictionary<string, string> { [QBittorrentProtocol.HashesField] = clientItemId };
+        if (item.State is QBittorrentProtocol.StoppedDownload or QBittorrentProtocol.PausedDownload) {
+            using var response = await SendAuthenticatedWithContentFactoryAsync(connection, HttpMethod.Post,
+                QBittorrentProtocol.StartEndpoint, () => new FormUrlEncodedContent(hashes), cancellationToken);
+            if (response.StatusCode == HttpStatusCode.NotFound)
+                await PostAsync(connection, QBittorrentProtocol.LegacyResumeEndpoint, hashes, cancellationToken);
+            else response.EnsureSuccessStatusCode();
+        }
+        else if (item.Progress <= 0 && !item.IsComplete) return;
+        hashes[QBittorrentProtocol.TagsField] = QBittorrentProtocol.PayloadAdmissionTag;
+        await PostAsync(connection, QBittorrentProtocol.RemoveTagsEndpoint, hashes, cancellationToken);
     }
 
     private async Task<HashSet<string>> CategoryHashesAsync(DownloadClientConnection connection, string category, CancellationToken cancellationToken) =>
@@ -183,7 +221,10 @@ public sealed class QBittorrentDownloadClient(HttpClient http) : IDownloadClient
                 Int(item, QBittorrentProtocol.InfoPeers) ?? 0,
                 Text(item, QBittorrentProtocol.SavePathJson),
                 Double(item, QBittorrentProtocol.InfoRatio),
-                Long(item, QBittorrentProtocol.SeedingTime)));
+                Long(item, QBittorrentProtocol.SeedingTime)),
+            AwaitingPayloadAdmission: (Text(item, QBittorrentProtocol.TagsField) ?? string.Empty)
+                .Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries)
+                .Contains(QBittorrentProtocol.PayloadAdmissionTag, StringComparer.Ordinal));
     }
 
     public Task<string> AddTorrentFileAsync(DownloadClientConnection connection, string fileName, byte[] torrent, CancellationToken cancellationToken) =>
@@ -601,9 +642,9 @@ public sealed class QBittorrentAuthException(string message, TimeSpan retryAfter
 }
 
 /// <summary>Resolves the configured <see cref="IDownloadClient"/> for a client family.</summary>
-public sealed class DownloadClientFactory(IEnumerable<IDownloadClient> clients, IAcquisitionDownloadRemoval? removal = null) : IDownloadClientFactory {
+public sealed class DownloadClientFactory(IEnumerable<IDownloadClient> clients, IAcquisitionDownloadRemoval? removal = null, IAcquisitionDownloadAdmission? admission = null) : IDownloadClientFactory {
     private readonly Dictionary<DownloadClientKind, IDownloadClient> _clients = clients.ToDictionary(
-        client => client.Kind, client => removal is null ? client : new OwnedDownloadClient(client, removal));
+        client => client.Kind, client => removal is null ? client : new OwnedDownloadClient(client, removal, admission));
 
     public IDownloadClient Get(DownloadClientKind kind) =>
         _clients.TryGetValue(kind, out var client)

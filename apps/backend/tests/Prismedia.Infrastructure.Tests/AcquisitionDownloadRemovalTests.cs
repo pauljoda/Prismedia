@@ -9,6 +9,26 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed partial class AcquisitionDownloadRemovalTests {
     [Theory]
+    [InlineData(AcquisitionStatus.Queued, true)]
+    [InlineData(AcquisitionStatus.Downloading, true)]
+    [InlineData(AcquisitionStatus.Cancelled, false)]
+    [InlineData(AcquisitionStatus.ManualImportRequired, false)]
+    [InlineData(AcquisitionStatus.Stopping, false)]
+    public async Task PayloadAdmissionRequiresTheCurrentActiveOwner(AcquisitionStatus status, bool releases) {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var (owner, clientId, transfer) = await SeedAsync(db);
+        (await db.Acquisitions.SingleAsync(row => row.Id == owner)).Status = status;
+        await db.SaveChangesAsync();
+        var client = new Client();
+        var wrapped = new DownloadClientFactory([client], new EfAcquisitionDownloadRemoval(db), new EfAcquisitionDownloadAdmission(db)).Get(client.Kind);
+        await wrapped.ReleaseOwnedPayloadAsync(Connection(clientId), owner, Guid.NewGuid(), "same-item", default);
+        Assert.False(client.Released);
+        await wrapped.ReleaseOwnedPayloadAsync(Connection(clientId), owner, transfer, "same-item", default);
+        Assert.Equal(releases, client.Released);
+    }
+
+    [Theory]
     [InlineData(AcquisitionStatus.Importing, false)]
     [InlineData(AcquisitionStatus.Imported, false)]
     [InlineData(AcquisitionStatus.ManualImportRequired, false)]
@@ -174,6 +194,11 @@ public sealed partial class AcquisitionDownloadRemovalTests {
     }
 
     private sealed class Client : IDownloadClient {
+        public bool Released { get; private set; }
+        public Task ReleasePayloadAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) {
+            Released = true;
+            return Task.CompletedTask;
+        }
         public DownloadClientKind Kind => DownloadClientKind.Sabnzbd;
         public bool DeletesCompletedPayload { get; init; } = true;
         public IReadOnlyList<string> CompletedDirectories { get; init; } = [];

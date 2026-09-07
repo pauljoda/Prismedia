@@ -3,9 +3,15 @@ using Prismedia.Domain.Entities;
 
 namespace Prismedia.Infrastructure.Acquisition;
 
-/// <summary>Preserves adapter behavior while routing acquisition-owned deletion through the shared ownership boundary.</summary>
-internal sealed class OwnedDownloadClient(IDownloadClient inner, IAcquisitionDownloadRemoval removal) : IDownloadClient {
+/// <summary>Preserves adapter behavior while routing acquisition-owned admission and deletion through the shared ownership boundary.</summary>
+internal sealed class OwnedDownloadClient(IDownloadClient inner, IAcquisitionDownloadRemoval removal, IAcquisitionDownloadAdmission? admission = null) : IDownloadClient {
     public DownloadClientKind Kind => inner.Kind;
+    public Task ReleasePayloadAsync(DownloadClientConnection connection, string itemId, CancellationToken token) =>
+        inner.ReleasePayloadAsync(connection, itemId, token);
+    public Task ReleaseOwnedPayloadAsync(DownloadClientConnection connection, Guid acquisitionId, Guid transferId,
+        string itemId, CancellationToken token) =>
+        (admission ?? throw new InvalidOperationException("Download payload admission is not configured."))
+            .ReleaseAsync(inner, connection, acquisitionId, transferId, itemId, token);
     public bool DeletesCompletedPayload => inner.DeletesCompletedPayload;
     public Task<IReadOnlyList<string>> GetCompletedDirectoriesAsync(DownloadClientConnection connection, CancellationToken token) => inner.GetCompletedDirectoriesAsync(connection, token);
     public Task<string> AddAsync(DownloadClientConnection connection, DownloadAddRequest request, CancellationToken token) => inner.AddAsync(connection, request, token);

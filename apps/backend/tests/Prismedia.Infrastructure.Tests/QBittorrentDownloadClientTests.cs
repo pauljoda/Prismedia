@@ -17,6 +17,107 @@ public sealed class QBittorrentDownloadClientTests {
     private static readonly DownloadClientConnection Connection =
         new(Guid.NewGuid(), DownloadClientKind.QBittorrent, "http://qbit.test", null, null, "prismedia", null);
 
+    [Theory]
+    [InlineData("2.11.4", true)]
+    [InlineData("2.8.14", false)]
+    public async Task AutomaticAddsRequestMetadataAdmissionWhenSupported(string apiVersion, bool supported) {
+        var handler = new AdmissionHandler { ApiVersion = apiVersion };
+        await NewClient(handler).AddAsync(Connection,
+            new("magnet:?xt=urn:btih:abc", "abc", "prismedia", "Film", InspectBeforeDownload: true), default);
+        Assert.Equal(supported, handler.AddBody.Contains("stopCondition=MetadataReceived", StringComparison.Ordinal));
+        Assert.Equal(supported, handler.AddBody.Contains("tags=prismedia-payload-admission", StringComparison.Ordinal));
+    }
+
+    [Theory]
+    [InlineData(true, true)]
+    [InlineData(false, false)]
+    public async Task OnlyTaggedMetadataHoldsAreReleased(bool tagged, bool shouldStart) {
+        var handler = new AdmissionHandler { Tagged = tagged };
+        var client = NewClient(handler);
+        var item = await client.GetItemAsync(Connection, "abc", default);
+        Assert.Equal(tagged, item!.AwaitingPayloadAdmission);
+        await ((IDownloadClient)client).ReleasePayloadAsync(Connection, "abc", default);
+        Assert.Equal(shouldStart ? 1 : 0, handler.StartCount);
+        Assert.Equal(shouldStart ? 1 : 0, handler.RemoveTagCount);
+    }
+
+    [Theory]
+    [InlineData("metaDL", true)]
+    [InlineData("stoppedDL", false)]
+    public async Task IncompleteMetadataRetainsTheHold(string state, bool hasFiles) {
+        var handler = new AdmissionHandler { Tagged = true, State = state, HasFiles = hasFiles };
+        await NewClient(handler).ReleasePayloadAsync(Connection, "abc", default);
+        Assert.Equal(0, handler.StartCount);
+        Assert.Equal(0, handler.RemoveTagCount);
+    }
+
+    [Theory]
+    [InlineData(HttpStatusCode.InternalServerError, false)]
+    [InlineData(HttpStatusCode.NotFound, true)]
+    public async Task AdmissionKeepsItsTagUntilStartSucceeds(HttpStatusCode startStatus, bool legacySucceeds) {
+        var handler = new AdmissionHandler { Tagged = true, StartStatus = startStatus };
+        var action = () => NewClient(handler).ReleasePayloadAsync(Connection, "abc", default);
+        if (legacySucceeds) await action();
+        else await Assert.ThrowsAsync<HttpRequestException>(action);
+        Assert.Equal(legacySucceeds ? 1 : 0, handler.ResumeCount);
+        Assert.Equal(legacySucceeds ? 1 : 0, handler.RemoveTagCount);
+    }
+
+    [Fact]
+    public async Task ManualAddsDoNotRequestAnAdmissionHold() {
+        var handler = new AdmissionHandler();
+        await NewClient(handler).AddAsync(Connection, new("magnet:?xt=urn:btih:abc", "abc", "prismedia"), default);
+        Assert.DoesNotContain("stopCondition", handler.AddBody);
+        Assert.DoesNotContain("tags", handler.AddBody);
+    }
+
+    private sealed class AdmissionHandler : HttpMessageHandler {
+        public string ApiVersion { get; init; } = "2.11.4";
+        public bool Tagged { get; init; }
+        public bool Existing { get; init; }
+        public string State { get; init; } = "stoppedDL";
+        public bool HasFiles { get; init; } = true;
+        public HttpStatusCode StartStatus { get; init; } = HttpStatusCode.OK;
+        public int ResumeCount { get; private set; }
+        public string AddBody { get; private set; } = "";
+        public int StartCount { get; private set; }
+        public int RemoveTagCount { get; private set; }
+        protected override async Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) {
+            var path = request.RequestUri!.AbsolutePath;
+            var body = "";
+            if (path.EndsWith("/app/webapiVersion", StringComparison.Ordinal)) body = ApiVersion;
+            if (path.EndsWith("/torrents/info", StringComparison.Ordinal)) body = (Existing || request.RequestUri.Query.Contains("hashes=", StringComparison.Ordinal))
+                ? "[{\"hash\":\"abc\",\"state\":\"" + State + "\",\"progress\":0,\"tags\":\"" + (Tagged ? "prismedia-payload-admission" : "personal") + "\"}]" : "[]";
+            if (path.EndsWith("/torrents/files", StringComparison.Ordinal)) body = HasFiles ? "[{\"name\":\"Film.mkv\",\"size\":100,\"progress\":0}]" : "[]";
+            if (path.EndsWith("/torrents/add", StringComparison.Ordinal)) AddBody = await request.Content!.ReadAsStringAsync(cancellationToken);
+            if (path.EndsWith("/torrents/start", StringComparison.Ordinal)) {
+                StartCount++;
+                return new(StartStatus) { Content = new StringContent("") };
+            }
+            if (path.EndsWith("/torrents/resume", StringComparison.Ordinal)) ResumeCount++;
+            if (path.EndsWith("/torrents/removeTags", StringComparison.Ordinal)) RemoveTagCount++;
+            return new(HttpStatusCode.OK) { Content = new StringContent(body) };
+        }
+    }
+
+    [Fact]
+    public async Task KnownHashDoesNotReuseADifferentTorrentWithTheSameTitle() {
+        var handler = new StubHandler(repeatLastListing: true);
+        handler.CategoryListings.Enqueue("""[{"hash":"oldhash","name":"Film"}]""");
+        var result = await NewClient(handler).AddAsync(Connection,
+            new("magnet:?xt=urn:btih:newhash", "newhash", "prismedia", "Film", true), default);
+        Assert.Equal("newhash", result);
+    }
+
+    [Fact]
+    public async Task AutomaticDuplicateDoesNotChangeAnExistingTorrent() {
+        var handler = new AdmissionHandler { Existing = true };
+        var result = await NewClient(handler).AddAsync(Connection,
+            new("magnet:?xt=urn:btih:abc", "abc", "prismedia", "Film", true), default);
+        Assert.Equal("abc", result);
+        Assert.Empty(handler.AddBody);
+    }
+
     [Fact]
     public async Task NoHashAddResolvesTheNewTorrentByCategoryDiff() {
         var handler = new StubHandler();

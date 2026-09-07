@@ -20,7 +20,8 @@ public sealed record DownloadClientConnection(
 /// <param name="Url">The download/magnet URL (for Prowlarr, a self-authenticating proxy URL).</param>
 /// <param name="InfoHash">The release info hash, used to track the resulting torrent. Null when unknown.</param>
 /// <param name="Title">The selected release's title; lets a client correlate a duplicate add (accepted but no new torrent created) with the already-present torrent by name.</param>
-public sealed record DownloadAddRequest(string Url, string? InfoHash, string Category, string? Title = null);
+/// <param name="InspectBeforeDownload">Requests a durable metadata hold when supported, so automatic acquisition can inspect files before downloading payload.</param>
+public sealed record DownloadAddRequest(string Url, string? InfoHash, string Category, string? Title = null, bool InspectBeforeDownload = false);
 
 /// <summary>Current state of an item in a download client.</summary>
 /// <param name="Progress">Transfer progress in the range 0..1.</param>
@@ -52,7 +53,9 @@ public sealed record DownloadItemStatus(
     /// Live telemetry already included by a client's bulk listing. Callers use this before falling back to
     /// a per-item properties request, avoiding request fan-out for clients such as qBittorrent.
     /// </summary>
-    DownloadItemProperties? Properties = null);
+    DownloadItemProperties? Properties = null,
+    /// <summary>True only for an adapter-created hold that awaits acquisition file admission.</summary>
+    bool AwaitingPayloadAdmission = false);
 
 /// <summary>Result of probing a download client connection.</summary>
 public sealed record DownloadClientConnectionTest(bool Connected, string? Message);
@@ -97,6 +100,14 @@ public interface IDownloadClient {
 
     /// <summary>Lists the files within a tracked item.</summary>
     Task<IReadOnlyList<DownloadItemFile>> GetFilesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken);
+
+    /// <summary>Releases an adapter-created metadata hold after admission; never resumes an ordinary paused item.</summary>
+    Task ReleasePayloadAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken) =>
+        throw new NotSupportedException("This client does not support metadata-only admission.");
+
+    /// <summary>Revalidates a current acquisition's ownership before releasing its metadata hold.</summary>
+    Task ReleaseOwnedPayloadAsync(DownloadClientConnection connection, Guid acquisitionId, Guid transferId,
+        string clientItemId, CancellationToken cancellationToken) => ReleasePayloadAsync(connection, clientItemId, cancellationToken);
 
     /// <summary>Reads live transfer telemetry for a tracked item, or null when the client no longer has it.</summary>
     Task<DownloadItemProperties?> GetPropertiesAsync(DownloadClientConnection connection, string clientItemId, CancellationToken cancellationToken);
