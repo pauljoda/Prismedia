@@ -34,6 +34,8 @@ public sealed class MediaReleaseDecisionEnginesTests {
     [InlineData("Example Show S02E17 1080p", true)]
     [InlineData("Example Show S02E17 Unknown Translation 1080p", true)]
     [InlineData("Example Show S02E17E18 A New Friend 1080p", true)]
+    [InlineData("[01/12] \"Example Show S02E17 Going West 1080p.mkv\"", false)]
+    [InlineData("[01/12] \"Example Show S02E17 A Bug Adventure 1080p.mkv\"", true)]
     public void KnownEpisodeTitlesCanDisproveAnOtherwiseExactSingleEpisodeNumber(string title, bool accepted) {
         var input = new AcquisitionSearchInput(Guid.NewGuid(), "A Bug Adventure", null, EntityKind.VideoEpisode,
             Series: "Example Show", SeasonNumber: 2, EpisodeNumber: 17) {

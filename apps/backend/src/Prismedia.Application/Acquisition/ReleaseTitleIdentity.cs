@@ -49,9 +49,13 @@ public static partial class ReleaseTitleIdentity {
     /// disables the gate entirely (ad-hoc evaluations without a known work).
     /// </summary>
     public static Result Match(string releaseTitle, string? targetTitle) {
-        var result = MatchCore(releaseTitle, targetTitle);
-        var withoutGroup = result.TitleMatched ? releaseTitle : WithoutLeadingReleaseGroup(releaseTitle);
-        return withoutGroup == releaseTitle ? result : MatchCore(withoutGroup, targetTitle);
+        foreach (var variant in ReleaseSubjectTitle.Variants(releaseTitle)) {
+            var result = MatchCore(variant, targetTitle);
+            if (result.TitleMatched) return result;
+            result = MatchCore(WithoutLeadingReleaseGroup(variant), targetTitle);
+            if (result.TitleMatched) return result;
+        }
+        return new Result(false, null);
     }
 
     /// <summary>
@@ -63,7 +67,11 @@ public static partial class ReleaseTitleIdentity {
     public static string WithoutLeadingWorkTitle(string candidate, string? workTitle) {
         var target = ComparableTokens(workTitle);
         if (target.Count == 0) return candidate;
-        return Suffix(candidate) ?? Suffix(WithoutLeadingReleaseGroup(candidate)) ?? candidate;
+        foreach (var variant in ReleaseSubjectTitle.Variants(candidate)) {
+            var suffix = Suffix(variant) ?? Suffix(WithoutLeadingReleaseGroup(variant));
+            if (suffix is not null) return suffix;
+        }
+        return candidate;
 
         string? Suffix(string value) {
             var index = 0;
@@ -116,9 +124,13 @@ public static partial class ReleaseTitleIdentity {
         string releaseTitle,
         string? targetTitle,
         TvEpisodeIdentifierSet episodeIdentifiers) {
-        var result = MatchEpisodeCore(releaseTitle, targetTitle, episodeIdentifiers);
-        var withoutGroup = result.TitleMatched ? releaseTitle : WithoutLeadingReleaseGroup(releaseTitle);
-        return withoutGroup == releaseTitle ? result : MatchEpisodeCore(withoutGroup, targetTitle, episodeIdentifiers);
+        foreach (var variant in ReleaseSubjectTitle.Variants(releaseTitle)) {
+            var result = MatchEpisodeCore(variant, targetTitle, episodeIdentifiers);
+            if (result.TitleMatched) return result;
+            result = MatchEpisodeCore(WithoutLeadingReleaseGroup(variant), targetTitle, episodeIdentifiers);
+            if (result.TitleMatched) return result;
+        }
+        return new Result(false, null);
     }
 
     private static Result MatchEpisodeCore(

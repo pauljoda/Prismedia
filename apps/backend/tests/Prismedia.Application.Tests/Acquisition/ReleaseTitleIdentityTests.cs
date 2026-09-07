@@ -11,6 +11,41 @@ namespace Prismedia.Application.Tests.Acquisition;
 /// </summary>
 public sealed class ReleaseTitleIdentityTests {
     [Theory]
+    [InlineData("[0099/1221] \"Amélie (2001) 1080p.mkv\"", true, 2001)]
+    [InlineData("[01/12] \"Am\u00c3\u00a9lie.2001.1080p.mkv\" yEnc", true, 2001)]
+    [InlineData("[01/12] \"Am\u00c3\u0083\u00c2\u00a9lie.2001.1080p.mkv\"", true, 2001)]
+    [InlineData("Am\u00c3\u00a9lie.2001.1080p.mkv", true, 2001)]
+    [InlineData("[01/12] \"Amélie Returns.2001.1080p.mkv\"", false, null)]
+    [InlineData("[13/12] \"Amélie.2001.1080p.mkv\"", false, null)]
+    [InlineData("[0/12] \"Amélie.2001.1080p.mkv\"", false, null)]
+    [InlineData("[01/12] Advertisement \"Amélie.2001.1080p.mkv\"", false, null)]
+    [InlineData("[01/12] \"Amélie.2001.1080p.mkv\" Another Film", false, null)]
+    public void UsenetSubjectFallbackPreservesCompleteWorkIdentity(string release, bool matched, int? year) {
+        var result = ReleaseTitleIdentity.Match(release, "Amélie");
+        Assert.Equal(matched, result.TitleMatched);
+        Assert.Equal(year, result.TitleYear);
+    }
+
+    [Fact]
+    public void SubjectFallbackAlsoSeparatesWorkNumbersFromAbsoluteEpisodeEvidence() {
+        var release = "[01/12] \"Am\u00c3\u0083\u00c2\u00a9lie 99 - 018 - A New Friend [1080p].mkv\"";
+        Assert.True(ReleaseTitleIdentity.MatchWithEpisodeIdentifiers(release, "Amélie 99",
+            TvEpisodeIdentifiers.Create("A New Friend", 18)).TitleMatched);
+        var tail = ReleaseTitleIdentity.WithoutLeadingWorkTitle(release, "Amélie 99");
+        Assert.DoesNotContain("99", tail);
+        Assert.Contains("018", tail);
+    }
+
+    [Theory]
+    [InlineData("[01/12] \"Amélie.2020.1080p.mkv\"", ReleaseRejectionReason.WrongYear)]
+    [InlineData("[01/12] \"Amélie.2001.1080p.sample.vol03+4.par2\" yEnc", ReleaseRejectionReason.UnsupportedFormat)]
+    public void WrappedMovieSubjectsStillRejectWrongYearsAndArtifacts(string title, ReleaseRejectionReason reason) {
+        var rules = BookAcquisitionRules.Default with { Kind = EntityKind.Movie, TargetTitle = "Amélie", TargetYear = 2001 };
+        var result = new MovieReleaseDecisionEngine().Evaluate([(Release(title), null, "Indexer")], rules);
+        Assert.Contains(reason, Assert.Single(result).Rejections);
+    }
+
+    [Theory]
     [InlineData("Look.Out.2020.1080p.WEB-DL", "Look Out!", true)]
     [InlineData("Whos.There.2020.1080p.WEB-DL", "Who's There?", true)]
     [InlineData("\"Falling.Stars\".2020.1080p.WEB-DL", "Falling Stars", true)]
