@@ -80,7 +80,10 @@ public sealed partial class AcquisitionService {
         if (payload is null) {
             return Unavailable("The downloaded payload is no longer available for review.");
         }
-        var visibleFiles = ToReviewFiles(payload, canMapVideos: false);
+        var ledger = (await store.GetTransferInfoAsync(id, cancellationToken))?.ImportResult;
+        var importedSources = ledger?.Files.Where(file => file.Status == AcquisitionImportFileStatus.Imported)
+            .Select(file => file.SourceRelativePath).ToHashSet(FileSystemPathComparison.Comparer) ?? [];
+        var visibleFiles = ToReviewFiles(payload, canMapVideos: false, ledger);
 
         if (import.CheckpointProtocol != AcquisitionCheckpointProtocol.Television) {
             return Unavailable(
@@ -112,7 +115,8 @@ public sealed partial class AcquisitionService {
                 string.IsNullOrWhiteSpace(import.Series) ? import.Title : import.Series, import.AlternativeWorkTitles)
             .Select(file => file.SourceRelativePath).ToHashSet(FileSystemPathComparison.Comparer);
         var suggestions = payload.Files
-            .Where(file => TvImportPlanBuilder.IsVideoFile(file.RelativePath) && !foreignFiles.Contains(file.RelativePath))
+            .Where(file => TvImportPlanBuilder.IsVideoFile(file.RelativePath)
+                && !foreignFiles.Contains(file.RelativePath) && !importedSources.Contains(file.RelativePath))
             .Select(file => new {
                 file.RelativePath,
                 Inferred = TvImportPlanBuilder.InferEpisode(file.RelativePath, seasonNumber, episodes,
@@ -137,9 +141,9 @@ public sealed partial class AcquisitionService {
                 item => item.Target!.EntityId!.Value,
                 FileSystemPathComparison.Comparer);
 
-        var files = ToReviewFiles(payload, canMapVideos: true)
+        var files = ToReviewFiles(payload, canMapVideos: true, ledger)
             .Select(file => file with {
-                SuggestedTargetEntityId = suggestionBySource.TryGetValue(file.SourceRelativePath, out var suggestion)
+                SuggestedTargetEntityId = file.VerificationFailure is null && suggestionBySource.TryGetValue(file.SourceRelativePath, out var suggestion)
                     ? suggestion
                     : null
             })
@@ -247,7 +251,8 @@ public sealed partial class AcquisitionService {
 
     private static IReadOnlyList<AcquisitionManualImportFile> ToReviewFiles(
         DownloadPayload payload,
-        bool canMapVideos) => payload.Files
+        bool canMapVideos,
+        AcquisitionImportFileLedger? ledger) => payload.Files
         .Select(file => {
             var isDangerous = DangerousFileDetection.IsDangerousFile(file.RelativePath);
             return new AcquisitionManualImportFile(
@@ -255,7 +260,10 @@ public sealed partial class AcquisitionService {
                 Path.GetFileName(file.RelativePath),
                 file.SizeBytes,
                 canMapVideos && !isDangerous && TvImportPlanBuilder.IsVideoFile(file.RelativePath),
-                IsDangerous: isDangerous);
+                IsDangerous: isDangerous,
+                VerificationFailure: ledger?.Files.FirstOrDefault(entry =>
+                    entry.Decision == AcquisitionImportDecision.HoldVerification
+                    && FileSystemPathComparison.Equals(entry.SourceRelativePath, file.RelativePath))?.TechnicalError);
         })
         .ToArray();
 

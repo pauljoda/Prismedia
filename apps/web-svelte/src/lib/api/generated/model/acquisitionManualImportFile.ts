@@ -14,4 +14,6 @@ export interface AcquisitionManualImportFile {
   /** @nullable */
   suggestedTargetEntityId?: string | null;
   isDangerous?: boolean;
+  /** @nullable */
+  verificationFailure?: string | null;
 }

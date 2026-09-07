@@ -142,7 +142,7 @@
   const panelTitle = $derived(panelTitleFor(status));
   const panelDescription = $derived(
     status === ACQUISITION_STATUS.manualImportRequired
-      ? "Prismedia stopped before adding these files to your library."
+      ? "Review the retained files before continuing this import."
       : null,
   );
 

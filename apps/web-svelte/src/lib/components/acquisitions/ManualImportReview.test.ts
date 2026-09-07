@@ -3,6 +3,20 @@ import { describe, expect, it, vi } from "vitest";
 import ManualImportReview from "./ManualImportReview.svelte";
 
 describe("manual import presentation", () => {
+  it("shows the retained file's verification failure separately from unsafe-file warnings", async () => {
+    const failure = "The video could not be decoded completely.";
+    render(ManualImportReview, {
+      review: { available: true, targets: [], files: [{ sourceRelativePath: "Show.S01E01.mkv",
+        name: "Show.S01E01.mkv", sizeBytes: 1000, canMap: true, verificationFailure: failure }] },
+      assignments: {}, onAssignmentChange: vi.fn(), onImport: vi.fn(), onReject: vi.fn(),
+    });
+    await fireEvent.click(screen.getByRole("button", { name: /Downloaded files/ }));
+    expect(screen.getByText(failure)).toBeVisible();
+    expect(screen.getByText("Verification failed; retrying will verify this file again.")).toBeVisible();
+    expect(screen.queryByText("Unsafe file blocked")).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Import mapped episodes" })).toBeDisabled();
+  });
+
   it("explains an unsupported mapping once without calling a movie an episode", () => {
     const message = "This download cannot be mapped to individual files.";
     render(ManualImportReview, {

@@ -34,7 +34,8 @@
       .map((file) => ({
         value: file.sourceRelativePath,
         label: file.sourceRelativePath,
-        annotation: mappedSourcePaths.has(file.sourceRelativePath) ? "Mapped" : undefined,
+        annotation: file.verificationFailure ? "Verification failed"
+          : mappedSourcePaths.has(file.sourceRelativePath) ? "Mapped" : undefined,
       })),
   ]);
 
@@ -45,6 +46,7 @@
 
   function fileKindLabel(file: AcquisitionManualImportReview["files"][number]): string {
     if (file.isDangerous) return "Blocked, potentially dangerous";
+    if (file.verificationFailure) return "Verification failed; retrying will verify this file again.";
     return file.canMap ? "Available for mapping" : "Other downloaded file";
   }
 </script>
@@ -162,6 +164,9 @@
                 <span class={file.isDangerous
                   ? "mt-0.5 block text-[0.68rem] text-warning-text"
                   : "mt-0.5 block text-[0.68rem] text-text-muted"}>{fileKindLabel(file)}</span>
+                {#if file.verificationFailure}
+                  <span class="mt-1 block text-xs leading-relaxed text-warning-text [overflow-wrap:anywhere]">{file.verificationFailure}</span>
+                {/if}
               </span>
             </span>
             <span class="shrink-0 font-mono text-[0.68rem] text-text-muted">{formatBytes(Number(file.sizeBytes))}</span>

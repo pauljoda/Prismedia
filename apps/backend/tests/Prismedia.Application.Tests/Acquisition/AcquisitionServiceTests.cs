@@ -1960,6 +1960,31 @@ public sealed class AcquisitionServiceTests {
         Assert.Empty(harness.Queue.Requests);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ManualReviewDoesNotPrefillFailedOrAlreadyImportedFiles(bool imported) {
+        const string source = "Show.S01E01.mkv";
+        var episode = Guid.NewGuid();
+        var ledger = new AcquisitionImportFileLedger(AcquisitionImportPhase.Imported, [
+            new("failed-file", source, 1000, source, null, AcquisitionImportFileRole.Media,
+                AcquisitionImportContentKind.Video, imported ? AcquisitionImportFileStatus.Imported : AcquisitionImportFileStatus.Skipped,
+                imported ? AcquisitionImportDecision.PlaceNew : AcquisitionImportDecision.HoldVerification,
+                imported ? null : "The video could not be decoded completely.")
+        ]);
+        var harness = Harness(TransferInfo(RecordedClientId, AcquisitionStatus.ManualImportRequired) with { ImportResult = ledger },
+            manualImportPayloads: new FixedDownloadPayloadReader(new("/downloads/show", [new(source, 1000)])),
+            manualImportTargets: new FixedImportTargetIndex([new(1, "First Story", episode)]));
+        harness.Store.ImportContext = new(AcquisitionId, "Season 1", null, "Show", null, null, null, null,
+            "/downloads/show", ClientItemId, RecordedClientId, EntityKind.VideoSeason, EntityId: WantedEntityId, SeasonNumber: 1);
+
+        var review = await harness.Service.GetManualImportReviewAsync(AcquisitionId, default);
+
+        Assert.Null(Assert.Single(review.Files).SuggestedTargetEntityId);
+        Assert.Equal(imported ? null : "The video could not be decoded completely.", review.Files[0].VerificationFailure);
+        Assert.True(review.Files[0].CanMap); // A repaired payload may be explicitly retried, with full verification again.
+    }
+
     private static AcquisitionTransferInfo TransferInfo(
         Guid? downloadClientConfigId,
         AcquisitionStatus status = AcquisitionStatus.Downloading) =>

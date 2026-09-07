@@ -187,13 +187,15 @@ public sealed record AcquisitionFilesView(
 /// <param name="CanMap">Whether this payload item is supported media that can be assigned to a target.</param>
 /// <param name="SuggestedTargetEntityId">Prismedia's best unambiguous target inference, or null when it could not decide.</param>
 /// <param name="IsDangerous">Whether the file is explicitly blocked because its extension may execute code.</param>
+/// <param name="VerificationFailure">Last recorded full-verification failure; an explicit retry must verify the file again.</param>
 public sealed record AcquisitionManualImportFile(
     string SourceRelativePath,
     string Name,
     long SizeBytes,
     bool CanMap,
     Guid? SuggestedTargetEntityId = null,
-    bool IsDangerous = false);
+    bool IsDangerous = false,
+    string? VerificationFailure = null);
 
 /// <summary>One expected Entity that the current held acquisition permits a downloaded file to satisfy.</summary>
 /// <param name="EntityId">Stable target Entity identity used by the submission contract.</param>
