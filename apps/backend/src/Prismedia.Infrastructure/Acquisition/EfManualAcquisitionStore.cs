@@ -19,6 +19,9 @@ public sealed class EfManualAcquisitionStore(
     public async Task<ManualReplacementSearchTarget?> GetSearchTargetAsync(
         Guid entityId,
         CancellationToken cancellationToken) {
+        // A single-episode replacement cannot retire bytes still serving another episode. Shared
+        // files need the TV coverage-aware merge path; reject before searching or creating a ticket.
+        if (await OwnedVideoEvidence.IsSharedAsync(db, entityId, cancellationToken)) return null;
         var imported = await db.Acquisitions.AsNoTracking()
             .Where(row => row.EntityId == entityId
                 && row.Status == AcquisitionStatus.Imported
@@ -57,17 +60,26 @@ public sealed class EfManualAcquisitionStore(
             entity,
             kind,
             cancellationToken);
+        var work = MediaQualityLadder.IsVideoKind(kind)
+            ? await new EfAcquisitionWorkContext(db).ReadIdentityAsync(entityId, cancellationToken)
+            : (Year: (int?)null, Titles: (IReadOnlyList<string>)Array.Empty<string>());
         var input = new AcquisitionSearchInput(
             Guid.Empty,
             entity.Title,
             author,
             kind,
             entityId,
+            Year: work.Year,
+            ProfileId: kind == EntityKind.VideoEpisode ? await ResolveEpisodeProfileAsync(entityId, cancellationToken) : null,
             Series: series,
             SeasonNumber: seasonNumber,
             EpisodeNumber: episodeNumber,
             BookRendition: kind == EntityKind.Book ? BookRendition.Ebook : null,
-            AbsoluteEpisodeNumber: absoluteEpisodeNumber);
+            AbsoluteEpisodeNumber: absoluteEpisodeNumber) {
+            AlternativeWorkTitles = work.Titles,
+            EpisodeCatalog = kind == EntityKind.VideoEpisode
+                ? await new EfImportTargetIndex(db).GetSeriesEpisodeCatalogAsync(entityId, cancellationToken) : []
+        };
         var hasEntitySubtitles = MediaQualityLadder.IsVideoKind(kind)
             && await db.EntitySubtitles.AsNoTracking().AnyAsync(row => row.EntityId == entityId, cancellationToken);
         var owned = MediaQualityLadder.IsUpgradeCapableKind(kind) || MediaQualityLadder.IsAudioKind(kind)
@@ -124,6 +136,7 @@ public sealed class EfManualAcquisitionStore(
                 SeasonNumber = target.Input.SeasonNumber,
                 EpisodeNumber = target.Input.EpisodeNumber,
                 Year = target.Input.Year,
+                ProfileId = target.Input.ProfileId,
                 FinalSourcePath = sourcePath,
                 OwnedSourceTier = target.OwnedQuality.BookRank?.Source ?? BookSourceTier.Unknown,
                 OwnedFormatTier = target.OwnedQuality.BookRank?.Format ?? BookFormatTier.Unknown,
@@ -322,6 +335,21 @@ public sealed class EfManualAcquisitionStore(
         }
     }
 
+    // Pausing monitoring does not discard its preferences. Stop at the nearest monitor even when
+    // its profile is null: that is an explicit default, not a request to inherit an ancestor's profile.
+    private async Task<Guid?> ResolveEpisodeProfileAsync(Guid entityId, CancellationToken cancellationToken) {
+        var visited = new HashSet<Guid>();
+        Guid? current = entityId;
+        while (current is { } id && visited.Count < 32 && visited.Add(id)) {
+            var monitor = await db.Monitors.AsNoTracking().Where(row => row.EntityId == id)
+                .Select(row => new { row.ProfileId }).FirstOrDefaultAsync(cancellationToken);
+            if (monitor is not null) return monitor.ProfileId;
+            current = await db.Entities.AsNoTracking().Where(row => row.Id == id)
+                .Select(row => row.ParentEntityId).FirstOrDefaultAsync(cancellationToken);
+        }
+        return null;
+    }
+
     private async Task<(string? Author, string? Series, int? SeasonNumber, int? EpisodeNumber, int? AbsoluteEpisodeNumber)> ResolveManualContextAsync(
         EntityRow entity,
         EntityKind kind,
@@ -338,16 +366,13 @@ public sealed class EfManualAcquisitionStore(
             return (null, null, null, null, null);
         }
 
-        var season = await db.Entities.AsNoTracking().FirstOrDefaultAsync(row => row.Id == seasonId, cancellationToken);
-        var series = season?.ParentEntityId is { } seriesId
-            ? await db.Entities.AsNoTracking().FirstOrDefaultAsync(row => row.Id == seriesId, cancellationToken)
-            : null;
-        var absoluteEpisodeNumber = await db.EntityPositions.AsNoTracking()
-            .Where(position => position.EntityId == entity.Id
-                && position.Code == EntityPositionCodes.AbsoluteEpisode)
-            .Select(position => (int?)position.Value)
-            .SingleOrDefaultAsync(cancellationToken);
-        return (null, series?.Title, season?.SortOrder, entity.SortOrder, absoluteEpisodeNumber);
+        var parent = await db.Entities.AsNoTracking().FirstOrDefaultAsync(row => row.Id == seasonId, cancellationToken);
+        var seriesId = await new EfImportTargetIndex(db).GetTvSeriesEntityIdAsync(entity.Id, cancellationToken);
+        var series = await db.Entities.AsNoTracking().FirstOrDefaultAsync(row => row.Id == seriesId, cancellationToken);
+        var positions = await new EfAcquisitionWorkContext(db).ReadPositionsAsync(entity.Id, kind, cancellationToken);
+        return (null, series?.Title,
+            positions.Season ?? (parent?.KindCode == EntityKind.VideoSeason.ToCode() ? parent.SortOrder : null),
+            positions.Episode ?? entity.SortOrder, positions.AbsoluteEpisode);
     }
 
     private static UpgradeOwnedQuality OwnedQuality(AcquisitionRow parent, bool hasSubtitles) =>

@@ -48,12 +48,12 @@ describe("EntityAcquisitionCard", () => {
     expect(screen.queryByRole("button", { name: "Notify imported" })).not.toBeInTheDocument();
   });
 
-  it("keeps reviewed replacement search in a quiet secondary-actions disclosure", async () => {
+  it.each([ENTITY_KIND.audioLibrary, ENTITY_KIND.videoEpisode])("keeps reviewed replacement search in a quiet secondary-actions disclosure for %s", async (entityKind) => {
     render(Harness, {
       initialAcquisition: acquisition("album-acquisition"),
       refresh: vi.fn(async () => {}),
       showFileManagement: true,
-      entityKind: ENTITY_KIND.audioLibrary,
+      entityKind,
     });
 
     expect(screen.queryByRole("button", { name: "Replace" })).not.toBeInTheDocument();

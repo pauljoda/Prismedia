@@ -70,7 +70,7 @@ public sealed class VideoEpisodeEntityKindDefinition() : PlayableVideoEntityKind
         AutoIdentifySelectorKind.Video,
         pluginFallbackKind: EntityKind.Video,
         allowsDirectReconcileChildTarget: true),
-    manualAcquisition: null,
+    manualAcquisition: EntityManualAcquisitionPolicy.UploadAndReplacement,
     libraryVisibility: EntityLibraryVisibilityPolicy.DirectRoot,
     additionalDefaultCapabilities: static () => [new CapabilityPosition()]) {
     /// <inheritdoc />

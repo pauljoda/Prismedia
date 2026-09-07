@@ -190,10 +190,10 @@ public sealed class EntityKindMetadataTests {
             .ToArray();
 
         Assert.Equal(
-            [EntityKind.AudioLibrary, EntityKind.Book, EntityKind.ComicInstallment, EntityKind.Movie, EntityKind.Video],
+            [EntityKind.AudioLibrary, EntityKind.Book, EntityKind.ComicInstallment, EntityKind.Movie, EntityKind.Video, EntityKind.VideoEpisode],
             replaceableKinds);
         Assert.Equal(
-            [EntityKind.AudioLibrary, EntityKind.Book, EntityKind.ComicInstallment, EntityKind.Movie, EntityKind.Video, EntityKind.VideoSeason],
+            [EntityKind.AudioLibrary, EntityKind.Book, EntityKind.ComicInstallment, EntityKind.Movie, EntityKind.Video, EntityKind.VideoEpisode, EntityKind.VideoSeason],
             uploadableKinds);
         Assert.All(
             EntityKindRegistry.All.Where(definition => definition.ManualAcquisition.SupportsReplacement),
