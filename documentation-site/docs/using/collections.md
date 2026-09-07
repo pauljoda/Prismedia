@@ -8,7 +8,7 @@ description: Manual, dynamic, and hybrid groupings across your library.
 
 Collections are simple groupings for browsing and curation. They can contain movies, series, videos, galleries, images, books, and audio tracks. They are an organizational view over your library — **not** the app-wide playback queue.
 
-![Collections](/img/screenshots/collections.png)
+<DocScreenshot src="/img/screenshots/collections.webp" alt="A collection detail page showing a curated set of music." width={2430} height={1920} />
 
 ## Modes
 

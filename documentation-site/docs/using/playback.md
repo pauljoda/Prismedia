@@ -13,7 +13,7 @@ For step-by-step tasks, see [read and listen to a book](./read-and-listen.md),
 
 ## Video playback
 
-![Video detail](/img/screenshots/video-detail.png)
+<DocScreenshot src="/img/screenshots/video-detail.webp" alt="A video paused in the web player with seek, subtitle, and playback controls." width={2430} height={1920} />
 
 Videos **direct-play** when the browser (or client) can decode the source. When it can't, Prismedia stream-copies (remuxes) the original video into a browser-compatible container where possible — so HEVC and Dolby Vision Profile 8 play with near-zero server load — and only falls back to a full transcode (on-demand HLS via ffmpeg) when the browser genuinely can't decode the stream.
 
@@ -44,7 +44,7 @@ the transcript immediately. OpenSubtitles currently delivers SRT to third-party 
 styling remains first-class for embedded, adjacent, uploaded, and future provider sources that
 actually supply those formats.
 
-![Subtitle view options](/img/screenshots/settings-subtitles.png)
+<DocScreenshot src="/img/screenshots/settings-subtitles.webp" alt="Subtitle style, size, position, and transparency controls beside a caption preview." width={2260} height={868} />
 
 Subtitle view options control auto-enable behavior, weighted language and label preferences, caption style, text size, vertical position, and transparency. Positive weights promote matching tracks and negative weights demote them; video pages also offer per-browser appearance overrides from the player.
 
@@ -52,7 +52,7 @@ Subtitle view options control auto-enable behavior, weighted language and label 
 
 The transcript tab is also the subtitle workspace: upload a track, extract one from the media file, or search configured providers. When a track is selected it shows timed cues; clicking a cue seeks the player. On desktop the transcript can dock beside the video so playback and reading stay visible together.
 
-![Transcript](/img/screenshots/transcript.png)
+<DocScreenshot src="/img/screenshots/transcript.webp" alt="The transcript workspace with timed cues that seek to the corresponding point in the video." width={2214} height={932} />
 
 ## Image lightbox
 
@@ -76,7 +76,7 @@ When a Book also has an audiobook rendition, its detail page shows **Listen** or
 
 Audio plays through a single **persistent player bar** that keeps playing as you browse.
 
-![Audio playback](/img/screenshots/audio.png)
+<DocScreenshot src="/img/screenshots/audio.webp" alt="The web music player and Up Next queue over an album detail page." width={2430} height={1920} />
 
 - A real **queue** with an "Up Next" list you can open and jump around.
 - **Shuffle** builds a fixed shuffled order you can scroll through (not a new random track each time). Albums and artists have Play All / Shuffle.

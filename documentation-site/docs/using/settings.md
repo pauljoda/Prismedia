@@ -8,7 +8,7 @@ description: Watched libraries, visibility, playback, subtitles, generation, sto
 
 Settings is where Prismedia describes and edits app-wide behavior. Most controls are descriptor-driven so the UI, defaults, and persistence stay aligned.
 
-![Settings](/img/screenshots/settings.png)
+<DocScreenshot src="/img/screenshots/settings.webp" alt="Settings sections for libraries, acquisition, playback, and maintenance." width={2430} height={1920} />
 
 ## Watched libraries
 
@@ -45,7 +45,7 @@ Playback settings cover direct/stream-copy/HLS behavior, adaptive transcoding (d
 
 ## Subtitles
 
-![Subtitle view options](/img/screenshots/settings-subtitles.png)
+<DocScreenshot src="/img/screenshots/settings-subtitles.webp" alt="Subtitle style, size, position, and transparency controls beside a caption preview." width={2260} height={868} />
 
 Subtitle settings control:
 

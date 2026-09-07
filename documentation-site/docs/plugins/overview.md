@@ -117,7 +117,7 @@ The first-party set includes **TMDB**, **AniList**, **YouTube**,
 not in the main application repo. They are the best reference implementations
 for the current protocol.
 
-You install them from **Plugins → Prismedia Index** in the web app. One click downloads, verifies, and registers them.
+You install them from **Plugins → Prismedia Community** in the web app. One click downloads, verifies, and registers them.
 
 ## Where plugin code lives
 

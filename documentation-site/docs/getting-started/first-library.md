@@ -16,9 +16,11 @@ On the computer running Docker, open [http://localhost:8008](http://localhost:80
 
 ## 2. Add a watched root
 
-Go to **Settings → Watched Libraries** and add a root such as `/media/movies` or `/media/books`. For a mixed collection, start with one root per media folder rather than enabling every scan type on `/media`.
+Go to **Settings → Watched Libraries** and choose **Browse Folder**. Navigate to a mounted folder such as `/media/movies` or `/media/books`, give it an optional label, choose the scan types, then select **Add Library**. For a mixed collection, start with one root per media folder rather than enabling every scan type on `/media`.
 
-![Settings](/img/screenshots/settings.png)
+If the folder browser starts elsewhere, choose **Up** until you reach `/`, then open `media` (or the container destination you used in your Docker mount). Check the selected path above the folder list before adding the library.
+
+<DocScreenshot src="/img/screenshots/watched-root-setup.webp" alt="A Movies folder selected in the library browser, with Videos and Recursive enabled." width={2260} height={1692} />
 
 :::tip[Use the path inside the container]
 The root path is the path **inside the container**, not on the host. If you mounted `/srv/movies:/media/movies`, the root path is `/media/movies`.
@@ -52,7 +54,7 @@ A newly added root starts scanning immediately for exactly the media kinds it ha
 - **Settings → Watched Libraries**, for root-level management.
 - **Files**, for a specific root, folder, or file context.
 
-![Jobs](/img/screenshots/jobs.png)
+<DocScreenshot src="/img/screenshots/jobs.webp" alt="Job Control with worker status, active execution lanes, and workflows waiting for review." width={2430} height={1920} />
 
 The worker enqueues follow-up jobs for probing, thumbnails, waveforms, sprites, subtitles, HLS assets, and metadata imports as needed. Scans are **incremental** — an unchanged root finishes almost instantly on the next pass, while a changed root does the full work.
 
@@ -69,7 +71,7 @@ Use the browse pages for catalog views:
 
 Use **Files** to inspect the source folder layout, linked entities, exclusions, and file operations.
 
-![Files](/img/screenshots/files.png)
+<DocScreenshot src="/img/screenshots/files.webp" alt="Files showing a filtered movie folder, its linked item, and folder properties." width={2430} height={1020} caption="Filter loaded folders, select an item, and inspect its linked media and properties." />
 
 ## 5. Open an item
 

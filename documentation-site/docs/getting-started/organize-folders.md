@@ -6,7 +6,7 @@ description: Choose watched roots, understand Docker paths, and organize movies,
 
 # Organize Your Media Folders
 
-Start with one folder for each media family. Add those folders as **watched roots** in **Settings → Watched Libraries**, then enable the matching scan type. You only need the folders for media you actually have.
+Start with one folder for each media family. In **Settings → Watched Libraries**, choose **Browse Folder**, navigate to each mounted folder, enable its matching scan type, and choose **Add Library**. You only need the folders for media you actually have.
 
 A watched root tells Prismedia **where to start looking**. The folders and filenames below that point help it decide whether a file is a movie, episode, album track, book, or comic installment. Scanning catalogs existing files; acquisition imports new downloads using the destination and naming rules you configure.
 
@@ -83,6 +83,8 @@ Enable **Books** for EPUBs, PDFs, audiobooks, and comic archives. **Audio** is t
 | Gallery | `Example Gallery/001.jpg` and `002.jpg` | A gallery containing the images. |
 
 For exact rules and additional formats, see [video](../library/videos.md), [music](../library/audio.md), [books and comics](../library/books.md), and [images](../library/images-galleries.md).
+
+<DocScreenshot src="/img/screenshots/watched-root-setup.webp" alt="A Movies folder selected in the library browser, with Videos and Recursive enabled." width={2260} height={1692} caption="Select the folder inside the container and enable the scan types that belong in it. This example is ready to add as a Movies root." />
 
 ## Why the watched root matters
 

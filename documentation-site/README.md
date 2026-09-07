@@ -127,3 +127,16 @@ navigation, mobile results, base-path links, and the generated index.
 The pinned search package has a small pnpm patch to keep its full-results link
 consistent with `trailingSlash: false`. Keep the browser assertion for the
 `/search?q=…` destination when upgrading the package.
+
+## Screenshots in guides
+
+Use the shared `DocScreenshot` MDX component for product captures. Supply descriptive
+alt text and the actual image dimensions; add a caption when it explains a step.
+The component reserves the image's layout space, loads it lazily, and links to the
+original at full resolution. `DocScreenshotGrid` groups related phone captures.
+
+Capture the current product interface, use SFW examples, and keep private account,
+host, file, and household details out of the frame. Prefer a focused control or
+panel when an entire app screen would make the relevant text too small. Export
+WebP files to `static/img/screenshots/` and remove superseded assets. Reuse current
+native captures from `static/img/showcase/` when they illustrate the same controls.

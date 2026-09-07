@@ -186,7 +186,7 @@ const config: Config = {
           title: 'Docs',
           items: [
             {
-              label: 'About Prismedia',
+              label: 'Start Here',
               to: '/docs/intro',
             },
             {

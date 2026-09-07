@@ -22,6 +22,8 @@ Open an EPUB, reveal the reader toolbar, and open **Reader Settings**. Select a 
 
 Changing individual settings lets you fine-tune the result. **Restore Reader Defaults** resets the reader preferences. Profiles are useful starting points; choose and adjust the one that is most comfortable for you.
 
+<DocScreenshot src="/img/showcase/ios-reader-settings-live.webp" alt="Native Reader Settings showing the reading profile, page theme, and typography controls." width={1206} height={2622} />
+
 ## Adjust the page
 
 **Appearance** changes the document theme. **Typography** and **Spacing** control the font, size, weight, line height, and spacing between letters, words, and paragraphs. The surrounding app controls keep Prismedia's dark appearance even when you choose a light document theme.

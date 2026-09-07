@@ -14,7 +14,7 @@ You need an administrator account or permission to request content. Administrato
 access to household members; members can request into their accessible libraries. Acquisition settings,
 plugins, and operational request activity remain administrator workspaces.
 
-![Request search](/img/screenshots/requests.png)
+<DocScreenshot src="/img/screenshots/requests.webp" alt="Movie search results in Request, with provider-specific title and year fields." width={2430} height={1920} />
 
 ## Before you search
 
@@ -67,6 +67,8 @@ Before committing, choose a compatible library root and acquisition profile. Con
 same medium-neutral policies everywhere: **All current and future**, **Missing now**, **Future only**, or
 **Manual selection**. The shared child picker applies them to seasons, books, albums, and future Entity
 hierarchies; the selected policy also controls whether newly discovered direct children begin acquisition.
+
+<DocScreenshot src="/img/screenshots/request-detail.webp" alt="Request review with a quality profile, destination library, and proposed movie metadata." width={2430} height={1920} caption="Review the match and choose a quality profile and import destination before choosing Request." />
 
 ### NSFW visibility
 

@@ -555,6 +555,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Docs
 
+- Replace legacy documentation screenshots with current SFW product captures, add folder setup, request review, chapter alignment, native reader, and player examples, and make every screenshot expandable. Update guide labels and job-state explanations to match the current interface.
 - Add local documentation search with keyboard navigation and mobile results, keeping search queries in the browser.
 - Simplify the getting-started path, explain server and client requirements, expand troubleshooting, and correct backup and writable-media guidance. Refresh the README and add focused support and issue-report paths.
 - Public-site publishing now checks canonical URLs, unique page descriptions, icons, manifest destinations, and browser behavior before deployment.

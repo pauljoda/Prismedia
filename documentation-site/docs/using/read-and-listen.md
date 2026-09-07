@@ -37,8 +37,10 @@ Reading and listening have their own saved positions. Combined continuation uses
 
 Open the book's **Chapter Mapping** tab when both renditions are present. Prismedia stores automatic matches from the scan and distinguishes them from explicit choices you save.
 
+<DocScreenshot src="/img/screenshots/chapter-mapping.webp" alt="Readable chapters paired with audiobook chapters in the Chapter Mapping tab." width={2214} height={1300} caption="Choose where the first audio chapter begins, then check individual chapter pairs." />
+
 1. Compare the readable chapter titles with the audiobook parts.
-2. If the audiobook starts after a foreword or other front matter, select the readable chapter where its first part begins to fill the map in order.
+2. If the audiobook starts after a foreword or other front matter, select the readable chapter where its first part begins, then choose **Mark first chapter** to fill the map in order.
 3. Correct individual rows when the editions split chapters differently.
 4. Save the map. Web and native clients use that saved alignment.
 
@@ -46,7 +48,9 @@ M4B files with embedded chapter markers can expose several audio chapters withou
 
 ## Continue in the native app
 
-Open the book and find **Read & Listen**. Use **Continue Reading** or **Continue Listening** for one format, or **Continue Combined** to use the reader with audiobook playback. The combined action estimates the audio position within the mapped chapter and starts slightly before that point, giving you time to find the passage.
+Open the book and find **Read & Listen**. Tap the **book icon** to continue reading or the **headphones icon** to continue listening. Choose **Continue Combined** to use the reader with audiobook playback. The combined action estimates the audio position within the mapped chapter and starts slightly before that point, giving you time to find the passage.
+
+<DocScreenshot src="/img/showcase/ios-book-live.webp" alt="Read and Listen progress in the native app, with separate reading, listening, and Continue Combined actions." width={1206} height={2622} />
 
 The reader's audiobook controls let you manage playback while the document remains open. For the reading appearance and focus controls, see [Native Reader Settings](./reader-settings.md).
 

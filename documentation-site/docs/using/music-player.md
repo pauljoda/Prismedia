@@ -17,7 +17,9 @@ If the album is still **Wanted**, it needs an imported playable file first. For 
 
 ## In the web app
 
-The persistent player stays available while you browse. Open **Up Next** to see the queue and choose another track. Shuffle creates a fixed order, so the list you see is the order that will play.
+The persistent player stays available while you browse. Open **Queue** to see **Up Next** and choose another track. Shuffle creates a fixed order, so the list you see is the order that will play.
+
+<DocScreenshot src="/img/screenshots/audio.webp" alt="The web music player and Up Next queue over an album detail page." width={2430} height={1920} caption="The web queue stays beside the current player while the album remains open." />
 
 Use the timeline or waveform to seek, and the transport controls to pause or change tracks. You can minimize the player to a compact bubble, move it to a screen edge, and tap its artwork to restore it.
 
@@ -26,6 +28,8 @@ The browser can expose track information and playback controls to the operating 
 ## In the native app
 
 Tap the mini player to open **Now Playing**. The full player includes artwork, a seek control, playback transport, shuffle, and repeat. Open **Show Queue** to inspect **Up Next**, then choose **Show Now Playing** to return to the artwork and player.
+
+<DocScreenshot src="/img/showcase/ios-music-live.webp" alt="The native music player with artwork, transport, output, shuffle, repeat, and queue controls." width={1206} height={2622} caption="Now Playing on iPhone. Open the queue from the lower-right control." />
 
 On iPhone and iPad, **Choose Audio Output** opens the system output picker. Available outputs depend on the device and connected audio routes. System Now Playing controls can also show the current title and artwork outside the app.
 

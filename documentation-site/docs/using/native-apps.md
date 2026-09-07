@@ -22,6 +22,8 @@ A LAN address only works while the device can reach your home network. Use your 
 
 The server must be running and reachable for server-backed browsing and streaming. Installing TestFlight does not change your network setup.
 
+<DocScreenshot src="/img/showcase/tvos-movies-live.webp" alt="The native Apple TV app browsing a movie library after connecting to a server." width={3840} height={2160} caption="A connected Apple TV app browsing the server&#x27;s Movies library." />
+
 ## What to try first
 
 - [Read and listen to the same book](./read-and-listen.md), with chapter mapping and combined continuation.

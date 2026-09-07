@@ -115,7 +115,7 @@ See [Playback & Reading](../using/playback.md) for direct playback, remuxing, su
 
 ## Trickplay (timeline hover) doesn't show thumbnails
 
-Check the video's preview work in **Jobs**. If generation failed, resolve its error first. **Settings → Generated Storage** provides diagnostics and rebuild actions for generated assets.
+Check the video's preview work in **Jobs**. If generation failed, resolve its error first. **Settings → Diagnostics** provides diagnostics and rebuild actions for generated assets.
 
 ## Subtitles aren't auto-loading
 
