@@ -368,10 +368,14 @@ public sealed class TvReleaseDecisionEngine(EntityKind kind) : IAcquisitionDecis
     public IReadOnlyList<ScoredRelease> Evaluate(
         IReadOnlyList<(IndexerRelease Release, Guid? IndexerConfigId, string IndexerName)> releases,
         BookAcquisitionRules rules,
-        IReadOnlySet<string>? blocklistedIdentities = null) =>
-        MediaReleaseEvaluation.Evaluate(
-            releases, rules, blocklistedIdentities, _specifications,
+        IReadOnlySet<string>? blocklistedIdentities = null) {
+        var specifications = rules.EpisodeNumber is not null && rules.TargetEpisodeCatalog.Count > 0
+            ? _specifications.Append(new TvCatalogEpisodeSpecification(rules.TargetEpisodeCatalog)).ToArray()
+            : _specifications;
+        return MediaReleaseEvaluation.Evaluate(
+            releases, rules, blocklistedIdentities, specifications,
             static (release, rules) => MediaReleaseEvaluation.VideoReleaseScore(release, rules) + UnitPrecisionBoost(release, rules));
+    }
 
     /// <summary>The unit-precision tier of one candidate for the sought TV unit; 0 outside TV searches.</summary>
     internal static double UnitPrecisionBoost(IndexerRelease release, BookAcquisitionRules rules) {

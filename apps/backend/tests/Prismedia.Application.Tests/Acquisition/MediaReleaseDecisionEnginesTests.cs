@@ -10,6 +10,47 @@ namespace Prismedia.Application.Tests.Acquisition;
 /// </summary>
 public sealed class MediaReleaseDecisionEnginesTests {
     [Theory]
+    [InlineData("Going West", "Going West", true)]
+    [InlineData("Going West Again", "Going West", true)]
+    [InlineData("A Bug Adventure", "Going West", false)]
+    [InlineData("A Bug Adventure", "Pilot", true)]
+    public void ConflictingTitleEvidenceRequiresADistinctUnambiguousCatalogIdentity(string targetTitle, string otherTitle, bool identified) {
+        var rules = BookAcquisitionRules.Default with { Kind = EntityKind.VideoEpisode, TargetTitle = "Example Show",
+            SeasonNumber = 2, EpisodeNumber = 17, TargetEpisodeTitle = targetTitle,
+            TargetEpisodeCatalog = [new(Guid.NewGuid(), 2, [new(17, targetTitle, Guid.NewGuid())]),
+                new(Guid.NewGuid(), 1, [new(70, otherTitle, identified ? Guid.NewGuid() : null)])] };
+        var title = targetTitle.StartsWith(otherTitle, StringComparison.Ordinal) ? targetTitle : otherTitle;
+
+        var result = new TvReleaseDecisionEngine(EntityKind.VideoEpisode).Evaluate([
+            (Release($"Example Show S02E17 {title} 1080p", seeders: 10), null, "Indexer")], rules);
+
+        Assert.True(Assert.Single(result).Accepted);
+    }
+
+    [Theory]
+    [InlineData("Example Show S02E17 Going West 1080p", false)]
+    [InlineData("Example Show S02E17 A New Friend 1080p", false)]
+    [InlineData("Example Show S02E17 A Bug Adventure 1080p", true)]
+    [InlineData("Example Show S02E17 1080p", true)]
+    [InlineData("Example Show S02E17 Unknown Translation 1080p", true)]
+    [InlineData("Example Show S02E17E18 A New Friend 1080p", true)]
+    public void KnownEpisodeTitlesCanDisproveAnOtherwiseExactSingleEpisodeNumber(string title, bool accepted) {
+        var input = new AcquisitionSearchInput(Guid.NewGuid(), "A Bug Adventure", null, EntityKind.VideoEpisode,
+            Series: "Example Show", SeasonNumber: 2, EpisodeNumber: 17) {
+            EpisodeCatalog = [
+                new(Guid.NewGuid(), 1, [new(70, "Going West", Guid.NewGuid())]),
+                new(Guid.NewGuid(), 2, [new(17, "A Bug Adventure", Guid.NewGuid()), new(18, "A New Friend", Guid.NewGuid())])
+            ] };
+        var rules = AcquisitionRuleContext.Apply(BookAcquisitionRules.Default with { Kind = input.Kind }, input,
+            null, ProperDownloadPolicy.PreferAndUpgrade, [DownloadProtocol.Torrent]);
+
+        var result = new TvReleaseDecisionEngine(EntityKind.VideoEpisode).Evaluate([(Release(title, seeders: 10), null, "Indexer")], rules);
+
+        Assert.Equal(accepted, Assert.Single(result).Accepted);
+        if (!accepted) Assert.Contains(ReleaseRejectionReason.WrongTvUnit, result[0].Rejections);
+    }
+
+    [Theory]
     [InlineData("[Group] Example Show (1997) EP018 Story [ENG DUB]")]
     [InlineData("Example Show Episode 18 1080p WEB-DL")]
     [InlineData("Example Show EP.018 1080p")]

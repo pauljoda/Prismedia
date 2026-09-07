@@ -153,8 +153,8 @@ public sealed record BookAcquisitionRules(
 
     /// <summary>
     /// The provider-authored title of the sought TV episode, set independently from
-    /// <see cref="TargetTitle"/> (which remains the series identity). Exact SxxEyy/1xYY releases stay
-    /// authoritative; this title admits a marker-less release only after its name identifies the episode.
+    /// <see cref="TargetTitle"/> (which remains the series identity). This title admits marker-less
+    /// releases; known catalog title conflicts independently check claims made by exact numbering.
     /// </summary>
     public string? TargetEpisodeTitle { get; init; }
 
@@ -163,6 +163,9 @@ public sealed record BookAcquisitionRules(
     /// may use this instead of season-relative numbering, especially for archive and anime posts.
     /// </summary>
     public int? TargetAbsoluteEpisodeNumber { get; init; }
+
+    /// <summary>Current catalog evidence for detecting episode titles that contradict a release's numbering.</summary>
+    public IReadOnlyList<TvSeasonEpisodeCatalog> TargetEpisodeCatalog { get; init; } = [];
 
     /// <summary>
     /// The sought work's year identity, set per search by the runner (a movie's release year; a series'
@@ -302,6 +305,9 @@ public sealed record AcquisitionSearchInput(
 
     /// <summary>Formal alternative work names; these never change the requested episode or numbering system.</summary>
     public IReadOnlyList<string> AlternativeWorkTitles { get; init; } = [];
+
+    /// <summary>Known episodes across the requested series; absent metadata never implies a title mismatch.</summary>
+    public IReadOnlyList<TvSeasonEpisodeCatalog> EpisodeCatalog { get; init; } = [];
 }
 
 /// <summary>

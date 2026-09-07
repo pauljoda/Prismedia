@@ -14,6 +14,7 @@ public static class AcquisitionRuleContext {
             TargetAlternativeTitles = input.AlternativeWorkTitles,
             TargetEpisodeTitle = input.EpisodeNumber is null ? null : input.Title,
             TargetAbsoluteEpisodeNumber = input.EpisodeNumber is null ? null : input.AbsoluteEpisodeNumber,
+            TargetEpisodeCatalog = input.EpisodeCatalog,
             TargetYear = input.Year, TargetAuthor = input.Author, BookRendition = input.BookRendition,
             ProperPolicy = properPolicy, AllowedProtocols = protocols
         };

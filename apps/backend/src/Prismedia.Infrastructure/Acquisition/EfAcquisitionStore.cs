@@ -172,7 +172,9 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             row.Id, row.Title, row.Author, row.Kind, row.EntityId, year, row.ProfileId,
             row.Series, positions.Season ?? row.SeasonNumber, positions.Episode ?? row.EpisodeNumber,
             positions.Volume ?? row.VolumeNumber, row.BookRendition, positions.AbsoluteEpisode) {
-            AlternativeWorkTitles = work.Titles
+            AlternativeWorkTitles = work.Titles,
+            EpisodeCatalog = row.Kind == EntityKind.VideoEpisode && contextEntityId is { } episodeEntityId
+                ? await new EfImportTargetIndex(db).GetSeriesEpisodeCatalogAsync(episodeEntityId, cancellationToken) : []
         };
     }
 

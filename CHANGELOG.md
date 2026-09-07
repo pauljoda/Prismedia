@@ -31,6 +31,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Episode searches and automatic grabs reject releases whose distinctive title confidently identifies another episode in the known series catalog, even when the advertised season and episode number match. Unnamed, translated, ambiguous, and multi-episode releases retain their existing checks.
+
 - The Auto-grab setting now explains that it controls standalone searches. Library requests and monitored recovery continue downloading acceptable releases automatically.
 
 - Downloaded-file review shows the last verification failure beside each retained video and leaves failed or already-imported files unselected. Explicit retries still require full verification before import.

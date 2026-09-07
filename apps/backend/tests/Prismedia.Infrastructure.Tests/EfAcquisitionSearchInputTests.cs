@@ -7,6 +7,34 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EfAcquisitionSearchInputTests {
     [Fact]
+    public async Task EpisodeSearchUsesTheSameCurrentSeriesCatalogAsImport() {
+        await using var db = CreateContext();
+        var series = Guid.NewGuid(); var first = Guid.NewGuid(); var second = Guid.NewGuid();
+        var target = Guid.NewGuid(); var other = Guid.NewGuid(); var acquisition = Guid.NewGuid();
+        foreach (var item in new[] {
+            (series, EntityKind.VideoSeries, (Guid?)null, 0, "Example Show"),
+            (first, EntityKind.VideoSeason, (Guid?)series, 1, "Season 1"),
+            (second, EntityKind.VideoSeason, (Guid?)series, 2, "Season 2"),
+            (other, EntityKind.VideoEpisode, (Guid?)first, 70, "Going West"),
+            (target, EntityKind.VideoEpisode, (Guid?)second, 17, "A Bug Adventure")
+        }) db.Entities.Add(new EntityRow { Id = item.Item1, KindCode = item.Item2.ToCode(), ParentEntityId = item.Item3,
+            SortOrder = item.Item4, Title = item.Item5, CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow });
+        db.Acquisitions.Add(new AcquisitionRow { Id = acquisition, EntityId = target, Kind = EntityKind.VideoEpisode,
+            Status = AcquisitionStatus.Searching, Title = "A Bug Adventure", Series = "Example Show", SeasonNumber = 2,
+            EpisodeNumber = 17, ExternalIdsJson = "{}", SourceUrlsJson = "[]", CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow });
+        await db.SaveChangesAsync();
+
+        var input = await AcquisitionTestFactory.Store(db).GetSearchInputAsync(acquisition, default);
+
+        Assert.Equal(2, input!.EpisodeCatalog.Count);
+        Assert.Equal(other, Assert.Single(input.EpisodeCatalog.Single(season => season.SeasonNumber == 1).Episodes).EntityId);
+        (await db.Entities.SingleAsync(row => row.Id == other)).Title = "Repaired title";
+        await db.SaveChangesAsync();
+        var refreshed = await AcquisitionTestFactory.Store(db).GetSearchInputAsync(acquisition, default);
+        Assert.Equal("Repaired title", Assert.Single(refreshed!.EpisodeCatalog.Single(season => season.SeasonNumber == 1).Episodes).Title);
+    }
+
+    [Fact]
     public async Task CarriesTheLinkedEpisodesAbsolutePositionIntoSearch() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
