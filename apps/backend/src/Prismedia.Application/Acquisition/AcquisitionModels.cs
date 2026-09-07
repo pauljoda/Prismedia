@@ -575,7 +575,8 @@ public interface IOwnedFileReplacer {
         Domain.Entities.EntityKind kind,
         bool allowFormatChange = false,
         string? recoveryBackupPath = null,
-        string? incomingEvidencePath = null) =>
+        string? incomingEvidencePath = null,
+        VerifiedVideoPayload? verifiedVideo = null) =>
         ReplaceAsync(ownedFolder, newContentPath, ownedFormatTier, cancellationToken, kind, allowFormatChange);
 }
 

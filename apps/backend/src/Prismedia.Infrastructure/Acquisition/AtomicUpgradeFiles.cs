@@ -6,7 +6,7 @@ using Prismedia.Domain.Entities;
 namespace Prismedia.Infrastructure.Acquisition;
 
 /// <summary>Uses captured file facts and attempt-specific byte evidence to recover atomic replacements, including approved video container changes.</summary>
-public sealed class AtomicUpgradeFiles(IOwnedFileReplacer replacer, IRecycleBin recycleBin) : IAtomicUpgradeFiles {
+public sealed class AtomicUpgradeFiles(IOwnedFileReplacer replacer, IRecycleBin recycleBin, IVideoPayloadVerifier videoVerifier) : IAtomicUpgradeFiles {
     /// <inheritdoc />
     public Task<AtomicUpgradeFilePlan> PrepareAsync(UpgradeReplaceTarget target, CancellationToken cancellationToken, bool allowFormatChange = false) {
         cancellationToken.ThrowIfCancellationRequested();
@@ -70,13 +70,19 @@ public sealed class AtomicUpgradeFiles(IOwnedFileReplacer replacer, IRecycleBin 
     }
 
     /// <inheritdoc />
-    public Task<OwnedFileReplaceResult> ReplaceAsync(AtomicUpgradeCheckpoint checkpoint, CancellationToken cancellationToken) {
+    public Task<VideoPayloadVerification> VerifyAsync(AtomicUpgradeCheckpoint checkpoint, CancellationToken cancellationToken) =>
+        VerifiedVideoPayload.VerifyAsync(videoVerifier, checkpoint.Files.IncomingPath, cancellationToken);
+
+    /// <inheritdoc />
+    public Task<OwnedFileReplaceResult> ReplaceAsync(AtomicUpgradeCheckpoint checkpoint, CancellationToken cancellationToken, VideoPayloadVerification? verification = null) {
+        if (verification is not null && verification.Verified is null)
+            return Task.FromResult(OwnedFileReplaceResult.Failed(verification.FailureReason ?? "The downloaded video has not passed verification."));
         if (DifferentDestinationOccupied(checkpoint.Files) || !Matches(checkpoint.Files.OwnedPath, checkpoint.Files.Owned)
             || !Matches(checkpoint.Files.IncomingPath, checkpoint.Files.Incoming))
             return Task.FromResult(OwnedFileReplaceResult.Failed("The prepared files changed before replacement; recovery evidence was retained."));
         return replacer.ReplaceRetainingBackupAsync(checkpoint.Files.OwnedPath, checkpoint.Files.IncomingPath,
             checkpoint.Files.IncomingFormat, cancellationToken, checkpoint.Kind,
-            allowFormatChange: checkpoint.Files.AllowFormatChange, recoveryBackupPath: checkpoint.BackupPath, incomingEvidencePath: checkpoint.EvidencePath);
+            allowFormatChange: checkpoint.Files.AllowFormatChange, recoveryBackupPath: checkpoint.BackupPath, incomingEvidencePath: checkpoint.EvidencePath, verifiedVideo: verification?.Verified);
     }
 
     /// <inheritdoc />

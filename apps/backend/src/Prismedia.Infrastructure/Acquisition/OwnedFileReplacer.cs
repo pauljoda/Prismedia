@@ -48,7 +48,8 @@ public sealed class OwnedFileReplacer(
         EntityKind kind,
         bool allowFormatChange = false,
         string? recoveryBackupPath = null,
-        string? incomingEvidencePath = null) =>
+        string? incomingEvidencePath = null,
+        VerifiedVideoPayload? verifiedVideo = null) =>
         ReplaceCoreAsync(
             ownedFolder,
             newContentPath,
@@ -58,7 +59,8 @@ public sealed class OwnedFileReplacer(
             allowFormatChange,
             retainBackup: true,
             recoveryBackupPath,
-            incomingEvidencePath);
+            incomingEvidencePath,
+            verifiedVideo);
 
     private async Task<OwnedFileReplaceResult> ReplaceCoreAsync(
         string ownedFolder,
@@ -69,7 +71,8 @@ public sealed class OwnedFileReplacer(
         bool allowFormatChange,
         bool retainBackup,
         string? recoveryBackupPath = null,
-        string? incomingEvidencePath = null) {
+        string? incomingEvidencePath = null,
+        VerifiedVideoPayload? verifiedVideo = null) {
         cancellationToken.ThrowIfCancellationRequested();
         var isVideo = MediaQualityLadder.IsUpgradeCapableKind(kind);
         var extensions = isVideo ? MovieImportPlanBuilder.VideoExtensions : ImportPlanBuilder.SupportedExtensions;
@@ -131,8 +134,13 @@ public sealed class OwnedFileReplacer(
         if (beforeVerification is null) {
             return OwnedFileReplaceResult.Failed("The replacement files could not be inspected. Both copies were retained for review.");
         }
-        if (isVideo && await videoVerifier.FindFailureAsync(incoming, cancellationToken) is { } verificationFailure) {
-            return OwnedFileReplaceResult.Failed(verificationFailure);
+        if (isVideo) {
+            if (verifiedVideo is not null) {
+                if (!verifiedVideo.Matches(incoming))
+                    return OwnedFileReplaceResult.Failed("The verified video changed before replacement. Both copies were retained for review.");
+            } else if (await videoVerifier.FindFailureAsync(incoming, cancellationToken) is { } verificationFailure) {
+                return OwnedFileReplaceResult.Failed(verificationFailure);
+            }
         }
         if (!beforeVerification.IsCurrent()) {
             return OwnedFileReplaceResult.Failed("The replacement files changed during verification. Both copies and recovery files were retained for review.");

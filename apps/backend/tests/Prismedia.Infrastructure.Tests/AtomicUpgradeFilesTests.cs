@@ -21,7 +21,7 @@ public sealed class AtomicUpgradeFilesTests {
             if (occupied) await File.WriteAllTextAsync(installed, "independent video");
             var verifier = new TestVideoPayloadVerifier();
             var files = new AtomicUpgradeFiles(new OwnedFileReplacer(new MergedImportTestSupport.NoRecycleBin(),
-                NullLogger<OwnedFileReplacer>.Instance, verifier), new MergedImportTestSupport.NoRecycleBin());
+                NullLogger<OwnedFileReplacer>.Instance, verifier), new MergedImportTestSupport.NoRecycleBin(), verifier);
             var parent = Guid.NewGuid();
             var entity = Guid.NewGuid();
             var target = new UpgradeReplaceTarget(parent, entity, owned, default, "Movie 1080p WEB-DL", incoming,
@@ -237,7 +237,7 @@ public sealed class AtomicUpgradeFilesTests {
     private sealed class Fixture(IRecycleBin? bin = null) : IDisposable {
         private readonly string root = Directory.CreateTempSubdirectory("atomic-replacement-").FullName;
         public AtomicUpgradeFiles Files { get; } = new(new OwnedFileReplacer(new MergedImportTestSupport.NoRecycleBin(),
-            NullLogger<OwnedFileReplacer>.Instance, new TestVideoPayloadVerifier()), bin ?? new MergedImportTestSupport.NoRecycleBin());
+            NullLogger<OwnedFileReplacer>.Instance, new TestVideoPayloadVerifier()), bin ?? new MergedImportTestSupport.NoRecycleBin(), new TestVideoPayloadVerifier());
         public async Task<AtomicUpgradeCheckpoint> PrepareAsync() {
             var owned = Path.Combine(root, "owned.epub");
             var incoming = Path.Combine(Directory.CreateDirectory(Path.Combine(root, "download")).FullName, "incoming.epub");

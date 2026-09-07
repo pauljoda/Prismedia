@@ -108,6 +108,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Video replacement now verifies files before taking catalog locks, then keeps library scans outside the file swap and Source-binding transaction. Quality failures are rejected before full decoding, and changed verification evidence cannot be reused.
+
 - Long-running replacements are no longer restarted by stale-import recovery. Retried imports follow their current workflow and retain reviewed format-change approval.
 
 - Repair and upload actions remain available for owned TV episodes when monitoring is off.

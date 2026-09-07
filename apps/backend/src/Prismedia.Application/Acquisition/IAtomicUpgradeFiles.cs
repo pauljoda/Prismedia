@@ -11,8 +11,11 @@ public interface IAtomicUpgradeFiles {
     /// <summary>Proves an installed swap or restores a provable staged candidate for validation; ambiguous evidence is retained for review.</summary>
     Task<AtomicUpgradeFileRecovery> RecoverAsync(AtomicUpgradeCheckpoint checkpoint, CancellationToken cancellationToken);
 
+    /// <summary>Verifies the prepared incoming video outside catalog locks; returned evidence must be rechecked before placement.</summary>
+    Task<VideoPayloadVerification> VerifyAsync(AtomicUpgradeCheckpoint checkpoint, CancellationToken cancellationToken);
+
     /// <summary>Swaps only the prepared files, retaining both the old bytes and incoming evidence until the database commit.</summary>
-    Task<OwnedFileReplaceResult> ReplaceAsync(AtomicUpgradeCheckpoint checkpoint, CancellationToken cancellationToken);
+    Task<OwnedFileReplaceResult> ReplaceAsync(AtomicUpgradeCheckpoint checkpoint, CancellationToken cancellationToken, VideoPayloadVerification? verification = null);
 
     /// <summary>Releases incoming-byte evidence only after the installation transaction committed; the original backup remains recoverable.</summary>
     Task CompleteAsync(AtomicUpgradeCheckpoint checkpoint, CancellationToken cancellationToken);

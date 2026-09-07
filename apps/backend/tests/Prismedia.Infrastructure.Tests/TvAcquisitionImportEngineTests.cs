@@ -2106,7 +2106,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
             EntityKind kind,
             bool allowFormatChange = false,
             string? recoveryBackupPath = null,
-            string? incomingEvidencePath = null) {
+            string? incomingEvidencePath = null, VerifiedVideoPayload? verifiedVideo = null) {
             Assert.NotNull(recoveryBackupPath);
             Assert.NotNull(incomingEvidencePath);
             File.Copy(newContentPath, incomingEvidencePath!);
@@ -2148,7 +2148,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
             EntityKind kind,
             bool allowFormatChange = false,
             string? recoveryBackupPath = null,
-            string? incomingEvidencePath = null) {
+            string? incomingEvidencePath = null, VerifiedVideoPayload? verifiedVideo = null) {
             Assert.NotNull(recoveryBackupPath);
             Assert.NotNull(incomingEvidencePath);
             var staged = OwnedFileReplacementArtifacts.StagedPath(ownedFolder);

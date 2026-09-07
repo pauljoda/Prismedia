@@ -2,6 +2,7 @@ using Microsoft.Extensions.Logging;
 using Prismedia.Application.Acquisition;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Files;
+using Prismedia.Application.Jobs.Scanning;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Jobs.Handlers;
@@ -21,6 +22,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
     IBookAcquisitionProfileStore profiles,
     IAtomicUpgradeCheckpointStore checkpoints,
     IAtomicUpgradeFiles files,
+    VideoScanConcurrencyGate scanGate,
     IAcquisitionHistoryStore history,
     ILogger<AcquisitionUpgradeReplaceJobHandler> logger,
     IEntityLifecycleMutationLease? entityLifecycle = null,
@@ -57,7 +59,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
                 }
                 if (!await acquisitions.TryTransitionStatusAsync(childId,
                         [AcquisitionStatus.Downloaded, AcquisitionStatus.Importing], AcquisitionStatus.Importing,
-                        "Preparing downloaded upgrade.", token)) return;
+                        MediaQualityLadder.IsVideoKind(current.ParentKind) ? "Verifying downloaded video before replacement." : "Preparing downloaded upgrade.", token)) return;
                 if (current.InstalledUpgradePath is not null || current.ParentVideoSourceShared
                     || EntityKindRegistry.Describe(current.ParentKind).UpgradeMode is not (EntityUpgradeMode.AtomicBookFile or EntityUpgradeMode.AtomicMediaFile)
                     || string.IsNullOrWhiteSpace(current.ChildContentPath) || string.IsNullOrWhiteSpace(current.ParentFinalSourcePath)
@@ -83,9 +85,44 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
         }
         // This lease must commit preparation before the next lease can mutate files. A rollback of
         // installation, quality, history, or readiness therefore leaves the exact recovery plan durable.
-        if (!await ExecuteLeaseAsync(parentEntityId, PrepareAsync, cancellationToken) || !prepared) return;
+        var recoveredDuringPreparation = false;
+        var preparationCommitted = await ExecuteLeaseAsync(parentEntityId, target.ParentKind, async token => {
+            await PrepareAsync(token);
+            if (!prepared || checkpoint is null) return;
+            var current = await acquisitions.GetUpgradeReplaceTargetAsync(childId, token);
+            if (current is null || !await checkpoints.IsCurrentAsync(childId, checkpoint, token)) {
+                prepared = false;
+                return;
+            }
+            var recovery = await files.RecoverAsync(checkpoint, token);
+            if (recovery.HoldReason is { } hold) {
+                await acquisitions.SetStatusAsync(childId, AcquisitionStatus.ManualImportRequired, hold, token);
+                prepared = false;
+                return;
+            }
+            if (recovery.Installed is not null) {
+                // Never expose an installed-but-unbound recovery to the watcher between transactions.
+                await HandleClaimedAsync(context, current, childId, checkpoint, null, token);
+                recoveredDuringPreparation = (await acquisitions.GetUpgradeReplaceTargetAsync(childId, token))?.InstalledUpgradePath is not null;
+                prepared = false;
+                return;
+            }
+            // Reject proven quality/profile failures before paying for a complete decode. The final
+            // installation repeats these checks against current policy after verification finishes.
+            if (MediaQualityLadder.IsVideoKind(current.ParentKind))
+                prepared = await EvaluateMediaAsync(context, current, childId, checkpoint, null, token) is not null;
+        }, cancellationToken);
+        if (!preparationCommitted) return;
+        if (recoveredDuringPreparation && checkpoint is not null) {
+            await CompleteCheckpointAsync(childId, checkpoint);
+            return;
+        }
+        if (!prepared) return;
+        // Only untouched candidates reach decoding, outside both scanner and Entity lifecycle locks.
+        var verification = checkpoint is not null && MediaQualityLadder.IsVideoKind(target.ParentKind)
+            ? await files.VerifyAsync(checkpoint, cancellationToken) : null;
         var installed = false;
-        var executed = await ExecuteLeaseAsync(parentEntityId, async token => {
+        var executed = await ExecuteLeaseAsync(parentEntityId, target.ParentKind, async token => {
             var current = await acquisitions.GetUpgradeReplaceTargetAsync(childId, token);
             if (current is null || current.ParentId != target.ParentId || current.ParentEntityId != parentEntityId) return;
             if (checkpoint is not null && !await checkpoints.IsCurrentAsync(childId, checkpoint, token)) {
@@ -94,21 +131,28 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
                     "The prepared replacement no longer matches its Source or transfer ownership. Recovery files were retained.", token);
                 return;
             }
-            await HandleClaimedAsync(context, current, childId, checkpoint, token);
+            await HandleClaimedAsync(context, current, childId, checkpoint, verification, token);
             installed = (await acquisitions.GetUpgradeReplaceTargetAsync(childId, token))?.InstalledUpgradePath is not null;
         }, cancellationToken);
-        if (executed && installed && checkpoint is not null) {
-            try {
-                await files.CompleteAsync(checkpoint, CancellationToken.None);
-            } catch (Exception exception) {
-                logger.LogWarning(exception, "Installed upgrade retained; incoming evidence cleanup failed for acquisition {Child}.", childId);
-            }
+        if (executed && installed && checkpoint is not null)
+            await CompleteCheckpointAsync(childId, checkpoint);
+    }
+
+    private async Task CompleteCheckpointAsync(Guid childId, AtomicUpgradeCheckpoint checkpoint) {
+        try {
+            await files.CompleteAsync(checkpoint, CancellationToken.None);
+        } catch (Exception exception) {
+            logger.LogWarning(exception, "Installed upgrade retained; incoming evidence cleanup failed for acquisition {Child}.", childId);
         }
     }
 
-    private Task<bool> ExecuteLeaseAsync(Guid entityId, Func<CancellationToken, Task> mutation, CancellationToken token) =>
-        entityLifecycle is null ? monitors.ExecuteIfActiveEntityMutationAsync(entityId, mutation, token)
-            : entityLifecycle.ExecuteAsync(entityId, mutation, token);
+    private async Task<bool> ExecuteLeaseAsync(Guid entityId, EntityKind kind, Func<CancellationToken, Task> mutation, CancellationToken token) {
+        // Watcher snapshots and Source materialization share this gate. Always acquire it before the
+        // Entity lifecycle lease, and retain it through the filesystem + Source-binding commit.
+        await using var scanLease = MediaQualityLadder.IsVideoKind(kind) ? await scanGate.EnterAsync(token) : null;
+        return entityLifecycle is null ? await monitors.ExecuteIfActiveEntityMutationAsync(entityId, mutation, token)
+            : await entityLifecycle.ExecuteAsync(entityId, mutation, token);
+    }
 
     /// <summary>Validates and applies an upgrade after the stable Entity lifecycle has been leased.</summary>
     private async Task HandleClaimedAsync(
@@ -116,6 +160,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
         UpgradeReplaceTarget target,
         Guid childId,
         AtomicUpgradeCheckpoint? checkpoint,
+        VideoPayloadVerification? verification,
         CancellationToken cancellationToken) {
 
         if (target.ParentVideoSourceShared) {
@@ -172,7 +217,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
         // a kind is absent from the media ladder: structural and multi-file kinds must use family import.
         switch (EntityKindRegistry.Describe(target.ParentKind).UpgradeMode) {
             case EntityUpgradeMode.AtomicMediaFile:
-                await HandleMediaAsync(context, target, childId, checkpoint!, recovered, cancellationToken);
+                await HandleMediaAsync(context, target, childId, checkpoint!, recovered, verification, cancellationToken);
                 break;
             case EntityUpgradeMode.AtomicBookFile:
                 await HandleBookAsync(context, target, childId, checkpoint!, recovered, cancellationToken);
@@ -228,7 +273,44 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
     }
 
     /// <summary>The movie/single-episode replace path: ladder-position (or same-quality revision) dominance, a verified video-file swap with durable Source rebinding, and Entity reconciliation.</summary>
-    private async Task HandleMediaAsync(JobContext context, UpgradeReplaceTarget target, Guid childId, AtomicUpgradeCheckpoint checkpoint, OwnedFileReplaceResult? recovered, CancellationToken cancellationToken) {
+    private async Task HandleMediaAsync(JobContext context, UpgradeReplaceTarget target, Guid childId, AtomicUpgradeCheckpoint checkpoint, OwnedFileReplaceResult? recovered, VideoPayloadVerification? verification, CancellationToken cancellationToken) {
+        var quality = await EvaluateMediaAsync(context, target, childId, checkpoint, recovered, cancellationToken);
+        if (quality is null) return;
+        // Video has no book format tier; the replacer's format-tier guard is a pass-through for this kind. The
+        // prepared format-change policy is durable, and a changed path is rebound in this transaction.
+        var result = recovered ?? await files.ReplaceAsync(checkpoint, cancellationToken, verification);
+        if (!result.Succeeded) {
+            await acquisitions.SetStatusAsync(childId, AcquisitionStatus.ManualImportRequired, result.FailureReason ?? "The upgrade could not be applied.", cancellationToken);
+            return;
+        }
+
+        if (!FileSystemPathComparison.Equals(checkpoint.Files.OwnedPath, checkpoint.Files.InstallPath)
+            && (!FileSystemPathComparison.Equals(checkpoint.Files.InstallPath, result.SwappedPath!)
+                || !await checkpoints.TryRebindSourceAsync(childId, checkpoint, cancellationToken)))
+            throw new IOException("The installed replacement's Source ownership changed before it could be rebound. Recovery evidence was retained.");
+
+        // Commit the installation receipt with the parent's quality, revision, and custom-format score.
+        // Advancing all three together lets a same-quality proper or format-score upgrade settle;
+        // transfer cleanup waits for the subsequent required-readiness finalizer.
+        await acquisitions.SetFinalSourcePathAsync(childId, result.SwappedPath!, cancellationToken);
+        if (!FileSystemPathComparison.Equals(checkpoint.Files.OwnedPath, checkpoint.Files.InstallPath))
+            await acquisitions.SetFinalSourcePathAsync(target.ParentId, result.SwappedPath!, cancellationToken);
+        await acquisitions.UpdateOwnedMediaQualityAsync(target.ParentId, quality.Code, quality.Revision, quality.FormatScore, cancellationToken);
+        await RecordUpgradedAsync(
+            target,
+            newCode: quality.Code,
+            oldQuality: string.IsNullOrWhiteSpace(target.ParentOwnedMediaQuality) ? VideoQuality.Unknown.ToCode() : target.ParentOwnedMediaQuality!,
+            newQuality: quality.Code,
+            cancellationToken);
+        await FinishAsync(context, target, childId, cancellationToken);
+        if (!await checkpoints.TryClearAsync(childId, checkpoint, cancellationToken))
+            throw new IOException("The replacement checkpoint changed before installation could commit.");
+    }
+
+    private sealed record MediaReplacementQuality(string Code, int Revision, int FormatScore);
+
+    private async Task<MediaReplacementQuality?> EvaluateMediaAsync(JobContext context, UpgradeReplaceTarget target,
+        Guid childId, AtomicUpgradeCheckpoint checkpoint, OwnedFileReplaceResult? recovered, CancellationToken cancellationToken) {
         // Re-confirm the downloaded release still beats the parent's CURRENT owned copy (it may have changed
         // since the search) before touching the file: a strictly higher ladder position, OR the same position
         // with a strictly higher PROPER/REPACK revision or custom-format score (the same accept rules the
@@ -257,7 +339,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
         if (recovered is null && !target.ChildManualPick) {
             if (VideoPayloadProfileValidation.ValidateProfile(candidateCode, inspection?.CandidateAudioLanguages, rules) is { } profileHold) {
                 await acquisitions.SetStatusAsync(childId, AcquisitionStatus.ManualImportRequired, profileHold, cancellationToken);
-                return;
+                return null;
             }
             if (mediaUpgradeInspector is not null
                 && (inspection is not { OwnedDurationSeconds: > 0, CandidateDurationSeconds: > 0 }
@@ -268,7 +350,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
                     AcquisitionStatus.ManualImportRequired,
                     "The owned and downloaded video could not both be inspected with a reliable runtime. Review the replacement; both files were preserved.",
                     cancellationToken);
-                return;
+                return null;
             }
 
             if (inspection is { OwnedDurationSeconds: > 0, CandidateDurationSeconds: >= 0 }
@@ -280,7 +362,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
                     AcquisitionStatus.ManualImportRequired,
                     "The downloaded video is substantially shorter than the owned copy. Review whether it is a complete replacement or a different edition; both files were preserved.",
                     cancellationToken);
-                return;
+                return null;
             }
 
             var comparableOwnedLabel = inspection is null
@@ -313,7 +395,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
                     checkpoint,
                     "The downloaded payload's measured resolution is lower than the owned copy or the release's claimed quality.",
                     cancellationToken);
-                return;
+                return null;
             }
 
             if (!higherQuality && !sameQualityBetterRevision && !sameQualityBetterFormatScore && !sameQualityAddsSubtitles) {
@@ -324,26 +406,10 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
                     checkpoint,
                     "The downloaded payload did not prove an upgrade over the current copy.",
                     cancellationToken);
-                return;
+                return null;
             }
         }
 
-        // Video has no book format tier; the replacer's format-tier guard is a pass-through for this kind. The
-        // prepared format-change policy is durable, and a changed path is rebound in this transaction.
-        var result = recovered ?? await files.ReplaceAsync(checkpoint, cancellationToken);
-        if (!result.Succeeded) {
-            await acquisitions.SetStatusAsync(childId, AcquisitionStatus.ManualImportRequired, result.FailureReason ?? "The upgrade could not be applied.", cancellationToken);
-            return;
-        }
-
-        if (!FileSystemPathComparison.Equals(checkpoint.Files.OwnedPath, checkpoint.Files.InstallPath)
-            && (!FileSystemPathComparison.Equals(checkpoint.Files.InstallPath, result.SwappedPath!)
-                || !await checkpoints.TryRebindSourceAsync(childId, checkpoint, cancellationToken)))
-            throw new IOException("The installed replacement's Source ownership changed before it could be rebound. Recovery evidence was retained.");
-
-        // Commit the installation receipt with the parent's quality, revision, and custom-format score.
-        // Advancing all three together lets a same-quality proper or format-score upgrade settle;
-        // transfer cleanup waits for the subsequent required-readiness finalizer.
         var resolvedCode = target.ChildManualPick && candidatePosition == 0
             ? target.ParentOwnedMediaQuality ?? VideoQuality.Unknown.ToCode()
             : candidateCode;
@@ -353,19 +419,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
         var resolvedFormatScore = target.ChildManualPick && candidatePosition == 0
             ? target.ParentOwnedFormatScore
             : candidateFormatScore;
-        await acquisitions.SetFinalSourcePathAsync(childId, result.SwappedPath!, cancellationToken);
-        if (!FileSystemPathComparison.Equals(checkpoint.Files.OwnedPath, checkpoint.Files.InstallPath))
-            await acquisitions.SetFinalSourcePathAsync(target.ParentId, result.SwappedPath!, cancellationToken);
-        await acquisitions.UpdateOwnedMediaQualityAsync(target.ParentId, resolvedCode, resolvedRevision, resolvedFormatScore, cancellationToken);
-        await RecordUpgradedAsync(
-            target,
-            newCode: resolvedCode,
-            oldQuality: string.IsNullOrWhiteSpace(target.ParentOwnedMediaQuality) ? VideoQuality.Unknown.ToCode() : target.ParentOwnedMediaQuality!,
-            newQuality: resolvedCode,
-            cancellationToken);
-        await FinishAsync(context, target, childId, cancellationToken);
-        if (!await checkpoints.TryClearAsync(childId, checkpoint, cancellationToken))
-            throw new IOException("The replacement checkpoint changed before installation could commit.");
+        return new(resolvedCode, resolvedRevision, resolvedFormatScore);
     }
 
     /// <summary>

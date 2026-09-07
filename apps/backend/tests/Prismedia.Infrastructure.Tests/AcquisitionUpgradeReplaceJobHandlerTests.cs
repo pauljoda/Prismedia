@@ -4,6 +4,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Prismedia.Application.Acquisition;
 using Prismedia.Application.Jobs;
 using Prismedia.Application.Jobs.Handlers;
+using Prismedia.Application.Jobs.Scanning;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Acquisition;
 using Prismedia.Infrastructure.Persistence;
@@ -84,6 +85,59 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
         Assert.False(await store.TryClearAsync(childId, checkpoint with { ClaimJobId = firstJob }, default));
         Assert.True(await store.TryClearAsync(childId, checkpoint, default));
         Assert.Null(await store.GetAsync(childId, default));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task VideoReplacementDecodesOutsideLocksThenKeepsScanningOutUntilTheSourceCommit(bool rejectedBeforeDecode) {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var folder = Directory.CreateTempSubdirectory("replacement-scan-boundary-").FullName;
+        try {
+            var owned = Path.Combine(folder, "video.avi");
+            var incoming = Path.Combine(Directory.CreateDirectory(Path.Combine(folder, "download")).FullName, "video.mkv");
+            await File.WriteAllTextAsync(owned, "old owned video");
+            await File.WriteAllTextAsync(incoming, "verified replacement video");
+            var (parentId, childId, _) = await SeedMediaAsync(db, EntityKind.Movie, VideoQuality.Webdl720p.ToCode(), "Movie 1080p WEB-DL");
+            var parent = (await db.Acquisitions.FindAsync(parentId))!;
+            parent.FinalSourcePath = owned;
+            (await db.DownloadTransfers.SingleAsync(row => row.AcquisitionId == childId)).ContentPath = Path.GetDirectoryName(incoming);
+            var sourceId = Guid.NewGuid();
+            db.EntityFiles.Add(new EntityFileRow { Id = sourceId, EntityId = parent.EntityId!.Value,
+                Role = EntityFileRole.Source, Path = owned, Source = FileSourceKind.Scan.ToCode() });
+            await db.SaveChangesAsync();
+            var gate = new VideoScanConcurrencyGate();
+            var verifier = new TestVideoPayloadVerifier { BeforeResult = async () => {
+                Assert.Null(db.Database.CurrentTransaction);
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+                await using var scan = await gate.EnterAsync(timeout.Token);
+                Assert.Equal("old owned video", await File.ReadAllTextAsync(owned));
+            } };
+            var queue = new RecordingJobQueue { BeforeEnqueue = async () => {
+                if (rejectedBeforeDecode) return;
+                using var timeout = new CancellationTokenSource(TimeSpan.FromMilliseconds(50));
+                await Assert.ThrowsAnyAsync<OperationCanceledException>(() => gate.EnterAsync(timeout.Token).AsTask());
+                await using var observer = database.CreateContext();
+                Assert.Equal(owned, (await observer.EntityFiles.FindAsync(sourceId))!.Path);
+                Assert.True(File.Exists(Path.ChangeExtension(owned, ".mkv")));
+            } };
+            await RunAsync(db, queue,
+                new OwnedFileReplacer(new MergedImportTestSupport.NoRecycleBin(), NullLogger<OwnedFileReplacer>.Instance, verifier), childId,
+                new FakeMediaUpgradePayloadInspector(new(720, rejectedBeforeDecode ? 480 : 1080, false, false, 1200, 1200)),
+                scanGate: gate, verifier: verifier);
+            if (rejectedBeforeDecode) {
+                Assert.Empty(verifier.Paths);
+                Assert.Equal(owned, (await db.EntityFiles.FindAsync(sourceId))!.Path);
+                Assert.True(File.Exists(owned));
+                Assert.True(File.Exists(incoming));
+                return;
+            }
+            Assert.Single(verifier.Paths);
+            Assert.Equal(Path.ChangeExtension(owned, ".mkv"), (await db.EntityFiles.FindAsync(sourceId))!.Path);
+            using var completionTimeout = new CancellationTokenSource(TimeSpan.FromSeconds(1));
+            await using var completedScan = await gate.EnterAsync(completionTimeout.Token);
+        } finally { Directory.Delete(folder, true); }
     }
 
     [Theory]
@@ -876,11 +930,14 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
         IOwnedFileReplacer replacer,
         Guid childId,
         IMediaUpgradePayloadInspector? inspector = null,
-        bool allowFormatChange = false) {
+        bool allowFormatChange = false,
+        VideoScanConcurrencyGate? scanGate = null,
+        IVideoPayloadVerifier? verifier = null) {
         var handler = new AcquisitionUpgradeReplaceJobHandler(
             AcquisitionTestFactory.Store(db), new EfMonitorStore(db), new EfBookAcquisitionProfileStore(db),
             replacer is FakeReplacer ? new FakeCheckpoints() : new EfAtomicUpgradeCheckpointStore(db),
-            replacer is FakeReplacer fake ? new FakeAtomicFiles(fake) : new AtomicUpgradeFiles(replacer, new MergedImportTestSupport.NoRecycleBin()),
+            replacer is FakeReplacer fake ? new FakeAtomicFiles(fake) : new AtomicUpgradeFiles(replacer, new MergedImportTestSupport.NoRecycleBin(), verifier ?? new TestVideoPayloadVerifier()),
+            scanGate ?? new VideoScanConcurrencyGate(),
             new EfAcquisitionHistoryStore(db),
             NullLogger<AcquisitionUpgradeReplaceJobHandler>.Instance,
             mediaUpgradeInspector: inspector);
@@ -981,7 +1038,8 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
                 new(1, DateTime.UtcNow), new(1, DateTime.UtcNow), target.ParentOwnedQuality.Format));
         public Task<AtomicUpgradeFileRecovery> RecoverAsync(AtomicUpgradeCheckpoint checkpoint, CancellationToken token) => Task.FromResult(new AtomicUpgradeFileRecovery());
         public Task CompleteAsync(AtomicUpgradeCheckpoint checkpoint, CancellationToken token) => Task.CompletedTask;
-        public Task<OwnedFileReplaceResult> ReplaceAsync(AtomicUpgradeCheckpoint checkpoint, CancellationToken token) =>
+        public Task<VideoPayloadVerification> VerifyAsync(AtomicUpgradeCheckpoint checkpoint, CancellationToken token) => Task.FromResult(new VideoPayloadVerification(null, null));
+        public Task<OwnedFileReplaceResult> ReplaceAsync(AtomicUpgradeCheckpoint checkpoint, CancellationToken token, VideoPayloadVerification? verification = null) =>
             replacer.ReplaceAsync(checkpoint.Files.OwnedPath, checkpoint.Files.IncomingPath, checkpoint.Files.IncomingFormat, token, checkpoint.Kind);
     }
 

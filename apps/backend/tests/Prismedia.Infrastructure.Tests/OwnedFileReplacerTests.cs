@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Prismedia.Domain.Entities;
+using Prismedia.Application.Acquisition;
 using Prismedia.Infrastructure.Acquisition;
 using Prismedia.Infrastructure.Media.Sidecars;
 
@@ -13,6 +14,36 @@ namespace Prismedia.Infrastructure.Tests;
 public sealed class OwnedFileReplacerTests : IDisposable {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "prismedia-replacer-" + Guid.NewGuid().ToString("N"));
     private readonly OwnedFileReplacer _replacer = new(new BinOff(), NullLogger<OwnedFileReplacer>.Instance, new TestVideoPayloadVerifier());
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task PlacementRejectsStaleOrUnrelatedFullDecodeEvidence(bool differentFile) {
+        var owned = WriteFile(Dir("library"), "Owned.mkv", "owned bytes");
+        var incoming = WriteFile(Dir("download"), "Incoming.mkv", "incoming bytes");
+        var other = WriteFile(Dir("other"), "Other.mkv", "incoming bytes");
+        var verifier = new TestVideoPayloadVerifier();
+        var verification = await VerifiedVideoPayload.VerifyAsync(verifier, incoming, default);
+        Assert.NotNull(verification.Verified);
+        if (!differentFile) await File.WriteAllTextAsync(incoming, "changed candidate bytes");
+        var result = await _replacer.ReplaceRetainingBackupAsync(owned, differentFile ? other : incoming,
+            BookFormatTier.Unknown, default, EntityKind.Movie, verifiedVideo: verification.Verified);
+        Assert.False(result.Succeeded);
+        Assert.Equal("owned bytes", await File.ReadAllTextAsync(owned));
+        Assert.True(File.Exists(incoming));
+        Assert.True(File.Exists(other));
+        Assert.False(File.Exists(owned + ".prismedia-bak"));
+    }
+
+    [Fact]
+    public async Task VideoChangedWhileDecodingCannotProduceReusableVerificationEvidence() {
+        var incoming = WriteFile(Dir("download"), "Incoming.mkv", "initial bytes");
+        var verifier = new TestVideoPayloadVerifier { BeforeResult = () => File.WriteAllTextAsync(incoming, "changed candidate bytes") };
+        var result = await VerifiedVideoPayload.VerifyAsync(verifier, incoming, default);
+        Assert.Null(result.Verified);
+        Assert.NotNull(result.FailureReason);
+        Assert.True(File.Exists(incoming));
+    }
 
     [Theory]
     [InlineData(false)]
