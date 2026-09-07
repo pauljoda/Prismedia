@@ -27,7 +27,9 @@ public sealed class EfAtomicUpgradeCheckpointStore(PrismediaDbContext db) : IAto
             || row.ImportClaimJobId is { } claim && claim != claimJobId
             || !SelectedMatches(row, preparation.SelectedRelease)) return null;
         var sourceId = await SoleSourceIdAsync(preparation.ParentEntityId, preparation.Files.OwnedPath, cancellationToken);
-        if (sourceId is null || !await ParentAndTransferMatchAsync(acquisitionId, preparation, cancellationToken)) return null;
+        if (sourceId is null || !await ParentAndTransferMatchAsync(acquisitionId, preparation, cancellationToken)
+            || await db.EntityFiles.AnyAsync(source => source.Id != sourceId && source.Role == EntityFileRole.Source
+                && source.Path == preparation.Files.InstallPath, cancellationToken)) return null;
         var checkpoint = new AtomicUpgradeCheckpoint(Guid.NewGuid(), claimJobId, preparation.ParentAcquisitionId,
             preparation.ParentEntityId, sourceId.Value, preparation.Kind, preparation.Files,
             preparation.TransferContentPath, preparation.TransferClientItemId, preparation.SelectedRelease);
@@ -60,6 +62,26 @@ public sealed class EfAtomicUpgradeCheckpointStore(PrismediaDbContext db) : IAto
         if (row is null || !CheckpointMatches(row.ImportCheckpointJson, checkpoint)
             || row.ImportClaimJobId != checkpoint.ClaimJobId || row.Status != AcquisitionStatus.Importing) return false;
         return await WriteAsync(row, null, null, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> TryRebindSourceAsync(Guid acquisitionId, AtomicUpgradeCheckpoint checkpoint, CancellationToken cancellationToken) {
+        if (!db.Database.IsRelational() || db.Database.CurrentTransaction is null)
+            throw new InvalidOperationException("Source replacement requires the Entity lifecycle transaction.");
+        if (!await IsCurrentAsync(acquisitionId, checkpoint, cancellationToken)) return false;
+        var path = checkpoint.Files.InstallPath;
+        if (await db.EntityFiles.AnyAsync(row => row.Id != checkpoint.SourceFileId
+                && row.Role == EntityFileRole.Source && row.Path == path, cancellationToken)) return false;
+        var affected = await db.EntityFiles.Where(row => row.Id == checkpoint.SourceFileId
+                && row.EntityId == checkpoint.ParentEntityId && row.Role == EntityFileRole.Source
+                && row.Path == checkpoint.Files.OwnedPath)
+            .ExecuteUpdateAsync(setters => setters.SetProperty(row => row.Path, path)
+                .SetProperty(row => row.SizeBytes, checkpoint.Files.Incoming.Length)
+                .SetProperty(row => row.MimeType, (string?)null)
+                .SetProperty(row => row.UpdatedAt, DateTimeOffset.UtcNow), cancellationToken);
+        if (affected == 1 && db.EntityFiles.Local.FirstOrDefault(row => row.Id == checkpoint.SourceFileId) is { } tracked)
+            await db.Entry(tracked).ReloadAsync(cancellationToken);
+        return affected == 1;
     }
 
     private async Task<bool> IdentityMatchesAsync(AcquisitionRow row, AtomicUpgradeCheckpoint checkpoint, CancellationToken cancellationToken) =>

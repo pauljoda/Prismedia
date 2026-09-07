@@ -138,6 +138,7 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.PreferredTerms).HasColumnName("preferred_terms");
             entity.Property(row => row.AutoPick).HasColumnName("auto_pick");
             entity.Property(row => row.AutoRedownload).HasColumnName("auto_redownload");
+            entity.Property(row => row.AllowFormatChange).HasColumnName("allow_format_change").HasDefaultValue(true);
             entity.Property(row => row.UpgradeUntilCutoff).HasColumnName("upgrade_until_cutoff").HasDefaultValue(false);
             entity.Property(row => row.CutoffSourceTier)
                 .HasColumnName("cutoff_source_tier")

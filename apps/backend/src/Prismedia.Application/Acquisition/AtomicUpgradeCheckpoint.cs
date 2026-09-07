@@ -12,7 +12,12 @@ public sealed record AtomicUpgradeFilePlan(
     string IncomingPath,
     AtomicUpgradeFileSnapshot Owned,
     AtomicUpgradeFileSnapshot Incoming,
-    BookFormatTier IncomingFormat);
+    BookFormatTier IncomingFormat,
+    bool AllowFormatChange = false) {
+    /// <summary>The original basename with the approved incoming extension, otherwise the original path.</summary>
+    [JsonIgnore]
+    public string InstallPath => AllowFormatChange ? Path.ChangeExtension(OwnedPath, Path.GetExtension(IncomingPath)) : OwnedPath;
+}
 
 /// <summary>
 /// Durable preparation for one owned-file replacement. The preparation commit precedes filesystem

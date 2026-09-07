@@ -380,7 +380,7 @@
       kind: ENTITY_KIND.book,
       targetLibraryRootId: bookRoots[0]?.id ?? "", pathTemplate: DEFAULT_PATH_TEMPLATE,
       importMode: IMPORT_MODE.move, allowedFormats: [], preferredLanguages: ["English"], minSeeders: 1,
-      minSizeBytes: null, maxSizeBytes: null, requiredTerms: [], ignoredTerms: [], preferredTerms: [], weightedTerms: [], autoPick: false, autoRedownload: false,
+      minSizeBytes: null, maxSizeBytes: null, requiredTerms: [], ignoredTerms: [], preferredTerms: [], weightedTerms: [], autoPick: false, autoRedownload: false, allowFormatChange: true,
       upgradeUntilCutoff: false, cutoffSourceTier: BOOK_SOURCE_TIER.unknown, cutoffFormatTier: BOOK_FORMAT_TIER.unknown,
       downloadCategory: null, allowedQualities: [], cutoffQuality: null,
       formatScores: {}, minFormatScore: 0, cutoffFormatScore: null,
@@ -418,7 +418,7 @@
       pathTemplate: p.pathTemplate, importMode: p.importMode, allowedFormats: p.allowedFormats, preferredLanguages: p.preferredLanguages,
       minSeeders: p.minSeeders, minSizeBytes: p.minSizeBytes, maxSizeBytes: p.maxSizeBytes,
       requiredTerms: p.requiredTerms, ignoredTerms: p.ignoredTerms, preferredTerms: p.preferredTerms, weightedTerms: p.weightedTerms,
-      autoPick: p.autoPick, autoRedownload: p.autoRedownload,
+      autoPick: p.autoPick, autoRedownload: p.autoRedownload, allowFormatChange: p.allowFormatChange,
       upgradeUntilCutoff: p.upgradeUntilCutoff, cutoffSourceTier: p.cutoffSourceTier, cutoffFormatTier: p.cutoffFormatTier,
       downloadCategory: p.downloadCategory ?? null, allowedQualities: p.allowedQualities ?? [], cutoffQuality: p.cutoffQuality ?? null,
       formatScores: { ...(p.formatScores ?? {}) }, minFormatScore: p.minFormatScore ?? 0, cutoffFormatScore: p.cutoffFormatScore ?? null,
@@ -840,8 +840,8 @@
               <span class="min-w-0 truncate text-xs text-text-muted">→ {allRoots.find((r) => r.id === p.targetLibraryRootId)?.label ?? "root"}</span>
             </div>
             <div class="flex shrink-0 items-center gap-1">
-              <Button size="sm" variant="ghost" onclick={() => editProfile(p)} disabled={busy}><Pencil class="h-3.5 w-3.5" /></Button>
-              <Button size="sm" variant="ghost" onclick={() => removeProfile(p.id)} disabled={busy}><Trash2 class="h-3.5 w-3.5" /></Button>
+              <Button size="sm" variant="ghost" aria-label={`Edit ${p.displayName}`} onclick={() => editProfile(p)} disabled={busy}><Pencil class="h-3.5 w-3.5" /></Button>
+              <Button size="sm" variant="ghost" aria-label={`Delete ${p.displayName}`} onclick={() => removeProfile(p.id)} disabled={busy}><Trash2 class="h-3.5 w-3.5" /></Button>
             </div>
           </div>
         {/each}
@@ -907,6 +907,9 @@
             <label class="flex items-center gap-2"><Checkbox checked={profileForm.isDefault} onchange={(e) => profileForm && (profileForm.isDefault = e)} /><span class="text-sm text-text-secondary">Default profile</span></label>
             <label class="flex items-start gap-2"><Checkbox checked={profileForm.autoPick} onchange={(e) => profileForm && (profileForm.autoPick = e)} /><span class="text-sm text-text-secondary">Auto-grab standalone searches<span class="block text-[0.72rem] text-text-muted">Automatically download the best acceptable release from searches started without a library request. Library requests, including monitored recovery, always download automatically.</span></span></label>
             <label class="flex items-start gap-2"><Checkbox checked={profileForm.autoRedownload} onchange={(e) => profileForm && (profileForm.autoRedownload = e)} /><span class="text-sm text-text-secondary">Auto-redownload on failure<span class="block text-[0.72rem] text-text-muted">When a download fails, blocklist that release and automatically grab the next-best candidate.</span></span></label>
+            {#if profileForm.kind === ENTITY_KIND.movie || profileForm.kind === ENTITY_KIND.videoSeries}
+              <label class="flex items-start gap-2"><Checkbox aria-label="Allow format changes" checked={profileForm.allowFormatChange} onchange={(e) => profileForm && (profileForm.allowFormatChange = e)} /><span class="text-sm text-text-secondary">Allow format changes<span class="block text-[0.72rem] text-text-muted">Let verified replacements change containers, such as AVI to MKV. Quality rules still apply. Turn off to require manual approval when the file format changes.</span></span></label>
+            {/if}
             {#if formIsBookKind}
             <label class="flex items-start gap-2"><Checkbox checked={profileForm.upgradeUntilCutoff} onchange={(e) => profileForm && (profileForm.upgradeUntilCutoff = e)} /><span class="text-sm text-text-secondary">Upgrade until cutoff<span class="block text-[0.72rem] text-text-muted">After a book is imported, keep searching for a higher-quality release and replace the file, until it reaches the cutoff below.</span></span></label>
             {/if}

@@ -385,7 +385,8 @@ public sealed record BookAcquisitionProfileView(
     int MinFormatScore = 0,
     int? CutoffFormatScore = null,
     EntityDateType? SearchAfterDateType = null,
-    int SearchDelayDays = 0);
+    int SearchDelayDays = 0,
+    bool AllowFormatChange = true);
 
 /// <summary>Request payload for creating or updating an acquisition profile.</summary>
 public sealed record BookAcquisitionProfileSaveRequest(
@@ -417,7 +418,8 @@ public sealed record BookAcquisitionProfileSaveRequest(
     int MinFormatScore = 0,
     int? CutoffFormatScore = null,
     EntityDateType? SearchAfterDateType = null,
-    int SearchDelayDays = 0);
+    int SearchDelayDays = 0,
+    bool AllowFormatChange = true);
 
 /// <summary>An editable starter custom format; saving uses the same contract and matching rules as advanced formats.</summary>
 public sealed record AcquisitionRulePresetView(

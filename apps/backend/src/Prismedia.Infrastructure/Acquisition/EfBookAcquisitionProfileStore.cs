@@ -121,6 +121,7 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
         row.SearchDelayDays = command.SearchDelayDays;
         row.AutoPick = command.AutoPick;
         row.AutoRedownload = command.AutoRedownload;
+        row.AllowFormatChange = command.AllowFormatChange;
         row.UpgradeUntilCutoff = command.UpgradeUntilCutoff;
         row.CutoffSourceTier = command.CutoffSourceTier;
         row.CutoffFormatTier = command.CutoffFormatTier;
@@ -203,6 +204,7 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
             row.PreferredTerms,
             DecodeWeightedTerms(row.WeightedTermsJson)) {
             Kind = row.Kind,
+            AllowFormatChange = row.AllowFormatChange,
             AllowedQualities = row.AllowedQualities,
             CutoffQuality = row.CutoffQuality,
             CustomFormats = customFormats,
@@ -266,7 +268,8 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
             row.MinFormatScore,
             row.CutoffFormatScore,
             row.SearchAfterDateType,
-            row.SearchDelayDays);
+            row.SearchDelayDays,
+            row.AllowFormatChange);
 
     private static IReadOnlyList<WeightedTerm> DecodeWeightedTerms(string json) {
         if (string.IsNullOrWhiteSpace(json)) {

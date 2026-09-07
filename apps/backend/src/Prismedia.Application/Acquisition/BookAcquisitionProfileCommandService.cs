@@ -96,7 +96,8 @@ public sealed class BookAcquisitionProfileCommandService(
             Math.Clamp(request.MinFormatScore, -10_000, 10_000),
             request.CutoffFormatScore is { } cutoff ? Math.Clamp(cutoff, -10_000, 10_000) : null,
             request.SearchAfterDateType,
-            request.SearchDelayDays);
+            request.SearchDelayDays,
+            request.AllowFormatChange);
     }
 
     /// <summary>

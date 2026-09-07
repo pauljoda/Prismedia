@@ -13,12 +13,10 @@ namespace Prismedia.Infrastructure.Acquisition;
 /// atomic rename, and the previous file is kept so it is always recoverable; the scanner ignores it because
 /// the extension is not importable), then the new file is moved into the owned file's exact path.
 /// <para>
-/// It deliberately handles only same-extension upgrades (a web EPUB → a retail EPUB; an mkv → a better mkv):
-/// installing at the exact owned path keeps the library's file row and playback/reader progress valid with no
-/// entity surgery. A format change (different extension — e.g. mkv → mp4) would orphan the entity, so it is
-/// refused here and surfaced for manual handling. The kind selects which single file to find (a book file, or
-/// a video file for a movie/single episode) and whether the book format-tier guard applies. Any failure
-/// restores the original from the backup, so the owned file is never lost.
+/// Same-extension swaps keep the exact path. Approved container changes keep the owned basename and
+/// install at the incoming extension; the caller must rebind the existing Source in its lifecycle
+/// transaction. A competing destination is never overwritten. The kind selects the importable files
+/// and whether the book format-tier floor applies. Originals remain recoverable on failure.
 /// </para>
 /// </summary>
 public sealed class OwnedFileReplacer(
@@ -95,10 +93,8 @@ public sealed class OwnedFileReplacer(
         var ownedExtension = Path.GetExtension(owned);
         var incomingExtension = Path.GetExtension(incoming);
         if (!string.Equals(ownedExtension, incomingExtension, StringComparison.OrdinalIgnoreCase) && !allowFormatChange) {
-            // A format change moves the file to a different extension/path, which would orphan the library
-            // entity and its playback/reader progress. Refuse it here; the caller surfaces it for manual
-            // replacement. This applies to video (mkv → mp4) exactly as it does to books, for the same reason.
-            // The user's explicit "import anyway" (allowFormatChange) takes the cross-format path below instead.
+            // Permission comes from the profile or an explicit reviewed retry. The caller owns
+            // rebinding and durable recovery when this changes the Source path.
             return (OwnedFileReplaceResult.Failed($"Upgrading the format ({ownedExtension} → {incomingExtension}) needs a manual replacement."));
         }
 
@@ -106,10 +102,12 @@ public sealed class OwnedFileReplacer(
         // same-extension swap this IS the owned path (the never-momentarily-empty atomic replace); for a
         // consented format change it is a sibling path, and the old file is retired after the install.
         var installPath = Path.ChangeExtension(owned, incomingExtension);
+        var changesPath = !FileSystemPathComparison.Equals(owned, installPath);
+        if (changesPath && (File.Exists(installPath) || Directory.Exists(installPath)))
+            return OwnedFileReplaceResult.Failed("The replacement destination already exists. Both copies were retained for review.");
 
         // Books enforce a format-tier floor from the actual extension (a folder named "(epub)" must not make a
-        // PDF look reflowable). Video has no extension-derived format tier — same-extension is already enforced
-        // above and the video quality upgrade is judged from the release title by the caller — so it is a
+        // PDF look reflowable). Video has no extension-derived format tier — the caller judges the video quality upgrade — so it is a
         // pass-through here (NewFormat stays Unknown; the caller records the media-quality code).
         var newFormat = isVideo ? BookFormatTier.Unknown : BookFormatDetection.FormatTierFromExtension(incoming);
         if (!isVideo && newFormat < ownedFormatTier) {
@@ -189,7 +187,7 @@ public sealed class OwnedFileReplacer(
         try {
             cancellationToken.ThrowIfCancellationRequested();
             CommitSubtitleSidecars(stagedSubtitleSidecars);
-            File.Move(staged, installPath, overwrite: true); // atomic same-directory install
+            File.Move(staged, installPath, overwrite: !changesPath); // never overwrite a competing sibling
             installedNewFile = true;
             var installed = new FileInfo(installPath);
             if (!installed.Exists || installed.Length == 0) {
@@ -198,9 +196,9 @@ public sealed class OwnedFileReplacer(
 
             // A consented format change installs beside the old file (different extension) — retire the
             // old file so the library never carries both. The backup copy already preserves it, so a
-            // failed delete only leaves a redundant original for the scan to re-find.
-            if (!FileSystemPathComparison.Equals(installPath, owned)) {
-                TryDelete(owned);
+            // failed delete rolls the attempt back instead of publishing two competing Sources.
+            if (changesPath) {
+                File.Delete(owned);
             }
         } catch (Exception ex) {
             logger.LogWarning(ex, "OwnedFileReplacer: swap failed for {Path}; the original is intact (or restorable from backup).", owned);

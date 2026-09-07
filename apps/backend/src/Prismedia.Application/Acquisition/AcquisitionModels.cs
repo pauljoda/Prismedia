@@ -49,6 +49,9 @@ public sealed record BookAcquisitionRules(
     /// </summary>
     public int? VolumeNumber { get; init; }
 
+    /// <summary>Allows video upgrades to change containers while preserving the owned entity and its history.</summary>
+    public bool AllowFormatChange { get; init; } = true;
+
     /// <summary>
     /// The transfer protocols an enabled download client can acquire, set per search by the runner from
     /// the configured clients (never by a profile). Defaults to torrent-only so rules built without a
@@ -781,9 +784,8 @@ public sealed record AcquisitionImportContext(
     }
 
     /// <summary>
-    /// The user's explicit "import anyway": an upgrade that changes the file extension — normally held
-    /// for manual import — replaces the owned file across formats. Carried by the manual retry-import
-    /// job payload only; automatic imports never set it.
+    /// Permission to replace an owned video at a different extension. The profile or an explicit
+    /// reviewed retry can grant it; a durable import plan retains the resolved permission for recovery.
     /// </summary>
     public bool AllowFormatChange { get; init; }
 
@@ -871,7 +873,7 @@ public sealed record ImportPlacementCheckpointUnit(
 /// <param name="LibraryRootId">Video root that owns every target.</param>
 /// <param name="SeriesFolderPath">Absolute series folder used by Entity hierarchy materialization.</param>
 /// <param name="ImportMode">Move/copy/hardlink behavior selected when the plan was created.</param>
-/// <param name="AllowFormatChange">The user's explicit cross-format replacement consent, retained for retries.</param>
+/// <param name="AllowFormatChange">Resolved profile or manual permission for cross-format replacement, retained for retries.</param>
 /// <param name="SuccessMessage">Terminal user-facing import summary retained across retries.</param>
 /// <param name="PreferSingleFileFinalSource">Whether a one-file result should checkpoint the file rather than its season folder.</param>
 /// <param name="Units">Every file mutation required for the successful import.</param>

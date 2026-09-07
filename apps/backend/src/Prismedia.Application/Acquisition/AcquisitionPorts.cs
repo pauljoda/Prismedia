@@ -98,7 +98,8 @@ public sealed record BookAcquisitionProfileSaveCommand(
     int MinFormatScore = 0,
     int? CutoffFormatScore = null,
     EntityDateType? SearchAfterDateType = null,
-    int SearchDelayDays = 0);
+    int SearchDelayDays = 0,
+    bool AllowFormatChange = true);
 
 /// <summary>
 /// Persistence port for custom formats (named, scored release classifiers), scoped per profile kind.

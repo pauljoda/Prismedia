@@ -63,4 +63,5 @@ export interface BookAcquisitionProfileSaveRequest {
   searchAfterDateType?: BookAcquisitionProfileSaveRequestSearchAfterDateType;
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   searchDelayDays?: number | string;
+  allowFormatChange?: boolean;
 }

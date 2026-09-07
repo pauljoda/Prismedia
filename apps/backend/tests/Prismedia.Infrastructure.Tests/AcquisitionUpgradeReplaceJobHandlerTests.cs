@@ -87,15 +87,20 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
     }
 
     [Theory]
-    [InlineData(EntityKind.Book)]
-    [InlineData(EntityKind.Movie)]
-    [InlineData(EntityKind.VideoEpisode)]
-    public async Task InterruptedAtomicSwapResumesFromPreparationCommittedBeforeFileMutation(EntityKind kind) {
+    [InlineData(EntityKind.Book, false, false)]
+    [InlineData(EntityKind.Movie, false, false)]
+    [InlineData(EntityKind.Movie, true, false)]
+    [InlineData(EntityKind.Movie, true, true)]
+    [InlineData(EntityKind.VideoEpisode, false, false)]
+    [InlineData(EntityKind.VideoEpisode, true, false)]
+    [InlineData(EntityKind.VideoEpisode, true, true)]
+    public async Task InterruptedAtomicSwapResumesFromPreparationCommittedBeforeFileMutation(EntityKind kind, bool formatChange, bool manualApproval) {
         await using var database = await PostgresTestDatabase.CreateAsync();
         var folder = Directory.CreateTempSubdirectory("prismedia-upgrade-commit-").FullName;
         try {
             var fileName = kind == EntityKind.Book ? "book.epub" : "video.mkv";
-            var owned = Path.Combine(folder, fileName);
+            var owned = Path.Combine(folder, formatChange ? "video.avi" : fileName);
+            var installed = Path.Combine(folder, fileName);
             var incoming = Path.Combine(Directory.CreateDirectory(Path.Combine(folder, "download")).FullName, fileName);
             await File.WriteAllTextAsync(owned, "original-owned-book");
             await File.WriteAllTextAsync(incoming, "downloaded-upgrade-book");
@@ -109,16 +114,32 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
                 sourceId = Guid.NewGuid();
                 db.EntityFiles.Add(new EntityFileRow { Id = sourceId, EntityId = parent.EntityId!.Value,
                     Role = EntityFileRole.Source, Path = owned, Source = FileSourceKind.Scan.ToCode() });
+                if (manualApproval) {
+                    var root = new LibraryRootRow { Id = Guid.NewGuid(), Path = folder, Label = "Video", Enabled = true };
+                    db.LibraryRoots.Add(root);
+                    db.BookAcquisitionProfiles.Add(new BookAcquisitionProfileRow {
+                        Id = Guid.NewGuid(), Kind = kind == EntityKind.Movie ? EntityKind.Movie : EntityKind.VideoSeries,
+                        TargetLibraryRootId = root.Id, IsDefault = true, AllowFormatChange = false
+                    });
+                }
                 await db.SaveChangesAsync();
                 var queue = new RecordingJobQueue {
                     BeforeEnqueue = () => throw new IOException("Interrupted after the filesystem swap, before the lifecycle commit")
                 };
+                if (manualApproval) {
+                    await RunAsync(db, new RecordingJobQueue(),
+                        new OwnedFileReplacer(new MergedImportTestSupport.NoRecycleBin(), NullLogger<OwnedFileReplacer>.Instance, new TestVideoPayloadVerifier()), childId);
+                    Assert.Equal(AcquisitionStatus.ManualImportRequired, (await db.Acquisitions.FindAsync(childId))!.Status);
+                    Assert.True(File.Exists(owned));
+                    Assert.True(File.Exists(incoming));
+                    await AcquisitionTestFactory.Store(db).SetStatusAsync(childId, AcquisitionStatus.Downloaded, "Approved format change", default);
+                }
                 var interruption = await Record.ExceptionAsync(() => RunAsync(db, queue,
                     new OwnedFileReplacer(new MergedImportTestSupport.NoRecycleBin(), NullLogger<OwnedFileReplacer>.Instance, new TestVideoPayloadVerifier()), childId,
-                    new FakeMediaUpgradePayloadInspector(new(720, 1080, false, false, 1200, 1200))));
+                    new FakeMediaUpgradePayloadInspector(new(720, 1080, false, false, 1200, 1200)), allowFormatChange: manualApproval));
                 Assert.True(interruption is IOException, interruption?.ToString() ?? (await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == childId)).StatusMessage);
             }
-            Assert.Equal("downloaded-upgrade-book", await File.ReadAllTextAsync(owned));
+            Assert.Equal("downloaded-upgrade-book", await File.ReadAllTextAsync(installed));
             Assert.Equal("original-owned-book", await File.ReadAllTextAsync(Assert.Single(Directory.GetFiles(folder, "*.prismedia-bak-*"))));
             Assert.False(File.Exists(incoming));
             await using (var db = database.CreateContext()) {
@@ -127,9 +148,11 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
                 if (kind == EntityKind.Book) Assert.Equal(BookSourceTier.Web, parent.OwnedSourceTier);
                 else Assert.Equal(VideoQuality.Webdl720p.ToCode(), parent.OwnedMediaQuality);
                 Assert.Null(child.FinalSourcePath);
+                Assert.Equal(owned, parent.FinalSourcePath);
                 // Preparation must survive the later transaction rollback; an installation receipt
                 // written only after the filesystem mutation cannot recover this interruption.
                 Assert.NotNull(child.ImportCheckpointJson);
+                Assert.Equal(owned, (await db.EntityFiles.FindAsync(sourceId))!.Path);
                 var store = AcquisitionTestFactory.Store(db);
                 var import = await store.GetImportContextAsync(childId, default);
                 Assert.Equal(sourceId, import!.AtomicUpgradeCheckpoint!.SourceFileId);
@@ -143,13 +166,15 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
                     new FakeMediaUpgradePayloadInspector(new(720, 1080, false, false, 1200, 1200)));
                 if (kind == EntityKind.Book) Assert.Equal(BookSourceTier.Retail, (await db.Acquisitions.FindAsync(parentId))!.OwnedSourceTier);
                 else Assert.Equal(VideoQuality.Webdl1080p.ToCode(), (await db.Acquisitions.FindAsync(parentId))!.OwnedMediaQuality);
-                Assert.Equal(owned, (await db.Acquisitions.FindAsync(childId))!.FinalSourcePath);
+                Assert.Equal(installed, (await db.Acquisitions.FindAsync(childId))!.FinalSourcePath);
                 Assert.Null((await db.Acquisitions.FindAsync(childId))!.ImportCheckpointJson);
                 Assert.Empty(Directory.GetFiles(folder, "*.prismedia-incoming-*"));
-                Assert.Equal(owned, (await db.EntityFiles.FindAsync(sourceId))!.Path);
+                Assert.Equal(installed, (await db.EntityFiles.FindAsync(sourceId))!.Path);
+                if (formatChange) Assert.Equal(installed, (await db.Acquisitions.FindAsync(parentId))!.FinalSourcePath);
+                if (formatChange) Assert.False(File.Exists(owned));
                 Assert.Single(queue.Enqueued, request => request.Type == JobType.ReconcileEntity);
                 Assert.Single(await db.AcquisitionHistory.Where(row => row.Event == AcquisitionHistoryEvent.Upgraded).ToArrayAsync());
-                Assert.Equal("downloaded-upgrade-book", await File.ReadAllTextAsync(owned));
+                Assert.Equal("downloaded-upgrade-book", await File.ReadAllTextAsync(installed));
             }
         } finally { Directory.Delete(folder, true); }
     }
@@ -850,7 +875,8 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
         RecordingJobQueue queue,
         IOwnedFileReplacer replacer,
         Guid childId,
-        IMediaUpgradePayloadInspector? inspector = null) {
+        IMediaUpgradePayloadInspector? inspector = null,
+        bool allowFormatChange = false) {
         var handler = new AcquisitionUpgradeReplaceJobHandler(
             AcquisitionTestFactory.Store(db), new EfMonitorStore(db), new EfBookAcquisitionProfileStore(db),
             replacer is FakeReplacer ? new FakeCheckpoints() : new EfAtomicUpgradeCheckpointStore(db),
@@ -860,7 +886,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
             mediaUpgradeInspector: inspector);
         var job = new JobRunSnapshot(
             Guid.NewGuid(), JobType.AcquisitionUpgradeReplace, JobRunStatus.Running, 0, null,
-            AcquisitionJobPayload.Serialize(childId), null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null);
+            AcquisitionJobPayload.Serialize(childId, allowFormatChange), null, null, null, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null);
         await handler.HandleAsync(new JobContext(job, queue), CancellationToken.None);
     }
 
@@ -945,11 +971,12 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
                 preparation.TransferContentPath, preparation.TransferClientItemId, preparation.SelectedRelease));
         public Task<bool> TryClaimAsync(Guid id, AtomicUpgradeCheckpoint checkpoint, Guid claim, CancellationToken token) => Task.FromResult(true);
         public Task<bool> IsCurrentAsync(Guid id, AtomicUpgradeCheckpoint checkpoint, CancellationToken token) => Task.FromResult(true);
+        public Task<bool> TryRebindSourceAsync(Guid id, AtomicUpgradeCheckpoint checkpoint, CancellationToken token) => Task.FromResult(true);
         public Task<bool> TryClearAsync(Guid id, AtomicUpgradeCheckpoint checkpoint, CancellationToken token) => Task.FromResult(true);
     }
 
     private sealed class FakeAtomicFiles(FakeReplacer replacer) : IAtomicUpgradeFiles {
-        public Task<AtomicUpgradeFilePlan> PrepareAsync(UpgradeReplaceTarget target, CancellationToken token) => Task.FromResult(
+        public Task<AtomicUpgradeFilePlan> PrepareAsync(UpgradeReplaceTarget target, CancellationToken token, bool allowFormatChange = false) => Task.FromResult(
             new AtomicUpgradeFilePlan(target.ParentFinalSourcePath!, target.ChildContentPath!,
                 new(1, DateTime.UtcNow), new(1, DateTime.UtcNow), target.ParentOwnedQuality.Format));
         public Task<AtomicUpgradeFileRecovery> RecoverAsync(AtomicUpgradeCheckpoint checkpoint, CancellationToken token) => Task.FromResult(new AtomicUpgradeFileRecovery());

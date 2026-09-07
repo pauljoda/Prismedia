@@ -6,6 +6,26 @@ using Prismedia.Infrastructure.Acquisition;
 namespace Prismedia.Infrastructure.Tests;
 
 public sealed class AtomicUpgradeCheckpointJsonTests {
+    [Fact]
+    public void ContainerChangeRequiresDurableVideoPermission() {
+        var checkpoint = Prepared(EntityKind.Movie);
+        checkpoint = checkpoint with { Files = checkpoint.Files with { OwnedPath = Path.ChangeExtension(checkpoint.Files.OwnedPath, ".avi") } };
+        Assert.Throws<InvalidDataException>(() => AtomicUpgradeCheckpointJson.Serialize(checkpoint));
+        checkpoint = checkpoint with { Files = checkpoint.Files with { AllowFormatChange = true } };
+        var json = AtomicUpgradeCheckpointJson.Serialize(checkpoint);
+        Assert.Equal(checkpoint, AtomicUpgradeCheckpointJson.Deserialize(json));
+        Assert.DoesNotContain(nameof(AtomicUpgradeFilePlan.InstallPath), json);
+        Assert.Throws<InvalidDataException>(() => AtomicUpgradeCheckpointJson.Serialize(checkpoint with { Kind = EntityKind.Book }));
+    }
+
+    [Fact]
+    public void PreviousSameFormatCheckpointRemainsReadableWithoutTheNewPermission() {
+        var checkpoint = Prepared(EntityKind.Movie);
+        var json = JsonNode.Parse(AtomicUpgradeCheckpointJson.Serialize(checkpoint))!;
+        json[nameof(AtomicUpgradeCheckpoint.Files)]!.AsObject().Remove(nameof(AtomicUpgradeFilePlan.AllowFormatChange));
+        Assert.Equal(checkpoint, AtomicUpgradeCheckpointJson.Deserialize(json.ToJsonString()));
+    }
+
     [Theory]
     [InlineData(EntityKind.Book)]
     [InlineData(EntityKind.Movie)]

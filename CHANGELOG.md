@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Quality profiles allow verified video replacements to change file containers by default. Turn off “Allow format changes” to require individual approval. Interrupted replacements preserve recovery evidence, episode identity, and playback history across container changes.
+
 - Replace or upload individual TV episodes, including older files imported through season packs. Replacement searches use current episode numbering and monitor preferences; files shared by multiple episodes require coverage-aware review.
 
 - Acquisition profiles now offer an ordered audio-language picker and editable starter rules for common languages, codecs, HDR, source formats, and lossless audio. Basic and Advanced edit the same reusable custom formats, with scores set per profile.

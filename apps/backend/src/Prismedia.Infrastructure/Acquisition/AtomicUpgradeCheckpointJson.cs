@@ -53,6 +53,9 @@ internal static class AtomicUpgradeCheckpointJson {
             || checkpoint.Files is not { Owned.Length: > 0, Incoming.Length: > 0 } files
             || !CanonicalPath(files.OwnedPath) || !CanonicalPath(files.IncomingPath)
             || FileSystemPathComparison.Equals(files.OwnedPath, files.IncomingPath)
+            || !string.Equals(Path.GetExtension(files.OwnedPath), Path.GetExtension(files.IncomingPath), StringComparison.OrdinalIgnoreCase)
+                && (!files.AllowFormatChange || !MediaQualityLadder.IsUpgradeCapableKind(checkpoint.Kind))
+            || FileSystemPathComparison.Equals(files.InstallPath, files.IncomingPath)
             || !CanonicalPath(checkpoint.TransferContentPath)
             || !FileSystemPathComparison.IsSameOrDescendant(checkpoint.TransferContentPath, files.IncomingPath)
             || files.Owned.LastWriteTimeUtc.Kind != DateTimeKind.Utc || files.Incoming.LastWriteTimeUtc.Kind != DateTimeKind.Utc

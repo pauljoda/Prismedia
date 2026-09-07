@@ -210,6 +210,9 @@ public sealed class BookAcquisitionProfileRow {
     /// </summary>
     public bool AutoRedownload { get; set; }
 
+    /// <summary>Allows verified video replacements to change their file container without individual approval.</summary>
+    public bool AllowFormatChange { get; set; } = true;
+
     /// <summary>When true, an imported book is kept under watch and re-searched for a higher-quality release until the cutoff is reached.</summary>
     public bool UpgradeUntilCutoff { get; set; }
 

@@ -6,6 +6,56 @@ using Prismedia.Infrastructure.Acquisition;
 namespace Prismedia.Infrastructure.Tests;
 
 public sealed class AtomicUpgradeFilesTests {
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task VideoContainerChangeNeedsPermissionAndAnEmptyDestination(bool allowed, bool occupied) {
+        var root = Directory.CreateTempSubdirectory("atomic-video-format-").FullName;
+        try {
+            var owned = Path.Combine(root, "owned.avi");
+            var incoming = Path.Combine(root, "incoming.mkv");
+            var installed = Path.Combine(root, "owned.mkv");
+            await File.WriteAllTextAsync(owned, "original video");
+            await File.WriteAllTextAsync(incoming, "new video");
+            if (occupied) await File.WriteAllTextAsync(installed, "independent video");
+            var verifier = new TestVideoPayloadVerifier();
+            var files = new AtomicUpgradeFiles(new OwnedFileReplacer(new MergedImportTestSupport.NoRecycleBin(),
+                NullLogger<OwnedFileReplacer>.Instance, verifier), new MergedImportTestSupport.NoRecycleBin());
+            var parent = Guid.NewGuid();
+            var entity = Guid.NewGuid();
+            var target = new UpgradeReplaceTarget(parent, entity, owned, default, "Movie 1080p WEB-DL", incoming,
+                "transfer", null, EntityKind.Movie);
+            if (!allowed || occupied) {
+                await Assert.ThrowsAsync<IOException>(() => files.PrepareAsync(target, default, allowed));
+                Assert.Equal("original video", await File.ReadAllTextAsync(owned));
+                Assert.Equal("new video", await File.ReadAllTextAsync(incoming));
+                if (occupied) Assert.Equal("independent video", await File.ReadAllTextAsync(installed));
+                Assert.Empty(verifier.Paths);
+                return;
+            }
+            var plan = await files.PrepareAsync(target, default, allowed);
+            var checkpoint = new AtomicUpgradeCheckpoint(Guid.NewGuid(), Guid.NewGuid(), parent, entity, Guid.NewGuid(),
+                EntityKind.Movie, plan, incoming, "transfer", new(target.ChildSelectedTitle!, null, null));
+            verifier.Failure = "Damaged video";
+            Assert.False((await files.ReplaceAsync(checkpoint, default)).Succeeded);
+            Assert.True(File.Exists(owned));
+            Assert.True(File.Exists(incoming));
+            Assert.False(File.Exists(installed));
+            verifier.Failure = null;
+            Assert.True((await files.ReplaceAsync(checkpoint, default)).Succeeded);
+            // Simulate interruption after installing the new extension but before retiring the old one.
+            File.Copy(checkpoint.BackupPath, owned);
+            var recovered = await files.RecoverAsync(checkpoint, default);
+            Assert.Null(recovered.HoldReason);
+            Assert.Equal(installed, recovered.Installed!.SwappedPath);
+            Assert.False(File.Exists(owned));
+            Assert.Equal("new video", await File.ReadAllTextAsync(installed));
+            await files.CompleteAsync(checkpoint, default);
+            Assert.Equal("original video", await File.ReadAllTextAsync(OwnedFileReplacementArtifacts.BackupPath(owned)));
+        } finally { Directory.Delete(root, true); }
+    }
+
     [Fact]
     public async Task ConfiguredBinReceivesTheOriginalOnlyAfterInstallationCommits() {
         var bin = new RecordingBin();

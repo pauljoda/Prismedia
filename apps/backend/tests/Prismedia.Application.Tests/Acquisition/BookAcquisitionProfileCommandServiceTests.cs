@@ -30,6 +30,17 @@ public sealed class BookAcquisitionProfileCommandServiceTests {
         CutoffSourceTier: BookSourceTier.Unknown,
         CutoffFormatTier: BookFormatTier.Unknown);
 
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task FormatChangePolicyIsPreservedByProfileEdits(bool enabled) {
+        var store = new CapturingStore();
+        var request = Request(EntityKind.Movie, "");
+        Assert.True(request.AllowFormatChange);
+        await CreateService(store).SaveAsync(request with { AllowFormatChange = enabled }, default);
+        Assert.Equal(enabled, store.LastCommand!.AllowFormatChange);
+    }
+
     [Fact]
     public async Task InvalidTvTemplateIsRejected() {
         var service = CreateService(new CapturingStore());

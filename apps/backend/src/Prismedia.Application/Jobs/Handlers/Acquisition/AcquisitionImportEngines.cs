@@ -934,7 +934,7 @@ public sealed partial class MovieAcquisitionImportEngine(
         var incomingRevision = selected is null ? 1 : ReleaseRevisionDetection.Detect(selected.Title);
         var rules = await profiles.GetRulesAsync(import.ProfileId, EntityKind.Movie, cancellationToken);
         var action = TvExistingTargetMerge.DecideAgainstOwned(
-            fileName, owned, incomingPosition, incomingRevision, rules.ProperPolicy, import.AllowFormatChange);
+            fileName, owned, incomingPosition, incomingRevision, rules.ProperPolicy, import.AllowFormatChange || rules.AllowFormatChange);
         if (action != MergeFileAction.ReplaceUpgrade) {
             await MergedImportExecution.FailNothingUsableAsync(
                 acquisitions, blocklist, history, torrents, logger, import, selected,
@@ -1251,6 +1251,7 @@ public sealed class TvAcquisitionImportEngine(
             return;
         }
         var rules = await profiles.GetRulesAsync(import.ProfileId, import.Kind, cancellationToken);
+        import = import with { AllowFormatChange = import.AllowFormatChange || rules.AllowFormatChange };
         var mergePlan = await new TvMeasuredMergePlanner(mediaUpgradeInspector).PlanAsync(
             unitsPlan.Units, layout,
             season => TvImportPlanBuilder.SeasonFolderSegment(series, season, profile?.PathTemplate),

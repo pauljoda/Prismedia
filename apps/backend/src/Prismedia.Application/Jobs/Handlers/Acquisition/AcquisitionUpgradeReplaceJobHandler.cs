@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Acquisition;
 using Prismedia.Application.Entities;
+using Prismedia.Application.Files;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Jobs.Handlers;
@@ -64,7 +65,8 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
                     prepared = true;
                     return;
                 }
-                var plan = await files.PrepareAsync(current, token);
+                var rules = await profiles.GetRulesAsync(current.ParentProfileId, current.ParentKind, token);
+                var plan = await files.PrepareAsync(current, token, payload.AllowFormatChange || rules.AllowFormatChange);
                 var selected = await acquisitions.GetSelectedReleaseAsync(childId, token);
                 if (selected is null) throw new IOException("The upgrade release information is missing.");
                 checkpoint = await checkpoints.TryPrepareAsync(childId, context.Job.Id,
@@ -225,7 +227,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
             throw new IOException("The replacement checkpoint changed before installation could commit.");
     }
 
-    /// <summary>The movie/single-episode replace path: ladder-position (or same-quality revision) dominance, an in-place same-extension video-file swap, and a library re-scan.</summary>
+    /// <summary>The movie/single-episode replace path: ladder-position (or same-quality revision) dominance, a verified video-file swap with durable Source rebinding, and Entity reconciliation.</summary>
     private async Task HandleMediaAsync(JobContext context, UpgradeReplaceTarget target, Guid childId, AtomicUpgradeCheckpoint checkpoint, OwnedFileReplaceResult? recovered, CancellationToken cancellationToken) {
         // Re-confirm the downloaded release still beats the parent's CURRENT owned copy (it may have changed
         // since the search) before touching the file: a strictly higher ladder position, OR the same position
@@ -327,12 +329,17 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
         }
 
         // Video has no book format tier; the replacer's format-tier guard is a pass-through for this kind. The
-        // same-extension rule still holds (an mkv → mp4 swap is refused, for entity/progress continuity).
+        // prepared format-change policy is durable, and a changed path is rebound in this transaction.
         var result = recovered ?? await files.ReplaceAsync(checkpoint, cancellationToken);
         if (!result.Succeeded) {
             await acquisitions.SetStatusAsync(childId, AcquisitionStatus.ManualImportRequired, result.FailureReason ?? "The upgrade could not be applied.", cancellationToken);
             return;
         }
+
+        if (!FileSystemPathComparison.Equals(checkpoint.Files.OwnedPath, checkpoint.Files.InstallPath)
+            && (!FileSystemPathComparison.Equals(checkpoint.Files.InstallPath, result.SwappedPath!)
+                || !await checkpoints.TryRebindSourceAsync(childId, checkpoint, cancellationToken)))
+            throw new IOException("The installed replacement's Source ownership changed before it could be rebound. Recovery evidence was retained.");
 
         // Commit the installation receipt with the parent's quality, revision, and custom-format score.
         // Advancing all three together lets a same-quality proper or format-score upgrade settle;
@@ -347,6 +354,8 @@ public sealed class AcquisitionUpgradeReplaceJobHandler(
             ? target.ParentOwnedFormatScore
             : candidateFormatScore;
         await acquisitions.SetFinalSourcePathAsync(childId, result.SwappedPath!, cancellationToken);
+        if (!FileSystemPathComparison.Equals(checkpoint.Files.OwnedPath, checkpoint.Files.InstallPath))
+            await acquisitions.SetFinalSourcePathAsync(target.ParentId, result.SwappedPath!, cancellationToken);
         await acquisitions.UpdateOwnedMediaQualityAsync(target.ParentId, resolvedCode, resolvedRevision, resolvedFormatScore, cancellationToken);
         await RecordUpgradedAsync(
             target,

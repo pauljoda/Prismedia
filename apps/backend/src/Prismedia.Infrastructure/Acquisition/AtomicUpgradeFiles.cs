@@ -5,22 +5,24 @@ using Prismedia.Domain.Entities;
 
 namespace Prismedia.Infrastructure.Acquisition;
 
-/// <summary>Uses captured file facts and attempt-specific byte evidence to recover same-path atomic replacements.</summary>
+/// <summary>Uses captured file facts and attempt-specific byte evidence to recover atomic replacements, including approved video container changes.</summary>
 public sealed class AtomicUpgradeFiles(IOwnedFileReplacer replacer, IRecycleBin recycleBin) : IAtomicUpgradeFiles {
     /// <inheritdoc />
-    public Task<AtomicUpgradeFilePlan> PrepareAsync(UpgradeReplaceTarget target, CancellationToken cancellationToken) {
+    public Task<AtomicUpgradeFilePlan> PrepareAsync(UpgradeReplaceTarget target, CancellationToken cancellationToken, bool allowFormatChange = false) {
         cancellationToken.ThrowIfCancellationRequested();
         var video = MediaQualityLadder.IsUpgradeCapableKind(target.ParentKind);
         var owned = Select(target.ParentFinalSourcePath, video);
         var incoming = Select(target.ChildContentPath, video);
         if (owned is null || incoming is null || FileSystemPathComparison.Equals(owned, incoming))
             throw new IOException("The owned and downloaded payloads must each contain one distinct importable file.");
-        if (!string.Equals(Path.GetExtension(owned), Path.GetExtension(incoming), StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(Path.GetExtension(owned), Path.GetExtension(incoming), StringComparison.OrdinalIgnoreCase) && !(video && allowFormatChange))
             throw new IOException("Upgrading to a different file format needs a manual replacement.");
         if (File.Exists(OwnedFileReplacementArtifacts.StagedPath(owned)) || Directory.Exists(OwnedFileReplacementArtifacts.StagedPath(owned)))
             throw new IOException("A previous replacement is still staged beside the owned file; review that attempt first.");
         var plan = new AtomicUpgradeFilePlan(owned, incoming, Snapshot(owned), Snapshot(incoming),
-            video ? BookFormatTier.Unknown : BookFormatDetection.FormatTierFromExtension(incoming));
+            video ? BookFormatTier.Unknown : BookFormatDetection.FormatTierFromExtension(incoming), video && allowFormatChange);
+        if (DifferentDestinationOccupied(plan))
+            throw new IOException("The replacement destination already exists; both files were retained for review.");
         if (!video && plan.IncomingFormat < target.ParentOwnedQuality.Format)
             throw new IOException("The upgrade file's format is lower than the owned file's.");
         return Task.FromResult(plan);
@@ -36,10 +38,20 @@ public sealed class AtomicUpgradeFiles(IOwnedFileReplacer replacer, IRecycleBin 
         if (File.Exists(evidence) && Matches(evidence, files.Incoming)
             && Matches(backup, files.Owned)
             && !File.Exists(staged) && !File.Exists(files.IncomingPath)
-            && await SameBytesAsync(evidence, files.OwnedPath, cancellationToken)) {
-            return new(OwnedFileReplaceResult.Ok(files.OwnedPath, files.IncomingFormat));
+            && await SameBytesAsync(evidence, files.InstallPath, cancellationToken)) {
+            if (!FileSystemPathComparison.Equals(files.OwnedPath, files.InstallPath)) {
+                // A crash can occur between installing the new extension and retiring the old file.
+                // Retire only the exact original proven by this attempt's retained backup.
+                if (Directory.Exists(files.OwnedPath)) return Hold();
+                if (File.Exists(files.OwnedPath)) {
+                    if (!Matches(files.OwnedPath, files.Owned)
+                        || !await SameBytesAsync(backup, files.OwnedPath, cancellationToken)) return Hold();
+                    File.Delete(files.OwnedPath);
+                }
+            }
+            return new(OwnedFileReplaceResult.Ok(files.InstallPath, files.IncomingFormat));
         }
-        if (!Matches(files.OwnedPath, files.Owned)) return Hold();
+        if (!Matches(files.OwnedPath, files.Owned) || DifferentDestinationOccupied(files)) return Hold();
         if (File.Exists(staged)) {
             if (!Matches(staged, files.Incoming)
                 || !await SameBytesAsync(staged, evidence, cancellationToken)) return Hold();
@@ -59,12 +71,12 @@ public sealed class AtomicUpgradeFiles(IOwnedFileReplacer replacer, IRecycleBin 
 
     /// <inheritdoc />
     public Task<OwnedFileReplaceResult> ReplaceAsync(AtomicUpgradeCheckpoint checkpoint, CancellationToken cancellationToken) {
-        if (!Matches(checkpoint.Files.OwnedPath, checkpoint.Files.Owned)
+        if (DifferentDestinationOccupied(checkpoint.Files) || !Matches(checkpoint.Files.OwnedPath, checkpoint.Files.Owned)
             || !Matches(checkpoint.Files.IncomingPath, checkpoint.Files.Incoming))
             return Task.FromResult(OwnedFileReplaceResult.Failed("The prepared files changed before replacement; recovery evidence was retained."));
         return replacer.ReplaceRetainingBackupAsync(checkpoint.Files.OwnedPath, checkpoint.Files.IncomingPath,
             checkpoint.Files.IncomingFormat, cancellationToken, checkpoint.Kind,
-            recoveryBackupPath: checkpoint.BackupPath, incomingEvidencePath: checkpoint.EvidencePath);
+            allowFormatChange: checkpoint.Files.AllowFormatChange, recoveryBackupPath: checkpoint.BackupPath, incomingEvidencePath: checkpoint.EvidencePath);
     }
 
     /// <inheritdoc />
@@ -75,10 +87,14 @@ public sealed class AtomicUpgradeFiles(IOwnedFileReplacer replacer, IRecycleBin 
             || await recycleBin.TryMoveToBinAsync(checkpoint.BackupPath, cancellationToken) is not null) return;
         // Restore the ordinary one-backup policy after commit. If another installation has already
         // changed the owned file, retain this attempt's original rather than replacing its newer backup.
-        if (Matches(checkpoint.Files.OwnedPath, checkpoint.Files.Incoming)) {
+        if (Matches(checkpoint.Files.InstallPath, checkpoint.Files.Incoming)) {
             File.Move(checkpoint.BackupPath, OwnedFileReplacementArtifacts.BackupPath(checkpoint.Files.OwnedPath), overwrite: true);
         }
     }
+
+    private static bool DifferentDestinationOccupied(AtomicUpgradeFilePlan files) =>
+        !FileSystemPathComparison.Equals(files.OwnedPath, files.InstallPath)
+        && (File.Exists(files.InstallPath) || Directory.Exists(files.InstallPath));
 
     private static AtomicUpgradeFileRecovery Hold() => new(HoldReason:
         "The interrupted replacement cannot be proven from its saved file evidence. Both the original and replacement artifacts were retained for review.");

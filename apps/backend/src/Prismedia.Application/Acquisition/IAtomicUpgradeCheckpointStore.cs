@@ -27,6 +27,9 @@ public interface IAtomicUpgradeCheckpointStore {
     /// <summary>Checks the exact claim and Source binding immediately before executing or recovering its file mutation.</summary>
     Task<bool> IsCurrentAsync(Guid acquisitionId, AtomicUpgradeCheckpoint checkpoint, CancellationToken cancellationToken);
 
+    /// <summary>Rebinds the exclusively owned Source to an approved installed path in the installation transaction, preserving its identifier.</summary>
+    Task<bool> TryRebindSourceAsync(Guid acquisitionId, AtomicUpgradeCheckpoint checkpoint, CancellationToken cancellationToken);
+
     /// <summary>Clears this exact preparation under the lifecycle lease after installation is recorded or an untouched plan is abandoned.</summary>
     Task<bool> TryClearAsync(Guid acquisitionId, AtomicUpgradeCheckpoint checkpoint, CancellationToken cancellationToken);
 }

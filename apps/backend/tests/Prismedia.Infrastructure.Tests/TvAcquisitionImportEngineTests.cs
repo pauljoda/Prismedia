@@ -1468,14 +1468,20 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         await using var db = CreateContext();
         var harness = await HarnessAsync(db, ownedEpisodeName: "Show - s01e01 720p WEB.mp4", payloadFiles: ["Show.S01E01.2160p.BluRay.mkv"], releaseTitle: "Show S01 2160p BluRay");
 
+        db.BookAcquisitionProfiles.Add(new BookAcquisitionProfileRow {
+            Id = Guid.NewGuid(), Kind = EntityKind.VideoSeries, IsDefault = true, AllowFormatChange = false
+        });
+        await db.SaveChangesAsync();
         await harness.Engine.ImportAsync(harness.Context, harness.Import, CancellationToken.None);
 
         Assert.Equal(AcquisitionStatus.ManualImportRequired, await StatusOf(db, harness.Import.Id));
         Assert.Empty(await db.AcquisitionBlocklist.AsNoTracking().ToArrayAsync());
     }
 
-    [Fact]
-    public async Task ConsentedFormatChangePreservesTheEpisodeEntityAndRebindsItsSource() {
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public async Task ConsentedFormatChangePreservesTheEpisodeEntityAndRebindsItsSource(bool profileAllows, bool manualApproval) {
         await using var db = CreateContext();
         var harness = await HarnessAsync(
             db,
@@ -1483,9 +1489,13 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
             payloadFiles: ["Show.S01E01.2160p.BluRay.mkv"],
             releaseTitle: "Show S01 2160p BluRay");
 
+        db.BookAcquisitionProfiles.Add(new BookAcquisitionProfileRow {
+            Id = Guid.NewGuid(), Kind = EntityKind.VideoSeries, IsDefault = true, AllowFormatChange = profileAllows
+        });
+        await db.SaveChangesAsync();
         await harness.Engine.ImportAsync(
             harness.Context,
-            harness.Import with { AllowFormatChange = true },
+            harness.Import with { AllowFormatChange = manualApproval },
             CancellationToken.None);
 
         var episodes = await db.Entities.AsNoTracking()

@@ -3,10 +3,10 @@ namespace Prismedia.Application.Acquisition;
 /// <summary>Recovery either proves an installed replacement, leaves an untouched candidate ready, or explains a hold.</summary>
 public sealed record AtomicUpgradeFileRecovery(OwnedFileReplaceResult? Installed = null, string? HoldReason = null);
 
-/// <summary>Physical preparation and evidence checks for a database-checkpointed, same-path replacement.</summary>
+/// <summary>Physical preparation and evidence checks for a database-checkpointed replacement.</summary>
 public interface IAtomicUpgradeFiles {
     /// <summary>Selects exact files and records their facts without mutating either file. Invalid or ambiguous inputs raise an IO error.</summary>
-    Task<AtomicUpgradeFilePlan> PrepareAsync(UpgradeReplaceTarget target, CancellationToken cancellationToken);
+    Task<AtomicUpgradeFilePlan> PrepareAsync(UpgradeReplaceTarget target, CancellationToken cancellationToken, bool allowFormatChange = false);
 
     /// <summary>Proves an installed swap or restores a provable staged candidate for validation; ambiguous evidence is retained for review.</summary>
     Task<AtomicUpgradeFileRecovery> RecoverAsync(AtomicUpgradeCheckpoint checkpoint, CancellationToken cancellationToken);
