@@ -18,4 +18,5 @@ export const AcquisitionFileItemDecision = {
   'hold-structural-conflict': 'hold-structural-conflict',
   unsupported: 'unsupported',
   ambiguous: 'ambiguous',
+  'hold-verification': 'hold-verification',
 } as const;

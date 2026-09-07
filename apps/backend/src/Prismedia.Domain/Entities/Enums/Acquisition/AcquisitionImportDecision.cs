@@ -10,4 +10,6 @@ public enum AcquisitionImportDecision {
     [Code("hold-structural-conflict")] HoldStructuralConflict,
     [Code("unsupported")] Unsupported,
     [Code("ambiguous")] Ambiguous,
+    /// <summary>The mapped video failed full verification and remains available for review.</summary>
+    [Code("hold-verification")] HoldVerification,
 }

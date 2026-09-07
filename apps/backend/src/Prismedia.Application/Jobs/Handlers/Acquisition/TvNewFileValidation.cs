@@ -9,6 +9,9 @@ namespace Prismedia.Application.Jobs.Handlers;
 internal sealed class TvNewFileValidation(IMediaProbe probe, IBookAcquisitionProfileStore profiles,
     IImportTargetIndex targets, IMonitorStore? monitors, IVideoPayloadVerifier verifier) {
     private readonly Dictionary<string, VideoProbeData?> _observedVideo = new(FileSystemPathComparison.Comparer);
+    private readonly Dictionary<string, string> _decodeFailures = new(FileSystemPathComparison.Comparer);
+    public IReadOnlyDictionary<string, string> DecodeFailures => _decodeFailures;
+    public bool DecodedAllPendingFiles { get; private set; }
     /// <summary>Returns a review reason for damaged recovered files or unreadable/disallowed pending files.</summary>
     public Task<string?> ValidateAsync(JobContext context, AcquisitionImportContext import, DownloadPayload? payload,
         TvImportCheckpoint checkpoint, SelectedRelease? selected, CancellationToken token) =>
@@ -81,7 +84,13 @@ internal sealed class TvNewFileValidation(IMediaProbe probe, IBookAcquisitionPro
             if (!decode) continue;
             await context.ReportProgressAsync(30, $"Verifying episode {++verified} of {pending.Length}", token);
             if (await verifier.FindFailureAsync(path!, token) is { } failure) {
-                return $"{Path.GetFileName(unit.SourceRelativePath)}: {failure}";
+                _decodeFailures[unit.SourceRelativePath.Replace('\\', '/')] = failure;
+            }
+        }
+        if (decode) {
+            DecodedAllPendingFiles = true;
+            if (_decodeFailures.FirstOrDefault() is { Key: not null } failed) {
+                return $"{Path.GetFileName(failed.Key)}: {failed.Value}";
             }
         }
         return null;

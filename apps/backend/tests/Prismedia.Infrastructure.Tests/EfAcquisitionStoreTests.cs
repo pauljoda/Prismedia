@@ -1932,6 +1932,44 @@ public sealed class EfAcquisitionStoreTests {
         Assert.Equal(checkpoint.AttemptId, (await store.GetImportContextAsync(acquisitionId, default))!.TvImportCheckpoint!.AttemptId);
     }
 
+    [Theory]
+    [InlineData("current", true)]
+    [InlineData("owner", false)]
+    [InlineData("attempt", false)]
+    [InlineData("stopped", false)]
+    [InlineData("approval", false)]
+    [InlineData("lost-evidence", false)]
+    public async Task VerifiedSubsetPreservesTheAttemptAndRetainedFileEvidence(string change, bool accepted) {
+        await using var db = CreateContext();
+        var id = AddCheckpointAcquisition(db);
+        var original = ValidTvCheckpoint();
+        var first = original.Units[0] with { PreviousFilePath = null, ReplacementBackupPath = null, ReplacementEvidencePath = null };
+        var second = first with { SourceRelativePath = "Show.S01E02.mkv", EpisodeNumber = 2,
+            SourceAbsolutePath = Path.Combine(Path.GetDirectoryName(first.SourceAbsolutePath!)!, "Show.S01E02.mkv"),
+            TargetAbsolutePath = Path.Combine(Path.GetDirectoryName(first.TargetAbsolutePath)!, "Show - S01E02.mkv") };
+        original = original with { Units = [first, second], LibraryRootPath = Path.GetDirectoryName(original.SeriesFolderPath) };
+        var ledger = AcquisitionImportFileLedger.Create(original, original.LibraryRootPath!)
+            .RetainUnverifiedVideos(new Dictionary<string, string> { [second.SourceRelativePath] = "The video could not be decoded." });
+        var revised = original with { Units = [first], ImportFileLedger = ledger, DiscardRemainingPayload = false };
+        var row = db.Acquisitions.Local.Single();
+        row.ImportClaimJobId = original.ClaimJobId;
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+        await store.SetTvImportCheckpointAsync(id, original, default);
+        if (change == "owner") row.ImportClaimJobId = Guid.NewGuid();
+        if (change == "stopped") row.Status = AcquisitionStatus.Stopping;
+        if (change == "approval") revised = revised with { AllowFormatChange = !original.AllowFormatChange };
+        if (change == "lost-evidence") revised = revised with { ImportFileLedger = ledger with { Files = [ledger.Files[0]] } };
+        await db.SaveChangesAsync();
+        if (change == "attempt") await store.SetTvImportCheckpointAsync(id, original with { AttemptId = Guid.NewGuid() }, default);
+
+        Assert.Equal(accepted, await store.TryReviseTvImportCheckpointAsync(id, original, revised, default));
+
+        var persisted = (await store.GetImportContextAsync(id, default))!.TvImportCheckpoint!;
+        Assert.Equal(accepted ? 1 : 2, persisted.Units.Count);
+        if (accepted) Assert.True((await store.GetTransferInfoAsync(id, default))!.ImportResult!.HasRetainedTvVideos());
+    }
+
     [Fact]
     public async Task ImportClaimLetsOnlyTheOwningJobRecoverImportingOrFailedWork() {
         await using var db = CreateContext();

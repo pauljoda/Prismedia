@@ -31,6 +31,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Untouched TV packs can import episodes that pass full verification while retaining damaged videos with their failure details for review. Missing-episode recovery then targets the episodes still unavailable, and interrupted imports preserve the verified subset.
+
 - Newly acquired movies, episodes, and video replacements now fully decode video and audio before placement. Verification uses limited background processing; damaged or unverified downloads stay available for review without replacing owned files.
 
 - Audio-language preferences and rules exclude known work and episode titles, so a word such as French in a movie's name no longer rejects otherwise eligible releases or falsely confirms their audio language.

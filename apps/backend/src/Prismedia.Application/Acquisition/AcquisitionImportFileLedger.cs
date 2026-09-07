@@ -128,7 +128,15 @@ public sealed record AcquisitionImportFileLedger(
     /// <summary>Whether a partial TV import still owns videos awaiting an explicit mapping or rejection.</summary>
     public bool HasRetainedTvVideos() => Files.Any(file => file.Role == AcquisitionImportFileRole.Media
         && file.ContentKind == AcquisitionImportContentKind.Video && file.Status == AcquisitionImportFileStatus.Skipped
-        && file.Decision == AcquisitionImportDecision.Ambiguous);
+        && file.Decision is AcquisitionImportDecision.Ambiguous or AcquisitionImportDecision.HoldVerification);
+
+    /// <summary>Keeps failed video bytes in the payload while verified files proceed through the same import.</summary>
+    public AcquisitionImportFileLedger RetainUnverifiedVideos(IReadOnlyDictionary<string, string> failures) => this with {
+        Files = Files.Select(file => failures.TryGetValue(file.SourceRelativePath, out var reason)
+            ? file with { Status = AcquisitionImportFileStatus.Skipped, Decision = AcquisitionImportDecision.HoldVerification,
+                DestinationRelativePath = null, TechnicalError = reason }
+            : file).ToArray()
+    };
 
     /// <summary>Captures actual payload lengths before a move makes the original paths unavailable.</summary>
     public AcquisitionImportFileLedger WithObservedSizes(IReadOnlyList<ImportCandidateFile> payload) {

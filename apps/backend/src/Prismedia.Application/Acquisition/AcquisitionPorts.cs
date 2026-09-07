@@ -874,6 +874,10 @@ public interface IAcquisitionStore : IAcquisitionLifecycleStore {
     Task<bool> TryHoldTvImportCheckpointAsync(Guid acquisitionId, TvImportCheckpoint checkpoint,
         string message, CancellationToken cancellationToken) => Task.FromResult(false);
 
+    /// <summary>Persists a verified subset and its retained-file evidence only while the original TV plan is still claimed.</summary>
+    Task<bool> TryReviseTvImportCheckpointAsync(Guid acquisitionId, TvImportCheckpoint expected,
+        TvImportCheckpoint revised, CancellationToken cancellationToken) => Task.FromResult(false);
+
     /// <summary>
     /// Atomically creates a kind-neutral book/movie/album placement checkpoint for the exclusively
     /// claimed Importing row and matching transfer. False means lifecycle ownership changed before

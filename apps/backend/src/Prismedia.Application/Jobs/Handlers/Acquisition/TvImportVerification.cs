@@ -45,10 +45,17 @@ internal sealed class TvImportVerification(ILibraryScanRootPersistence roots, II
                 }
                 return new(placementLease, false, null);
             }
-            hold ??= await validation.ValidateCurrentProfileAsync(context, import, payload, checkpoint, selected, token);
+            var root = await roots.GetLibraryRootAsync(checkpoint.LibraryRootId, token);
+            var verifiedPlan = root is null ? null : TvVerifiedImportPlan.RetainFailures(checkpoint, validation, root.Path);
+            if (verifiedPlan is not null) hold = null;
+            hold ??= await validation.ValidateCurrentProfileAsync(context, import, payload, verifiedPlan ?? checkpoint, selected, token);
             if (hold is not null) {
                 await acquisitions.TryHoldTvImportCheckpointAsync(import.Id, checkpoint, hold, token);
                 return new(placementLease, false, null);
+            }
+            if (verifiedPlan is not null) {
+                var revised = await acquisitions.TryReviseTvImportCheckpointAsync(import.Id, checkpoint, verifiedPlan, token);
+                return new(placementLease, revised, null, verifiedPlan);
             }
             return new(placementLease, await acquisitions.IsCurrentTvImportCheckpointAsync(import.Id, checkpoint, token), null);
         } catch {
@@ -59,6 +66,7 @@ internal sealed class TvImportVerification(ILibraryScanRootPersistence roots, II
 }
 
 /// <summary>Keeps placement exclusive after verification and distinguishes superseded work from a review hold.</summary>
-internal sealed record TvImportVerificationLease(IAsyncDisposable? Lease, bool IsCurrent, string? Failure) : IAsyncDisposable {
+internal sealed record TvImportVerificationLease(IAsyncDisposable? Lease, bool IsCurrent, string? Failure,
+    TvImportCheckpoint? VerifiedCheckpoint = null) : IAsyncDisposable {
     public ValueTask DisposeAsync() => Lease?.DisposeAsync() ?? ValueTask.CompletedTask;
 }

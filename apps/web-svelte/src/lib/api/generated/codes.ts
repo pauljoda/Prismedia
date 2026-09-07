@@ -305,6 +305,7 @@ export const ACQUISITION_IMPORT_DECISION = {
   holdStructuralConflict: "hold-structural-conflict",
   unsupported: "unsupported",
   ambiguous: "ambiguous",
+  holdVerification: "hold-verification",
 } as const;
 
 export type AcquisitionImportDecisionCode = (typeof ACQUISITION_IMPORT_DECISION)[keyof typeof ACQUISITION_IMPORT_DECISION];

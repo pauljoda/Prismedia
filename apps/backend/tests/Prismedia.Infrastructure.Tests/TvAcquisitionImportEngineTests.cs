@@ -29,6 +29,51 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
     private readonly string _workRoot = Directory.CreateTempSubdirectory("prismedia-tv-import-").FullName;
 
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task MixedIntegrityPackImportsVerifiedEpisodesAndRetainsOnlyTheDamagedEpisode(bool interruptPlacement) {
+        await using var db = CreateContext();
+        string[] files = ["Show.S01E02.WEB-DL.1080p.mkv", "Show.S01E03.WEB-DL.1080p.mkv", "Show.S01E04.WEB-DL.1080p.mkv"];
+        var verifier = new TestVideoPayloadVerifier();
+        verifier.BeforeResult = () => {
+            verifier.Failure = verifier.Paths.Last().Contains("E03") ? "The downloaded video could not be decoded completely." : null;
+            return Task.CompletedTask;
+        };
+        var harness = await HarnessAsync(db, "Show.S01E01.WEB-DL.720p.mkv", files, "Show S01 WEB-DL 1080p",
+            wantedEpisodeNumbers: [2, 3, 4], videoVerifier: verifier, enableMissingFallback: true,
+            failPlacementOnCall: interruptPlacement ? 1 : null);
+        var store = AcquisitionTestFactory.Store(db);
+        if (interruptPlacement) {
+            await Assert.ThrowsAsync<IOException>(() => harness.Engine.ImportAsync(harness.Context, harness.Import, default));
+            var resume = (await store.GetImportContextAsync(harness.Import.Id, default))!;
+            Assert.Equal<int>([2, 4], resume.TvImportCheckpoint!.Units.Select(unit => unit.EpisodeNumber));
+            verifier.Paths.Clear();
+            await harness.ResumeEngine.ImportAsync(harness.Context, resume, default);
+            Assert.DoesNotContain(verifier.Paths, path => path.Contains("E03"));
+        } else {
+            await harness.Engine.ImportAsync(harness.Context, harness.Import, default);
+            Assert.Equal(3, verifier.Paths.Count);
+        }
+        await store.MarkImportedWithQualityAsync(harness.Import.Id, BookQualityRank.Floor, "Imported", default);
+
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, await StatusOf(db, harness.Import.Id));
+        var episodes = await db.Entities.AsNoTracking().Where(row => row.ParentEntityId == harness.SeasonId
+            && row.SortOrder >= 2 && row.SortOrder <= 4).OrderBy(row => row.SortOrder).ToArrayAsync();
+        Assert.Equal<bool>([false, true, false], episodes.Select(episode => episode.IsWanted));
+        Assert.Equal(2, await db.EntityFiles.CountAsync(row => episodes.Select(episode => episode.Id).Contains(row.EntityId)
+            && row.Role == EntityFileRole.Source));
+        Assert.Equal("payload-bytes", await File.ReadAllTextAsync(Path.Combine(harness.Import.ContentPath!, files[1])));
+        Assert.Equal("owned-bytes", await File.ReadAllTextAsync(harness.OwnedEpisodePath));
+        var ledger = (await store.GetTransferInfoAsync(harness.Import.Id, default))!.ImportResult!;
+        Assert.True(ledger.HasRetainedTvVideos());
+        var retained = Assert.Single(ledger.Files, file => file.SourceRelativePath == files[1]);
+        Assert.Equal(AcquisitionImportFileStatus.Skipped, retained.Status);
+        Assert.Equal(AcquisitionImportDecision.HoldVerification, retained.Decision);
+        Assert.Contains("decoded", retained.TechnicalError);
+        Assert.Contains(harness.Queue.Enqueued, request => request.Type == JobType.MonitoredSearch);
+    }
+
+    [Theory]
     [InlineData("scan", AcquisitionStatus.Importing)]
     [InlineData("profile", AcquisitionStatus.ManualImportRequired)]
     [InlineData("payload", AcquisitionStatus.ManualImportRequired)]
@@ -74,6 +119,31 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
             var checkpoint = (await AcquisitionTestFactory.Store(db).GetImportContextAsync(harness.Import.Id, default))!.TvImportCheckpoint!;
             Assert.Equal("a competing library file", await File.ReadAllTextAsync(Assert.Single(checkpoint.Units).TargetAbsolutePath));
         }
+    }
+
+    [Fact]
+    public async Task PartialIntegrityRecoveryStillHonorsAProfileChangedDuringDecode() {
+        await using var db = CreateContext();
+        var verifier = new TestVideoPayloadVerifier();
+        string[] files = ["Show.S01E02.WEB-DL.1080p.mkv", "Show.S01E03.WEB-DL.1080p.mkv"];
+        var harness = await HarnessAsync(db, "Show.S01E01.WEB-DL.720p.mkv", files, "Show S01 WEB-DL 1080p",
+            wantedEpisodeNumbers: [2, 3], videoVerifier: verifier,
+            mediaProbe: new NewEpisodeProbe(new(1200, 1000, 1920, 1080, 24, null, null, null, null, null, null)));
+        verifier.BeforeResult = async () => {
+            if (!verifier.Paths.Last().Contains("E03")) return;
+            verifier.Failure = "The video could not be decoded completely.";
+            db.BookAcquisitionProfiles.Add(new BookAcquisitionProfileRow { Id = Guid.NewGuid(), IsDefault = true,
+                Kind = AcquisitionProfileKinds.For(EntityKind.VideoSeason), DisplayName = "Changed during verification",
+                AllowedQualities = [VideoQuality.Webdl2160p.ToCode()] });
+            await db.SaveChangesAsync();
+        };
+
+        await harness.Engine.ImportAsync(harness.Context, harness.Import, default);
+
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, await StatusOf(db, harness.Import.Id));
+        Assert.Single(await db.EntityFiles.Where(row => row.Role == EntityFileRole.Source).ToArrayAsync());
+        foreach (var file in files) Assert.True(File.Exists(Path.Combine(harness.Import.ContentPath!, file)));
+        Assert.Equal(2, (await AcquisitionTestFactory.Store(db).GetImportContextAsync(harness.Import.Id, default))!.TvImportCheckpoint!.Units.Count);
     }
 
     [Fact]

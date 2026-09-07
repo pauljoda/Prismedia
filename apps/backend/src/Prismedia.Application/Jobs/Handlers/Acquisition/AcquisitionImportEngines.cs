@@ -1519,6 +1519,7 @@ public sealed class TvAcquisitionImportEngine(
                 new TvNewFileValidation(mediaProbe, profiles, targets, monitors, videoVerifier))
             .VerifyAsync(scanLease, context, import, payload, checkpoint, selected, cancellationToken);
         if (!verification.IsCurrent) return;
+        checkpoint = verification.VerifiedCheckpoint ?? checkpoint;
         if (verification.Failure is { } newFileHold) {
             await acquisitions.SetStatusAsync(import.Id, AcquisitionStatus.ManualImportRequired, newFileHold, cancellationToken);
             return;

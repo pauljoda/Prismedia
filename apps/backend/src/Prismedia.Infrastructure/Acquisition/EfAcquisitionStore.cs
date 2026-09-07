@@ -889,7 +889,9 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         var retainedVideos = importResult?.HasRetainedTvVideos() == true;
         row.Status = retainedVideos ? AcquisitionStatus.ManualImportRequired : AcquisitionStatus.Imported;
         row.StatusMessage = retainedVideos
-            ? "Matched episodes were imported. Additional videos were retained in the download for mapping review."
+            ? importResult!.Files.Any(file => file.Decision == AcquisitionImportDecision.HoldVerification)
+                ? "Verified episodes were imported. Videos that failed verification were retained in the download for review."
+                : "Matched episodes were imported. Additional videos were retained in the download for mapping review."
             : message;
         row.OwnedSourceTier = ownedQuality.Source;
         row.OwnedFormatTier = ownedQuality.Format;
