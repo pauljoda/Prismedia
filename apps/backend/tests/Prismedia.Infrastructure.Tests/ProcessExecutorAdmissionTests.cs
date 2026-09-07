@@ -51,7 +51,7 @@ public sealed class ProcessExecutorAdmissionTests : IDisposable {
     private string CreateNoOpFfmpeg() {
         Directory.CreateDirectory(_tempRoot);
         var path = Path.Combine(_tempRoot, "ffmpeg");
-        File.Copy("/usr/bin/true", path, overwrite: true);
+        File.WriteAllText(path, "#!/bin/sh\nexit 0\n");
         if (!OperatingSystem.IsWindows()) {
             File.SetUnixFileMode(
                 path,

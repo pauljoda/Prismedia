@@ -6,7 +6,8 @@ namespace Prismedia.Infrastructure.Videos;
 /// <summary>
 /// In-memory transcode session registry. Process ownership hooks will attach here as the HLS manager deepens.
 /// </summary>
-public sealed class TranscodeSessionService : ITranscodeSessionService {
+public sealed class TranscodeSessionService(TimeProvider? timeProvider = null) : ITranscodeSessionService {
+    private readonly TimeProvider _time = timeProvider ?? TimeProvider.System;
     private readonly ConcurrentDictionary<string, ActiveTranscodeSession> _sessions = new(StringComparer.Ordinal);
 
     public void Register(string playSessionId, Guid itemId) {
@@ -16,8 +17,8 @@ public sealed class TranscodeSessionService : ITranscodeSessionService {
 
         _sessions.AddOrUpdate(
             playSessionId,
-            _ => new ActiveTranscodeSession(itemId, DateTimeOffset.UtcNow),
-            (_, existing) => existing with { ItemId = itemId, LastPingedAt = DateTimeOffset.UtcNow });
+            _ => new ActiveTranscodeSession(itemId, _time.GetUtcNow()),
+            (_, existing) => existing with { ItemId = itemId, LastPingedAt = _time.GetUtcNow() });
     }
 
     public void Ping(string playSessionId) {
@@ -27,8 +28,8 @@ public sealed class TranscodeSessionService : ITranscodeSessionService {
 
         _sessions.AddOrUpdate(
             playSessionId,
-            _ => new ActiveTranscodeSession(Guid.Empty, DateTimeOffset.UtcNow),
-            (_, existing) => existing with { LastPingedAt = DateTimeOffset.UtcNow });
+            _ => new ActiveTranscodeSession(Guid.Empty, _time.GetUtcNow()),
+            (_, existing) => existing with { LastPingedAt = _time.GetUtcNow() });
     }
 
     public Task CancelAsync(string playSessionId, CancellationToken cancellationToken) {
@@ -49,7 +50,7 @@ public sealed class TranscodeSessionService : ITranscodeSessionService {
     }
 
     public IReadOnlySet<Guid> LiveItemIds(TimeSpan within) {
-        var cutoff = DateTimeOffset.UtcNow - within;
+        var cutoff = _time.GetUtcNow() - within;
         var live = new HashSet<Guid>();
         foreach (var session in _sessions.Values) {
             if (session.ItemId != Guid.Empty && session.LastPingedAt >= cutoff) {
@@ -61,7 +62,7 @@ public sealed class TranscodeSessionService : ITranscodeSessionService {
     }
 
     public int ReapStaleSessions(TimeSpan ttl) {
-        var cutoff = DateTimeOffset.UtcNow - ttl;
+        var cutoff = _time.GetUtcNow() - ttl;
         var removed = 0;
         foreach (var (playSessionId, session) in _sessions) {
             if (session.LastPingedAt < cutoff && _sessions.TryRemove(playSessionId, out _)) {
