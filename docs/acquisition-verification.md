@@ -45,7 +45,8 @@ also cannot prove that its videos decode correctly.
 
 Individual-song searches use advertised filenames when available to check the exact
 recording before selection. Artist prefixes and track numbers are normalized;
-recording variants such as instrumentals remain distinct.
+recording variants such as instrumentals remain distinct. Album reconciliation
+allows track performers to differ from a compilation album's artist.
 
 ## Before import and replacement
 

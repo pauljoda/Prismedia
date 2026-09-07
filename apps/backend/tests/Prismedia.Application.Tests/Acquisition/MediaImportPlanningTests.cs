@@ -9,6 +9,15 @@ public sealed class MovieImportPlanBuilderTests {
 
     private static ImportCandidateFile File(string path, long size) => new(path, size);
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, true)]
+    public void IndividualRecordingChecksArtistWithoutChangingCompilationAlbumMatching(bool requireArtistMatch, bool blocked) {
+        var plan = MusicImportPlanBuilder.Plan([new("01 Other Performer - Song.flac", 100)], "Album Artist", "Compilation",
+            requestedTracks: [new(Guid.NewGuid(), "Song")], requireArtistMatch: requireArtistMatch);
+        Assert.Equal(blocked, plan.Blocked);
+    }
+
     [Fact]
     public void PicksTheLargestVideoAndRendersTitleYearLayout() {
         var plan = MovieImportPlanBuilder.Plan([

@@ -99,7 +99,7 @@ public sealed class MusicTitleIdentitySpecification(EntityKind kind = EntityKind
         if (kind == EntityKind.AudioTrack && !string.IsNullOrWhiteSpace(rules.TargetTrackTitle)
             && release.KnownFileNames.Count > 0
             && !release.KnownFileNames.Any(file => AudioTrackTitleText.MatchesMetadataTitle(
-                rules.TargetTrackTitle, Path.GetFileNameWithoutExtension(file.Replace('\\', '/')), rules.TargetAuthor))) {
+                rules.TargetTrackTitle, Path.GetFileNameWithoutExtension(file.Replace('\\', '/')), rules.TargetAuthor, requireArtistMatch: true))) {
             return Reason;
         }
         var matched = release.Protocol == DownloadProtocol.Soulseek

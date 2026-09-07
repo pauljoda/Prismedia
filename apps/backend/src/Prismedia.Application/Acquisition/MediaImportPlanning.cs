@@ -175,19 +175,21 @@ public static class MusicImportPlanBuilder {
     /// (<paramref name="template"/> defaults to <see cref="MediaNamingTemplates.MusicDefault"/>; a blank or
     /// invalid template degrades to the default).
     /// </summary>
+    /// <param name="requireArtistMatch">For individual recordings, requires explicit filename artist credits to agree with the requested performer.</param>
     public static ImportPlan Plan(
         IReadOnlyList<ImportCandidateFile> files,
         string artist,
         string album,
         string? template = null,
         int? year = null,
-        IReadOnlyList<RequestedAudioTrack>? requestedTracks = null) {
+        IReadOnlyList<RequestedAudioTrack>? requestedTracks = null,
+        bool requireArtistMatch = false) {
         var supportedAudio = files
             .Where(file => AudioExtensions.Contains(Path.GetExtension(file.RelativePath)))
             .ToArray();
         var requestedSelections = requestedTracks is null
             ? null
-            : SelectRequestedAudio(supportedAudio, requestedTracks, artist);
+            : SelectRequestedAudio(supportedAudio, requestedTracks, artist, requireArtistMatch);
         var audio = requestedSelections is null
             ? supportedAudio
             : requestedSelections.Select(selection => selection.File).ToArray();
@@ -226,9 +228,9 @@ public static class MusicImportPlanBuilder {
     private static AudioSelection[] SelectRequestedAudio(
         IReadOnlyList<ImportCandidateFile> audio,
         IReadOnlyList<RequestedAudioTrack> requestedTracks,
-        string artist) {
+        string artist, bool requireArtistMatch) {
         var titleProposals = requestedTracks
-            .Select(track => ResolveTitleProposal(track, audio, artist))
+            .Select(track => ResolveTitleProposal(track, audio, artist, requireArtistMatch))
             .OfType<AudioSelection>()
             .ToArray();
         var selected = RemoveFileConflicts(titleProposals).ToList();
@@ -253,11 +255,11 @@ public static class MusicImportPlanBuilder {
     private static AudioSelection? ResolveTitleProposal(
         RequestedAudioTrack track,
         IReadOnlyList<ImportCandidateFile> audio,
-        string artist) {
+        string artist, bool requireArtistMatch) {
         var candidates = audio
             .Where(file => AudioTrackTitleText.MatchesMetadataTitle(
                 track.Title,
-                FileNameWithoutExtension(file.RelativePath), artist))
+                FileNameWithoutExtension(file.RelativePath), artist, requireArtistMatch))
             .ToArray();
         var resolved = Unique(candidates);
         if (resolved is null && track.Position is not null) {

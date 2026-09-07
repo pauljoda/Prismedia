@@ -108,7 +108,7 @@ public sealed partial class MusicAcquisitionImportEngine(
             albumTitle,
             profile?.PathTemplate,
             import.Year,
-            requestedTracks);
+            requestedTracks, requireArtistMatch: import.Kind == EntityKind.AudioTrack);
         if (rawPlan.Blocked) {
             await acquisitions.SetStatusAsync(
                 import.Id, AcquisitionStatus.ManualImportRequired,

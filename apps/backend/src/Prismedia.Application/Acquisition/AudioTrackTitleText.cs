@@ -29,9 +29,10 @@ public static partial class AudioTrackTitleText {
     /// Whether a scanned filename safely identifies one metadata-authored track title. Exact normalized
     /// equality is preferred; a numbered filename may also carry a leading artist credit before the exact
     /// title, which is common in Soulseek folders and remains unambiguous only when the caller finds one match.
-    /// Unnumbered artist prefixes require an exact match to the supplied artist.
+    /// Unnumbered artist prefixes require an exact match to the supplied artist. Individual recording
+    /// requests can also require that match for numbered files; an album artist may differ from its performers.
     /// </summary>
-    public static bool MatchesMetadataTitle(string? metadataTitle, string? scannedTitle, string? artist = null) {
+    public static bool MatchesMetadataTitle(string? metadataTitle, string? scannedTitle, string? artist = null, bool requireArtistMatch = false) {
         var metadata = ReleaseTitleText.Tokens(Normalize(metadataTitle));
         var scanned = ReleaseTitleText.Tokens(Normalize(scannedTitle));
         if (metadata.Count == 0 || scanned.Count < metadata.Count) {
@@ -62,7 +63,7 @@ public static partial class AudioTrackTitleText {
         }
         // Standalone Soulseek files often omit album numbering. Accept their prefix only when it
         // matches the requested artist, so a similarly named song by another artist cannot bind here.
-        if ((!numbered || !string.IsNullOrWhiteSpace(artist)) && !ReleaseTitleText.Tokens(Normalize(artist))
+        if ((!numbered || requireArtistMatch) && !ReleaseTitleText.Tokens(Normalize(artist))
                 .SequenceEqual(ReleaseTitleText.Tokens(Normalize(artistAndTitle[0])), StringComparer.Ordinal)) {
             return false;
         }

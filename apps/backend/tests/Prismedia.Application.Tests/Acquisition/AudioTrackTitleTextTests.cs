@@ -17,7 +17,7 @@ public sealed class AudioTrackTitleTextTests {
     [InlineData("Pharrell Williams - Happy (Live)", "Pharrell Williams", false)]
     [InlineData("Pharrell Williams - Happy", null, false)]
     public void StandaloneArtistPrefixRequiresTheRequestedArtistAndExactTitle(string filename, string? artist, bool expected) =>
-        Assert.Equal(expected, AudioTrackTitleText.MatchesMetadataTitle("Happy", filename, artist));
+        Assert.Equal(expected, AudioTrackTitleText.MatchesMetadataTitle("Happy", filename, artist, requireArtistMatch: true));
 
     [Theory]
     [InlineData(
