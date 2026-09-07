@@ -1,7 +1,12 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Security;
+using Prismedia.Infrastructure.Entities;
+using Prismedia.Infrastructure.Entities.Mappers;
+using Prismedia.Infrastructure.Entities.Thumbnails;
 using Prismedia.Contracts.Media;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Audio;
+using Prismedia.Infrastructure.Security;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 
@@ -27,7 +32,7 @@ public sealed class AudioSourceServiceTests : IDisposable {
         SeedAudioSource(db, trackId, filePath, codec);
         await db.SaveChangesAsync();
 
-        var service = new AudioSourceService(db);
+        var service = CreateService(db);
         var source = await service.GetSourceAsync(trackId, CancellationToken.None);
 
         Assert.NotNull(source);
@@ -52,7 +57,7 @@ public sealed class AudioSourceServiceTests : IDisposable {
             mimeType: storedContentType);
         await db.SaveChangesAsync();
 
-        var source = await new AudioSourceService(db).GetSourceAsync(trackId, CancellationToken.None);
+        var source = await CreateService(db).GetSourceAsync(trackId, CancellationToken.None);
 
         Assert.NotNull(source);
         Assert.Equal(MediaContentTypes.AudioOggOpus, source.ContentType);
@@ -68,7 +73,7 @@ public sealed class AudioSourceServiceTests : IDisposable {
         SeedAudioSource(db, trackId, filePath, "mp3", isWanted: true);
         await db.SaveChangesAsync();
 
-        var source = await new AudioSourceService(db).GetSourceAsync(trackId, CancellationToken.None);
+        var source = await CreateService(db).GetSourceAsync(trackId, CancellationToken.None);
 
         Assert.Null(source);
     }
@@ -96,15 +101,78 @@ public sealed class AudioSourceServiceTests : IDisposable {
         });
         await db.SaveChangesAsync();
 
-        var source = await new AudioSourceService(db).GetSourceAsync(bookId, CancellationToken.None);
+        var source = await CreateService(db).GetSourceAsync(bookId, CancellationToken.None);
 
         Assert.Null(source);
+    }
+
+    [Theory]
+    [InlineData(true, true, MediaCodecs.Mp3)]
+    [InlineData(false, true, MediaCodecs.Mp3)]
+    [InlineData(true, false, MediaCodecs.Mp3)]
+    [InlineData(false, false, MediaCodecs.Mp3)]
+    [InlineData(true, true, MediaCodecs.Ac3)]
+    [InlineData(false, true, MediaCodecs.Ac3)]
+    [InlineData(true, false, MediaCodecs.Ac3)]
+    [InlineData(false, false, MediaCodecs.Ac3)]
+    public async Task SourceResolutionEnforcesMemberLibraryAccess(bool granted, bool enabled, string codec) {
+        await using var db = CreateContext();
+        var trackId = Guid.NewGuid();
+        var rootId = Guid.NewGuid();
+        var filePath = Path.Combine(_tempDir, "restricted.m4a");
+        await File.WriteAllTextAsync(filePath, "audio-bytes");
+        SeedAudioSource(db, trackId, filePath, codec);
+        db.LibraryRoots.Add(new LibraryRootRow {
+            Id = rootId, Path = _tempDir, Label = "Audio", Enabled = enabled
+        });
+        db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = trackId, LibraryRootId = rootId });
+        await db.SaveChangesAsync();
+        var user = granted ? TestUserContext.Member(rootId) : TestUserContext.Member();
+        var service = CreateService(db, user);
+
+        var source = await service.GetSourceAsync(trackId, CancellationToken.None);
+
+        Assert.Equal(granted && enabled, source is not null);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task NsfwLibraryPlaybackFollowsAccountPermission(bool allowNsfw) {
+        await using var db = CreateContext();
+        var trackId = Guid.NewGuid();
+        var rootId = Guid.NewGuid();
+        var userId = TestUserContext.UserId;
+        var filePath = Path.Combine(_tempDir, "nsfw.mp3");
+        await File.WriteAllTextAsync(filePath, "audio-bytes");
+        SeedAudioSource(db, trackId, filePath, MediaCodecs.Mp3);
+        db.Users.Add(new UserRow { Id = userId, AllowNsfw = allowNsfw });
+        db.LibraryRoots.Add(new LibraryRootRow {
+            Id = rootId, Path = _tempDir, Label = "Restricted audio", Enabled = true, IsNsfw = true
+        });
+        db.EntityLibraryRoots.Add(new EntityLibraryRootRow { EntityId = trackId, LibraryRootId = rootId });
+        await db.SaveChangesAsync();
+        var access = new EfLibraryAccessReader(db);
+        await access.ReplaceUserAccessAsync(userId, [rootId], CancellationToken.None);
+        var allowedRoots = await access.GetAllowedRootIdsAsync(userId, CancellationToken.None);
+        var service = CreateService(db, TestUserContext.Member(allowedRoots.ToArray()));
+
+        var source = await service.GetSourceAsync(trackId, CancellationToken.None);
+
+        Assert.Equal(allowNsfw, source is not null);
     }
 
     public void Dispose() {
         if (Directory.Exists(_tempDir)) {
             Directory.Delete(_tempDir, recursive: true);
         }
+    }
+
+    private static AudioSourceService CreateService(PrismediaDbContext db, ICurrentUserContext? user = null) {
+        user ??= TestUserContext.Admin();
+        var repository = new EfEntityRepository(db, user, EntityMappers.Kinds(db, user), EntityMappers.Capabilities(db, user));
+        var read = new EfEntityReadService(db, user, repository, ThumbnailContributors.For(db), new EfEntityProgressTopologyResolver(db));
+        return new AudioSourceService(db, new EfEntityVisibilityChecker(read));
     }
 
     private static PrismediaDbContext CreateContext() =>

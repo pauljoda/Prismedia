@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Audio;
+using Prismedia.Application.Entities;
 using Prismedia.Contracts.Media;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
@@ -21,17 +22,24 @@ public sealed class AudioSourceService : IAudioSourceService {
     };
 
     private readonly PrismediaDbContext _db;
+    private readonly IEntityVisibilityChecker _visibility;
 
     /// <summary>
     /// Creates an audio source resolver over the database context.
     /// </summary>
     /// <param name="db">Database context used to find audio source file rows.</param>
-    public AudioSourceService(PrismediaDbContext db) {
+    /// <param name="visibility">Current-user library visibility, checked before resolving any file.</param>
+    public AudioSourceService(PrismediaDbContext db, IEntityVisibilityChecker visibility) {
         _db = db;
+        _visibility = visibility;
     }
 
     /// <inheritdoc />
     public async Task<AudioSourceFile?> GetSourceAsync(Guid id, CancellationToken cancellationToken) {
+        if (!await _visibility.IsVisibleAsync(id, cancellationToken)) {
+            return null;
+        }
+
         var playableKindCodes = EntityKindRegistry.All
             .OfType<IPlayableAudioKindDefinition>()
             .Select(definition => definition.Kind.ToCode())

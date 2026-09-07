@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- A security policy and private vulnerability reporting guide explain how to report issues and how fixes are coordinated.
+
 - Automatic qBittorrent acquisitions on supported clients inspect torrent contents before releasing payload downloads. Wrong-content and redundant season packs can enter recovery before transferring media; metadata holds survive restarts and respect cancellation.
 
 - Quality profiles allow verified video replacements to change file containers by default. Turn off “Allow format changes” to require individual approval. Interrupted replacements preserve recovery evidence, episode identity, and playback history across container changes.
@@ -109,6 +111,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Audio-track detail and saved-queue payloads no longer duplicate embedded artist and album fields outside the Entity's `embedded-audio-metadata` capability.
 
 ### Fixed
+
+- Audio playback now enforces the same library-access restrictions as other media, including range requests and transcoding.
 
 - Individual-song searches check advertised filenames before automatic selection, avoiding different recordings or artist credits that would otherwise fail only at import. Exact track matches rank by profile and quality without penalties from unrelated peer folder names. Compilation-album imports still allow track performers to differ from the album artist.
 
