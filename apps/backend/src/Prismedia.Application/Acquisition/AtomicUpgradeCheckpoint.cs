@@ -16,7 +16,9 @@ public sealed record AtomicUpgradeFilePlan(
     bool AllowFormatChange = false) {
     /// <summary>The original basename with the approved incoming extension, otherwise the original path.</summary>
     [JsonIgnore]
-    public string InstallPath => AllowFormatChange ? Path.ChangeExtension(OwnedPath, Path.GetExtension(IncomingPath)) : OwnedPath;
+    public string InstallPath => AllowFormatChange
+        && !string.Equals(Path.GetExtension(OwnedPath), Path.GetExtension(IncomingPath), StringComparison.OrdinalIgnoreCase)
+            ? Path.ChangeExtension(OwnedPath, Path.GetExtension(IncomingPath)) : OwnedPath;
 }
 
 /// <summary>

@@ -108,6 +108,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Replacing a video preserves its exact source path when only the file extension’s capitalization differs, including on Linux.
+
 - Library scans preserve episode identity while an interrupted video replacement awaits recovery or review, and retry reserved files after recovery finishes.
 
 - Video replacement now verifies files before taking catalog locks, then keeps library scans outside the file swap and Source-binding transaction. Quality failures are rejected before full decoding, and changed verification evidence cannot be reused.

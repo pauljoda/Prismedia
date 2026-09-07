@@ -104,7 +104,8 @@ public sealed class OwnedFileReplacer(
         // The installed path: same basename as the owned file, with the incoming file's extension. For a
         // same-extension swap this IS the owned path (the never-momentarily-empty atomic replace); for a
         // consented format change it is a sibling path, and the old file is retired after the install.
-        var installPath = Path.ChangeExtension(owned, incomingExtension);
+        var installPath = string.Equals(ownedExtension, incomingExtension, StringComparison.OrdinalIgnoreCase)
+            ? owned : Path.ChangeExtension(owned, incomingExtension);
         var changesPath = !FileSystemPathComparison.Equals(owned, installPath);
         if (changesPath && (File.Exists(installPath) || Directory.Exists(installPath)))
             return OwnedFileReplaceResult.Failed("The replacement destination already exists. Both copies were retained for review.");

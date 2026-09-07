@@ -7,6 +7,38 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class AtomicUpgradeFilesTests {
     [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ExtensionCapitalizationPreservesTheExactOwnedPath(bool allowFormatChange) {
+        var root = Directory.CreateTempSubdirectory("atomic-extension-case-").FullName;
+        try {
+            var owned = Path.Combine(root, "owned.MKV");
+            var incoming = Path.Combine(root, "incoming.mkv");
+            await File.WriteAllTextAsync(owned, "original video");
+            await File.WriteAllTextAsync(incoming, "new video");
+            var verifier = new TestVideoPayloadVerifier();
+            var bin = new MergedImportTestSupport.NoRecycleBin();
+            var files = new AtomicUpgradeFiles(new OwnedFileReplacer(bin,
+                NullLogger<OwnedFileReplacer>.Instance, verifier), bin, verifier);
+            var parent = Guid.NewGuid();
+            var entity = Guid.NewGuid();
+            var target = new UpgradeReplaceTarget(parent, entity, owned, default, "Movie 1080p WEB-DL", incoming,
+                "transfer", null, EntityKind.Movie);
+            var plan = await files.PrepareAsync(target, default, allowFormatChange);
+            var checkpoint = new AtomicUpgradeCheckpoint(Guid.NewGuid(), Guid.NewGuid(), parent, entity, Guid.NewGuid(),
+                EntityKind.Movie, plan, incoming, "transfer", new(target.ChildSelectedTitle!, null, null));
+            Assert.Equal(owned, plan.InstallPath);
+            var installed = await files.ReplaceAsync(checkpoint, default);
+            Assert.True(installed.Succeeded);
+            Assert.Equal(owned, installed.SwappedPath);
+            Assert.Equal("new video", await File.ReadAllTextAsync(owned));
+            var recovered = await files.RecoverAsync(checkpoint, default);
+            Assert.Null(recovered.HoldReason);
+            Assert.Equal(owned, recovered.Installed!.SwappedPath);
+        } finally { Directory.Delete(root, true); }
+    }
+
+    [Theory]
     [InlineData(false, false)]
     [InlineData(true, false)]
     [InlineData(true, true)]
