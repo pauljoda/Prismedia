@@ -53,7 +53,7 @@ public sealed class MusicReleaseDecisionEngine(EntityKind kind = EntityKind.Audi
         // Torrent/Usenet scene names lead with artist and work, while Soulseek exposes the work in
         // its remote folder path. Keep the strict scene-title guard everywhere except that path-based
         // protocol. NO year gate on purpose — remaster/reissue years legitimately diverge.
-        new MusicTitleIdentitySpecification(),
+        new MusicTitleIdentitySpecification(kind),
         new ProtocolSpecification(),
         new DownloadLinkSpecification(),
         new MinSeedersSpecification(),
@@ -73,10 +73,14 @@ public sealed class MusicReleaseDecisionEngine(EntityKind kind = EntityKind.Audi
         MediaReleaseEvaluation.Evaluate(releases, rules, blocklistedIdentities, _specifications, MusicScore);
 
     /// <summary>Profile preference (terms, custom weights, language) outranks everything; then the codec-quality ladder (hi-res and lossless first), then the revision boost (a proper/repack at the same quality outranks a plain release unless propers are not preferred), then seeders.</summary>
-    private static double MusicScore(IndexerRelease release, BookAcquisitionRules rules) {
+    private double MusicScore(IndexerRelease release, BookAcquisitionRules rules) {
         var quality = (int)AudioQualityDetection.Detect(release.Title);
+        // Once an advertised file identifies the exact recording, arbitrary peer folder names
+        // cannot improve identity or justify demoting a higher-quality copy.
+        var relevance = kind == EntityKind.AudioTrack && release.KnownFileNames.Count > 0
+            && !string.IsNullOrWhiteSpace(rules.TargetTrackTitle) ? 0 : ReleaseTitleRelevance.Score(release, rules);
         return MediaReleaseEvaluation.PreferenceScore(release, rules) * 10_000
-            + ReleaseTitleRelevance.Score(release, rules)
+            + relevance
             + quality * 100_000
             + MediaReleaseEvaluation.RevisionBoost(release.Title, rules)
             + Math.Min(release.Seeders ?? 0, 9_999);
@@ -88,10 +92,16 @@ public sealed class MusicReleaseDecisionEngine(EntityKind kind = EntityKind.Audi
 /// retain the strict leading-title convention; Soulseek candidates may place artist, album, and track
 /// in successive remote path segments, so every target token must occur somewhere in that path title.
 /// </summary>
-public sealed class MusicTitleIdentitySpecification : IReleaseSpecification {
+public sealed class MusicTitleIdentitySpecification(EntityKind kind = EntityKind.AudioLibrary) : IReleaseSpecification {
     public ReleaseRejectionReason Reason => ReleaseRejectionReason.TitleMismatch;
 
     public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) {
+        if (kind == EntityKind.AudioTrack && !string.IsNullOrWhiteSpace(rules.TargetTrackTitle)
+            && release.KnownFileNames.Count > 0
+            && !release.KnownFileNames.Any(file => AudioTrackTitleText.MatchesMetadataTitle(
+                rules.TargetTrackTitle, Path.GetFileNameWithoutExtension(file.Replace('\\', '/')), rules.TargetAuthor))) {
+            return Reason;
+        }
         var matched = release.Protocol == DownloadProtocol.Soulseek
             ? ReleaseTitleIdentity.MatchesSoulseekPath(release.Title, rules.TargetTitle)
             : ReleaseTitleIdentity.Match(release.Title, rules.TargetTitle).TitleMatched;

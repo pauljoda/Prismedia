@@ -232,7 +232,7 @@ public sealed partial class SlskdIndexerClient(
             null,
             null,
             null,
-            null);
+            null) { KnownFileNames = files.Select(file => file.Filename).ToArray() };
     }
 
     private static string QualityLabel(IReadOnlyList<SlskdSearchFile> files) {

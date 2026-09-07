@@ -110,6 +110,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Individual-song searches check advertised filenames before automatic selection, avoiding different recordings or artist credits that would otherwise fail only at import. Exact track matches rank by profile and quality without penalties from unrelated peer folder names.
+
 - Replacing a video preserves its exact source path when only the file extension’s capitalization differs, including on Linux.
 
 - Library scans preserve episode identity while an interrupted video replacement awaits recovery or review, and retry reserved files after recovery finishes.
@@ -796,6 +798,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Removed development-only route shells and redundant prerelease UI panels so the app surface and release notes focus on the production Prismedia experience.
 
 ### Docs
+
+- Documented acquisition profile controls, verification stages, recovery behavior, and file-inventory limits.
 - Prepared the native App Store listing, exact-size iPhone, iPad, and Apple TV
   screenshot galleries, review notes, privacy answers, licensed
   demonstration-media ledger, and an isolated Apple review deployment that

@@ -520,6 +520,7 @@ public static class DependencyInjection {
         services.AddScoped<IDownloadClient>(provider => provider.GetRequiredService<SlskdDownloadClient>());
         services.AddScoped<IAcquisitionDownloadRemoval, EfAcquisitionDownloadRemoval>();
         services.AddScoped<IAcquisitionDownloadAdmission, EfAcquisitionDownloadAdmission>();
+        services.AddSingleton<IAcquisitionReleaseInventory, SoulseekReleaseInventory>();
         services.AddScoped<EfCompletedDownloadPayloadCleanup>();
         services.AddScoped<IDownloadClientFactory, DownloadClientFactory>();
         services.AddScoped<IAcquisitionImportPlanner, AcquisitionImportPlanner>();

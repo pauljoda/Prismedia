@@ -10,6 +10,33 @@ using Prismedia.Infrastructure.Settings;
 namespace Prismedia.Infrastructure.Tests;
 
 public sealed class AcquisitionCandidateValidatorTests {
+    [Theory]
+    [InlineData("Happy", false)]
+    [InlineData("Happy (Instrumental)", true)]
+    public async Task StoredTrackCandidateRechecksItsAdvertisedRecording(string requestedTitle, bool accepted) {
+        await using var db = new PrismediaDbContext(new DbContextOptionsBuilder<PrismediaDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
+        var row = new AcquisitionRow { Id = Guid.NewGuid(), Kind = EntityKind.AudioTrack,
+            Title = requestedTitle, Author = "Pharrell Williams", Status = AcquisitionStatus.Searching };
+        db.Acquisitions.Add(row);
+        db.DownloadClientConfigs.Add(new DownloadClientConfigRow { Id = Guid.NewGuid(), Kind = DownloadClientKind.Slskd, Enabled = true });
+        await db.SaveChangesAsync();
+        var locator = SoulseekLocator.Encode(new(Guid.NewGuid(), "peer",
+            [new("Music\\Pharrell Williams\\02-pharrell_williams-happy_(instrumental).flac", 30_000_000)]));
+        var release = new IndexerRelease("Pharrell Williams / Happy / Happy (Instrumental).flac FLAC", 30_000_000,
+            null, null, DownloadProtocol.Soulseek, locator, null, null, null, null, null);
+        var store = AcquisitionTestFactory.Store(db);
+        Assert.True(await store.TryCompleteSearchAsync(row.Id, [new(release, null, "Soulseek", true, 100, [])], null, default));
+        var candidate = (await store.GetQueueCandidateAsync(row.Id, (await db.ReleaseCandidates.SingleAsync()).Id, default))!;
+        var validator = new AcquisitionCandidateValidator(store, new EfBookAcquisitionProfileStore(db),
+            new EfDownloadClientConfigStore(db), new AcquisitionPolicyRegistry([new BookAcquisitionPolicyModule(), new MovieAcquisitionPolicyModule(),
+                new MusicAcquisitionPolicyModule(), new TvAcquisitionPolicyModule()]),
+            new SettingsService(new EfSettingsPersistence(db)), new SoulseekReleaseInventory());
+        var rejections = await validator.ValidateAsync(row.Id, candidate, default);
+        if (accepted) Assert.Empty(rejections);
+        else Assert.Contains(ReleaseRejectionReason.TitleMismatch, rejections);
+    }
+
     [Fact]
     public async Task StoredCandidateKeepsIndexerFactsAndUsesCurrentProfileAndRequestMetadata() {
         await using var db = new PrismediaDbContext(new DbContextOptionsBuilder<PrismediaDbContext>()

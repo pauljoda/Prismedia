@@ -62,7 +62,7 @@ public static partial class AudioTrackTitleText {
         }
         // Standalone Soulseek files often omit album numbering. Accept their prefix only when it
         // matches the requested artist, so a similarly named song by another artist cannot bind here.
-        if (!numbered && !ReleaseTitleText.Tokens(Normalize(artist))
+        if ((!numbered || !string.IsNullOrWhiteSpace(artist)) && !ReleaseTitleText.Tokens(Normalize(artist))
                 .SequenceEqual(ReleaseTitleText.Tokens(Normalize(artistAndTitle[0])), StringComparer.Ordinal)) {
             return false;
         }

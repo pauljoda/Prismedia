@@ -32,6 +32,8 @@ public sealed class SlskdIndexerClientTests {
         var release = Assert.Single(releases);
         Assert.Equal(DownloadProtocol.Soulseek, release.Protocol);
         Assert.Equal(300, release.SizeBytes);
+        Assert.Equal(["Music\\Artist\\Album\\01 First.flac", "Music\\Artist\\Album\\02 Second.flac"], release.KnownFileNames);
+        Assert.Equal(release.KnownFileNames, new SoulseekReleaseInventory().ReadFileNames(release.DownloadUrl));
         Assert.Contains("Artist / Album", release.Title, StringComparison.Ordinal);
         Assert.StartsWith(SoulseekProtocol.LocatorPrefix, release.DownloadUrl, StringComparison.Ordinal);
         Assert.All(handler.Requests, request => Assert.Equal("secret", request.Headers.GetValues(SoulseekProtocol.ApiKeyHeader).Single()));
@@ -51,6 +53,8 @@ public sealed class SlskdIndexerClientTests {
 
         var release = Assert.Single(releases);
         Assert.Equal(300, release.SizeBytes);
+        Assert.Equal(["Music\\Artist\\Album\\03 Wanted.flac"], release.KnownFileNames);
+        Assert.Equal(release.KnownFileNames, new SoulseekReleaseInventory().ReadFileNames(release.DownloadUrl));
         Assert.Contains("Artist / Album / 03 Wanted.flac", release.Title, StringComparison.OrdinalIgnoreCase);
         Assert.False(release.Title.StartsWith("Artist Album Wanted", StringComparison.OrdinalIgnoreCase));
     }

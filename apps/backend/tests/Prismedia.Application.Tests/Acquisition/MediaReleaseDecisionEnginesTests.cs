@@ -450,6 +450,38 @@ public sealed class MediaReleaseDecisionEnginesTests {
     }
 
     [Fact]
+    public void ExactTrackFileQualityOutranksUnrelatedPeerFolderNames() {
+        var rules = BookAcquisitionRules.Default with {
+            TargetTitle = "Pharrell Williams Happy", TargetTrackTitle = "Happy", TargetAuthor = "Pharrell Williams",
+            AllowedProtocols = [DownloadProtocol.Soulseek]
+        };
+        var lossless = Release("Archive / Downloads / Collection / Favorites / Recently Added / Pharrell Williams / Happy / 01 Happy.flac FLAC",
+            seeders: 1, protocol: DownloadProtocol.Soulseek) with { KnownFileNames = ["01 Happy.flac"] };
+        var lossy = Release("Pharrell Williams / Happy.mp3 MP3 128kbps", seeders: 1, protocol: DownloadProtocol.Soulseek)
+            with { KnownFileNames = ["Happy.mp3"] };
+        var scored = new MusicReleaseDecisionEngine(EntityKind.AudioTrack).Evaluate([(lossless, null, "Soulseek"), (lossy, null, "Soulseek")], rules);
+        Assert.All(scored, candidate => Assert.True(candidate.Accepted));
+        Assert.Equal(lossless, scored[0].Release);
+    }
+
+    [Theory]
+    [InlineData("Happy", "01-pharrell_williams-happy.flac", true)]
+    [InlineData("Happy", "02-pharrell_williams-happy_(instrumental).flac", false)]
+    [InlineData("Happy (Instrumental)", "02-pharrell_williams-happy_(instrumental).flac", true)]
+    [InlineData("Happy", "01-other_artist-happy.flac", false)]
+    public void TrackRankingUsesAdvertisedFilesToMatchTheRequestedRecording(string title, string filename, bool accepted) {
+        var rules = BookAcquisitionRules.Default with {
+            TargetTitle = "Pharrell Williams Happy", TargetTrackTitle = title, TargetAuthor = "Pharrell Williams",
+            AllowedProtocols = [DownloadProtocol.Soulseek]
+        };
+        var release = Release("Pharrell Williams / Happy / " + filename + " FLAC", seeders: 1,
+            protocol: DownloadProtocol.Soulseek) with { KnownFileNames = ["Music\\Pharrell Williams\\Happy\\" + filename] };
+        var result = Assert.Single(new MusicReleaseDecisionEngine(EntityKind.AudioTrack).Evaluate([(release, null, "Soulseek")], rules));
+        Assert.Equal(accepted, result.Accepted);
+        if (!accepted) Assert.Contains(ReleaseRejectionReason.TitleMismatch, result.Rejections);
+    }
+
+    [Fact]
     public void MusicEngineUsesSoulseekFolderContextForTrackIdentity() {
         var engine = new MusicReleaseDecisionEngine(EntityKind.AudioTrack);
         var rules = BookAcquisitionRules.Default with {

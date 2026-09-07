@@ -9,6 +9,7 @@ public sealed class AudioTrackTitleTextTests {
     [InlineData("pharrell_williams-happy", "Pharrell Williams", true)]
     [InlineData("01-pharrell_williams-happy_(instrumental)", "Pharrell Williams", false)]
     [InlineData("01-other_artist-happy", "Pharrell Williams", false)]
+    [InlineData("01 Other Artist - Happy", "Pharrell Williams", false)]
     [InlineData("01-pharrell_williams-not_happy", "Pharrell Williams", false)]
     [InlineData("01-pharrell_williams-happy", null, false)]
     [InlineData("Other Artist - Happy", "Pharrell Williams", false)]

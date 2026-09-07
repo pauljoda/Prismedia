@@ -13,6 +13,7 @@ public static class AcquisitionRuleContext {
             TargetTitle = input.WorkTitle,
             TargetAlternativeTitles = input.AlternativeWorkTitles,
             TargetEpisodeTitle = input.EpisodeNumber is null ? null : input.Title,
+            TargetTrackTitle = input.Kind == EntityKind.AudioTrack ? input.Title : null,
             TargetAbsoluteEpisodeNumber = input.EpisodeNumber is null ? null : input.AbsoluteEpisodeNumber,
             TargetEpisodeCatalog = input.EpisodeCatalog,
             TargetYear = input.Year, TargetAuthor = input.Author, BookRendition = input.BookRendition,
@@ -37,7 +38,7 @@ public interface IAcquisitionCandidateValidator {
 /// <summary>Uses the search decision engine with fresh profile, request, protocol, and owned-quality facts.</summary>
 public sealed class AcquisitionCandidateValidator(
     IAcquisitionStore acquisitions, IBookAcquisitionProfileStore profiles, IDownloadClientConfigStore downloadClients,
-    IAcquisitionPolicyRegistry policies, SettingsService settings) : IAcquisitionCandidateValidator {
+    IAcquisitionPolicyRegistry policies, SettingsService settings, IAcquisitionReleaseInventory? inventory = null) : IAcquisitionCandidateValidator {
     /// <inheritdoc />
     public async Task<IReadOnlyList<ReleaseRejectionReason>> ValidateAsync(Guid acquisitionId, AcquisitionQueueCandidate candidate, CancellationToken cancellationToken) {
         var input = await acquisitions.GetSearchInputAsync(acquisitionId, cancellationToken)
@@ -49,7 +50,7 @@ public sealed class AcquisitionCandidateValidator(
             await downloadClients.GetEnabledProtocolsAsync(cancellationToken));
         var release = new IndexerRelease(candidate.Title, candidate.SizeBytes, candidate.Seeders, candidate.Peers,
             candidate.Protocol, candidate.DownloadUrl, candidate.MagnetUrl, candidate.InfoHash, candidate.InfoUrl,
-            candidate.Language, candidate.PublishedAt);
+            candidate.Language, candidate.PublishedAt) { KnownFileNames = inventory?.ReadFileNames(candidate.DownloadUrl) ?? [] };
         var result = policies.Get(input.Kind).DecisionEngineFor(input.Kind).Evaluate(
             [(release, candidate.IndexerConfigId, candidate.IndexerName)], rules, new HashSet<string>()).SingleOrDefault();
         return result is { Accepted: true } ? [] : result?.Rejections is { Count: > 0 } reasons

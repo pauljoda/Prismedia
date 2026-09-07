@@ -18,7 +18,10 @@ public sealed record IndexerRelease(
     string? InfoHash,
     string? InfoUrl,
     string? Language,
-    DateTimeOffset? PublishedAt);
+    DateTimeOffset? PublishedAt) {
+    /// <summary>Advertised payload filenames when the provider exposes them before download; empty means unknown.</summary>
+    public IReadOnlyList<string> KnownFileNames { get; init; } = [];
+}
 
 /// <summary>
 /// Decision rules a book acquisition profile contributes. Kept separate from the persistence row so
@@ -160,6 +163,9 @@ public sealed record BookAcquisitionRules(
     /// releases; known catalog title conflicts independently check claims made by exact numbering.
     /// </summary>
     public string? TargetEpisodeTitle { get; init; }
+
+    /// <summary>The requested recording title, separate from artist and album context, for exact file admission.</summary>
+    public string? TargetTrackTitle { get; init; }
 
     /// <summary>
     /// The provider-authored absolute episode position of the sought TV episode. Search release titles
