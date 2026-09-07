@@ -31,6 +31,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- The Auto-grab setting now explains that it controls standalone searches. Library requests and monitored recovery continue downloading acceptable releases automatically.
+
 - Downloaded-file review shows the last verification failure beside each retained video and leaves failed or already-imported files unselected. Explicit retries still require full verification before import.
 
 - Untouched TV packs can import episodes that pass full verification while retaining damaged videos with their failure details for review. Missing-episode recovery then targets the episodes still unavailable, and interrupted imports preserve the verified subset.
