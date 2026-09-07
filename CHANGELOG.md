@@ -86,6 +86,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Docker builds include workspace dependency patches, restoring dev image publishing and Docker Compose builds after the documentation search update.
 - Documentation tables scroll within the article on narrow screens instead of widening the page.
 
 - Opening plugin credentials no longer autofills the plugin search with your Prismedia login and hides the editor. Plugin searches now use the shared clear control and return focus to the empty search field.
