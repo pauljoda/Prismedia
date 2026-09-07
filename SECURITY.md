@@ -38,3 +38,10 @@ access other people's media or interrupt their downloads. Third-party services
 and plugins may need a coordinated report to their own maintainers.
 
 Maintainers follow the [security response process](docs/security-response.md).
+
+## Security acknowledgments
+
+Thank you to the researchers who help make Prismedia safer through responsible
+disclosure. Contributors are listed with their permission.
+
+- Furkan Arslan

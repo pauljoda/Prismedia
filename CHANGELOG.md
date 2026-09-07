@@ -814,6 +814,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Docs
 
+- Add a public security reporting page and researcher acknowledgments, linked from the website, support, and contribution guides.
 - Documented acquisition profile controls, verification stages, recovery behavior, and file-inventory limits.
 - Soften the documentation reading palette and fix tables that left unused space beside their columns, with clearer rows and contained scrolling on small screens.
 - Replace legacy documentation screenshots with current SFW product captures, add folder setup, request review, chapter alignment, native reader, and player examples, and make every screenshot expandable. Update guide labels and job-state explanations to match the current interface.

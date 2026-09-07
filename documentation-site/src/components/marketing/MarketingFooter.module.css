@@ -38,6 +38,6 @@
   .resources a { min-height: 44px; font-size: 13px; }
   .footer .resources h3 { margin-bottom: 8px; }
   .downloads a { max-width: 360px; }
-  .bottom { gap: 12px; padding-block: 18px; }
+  .bottom { gap: 12px; padding-block: 18px; flex-wrap: wrap; }
   .bottom > div { gap: 20px; }
 }

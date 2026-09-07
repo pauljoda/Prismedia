@@ -100,6 +100,7 @@ Read [CHANGELOG.md](CHANGELOG.md) and the [upgrade guide](https://pauljoda.githu
 - Ask setup and usage questions in [r/Prismedia](https://www.reddit.com/r/Prismedia/).
 - [Open an issue](https://github.com/pauljoda/Prismedia/issues/new/choose) for a bug, missing documentation, or feature suggestion. Remove private details from logs and screenshots.
 - Read [Contributing](https://pauljoda.github.io/Prismedia/docs/developers/contributing) for development conventions.
+- Report suspected vulnerabilities privately using the [security policy](SECURITY.md).
 
 Metadata providers use Prismedia's .NET plugin protocol; Stash YAML scrapers run through the Stash compatibility adapter. See the [plugin guide](https://pauljoda.github.io/Prismedia/docs/plugins/overview) and [Prismedia-Plugins](https://github.com/pauljoda/Prismedia-Plugins) for the current contract and implementations.
 

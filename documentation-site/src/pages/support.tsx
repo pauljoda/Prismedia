@@ -62,6 +62,19 @@ export default function SupportPage() {
             </section>
 
             <section className={styles.section}>
+              <Heading as="h2">Report a security issue privately</Heading>
+              <p>
+                If you suspect unauthorized access or exposure of private data,
+                use the private reporting channel. Keep vulnerability details out
+                of public issues and community posts.
+              </p>
+              <div className={styles.actions}>
+                <a className={styles.secondaryAction} href="https://github.com/pauljoda/Prismedia/security/advisories/new">Report a vulnerability</a>
+                <Link className={styles.secondaryAction} to="/docs/deployment/security">Security policy and acknowledgments</Link>
+              </div>
+            </section>
+
+            <section className={styles.section}>
               <Heading as="h2">Report a problem or suggest a change</Heading>
               <p>
                 Search existing GitHub issues first. If the problem has not been

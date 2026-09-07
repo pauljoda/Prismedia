@@ -8,6 +8,9 @@ description: Local setup, the commit + changelog policy, and how channel images 
 
 This page covers what to know before opening a PR: how to run things locally, what commits look like, and how channel images are published.
 
+For a suspected vulnerability, follow [Reporting Security Issues](../deployment/security.md)
+before opening a public issue or pull request.
+
 ## Local development
 
 ### Prerequisites

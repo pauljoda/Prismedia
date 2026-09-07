@@ -3,7 +3,10 @@ description: Report a reproducible problem with the server, web app, or native a
 body:
   - type: markdown
     attributes:
-      value: Please check existing issues first. Remove passwords, tokens, private hostnames, and private media details from anything you share.
+      value: |
+        Please check existing issues first. Remove passwords, tokens, private hostnames, and private media details from anything you share.
+
+        For suspected vulnerabilities, [report privately](https://github.com/pauljoda/Prismedia/security/advisories/new) instead of using this public form.
   - type: dropdown
     id: platform
     attributes:

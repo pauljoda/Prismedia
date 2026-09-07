@@ -53,6 +53,7 @@ const sidebars: SidebarsConfig = {
       label: 'Deployment & Security',
       collapsed: true,
       items: [
+        'deployment/security',
         'deployment/authentication',
         'deployment/reverse-proxy',
         'deployment/backups',

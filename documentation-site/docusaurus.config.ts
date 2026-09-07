@@ -236,6 +236,10 @@ const config: Config = {
               to: '/support',
             },
             {
+              label: 'Security',
+              to: '/docs/deployment/security',
+            },
+            {
               label: 'Privacy',
               to: '/privacy',
             },

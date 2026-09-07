@@ -25,7 +25,7 @@ export default function MarketingFooter() {
         <div><h3>Using Prismedia</h3><Link to="/docs/using/playback">Watch, listen, and read <ArrowIcon /></Link><Link to="/docs/using/requests">Connect your acquisition tools <ArrowIcon /></Link><Link href={`${GITHUB_URL}/blob/main/CHANGELOG.md`}>Read the release notes <ArrowIcon diagonal /></Link></div>
         <div className={styles.downloads}><h3>Native apps</h3><BrandLink href={APP_STORE_URL} icon="/img/brands/app-store.svg">Apple TV on the App Store</BrandLink><BrandLink href={TESTFLIGHT_URL} icon="/img/brands/testflight.png">Early builds on TestFlight</BrandLink></div>
       </nav>
-      <div className={styles.bottom}><span>© {new Date().getFullYear()} Prismedia</span><div><Link to="/support">Support</Link><Link to="/privacy">Privacy</Link></div></div>
+      <div className={styles.bottom}><span>© {new Date().getFullYear()} Prismedia</span><div><Link to="/support">Support</Link><Link to="/docs/deployment/security">Security</Link><Link to="/privacy">Privacy</Link></div></div>
     </div>
   </footer>;
 }
