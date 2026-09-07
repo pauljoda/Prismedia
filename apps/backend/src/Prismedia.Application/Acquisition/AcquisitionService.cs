@@ -993,7 +993,7 @@ public sealed partial class AcquisitionService(
                 GraphRootEntityId: detail.Summary.EntityId?.ToString()),
             cancellationToken);
         if (importJob.GraphId is { } graphId) {
-            await store.SetJobGraphIdAsync(detail.Summary.Id, graphId, cancellationToken);
+            await store.TryRelinkJobGraphIdAsync(detail.Summary.Id, detail.Summary.JobGraphId, graphId, cancellationToken);
         }
         return await store.GetAsync(id, cancellationToken);
     }

@@ -34,12 +34,16 @@ public sealed class AcquisitionImportJobHandlerCheckpointTests : IDisposable {
         var handler = new AcquisitionImportJobHandler(AcquisitionTestFactory.Store(db), new SingleEngineFactory(engine),
             new DownloadPayloadReader(), new EfAcquisitionHistoryStore(db), NullLogger<AcquisitionImportJobHandler>.Instance);
         var context = new JobContext(new JobRunSnapshot(Guid.NewGuid(), JobType.AcquisitionImport, JobRunStatus.Running,
-            0, null, AcquisitionJobPayload.Serialize(child.Id, manualRetry: manualRetry), null, child.Id.ToString(), "Episode", now, now, null), queue);
+            0, null, AcquisitionJobPayload.Serialize(child.Id, allowFormatChange: manualRetry, manualRetry: manualRetry), null, child.Id.ToString(), "Episode", now, now, null), queue);
 
         await handler.HandleAsync(context, default);
 
         if (cancelled) Assert.Empty(queue.Enqueued);
-        else Assert.Equal(JobType.AcquisitionUpgradeReplace, Assert.Single(queue.Enqueued).Type);
+        else {
+            var replacement = Assert.Single(queue.Enqueued);
+            Assert.Equal(JobType.AcquisitionUpgradeReplace, replacement.Type);
+            Assert.Equal(manualRetry, AcquisitionJobPayload.Parse(replacement.PayloadJson!).AllowFormatChange);
+        }
         Assert.False(engine.Called);
         await db.Entry(child).ReloadAsync();
         Assert.Null(child.ImportClaimJobId);

@@ -76,7 +76,7 @@ public sealed class AcquisitionCompletionService(
 
         var job = await jobs.EnqueueAsync(request, cancellationToken);
         if (job.GraphId is { } recoveryGraphId) {
-            await acquisitions.SetJobGraphIdAsync(acquisitionId, recoveryGraphId, cancellationToken);
+            await acquisitions.TryRelinkJobGraphIdAsync(acquisitionId, detail.Summary.JobGraphId, recoveryGraphId, cancellationToken);
         }
     }
 

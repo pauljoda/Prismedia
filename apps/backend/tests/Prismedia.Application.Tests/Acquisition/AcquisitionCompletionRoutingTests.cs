@@ -137,6 +137,7 @@ public sealed class AcquisitionCompletionRoutingTests {
                 nameof(IAcquisitionStore.GetAsync) => Task.FromResult(Detail),
                 nameof(IAcquisitionStore.GetUpgradeOwnedQualityAsync) => Task.FromResult(UpgradeOwnedQuality),
                 nameof(IAcquisitionStore.SetJobGraphIdAsync) => Task.CompletedTask,
+                nameof(IAcquisitionStore.TryRelinkJobGraphIdAsync) => Task.FromResult(true),
                 _ => throw new NotSupportedException(targetMethod?.Name)
             };
     }

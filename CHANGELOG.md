@@ -108,6 +108,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Long-running replacements are no longer restarted by stale-import recovery. Retried imports follow their current workflow and retain reviewed format-change approval.
+
 - Repair and upload actions remain available for owned TV episodes when monitoring is off.
 
 - Preserve independently changed library files and replacement recovery artifacts when they change while a downloaded video is being fully verified.

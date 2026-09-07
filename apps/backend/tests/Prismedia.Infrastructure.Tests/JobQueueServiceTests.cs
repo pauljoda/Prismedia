@@ -551,17 +551,20 @@ public sealed class JobQueueServiceTests {
     }
 
     [Theory]
-    [InlineData(JobGraphStatus.Completed, false)]
-    [InlineData(JobGraphStatus.Waiting, true)]
+    [InlineData(JobGraphStatus.Completed, false, false)]
+    [InlineData(JobGraphStatus.Waiting, true, false)]
+    [InlineData(JobGraphStatus.Completed, false, true)]
+    [InlineData(JobGraphStatus.Waiting, true, true)]
     public async Task RecoveryResumesAStrandedDurableImportOnAFreshGraph(
         JobGraphStatus originalGraphStatus,
-        bool keepGraphOpen) {
+        bool keepGraphOpen,
+        bool replacement) {
         await using var db = CreateContext();
         var service = new JobQueueService(db);
         var acquisitionId = Guid.NewGuid();
         var original = await service.EnqueueAsync(
             new EnqueueJobRequest(
-                JobType.AcquisitionImport,
+                replacement ? JobType.AcquisitionUpgradeReplace : JobType.AcquisitionImport,
                 PayloadJson: AcquisitionJobPayload.Serialize(acquisitionId),
                 TargetEntityId: acquisitionId.ToString(),
                 Origin: JobGraphOrigin.Interactive),
@@ -585,6 +588,7 @@ public sealed class JobQueueServiceTests {
             Id = acquisitionId,
             Kind = EntityKind.VideoEpisode,
             Title = "Stranded episode",
+            UpgradeOfAcquisitionId = replacement ? Guid.NewGuid() : null,
             Status = AcquisitionStatus.Importing,
             ImportCheckpointJson = "{}",
             JobGraphId = original.GraphId,
@@ -602,15 +606,47 @@ public sealed class JobQueueServiceTests {
         db.ChangeTracker.Clear();
         var recovered = await db.Acquisitions.SingleAsync(row => row.Id == acquisitionId);
         var retry = await db.JobRuns.SingleAsync(run => run.Id != original.Id);
-        Assert.Equal(AcquisitionStatus.Failed, recovered.Status);
+        Assert.Equal(replacement ? AcquisitionStatus.Downloaded : AcquisitionStatus.Failed, recovered.Status);
         Assert.Contains("resuming", recovered.StatusMessage, StringComparison.OrdinalIgnoreCase);
         Assert.NotEqual(original.GraphId, recovered.JobGraphId);
         Assert.Equal(recovered.JobGraphId, retry.GraphId);
         Assert.Equal(JobRunStatus.Queued, retry.Status);
+        Assert.Equal(replacement ? JobType.AcquisitionUpgradeReplace : JobType.AcquisitionImport, retry.Type);
         Assert.Equal(
             JobGraphOrigin.Interactive,
             (await db.JobGraphs.SingleAsync(graph => graph.Id == retry.GraphId)).Origin);
         Assert.True(AcquisitionJobPayload.Parse(retry.PayloadJson!).ManualRetry);
+    }
+
+    [Theory]
+    [InlineData(JobType.AcquisitionImport, JobRunStatus.Running, true)]
+    [InlineData(JobType.AcquisitionUpgradeReplace, JobRunStatus.Running, true)]
+    [InlineData(JobType.AcquisitionUpgradeReplace, JobRunStatus.Queued, true)]
+    [InlineData(JobType.AcquisitionUpgradeReplace, JobRunStatus.Running, false)]
+    public async Task StaleAcquisitionRecoveryLeavesActiveFileWorkAndItsClaimUntouched(JobType type, JobRunStatus status, bool hasTarget) {
+        await using var db = CreateContext();
+        var service = new JobQueueService(db);
+        var id = Guid.NewGuid();
+        var active = await service.EnqueueAsync(new EnqueueJobRequest(type,
+            PayloadJson: AcquisitionJobPayload.Serialize(id), TargetEntityId: hasTarget ? id.ToString() : null), default);
+        var run = (await db.JobRuns.FindAsync(active.Id))!;
+        run.Status = status;
+        run.LockedBy = "worker-live";
+        run.LockedAt = DateTimeOffset.UtcNow.AddMinutes(-10);
+        var acquisition = new AcquisitionRow {
+            Id = id, Kind = EntityKind.VideoEpisode, Title = "Video verification", Status = AcquisitionStatus.Importing,
+            ImportClaimJobId = active.Id, ImportCheckpointJson = "{}", JobGraphId = null,
+            UpdatedAt = DateTimeOffset.UtcNow.AddMinutes(-10)
+        };
+        db.Acquisitions.Add(acquisition);
+        await db.SaveChangesAsync();
+        await service.RecoverStaleRunningAsync("worker-live", TimeSpan.FromMinutes(2), default);
+        db.ChangeTracker.Clear();
+        var current = (await db.Acquisitions.FindAsync(id))!;
+        Assert.Equal(AcquisitionStatus.Importing, current.Status);
+        Assert.Equal(active.Id, current.ImportClaimJobId);
+        Assert.Equal("{}", current.ImportCheckpointJson);
+        Assert.Single(await db.JobRuns.ToArrayAsync());
     }
 
     [Fact]

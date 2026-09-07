@@ -36,17 +36,20 @@ public sealed partial class JobQueueService {
         }
 
         var targetIds = candidates.Select(acquisition => acquisition.Id.ToString()).ToArray();
-        var activeTargets = (await _db.JobRuns.AsNoTracking()
-                .Where(run =>
-                    run.Type == JobType.AcquisitionImport
-                    && run.TargetEntityId != null
-                    && targetIds.Contains(run.TargetEntityId)
-                    && (run.Status == JobRunStatus.Queued || run.Status == JobRunStatus.Running))
-                .Select(run => run.TargetEntityId!)
-                .ToArrayAsync(cancellationToken))
-            .ToHashSet(StringComparer.Ordinal);
+        var claimIds = candidates.Where(acquisition => acquisition.ImportClaimJobId is not null)
+            .Select(acquisition => acquisition.ImportClaimJobId!.Value).ToArray();
+        var activeRuns = await _db.JobRuns.AsNoTracking()
+            .Where(run => (run.Type == JobType.AcquisitionImport || run.Type == JobType.AcquisitionUpgradeReplace)
+                && (claimIds.Contains(run.Id) || run.TargetEntityId != null && targetIds.Contains(run.TargetEntityId))
+                && (run.Status == JobRunStatus.Queued || run.Status == JobRunStatus.Running))
+            .Select(run => new { run.Id, run.TargetEntityId })
+            .ToArrayAsync(cancellationToken);
+        var activeTargets = activeRuns.Where(run => run.TargetEntityId is not null)
+            .Select(run => run.TargetEntityId!).ToHashSet(StringComparer.Ordinal);
+        var activeClaims = activeRuns.Select(run => run.Id).ToHashSet();
         var stranded = candidates
-            .Where(acquisition => !activeTargets.Contains(acquisition.Id.ToString()))
+            .Where(acquisition => !activeTargets.Contains(acquisition.Id.ToString())
+                && !(acquisition.ImportClaimJobId is { } claim && activeClaims.Contains(claim)))
             .ToArray();
         if (stranded.Length == 0) {
             return;
@@ -62,7 +65,7 @@ public sealed partial class JobQueueService {
             .ToDictionaryAsync(graph => graph.Id, graph => graph.Status, cancellationToken);
         var completedImportTargets = (await _db.JobRuns.AsNoTracking()
                 .Where(run =>
-                    run.Type == JobType.AcquisitionImport
+                    (run.Type == JobType.AcquisitionImport || run.Type == JobType.AcquisitionUpgradeReplace)
                     && run.Status == JobRunStatus.Completed
                     && run.TargetEntityId != null
                     && targetIds.Contains(run.TargetEntityId))
@@ -106,6 +109,9 @@ public sealed partial class JobQueueService {
                     : interruptedMessage;
             acquisition.UpdatedAt = now;
             if (acquisition.ImportCheckpointJson is not null && canResumeAutomatically) {
+                if (AcquisitionCompletionService.CompletionJobType(acquisition.Kind,
+                        acquisition.UpgradeOfAcquisitionId is not null, acquisition.BookRendition) == JobType.AcquisitionUpgradeReplace)
+                    acquisition.Status = AcquisitionStatus.Downloaded;
                 resumable.Add(acquisition);
             }
         }
@@ -114,7 +120,8 @@ public sealed partial class JobQueueService {
         foreach (var acquisition in resumable) {
             var retry = await EnqueueAsync(
                 new EnqueueJobRequest(
-                    JobType.AcquisitionImport,
+                    AcquisitionCompletionService.CompletionJobType(acquisition.Kind,
+                        acquisition.UpgradeOfAcquisitionId is not null, acquisition.BookRendition),
                     PayloadJson: AcquisitionJobPayload.Serialize(
                         acquisition.Id,
                         allowFormatChange: false,

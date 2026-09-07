@@ -52,7 +52,7 @@ public sealed class AcquisitionImportJobHandler(
             } else if (await acquisitions.GetStatusAsync(payload.AcquisitionId, cancellationToken)
                 is not (AcquisitionStatus.Downloaded or AcquisitionStatus.Importing)) return;
             await context.EnqueueIfNeededAsync(new EnqueueJobRequest(JobType.AcquisitionUpgradeReplace,
-                PayloadJson: AcquisitionJobPayload.Serialize(payload.AcquisitionId),
+                PayloadJson: AcquisitionJobPayload.Serialize(payload.AcquisitionId, payload.AllowFormatChange, manualRetry: payload.ManualRetry),
                 TargetEntityId: payload.AcquisitionId.ToString(), TargetLabel: import.Title), cancellationToken);
             return;
         }

@@ -1731,6 +1731,25 @@ public sealed class AcquisitionServiceTests {
             harness.Store.Status);
     }
 
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(false, true)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task NewImportAttemptsRelinkTheirGraphWithoutOverwritingANewerAttempt(bool completion, bool raced) {
+        var harness = Harness(TransferInfo(RecordedClientId,
+            completion ? AcquisitionStatus.Downloaded : AcquisitionStatus.ManualImportRequired));
+        var original = Guid.NewGuid();
+        var concurrent = Guid.NewGuid();
+        var next = Guid.NewGuid();
+        harness.Store.JobGraphId = original;
+        harness.Queue.ResultGraphId = next;
+        if (raced) harness.Queue.BeforeEnqueue = () => harness.Store.JobGraphId = concurrent;
+        if (completion) await new AcquisitionCompletionService(harness.Store, harness.Queue).ScheduleAsync(AcquisitionId, default);
+        else await harness.Service.RetryImportAsync(AcquisitionId, false, default);
+        Assert.Equal(raced ? concurrent : next, harness.Store.JobGraphId);
+    }
+
     [Fact]
     public async Task FailedDurableImportCanEnqueueAnExplicitResume() {
         var harness = Harness(TransferInfo(RecordedClientId, AcquisitionStatus.Failed));
@@ -2264,6 +2283,12 @@ public sealed class AcquisitionServiceTests {
         public Task<Guid?> GetJobGraphIdAsync(Guid id, CancellationToken cancellationToken) =>
             Task.FromResult(id == AcquisitionId ? JobGraphId : null);
 
+        public Task<bool> TryRelinkJobGraphIdAsync(Guid id, Guid? expectedGraphId, Guid graphId, CancellationToken cancellationToken) {
+            if (id != AcquisitionId || JobGraphId != expectedGraphId) return Task.FromResult(false);
+            JobGraphId = graphId;
+            return Task.FromResult(true);
+        }
+
         public Task SetStatusAsync(Guid id, AcquisitionStatus status, string? message, CancellationToken cancellationToken) {
             StatusChanges.Add((id, status, message));
             if (id == AcquisitionId) {
@@ -2394,7 +2419,7 @@ public sealed class AcquisitionServiceTests {
             Task.FromResult(id == AcquisitionId ? SearchInput : null);
         public Task<AcquisitionStatus?> GetStatusAsync(Guid id, CancellationToken cancellationToken) =>
             Task.FromResult(id == AcquisitionId ? Status : id == CloneResult ? ReplacementStatus : null);
-        public Task<UpgradeOwnedQuality?> GetUpgradeOwnedQualityAsync(Guid acquisitionId, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<UpgradeOwnedQuality?> GetUpgradeOwnedQualityAsync(Guid acquisitionId, CancellationToken cancellationToken) => Task.FromResult<UpgradeOwnedQuality?>(null);
         public Task<UpgradeReplaceTarget?> GetUpgradeReplaceTargetAsync(Guid childId, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task UpdateOwnedQualityAsync(Guid acquisitionId, BookQualityRank ownedQuality, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task UpdateOwnedMediaQualityAsync(Guid acquisitionId, string ownedMediaQuality, int ownedMediaRevision, int ownedFormatScore, CancellationToken cancellationToken) => throw new NotSupportedException();
@@ -2920,6 +2945,7 @@ public sealed class AcquisitionServiceTests {
     }
 
     private sealed class RecordingJobQueue : IJobQueueService {
+        public Guid? ResultGraphId { get; set; }
         public List<EnqueueJobRequest> Requests { get; } = [];
         public List<(string Key, int MaxConcurrency, TimeSpan MinimumStartInterval)> ResourceDeclarations { get; } = [];
         public Exception? EnqueueFailure { get; set; }
@@ -2937,7 +2963,7 @@ public sealed class AcquisitionServiceTests {
             return Task.FromResult(new JobRunSnapshot(
                 Guid.NewGuid(), request.Type, JobRunStatus.Queued, 0, null,
                 request.PayloadJson ?? "{}", null, request.TargetEntityId, request.TargetLabel,
-                DateTimeOffset.UtcNow, null, null));
+                DateTimeOffset.UtcNow, null, null) { GraphId = ResultGraphId });
         }
         public Task<bool> HasPendingAsync(JobType type, string? targetEntityId, CancellationToken cancellationToken) =>
             Task.FromResult(Requests.Any(request => request.Type == type && request.TargetEntityId == targetEntityId));
