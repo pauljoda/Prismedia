@@ -106,6 +106,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Repair and upload actions remain available for owned TV episodes when monitoring is off.
+
 - Preserve independently changed library files and replacement recovery artifacts when they change while a downloaded video is being fully verified.
 
 - Recognize quoted Usenet multipart release names and recover reversible title encoding errors while preserving work, year, episode, and sample-file checks.

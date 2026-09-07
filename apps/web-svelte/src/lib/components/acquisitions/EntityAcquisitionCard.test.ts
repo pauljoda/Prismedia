@@ -61,6 +61,20 @@ describe("EntityAcquisitionCard", () => {
     expect(screen.getByRole("button", { name: "Replace" })).toBeInTheDocument();
   });
 
+  it("offers reviewed episode repair while monitoring is off", async () => {
+    render(Harness, {
+      initialAcquisition: null,
+      refresh: vi.fn(async () => {}),
+      showFileManagement: true,
+      entityKind: ENTITY_KIND.videoEpisode,
+      showMonitor: true,
+      monitorActive: false,
+    });
+    await fireEvent.click(screen.getByRole("button", { name: "More acquisition actions" }));
+    expect(screen.getByRole("button", { name: "Replace" })).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Monitor" })).not.toBeChecked();
+  });
+
   it("separates the current acquisition from its monitoring settings", () => {
     render(Harness, {
       initialAcquisition: acquisition("acquisition-1"),

@@ -268,14 +268,15 @@
             </Card.Root>
           {/if}
 
-          {#if entity}
-            <Disclosure title="More acquisition actions" icon={Wrench}>
-              <div class="flex flex-col gap-3">
-                {@render manualActions()}
-                <EntityBlocklistClearAction entityId={entity.id} entityTitle={entity.title} />
-              </div>
-            </Disclosure>
-          {/if}
+        {/if}
+
+        {#if entity}
+          <Disclosure title="More acquisition actions" icon={Wrench}>
+            <div class="flex flex-col gap-3">
+              {@render manualActions()}
+              <EntityBlocklistClearAction entityId={entity.id} entityTitle={entity.title} />
+            </div>
+          </Disclosure>
         {/if}
       </aside>
     </div>
