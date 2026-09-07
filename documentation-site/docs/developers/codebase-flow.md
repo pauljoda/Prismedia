@@ -184,7 +184,7 @@ Important groups currently mapped:
 | Files | `/api/files` | `FilesService`, managed storage, file persistence. |
 | Jobs | `/api/jobs` | `JobService`, `IJobGraphService`, `IJobQueueService`, durable graph/node/signal/resource rows. |
 | Identify | `/api/identify` | Plugin services, identify queues, cascade runners. |
-| Requests | `/api/requests` | Radarr, Sonarr, Lidarr clients and history stores. |
+| Requests | `/api/requests` | Plugin discovery, proposal review, and wanted Entity creation. |
 | Playback | `/api/playback`, `/api/music-player` | Playback planning and sessions, HLS assets, stream sources. |
 | Settings/auth | `/api/settings`, `/api/auth`, `/api/users` | Settings registry, user authentication, and user administration services. |
 
@@ -326,13 +326,16 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-  Settings["Request Services settings"] --> Test["Connection test pulls profiles, roots, tags"]
-  Test --> Save["Save Radarr, Sonarr, or Lidarr service"]
-  Save --> Search["Request search"]
-  Search --> Enrich["TMDB or MusicBrainz enrichment when available"]
-  Enrich --> Submit["Submit request or update existing monitored item"]
-  Submit --> History["Request history row"]
-  History --> LiveStatus["Live status refresh from upstream service"]
+  Plugins["Metadata plugins"] --> Search["Discover and review proposal"]
+  Settings["Indexers, download clients, profiles, watched roots"] --> Submit["Create wanted Entity and acquisition"]
+  Search --> Submit
+  Submit --> Releases["Search indexers and review releases"]
+  Releases --> Download["Transfer through configured download client"]
+  Download --> Import["Verify and import onto the same Entity"]
+  Import --> Ready["Watch, read, or listen"]
+  Submit --> History["Persistent acquisition history"]
+  Download --> History
+  Import --> History
 ```
 
 ## Where To Start For Common Changes
@@ -350,7 +353,7 @@ flowchart TD
 | New worker job | `Prismedia.Application/Jobs/DependencyInjection.cs` | `JobType`, handler, queue tests, Jobs UI if surfaced. |
 | Playback negotiation change | `VideoPlaybackPlanService.cs` | `VideoDirectPlayPolicy`, `HlsAssetService*`, `/api/playback` endpoints, `VideoPlayer.svelte`. |
 | Plugin/identify behavior | `IdentifyPluginService*` or identify job handlers | Queue store, proposal traversal, apply service, identify UI store. |
-| Request integration | `RequestEndpoints.cs` and request services | Arr clients, request contracts, settings UI, history tests. |
+| Request integration | `Endpoints/Requests/RequestEndpoints.cs` and `Endpoints/Acquisition/AcquisitionEndpoints.cs` | Plugin discovery, acquisition use cases, indexer/download-client adapters, import and history tests. |
 
 ## Quality Snapshot
 

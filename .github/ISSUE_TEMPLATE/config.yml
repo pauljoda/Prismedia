@@ -3,3 +3,9 @@ contact_links:
   - name: Report a security vulnerability privately
     url: https://github.com/pauljoda/Prismedia/security/advisories/new
     about: Use private vulnerability reporting for suspected security issues. Do not include exploit details in public issues.
+  - name: Setup and usage questions
+    url: https://www.reddit.com/r/Prismedia/
+    about: Ask the community about setup, folder layouts, and using your library.
+  - name: Troubleshooting guide
+    url: https://pauljoda.github.io/Prismedia/docs/advanced/troubleshooting
+    about: Check connection, scanning, importing, and playback problems.

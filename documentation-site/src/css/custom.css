@@ -1,3 +1,4 @@
+@import './marketing-glass.css';
 @import '@fontsource/geist-sans/400.css';
 @import '@fontsource/geist-sans/600.css';
 @import '@fontsource/geist-sans/700.css';
@@ -88,6 +89,43 @@
   --ifm-background-surface-color: var(--prismedia-surface-1);
 }
 
+/* A softer reading palette for documentation, with distinct chrome and content. */
+html:is(.docs-wrapper, [class~='plugin-@easyops-cn/docusaurus-search-local']) {
+  --prismedia-bg: #1b1e24;
+  --prismedia-surface-1: #22262d;
+  --prismedia-surface-2: #2b3038;
+  --prismedia-surface-3: #333943;
+  --prismedia-glass-2: rgba(24, 27, 33, 0.96);
+  --prismedia-glass-3: rgba(29, 33, 40, 0.98);
+  --prismedia-text-primary: #e2e5eb;
+  --prismedia-text-secondary: #bec4ce;
+  --prismedia-text-muted: #9ca5b3;
+  --prismedia-neutral: #c5cbd5;
+  --prismedia-neutral-strong: #dde1e8;
+  --prismedia-border-subtle: rgba(173, 185, 203, 0.12);
+  --prismedia-border-default: rgba(173, 185, 203, 0.18);
+  --prismedia-border-strong: rgba(193, 203, 219, 0.3);
+  --ifm-table-stripe-background: rgba(190, 202, 220, 0.035);
+  --ifm-table-head-background: var(--prismedia-surface-2);
+}
+
+html:is(.docs-wrapper, [class~='plugin-@easyops-cn/docusaurus-search-local']) .theme-doc-sidebar-container,
+html:is(.docs-wrapper, [class~='plugin-@easyops-cn/docusaurus-search-local']) .footer {
+  background: #16191f;
+}
+
+html:is(.docs-wrapper, [class~='plugin-@easyops-cn/docusaurus-search-local']) .navbar {
+  box-shadow: none;
+}
+
+html:is(.docs-wrapper, [class~='plugin-@easyops-cn/docusaurus-search-local']) .theme-code-block {
+  box-shadow: none;
+}
+
+html:is(.docs-wrapper, [class~='plugin-@easyops-cn/docusaurus-search-local']) .theme-code-block pre {
+  background: transparent !important;
+}
+
 html {
   background: var(--prismedia-bg);
   scroll-behavior: smooth;
@@ -174,21 +212,25 @@ a {
 }
 
 .navbar__testflight {
+  color: var(--prismedia-text-primary);
   margin-left: 0.25rem;
-  padding: 0.48rem 0.72rem;
-  color: #111214 !important;
-  background: var(--prismedia-neutral-strong);
-  border: 1px solid rgba(255, 255, 255, 0.42);
-  border-radius: var(--prismedia-radius-sm);
+  padding: 0.55rem 0.85rem;
+  min-height: 38px;
   font-family: var(--ifm-heading-font-family);
   font-size: 0.78rem;
-  font-weight: 700;
+  font-weight: 500;
 }
 
-.navbar__testflight:hover {
-  color: #000 !important;
-  background: #fff;
+.navbar__testflight::before, .navbar__github::before {
+  content: '';
+  display: inline-block;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  background: center / contain no-repeat url('../../static/img/brands/testflight.png');
 }
+.navbar__github { display: inline-flex; align-items: center; gap: 8px; }
+.navbar__github::before { background-image: url('../../static/img/brands/github.svg'); filter: invert(1); }
 
 .navbar-sidebar,
 .navbar-sidebar__brand,
@@ -207,6 +249,27 @@ a {
   background-color: var(--prismedia-surface-1);
   border: 1px solid var(--prismedia-border-default);
   border-radius: var(--prismedia-radius-sm);
+  min-height: 40px;
+  font-size: 0.875rem;
+}
+
+:root {
+  --search-local-modal-background: var(--prismedia-surface-1);
+  --search-local-modal-shadow: 0 0 0 1px var(--prismedia-border-strong), 0 16px 48px #000b;
+  --search-local-hit-background: var(--prismedia-surface-2);
+  --search-local-hit-color: var(--prismedia-text-primary);
+  --search-local-hit-shadow: none;
+  --search-local-muted-color: var(--prismedia-text-secondary);
+  --search-local-highlight-color: #c4c9d4;
+  --search-local-hit-active-color: #090a0b;
+  --search-local-input-active-border-color: #c4c9d4;
+}
+
+/* The docs need room for search before the mobile menu takes over. */
+@media (min-width: 997px) and (max-width: 1199px) {
+  .navbar:has(.navbar__search) .navbar__section-link {
+    display: none;
+  }
 }
 
 .theme-doc-sidebar-container {
@@ -298,6 +361,57 @@ table {
   overflow: hidden;
   border: 1px solid var(--prismedia-border-default);
   border-radius: var(--prismedia-radius-md);
+}
+
+/* The frame scrolls; the table keeps its native column sizing. */
+.doc-table-scroll {
+  margin: 1.5rem 0;
+  max-width: 100%;
+  overflow-x: auto;
+  border: 1px solid var(--prismedia-border-default);
+  border-radius: var(--prismedia-radius-sm);
+  background: var(--prismedia-surface-1);
+}
+
+.doc-table-scroll:focus-visible {
+  outline: 2px solid var(--prismedia-text-muted);
+  outline-offset: 3px;
+}
+
+.doc-table-scroll table {
+  display: table;
+  width: 100%;
+  margin: 0;
+  overflow: visible;
+  border: 0;
+  border-radius: 0;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.94rem;
+  line-height: 1.6;
+}
+
+.doc-table-scroll th,
+.doc-table-scroll td {
+  min-width: 7rem;
+  padding: 0.85rem 1rem;
+  border: 0;
+  text-align: left;
+  vertical-align: top;
+}
+
+.doc-table-scroll th {
+  font-weight: 600;
+}
+
+.doc-table-scroll tbody td {
+  border-top: 1px solid var(--prismedia-border-subtle);
+}
+
+.doc-table-scroll td code {
+  padding: 0;
+  border: 0;
+  background: transparent;
 }
 
 th {
@@ -447,6 +561,19 @@ blockquote {
 }
 
 @media (max-width: 996px) {
+  /* Service links live in the mobile menu; custom glass styles must not
+     override Docusaurus' collapsed navigation and squeeze the menu button. */
+  .navbar__items > .navbar__github,
+  .navbar__items > .navbar__testflight {
+    display: none;
+  }
+
+  .navbar__toggle {
+    min-width: 44px;
+    min-height: 44px;
+    flex-shrink: 0;
+  }
+
   .navbar {
     background: var(--prismedia-surface-1);
     backdrop-filter: none;

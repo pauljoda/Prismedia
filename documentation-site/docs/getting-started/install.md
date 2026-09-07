@@ -11,6 +11,8 @@ Prismedia runs as a single container. You provide two mounts:
 - `/data` for the database, generated assets, cache, plugin state, and the encryption secret.
 - `/media` for the media folders you want Prismedia to scan.
 
+For an overview of the server, native apps, and optional services, read [Before You Install](./before-you-install.md).
+
 ## Requirements
 
 - Docker or Docker Compose.
@@ -29,9 +31,11 @@ docker run -d \
   ghcr.io/pauljoda/prismedia:latest
 ```
 
-Open [http://localhost:8008](http://localhost:8008).
+Open [http://localhost:8008](http://localhost:8008) on the computer running Docker. From another device, use that computer's reachable network address and port instead, such as `http://media-server.local:8008`. Complete the first-run wizard to create your administrator account.
 
 ## Docker Compose
+
+Save the following as `compose.yaml`. Replace `/path/to/your/media` with an existing folder on the computer running Docker, then run the command from the directory containing that file. Keep this file for future restarts and updates.
 
 ```yaml
 services:
@@ -61,7 +65,7 @@ volumes:
   - /path/to/your/media:/media:ro
 ```
 
-Mount `/media` read-write when you want to use the **Files** workspace for browser uploads, folder creation, rename, move, delete, and scan-exclusion cleanup.
+Mount the media destination read-write for acquisition imports and for **Files** operations such as uploads, folder creation, renames, moves, and deletes.
 
 ## Environment variables
 
@@ -69,7 +73,7 @@ Most installs need **no** environment variables. The container generates everyth
 
 | Variable | Default | Use |
 | --- | --- | --- |
-| `PRISMEDIA_SECRET` | Auto-generated, persisted to `/data/.prismedia-secret` | Encryption key for plugin credentials (e.g. provider API keys) stored at rest. The container creates and persists one automatically, so it survives container recreation as long as `/data` persists. Set it explicitly only if you want to control or rotate the key yourself. See [Authentication & User Accounts](../deployment/authentication.md). |
+| `PRISMEDIA_SECRET` | Auto-generated, persisted to `/data/.prismedia-secret` | Encryption key for plugin credentials (e.g. provider API keys) stored at rest. The container creates and persists one automatically, so it survives container recreation as long as `/data` persists. Set it explicitly only if you manage the key yourself. Keep the value stable; changing it makes previously encrypted credentials unreadable. See [Authentication & User Accounts](../deployment/authentication.md). |
 | `PRISMEDIA_RECOVERY_PASSWORD` | Unset | Locked out? Set to reset (or create) an enabled administrator's password on boot, sign back in, then unset. See [Password recovery](../deployment/authentication.md#password-recovery). |
 | `PRISMEDIA_RECOVERY_USERNAME` | `admin` | The account `PRISMEDIA_RECOVERY_PASSWORD` resets or creates. |
 | `ASPNETCORE_URLS` | `http://0.0.0.0:8008` | Override the in-container listen address/port. |

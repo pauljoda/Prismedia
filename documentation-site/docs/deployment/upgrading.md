@@ -53,7 +53,7 @@ If a migration fails, the container exits — Prismedia would rather refuse to s
 
 When a release would destroy data or require a rescan, the release notes call it out under **What's New** and the Keep a Changelog sections. For a breaking upgrade:
 
-1. Snapshot `/data` before pulling the new image.
+1. Stop the container and snapshot or copy `/data` before pulling the new image, so the database files form a consistent backup.
 2. Read `CHANGELOG.md` for any rescan or manual-action instructions.
 3. Start the new image and let EF Core migrations run on boot.
 4. If the notes say to rebuild metadata, run a fresh scan from **Jobs → Library scan → Run**.
@@ -92,7 +92,7 @@ For broader rollback safety, especially before upgrades, still keep a host-level
 - **`pg_dump` of the embedded Postgres** - useful for a portable SQL dump.
 - **`rsync`/`restic` of `/data`** - stop the container first for a consistent copy; Postgres files aren't safe to copy while running.
 
-Your **media** (`/media`) doesn't need a Prismedia backup - it's read-only as far as Prismedia is concerned and lives wherever you keep it.
+Back up your **media** (`/media`) separately. Database backups and `/data` snapshots do not include it. Media mounts can be writable for imports and file-manager operations, so a catalog backup cannot undo a file deletion or restore a missing source file.
 
 ## Dev image discipline
 

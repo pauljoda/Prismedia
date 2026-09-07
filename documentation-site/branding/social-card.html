@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=1200">
+<title>Prismedia social preview artwork</title>
+<style>
+  @font-face { font-family: Geist; src: url('../node_modules/@fontsource/geist-sans/files/geist-sans-latin-600-normal.woff2'); font-weight: 600; }
+  @font-face { font-family: Inter; src: url('../node_modules/@fontsource-variable/inter/files/inter-latin-wght-normal.woff2'); font-weight: 100 900; }
+  * { box-sizing: border-box; }
+  html, body { width: 1200px; height: 630px; margin: 0; overflow: hidden; }
+  body { position: relative; background: #050609; color: #f5f5f6; font-family: Inter, sans-serif; }
+  .atmosphere { position: absolute; inset: 0; background:
+    radial-gradient(ellipse at 0 0, #b3484d33, transparent 43%),
+    radial-gradient(ellipse at 50% -20%, #b763372b, transparent 48%),
+    radial-gradient(ellipse at 100% 0, #9e873b26, transparent 45%),
+    radial-gradient(ellipse at 110% 60%, #4d925d24, transparent 45%),
+    radial-gradient(ellipse at 95% 110%, #3b869c2b, transparent 45%),
+    radial-gradient(ellipse at 45% 110%, #536fb02b, transparent 48%),
+    radial-gradient(ellipse at 0 100%, #775ca52b, transparent 45%),
+    radial-gradient(ellipse at -15% 50%, #94478f24, transparent 45%); }
+  .brand { position: absolute; left: 52px; top: 44px; display: flex; align-items: center; gap: 14px; font: 600 27px Geist; }
+  .brand img { width: 40px; height: auto; }
+  .copy { position: absolute; left: 52px; top: 194px; width: 474px; }
+  h1 { margin: 0 0 28px; font: 600 55px/1.06 Geist; letter-spacing: -.04em; }
+  p { color: #b6bbc6; font-size: 20px; line-height: 1.65; margin: 0; }
+  .platforms { position: absolute; left: 54px; bottom: 50px; font-size: 15px; color: #abb3c2; }
+  .screen { position: absolute; margin: 0; }
+  .screen img { display: block; width: 100%; border: 1px solid #c7d1e145; border-radius: 10px; box-shadow: 0 18px 44px #000a; }
+  .web { width: 614px; right: 30px; top: 134px; }
+  .tv { width: 266px; left: 526px; bottom: 44px; }
+  .tv img { border: 4px solid #393c43; border-radius: 7px; }
+  .tv::after { content: ''; position: absolute; height: 5px; left: 28%; right: 28%; bottom: -7px; background: #50545c; border-radius: 2px; }
+  .phone { width: 116px; right: 20px; bottom: 36px; }
+  .phone img { border: 3px solid #454b55; border-radius: 18px; }
+</style>
+<div class="atmosphere"></div>
+<div class="brand"><img src="../static/img/logo-mark.png" alt="">Prismedia</div>
+<div class="copy"><h1>A clear home<br>for all your media.</h1><p>Movies, music, books, and more.<br>One library on your own server.</p></div>
+<div class="platforms">Web · iPhone · iPad · Apple TV</div>
+<figure class="screen web"><img src="../static/img/showcase/web-movies-live.webp" alt="Prismedia web movie library"></figure>
+<figure class="screen tv"><img src="../static/img/showcase/tvos-movies-live.webp" alt="Prismedia on Apple TV"></figure>
+<figure class="screen phone"><img src="../static/img/showcase/ios-book-cover-live.webp" alt="Prismedia book detail on iPhone"></figure>
+</html>

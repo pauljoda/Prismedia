@@ -1,0 +1,22 @@
+name: Documentation improvement
+description: Tell us where a guide is outdated, unclear, or missing a step.
+body:
+  - type: input
+    id: page
+    attributes:
+      label: Guide URL or topic
+      description: Link the page, or describe the topic if a guide is missing.
+    validations:
+      required: true
+  - type: textarea
+    id: task
+    attributes:
+      label: What were you trying to do?
+      description: Include the step that became confusing and the app / server version if relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: improvement
+    attributes:
+      label: What would make the guide clearer?
+      description: Suggested wording, a missing example, or an outdated instruction. Replace private details in any examples.

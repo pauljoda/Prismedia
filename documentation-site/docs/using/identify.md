@@ -8,7 +8,7 @@ description: The Identify queue, provider proposals, cascade, Auto Identify, and
 
 Identify is Prismedia's metadata workflow. It is queue-based, durable, and designed so you can inspect provider suggestions before applying them. For a first run, see [Identify & Enrich Your Media](../getting-started/identify-walkthrough.md).
 
-![Identify queue](/img/screenshots/identify.png)
+<DocScreenshot src="/img/screenshots/identify.webp" alt="A provider review comparing current and proposed metadata before accepting changes." width={2430} height={1920} />
 
 ## Providers
 
@@ -72,12 +72,12 @@ Identifying everything automatically makes scans take longer; enable it delibera
 
 ## Plugin management
 
-![Plugins](/img/screenshots/plugins.png)
+<DocScreenshot src="/img/screenshots/plugins.webp" alt="Installed metadata providers and their supported media types." width={2430} height={1920} />
 
 Use **Plugins** to:
 
 - Browse installed plugins (with capability and source info).
-- Install community packages from the **Prismedia Index** and wrap scrapers from the **Stash Community** tab.
+- Install community packages from the **Prismedia Community** and wrap scrapers from the **Stash Community** tab.
 - Enable or disable providers.
 - Configure credentials (encrypted at rest — see [Authentication & User Accounts](../deployment/authentication.md)).
 - Update plugins when newer versions are published.

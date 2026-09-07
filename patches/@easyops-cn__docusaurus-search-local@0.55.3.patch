@@ -1,0 +1,16 @@
+diff --git a/CHANGELOG.md b/CHANGELOG.md
+deleted file mode 100644
+index ffd26a28fb58ee0cf740eb92e0784753a15bfa68..0000000000000000000000000000000000000000
+diff --git a/dist/client/client/theme/SearchBar/SearchBar.jsx b/dist/client/client/theme/SearchBar/SearchBar.jsx
+index 10ef222e098d751b8f0d402585c6643909af9ed3..aaccc4afe365805a8c74ab5541c1f58c1c7ec22a 100644
+--- a/dist/client/client/theme/SearchBar/SearchBar.jsx
++++ b/dist/client/client/theme/SearchBar/SearchBar.jsx
+@@ -167,7 +167,7 @@ export default function SearchBar({ handleSearchBarToggle, }) {
+                 }
+                 params.set("version", versionUrl.substring(baseUrl.length));
+             }
+-            const url = `${baseUrl}search/?${params.toString()}`;
++            const url = `${baseUrl}search?${params.toString()}`;
+             a.href = url;
+             a.textContent = linkText;
+             a.addEventListener("click", (e) => {

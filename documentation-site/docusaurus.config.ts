@@ -2,6 +2,7 @@ import {themes as prismThemes} from 'prism-react-renderer';
 import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 import type {PrismTheme} from 'prism-react-renderer';
+import {SITE_ORIGIN, SITE_BASE_URL, SOCIAL_IMAGE_PATH, SOCIAL_IMAGE_ALT} from './site-metadata';
 
 const prismediaPrismTheme: PrismTheme = {
   plain: {
@@ -29,8 +30,13 @@ const disablePathOnlyActiveState = 'a^';
 
 const config: Config = {
   title: 'Prismedia',
-  tagline: 'Your whole media life. One private home.',
-  favicon: 'img/favicon-32.png',
+  tagline: 'A clear home for all your media.',
+  favicon: 'img/icons/favicon.ico',
+  headTags: [
+    {tagName: 'link', attributes: {rel: 'manifest', href: `${SITE_BASE_URL}site.webmanifest`}},
+    {tagName: 'link', attributes: {rel: 'icon', type: 'image/png', sizes: '96x96', href: `${SITE_BASE_URL}img/icons/favicon-96.png`}},
+    {tagName: 'link', attributes: {rel: 'apple-touch-icon', sizes: '180x180', href: `${SITE_BASE_URL}img/icons/apple-touch-icon.png`}},
+  ],
 
   // Future flags, see https://docusaurus.io/docs/api/docusaurus-config#future
   future: {
@@ -39,13 +45,25 @@ const config: Config = {
   markdown: {
     mermaid: true,
   },
-  themes: ['@docusaurus/theme-mermaid'],
+  themes: [
+    '@docusaurus/theme-mermaid',
+    [
+      '@easyops-cn/docusaurus-search-local',
+      {
+        hashed: 'filename',
+        indexBlog: false,
+        indexPages: false,
+        highlightSearchTermsOnTargetPage: true,
+        searchBarPosition: 'right',
+      },
+    ],
+  ],
 
   // Set the production url of your site here
-  url: 'https://pauljoda.github.io',
+  url: SITE_ORIGIN,
   // Set the /<baseUrl>/ pathname under which your site is served
   // For GitHub pages deployment, it is often '/<projectName>/'
-  baseUrl: '/Prismedia/',
+  baseUrl: SITE_BASE_URL,
 
   // GitHub pages deployment config.
   // If you aren't using GitHub pages, you don't need these.
@@ -76,46 +94,34 @@ const config: Config = {
         theme: {
           customCss: './src/css/custom.css',
         },
+        sitemap: {
+          ignorePatterns: ['**/search'],
+        },
       } satisfies Preset.Options,
     ],
   ],
 
   themeConfig: {
-    image: 'img/prismedia-social-card.png',
+    image: SOCIAL_IMAGE_PATH,
     metadata: [
-      {
-        name: 'keywords',
-        content:
-          'self-hosted media library, private media server, movies, music, audiobooks, ebooks, comics, iOS, Apple TV, Docker',
-      },
       {name: 'application-name', content: 'Prismedia'},
       {name: 'apple-mobile-web-app-title', content: 'Prismedia'},
-      {name: 'theme-color', content: '#050506'},
+      {name: 'theme-color', content: '#050609'},
+      {name: 'color-scheme', content: 'dark'},
+      {name: 'robots', content: 'index, follow, max-image-preview:large'},
       {property: 'og:type', content: 'website'},
       {property: 'og:site_name', content: 'Prismedia'},
-      {
-        property: 'og:image:alt',
-        content:
-          'Prismedia prism splitting one library into watch, read, listen, and request experiences.',
-      },
-      {
-        name: 'twitter:title',
-        content: 'Your whole media life. One private home.',
-      },
-      {
-        name: 'twitter:description',
-        content:
-          'A private, self-hosted media library for web, iPhone, iPad, and Apple TV.',
-      },
-      {
-        name: 'twitter:image:alt',
-        content:
-          'Prismedia prism splitting one library into watch, read, listen, and request experiences.',
-      },
+      {property: 'og:image:width', content: '1200'},
+      {property: 'og:image:height', content: '630'},
+      {property: 'og:image:type', content: 'image/png'},
+      {property: 'og:image:alt', content: SOCIAL_IMAGE_ALT},
+      // Docusaurus supplies each page's Open Graph title and description, which
+      // social cards also use. Global Twitter overrides would flatten every doc.
+      {name: 'twitter:image:alt', content: SOCIAL_IMAGE_ALT},
     ],
     colorMode: {
       defaultMode: 'dark',
-      disableSwitch: false,
+      disableSwitch: true,
       respectPrefersColorScheme: false,
     },
     navbar: {
@@ -126,28 +132,32 @@ const config: Config = {
       },
       items: [
         {
-          to: '/?section=product',
-          label: 'Product',
+          to: '/?section=workflow',
+          label: 'How it works',
           position: 'left',
           activeBaseRegex: disablePathOnlyActiveState,
+          className: 'navbar__section-link',
         },
         {
           to: '/?section=experiences',
           label: 'Experiences',
           position: 'left',
           activeBaseRegex: disablePathOnlyActiveState,
+          className: 'navbar__section-link',
         },
         {
           to: '/?section=platforms',
           label: 'Platforms',
           position: 'left',
           activeBaseRegex: disablePathOnlyActiveState,
+          className: 'navbar__section-link',
         },
         {
           to: '/?section=self-hosting',
           label: 'Self-hosting',
           position: 'left',
           activeBaseRegex: disablePathOnlyActiveState,
+          className: 'navbar__section-link',
         },
         {
           type: 'docSidebar',
@@ -159,12 +169,13 @@ const config: Config = {
           href: 'https://github.com/pauljoda/Prismedia',
           label: 'GitHub',
           position: 'right',
+          className: 'navbar__github',
         },
         {
           href: 'https://testflight.apple.com/join/c9bgDxr7',
-          label: 'Join TestFlight',
+          label: 'TestFlight',
           position: 'right',
-          className: 'navbar__testflight',
+          className: 'navbar__testflight marketing-glass',
         },
       ],
     },
@@ -175,7 +186,7 @@ const config: Config = {
           title: 'Docs',
           items: [
             {
-              label: 'About Prismedia',
+              label: 'Start Here',
               to: '/docs/intro',
             },
             {
@@ -217,7 +228,7 @@ const config: Config = {
               href: 'https://www.reddit.com/r/Prismedia/',
             },
             {
-              label: 'Join TestFlight',
+              label: 'Test early builds',
               href: 'https://testflight.apple.com/join/c9bgDxr7',
             },
             {

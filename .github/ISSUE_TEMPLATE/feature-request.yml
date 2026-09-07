@@ -1,0 +1,22 @@
+name: Feature request
+description: Describe a workflow you would like Prismedia to support or improve.
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What are you trying to do?
+      description: Describe the task and what gets in the way today. Include the platform if relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: outcome
+    attributes:
+      label: What would a useful result look like?
+      description: Explain the behavior you want. A concrete example helps.
+    validations:
+      required: true
+  - type: textarea
+    id: workaround
+    attributes:
+      label: Current workaround or related ideas
+      description: Optional. Link related issues if you found any.

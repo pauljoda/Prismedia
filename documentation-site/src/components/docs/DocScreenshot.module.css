@@ -1,0 +1,62 @@
+.figure {
+  margin: 1.75rem 0 2rem;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 140px), 1fr));
+  gap: 1rem;
+  align-items: start;
+  margin: 1.75rem 0 2rem;
+}
+
+.grid .figure {
+  margin: 0;
+}
+
+.portrait {
+  max-width: 320px;
+  margin-inline: auto;
+}
+
+.link {
+  position: relative;
+  display: block;
+  overflow: hidden;
+  border: 1px solid var(--prismedia-border-default);
+  border-radius: var(--prismedia-radius-sm);
+  background: #000;
+}
+
+.link img {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin: 0;
+}
+
+.link:focus-visible {
+  outline: 2px solid var(--prismedia-text-primary);
+  outline-offset: 4px;
+}
+
+.expand {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border: 1px solid #ffffff30;
+  border-radius: var(--prismedia-radius-xs);
+  background: #111214e8;
+  color: #fff;
+}
+
+.figure figcaption {
+  margin-top: 0.65rem;
+  color: var(--prismedia-text-secondary);
+  font-size: 0.875rem;
+  line-height: 1.6;
+}

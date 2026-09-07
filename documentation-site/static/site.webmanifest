@@ -1,0 +1,23 @@
+{
+  "id": "./",
+  "name": "Prismedia",
+  "short_name": "Prismedia",
+  "description": "Explore Prismedia, download the native apps, and learn to set up and organize your self-hosted media library.",
+  "lang": "en",
+  "dir": "ltr",
+  "start_url": "./",
+  "scope": "./",
+  "display": "browser",
+  "theme_color": "#050609",
+  "background_color": "#050609",
+  "icons": [
+    {"src": "img/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "img/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "img/icons/icon-maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ],
+  "shortcuts": [
+    {"name": "Set up Prismedia", "short_name": "Setup", "description": "Install your server with Docker.", "url": "docs/getting-started/install", "icons": [{"src": "img/icons/icon-192.png", "sizes": "192x192", "type": "image/png"}]},
+    {"name": "Organize your folders", "short_name": "Folders", "description": "Understand media folders and library roots.", "url": "docs/getting-started/organize-folders", "icons": [{"src": "img/icons/icon-192.png", "sizes": "192x192", "type": "image/png"}]},
+    {"name": "Native apps", "short_name": "Apps", "description": "Find the Apple TV download and early native builds.", "url": "./#platforms", "icons": [{"src": "img/icons/icon-192.png", "sizes": "192x192", "type": "image/png"}]}
+  ]
+}

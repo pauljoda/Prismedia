@@ -74,7 +74,7 @@ ORDER BY plugin_id;
 
 ## The community registry
 
-[prismedia-community-plugins](https://github.com/pauljoda/prismedia-community-plugins) is the first-party plugin registry. The Plugins UI's **Prismedia Index** tab pulls from this repo so users can install with one click.
+[prismedia-community-plugins](https://github.com/pauljoda/prismedia-community-plugins) is the first-party plugin registry. The Plugins UI's **Prismedia Community** tab pulls from this repo so users can install with one click.
 
 ### Index format
 
@@ -125,7 +125,7 @@ The registry is open. To add a plugin:
 2. Tag a release in your plugin's git repo.
 3. Open a PR to prismedia-community-plugins adding (or updating) an entry in `index.json`. Include the download URL, SemVer, and SHA-256.
 4. CI in the registry repo verifies your manifest parses and the archive matches the SHA-256.
-5. Once merged, your plugin appears in every user's **Prismedia Index** tab.
+5. Once merged, your plugin appears in every user's **Prismedia Community** tab.
 
 The registry README has the current PR template and validation rules; check there for specifics.
 

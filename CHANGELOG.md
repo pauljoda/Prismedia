@@ -60,6 +60,15 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Equally ranked acquisition releases keep a stable order across review and automatic selection.
 
 - Large TV packs reuse episode evidence across files and alignment passes, reducing repeated parsing and memory allocation during import planning.
+- The public site includes a complete icon set and website manifest, a refreshed social preview, clearer native download labels, and page-specific search and sharing metadata.
+- Product screenshots now load at sizes suited to the screen while retaining full-resolution originals; the mobile navigation keeps its menu and brand clear on narrow phones.
+- The homepage adds a real web playback demonstration, brings the product tour closer to the experience examples, and names supported indexers and download clients.
+- The homepage explains server setup earlier, links directly to the practical library workflow, and brings product demonstrations ahead of the founder story.
+- The homepage closes with clearer community links and useful setup, media, and native-app shortcuts.
+- The homepage shows fresh high-resolution web and native product captures, including a 4K Apple TV view in the stacked hero. Primary links now lead to the source repository, native downloads, and setup.
+- The public homepage adds a subtle spectrum atmosphere, a prism glass primary action, and familiar download and community buttons. The prism uses the Prismedia logo and connected media branches; motion follows system preferences.
+
+- Redesign the public homepage around a clearer introduction, the story behind Prismedia, and an interactive prism that follows scrolling. Media accents match the app, with a complete static illustration on phones and for reduced motion.
 
 - Replacement searches open in the main acquisition area instead of inside More acquisition actions. Closing the search returns to the current acquisition without changing the existing files.
 - Clicking an Entity grid thumbnail carries its artwork into the detail header on supported browsers. Back and forward navigation stay immediate, reduced motion skips the effect, and slow or unavailable artwork falls back to normal navigation.
@@ -335,6 +344,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Monitored movies, episodes, and ebooks retain their imported quality baseline so enabling upgrades or raising a profile cutoff can resume upgrade searches after the original import.
 
 - Automatic upgrades and the Cutoff Unmet list now honor the acquisition’s assigned quality profile, so a different default profile cannot silently disable upgrades or trigger unwanted ones.
+- Docker builds include workspace dependency patches, restoring dev image publishing and Docker Compose builds after the documentation search update.
+- Documentation tables scroll within the article on narrow screens instead of widening the page.
 
 - Opening plugin credentials no longer autofills the plugin search with your Prismedia login and hides the editor. Plugin searches now use the shared clear control and return focus to the empty search field.
 - Plugin navigation now uses the shared keyboard-accessible tabs. Confirmation dialogs focus Cancel, preserve failed actions for retry, and prevent dismissal while work is in progress. Request messages, dashboard placeholders, and diagnostic job history use the shared UI components.
@@ -804,6 +815,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ### Docs
 
 - Documented acquisition profile controls, verification stages, recovery behavior, and file-inventory limits.
+- Soften the documentation reading palette and fix tables that left unused space beside their columns, with clearer rows and contained scrolling on small screens.
+- Replace legacy documentation screenshots with current SFW product captures, add folder setup, request review, chapter alignment, native reader, and player examples, and make every screenshot expandable. Update guide labels and job-state explanations to match the current interface.
+- Add local documentation search with keyboard navigation and mobile results, keeping search queries in the browser.
+- Simplify the getting-started path, explain server and client requirements, expand troubleshooting, and correct backup and writable-media guidance. Refresh the README and add focused support and issue-report paths.
+- Public-site publishing now checks canonical URLs, unique page descriptions, icons, manifest destinations, and browser behavior before deployment.
+- Add practical guides for native app connection, reading and listening together, EPUB reader settings, and web/native music players; clarify request permissions and download-to-library path mapping.
+
+- Link the released Apple TV app from the README, describe TestFlight as early-build access, and remove the outdated launch-date notice from the homepage.
+
+- Explain media folder organization with Docker path examples, watched-root settings, and common scan corrections. Update book and comic grouping guidance and replace outdated external request-service instructions with Prismedia acquisition setup.
 - Prepared the native App Store listing, exact-size iPhone, iPad, and Apple TV
   screenshot galleries, review notes, privacy answers, licensed
   demonstration-media ledger, and an isolated Apple review deployment that

@@ -8,18 +8,25 @@ const sidebars: SidebarsConfig = {
       label: 'Getting Started',
       collapsed: false,
       items: [
+        'getting-started/before-you-install',
         'getting-started/install',
+        'getting-started/organize-folders',
         'getting-started/first-library',
         'getting-started/identify-walkthrough',
       ],
     },
+    'advanced/troubleshooting',
     {
       type: 'category',
       label: 'Using Prismedia',
-      collapsed: false,
+      collapsed: true,
       items: [
         'using/browsing',
         'using/playback',
+        'using/native-apps',
+        'using/read-and-listen',
+        'using/reader-settings',
+        'using/music-player',
         'using/navigation',
         'using/identify',
         'using/requests',
@@ -31,7 +38,7 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Library & Scanning',
-      collapsed: false,
+      collapsed: true,
       items: [
         'library/overview',
         'library/videos',
@@ -44,7 +51,7 @@ const sidebars: SidebarsConfig = {
     {
       type: 'category',
       label: 'Deployment & Security',
-      collapsed: false,
+      collapsed: true,
       items: [
         'deployment/authentication',
         'deployment/reverse-proxy',
@@ -86,7 +93,6 @@ const sidebars: SidebarsConfig = {
       collapsed: true,
       items: [
         'advanced/stash-compatibility',
-        'advanced/troubleshooting',
       ],
     },
   ],

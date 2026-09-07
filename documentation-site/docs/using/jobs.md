@@ -1,67 +1,62 @@
 ---
 sidebar_position: 7
 title: Jobs & Operations
-description: Worker status, queues, scans, failures, and maintenance.
+description: Read worker status, execution lanes, waiting workflows, and failures; run scans and diagnose background work in Prismedia.
 ---
 
 # Jobs & Operations
 
-The **Jobs** page shows what Prismedia is doing in the background. It is the first place to check when a scan, thumbnail, identify run, HLS render, subtitle extraction, or import feels slow.
+Open **Jobs** to see what the server is doing. The page is titled **Job Control** and separates work that is actively running from workflows waiting for a decision or an external event.
 
-![Jobs](/img/screenshots/jobs.png)
+<DocScreenshot src="/img/screenshots/jobs.webp" alt="Job Control with worker status, active execution lanes, and workflows waiting for review." width={2430} height={1920} />
 
-## Worker status
+## Read the status first
 
-The worker heartbeat badge tells you whether the .NET worker is online. If the API is running but the worker is offline, you can still browse existing data, but queued work won't move. In the unified image the entrypoint supervises the worker and restarts it automatically if it ever stops.
+The top of the page shows whether the worker is online, along with running, queued, waiting, and failed counts.
 
-## Queue families
+| Section | What it means | What to do |
+| --- | --- | --- |
+| **Active execution lanes** | Work running now, or queued for a worker or shared resource. | Expand a lane to inspect its steps and current message. |
+| **Waiting workflows** | A workflow needs review or an external event, such as a completed download. It is not holding an active worker lane. | Read the waiting reason and open the related item to review or continue it. |
+| **Recent lanes** | Recently completed or failed work. | Open a failure and read its error before retrying. |
 
-| Queue | Typical work |
-| --- | --- |
-| **Library scan** | Walk watched roots, classify files, remove missing files. |
-| **Media probe** | Read technical metadata: duration, dimensions, codecs, audio info, embedded tags. |
-| **Preview** | Generate thumbnails, sprites, trickplay tiles, and waveforms. |
-| **HLS** | Create adaptive playback assets on demand. |
-| **Subtitles** | Extract embedded subtitles, import adjacent SRT/VTT/ASS/SSA files, and reconcile normalized tracks. |
-| **Identify** | Provider searches, bulk identify, and cascade child resolution. |
-| **Collections** | Refresh dynamic and hybrid collection rules. |
-| **Maintenance** | Cleanup and diagnostic backfills. |
+A request waiting for release review and an Identify proposal waiting for approval are expected pauses. Increasing worker concurrency will not approve either one.
 
-## Running a scan
+## Run a scan
 
-Run a scan from:
+Under **Administrative work**, choose the medium in **Scans**: Videos, Images, Books, Comics, or Audio. The maintenance actions can refresh collections or check monitored items.
 
-- **Jobs**, for a general library scan.
-- **Settings → Watched Libraries**, for root-level management.
-- **Files**, for a specific root, folder, or file context.
+You can also start from **Settings → Watched Libraries** or use **Files** to rescan a particular location. A newly added root scans its enabled media types automatically.
 
-Scans are idempotent and **incremental** — unchanged roots skip the detailed work. There is at most one scan per media kind in flight; a scheduled scan, a new folder, and a manual scan reuse the in-flight one. New media gets its metadata and cover thumbnail first, before heavier preview/trickplay generation. See [How Scanning Works](../library/overview.md).
+Scans discover files and schedule related work such as probes, artwork, previews, subtitles, and metadata. The library can become usable while heavier background generation continues. See [Your First Library & Scan](../getting-started/first-library.md).
 
-## Failures
+## When work fails
 
-Open a failure row to read the error message. Common causes:
+Read the lane's message and the relevant container log excerpt. Common causes include:
 
-- A bad or unsupported media file.
-- A media path that no longer exists.
-- A read-only mount for an operation that needs write access.
-- Disk full under `/data`.
-- Plugin network/API errors.
+- A source path that no longer exists or cannot be read.
+- A read-only destination for an import or file operation.
+- Full storage under `/data`.
+- A provider or download-client connection error.
+- A damaged or unsupported media file.
 
-After fixing the cause, retry the action or rescan. Clearing failures hides acknowledged rows from the dashboard; it does not erase historical `job_runs` records.
+Fix the cause before retrying. Cancelling work stops that workflow; it does not repair a failing service or make a missing file available.
 
-## Stuck work
+## When nothing moves
 
-If work appears stuck:
+1. Check the worker status at the top of the page.
+2. Expand the active or queued lane and read its current message.
+3. Check whether the workflow is actually waiting for review.
+4. Read the container logs:
 
-1. Check the worker heartbeat.
-2. Read the active queue row for the target label and message.
-3. Check container logs: `docker compose logs prismedia --tail 200`.
-4. Restart the container if the worker was killed mid-job — stale running jobs are recovered on the next boot after their lease expires.
+   ```bash
+   docker compose logs --tail 200 prismedia
+   ```
 
-## Worker concurrency
+If the worker stopped unexpectedly, a container restart can let it recover expired leases. Persistent failures need their underlying cause resolved. See [Troubleshooting](../advanced/troubleshooting.md).
 
-The worker concurrency setting is global; changing it takes effect without a restart. Raising it can speed up independent jobs but increases disk, CPU, and ffmpeg pressure. Keep it modest on small NAS or single-board systems. Background generation runs at below-normal priority with a capped thread count so it doesn't starve playback and browsing.
+## Background work and storage
 
-## Generated storage
+Scans and media generation share worker and storage capacity. Higher concurrency increases demand on the CPU and disks; start conservatively and inspect the running work before raising it.
 
-Generated assets live under `/data`: thumbnails, HLS renditions, waveform data, sprites, trickplay tiles, extracted subtitles, and plugin artwork. **Settings → Generated Storage** offers diagnostics and rebuild actions when assets need refreshing.
+Generated assets live under `/data`, including thumbnails, playback renditions, waveforms, subtitle tracks, and plugin artwork. **Settings → Transcode Cache** manages prepared video storage, and **Settings → Diagnostics** provides focused maintenance actions. Your source media remains in its own mounted folders.

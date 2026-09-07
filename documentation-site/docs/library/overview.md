@@ -10,6 +10,8 @@ Prismedia treats your folder layout as the source of truth. You decide which fol
 
 This page covers the mechanics shared by every media type. The per-type rules — with the exact extension lists and folder trees — are on the dedicated pages:
 
+For a recommended starting layout, use [Organize Your Media Folders](../getting-started/organize-folders.md). The root you select is the starting point for the classification rules below; choosing its parent changes how those rules see your folders.
+
 - [Videos, Movies & Series](./videos.md)
 - [Images & Galleries](./images-galleries.md)
 - [Books, Comics, eBooks & Audiobooks](./books.md)

@@ -12,18 +12,19 @@ This page is a hands-on first run. The full reference lives in [Identify & Metad
 
 ## 1. Install a provider
 
-Open **Plugins → Prismedia Index** and install a provider that matches your library. First-party options include:
+Open **Plugins → Prismedia Community** and install a provider that matches your library. First-party options include:
 
 | Provider | Good for |
 | --- | --- |
 | **The Movie Database (TMDB)** | Movies and TV series. |
-| **TheTVDB** | TV series and episodes. |
+| **AniList** | Anime and related metadata. |
+| **Open Library** | Books and authors. |
 | **MusicBrainz** | Artists, albums, and tracks. |
 | **YouTube** | Channel/video metadata. |
 
 One click downloads, verifies, and registers the plugin. For adult-site metadata you can also wrap **Stash community scrapers** — see [Stash Compatibility](../advanced/stash-compatibility.md).
 
-![Plugins](/img/screenshots/plugins.png)
+<DocScreenshot src="/img/screenshots/plugins.webp" alt="Installed metadata providers and their supported media types." width={2430} height={1920} />
 
 ## 2. Add credentials (if required)
 
@@ -36,7 +37,7 @@ items at once from a browse page's selection toolbar (this runs as a durable bac
 job). Wanted and other fileless Entities already carry their request metadata and become eligible only
 after real source files are imported. Items land in the **Identify** queue.
 
-![Identify queue](/img/screenshots/identify.png)
+<DocScreenshot src="/img/screenshots/identify.webp" alt="A provider review comparing current and proposed metadata before accepting changes." width={2430} height={1920} />
 
 Each queued item moves through:
 
