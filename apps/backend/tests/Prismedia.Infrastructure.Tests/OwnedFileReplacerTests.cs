@@ -17,6 +17,44 @@ public sealed class OwnedFileReplacerTests : IDisposable {
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task OwnedVideoChangedDuringDecodeIsPreserved(bool retainBackup) {
+        var owned = WriteFile(Dir("library"), "Owned.mkv", "old owned bytes");
+        var incoming = WriteFile(Dir("download"), "Incoming.mkv", "verified candidate bytes");
+        var verifier = new TestVideoPayloadVerifier { BeforeResult = () => File.WriteAllTextAsync(owned, "newer independently repaired owned bytes") };
+        var replacer = new OwnedFileReplacer(new BinOff(), NullLogger<OwnedFileReplacer>.Instance, verifier);
+
+        var result = retainBackup
+            ? await replacer.ReplaceRetainingBackupAsync(owned, incoming, BookFormatTier.Unknown, default, EntityKind.Movie)
+            : await replacer.ReplaceAsync(owned, incoming, BookFormatTier.Unknown, default, EntityKind.Movie);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("newer independently repaired owned bytes", await File.ReadAllTextAsync(owned));
+        Assert.Equal("verified candidate bytes", await File.ReadAllTextAsync(incoming));
+        Assert.False(File.Exists(owned + ".prismedia-bak"));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ReplacementDestinationCreatedDuringDecodeIsPreserved(bool evidenceFile) {
+        var owned = WriteFile(Dir("library"), "Owned.mkv", "owned bytes");
+        var incoming = WriteFile(Dir("download"), "Incoming.mp4", "verified candidate bytes");
+        var destination = evidenceFile ? owned + ".attempt-evidence" : Path.ChangeExtension(owned, ".mp4");
+        var verifier = new TestVideoPayloadVerifier { BeforeResult = () => File.WriteAllTextAsync(destination, "independent file bytes") };
+        var replacer = new OwnedFileReplacer(new BinOff(), NullLogger<OwnedFileReplacer>.Instance, verifier);
+
+        var result = await replacer.ReplaceRetainingBackupAsync(owned, incoming, BookFormatTier.Unknown, default,
+            EntityKind.Movie, allowFormatChange: true, incomingEvidencePath: evidenceFile ? destination : null);
+
+        Assert.False(result.Succeeded);
+        Assert.Equal("independent file bytes", await File.ReadAllTextAsync(destination));
+        Assert.Equal("owned bytes", await File.ReadAllTextAsync(owned));
+        Assert.Equal("verified candidate bytes", await File.ReadAllTextAsync(incoming));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task FailedDecodeCannotStageOrReplaceOwnedVideo(bool formatChange) {
         var owned = WriteFile(Dir("library"), "Owned.mkv", "healthy owned bytes");
         var incoming = WriteFile(Dir("download"), formatChange ? "Incoming.mp4" : "Incoming.mkv", "damaged candidate bytes");

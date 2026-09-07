@@ -127,8 +127,17 @@ public sealed class OwnedFileReplacer(
             return OwnedFileReplaceResult.Failed("A previous replacement candidate is still staged beside the owned file. Resume or review that attempt before replacing it.");
         }
         var stagedIncoming = false;
+        // Full decoding can wait minutes for CPU admission and execution. Re-check all paths that the
+        // swap can consume or overwrite so an independently repaired copy or recovery artifact survives.
+        var beforeVerification = ReplacementFileSnapshot.Capture(owned, incoming, installPath, backup, staged, evidence);
+        if (beforeVerification is null) {
+            return OwnedFileReplaceResult.Failed("The replacement files could not be inspected. Both copies were retained for review.");
+        }
         if (isVideo && await videoVerifier.FindFailureAsync(incoming, cancellationToken) is { } verificationFailure) {
             return OwnedFileReplaceResult.Failed(verificationFailure);
+        }
+        if (!beforeVerification.IsCurrent()) {
+            return OwnedFileReplaceResult.Failed("The replacement files changed during verification. Both copies and recovery files were retained for review.");
         }
         IReadOnlyList<StagedSubtitleSidecar> stagedSubtitleSidecars;
         try {

@@ -104,6 +104,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Preserve independently changed library files and replacement recovery artifacts when they change while a downloaded video is being fully verified.
+
 - Recognize quoted Usenet multipart release names and recover reversible title encoding errors while preserving work, year, episode, and sample-file checks.
 
 - Untouched TV downloads now release the library scan lock during full verification, then recheck their files, episode mappings, ownership, and current profile before import. Changed plans return to review without overwriting a newer cancellation or losing partial-import recovery evidence.
