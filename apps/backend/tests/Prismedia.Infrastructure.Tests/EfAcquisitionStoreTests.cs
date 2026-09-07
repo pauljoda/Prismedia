@@ -1906,6 +1906,32 @@ public sealed class EfAcquisitionStoreTests {
             (await store.GetImportContextAsync(acquisitionId, CancellationToken.None))!.TvImportCheckpoint!.AttemptId);
     }
 
+    [Theory]
+    [InlineData("current", true)]
+    [InlineData("attempt", false)]
+    [InlineData("owner", false)]
+    [InlineData("stopped", false)]
+    public async Task VerificationHoldRequiresTheExactActiveCheckpoint(string change, bool expected) {
+        await using var db = CreateContext();
+        var acquisitionId = AddCheckpointAcquisition(db);
+        var checkpoint = ValidTvCheckpoint();
+        var row = db.Acquisitions.Local.Single();
+        row.ImportClaimJobId = checkpoint.ClaimJobId;
+        await db.SaveChangesAsync();
+        IAcquisitionStore store = AcquisitionTestFactory.Store(db);
+        await store.SetTvImportCheckpointAsync(acquisitionId, checkpoint, default);
+        if (change == "owner") row.ImportClaimJobId = Guid.NewGuid();
+        if (change == "stopped") row.Status = AcquisitionStatus.Stopping;
+        await db.SaveChangesAsync();
+        var before = row.Status;
+        var observed = change == "attempt" ? checkpoint with { AttemptId = Guid.NewGuid() } : checkpoint;
+
+        Assert.Equal(expected, await store.TryHoldTvImportCheckpointAsync(acquisitionId, observed, "Verification needs review.", default));
+
+        Assert.Equal(expected ? AcquisitionStatus.ManualImportRequired : before, await store.GetStatusAsync(acquisitionId, default));
+        Assert.Equal(checkpoint.AttemptId, (await store.GetImportContextAsync(acquisitionId, default))!.TvImportCheckpoint!.AttemptId);
+    }
+
     [Fact]
     public async Task ImportClaimLetsOnlyTheOwningJobRecoverImportingOrFailedWork() {
         await using var db = CreateContext();

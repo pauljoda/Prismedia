@@ -94,6 +94,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Untouched TV downloads now release the library scan lock during full verification, then recheck their files, episode mappings, ownership, and current profile before import. Changed plans return to review without overwriting a newer cancellation or losing partial-import recovery evidence.
+
 - Interrupted TV imports now verify already-placed video before finishing episode recovery, preserving damaged files and their recovery state for review.
 
 - Reviewed episode selections replace an untouched held import plan, so excluding a damaged file no longer retries it anyway. Partially applied plans keep their recovery evidence.

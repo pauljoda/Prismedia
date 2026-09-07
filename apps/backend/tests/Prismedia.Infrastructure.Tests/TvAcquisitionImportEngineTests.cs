@@ -29,6 +29,90 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
     private readonly string _workRoot = Directory.CreateTempSubdirectory("prismedia-tv-import-").FullName;
 
     [Theory]
+    [InlineData("scan", AcquisitionStatus.Importing)]
+    [InlineData("profile", AcquisitionStatus.ManualImportRequired)]
+    [InlineData("payload", AcquisitionStatus.ManualImportRequired)]
+    [InlineData("catalog", AcquisitionStatus.ManualImportRequired)]
+    [InlineData("target", AcquisitionStatus.ManualImportRequired)]
+    [InlineData("stopped", AcquisitionStatus.Stopping)]
+    public async Task PendingDecodeAllowsScansAndRechecksChangesBeforePlacement(string change, AcquisitionStatus expectedStatus) {
+        await using var db = CreateContext();
+        const string file = "Show.S01E02.WEB-DL.1080p.mkv";
+        var verifier = new TestVideoPayloadVerifier();
+        var harness = await HarnessAsync(db, "Show.S01E01.WEB-DL.720p.mkv", [file], "Show S01 WEB-DL 1080p",
+            videoVerifier: verifier, mediaProbe: new NewEpisodeProbe(new(1200, 1000, 1920, 1080, 24, null, null, null, null, null, null)));
+        verifier.BeforeResult = async () => {
+            using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+            await using var scan = await harness.ScanGate.EnterAsync(deadline.Token);
+            Assert.False(await db.EntityFiles.AnyAsync(row => row.EntityId == harness.WantedEpisodeId && row.Role == EntityFileRole.Source));
+            if (change == "profile") db.BookAcquisitionProfiles.Add(new BookAcquisitionProfileRow {
+                Id = Guid.NewGuid(), Kind = AcquisitionProfileKinds.For(EntityKind.VideoSeason), DisplayName = "Changed during decode",
+                IsDefault = true, AllowedQualities = [VideoQuality.Webdl2160p.ToCode()]
+            });
+            if (change == "catalog") (await db.Entities.SingleAsync(row => row.Id == harness.WantedEpisodeId)).SortOrder = 3;
+            if (change == "stopped") (await db.Acquisitions.SingleAsync()).Status = AcquisitionStatus.Stopping;
+            if (change == "payload") await File.WriteAllTextAsync(Path.Combine(harness.Import.ContentPath!, file), "changed payload bytes");
+            if (change == "target") {
+                var checkpoint = (await AcquisitionTestFactory.Store(db).GetImportContextAsync(harness.Import.Id, default))!.TvImportCheckpoint!;
+                await File.WriteAllTextAsync(Assert.Single(checkpoint.Units).TargetAbsolutePath, "a competing library file");
+            }
+            await db.SaveChangesAsync();
+            if (change == "stopped") verifier.Failure = "A stale decoder failure must not overwrite cancellation.";
+        };
+
+        await harness.Engine.ImportAsync(harness.Context, harness.Import, default);
+
+        Assert.Equal(expectedStatus, await StatusOf(db, harness.Import.Id));
+        Assert.Single(verifier.Paths);
+        Assert.Equal("owned-bytes", await File.ReadAllTextAsync(harness.OwnedEpisodePath));
+        Assert.Equal(change == "scan", await db.EntityFiles.AnyAsync(row => row.EntityId == harness.WantedEpisodeId && row.Role == EntityFileRole.Source));
+        if (change != "scan") Assert.True(File.Exists(Path.Combine(harness.Import.ContentPath!, file)));
+        if (change is "catalog" or "payload") {
+            Assert.Null((await AcquisitionTestFactory.Store(db).GetImportContextAsync(harness.Import.Id, default))!.TvImportCheckpoint);
+        }
+        if (change == "target") {
+            var checkpoint = (await AcquisitionTestFactory.Store(db).GetImportContextAsync(harness.Import.Id, default))!.TvImportCheckpoint!;
+            Assert.Equal("a competing library file", await File.ReadAllTextAsync(Assert.Single(checkpoint.Units).TargetAbsolutePath));
+        }
+    }
+
+    [Fact]
+    public async Task CancellingDecodeLeavesTheScanGateAvailableAndThePayloadUntouched() {
+        await using var db = CreateContext();
+        using var cancellation = new CancellationTokenSource();
+        const string file = "Show.S01E02.WEB-DL.1080p.mkv";
+        var verifier = new TestVideoPayloadVerifier { BeforeResult = () => { cancellation.Cancel(); return Task.CompletedTask; } };
+        var harness = await HarnessAsync(db, "Show.S01E01.WEB-DL.720p.mkv", [file], "Show S01 WEB-DL 1080p", videoVerifier: verifier);
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => harness.Engine.ImportAsync(harness.Context, harness.Import, cancellation.Token));
+
+        using var deadline = new CancellationTokenSource(TimeSpan.FromSeconds(2));
+        await using var scan = await harness.ScanGate.EnterAsync(deadline.Token);
+        Assert.Equal("payload-bytes", await File.ReadAllTextAsync(Path.Combine(harness.Import.ContentPath!, file)));
+        Assert.False(await db.EntityFiles.AnyAsync(row => row.EntityId == harness.WantedEpisodeId && row.Role == EntityFileRole.Source));
+    }
+
+    [Fact]
+    public async Task RecoveryKeepsPlacedUncatalogedFilesBehindTheScanGateDuringDecode() {
+        await using var db = CreateContext();
+        var verifier = new TestVideoPayloadVerifier();
+        var harness = await HarnessAsync(db, "Show.S01E01.WEB-DL.720p.mkv", ["Show.S01E02.WEB-DL.1080p.mkv"],
+            "Show S01 WEB-DL 1080p", videoVerifier: verifier, failMaterialization: true);
+        await Assert.ThrowsAsync<InvalidOperationException>(() => harness.Engine.ImportAsync(harness.Context, harness.Import, default));
+        verifier.BeforeResult = async () => {
+            using var deadline = new CancellationTokenSource(TimeSpan.FromMilliseconds(100));
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(async () => {
+                await using var unexpectedLease = await harness.ScanGate.EnterAsync(deadline.Token);
+            });
+        };
+        var resume = (await AcquisitionTestFactory.Store(db).GetImportContextAsync(harness.Import.Id, default))!;
+
+        await harness.ResumeEngine.ImportAsync(harness.Context, resume, default);
+
+        Assert.True(await db.EntityFiles.AnyAsync(row => row.EntityId == harness.WantedEpisodeId && row.Role == EntityFileRole.Source));
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task RecoveryDecodesPlacedNewEpisodeBeforeCatalogingIt(bool checkpointRecordedPlacement) {

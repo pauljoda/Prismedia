@@ -870,6 +870,10 @@ public interface IAcquisitionStore : IAcquisitionLifecycleStore {
         TvImportCheckpoint checkpoint,
         CancellationToken cancellationToken);
 
+    /// <summary>Holds only the exact currently claimed TV plan; a stale verifier cannot overwrite a newer lifecycle decision.</summary>
+    Task<bool> TryHoldTvImportCheckpointAsync(Guid acquisitionId, TvImportCheckpoint checkpoint,
+        string message, CancellationToken cancellationToken) => Task.FromResult(false);
+
     /// <summary>
     /// Atomically creates a kind-neutral book/movie/album placement checkpoint for the exclusively
     /// claimed Importing row and matching transfer. False means lifecycle ownership changed before

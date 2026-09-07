@@ -1,4 +1,5 @@
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Files;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Domain.Entities;
 
@@ -7,9 +8,19 @@ namespace Prismedia.Application.Jobs.Handlers;
 /// <summary>Verifies recovered files and inspects pending new episodes before a checkpoint advances.</summary>
 internal sealed class TvNewFileValidation(IMediaProbe probe, IBookAcquisitionProfileStore profiles,
     IImportTargetIndex targets, IMonitorStore? monitors, IVideoPayloadVerifier verifier) {
+    private readonly Dictionary<string, VideoProbeData?> _observedVideo = new(FileSystemPathComparison.Comparer);
     /// <summary>Returns a review reason for damaged recovered files or unreadable/disallowed pending files.</summary>
-    public async Task<string?> ValidateAsync(JobContext context, AcquisitionImportContext import, DownloadPayload? payload,
-        TvImportCheckpoint checkpoint, SelectedRelease? selected, CancellationToken token) {
+    public Task<string?> ValidateAsync(JobContext context, AcquisitionImportContext import, DownloadPayload? payload,
+        TvImportCheckpoint checkpoint, SelectedRelease? selected, CancellationToken token) =>
+        ValidateCoreAsync(context, import, payload, checkpoint, selected, true, token);
+
+    /// <summary>Rechecks current profile and measured metadata after a long decode, without decoding the same bytes twice.</summary>
+    public Task<string?> ValidateCurrentProfileAsync(JobContext context, AcquisitionImportContext import, DownloadPayload? payload,
+        TvImportCheckpoint checkpoint, SelectedRelease? selected, CancellationToken token) =>
+        ValidateCoreAsync(context, import, payload, checkpoint, selected, false, token);
+
+    private async Task<string?> ValidateCoreAsync(JobContext context, AcquisitionImportContext import, DownloadPayload? payload,
+        TvImportCheckpoint checkpoint, SelectedRelease? selected, bool decode, CancellationToken token) {
         // A crash may happen either side of recording the move. In both cases the library-side
         // bytes still need integrity verification before recovery publishes their catalog bindings.
         // Already placed units retain their elected profile decision; only pending files recheck it.
@@ -18,7 +29,7 @@ internal sealed class TvNewFileValidation(IMediaProbe probe, IBookAcquisitionPro
                 ? unit.FinalPath
                 : unit.PreviousFilePath is null && !File.Exists(SourcePath(unit, payload)) && File.Exists(unit.TargetAbsolutePath)
                     ? unit.TargetAbsolutePath : null).OfType<string>();
-        if (await TvPlacedFileValidation.ValidateAsync(context, recovered, verifier, token) is { } recoveryHold) return recoveryHold;
+        if (decode && await TvPlacedFileValidation.ValidateAsync(context, recovered, verifier, token) is { } recoveryHold) return recoveryHold;
 
         var pending = checkpoint.Units.Where(unit => unit.PreviousFilePath is null && !unit.AdoptedExistingTarget
             && (unit.FinalPath is null || !File.Exists(unit.FinalPath)))
@@ -56,7 +67,8 @@ internal sealed class TvNewFileValidation(IMediaProbe probe, IBookAcquisitionPro
 
         var verified = 0;
         foreach (var (unit, path) in pending) {
-            var video = await probe.ProbeVideoAsync(path!, token);
+            var video = decode ? await probe.ProbeVideoAsync(path!, token) : _observedVideo.GetValueOrDefault(path!);
+            if (decode) _observedVideo[path!] = video;
             if (video is not { Width: > 0, Height: > 0, DurationSeconds: > 0 }
                 || !double.IsFinite(video.DurationSeconds.Value)) {
                 return $"The episode file '{Path.GetFileName(unit.SourceRelativePath)}' could not be verified as readable video with a valid runtime. The download was preserved for review.";
@@ -66,6 +78,7 @@ internal sealed class TvNewFileValidation(IMediaProbe probe, IBookAcquisitionPro
                     rulesBySeason[unit.SeasonNumber]) is { } reason) {
                 return $"{Path.GetFileName(unit.SourceRelativePath)}: {reason}";
             }
+            if (!decode) continue;
             await context.ReportProgressAsync(30, $"Verifying episode {++verified} of {pending.Length}", token);
             if (await verifier.FindFailureAsync(path!, token) is { } failure) {
                 return $"{Path.GetFileName(unit.SourceRelativePath)}: {failure}";

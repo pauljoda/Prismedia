@@ -1120,6 +1120,7 @@ public sealed class TvAcquisitionImportEngine(
                 durableCheckpoint,
                 selected,
                 ownedMediaQuality,
+                scanLease,
                 cancellationToken);
             return;
         }
@@ -1154,7 +1155,7 @@ public sealed class TvAcquisitionImportEngine(
         if (import.EntityId is { } linkedEntityId
             && await targets.GetTvLayoutAsync(linkedEntityId, cancellationToken) is { } layout
             && Directory.Exists(layout.SeriesFolderPath)) {
-            await ImportIntoExistingSeriesAsync(context, import, payload, layout, profile, selected, ownedMediaQuality, cancellationToken);
+            await ImportIntoExistingSeriesAsync(context, import, payload, layout, profile, selected, ownedMediaQuality, scanLease, cancellationToken);
             return;
         }
 
@@ -1217,6 +1218,7 @@ public sealed class TvAcquisitionImportEngine(
             checkpoint,
             selected,
             ownedMediaQuality,
+            scanLease,
             cancellationToken);
     }
 
@@ -1234,6 +1236,7 @@ public sealed class TvAcquisitionImportEngine(
         BookImportProfile? profile,
         SelectedRelease? selected,
         string? qualityCode,
+        IAsyncDisposable scanLease,
         CancellationToken cancellationToken) {
         var series = SeriesOf(import);
         var catalogPlan = await new TvAcquisitionImportPlanner(targets, monitors, catalogEvidence).PlanAsync(import, payload, profile, qualityCode, cancellationToken);
@@ -1334,6 +1337,7 @@ public sealed class TvAcquisitionImportEngine(
             checkpoint,
             selected,
             qualityCode,
+            scanLease,
             cancellationToken);
     }
 
@@ -1488,6 +1492,7 @@ public sealed class TvAcquisitionImportEngine(
         TvImportCheckpoint checkpoint,
         SelectedRelease? selected,
         string? qualityCode,
+        IAsyncDisposable scanLease,
         CancellationToken cancellationToken) {
         var root = await roots.GetLibraryRootAsync(checkpoint.LibraryRootId, cancellationToken);
         if (root is not { Enabled: true, ScanVideos: true }) {
@@ -1510,8 +1515,11 @@ public sealed class TvAcquisitionImportEngine(
             }
         }
 
-        if (await new TvNewFileValidation(mediaProbe, profiles, targets, monitors, videoVerifier)
-                .ValidateAsync(context, import, payload, checkpoint, selected, cancellationToken) is { } newFileHold) {
+        await using var verification = await new TvImportVerification(roots, targets, acquisitions, scanGate,
+                new TvNewFileValidation(mediaProbe, profiles, targets, monitors, videoVerifier))
+            .VerifyAsync(scanLease, context, import, payload, checkpoint, selected, cancellationToken);
+        if (!verification.IsCurrent) return;
+        if (verification.Failure is { } newFileHold) {
             await acquisitions.SetStatusAsync(import.Id, AcquisitionStatus.ManualImportRequired, newFileHold, cancellationToken);
             return;
         }
