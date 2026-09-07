@@ -57,7 +57,9 @@ public sealed class ScanLibraryJobHandler(
     protected override async Task OnChangedFileSignaturesAsync(
         IReadOnlyCollection<string> changedPaths,
         CancellationToken cancellationToken) {
-        foreach (var path in changedPaths) {
+        var reserved = (await videos.ListPendingVideoReplacementPathsAsync(cancellationToken))
+            .ToHashSet(FileSystemPathComparison.Comparer);
+        foreach (var path in changedPaths.Where(path => !reserved.Contains(path))) {
             // Rebinding a path to itself is the existing atomic source-generation boundary: it
             // preserves Entity identity while retiring probe data, hashes, subtitles, previews,
             // trickplay, generated files, and cached playback packages for every shared owner.
@@ -219,6 +221,11 @@ public sealed class ScanLibraryJobHandler(
         bool reconcileWholeRoot,
         JobPhaseTimer timer,
         CancellationToken cancellationToken) {
+
+        var reserved = (await videos.ListPendingVideoReplacementPathsAsync(cancellationToken))
+            .ToHashSet(FileSystemPathComparison.Comparer);
+        var deferredPaths = files.Where(reserved.Contains).ToArray();
+        files = files.Where(path => !reserved.Contains(path)).ToArray();
 
         LibrarySettingsData settings;
         using (timer.Phase("settings")) {
@@ -472,7 +479,7 @@ public sealed class ScanLibraryJobHandler(
             orphans,
             report.ToLogString());
 
-        return failedPaths.Count == 0 ? ScanRootOutcome.Success : new ScanRootOutcome(failedPaths);
+        return new ScanRootOutcome(failedPaths) { DeferredPaths = deferredPaths };
     }
 
     private static bool IsVideoPath(string path) =>

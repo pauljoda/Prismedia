@@ -387,6 +387,10 @@ public sealed partial class LibraryScanPersistenceService {
         List<Guid> idsToRemove, CancellationToken cancellationToken) {
         if (idsToRemove.Count == 0) return 0;
 
+        var protectedIds = await GetPendingReplacementProtectedEntitiesAsync(cancellationToken);
+        idsToRemove = idsToRemove.Where(id => !protectedIds.Contains(id)).ToList();
+        if (idsToRemove.Count == 0) return 0;
+
         var entitiesToRemove = await _db.Entities
             .Where(e => idsToRemove.Contains(e.Id))
             .ToListAsync(cancellationToken);

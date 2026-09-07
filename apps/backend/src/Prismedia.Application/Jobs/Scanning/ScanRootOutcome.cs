@@ -9,6 +9,9 @@ namespace Prismedia.Application.Jobs.Scanning;
 /// </summary>
 /// <param name="FailedPaths">Source paths of files the scan discovered but could not persist.</param>
 public sealed record ScanRootOutcome(IReadOnlyCollection<string> FailedPaths) {
+    /// <summary>Temporarily reserved paths withheld from snapshots without failing the scan.</summary>
+    public IReadOnlyCollection<string> DeferredPaths { get; init; } = [];
+
     /// <summary>A scan pass that persisted every discovered file.</summary>
     public static ScanRootOutcome Success { get; } = new([]);
 }

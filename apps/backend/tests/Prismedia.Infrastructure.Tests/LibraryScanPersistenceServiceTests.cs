@@ -1,4 +1,6 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Acquisition;
+using Prismedia.Infrastructure.Acquisition;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Jobs;
@@ -1677,6 +1679,48 @@ public sealed class LibraryScanPersistenceServiceTests {
         Assert.False(await db.Entities.AnyAsync(entity => entity.Id == orphanTag));
         Assert.True(await db.Entities.AnyAsync(entity => entity.Id == referencedTag));
         Assert.True(await db.Entities.AnyAsync(entity => entity.Id == videoId));
+    }
+
+    [Theory]
+    [InlineData(AcquisitionStatus.Importing, false, false)]
+    [InlineData(AcquisitionStatus.Importing, false, true)]
+    [InlineData(AcquisitionStatus.Failed, false, false)]
+    [InlineData(AcquisitionStatus.Cancelled, false, false)]
+    [InlineData(AcquisitionStatus.Failed, true, false)]
+    public async Task PendingReplacementPreservesMissingSourceUntilCheckpointClears(AcquisitionStatus status, bool malformed, bool postgres) {
+        await using var database = postgres ? await PostgresTestDatabase.CreateAsync() : null;
+        await using var db = database?.CreateContext() ?? CreateContext();
+        var rootId = Guid.NewGuid();
+        var entityId = Guid.NewGuid();
+        var parentId = Guid.NewGuid();
+        const string owned = "/media/replacement-test/episode.avi";
+        SeedLibraryRoot(db, rootId, "/media/replacement-test");
+        SeedSourceEntity(db, entityId, EntityKind.VideoEpisode.ToCode(), owned);
+        var sourceId = db.EntityFiles.Local.Single().Id;
+        var checkpoint = new AtomicUpgradeCheckpoint(Guid.NewGuid(), Guid.NewGuid(), parentId, entityId, sourceId,
+            EntityKind.VideoEpisode, new(owned, "/downloads/episode.mkv", new(1, DateTime.UtcNow),
+                new(2, DateTime.UtcNow), default, AllowFormatChange: true), "/downloads/episode.mkv", null,
+            new("Episode 1080p", null, null));
+        db.Acquisitions.Add(new AcquisitionRow { Id = parentId, EntityId = entityId, Kind = EntityKind.VideoEpisode,
+            Status = AcquisitionStatus.Imported, FinalSourcePath = owned });
+        var child = new AcquisitionRow { Id = Guid.NewGuid(), UpgradeOfAcquisitionId = parentId,
+            Kind = EntityKind.VideoEpisode, Status = status,
+            ImportCheckpointJson = malformed ? "{}" : AtomicUpgradeCheckpointJson.Serialize(checkpoint) };
+        db.Acquisitions.Add(child);
+        await db.SaveChangesAsync();
+        var service = new LibraryScanPersistenceService(db);
+
+        Assert.Equal(0, await service.RemoveStalePlayableVideosByRootAsync(rootId, new HashSet<string>(), default));
+        Assert.True(await db.Entities.AnyAsync(entity => entity.Id == entityId));
+        Assert.Equal(sourceId, (await db.EntityFiles.SingleAsync()).Id);
+        var reserved = await service.ListPendingVideoReplacementPathsAsync(default);
+        Assert.Contains(owned, reserved);
+        Assert.Equal(!malformed, reserved.Contains(checkpoint.Files.InstallPath));
+
+        child.ImportCheckpointJson = null;
+        await db.SaveChangesAsync();
+        Assert.Empty(await service.ListPendingVideoReplacementPathsAsync(default));
+        Assert.Equal(1, await service.RemoveStalePlayableVideosByRootAsync(rootId, new HashSet<string>(), default));
     }
 
     [Fact]

@@ -89,6 +89,13 @@ public interface IVideoScanPersistence {
         CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<Guid>>([]);
 
     /// <summary>
+    /// Paths reserved by unfinished video replacements. Discovery must defer them until recovery
+    /// commits their existing owner; a path alone cannot prove that installation succeeded.
+    /// </summary>
+    Task<IReadOnlyList<string>> ListPendingVideoReplacementPathsAsync(
+        CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<string>>([]);
+
+    /// <summary>
     /// Returns every Entity owning each requested Source path. Unlike the positional batch-upsert
     /// result, this preserves all co-owners of a multi-episode physical file.
     /// </summary>

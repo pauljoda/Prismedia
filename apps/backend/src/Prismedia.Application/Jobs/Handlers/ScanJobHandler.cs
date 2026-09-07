@@ -300,7 +300,7 @@ public abstract class ScanJobHandler(
                 await snapshots.ApplyAsync(
                     root.Id,
                     scanKind,
-                    WithoutFailedPaths(delta, detailedOutcome),
+                    WithoutUnprocessedPaths(delta, detailedOutcome),
                     cancellationToken);
             }
             ThrowIfFilesFailed(detailedOutcome);
@@ -346,10 +346,10 @@ public abstract class ScanJobHandler(
             report.ToLogString());
     }
 
-    private static ScanDelta WithoutFailedPaths(ScanDelta delta, ScanRootOutcome outcome) {
-        if (outcome.FailedPaths.Count == 0) return delta;
+    private static ScanDelta WithoutUnprocessedPaths(ScanDelta delta, ScanRootOutcome outcome) {
+        if (outcome.FailedPaths.Count == 0 && outcome.DeferredPaths.Count == 0) return delta;
 
-        var failed = new HashSet<string>(outcome.FailedPaths, FileSystemPathComparison.Comparer);
+        var failed = new HashSet<string>(outcome.FailedPaths.Concat(outcome.DeferredPaths), FileSystemPathComparison.Comparer);
         return delta with {
             Added = delta.Added.Where(signature => !failed.Contains(signature.Path)).ToArray(),
             Changed = delta.Changed.Where(signature => !failed.Contains(signature.Path)).ToArray()

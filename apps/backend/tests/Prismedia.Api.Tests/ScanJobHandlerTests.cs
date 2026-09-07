@@ -13,6 +13,30 @@ namespace Prismedia.Api.Tests;
 
 public sealed class ScanJobHandlerTests {
     [Fact]
+    public async Task VideoScanDefersPendingReplacementWithoutHidingUnrelatedFiles() {
+        var root = new LibraryRootData(Guid.NewGuid(), "/media/videos", "Videos", true, true,
+            ScanVideos: true, ScanImages: false, ScanAudio: false, ScanBooks: false, IsNsfw: false);
+        const string reserved = "/media/videos/replacement.mkv";
+        const string unrelated = "/media/videos/unrelated.mkv";
+        var persistence = new FakeScanPersistence([root]) {
+            Settings = DisabledGeneratedWorkSettings,
+            PendingReplacementPaths = [reserved], UpsertedVideoIds = [Guid.NewGuid()]
+        };
+        var snapshots = new FakeScanSnapshotStore();
+        var handler = new ScanLibraryJobHandler(NullLogger<ScanLibraryJobHandler>.Instance,
+            new RecordingFileDiscovery([reserved, unrelated]), persistence, persistence, persistence,
+            snapshots: snapshots);
+
+        await handler.HandleAsync(new JobContext(SingleRootScanJob(root), new RecordingJobQueue()), default);
+
+        Assert.Equal(unrelated, Assert.Single(persistence.UpsertedVideoItems).FilePath);
+        persistence.PendingReplacementPaths = [];
+        persistence.UpsertedVideoItems.Clear();
+        await handler.HandleAsync(new JobContext(SingleRootScanJob(root), new RecordingJobQueue()), default);
+        Assert.Contains(persistence.UpsertedVideoItems, item => item.FilePath == reserved);
+    }
+
+    [Fact]
     public async Task VideoScanEnqueuesPreviewJobWhenOnlyTrickplayNeedsGeneration() {
         var root = new LibraryRootData(
             Guid.Parse("11111111-1111-1111-1111-111111111111"),
@@ -3432,6 +3456,9 @@ public sealed class ScanJobHandlerTests {
     }
 
     private sealed class FakeScanPersistence(IReadOnlyList<LibraryRootData> roots) : ILibraryScanRootPersistence, IVideoScanPersistence, IDownstreamNeedsPersistence, IImageGalleryScanPersistence, IAudioScanPersistence, IBookScanPersistence, IComicScanPersistence {
+        public IReadOnlyList<string> PendingReplacementPaths { get; set; } = [];
+        public Task<IReadOnlyList<string>> ListPendingVideoReplacementPathsAsync(CancellationToken cancellationToken) =>
+            Task.FromResult(PendingReplacementPaths);
         public List<Guid> LoadedRootIds { get; } = [];
         public List<Guid> LastScannedRootIds { get; } = [];
         public bool LoadedEnabledRoots { get; private set; }
