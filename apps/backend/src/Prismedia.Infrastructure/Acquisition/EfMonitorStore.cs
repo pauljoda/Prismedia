@@ -26,7 +26,8 @@ public sealed partial class EfMonitorStore(
         var now = DateTimeOffset.UtcNow;
         var acquisitionTarget = await db.Acquisitions.AsNoTracking()
             .Where(acquisition => acquisition.Id == acquisitionId)
-            .Select(acquisition => new { acquisition.EntityId, acquisition.BookRendition })
+            .Select(acquisition => new { acquisition.EntityId, acquisition.BookRendition,
+                acquisition.ProfileId, acquisition.TargetLibraryRootId })
             .FirstOrDefaultAsync(cancellationToken);
         var entityId = acquisitionTarget?.EntityId;
         var bookRendition = acquisitionTarget?.BookRendition;
@@ -50,6 +51,8 @@ public sealed partial class EfMonitorStore(
                 BookRendition = bookRendition,
                 AcquisitionId = acquisitionId,
                 EntityId = entityId,
+                ProfileId = acquisitionTarget?.ProfileId,
+                TargetLibraryRootId = acquisitionTarget?.TargetLibraryRootId,
                 Status = MonitorStatus.Active,
                 Title = title,
                 Author = author,

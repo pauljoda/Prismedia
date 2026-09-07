@@ -8,6 +8,36 @@ using Prismedia.Infrastructure.Persistence.Entities;
 namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EfMonitorStoreTests {
+    [Theory]
+    [InlineData(false, false)]
+    [InlineData(true, false)]
+    [InlineData(true, true)]
+    public async Task AcquisitionMonitorInheritsTargetingWithoutOverwritingEstablishedIntent(bool existing, bool explicitDefault) {
+        await using var db = CreateContext();
+        var entityId = Guid.NewGuid();
+        var acquisitionId = SeedAcquisition(db, AcquisitionStatus.Failed, entityId);
+        var acquisition = db.Acquisitions.Local.Single();
+        acquisition.ProfileId = Guid.NewGuid();
+        acquisition.TargetLibraryRootId = Guid.NewGuid();
+        var expectedProfile = existing ? explicitDefault ? null : (Guid?)Guid.NewGuid() : acquisition.ProfileId;
+        var expectedRoot = existing ? explicitDefault ? null : (Guid?)Guid.NewGuid() : acquisition.TargetLibraryRootId;
+        if (existing) db.Monitors.Add(new MonitorRow {
+            Id = Guid.NewGuid(), EntityId = entityId, Kind = EntityKind.Book, Status = MonitorStatus.Paused,
+            Title = "Book", ProfileId = expectedProfile, TargetLibraryRootId = expectedRoot,
+            CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var store = new EfMonitorStore(db);
+
+        var monitor = await store.StartAsync(acquisitionId, EntityKind.Book, "Book", null, default);
+        var inherited = await store.GetTargetingByEntityAsync(entityId, default);
+
+        Assert.Equal(expectedProfile, monitor.ProfileId);
+        Assert.Equal(expectedRoot, monitor.TargetLibraryRootId);
+        Assert.Equal(expectedProfile, inherited!.ProfileId);
+        Assert.Equal(expectedRoot, inherited.TargetLibraryRootId);
+    }
+
     [Fact]
     [Trait("Category", "PostgreSQL")]
     public async Task ActiveMutationLeaseRechecksAPausedMonitorEvenWhenTheContextPreviouslyTrackedIt() {
