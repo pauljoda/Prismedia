@@ -32,6 +32,9 @@ public interface IHeldTvImportRecoveryStore {
     /// these mapping inputs have not already been retried. The fingerprint survives worker restarts.
     /// </summary>
     Task<bool> TryResumeAsync(HeldTvImport held, string fingerprint, CancellationToken cancellationToken);
+
+    /// <summary>Queues a rate-limited provider refresh while the observed automatic hold is still current.</summary>
+    Task RequestMetadataRefreshAsync(HeldTvImport held, CancellationToken cancellationToken);
 }
 
 /// <summary>
@@ -83,7 +86,7 @@ public sealed class HeldTvImportRecoveryService(
     private async Task ReconsiderAsync(HeldTvImport held, CancellationToken cancellationToken) {
         var import = await acquisitions.GetImportContextAsync(held.Id, cancellationToken);
         var selected = await acquisitions.GetSelectedReleaseAsync(held.Id, cancellationToken);
-        if (import is not { SeasonNumber: { } season, ContentPath: { } contentPath }
+        if (import is not { ContentPath: { } contentPath }
             || import.EntityId != held.EntityId || selected is null || selected.ManualPick
             || import.ImportPlacementCheckpoint is not null || import.AtomicUpgradeCheckpoint is not null
             || import.UpgradeOfAcquisitionId is not null) {
@@ -93,7 +96,13 @@ public sealed class HeldTvImportRecoveryService(
             await ReconsiderCheckpointAsync(held, import, checkpoint, selected, cancellationToken);
             return;
         }
-        if (await targets.HasUnnumberedWantedTvEpisodesAsync(held.EntityId, season, cancellationToken)) return;
+        if (import.SeasonNumber is not { } season
+            || await targets.HasUnnumberedWantedTvEpisodesAsync(held.EntityId, season, cancellationToken)) {
+            if (import.ExternalIdentity is not null) {
+                await recovery.RequestMetadataRefreshAsync(held, cancellationToken);
+            }
+            return;
+        }
         var retainedPartial = !string.IsNullOrWhiteSpace(import.FinalSourcePath)
             && (await acquisitions.GetTransferInfoAsync(held.Id, cancellationToken))?.ImportResult?.HasRetainedTvVideos() == true;
         if (!string.IsNullOrWhiteSpace(import.FinalSourcePath) && !retainedPartial) {

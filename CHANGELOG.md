@@ -121,6 +121,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Monitored TV downloads held by missing season or episode numbers now refresh provider metadata on a bounded schedule and reuse their retained files when numbering becomes available.
+
 - Newly monitored requests get their first background check before routine rechecks, preventing old “Awaiting release” states from lingering behind a large monitoring backlog.
 
 - Audio playback now enforces the same library-access restrictions as other media, including range requests and transcoding.

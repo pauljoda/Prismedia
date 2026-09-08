@@ -5,6 +5,7 @@ using Prismedia.Application.Jobs.Ports;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Acquisition;
 using Prismedia.Infrastructure.Persistence;
+using Prismedia.Infrastructure.Queue;
 using Prismedia.Infrastructure.Persistence.Entities;
 
 namespace Prismedia.Infrastructure.Tests;
@@ -13,6 +14,84 @@ public sealed class HeldTvImportRecoveryTests : IDisposable {
     private readonly string root = Directory.CreateTempSubdirectory("prismedia-held-tv-").FullName;
     private readonly Guid rootId = Guid.NewGuid();
     public void Dispose() => Directory.Delete(root, true);
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task MissingNumberingQueuesProviderRefreshWithoutDiscardingTheRetainedDownload(bool missingSeason) {
+        await using var db = CreateContext();
+        var (service, acquisition, _) = await SeedAsync(db);
+        acquisition.IdentityNamespace = "test-provider";
+        acquisition.IdentityValue = "season-identity";
+        if (missingSeason) {
+            acquisition.SeasonNumber = null;
+            (await db.Entities.SingleAsync(row => row.Id == acquisition.EntityId)).SortOrder = null;
+        }
+        await db.SaveChangesAsync();
+
+        await service.RecoverAsync(default);
+        await CreateService(db).RecoverAsync(default);
+
+        var refresh = Assert.Single(await db.JobRuns.ToArrayAsync());
+        Assert.Equal(JobType.AcquisitionEnrich, refresh.Type);
+        Assert.Equal(acquisition.Id, AcquisitionJobPayload.Parse(refresh.PayloadJson).AcquisitionId);
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, acquisition.Status);
+        Assert.Null(acquisition.ImportRecoveryFingerprint);
+        Assert.True(File.Exists(Path.Combine(root, "payload", "Show.S01E01E02.First.Story.Second.Story.mkv")));
+    }
+
+    [Fact]
+    public async Task NumberingRefreshUsesDurableCooldownAndResumesOnlyAfterMetadataImproves() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var (service, acquisition, episodes) = await SeedAsync(db);
+        acquisition.IdentityNamespace = "test-provider";
+        acquisition.IdentityValue = "season-identity";
+        await db.SaveChangesAsync();
+        await service.RecoverAsync(default);
+        var refresh = Assert.Single(await db.JobRuns.Where(job => job.Type == JobType.AcquisitionEnrich).ToArrayAsync());
+        var queue = new JobQueueService(db);
+        Assert.NotNull(await queue.ClaimNextAsync("metadata-recovery-test", default));
+        await db.Entry(refresh).ReloadAsync();
+        await queue.CompleteAsync(refresh.Id, "Provider has no numbering yet", default);
+        await db.Entry(refresh).ReloadAsync();
+        Assert.Equal(JobRunStatus.Completed, refresh.Status);
+        await CreateService(db).RecoverAsync(default);
+        Assert.Single(await db.JobRuns.ToArrayAsync());
+
+        refresh.CreatedAt = DateTimeOffset.UtcNow.AddDays(-2);
+        refresh.FinishedAt = refresh.CreatedAt;
+        await db.SaveChangesAsync();
+        await CreateService(db).RecoverAsync(default);
+        Assert.Equal(2, await db.JobRuns.CountAsync());
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, acquisition.Status);
+
+        foreach (var (episode, number) in episodes.Select((episode, index) => (episode, index + 1)))
+            db.EntityPositions.Add(new EntityPositionRow { EntityId = episode.Id, Code = EntityPositionCodes.Episode, Value = number });
+        await db.SaveChangesAsync();
+        await CreateService(db).RecoverAsync(default);
+        Assert.Equal(AcquisitionStatus.Downloaded, acquisition.Status);
+        Assert.Equal(2, await db.JobRuns.CountAsync());
+    }
+
+    [Theory]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(false, false, true)]
+    public async Task MissingNumberingDoesNotRefreshPausedExplicitReviewOrUnidentifiedRequests(bool paused, bool manual, bool unidentified) {
+        await using var db = CreateContext();
+        var (service, acquisition, _) = await SeedAsync(db);
+        if (!unidentified) {
+            acquisition.IdentityNamespace = "test-provider";
+            acquisition.IdentityValue = "season-identity";
+        }
+        if (paused) (await db.Monitors.SingleAsync()).Status = MonitorStatus.Paused;
+        acquisition.ImportManualReview = manual;
+        await db.SaveChangesAsync();
+        await service.RecoverAsync(default);
+        Assert.Empty(await db.JobRuns.ToArrayAsync());
+        Assert.Equal(AcquisitionStatus.ManualImportRequired, acquisition.Status);
+    }
 
     [Fact]
     public async Task SlowProviderBacklogsYieldBetweenAttemptsAndRotateAcrossServiceScopes() {
@@ -174,7 +253,7 @@ public sealed class HeldTvImportRecoveryTests : IDisposable {
         acquisition.ImportResultJson = AcquisitionImportFileLedgerJson.Serialize(
             new AcquisitionImportFileLedger(AcquisitionImportPhase.Imported, []).RetainUnmappedTvVideos([new("extra.mkv", 10)]));
         await db.SaveChangesAsync();
-        var store = new EfHeldTvImportRecoveryStore(db);
+        var store = new EfHeldTvImportRecoveryStore(db, new JobQueueService(db));
         var held = Assert.Single(await store.ListAsync(default));
         Assert.True(await store.TryResumeAsync(held, "mapping-one", default));
         acquisition.Status = AcquisitionStatus.ManualImportRequired;
@@ -308,7 +387,7 @@ public sealed class HeldTvImportRecoveryTests : IDisposable {
         episodes[0].SortOrder = 1;
         episodes[1].SortOrder = 2;
         var completed = await db.DownloadTransfers.SingleAsync();
-        var store = new EfHeldTvImportRecoveryStore(db);
+        var store = new EfHeldTvImportRecoveryStore(db, new JobQueueService(db));
         var held = Assert.Single(await store.ListAsync(CancellationToken.None));
         db.DownloadTransfers.Add(new DownloadTransferRow {
             Id = Guid.NewGuid(), AcquisitionId = acquisition.Id, ClientItemId = "partial-retry",
@@ -329,7 +408,7 @@ public sealed class HeldTvImportRecoveryTests : IDisposable {
     public async Task ResumeCannotOverwriteANewerHoldOrCancellation() {
         await using var db = CreateContext();
         var (_, acquisition, _) = await SeedAsync(db);
-        var store = new EfHeldTvImportRecoveryStore(db);
+        var store = new EfHeldTvImportRecoveryStore(db, new JobQueueService(db));
         var held = Assert.Single(await store.ListAsync(CancellationToken.None));
         acquisition.UpdatedAt = held.HeldAt.AddSeconds(1);
         await db.SaveChangesAsync();
@@ -396,7 +475,7 @@ public sealed class HeldTvImportRecoveryTests : IDisposable {
         acquisition.ImportCheckpointJson = TvImportCheckpointJson.Serialize(checkpoint);
         acquisition.FinalSourcePath = placed;
         await db.SaveChangesAsync();
-        var store = new EfHeldTvImportRecoveryStore(db);
+        var store = new EfHeldTvImportRecoveryStore(db, new JobQueueService(db));
         var held = Assert.Single(await store.ListAsync(default));
         Assert.True(await store.TryResumeAsync(held, "inputs-one", default));
         Assert.Equal(checkpoint.AttemptId, TvImportCheckpointJson.Deserialize(acquisition.ImportCheckpointJson)!.AttemptId);
@@ -420,7 +499,7 @@ public sealed class HeldTvImportRecoveryTests : IDisposable {
         await using var db = database?.CreateContext() ?? CreateContext();
         var (_, acquisition, _) = await SeedAsync(db);
         await SaveNewFileCheckpointAsync(db, acquisition);
-        var store = new EfHeldTvImportRecoveryStore(db);
+        var store = new EfHeldTvImportRecoveryStore(db, new JobQueueService(db));
         var held = Assert.Single(await store.ListAsync(default));
         var transfer = await db.DownloadTransfers.SingleAsync();
         if (newerTransfer) db.DownloadTransfers.Add(new DownloadTransferRow {
@@ -442,7 +521,7 @@ public sealed class HeldTvImportRecoveryTests : IDisposable {
         await using var db = database?.CreateContext() ?? CreateContext();
         var (_, acquisition, _) = await SeedAsync(db);
         await SaveNewFileCheckpointAsync(db, acquisition);
-        var store = new EfHeldTvImportRecoveryStore(db);
+        var store = new EfHeldTvImportRecoveryStore(db, new JobQueueService(db));
         var held = Assert.Single(await store.ListAsync(default));
         // Do not change UpdatedAt: the release itself is part of the observed authority.
         acquisition.SelectedReleaseJson = System.Text.Json.JsonSerializer.Serialize(
@@ -461,7 +540,7 @@ public sealed class HeldTvImportRecoveryTests : IDisposable {
         acquisition.ImportCheckpointJson = acquisition.ImportCheckpointJson![..^1] + ",\"FuturePolicy\":true}";
         await db.SaveChangesAsync();
 
-        Assert.Empty(await new EfHeldTvImportRecoveryStore(db).ListAsync(default));
+        Assert.Empty(await new EfHeldTvImportRecoveryStore(db, new JobQueueService(db)).ListAsync(default));
         await service.RecoverAsync(default);
         Assert.Equal(AcquisitionStatus.ManualImportRequired, acquisition.Status);
     }
@@ -539,7 +618,7 @@ public sealed class HeldTvImportRecoveryTests : IDisposable {
         acquisition.ImportCheckpointJson = TvImportCheckpointJson.Serialize(checkpoint with { Units = [unit] });
         await db.SaveChangesAsync();
 
-        Assert.Empty(await new EfHeldTvImportRecoveryStore(db).ListAsync(default));
+        Assert.Empty(await new EfHeldTvImportRecoveryStore(db, new JobQueueService(db)).ListAsync(default));
         await service.RecoverAsync(default);
         Assert.Equal(AcquisitionStatus.ManualImportRequired, acquisition.Status);
         Assert.Equal("owned bytes", await File.ReadAllTextAsync(unit.TargetAbsolutePath));
@@ -590,7 +669,7 @@ public sealed class HeldTvImportRecoveryTests : IDisposable {
 
     private HeldTvImportRecoveryService CreateService(PrismediaDbContext db, ITvEpisodeCatalogEvidenceSource? evidence = null,
         HeldTvImportRecoveryCursor? cursor = null, TimeProvider? clock = null) => new(
-        new EfHeldTvImportRecoveryStore(db), AcquisitionTestFactory.Store(db), new EfImportTargetIndex(db),
+        new EfHeldTvImportRecoveryStore(db, new JobQueueService(db)), AcquisitionTestFactory.Store(db), new EfImportTargetIndex(db),
         new DownloadPayloadReader(), new EfBookAcquisitionProfileStore(db), new Roots(root, rootId), new EfMonitorStore(db),
         NullLogger<HeldTvImportRecoveryService>.Instance, evidence, cursor, clock);
 

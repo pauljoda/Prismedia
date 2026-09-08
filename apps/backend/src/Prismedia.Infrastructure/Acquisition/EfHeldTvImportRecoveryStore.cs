@@ -1,13 +1,14 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Acquisition;
+using Prismedia.Application.Jobs;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
 
 namespace Prismedia.Infrastructure.Acquisition;
 
 /// <summary>Persists retained TV retry observations alongside the acquisition's durable completion state.</summary>
-public sealed class EfHeldTvImportRecoveryStore(PrismediaDbContext db) : IHeldTvImportRecoveryStore {
+public sealed class EfHeldTvImportRecoveryStore(PrismediaDbContext db, IJobQueueService queue) : IHeldTvImportRecoveryStore {
     /// <inheritdoc />
     public async Task<IReadOnlyList<HeldTvImport>> ListAsync(CancellationToken cancellationToken) {
         var held = await WithCompletedPayload().AsNoTracking()
@@ -27,6 +28,34 @@ public sealed class EfHeldTvImportRecoveryStore(PrismediaDbContext db) : IHeldTv
             item.Row.UpdatedAt, item.Row.ImportRecoveryFingerprint, item.Row.FinalSourcePath, item.Row.ImportResultJson,
             item.Row.ImportCheckpointJson, item.Row.SelectedReleaseJson,
             item.Transfer.Id, item.Transfer.ContentPath, item.Transfer.ClientItemId)).Where(CanReconsiderPayload).ToArray();
+    }
+
+    /// <inheritdoc />
+    public async Task RequestMetadataRefreshAsync(HeldTvImport held, CancellationToken cancellationToken) {
+        if (!CanReconsiderPayload(held) || held.CheckpointSnapshot is not null) return;
+        var target = held.Id.ToString();
+        var cutoff = DateTimeOffset.UtcNow.AddDays(-1);
+        // A completed provider miss is still an attempt. Persist the cooldown in job history so
+        // another worker scope or restart cannot repeatedly refresh an unchanged incomplete catalog.
+        if (await db.JobRuns.AnyAsync(job => job.Type == JobType.AcquisitionEnrich
+                && job.TargetEntityId == target
+                && (job.Status == JobRunStatus.Queued || job.Status == JobRunStatus.Running
+                    || job.CreatedAt >= cutoff || job.FinishedAt >= cutoff), cancellationToken)) return;
+        var current = await WithObservedPayload(held).AsNoTracking()
+            .Where(row => row.Id == held.Id && row.EntityId == held.EntityId
+                && row.Status == AcquisitionStatus.ManualImportRequired && row.UpdatedAt == held.HeldAt
+                && !row.ImportManualReview && row.ImportClaimJobId == null && row.UpgradeOfAcquisitionId == null
+                && row.SelectedReleaseJson == held.SelectedReleaseSnapshot
+                && row.ImportCheckpointJson == held.CheckpointSnapshot
+                && row.ImportResultJson == held.ImportResultSnapshot && row.FinalSourcePath == held.FinalSourcePath
+                && row.IdentityNamespace != null && row.IdentityValue != null
+                && db.Monitors.Any(monitor => monitor.EntityId == held.EntityId && monitor.Status == MonitorStatus.Active))
+            .Select(row => new { row.Title, row.Kind }).SingleOrDefaultAsync(cancellationToken);
+        if (current is null) return;
+        await queue.EnqueueAsync(new EnqueueJobRequest(JobType.AcquisitionEnrich,
+            PayloadJson: AcquisitionJobPayload.Serialize(held.Id), TargetEntityId: target,
+            TargetLabel: current.Title, Origin: JobGraphOrigin.Background,
+            GraphRootEntityKind: current.Kind.ToCode(), GraphRootEntityId: held.EntityId.ToString()), cancellationToken);
     }
 
     /// <inheritdoc />
