@@ -121,6 +121,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Newly monitored requests get their first background check before routine rechecks, preventing old “Awaiting release” states from lingering behind a large monitoring backlog.
+
 - Audio playback now enforces the same library-access restrictions as other media, including range requests and transcoding.
 
 - Individual-song searches check advertised filenames before automatic selection, avoiding different recordings or artist credits that would otherwise fail only at import. Exact track matches rank by profile and quality without penalties from unrelated peer folder names. Compilation-album imports still allow track performers to differ from the album artist.
