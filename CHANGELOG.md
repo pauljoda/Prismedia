@@ -121,6 +121,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Older automatic TV imports incorrectly marked for manual review during upgrade can recover when their matching completed job proves automatic intent; explicit reviews and uncertain history remain protected.
+
 - TV searches can accept alternate episode numbering when complete, unambiguous catalog titles prove the requested content, while rejecting misleading number matches that name another episode.
 
 - Monitored TV downloads held by missing season or episode numbers now refresh provider metadata on a bounded schedule and reuse their retained files when numbering becomes available.

@@ -8,9 +8,10 @@ using Prismedia.Infrastructure.Persistence;
 namespace Prismedia.Infrastructure.Acquisition;
 
 /// <summary>Persists retained TV retry observations alongside the acquisition's durable completion state.</summary>
-public sealed class EfHeldTvImportRecoveryStore(PrismediaDbContext db, IJobQueueService queue) : IHeldTvImportRecoveryStore {
+public sealed partial class EfHeldTvImportRecoveryStore(PrismediaDbContext db, IJobQueueService queue) : IHeldTvImportRecoveryStore {
     /// <inheritdoc />
     public async Task<IReadOnlyList<HeldTvImport>> ListAsync(CancellationToken cancellationToken) {
+        await RestoreRecordedAutomaticAuthorityAsync(cancellationToken);
         var held = await WithCompletedPayload().AsNoTracking()
             .Where(row => row.Status == AcquisitionStatus.ManualImportRequired
                 && (row.Kind == EntityKind.VideoSeason || row.Kind == EntityKind.VideoEpisode)

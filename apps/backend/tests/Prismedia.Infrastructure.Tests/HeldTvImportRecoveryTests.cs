@@ -10,7 +10,7 @@ using Prismedia.Infrastructure.Persistence.Entities;
 
 namespace Prismedia.Infrastructure.Tests;
 
-public sealed class HeldTvImportRecoveryTests : IDisposable {
+public sealed partial class HeldTvImportRecoveryTests : IDisposable {
     private readonly string root = Directory.CreateTempSubdirectory("prismedia-held-tv-").FullName;
     private readonly Guid rootId = Guid.NewGuid();
     public void Dispose() => Directory.Delete(root, true);
