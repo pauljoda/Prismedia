@@ -10,6 +10,68 @@ namespace Prismedia.Application.Tests.Acquisition;
 /// </summary>
 public sealed class MediaReleaseDecisionEnginesTests {
     [Theory]
+    [InlineData("Example.Show.S03E03.Rise.and.Bloom.480p.WEB-DL", true)]
+    [InlineData("Example.Show.S03E03E04.Rise.and.Bloom.Super.Snow.Day.480p.WEB-DL", true)]
+    [InlineData("Example.Show.S03E03E04.Rise.and.Bloom.480p.WEB-DL", false)]
+    [InlineData("Example.Show.S03E03.Rise.and.Bloom.Revisited.480p.WEB-DL", false)]
+    [InlineData("Example.Show.S03E03.Super.Snow.Day.480p.WEB-DL", false)]
+    [InlineData("Other.Show.S03E03.Rise.and.Bloom.480p.WEB-DL", false)]
+    [InlineData("Example.Show.S02E03.Rise.and.Bloom.480p.WEB-DL", false)]
+    public void CompleteCatalogTitlesCanRecoverDifferentEpisodeOrderingWithinTheSameSeason(string title, bool accepted) {
+        var rules = BookAcquisitionRules.Default with { Kind = EntityKind.VideoEpisode, TargetTitle = "Example Show",
+            SeasonNumber = 3, EpisodeNumber = 2, TargetEpisodeTitle = "Rise and Bloom",
+            TargetEpisodeCatalog = [new(Guid.NewGuid(), 3,
+                [new(2, "Rise and Bloom", Guid.NewGuid()), new(3, "Super Snow Day", Guid.NewGuid())])] };
+        var candidate = Assert.Single(new TvReleaseDecisionEngine(EntityKind.VideoEpisode).Evaluate(
+            [(Release(title, seeders: 10), null, "Indexer")], rules));
+        Assert.Equal(accepted, candidate.Accepted);
+        if (accepted) {
+            var plan = TvImportPlanBuilder.PlanUnits([new(title + ".mkv", 1000)], "Example Show", 3, 2,
+                episodeTitles: rules.TargetEpisodeCatalog[0].Episodes);
+            Assert.False(plan.Blocked);
+            var unit = Assert.Single(plan.Units);
+            Assert.Equal(2, unit.Episode);
+        }
+    }
+
+    [Theory]
+    [InlineData(true, false)]
+    [InlineData(false, true)]
+    public void AlternateNumberingCannotUseRepeatedOrUnidentifiedCatalogTitles(bool repeated, bool unidentified) {
+        var rules = BookAcquisitionRules.Default with { Kind = EntityKind.VideoEpisode, TargetTitle = "Example Show",
+            SeasonNumber = 3, EpisodeNumber = 2, TargetEpisodeTitle = "Rise and Bloom",
+            TargetEpisodeCatalog = [new(Guid.NewGuid(), 3, [new(2, "Rise and Bloom", unidentified ? null : Guid.NewGuid())]),
+                new(Guid.NewGuid(), 2, [new(9, repeated ? "Rise and Bloom" : "Unrelated Story", Guid.NewGuid())])] };
+        var candidate = Assert.Single(new TvReleaseDecisionEngine(EntityKind.VideoEpisode).Evaluate(
+            [(Release("Example Show S03E03 Rise and Bloom 480p WEB-DL", seeders: 10), null, "Indexer")], rules));
+        Assert.False(candidate.Accepted);
+    }
+
+    [Fact]
+    public void ExactNumberingStillOutranksAnAlternateOrderTitleMatch() {
+        var rules = BookAcquisitionRules.Default with { Kind = EntityKind.VideoEpisode, TargetTitle = "Example Show",
+            SeasonNumber = 3, EpisodeNumber = 2, TargetEpisodeTitle = "Rise and Bloom",
+            TargetEpisodeCatalog = [new(Guid.NewGuid(), 3, [new(2, "Rise and Bloom", Guid.NewGuid())])] };
+        var candidates = new TvReleaseDecisionEngine(EntityKind.VideoEpisode).Evaluate([
+            (Release("Example Show S03E03 Rise and Bloom 1080p WEB-DL", seeders: 10), null, "Indexer"),
+            (Release("Example Show S03E02 Rise and Bloom 480p WEB-DL", seeders: 10), null, "Indexer")], rules);
+        Assert.All(candidates, candidate => Assert.True(candidate.Accepted));
+        Assert.Contains("S03E02", candidates[0].Release.Title);
+    }
+
+    [Fact]
+    public void RepeatedCatalogTitlesStillDisproveAnUnrelatedEpisodeWithTheSameReleaseNumber() {
+        var rules = BookAcquisitionRules.Default with { Kind = EntityKind.VideoEpisode, TargetTitle = "Example Show",
+            SeasonNumber = 3, EpisodeNumber = 3, TargetEpisodeTitle = "Super Snow Day",
+            TargetEpisodeCatalog = [new(Guid.NewGuid(), 3, [new(2, "Rise and Bloom", Guid.NewGuid()),
+                new(3, "Super Snow Day", Guid.NewGuid()), new(44, "Rise and Bloom", Guid.NewGuid())])] };
+        var candidate = Assert.Single(new TvReleaseDecisionEngine(EntityKind.VideoEpisode).Evaluate(
+            [(Release("Example Show S03E03 Rise and Bloom 480p WEB-DL", seeders: 10), null, "Indexer")], rules));
+        Assert.False(candidate.Accepted);
+        Assert.Contains(ReleaseRejectionReason.WrongTvUnit, candidate.Rejections);
+    }
+
+    [Theory]
     [InlineData("Going West", "Going West", true)]
     [InlineData("Going West Again", "Going West", true)]
     [InlineData("A Bug Adventure", "Going West", false)]

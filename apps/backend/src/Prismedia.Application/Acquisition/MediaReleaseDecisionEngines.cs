@@ -150,12 +150,19 @@ public sealed class MediaYearSpecification : IReleaseSpecification {
 
 /// <summary>
 /// Rejects TV releases that name a different unit than the acquisition seeks. An episode search only
-/// accepts releases declaring its exact SxxEyy (or 1x05); a season-pack search rejects single-episode
+/// accepts exact SxxEyy (or 1x05), or a same-season alternate order proven by complete catalog titles;
+/// a season-pack search rejects single-episode
 /// releases and other seasons' packs, while accepting complete-series packs (they contain the season)
 /// and marker-less titles (judged by the query match alone, mirroring the format rule for books).
 /// No-op outside TV searches — the unit fields are set per search by the runner, never by a profile.
 /// </summary>
 public sealed class TvUnitSpecification : IReleaseSpecification {
+    private readonly TvCatalogEpisodeSpecification? catalog;
+
+    /// <summary>Checks numeric and title-only identity when no full catalog is available.</summary>
+    public TvUnitSpecification() { }
+
+    internal TvUnitSpecification(TvCatalogEpisodeSpecification catalog) => this.catalog = catalog;
     public ReleaseRejectionReason Reason => ReleaseRejectionReason.WrongTvUnit;
 
     public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) {
@@ -170,7 +177,8 @@ public sealed class TvUnitSpecification : IReleaseSpecification {
             // release is the safe fallback only when it declares no competing TV unit and names the provider
             // episode title; the series identity gate independently proves the parent work.
             if (declaredEpisodes is { } unit) {
-                return unit.Season == season && unit.Episodes.Contains(episode) ? null : Reason;
+                return unit.Season == season && unit.Episodes.Contains(episode)
+                    || catalog?.IdentifiesRequestedEpisode(release, rules) == true ? null : Reason;
             }
 
             if (TvReleaseTokens.NamesCompleteSeries(release.Title)) {
@@ -379,8 +387,11 @@ public sealed class TvReleaseDecisionEngine(EntityKind kind) : IAcquisitionDecis
         IReadOnlyList<(IndexerRelease Release, Guid? IndexerConfigId, string IndexerName)> releases,
         BookAcquisitionRules rules,
         IReadOnlySet<string>? blocklistedIdentities = null) {
-        var specifications = rules.EpisodeNumber is not null && rules.TargetEpisodeCatalog.Count > 0
-            ? _specifications.Append(new TvCatalogEpisodeSpecification(rules.TargetEpisodeCatalog)).ToArray()
+        var catalog = rules.EpisodeNumber is not null && rules.TargetEpisodeCatalog.Count > 0
+            ? new TvCatalogEpisodeSpecification(rules.TargetEpisodeCatalog) : null;
+        var specifications = catalog is not null
+            ? _specifications.Select(specification => specification is TvUnitSpecification
+                ? new TvUnitSpecification(catalog) : specification).Append(catalog).ToArray()
             : _specifications;
         return MediaReleaseEvaluation.Evaluate(
             releases, rules, blocklistedIdentities, specifications,
@@ -395,7 +406,7 @@ public sealed class TvReleaseDecisionEngine(EntityKind kind) : IAcquisitionDecis
 
         if (rules.EpisodeNumber is { } episode) {
             // Single episode sought: a release declaring the exact unit — alone or within a multi-episode
-            // span — wins first, followed by absolute numbering and then provider-title-only evidence.
+            // span — wins first, followed by absolute numbering and then provider-title evidence.
             if (TvReleaseTokens.ParseEpisodes(release.Title) is { } unit
                 && unit.Season == season && unit.Episodes.Contains(episode)) {
                 return ExactUnitBoost;
