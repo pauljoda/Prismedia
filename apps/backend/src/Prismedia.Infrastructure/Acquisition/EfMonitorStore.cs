@@ -480,7 +480,9 @@ public sealed partial class EfMonitorStore(
             from acquisition in joined.DefaultIfEmpty()
             join measured in measuredVideos on monitor.EntityId equals measured.EntityId into measurements
             from measured in measurements.DefaultIfEmpty()
-            orderby monitor.LastSearchedAt, monitor.CreatedAt
+            // PostgreSQL sorts nullable timestamps last by default. First checks must precede
+            // routine rechecks, including requests whose release gate was satisfied during hydration.
+            orderby monitor.LastSearchedAt != null, monitor.LastSearchedAt, monitor.CreatedAt, monitor.Id
             select new {
                 Monitor = monitor,
                 MeasuredWidth = measured == null ? null : measured.Width,
