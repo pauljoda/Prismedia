@@ -24,7 +24,9 @@ public sealed class AcquisitionSearchJobHandler(
     AcquisitionMissingChildFallback missingChildren,
     ILogger<AcquisitionSearchJobHandler> logger,
     IJobGraphService? graphs = null,
-    IAcquisitionReleaseTimingService? releaseTiming = null) : IJobHandler {
+    IAcquisitionReleaseTimingService? releaseTiming = null,
+    HeldAcquisitionCandidatePolicy? heldCandidates = null,
+    IHeldAcquisitionAlternativeService? heldAlternatives = null) : IJobHandler {
     /// <summary>
     /// States from which an explicit API or monitor action may publish a fresh Searching intent. This is a
     /// scheduling policy only; the job handler itself consumes Searching exclusively.
@@ -93,7 +95,14 @@ public sealed class AcquisitionSearchJobHandler(
                 cancellationToken,
                 upgradeOwned,
                 payload.CustomQuery);
+            if (input.RecoveryOfAcquisitionId is not null) {
+                outcome = outcome with { Candidates = heldCandidates is not null
+                    ? await heldCandidates.FilterAsync(input, outcome.Candidates, cancellationToken)
+                    : outcome.Candidates.Select(candidate => candidate with { Accepted = false,
+                        Rejections = candidate.Rejections.Append(ReleaseRejectionReason.NotAnUpgrade).Distinct().ToArray() }).ToArray() };
+            }
             var message = BuildMessage(outcome);
+            if (input.RecoveryOfAcquisitionId is not null) message += " The earlier held download remains available for review.";
             if (!await store.TryCompleteSearchAsync(
                     payload.AcquisitionId,
                     outcome.Candidates,
@@ -105,6 +114,7 @@ public sealed class AcquisitionSearchJobHandler(
                 return;
             }
 
+            if (heldAlternatives is not null) await heldAlternatives.RecordSearchAsync(input, outcome, cancellationToken);
             var fallback = await missingChildren.TryStartAsync(input, outcome, context, cancellationToken);
             if (fallback is { Missing: > 0 }) {
                 logger.LogInformation(

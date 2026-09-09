@@ -465,7 +465,10 @@ public interface IImportTargetIndex {
 /// </summary>
 public sealed record AcquisitionTeardownClaim(
     AcquisitionTeardownIntent Intent,
-    AcquisitionStatus OriginalStatus);
+    AcquisitionStatus OriginalStatus) {
+    /// <summary>A completed independent replacement makes this held download redundant.</summary>
+    public bool SupersededHeldDownload { get; init; }
+}
 
 /// <summary>
 /// Narrow lifecycle boundary used by background orchestration that must establish durable provenance

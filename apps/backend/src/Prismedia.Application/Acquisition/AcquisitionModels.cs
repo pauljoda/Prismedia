@@ -312,6 +312,9 @@ public sealed record AcquisitionSearchInput(
         }
     }
 
+    /// <summary>Retained attempt used as the minimum improvement baseline for a background recovery search.</summary>
+    public Guid? RecoveryOfAcquisitionId { get; init; }
+
     /// <summary>Formal alternative work names; these never change the requested episode or numbering system.</summary>
     public IReadOnlyList<string> AlternativeWorkTitles { get; init; } = [];
 
@@ -440,6 +443,9 @@ public sealed record AcquisitionCandidateRef(
 public sealed record DueMonitor(
     Guid MonitorId, Guid? AcquisitionId, string Title, EntityKind Kind, bool IsUpgrade = false, Guid? EntityId = null,
     bool MissingChildFallback = false, BookRendition? BookRendition = null, Guid? ProfileId = null) {
+    /// <summary>Search a separate recovery attempt while preserving the unattended held payload.</summary>
+    public bool HeldAlternativeRequired { get; init; }
+
     /// <summary>Repair the owned file's inspection evidence before judging or searching an imported baseline.</summary>
     public bool OwnedInspectionRequired { get; init; }
 }
@@ -739,6 +745,9 @@ public sealed record AcquisitionImportContext(
     BookRendition? BookRendition = null,
     Guid? UpgradeOfAcquisitionId = null,
     int? VolumeNumber = null) {
+    /// <summary>An explicitly reviewed import must remain under user control during background recovery.</summary>
+    public bool ImportManualReview { get; init; }
+
     /// <summary>Atomic preparation overrides the normal family placement protocol when present.</summary>
     public AcquisitionCheckpointProtocol CheckpointProtocol => AtomicUpgradeCheckpoint is not null
         ? AcquisitionCheckpointProtocol.AtomicUpgrade : AcquisitionProfileKinds.CheckpointProtocolFor(Kind);

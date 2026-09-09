@@ -491,6 +491,14 @@ public sealed partial class EfMonitorStore(
                     && file.Role == EntityFileRole.Source),
                 SubtitleInspectionComplete = monitor.EntityId != null && db.EntitySubtitleStates.Any(state =>
                     state.EntityId == monitor.EntityId && state.SubtitlesExtractedAt != null),
+                IsHeldRecovery = acquisition != null && acquisition.RecoveryOfAcquisitionId != null,
+                HeldAt = acquisition == null ? (DateTimeOffset?)null : acquisition.UpdatedAt,
+                CanSeekHeldAlternative = acquisition != null && acquisition.Status == AcquisitionStatus.ManualImportRequired
+                    && !acquisition.ImportManualReview && acquisition.ImportClaimJobId == null
+                    && acquisition.ImportCheckpointJson == null && acquisition.UpgradeOfAcquisitionId == null
+                    && acquisition.FinalSourcePath == null
+                    && (acquisition.Kind == EntityKind.VideoEpisode || acquisition.Kind == EntityKind.VideoSeason || acquisition.Kind == EntityKind.Movie)
+                    && db.DownloadTransfers.Any(transfer => transfer.AcquisitionId == acquisition.Id && transfer.Progress >= 1 && transfer.ContentPath != null),
                 AcquisitionStatus = acquisition == null ? (AcquisitionStatus?)null : acquisition.Status,
                 AcquisitionEntityId = acquisition == null ? null : acquisition.EntityId,
                 AcquisitionProfileId = acquisition == null ? null : acquisition.ProfileId,
@@ -545,6 +553,16 @@ public sealed partial class EfMonitorStore(
             // The acquisition was hard-deleted (FK set null) — auto-pause; nothing to re-search.
             if (monitor.AcquisitionId is not { } acquisitionId) {
                 statusTransitions.Add((monitor.Id, MonitorStatus.Paused));
+                continue;
+            }
+
+            if (row.CanSeekHeldAlternative && !row.HasOwnedSource && monitor.UpgradeChildAcquisitionId is null) {
+                var lastAttempt = monitor.LastSearchedAt is { } last && last > row.HeldAt ? last : row.HeldAt;
+                if (forceImmediate || lastAttempt is null
+                    || now - lastAttempt >= HeldAcquisitionRecoveryPolicy.Delay(defaultIntervalMinutes, monitor.BarrenSearches)) {
+                    due.Add(new DueMonitor(monitor.Id, acquisitionId, monitor.Title, monitor.Kind,
+                        EntityId: monitor.EntityId, ProfileId: row.AcquisitionProfileId) { HeldAlternativeRequired = true });
+                }
                 continue;
             }
 
@@ -709,7 +727,8 @@ public sealed partial class EfMonitorStore(
                 continue;
             }
 
-            if (forceImmediate || monitor.LastSearchedAt is null || now - monitor.LastSearchedAt >= interval) {
+            if (forceImmediate || monitor.LastSearchedAt is null || now - monitor.LastSearchedAt >=
+                    (row.IsHeldRecovery ? HeldAcquisitionRecoveryPolicy.Delay(defaultIntervalMinutes, monitor.BarrenSearches) : interval)) {
                 due.Add(new DueMonitor(
                     monitor.Id, acquisitionId, monitor.Title,
                     EntityId: monitor.EntityId,

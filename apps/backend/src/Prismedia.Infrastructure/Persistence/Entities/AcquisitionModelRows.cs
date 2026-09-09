@@ -397,6 +397,9 @@ public sealed class AcquisitionRow {
     /// </summary>
     public Guid? UpgradeOfAcquisitionId { get; set; }
 
+    /// <summary>Retained unimported attempt this automatic alternative may supersede only after verified import.</summary>
+    public Guid? RecoveryOfAcquisitionId { get; set; }
+
     /// <summary>
     /// Set in the same commit that transitions to <see cref="AcquisitionStatus.Imported"/> and records the
     /// owned tiers, so the upgrade due-policy treats the owned quality as authoritative only once captured

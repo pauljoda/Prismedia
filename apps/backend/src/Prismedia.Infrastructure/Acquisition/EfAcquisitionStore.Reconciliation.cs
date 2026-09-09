@@ -34,6 +34,11 @@ public sealed partial class EfAcquisitionStore {
             return new HashSet<Guid>();
         }
 
+        var candidateIds = candidates.Select(row => row.Id).ToArray();
+        var retainedIds = await db.Acquisitions.AsNoTracking().Where(row => row.RecoveryOfAcquisitionId != null
+            && candidateIds.Contains(row.RecoveryOfAcquisitionId.Value)).Select(row => row.RecoveryOfAcquisitionId!.Value)
+            .ToHashSetAsync(cancellationToken);
+        candidates = candidates.Where(row => !retainedIds.Contains(row.Id)).ToArray();
         var fulfilledEntityIds = await new EfEntityFulfillmentProjection(db).ResolveAsync(
             candidates.Select(row => row.EntityId!.Value).Distinct().ToArray(),
             cancellationToken);
@@ -76,7 +81,8 @@ public sealed partial class EfAcquisitionStore {
                 && candidate.IdentityNamespace == imported.IdentityNamespace
                 && candidate.IdentityValue == imported.IdentityValue
                 && candidate.ImportCheckpointJson == null
-                && OrphanRetirableStatuses.Contains(candidate.Status))
+                && OrphanRetirableStatuses.Contains(candidate.Status)
+                && !db.Acquisitions.Any(recovery => recovery.RecoveryOfAcquisitionId == candidate.Id))
             .ToArrayAsync(cancellationToken);
         if (superseded.Length == 0) {
             return;
@@ -126,7 +132,8 @@ public sealed partial class EfAcquisitionStore {
                 && subtreeIds.Contains(candidate.EntityId.Value)
                 && candidate.UpgradeOfAcquisitionId == null
                 && candidate.ImportCheckpointJson == null
-                && OrphanRetirableStatuses.Contains(candidate.Status))
+                && OrphanRetirableStatuses.Contains(candidate.Status)
+                && !db.Acquisitions.Any(recovery => recovery.RecoveryOfAcquisitionId == candidate.Id))
             .ToArrayAsync(cancellationToken);
         if (candidates.Length == 0) {
             return;

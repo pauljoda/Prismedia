@@ -536,7 +536,8 @@ public sealed partial class AcquisitionService(
                 "The acquisition no longer carries the expected cleanup claim. Refresh and retry.");
         }
 
-        await RecordRemovedAsync(detail.Summary, "Removed by user.", cancellationToken);
+        await RecordRemovedAsync(detail.Summary, claim.SupersededHeldDownload
+            ? "Held download removed after its replacement finished importing." : "Removed by user.", cancellationToken);
         return await store.DeleteAsync(id, cancellationToken);
     }
 

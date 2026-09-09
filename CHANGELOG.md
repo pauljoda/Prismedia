@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Monitored movies and TV units can look for better matches while keeping unattended automatic import holds available for review. Recovery compares episode coverage and profile quality, backs off from hours to weekly searches, and only cleans up superseded downloads after a replacement finishes importing. Unresolved foreign-season extras remain available for review.
+
 - A security policy and private vulnerability reporting guide explain how to report issues and how fixes are coordinated.
 
 - Automatic qBittorrent acquisitions on supported clients inspect torrent contents before releasing payload downloads. Wrong-content and redundant season packs can enter recovery before transferring media; metadata holds survive restarts and respect cancellation.

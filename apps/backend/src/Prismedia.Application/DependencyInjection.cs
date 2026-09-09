@@ -63,6 +63,9 @@ public static class DependencyInjection {
         services.AddScoped<Acquisition.IAcquisitionReleaseTimingService, Acquisition.AcquisitionReleaseTimingService>();
         services.AddScoped<Acquisition.IAcquisitionReleaseDateChangeHandler, Acquisition.AcquisitionReleaseDateChangeHandler>();
         services.AddScoped<Acquisition.AcquisitionSearchRunner>();
+        services.AddScoped<Acquisition.HeldAcquisitionCandidatePolicy>();
+        services.AddScoped<Acquisition.SupersededHeldAcquisitionCleanup>();
+        services.AddSingleton<Acquisition.SupersededHeldAcquisitionCursor>();
         services.AddScoped<Acquisition.IAcquisitionCandidateValidator, Acquisition.AcquisitionCandidateValidator>();
         services.AddScoped<Acquisition.AcquisitionMissingChildFallback>();
         services.AddSingleton<Acquisition.ManualReplacementSearchSessionStore>();

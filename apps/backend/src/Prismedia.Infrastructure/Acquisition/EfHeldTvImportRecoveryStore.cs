@@ -108,7 +108,18 @@ public sealed partial class EfHeldTvImportRecoveryStore(PrismediaDbContext db, I
 
     // Match GetImportContextAsync's latest-transfer selection. A stale completed transfer cannot
     // authorize a newer incomplete payload, including when it appears after ListAsync's observation.
+    private static readonly AcquisitionStatus[] ActiveAlternativeStatuses = [
+        AcquisitionStatus.Searching, AcquisitionStatus.Queued, AcquisitionStatus.Downloading,
+        AcquisitionStatus.WaitingForDownloadClient, AcquisitionStatus.Downloaded, AcquisitionStatus.Importing,
+        AcquisitionStatus.Stopping
+    ];
+
     private IQueryable<Persistence.Entities.AcquisitionRow> WithCompletedPayload() => db.Acquisitions
+        .Where(row => !db.Monitors.Any(monitor => monitor.EntityId == row.EntityId && monitor.AcquisitionId != row.Id
+            && monitor.Status == MonitorStatus.Active && db.Acquisitions.Any(alternative => alternative.Id == monitor.AcquisitionId
+                && (ActiveAlternativeStatuses.Contains(alternative.Status)
+                    || alternative.Status == AcquisitionStatus.AwaitingSelection && db.ReleaseCandidates.Any(candidate =>
+                        candidate.AcquisitionId == alternative.Id && candidate.Accepted)))))
         .Where(row => db.DownloadTransfers.Where(transfer => transfer.AcquisitionId == row.Id)
             .OrderByDescending(transfer => transfer.CreatedAt)
             .Select(transfer => transfer.Progress >= 1 && !string.IsNullOrWhiteSpace(transfer.ContentPath))

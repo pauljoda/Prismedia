@@ -35,6 +35,7 @@ public sealed partial class EfMonitorStore {
                 monitor.BarrenSearches,
                 monitor.Author,
                 AcquisitionStatus = acquisition == null ? (AcquisitionStatus?)null : acquisition.Status,
+                IsHeldRecovery = acquisition != null && acquisition.RecoveryOfAcquisitionId != null,
                 PosterUrl = acquisition == null ? null : acquisition.PosterUrl
             };
 
@@ -50,10 +51,9 @@ public sealed partial class EfMonitorStore {
             row.MonitorStatus,
             row.AcquisitionStatus,
             row.LastSearchedAt,
-            // A missing item is re-searched on the plain interval (its owned copy is nonexistent, so the
-            // barren-search backoff only governs upgrade re-searches). Newer barren counts still stretch the
-            // ETA, mirroring the sweep's exponential backoff.
-            NextSearchAt: row.LastSearchedAt is { } last ? last + BackoffFor(WantedBaseInterval, row.BarrenSearches) : null,
+            NextSearchAt: row.LastSearchedAt is { } last ? last + (row.IsHeldRecovery
+                ? HeldAcquisitionRecoveryPolicy.Delay((int)WantedBaseInterval.TotalMinutes, row.BarrenSearches)
+                : BackoffFor(WantedBaseInterval, row.BarrenSearches)) : null,
             OwnedQuality: null,
             CutoffQuality: null,
             row.BarrenSearches,

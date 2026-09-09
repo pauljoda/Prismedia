@@ -469,6 +469,8 @@ public static class DependencyInjection {
         services.AddScoped<IAtomicUpgradeCheckpointStore, EfAtomicUpgradeCheckpointStore>();
         services.AddScoped<IAtomicUpgradeFiles, AtomicUpgradeFiles>();
         services.AddScoped<IHeldTvImportRecoveryStore, EfHeldTvImportRecoveryStore>();
+        services.AddScoped<IHeldAcquisitionAlternativeService, EfHeldAcquisitionAlternativeService>();
+        services.AddScoped<ISupersededHeldAcquisitionStore, EfSupersededHeldAcquisitionStore>();
         services.AddScoped<ITvPayloadObservationStore, EfTvPayloadObservationStore>();
         services.AddScoped<IDetachedDownloadCleanupStore, EfDetachedDownloadCleanupStore>();
         services.AddScoped<EfManualAcquisitionStore>();

@@ -150,7 +150,7 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         var row = await db.Acquisitions
             .AsNoTracking()
             .Where(row => row.Id == id)
-            .Select(row => new { row.Id, row.Title, row.Author, row.Kind, row.EntityId, row.UpgradeOfAcquisitionId, row.Year, row.ProfileId, row.Series, row.SeasonNumber, row.EpisodeNumber, row.VolumeNumber, row.BookRendition })
+            .Select(row => new { row.Id, row.Title, row.Author, row.Kind, row.EntityId, row.UpgradeOfAcquisitionId, row.RecoveryOfAcquisitionId, row.Year, row.ProfileId, row.Series, row.SeasonNumber, row.EpisodeNumber, row.VolumeNumber, row.BookRendition })
             .FirstOrDefaultAsync(cancellationToken);
         if (row is null) {
             return null;
@@ -173,6 +173,7 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             row.Series, positions.Season ?? row.SeasonNumber, positions.Episode ?? row.EpisodeNumber,
             positions.Volume ?? row.VolumeNumber, row.BookRendition, positions.AbsoluteEpisode) {
             AlternativeWorkTitles = work.Titles,
+            RecoveryOfAcquisitionId = row.RecoveryOfAcquisitionId,
             EpisodeCatalog = row.Kind == EntityKind.VideoEpisode && contextEntityId is { } episodeEntityId
                 ? await new EfImportTargetIndex(db).GetSeriesEpisodeCatalogAsync(episodeEntityId, cancellationToken) : []
         };
@@ -226,12 +227,14 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
                 && row.TeardownOriginalStatus != null)
             .Select(row => new {
                 Intent = row.TeardownIntent!.Value,
-                OriginalStatus = row.TeardownOriginalStatus!.Value
+                OriginalStatus = row.TeardownOriginalStatus!.Value,
+                Superseded = db.Acquisitions.Any(replacement => replacement.RecoveryOfAcquisitionId == row.Id
+                    && replacement.Status == AcquisitionStatus.Imported)
             })
             .FirstOrDefaultAsync(cancellationToken);
         return claim is null
             ? null
-            : new AcquisitionTeardownClaim(claim.Intent, claim.OriginalStatus);
+            : new AcquisitionTeardownClaim(claim.Intent, claim.OriginalStatus) { SupersededHeldDownload = claim.Superseded };
     }
 
     /// <inheritdoc />
@@ -296,6 +299,13 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             return false;
         }
 
+        // Preserve older retained attempts when a middle recovery attempt is removed. The new
+        // attempt continues to own the chain, including after cleanup resumes across restarts.
+        if (row.RecoveryOfAcquisitionId is { } retainedId && retainedId != row.Id) {
+            var successors = await db.Acquisitions.Where(candidate => candidate.RecoveryOfAcquisitionId == id
+                && candidate.Id != retainedId).ToArrayAsync(cancellationToken);
+            foreach (var successor in successors) successor.RecoveryOfAcquisitionId = retainedId;
+        }
         // Candidates, transfers, and import hints cascade on the acquisition FK.
         db.Acquisitions.Remove(row);
         await db.SaveChangesAsync(cancellationToken);
@@ -368,6 +378,7 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
     private static AcquisitionRow CreateRetryClone(AcquisitionRow source, DateTimeOffset now) => new() {
         Id = Guid.NewGuid(),
         Kind = source.Kind,
+        RecoveryOfAcquisitionId = source.RecoveryOfAcquisitionId,
         BookRendition = source.BookRendition,
         EntityId = source.EntityId,
         ProfileId = source.ProfileId,
@@ -1235,6 +1246,7 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             tvImportCheckpoint, importPlacementCheckpoint, row.BookRendition, row.UpgradeOfAcquisitionId,
             positions.Volume ?? row.VolumeNumber) {
             AlternativeWorkTitles = work.Titles,
+            ImportManualReview = row.ImportManualReview,
             AtomicUpgradeCheckpoint = atomicUpgradeCheckpoint
         };
         context.EnsureCheckpointApplicability();

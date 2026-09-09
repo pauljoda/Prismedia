@@ -272,18 +272,21 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.OwnedMediaRevision).HasColumnName("owned_media_revision").HasDefaultValue(1);
             entity.Property(row => row.OwnedFormatScore).HasColumnName("owned_format_score").HasDefaultValue(0);
             entity.Property(row => row.UpgradeOfAcquisitionId).HasColumnName("upgrade_of_acquisition_id");
+            entity.Property(row => row.RecoveryOfAcquisitionId).HasColumnName("recovery_of_acquisition_id");
             entity.Property(row => row.UpgradeQualityCaptured).HasColumnName("upgrade_quality_captured").HasDefaultValue(false);
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
             entity.HasIndex(row => row.CreatedAt);
             entity.HasIndex(row => row.Status);
             entity.HasIndex(row => row.UpgradeOfAcquisitionId);
+            entity.HasIndex(row => row.RecoveryOfAcquisitionId);
             entity.HasIndex(row => row.JobGraphId);
             // Loose link into the entity graph: deleting the wanted entity never cascades into (or is
             // blocked by) a transient acquisition attempt.
             entity.HasIndex(row => row.EntityId);
             entity.HasOne<BookAcquisitionProfileRow>().WithMany().HasForeignKey(row => row.ProfileId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne<AcquisitionRow>().WithMany().HasForeignKey(row => row.UpgradeOfAcquisitionId).OnDelete(DeleteBehavior.SetNull);
+            entity.HasOne<AcquisitionRow>().WithMany().HasForeignKey(row => row.RecoveryOfAcquisitionId).OnDelete(DeleteBehavior.SetNull);
             entity.HasOne<JobGraphRow>().WithMany().HasForeignKey(row => row.JobGraphId).OnDelete(DeleteBehavior.SetNull);
         });
 

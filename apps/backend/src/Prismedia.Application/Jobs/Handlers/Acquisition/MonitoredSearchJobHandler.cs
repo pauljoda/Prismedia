@@ -25,7 +25,8 @@ public sealed partial class MonitoredSearchJobHandler(
     IJobQueueService? jobs = null,
     IAcquisitionReleaseTimingService? releaseTiming = null,
     IJobGraphService? graphs = null,
-    ITvOwnedEpisodeCoverageRepair? ownedTvCoverage = null) : IJobHandler {
+    ITvOwnedEpisodeCoverageRepair? ownedTvCoverage = null,
+    IHeldAcquisitionAlternativeService? heldAlternatives = null) : IJobHandler {
     public async Task HandleAsync(JobContext context, CancellationToken cancellationToken) {
         var due = await ResolveWorkAsync(context.Job, cancellationToken);
         if (due.Count == 0) {
@@ -61,6 +62,16 @@ public sealed partial class MonitoredSearchJobHandler(
         // action so a row claimed by destructive lifecycle work afterward is never acted on.
         if (!await monitors.IsActiveAsync(monitor.MonitorId, cancellationToken)) {
             return null;
+        }
+
+        if (monitor.HeldAlternativeRequired) {
+            if (heldAlternatives is null) return null;
+            var alternative = await heldAlternatives.CreateAsync(monitor, cancellationToken);
+            if (alternative is null) {
+                await monitors.MarkSearchedAsync(monitor.MonitorId, cancellationToken);
+                return $"Keeping the held download for {monitor.Title}";
+            }
+            monitor = monitor with { AcquisitionId = alternative, HeldAlternativeRequired = false };
         }
 
         if (monitor.OwnedInspectionRequired) {

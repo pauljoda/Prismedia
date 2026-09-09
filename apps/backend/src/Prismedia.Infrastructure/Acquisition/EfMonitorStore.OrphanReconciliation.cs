@@ -90,6 +90,7 @@ public sealed partial class EfMonitorStore {
             where acquisition.EntityId != null
                 && acquisition.UpgradeOfAcquisitionId == null
                 && OrphanRetirableStatuses.Contains(acquisition.Status)
+                && !db.Acquisitions.Any(recovery => recovery.RecoveryOfAcquisitionId == acquisition.Id)
             select new { Monitor = monitor, Acquisition = acquisition })
             .ToArrayAsync(cancellationToken);
         if (candidates.Length == 0) {
