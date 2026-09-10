@@ -2,7 +2,7 @@ diff --git a/CHANGELOG.md b/CHANGELOG.md
 deleted file mode 100644
 index ffd26a28fb58ee0cf740eb92e0784753a15bfa68..0000000000000000000000000000000000000000
 diff --git a/dist/client/client/theme/SearchBar/SearchBar.jsx b/dist/client/client/theme/SearchBar/SearchBar.jsx
-index 10ef222e098d751b8f0d402585c6643909af9ed3..aaccc4afe365805a8c74ab5541c1f58c1c7ec22a 100644
+index 10ef222e098d751b8f0d402585c6643909af9ed3..b9202b1cdd0d2a4bc3261ab37320859c53858420 100644
 --- a/dist/client/client/theme/SearchBar/SearchBar.jsx
 +++ b/dist/client/client/theme/SearchBar/SearchBar.jsx
 @@ -167,7 +167,7 @@ export default function SearchBar({ handleSearchBarToggle, }) {
@@ -14,3 +14,18 @@ index 10ef222e098d751b8f0d402585c6643909af9ed3..aaccc4afe365805a8c74ab5541c1f58c
              a.href = url;
              a.textContent = linkText;
              a.addEventListener("click", (e) => {
+@@ -299,8 +299,12 @@ export default function SearchBar({ handleSearchBarToggle, }) {
+                 });
+             }
+             // Apply any keywords to the search input so that we can clear marks in case we loaded a page with a highlight in the url
+-            setInputValue(keywords.join(" "));
+-            search.current?.autocomplete.setVal(keywords.join(" "));
++            // Highlighting runs after hydration; preserve a query the user has already
++            // started typing while that work was pending.
++            if (document.activeElement !== searchBarRef.current) {
++                setInputValue(keywords.join(" "));
++                search.current?.autocomplete.setVal(keywords.join(" "));
++            }
+         });
+     }, [isBrowser, location.search, location.pathname]);
+     const [focused, setFocused] = useState(false);

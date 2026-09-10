@@ -6,7 +6,7 @@ settings:
 
 patchedDependencies:
   '@easyops-cn/docusaurus-search-local@0.55.3':
-    hash: 353ef78c38304916ddcc380e07c9db17a2af26a353a1c623e2b720c078cffa20
+    hash: 0b8cba4acbd8f17ea6984e07d06ff73e7ba86b950d4655fc46b4e6980a5e095f
     path: patches/@easyops-cn__docusaurus-search-local@0.55.3.patch
 
 importers:
@@ -157,7 +157,7 @@ importers:
         version: 3.10.0(@docusaurus/faster@3.10.0(@docusaurus/types@3.10.0(@swc/core@1.15.40(@swc/helpers@0.5.23))(esbuild@0.28.0)(postcss@8.5.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(@swc/helpers@0.5.23)(esbuild@0.28.0)(postcss@8.5.15))(@docusaurus/plugin-content-docs@3.10.0(@docusaurus/faster@3.10.0(@docusaurus/types@3.10.0(@swc/core@1.15.40(@swc/helpers@0.5.23))(esbuild@0.28.0)(postcss@8.5.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(@swc/helpers@0.5.23)(esbuild@0.28.0)(postcss@8.5.15))(@mdx-js/react@3.1.1(@types/react@19.2.15)(react@19.2.6))(@rspack/core@1.7.11(@swc/helpers@0.5.23))(@swc/core@1.15.40(@swc/helpers@0.5.23))(esbuild@0.28.0)(postcss@8.5.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(typescript@6.0.3))(@mdx-js/react@3.1.1(@types/react@19.2.15)(react@19.2.6))(@rspack/core@1.7.11(@swc/helpers@0.5.23))(@swc/core@1.15.40(@swc/helpers@0.5.23))(esbuild@0.28.0)(postcss@8.5.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(typescript@6.0.3)
       '@easyops-cn/docusaurus-search-local':
         specifier: 0.55.3
-        version: 0.55.3(patch_hash=353ef78c38304916ddcc380e07c9db17a2af26a353a1c623e2b720c078cffa20)(cdc5f13b8d7cb304492136e1ce0b887a)
+        version: 0.55.3(patch_hash=0b8cba4acbd8f17ea6984e07d06ff73e7ba86b950d4655fc46b4e6980a5e095f)(cdc5f13b8d7cb304492136e1ce0b887a)
       '@fontsource-variable/inter':
         specifier: ^5.2.8
         version: 5.2.8
@@ -10793,7 +10793,7 @@ snapshots:
       cssesc: 3.0.0
       immediate: 3.3.0
 
-  '@easyops-cn/docusaurus-search-local@0.55.3(patch_hash=353ef78c38304916ddcc380e07c9db17a2af26a353a1c623e2b720c078cffa20)(cdc5f13b8d7cb304492136e1ce0b887a)':
+  '@easyops-cn/docusaurus-search-local@0.55.3(patch_hash=0b8cba4acbd8f17ea6984e07d06ff73e7ba86b950d4655fc46b4e6980a5e095f)(cdc5f13b8d7cb304492136e1ce0b887a)':
     dependencies:
       '@docusaurus/plugin-content-docs': 3.10.0(@docusaurus/faster@3.10.0(@docusaurus/types@3.10.0(@swc/core@1.15.40(@swc/helpers@0.5.23))(esbuild@0.28.0)(postcss@8.5.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(@swc/helpers@0.5.23)(esbuild@0.28.0)(postcss@8.5.15))(@mdx-js/react@3.1.1(@types/react@19.2.15)(react@19.2.6))(@rspack/core@1.7.11(@swc/helpers@0.5.23))(@swc/core@1.15.40(@swc/helpers@0.5.23))(debug@4.4.3)(esbuild@0.28.0)(postcss@8.5.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(typescript@6.0.3)
       '@docusaurus/theme-common': 3.10.0(@docusaurus/plugin-content-docs@3.10.0(@docusaurus/faster@3.10.0(@docusaurus/types@3.10.0(@swc/core@1.15.40(@swc/helpers@0.5.23))(esbuild@0.28.0)(postcss@8.5.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6))(@swc/helpers@0.5.23)(esbuild@0.28.0)(postcss@8.5.15))(@mdx-js/react@3.1.1(@types/react@19.2.15)(react@19.2.6))(@rspack/core@1.7.11(@swc/helpers@0.5.23))(@swc/core@1.15.40(@swc/helpers@0.5.23))(esbuild@0.28.0)(postcss@8.5.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)(typescript@6.0.3))(@swc/core@1.15.40(@swc/helpers@0.5.23))(esbuild@0.28.0)(postcss@8.5.15)(react-dom@19.2.6(react@19.2.6))(react@19.2.6)

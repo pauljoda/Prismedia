@@ -1,5 +1,26 @@
 import {expect, test} from '@playwright/test';
 
+test('search preserves a query entered before the page finishes initializing', async ({page}) => {
+  await page.setViewportSize({width: 375, height: 812});
+  let resumeScripts!: () => void;
+  const scriptsReady = new Promise<void>(resolve => { resumeScripts = resolve; });
+  await page.route('**/assets/js/*.js', async route => {
+    await scriptsReady;
+    await route.continue();
+  });
+  try {
+    await page.goto('docs/intro', {waitUntil: 'commit'});
+    const search = page.locator('.navbar').getByLabel('Search', {exact: true});
+    await search.fill('reader settings');
+    resumeScripts();
+    await page.waitForLoadState('load');
+    await expect(page.getByRole('option').first()).toContainText('Native Reader Settings');
+    await expect(search).toHaveValue('reader settings');
+  } finally {
+    resumeScripts();
+  }
+});
+
 test('documentation search uses the local index and opens a guide with the keyboard', async ({page}) => {
   const indexResponses: number[] = [];
   page.on('response', response => {
