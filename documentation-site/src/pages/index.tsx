@@ -9,7 +9,7 @@ import BrandLink from '../components/marketing/BrandLink';
 import PlatformShowcase from '../components/marketing/PlatformShowcase';
 import ProductScreenshot from '../components/marketing/ProductScreenshot';
 import MarketingFooter from '../components/marketing/MarketingFooter';
-import {APP_STORE_URL, GITHUB_URL, TESTFLIGHT_URL} from '../components/marketing/links';
+import {APP_STORE_URL, GITHUB_URL} from '../components/marketing/links';
 import PrismStory from '../components/marketing/PrismStory';
 import {ENTITY_KIND, familyStyle} from '../components/marketing/media-families';
 import styles from './index.module.css';
@@ -40,7 +40,7 @@ const PRODUCT_SCHEMA = {
       softwareRequirements: 'A self-hosted Prismedia server; Docker for server installation',
       license: `${GITHUB_URL}/blob/main/LICENSE`,
       isAccessibleForFree: true,
-      sameAs: [GITHUB_URL, APP_STORE_URL, TESTFLIGHT_URL],
+      sameAs: [GITHUB_URL, APP_STORE_URL],
     },
   ],
 };
@@ -80,8 +80,7 @@ function Hero() {
     <p className={styles.lede}>Find, organize, and enjoy your movies, music, and books.<br />Run Prismedia on your own server, then connect from the web or native Apple apps.</p>
     <div className={styles.actions}>
       <BrandLink href={GITHUB_URL} icon="/img/brands/github.svg" primary>View on GitHub</BrandLink>
-      <BrandLink href={APP_STORE_URL} icon="/img/brands/app-store.svg" hint="App Store">Apple TV</BrandLink>
-      <BrandLink href={TESTFLIGHT_URL} icon="/img/brands/testflight.png" hint="iPhone & iPad">TestFlight</BrandLink>
+      <BrandLink href={APP_STORE_URL} icon="/img/brands/app-store.svg" hint="iPhone, iPad & Apple TV">App Store</BrandLink>
       <Link className={`marketing-glass ${styles.secondaryAction}`} to="/docs/getting-started/install">Read the setup guide <ArrowIcon /></Link>
     </div>
     <PlatformShowcase />
@@ -154,10 +153,10 @@ function Platforms() {
     <div className={styles.sectionHeading}><div><h2 id="platforms-title">One collection.<br />At home on every screen.</h2></div><p>The responsive web app and native Apple apps connect to your Prismedia server. Each screen has room to work the way it should.</p></div>
     <div className={styles.platformGrid}>
       <article><span className={styles.platformLabel}>Web</span><h3>The whole library<br />in your browser.</h3><p>Browse and enjoy your media, manage files, identify titles, and follow background work. The layout adapts from desktop to phone.</p><Link className={styles.textLink} to="/docs/getting-started/install">Set up your server <ArrowIcon /></Link></article>
-      <article><span className={styles.platformLabel}>iPhone &amp; iPad</span><h3>Made for touch.<br />Ready for a good book.</h3><p>Native browsing, playback, reading, and listening, with controls shaped for your device.</p><BrandLink href={TESTFLIGHT_URL} icon="/img/brands/testflight.png">TestFlight</BrandLink></article>
-      <article><span className={styles.platformLabel}>Apple TV</span><h3>Your collection,<br />from the couch.</h3><p>A focus-based interface and native video player for the biggest screen in the house.</p><BrandLink href={APP_STORE_URL} icon="/img/brands/app-store.svg">Get the Apple TV app</BrandLink></article>
+      <article><span className={styles.platformLabel}>iPhone &amp; iPad</span><h3>Made for touch.<br />Ready for a good book.</h3><p>Native browsing, playback, reading, and listening, with controls shaped for your device.</p><BrandLink href={APP_STORE_URL} icon="/img/brands/app-store.svg">Download on the App Store</BrandLink></article>
+      <article><span className={styles.platformLabel}>Apple TV</span><h3>Your collection,<br />from the couch.</h3><p>A focus-based interface and native video player for the biggest screen in the house.</p><BrandLink href={APP_STORE_URL} icon="/img/brands/app-store.svg">Download on the App Store</BrandLink></article>
     </div>
-    <p className={styles.platformNote}>Native apps need a reachable Prismedia server and your account. TestFlight is available for testing early builds.</p>
+    <p className={styles.platformNote}>Available on the App Store for iPhone, iPad, and Apple TV. Native apps need a reachable Prismedia server and your account.</p>
   </section>;
 }
 

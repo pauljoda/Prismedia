@@ -211,7 +211,7 @@ a {
   box-shadow: inset 0 -2px var(--prismedia-material-blue);
 }
 
-.navbar__testflight {
+.navbar__app-store {
   color: var(--prismedia-text-primary);
   margin-left: 0.25rem;
   padding: 0.55rem 0.85rem;
@@ -221,13 +221,14 @@ a {
   font-weight: 500;
 }
 
-.navbar__testflight::before, .navbar__github::before {
+.navbar__app-store::before, .navbar__github::before {
   content: '';
   display: inline-block;
   width: 18px;
   height: 18px;
   flex-shrink: 0;
-  background: center / contain no-repeat url('../../static/img/brands/testflight.png');
+  background: center / contain no-repeat url('../../static/img/brands/app-store.svg');
+  filter: invert(1);
 }
 .navbar__github { display: inline-flex; align-items: center; gap: 8px; }
 .navbar__github::before { background-image: url('../../static/img/brands/github.svg'); filter: invert(1); }
@@ -564,7 +565,7 @@ blockquote {
   /* Service links live in the mobile menu; custom glass styles must not
      override Docusaurus' collapsed navigation and squeeze the menu button. */
   .navbar__items > .navbar__github,
-  .navbar__items > .navbar__testflight {
+  .navbar__items > .navbar__app-store {
     display: none;
   }
 

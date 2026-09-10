@@ -2,7 +2,7 @@ import Link from '@docusaurus/Link';
 import useBaseUrl from '@docusaurus/useBaseUrl';
 import ArrowIcon from './ArrowIcon';
 import BrandLink from './BrandLink';
-import {APP_STORE_URL, GITHUB_URL, REDDIT_URL, TESTFLIGHT_URL} from './links';
+import {APP_STORE_URL, GITHUB_URL, REDDIT_URL} from './links';
 import styles from './MarketingFooter.module.css';
 
 /** The homepage's closing invitation and practical next steps. */
@@ -23,7 +23,7 @@ export default function MarketingFooter() {
       <nav className={styles.resources} aria-label="Footer navigation">
         <div><h3>Start your library</h3><Link to="/docs/getting-started/install">Install with Docker <ArrowIcon /></Link><Link to="/docs/getting-started/organize-folders">Organize your folders <ArrowIcon /></Link><Link to="/docs/getting-started/first-library">Add your first library <ArrowIcon /></Link></div>
         <div><h3>Using Prismedia</h3><Link to="/docs/using/playback">Watch, listen, and read <ArrowIcon /></Link><Link to="/docs/using/requests">Connect your acquisition tools <ArrowIcon /></Link><Link href={`${GITHUB_URL}/blob/main/CHANGELOG.md`}>Read the release notes <ArrowIcon diagonal /></Link></div>
-        <div className={styles.downloads}><h3>Native apps</h3><BrandLink href={APP_STORE_URL} icon="/img/brands/app-store.svg">Apple TV on the App Store</BrandLink><BrandLink href={TESTFLIGHT_URL} icon="/img/brands/testflight.png">Early builds on TestFlight</BrandLink></div>
+        <div className={styles.downloads}><h3>Native apps</h3><BrandLink href={APP_STORE_URL} icon="/img/brands/app-store.svg" hint="iPhone, iPad & Apple TV">App Store</BrandLink></div>
       </nav>
       <div className={styles.bottom}><span>© {new Date().getFullYear()} Prismedia</span><div><Link to="/support">Support</Link><Link to="/docs/deployment/security">Security</Link><Link to="/privacy">Privacy</Link></div></div>
     </div>

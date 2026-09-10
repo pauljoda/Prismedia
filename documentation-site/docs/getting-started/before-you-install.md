@@ -40,7 +40,7 @@ For requests, Prismedia uses a metadata plugin to identify the title, your index
 
 No. They connect to your Prismedia server and use the same account and library as the browser.
 
-The Apple TV app is on the [App Store](https://apps.apple.com/us/app/prismedia/id6792944211). [TestFlight](https://testflight.apple.com/join/c9bgDxr7) provides early native builds, including iPhone and iPad. Start with the web setup, then follow [Connect the Native App](../using/native-apps.md).
+The native app is on the [App Store](https://apps.apple.com/us/app/prismedia/id6792944211) for iPhone, iPad, and Apple TV. Start with the web setup, then follow [Connect the Native App](../using/native-apps.md).
 
 ## Can other people use my library?
 

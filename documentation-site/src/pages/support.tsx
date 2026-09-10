@@ -18,7 +18,7 @@ export default function SupportPage() {
           </Heading>
           <p className={styles.lead}>
             Get help with the Prismedia server, media libraries, native apps,
-            playback, reading, listening, or your TestFlight build.
+            playback, reading, or listening.
           </p>
 
           <div className={styles.content}>

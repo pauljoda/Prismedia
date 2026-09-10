@@ -3,6 +3,7 @@ import type {Config} from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 import type {PrismTheme} from 'prism-react-renderer';
 import {SITE_ORIGIN, SITE_BASE_URL, SOCIAL_IMAGE_PATH, SOCIAL_IMAGE_ALT} from './site-metadata';
+import {APP_STORE_URL} from './src/components/marketing/links';
 
 const prismediaPrismTheme: PrismTheme = {
   plain: {
@@ -172,10 +173,10 @@ const config: Config = {
           className: 'navbar__github',
         },
         {
-          href: 'https://testflight.apple.com/join/c9bgDxr7',
-          label: 'TestFlight',
+          href: APP_STORE_URL,
+          label: 'App Store',
           position: 'right',
-          className: 'navbar__testflight marketing-glass',
+          className: 'navbar__app-store marketing-glass',
         },
       ],
     },
@@ -228,8 +229,8 @@ const config: Config = {
               href: 'https://www.reddit.com/r/Prismedia/',
             },
             {
-              label: 'Test early builds',
-              href: 'https://testflight.apple.com/join/c9bgDxr7',
+              label: 'App Store',
+              href: APP_STORE_URL,
             },
             {
               label: 'Support',

@@ -13,8 +13,7 @@
   <a href="https://pauljoda.github.io/Prismedia/">Website</a> &middot;
   <a href="#quick-start">Quick start</a> &middot;
   <a href="https://pauljoda.github.io/Prismedia/docs/intro">Guides</a> &middot;
-  <a href="https://apps.apple.com/us/app/prismedia/id6792944211">Apple TV App Store</a> &middot;
-  <a href="https://testflight.apple.com/join/c9bgDxr7">TestFlight</a> &middot;
+  <a href="https://apps.apple.com/us/app/prismedia/id6792944211">App Store</a> &middot;
   <a href="https://www.reddit.com/r/Prismedia/">Community</a>
 </p>
 
@@ -26,7 +25,7 @@ Movies, series, music, books, audiobooks, comics, images, and galleries share a 
 
 The shared foundation is the **Entity**: a library item that holds its identity, metadata, artwork, files, relationships, and personal progress. A requested title becomes the same item you eventually play or read. The prism represents that idea: one light enters, and the different media experiences take their own colors.
 
-Run the server on your own computer or NAS. The web app is the complete management workspace; the native apps connect to the same server and account. The Apple TV app is available on the [App Store](https://apps.apple.com/us/app/prismedia/id6792944211), with early native builds, including iPhone and iPad, available through [TestFlight](https://testflight.apple.com/join/c9bgDxr7).
+Run the server on your own computer or NAS. The web app is the complete management workspace; the native apps connect to the same server and account. Download Prismedia for iPhone, iPad, and Apple TV from the [App Store](https://apps.apple.com/us/app/prismedia/id6792944211).
 
 ## What you can do
 

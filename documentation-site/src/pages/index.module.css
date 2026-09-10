@@ -529,13 +529,12 @@
   }
   .hero .actions {
     display: grid;
-    grid-template-columns: repeat(2, minmax(0, 1fr));
+    grid-template-columns: minmax(0, 1fr);
     gap: 10px;
     max-width: 370px;
     margin-inline: auto;
   }
   .hero .actions a { width: 100%; justify-content: center; }
-  .hero .actions a:first-child, .hero .actions a:last-child { grid-column: 1 / -1; }
 
   .section {
     padding-block: 58px;

@@ -824,6 +824,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Docs
 
+- Update the website and setup guides to use one App Store download for iPhone, iPad, and Apple TV.
 - Add a public security reporting page and researcher acknowledgments, linked from the website, support, and contribution guides.
 - Documented acquisition profile controls, verification stages, recovery behavior, and file-inventory limits.
 - Soften the documentation reading palette and fix tables that left unused space beside their columns, with clearer rows and contained scrolling on small screens.

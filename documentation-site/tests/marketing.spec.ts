@@ -56,7 +56,11 @@ test('phone layout keeps the media labels, setup links, and folder tables within
   await expect(page.locator('#product')).toHaveAttribute('data-motion', 'false');
   expect((await drawnBeams(page)).every((offset) => offset === 0)).toBe(true);
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await expect(page.getByRole('link', {name: 'Get the Apple TV app'})).toHaveAttribute('href', 'https://apps.apple.com/us/app/prismedia/id6792944211');
+  const downloads = page.locator('#platforms').getByRole('link', {name: 'Download on the App Store'});
+  await expect(downloads).toHaveCount(2);
+  for (const download of await downloads.all()) {
+    await expect(download).toHaveAttribute('href', 'https://apps.apple.com/us/app/prismedia/id6792944211');
+  }
   await page.getByRole('contentinfo').getByRole('link', {name: 'Organize your folders'}).click();
   await expect(page.getByRole('heading', {level: 1})).toHaveText('Organize Your Media Folders');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
@@ -98,8 +102,10 @@ test('hero actions lead to source, native downloads, and setup alongside all thr
   await page.goto('./');
   const hero = page.locator('header').filter({has: page.getByRole('heading', {level: 1})});
   const actions = hero.locator('a.marketing-glass');
-  await expect(actions).toHaveText(['View on GitHub', 'Apple TV App Store', 'TestFlight iPhone & iPad', 'Read the setup guide']);
+  await expect(actions).toHaveText(['View on GitHub', 'App Store iPhone, iPad & Apple TV', 'Read the setup guide']);
   await expect(actions.first()).toHaveAttribute('href', 'https://github.com/pauljoda/Prismedia');
+  await expect(actions.nth(1)).toHaveAttribute('href', 'https://apps.apple.com/us/app/prismedia/id6792944211');
+  await expect(page.locator('a[href*="testflight.apple.com"]')).toHaveCount(0);
   await expect(page.locator('.marketing-prism')).toHaveCount(1);
   const tv = page.getByRole('img', {name: 'Browse a movie collection in the native Apple TV app'});
   await expect(tv).toBeVisible();
@@ -116,6 +122,7 @@ test('narrow phones can open the menu without overlapping service links', async 
   await toggle.click();
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
   await expect(page.locator('.navbar-sidebar').getByRole('link', {name: /GitHub/})).toBeVisible();
+  await expect(page.locator('.navbar-sidebar').getByRole('link', {name: /App Store/})).toBeVisible();
   await page.locator('.navbar-sidebar').getByRole('link', {name: 'How it works', exact: true}).click();
   await expect(page).toHaveURL(/#workflow$/);
   await expect.poll(() => page.locator('#workflow').evaluate((section) => Math.abs(section.getBoundingClientRect().top - 75))).toBeLessThan(2);
