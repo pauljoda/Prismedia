@@ -10,7 +10,7 @@ export const acquisitionAccessLabels: Record<AcquisitionAccessKindCode, string> 
 };
 
 /** Familiar publication format names for standard MIME types returned by a source. */
-export function publicationFormatLabel(mediaType: string | null): string | null {
+export function publicationFormatLabel(mediaType: string | null | undefined): string | null {
   switch (mediaType?.split(";")[0].trim().toLowerCase()) {
     case "application/epub+zip": return "EPUB";
     case "application/pdf": return "PDF";
