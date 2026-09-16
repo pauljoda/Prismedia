@@ -104,9 +104,11 @@
         <p class="text-xs text-text-muted">Applies to {preview.state.targets.length} linked {preview.state.targets.length === 1 ? "item" : "items"}.</p>
         <Select ariaLabel="Manager profile" value={profileId} options={preview.options.profiles.map(profile => ({ value: profile.id, label: profile.label }))}
           onchange={value => profileId = value} disabled={busy || !!pending || !preview.state.capabilities.canChangeProfile} />
+        {#if !preview.state.capabilities.canChangeProfile}<p class="text-xs text-text-muted">Change this profile in the connected app.</p>{/if}
         <label class="flex items-center justify-between gap-3 text-sm">Monitoring
           <Toggle ariaLabel="Monitoring" checked={monitored} onchange={value => { monitored = value; monitoringChanged = true; }} disabled={busy || !!pending || !preview.state.capabilities.canChangeMonitoring} />
         </label>
+        {#if preview.state.capabilities.monitoringUnavailableReason}<p class="text-xs text-text-muted">{preview.state.capabilities.monitoringUnavailableReason}</p>{/if}
         {#if !monitoringChanged && preview.state.targets.some(target => target.monitored) && !preview.state.targets.every(target => target.monitored)}<p class="text-xs text-text-muted">Current monitoring varies across linked items. It will remain unchanged unless you change this control.</p>{/if}
         <label class="flex items-center gap-3 text-sm"><Checkbox aria-label="Search now" checked={search} onchange={value => search = value} disabled={busy || !!pending || !preview.state.capabilities.canSearch} />Search now</label>
         <p class="text-xs text-text-muted">Only settings you change are sent. The library folder stays managed by the connected app.</p>

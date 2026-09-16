@@ -10,7 +10,8 @@ public sealed record ManagedControlScope(ManagedItemInput Item, IReadOnlyList<Ma
 /// <summary>The manager's current monitoring flag for one selected target.</summary>
 public sealed record ManagedTargetMonitoring(ManagedControlTarget Target, bool Monitored);
 /// <summary>Operations the adapter can faithfully apply to this exact scope without changing unrelated targets.</summary>
-public sealed record ManagedControlCapabilities(bool CanSearch, bool CanChangeMonitoring, bool CanChangeProfile);
+public sealed record ManagedControlCapabilities(bool CanSearch, bool CanChangeMonitoring, bool CanChangeProfile,
+    string? MonitoringUnavailableReason = null);
 /// <summary>Remote command identity and its original queue timestamp, which fence reuse of transient numeric IDs.</summary>
 public sealed record ManagedCommandReference(string Id, DateTimeOffset QueuedAt);
 /// <summary>Observed command execution, never evidence that content has become locally available.</summary>

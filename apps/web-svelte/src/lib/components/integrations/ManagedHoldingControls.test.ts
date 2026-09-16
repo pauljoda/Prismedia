@@ -12,7 +12,7 @@ const preview: ManagedControlPreview = {
   state: {
     item: { remoteId: "1", entityKind: ENTITY_KIND.movie, title: "Film", year: null, externalIds: { tmdb: "42" }, monitored: false, profileId: "7", remoteFileCount: 0 },
     path: "/remote/film", targets: [{ target: { remoteId: "1", entityKind: ENTITY_KIND.movie, seasonNumber: null, episodeNumber: null, absoluteNumber: null }, monitored: false }],
-    capabilities: { canSearch: true, canChangeProfile: true, canChangeMonitoring: true }, command: null,
+    capabilities: { canSearch: true, canChangeProfile: true, canChangeMonitoring: true, monitoringUnavailableReason: null }, command: null,
   },
   options: { profiles: [{ id: "7", label: "Existing quality" }], roots: [] },
 };
@@ -61,5 +61,15 @@ describe("Manager controls", () => {
     api.fetchControlActions.mockResolvedValue([action({ phase: MANAGED_CONTROL_PHASE.completed, canCancel: false })]);
     await open(); await screen.findByText("Search completed");
     expect(screen.getByText(/Search completion does not mean a download or local file is available/)).toBeInTheDocument();
+  });
+  it("explains a parent monitoring restriction while leaving explicit search available", async () => {
+    api.fetchControlPreview.mockResolvedValue({ ...preview, state: { ...preview.state, capabilities: {
+      canSearch: true, canChangeProfile: false, canChangeMonitoring: false, monitoringUnavailableReason: "Series monitoring is disabled in the connected app.",
+    } } });
+    await open(); await fireEvent.click(screen.getByRole("button", { name: "Review manager settings" }));
+    await screen.findByText("Series monitoring is disabled in the connected app.");
+    expect(screen.getByRole("switch", { name: "Monitoring" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Manager profile" })).toBeDisabled();
+    expect(screen.getByRole("checkbox", { name: "Search now" })).toBeEnabled();
   });
 });

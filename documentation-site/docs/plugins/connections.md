@@ -236,8 +236,8 @@ not establish that Prismedia can read or play those files.
 The Radarr adapter supports Radarr 6.x API v3; the Sonarr adapter supports Sonarr 4.x API v3.
 Configure the application base URL, including any reverse-proxy prefix, and its API key.
 Multiple Connections keep their configuration and identities separate. Both adapters
-read existing holdings, profiles, and root folders. Radarr also supports the reviewed
-controls described below; Sonarr currently exposes read-only operations.
+read existing holdings, profiles, and root folders. Both support the reviewed
+controls described below, with different authority for movies and episode scopes.
 Sonarr preserves exact episode-to-file associations, including specials and files
 covering several episodes. Manager profile and folder IDs remain external choices.
 
@@ -349,6 +349,25 @@ new action afterward is a new explicit request.
 Action history survives queue-history removal and connection outages. These controls
 use typed `reconcile-managed`, `configure-managed`, and `request-managed` contracts;
 plugins cannot expose arbitrary manager endpoints through this API.
+
+### Control linked Sonarr episodes
+
+Sonarr plugin 1.1.0 or later uses the same durable action workflow for the exact
+episodes already linked to a holding. It pins the series identity and each episode's
+remote ID, season, episode number, and known absolute number. New episodes and changed
+coverage require explicit association review before entering that scope.
+
+**Search now** sends one `EpisodeSearch` for those episode IDs, including specials.
+It can search while the series is unmonitored and leaves all monitoring flags intact.
+It never substitutes a full-series or season search command. The manager still owns
+release selection; downloaded packs can contain additional content, which does not
+automatically expand Prismedia's linked scope.
+
+Episode monitoring changes require the parent series to be monitored already.
+Otherwise the control explains that restriction and remains unavailable. The series
+profile is also read-only here because it affects episodes outside the linked scope.
+Prismedia never enables the parent gate implicitly. Monitoring changes use only exact
+episode IDs and preserve unrelated episode flags, profile, folder, and files.
 
 ## Import from a URL
 

@@ -9,4 +9,6 @@ export interface ManagedControlCapabilities {
   canSearch: boolean;
   canChangeMonitoring: boolean;
   canChangeProfile: boolean;
+  /** @nullable */
+  monitoringUnavailableReason?: string | null;
 }
