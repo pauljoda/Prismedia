@@ -14,6 +14,68 @@ using DomainEntityExternalId = Prismedia.Domain.Entities.EntityExternalId;
 namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EntityMetadataApplyServiceTests {
+    [Fact]
+    public async Task ManualScalarClearIsProtectedAndUnlockingAllowsAttributedProviderEnrichment() {
+        await using var db = CreateContext();
+        var id = Guid.NewGuid();
+        SeedEntity(db, id, EntityKind.Book.ToCode(), "Book");
+        await db.SaveChangesAsync();
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        var fields = new[] { MetadataPatchField.Description.ToCode() };
+        await service.ApplyPatchAsync(id, new EntityMetadataUpdateRequest(fields, EmptyPatch()), default);
+        var proposal = new EntityMetadataProposal("book", "fixture-provider", EntityKind.Book, 0.9m, null,
+            EmptyPatch() with { Description = "Provider description" }, [], [], [], Relationships: []);
+        await service.ApplyAsync(id, proposal, fields, null, default);
+        Assert.Null(await db.EntityDescriptions.FindAsync(id));
+        var evidence = await db.EntityMetadataFields.FindAsync(id, MetadataPatchField.Description);
+        Assert.True(evidence!.IsLocked);
+        Assert.True(evidence.IsCleared);
+        Assert.Equal(MetadataValueOrigin.User, evidence.Origin);
+        evidence.Apply(evidence.Evidence().WithLock(false));
+        await db.SaveChangesAsync();
+        await service.ApplyAsync(id, proposal, fields, null, default);
+        Assert.Equal("Provider description", (await db.EntityDescriptions.FindAsync(id))!.Value);
+        Assert.Equal(MetadataValueOrigin.Provider, evidence.Origin);
+        Assert.Equal(proposal.Provider, evidence.ProviderId);
+        Assert.Equal(0.9m, evidence.Confidence);
+        Assert.False(evidence.IsCleared);
+    }
+
+    [Fact]
+    public async Task SparseProviderDoesNotTakeCreditForAnExistingValue() {
+        await using var db = CreateContext();
+        var id = Guid.NewGuid();
+        SeedEntity(db, id, EntityKind.Book.ToCode(), "Book");
+        await db.SaveChangesAsync();
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        var fields = new[] { MetadataPatchField.Description.ToCode() };
+        var proposal = new EntityMetadataProposal("book", "first-provider", EntityKind.Book, 0.8m, null,
+            EmptyPatch() with { Description = "Known description" }, [], [], [], Relationships: []);
+        await service.ApplyAsync(id, proposal, fields, null, default);
+        var original = (await db.EntityMetadataFields.FindAsync(id, MetadataPatchField.Description))!.Evidence();
+        await service.ApplyAsync(id, proposal with { Provider = "second-provider", Patch = EmptyPatch() }, fields, null, default);
+        Assert.Equal(original, (await db.EntityMetadataFields.FindAsync(id, MetadataPatchField.Description))!.Evidence());
+    }
+
+    [Fact]
+    public async Task RecursiveProviderEnrichmentRespectsChildTitleLockAndAttributesUnlockedDescription() {
+        await using var db = CreateContext();
+        var parent = Guid.NewGuid(); var child = Guid.NewGuid();
+        SeedEntity(db, parent, EntityKind.ComicSeries.ToCode(), "Series");
+        SeedEntity(db, child, EntityKind.ComicInstallment.ToCode(), "Chapter", parentEntityId: parent);
+        await db.SaveChangesAsync();
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        await service.ApplyPatchAsync(child, new EntityMetadataUpdateRequest([MetadataPatchField.Title.ToCode()], EmptyPatch() with { Title = "Curated issue label" }), default);
+        var node = new EntityMetadataProposal("issue", "fixture-provider", EntityKind.ComicInstallment, 0.7m, null,
+            EmptyPatch() with { Title = "Provider issue label", Description = "Issue description" }, [], [], [], TargetEntityId: child, Relationships: []);
+        var root = new EntityMetadataProposal("series", "fixture-provider", EntityKind.ComicSeries, 0.7m, null, EmptyPatch(), [], [node], [], Relationships: []);
+        await service.ApplyAsync(parent, root, [], null, default);
+        Assert.Equal("Curated issue label", (await db.Entities.FindAsync(child))!.Title);
+        Assert.Equal("Issue description", (await db.EntityDescriptions.FindAsync(child))!.Value);
+        Assert.Equal(MetadataValueOrigin.User, (await db.EntityMetadataFields.FindAsync(child, MetadataPatchField.Title))!.Origin);
+        Assert.Equal(MetadataValueOrigin.Provider, (await db.EntityMetadataFields.FindAsync(child, MetadataPatchField.Description))!.Origin);
+    }
+
     [Theory]
     [InlineData(null)]
     [InlineData("")]
@@ -36,6 +98,9 @@ public sealed class EntityMetadataApplyServiceTests {
         var originalLinks = await db.EntityRelationshipLinks.Where(row => row.EntityId == entityId)
             .Select(row => row.TargetEntityId).ToArrayAsync();
         Assert.NotEmpty(originalLinks);
+        // Exercise omission independently of locks: even an unlocked value must survive absent evidence.
+        foreach (var field in await db.EntityMetadataFields.Where(row => row.EntityId == entityId).ToArrayAsync()) field.Apply(field.Evidence().WithLock(false));
+        await db.SaveChangesAsync();
         var proposal = new EntityMetadataProposal("sparse-book", "fixture-provider", EntityKind.Book, null, null,
             EmptyPatch() with { Description = missingValue, Classification = missingValue }, [], [], [], Relationships: []);
 

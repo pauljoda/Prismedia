@@ -169,6 +169,8 @@ public static class ApiProblemCodes {
 
     /// <summary>Problem code <c>invalid_entity_metadata_patch</c>.</summary>
     public const string InvalidEntityMetadataPatch = "invalid_entity_metadata_patch";
+    /// <summary>A metadata protection edit used stale value provenance.</summary>
+    public const string MetadataFieldConflict = "metadata_field_conflict";
 
     /// <summary>Problem code <c>invalid_path</c>.</summary>
     public const string InvalidPath = "invalid_path";

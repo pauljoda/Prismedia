@@ -224,6 +224,7 @@ public static class DependencyInjection {
             settings: provider.GetRequiredService<Prismedia.Application.Settings.SettingsService>()));
         services.AddScoped<IEntityMetadataPatchService>(provider =>
             provider.GetRequiredService<EntityMetadataApplyService>());
+        services.AddScoped<IMetadataFieldService, EfMetadataFieldService>();
         services.AddScoped<IEntityPositionEnricher>(provider =>
             provider.GetRequiredService<EntityMetadataApplyService>());
         services.AddScoped<IEntityManagementService, EntityManagementService>();

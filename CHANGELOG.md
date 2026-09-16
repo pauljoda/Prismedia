@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Metadata protection shows the source of titles, descriptions, and classifications. Manual edits and explicit clears are protected from provider enrichment until unlocked; protection also applies to children updated through a parent proposal.
+
 - URL executor requests can be cancelled before local import. Cancellation survives restarts, reconciles uncertain submissions, and preserves the actual remote outcome when completion wins the race.
 
 - Import books and comics from inspected URLs through compatible executor connections. Durable operations recover uncertain submissions, verify exact output files, and retry import acknowledgements independently. A separate Archiver simulator exercises restart and response-loss recovery.

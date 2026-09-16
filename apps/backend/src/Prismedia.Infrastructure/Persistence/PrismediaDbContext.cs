@@ -30,6 +30,7 @@ public sealed class PrismediaDbContext : DbContext {
     public DbSet<EntityCollectionMemberCountRow> EntityCollectionMemberCounts => Set<EntityCollectionMemberCountRow>();
 
     public DbSet<EntityDescriptionRow> EntityDescriptions => Set<EntityDescriptionRow>();
+    public DbSet<EntityMetadataFieldRow> EntityMetadataFields => Set<EntityMetadataFieldRow>();
 
     public DbSet<EntityRelationshipLinkRow> EntityRelationshipLinks => Set<EntityRelationshipLinkRow>();
 

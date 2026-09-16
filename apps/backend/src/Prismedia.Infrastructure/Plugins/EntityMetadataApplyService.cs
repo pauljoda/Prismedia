@@ -232,6 +232,7 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
 
         var now = DateTimeOffset.UtcNow;
         await ApplyScopedPatchToEntityAsync(entity, fields, request.Patch, now, cancellationToken);
+        await RecordScalarEvidenceAsync(entity.Id, request.Patch, fields, null, now, cancellationToken);
 
         if (fields.Contains(MetadataPatchField.Images.ToCode()) && request.SelectedImages is not null) {
             await _artwork.DownloadSelectedImagesAsync(entityId, request.SelectedImages, now, cancellationToken);
@@ -437,6 +438,8 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         }
 
         var selected = selectedFields.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var locked = await LockedScalarFieldsAsync(entity.Id, cancellationToken);
+        selected.ExceptWith(locked.Select(field => field.ToCode()));
         var patch = proposal.Patch;
         var now = DateTimeOffset.UtcNow;
         var rootTitle = !string.IsNullOrWhiteSpace(patch.Title) ? patch.Title.Trim() : entity.Title;
@@ -502,6 +505,8 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         if (patch.Flags?.IsNsfw == true) {
             await UpsertFlagsAsync(entityId, new EntityMetadataFlagsPatch(null, true, null), now, cancellationToken);
         }
+
+        await RecordScalarEvidenceAsync(entity.Id, patch, selected, proposal, now, cancellationToken);
 
         // Walk the root's related entities and structural children through the single recursive node
         // applier. Relationship proposals only enrich entities the root's credit/studio/tags fields

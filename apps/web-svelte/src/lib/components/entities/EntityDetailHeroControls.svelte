@@ -5,6 +5,8 @@
   import type { Snippet } from "svelte";
   import type { EntityDetailCard } from "$lib/entities/entity-detail";
   import EntityActionButton from "./EntityActionButton.svelte";
+  import EntityMetadataProtection from "./EntityMetadataProtection.svelte";
+  import { useSession } from "$lib/stores/session.svelte";
   import { isWanted } from "$lib/api/capabilities";
   import { acquisitionStatusDisplay } from "$lib/requests/acquisition-status-display";
   import type { EntityDetailActionButton, EntityDetailProps } from "./entity-detail-types";
@@ -53,6 +55,7 @@
     wantedStatus,
   }: Props = $props();
 
+  const session = useSession();
   const providerIdentityLabel = $derived(card.providerIdentity?.pluginId ?? "");
   const wanted = $derived(isWanted(card.entity.capabilities));
   const acquisitionStatus = $derived(acquisitionStatusDisplay(
@@ -152,6 +155,9 @@
               onClick={onStartEdit}
             />
           {/if}
+        {/if}
+        {#if canEdit && !editing && session.isAdmin}
+          {#key card.entity.id}<EntityMetadataProtection entityId={card.entity.id} />{/key}
         {/if}
         {#each actionButtons as action (action.id)}
           {#if action.href && !action.disabled}

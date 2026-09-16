@@ -6,6 +6,23 @@ namespace Prismedia.Infrastructure.Persistence;
 
 internal static class EntityRelationshipModelConfiguration {
     public static void ConfigureEntityRelationshipModel(this ModelBuilder modelBuilder) {
+        modelBuilder.Entity<EntityMetadataFieldRow>(entity => {
+            entity.ToTable("entity_metadata_fields");
+            entity.HasKey(row => new { row.EntityId, row.Field });
+            entity.Property(row => row.EntityId).HasColumnName("entity_id");
+            entity.Property(row => row.Field).HasColumnName("field").HasMaxLength(64)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<MetadataPatchField>());
+            entity.Property(row => row.Origin).HasColumnName("origin").HasMaxLength(32)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<MetadataValueOrigin>());
+            entity.Property(row => row.ProviderId).HasColumnName("provider_id").HasMaxLength(128);
+            entity.Property(row => row.ObservedAt).HasColumnName("observed_at");
+            entity.Property(row => row.Confidence).HasColumnName("confidence").HasPrecision(7, 6);
+            entity.Property(row => row.IsCleared).HasColumnName("is_cleared");
+            entity.Property(row => row.IsLocked).HasColumnName("is_locked");
+            entity.Property(row => row.Revision).HasColumnName("revision").IsConcurrencyToken();
+            entity.HasOne<EntityRow>().WithMany().HasForeignKey(row => row.EntityId).OnDelete(DeleteBehavior.Cascade);
+        });
+
         modelBuilder.Entity<EntityRelationshipLinkRow>(entity => {
             entity.ToTable("entity_relationship_links");
             entity.HasKey(row => new { row.EntityId, row.RelationshipCode, row.TargetEntityId });

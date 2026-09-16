@@ -7,6 +7,7 @@ public static class EntityEndpoints {
 
         group.MapEntityListEndpoint();
         group.MapEntityDetailEndpoint();
+        group.MapEntityMetadataFieldsEndpoint();
         group.MapEntityThumbnailEndpoint();
         group.MapEntityHoverImagesEndpoint();
         group.MapEntityChildrenEndpoint();

@@ -294,13 +294,16 @@ public sealed partial class EntityMetadataApplyService {
         var path = parentPath.Count == 0 ? [title] : parentPath.Concat([title]).ToArray();
         await ReportApplyProgressAsync(progress, entity.KindCode.DecodeAs<EntityKind>(), title, path, cancellationToken);
 
-        await ApplyPatchToEntityAsync(entity, node.Patch, isRelationship ? [] : node.Images, now, cancellationToken);
+        var locked = await LockedScalarFieldsAsync(entity.Id, cancellationToken);
+        var acceptedPatch = PreserveLockedScalars(node.Patch, locked);
+        await ApplyPatchToEntityAsync(entity, acceptedPatch, isRelationship ? [] : node.Images, now, cancellationToken);
+        await RecordScalarEvidenceAsync(entity.Id, acceptedPatch, MetadataFieldProtection.Fields.Select(field => field.ToCode()), node, now, cancellationToken);
         await BindProviderIdentityAsync(
             entity,
             node.Provider,
             node.Patch.ExternalIds,
             cancellationToken);
-        await ReplaceProviderAlternativeTitlesAsync(entity, node, now, cancellationToken);
+        if (!locked.Contains(MetadataPatchField.Title)) await ReplaceProviderAlternativeTitlesAsync(entity, node, now, cancellationToken);
         if (isRelationship) {
             await ApplyRelationshipArtworkAsync(entity, node, now, cancellationToken);
         }

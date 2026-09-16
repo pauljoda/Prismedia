@@ -1265,6 +1265,15 @@ export const METADATA_PATCH_FIELD = {
 
 export type MetadataPatchFieldCode = (typeof METADATA_PATCH_FIELD)[keyof typeof METADATA_PATCH_FIELD];
 
+// source: enum MetadataValueOrigin
+export const METADATA_VALUE_ORIGIN = {
+  unknown: "unknown",
+  user: "user",
+  provider: "provider",
+} as const;
+
+export type MetadataValueOriginCode = (typeof METADATA_VALUE_ORIGIN)[keyof typeof METADATA_VALUE_ORIGIN];
+
 // source: enum MonitorPreset
 export const MONITOR_PRESET = {
   all: "all",
@@ -1747,6 +1756,7 @@ export const PROBLEM_CODE = {
   invalidUpload: "invalid_upload",
   lastAdminRequired: "last_admin_required",
   libraryRootPathConflict: "library_root_path_conflict",
+  metadataFieldConflict: "metadata_field_conflict",
   notFound: "not_found",
   passwordInvalid: "password_invalid",
   playbackItemNotFound: "playback_item_not_found",

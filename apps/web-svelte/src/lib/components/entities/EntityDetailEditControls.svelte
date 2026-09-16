@@ -35,6 +35,7 @@
     </Alert.Root>
   {/if}
   <div class="w-full min-w-0">
+    <p class="mb-3 text-sm text-muted-foreground">Changes to the title, description, and classification are protected from provider updates. Manage these locks in Metadata protection.</p>
     <FormActions {onSave} {onCancel} {saving} {saveDisabled} {saveLabel} {cancelLabel} />
   </div>
 </div>

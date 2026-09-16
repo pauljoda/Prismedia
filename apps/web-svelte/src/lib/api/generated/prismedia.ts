@@ -201,6 +201,7 @@ import type {
   ManualReplacementQueueRequest,
   ManualReplacementSearchRequest,
   ManualReplacementSearchResult,
+  MetadataFieldResponse,
   MissingChildrenCommitRequest,
   MissingChildrenCommitResponse,
   MonitorCreateRequest,
@@ -258,6 +259,7 @@ import type {
   TranscodeCacheStatusResponse,
   UpdateCheckResponse,
   UpdateConnectionRequest,
+  UpdateMetadataFieldLockRequest,
   UpdateMusicPlayerProgressRequest,
   UpdateMusicPlayerStateRequest,
   UpdateOpenSubtitlesConfigurationRequest,
@@ -2615,6 +2617,100 @@ export const deleteEntity = async (id: string,
     method: 'DELETE'
 
 
+  }
+);}
+
+
+
+export type getEntityMetadataFieldsResponse200 = {
+  data: MetadataFieldResponse[]
+  status: 200
+}
+
+export type getEntityMetadataFieldsResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type getEntityMetadataFieldsResponseSuccess = (getEntityMetadataFieldsResponse200) & {
+  headers: Headers;
+};
+export type getEntityMetadataFieldsResponseError = (getEntityMetadataFieldsResponse404) & {
+  headers: Headers;
+};
+
+export type getEntityMetadataFieldsResponse = (getEntityMetadataFieldsResponseSuccess | getEntityMetadataFieldsResponseError)
+
+export const getGetEntityMetadataFieldsUrl = (id: string,) => {
+
+
+
+
+  return `/api/entities/${id}/metadata-fields`
+}
+
+export const getEntityMetadataFields = async (id: string, options?: RequestInit): Promise<getEntityMetadataFieldsResponse> => {
+
+  return orvalFetch<getEntityMetadataFieldsResponse>(getGetEntityMetadataFieldsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type setEntityMetadataFieldLockResponse200 = {
+  data: MetadataFieldResponse
+  status: 200
+}
+
+export type setEntityMetadataFieldLockResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type setEntityMetadataFieldLockResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type setEntityMetadataFieldLockResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type setEntityMetadataFieldLockResponseSuccess = (setEntityMetadataFieldLockResponse200) & {
+  headers: Headers;
+};
+export type setEntityMetadataFieldLockResponseError = (setEntityMetadataFieldLockResponse400 | setEntityMetadataFieldLockResponse404 | setEntityMetadataFieldLockResponse409) & {
+  headers: Headers;
+};
+
+export type setEntityMetadataFieldLockResponse = (setEntityMetadataFieldLockResponseSuccess | setEntityMetadataFieldLockResponseError)
+
+export const getSetEntityMetadataFieldLockUrl = (id: string,
+    field: string,) => {
+
+
+
+
+  return `/api/entities/${id}/metadata-fields/${field}`
+}
+
+export const setEntityMetadataFieldLock = async (id: string,
+    field: string,
+    updateMetadataFieldLockRequest: UpdateMetadataFieldLockRequest, options?: RequestInit): Promise<setEntityMetadataFieldLockResponse> => {
+
+  return orvalFetch<setEntityMetadataFieldLockResponse>(getSetEntityMetadataFieldLockUrl(id,field),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateMetadataFieldLockRequest,)
   }
 );}
 
