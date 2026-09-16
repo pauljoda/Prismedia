@@ -7,6 +7,9 @@ namespace Prismedia.Infrastructure.Media.Persistence;
 
 public sealed partial class LibraryScanPersistenceService {
     /// <inheritdoc />
+    public async Task<IReadOnlyList<Guid>> ListManagedHoldingsForRootAsync(Guid rootId, CancellationToken token) =>
+        await _db.ManagedHoldings.AsNoTracking().Where(holding => holding.LibraryRootId == rootId).Select(holding => holding.Id).ToArrayAsync(token);
+    /// <inheritdoc />
     public async Task<IReadOnlyList<string>> ListPendingVideoReplacementPathsAsync(CancellationToken cancellationToken) {
         var paths = new HashSet<string>(FileSystemPathComparison.Comparer);
         foreach (var pending in await ListPendingVideoReplacementsAsync(cancellationToken)) {

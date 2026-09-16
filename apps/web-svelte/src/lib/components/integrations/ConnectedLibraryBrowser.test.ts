@@ -4,7 +4,7 @@ import { CONNECTION_STATUS, ENTITY_KIND, INTEGRATION_OPERATION, PLUGIN_CAPABILIT
 import type { ConnectionResponse } from "$lib/api/generated/model";
 import ConnectedLibraryBrowser from "./ConnectedLibraryBrowser.svelte";
 
-const api = vi.hoisted(() => ({ fetchManagedLibrary: vi.fn(), fetchManagedItem: vi.fn(), fetchManagerOptions: vi.fn(), fetchLibraryMounts: vi.fn(), inspectLocalLibraryAccess: vi.fn() }));
+const api = vi.hoisted(() => ({ fetchManagedTracking: vi.fn(), fetchManagedLibrary: vi.fn(), fetchManagedItem: vi.fn(), fetchManagerOptions: vi.fn(), fetchLibraryMounts: vi.fn(), inspectLocalLibraryAccess: vi.fn() }));
 vi.mock("$lib/api/managed-libraries", () => api);
 const connection: ConnectionResponse = {
   id: "connection-one", pluginId: "fixture-manager", name: "Existing collection", baseUrl: "http://manager.test/", enabled: true,
@@ -22,6 +22,7 @@ describe("Connected library browser", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     api.fetchLibraryMounts.mockResolvedValue([]);
+    api.fetchManagedTracking.mockResolvedValue([]);
     api.fetchManagedLibrary.mockResolvedValue({ items: [item], nextCursor: null });
     api.fetchManagedItem.mockResolvedValue(snapshot);
     api.fetchManagerOptions.mockResolvedValue({ profiles: [{ id: "4", label: "Existing quality" }], roots: [] });

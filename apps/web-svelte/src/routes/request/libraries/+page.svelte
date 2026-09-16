@@ -3,7 +3,7 @@
   import { page } from "$app/state";
   import { Library, ShieldUser } from "@lucide/svelte";
   import { Alert, Select, buttonVariants } from "@prismedia/ui-svelte";
-  import { CONNECTION_STATUS, INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
+  import { CONNECTION_STATUS, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
   import type { ConnectionResponse } from "$lib/api/generated/model";
   import { fetchConnections } from "$lib/api/connections";
   import { useSession } from "$lib/stores/session.svelte";
@@ -19,10 +19,9 @@
   onMount(() => { if (session.isAdmin) void initialize(); else loading = false; });
   async function initialize() {
     try {
-      connections = (await fetchConnections()).filter(item => item.status === CONNECTION_STATUS.ready
-        && item.effectiveCapabilities.some(capability => capability.kind === PLUGIN_CAPABILITY.connectedLibrary
-          && capability.operations.includes(INTEGRATION_OPERATION.searchLibrary) && capability.operations.includes(INTEGRATION_OPERATION.getLibraryItem)));
-      connectionId = connections.find(item => item.id === page.url.searchParams.get("connection"))?.id ?? connections[0]?.id ?? "";
+      connections = (await fetchConnections()).filter(item => item.enabledCapabilities.includes(PLUGIN_CAPABILITY.connectedLibrary));
+      connectionId = connections.find(item => item.id === page.url.searchParams.get("connection"))?.id
+        ?? connections.find(item => item.status === CONNECTION_STATUS.ready)?.id ?? connections[0]?.id ?? "";
     } catch (cause) { error = cause instanceof Error ? cause.message : "Could not load connected libraries"; }
     finally { loading = false; }
   }

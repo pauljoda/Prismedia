@@ -175,6 +175,8 @@ public abstract class ScanJobHandler(
             }
             await using var acquiredScanScope = scanScope;
 
+            if (await DelegateRootReconciliationAsync(context, root, cancellationToken)) return;
+
             if (snapshots is null) {
                 // No snapshot store wired (e.g. in unit tests): always run the full scan.
                 mode = "full-no-snapshot-store";
@@ -490,6 +492,9 @@ public abstract class ScanJobHandler(
 
     /// <summary>Returns true if this root should be scanned by this handler's media type.</summary>
     protected abstract bool IsEligibleRoot(LibraryRootData root);
+
+    /// <summary>Allows an authoritative external owner to replace ordinary path discovery for this root.</summary>
+    protected virtual Task<bool> DelegateRootReconciliationAsync(JobContext context, LibraryRootData root, CancellationToken token) => Task.FromResult(false);
 
     /// <summary>
     /// The media categories this handler enumerates under a root. Drives the incremental snapshot, so

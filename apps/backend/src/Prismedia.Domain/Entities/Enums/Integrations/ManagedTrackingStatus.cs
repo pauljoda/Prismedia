@@ -1,0 +1,13 @@
+namespace Prismedia.Domain.Entities;
+
+/// <summary>Health of a retained association with an externally managed holding.</summary>
+public enum ManagedTrackingStatus {
+    /// <summary>Explicit local associations are awaiting worker verification.</summary>
+    [Code("pending")] Pending,
+    /// <summary>The most recent observation reconciled the established scope.</summary>
+    [Code("tracking")] Tracking,
+    /// <summary>Identity, coverage, or source ownership needs an explicit decision.</summary>
+    [Code("needs-review")] NeedsReview,
+    /// <summary>The connected service could not be observed; previous evidence is retained.</summary>
+    [Code("stale")] Stale
+}

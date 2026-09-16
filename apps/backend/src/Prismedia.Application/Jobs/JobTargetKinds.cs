@@ -12,4 +12,7 @@ public static class JobTargetKinds {
 
     /// <summary>Durable plugin transfer operation, independent of a library entity or queue run.</summary>
     public const string IntegrationTransfer = "integration-transfer";
+
+    /// <summary>Durable association with an externally managed holding.</summary>
+    public const string ManagedHolding = "managed-holding";
 }

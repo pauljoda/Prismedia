@@ -45,6 +45,17 @@ public sealed class ScanLibraryJobHandler(
 
     protected override bool IsEligibleRoot(LibraryRootData root) => root.ScanVideos;
 
+    protected override async Task<bool> DelegateRootReconciliationAsync(JobContext context, LibraryRootData root, CancellationToken token) {
+        var holdings = await videos.ListManagedHoldingsForRootAsync(root.Id, token);
+        if (holdings.Count == 0) return false;
+        // Reserve the whole mapped root: an external manager can rename the holding folder as well
+        // as its files. A folder-only reservation would let path discovery duplicate established IDs.
+        foreach (var id in holdings) await context.EnqueueIfNeededAsync(new EnqueueJobRequest(JobType.ManagedLibraryReconcile,
+            TargetEntityKind: JobTargetKinds.ManagedHolding, TargetEntityId: id.ToString(), TargetLabel: root.Label,
+            ResourceKey: JobResourceKeys.LibraryScan), token);
+        return true;
+    }
+
     protected override IReadOnlyList<MediaCategory> ScanCategories => [MediaCategory.Video];
 
     protected override IReadOnlyList<MediaCategory> SnapshotCategories =>

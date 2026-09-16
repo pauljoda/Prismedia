@@ -161,6 +161,10 @@ public enum JobType {
     [Code("integration-transfer")]
     IntegrationTransfer,
 
+    /// <summary>Verifies and reconciles an existing connected holding while retaining local entity identity.</summary>
+    [Code("managed-library-reconcile")]
+    ManagedLibraryReconcile,
+
     /// <summary>Searches configured indexers for an acquisition's book and persists scored release candidates.</summary>
     [Code("acquisition-search")]
     AcquisitionSearch,

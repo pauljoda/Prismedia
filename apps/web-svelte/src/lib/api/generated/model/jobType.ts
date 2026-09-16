@@ -46,6 +46,7 @@ export const JobType = {
   'auto-identify': 'auto-identify',
   'identify-cascade': 'identify-cascade',
   'integration-transfer': 'integration-transfer',
+  'managed-library-reconcile': 'managed-library-reconcile',
   'acquisition-search': 'acquisition-search',
   'acquisition-monitor': 'acquisition-monitor',
   'acquisition-import': 'acquisition-import',

@@ -10,6 +10,7 @@ export type EntityCapabilityImagesCapabilitySupportedKindsItem = typeof EntityCa
 
 export const EntityCapabilityImagesCapabilitySupportedKindsItem = {
   source: 'source',
+  'unavailable-source': 'unavailable-source',
   thumbnail: 'thumbnail',
   'grid-thumbnail': 'grid-thumbnail',
   'grid-thumbnail-2x': 'grid-thumbnail-2x',

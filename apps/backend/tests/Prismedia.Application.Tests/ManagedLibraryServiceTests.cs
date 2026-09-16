@@ -23,7 +23,7 @@ public sealed class ManagedLibraryServiceTests {
     public async Task RevokedManifestCannotReadSecretsOrExecuteLibraryOperations() {
         var fixture = new Fixture();
         fixture.Manifest = fixture.Manifest with { Integration = new(1, [], []) };
-        await Assert.ThrowsAsync<ArgumentException>(() => fixture.Service.SearchAsync(fixture.Connection.State.Id, new(EntityKind.Movie), default));
+        await Assert.ThrowsAsync<ConnectionCapabilityUnavailableException>(() => fixture.Service.SearchAsync(fixture.Connection.State.Id, new(EntityKind.Movie), default));
         Assert.Equal(0, fixture.SecretReads);
         Assert.Equal(0, fixture.Calls);
     }

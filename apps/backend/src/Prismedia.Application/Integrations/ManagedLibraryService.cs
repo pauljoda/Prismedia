@@ -36,6 +36,12 @@ public sealed class ManagedLibraryService(IntegrationConnectionAccess access, II
                     || target.SeasonNumber < 0 || target.EpisodeNumber < 0 || target.AbsoluteNumber < 0) throw Invalid();
             }
         }
+        var targets = snapshot.Files.SelectMany(file => file.Targets).ToArray();
+        if (targets.Select(target => target.RemoteId).Distinct(StringComparer.Ordinal).Count() != targets.Length
+            || input.EntityKind == EntityKind.Movie && targets.Any(target => target.EntityKind != EntityKind.Movie || target.RemoteId != input.RemoteId
+                || target.SeasonNumber is not null || target.EpisodeNumber is not null || target.AbsoluteNumber is not null)
+            || input.EntityKind == EntityKind.VideoSeries && targets.Any(target => target.EntityKind != EntityKind.VideoEpisode
+                || target.SeasonNumber is null || target.EpisodeNumber is null)) throw Invalid();
         return snapshot;
     }
 

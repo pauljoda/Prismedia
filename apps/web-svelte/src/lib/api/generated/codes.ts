@@ -755,6 +755,7 @@ export type EntityEngagementModeCode = (typeof ENTITY_ENGAGEMENT_MODE)[keyof typ
 // source: enum EntityFileRole
 export const ENTITY_FILE_ROLE = {
   source: "source",
+  unavailableSource: "unavailable-source",
   thumbnail: "thumbnail",
   gridThumbnail: "grid-thumbnail",
   gridThumbnail2x: "grid-thumbnail-2x",
@@ -1180,6 +1181,7 @@ export const JOB_TYPE = {
   autoIdentify: "auto-identify",
   identifyCascade: "identify-cascade",
   integrationTransfer: "integration-transfer",
+  managedLibraryReconcile: "managed-library-reconcile",
   acquisitionSearch: "acquisition-search",
   acquisitionMonitor: "acquisition-monitor",
   acquisitionImport: "acquisition-import",
@@ -1202,6 +1204,16 @@ export const LIBRARY_ROOT_MEDIA_CAPABILITY = {
 } as const;
 
 export type LibraryRootMediaCapabilityCode = (typeof LIBRARY_ROOT_MEDIA_CAPABILITY)[keyof typeof LIBRARY_ROOT_MEDIA_CAPABILITY];
+
+// source: enum ManagedTrackingStatus
+export const MANAGED_TRACKING_STATUS = {
+  pending: "pending",
+  tracking: "tracking",
+  needsReview: "needs-review",
+  stale: "stale",
+} as const;
+
+export type ManagedTrackingStatusCode = (typeof MANAGED_TRACKING_STATUS)[keyof typeof MANAGED_TRACKING_STATUS];
 
 // source: enum MediaFileIgnoreReason
 export const MEDIA_FILE_IGNORE_REASON = {

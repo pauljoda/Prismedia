@@ -16,7 +16,7 @@ public sealed class CatalogDiscoveryServiceTests {
         Assert.Equal(0, fixture.DiscoveryCalls);
         fixture.PluginAvailable = true;
         fixture.Manifest = fixture.Manifest with { Integration = new(1, [], []) };
-        await Assert.ThrowsAsync<ArgumentException>(() => fixture.Service.BrowseAsync(fixture.Connection.State.Id, new(EntityKind.Book), default));
+        await Assert.ThrowsAsync<ConnectionCapabilityUnavailableException>(() => fixture.Service.BrowseAsync(fixture.Connection.State.Id, new(EntityKind.Book), default));
         Assert.Equal(0, fixture.SecretReads);
     }
 

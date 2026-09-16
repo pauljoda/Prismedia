@@ -60,6 +60,9 @@ public sealed record ImportedEntityReadyScope(
 
 /// <summary>Video scan persistence operations for discovered files and stale cleanup.</summary>
 public interface IVideoScanPersistence {
+    /// <summary>Existing connected holdings whose mapped root must be reconciled through stable external identity rather than path discovery.</summary>
+    Task<IReadOnlyList<Guid>> ListManagedHoldingsForRootAsync(Guid rootId, CancellationToken token) =>
+        Task.FromResult<IReadOnlyList<Guid>>([]);
     Task<int> RemoveStalePlayableVideosByRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken);
     Task<int> RemoveStaleMoviesByRootAsync(Guid rootId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken);
     Task<int> RemoveOrphanSeriesAndSeasonsAsync(CancellationToken cancellationToken);

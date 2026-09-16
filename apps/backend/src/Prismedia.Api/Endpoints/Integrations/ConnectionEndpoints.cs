@@ -69,6 +69,19 @@ public static class ConnectionEndpoints {
         group.MapPost("/{id:guid}/library/local-access", async (Guid id, ManagedItemInput request, ExternalLibraryService service, CancellationToken cancellationToken) =>
             Results.Ok(await service.InspectAsync(id, request, cancellationToken)))
             .WithName("InspectExternalLibraryAccess").Produces<MappedLibrarySnapshot>().Produces<ApiProblem>(400);
+        group.MapPost("/{id:guid}/library/tracking-preview", async (Guid id, ManagedItemInput request, ManagedTrackingService service, CancellationToken token) =>
+            Results.Ok(await service.PreviewAsync(id, request, token)))
+            .WithName("PreviewManagedTracking").Produces<ManagedTrackingPreview>().Produces<ApiProblem>(400);
+        group.MapGet("/{id:guid}/library/tracking", async (Guid id, ManagedTrackingService service, CancellationToken token) =>
+            Results.Ok(await service.ListAsync(id, token)))
+            .WithName("ListManagedTracking").Produces<IReadOnlyList<ManagedTrackingResponse>>();
+        group.MapPost("/{id:guid}/library/tracking", async (Guid id, TrackManagedHoldingRequest request, ManagedTrackingService service, CancellationToken token) =>
+            Results.Accepted(value: await service.TrackAsync(id, request, token)))
+            .WithName("TrackManagedHolding").Produces<ManagedTrackingResponse>(202).Produces<ApiProblem>(400);
+        group.MapPost("/{id:guid}/library/tracking/{holdingId:guid}/refresh", async (Guid id, Guid holdingId, ManagedTrackingService service, CancellationToken token) => {
+            await service.RefreshAsync(id, holdingId, token);
+            return Results.Accepted();
+        }).WithName("RefreshManagedHolding").Produces(202).Produces<ApiProblem>(400);
         return group;
     }
 

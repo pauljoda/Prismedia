@@ -13,6 +13,23 @@ namespace Prismedia.Api.Tests;
 
 public sealed class ScanJobHandlerTests {
     [Fact]
+    public async Task TrackedRootDelegatesBeforeDiscoveringRenamedFoldersOrRebindingSignatures() {
+        var root = new LibraryRootData(Guid.NewGuid(), "/media/external", "External", true, true,
+            ScanVideos: true, ScanImages: false, ScanAudio: false, ScanBooks: false, IsNsfw: false);
+        var holding = Guid.NewGuid();
+        var persistence = new FakeScanPersistence([root]) { ManagedHoldings = [holding] };
+        var queue = new RecordingJobQueue();
+        var handler = new ScanLibraryJobHandler(NullLogger<ScanLibraryJobHandler>.Instance,
+            new RecordingFileDiscovery(["/media/external/new-name/movie.mkv"]), persistence, persistence, persistence);
+        await handler.HandleAsync(new JobContext(SingleRootScanJob(root), queue), default);
+        Assert.Empty(persistence.UpsertedVideoItems);
+        var reconcile = Assert.Single(queue.Enqueued);
+        Assert.Equal(JobType.ManagedLibraryReconcile, reconcile.Type);
+        Assert.Equal(holding.ToString(), reconcile.TargetEntityId);
+        Assert.Equal(JobResourceKeys.LibraryScan, reconcile.ResourceKey);
+    }
+
+    [Fact]
     public async Task VideoScanDefersPendingReplacementWithoutHidingUnrelatedFiles() {
         var root = new LibraryRootData(Guid.NewGuid(), "/media/videos", "Videos", true, true,
             ScanVideos: true, ScanImages: false, ScanAudio: false, ScanBooks: false, IsNsfw: false);
@@ -3456,6 +3473,8 @@ public sealed class ScanJobHandlerTests {
     }
 
     private sealed class FakeScanPersistence(IReadOnlyList<LibraryRootData> roots) : ILibraryScanRootPersistence, IVideoScanPersistence, IDownstreamNeedsPersistence, IImageGalleryScanPersistence, IAudioScanPersistence, IBookScanPersistence, IComicScanPersistence {
+        public IReadOnlyList<Guid> ManagedHoldings { get; init; } = [];
+        public Task<IReadOnlyList<Guid>> ListManagedHoldingsForRootAsync(Guid rootId, CancellationToken token) => Task.FromResult(ManagedHoldings);
         public IReadOnlyList<string> PendingReplacementPaths { get; set; } = [];
         public Task<IReadOnlyList<string>> ListPendingVideoReplacementPathsAsync(CancellationToken cancellationToken) =>
             Task.FromResult(PendingReplacementPaths);

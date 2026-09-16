@@ -273,7 +273,33 @@ the local root. Missing or mismatched files remain explicit failures. Matching s
 does not establish a content hash, a completed library import, or playback availability.
 Missing external files and empty managed containers retain their catalog records and user
 history during scans. Their presence in the catalog does not prove current byte access.
-These mappings do not yet bind remote file upgrades to existing Prismedia identities.
+
+### Track existing holdings
+
+After the initial library scan, inspect a holding and choose **Match existing items**.
+Prismedia compares exact mapped source paths, media kinds, and episode coordinates,
+including all episodes sharing one file. **Link existing items** saves those reviewed
+associations before a worker verifies them again. Conflicting provider identities,
+native monitors, active acquisitions, or existing connected ownership prevent linking.
+
+Tracking observes the connected application every five minutes and can be refreshed
+manually. Renames, including a renamed containing folder, and same-scope replacements
+retain local entity IDs, file IDs, and user history. Byte-derived metadata and cached
+playback assets are refreshed for replacements. Missing or unreadable files retain
+their records with an unavailable source role, so catalog presence does not imply
+playability. Connection outages retain the last associations and show stale status;
+they never start a native fallback acquisition.
+
+Changed target identity, numbering, shared-file coverage, or a conflicting local owner
+requires review. Unverified source availability is withdrawn while the association
+remains intact. Restoring the expected scope and refreshing tracking can recover it.
+
+Once a root has a tracked holding, video scans delegate to its saved holdings. This
+reserves the entire mapped root against path-based discovery, including external folder
+renames. Scan the existing collection before linking it. New unscanned holdings and
+expanded episode coverage currently require a further explicit import/linking workflow;
+they are not silently added by ordinary scans. Tracking does not yet issue manager
+requests, change profiles, or enable external monitoring.
 
 ## Import from a URL
 

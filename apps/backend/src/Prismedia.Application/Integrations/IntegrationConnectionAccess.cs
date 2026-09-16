@@ -19,7 +19,7 @@ public sealed class IntegrationConnectionAccess(IIntegrationConnectionStore stor
         if (!connection.Allows(capability, operation, kind) || !PluginCapabilityPolicy.Allows(capability, operation)
             || manifest.Integration?.Capabilities.Any(support => support.Kind == capability
                 && support.Operations.Contains(operation) && support.EntityKinds.Contains(kind)) != true)
-            throw new ArgumentException("This connection does not currently support the requested operation. Check its enabled capabilities and test it again.");
+            throw new ConnectionCapabilityUnavailableException();
         var auth = await store.ReadSecretsAsync(id, cancellationToken);
         if (manifest.Auth.Any(field => field.Required && (!auth.TryGetValue(field.Key, out var value) || string.IsNullOrWhiteSpace(value))))
             throw new IntegrationInvocationException("Required connection credentials are missing.");
@@ -27,3 +27,7 @@ public sealed class IntegrationConnectionAccess(IIntegrationConnectionStore stor
             connection.State.HasPersistentRemoteIdentity ? connection.State.RemoteInstanceId : null, connection.State.Settings, auth));
     }
 }
+
+/// <summary>Current connection configuration has not authorized this operation; retained intent may be retried after configuration recovers.</summary>
+public sealed class ConnectionCapabilityUnavailableException() : ArgumentException(
+    "This connection does not currently support the requested operation. Check its enabled capabilities and test it again.");

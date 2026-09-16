@@ -6,6 +6,51 @@ namespace Prismedia.Infrastructure.Persistence;
 
 internal static partial class PrismediaModelConfiguration {
     private static void ConfigureIntegrationTables(ModelBuilder modelBuilder) {
+        modelBuilder.Entity<ManagedHoldingRow>(entity => {
+            entity.ToTable("managed_holdings");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.ConnectionId).HasColumnName("connection_id");
+            entity.Property(row => row.LibraryRootId).HasColumnName("library_root_id");
+            entity.Property(row => row.Kind).HasColumnName("kind").HasMaxLength(64).HasConversion(value => value.ToCode(), value => EntityKindRegistry.Require(value));
+            entity.Property(row => row.RemoteId).HasColumnName("remote_id").HasMaxLength(512);
+            entity.Property(row => row.Title).HasColumnName("title").HasMaxLength(512);
+            entity.Property(row => row.ItemJson).HasColumnName("item").HasColumnType("jsonb");
+            entity.Property(row => row.SelectionsJson).HasColumnName("selections").HasColumnType("jsonb");
+            entity.Property(row => row.Status).HasColumnName("status").HasMaxLength(32).HasConversion(value => value.ToCode(), value => value.DecodeAs<ManagedTrackingStatus>());
+            entity.Property(row => row.Revision).HasColumnName("revision").IsConcurrencyToken();
+            entity.Property(row => row.LastCheckedAt).HasColumnName("last_checked_at");
+            entity.Property(row => row.NextCheckAt).HasColumnName("next_check_at");
+            entity.Property(row => row.Problem).HasColumnName("problem").HasMaxLength(4096);
+            entity.HasOne<IntegrationConnectionRow>().WithMany().HasForeignKey(row => row.ConnectionId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<LibraryRootRow>().WithMany().HasForeignKey(row => row.LibraryRootId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(row => new { row.ConnectionId, row.Kind, row.RemoteId }).IsUnique();
+            entity.HasIndex(row => row.NextCheckAt);
+        });
+        modelBuilder.Entity<ManagedSourceBindingRow>(entity => {
+            entity.ToTable("managed_source_bindings");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.HoldingId).HasColumnName("holding_id");
+            entity.Property(row => row.RemoteTargetId).HasColumnName("remote_target_id").HasMaxLength(512);
+            entity.Property(row => row.Kind).HasColumnName("kind").HasMaxLength(64).HasConversion(value => value.ToCode(), value => EntityKindRegistry.Require(value));
+            entity.Property(row => row.SeasonNumber).HasColumnName("season_number");
+            entity.Property(row => row.EpisodeNumber).HasColumnName("episode_number");
+            entity.Property(row => row.AbsoluteNumber).HasColumnName("absolute_number");
+            entity.Property(row => row.EntityId).HasColumnName("entity_id");
+            entity.Property(row => row.SourceFileId).HasColumnName("source_file_id");
+            entity.Property(row => row.RemoteFileId).HasColumnName("remote_file_id").HasMaxLength(512);
+            entity.Property(row => row.LocalPath).HasColumnName("local_path").HasMaxLength(8192);
+            entity.Property(row => row.SizeBytes).HasColumnName("size_bytes");
+            entity.Property(row => row.WrittenAt).HasColumnName("written_at");
+            entity.Property(row => row.IsAvailable).HasColumnName("is_available");
+            entity.HasOne<ManagedHoldingRow>().WithMany().HasForeignKey(row => row.HoldingId).OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<EntityRow>().WithMany().HasForeignKey(row => row.EntityId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<EntityFileRow>().WithMany().HasForeignKey(row => row.SourceFileId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(row => new { row.HoldingId, row.RemoteTargetId }).IsUnique();
+            entity.HasIndex(row => row.EntityId).IsUnique();
+            entity.HasIndex(row => row.SourceFileId).IsUnique();
+        });
         modelBuilder.Entity<ExternalLibraryMountRow>(entity => {
             entity.ToTable("external_library_mounts");
             entity.HasKey(row => row.Id);

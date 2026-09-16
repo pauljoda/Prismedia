@@ -2,10 +2,11 @@
   import { onMount } from "svelte";
   import { ArrowLeft, ArrowRight, FolderOpen, Library, RefreshCw, Search } from "@lucide/svelte";
   import { Alert, Badge, Button, DialogBase, Panel, Select, TextInput } from "@prismedia/ui-svelte";
-  import { INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
+  import { CONNECTION_STATUS, INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
   import type { ConnectionResponse, EntityKind, ManagedItemSnapshot, ManagedLibraryItem, ManagedLibraryPage, ManagerOptions, MappedLibraryFile } from "$lib/api/generated/model";
   import { fetchManagedItem, fetchManagedLibrary, fetchManagerOptions, inspectLocalLibraryAccess } from "$lib/api/managed-libraries";
   import ExternalLibraryMappings from "./ExternalLibraryMappings.svelte";
+  import ManagedHoldingTracking from "./ManagedHoldingTracking.svelte";
   import { getEntityKindLabel } from "$lib/entities/entity-grid";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
 
@@ -68,6 +69,11 @@
     finally { if (current === detailSequence) detailLoading = false; }
   }
 </script>
+
+<ManagedHoldingTracking connectionId={connection.id} />
+{#if connection.status !== CONNECTION_STATUS.ready}
+  <Alert.Root><Alert.Description>Test this connection in Settings to resume remote observations. Saved tracking remains available here.</Alert.Description></Alert.Root>
+{/if}
 
 {#if connection.effectiveCapabilities.some(capability => capability.kind === PLUGIN_CAPABILITY.externalManager && capability.operations.includes(INTEGRATION_OPERATION.managerOptions))}
   <ExternalLibraryMappings {connection} {kind} />
@@ -136,6 +142,7 @@
         {#if !detail.files.length}<p class="py-3 text-sm text-text-muted">No final files are currently associated with this holding.</p>{/if}
       </div>
       {#if detail.files.length > visibleFiles}<Button variant="secondary" onclick={() => visibleFiles += 50}>Show more files</Button>{/if}
+      {#key detail.item.remoteId}<ManagedHoldingTracking connectionId={connection.id} item={detail.item} />{/key}
     {/if}
     <DialogBase.Footer><Button variant="outline" onclick={() => { detailOpen = false; detailSequence++; }}>Done</Button></DialogBase.Footer>
   </DialogBase.Content>

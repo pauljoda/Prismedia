@@ -250,6 +250,12 @@ const _JOB_DEFINITIONS = [
   },
   // Acquisition
   {
+    type: JOB_TYPE.managedLibraryReconcile,
+    queueName: JOB_TYPE.managedLibraryReconcile,
+    label: "Connected Library Refresh",
+    description: "Verifies externally managed files while preserving existing library items and history.",
+  },
+  {
     type: JOB_TYPE.integrationTransfer,
     queueName: JOB_TYPE.integrationTransfer,
     label: "Publication Transfer",

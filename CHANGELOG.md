@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Radarr and Sonarr holdings can link to existing scanned items and track renamed, replaced, or missing files while retaining item identity and history. Ambiguous coverage requires review, and unavailable sources stay in the catalog without being advertised as playable.
+
 - Metadata plugins can retain exact comic issue and chapter labels separately from ordering, show them in review, and match fractional installments without merging coincidental positions.
 
 - Connected libraries can map external roots to dedicated read-only folders and check local file access separately from remote availability. Mappings start with scanning paused, protect files even when the connection is disabled, and stay out of native acquisition destinations.

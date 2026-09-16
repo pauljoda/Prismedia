@@ -204,6 +204,8 @@ import type {
   ManagedItemSnapshot,
   ManagedLibraryPage,
   ManagedLibraryQuery,
+  ManagedTrackingPreview,
+  ManagedTrackingResponse,
   ManagerOptions,
   ManagerOptionsInput,
   ManualReplacementQueueRequest,
@@ -265,6 +267,7 @@ import type {
   StartBulkIdentifyParams,
   StashScraperListing,
   SubtitleProviderTestResponse,
+  TrackManagedHoldingRequest,
   TranscodeCacheStatusResponse,
   UpdateCheckResponse,
   UpdateConnectionRequest,
@@ -9718,6 +9721,165 @@ export const inspectExternalLibraryAccess = async (id: string,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       managedItemInput,)
+  }
+);}
+
+
+
+export type previewManagedTrackingResponse200 = {
+  data: ManagedTrackingPreview
+  status: 200
+}
+
+export type previewManagedTrackingResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type previewManagedTrackingResponseSuccess = (previewManagedTrackingResponse200) & {
+  headers: Headers;
+};
+export type previewManagedTrackingResponseError = (previewManagedTrackingResponse400) & {
+  headers: Headers;
+};
+
+export type previewManagedTrackingResponse = (previewManagedTrackingResponseSuccess | previewManagedTrackingResponseError)
+
+export const getPreviewManagedTrackingUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/tracking-preview`
+}
+
+export const previewManagedTracking = async (id: string,
+    managedItemInput: ManagedItemInput, options?: RequestInit): Promise<previewManagedTrackingResponse> => {
+
+  return orvalFetch<previewManagedTrackingResponse>(getPreviewManagedTrackingUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      managedItemInput,)
+  }
+);}
+
+
+
+export type listManagedTrackingResponse200 = {
+  data: ManagedTrackingResponse[]
+  status: 200
+}
+
+export type listManagedTrackingResponseSuccess = (listManagedTrackingResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listManagedTrackingResponse = (listManagedTrackingResponseSuccess)
+
+export const getListManagedTrackingUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/tracking`
+}
+
+export const listManagedTracking = async (id: string, options?: RequestInit): Promise<listManagedTrackingResponse> => {
+
+  return orvalFetch<listManagedTrackingResponse>(getListManagedTrackingUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type trackManagedHoldingResponse202 = {
+  data: ManagedTrackingResponse
+  status: 202
+}
+
+export type trackManagedHoldingResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type trackManagedHoldingResponseSuccess = (trackManagedHoldingResponse202) & {
+  headers: Headers;
+};
+export type trackManagedHoldingResponseError = (trackManagedHoldingResponse400) & {
+  headers: Headers;
+};
+
+export type trackManagedHoldingResponse = (trackManagedHoldingResponseSuccess | trackManagedHoldingResponseError)
+
+export const getTrackManagedHoldingUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/tracking`
+}
+
+export const trackManagedHolding = async (id: string,
+    trackManagedHoldingRequest: TrackManagedHoldingRequest, options?: RequestInit): Promise<trackManagedHoldingResponse> => {
+
+  return orvalFetch<trackManagedHoldingResponse>(getTrackManagedHoldingUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      trackManagedHoldingRequest,)
+  }
+);}
+
+
+
+export type refreshManagedHoldingResponse202 = {
+  data: void
+  status: 202
+}
+
+export type refreshManagedHoldingResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type refreshManagedHoldingResponseSuccess = (refreshManagedHoldingResponse202) & {
+  headers: Headers;
+};
+export type refreshManagedHoldingResponseError = (refreshManagedHoldingResponse400) & {
+  headers: Headers;
+};
+
+export type refreshManagedHoldingResponse = (refreshManagedHoldingResponseSuccess | refreshManagedHoldingResponseError)
+
+export const getRefreshManagedHoldingUrl = (id: string,
+    holdingId: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/tracking/${holdingId}/refresh`
+}
+
+export const refreshManagedHolding = async (id: string,
+    holdingId: string, options?: RequestInit): Promise<refreshManagedHoldingResponse> => {
+
+  return orvalFetch<refreshManagedHoldingResponse>(getRefreshManagedHoldingUrl(id,holdingId),
+  {
+    ...options,
+    method: 'POST'
+
+
   }
 );}
 
