@@ -5,13 +5,14 @@ using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Media;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Media.Processing;
+using Prismedia.Infrastructure.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 
 namespace Prismedia.Infrastructure.Opds;
 
 /// <summary>
-/// EF-backed OPDS catalog projection. Every feed starts from <see cref="VisibleBooksQuery"/>
+/// EF-backed OPDS catalog projection. Every feed starts from <see cref="VisibleBooksQueryAsync"/>
 /// so library, NSFW, and acquisition-file checks are applied before any navigation
 /// group or count can expose metadata.
 /// </summary>
@@ -23,8 +24,12 @@ public sealed class EfOpdsCatalogService(
     // Memoized per request: roots hidden from the caller (member library grants).
     private Guid[]? _hiddenRootIds;
     private bool _accessResolved;
+    private readonly EfEntityLibraryVisibilityFilter visibility = new(db, currentUser);
 
     private static readonly string BookKindCode = EntityKind.Book.ToCode();
+    private static readonly string ComicKindCode = EntityKind.ComicInstallment.ToCode();
+    private static readonly string ComicSeriesKindCode = EntityKind.ComicSeries.ToCode();
+    private static readonly string ComicVolumeKindCode = EntityKind.ComicVolume.ToCode();
     private static readonly string PersonKindCode = EntityKind.Person.ToCode();
     private static readonly string CollectionKindCode = EntityKind.Collection.ToCode();
     private static readonly string TagKindCode = EntityKind.Tag.ToCode();
@@ -121,7 +126,8 @@ public sealed class EfOpdsCatalogService(
         bool hideNsfw,
         OpdsPageRequest page,
         CancellationToken cancellationToken) {
-        if (!await IsVisibleNavigationEntityAsync(seriesId, BookKindCode, hideNsfw, cancellationToken)) {
+        if (!await IsVisibleNavigationEntityAsync(seriesId, BookKindCode, hideNsfw, cancellationToken)
+            && !await IsVisibleNavigationEntityAsync(seriesId, ComicSeriesKindCode, hideNsfw, cancellationToken)) {
             return null;
         }
 
@@ -260,7 +266,7 @@ public sealed class EfOpdsCatalogService(
         }
 
         var downloadPath = DownloadPathFor(row.SourcePath);
-        var contentType = ContentTypeFor(row.Format, downloadPath, row.SourceMimeType);
+        var contentType = ContentTypeFor(row.Format, row.IsComic, row.SourceMimeType);
         return new OpdsFileContent(
             row.Id,
             EntityFileRole.Source,
@@ -297,10 +303,16 @@ public sealed class EfOpdsCatalogService(
         var hiddenRootIds = _hiddenRootIds ?? [];
         var sourceRows = db.EntityFiles.AsNoTracking()
             .Where(file => file.Role == EntityFileRole.Source);
+        var visibleEntities = db.Entities.AsNoTracking();
+        if (await visibility.RequiresCurrentUserVisibilityAsync(cancellationToken))
+            visibleEntities = visibility.ApplyCurrentUserVisibility(visibleEntities);
 
         return
-            from entity in db.Entities.AsNoTracking()
-            join detail in db.BookDetails.AsNoTracking() on entity.Id equals detail.EntityId
+            from entity in visibleEntities
+            join detailCandidate in db.BookDetails.AsNoTracking() on entity.Id equals detailCandidate.EntityId into bookRows
+            from detail in bookRows.DefaultIfEmpty()
+            join comicCandidate in db.ComicInstallmentDetails.AsNoTracking() on entity.Id equals comicCandidate.EntityId into comicRows
+            from comic in comicRows.DefaultIfEmpty()
             join libraryMembership in db.EntityLibraryRoots.AsNoTracking() on entity.Id equals libraryMembership.EntityId into membershipRows
             from membership in membershipRows.DefaultIfEmpty()
             join source in sourceRows on entity.Id equals source.EntityId
@@ -308,28 +320,30 @@ public sealed class EfOpdsCatalogService(
             from root in rootRows.DefaultIfEmpty()
             join parentCandidate in db.Entities.AsNoTracking() on entity.ParentEntityId equals parentCandidate.Id into parentRows
             from parent in parentRows.DefaultIfEmpty()
-            where entity.KindCode == BookKindCode &&
-                  (membership == null || membership.LibraryRootId == null || (root != null && root.Enabled)) &&
+            join ancestorCandidate in db.Entities.AsNoTracking() on parent.ParentEntityId equals ancestorCandidate.Id into ancestorRows
+            from ancestor in ancestorRows.DefaultIfEmpty()
+            where ((entity.KindCode == BookKindCode && detail != null && (detail.Format == BookFormat.Epub || detail.Format == BookFormat.Pdf))
+                   || (entity.KindCode == ComicKindCode && comic != null && (source.Path.ToLower().EndsWith(".cbz") || source.Path.ToLower().EndsWith(".zip")))) &&
+                  (membership == null || membership.LibraryRootId == null || (root != null && root.Enabled && root.ScanBooks)) &&
                   (membership == null || membership.LibraryRootId == null || !hiddenRootIds.Contains(membership.LibraryRootId ?? Guid.Empty)) &&
-                  (detail.Format == BookFormat.Epub ||
-                   detail.Format == BookFormat.Pdf) &&
                   !db.Entities.AsNoTracking().Any(child =>
                       child.ParentEntityId == entity.Id &&
                       child.KindCode == BookKindCode) &&
                   (!hideNsfw ||
                    (!entity.IsNsfw &&
                     (root == null || !root.IsNsfw) &&
-                    (parent == null || !parent.IsNsfw)))
+                    (parent == null || !parent.IsNsfw) &&
+                    (ancestor == null || !ancestor.IsNsfw)))
             select new VisibleBookRow {
                 Id = entity.Id,
                 Title = entity.Title,
                 SortName = entity.SortName,
-                SeriesId = entity.ParentEntityId,
-                SeriesTitle = parent == null ? null : parent.Title,
+                SeriesId = parent != null && parent.KindCode == ComicVolumeKindCode ? parent.ParentEntityId : entity.ParentEntityId,
+                SeriesTitle = parent != null && parent.KindCode == ComicVolumeKindCode ? (ancestor == null ? null : ancestor.Title) : (parent == null ? null : parent.Title),
                 CreatedAt = entity.CreatedAt,
                 UpdatedAt = entity.UpdatedAt,
-                BookType = detail.BookType,
-                Format = detail.Format,
+                Format = detail == null ? null : detail.Format,
+                IsComic = entity.KindCode == ComicKindCode,
                 LibraryRootId = membership == null ? null : membership.LibraryRootId,
                 SourcePath = source.Path,
                 SourceMimeType = source.MimeType,
@@ -398,7 +412,7 @@ public sealed class EfOpdsCatalogService(
         var seriesRows = await db.Entities.AsNoTracking()
             .Where(entity =>
                 seriesIds.Contains(entity.Id) &&
-                entity.KindCode == BookKindCode &&
+                (entity.KindCode == BookKindCode || entity.KindCode == ComicSeriesKindCode) &&
                 (!hideNsfw || !entity.IsNsfw))
             .Select(entity => new { entity.Id, entity.Title, entity.SortName })
             .ToArrayAsync(cancellationToken);
@@ -625,15 +639,13 @@ public sealed class EfOpdsCatalogService(
             .Select(row => {
                 var cover = coversByBook.GetValueOrDefault(row.Id);
                 var downloadPath = DownloadPathFor(row.SourcePath);
-                var contentType = ContentTypeFor(row.Format, downloadPath, row.SourceMimeType);
+                var contentType = ContentTypeFor(row.Format, row.IsComic, row.SourceMimeType);
                 return new OpdsBookEntry(
                     row.Id,
                     row.Title,
                     descriptions.GetValueOrDefault(row.Id),
                     row.CreatedAt,
                     row.UpdatedAt,
-                    row.BookType,
-                    row.Format,
                     row.SeriesId,
                     row.SeriesTitle,
                     authorsByBook.GetValueOrDefault(row.Id) ?? [],
@@ -761,7 +773,8 @@ public sealed class EfOpdsCatalogService(
     private static string SortNameFor(string? sortName, string title) =>
         string.IsNullOrWhiteSpace(sortName) ? title : sortName;
 
-    private static string ContentTypeFor(BookFormat format, string sourcePath, string? storedMime) {
+    private static string ContentTypeFor(BookFormat? format, bool isComic, string? storedMime) {
+        if (isComic) return MediaContentTypes.ComicBookZip;
         if (!string.IsNullOrWhiteSpace(storedMime) &&
             !storedMime.Equals(MediaContentTypes.OctetStream, StringComparison.OrdinalIgnoreCase)) {
             return storedMime;
@@ -816,9 +829,8 @@ public sealed class EfOpdsCatalogService(
             fileName = "book";
         }
 
-        return contentType.Equals(MediaContentTypes.ComicBookZip, StringComparison.OrdinalIgnoreCase) &&
-               string.IsNullOrEmpty(Path.GetExtension(fileName))
-            ? $"{fileName}.cbz"
+        return contentType.Equals(MediaContentTypes.ComicBookZip, StringComparison.OrdinalIgnoreCase)
+            ? Path.ChangeExtension(fileName, ".cbz")
             : fileName;
     }
 
@@ -851,8 +863,8 @@ public sealed class EfOpdsCatalogService(
         public string? SeriesTitle { get; init; }
         public DateTimeOffset CreatedAt { get; init; }
         public DateTimeOffset UpdatedAt { get; init; }
-        public BookType BookType { get; init; }
-        public BookFormat Format { get; init; }
+        public BookFormat? Format { get; init; }
+        public bool IsComic { get; init; }
         public Guid? LibraryRootId { get; init; }
         public string SourcePath { get; init; } = string.Empty;
         public string? SourceMimeType { get; init; }

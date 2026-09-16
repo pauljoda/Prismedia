@@ -384,8 +384,6 @@ public sealed class OpdsEndpointTests : IDisposable {
                 summary,
                 DateTimeOffset.UtcNow.AddMinutes(-(id.ToString()[0] % 4)),
                 DateTimeOffset.UtcNow,
-                BookType.Novel,
-                mime == MediaContentTypes.Pdf ? BookFormat.Pdf : BookFormat.Epub,
                 null,
                 null,
                 [new OpdsContributor(Guid.NewGuid(), "Author & Person")],

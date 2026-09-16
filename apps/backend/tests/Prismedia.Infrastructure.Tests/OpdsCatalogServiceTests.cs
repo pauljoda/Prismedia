@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Opds;
+using Prismedia.Application.Security;
 using Prismedia.Contracts.Media;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Entities;
@@ -30,6 +31,55 @@ public sealed class OpdsCatalogServiceTests : IDisposable {
 
     public OpdsCatalogServiceTests() {
         Directory.CreateDirectory(_tempDir);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task DedicatedComicInstallmentsExposeArchivesAndTheirActualSeriesWithoutBookDetails(bool postgres) {
+        await using var database = postgres ? await PostgresTestDatabase.CreateAsync() : null;
+        await using var db = database?.CreateContext() ?? CreateContext();
+        db.LibraryRoots.AddRange(
+            new LibraryRootRow { Id = VisibleRootId, Path = Path.Combine(_tempDir, "visible"), Label = "Visible", Enabled = true, ScanBooks = true },
+            new LibraryRootRow { Id = DisabledRootId, Path = Path.Combine(_tempDir, "disabled"), Label = "Disabled", Enabled = false, ScanBooks = true });
+        var seriesId = Guid.NewGuid();
+        var volumeId = Guid.NewGuid();
+        var issueId = Guid.NewGuid();
+        db.Entities.AddRange(Entity(seriesId, EntityKind.ComicSeries.ToCode(), "Comic Series", false),
+            Entity(volumeId, EntityKind.ComicVolume.ToCode(), "Volume One", false, seriesId),
+            Entity(issueId, EntityKind.ComicInstallment.ToCode(), "Issue One", false, volumeId));
+        db.ComicInstallmentDetails.Add(new() { EntityId = issueId, PageCount = 2 });
+        db.EntityLibraryRoots.Add(RootMembership(issueId, VisibleRootId));
+        db.EntityFiles.Add(Source(issueId, Path.Combine(_tempDir, "issue.zip"), MediaContentTypes.OctetStream));
+        await db.SaveChangesAsync();
+        var service = CreateService(db);
+        var issue = await service.GetBookAsync(issueId, true, default);
+        Assert.NotNull(issue);
+        Assert.Equal(MediaContentTypes.ComicBookZip, issue.AcquisitionContentType);
+        Assert.Equal(seriesId, issue.SeriesId);
+        Assert.Contains((await service.ListSeriesAsync(true, new(1, 50), default)).Items, item => item.Id == seriesId);
+        Assert.Equal(issueId, Assert.Single((await service.ListSeriesBooksAsync(seriesId, true, new(1, 50), default))!.Items).Id);
+        var download = await service.GetBookDownloadAsync(issueId, true, default);
+        Assert.Equal(MediaContentTypes.ComicBookZip, download!.ContentType);
+        Assert.Equal("issue.cbz", download.FileName);
+
+        var restricted = CreateService(db, TestUserContext.Member(DisabledRootId));
+        Assert.Null(await restricted.GetBookAsync(issueId, false, default));
+        Assert.Null(await restricted.GetBookDownloadAsync(issueId, false, default));
+        Assert.DoesNotContain((await restricted.ListSeriesAsync(false, new(1, 50), default)).Items, item => item.Id == seriesId);
+
+        // A safe installment cannot reveal its NSFW series through a volume.
+        (await db.Entities.SingleAsync(entity => entity.Id == seriesId)).IsNsfw = true;
+        await db.SaveChangesAsync();
+        Assert.Null(await service.GetBookAsync(issueId, true, default));
+        Assert.Null(await service.GetBookDownloadAsync(issueId, true, default));
+        Assert.NotNull(await service.GetBookAsync(issueId, false, default));
+
+        // Imported descendants can inherit membership from an ancestor. The shared visibility rule still applies.
+        db.EntityLibraryRoots.Remove(await db.EntityLibraryRoots.SingleAsync(item => item.EntityId == issueId));
+        db.EntityLibraryRoots.Add(RootMembership(volumeId, VisibleRootId));
+        await db.SaveChangesAsync();
+        Assert.Null(await CreateService(db, TestUserContext.Member(DisabledRootId)).GetBookDownloadAsync(issueId, false, default));
     }
 
     [Fact]
@@ -152,16 +202,17 @@ public sealed class OpdsCatalogServiceTests : IDisposable {
         }
     }
 
-    private EfOpdsCatalogService CreateService(PrismediaDbContext db) {
+    private EfOpdsCatalogService CreateService(PrismediaDbContext db, ICurrentUserContext? currentUser = null) {
+        var user = currentUser ?? TestUserContext.Admin();
         var assets = new AssetPathService(_tempDir, Path.Combine(_tempDir, "cache"));
-        var repository = new EfEntityRepository(db, TestUserContext.Admin(), EntityMappers.Kinds(db), EntityMappers.Capabilities(db, TestUserContext.Admin()));
+        var repository = new EfEntityRepository(db, user, EntityMappers.Kinds(db), EntityMappers.Capabilities(db, user));
         var entityReadService = new EfEntityReadService(
             db,
-            TestUserContext.Admin(),
+            user,
             repository,
             ThumbnailContributors.For(db), new EfEntityProgressTopologyResolver(db),
             assets);
-        return new EfOpdsCatalogService(db, assets, entityReadService, TestUserContext.Admin());
+        return new EfOpdsCatalogService(db, assets, entityReadService, user);
     }
 
     private static PrismediaDbContext CreateContext() =>

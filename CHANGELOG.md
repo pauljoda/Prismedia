@@ -129,6 +129,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- OPDS catalogs now include dedicated comic installments and their series, with CBZ downloads that respect library access and NSFW series visibility.
+
 - Native metadata plugins now have bounded output, restricted inherited environment, private temporary credential files, and credential redaction in reported failures.
 
 - Metadata providers preserve existing descriptions, classifications, tags, and credits when they return no value. Manual edits can still explicitly clear those fields.
