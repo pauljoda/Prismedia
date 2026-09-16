@@ -51,9 +51,11 @@ import type {
   CommitEntityRequestParams,
   CommitRequestParams,
   CommitReviewedRequestParams,
+  ConnectionResponse,
   ConsumptionEventCreateRequest,
   ConsumptionStatisticsResponse,
   ConsumptionUpdateRequest,
+  CreateConnectionRequest,
   CreateFileFolderParams,
   CreateFirstAdminRequest,
   CustomFormatSaveRequest,
@@ -63,6 +65,7 @@ import type {
   DatabaseRestoreRequest,
   DatabaseRestoreScheduledResponse,
   DatabaseRestoreStatusResponse,
+  DeleteConnectionParams,
   DeleteEntityParams,
   DeleteFileParams,
   DownloadClientSaveRequest,
@@ -247,6 +250,7 @@ import type {
   SubtitleProviderTestResponse,
   TranscodeCacheStatusResponse,
   UpdateCheckResponse,
+  UpdateConnectionRequest,
   UpdateMusicPlayerProgressRequest,
   UpdateMusicPlayerStateRequest,
   UpdateOpenSubtitlesConfigurationRequest,
@@ -8926,6 +8930,256 @@ export const updatePluginAuth = async (provider: string,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       pluginAuthUpdateRequest,)
+  }
+);}
+
+
+
+export type listConnectionsResponse200 = {
+  data: ConnectionResponse[]
+  status: 200
+}
+
+export type listConnectionsResponseSuccess = (listConnectionsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listConnectionsResponse = (listConnectionsResponseSuccess)
+
+export const getListConnectionsUrl = () => {
+
+
+
+
+  return `/api/connections`
+}
+
+export const listConnections = async ( options?: RequestInit): Promise<listConnectionsResponse> => {
+
+  return orvalFetch<listConnectionsResponse>(getListConnectionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createConnectionResponse201 = {
+  data: ConnectionResponse
+  status: 201
+}
+
+export type createConnectionResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type createConnectionResponseSuccess = (createConnectionResponse201) & {
+  headers: Headers;
+};
+export type createConnectionResponseError = (createConnectionResponse400) & {
+  headers: Headers;
+};
+
+export type createConnectionResponse = (createConnectionResponseSuccess | createConnectionResponseError)
+
+export const getCreateConnectionUrl = () => {
+
+
+
+
+  return `/api/connections`
+}
+
+export const createConnection = async (createConnectionRequest: CreateConnectionRequest, options?: RequestInit): Promise<createConnectionResponse> => {
+
+  return orvalFetch<createConnectionResponse>(getCreateConnectionUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createConnectionRequest,)
+  }
+);}
+
+
+
+export type getConnectionResponse200 = {
+  data: ConnectionResponse
+  status: 200
+}
+
+export type getConnectionResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type getConnectionResponseSuccess = (getConnectionResponse200) & {
+  headers: Headers;
+};
+export type getConnectionResponseError = (getConnectionResponse404) & {
+  headers: Headers;
+};
+
+export type getConnectionResponse = (getConnectionResponseSuccess | getConnectionResponseError)
+
+export const getGetConnectionUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}`
+}
+
+export const getConnection = async (id: string, options?: RequestInit): Promise<getConnectionResponse> => {
+
+  return orvalFetch<getConnectionResponse>(getGetConnectionUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type updateConnectionResponse200 = {
+  data: ConnectionResponse
+  status: 200
+}
+
+export type updateConnectionResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type updateConnectionResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type updateConnectionResponseSuccess = (updateConnectionResponse200) & {
+  headers: Headers;
+};
+export type updateConnectionResponseError = (updateConnectionResponse400 | updateConnectionResponse409) & {
+  headers: Headers;
+};
+
+export type updateConnectionResponse = (updateConnectionResponseSuccess | updateConnectionResponseError)
+
+export const getUpdateConnectionUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}`
+}
+
+export const updateConnection = async (id: string,
+    updateConnectionRequest: UpdateConnectionRequest, options?: RequestInit): Promise<updateConnectionResponse> => {
+
+  return orvalFetch<updateConnectionResponse>(getUpdateConnectionUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      updateConnectionRequest,)
+  }
+);}
+
+
+
+export type deleteConnectionResponse204 = {
+  data: void
+  status: 204
+}
+
+export type deleteConnectionResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type deleteConnectionResponseSuccess = (deleteConnectionResponse204) & {
+  headers: Headers;
+};
+export type deleteConnectionResponseError = (deleteConnectionResponse409) & {
+  headers: Headers;
+};
+
+export type deleteConnectionResponse = (deleteConnectionResponseSuccess | deleteConnectionResponseError)
+
+export const getDeleteConnectionUrl = (id: string,
+    params: DeleteConnectionParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/connections/${id}?${stringifiedParams}` : `/api/connections/${id}`
+}
+
+export const deleteConnection = async (id: string,
+    params: DeleteConnectionParams, options?: RequestInit): Promise<deleteConnectionResponse> => {
+
+  return orvalFetch<deleteConnectionResponse>(getDeleteConnectionUrl(id,params),
+  {
+    ...options,
+    method: 'DELETE'
+
+
+  }
+);}
+
+
+
+export type testConnectionResponse200 = {
+  data: ConnectionResponse
+  status: 200
+}
+
+export type testConnectionResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type testConnectionResponseSuccess = (testConnectionResponse200) & {
+  headers: Headers;
+};
+export type testConnectionResponseError = (testConnectionResponse409) & {
+  headers: Headers;
+};
+
+export type testConnectionResponse = (testConnectionResponseSuccess | testConnectionResponseError)
+
+export const getTestConnectionUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/test`
+}
+
+export const testConnection = async (id: string, options?: RequestInit): Promise<testConnectionResponse> => {
+
+  return orvalFetch<testConnectionResponse>(getTestConnectionUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
   }
 );}
 

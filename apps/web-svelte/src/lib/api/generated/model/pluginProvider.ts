@@ -6,6 +6,7 @@
  */
 import type { PluginAuthField } from './pluginAuthField';
 import type { PluginEntitySupport } from './pluginEntitySupport';
+import type { PluginIntegrationDefinition } from './pluginIntegrationDefinition';
 
 export interface PluginProvider {
   id: string;
@@ -20,4 +21,5 @@ export interface PluginProvider {
   updateAvailable?: boolean;
   /** @nullable */
   availableVersion?: string | null;
+  integration?: null | PluginIntegrationDefinition;
 }

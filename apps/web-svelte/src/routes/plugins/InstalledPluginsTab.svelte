@@ -14,6 +14,7 @@
   import { Badge, Button, SearchInput } from "@prismedia/ui-svelte";
   import { ENTITY_KIND } from "$lib/api/generated/codes";
   import type { PluginProvider } from "$lib/api/generated/model";
+  import PluginIntegrationCapabilities from "$lib/components/plugins/PluginIntegrationCapabilities.svelte";
   import PluginCapabilityChips from "$lib/components/plugins/PluginCapabilityChips.svelte";
   import { pluginCapabilities } from "$lib/plugins/plugin-capabilities";
   import { entityTerms } from "$lib/terminology";
@@ -142,7 +143,7 @@
     <div class="plugin-grid">
       {#each filteredProviders as plugin (plugin.id)}
         {@const authExpanded = authExpandedFor === `prismedia:${plugin.id}`}
-        {@const hasAuth = plugin.auth.length > 0}
+        {@const hasAuth = plugin.supports.length > 0 && plugin.auth.length > 0}
         <div
           class={"surface-card no-lift transition-opacity duration-fast " +
             (plugin.installed && plugin.enabled ? "" : "opacity-80")}
@@ -164,7 +165,7 @@
                     <Badge variant="success">
                       <Check class="h-2.5 w-2.5" />Auth OK
                     </Badge>
-                  {:else if plugin.missingAuthKeys.length > 0}
+                  {:else if hasAuth && plugin.missingAuthKeys.length > 0}
                     <Badge variant="warning">
                       <AlertCircle class="h-2.5 w-2.5" />Auth Required
                     </Badge>
@@ -177,6 +178,7 @@
                   capabilities={capabilitiesByPlugin.get(plugin.id) ?? []}
                   class="mt-2"
                 />
+                <PluginIntegrationCapabilities integration={plugin.integration} />
               </div>
               <div class="flex items-center gap-2 shrink-0">
                 {#if plugin.installed && plugin.updateAvailable}

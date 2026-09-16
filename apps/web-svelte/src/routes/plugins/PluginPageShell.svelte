@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Snippet } from "svelte";
   import { AlertTriangle, Boxes, Check, Globe, Plug, Puzzle, Sparkles, X } from "@lucide/svelte";
-  import { Alert, Badge, Button, Tabs } from "@prismedia/ui-svelte";
+  import { Alert, Badge, Button, Tabs, buttonVariants } from "@prismedia/ui-svelte";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import type { PluginTabDefinition, PluginsTab } from "./plugin-page-types";
 
@@ -44,9 +44,10 @@
         Plugins
       </h1>
       <p class="mt-1 text-text-muted text-[0.78rem]">
-        Install and manage identification plugins and metadata providers
+        Install metadata providers and integrations for your connected applications
       </p>
     </div>
+    <div><a class={buttonVariants({ variant: "secondary", size: "sm" })} href="/settings/connections"><Plug />Connections</a></div>
 
     {#if !loading}
       <Tabs.List variant="line" class="overflow-x-auto scrollbar-hidden" aria-label="Plugin views">

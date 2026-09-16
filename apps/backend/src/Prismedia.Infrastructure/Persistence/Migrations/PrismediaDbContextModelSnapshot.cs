@@ -3139,6 +3139,90 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                     b.ToTable("indexer_statuses", (string)null);
                 });
 
+            modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.IntegrationConnectionRow", b =>
+                {
+                    b.Property<Guid>("Id")
+                        .HasColumnType("uuid")
+                        .HasColumnName("id");
+
+                    b.Property<string>("BaseUrl")
+                        .IsRequired()
+                        .HasMaxLength(2048)
+                        .HasColumnType("character varying(2048)")
+                        .HasColumnName("base_url");
+
+                    b.Property<string>("EffectiveCapabilitiesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("effective_capabilities");
+
+                    b.Property<bool>("Enabled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("enabled");
+
+                    b.Property<string>("EnabledCapabilitiesJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("enabled_capabilities");
+
+                    b.Property<bool>("HasPersistentRemoteIdentity")
+                        .HasColumnType("boolean")
+                        .HasColumnName("has_persistent_remote_identity");
+
+                    b.Property<DateTimeOffset?>("LastCheckedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("last_checked_at");
+
+                    b.Property<string>("LastError")
+                        .HasMaxLength(4096)
+                        .HasColumnType("character varying(4096)")
+                        .HasColumnName("last_error");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)")
+                        .HasColumnName("name");
+
+                    b.Property<string>("PluginId")
+                        .IsRequired()
+                        .HasMaxLength(128)
+                        .HasColumnType("character varying(128)")
+                        .HasColumnName("plugin_id");
+
+                    b.Property<string>("ProtectedSecretsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("protected_secrets");
+
+                    b.Property<string>("RemoteInstanceId")
+                        .HasMaxLength(512)
+                        .HasColumnType("character varying(512)")
+                        .HasColumnName("remote_instance_id");
+
+                    b.Property<long>("Revision")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint")
+                        .HasColumnName("revision");
+
+                    b.Property<string>("SettingsJson")
+                        .IsRequired()
+                        .HasColumnType("jsonb")
+                        .HasColumnName("settings");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("status");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("PluginId");
+
+                    b.ToTable("integration_connections", (string)null);
+                });
+
             modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.JobDependencyRow", b =>
                 {
                     b.Property<Guid>("PredecessorJobRunId")

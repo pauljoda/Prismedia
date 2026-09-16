@@ -7,6 +7,15 @@ namespace Prismedia.Contracts.System;
 /// constants instead of bare string literals.
 /// </summary>
 public static class ApiProblemCodes {
+    /// <summary>The requested connection no longer exists.</summary>
+    public const string ConnectionNotFound = "connection_not_found";
+    /// <summary>A connection changed since the submitted revision.</summary>
+    public const string ConnectionConflict = "connection_conflict";
+    /// <summary>Connection configuration violates its plugin schema.</summary>
+    public const string ConnectionInvalid = "connection_invalid";
+    /// <summary>The installed integration plugin is unavailable.</summary>
+    public const string ConnectionUnavailable = "connection_unavailable";
+
     /// <summary>Problem code <c>calendar_range_invalid</c>.</summary>
     public const string CalendarRangeInvalid = "calendar_range_invalid";
 

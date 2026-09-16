@@ -1,3 +1,5 @@
+using Prismedia.Application.Integrations;
+using Prismedia.Infrastructure.Integrations;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -88,6 +90,11 @@ public static class DependencyInjection {
         services.AddSingleton(new ManagedGeneratedSourceRoot(dataDir));
         RegisterMediaProcessing(services, mediaToolOptions, dataDir, cacheDir);
         RegisterPluginsAndIdentify(services, configuration, pathBase, cacheDir);
+        services.AddSingleton(new ConnectionSecretProtector(dataDir));
+        services.AddSingleton<PluginProcessTransport>();
+        services.AddScoped<IIntegrationConnectionStore, EfIntegrationConnectionStore>();
+        services.AddScoped<IIntegrationPluginGateway, IntegrationPluginGateway>();
+        services.AddScoped<ConnectionService>();
         RegisterLibraryScanning(services, dataDir);
         RegisterEntities(services, cacheDir);
         RegisterFilesAndOrganization(services);

@@ -590,6 +590,17 @@ export const COMIC_INSTALLMENT_KIND = {
 
 export type ComicInstallmentKindCode = (typeof COMIC_INSTALLMENT_KIND)[keyof typeof COMIC_INSTALLMENT_KIND];
 
+// source: enum ConnectionStatus
+export const CONNECTION_STATUS = {
+  unverified: "unverified",
+  ready: "ready",
+  unavailable: "unavailable",
+  identityChanged: "identity-changed",
+  disabled: "disabled",
+} as const;
+
+export type ConnectionStatusCode = (typeof CONNECTION_STATUS)[keyof typeof CONNECTION_STATUS];
+
 // source: enum ConsumptionActivityKind
 export const CONSUMPTION_ACTIVITY_KIND = {
   viewing: "viewing",
@@ -998,6 +1009,31 @@ export const INDEXER_KIND = {
 
 export type IndexerKindCode = (typeof INDEXER_KIND)[keyof typeof INDEXER_KIND];
 
+// source: enum IntegrationOperation
+export const INTEGRATION_OPERATION = {
+  probe: "probe",
+  search: "search",
+  browse: "browse",
+  inspect: "inspect",
+  resolve: "resolve",
+  submit: "submit",
+  findSubmission: "find-submission",
+  getJob: "get-job",
+  cancel: "cancel",
+  listArtifacts: "list-artifacts",
+  authorizeArtifact: "authorize-artifact",
+  acknowledge: "acknowledge",
+  lookupManaged: "lookup-managed",
+  ensureManaged: "ensure-managed",
+  requestManaged: "request-managed",
+  configureManaged: "configure-managed",
+  reconcileManaged: "reconcile-managed",
+  searchLibrary: "search-library",
+  getLibraryItem: "get-library-item",
+} as const;
+
+export type IntegrationOperationCode = (typeof INTEGRATION_OPERATION)[keyof typeof INTEGRATION_OPERATION];
+
 // source: enum JobGraphOrigin
 export const JOB_GRAPH_ORIGIN = {
   background: "background",
@@ -1258,6 +1294,18 @@ export const PLAYBACK_MODE = {
 } as const;
 
 export type PlaybackModeCode = (typeof PLAYBACK_MODE)[keyof typeof PLAYBACK_MODE];
+
+// source: enum PluginCapability
+export const PLUGIN_CAPABILITY = {
+  metadata: "metadata",
+  catalogDiscovery: "catalog-discovery",
+  acquisitionSource: "acquisition-source",
+  transferExecutor: "transfer-executor",
+  externalManager: "external-manager",
+  connectedLibrary: "connected-library",
+} as const;
+
+export type PluginCapabilityCode = (typeof PLUGIN_CAPABILITY)[keyof typeof PLUGIN_CAPABILITY];
 
 // source: enum PluginSearchFieldType
 export const PLUGIN_SEARCH_FIELD_TYPE = {
@@ -1590,6 +1638,10 @@ export const PROBLEM_CODE = {
   calendarRangeInvalid: "calendar_range_invalid",
   changelogNotFound: "changelog_not_found",
   collectionNotFound: "collection_not_found",
+  connectionConflict: "connection_conflict",
+  connectionInvalid: "connection_invalid",
+  connectionNotFound: "connection_not_found",
+  connectionUnavailable: "connection_unavailable",
   databaseBackupInvalid: "database_backup_invalid",
   databaseBackupNotFound: "database_backup_not_found",
   databaseRestoreInvalid: "database_restore_invalid",

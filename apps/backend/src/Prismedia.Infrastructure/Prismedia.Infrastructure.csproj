@@ -9,6 +9,7 @@
   <ItemGroup>
     <PackageReference Include="AngleSharp" Version="1.5.2" />
     <PackageReference Include="AngleSharp.XPath" Version="2.0.6" />
+    <PackageReference Include="Microsoft.AspNetCore.DataProtection.Extensions" Version="10.0.8" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Design" Version="10.0.8">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
@@ -25,6 +26,7 @@
     <PackageReference Include="PDFtoImage" Version="4.1.1" />
     <PackageReference Include="SkiaSharp" Version="2.88.9" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="2.88.9" />
+    <PackageReference Include="System.Security.Cryptography.Xml" Version="10.0.12" />
     <PackageReference Include="VersOne.Epub" Version="3.3.6" />
     <PackageReference Include="YamlDotNet" Version="18.0.0" />
   </ItemGroup>

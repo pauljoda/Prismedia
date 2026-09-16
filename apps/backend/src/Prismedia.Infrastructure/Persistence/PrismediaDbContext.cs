@@ -134,6 +134,8 @@ public sealed class PrismediaDbContext : DbContext {
 
     public DbSet<BrowserSessionSettingRow> BrowserSessionSettings => Set<BrowserSessionSettingRow>();
 
+    public DbSet<IntegrationConnectionRow> IntegrationConnections => Set<IntegrationConnectionRow>();
+
     public DbSet<ProviderConfigRow> ProviderConfigs => Set<ProviderConfigRow>();
 
     public DbSet<ProviderCredentialRow> ProviderCredentials => Set<ProviderCredentialRow>();

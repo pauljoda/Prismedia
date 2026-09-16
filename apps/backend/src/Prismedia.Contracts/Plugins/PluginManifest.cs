@@ -116,7 +116,8 @@ public sealed record PluginManifest(
     IReadOnlyList<PluginAuthField> Auth,
     bool IsNsfw,
     IReadOnlyList<PluginEntitySupport> Supports,
-    PluginExecutionPolicy? Execution = null);
+    PluginExecutionPolicy? Execution = null,
+    PluginIntegrationDefinition? Integration = null);
 
 /// <summary>
 /// Index entry consumed by the Prismedia plugin manager.
@@ -146,7 +147,8 @@ public sealed record PluginIndexEntry(
     IReadOnlyList<string> ApiTags,
     PluginCompatibility Compat,
     IReadOnlyList<PluginEntitySupport> Supports,
-    PluginExecutionPolicy? Execution = null);
+    PluginExecutionPolicy? Execution = null,
+    PluginIntegrationDefinition? Integration = null);
 
 /// <summary>
 /// API-facing plugin provider summary.
@@ -162,7 +164,8 @@ public sealed record PluginProvider(
     IReadOnlyList<PluginAuthField> Auth,
     IReadOnlyList<string> MissingAuthKeys,
     bool UpdateAvailable = false,
-    string? AvailableVersion = null);
+    string? AvailableVersion = null,
+    PluginIntegrationDefinition? Integration = null);
 
 /// <summary>
 /// Request body for saving plugin credential values.

@@ -63,6 +63,12 @@ supplied credentials and are limited to 4,096 characters. These protections redu
 accidental exposure and resource use; only install executable packages you trust.
 Stash-compatible scrapers use their separate compatibility runner.
 
+## Connected applications
+
+Packages may also declare separately versioned integration capabilities. Configure
+independent instances in **Settings → Connections**. See [Connections and integration
+capabilities](./connections.md) for configuration, negotiation, and the process envelope.
+
 ## Wrapping Stash community scrapers
 
 The Stash community's YAML site scrapers can be **wrapped** as Stash-compatible plugins and run through the same execution boundary as native ones. The adapter maps Prismedia actions onto Stash actions and normalizes the result. See [Stash Compatibility](../advanced/stash-compatibility.md) for the user-facing flow and [Stash Compatibility (plugin authors)](./stash-compat.md) for the wrapper format.

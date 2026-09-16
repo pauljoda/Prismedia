@@ -123,7 +123,8 @@ public sealed partial class PluginCatalogService : IPluginCatalogService {
                     IsNsfw: entry.IsNsfw || config?.IsNsfw == true,
                     entry.Supports,
                     Auth: [],
-                    MissingAuthKeys: []);
+                    MissingAuthKeys: [],
+                    Integration: entry.Integration);
             }));
 
         return providers
@@ -426,7 +427,8 @@ public sealed partial class PluginCatalogService : IPluginCatalogService {
             descriptor.Manifest.Auth,
             missing,
             UpdateAvailable: updateAvailable,
-            AvailableVersion: updateAvailable ? remote?.Version : null);
+            AvailableVersion: updateAvailable ? remote?.Version : null,
+            Integration: descriptor.Manifest.Integration);
     }
 
     private IEnumerable<string> EnumerateDiscoveryRoots() {

@@ -1,0 +1,31 @@
+using Microsoft.EntityFrameworkCore;
+using Prismedia.Domain.Entities;
+using Prismedia.Infrastructure.Persistence.Entities;
+
+namespace Prismedia.Infrastructure.Persistence;
+
+internal static partial class PrismediaModelConfiguration {
+    private static void ConfigureIntegrationTables(ModelBuilder modelBuilder) {
+        modelBuilder.Entity<IntegrationConnectionRow>(entity => {
+            entity.ToTable("integration_connections");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.PluginId).HasColumnName("plugin_id").HasMaxLength(128).IsRequired();
+            entity.Property(row => row.Name).HasColumnName("name").HasMaxLength(200).IsRequired();
+            entity.Property(row => row.BaseUrl).HasColumnName("base_url").HasMaxLength(2048).IsRequired();
+            entity.Property(row => row.Enabled).HasColumnName("enabled");
+            entity.Property(row => row.Revision).HasColumnName("revision").IsConcurrencyToken();
+            entity.Property(row => row.Status).HasColumnName("status").HasMaxLength(32)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<ConnectionStatus>());
+            entity.Property(row => row.EnabledCapabilitiesJson).HasColumnName("enabled_capabilities").HasColumnType("jsonb");
+            entity.Property(row => row.SettingsJson).HasColumnName("settings").HasColumnType("jsonb");
+            entity.Property(row => row.ProtectedSecretsJson).HasColumnName("protected_secrets").HasColumnType("jsonb");
+            entity.Property(row => row.EffectiveCapabilitiesJson).HasColumnName("effective_capabilities").HasColumnType("jsonb");
+            entity.Property(row => row.RemoteInstanceId).HasColumnName("remote_instance_id").HasMaxLength(512);
+            entity.Property(row => row.HasPersistentRemoteIdentity).HasColumnName("has_persistent_remote_identity");
+            entity.Property(row => row.LastCheckedAt).HasColumnName("last_checked_at");
+            entity.Property(row => row.LastError).HasColumnName("last_error").HasMaxLength(4096);
+            entity.HasIndex(row => row.PluginId); // Multiple instances of the same plugin are intentional.
+        });
+    }
+}
