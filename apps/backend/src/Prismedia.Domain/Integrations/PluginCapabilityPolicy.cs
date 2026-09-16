@@ -10,7 +10,7 @@ public static class PluginCapabilityPolicy {
         PluginCapability.AcquisitionSource => operation is IntegrationOperation.Resolve,
         PluginCapability.TransferExecutor => operation is IntegrationOperation.Submit or IntegrationOperation.FindSubmission
             or IntegrationOperation.GetJob or IntegrationOperation.Cancel or IntegrationOperation.ListArtifacts
-            or IntegrationOperation.AuthorizeArtifact or IntegrationOperation.Acknowledge,
+            or IntegrationOperation.AuthorizeArtifact or IntegrationOperation.RenewRetention or IntegrationOperation.Acknowledge,
         PluginCapability.ExternalManager => operation is IntegrationOperation.LookupManaged or IntegrationOperation.EnsureManaged
             or IntegrationOperation.RequestManaged or IntegrationOperation.ConfigureManaged or IntegrationOperation.ReconcileManaged,
         PluginCapability.ConnectedLibrary => operation is IntegrationOperation.SearchLibrary or IntegrationOperation.GetLibraryItem,

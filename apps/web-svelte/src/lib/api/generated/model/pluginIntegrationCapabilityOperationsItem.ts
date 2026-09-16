@@ -20,6 +20,7 @@ export const PluginIntegrationCapabilityOperationsItem = {
   cancel: 'cancel',
   'list-artifacts': 'list-artifacts',
   'authorize-artifact': 'authorize-artifact',
+  'renew-retention': 'renew-retention',
   acknowledge: 'acknowledge',
   'lookup-managed': 'lookup-managed',
   'ensure-managed': 'ensure-managed',

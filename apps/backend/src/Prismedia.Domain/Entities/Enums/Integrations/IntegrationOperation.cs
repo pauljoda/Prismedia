@@ -46,6 +46,10 @@ public enum IntegrationOperation {
     [Code("authorize-artifact")]
     AuthorizeArtifact,
 
+    /// <summary>Renew guaranteed remote artifact retention while importing.</summary>
+    [Code("renew-retention")]
+    RenewRetention,
+
     /// <summary>Acknowledge committed local imports independently of transfer.</summary>
     [Code("acknowledge")]
     Acknowledge,

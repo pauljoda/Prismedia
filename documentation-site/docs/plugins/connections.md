@@ -149,3 +149,42 @@ when a key is missing. See Microsoft's
 
 Native plugins remain trusted executable code, not sandboxed extensions. See
 [Native process limits and trust](./overview.md#native-process-limits-and-trust).
+
+## Executor and artifact protocol
+
+The integration protocol separates a remote executor job from Prismedia's local
+transfer and import state. These are typed adapter contracts; capability declaration
+does not itself expose a browser action.
+
+- `submit` receives a durable `clientOperationId`, inspected selection ID/revision,
+  explicit item IDs, and item/byte limits. Persist intent before sending it.
+- `find-submission` resolves that same operation ID after a timeout or interrupted
+  response. A missing active-queue item is never proof of completion.
+- `get-job` reports the persistent installation, stable job ID, operation ID,
+  monotonic revision, execution state, progress, item failures, and manifest revision.
+- `list-artifacts` reads a sealed revision with an exact total count. Every page
+  must retain the job, revision, count, and sealed flag. Repeated cursors, missing
+  pages, duplicate IDs/portable paths, and invalid size/hash evidence are rejected.
+- `authorize-artifact` provides server-only retrieval instructions for one artifact.
+- `renew-retention` guarantees an expiry while transfer or import remains unfinished.
+- `acknowledge` confirms a locally persisted receipt ID and exact imported
+  artifact hashes. Retrying acknowledgement must not repeat acquisition or import.
+
+Artifact manifests describe opaque IDs, selected item IDs, portable relative names,
+MIME types, positive byte sizes, SHA-256 hashes, and content/cover/sidecar roles.
+Optional groups use explicit positive one-based ordinals. Suggested names never
+choose a host filesystem destination. The host limits a manifest to 10,000 artifacts
+and 250 GiB total, with smaller per-request limits where appropriate.
+
+HTTP retrieval stays within the configured origin, including redirects. Headers
+are scoped to authorization and accepted media types. Hash-pinned interrupted files
+can resume with a validated byte range; a server that returns a full body restarts
+the transfer. A verified local receipt is reused only after rechecking the staged
+file's size and hash. Unknown-size transfers still have an enforced byte ceiling.
+Native plugins remain trusted code; these transport checks do not create an OS sandbox.
+
+Remote execution success permits reading the manifest. Verified bytes permit local
+import. Exact committed source ownership permits acknowledgement. Partial, expired,
+failed, or cancelled execution cannot silently satisfy a full-content request.
+Direct catalog downloads use the same byte evidence and local ownership rules,
+without inventing a remote job or requiring a remote receipt endpoint.

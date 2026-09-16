@@ -96,10 +96,17 @@ public static class DependencyInjection {
         services.AddScoped<IntegrationPluginGateway>();
         services.AddScoped<IIntegrationPluginGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
         services.AddScoped<IIntegrationDiscoveryGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
+        services.AddScoped<IIntegrationTransferGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
         services.AddSingleton<IDiscoveryTokenProtector>(new DiscoveryTokenProtector(dataDir));
         services.AddScoped<IntegrationConnectionAccess>();
         services.AddScoped<CatalogDiscoveryService>();
         services.AddScoped<ConnectionService>();
+        services.AddScoped<IntegrationManifestReader>();
+        services.AddSingleton(new IntegrationArtifactStorageOptions(Path.Combine(dataDir, "integrations", "artifacts")));
+        services.AddHttpClient<IIntegrationArtifactTransfer, HttpIntegrationArtifactTransfer>(client => client.Timeout = Timeout.InfiniteTimeSpan)
+            .ConfigurePrimaryHttpMessageHandler(() => new SocketsHttpHandler {
+                AllowAutoRedirect = false, UseCookies = false, ConnectTimeout = TimeSpan.FromSeconds(15)
+            }).RemoveAllLoggers();
         RegisterLibraryScanning(services, dataDir);
         RegisterEntities(services, cacheDir);
         RegisterFilesAndOrganization(services);

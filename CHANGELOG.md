@@ -833,6 +833,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Docs
 
+- Documented the executor protocol for durable jobs, sealed output manifests, retained artifacts, and independently retryable import acknowledgements.
+
 - Update the website and setup guides to use one App Store download for iPhone, iPad, and Apple TV.
 - Add a public security reporting page and researcher acknowledgments, linked from the website, support, and contribution guides.
 - Documented acquisition profile controls, verification stages, recovery behavior, and file-inventory limits.

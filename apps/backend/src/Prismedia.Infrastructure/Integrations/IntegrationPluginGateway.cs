@@ -11,8 +11,8 @@ using Prismedia.Infrastructure.Processes;
 namespace Prismedia.Infrastructure.Integrations;
 
 /// <summary>Runs typed integration operations through the existing installed executable package boundary.</summary>
-public sealed class IntegrationPluginGateway(PrismediaDbContext db, PluginCatalogService catalog,
-    PluginProcessTransport transport) : IIntegrationPluginGateway, IIntegrationDiscoveryGateway {
+public sealed partial class IntegrationPluginGateway(PrismediaDbContext db, PluginCatalogService catalog,
+    PluginProcessTransport transport) : IIntegrationPluginGateway, IIntegrationDiscoveryGateway, IIntegrationTransferGateway {
     /// <inheritdoc />
     public async Task<PluginManifest?> FindAsync(string pluginId, CancellationToken cancellationToken) =>
         (await FindDescriptorAsync(pluginId, cancellationToken))?.Manifest;

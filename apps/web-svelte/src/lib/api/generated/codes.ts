@@ -1020,6 +1020,15 @@ export const INDEXER_KIND = {
 
 export type IndexerKindCode = (typeof INDEXER_KIND)[keyof typeof INDEXER_KIND];
 
+// source: enum IntegrationArtifactRole
+export const INTEGRATION_ARTIFACT_ROLE = {
+  content: "content",
+  cover: "cover",
+  sidecar: "sidecar",
+} as const;
+
+export type IntegrationArtifactRoleCode = (typeof INTEGRATION_ARTIFACT_ROLE)[keyof typeof INTEGRATION_ARTIFACT_ROLE];
+
 // source: enum IntegrationOperation
 export const INTEGRATION_OPERATION = {
   probe: "probe",
@@ -1033,6 +1042,7 @@ export const INTEGRATION_OPERATION = {
   cancel: "cancel",
   listArtifacts: "list-artifacts",
   authorizeArtifact: "authorize-artifact",
+  renewRetention: "renew-retention",
   acknowledge: "acknowledge",
   lookupManaged: "lookup-managed",
   ensureManaged: "ensure-managed",
@@ -1044,6 +1054,31 @@ export const INTEGRATION_OPERATION = {
 } as const;
 
 export type IntegrationOperationCode = (typeof INTEGRATION_OPERATION)[keyof typeof INTEGRATION_OPERATION];
+
+// source: enum IntegrationTransferMode
+export const INTEGRATION_TRANSFER_MODE = {
+  remoteExecutor: "remote-executor",
+  sourceDownload: "source-download",
+} as const;
+
+export type IntegrationTransferModeCode = (typeof INTEGRATION_TRANSFER_MODE)[keyof typeof INTEGRATION_TRANSFER_MODE];
+
+// source: enum IntegrationTransferPhase
+export const INTEGRATION_TRANSFER_PHASE = {
+  pendingSubmission: "pending-submission",
+  submissionUncertain: "submission-uncertain",
+  awaitingRemote: "awaiting-remote",
+  awaitingArtifacts: "awaiting-artifacts",
+  transferring: "transferring",
+  importing: "importing",
+  awaitingAcknowledgement: "awaiting-acknowledgement",
+  completed: "completed",
+  needsReview: "needs-review",
+  failed: "failed",
+  cancelled: "cancelled",
+} as const;
+
+export type IntegrationTransferPhaseCode = (typeof INTEGRATION_TRANSFER_PHASE)[keyof typeof INTEGRATION_TRANSFER_PHASE];
 
 // source: enum JobGraphOrigin
 export const JOB_GRAPH_ORIGIN = {
@@ -1401,6 +1436,19 @@ export const RELEASE_REJECTION_REASON = {
 } as const;
 
 export type ReleaseRejectionReasonCode = (typeof RELEASE_REJECTION_REASON)[keyof typeof RELEASE_REJECTION_REASON];
+
+// source: enum RemoteJobState
+export const REMOTE_JOB_STATE = {
+  queued: "queued",
+  running: "running",
+  partial: "partial",
+  succeeded: "succeeded",
+  failed: "failed",
+  cancelled: "cancelled",
+  expired: "expired",
+} as const;
+
+export type RemoteJobStateCode = (typeof REMOTE_JOB_STATE)[keyof typeof REMOTE_JOB_STATE];
 
 // source: enum RequestCommitOutcome
 export const REQUEST_COMMIT_OUTCOME = {
