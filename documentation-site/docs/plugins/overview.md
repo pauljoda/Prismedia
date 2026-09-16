@@ -44,10 +44,24 @@ Native plugins speak the versioned `IdentifyPluginRequest` /
                    candidate or proposal
 ```
 
-The process is isolated from Prismedia persistence. It receives a minimal Entity
+The protocol keeps persistence in Prismedia. The process receives a minimal Entity
 snapshot, plugin-owned query fields, known identities and structural context; it
 returns candidates or a proposal. The core owns validation, persistence,
 monitoring, acquisition, and metadata application.
+
+### Native process limits and trust
+
+Native .NET plugins are trusted executables running as the Prismedia operating-system
+user. They are not sandboxed. The host passes credentials in a temporary request file,
+created with owner-only access on Unix and deleted after invocation. Children receive
+an explicit platform environment rather than inheriting database and server secrets.
+
+Each invocation has a deadline and limits of 4 Mi characters for the request,
+16 Mi characters for stdout, 64 Ki characters for stderr, and 64 levels of JSON nesting.
+Exceeding an output limit terminates the process tree. Reported plugin errors redact
+supplied credentials and are limited to 4,096 characters. These protections reduce
+accidental exposure and resource use; only install executable packages you trust.
+Stash-compatible scrapers use their separate compatibility runner.
 
 ## Wrapping Stash community scrapers
 

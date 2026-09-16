@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Text;
 
 namespace Prismedia.Infrastructure.Processes;
 
@@ -18,12 +19,41 @@ public class ProcessExecutor(IMediaProcessAdmission? mediaAdmission = null) {
     /// media generation (thumbnails, trickplay) never starves playback, the API, or scans.
     /// </param>
     /// <returns>Exit code plus captured standard output and standard error.</returns>
-    public virtual async Task<ProcessExecutionResult> RunAsync(
+    public virtual Task<ProcessExecutionResult> RunAsync(
         string fileName,
         IReadOnlyList<string> arguments,
         IReadOnlyDictionary<string, string>? environment,
         CancellationToken cancellationToken,
-        bool lowPriority = false) {
+        bool lowPriority = false) =>
+        RunCapturedAsync(fileName, arguments, environment, cancellationToken, new ProcessExecutionOptions(), lowPriority);
+
+    /// <summary>Runs a child with explicit output budgets and environment inheritance policy.</summary>
+    /// <param name="fileName">Executable name or absolute path.</param>
+    /// <param name="arguments">Arguments passed without shell interpolation.</param>
+    /// <param name="environment">Explicit environment values; the complete environment when inheritance is disabled.</param>
+    /// <param name="cancellationToken">Cancellation terminates the process tree.</param>
+    /// <param name="options">Capture and environment limits for this invocation.</param>
+    /// <param name="lowPriority">Whether background work uses below-normal scheduling priority.</param>
+    /// <returns>The exit code and complete output, or an exception if a capture limit is exceeded.</returns>
+    public virtual Task<ProcessExecutionResult> RunAsync(
+        string fileName,
+        IReadOnlyList<string> arguments,
+        IReadOnlyDictionary<string, string>? environment,
+        CancellationToken cancellationToken,
+        ProcessExecutionOptions options,
+        bool lowPriority = false) =>
+        RunCapturedAsync(fileName, arguments, environment, cancellationToken, options, lowPriority);
+
+    private async Task<ProcessExecutionResult> RunCapturedAsync(
+        string fileName,
+        IReadOnlyList<string> arguments,
+        IReadOnlyDictionary<string, string>? environment,
+        CancellationToken cancellationToken,
+        ProcessExecutionOptions options,
+        bool lowPriority) {
+        if (options.MaxStandardOutputCharacters is < 0 || options.MaxStandardErrorCharacters is < 0) {
+            throw new ArgumentOutOfRangeException(nameof(options), "Capture limits must be non-negative.");
+        }
         await using var mediaLease = await AcquireMediaLeaseAsync(fileName, lowPriority, cancellationToken);
         var startInfo = new ProcessStartInfo(fileName) {
             RedirectStandardError = true,
@@ -35,6 +65,7 @@ public class ProcessExecutor(IMediaProcessAdmission? mediaAdmission = null) {
             startInfo.ArgumentList.Add(argument);
         }
 
+        if (!options.InheritEnvironment) startInfo.Environment.Clear();
         foreach (var (key, value) in environment ?? new Dictionary<string, string>()) {
             startInfo.Environment[key] = value;
         }
@@ -42,21 +73,46 @@ public class ProcessExecutor(IMediaProcessAdmission? mediaAdmission = null) {
         using var process = Process.Start(startInfo) ??
             throw new InvalidOperationException($"Failed to start '{fileName}'.");
         TryApplyLowPriority(process, lowPriority);
-
+        using var captureCancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        var stdoutTask = CaptureAsync(process.StandardOutput, options.MaxStandardOutputCharacters, captureCancellation.Token);
+        var stderrTask = CaptureAsync(process.StandardError, options.MaxStandardErrorCharacters, captureCancellation.Token);
         try {
-            var stdoutTask = process.StandardOutput.ReadToEndAsync(cancellationToken);
-            var stderrTask = process.StandardError.ReadToEndAsync(cancellationToken);
-            await process.WaitForExitAsync(cancellationToken);
+            // Observe either stream's failure immediately: waiting for exit or WhenAll first
+            // would deadlock a child whose overflowing pipe is no longer being drained.
+            var pending = new List<Task> { stdoutTask, stderrTask, process.WaitForExitAsync(captureCancellation.Token) };
+            while (pending.Count > 0) {
+                var completed = await Task.WhenAny(pending);
+                await completed;
+                pending.Remove(completed);
+            }
 
             return new ProcessExecutionResult(
                 process.ExitCode,
                 await stdoutTask,
                 await stderrTask);
-        } catch (OperationCanceledException) when (!process.HasExited) {
-            process.Kill(entireProcessTree: true);
+        } catch {
+            await captureCancellation.CancelAsync();
+            if (!process.HasExited) {
+                try { process.Kill(entireProcessTree: true); }
+                catch (InvalidOperationException) { /* The child exited between the check and kill. */ }
+            }
             await process.WaitForExitAsync(CancellationToken.None);
+            try { await Task.WhenAll(stdoutTask, stderrTask); }
+            catch { /* Preserve the original process/capture failure. */ }
             throw;
         }
+    }
+
+    private static async Task<string> CaptureAsync(StreamReader reader, int? maximumCharacters, CancellationToken cancellationToken) {
+        if (maximumCharacters is null) return await reader.ReadToEndAsync(cancellationToken);
+        var output = new StringBuilder(Math.Min(maximumCharacters.Value, 4096));
+        var buffer = new char[4096];
+        int read;
+        while ((read = await reader.ReadAsync(buffer.AsMemory(), cancellationToken)) > 0) {
+            if (read > maximumCharacters.Value - output.Length) throw new ProcessOutputLimitException();
+            output.Append(buffer, 0, read);
+        }
+        return output.ToString();
     }
 
     /// <summary>

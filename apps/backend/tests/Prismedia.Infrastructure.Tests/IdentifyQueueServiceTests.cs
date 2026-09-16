@@ -2191,7 +2191,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             string fileName,
             IReadOnlyList<string> arguments,
             IReadOnlyDictionary<string, string>? environment,
-            CancellationToken cancellationToken, bool lowPriority = false) {
+            CancellationToken cancellationToken, ProcessExecutionOptions options, bool lowPriority = false) {
             var wire = new {
                 ok = false,
                 result = (object?)null,
@@ -2206,7 +2206,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             string fileName,
             IReadOnlyList<string> arguments,
             IReadOnlyDictionary<string, string>? environment,
-            CancellationToken cancellationToken, bool lowPriority = false) =>
+            CancellationToken cancellationToken, ProcessExecutionOptions options, bool lowPriority = false) =>
             throw new InvalidOperationException("Plugin process crashed.");
     }
 
@@ -2215,7 +2215,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             string fileName,
             IReadOnlyList<string> arguments,
             IReadOnlyDictionary<string, string>? environment,
-            CancellationToken cancellationToken, bool lowPriority = false) {
+            CancellationToken cancellationToken, ProcessExecutionOptions options, bool lowPriority = false) {
             var wire = new {
                 ok = true,
                 result = new {
@@ -2243,7 +2243,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             string fileName,
             IReadOnlyList<string> arguments,
             IReadOnlyDictionary<string, string>? environment,
-            CancellationToken cancellationToken, bool lowPriority = false) {
+            CancellationToken cancellationToken, ProcessExecutionOptions options, bool lowPriority = false) {
             var requestJson = await File.ReadAllTextAsync(arguments[1], cancellationToken);
             var request = JsonSerializer.Deserialize<IdentifyPluginRequest>(requestJson, JsonOptions)!;
             return new ProcessExecutionResult(
@@ -2263,7 +2263,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             string fileName,
             IReadOnlyList<string> arguments,
             IReadOnlyDictionary<string, string>? environment,
-            CancellationToken cancellationToken, bool lowPriority = false) {
+            CancellationToken cancellationToken, ProcessExecutionOptions options, bool lowPriority = false) {
             var requestJson = await File.ReadAllTextAsync(arguments[1], cancellationToken);
             var request = JsonSerializer.Deserialize<IdentifyPluginRequest>(requestJson, JsonOptions)!;
             var storedId = request.Query.ExternalIds?.GetValueOrDefault("tmdb")
@@ -2307,7 +2307,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             string fileName,
             IReadOnlyList<string> arguments,
             IReadOnlyDictionary<string, string>? environment,
-            CancellationToken cancellationToken, bool lowPriority = false) {
+            CancellationToken cancellationToken, ProcessExecutionOptions options, bool lowPriority = false) {
             var requestJson = await File.ReadAllTextAsync(arguments[1], cancellationToken);
             var request = JsonSerializer.Deserialize<IdentifyPluginRequest>(requestJson, JsonOptions)!;
             if (request.Action == IdentifyAction.Search) {
@@ -2345,7 +2345,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             string fileName,
             IReadOnlyList<string> arguments,
             IReadOnlyDictionary<string, string>? environment,
-            CancellationToken cancellationToken, bool lowPriority = false) {
+            CancellationToken cancellationToken, ProcessExecutionOptions options, bool lowPriority = false) {
             var requestJson = await File.ReadAllTextAsync(arguments[1], cancellationToken);
             var request = JsonSerializer.Deserialize<IdentifyPluginRequest>(requestJson, JsonOptions)!;
             Requests.Add(request);
@@ -2440,7 +2440,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             string fileName,
             IReadOnlyList<string> arguments,
             IReadOnlyDictionary<string, string>? environment,
-            CancellationToken cancellationToken, bool lowPriority = false) {
+            CancellationToken cancellationToken, ProcessExecutionOptions options, bool lowPriority = false) {
             var requestJson = await File.ReadAllTextAsync(arguments[1], cancellationToken);
             var request = JsonSerializer.Deserialize<IdentifyPluginRequest>(requestJson, JsonOptions)!;
             Requests.Add(request);
@@ -2497,6 +2497,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             IReadOnlyList<string> arguments,
             IReadOnlyDictionary<string, string>? environment,
             CancellationToken cancellationToken,
+            ProcessExecutionOptions options,
             bool lowPriority = false) {
             var requestJson = await File.ReadAllTextAsync(arguments[1], cancellationToken);
             var request = JsonSerializer.Deserialize<IdentifyPluginRequest>(requestJson, JsonOptions)!;
@@ -2544,7 +2545,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             string fileName,
             IReadOnlyList<string> arguments,
             IReadOnlyDictionary<string, string>? environment,
-            CancellationToken cancellationToken, bool lowPriority = false) {
+            CancellationToken cancellationToken, ProcessExecutionOptions options, bool lowPriority = false) {
             var wire = new {
                 ok = true,
                 result = new {
@@ -2580,7 +2581,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             string fileName,
             IReadOnlyList<string> arguments,
             IReadOnlyDictionary<string, string>? environment,
-            CancellationToken cancellationToken, bool lowPriority = false) {
+            CancellationToken cancellationToken, ProcessExecutionOptions options, bool lowPriority = false) {
             var requestJson = await File.ReadAllTextAsync(arguments[1], cancellationToken);
             var request = JsonSerializer.Deserialize<IdentifyPluginRequest>(requestJson, JsonOptions)!;
             Actions.Add(request.Action.ToCode());
@@ -2606,7 +2607,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             string fileName,
             IReadOnlyList<string> arguments,
             IReadOnlyDictionary<string, string>? environment,
-            CancellationToken cancellationToken, bool lowPriority = false) {
+            CancellationToken cancellationToken, ProcessExecutionOptions options, bool lowPriority = false) {
             var requestJson = await File.ReadAllTextAsync(arguments[1], cancellationToken);
             var request = JsonSerializer.Deserialize<IdentifyPluginRequest>(requestJson, JsonOptions)!;
             if (request.Action == IdentifyAction.LookupId) {
@@ -2645,7 +2646,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             string fileName,
             IReadOnlyList<string> arguments,
             IReadOnlyDictionary<string, string>? environment,
-            CancellationToken cancellationToken, bool lowPriority = false) {
+            CancellationToken cancellationToken, ProcessExecutionOptions options, bool lowPriority = false) {
             var requestJson = await File.ReadAllTextAsync(arguments[1], cancellationToken);
             var request = JsonSerializer.Deserialize<IdentifyPluginRequest>(requestJson, JsonOptions)!;
             Requests.Add(request);
@@ -2737,7 +2738,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
             string fileName,
             IReadOnlyList<string> arguments,
             IReadOnlyDictionary<string, string>? environment,
-            CancellationToken cancellationToken, bool lowPriority = false) {
+            CancellationToken cancellationToken, ProcessExecutionOptions options, bool lowPriority = false) {
             var requestJson = await File.ReadAllTextAsync(arguments[1], cancellationToken);
             var request = JsonSerializer.Deserialize<IdentifyPluginRequest>(requestJson, JsonOptions)!;
             Actions.Add(request.Action.ToCode());

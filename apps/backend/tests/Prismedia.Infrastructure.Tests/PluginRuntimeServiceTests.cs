@@ -1424,7 +1424,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             string fileName,
             IReadOnlyList<string> arguments,
             IReadOnlyDictionary<string, string>? environment,
-            CancellationToken cancellationToken, bool lowPriority = false) {
+            CancellationToken cancellationToken, ProcessExecutionOptions options, bool lowPriority = false) {
             FileName = fileName;
             Arguments = arguments.ToArray();
             var requestJson = await File.ReadAllTextAsync(arguments[1], cancellationToken);
@@ -1471,7 +1471,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             string fileName,
             IReadOnlyList<string> arguments,
             IReadOnlyDictionary<string, string>? environment,
-            CancellationToken cancellationToken, bool lowPriority = false) =>
+            CancellationToken cancellationToken, ProcessExecutionOptions options, bool lowPriority = false) =>
             Task.FromResult(new ProcessExecutionResult(
                 0,
                 """
@@ -1493,7 +1493,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             string fileName,
             IReadOnlyList<string> arguments,
             IReadOnlyDictionary<string, string>? environment,
-            CancellationToken cancellationToken, bool lowPriority = false) =>
+            CancellationToken cancellationToken, ProcessExecutionOptions options, bool lowPriority = false) =>
             Task.FromResult(new ProcessExecutionResult(
                 0,
                 """
@@ -1529,7 +1529,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             string fileName,
             IReadOnlyList<string> arguments,
             IReadOnlyDictionary<string, string>? environment,
-            CancellationToken cancellationToken, bool lowPriority = false) {
+            CancellationToken cancellationToken, ProcessExecutionOptions options, bool lowPriority = false) {
             var requestJson = await File.ReadAllTextAsync(arguments[1], cancellationToken);
             var request = JsonSerializer.Deserialize<IdentifyPluginRequest>(
                 requestJson,
@@ -1570,7 +1570,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             string fileName,
             IReadOnlyList<string> arguments,
             IReadOnlyDictionary<string, string>? environment,
-            CancellationToken cancellationToken, bool lowPriority = false) {
+            CancellationToken cancellationToken, ProcessExecutionOptions options, bool lowPriority = false) {
             var requestJson = await File.ReadAllTextAsync(arguments[1], cancellationToken);
             var request = JsonSerializer.Deserialize<IdentifyPluginRequest>(
                 requestJson,
@@ -1646,7 +1646,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             string fileName,
             IReadOnlyList<string> arguments,
             IReadOnlyDictionary<string, string>? environment,
-            CancellationToken cancellationToken, bool lowPriority = false) {
+            CancellationToken cancellationToken, ProcessExecutionOptions options, bool lowPriority = false) {
             var requestJson = await File.ReadAllTextAsync(arguments[1], cancellationToken);
             var request = JsonSerializer.Deserialize<IdentifyPluginRequest>(
                 requestJson,
@@ -1709,7 +1709,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             string fileName,
             IReadOnlyList<string> arguments,
             IReadOnlyDictionary<string, string>? environment,
-            CancellationToken cancellationToken, bool lowPriority = false) {
+            CancellationToken cancellationToken, ProcessExecutionOptions options, bool lowPriority = false) {
             var request = JsonSerializer.Deserialize<IdentifyPluginRequest>(
                 await File.ReadAllTextAsync(arguments[1], cancellationToken),
                 WireJson)!;
@@ -1741,7 +1741,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             string fileName,
             IReadOnlyList<string> arguments,
             IReadOnlyDictionary<string, string>? environment,
-            CancellationToken cancellationToken, bool lowPriority = false) {
+            CancellationToken cancellationToken, ProcessExecutionOptions options, bool lowPriority = false) {
             await Task.CompletedTask;
             // Mimics a provider that degraded a failed detail lookup to its raw id: the title is just
             // the external id value.
