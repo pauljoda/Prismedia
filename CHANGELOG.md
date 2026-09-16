@@ -123,6 +123,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Metadata providers preserve existing descriptions, classifications, tags, and credits when they return no value. Manual edits can still explicitly clear those fields.
+
 - Documentation search preserves queries typed while the page is still loading.
 - Older automatic TV imports incorrectly marked for manual review during upgrade can recover when their matching completed job proves automatic intent; explicit reviews and uncertain history remain protected.
 

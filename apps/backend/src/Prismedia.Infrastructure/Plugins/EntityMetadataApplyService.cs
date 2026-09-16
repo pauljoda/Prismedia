@@ -447,7 +447,9 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
             entity.Title = patch.Title.Trim();
         }
 
-        if (selected.Contains(MetadataPatchField.Description.ToCode())) {
+        // Provider omissions carry no evidence. Explicit clearing belongs to ApplyPatchAsync,
+        // whose selected fields represent a user's edit rather than a sparse provider response.
+        if (selected.Contains(MetadataPatchField.Description.ToCode()) && !string.IsNullOrWhiteSpace(patch.Description)) {
             await UpsertDescriptionAsync(entityId, patch.Description, now, cancellationToken);
         }
 
@@ -489,7 +491,7 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
             await UpsertPositionsAsync(entity, normalizedPositions, now, cancellationToken);
         }
 
-        if (selected.Contains(MetadataPatchField.Classification.ToCode())) {
+        if (selected.Contains(MetadataPatchField.Classification.ToCode()) && !string.IsNullOrWhiteSpace(patch.Classification)) {
             await UpsertClassificationAsync(entityId, patch.Classification, now, cancellationToken);
         }
 

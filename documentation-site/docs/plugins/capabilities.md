@@ -107,6 +107,12 @@ external identities, URLs, tags, studio, credits, dates, stats, positions,
 classification, and optional flags. Plugins do not return database rows or
 third-party application schemas.
 
+Provider proposals are enrichment: missing or blank descriptions and classifications,
+and empty tag or credit lists, preserve existing metadata. Selectable fields do not
+turn absent provider evidence into a delete instruction. Populated tag and credit
+lists retain their reviewed replacement behavior. The manual metadata editor has a
+separate explicit field-selection contract and can clear those fields.
+
 - `children` are structural: seasons, episodes, volumes, chapters, albums, or
   tracks.
 - `relationships` are non-structural: people, studios, tags, and related works.

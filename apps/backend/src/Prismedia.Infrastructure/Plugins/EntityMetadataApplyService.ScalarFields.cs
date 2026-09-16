@@ -12,10 +12,8 @@ public sealed partial class EntityMetadataApplyService {
     private async Task UpsertDescriptionAsync(Guid entityId, string? value, DateTimeOffset now, CancellationToken cancellationToken) {
         var existing = await _db.EntityDescriptions.FindAsync([entityId], cancellationToken);
         if (string.IsNullOrWhiteSpace(value)) {
-            // An explicit empty value clears the description — this is intentional for the manual edit path,
-            // which shares this method. (A consequence: an identify pass that returns no description clears a
-            // request-time seed; that is acceptable and rare, and must not be "fixed" here without breaking
-            // the edit-clear behavior — the seed is a best-effort floor, not a guarantee.)
+            // The manual edit path explicitly selects this field to clear it. Provider apply
+            // paths must filter absent evidence before calling this shared writer.
             if (existing is not null) {
                 _db.EntityDescriptions.Remove(existing);
             }

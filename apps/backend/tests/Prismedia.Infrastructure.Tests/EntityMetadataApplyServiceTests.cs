@@ -15,6 +15,63 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EntityMetadataApplyServiceTests {
     [Theory]
+    [InlineData(null)]
+    [InlineData("")]
+    [InlineData("   ")]
+    public async Task SparseProviderProposalPreservesDescriptionClassificationAndRelationships(string? missingValue) {
+        await using var db = CreateContext();
+        var entityId = Guid.NewGuid();
+        SeedEntity(db, entityId, EntityKind.Book.ToCode(), "A curated book");
+        await db.SaveChangesAsync();
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        var fields = new[] {
+            MetadataPatchField.Description.ToCode(), MetadataPatchField.Classification.ToCode(),
+            MetadataPatchField.Tags.ToCode(), MetadataPatchField.Credits.ToCode()
+        };
+        await service.ApplyPatchAsync(entityId, new EntityMetadataUpdateRequest(fields,
+            EmptyPatch() with {
+                Description = "A carefully reviewed description", Classification = "Reviewed classification",
+                Tags = ["Curated subject"], Credits = [new CreditPatch("Known author", CreditRole.Writer.ToCode(), null, 0)]
+            }), CancellationToken.None);
+        var originalLinks = await db.EntityRelationshipLinks.Where(row => row.EntityId == entityId)
+            .Select(row => row.TargetEntityId).ToArrayAsync();
+        Assert.NotEmpty(originalLinks);
+        var proposal = new EntityMetadataProposal("sparse-book", "fixture-provider", EntityKind.Book, null, null,
+            EmptyPatch() with { Description = missingValue, Classification = missingValue }, [], [], [], Relationships: []);
+
+        Assert.True(await service.ApplyAsync(entityId, proposal, fields, null, CancellationToken.None));
+
+        Assert.Equal("A carefully reviewed description", (await db.EntityDescriptions.FindAsync(entityId))!.Value);
+        Assert.Equal("Reviewed classification", (await db.EntityClassifications.FindAsync(entityId))!.Value);
+        Assert.Equal(originalLinks.Order(), (await db.EntityRelationshipLinks.Where(row => row.EntityId == entityId)
+            .Select(row => row.TargetEntityId).ToArrayAsync()).Order());
+    }
+
+    [Fact]
+    public async Task ManualBookEditCanExplicitlyClearFieldsPreservedBySparseProviders() {
+        await using var db = CreateContext();
+        var entityId = Guid.NewGuid();
+        SeedEntity(db, entityId, EntityKind.Book.ToCode(), "A curated book");
+        await db.SaveChangesAsync();
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        var fields = new[] {
+            MetadataPatchField.Description.ToCode(), MetadataPatchField.Classification.ToCode(),
+            MetadataPatchField.Tags.ToCode(), MetadataPatchField.Credits.ToCode()
+        };
+        await service.ApplyPatchAsync(entityId, new EntityMetadataUpdateRequest(fields,
+            EmptyPatch() with {
+                Description = "Remove this description", Classification = "Remove this classification",
+                Tags = ["Remove this subject"], Credits = [new CreditPatch("Remove this author", CreditRole.Writer.ToCode(), null, 0)]
+            }), CancellationToken.None);
+
+        Assert.True(await service.ApplyPatchAsync(entityId, new EntityMetadataUpdateRequest(fields, EmptyPatch()), CancellationToken.None));
+
+        Assert.Null(await db.EntityDescriptions.FindAsync(entityId));
+        Assert.Null(await db.EntityClassifications.FindAsync(entityId));
+        Assert.Empty(await db.EntityRelationshipLinks.Where(row => row.EntityId == entityId).ToArrayAsync());
+    }
+
+    [Theory]
     [InlineData(false)]
     [InlineData(true)]
     public async Task CompleteChildEpisodeNumberingRetiresAnUnsupportedAbsolutePositionWithoutChangingItsFile(bool completeNumbering) {

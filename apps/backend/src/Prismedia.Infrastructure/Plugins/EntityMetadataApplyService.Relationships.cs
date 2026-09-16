@@ -60,7 +60,7 @@ public sealed partial class EntityMetadataApplyService {
             return;
         }
 
-        if (selected.Contains(MetadataPatchField.Tags.ToCode())) {
+        if (selected.Contains(MetadataPatchField.Tags.ToCode()) && patch.Tags.Any(tag => !string.IsNullOrWhiteSpace(tag))) {
             await ReplaceTagsAsync(owner.Id, patch.Tags, now, markNsfw, cancellationToken);
         }
 
@@ -68,7 +68,7 @@ public sealed partial class EntityMetadataApplyService {
             await SetStudioAsync(owner.Id, patch.Studio, now, markNsfw, cancellationToken);
         }
 
-        if (selected.Contains(MetadataPatchField.Credits.ToCode())) {
+        if (selected.Contains(MetadataPatchField.Credits.ToCode()) && patch.Credits.Any(credit => !string.IsNullOrWhiteSpace(credit.Name))) {
             await ReplaceCreditsAsync(owner.Id, patch.Credits, now, markNsfw, cancellationToken);
         }
 
