@@ -25,7 +25,8 @@ public sealed class ScanBookJobHandler(
     Acquisition.IAcquisitionHintApplier? acquisitionHints = null,
     IAudioScanPersistence? audio = null,
     ILibraryFileChangeIntake? changeIntake = null,
-    IBookChapterMapService? chapterMap = null) : ScanJobHandler(logger, fileDiscovery, roots, snapshots, changeIntake: changeIntake) {
+    IBookChapterMapService? chapterMap = null,
+    IImportedPublicationTitleResolver? importedTitles = null) : ScanJobHandler(logger, fileDiscovery, roots, snapshots, changeIntake: changeIntake) {
     protected override bool IsEligibleRoot(LibraryRootData root) => root.ScanBooks;
 
     protected override IReadOnlyList<MediaCategory> ScanCategories =>
@@ -179,8 +180,10 @@ public sealed class ScanBookJobHandler(
             var metadata = bookFileMetadata is null
                 ? null
                 : await bookFileMetadata.ReadAsync(sourcePath, format.Value, cancellationToken);
+            var acceptedTitle = FirstNonEmpty(metadata?.Title) is null && importedTitles is not null
+                ? await importedTitles.ResolveAsync(root.Id, EntityKind.Book, sourcePath, cancellationToken) : null;
             var fallbackTitle = Path.GetFileNameWithoutExtension(sourcePath);
-            var title = FirstNonEmpty(metadata?.Title, metadata?.Series, fallbackTitle)!;
+            var title = FirstNonEmpty(metadata?.Title, acceptedTitle, metadata?.Series, fallbackTitle)!;
             var isNsfw = root.IsNsfw || metadata?.MarksNsfw == true;
             items.Add(SingleFileBookItem.From(root.Path, sourcePath, title, isNsfw, format.Value, metadata));
         }

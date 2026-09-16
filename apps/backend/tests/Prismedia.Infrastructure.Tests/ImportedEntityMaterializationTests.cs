@@ -30,7 +30,7 @@ namespace Prismedia.Infrastructure.Tests;
 /// its existing Wanted Entity to real Source ownership before it writes Imported; TV has its own
 /// checkpoint/materializer suite because one file may satisfy several episode Entities.
 /// </summary>
-public sealed class ImportedEntityMaterializationTests : IDisposable {
+public sealed partial class ImportedEntityMaterializationTests : IDisposable {
     private readonly string _workRoot = Directory.CreateTempSubdirectory("prismedia-import-ready-").FullName;
 
     public void Dispose() {

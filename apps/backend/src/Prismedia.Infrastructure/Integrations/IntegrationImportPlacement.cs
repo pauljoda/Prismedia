@@ -1,5 +1,4 @@
 using System.Security.Cryptography;
-using System.Text;
 using Prismedia.Application.Files;
 using Prismedia.Application.Integrations;
 using Prismedia.Application.Jobs.Ports;
@@ -20,10 +19,8 @@ public sealed class IntegrationImportPlacement(ILibraryFileMutationGuard mutatio
             || artifact.SizeBytes <= 0 || artifact.Sha256 is not { Length: 64 } || !artifact.Sha256.All(Uri.IsHexDigit))
             throw new InvalidDataException("The publication has no valid placement evidence.");
         RejectLink(rootPath);
-        var title = new string(plan.Title.Where(character => !char.IsControl(character) && character is not ('/' or '\\' or ':' or '"' or '<' or '>' or '|' or '?' or '*')).Take(80).ToArray()).Trim().TrimEnd('.');
-        if (title.Length == 0) title = "Publication";
-        var artifactKey = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(artifact.ArtifactId)))[..16];
-        var target = Path.Combine(rootPath, $"{title} [{operationId:N}-{artifactKey}]{Path.GetExtension(artifact.FileName).ToLowerInvariant()}");
+        var artifactKey = IntegrationPublicationNames.ArtifactKey(artifact.ArtifactId);
+        var target = Path.Combine(rootPath, IntegrationPublicationNames.FileName(operationId, plan.Title, artifact.ArtifactId, artifact.FileName));
         var pending = Path.Combine(rootPath, $".prismedia-{operationId:N}-{artifactKey}.part");
         RejectLink(target);
         RejectLink(pending);

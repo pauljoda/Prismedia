@@ -121,6 +121,7 @@ public static class DependencyInjection {
         services.AddSingleton(new TransferPlanProtector(dataDir));
         services.AddScoped<IIntegrationPublicationVerifier, IntegrationPublicationVerifier>();
         services.AddScoped<IIntegrationImportPlacement, IntegrationImportPlacement>();
+        services.AddScoped<IImportedPublicationTitleResolver, ImportedPublicationTitleResolver>();
         services.AddScoped<ConnectionService>();
         services.AddScoped<IntegrationManifestReader>();
         services.AddSingleton(new IntegrationArtifactStorageOptions(Path.Combine(dataDir, "integrations", "artifacts")));

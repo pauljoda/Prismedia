@@ -93,6 +93,10 @@ cannot acquire the same source item through the same connection concurrently.
 Prismedia records the selected destination path when accepting the request. Moving,
 disabling, or unmounting that library blocks placement. Files receive deterministic,
 operation-specific names, and existing files with different bytes are preserved.
+Book and comic display titles use embedded publication titles first, then the selected
+source title when the retained import record matches the exact path and bytes. This
+keeps storage operation IDs out of display names during initial import and later scans;
+ordinary files and unverified replacements retain the normal metadata/filename fallback.
 Import retries recheck local hashes and do not need the source online once byte
 verification has been committed. Keep `/data/integrations/artifacts` until unfinished
 imports have recovered; a database receipt alone cannot recreate missing staged bytes.

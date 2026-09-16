@@ -151,6 +151,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Catalog and URL imports use the selected publication title when embedded metadata has no title, keeping storage operation IDs out of book and comic names across rescans. Titles are recovered only for the exact accepted files and verified bytes.
+
 - Comic acquisition preserves fractional, negative, and suffixed issue labels when matching releases, and uses the current library label even when the installment title has no number. Automatic exact-issue requests reject unnumbered packs.
 
 - Missing external-library files and empty managed containers retain their catalog identity and viewing history during scan cleanup, including while a connection is offline.

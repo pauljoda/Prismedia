@@ -33,7 +33,8 @@ public sealed class ScanComicJobHandler(
     IScanMetadataPersistence? scanMetadata = null,
     ILibraryFileChangeIntake? changeIntake = null,
     IComicFolderNormalizer? folderNormalizer = null,
-    IAcquisitionHintApplier? acquisitionHints = null)
+    IAcquisitionHintApplier? acquisitionHints = null,
+    IImportedPublicationTitleResolver? importedTitles = null)
     : ScanJobHandler(logger, fileDiscovery, roots, snapshots, changeIntake: changeIntake) {
     private static readonly Regex FirstInteger = new(@"\d+", RegexOptions.Compiled | RegexOptions.CultureInvariant);
 
@@ -173,13 +174,16 @@ public sealed class ScanComicJobHandler(
             var metadata = comicInfoReader is null
                 ? null
                 : await comicInfoReader.ReadAsync(archivePath, cancellationToken);
+            var acceptedTitle = FirstNonEmpty(metadata?.Title) is null && importedTitles is not null
+                ? await importedTitles.ResolveAsync(root.Id, EntityKind.ComicInstallment, archivePath, cancellationToken) : null;
             items.Add(ComicArchiveItem.From(
                 root.Path,
                 archivePath,
                 source.ClassificationPath,
                 members,
                 metadata,
-                source.Provenance));
+                source.Provenance,
+                acceptedTitle));
         }
 
         var validArchivePaths = items
@@ -548,12 +552,13 @@ public sealed class ScanComicJobHandler(
             string classificationPath,
             IReadOnlyList<string> pageMembers,
             ComicInfoMetadata? metadata,
-            ComicSourceProvenance? sourceProvenance) {
+            ComicSourceProvenance? sourceProvenance,
+            string? acceptedTitle = null) {
             var relativePath = Path.GetRelativePath(rootPath, classificationPath);
             var segments = relativePath.Split(
                 [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
                 StringSplitOptions.RemoveEmptyEntries);
-            var fallbackTitle = Path.GetFileNameWithoutExtension(classificationPath);
+            var fallbackTitle = acceptedTitle ?? Path.GetFileNameWithoutExtension(classificationPath);
             var installmentTitle = FirstNonEmpty(metadata?.Title, fallbackTitle)!;
             var seriesFolderPath = segments.Length > 1
                 ? Path.Combine(rootPath, segments[0])
