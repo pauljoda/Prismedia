@@ -30,6 +30,7 @@ import type {
   BookAcquisitionProfileView,
   BookChapterMappingsResponse,
   BookContentsResponse,
+  BrowseConnectionRequest,
   BrowseLibraryPathParams,
   BrowserSessionResponse,
   BulkJobResponse,
@@ -68,6 +69,7 @@ import type {
   DeleteConnectionParams,
   DeleteEntityParams,
   DeleteFileParams,
+  DiscoveryPageResponse,
   DownloadClientSaveRequest,
   DownloadClientSummary,
   DownloadClientTestRequest,
@@ -9180,6 +9182,48 @@ export const testConnection = async (id: string, options?: RequestInit): Promise
     method: 'POST'
 
 
+  }
+);}
+
+
+
+export type browseConnectionResponse200 = {
+  data: DiscoveryPageResponse
+  status: 200
+}
+
+export type browseConnectionResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type browseConnectionResponseSuccess = (browseConnectionResponse200) & {
+  headers: Headers;
+};
+export type browseConnectionResponseError = (browseConnectionResponse400) & {
+  headers: Headers;
+};
+
+export type browseConnectionResponse = (browseConnectionResponseSuccess | browseConnectionResponseError)
+
+export const getBrowseConnectionUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/browse`
+}
+
+export const browseConnection = async (id: string,
+    browseConnectionRequest: BrowseConnectionRequest, options?: RequestInit): Promise<browseConnectionResponse> => {
+
+  return orvalFetch<browseConnectionResponse>(getBrowseConnectionUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      browseConnectionRequest,)
   }
 );}
 

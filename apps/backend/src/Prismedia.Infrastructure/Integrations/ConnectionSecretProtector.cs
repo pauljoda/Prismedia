@@ -6,16 +6,12 @@ namespace Prismedia.Infrastructure.Integrations;
 
 /// <summary>Protects connection secrets with a persistent key ring shared by API and worker, and connection-specific purposes.</summary>
 public sealed class ConnectionSecretProtector {
-    private const string ApplicationName = "Prismedia.Connections";
     private const string Purpose = "connection-credentials-v1";
     private readonly IDataProtectionProvider _provider;
 
     /// <summary>Uses the private key directory beneath persistent application data, never a transient cache.</summary>
     public ConnectionSecretProtector(string dataDirectory) {
-        var directory = Directory.CreateDirectory(Path.Combine(dataDirectory, "keys", "connections"));
-        if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(directory.FullName,
-            UnixFileMode.UserRead | UnixFileMode.UserWrite | UnixFileMode.UserExecute);
-        _provider = DataProtectionProvider.Create(directory, builder => builder.SetApplicationName(ApplicationName));
+        _provider = IntegrationDataProtection.Create(dataDirectory);
     }
 
     /// <summary>Encrypts one value bound to its connection and credential key.</summary>

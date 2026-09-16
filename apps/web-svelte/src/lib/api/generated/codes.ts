@@ -258,6 +258,17 @@ export const COLLECTION_RULE_TARGET_KINDS = {
   ]
 } as const satisfies Record<CollectionRuleFieldCode, readonly EntityKindCode[]>;
 
+// source: enum AcquisitionAccessKind
+export const ACQUISITION_ACCESS_KIND = {
+  download: "download",
+  borrow: "borrow",
+  purchase: "purchase",
+  sample: "sample",
+  external: "external",
+} as const;
+
+export type AcquisitionAccessKindCode = (typeof ACQUISITION_ACCESS_KIND)[keyof typeof ACQUISITION_ACCESS_KIND];
+
 // source: enum AcquisitionCheckpointProtocol
 export const ACQUISITION_CHECKPOINT_PROTOCOL = {
   placement: "placement",

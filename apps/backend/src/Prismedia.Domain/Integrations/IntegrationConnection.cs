@@ -42,10 +42,10 @@ public sealed class IntegrationConnection(IntegrationConnectionState state) {
             || pair.Key.Length > 100 || pair.Value is null || pair.Value.Length > 4096)) throw new ArgumentException("Connection settings exceed their limits.");
         // A bound endpoint is immutable: changing its location could send existing job IDs to another server.
         // Create a new connection for a moved/replaced server; explicit rebinding requires fulfillment reconciliation.
-        if (State.RemoteInstanceId is not null && !string.Equals(State.BaseUrl, endpoint.AbsoluteUri.TrimEnd('/'), StringComparison.Ordinal))
+        if (State.RemoteInstanceId is not null && !string.Equals(new Uri(State.BaseUrl).AbsoluteUri, endpoint.AbsoluteUri, StringComparison.Ordinal))
             throw new ArgumentException("Create a new connection to change the address of a verified remote application.");
         State = State with {
-            Name = name.Trim(), BaseUrl = endpoint.AbsoluteUri.TrimEnd('/'), Enabled = enabled,
+            Name = name.Trim(), BaseUrl = endpoint.AbsoluteUri, Enabled = enabled,
             EnabledCapabilities = capabilities.ToArray(), Settings = new Dictionary<string, string>(settings),
             Revision = State.Revision + 1, Status = enabled ? ConnectionStatus.Unverified : ConnectionStatus.Disabled,
             EffectiveCapabilities = [], LastCheckedAt = null, LastError = null

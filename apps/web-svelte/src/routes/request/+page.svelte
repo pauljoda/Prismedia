@@ -1,6 +1,6 @@
 <script lang="ts">
   import { Send, Settings } from "@lucide/svelte";
-  import { Button } from "@prismedia/ui-svelte";
+  import { Button, buttonVariants } from "@prismedia/ui-svelte";
   import { goto } from "$app/navigation";
   import RequestDiscover from "$lib/components/requests/RequestDiscover.svelte";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
@@ -30,6 +30,8 @@
       </p>
     </div>
     {#if session.isAdmin}
+      <div class="flex flex-wrap gap-2">
+      <a class={buttonVariants({ variant: "secondary", size: "sm" })} href="/request/catalogs">Browse catalogs</a>
       <Button
         type="button"
         variant="secondary"
@@ -40,6 +42,7 @@
         <Settings class="h-3.5 w-3.5" />
         Settings
       </Button>
+      </div>
     {/if}
   </div>
 

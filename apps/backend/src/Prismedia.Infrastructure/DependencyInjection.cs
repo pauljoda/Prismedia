@@ -93,7 +93,12 @@ public static class DependencyInjection {
         services.AddSingleton(new ConnectionSecretProtector(dataDir));
         services.AddSingleton<PluginProcessTransport>();
         services.AddScoped<IIntegrationConnectionStore, EfIntegrationConnectionStore>();
-        services.AddScoped<IIntegrationPluginGateway, IntegrationPluginGateway>();
+        services.AddScoped<IntegrationPluginGateway>();
+        services.AddScoped<IIntegrationPluginGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
+        services.AddScoped<IIntegrationDiscoveryGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
+        services.AddSingleton<IDiscoveryTokenProtector>(new DiscoveryTokenProtector(dataDir));
+        services.AddScoped<IntegrationConnectionAccess>();
+        services.AddScoped<CatalogDiscoveryService>();
         services.AddScoped<ConnectionService>();
         RegisterLibraryScanning(services, dataDir);
         RegisterEntities(services, cacheDir);

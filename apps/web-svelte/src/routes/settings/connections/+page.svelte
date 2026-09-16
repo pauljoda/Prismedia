@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { AlertTriangle, ArrowUpRight, Check, Plug, Plus, RefreshCw, ShieldUser } from "@lucide/svelte";
   import { Alert, Badge, Button, Panel, buttonVariants } from "@prismedia/ui-svelte";
-  import { CONNECTION_STATUS } from "$lib/api/generated/codes";
+  import { CONNECTION_STATUS, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
   import type { ConnectionResponse, CreateConnectionRequest, PluginProvider } from "$lib/api/generated/model";
   import { addConnection, fetchConnections, probeConnection, removeConnection, saveConnection } from "$lib/api/connections";
   import { fetchPluginProviders } from "$lib/api/plugins";
@@ -128,6 +128,9 @@
                 <Button variant="secondary" size="sm" onclick={() => void test(connection)} disabled={!connection.enabled || !!testingId || editorOpen || !plugin?.enabled}>
                   <RefreshCw class={testingId === connection.id ? "animate-spin" : undefined} />{testingId === connection.id ? "Testing…" : "Test connection"}
                 </Button>
+                {#if connection.status === CONNECTION_STATUS.ready && connection.effectiveCapabilities.some(item => item.kind === PLUGIN_CAPABILITY.catalogDiscovery)}
+                  <a class={buttonVariants({ variant: "secondary", size: "sm" })} href={`/request/catalogs?connection=${connection.id}`}>Browse catalog</a>
+                {/if}
                 <Button variant="ghost" size="sm" onclick={() => openEditor(connection)} disabled={editorOpen || !!testingId || !plugin?.enabled}>Edit</Button>
                 <Button variant="ghost" size="sm" onclick={() => deleteTarget = connection} disabled={editorOpen || !!testingId}>Remove</Button>
               </div>

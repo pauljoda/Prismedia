@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Connected catalogs can be browsed and searched from Requests, with book/comic source selections and clear distinctions between full publications, loans, purchases, and samples. OPDS catalog connections support independent credentials and paginated navigation.
+
 - Connections can configure multiple instances of an integration plugin, with independent credentials, capability selection, and remote health checks. Plugin packages can declare discovery, acquisition, download, external-manager, and connected-library capabilities independently from metadata identification.
 
 - Monitored movies and TV units can look for better matches while keeping unattended automatic import holds available for review. Recovery compares episode coverage and profile quality, backs off from hours to weekly searches, and only cleans up superseded downloads after a replacement finishes importing. Unresolved foreign-season extras remain available for review.

@@ -45,10 +45,35 @@ An integration declares only the operations it implements. Metadata search resul
 are not automatically downloadable items. A manager's completed command is not proof
 of a file being available to Prismedia.
 
-The initial connection interface implements configuration and capability testing.
-Acquisition operations use separate typed orchestration contracts as their adapters
-are introduced; declaring an operation alone does not expose a generic executable
-RPC endpoint to browser clients.
+Connections provide configuration, capability testing, and a catalog browser at
+**Requests → Browse catalogs**. The browser shows only tested connections that
+currently advertise discovery. Administrators can choose a connection and media type,
+open catalog sections, search supported sources, and move through result pages.
+
+Catalog pages distinguish full-publication offers from loans, purchases, samples,
+and external workflows. These distinctions do not grant permission to execute an
+external workflow. Acquisition operations use separate typed orchestration contracts;
+declaring an operation alone does not expose a generic executable RPC endpoint.
+
+## OPDS catalogs
+
+The OPDS Catalogs plugin consumes Atom OPDS 1.2 and JSON OPDS 2 catalogs. Configure
+the catalog root URL, including a trailing slash when relative links require one.
+Authentication can be Basic username/password or a bearer token. Each catalog is a
+separate connection. Search is enabled only when the catalog advertises a supported
+search template or OpenSearch description.
+
+Navigation and authenticated retrieval are restricted to the configured origin.
+Cross-origin downloads, checkout, borrowing, and indirect/DRM acquisition remain
+external offers. EPUB/PDF ebook and CBZ/CBR comic catalogs are supported; an unmarked
+PDF is treated as a book. This is a consumer interface: the remote catalog remains
+the authority for which publications are visible to its configured account.
+
+The discovery API replaces source locators with protected, expiring selection tokens.
+Continuation tokens are bound to the connection, media type, query, container, and
+page size. Changing a query requires starting a new page sequence. Plugin responses
+are bounded and validated before reaching the browser. Resolved download addresses
+and authentication headers remain server-only.
 
 ## Manifest declaration
 

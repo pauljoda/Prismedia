@@ -37,6 +37,13 @@ public sealed class IntegrationConnectionTests {
             connection.State.EnabledCapabilities, connection.State.Settings));
     }
 
+    [Fact]
+    public void CatalogDirectoryUrlsPreserveRelativeLinkResolution() {
+        var connection = IntegrationConnection.Create(PluginId, "Catalog", "http://catalog.test/opds/", true,
+            [PluginCapability.CatalogDiscovery], new Dictionary<string, string>());
+        Assert.Equal("http://catalog.test/opds/books", new Uri(new Uri(connection.State.BaseUrl), "books").AbsoluteUri);
+    }
+
     [Theory]
     [InlineData("file:///etc/passwd")]
     [InlineData("http://user:secret@catalog.test")]

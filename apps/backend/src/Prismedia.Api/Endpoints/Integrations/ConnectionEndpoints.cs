@@ -31,6 +31,10 @@ public static class ConnectionEndpoints {
             await service.DeleteAsync(id, expectedRevision, cancellationToken);
             return Results.NoContent();
         }).WithName("DeleteConnection").Produces(204).Produces<ApiProblem>(409);
+        group.MapPost("/{id:guid}/browse", async (Guid id, BrowseConnectionRequest request,
+            CatalogDiscoveryService service, CancellationToken cancellationToken) =>
+            Results.Ok(await service.BrowseAsync(id, request, cancellationToken)))
+            .WithName("BrowseConnection").Produces<DiscoveryPageResponse>().Produces<ApiProblem>(400);
         return group;
     }
 
@@ -40,6 +44,7 @@ public static class ConnectionEndpoints {
             catch (ConnectionNotFoundException error) { return Results.NotFound(new ApiProblem(ApiProblemCodes.ConnectionNotFound, error.Message)); }
             catch (ConnectionConflictException error) { return Results.Conflict(new ApiProblem(ApiProblemCodes.ConnectionConflict, error.Message)); }
             catch (ArgumentException error) { return Results.BadRequest(new ApiProblem(ApiProblemCodes.ConnectionInvalid, error.Message)); }
+            catch (ConnectionSecretUnavailableException error) { return Results.BadRequest(new ApiProblem(ApiProblemCodes.ConnectionUnavailable, error.Message)); }
             catch (IntegrationInvocationException error) { return Results.BadRequest(new ApiProblem(ApiProblemCodes.ConnectionUnavailable, error.Message)); }
         }
     }

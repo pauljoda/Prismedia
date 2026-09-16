@@ -12,7 +12,7 @@ namespace Prismedia.Infrastructure.Integrations;
 
 /// <summary>Runs typed integration operations through the existing installed executable package boundary.</summary>
 public sealed class IntegrationPluginGateway(PrismediaDbContext db, PluginCatalogService catalog,
-    PluginProcessTransport transport) : IIntegrationPluginGateway {
+    PluginProcessTransport transport) : IIntegrationPluginGateway, IIntegrationDiscoveryGateway {
     /// <inheritdoc />
     public async Task<PluginManifest?> FindAsync(string pluginId, CancellationToken cancellationToken) =>
         (await FindDescriptorAsync(pluginId, cancellationToken))?.Manifest;
@@ -23,6 +23,23 @@ public sealed class IntegrationPluginGateway(PrismediaDbContext db, PluginCatalo
             ?? throw new IntegrationInvocationException("The integration plugin is unavailable or disabled.");
         return await InvokeAsync<ConnectionProbeInput, ConnectionProbeResult>(descriptor, IntegrationOperation.Probe,
             connection, new ConnectionProbeInput(), cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<CatalogPage> DiscoverAsync(string pluginId, IntegrationOperation operation, IntegrationConnectionContext connection,
+        IntegrationDiscoveryInput input, CancellationToken cancellationToken) {
+        if (operation is not (IntegrationOperation.Search or IntegrationOperation.Browse)) throw new ArgumentException("Invalid catalog operation.");
+        var descriptor = await FindDescriptorAsync(pluginId, cancellationToken)
+            ?? throw new IntegrationInvocationException("The integration plugin is unavailable or disabled.");
+        return await InvokeAsync<IntegrationDiscoveryInput, CatalogPage>(descriptor, operation, connection, input, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public async Task<ResolvedSourceOffer> ResolveAsync(string pluginId, IntegrationConnectionContext connection,
+        ResolveSourceOfferInput input, CancellationToken cancellationToken) {
+        var descriptor = await FindDescriptorAsync(pluginId, cancellationToken)
+            ?? throw new IntegrationInvocationException("The integration plugin is unavailable or disabled.");
+        return await InvokeAsync<ResolveSourceOfferInput, ResolvedSourceOffer>(descriptor, IntegrationOperation.Resolve, connection, input, cancellationToken);
     }
 
     /// <summary>Executes one bounded typed call and validates protocol and invocation correlation before returning a result.</summary>
