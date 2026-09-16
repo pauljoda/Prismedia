@@ -13,6 +13,7 @@ public static class ApiProblemCodes {
     public const string ConnectionInUse = "connection_in_use";
     /// <summary>A connection changed since the submitted revision.</summary>
     public const string ConnectionConflict = "connection_conflict";
+    public const string FulfillmentOwnershipConflict = "fulfillment_ownership_conflict";
     /// <summary>Connection configuration violates its plugin schema.</summary>
     public const string ConnectionInvalid = "connection_invalid";
     /// <summary>The installed integration plugin is unavailable.</summary>

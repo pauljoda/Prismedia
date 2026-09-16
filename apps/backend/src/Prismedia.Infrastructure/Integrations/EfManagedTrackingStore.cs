@@ -52,14 +52,24 @@ public sealed partial class EfManagedTrackingStore(PrismediaDbContext db, IExter
         var row = new ManagedHoldingRow { Id = request.OperationId, ConnectionId = connectionId, LibraryRootId = request.LibraryRootId,
             Kind = item.EntityKind, RemoteId = item.RemoteId, Title = title, ItemJson = itemJson,
             SelectionsJson = JsonSerializer.Serialize(selections, Json), Revision = 1, Status = ManagedTrackingStatus.Pending, NextCheckAt = DateTimeOffset.UtcNow };
-        db.ManagedHoldings.Add(row);
         try {
-            await db.SaveChangesAsync(token);
-            await PublishAsync(row, token);
+            if (!await lifecycle.ExecuteManyAsync(selections.Select(selection => selection.EntityId).ToArray(), async leaseToken => {
+                db.ManagedHoldings.Add(row);
+                foreach (var selection in selections)
+                    await new EfFulfillmentReservationStore(db).ReserveAsync(row.Id, FulfillmentOwnerKind.ConnectedLibrary,
+                        connectionId, selection.EntityId, null, leaseToken);
+                await db.SaveChangesAsync(leaseToken);
+                await PublishAsync(row, leaseToken);
+            }, token)) throw new ArgumentException("The selected items are changing. Refresh their associations before linking.");
             await transaction.CommitAsync(token);
         } catch (DbUpdateException error) when (error.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation }) {
             await transaction.RollbackAsync(token); db.ChangeTracker.Clear();
+            if (await FindAsync(request.OperationId, token) is { } accepted)
+                return await CreateAsync(connectionId, request, accepted.Tracking.Title, token);
             throw new ArgumentException("This holding or one of its local sources is already tracked. Refresh the existing association.");
+        } catch (Exception error) when (FulfillmentOwnershipViolation.IsConflict(error)) {
+            await transaction.RollbackAsync(token); db.ChangeTracker.Clear();
+            throw new FulfillmentOwnershipConflictException(error);
         }
         return await MapAsync(row, token);
     }

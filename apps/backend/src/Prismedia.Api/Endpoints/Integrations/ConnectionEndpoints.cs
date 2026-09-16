@@ -77,7 +77,7 @@ public static class ConnectionEndpoints {
             .WithName("ListManagedTracking").Produces<IReadOnlyList<ManagedTrackingResponse>>();
         group.MapPost("/{id:guid}/library/tracking", async (Guid id, TrackManagedHoldingRequest request, ManagedTrackingService service, CancellationToken token) =>
             Results.Accepted(value: await service.TrackAsync(id, request, token)))
-            .WithName("TrackManagedHolding").Produces<ManagedTrackingResponse>(202).Produces<ApiProblem>(400);
+            .WithName("TrackManagedHolding").Produces<ManagedTrackingResponse>(202).Produces<ApiProblem>(400).Produces<ApiProblem>(409);
         group.MapPost("/{id:guid}/library/tracking/{holdingId:guid}/refresh", async (Guid id, Guid holdingId, ManagedTrackingService service, CancellationToken token) => {
             await service.RefreshAsync(id, holdingId, token);
             return Results.Accepted();
@@ -91,6 +91,7 @@ public static class ConnectionEndpoints {
             catch (ConnectionNotFoundException error) { return Results.NotFound(new ApiProblem(ApiProblemCodes.ConnectionNotFound, error.Message)); }
             catch (ConnectionInUseException error) { return Results.Conflict(new ApiProblem(ApiProblemCodes.ConnectionInUse, error.Message)); }
             catch (ConnectionConflictException error) { return Results.Conflict(new ApiProblem(ApiProblemCodes.ConnectionConflict, error.Message)); }
+            catch (FulfillmentOwnershipConflictException error) { return Results.Conflict(new ApiProblem(ApiProblemCodes.FulfillmentOwnershipConflict, error.Message)); }
             catch (ArgumentException error) { return Results.BadRequest(new ApiProblem(ApiProblemCodes.ConnectionInvalid, error.Message)); }
             catch (ConnectionSecretUnavailableException error) { return Results.BadRequest(new ApiProblem(ApiProblemCodes.ConnectionUnavailable, error.Message)); }
             catch (IntegrationInvocationException error) { return Results.BadRequest(new ApiProblem(ApiProblemCodes.ConnectionUnavailable, error.Message)); }

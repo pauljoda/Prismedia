@@ -9811,10 +9811,15 @@ export type trackManagedHoldingResponse400 = {
   status: 400
 }
 
+export type trackManagedHoldingResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
 export type trackManagedHoldingResponseSuccess = (trackManagedHoldingResponse202) & {
   headers: Headers;
 };
-export type trackManagedHoldingResponseError = (trackManagedHoldingResponse400) & {
+export type trackManagedHoldingResponseError = (trackManagedHoldingResponse400 | trackManagedHoldingResponse409) & {
   headers: Headers;
 };
 
@@ -11628,10 +11633,15 @@ export type createAcquisitionResponse400 = {
   status: 400
 }
 
+export type createAcquisitionResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
 export type createAcquisitionResponseSuccess = (createAcquisitionResponse200) & {
   headers: Headers;
 };
-export type createAcquisitionResponseError = (createAcquisitionResponse400) & {
+export type createAcquisitionResponseError = (createAcquisitionResponse400 | createAcquisitionResponse409) & {
   headers: Headers;
 };
 

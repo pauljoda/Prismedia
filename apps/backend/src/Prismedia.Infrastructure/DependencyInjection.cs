@@ -100,6 +100,7 @@ public static class DependencyInjection {
         services.AddScoped<IIntegrationManagerGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
         services.AddScoped<ManagedLibraryService>();
         services.AddScoped<IManagedTrackingStore, EfManagedTrackingStore>();
+        services.AddScoped<IFulfillmentReservationStore, EfFulfillmentReservationStore>();
         services.AddScoped<ManagedTrackingService>();
         services.AddSingleton(new ExternalLibraryStorageOptions(dataDir, cacheDir));
         services.AddScoped<IExternalLibraryMountStore, EfExternalLibraryMountStore>();

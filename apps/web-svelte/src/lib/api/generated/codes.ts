@@ -932,6 +932,14 @@ export const FINGERPRINT_SUBMISSION_STATUS = {
 
 export type FingerprintSubmissionStatusCode = (typeof FINGERPRINT_SUBMISSION_STATUS)[keyof typeof FINGERPRINT_SUBMISSION_STATUS];
 
+// source: enum FulfillmentOwnerKind
+export const FULFILLMENT_OWNER_KIND = {
+  externalManager: "external-manager",
+  connectedLibrary: "connected-library",
+} as const;
+
+export type FulfillmentOwnerKindCode = (typeof FULFILLMENT_OWNER_KIND)[keyof typeof FULFILLMENT_OWNER_KIND];
+
 // source: enum GalleryType
 export const GALLERY_TYPE = {
   virtual: "virtual",
@@ -1741,6 +1749,7 @@ export const PROBLEM_CODE = {
   entityReaderPageNotFound: "entity_reader_page_not_found",
   externalIdentityAmbiguous: "external_identity_ambiguous",
   fileConflict: "file_conflict",
+  fulfillmentOwnershipConflict: "fulfillment_ownership_conflict",
   identifyApplyProgressNotFound: "identify_apply_progress_not_found",
   identifyFailed: "identify_failed",
   identifyQueueApplyInvalid: "identify_queue_apply_invalid",

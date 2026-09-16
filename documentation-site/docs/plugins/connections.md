@@ -280,7 +280,19 @@ After the initial library scan, inspect a holding and choose **Match existing it
 Prismedia compares exact mapped source paths, media kinds, and episode coordinates,
 including all episodes sharing one file. **Link existing items** saves those reviewed
 associations before a worker verifies them again. Conflicting provider identities,
-native monitors, active acquisitions, or existing connected ownership prevent linking.
+native monitors, unfinished acquisitions, or existing connected ownership prevent linking.
+
+Linking reserves acquisition ownership in the same transaction as the saved intent and
+background job. Native searches, retries, replacements, and monitoring cannot take over
+that scope. Series and season requests overlap their contained episodes; independent
+episodes and book renditions can have separate owners. Known equivalent provider IDs
+also prevent duplicate local items from bypassing ownership. Titles alone do not prove
+equivalence. Failed acquisitions and paused monitors retain ownership until resolved.
+
+Disabling a connection, a remote outage, or clearing job history does not release its
+reservation. Moving between acquisition owners requires an explicit handoff; tracking
+does not yet offer that handoff. Database checks also reject metadata edits that would
+merge two actively owned scopes.
 
 Tracking observes the connected application every five minutes and can be refreshed
 manually. Renames, including a renamed containing folder, and same-scope replacements

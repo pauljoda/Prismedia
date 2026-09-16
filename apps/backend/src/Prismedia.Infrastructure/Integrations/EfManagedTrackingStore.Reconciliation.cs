@@ -29,7 +29,10 @@ public sealed partial class EfManagedTrackingStore {
                 var current = await SourcesAsync(observation.Files.Select(file => file.LocalPath).ToArray(), leaseToken);
                 var checkedPlan = ManagedSourceAdoption.Plan(observation.Files, work.Selections, current);
                 if (checkedPlan.ReviewReason is not null) throw new ArgumentException(checkedPlan.ReviewReason);
-                await RequireUnownedAsync(ids, work.Tracking.Item.ExpectedExternalIds, leaseToken);
+                await RequireUnownedAsync(ids, work.Tracking.Item.EntityKind, work.Tracking.Item.ExpectedExternalIds, leaseToken);
+                foreach (var id in ids)
+                    await new EfFulfillmentReservationStore(db).ReserveAsync(row.Id, FulfillmentOwnerKind.ConnectedLibrary,
+                        row.ConnectionId, id, null, leaseToken);
                 foreach (var file in checkedPlan.Bindings) foreach (var owner in file.Entities) {
                     db.ManagedSourceBindings.Add(new() { Id = Guid.NewGuid(), HoldingId = row.Id, EntityId = owner.EntityId,
                         SourceFileId = owner.SourceFileId, RemoteTargetId = owner.Target.RemoteTargetId, Kind = owner.Target.Kind,
@@ -118,7 +121,7 @@ public sealed partial class EfManagedTrackingStore {
         } catch (ArgumentException) { return false; }
     }
 
-    private async Task RequireUnownedAsync(Guid[] ids, IReadOnlyDictionary<string, string> expectedIdentities, CancellationToken token) {
+    private async Task RequireUnownedAsync(Guid[] ids, EntityKind holdingKind, IReadOnlyDictionary<string, string> expectedIdentities, CancellationToken token) {
         if (await db.ManagedSourceBindings.AnyAsync(binding => ids.Contains(binding.EntityId), token))
             throw new ArgumentException("One of these local entities is already linked to a connected holding.");
         var all = ids.ToHashSet(); var frontier = ids;
@@ -127,7 +130,11 @@ public sealed partial class EfManagedTrackingStore {
             frontier = parents.Where(all.Add).ToArray();
         }
         var scope = all.ToArray();
-        var localIds = await db.EntityExternalIds.AsNoTracking().Where(identity => scope.Contains(identity.EntityId)).ToArrayAsync(token);
+        // A series and its episodes can use the same namespace with different IDs. Compare the
+        // holding's pinned identity only to local entities representing that same kind of work.
+        var holdingKindCode = holdingKind.ToCode();
+        var localIds = await db.EntityExternalIds.AsNoTracking().Where(identity => scope.Contains(identity.EntityId)
+            && db.Entities.Any(entity => entity.Id == identity.EntityId && entity.KindCode == holdingKindCode)).ToArrayAsync(token);
         if (localIds.Any(identity => expectedIdentities.TryGetValue(identity.Provider, out var expected) && identity.Value != expected))
             throw new ArgumentException("The selected local scope has conflicting provider identities. Review its metadata before linking.");
         if (await db.Monitors.AnyAsync(monitor => monitor.EntityId != null && scope.Contains(monitor.EntityId.Value), token)

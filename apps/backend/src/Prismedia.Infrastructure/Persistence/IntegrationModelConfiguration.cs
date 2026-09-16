@@ -6,6 +6,23 @@ namespace Prismedia.Infrastructure.Persistence;
 
 internal static partial class PrismediaModelConfiguration {
     private static void ConfigureIntegrationTables(ModelBuilder modelBuilder) {
+        modelBuilder.Entity<FulfillmentReservationRow>(entity => {
+            entity.ToTable("fulfillment_reservations");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.OwnerId).HasColumnName("owner_id");
+            entity.Property(row => row.OwnerKind).HasColumnName("owner_kind").HasMaxLength(32).HasConversion(value => value.ToCode(), value => value.DecodeAs<FulfillmentOwnerKind>());
+            entity.Property(row => row.ConnectionId).HasColumnName("connection_id");
+            entity.Property(row => row.EntityId).HasColumnName("entity_id");
+            entity.Property(row => row.BookRendition).HasColumnName("book_rendition").HasMaxLength(32).HasConversion(value => value.HasValue ? value.Value.ToCode() : null, value => value == null ? null : value.DecodeAs<BookRendition>());
+            entity.Property(row => row.ExternalIdsJson).HasColumnName("external_ids").HasColumnType("jsonb");
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.ReleasedAt).HasColumnName("released_at");
+            entity.HasOne<EntityRow>().WithMany().HasForeignKey(row => row.EntityId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<IntegrationConnectionRow>().WithMany().HasForeignKey(row => row.ConnectionId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(row => new { row.OwnerId, row.OwnerKind, row.EntityId, row.BookRendition }).IsUnique().AreNullsDistinct(false);
+            entity.HasIndex(row => row.EntityId);
+        });
         modelBuilder.Entity<ManagedHoldingRow>(entity => {
             entity.ToTable("managed_holdings");
             entity.HasKey(row => row.Id);

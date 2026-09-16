@@ -106,6 +106,7 @@ public static class AcquisitionEndpoints {
             .WithName("CreateAcquisition")
             .WithSummary("Creates an acquisition and starts a background indexer search; poll the acquisition for scored candidates.")
             .Produces<AcquisitionSummary>()
+            .Produces<ApiProblem>(StatusCodes.Status409Conflict)
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
 
         group.MapGet("/", (

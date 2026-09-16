@@ -102,6 +102,7 @@ var app = builder.Build();
 
 app.UseResponseCompression();
 app.UseMiddleware<Prismedia.Api.Diagnostics.RequestTimingMiddleware>();
+app.UseMiddleware<Prismedia.Api.Diagnostics.FulfillmentOwnershipMiddleware>();
 
 if (app.Environment.IsDevelopment()) {
     app.MapOpenApi();

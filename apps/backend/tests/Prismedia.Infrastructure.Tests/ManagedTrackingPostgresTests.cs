@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Integrations;
 using Prismedia.Application.Jobs;
 using Prismedia.Contracts.Integrations;
+using Prismedia.Contracts.Entities;
 using Prismedia.Domain.Entities;
 using Prismedia.Domain.Integrations;
 using Prismedia.Infrastructure.Entities;
@@ -16,6 +17,26 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class ManagedTrackingPostgresTests : IDisposable {
     private readonly string workspace = Directory.CreateTempSubdirectory("prismedia-tracking-").FullName;
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task OwnershipMigrationBackfillsAcceptedScopesAndCanBeRolledBack(bool adopted) {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var fixture = await SeedAsync(db);
+        if (adopted) await AdoptAsync(Store(db), fixture);
+        else await Store(db).CreateAsync(fixture.ConnectionId, fixture.Request, "Holding", default);
+        await database.MigrateAsync("20260916203046_AddManagedLibraryTracking");
+        await database.MigrateAsync("20260916205953_AddFulfillmentReservations");
+        db.ChangeTracker.Clear();
+        var owner = Assert.Single(await db.FulfillmentReservations.ToArrayAsync());
+        Assert.Equal(fixture.EntityId, owner.EntityId);
+        Assert.Equal(fixture.Request.OperationId, owner.OwnerId);
+        db.Acquisitions.Add(new() { Id = Guid.NewGuid(), EntityId = fixture.EntityId, Kind = EntityKind.Movie, Status = AcquisitionStatus.Pending });
+        var error = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
+        Assert.True(FulfillmentOwnershipViolation.IsConflict(error));
+    }
 
     [Fact]
     public async Task RenameMissingAndRestoreKeepEntityFileAndUserStateWhileUpdatingAvailability() {
@@ -57,6 +78,21 @@ public sealed class ManagedTrackingPostgresTests : IDisposable {
         Assert.Equal(EntityFileRole.Source, (await db.EntityFiles.AsNoTracking().SingleAsync()).Role);
         Assert.True((await db.EntityAvailability.AsNoTracking().SingleAsync()).HasSourceMedia);
         Assert.Equal(fixture.SourceId, (await db.EntityFiles.AsNoTracking().SingleAsync()).Id);
+    }
+
+    [Fact]
+    public async Task ConcurrentReplaysReturnTheSameAcceptedIntentAndSingleOwnershipReservation() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var first = database.CreateContext();
+        var fixture = await SeedAsync(first);
+        await using var second = database.CreateContext();
+        var results = await Task.WhenAll(
+            Store(first).CreateAsync(fixture.ConnectionId, fixture.Request, "Holding", default),
+            Store(second).CreateAsync(fixture.ConnectionId, fixture.Request, "Holding", default));
+        Assert.All(results, result => Assert.Equal(fixture.Request.OperationId, result.Id));
+        Assert.Single(await first.ManagedHoldings.ToArrayAsync());
+        Assert.Single(await first.FulfillmentReservations.ToArrayAsync());
+        Assert.Single(await first.JobRuns.ToArrayAsync());
     }
 
     [Fact]
@@ -127,6 +163,35 @@ public sealed class ManagedTrackingPostgresTests : IDisposable {
     }
 
     [Fact]
+    public async Task SeriesIdentityIsComparedToItsSeriesWithoutConfusingEpisodeProviderIds() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var fixture = await SeedAsync(db);
+        var series = Guid.NewGuid(); var season = Guid.NewGuid();
+        db.Entities.AddRange(new() { Id = series, KindCode = EntityKind.VideoSeries.ToCode(), Title = "Series" },
+            new() { Id = season, ParentEntityId = series, KindCode = EntityKind.VideoSeason.ToCode(), Title = "Season" });
+        var episode = await db.Entities.SingleAsync(entity => entity.Id == fixture.EntityId);
+        episode.KindCode = EntityKind.VideoEpisode.ToCode(); episode.ParentEntityId = season;
+        db.EntityPositions.AddRange(new() { EntityId = season, Code = EntityPositionCodes.Season, Value = 1 },
+            new() { EntityId = episode.Id, Code = EntityPositionCodes.Season, Value = 1 },
+            new() { EntityId = episode.Id, Code = EntityPositionCodes.Episode, Value = 1 });
+        db.EntityExternalIds.AddRange(new() { Id = Guid.NewGuid(), EntityId = series, Provider = ExternalIdProviders.Tvdb, Value = "42" },
+            new() { Id = Guid.NewGuid(), EntityId = episode.Id, Provider = ExternalIdProviders.Tvdb, Value = "1000" });
+        await db.SaveChangesAsync();
+        var item = new ManagedItemInput(EntityKind.VideoSeries, "1", new Dictionary<string, string> { [ExternalIdProviders.Tvdb] = "42" });
+        fixture = fixture with {
+            Request = fixture.Request with { Item = item, Selections = [new("1000", episode.Id, fixture.SourceId)] },
+            Snapshot = fixture.Snapshot with {
+                Item = fixture.Snapshot.Item with { EntityKind = EntityKind.VideoSeries, ExternalIds = item.ExpectedExternalIds },
+                Files = [fixture.Snapshot.Files[0] with { Targets = [new("1000", EntityKind.VideoEpisode, "Episode", 1, 1)] }]
+            }
+        };
+        var accepted = await AdoptAsync(Store(db), fixture);
+        Assert.Equal(ManagedTrackingStatus.Tracking, accepted.Tracking.Status);
+        Assert.Equal(episode.Id, Assert.Single(Assert.Single(accepted.Tracking.Bindings).Entities).EntityId);
+    }
+
+    [Fact]
     public async Task ProviderIdentityConflictPreventsAdoptionWithoutChangingSource() {
         await using var database = await PostgresTestDatabase.CreateAsync();
         await using var db = database.CreateContext();
@@ -149,11 +214,13 @@ public sealed class ManagedTrackingPostgresTests : IDisposable {
                 BEGIN RAISE EXCEPTION 'Simulated queue publication failure'; END $$;
                 CREATE TRIGGER reject_test_queue BEFORE INSERT ON job_runs FOR EACH ROW EXECUTE FUNCTION reject_test_queue();
                 """);
-            await Assert.ThrowsAnyAsync<Exception>(() => Store(db).CreateAsync(fixture.ConnectionId, fixture.Request, "Holding", default));
+            var error = await Assert.ThrowsAnyAsync<Exception>(() => Store(db).CreateAsync(fixture.ConnectionId, fixture.Request, "Holding", default));
+            Assert.Contains("Simulated queue publication failure", error.ToString(), StringComparison.Ordinal);
         }
         await using var check = database.CreateContext();
         Assert.Empty(await check.ManagedHoldings.ToArrayAsync());
         Assert.Empty(await check.ManagedSourceBindings.ToArrayAsync());
+        Assert.Empty(await check.FulfillmentReservations.ToArrayAsync());
         Assert.Empty(await check.JobGraphs.ToArrayAsync());
         Assert.Empty(await check.JobRuns.ToArrayAsync());
     }
@@ -182,7 +249,7 @@ public sealed class ManagedTrackingPostgresTests : IDisposable {
         db.Entities.Add(new() { Id = entity, KindCode = EntityKind.Movie.ToCode(), Title = "Retained title", IsOrganized = true });
         db.EntityFiles.Add(new() { Id = file, EntityId = entity, Path = path, SizeBytes = 3 });
         await db.SaveChangesAsync();
-        var input = new ManagedItemInput(EntityKind.Movie, "1", new Dictionary<string, string> { ["tmdb"] = "1" });
+        var input = new ManagedItemInput(EntityKind.Movie, "1", new Dictionary<string, string> { [ExternalIdProviders.Tmdb] = "1" });
         var item = new ManagedLibraryItem("1", EntityKind.Movie, "Film", 2020, input.ExpectedExternalIds, false, null, 1);
         var snapshot = new ManagedItemSnapshot(item, "/movies/film", [new("11", "/movies/film.mkv", 3, null, [new("1", EntityKind.Movie, "Film")])], DateTimeOffset.UtcNow);
         return new(connection, root, entity, file, path, snapshot, new(Guid.NewGuid(), root, input, [new("1", entity, file)]));
