@@ -171,6 +171,8 @@ public static class ApiProblemCodes {
     public const string InvalidEntityMetadataPatch = "invalid_entity_metadata_patch";
     /// <summary>A metadata protection edit used stale value provenance.</summary>
     public const string MetadataFieldConflict = "metadata_field_conflict";
+    /// <summary>A filesystem mutation overlaps an externally managed library boundary.</summary>
+    public const string ReadOnlyLibrary = "read_only_library";
 
     /// <summary>Problem code <c>invalid_path</c>.</summary>
     public const string InvalidPath = "invalid_path";

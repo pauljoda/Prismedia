@@ -309,7 +309,7 @@ public sealed class FilesServiceTests : IDisposable {
 
         return new FilesService(
             Persistence,
-            new LocalManagedFileStorage(),
+            new LocalManagedFileStorage(new TestFileMutationGuard()),
             new FileArchivePreparationService(),
             Queue,
             new EntitySourcePathMutationCoordinator(SourceOwners, Lifecycle));

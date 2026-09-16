@@ -16,7 +16,7 @@ public sealed class ImportFileMoverTests {
         var desired = Path.Combine(directory, "Episode.mkv");
         var caseDistinctReservation = Path.Combine(directory, "episode.mkv");
 
-        var resolved = new ImportFileMover().ResolveExactTargetPath(
+        var resolved = new ImportFileMover(new TestFileMutationGuard()).ResolveExactTargetPath(
             desired,
             [caseDistinctReservation]);
 
@@ -30,7 +30,7 @@ public sealed class ImportFileMoverTests {
             var desired = await WriteAsync(root, "library/episode.mkv", "existing-payload");
             var reserved = Path.Combine(root.FullName, "library", "episode (2).mkv");
 
-            var resolved = new ImportFileMover().ResolveExactTargetPath(desired, [reserved]);
+            var resolved = new ImportFileMover(new TestFileMutationGuard()).ResolveExactTargetPath(desired, [reserved]);
 
             Assert.Equal(Path.Combine(root.FullName, "library", "episode (3).mkv"), resolved);
             Assert.False(File.Exists(resolved), "resolving a target must not mutate the library");
@@ -46,7 +46,7 @@ public sealed class ImportFileMoverTests {
             var source = await WriteAsync(root, "downloads/episode.mkv", "new-payload");
             var target = Path.Combine(root.FullName, "library", "Series", "episode.mkv");
 
-            var placed = await new ImportFileMover().PlaceExactAsync(
+            var placed = await new ImportFileMover(new TestFileMutationGuard()).PlaceExactAsync(
                 new ResolvedImportItem(source, target),
                 ImportMode.Copy,
                 CancellationToken.None);
@@ -65,7 +65,7 @@ public sealed class ImportFileMoverTests {
             var source = await WriteAsync(root, "downloads/episode.mkv", "new-payload");
             var target = await WriteAsync(root, "library/episode.mkv", "existing-payload");
 
-            var placed = await new ImportFileMover().PlaceAsync(
+            var placed = await new ImportFileMover(new TestFileMutationGuard()).PlaceAsync(
                 new ResolvedImportItem(source, target),
                 ImportMode.Copy,
                 CancellationToken.None);
@@ -87,14 +87,14 @@ public sealed class ImportFileMoverTests {
             using var cancelled = new CancellationTokenSource();
             cancelled.Cancel();
 
-            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => new ImportFileMover().PlaceExactAsync(
+            await Assert.ThrowsAnyAsync<OperationCanceledException>(() => new ImportFileMover(new TestFileMutationGuard()).PlaceExactAsync(
                 new ResolvedImportItem(source, target),
                 ImportMode.Copy,
                 cancelled.Token));
 
             Assert.False(File.Exists(target));
             Assert.Equal("new-payload", await File.ReadAllTextAsync(source));
-            Assert.Empty(Directory.EnumerateFiles(
+            if (Directory.Exists(Path.GetDirectoryName(target))) Assert.Empty(Directory.EnumerateFiles(
                 Path.GetDirectoryName(target)!,
                 "*.prismedia-import",
                 SearchOption.TopDirectoryOnly));
@@ -113,7 +113,7 @@ public sealed class ImportFileMoverTests {
             var source = await WriteAsync(root, "downloads/episode.mkv", "new-payload");
             var target = await WriteAsync(root, "library/episode.mkv", "existing-payload");
 
-            await Assert.ThrowsAsync<IOException>(() => new ImportFileMover().PlaceExactAsync(
+            await Assert.ThrowsAsync<IOException>(() => new ImportFileMover(new TestFileMutationGuard()).PlaceExactAsync(
                 new ResolvedImportItem(source, target),
                 mode,
                 CancellationToken.None));

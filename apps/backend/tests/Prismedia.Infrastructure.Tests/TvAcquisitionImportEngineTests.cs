@@ -1868,7 +1868,7 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
         IImportedVideoMaterializer firstMaterializer = failMaterialization
             ? new FailOnCallImportedVideoMaterializer(realMaterializer, 1)
             : realMaterializer;
-        var realMover = new ImportFileMover();
+        var realMover = new ImportFileMover(new TestFileMutationGuard());
         IImportFileMover firstMover = failPlacementOnCall is { } failBeforeCall
             ? new FailOnCallImportFileMover(realMover, failBeforeCall, failAfterPlacement: false)
             : failAfterPlacementOnCall is { } failAfterCall
@@ -1883,8 +1883,8 @@ public sealed class TvAcquisitionImportEngineTests : IDisposable {
                 ? new ThrowAfterReplacementStageReplacer()
                 : failAfterReplacementEvidence
                     ? new FailAfterReplacementEvidenceReplacer()
-                    : new OwnedFileReplacer(new MergedImportTestSupport.NoRecycleBin(), NullLogger<OwnedFileReplacer>.Instance, new TestVideoPayloadVerifier());
-        var resumeReplacer = new OwnedFileReplacer(
+                    : new OwnedFileReplacer(new TestFileMutationGuard(), new MergedImportTestSupport.NoRecycleBin(), NullLogger<OwnedFileReplacer>.Instance, new TestVideoPayloadVerifier());
+        var resumeReplacer = new OwnedFileReplacer(new TestFileMutationGuard(),
             new MergedImportTestSupport.NoRecycleBin(),
             NullLogger<OwnedFileReplacer>.Instance, new TestVideoPayloadVerifier());
         var scanGate = new VideoScanConcurrencyGate();

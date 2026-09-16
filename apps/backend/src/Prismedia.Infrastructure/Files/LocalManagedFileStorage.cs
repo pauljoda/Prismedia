@@ -11,7 +11,7 @@ namespace Prismedia.Infrastructure.Files;
 /// been root-normalized by the application service, and adds disk-specific protections such
 /// as symlink checks before writes and deletes.
 /// </summary>
-public sealed class LocalManagedFileStorage : IManagedFileStorage {
+public sealed class LocalManagedFileStorage(ILibraryFileMutationGuard mutations) : IManagedFileStorage {
     /// <summary>Longest a directory detail may spend walking the tree for file count/size stats.</summary>
     private static readonly TimeSpan DirectoryStatsBudget = TimeSpan.FromSeconds(2);
 
@@ -112,7 +112,8 @@ public sealed class LocalManagedFileStorage : IManagedFileStorage {
     }
 
     /// <inheritdoc />
-    public Task CreateDirectoryAsync(ResolvedFilePath path, CancellationToken cancellationToken) {
+    public async Task CreateDirectoryAsync(ResolvedFilePath path, CancellationToken cancellationToken) {
+        await using var protection = await mutations.EnterAsync([path.AbsolutePath], cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         EnsureNoSymlinkAncestor(path);
         if (File.Exists(path.AbsolutePath) || Directory.Exists(path.AbsolutePath)) {
@@ -120,7 +121,6 @@ public sealed class LocalManagedFileStorage : IManagedFileStorage {
         }
 
         Directory.CreateDirectory(path.AbsolutePath);
-        return Task.CompletedTask;
     }
 
     /// <inheritdoc />
@@ -128,6 +128,7 @@ public sealed class LocalManagedFileStorage : IManagedFileStorage {
         ResolvedFilePath path,
         Stream content,
         CancellationToken cancellationToken) {
+        await using var protection = await mutations.EnterAsync([path.AbsolutePath], cancellationToken);
         EnsureNoSymlinkAncestor(path);
         if (File.Exists(path.AbsolutePath) || Directory.Exists(path.AbsolutePath)) {
             throw new FileConflictException($"A file or folder already exists at {path.RelativePath}.");
@@ -143,10 +144,11 @@ public sealed class LocalManagedFileStorage : IManagedFileStorage {
     }
 
     /// <inheritdoc />
-    public Task MoveAsync(
+    public async Task MoveAsync(
         ResolvedFilePath source,
         ResolvedFilePath target,
         CancellationToken cancellationToken) {
+        await using var protection = await mutations.EnterAsync([source.AbsolutePath, target.AbsolutePath], cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         EnsureNoSymlinkAncestor(source);
         EnsureNoSymlinkAncestor(target);
@@ -161,29 +163,30 @@ public sealed class LocalManagedFileStorage : IManagedFileStorage {
 
         if (Directory.Exists(source.AbsolutePath)) {
             Directory.Move(source.AbsolutePath, target.AbsolutePath);
-            return Task.CompletedTask;
+            return;
         }
 
         if (File.Exists(source.AbsolutePath)) {
             File.Move(source.AbsolutePath, target.AbsolutePath);
-            return Task.CompletedTask;
+            return;
         }
 
         throw new FileOperationException(ApiProblemCodes.NotFound, "Source path was not found.");
     }
 
     /// <inheritdoc />
-    public Task DeleteAsync(ResolvedFilePath path, CancellationToken cancellationToken) {
+    public async Task DeleteAsync(ResolvedFilePath path, CancellationToken cancellationToken) {
+        await using var protection = await mutations.EnterAsync([path.AbsolutePath], cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         EnsureNoSymlinkAncestor(path);
         if (Directory.Exists(path.AbsolutePath)) {
             Directory.Delete(path.AbsolutePath, recursive: true);
-            return Task.CompletedTask;
+            return;
         }
 
         if (File.Exists(path.AbsolutePath)) {
             File.Delete(path.AbsolutePath);
-            return Task.CompletedTask;
+            return;
         }
 
         throw new FileOperationException(ApiProblemCodes.NotFound, "Path was not found.");

@@ -134,7 +134,7 @@ public sealed partial class AcquisitionDownloadRemovalTests {
     }
 
     private static EfAcquisitionDownloadRemoval Cleaner(PrismediaDbContext db) => new(db,
-        new EfCompletedDownloadPayloadCleanup(db, new RemotePathMapper(new EfRemotePathMappingStore(db))));
+        new EfCompletedDownloadPayloadCleanup(new TestFileMutationGuard(), db, new RemotePathMapper(new EfRemotePathMappingStore(db))));
 
     private sealed class PayloadFiles : IDisposable {
         private readonly string root = Path.Combine(Path.GetTempPath(), "completed-payload-" + Guid.NewGuid().ToString("N"));

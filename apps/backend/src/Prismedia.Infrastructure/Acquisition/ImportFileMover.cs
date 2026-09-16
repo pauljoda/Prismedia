@@ -11,7 +11,7 @@ namespace Prismedia.Infrastructure.Acquisition;
 /// Ordinary placements give colliding targets a stable numeric suffix; checkpoint-driven placements
 /// can instead require the pre-resolved exact path and fail safely if it is no longer available.
 /// </summary>
-public sealed class ImportFileMover : IImportFileMover {
+public sealed class ImportFileMover(ILibraryFileMutationGuard mutations) : IImportFileMover {
     /// <inheritdoc />
     public string ResolveExactTargetPath(string desiredTargetPath, IReadOnlyCollection<string> reservedTargetPaths) {
         var reserved = reservedTargetPaths
@@ -33,6 +33,8 @@ public sealed class ImportFileMover : IImportFileMover {
         ImportMode mode,
         bool resolveCollision,
         CancellationToken cancellationToken) {
+        await using var protection = await mutations.EnterAsync(mode == ImportMode.Copy
+            ? [item.TargetAbsolutePath] : [item.TargetAbsolutePath, item.SourceAbsolutePath], cancellationToken);
         var directory = Path.GetDirectoryName(item.TargetAbsolutePath);
         if (!string.IsNullOrEmpty(directory)) {
             Directory.CreateDirectory(directory);

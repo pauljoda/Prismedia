@@ -9,6 +9,7 @@ using Prismedia.Application.Requests;
 using Prismedia.Contracts.System;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Files;
+using Prismedia.Infrastructure.Acquisition;
 using Prismedia.Infrastructure.Media.Processing;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
@@ -124,6 +125,14 @@ public sealed class MediaEntityDeletionService(
         }
 
         var ids = (await hierarchy.ListSubtreeIdsAsync(id, cancellationToken)).ToArray();
+        // External file ownership refuses deletion before cancelling work or publishing lifecycle claims.
+        var protectedRoots = await db.ExternalLibraryMounts.AsNoTracking().Select(mount => mount.LocalPath).ToArrayAsync(cancellationToken);
+        if (protectedRoots.Length > 0) {
+            var physical = await physicalManagedPaths.ListAsync(ids, cancellationToken);
+            if (physical.Any(source => protectedRoots.Any(root => CompletedPayloadFileSystem.Overlaps(
+                    CompletedPayloadFileSystem.CanonicalPath(root), CompletedPayloadFileSystem.CanonicalPath(source.Path)))))
+                return Conflict("This Entity owns files in an externally managed library. Manage those files in the connected application.");
+        }
         // Confirmed deletion is the terminal owner of this subtree. Resolve every acquisition and graph
         // before any other preflight so active workers cannot keep creating state while removal proceeds.
         var acquisitionIdsByEntity = new Dictionary<Guid, IReadOnlyList<Guid>>();

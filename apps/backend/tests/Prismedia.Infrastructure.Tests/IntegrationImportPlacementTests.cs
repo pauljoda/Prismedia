@@ -8,7 +8,7 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class IntegrationImportPlacementTests : IDisposable {
     private readonly string workspace = Path.Combine(Path.GetTempPath(), "prismedia-placement-" + Guid.NewGuid().ToString("N"));
-    private readonly IntegrationImportPlacement placement = new();
+    private readonly IntegrationImportPlacement placement = new(new TestFileMutationGuard());
     private readonly Guid operation = Guid.NewGuid();
 
     [Fact]

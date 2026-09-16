@@ -13,7 +13,7 @@ namespace Prismedia.Infrastructure.Tests;
 /// </summary>
 public sealed class OwnedFileReplacerTests : IDisposable {
     private readonly string _root = Path.Combine(Path.GetTempPath(), "prismedia-replacer-" + Guid.NewGuid().ToString("N"));
-    private readonly OwnedFileReplacer _replacer = new(new BinOff(), NullLogger<OwnedFileReplacer>.Instance, new TestVideoPayloadVerifier());
+    private readonly OwnedFileReplacer _replacer = new(new TestFileMutationGuard(), new BinOff(), NullLogger<OwnedFileReplacer>.Instance, new TestVideoPayloadVerifier());
 
     [Theory]
     [InlineData(false)]
@@ -52,7 +52,7 @@ public sealed class OwnedFileReplacerTests : IDisposable {
         var owned = WriteFile(Dir("library"), "Owned.mkv", "old owned bytes");
         var incoming = WriteFile(Dir("download"), "Incoming.mkv", "verified candidate bytes");
         var verifier = new TestVideoPayloadVerifier { BeforeResult = () => File.WriteAllTextAsync(owned, "newer independently repaired owned bytes") };
-        var replacer = new OwnedFileReplacer(new BinOff(), NullLogger<OwnedFileReplacer>.Instance, verifier);
+        var replacer = new OwnedFileReplacer(new TestFileMutationGuard(), new BinOff(), NullLogger<OwnedFileReplacer>.Instance, verifier);
 
         var result = retainBackup
             ? await replacer.ReplaceRetainingBackupAsync(owned, incoming, BookFormatTier.Unknown, default, EntityKind.Movie)
@@ -72,7 +72,7 @@ public sealed class OwnedFileReplacerTests : IDisposable {
         var incoming = WriteFile(Dir("download"), "Incoming.mp4", "verified candidate bytes");
         var destination = evidenceFile ? owned + ".attempt-evidence" : Path.ChangeExtension(owned, ".mp4");
         var verifier = new TestVideoPayloadVerifier { BeforeResult = () => File.WriteAllTextAsync(destination, "independent file bytes") };
-        var replacer = new OwnedFileReplacer(new BinOff(), NullLogger<OwnedFileReplacer>.Instance, verifier);
+        var replacer = new OwnedFileReplacer(new TestFileMutationGuard(), new BinOff(), NullLogger<OwnedFileReplacer>.Instance, verifier);
 
         var result = await replacer.ReplaceRetainingBackupAsync(owned, incoming, BookFormatTier.Unknown, default,
             EntityKind.Movie, allowFormatChange: true, incomingEvidencePath: evidenceFile ? destination : null);
@@ -90,7 +90,7 @@ public sealed class OwnedFileReplacerTests : IDisposable {
         var owned = WriteFile(Dir("library"), "Owned.mkv", "healthy owned bytes");
         var incoming = WriteFile(Dir("download"), formatChange ? "Incoming.mp4" : "Incoming.mkv", "damaged candidate bytes");
         var verifier = new TestVideoPayloadVerifier("The downloaded video could not be decoded completely.");
-        var replacer = new OwnedFileReplacer(new BinOff(), NullLogger<OwnedFileReplacer>.Instance, verifier);
+        var replacer = new OwnedFileReplacer(new TestFileMutationGuard(), new BinOff(), NullLogger<OwnedFileReplacer>.Instance, verifier);
 
         var result = await replacer.ReplaceAsync(owned, incoming, BookFormatTier.Unknown, default,
             EntityKind.Movie, allowFormatChange: formatChange);
@@ -175,7 +175,7 @@ public sealed class OwnedFileReplacerTests : IDisposable {
     public async Task RecycleFailureDoesNotRollBackAnInstalledUpgrade(EntityKind kind, string extension) {
         var owned = WriteFile(Dir("library"), "Owned" + extension, "owned bytes");
         var incoming = WriteFile(Dir("download"), "Incoming" + extension, "downloaded upgrade bytes");
-        var replacer = new OwnedFileReplacer(new FailingBin(), NullLogger<OwnedFileReplacer>.Instance, new TestVideoPayloadVerifier());
+        var replacer = new OwnedFileReplacer(new TestFileMutationGuard(), new FailingBin(), NullLogger<OwnedFileReplacer>.Instance, new TestVideoPayloadVerifier());
 
         var result = await replacer.ReplaceAsync(owned, incoming, BookFormatTier.Unknown, default, kind);
 
@@ -270,7 +270,7 @@ public sealed class OwnedFileReplacerTests : IDisposable {
         WriteFile(library, "Movie (2020).eng.srt", "old subtitle bytes");
         WriteFile(download, "Release.1080p.mkv", "new copy");
         WriteFile(download, "Release.1080p.eng.srt", "subtitle bytes");
-        var replacer = new OwnedFileReplacer(
+        var replacer = new OwnedFileReplacer(new TestFileMutationGuard(),
             new BinOff(),
             NullLogger<OwnedFileReplacer>.Instance, new TestVideoPayloadVerifier(),
             new SubtitleSidecarDiscovery());
@@ -377,7 +377,7 @@ public sealed class OwnedFileReplacerTests : IDisposable {
         await File.WriteAllTextAsync(incoming, "new-better");
 
         var bin = new CapturingBin();
-        var replacer = new OwnedFileReplacer(bin, NullLogger<OwnedFileReplacer>.Instance, new TestVideoPayloadVerifier());
+        var replacer = new OwnedFileReplacer(new TestFileMutationGuard(), bin, NullLogger<OwnedFileReplacer>.Instance, new TestVideoPayloadVerifier());
         var result = await replacer.ReplaceAsync(library, download, Prismedia.Domain.Entities.BookFormatTier.Unknown, CancellationToken.None, EntityKind.Book);
 
         Assert.True(result.Succeeded);

@@ -77,7 +77,7 @@ public sealed class ImportPlacementExecutionTests : IDisposable {
         await Assert.ThrowsAsync<SyntheticPlacementCrashException>(() =>
             ImportPlacementExecution.ExecuteAsync(
                 store,
-                new CrashAfterExactPlacementMover(new ImportFileMover()),
+                new CrashAfterExactPlacementMover(new ImportFileMover(new TestFileMutationGuard())),
                 acquisitionId,
                 checkpoint,
                 CancellationToken.None));
@@ -91,7 +91,7 @@ public sealed class ImportPlacementExecutionTests : IDisposable {
         var completed = Assert.IsType<ImportPlacementCheckpoint>(
             await ImportPlacementExecution.ExecuteAsync(
                 store,
-                new ImportFileMover(),
+                new ImportFileMover(new TestFileMutationGuard()),
                 acquisitionId,
                 persisted,
                 CancellationToken.None));

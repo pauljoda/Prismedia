@@ -8,7 +8,7 @@ using Prismedia.Infrastructure.Persistence.Entities;
 namespace Prismedia.Infrastructure.Acquisition;
 
 /// <summary>Validates retained import evidence before removing completed files a downloader's API leaves behind.</summary>
-public sealed class EfCompletedDownloadPayloadCleanup(PrismediaDbContext db, RemotePathMapper paths) {
+public sealed class EfCompletedDownloadPayloadCleanup(ILibraryFileMutationGuard mutations, PrismediaDbContext db, RemotePathMapper paths) {
     private static readonly AcquisitionStatus[] Terminal = [AcquisitionStatus.Imported, AcquisitionStatus.Failed,
         AcquisitionStatus.Cancelled, AcquisitionStatus.Stopping];
 
@@ -32,6 +32,7 @@ public sealed class EfCompletedDownloadPayloadCleanup(PrismediaDbContext db, Rem
             .Distinct(FileSystemPathComparison.Comparer).ToArray();
         if (canonical.Length != 1) throw new IOException("The download's payload path changed before cleanup; its files were preserved.");
         var payload = canonical[0];
+        await using var protection = await mutations.EnterAsync([payload], token);
         var ownershipKey = $"{connection.Id:N}:{itemId}";
         if (!CompletedPayloadFileSystem.HasPayload(payload, ownershipKey)) return;
         var completedRoots = new List<string>();

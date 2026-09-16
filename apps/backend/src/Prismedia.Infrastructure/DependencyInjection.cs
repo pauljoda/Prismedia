@@ -365,6 +365,8 @@ public static class DependencyInjection {
         services.AddScoped<IFilesPersistence, EfFilesPersistence>();
         services.AddScoped<IEntitySourcePathOwnerReader, EfEntitySourcePathOwnerReader>();
         services.AddSingleton<IManagedFileStorage, LocalManagedFileStorage>();
+        services.AddSingleton<PostgresLibraryFileMutationGuard>();
+        services.AddSingleton<ILibraryFileMutationGuard>(provider => provider.GetRequiredService<PostgresLibraryFileMutationGuard>());
         services.AddSingleton<IFileArchivePreparationService, FileArchivePreparationService>();
     }
 

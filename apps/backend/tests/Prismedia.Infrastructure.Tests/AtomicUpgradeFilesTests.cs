@@ -18,7 +18,7 @@ public sealed class AtomicUpgradeFilesTests {
             await File.WriteAllTextAsync(incoming, "new video");
             var verifier = new TestVideoPayloadVerifier();
             var bin = new MergedImportTestSupport.NoRecycleBin();
-            var files = new AtomicUpgradeFiles(new OwnedFileReplacer(bin,
+            var files = new AtomicUpgradeFiles(new TestFileMutationGuard(), new OwnedFileReplacer(new TestFileMutationGuard(), bin,
                 NullLogger<OwnedFileReplacer>.Instance, verifier), bin, verifier);
             var parent = Guid.NewGuid();
             var entity = Guid.NewGuid();
@@ -52,7 +52,7 @@ public sealed class AtomicUpgradeFilesTests {
             await File.WriteAllTextAsync(incoming, "new video");
             if (occupied) await File.WriteAllTextAsync(installed, "independent video");
             var verifier = new TestVideoPayloadVerifier();
-            var files = new AtomicUpgradeFiles(new OwnedFileReplacer(new MergedImportTestSupport.NoRecycleBin(),
+            var files = new AtomicUpgradeFiles(new TestFileMutationGuard(), new OwnedFileReplacer(new TestFileMutationGuard(), new MergedImportTestSupport.NoRecycleBin(),
                 NullLogger<OwnedFileReplacer>.Instance, verifier), new MergedImportTestSupport.NoRecycleBin(), verifier);
             var parent = Guid.NewGuid();
             var entity = Guid.NewGuid();
@@ -268,7 +268,7 @@ public sealed class AtomicUpgradeFilesTests {
 
     private sealed class Fixture(IRecycleBin? bin = null) : IDisposable {
         private readonly string root = Directory.CreateTempSubdirectory("atomic-replacement-").FullName;
-        public AtomicUpgradeFiles Files { get; } = new(new OwnedFileReplacer(new MergedImportTestSupport.NoRecycleBin(),
+        public AtomicUpgradeFiles Files { get; } = new(new TestFileMutationGuard(), new OwnedFileReplacer(new TestFileMutationGuard(), new MergedImportTestSupport.NoRecycleBin(),
             NullLogger<OwnedFileReplacer>.Instance, new TestVideoPayloadVerifier()), bin ?? new MergedImportTestSupport.NoRecycleBin(), new TestVideoPayloadVerifier());
         public async Task<AtomicUpgradeCheckpoint> PrepareAsync() {
             var owned = Path.Combine(root, "owned.epub");

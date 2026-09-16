@@ -123,7 +123,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
                 Assert.True(File.Exists(Path.ChangeExtension(owned, ".mkv")));
             } };
             await RunAsync(db, queue,
-                new OwnedFileReplacer(new MergedImportTestSupport.NoRecycleBin(), NullLogger<OwnedFileReplacer>.Instance, verifier), childId,
+                new OwnedFileReplacer(new TestFileMutationGuard(), new MergedImportTestSupport.NoRecycleBin(), NullLogger<OwnedFileReplacer>.Instance, verifier), childId,
                 new FakeMediaUpgradePayloadInspector(new(720, rejectedBeforeDecode ? 480 : 1080, false, false, 1200, 1200)),
                 scanGate: gate, verifier: verifier);
             if (rejectedBeforeDecode) {
@@ -182,14 +182,14 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
                 };
                 if (manualApproval) {
                     await RunAsync(db, new RecordingJobQueue(),
-                        new OwnedFileReplacer(new MergedImportTestSupport.NoRecycleBin(), NullLogger<OwnedFileReplacer>.Instance, new TestVideoPayloadVerifier()), childId);
+                        new OwnedFileReplacer(new TestFileMutationGuard(), new MergedImportTestSupport.NoRecycleBin(), NullLogger<OwnedFileReplacer>.Instance, new TestVideoPayloadVerifier()), childId);
                     Assert.Equal(AcquisitionStatus.ManualImportRequired, (await db.Acquisitions.FindAsync(childId))!.Status);
                     Assert.True(File.Exists(owned));
                     Assert.True(File.Exists(incoming));
                     await AcquisitionTestFactory.Store(db).SetStatusAsync(childId, AcquisitionStatus.Downloaded, "Approved format change", default);
                 }
                 var interruption = await Record.ExceptionAsync(() => RunAsync(db, queue,
-                    new OwnedFileReplacer(new MergedImportTestSupport.NoRecycleBin(), NullLogger<OwnedFileReplacer>.Instance, new TestVideoPayloadVerifier()), childId,
+                    new OwnedFileReplacer(new TestFileMutationGuard(), new MergedImportTestSupport.NoRecycleBin(), NullLogger<OwnedFileReplacer>.Instance, new TestVideoPayloadVerifier()), childId,
                     new FakeMediaUpgradePayloadInspector(new(720, 1080, false, false, 1200, 1200)), allowFormatChange: manualApproval));
                 Assert.True(interruption is IOException, interruption?.ToString() ?? (await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == childId)).StatusMessage);
             }
@@ -216,7 +216,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
                 Assert.True(await store.TryTransitionStatusAsync(childId, [AcquisitionStatus.Failed], AcquisitionStatus.Downloaded, "Retry", default));
                 var queue = new RecordingJobQueue();
                 await RunAsync(db, queue,
-                    new OwnedFileReplacer(new MergedImportTestSupport.NoRecycleBin(), NullLogger<OwnedFileReplacer>.Instance, new TestVideoPayloadVerifier()), childId,
+                    new OwnedFileReplacer(new TestFileMutationGuard(), new MergedImportTestSupport.NoRecycleBin(), NullLogger<OwnedFileReplacer>.Instance, new TestVideoPayloadVerifier()), childId,
                     new FakeMediaUpgradePayloadInspector(new(720, 1080, false, false, 1200, 1200)));
                 if (kind == EntityKind.Book) Assert.Equal(BookSourceTier.Retail, (await db.Acquisitions.FindAsync(parentId))!.OwnedSourceTier);
                 else Assert.Equal(VideoQuality.Webdl1080p.ToCode(), (await db.Acquisitions.FindAsync(parentId))!.OwnedMediaQuality);
@@ -936,7 +936,7 @@ public sealed class AcquisitionUpgradeReplaceJobHandlerTests {
         var handler = new AcquisitionUpgradeReplaceJobHandler(
             AcquisitionTestFactory.Store(db), new EfMonitorStore(db), new EfBookAcquisitionProfileStore(db),
             replacer is FakeReplacer ? new FakeCheckpoints() : new EfAtomicUpgradeCheckpointStore(db),
-            replacer is FakeReplacer fake ? new FakeAtomicFiles(fake) : new AtomicUpgradeFiles(replacer, new MergedImportTestSupport.NoRecycleBin(), verifier ?? new TestVideoPayloadVerifier()),
+            replacer is FakeReplacer fake ? new FakeAtomicFiles(fake) : new AtomicUpgradeFiles(new TestFileMutationGuard(), replacer, new MergedImportTestSupport.NoRecycleBin(), verifier ?? new TestVideoPayloadVerifier()),
             scanGate ?? new VideoScanConcurrencyGate(),
             new EfAcquisitionHistoryStore(db),
             NullLogger<AcquisitionUpgradeReplaceJobHandler>.Instance,

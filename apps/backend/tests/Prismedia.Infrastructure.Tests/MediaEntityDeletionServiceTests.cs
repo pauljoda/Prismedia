@@ -25,6 +25,25 @@ namespace Prismedia.Infrastructure.Tests;
 /// identities are suppressed so a monitored container never re-requests the deleted work.
 /// </summary>
 public sealed class MediaEntityDeletionServiceTests {
+    [Fact]
+    public async Task ExternalOwnershipRefusesDeletionBeforeClaimingOrRemovingTheEntity() {
+        await using var db = CreateContext();
+        var root = new FileLibraryRoot(Guid.NewGuid(), "/external/movies", "External movies", true, true, false, false, false, false);
+        var movieId = Guid.NewGuid();
+        db.Entities.Add(NewEntity(movieId, EntityKind.Movie.ToCode(), "External movie"));
+        db.EntityFiles.Add(NewSourceFile(movieId, "/external/movies/film.mkv"));
+        db.ExternalLibraryMounts.Add(new ExternalLibraryMountRow { Id = Guid.NewGuid(), ConnectionId = Guid.NewGuid(), LibraryRootId = root.Id,
+            RemoteRootId = "1", RemotePath = "/remote/movies", LocalPath = root.Path, CreatedAt = DateTimeOffset.UtcNow });
+        await db.SaveChangesAsync();
+        var storage = new RecordingStorage();
+        var result = await CreateDeletionService(db, root, storage).DeleteAsync(movieId, true, default);
+        Assert.False(result.Deleted);
+        Assert.Equal(MediaEntityDeleteFailureKind.Conflict, result.FailureKind);
+        Assert.Empty(storage.DeletedPaths);
+        Assert.Null((await db.Entities.FindAsync(movieId))!.LifecycleClaimKind);
+        Assert.Single(db.EntityFiles);
+    }
+
     [Theory]
     [InlineData(EntityKind.Audio, true)]
     [InlineData(EntityKind.BookChapter, false)]
@@ -1331,7 +1350,7 @@ public sealed class MediaEntityDeletionServiceTests {
             monitorStore,
             new AcquisitionJobCleanup(db),
             new EfEntityLifecycleMutationLease(db, new EfEntityHierarchyReader(db)),
-            new AcquisitionImportResetCleanup(
+            new AcquisitionImportResetCleanup(new TestFileMutationGuard(),
                 db,
                 new Prismedia.Application.Jobs.Scanning.VideoScanConcurrencyGate(),
                 NullLogger<AcquisitionImportResetCleanup>.Instance));

@@ -20,7 +20,7 @@ public sealed class ImportFileMoverHardlinkTests {
             await File.WriteAllTextAsync(source, "payload-bytes");
             var target = Path.Combine(root.FullName, "library", "Author", "book.epub");
 
-            var placed = await new ImportFileMover().PlaceAsync(
+            var placed = await new ImportFileMover(new TestFileMutationGuard()).PlaceAsync(
                 new ResolvedImportItem(source, target), ImportMode.Hardlink, CancellationToken.None);
 
             Assert.Equal(target, placed);

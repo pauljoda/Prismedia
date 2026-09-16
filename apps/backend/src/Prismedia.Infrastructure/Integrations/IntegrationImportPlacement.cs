@@ -7,10 +7,11 @@ using Prismedia.Application.Jobs.Ports;
 namespace Prismedia.Infrastructure.Integrations;
 
 /// <summary>Atomic, non-destructive publication placement inside a frozen library boundary.</summary>
-public sealed class IntegrationImportPlacement : IIntegrationImportPlacement {
+public sealed class IntegrationImportPlacement(ILibraryFileMutationGuard mutations) : IIntegrationImportPlacement {
     /// <inheritdoc />
     public async Task<string> PlaceAsync(Guid operationId, IntegrationTransferPlan plan, LibraryRootData root,
         VerifiedIntegrationArtifact artifact, CancellationToken cancellationToken) {
+        await using var protection = await mutations.EnterAsync([root.Path], cancellationToken);
         var rootPath = Path.GetFullPath(root.Path);
         if (operationId == Guid.Empty || root.Id != plan.LibraryRootId || !root.Enabled || !root.ScanBooks
             || !FileSystemPathComparison.Comparer.Equals(rootPath, Path.GetFullPath(plan.LibraryPath)) || !Directory.Exists(rootPath))

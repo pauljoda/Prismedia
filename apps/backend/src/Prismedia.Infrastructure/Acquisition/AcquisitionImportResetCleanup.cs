@@ -13,6 +13,7 @@ namespace Prismedia.Infrastructure.Acquisition;
 /// the validated durable checkpoint; the cleanup never discovers or guesses neighboring library files.
 /// </summary>
 public sealed class AcquisitionImportResetCleanup(
+    ILibraryFileMutationGuard mutations,
     PrismediaDbContext db,
     VideoScanConcurrencyGate scanGate,
     ILogger<AcquisitionImportResetCleanup> logger) : IAcquisitionImportResetCleanup {
@@ -23,6 +24,16 @@ public sealed class AcquisitionImportResetCleanup(
         await using var scanLease = await scanGate.EnterAsync(cancellationToken);
 
         import.EnsureCheckpointApplicability();
+        var mutablePaths = import.CheckpointProtocol switch {
+            AcquisitionCheckpointProtocol.Placement when import.PlacementCheckpoint is { } placement =>
+                new[] { placement.LibraryRootPath, placement.PayloadRootPath }
+                    .Concat(placement.Units.SelectMany(unit => new[] { unit.TargetAbsolutePath, unit.SourceAbsolutePath })),
+            AcquisitionCheckpointProtocol.Television when import.TelevisionCheckpoint is { } television =>
+                new[] { television.SeriesFolderPath }.Concat(television.Units.SelectMany(unit => new[] {
+                    unit.TargetAbsolutePath, unit.SourceAbsolutePath, unit.PreviousFilePath, unit.ReplacementEvidencePath, unit.ReplacementBackupPath })),
+            _ => []
+        };
+        await using var protection = await mutations.EnterAsync(mutablePaths.Where(path => !string.IsNullOrWhiteSpace(path)).Select(path => path!).ToArray(), cancellationToken);
         var catalogChanges = import.CheckpointProtocol switch {
             // Atomic replacements own an existing Source: generic placement teardown must never delete it.
             // Explicit removal retains adjacent original/incoming recovery artifacts for manual review.

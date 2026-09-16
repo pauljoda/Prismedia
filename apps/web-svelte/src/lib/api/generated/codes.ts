@@ -1764,6 +1764,7 @@ export const PROBLEM_CODE = {
   playbackSourceNotFound: "playback_source_not_found",
   pluginNotFound: "plugin_not_found",
   pluginUpdateNotFound: "plugin_update_not_found",
+  readOnlyLibrary: "read_only_library",
   requestInvalid: "request_invalid",
   requestPermissionRequired: "request_permission_required",
   requestProposalChanged: "request_proposal_changed",

@@ -6,6 +6,21 @@ namespace Prismedia.Infrastructure.Persistence;
 
 internal static partial class PrismediaModelConfiguration {
     private static void ConfigureIntegrationTables(ModelBuilder modelBuilder) {
+        modelBuilder.Entity<ExternalLibraryMountRow>(entity => {
+            entity.ToTable("external_library_mounts");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.ConnectionId).HasColumnName("connection_id");
+            entity.Property(row => row.LibraryRootId).HasColumnName("library_root_id");
+            entity.Property(row => row.RemoteRootId).HasColumnName("remote_root_id").HasMaxLength(512);
+            entity.Property(row => row.RemotePath).HasColumnName("remote_path").HasMaxLength(8192);
+            entity.Property(row => row.LocalPath).HasColumnName("local_path").HasMaxLength(8192);
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.HasOne<IntegrationConnectionRow>().WithMany().HasForeignKey(row => row.ConnectionId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<LibraryRootRow>().WithMany().HasForeignKey(row => row.LibraryRootId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(row => row.LibraryRootId).IsUnique();
+            entity.HasIndex(row => new { row.ConnectionId, row.RemoteRootId }).IsUnique();
+        });
         modelBuilder.Entity<IntegrationConnectionRow>(entity => {
             entity.ToTable("integration_connections");
             entity.HasKey(row => row.Id);

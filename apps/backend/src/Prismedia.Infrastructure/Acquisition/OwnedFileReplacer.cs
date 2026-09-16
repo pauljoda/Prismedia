@@ -20,6 +20,7 @@ namespace Prismedia.Infrastructure.Acquisition;
 /// </para>
 /// </summary>
 public sealed class OwnedFileReplacer(
+    ILibraryFileMutationGuard mutations,
     IRecycleBin recycleBin,
     ILogger<OwnedFileReplacer> logger,
     IVideoPayloadVerifier videoVerifier,
@@ -87,6 +88,9 @@ public sealed class OwnedFileReplacer(
         if (incoming is null) {
             return (OwnedFileReplaceResult.Failed($"The upgrade download has no single importable {fileNoun} file."));
         }
+
+        await using var protection = await mutations.EnterAsync(new[] { owned, incoming, recoveryBackupPath, incomingEvidencePath }
+            .Where(path => !string.IsNullOrWhiteSpace(path)).Select(path => path!).ToArray(), cancellationToken);
 
         var incomingInfo = new FileInfo(incoming);
         if (!incomingInfo.Exists || incomingInfo.Length == 0) {

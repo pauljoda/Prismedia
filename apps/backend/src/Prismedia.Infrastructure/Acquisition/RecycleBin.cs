@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Prismedia.Application.Acquisition;
 using Prismedia.Application.Settings;
+using Prismedia.Application.Files;
 
 namespace Prismedia.Infrastructure.Acquisition;
 
@@ -11,12 +12,14 @@ namespace Prismedia.Infrastructure.Acquisition;
 /// their fallback behavior (the <c>.prismedia-bak</c> sidecar). This is a filesystem holding area
 /// only; database rows remain hard-delete per the repo policy.
 /// </summary>
-public sealed class RecycleBin(SettingsService settings, ILogger<RecycleBin> logger) : IRecycleBin {
+public sealed class RecycleBin(ILibraryFileMutationGuard mutations, SettingsService settings, ILogger<RecycleBin> logger) : IRecycleBin {
     public async Task<string?> TryMoveToBinAsync(string filePath, CancellationToken cancellationToken) {
         var config = await settings.GetRecycleBinSettingsAsync(cancellationToken);
         if (config.Path is null || !File.Exists(filePath)) {
             return null;
         }
+
+        await using var protection = await mutations.EnterAsync([filePath, config.Path], cancellationToken);
 
         try {
             var folder = Path.Combine(config.Path, DateTimeOffset.UtcNow.ToString("yyyy-MM-dd"));
@@ -39,6 +42,8 @@ public sealed class RecycleBin(SettingsService settings, ILogger<RecycleBin> log
         if (config.Path is null || !Directory.Exists(config.Path)) {
             return 0;
         }
+
+        await using var protection = await mutations.EnterAsync([config.Path], cancellationToken);
 
         var cutoff = DateTimeOffset.UtcNow - TimeSpan.FromDays(Math.Max(config.CleanupDays, 1));
         var removed = 0;

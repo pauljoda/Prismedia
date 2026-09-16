@@ -18,7 +18,7 @@ public sealed class RecycleBinTests {
             var settings = new SettingsService(new EfSettingsPersistence(db));
             await settings.UpdateSettingAsync(AppSettings.Acquisition.RecycleBinPath.Key,
                 JsonSerializer.SerializeToElement(Path.Combine(root, "bin")), default);
-            var bin = new RecycleBin(settings, NullLogger<RecycleBin>.Instance);
+            var bin = new RecycleBin(new TestFileMutationGuard(), settings, NullLogger<RecycleBin>.Instance);
             var original = Path.Combine(root, "old-media.prismedia-bak");
             await File.WriteAllTextAsync(original, "original-library-bytes");
             File.SetLastWriteTimeUtc(original, DateTime.UtcNow.AddYears(-10));
