@@ -141,6 +141,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Comic acquisition preserves fractional, negative, and suffixed issue labels when matching releases, and uses the current library label even when the installment title has no number. Automatic exact-issue requests reject unnumbered packs.
+
 - Missing external-library files and empty managed containers retain their catalog identity and viewing history during scan cleanup, including while a connection is offline.
 
 - OPDS catalogs now include dedicated comic installments and their series, with CBZ downloads that respect library access and NSFW series visibility.

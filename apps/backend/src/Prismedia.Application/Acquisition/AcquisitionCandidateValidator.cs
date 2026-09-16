@@ -11,6 +11,8 @@ public static class AcquisitionRuleContext {
         UpgradeOwnedQuality? owned, ProperDownloadPolicy properPolicy, IReadOnlyList<DownloadProtocol> protocols) {
         rules = rules with {
             TargetTitle = input.WorkTitle,
+            TargetInstallmentNumber = input.Kind == EntityKind.ComicInstallment
+                ? ComicInstallmentNumber.Parse(input.InstallmentLabel) ?? BookReleaseTokens.ParseInstallment(input.Title) : null,
             TargetAlternativeTitles = input.AlternativeWorkTitles,
             TargetEpisodeTitle = input.EpisodeNumber is null ? null : input.Title,
             TargetTrackTitle = input.Kind == EntityKind.AudioTrack ? input.Title : null,

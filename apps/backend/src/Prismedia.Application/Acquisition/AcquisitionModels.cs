@@ -52,6 +52,9 @@ public sealed record BookAcquisitionRules(
     /// </summary>
     public int? VolumeNumber { get; init; }
 
+    /// <summary>Exact requested comic designation; shelf ordinals must never substitute for this identity.</summary>
+    public ComicInstallmentNumber? TargetInstallmentNumber { get; init; }
+
     /// <summary>Allows video upgrades to change containers while preserving the owned entity and its history.</summary>
     public bool AllowFormatChange { get; init; } = true;
 
@@ -282,6 +285,9 @@ public sealed record AcquisitionSearchInput(
     int? VolumeNumber = null,
     BookRendition? BookRendition = null,
     int? AbsoluteEpisodeNumber = null) {
+    /// <summary>Current exact comic issue/chapter label, including fractions and suffixes.</summary>
+    public string? InstallmentLabel { get; init; }
+
     /// <summary>
     /// The title of the WORK this acquisition belongs to — the series for TV units (a season or episode
     /// acquisition's own Title is "Season 1" or the episode name), the author-qualified title for music,

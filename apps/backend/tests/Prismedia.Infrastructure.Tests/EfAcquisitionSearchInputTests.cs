@@ -7,6 +7,26 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EfAcquisitionSearchInputTests {
     [Fact]
+    public async Task ComicSearchUsesTheExactStoredLabelEvenWhenItsTitleHasNoNumber() {
+        await using var db = CreateContext();
+        var entity = Guid.NewGuid(); var acquisition = Guid.NewGuid();
+        db.Entities.Add(new EntityRow { Id = entity, KindCode = EntityKind.ComicInstallment.ToCode(), Title = "Interlude" });
+        db.EntityPositions.Add(new EntityPositionRow { EntityId = entity, Code = EntityPositionCodes.Chapter, Value = 12, Label = "12.5" });
+        db.Acquisitions.Add(new AcquisitionRow { Id = acquisition, EntityId = entity, Kind = EntityKind.ComicInstallment,
+            Status = AcquisitionStatus.Searching, Title = "Interlude", ExternalIdsJson = "{}", SourceUrlsJson = "[]" });
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+        var input = (await store.GetSearchInputAsync(acquisition, default))!;
+        var rules = Prismedia.Application.Acquisition.AcquisitionRuleContext.Apply(
+            Prismedia.Application.Acquisition.BookAcquisitionRules.Default with { Kind = EntityKind.ComicInstallment },
+            input, null, ProperDownloadPolicy.PreferAndUpgrade, [DownloadProtocol.Torrent]);
+        Assert.Equal(ComicInstallmentNumber.Parse("12.5"), rules.TargetInstallmentNumber);
+        (await db.EntityPositions.FindAsync(entity, EntityPositionCodes.Chapter))!.Label = "12A";
+        await db.SaveChangesAsync();
+        Assert.Equal("12A", (await store.GetSearchInputAsync(acquisition, default))!.InstallmentLabel);
+    }
+
+    [Fact]
     public async Task EpisodeSearchUsesTheSameCurrentSeriesCatalogAsImport() {
         await using var db = CreateContext();
         var series = Guid.NewGuid(); var first = Guid.NewGuid(); var second = Guid.NewGuid();

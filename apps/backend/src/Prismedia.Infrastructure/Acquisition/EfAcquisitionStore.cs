@@ -172,6 +172,7 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
             row.Id, row.Title, row.Author, row.Kind, row.EntityId, year, row.ProfileId,
             row.Series, positions.Season ?? row.SeasonNumber, positions.Episode ?? row.EpisodeNumber,
             positions.Volume ?? row.VolumeNumber, row.BookRendition, positions.AbsoluteEpisode) {
+            InstallmentLabel = await new EfAcquisitionWorkContext(db).ReadInstallmentLabelAsync(contextEntityId, row.Kind, cancellationToken),
             AlternativeWorkTitles = work.Titles,
             RecoveryOfAcquisitionId = row.RecoveryOfAcquisitionId,
             EpisodeCatalog = row.Kind == EntityKind.VideoEpisode && contextEntityId is { } episodeEntityId

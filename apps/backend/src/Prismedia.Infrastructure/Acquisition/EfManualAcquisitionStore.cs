@@ -76,6 +76,7 @@ public sealed class EfManualAcquisitionStore(
             EpisodeNumber: episodeNumber,
             BookRendition: kind == EntityKind.Book ? BookRendition.Ebook : null,
             AbsoluteEpisodeNumber: absoluteEpisodeNumber) {
+            InstallmentLabel = await new EfAcquisitionWorkContext(db).ReadInstallmentLabelAsync(entityId, kind, cancellationToken),
             AlternativeWorkTitles = work.Titles,
             EpisodeCatalog = kind == EntityKind.VideoEpisode
                 ? await new EfImportTargetIndex(db).GetSeriesEpisodeCatalogAsync(entityId, cancellationToken) : []

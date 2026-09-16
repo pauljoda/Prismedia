@@ -1,4 +1,5 @@
 using System.Text.RegularExpressions;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Acquisition;
 
@@ -16,7 +17,7 @@ public static partial class BookReleaseTokens {
     private static partial Regex VolumeTokenRegex();
 
     [GeneratedRegex(
-        @"(?:^|[\s._\-(\[])(?:ch(?:apter)?|issue|ep(?:isode)?|#)\.?[\s._-]*(?<installment>\d{1,5})(?:\D|$)",
+        @"(?:^|[\s._\-(\[])(?:ch(?:apter)?|issue|ep(?:isode)?|#)\.?[\s._]*(?<installment>-?[0-9]+(?:\.[0-9]+)?(?:/[0-9]+)?[a-z]*(?:-[0-9]+(?:\.[0-9]+)?)?)(?![a-z0-9/]|\.[0-9])",
         RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
     private static partial Regex InstallmentTokenRegex();
 
@@ -27,10 +28,8 @@ public static partial class BookReleaseTokens {
     }
 
     /// <summary>The independently released chapter/issue number a comic name declares, or null.</summary>
-    public static int? ParseInstallment(string name) {
+    public static ComicInstallmentNumber? ParseInstallment(string name) {
         var match = InstallmentTokenRegex().Match(name);
-        return match.Success && int.TryParse(match.Groups["installment"].Value, out var installment)
-            ? installment
-            : null;
+        return match.Success ? ComicInstallmentNumber.Parse(match.Groups["installment"].Value) : null;
     }
 }

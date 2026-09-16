@@ -7,6 +7,16 @@ namespace Prismedia.Infrastructure.Acquisition;
 
 /// <summary>Reads current work identity and canonical positions for persisted and transient acquisition searches.</summary>
 internal sealed class EfAcquisitionWorkContext(PrismediaDbContext db) {
+    /// <summary>Reads the exact display designation without interpreting an integer ordering value as identity.</summary>
+    public async Task<string?> ReadInstallmentLabelAsync(Guid? entityId, EntityKind kind, CancellationToken cancellationToken) {
+        if (entityId is not { } id || kind != EntityKind.ComicInstallment) return null;
+        return await (from position in db.EntityPositions.AsNoTracking()
+            join entity in db.Entities.AsNoTracking() on position.EntityId equals entity.Id
+            where entity.Id == id && entity.KindCode == EntityKind.ComicInstallment.ToCode()
+                && position.Code == EntityPositionCodes.Chapter
+            select position.Label).SingleOrDefaultAsync(cancellationToken);
+    }
+
     /// <summary>
     /// Uses the library's current ordering after metadata repair, with request-time values retained by
     /// callers only where the library has no position. Search and import must agree on the same target;

@@ -68,25 +68,25 @@ public sealed class BookTitleIdentitySpecification : IReleaseSpecification {
         return rules.VolumeNumber is { } volume && BookReleaseTokens.ParseVolume(release.Title) == volume
             ? null
             : rules.Kind == EntityKind.ComicInstallment
-                && BookReleaseTokens.ParseInstallment(rules.TargetTitle ?? string.Empty) is { } installment
+                && (rules.TargetInstallmentNumber ?? BookReleaseTokens.ParseInstallment(rules.TargetTitle ?? string.Empty)) is { } installment
                 && BookReleaseTokens.ParseInstallment(release.Title) == installment
                     ? null
                     : Reason;
     }
 }
 
-/// <summary>Rejects a serialized-comic release that explicitly names a different chapter or issue.</summary>
+/// <summary>Requires an exact declared chapter or issue when a comic request identifies one.</summary>
 public sealed class ComicInstallmentSpecification : IReleaseSpecification {
     public ReleaseRejectionReason Reason => ReleaseRejectionReason.WrongInstallment;
 
     public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) {
         if (rules.Kind != EntityKind.ComicInstallment
-            || BookReleaseTokens.ParseInstallment(rules.TargetTitle ?? string.Empty) is not { } expected) {
+            || (rules.TargetInstallmentNumber ?? BookReleaseTokens.ParseInstallment(rules.TargetTitle ?? string.Empty)) is not { } expected) {
             return null;
         }
 
         var declared = BookReleaseTokens.ParseInstallment(release.Title);
-        return declared is null || declared == expected ? null : Reason;
+        return declared == expected ? null : Reason;
     }
 }
 
