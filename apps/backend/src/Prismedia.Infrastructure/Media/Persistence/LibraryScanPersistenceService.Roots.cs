@@ -144,12 +144,7 @@ public sealed partial class LibraryScanPersistenceService {
             return 0;
         }
 
-        var entities = await _db.Entities
-            .Where(entity => excludedEntityIds.Contains(entity.Id))
-            .ToArrayAsync(cancellationToken);
-        _db.Entities.RemoveRange(entities);
-        await SaveChangesWithLifecycleAsync(cancellationToken);
-        return entities.Length;
+        return await RemoveEntitiesByIdAsync(excludedEntityIds.ToList(), cancellationToken);
     }
 
 

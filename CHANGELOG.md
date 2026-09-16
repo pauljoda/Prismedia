@@ -141,6 +141,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Missing external-library files and empty managed containers retain their catalog identity and viewing history during scan cleanup, including while a connection is offline.
+
 - OPDS catalogs now include dedicated comic installments and their series, with CBZ downloads that respect library access and NSFW series visibility.
 
 - Native metadata plugins now have bounded output, restricted inherited environment, private temporary credential files, and credential redaction in reported failures.

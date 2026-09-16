@@ -271,6 +271,8 @@ Root removal is unavailable while the external mapping owns its boundary.
 local paths, readability, and sizes. It rejects path traversal and symlinks escaping
 the local root. Missing or mismatched files remain explicit failures. Matching size
 does not establish a content hash, a completed library import, or playback availability.
+Missing external files and empty managed containers retain their catalog records and user
+history during scans. Their presence in the catalog does not prove current byte access.
 These mappings do not yet bind remote file upgrades to existing Prismedia identities.
 
 ## Import from a URL

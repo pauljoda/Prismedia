@@ -220,6 +220,8 @@ public sealed class FilesService(
         var target = await ResolveAsync(request.RootId, request.Path, hideNsfw, cancellationToken);
         await EnsureVisiblePathAsync(target, hideNsfw, cancellationToken);
         var detail = await storage.GetDetailAsync(target, [], cancellationToken);
+        if (target.Root.IsReadOnly)
+            throw new FileOperationException(ApiProblemCodes.ReadOnlyLibrary, "Manage external library inclusion in its connected application. Prismedia retains these items and their history.");
         await persistence.UpsertExclusionAsync(
             target.Root.Id,
             target.RelativePath,

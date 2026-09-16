@@ -20,9 +20,11 @@ internal static class DerivedEntityContainerPruner {
         Func<CancellationToken, Task> saveChanges,
         CancellationToken cancellationToken) {
         var removed = 0;
+        var retained = await ExternalLibraryEntityRetention.ListProtectedIdsAsync(db, cancellationToken);
         while (true) {
             var orphanContainers = await db.Entities
                 .Where(entity => ContainerCodes.Contains(entity.KindCode)
+                    && !retained.Contains(entity.Id)
                     && !entity.IsWanted
                     && !db.Monitors.Any(monitor =>
                         monitor.EntityId == entity.Id && monitor.Status == MonitorStatus.Active)
