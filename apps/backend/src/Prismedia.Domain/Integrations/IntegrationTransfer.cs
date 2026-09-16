@@ -16,6 +16,8 @@ public sealed record IntegrationTransferState(Guid OperationId, Guid ConnectionI
 public sealed class IntegrationTransfer(IntegrationTransferState state) {
     /// <summary>Immutable state to persist with optimistic concurrency after each external boundary.</summary>
     public IntegrationTransferState State { get; private set; } = state;
+    /// <summary>Direct retrieval can stop only before a persisted import boundary permits library placement.</summary>
+    public bool CanCancelSource => State.Mode == IntegrationTransferMode.SourceDownload && State.Phase == IntegrationTransferPhase.Transferring;
 
     /// <summary>Creates a finite acquisition intent for a verified persistent executor installation.</summary>
     public static IntegrationTransfer Create(Guid operationId, Guid connectionId, string instanceId) {
@@ -41,6 +43,14 @@ public sealed class IntegrationTransfer(IntegrationTransferState state) {
         if (State.Phase != IntegrationTransferPhase.Transferring) throw InvalidTransition();
         Change(State with { Artifacts = manifest.Artifacts, VerifiedArtifactIds = [artifact.Id], Imports = [],
             Phase = IntegrationTransferPhase.Importing });
+    }
+
+    /// <summary>Cancels direct retrieval before local placement starts; persisted cancellation fences any stale downloading worker.</summary>
+    public void CancelSourceDownload() {
+        if (State.Mode != IntegrationTransferMode.SourceDownload) throw InvalidTransition();
+        if (State.Phase == IntegrationTransferPhase.Cancelled) return;
+        if (!CanCancelSource) throw InvalidTransition();
+        Change(State with { Phase = IntegrationTransferPhase.Cancelled });
     }
 
     /// <summary>Persist this state before issuing POST. A crash or timeout must recover by the same operation key.</summary>

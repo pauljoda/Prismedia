@@ -8,4 +8,4 @@ public sealed record AcquireCatalogOfferRequest(Guid OperationId, string Selecti
 /// <summary>Public durable acquisition progress without source locators, byte authorization, or staging paths.</summary>
 public sealed record IntegrationTransferResponse(Guid Id, Guid ConnectionId, string Title, EntityKind EntityKind, Guid LibraryRootId,
     IntegrationTransferMode Mode, IntegrationTransferPhase Phase, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt,
-    int ArtifactCount, IReadOnlyList<Guid> ImportedEntityIds, string? LastError);
+    int ArtifactCount, IReadOnlyList<Guid> ImportedEntityIds, string? LastError, bool CanCancel);

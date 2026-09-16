@@ -1,4 +1,4 @@
-import { acquireCatalogOffer, listIntegrationTransfers, retryIntegrationTransfer } from "$lib/api/generated/prismedia";
+import { acquireCatalogOffer, cancelIntegrationTransfer, listIntegrationTransfers, retryIntegrationTransfer } from "$lib/api/generated/prismedia";
 import type { AcquireCatalogOfferRequest, IntegrationTransferResponse } from "$lib/api/generated/model";
 import { unwrapGenerated } from "$lib/api/generated-response";
 
@@ -13,3 +13,7 @@ export const fetchIntegrationTransfers = (): Promise<IntegrationTransferResponse
 /** Resumes an accepted operation without creating a new acquisition. */
 export const retryPublicationTransfer = (id: string): Promise<void> =>
   retryIntegrationTransfer(id).then(response => unwrapGenerated(response, "Could not retry this publication", [202]));
+
+/** Cancels an accepted direct download before it enters library import. */
+export const cancelPublicationTransfer = (id: string): Promise<IntegrationTransferResponse> =>
+  cancelIntegrationTransfer(id).then(response => unwrapGenerated(response, "Could not cancel this publication"));

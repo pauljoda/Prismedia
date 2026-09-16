@@ -21,6 +21,9 @@ public static class IntegrationTransferEndpoints {
             await service.RetryAsync(id, cancellationToken);
             return Results.Accepted($"/api/integration-transfers/{id}");
         }).WithName("RetryIntegrationTransfer").Produces(202).Produces<ApiProblem>(400).Produces<ApiProblem>(404);
+        group.MapPost("/{id:guid}/cancel", async (Guid id, CatalogAcquisitionService service, CancellationToken cancellationToken) =>
+            Results.Ok(await service.CancelAsync(id, cancellationToken)))
+            .WithName("CancelIntegrationTransfer").Produces<IntegrationTransferResponse>().Produces<ApiProblem>(400).Produces<ApiProblem>(404).Produces<ApiProblem>(409);
         return group;
     }
 }

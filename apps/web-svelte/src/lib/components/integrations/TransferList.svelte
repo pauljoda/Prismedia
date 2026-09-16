@@ -1,9 +1,9 @@
 <script lang="ts">
   import { goto } from "$app/navigation";
   import { Alert, Badge, Button, Panel } from "@prismedia/ui-svelte";
-  import { ArrowUpRight, RotateCcw } from "@lucide/svelte";
+  import { ArrowUpRight, RotateCcw, X } from "@lucide/svelte";
   import type { IntegrationTransferResponse } from "$lib/api/generated/model";
-  import { retryPublicationTransfer } from "$lib/api/integration-transfers";
+  import { cancelPublicationTransfer, retryPublicationTransfer } from "$lib/api/integration-transfers";
   import { resolveEntityHrefById } from "$lib/entities/entity-route-resolver";
   import { isTransferTerminal, transferPhaseLabels } from "$lib/integrations/transfer-labels";
 
@@ -26,6 +26,15 @@
     } catch (cause) { error = cause instanceof Error ? cause.message : "Could not open the imported publication"; }
     finally { busy = null; }
   }
+  async function cancel(id: string) {
+    busy = id; error = null;
+    try { await cancelPublicationTransfer(id); await onrefresh(); }
+    catch (cause) {
+      error = cause instanceof Error ? cause.message : "Could not cancel this download";
+      await onrefresh();
+    }
+    finally { busy = null; }
+  }
 </script>
 
 {#if transfers.length}
@@ -40,6 +49,9 @@
           {#if transfer.lastError}<p class="break-words text-sm text-text-muted">{transfer.lastError}</p>{/if}
         </div>
         <div class="flex shrink-0 flex-wrap gap-2">
+          {#if transfer.canCancel}
+            <Button variant="ghost" size="sm" disabled={busy !== null} onclick={() => void cancel(transfer.id)}><X />Cancel download</Button>
+          {/if}
           {#if transfer.lastError && !isTransferTerminal(transfer.phase)}
             <Button variant="secondary" size="sm" disabled={busy !== null} onclick={() => void retry(transfer.id)}><RotateCcw />Retry import</Button>
           {/if}

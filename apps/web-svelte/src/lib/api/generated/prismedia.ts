@@ -9396,6 +9396,56 @@ export const retryIntegrationTransfer = async (id: string, options?: RequestInit
 
 
 
+export type cancelIntegrationTransferResponse200 = {
+  data: IntegrationTransferResponse
+  status: 200
+}
+
+export type cancelIntegrationTransferResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type cancelIntegrationTransferResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type cancelIntegrationTransferResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type cancelIntegrationTransferResponseSuccess = (cancelIntegrationTransferResponse200) & {
+  headers: Headers;
+};
+export type cancelIntegrationTransferResponseError = (cancelIntegrationTransferResponse400 | cancelIntegrationTransferResponse404 | cancelIntegrationTransferResponse409) & {
+  headers: Headers;
+};
+
+export type cancelIntegrationTransferResponse = (cancelIntegrationTransferResponseSuccess | cancelIntegrationTransferResponseError)
+
+export const getCancelIntegrationTransferUrl = (id: string,) => {
+
+
+
+
+  return `/api/integration-transfers/${id}/cancel`
+}
+
+export const cancelIntegrationTransfer = async (id: string, options?: RequestInit): Promise<cancelIntegrationTransferResponse> => {
+
+  return orvalFetch<cancelIntegrationTransferResponse>(getCancelIntegrationTransferUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
 export type listIdentifyProvidersResponse200 = {
   data: PluginProvider[]
   status: 200

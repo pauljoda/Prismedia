@@ -453,6 +453,17 @@ public sealed partial class JobQueueService : IJobQueueService {
             return true;
         }, cancellationToken);
 
+    /// <inheritdoc />
+    public async Task<int> CancelTargetAsync(JobType type, string targetEntityId, CancellationToken cancellationToken) {
+        if (string.IsNullOrWhiteSpace(targetEntityId)) throw new ArgumentException("A specific cancellation target is required.");
+        var ids = await _db.JobRuns.AsNoTracking().Where(job => job.Type == type && job.TargetEntityId == targetEntityId
+            && (job.Status == JobRunStatus.Queued || job.Status == JobRunStatus.Running))
+            .Select(job => job.Id).ToArrayAsync(cancellationToken);
+        var count = 0;
+        foreach (var id in ids) if (await CancelRunAsync(id, cancellationToken)) count++;
+        return count;
+    }
+
     public async Task<bool> IsRunCancelledAsync(Guid id, CancellationToken cancellationToken) {
         var status = await _db.JobRuns
             .AsNoTracking()

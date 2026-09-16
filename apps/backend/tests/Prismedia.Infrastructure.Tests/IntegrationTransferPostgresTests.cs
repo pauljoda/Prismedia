@@ -13,6 +13,30 @@ public sealed class IntegrationTransferPostgresTests : IDisposable {
     private readonly string keys = Path.Combine(Path.GetTempPath(), "prismedia-transfer-pg-" + Guid.NewGuid().ToString("N"));
 
     [Fact]
+    public async Task CancellationFencesAStaleWorkerReleasesOwnershipAndOnlyStopsItsOwnTarget() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var connection = await AddConnectionAsync(database);
+        var plan = Plan;
+        var transfer = IntegrationTransfer.CreateSourceDownload(Guid.NewGuid(), connection);
+        var other = IntegrationTransfer.CreateSourceDownload(Guid.NewGuid(), connection);
+        await using var worker = database.CreateContext();
+        await Store(worker).CreateAsync(transfer, plan, default);
+        await Store(worker).CreateAsync(other, plan with { OwnershipKey = "another-owner" }, default);
+        await using (var api = database.CreateContext()) {
+            var service = new CatalogAcquisitionService(Store(api), null!, null!, null!, null!, new JobQueueService(api));
+            Assert.Equal(IntegrationTransferPhase.Cancelled, (await service.CancelAsync(transfer.State.OperationId, default)).Phase);
+            Assert.Equal(IntegrationTransferPhase.Cancelled, (await service.CancelAsync(transfer.State.OperationId, default)).Phase);
+        }
+        transfer.AcceptSourceArtifact(new("file", "item", "book.epub", "application/epub+zip", 100, new string('a', 64), IntegrationArtifactRole.Content));
+        await Assert.ThrowsAsync<IntegrationTransferConflictException>(() => Store(worker).SaveAsync(transfer, 1, null, default));
+        await using var check = database.CreateContext();
+        Assert.Equal(JobRunStatus.Cancelled, (await check.JobRuns.SingleAsync(job => job.TargetEntityId == transfer.State.OperationId.ToString())).Status);
+        Assert.Equal(JobRunStatus.Queued, (await check.JobRuns.SingleAsync(job => job.TargetEntityId == other.State.OperationId.ToString())).Status);
+        Assert.Null((await check.IntegrationTransfers.SingleAsync(row => row.Id == transfer.State.OperationId)).ActiveOwnershipKey);
+        await Store(check).CreateAsync(IntegrationTransfer.CreateSourceDownload(Guid.NewGuid(), connection), plan, default);
+    }
+
+    [Fact]
     public async Task QueuePublicationFailureRollsBackIntentAndEntireGraph() {
         await using var database = await PostgresTestDatabase.CreateAsync();
         var connection = await AddConnectionAsync(database);

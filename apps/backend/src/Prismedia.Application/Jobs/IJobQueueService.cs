@@ -68,6 +68,10 @@ public interface IJobQueueService {
     /// </summary>
     Task<bool> CancelRunAsync(Guid id, CancellationToken cancellationToken);
 
+    /// <summary>Cancels active runs for exactly one typed durable target, leaving other operations untouched.</summary>
+    Task<int> CancelTargetAsync(JobType type, string targetEntityId, CancellationToken cancellationToken) =>
+        throw new NotSupportedException("This queue does not support targeted cancellation.");
+
     /// <summary>
     /// Checks whether a claimed job run has been cancelled by an operator while a handler is still running.
     /// </summary>

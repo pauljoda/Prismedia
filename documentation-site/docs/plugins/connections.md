@@ -102,6 +102,11 @@ transaction. Sensitive source locators in that intent use the same persistent ke
 ring as connection credentials, with a separate operation-bound encryption purpose.
 Connections with transfer history can be disabled but cannot be deleted.
 
+**Cancel download** is available until the worker starts library import. Cancellation
+is persisted before stopping the queue run, so an older worker cannot place files
+after cancellation wins. Existing staged bytes remain available for inspection.
+Once placement can have begun, use **Retry import** to reconcile the existing files.
+
 ## Manifest declaration
 
 Manifest v2 accepts an optional `integration` section. Its `protocolVersion` is

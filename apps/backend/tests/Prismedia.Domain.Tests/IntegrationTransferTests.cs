@@ -22,6 +22,21 @@ public sealed class IntegrationTransferTests {
     }
 
     [Fact]
+    public void DirectCancellationIsIdempotentAndCannotCancelCommittedImportWorkOrRemoteJobs() {
+        var transfer = IntegrationTransfer.CreateSourceDownload(Guid.NewGuid(), Guid.NewGuid());
+        transfer.CancelSourceDownload();
+        var revision = transfer.State.Revision;
+        transfer.CancelSourceDownload();
+        Assert.Equal(revision, transfer.State.Revision);
+        Assert.Equal(IntegrationTransferPhase.Cancelled, transfer.State.Phase);
+        Assert.Throws<InvalidOperationException>(() => transfer.AcceptSourceArtifact(Artifact));
+        var importing = IntegrationTransfer.CreateSourceDownload(Guid.NewGuid(), Guid.NewGuid());
+        importing.AcceptSourceArtifact(Artifact);
+        Assert.Throws<InvalidOperationException>(() => importing.CancelSourceDownload());
+        Assert.Throws<InvalidOperationException>(() => Submitted().CancelSourceDownload());
+    }
+
+    [Fact]
     public void DirectSourceCompletesOnlyAfterVerifiedLocalOwnershipWithoutInventingARemoteJob() {
         var transfer = IntegrationTransfer.CreateSourceDownload(Guid.NewGuid(), Guid.NewGuid());
         Assert.Null(transfer.State.InstanceId);

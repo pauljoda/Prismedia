@@ -23,4 +23,5 @@ export interface IntegrationTransferResponse {
   importedEntityIds: string[];
   /** @nullable */
   lastError: string | null;
+  canCancel: boolean;
 }
