@@ -24,7 +24,7 @@ public sealed class FilesService(
         return new FileRootsResponse(roots
             .Where(root => !hideNsfw || !root.IsNsfw)
             .OrderBy(root => root.Label, StringComparer.OrdinalIgnoreCase)
-            .Select(root => new FileRoot(root.Id, root.Label, root.Path, root.Enabled))
+            .Select(root => new FileRoot(root.Id, root.Label, root.Path, root.Enabled, root.IsReadOnly))
             .ToArray());
     }
 

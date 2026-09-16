@@ -59,6 +59,7 @@ import type {
   ConsumptionStatisticsResponse,
   ConsumptionUpdateRequest,
   CreateConnectionRequest,
+  CreateExternalLibraryMountRequest,
   CreateFileFolderParams,
   CreateFirstAdminRequest,
   CustomFormatSaveRequest,
@@ -102,6 +103,7 @@ import type {
   EntityThumbnailBatchResponse,
   ExcludeFileParams,
   ExecutorInspectionResponse,
+  ExternalLibraryMount,
   FileArchivePreparation,
   FileArchiveRequest,
   FileChildrenResponse,
@@ -207,6 +209,7 @@ import type {
   ManualReplacementQueueRequest,
   ManualReplacementSearchRequest,
   ManualReplacementSearchResult,
+  MappedLibrarySnapshot,
   MetadataFieldResponse,
   MissingChildrenCommitRequest,
   MissingChildrenCommitResponse,
@@ -9593,6 +9596,128 @@ export const getManagerOptions = async (id: string,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       managerOptionsInput,)
+  }
+);}
+
+
+
+export type listExternalLibraryMountsResponse200 = {
+  data: ExternalLibraryMount[]
+  status: 200
+}
+
+export type listExternalLibraryMountsResponseSuccess = (listExternalLibraryMountsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listExternalLibraryMountsResponse = (listExternalLibraryMountsResponseSuccess)
+
+export const getListExternalLibraryMountsUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/mounts`
+}
+
+export const listExternalLibraryMounts = async (id: string, options?: RequestInit): Promise<listExternalLibraryMountsResponse> => {
+
+  return orvalFetch<listExternalLibraryMountsResponse>(getListExternalLibraryMountsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createExternalLibraryMountResponse200 = {
+  data: ExternalLibraryMount
+  status: 200
+}
+
+export type createExternalLibraryMountResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type createExternalLibraryMountResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type createExternalLibraryMountResponseSuccess = (createExternalLibraryMountResponse200) & {
+  headers: Headers;
+};
+export type createExternalLibraryMountResponseError = (createExternalLibraryMountResponse400 | createExternalLibraryMountResponse409) & {
+  headers: Headers;
+};
+
+export type createExternalLibraryMountResponse = (createExternalLibraryMountResponseSuccess | createExternalLibraryMountResponseError)
+
+export const getCreateExternalLibraryMountUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/mounts`
+}
+
+export const createExternalLibraryMount = async (id: string,
+    createExternalLibraryMountRequest: CreateExternalLibraryMountRequest, options?: RequestInit): Promise<createExternalLibraryMountResponse> => {
+
+  return orvalFetch<createExternalLibraryMountResponse>(getCreateExternalLibraryMountUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createExternalLibraryMountRequest,)
+  }
+);}
+
+
+
+export type inspectExternalLibraryAccessResponse200 = {
+  data: MappedLibrarySnapshot
+  status: 200
+}
+
+export type inspectExternalLibraryAccessResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type inspectExternalLibraryAccessResponseSuccess = (inspectExternalLibraryAccessResponse200) & {
+  headers: Headers;
+};
+export type inspectExternalLibraryAccessResponseError = (inspectExternalLibraryAccessResponse400) & {
+  headers: Headers;
+};
+
+export type inspectExternalLibraryAccessResponse = (inspectExternalLibraryAccessResponseSuccess | inspectExternalLibraryAccessResponseError)
+
+export const getInspectExternalLibraryAccessUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/local-access`
+}
+
+export const inspectExternalLibraryAccess = async (id: string,
+    managedItemInput: ManagedItemInput, options?: RequestInit): Promise<inspectExternalLibraryAccessResponse> => {
+
+  return orvalFetch<inspectExternalLibraryAccessResponse>(getInspectExternalLibraryAccessUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      managedItemInput,)
   }
 );}
 

@@ -1,9 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Prismedia.Application.Settings;
+using Prismedia.Application.Files;
 using Prismedia.Contracts.Settings;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Media.Persistence;
+using Prismedia.Infrastructure.Files;
+using Prismedia.Infrastructure.Acquisition;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 
@@ -107,16 +110,18 @@ public sealed class EfSettingsPersistence : ISettingsPersistence {
             .AsNoTracking()
             .OrderBy(root => root.Label)
             .ThenBy(root => root.Path)
-            .Select(root => ToContract(root))
+            .Select(root => ToContract(root, _db.ExternalLibraryMounts.Any(mount => mount.LibraryRootId == root.Id)))
             .ToArrayAsync(cancellationToken);
     }
 
     public async Task<LibraryRoot?> GetLibraryRootAsync(Guid id, CancellationToken cancellationToken) {
         var row = await _db.LibraryRoots.AsNoTracking().FirstOrDefaultAsync(root => root.Id == id, cancellationToken);
-        return row is null ? null : ToContract(row);
+        return row is null ? null : ToContract(row, await IsReadOnlyAsync(id, cancellationToken));
     }
 
     public async Task<LibraryRoot> AddLibraryRootAsync(LibraryRoot state, CancellationToken cancellationToken) {
+        await using var transaction = await LibraryRootConfigurationLease.AcquireAsync(_db, cancellationToken);
+        await RequireOrdinaryPathAsync(state.Path, cancellationToken);
         var row = new LibraryRootRow {
             Id = state.Id,
             Path = state.Path,
@@ -137,7 +142,8 @@ public sealed class EfSettingsPersistence : ISettingsPersistence {
 
         _db.LibraryRoots.Add(row);
         await SaveLibraryRootChangesAsync(state.Path, cancellationToken);
-        return ToContract(row);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+        return ToContract(row, false);
     }
 
     /// <summary>
@@ -158,9 +164,14 @@ public sealed class EfSettingsPersistence : ISettingsPersistence {
     }
 
     public async Task<LibraryRoot> SaveLibraryRootAsync(LibraryRoot state, CancellationToken cancellationToken) {
+        await using var transaction = await LibraryRootConfigurationLease.AcquireAsync(_db, cancellationToken);
+        var isReadOnly = await IsReadOnlyAsync(state.Id, cancellationToken);
         var row = await _db.LibraryRoots.FindAsync([state.Id], cancellationToken)
             ?? throw new InvalidOperationException($"Library root '{state.Id}' was not found.");
 
+        if (isReadOnly && !FileSystemPathComparison.Comparer.Equals(row.Path, state.Path))
+            throw new ReadOnlyLibraryException("An externally managed library path cannot be changed. Disable scanning to pause this library.");
+        if (!isReadOnly) await RequireOrdinaryPathAsync(state.Path, cancellationToken);
         row.Path = state.Path;
         row.Label = state.Label;
         row.Enabled = state.Enabled;
@@ -175,17 +186,16 @@ public sealed class EfSettingsPersistence : ISettingsPersistence {
         row.UpdatedAt = state.UpdatedAt;
 
         await SaveLibraryRootChangesAsync(state.Path, cancellationToken);
-        return ToContract(row);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+        return ToContract(row, isReadOnly);
     }
 
     public async Task<bool> DeleteLibraryRootAsync(Guid id, CancellationToken cancellationToken) {
-        if (!_db.Database.IsRelational() || _db.Database.CurrentTransaction is not null) {
-            return await DeleteLibraryRootCoreAsync(id, cancellationToken);
-        }
-
-        await using var transaction = await _db.Database.BeginTransactionAsync(cancellationToken);
+        await using var transaction = await LibraryRootConfigurationLease.AcquireAsync(_db, cancellationToken);
+        if (await IsReadOnlyAsync(id, cancellationToken))
+            throw new ReadOnlyLibraryException("This root protects an externally managed library. Disable scanning to pause it without removing file protection.");
         var deleted = await DeleteLibraryRootCoreAsync(id, cancellationToken);
-        await transaction.CommitAsync(cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
         return deleted;
     }
 
@@ -271,7 +281,15 @@ public sealed class EfSettingsPersistence : ISettingsPersistence {
             .ToDictionary(group => group.Key, group => group.Select(entity => entity.Id).ToArray());
     }
 
-    private static LibraryRoot ToContract(LibraryRootRow row) =>
+    private Task<bool> IsReadOnlyAsync(Guid id, CancellationToken token) =>
+        _db.ExternalLibraryMounts.AnyAsync(mount => mount.LibraryRootId == id, token);
+
+    private async Task RequireOrdinaryPathAsync(string path, CancellationToken token) {
+        if (await ExternalLibraryBoundaryPaths.OverlapsAsync(_db, path, token))
+            throw new ReadOnlyLibraryException("This path overlaps an externally managed library. Use its existing read-only root.");
+    }
+
+    private static LibraryRoot ToContract(LibraryRootRow row, bool isReadOnly) =>
         new(
             row.Id,
             row.Path,
@@ -287,5 +305,5 @@ public sealed class EfSettingsPersistence : ISettingsPersistence {
             row.CreatedAt,
             row.UpdatedAt,
             row.AutoIdentify,
-            row.CreatedByUserId);
+            row.CreatedByUserId, IsReadOnly: isReadOnly);
 }

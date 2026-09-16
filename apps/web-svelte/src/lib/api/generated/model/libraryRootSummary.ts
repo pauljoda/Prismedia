@@ -13,4 +13,5 @@ export interface LibraryRootSummary {
   scanAudio: boolean;
   scanBooks: boolean;
   isNsfw: boolean;
+  isReadOnly?: boolean;
 }

@@ -99,6 +99,9 @@ public static class DependencyInjection {
         services.AddScoped<IIntegrationTransferGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
         services.AddScoped<IIntegrationManagerGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
         services.AddScoped<ManagedLibraryService>();
+        services.AddSingleton(new ExternalLibraryStorageOptions(dataDir, cacheDir));
+        services.AddScoped<IExternalLibraryMountStore, EfExternalLibraryMountStore>();
+        services.AddScoped<ExternalLibraryService>();
         services.AddSingleton<IDiscoveryTokenProtector>(new DiscoveryTokenProtector(dataDir));
         services.AddSingleton<IExecutorSelectionProtector>(new ExecutorSelectionProtector(dataDir));
         services.AddScoped<IntegrationConnectionAccess>();

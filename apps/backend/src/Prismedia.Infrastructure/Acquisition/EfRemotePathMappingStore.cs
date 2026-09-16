@@ -1,6 +1,8 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Acquisition;
 using Prismedia.Contracts.Acquisition;
+using Prismedia.Contracts.System;
+using Prismedia.Infrastructure.Files;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 
@@ -26,6 +28,10 @@ public sealed class EfRemotePathMappingStore(PrismediaDbContext db) : IRemotePat
     }
 
     public async Task<RemotePathMappingView> SaveAsync(RemotePathMappingSaveRequest request, CancellationToken cancellationToken) {
+        await using var transaction = await LibraryRootConfigurationLease.AcquireAsync(db, cancellationToken);
+        if (await ExternalLibraryBoundaryPaths.OverlapsAsync(db, request.LocalPath, cancellationToken))
+            throw new AcquisitionConfigurationException(ApiProblemCodes.DownloadClientInvalid, "Download mappings cannot overlap externally managed libraries.");
+
         var now = DateTimeOffset.UtcNow;
         var row = request.Id is { } id
             ? await db.RemotePathMappings.FirstOrDefaultAsync(candidate => candidate.Id == id, cancellationToken)
@@ -44,6 +50,7 @@ public sealed class EfRemotePathMappingStore(PrismediaDbContext db) : IRemotePat
         row.LocalPath = request.LocalPath.Trim();
         row.UpdatedAt = now;
         await db.SaveChangesAsync(cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
         return ToView(row);
     }
 

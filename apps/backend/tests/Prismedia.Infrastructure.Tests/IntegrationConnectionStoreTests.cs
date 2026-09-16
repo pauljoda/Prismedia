@@ -5,6 +5,7 @@ using Prismedia.Domain.Entities;
 using Prismedia.Domain.Integrations;
 using Prismedia.Infrastructure.Integrations;
 using Prismedia.Infrastructure.Persistence;
+using Prismedia.Infrastructure.Persistence.Entities;
 
 namespace Prismedia.Infrastructure.Tests;
 
@@ -56,6 +57,25 @@ public sealed class IntegrationConnectionStoreTests : IDisposable {
         Assert.Equal(ConnectionStatus.Disabled, saved.Connection.State.Status);
         Assert.Empty(saved.ConfiguredSecretKeys);
         Assert.Empty(await store.ReadSecretsAsync(connection.State.Id, CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task MappedConnectionCannotChangeSourceOrBeDeletedButCanBeDisabled() {
+        await using var db = new PrismediaDbContext(_options);
+        var store = new EfIntegrationConnectionStore(db, new ConnectionSecretProtector(_root));
+        var connection = NewConnection();
+        await store.SaveAsync(connection, null, new Dictionary<string, string?>(), default);
+        db.ExternalLibraryMounts.Add(new ExternalLibraryMountRow { Id = Guid.NewGuid(), ConnectionId = connection.State.Id,
+            LibraryRootId = Guid.NewGuid(), RemoteRootId = "1", RemotePath = "/remote", LocalPath = _root });
+        await db.SaveChangesAsync();
+        var changed = (await store.FindAsync(connection.State.Id, default))!.Connection;
+        changed.Configure(changed.State.Name, "http://different.test", true, changed.State.EnabledCapabilities, changed.State.Settings);
+        await Assert.ThrowsAsync<ArgumentException>(() => store.SaveAsync(changed, 1, new Dictionary<string, string?>(), default));
+        await Assert.ThrowsAsync<ConnectionInUseException>(() => store.DeleteAsync(connection.State.Id, 1, default));
+        connection.Configure(connection.State.Name, connection.State.BaseUrl, false, connection.State.EnabledCapabilities, connection.State.Settings);
+        await store.SaveAsync(connection, 1, new Dictionary<string, string?>(), default);
+        Assert.False((await store.FindAsync(connection.State.Id, default))!.Connection.State.Enabled);
+        Assert.Single(await db.ExternalLibraryMounts.ToArrayAsync());
     }
 
     public void Dispose() { if (Directory.Exists(_root)) Directory.Delete(_root, true); }

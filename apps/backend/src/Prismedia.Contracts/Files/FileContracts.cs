@@ -9,7 +9,7 @@ namespace Prismedia.Contracts.Files;
 /// <param name="Label">User-facing root label.</param>
 /// <param name="Path">Absolute root path on the server.</param>
 /// <param name="Enabled">Whether the root participates in scans.</param>
-public sealed record FileRoot(Guid Id, string Label, string Path, bool Enabled);
+public sealed record FileRoot(Guid Id, string Label, string Path, bool Enabled, bool IsReadOnly = false);
 
 /// <summary>
 /// Child file or directory entry under a watched root.

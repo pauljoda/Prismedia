@@ -55,7 +55,7 @@ public sealed class ExecutorAcquisitionService(IntegrationConnectionAccess acces
             ?? throw new ArgumentException("Choose an item from the inspected selection.");
         var allowed = await currentUser.GetAllowedLibraryRootIdsAsync(cancellationToken);
         var root = await roots.GetLibraryRootAsync(request.LibraryRootId, cancellationToken);
-        if (root is null || !root.Enabled || !root.ScanBooks || allowed is not null && !allowed.Contains(root.Id))
+        if (root is null || root.IsReadOnly || !root.Enabled || !root.ScanBooks || allowed is not null && !allowed.Contains(root.Id))
             throw new ArgumentException("Choose an accessible, enabled publication library.");
         var intent = new SubmitTransferInput(request.OperationId, selection.Inspection.CanonicalUrl, selection.Inspection.SelectionId,
             selection.Inspection.Revision, [item.Id], 1, MaximumPublicationBytes);

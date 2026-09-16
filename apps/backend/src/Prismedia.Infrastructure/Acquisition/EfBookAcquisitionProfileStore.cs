@@ -2,6 +2,7 @@ using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Acquisition;
 using Prismedia.Contracts.Acquisition;
+using Prismedia.Contracts.System;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
@@ -80,6 +81,9 @@ public sealed class EfBookAcquisitionProfileStore(PrismediaDbContext db) : IBook
     }
 
     public async Task<BookAcquisitionProfileView> SaveAsync(BookAcquisitionProfileSaveCommand command, CancellationToken cancellationToken) {
+        if (await db.ExternalLibraryMounts.AnyAsync(mount => mount.LibraryRootId == command.TargetLibraryRootId, cancellationToken))
+            throw new AcquisitionConfigurationException(ApiProblemCodes.AcquisitionProfileInvalid, "Native acquisition profiles need a Prismedia-managed destination.");
+
         var now = DateTimeOffset.UtcNow;
         var row = command.Id is { } id
             ? await db.BookAcquisitionProfiles.FirstOrDefaultAsync(profile => profile.Id == id, cancellationToken)

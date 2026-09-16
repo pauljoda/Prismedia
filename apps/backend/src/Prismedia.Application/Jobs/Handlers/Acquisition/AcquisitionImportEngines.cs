@@ -621,12 +621,14 @@ internal static class ImportRootResolution {
             }
 
             var chosen = await roots.GetLibraryRootAsync(id, cancellationToken);
+            if (chosen is { IsReadOnly: true }) throw new InvalidOperationException("The chosen library is externally managed and cannot receive native imports.");
             if (chosen is { Enabled: true } && supportsKind(chosen)) {
                 return chosen;
             }
         }
 
         return (await roots.GetEnabledRootsAsync(cancellationToken))
+            .Where(root => !root.IsReadOnly)
             .Where(supportsKind)
             .OrderBy(candidate => candidate.IsNsfw)
             .ThenBy(candidate => candidate.Label, StringComparer.OrdinalIgnoreCase)
@@ -640,6 +642,7 @@ internal static class ImportRootResolution {
         CancellationToken cancellationToken) {
         var candidate = Path.GetFullPath(path);
         return (await roots.GetEnabledRootsAsync(cancellationToken))
+            .Where(root => !root.IsReadOnly)
             .Where(supportsKind)
             .Where(root => IsAtOrUnder(candidate, Path.GetFullPath(root.Path)))
             .OrderByDescending(root => Path.GetFullPath(root.Path).Length)
@@ -1978,7 +1981,7 @@ public sealed class TvAcquisitionImportEngine(
         CancellationToken cancellationToken) {
         var seriesFolder = Path.GetFullPath(seriesFolderPath);
         return (await roots.GetEnabledRootsAsync(cancellationToken))
-            .Where(root => root.ScanVideos && IsAtOrUnderFolder(seriesFolder, Path.GetFullPath(root.Path)))
+            .Where(root => !root.IsReadOnly && root.ScanVideos && IsAtOrUnderFolder(seriesFolder, Path.GetFullPath(root.Path)))
             .OrderByDescending(root => Path.GetFullPath(root.Path).Length)
             .FirstOrDefault();
     }

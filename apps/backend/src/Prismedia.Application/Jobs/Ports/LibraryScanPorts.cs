@@ -558,7 +558,8 @@ public sealed record LibraryRootData(
     bool ScanAudio,
     bool ScanBooks,
     bool IsNsfw,
-    bool AutoIdentify = true);
+    bool AutoIdentify = true,
+    bool IsReadOnly = false);
 
 public sealed record EntityTechnicalData(
     double? DurationSeconds,

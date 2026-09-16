@@ -7,6 +7,8 @@ using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Acquisition;
 using Prismedia.Infrastructure.Files;
 using Prismedia.Infrastructure.Persistence.Entities;
+using Prismedia.Infrastructure.Settings;
+using Prismedia.Application.Settings;
 
 namespace Prismedia.Infrastructure.Tests;
 
@@ -54,6 +56,39 @@ public sealed class ExternalLibraryWriteProtectionTests : IDisposable {
         Assert.Equal("externally owned bytes", await File.ReadAllTextAsync(destination.AbsolutePath));
         await Assert.ThrowsAsync<FileOperationException>(() => mover.PlaceAsync(new(destination.AbsolutePath, Path.Combine(external, "incoming.mkv")), ImportMode.Copy, default));
         Assert.Single(Directory.GetFiles(external));
+    }
+
+    [Fact]
+    public async Task SettingsCannotRetargetOrDeleteProtectedRootButCanDisableScanning() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var external = Directory.CreateDirectory(Path.Combine(workspace, "external")).FullName;
+        await AddBoundaryAsync(database, external);
+        await using var db = database.CreateContext();
+        var settings = new EfSettingsPersistence(db);
+        var root = Assert.Single(await settings.ListLibraryRootsAsync(default));
+        Assert.True(root.IsReadOnly);
+        await Assert.ThrowsAsync<ReadOnlyLibraryException>(() => settings.SaveLibraryRootAsync(root with { Path = workspace }, default));
+        await Assert.ThrowsAsync<ReadOnlyLibraryException>(() => settings.DeleteLibraryRootAsync(root.Id, default));
+        var changed = await settings.SaveLibraryRootAsync(root with { Enabled = false, Label = "Paused" }, default);
+        Assert.True(changed.IsReadOnly);
+        Assert.False(changed.Enabled);
+        Assert.Equal(external, changed.Path);
+        Assert.Single(await db.ExternalLibraryMounts.ToArrayAsync());
+    }
+
+    [Fact]
+    public async Task DownloadConfigurationCannotClaimAProtectedFolderAfterMapping() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var external = Directory.CreateDirectory(Path.Combine(workspace, "external")).FullName;
+        await AddBoundaryAsync(database, external);
+        await using var db = database.CreateContext();
+        var clients = new EfDownloadClientConfigStore(db);
+        await Assert.ThrowsAsync<AcquisitionConfigurationException>(() => clients.SaveAsync(new(null, DownloadClientKind.QBittorrent,
+            "Fixture", "http://client.test", null, null, "fixture", false, DownloadDirectory: external), default));
+        await Assert.ThrowsAsync<AcquisitionConfigurationException>(() => new EfRemotePathMappingStore(db).SaveAsync(
+            new(null, Guid.NewGuid(), "/downloads", external), default));
+        Assert.Empty(await db.DownloadClientConfigs.ToArrayAsync());
+        Assert.Empty(await db.RemotePathMappings.ToArrayAsync());
     }
 
     [Fact]

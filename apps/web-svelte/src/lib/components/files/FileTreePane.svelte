@@ -71,7 +71,7 @@
     const rect = context.anchorRect;
     const meta = registry.get(item.path as string);
     const isRoot = meta?.path === "";
-    const actions = fileContextActions(item.kind, isRoot, meta?.excluded);
+    const actions = fileContextActions(item.kind, isRoot, meta?.excluded, meta?.isReadOnly);
     const menuHeight = actions.length * 32 + 2;
     const menuWidth = 160;
     const top = rect.bottom + menuHeight > window.innerHeight ? Math.max(4, rect.top - menuHeight) : rect.bottom;

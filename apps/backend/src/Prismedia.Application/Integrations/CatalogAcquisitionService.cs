@@ -27,7 +27,7 @@ public sealed class CatalogAcquisitionService(IIntegrationTransferStore store, I
             throw new ArgumentException("Direct catalog imports currently support books and comic installments.");
         var allowedRoots = await currentUser.GetAllowedLibraryRootIdsAsync(cancellationToken);
         var root = await roots.GetLibraryRootAsync(request.LibraryRootId, cancellationToken);
-        if (root is null || !root.Enabled || !root.ScanBooks || allowedRoots is not null && !allowedRoots.Contains(root.Id))
+        if (root is null || root.IsReadOnly || !root.Enabled || !root.ScanBooks || allowedRoots is not null && !allowedRoots.Contains(root.Id))
             throw new ArgumentException("Choose an accessible, enabled publication library.");
         var offer = await discovery.ResolveAsync(connectionId, request.SelectionToken, request.OfferId, cancellationToken);
         if (!IntegrationPublicationFormats.IsSupported(selection.EntityKind, offer.Delivery.SuggestedFileName))

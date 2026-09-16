@@ -39,7 +39,8 @@ const fileActions: FileAction[] = [
 
 const removeExclusionAction: FileAction = { id: "remove-exclusion", label: "Remove exclusion" };
 
-export function fileContextActions(kind: FileEntryKindCode, isRoot?: boolean, excluded?: boolean): FileAction[] {
+export function fileContextActions(kind: FileEntryKindCode, isRoot?: boolean, excluded?: boolean, isReadOnly?: boolean): FileAction[] {
+  if (isReadOnly) return rootActions.filter((action) => action.id === "open" || action.id === "download" || action.id === "rescan");
   if (isRoot) return rootActions;
   const actions = kind === FILE_ENTRY_KIND.directory ? directoryActions : fileActions;
   return excluded

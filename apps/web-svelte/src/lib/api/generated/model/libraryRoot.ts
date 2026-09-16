@@ -25,4 +25,5 @@ export interface LibraryRoot {
   createdByUserId?: string | null;
   /** @nullable */
   accessUserIds?: string[] | null;
+  isReadOnly?: boolean;
 }

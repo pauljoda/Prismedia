@@ -383,6 +383,7 @@
                 <h3 class="text-[0.85rem] font-semibold text-text-primary truncate">
                   {root.label}
                 </h3>
+                {#if root.isReadOnly}<p class="mt-1 text-xs text-text-muted">Externally managed · files are read-only</p>{/if}
                 <p
                   class="mt-1.5 truncate text-mono-sm text-text-disabled bg-surface-1/50 rounded-xs border border-border-subtle px-2 py-0.5 inline-block max-w-full shadow-sm"
                 >
@@ -417,7 +418,8 @@
                 type="button"
                 onclick={() => void handleDeleteRoot(root)}
                 class="p-1.5"
-                title="Remove Library"
+                title={root.isReadOnly ? "Disable scanning to pause this external library" : "Remove Library"}
+                disabled={root.isReadOnly}
               >
                 <Trash2 class="h-4 w-4" />
               </Button>

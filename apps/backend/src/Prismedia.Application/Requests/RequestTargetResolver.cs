@@ -25,6 +25,8 @@ public sealed class RequestTargetResolver(
         CancellationToken cancellationToken) {
         var allowedRootIds = await currentUser.GetAllowedLibraryRootIdsAsync(cancellationToken);
         if (allowedRootIds is null) {
+            if (requested.TargetLibraryRootId is { } selectedId && await settings.GetLibraryRootAsync(selectedId, cancellationToken) is { IsReadOnly: true })
+                throw new RequestCommitValidationException("Choose a Prismedia-managed destination for a native acquisition.");
             return requested;
         }
 
@@ -34,7 +36,7 @@ public sealed class RequestTargetResolver(
             ?? throw new RequestCommitValidationException("This request kind has no acquisition profile policy.");
         var compatibleRoots = (await settings.ListLibraryRootsAsync(cancellationToken))
             .Where(root =>
-                root.Enabled &&
+                root.Enabled && !root.IsReadOnly &&
                 allowedRootIds.Contains(root.Id) &&
                 (!hideNsfw || !root.IsNsfw) &&
                 Supports(root, profilePolicy.LibraryRootMediaCapability))

@@ -57,13 +57,13 @@ public sealed partial class LibraryScanPersistenceService {
     public async Task<LibraryRootData?> GetLibraryRootAsync(Guid rootId, CancellationToken cancellationToken) {
         var row = await _db.LibraryRoots.AsNoTracking()
             .FirstOrDefaultAsync(r => r.Id == rootId, cancellationToken);
-        return row is null ? null : ToData(row);
+        return row is null ? null : ToData(row, await _db.ExternalLibraryMounts.AnyAsync(mount => mount.LibraryRootId == rootId, cancellationToken));
     }
 
     public async Task<IReadOnlyList<LibraryRootData>> GetEnabledRootsAsync(CancellationToken cancellationToken) {
         return await _db.LibraryRoots.AsNoTracking()
             .Where(r => r.Enabled)
-            .Select(r => ToData(r))
+            .Select(r => ToData(r, _db.ExternalLibraryMounts.Any(mount => mount.LibraryRootId == r.Id)))
             .ToListAsync(cancellationToken);
     }
 
@@ -153,7 +153,7 @@ public sealed partial class LibraryScanPersistenceService {
     }
 
 
-    private static LibraryRootData ToData(LibraryRootRow row) =>
+    private static LibraryRootData ToData(LibraryRootRow row, bool isReadOnly) =>
         new(row.Id, row.Path, row.Label, row.Enabled, row.Recursive,
-            row.ScanVideos, row.ScanImages, row.ScanAudio, row.ScanBooks, row.IsNsfw, row.AutoIdentify);
+            row.ScanVideos, row.ScanImages, row.ScanAudio, row.ScanBooks, row.IsNsfw, row.AutoIdentify, isReadOnly);
 }

@@ -3,8 +3,9 @@
   import { ArrowLeft, ArrowRight, FolderOpen, Library, RefreshCw, Search } from "@lucide/svelte";
   import { Alert, Badge, Button, DialogBase, Panel, Select, TextInput } from "@prismedia/ui-svelte";
   import { INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
-  import type { ConnectionResponse, EntityKind, ManagedItemSnapshot, ManagedLibraryItem, ManagedLibraryPage, ManagerOptions } from "$lib/api/generated/model";
-  import { fetchManagedItem, fetchManagedLibrary, fetchManagerOptions } from "$lib/api/managed-libraries";
+  import type { ConnectionResponse, EntityKind, ManagedItemSnapshot, ManagedLibraryItem, ManagedLibraryPage, ManagerOptions, MappedLibraryFile } from "$lib/api/generated/model";
+  import { fetchManagedItem, fetchManagedLibrary, fetchManagerOptions, inspectLocalLibraryAccess } from "$lib/api/managed-libraries";
+  import ExternalLibraryMappings from "./ExternalLibraryMappings.svelte";
   import { getEntityKindLabel } from "$lib/entities/entity-grid";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
 
@@ -23,6 +24,7 @@
   let detailLoading = $state(false);
   let detailError = $state<string | null>(null);
   let visibleFiles = $state(50);
+  let localFiles = $state<MappedLibraryFile[] | null>(null);
   let sequence = 0;
   let detailSequence = 0;
 
@@ -42,7 +44,7 @@
   }
   async function inspect(item: ManagedLibraryItem) {
     const current = ++detailSequence;
-    detailOpen = true; detailLoading = true; detailError = null; detail = null; options = null; visibleFiles = 50;
+    detailOpen = true; detailLoading = true; detailError = null; detail = null; options = null; visibleFiles = 50; localFiles = null;
     try {
       const result = await fetchManagedItem(connection.id, { entityKind: item.entityKind, remoteId: item.remoteId, expectedExternalIds: item.externalIds });
       if (current !== detailSequence) return;
@@ -55,8 +57,21 @@
     finally { if (current === detailSequence) detailLoading = false; }
   }
   function back() { const previous = history.at(-1); if (previous) { results = previous; history = history.slice(0, -1); } }
+  async function checkLocalAccess() {
+    if (!detail) return;
+    const current = ++detailSequence;
+    detailLoading = true; detailError = null;
+    try {
+      const result = await inspectLocalLibraryAccess(connection.id, { entityKind: detail.item.entityKind, remoteId: detail.item.remoteId, expectedExternalIds: detail.item.externalIds });
+      if (current === detailSequence) { detail = result.remote; localFiles = result.files; }
+    } catch (cause) { if (current === detailSequence) detailError = cause instanceof Error ? cause.message : "Could not check local access"; }
+    finally { if (current === detailSequence) detailLoading = false; }
+  }
 </script>
 
+{#if connection.effectiveCapabilities.some(capability => capability.kind === PLUGIN_CAPABILITY.externalManager && capability.operations.includes(INTEGRATION_OPERATION.managerOptions))}
+  <ExternalLibraryMappings {connection} {kind} />
+{/if}
 <Panel class="flex min-w-0 flex-col gap-3 p-4">
   {#if (support?.entityKinds.length ?? 0) > 1}
     <Select ariaLabel="Library media type" value={kind} options={(support?.entityKinds ?? []).map(value => ({ value, label: getEntityKindLabel(value) }))}
@@ -97,7 +112,7 @@
   <DialogBase.Content class="max-h-[85dvh] overflow-y-auto sm:max-w-2xl">
     <DialogBase.Header>
       <DialogBase.Title>{detail?.item.title ?? "Connected holding"}</DialogBase.Title>
-      <DialogBase.Description>Files reported by {connection.name}. Local access has not been checked.</DialogBase.Description>
+      <DialogBase.Description>Files reported by {connection.name}. {localFiles ? "Local checks confirm readability and size; importing into the library is a separate step." : "Local access has not been checked."}</DialogBase.Description>
     </DialogBase.Header>
     {#if detailError}<p role="alert" class="text-sm text-error-text">{detailError}</p>{/if}
     {#if detailLoading}<p role="status" class="text-sm text-text-muted">Reading file associations and profiles…</p>{/if}
@@ -106,13 +121,16 @@
         <p>Observed {new Date(detail.observedAt).toLocaleString()}</p>
         <p>Profile: {options?.profiles.find(profile => profile.id === detail?.item.profileId)?.label ?? detail.item.profileId ?? "Unknown"}</p>
         <p class="break-all">Remote folder: {detail.path}</p>
+        <Button variant="outline" size="sm" disabled={detailLoading} onclick={checkLocalAccess}>Check local access</Button>
       </div>
       <div class="divide-y divide-border-subtle">
         {#each detail.files.slice(0, visibleFiles) as file (file.remoteId)}
+          {@const local = localFiles?.find(candidate => candidate.remoteId === file.remoteId)}
           <div class="space-y-2 py-3">
             <p class="break-all font-mono text-xs">{file.path}</p>
             <p class="text-xs text-text-muted">{(Number(file.sizeBytes) / 1024 / 1024).toFixed(1)} MiB · {file.targets.length} content {file.targets.length === 1 ? "target" : "targets"}</p>
             <p class="break-words text-sm text-text-muted">{file.targets.slice(0, 6).map(target => target.seasonNumber != null ? `S${target.seasonNumber} E${target.episodeNumber}: ${target.title}` : target.title).join(" · ")}{file.targets.length > 6 ? ` · ${file.targets.length - 6} more` : ""}</p>
+            {#if local}<p class="text-xs text-text-muted">{local.isReadable && local.sizeMatches ? "Readable locally · size matches" : local.problem}</p>{/if}
           </div>
         {/each}
         {#if !detail.files.length}<p class="py-3 text-sm text-text-muted">No final files are currently associated with this holding.</p>{/if}

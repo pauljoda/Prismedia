@@ -128,6 +128,9 @@ public sealed class MediaEntityDeletionService(
         // External file ownership refuses deletion before cancelling work or publishing lifecycle claims.
         var protectedRoots = await db.ExternalLibraryMounts.AsNoTracking().Select(mount => mount.LocalPath).ToArrayAsync(cancellationToken);
         if (protectedRoots.Length > 0) {
+            if (await db.EntityLibraryRoots.AnyAsync(link => ids.Contains(link.EntityId)
+                && db.ExternalLibraryMounts.Any(mount => mount.LibraryRootId == link.LibraryRootId), cancellationToken))
+                return Conflict("This Entity belongs to an externally managed library. Manage those files in the connected application.");
             var physical = await physicalManagedPaths.ListAsync(ids, cancellationToken);
             if (physical.Any(source => protectedRoots.Any(root => CompletedPayloadFileSystem.Overlaps(
                     CompletedPayloadFileSystem.CanonicalPath(root), CompletedPayloadFileSystem.CanonicalPath(source.Path)))))

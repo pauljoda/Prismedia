@@ -7,7 +7,7 @@ namespace Prismedia.Infrastructure.Files;
 
 /// <summary>Holds shared PostgreSQL protection leases across physical writes, with one exclusive lease for mount configuration.</summary>
 public sealed class PostgresLibraryFileMutationGuard(NpgsqlDataSource dataSource) : ILibraryFileMutationGuard {
-    private const long ProtectionLockId = 5_087_441_904;
+    internal const long ProtectionLockId = 5_087_441_904;
     private readonly AsyncLocal<PendingLease?> ambient = new();
 
     /// <inheritdoc />

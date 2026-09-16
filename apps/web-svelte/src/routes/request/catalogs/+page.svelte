@@ -68,7 +68,7 @@
     loading = true; error = null;
     try {
       const [available, libraries] = await Promise.all([fetchConnections(), fetchLibraryRoots()]);
-      roots = libraries.filter(root => root.enabled && root.scanBooks);
+      roots = libraries.filter(root => root.enabled && !root.isReadOnly && root.scanBooks);
       rootId = roots[0]?.id ?? "";
       await refreshTransfers();
       connections = available.filter(item => item.status === CONNECTION_STATUS.ready

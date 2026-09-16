@@ -49,7 +49,7 @@
       connections = available.filter(item => item.status === CONNECTION_STATUS.ready && item.hasPersistentRemoteIdentity
         && item.effectiveCapabilities.some(capability => capability.kind === PLUGIN_CAPABILITY.catalogDiscovery && capability.operations.includes(INTEGRATION_OPERATION.inspect))
         && item.effectiveCapabilities.some(capability => capability.kind === PLUGIN_CAPABILITY.transferExecutor));
-      roots = libraries.filter(root => root.enabled && root.scanBooks);
+      roots = libraries.filter(root => root.enabled && !root.isReadOnly && root.scanBooks);
       rootId = roots[0]?.id ?? "";
       const requested = page.url.searchParams.get("connection");
       chooseConnection(connections.find(item => item.id === requested)?.id ?? connections[0]?.id ?? "");

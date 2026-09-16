@@ -24,7 +24,8 @@ public sealed record LibraryRoot(
     DateTimeOffset UpdatedAt,
     bool AutoIdentify = true,
     Guid? CreatedByUserId = null,
-    IReadOnlyList<Guid>? AccessUserIds = null);
+    IReadOnlyList<Guid>? AccessUserIds = null,
+    bool IsReadOnly = false);
 
 /// <summary>
 /// Member-facing summary of a library root the caller can access. Deliberately omits
@@ -37,7 +38,8 @@ public sealed record LibraryRootSummary(
     bool ScanImages,
     bool ScanAudio,
     bool ScanBooks,
-    bool IsNsfw);
+    bool IsNsfw,
+    bool IsReadOnly = false);
 
 /// <summary>
 /// Request body for creating a watched media root.

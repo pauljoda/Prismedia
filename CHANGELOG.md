@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Connected libraries can map external roots to dedicated read-only folders and check local file access separately from remote availability. Mappings start with scanning paused, protect files even when the connection is disabled, and stay out of native acquisition destinations.
+
 - Connected libraries can browse Radarr and Sonarr holdings, inspect final file associations, and show existing external profiles. Reported remote availability is kept separate from verified local access.
 
 - Metadata protection shows the source of titles, descriptions, and classifications. Manual edits and explicit clears are protected from provider enrichment until unlocked; protection also applies to children updated through a parent proposal.

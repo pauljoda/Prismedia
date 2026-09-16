@@ -251,6 +251,28 @@ unsupported server majors and credential-bearing redirects. Their library-list e
 return the whole upstream catalog, so the adapter rejects responses exceeding 8 MiB rather
 than silently truncating them. Pagination reflects an observed library that may change between reads.
 
+### Map local files
+
+In **Connected libraries**, choose **Map library folder**, select an existing remote
+root, and enter the corresponding folder mounted on the Prismedia server. Use a
+dedicated folder outside existing libraries, download areas, and application data.
+A read-only container bind mount adds an operating-system boundary to Prismedia's
+own file protection.
+
+The mapping creates a watched library with scanning and automatic identification
+paused. Enable scanning in **Settings → Libraries** when ready. The external app
+continues organizing its files. Prismedia blocks local deletion, replacement, moves,
+uploads, and native acquisition destinations in this root. Protection remains when
+scanning or the Connection is disabled. Paths are fixed after creation; changing the
+Connection's application address or source settings requires a separate Connection.
+Root removal is unavailable while the external mapping owns its boundary.
+
+**Check local access** reads fresh remote file associations and checks their mapped
+local paths, readability, and sizes. It rejects path traversal and symlinks escaping
+the local root. Missing or mismatched files remain explicit failures. Matching size
+does not establish a content hash, a completed library import, or playback availability.
+These mappings do not yet bind remote file upgrades to existing Prismedia identities.
+
 ## Import from a URL
 
 **Requests → Import from URL** shows tested connections with URL inspection and

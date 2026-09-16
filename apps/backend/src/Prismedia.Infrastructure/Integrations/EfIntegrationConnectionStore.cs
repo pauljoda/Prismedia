@@ -5,6 +5,7 @@ using Prismedia.Application.Integrations;
 using Prismedia.Domain.Entities;
 using Prismedia.Domain.Integrations;
 using Prismedia.Infrastructure.Persistence;
+using Prismedia.Infrastructure.Files;
 using Prismedia.Infrastructure.Persistence.Entities;
 using Prismedia.Infrastructure.Plugins;
 
@@ -25,6 +26,7 @@ public sealed class EfIntegrationConnectionStore(PrismediaDbContext db, Connecti
     /// <inheritdoc />
     public async Task SaveAsync(IntegrationConnection connection, long? expectedRevision,
         IReadOnlyDictionary<string, string?> secretChanges, CancellationToken cancellationToken) {
+        await using var transaction = await LibraryRootConfigurationLease.AcquireAsync(db, cancellationToken);
         var state = connection.State;
         var row = await db.IntegrationConnections.SingleOrDefaultAsync(row => row.Id == state.Id, cancellationToken);
         if (expectedRevision is null) {
@@ -34,6 +36,10 @@ public sealed class EfIntegrationConnectionStore(PrismediaDbContext db, Connecti
         } else if (row is null) throw new ConnectionNotFoundException();
         else if (row.Revision != expectedRevision || state.Revision != expectedRevision + 1) throw new ConnectionConflictException();
 
+        if (expectedRevision is not null && (row.BaseUrl != state.BaseUrl
+            || !Read<Dictionary<string, string>>(row.SettingsJson).OrderBy(pair => pair.Key).SequenceEqual(state.Settings.OrderBy(pair => pair.Key)))
+            && await db.ExternalLibraryMounts.AnyAsync(mount => mount.ConnectionId == state.Id, cancellationToken))
+            throw new ArgumentException("This connection owns mapped library roots. Create a separate connection for another address or source configuration.");
         var protectedValues = Read<Dictionary<string, string>>(row.ProtectedSecretsJson);
         foreach (var (key, value) in secretChanges) {
             if (string.IsNullOrEmpty(value)) protectedValues.Remove(key);
@@ -54,6 +60,7 @@ public sealed class EfIntegrationConnectionStore(PrismediaDbContext db, Connecti
         row.LastError = state.LastError;
         try { await db.SaveChangesAsync(cancellationToken); }
         catch (DbUpdateConcurrencyException) { throw new ConnectionConflictException(); }
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
     }
 
     /// <inheritdoc />
@@ -69,7 +76,8 @@ public sealed class EfIntegrationConnectionStore(PrismediaDbContext db, Connecti
         var row = await db.IntegrationConnections.SingleOrDefaultAsync(row => row.Id == id, cancellationToken)
             ?? throw new ConnectionNotFoundException();
         if (row.Revision != expectedRevision) throw new ConnectionConflictException();
-        if (await db.IntegrationTransfers.AsNoTracking().AnyAsync(transfer => transfer.ConnectionId == id, cancellationToken)) throw new ConnectionInUseException();
+        if (await db.IntegrationTransfers.AsNoTracking().AnyAsync(transfer => transfer.ConnectionId == id, cancellationToken)
+            || await db.ExternalLibraryMounts.AnyAsync(mount => mount.ConnectionId == id, cancellationToken)) throw new ConnectionInUseException();
         db.IntegrationConnections.Remove(row);
         try { await db.SaveChangesAsync(cancellationToken); }
         catch (DbUpdateConcurrencyException) { throw new ConnectionConflictException(); }
