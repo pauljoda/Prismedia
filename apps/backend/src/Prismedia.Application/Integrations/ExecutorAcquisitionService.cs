@@ -17,7 +17,7 @@ public sealed class ExecutorAcquisitionService(IntegrationConnectionAccess acces
     public const long MaximumPublicationBytes = 2L * 1024 * 1024 * 1024;
     private static readonly IntegrationOperation[] RequiredOperations = [IntegrationOperation.Submit, IntegrationOperation.FindSubmission,
         IntegrationOperation.GetJob, IntegrationOperation.ListArtifacts, IntegrationOperation.AuthorizeArtifact,
-        IntegrationOperation.RenewRetention, IntegrationOperation.Acknowledge];
+        IntegrationOperation.RenewRetention, IntegrationOperation.Acknowledge, IntegrationOperation.Cancel, IntegrationOperation.CancelSubmission];
 
     /// <summary>Returns finite choices from an executor that provides durable identity, submission recovery, retained outputs, and receipts.</summary>
     public async Task<ExecutorInspectionResponse> InspectAsync(Guid connectionId, InspectExecutorRequest request, CancellationToken cancellationToken) {

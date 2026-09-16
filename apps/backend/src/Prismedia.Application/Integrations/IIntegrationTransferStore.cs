@@ -25,6 +25,9 @@ public interface IIntegrationTransferStore {
     Task<StoredIntegrationTransfer> CreateAsync(IntegrationTransfer transfer, IntegrationTransferPlan plan, CancellationToken cancellationToken);
     /// <summary>Persists the next domain revision and optional safe error without changing the original intent.</summary>
     Task SaveAsync(IntegrationTransfer transfer, long expectedRevision, string? error, CancellationToken cancellationToken);
+    /// <summary>Atomically saves a control intent and ensures its durable reconciliation run exists.</summary>
+    Task SaveAndEnqueueAsync(IntegrationTransfer transfer, long expectedRevision, CancellationToken cancellationToken) =>
+        throw new NotSupportedException("This store does not support atomic control intents.");
     /// <summary>Records a safe attempt failure only while the saved domain revision remains current.</summary>
     Task RecordErrorAsync(Guid operationId, long expectedRevision, string error, CancellationToken cancellationToken);
     /// <summary>Queues an explicit retry of unfinished work while retaining operation, byte, and import evidence.</summary>

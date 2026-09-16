@@ -192,6 +192,8 @@ does not itself expose a browser action.
   explicit item IDs, and item/byte limits. Persist intent before sending it.
 - `find-submission` resolves that same operation ID after a timeout or interrupted
   response. A missing active-queue item is never proof of completion.
+- `cancel-submission` atomically cancels by operation ID or persists a rejection
+  fence for a late POST. A missing lookup alone cannot prove safe cancellation.
 - `get-job` reports the persistent installation, stable job ID, operation ID,
   monotonic revision, execution state, progress, item failures, and manifest revision.
 - `list-artifacts` reads a sealed revision with an exact total count. Every page
@@ -244,8 +246,14 @@ never substitutes for verifying its output bytes.
 After local source ownership commits, acknowledgement is a separate step. An unavailable
 receipt endpoint leaves **Awaiting acknowledgement**; retries reuse the same receipt
 without downloading or materializing the publication again. Partial results remain
-held with renewable retention. Remote cancellation is not yet exposed in this view;
-the existing **Cancel download** action applies only to direct catalog downloads.
+held with renewable retention. **Cancel request** is available until local import starts. Prismedia persists the
+cancellation before contacting the executor and reserves ownership until remote
+execution has stopped. A running transfer observes cancellation at its next durable
+boundary. Uncertain submissions reconcile the original operation and use a durable cancellation
+fence if no job was accepted;
+a never-submitted operation stops locally. If execution finished first, Prismedia
+preserves that remote result and cancels the local import without acknowledging its
+outputs. Direct catalog downloads retain their **Cancel download** action.
 
 The Archiver adapter targets the proposed executor API v1, including its explicit
 `single-publication` output profile. It requires that interface to be implemented;

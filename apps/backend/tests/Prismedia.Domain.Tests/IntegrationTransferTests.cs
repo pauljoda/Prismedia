@@ -22,6 +22,32 @@ public sealed class IntegrationTransferTests {
     }
 
     [Fact]
+    public void RemoteCancellationStopsUnsentIntentAndCannotInterruptCommittedImport() {
+        var unsent = IntegrationTransfer.Create(Guid.NewGuid(), Guid.NewGuid(), Instance);
+        unsent.RequestRemoteCancellation();
+        Assert.Equal(IntegrationTransferPhase.Cancelled, unsent.State.Phase);
+        Assert.Null(unsent.State.JobId);
+        var importing = WithManifest();
+        importing.RecordVerified(Artifact.Id, Artifact.SizeBytes, Artifact.Sha256);
+        Assert.Throws<InvalidOperationException>(() => importing.RequestRemoteCancellation());
+    }
+
+    [Fact]
+    public void CancellationWaitsForExecutionToStopAndPreservesSuccessWhenItWinsTheRace() {
+        var transfer = Submitted();
+        transfer.RequestRemoteCancellation();
+        Assert.True(transfer.State.CancellationRequested);
+        transfer.ObserveCancellation(Instance, Job, 1, RemoteJobState.Running, null);
+        Assert.NotEqual(IntegrationTransferPhase.Cancelled, transfer.State.Phase);
+        var resumed = new IntegrationTransfer(transfer.State);
+        resumed.ObserveCancellation(Instance, Job, 2, RemoteJobState.Succeeded, Revision);
+        Assert.Equal(IntegrationTransferPhase.Cancelled, resumed.State.Phase);
+        Assert.Equal(RemoteJobState.Succeeded, resumed.State.LastRemoteState);
+        Assert.Equal(Revision, resumed.State.ManifestRevision);
+        Assert.Null(resumed.State.Imports);
+    }
+
+    [Fact]
     public void DirectCancellationIsIdempotentAndCannotCancelCommittedImportWorkOrRemoteJobs() {
         var transfer = IntegrationTransfer.CreateSourceDownload(Guid.NewGuid(), Guid.NewGuid());
         transfer.CancelSourceDownload();

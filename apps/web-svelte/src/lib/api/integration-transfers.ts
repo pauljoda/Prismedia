@@ -14,7 +14,7 @@ export const fetchIntegrationTransfers = (): Promise<IntegrationTransferResponse
 export const retryPublicationTransfer = (id: string): Promise<void> =>
   retryIntegrationTransfer(id).then(response => unwrapGenerated(response, "Could not retry this publication", [202]));
 
-/** Cancels an accepted direct download before it enters library import. */
+/** Requests cancellation before library import; remote execution must be confirmed stopped. */
 export const cancelPublicationTransfer = (id: string): Promise<IntegrationTransferResponse> =>
   cancelIntegrationTransfer(id).then(response => unwrapGenerated(response, "Could not cancel this publication"));
 

@@ -16,6 +16,9 @@ public sealed partial class IntegrationPluginGateway {
     public Task<FindTransferResult> FindSubmissionAsync(string pluginId, IntegrationConnectionContext connection, FindTransferInput input, CancellationToken cancellationToken) =>
         TransferInvokeAsync<FindTransferInput, FindTransferResult>(pluginId, IntegrationOperation.FindSubmission, connection, input, cancellationToken);
     /// <inheritdoc />
+    public Task<CancelSubmissionResult> CancelSubmissionAsync(string pluginId, IntegrationConnectionContext connection, FindTransferInput input, CancellationToken cancellationToken) =>
+        TransferInvokeAsync<FindTransferInput, CancelSubmissionResult>(pluginId, IntegrationOperation.CancelSubmission, connection, input, cancellationToken);
+    /// <inheritdoc />
     public Task<RemoteTransferSnapshot> GetJobAsync(string pluginId, IntegrationConnectionContext connection, RemoteTransferJobInput input, CancellationToken cancellationToken) =>
         TransferInvokeAsync<RemoteTransferJobInput, RemoteTransferSnapshot>(pluginId, IntegrationOperation.GetJob, connection, input, cancellationToken);
     /// <inheritdoc />

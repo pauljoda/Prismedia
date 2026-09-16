@@ -64,6 +64,15 @@ public sealed partial class JobQueueService : IJobQueueService {
         return await EnqueueAsync(new EnqueueJobRequest(type), cancellationToken);
     }
 
+    /// <inheritdoc />
+    public async Task WakeTargetAsync(JobType type, string targetEntityId, CancellationToken cancellationToken) {
+        var now = DateTimeOffset.UtcNow;
+        var pending = await _db.JobRuns.Where(row => row.Type == type && row.TargetEntityId == targetEntityId
+            && row.Status == JobRunStatus.Queued && row.AvailableAt > now).ToArrayAsync(cancellationToken);
+        foreach (var row in pending) row.AvailableAt = now;
+        if (pending.Length > 0) await _db.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task<JobRunSnapshot> EnqueueAsync(EnqueueJobRequest request, CancellationToken cancellationToken) {
         // Some jobs are queue-wide singletons: scans already walk every enabled root of their kind,
         // and database backups should never overlap. When one is already queued or running, return

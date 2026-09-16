@@ -54,7 +54,7 @@ public sealed class ExecutorAcquisitionServiceTests {
         internal static readonly IntegrationSupport[] Supports = [
             new(PluginCapability.CatalogDiscovery, [IntegrationOperation.Inspect], [EntityKind.Book]),
             new(PluginCapability.TransferExecutor, [IntegrationOperation.Submit, IntegrationOperation.FindSubmission, IntegrationOperation.GetJob,
-                IntegrationOperation.ListArtifacts, IntegrationOperation.AuthorizeArtifact, IntegrationOperation.RenewRetention, IntegrationOperation.Acknowledge], [EntityKind.Book])
+                IntegrationOperation.ListArtifacts, IntegrationOperation.AuthorizeArtifact, IntegrationOperation.RenewRetention, IntegrationOperation.Acknowledge, IntegrationOperation.Cancel, IntegrationOperation.CancelSubmission], [EntityKind.Book])
         ];
         internal IntegrationConnection Connection { get; }
         internal PluginManifest Manifest { get; set; }

@@ -30,6 +30,10 @@ public enum IntegrationOperation {
     [Code("find-submission")]
     FindSubmission,
 
+    /// <summary>Atomically cancels an accepted operation or fences a late submission under that operation key.</summary>
+    [Code("cancel-submission")]
+    CancelSubmission,
+
     /// <summary>Read a durable remote job snapshot.</summary>
     [Code("get-job")]
     GetJob,

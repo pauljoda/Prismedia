@@ -42,7 +42,7 @@ receipt retries must retain their ID and exact hashes. Delay makes queued/runnin
 cancellation and mid-execution restarts observable.
 
 The fixture supports authenticated GET/HEAD/Range artifact retrieval, immutable SHA-256
-manifests, finite byte limits, idempotent cancellation, and renewable retention. It keeps
+manifests, finite byte limits, idempotent cancellation, durable operation cancellation tombstones, and renewable retention. It keeps
 operation history indefinitely and marks expired bytes unavailable without rewriting
 execution state. It never deletes another application's files.
 

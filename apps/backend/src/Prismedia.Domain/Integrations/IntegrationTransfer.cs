@@ -10,7 +10,8 @@ public sealed record IntegrationTransferState(Guid OperationId, Guid ConnectionI
     IntegrationTransferPhase Phase, string? JobId = null, long RemoteRevision = -1, string? ManifestRevision = null,
     IReadOnlyList<IntegrationArtifact>? Artifacts = null, IReadOnlyList<string>? VerifiedArtifactIds = null,
     IReadOnlyList<IntegrationArtifactImport>? Imports = null, Guid? ReceiptId = null,
-    IntegrationTransferMode Mode = IntegrationTransferMode.RemoteExecutor, RemoteJobState? LastRemoteState = null);
+    IntegrationTransferMode Mode = IntegrationTransferMode.RemoteExecutor, RemoteJobState? LastRemoteState = null,
+    bool CancellationRequested = false);
 
 /// <summary>Enforces submission recovery and the separation between remote completion, verified bytes, committed imports, and acknowledgement.</summary>
 public sealed class IntegrationTransfer(IntegrationTransferState state) {
@@ -18,6 +19,11 @@ public sealed class IntegrationTransfer(IntegrationTransferState state) {
     public IntegrationTransferState State { get; private set; } = state;
     /// <summary>Direct retrieval can stop only before a persisted import boundary permits library placement.</summary>
     public bool CanCancelSource => State.Mode == IntegrationTransferMode.SourceDownload && State.Phase == IntegrationTransferPhase.Transferring;
+    /// <summary>Remote work can be stopped until local import starts; ownership remains reserved until execution has stopped.</summary>
+    public bool CanCancelRemote => State.Mode == IntegrationTransferMode.RemoteExecutor && !State.CancellationRequested
+        && State.Phase is IntegrationTransferPhase.PendingSubmission or IntegrationTransferPhase.SubmissionUncertain
+            or IntegrationTransferPhase.AwaitingRemote or IntegrationTransferPhase.AwaitingArtifacts
+            or IntegrationTransferPhase.Transferring or IntegrationTransferPhase.NeedsReview;
 
     /// <summary>Creates a finite acquisition intent for a verified persistent executor installation.</summary>
     public static IntegrationTransfer Create(Guid operationId, Guid connectionId, string instanceId) {
@@ -51,6 +57,39 @@ public sealed class IntegrationTransfer(IntegrationTransferState state) {
         if (State.Phase == IntegrationTransferPhase.Cancelled) return;
         if (!CanCancelSource) throw InvalidTransition();
         Change(State with { Phase = IntegrationTransferPhase.Cancelled });
+    }
+
+    /// <summary>Persists a cancellation fence before any remote call. A never-submitted operation can stop immediately.</summary>
+    public void RequestRemoteCancellation() {
+        if (State.Mode != IntegrationTransferMode.RemoteExecutor) throw InvalidTransition();
+        if (State.Phase == IntegrationTransferPhase.Cancelled || State.CancellationRequested) return;
+        if (!CanCancelRemote) throw InvalidTransition();
+        Change(State with { CancellationRequested = true,
+            Phase = State.Phase == IntegrationTransferPhase.PendingSubmission ? IntegrationTransferPhase.Cancelled : State.Phase });
+    }
+
+    /// <summary>Accepts an executor's durable operation tombstone, which prevents an in-flight late submission from creating a job.</summary>
+    public void ConfirmPreventedSubmission(string instanceId, Guid operationId) {
+        if (!State.CancellationRequested || State.InstanceId != instanceId || State.OperationId != operationId
+            || State.JobId is not null || State.Phase != IntegrationTransferPhase.SubmissionUncertain) throw InvalidTransition();
+        Change(State with { Phase = IntegrationTransferPhase.Cancelled });
+    }
+
+    /// <summary>Confirms remote quiescence before releasing local ownership; natural success is preserved when it wins cancellation.</summary>
+    public void ObserveCancellation(string instanceId, string jobId, long revision, RemoteJobState remoteState, string? manifestRevision) {
+        if (!State.CancellationRequested || State.Mode != IntegrationTransferMode.RemoteExecutor
+            || instanceId != State.InstanceId || jobId != State.JobId || revision < 0 || !Enum.IsDefined(remoteState)) throw InvalidTransition();
+        if (State.Phase == IntegrationTransferPhase.Cancelled || revision < State.RemoteRevision) return;
+        if (State.Phase is IntegrationTransferPhase.Importing or IntegrationTransferPhase.AwaitingAcknowledgement or IntegrationTransferPhase.Completed)
+            throw InvalidTransition();
+        if (State.LastRemoteState is RemoteJobState.Succeeded or RemoteJobState.Partial or RemoteJobState.Failed or RemoteJobState.Cancelled
+            && (State.LastRemoteState != remoteState || State.ManifestRevision != manifestRevision))
+            throw new InvalidOperationException("Cancellation cannot rewrite a terminal execution result.");
+        if (remoteState == RemoteJobState.Succeeded && (string.IsNullOrWhiteSpace(manifestRevision) || manifestRevision.Length > 512))
+            throw new InvalidOperationException("Successful execution still requires its exact sealed output revision.");
+        var stopped = remoteState is RemoteJobState.Succeeded or RemoteJobState.Partial or RemoteJobState.Failed or RemoteJobState.Cancelled;
+        Change(State with { RemoteRevision = revision, LastRemoteState = remoteState, ManifestRevision = manifestRevision,
+            Phase = stopped ? IntegrationTransferPhase.Cancelled : State.Phase });
     }
 
     /// <summary>Persist this state before issuing POST. A crash or timeout must recover by the same operation key.</summary>
@@ -94,7 +133,7 @@ public sealed class IntegrationTransfer(IntegrationTransferState state) {
 
     /// <summary>Freezes every artifact from the accepted manifest revision; partial results require a separate reviewed intent.</summary>
     public void AcceptManifest(IntegrationArtifactManifest manifest) {
-        if (State.LastRemoteState != RemoteJobState.Succeeded) throw InvalidTransition();
+        if (State.LastRemoteState != RemoteJobState.Succeeded || State.CancellationRequested) throw InvalidTransition();
         if (manifest.JobId != State.JobId || manifest.Revision != State.ManifestRevision)
             throw new InvalidOperationException("The output manifest belongs to another job or revision.");
         if (State.Artifacts is { } previous) {
@@ -117,6 +156,7 @@ public sealed class IntegrationTransfer(IntegrationTransferState state) {
 
     /// <summary>Records local byte evidence only when its size and SHA-256 match the frozen remote manifest.</summary>
     public void RecordVerified(string artifactId, long sizeBytes, string sha256) {
+        if (State.CancellationRequested) throw InvalidTransition();
         var artifact = FindArtifact(artifactId);
         if (artifact.SizeBytes != sizeBytes || !artifact.Sha256.Equals(sha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidOperationException("Local artifact bytes do not match the sealed manifest.");

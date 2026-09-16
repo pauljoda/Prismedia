@@ -2,6 +2,7 @@
   import { goto } from "$app/navigation";
   import { Alert, Badge, Button, Panel } from "@prismedia/ui-svelte";
   import { ArrowUpRight, RotateCcw, X } from "@lucide/svelte";
+  import { INTEGRATION_TRANSFER_MODE } from "$lib/api/generated/codes";
   import type { IntegrationTransferResponse } from "$lib/api/generated/model";
   import { cancelPublicationTransfer, retryPublicationTransfer } from "$lib/api/integration-transfers";
   import { resolveEntityHrefById } from "$lib/entities/entity-route-resolver";
@@ -45,15 +46,15 @@
       <Panel class="flex min-w-0 flex-col gap-3 p-4 sm:flex-row sm:items-center sm:justify-between">
         <div class="min-w-0 space-y-2">
           <h3 class="break-words text-sm font-medium">{transfer.title}</h3>
-          <Badge>{transferPhaseLabels[transfer.phase]}</Badge>
+          <Badge>{transfer.cancellationRequested && !isTransferTerminal(transfer.phase) ? "Cancellation requested" : transferPhaseLabels[transfer.phase]}</Badge>
           {#if transfer.lastError}<p class="break-words text-sm text-text-muted">{transfer.lastError}</p>{/if}
         </div>
         <div class="flex shrink-0 flex-wrap gap-2">
           {#if transfer.canCancel}
-            <Button variant="ghost" size="sm" disabled={busy !== null} onclick={() => void cancel(transfer.id)}><X />Cancel download</Button>
+            <Button variant="ghost" size="sm" disabled={busy !== null} onclick={() => void cancel(transfer.id)}><X />{transfer.mode === INTEGRATION_TRANSFER_MODE.remoteExecutor ? "Cancel request" : "Cancel download"}</Button>
           {/if}
           {#if transfer.lastError && !isTransferTerminal(transfer.phase)}
-            <Button variant="secondary" size="sm" disabled={busy !== null} onclick={() => void retry(transfer.id)}><RotateCcw />Retry import</Button>
+            <Button variant="secondary" size="sm" disabled={busy !== null} onclick={() => void retry(transfer.id)}><RotateCcw />{transfer.cancellationRequested ? "Retry cancellation" : "Retry import"}</Button>
           {/if}
           {#each transfer.importedEntityIds as id}
             <Button variant="secondary" size="sm" disabled={busy !== null} onclick={() => void open(id)}>Open in library<ArrowUpRight /></Button>

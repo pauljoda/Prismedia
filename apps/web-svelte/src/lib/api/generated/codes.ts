@@ -1038,6 +1038,7 @@ export const INTEGRATION_OPERATION = {
   resolve: "resolve",
   submit: "submit",
   findSubmission: "find-submission",
+  cancelSubmission: "cancel-submission",
   getJob: "get-job",
   cancel: "cancel",
   listArtifacts: "list-artifacts",

@@ -84,6 +84,14 @@ public sealed class EfIntegrationTransferStore(PrismediaDbContext db, TransferPl
         await scheduler.EnqueueAsync(operationId, work.Plan.Title, cancellationToken);
     }
 
+    /// <inheritdoc />
+    public async Task SaveAndEnqueueAsync(IntegrationTransfer transfer, long expectedRevision, CancellationToken cancellationToken) {
+        await using var transaction = db.Database.IsRelational() ? await db.Database.BeginTransactionAsync(cancellationToken) : null;
+        await SaveAsync(transfer, expectedRevision, null, cancellationToken);
+        if (transfer.State.Phase != IntegrationTransferPhase.Cancelled) await EnqueueRetryAsync(transfer.State.OperationId, cancellationToken);
+        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
+    }
+
     private StoredIntegrationTransfer Map(IntegrationTransferRow row) {
         var state = JsonSerializer.Deserialize<IntegrationTransferState>(row.StateJson, Json)
             ?? throw new InvalidDataException("Stored integration transfer state is invalid.");

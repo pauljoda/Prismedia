@@ -21,7 +21,7 @@ public sealed class SimulatorStore {
     }
     /// <summary>Reads the service's stable installation identity and negotiated executor profile.</summary>
     public SystemInfo Info => new(state.InstanceId, ArchiverWire.ApiVersion, "1.0.0-simulator",
-        [ArchiverWire.Inspect, ArchiverWire.Submit, ArchiverWire.Cancel, ArchiverWire.Artifacts, ArchiverWire.Retention, ArchiverWire.Receipts],
+        [ArchiverWire.Inspect, ArchiverWire.Submit, ArchiverWire.Cancel, ArchiverWire.CancelOperation, ArchiverWire.Artifacts, ArchiverWire.Retention, ArchiverWire.Receipts],
         [ArchiverWire.PublicationProfile], 1, 2L * 1024 * 1024 * 1024, 7, 30);
 
     /// <summary>Inspects only reserved synthetic URLs. No arbitrary URL is fetched.</summary>
@@ -53,6 +53,8 @@ public sealed class SimulatorStore {
             || request.Limits.MaxItems != 1 || request.Limits.MaxBytes is < 1 or > 2147483648
             || request.Output.Profile != ArchiverWire.PublicationProfile)
             throw new ApiFailure(400, ArchiverWire.Invalid, "Choose one item and the finite single-publication output profile.");
+        if (state.CancelledOperations.Contains(request.ClientOperationId))
+            throw new ApiFailure(409, ArchiverWire.Cancelled, "This operation was cancelled before acceptance and cannot create a job.");
         if (!state.Selections.TryGetValue(request.Selection.Id, out var inspection) || inspection.Revision != request.Selection.Revision
             || inspection.ExpiresAt <= DateTimeOffset.UtcNow || inspection.CanonicalUrl != request.Input.Url
             || inspection.Items[0].Id != request.Selection.ItemIds[0] || !inspection.Items[0].Formats.Contains(request.Output.Format))
@@ -83,6 +85,17 @@ public sealed class SimulatorStore {
         var job = Get(id);
         if (job.Status is ArchiverWire.Queued or ArchiverWire.Running or ArchiverWire.Waiting) { job.Status = ArchiverWire.Cancelled; Touch(job); Persist(); }
         return Snapshot(job);
+    });
+    /// <summary>Serializes with submission to prevent acceptance after a cancellation tombstone commits.</summary>
+    public Task<OperationCancellation> CancelOperationAsync(Guid operation) => Locked(() => {
+        if (operation == Guid.Empty) throw new ApiFailure(400, ArchiverWire.Invalid, "A stable operation ID is required.");
+        state.CancelledOperations.Add(operation);
+        var job = state.Jobs.Values.FirstOrDefault(item => item.Request.ClientOperationId == operation);
+        if (job?.Status is ArchiverWire.Queued or ArchiverWire.Running or ArchiverWire.Waiting) {
+            job.Status = ArchiverWire.Cancelled; Touch(job);
+        }
+        Persist();
+        return new OperationCancellation(state.InstanceId, operation, true, job is null ? null : Snapshot(job));
     });
     /// <summary>Returns the exact sealed output set; wrong revisions are rejected.</summary>
     public Task<ManifestPage> ManifestAsync(string id, string revision, string? cursor) => Locked(() => {
@@ -172,6 +185,7 @@ public sealed class SimulatorStore {
         public string InstanceId { get; set; } = Guid.NewGuid().ToString("N");
         public Dictionary<string, Inspection> Selections { get; set; } = [];
         public Dictionary<string, Job> Jobs { get; set; } = [];
+        public HashSet<Guid> CancelledOperations { get; set; } = [];
         public SimulationControls Controls { get; set; } = new();
     }
     /// <summary>Durable fixture job and immutable acceptance evidence.</summary>

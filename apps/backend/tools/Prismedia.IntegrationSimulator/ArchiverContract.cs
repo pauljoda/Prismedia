@@ -19,6 +19,7 @@ public static class ArchiverWire {
     public const string Inspect = "inspect";
     public const string Submit = "submit";
     public const string Cancel = "cancel";
+    public const string CancelOperation = "cancel-operation";
     public const string Artifacts = "artifacts";
     public const string Retention = "retention";
     public const string Receipts = "receipts";
@@ -60,6 +61,8 @@ public sealed record ItemFailure(string ItemId, string Message);
 public sealed record JobSnapshot(string InstanceId, string JobId, Guid ClientOperationId, long Revision, string State,
     double? Progress, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, string? ManifestRevision,
     DateTimeOffset RetainedUntil, bool ArtifactsExpired, DateTimeOffset? NextPollAfter, IReadOnlyList<ItemFailure> ItemFailures);
+/// <summary>Durable operation fence with the original job when one was accepted before cancellation.</summary>
+public sealed record OperationCancellation(string InstanceId, Guid ClientOperationId, bool PreventedAcceptance, JobSnapshot? Job);
 /// <summary>One page of a sealed artifact set.</summary>
 public sealed record ManifestPage(string JobId, string Revision, bool Sealed, int ArtifactCount, IReadOnlyList<Artifact> Artifacts, string? NextCursor);
 /// <summary>Retention request. Granted leases cannot be revoked by cleanup.</summary>

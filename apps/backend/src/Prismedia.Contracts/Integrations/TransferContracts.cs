@@ -13,6 +13,9 @@ public sealed record FindTransferInput(Guid ClientOperationId);
 /// <summary>Lookup result. A missing reference means no accepted operation was found, never successful fulfillment.</summary>
 public sealed record FindTransferResult(RemoteTransferSnapshot? Job);
 
+/// <summary>Atomic operation cancellation: a job reference or durable proof that late acceptance is fenced on this installation.</summary>
+public sealed record CancelSubmissionResult(string InstanceId, Guid ClientOperationId, bool PreventedAcceptance, RemoteTransferSnapshot? Job);
+
 /// <summary>One structured execution failure for an explicitly selected item.</summary>
 public sealed record RemoteTransferItemFailure(string ItemId, string Message);
 

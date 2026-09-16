@@ -13,6 +13,40 @@ public sealed class IntegrationTransferPostgresTests : IDisposable {
     private readonly string keys = Path.Combine(Path.GetTempPath(), "prismedia-transfer-pg-" + Guid.NewGuid().ToString("N"));
 
     [Fact]
+    public async Task RemoteCancellationAtomicallyWakesReconciliationAndRetainsOwnershipUntilStopped() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        var connection = await AddConnectionAsync(database);
+        var transfer = IntegrationTransfer.Create(Guid.NewGuid(), connection, "installation");
+        var plan = Plan with { Source = null, Executor = new(transfer.State.OperationId, "https://source.test/book", "selection", "revision", ["publication"], 1, 1000) };
+        await using (var seed = database.CreateContext()) {
+            var store = Store(seed);
+            await store.CreateAsync(transfer, plan, default);
+            transfer.BeginSubmission(); await store.SaveAsync(transfer, 1, null, default);
+            transfer.AcceptSubmission(transfer.State.OperationId, "installation", "job"); await store.SaveAsync(transfer, 2, null, default);
+            var run = await seed.JobRuns.SingleAsync(); run.AvailableAt = DateTimeOffset.UtcNow.AddHours(1); await seed.SaveChangesAsync();
+        }
+        await using (var failure = database.CreateContext()) {
+            var store = new EfIntegrationTransferStore(failure, new(keys), new FailingScheduler(new(new JobQueueService(failure))));
+            var cancel = new IntegrationTransfer(transfer.State); cancel.RequestRemoteCancellation();
+            await Assert.ThrowsAsync<InvalidOperationException>(() => store.SaveAndEnqueueAsync(cancel, 3, default));
+        }
+        await using (var check = database.CreateContext()) {
+            Assert.False((await Store(check).FindAsync(transfer.State.OperationId, default))!.Transfer.State.CancellationRequested);
+            Assert.True((await check.JobRuns.SingleAsync()).AvailableAt > DateTimeOffset.UtcNow.AddMinutes(50));
+        }
+        await using (var api = database.CreateContext()) {
+            var service = new IntegrationTransferService(Store(api), new JobQueueService(api));
+            Assert.True((await service.CancelAsync(transfer.State.OperationId, default)).CancellationRequested);
+            Assert.True((await service.CancelAsync(transfer.State.OperationId, default)).CancellationRequested);
+        }
+        await using var verify = database.CreateContext();
+        Assert.NotNull((await verify.IntegrationTransfers.SingleAsync()).ActiveOwnershipKey);
+        Assert.True((await verify.JobRuns.SingleAsync()).AvailableAt <= DateTimeOffset.UtcNow);
+        transfer.Observe("installation", "job", 1, RemoteJobState.Succeeded, "manifest");
+        await Assert.ThrowsAsync<IntegrationTransferConflictException>(() => Store(verify).SaveAsync(transfer, 3, null, default));
+    }
+
+    [Fact]
     public async Task CancellationFencesAStaleWorkerReleasesOwnershipAndOnlyStopsItsOwnTarget() {
         await using var database = await PostgresTestDatabase.CreateAsync();
         var connection = await AddConnectionAsync(database);

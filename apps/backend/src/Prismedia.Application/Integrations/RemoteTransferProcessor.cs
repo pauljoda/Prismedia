@@ -63,6 +63,18 @@ public sealed class RemoteTransferProcessor(IIntegrationTransferStore store, Int
                 var lookup = await AuthorizeAsync(IntegrationOperation.FindSubmission);
                 var found = await gateway.FindSubmissionAsync(lookup.Manifest.Id, lookup.Context, new(operationId), cancellationToken);
                 snapshot = found.Job;
+                if (snapshot is null && transfer.State.CancellationRequested) {
+                    var cancel = await AuthorizeAsync(IntegrationOperation.CancelSubmission);
+                    var result = await gateway.CancelSubmissionAsync(cancel.Manifest.Id, cancel.Context, new(operationId), cancellationToken);
+                    if (result.InstanceId != transfer.State.InstanceId || result.ClientOperationId != operationId || !result.PreventedAcceptance)
+                        throw new IntegrationInvocationException("The executor did not confirm a durable cancellation fence.");
+                    snapshot = result.Job;
+                    if (snapshot is null) {
+                        transfer.ConfirmPreventedSubmission(result.InstanceId, result.ClientOperationId);
+                        await PersistAsync();
+                        return;
+                    }
+                }
                 if (snapshot is null) {
                     var submit = await AuthorizeAsync(IntegrationOperation.Submit);
                     snapshot = await gateway.SubmitAsync(submit.Manifest.Id, submit.Context, intent, cancellationToken);
@@ -70,6 +82,16 @@ public sealed class RemoteTransferProcessor(IIntegrationTransferStore store, Int
                 ValidateSnapshot(snapshot);
                 transfer.AcceptSubmission(snapshot.ClientOperationId, snapshot.InstanceId, snapshot.JobId);
                 await PersistAsync();
+            }
+            if (transfer.State.CancellationRequested) {
+                var connection = await AuthorizeAsync(IntegrationOperation.Cancel);
+                snapshot = await gateway.CancelAsync(connection.Manifest.Id, connection.Context, new(transfer.State.JobId!), cancellationToken);
+                ValidateSnapshot(snapshot);
+                transfer.ObserveCancellation(snapshot.InstanceId, snapshot.JobId, snapshot.Revision, snapshot.State, snapshot.ManifestRevision);
+                await PersistAsync();
+                if (transfer.State.Phase != IntegrationTransferPhase.Cancelled)
+                    throw new JobRetryLaterException("Waiting for the executor to stop the accepted operation.", PollDelay(snapshot.NextPollAfter));
+                return;
             }
             if (transfer.State.Phase is IntegrationTransferPhase.AwaitingRemote or IntegrationTransferPhase.NeedsReview) {
                 if (snapshot is null) {

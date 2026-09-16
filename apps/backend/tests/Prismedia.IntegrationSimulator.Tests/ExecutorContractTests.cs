@@ -12,6 +12,22 @@ public sealed class ExecutorContractTests : IDisposable {
             new(ArchiverWire.PublicationProfile, ArchiverWire.Epub), new(1, 1048576));
     }
     [Fact]
+    public async Task OperationCancellationSurvivesRestartAndFencesLateSubmissionWithoutCreatingAJob() {
+        var store = Open();
+        var request = await RequestAsync(store);
+        var result = await store.CancelOperationAsync(request.ClientOperationId);
+        Assert.True(result.PreventedAcceptance);
+        Assert.Null(result.Job);
+        var restarted = Open();
+        var error = await Assert.ThrowsAsync<ApiFailure>(() => restarted.SubmitAsync(request, request.ClientOperationId.ToString()));
+        Assert.Equal(409, error.Status);
+        Assert.Equal(ArchiverWire.Cancelled, error.Code);
+        var replay = await restarted.CancelOperationAsync(request.ClientOperationId);
+        Assert.True(replay.PreventedAcceptance);
+        Assert.Null(replay.Job);
+    }
+
+    [Fact]
     public async Task ConcurrentDuplicateSubmissionAndRestartKeepOneJobWithOriginalSelection() {
         var store = Open();
         var request = await RequestAsync(store);

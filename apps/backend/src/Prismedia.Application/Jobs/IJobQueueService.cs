@@ -72,6 +72,9 @@ public interface IJobQueueService {
     Task<int> CancelTargetAsync(JobType type, string targetEntityId, CancellationToken cancellationToken) =>
         throw new NotSupportedException("This queue does not support targeted cancellation.");
 
+    /// <summary>Makes queued reconciliation for exactly one target due now without bypassing dependencies, resource limits, or running leases.</summary>
+    Task WakeTargetAsync(JobType type, string targetEntityId, CancellationToken cancellationToken) => Task.CompletedTask;
+
     /// <summary>
     /// Checks whether a claimed job run has been cancelled by an operator while a handler is still running.
     /// </summary>

@@ -21,6 +21,15 @@ public sealed class IntegrationTransferService(IIntegrationTransferStore store, 
     public async Task<IntegrationTransferResponse> CancelAsync(Guid id, CancellationToken cancellationToken) {
         var work = await store.FindAsync(id, cancellationToken) ?? throw new IntegrationTransferNotFoundException();
         var transfer = work.Transfer;
+        if (transfer.State.Mode == IntegrationTransferMode.RemoteExecutor) {
+            if (!transfer.CanCancelRemote && !transfer.State.CancellationRequested && transfer.State.Phase != IntegrationTransferPhase.Cancelled)
+                throw new ArgumentException("Local import has started or this operation is already terminal. Reconcile its existing files before requesting another copy.");
+            var expected = transfer.State.Revision;
+            transfer.RequestRemoteCancellation();
+            if (transfer.State.Revision != expected) await store.SaveAndEnqueueAsync(transfer, expected, cancellationToken);
+            else if (transfer.State.Phase != IntegrationTransferPhase.Cancelled) await store.EnqueueRetryAsync(id, cancellationToken);
+            return await GetAsync(id, cancellationToken);
+        }
         if (transfer.State.Mode != IntegrationTransferMode.SourceDownload
             || transfer.State.Phase is not (IntegrationTransferPhase.Transferring or IntegrationTransferPhase.Cancelled))
             throw new ArgumentException("This transfer has already begun library import and cannot be cancelled. Retry it to reconcile its files.");
@@ -35,6 +44,7 @@ public sealed class IntegrationTransferService(IIntegrationTransferStore store, 
         var state = work.Transfer.State;
         return new(state.OperationId, state.ConnectionId, work.Plan.Title, work.Plan.EntityKind, work.Plan.LibraryRootId,
             state.Mode, state.Phase, work.CreatedAt, work.UpdatedAt, state.Artifacts?.Count ?? 0,
-            state.Imports?.SelectMany(imported => imported.EntityIds).Distinct().ToArray() ?? [], work.LastError, work.Transfer.CanCancelSource);
+            state.Imports?.SelectMany(imported => imported.EntityIds).Distinct().ToArray() ?? [], work.LastError,
+            work.Transfer.CanCancelSource || work.Transfer.CanCancelRemote, state.CancellationRequested);
     }
 }

@@ -12,6 +12,46 @@ namespace Prismedia.Application.Tests;
 
 public sealed class RemoteTransferProcessorTests {
     [Fact]
+    public async Task UnacceptedAmbiguousCancellationUsesAtomicFenceAndNeverPostsANewJob() {
+        var fixture = new Fixture();
+        fixture.MarkSubmissionUncertain();
+        fixture.RequestCancellation();
+        await fixture.RunAsync();
+        Assert.Equal(IntegrationTransferPhase.Cancelled, fixture.State.Phase);
+        Assert.Equal(0, fixture.Submissions);
+        Assert.Equal(0, fixture.Cancellations);
+        Assert.Equal(0, fixture.Downloads);
+    }
+
+    [Fact]
+    public async Task CancellationOfAmbiguousSubmissionRecoversAndStopsTheOriginalJobWithoutImport() {
+        var fixture = new Fixture { LoseSubmissionOnce = true };
+        await Assert.ThrowsAsync<JobRetryLaterException>(fixture.RunAsync);
+        fixture.RequestCancellation();
+        await fixture.RunAsync();
+        Assert.Equal(IntegrationTransferPhase.Cancelled, fixture.State.Phase);
+        Assert.Equal(RemoteJobState.Succeeded, fixture.State.LastRemoteState);
+        Assert.Equal(1, fixture.Submissions);
+        Assert.Equal(1, fixture.Cancellations);
+        Assert.Equal(0, fixture.Downloads);
+        Assert.Empty(fixture.Receipts);
+    }
+
+    [Fact]
+    public async Task CancellationKeepsOwnershipWhileRemoteExecutionIsStillRunning() {
+        var fixture = new Fixture { RemoteState = RemoteJobState.Running };
+        await Assert.ThrowsAsync<JobRetryLaterException>(fixture.RunAsync);
+        fixture.RequestCancellation();
+        await Assert.ThrowsAsync<JobRetryLaterException>(fixture.RunAsync);
+        Assert.NotEqual(IntegrationTransferPhase.Cancelled, fixture.State.Phase);
+        fixture.RemoteState = RemoteJobState.Cancelled;
+        await fixture.RunAsync();
+        Assert.Equal(IntegrationTransferPhase.Cancelled, fixture.State.Phase);
+        Assert.Equal(2, fixture.Cancellations);
+        Assert.Equal(0, fixture.Downloads);
+    }
+
+    [Fact]
     public async Task LostSubmissionResponseRecoversOriginalJobAfterRestartWithoutAnotherPost() {
         var fixture = new Fixture { LoseSubmissionOnce = true };
         await Assert.ThrowsAsync<JobRetryLaterException>(fixture.RunAsync);
@@ -124,6 +164,7 @@ public sealed class RemoteTransferProcessorTests {
         internal int Materializations { get; private set; }
         internal int Placements { get; private set; }
         internal int Renewals { get; private set; }
+        internal int Cancellations { get; private set; }
         internal Guid EntityId { get; } = Guid.NewGuid();
         internal List<Guid> Receipts { get; } = [];
         private bool accepted;
@@ -141,7 +182,7 @@ public sealed class RemoteTransferProcessorTests {
             var supports = new IntegrationSupport[] {
                 new(PluginCapability.TransferExecutor, [IntegrationOperation.Submit, IntegrationOperation.FindSubmission,
                     IntegrationOperation.GetJob, IntegrationOperation.ListArtifacts, IntegrationOperation.AuthorizeArtifact,
-                    IntegrationOperation.RenewRetention, IntegrationOperation.Acknowledge], [EntityKind.Book])
+                    IntegrationOperation.RenewRetention, IntegrationOperation.Acknowledge, IntegrationOperation.Cancel, IntegrationOperation.CancelSubmission], [EntityKind.Book])
             };
             connection = IntegrationConnection.Create(PluginId, "Executor", "http://executor.test/", true, [PluginCapability.TransferExecutor], new Dictionary<string, string>());
             connection.RecordProbe(InstanceId, supports, null, DateTimeOffset.UtcNow);
@@ -166,8 +207,10 @@ public sealed class RemoteTransferProcessorTests {
             var plugins = Proxy<IIntegrationPluginGateway>((method, _) => method == nameof(IIntegrationPluginGateway.FindAsync) ? Task.FromResult<PluginManifest?>(manifest) : throw new NotSupportedException(method));
             var gateway = Proxy<IIntegrationTransferGateway>((method, args) => method switch {
                 nameof(IIntegrationTransferGateway.FindSubmissionAsync) => Find(),
+                nameof(IIntegrationTransferGateway.CancelSubmissionAsync) => Task.FromResult(new CancelSubmissionResult(InstanceId, State.OperationId, true, null)),
                 nameof(IIntegrationTransferGateway.SubmitAsync) => Submit((SubmitTransferInput)args![2]!),
                 nameof(IIntegrationTransferGateway.GetJobAsync) => Task.FromResult(Snapshot),
+                nameof(IIntegrationTransferGateway.CancelAsync) => Cancel(),
                 nameof(IIntegrationTransferGateway.RenewRetentionAsync) => Renew((RenewTransferRetentionInput)args![2]!),
                 nameof(IIntegrationTransferGateway.ReadManifestAsync) => Task.FromResult(new TransferManifestPage(JobId, WrongManifest ? "another-revision" : ManifestRevision, true, 1, [Artifact])),
                 nameof(IIntegrationTransferGateway.AuthorizeArtifactAsync) => Task.FromResult(new HttpArtifactDelivery("http://executor.test/file", new Dictionary<string, string>(), "book.epub", ByteSize: 100, Sha256: Hash)),
@@ -206,6 +249,15 @@ public sealed class RemoteTransferProcessorTests {
             State = transfer.State;
             return Task.CompletedTask;
         }
+        internal void RequestCancellation() {
+            var transfer = new IntegrationTransfer(State);
+            transfer.RequestRemoteCancellation();
+            State = transfer.State;
+        }
+        internal void MarkSubmissionUncertain() {
+            var transfer = new IntegrationTransfer(State); transfer.BeginSubmission(); State = transfer.State;
+        }
+        private Task<RemoteTransferSnapshot> Cancel() { Cancellations++; return Task.FromResult(Snapshot); }
         private Task<FindTransferResult> Find() { Lookups++; return Task.FromResult(new FindTransferResult(accepted ? Snapshot : null)); }
         private Task<RemoteTransferSnapshot> Submit(SubmitTransferInput input) {
             Assert.Equal(IntegrationTransferPhase.SubmissionUncertain, State.Phase);

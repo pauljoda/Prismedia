@@ -24,4 +24,5 @@ export interface IntegrationTransferResponse {
   /** @nullable */
   lastError: string | null;
   canCancel: boolean;
+  cancellationRequested: boolean;
 }

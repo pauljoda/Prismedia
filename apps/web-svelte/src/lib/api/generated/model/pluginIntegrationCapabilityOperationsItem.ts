@@ -16,6 +16,7 @@ export const PluginIntegrationCapabilityOperationsItem = {
   resolve: 'resolve',
   submit: 'submit',
   'find-submission': 'find-submission',
+  'cancel-submission': 'cancel-submission',
   'get-job': 'get-job',
   cancel: 'cancel',
   'list-artifacts': 'list-artifacts',

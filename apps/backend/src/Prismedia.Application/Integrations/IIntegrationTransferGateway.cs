@@ -10,6 +10,9 @@ public interface IIntegrationTransferGateway {
     Task<RemoteTransferSnapshot> SubmitAsync(string pluginId, IntegrationConnectionContext connection, SubmitTransferInput input, CancellationToken cancellationToken);
     /// <summary>Recovers an ambiguous submission before another attempt is considered.</summary>
     Task<FindTransferResult> FindSubmissionAsync(string pluginId, IntegrationConnectionContext connection, FindTransferInput input, CancellationToken cancellationToken);
+    /// <summary>Cancels by durable operation identity, atomically preventing a late POST if no job has been accepted yet.</summary>
+    Task<CancelSubmissionResult> CancelSubmissionAsync(string pluginId, IntegrationConnectionContext connection, FindTransferInput input, CancellationToken cancellationToken) =>
+        throw new NotSupportedException("This gateway does not support atomic operation cancellation.");
     /// <summary>Reads durable job state even after the executor removes it from its active queue.</summary>
     Task<RemoteTransferSnapshot> GetJobAsync(string pluginId, IntegrationConnectionContext connection, RemoteTransferJobInput input, CancellationToken cancellationToken);
     /// <summary>Requests cancellation; the returned snapshot must establish the actual outcome.</summary>

@@ -65,6 +65,7 @@ Base path: `/api/v1`. JSON is UTF-8; timestamps are RFC 3339 UTC; opaque IDs are
 | `POST /inspect` | Check a URL or candidate; return canonical source, compatibility, bounded selection preview, warnings, available output formats, and selection revision/expiry. |
 | `POST /search` | Optional. Search a specified source with declared typed fields and bounded pagination; return candidates. |
 | `GET /operations/{clientOperationId}` | Recover the job reference for this authenticated client's durable operation ID. Required for ambiguous submissions. |
+| `POST /operations/{clientOperationId}/cancel` | Atomically cancel the accepted operation, or persist a tombstone that prevents a delayed POST from creating a job. |
 | `POST /jobs` | Validate and atomically persist an operation/job; return `202` with a stable job reference and `Location`. |
 | `GET /jobs/{jobId}` | Authoritative snapshot, including terminal status, progress, item outcomes, artifact-manifest reference, and retention state. |
 | `GET /jobs?cursor=...&limit=...` | Paginated client-scoped reconciliation; support incremental updated-since/cursor semantics and deleted/expired tombstones. |
@@ -173,6 +174,18 @@ Snapshot includes: job ID, client operation ID, instance ID, monotonic revision,
 Progress may have unknown totals: nullable fraction/bytesTotal/itemsTotal are valid. Report bytes completed and items completed independently where known. Never invent 100% because a source does not provide progress, and do not equate downloaded bytes with completed packaging.
 
 ### Cancellation behavior
+
+An operation lookup returning `404` cannot establish that an in-flight POST will
+never arrive. The required `cancel-operation` capability closes that race:
+`POST /operations/{clientOperationId}/cancel` serializes with submission and returns
+`instanceId`, `clientOperationId`, `preventedAcceptance: true`, and an optional `job`.
+If no job exists, persist the cancellation tombstone before confirming it. Any later
+submission with that operation ID is rejected; cancelling repeatedly returns the
+same outcome. Keep tombstones for at least the operation idempotency window.
+If a job already exists, return its authoritative snapshot and propagate cancellation.
+The client retains ownership until that job is terminal. Never create a new job merely
+to cancel an uncertain submission. A new explicit intent requires a new operation ID.
+
 
 Queued cancellation prevents execution. Running cancellation propagates a signal through source plugins and subprocesses, waits for writes/processes to stop, then records a terminal state. A cancellation request can race with natural success; return the final authoritative state rather than deleting the finished job.
 

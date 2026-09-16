@@ -22,6 +22,6 @@ public enum IntegrationTransferPhase {
     [Code("needs-review")] NeedsReview,
     /// <summary>The executor failed before fulfillment completed.</summary>
     [Code("failed")] Failed,
-    /// <summary>The executor confirms cancellation.</summary>
+    /// <summary>Local fulfillment was cancelled before import; any accepted remote execution is confirmed stopped.</summary>
     [Code("cancelled")] Cancelled
 }
