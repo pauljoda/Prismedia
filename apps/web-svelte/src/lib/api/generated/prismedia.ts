@@ -6,6 +6,7 @@
  */
 import type {
   AcquireCatalogOfferRequest,
+  AcquireExecutorItemRequest,
   AcquireVideoSubtitleRequest,
   AcquireVideoSubtitleResponse,
   AcquisitionBlocklistClearResponse,
@@ -100,6 +101,7 @@ import type {
   EntityThumbnailBatchRequest,
   EntityThumbnailBatchResponse,
   ExcludeFileParams,
+  ExecutorInspectionResponse,
   FileArchivePreparation,
   FileArchiveRequest,
   FileChildrenResponse,
@@ -150,6 +152,7 @@ import type {
   IndexerConfigSummary,
   IndexerTestRequest,
   IndexerTestResponse,
+  InspectExecutorRequest,
   IntegrationTransferResponse,
   JobCancelResponse,
   JobCreateResponse,
@@ -9273,6 +9276,95 @@ export const acquireCatalogOffer = async (id: string,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       acquireCatalogOfferRequest,)
+  }
+);}
+
+
+
+export type inspectExecutorUrlResponse200 = {
+  data: ExecutorInspectionResponse
+  status: 200
+}
+
+export type inspectExecutorUrlResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type inspectExecutorUrlResponseSuccess = (inspectExecutorUrlResponse200) & {
+  headers: Headers;
+};
+export type inspectExecutorUrlResponseError = (inspectExecutorUrlResponse400) & {
+  headers: Headers;
+};
+
+export type inspectExecutorUrlResponse = (inspectExecutorUrlResponseSuccess | inspectExecutorUrlResponseError)
+
+export const getInspectExecutorUrlUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/inspect`
+}
+
+export const inspectExecutorUrl = async (id: string,
+    inspectExecutorRequest: InspectExecutorRequest, options?: RequestInit): Promise<inspectExecutorUrlResponse> => {
+
+  return orvalFetch<inspectExecutorUrlResponse>(getInspectExecutorUrlUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      inspectExecutorRequest,)
+  }
+);}
+
+
+
+export type acquireExecutorItemResponse202 = {
+  data: IntegrationTransferResponse
+  status: 202
+}
+
+export type acquireExecutorItemResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type acquireExecutorItemResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type acquireExecutorItemResponseSuccess = (acquireExecutorItemResponse202) & {
+  headers: Headers;
+};
+export type acquireExecutorItemResponseError = (acquireExecutorItemResponse400 | acquireExecutorItemResponse409) & {
+  headers: Headers;
+};
+
+export type acquireExecutorItemResponse = (acquireExecutorItemResponseSuccess | acquireExecutorItemResponseError)
+
+export const getAcquireExecutorItemUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/acquire-executor`
+}
+
+export const acquireExecutorItem = async (id: string,
+    acquireExecutorItemRequest: AcquireExecutorItemRequest, options?: RequestInit): Promise<acquireExecutorItemResponse> => {
+
+  return orvalFetch<acquireExecutorItemResponse>(getAcquireExecutorItemUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      acquireExecutorItemRequest,)
   }
 );}
 

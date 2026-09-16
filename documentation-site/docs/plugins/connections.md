@@ -47,7 +47,7 @@ of a file being available to Prismedia.
 
 Connections provide configuration, capability testing, and a catalog browser at
 **Requests → Browse catalogs**. The browser shows only tested connections that
-currently advertise discovery. Administrators can choose a connection and media type,
+currently advertise catalog browse or search. Administrators can choose a connection and media type,
 open catalog sections, search supported sources, and move through result pages.
 
 Catalog pages distinguish full-publication offers from loans, purchases, samples,
@@ -163,7 +163,7 @@ metadata, with a distinct envelope discriminator:
 Responses echo the protocol, version, and invocation ID. A successful `result`
 contains `instanceId` (null if unavailable), `displayName`, optional `version`, and
 `capabilities`. A failure returns `ok: false` with an error. Each call returns promptly;
-future remote job polling must not keep a plugin process alive indefinitely.
+remote polling returns the worker slot to the durable queue between snapshots.
 
 ## Credential storage and recovery
 
@@ -216,7 +216,40 @@ file's size and hash. Unknown-size transfers still have an enforced byte ceiling
 Native plugins remain trusted code; these transport checks do not create an OS sandbox.
 
 Remote execution success permits reading the manifest. Verified bytes permit local
-import. Exact committed source ownership permits acknowledgement. Partial, expired,
-failed, or cancelled execution cannot silently satisfy a full-content request.
+import. Exact committed source ownership permits acknowledgement. Partial, failed, or cancelled execution cannot silently satisfy a full-content request.
+Artifact expiration is separate from terminal execution: restored exact outputs can
+resume verification, while committed local bytes remain usable without the remote spool.
 Direct catalog downloads use the same byte evidence and local ownership rules,
 without inventing a remote job or requiring a remote receipt endpoint.
+
+
+## Import from a URL
+
+**Requests → Import from URL** shows tested connections with URL inspection and
+transfer execution. Choose a connection and publication kind, inspect the URL, then
+select one publication and an enabled destination library. Inspection creates no
+remote job. Selections expire, and connection changes require inspecting again.
+
+The initial executor profile imports one complete EPUB/PDF book or CBZ comic,
+with a 2 GiB byte limit. Its sealed manifest must contain exactly one content file
+for the selected item. Additional covers, sidecars, or pages hold the operation for
+review; Prismedia does not acknowledge outputs it has not imported.
+
+A remote executor must provide persistent installation identity, operation recovery,
+sealed output manifests, renewable retention, and idempotent receipts. Prismedia saves
+the operation before submission, looks up that same operation after an uncertain
+response, and resumes polling through durable queue deferrals. A remote job's success
+never substitutes for verifying its output bytes.
+
+After local source ownership commits, acknowledgement is a separate step. An unavailable
+receipt endpoint leaves **Awaiting acknowledgement**; retries reuse the same receipt
+without downloading or materializing the publication again. Partial results remain
+held with renewable retention. Remote cancellation is not yet exposed in this view;
+the existing **Cancel download** action applies only to direct catalog downloads.
+
+The Archiver adapter targets the proposed executor API v1, including its explicit
+`single-publication` output profile. It requires that interface to be implemented;
+older Archiver installations that only return success messages are not compatible.
+The repository includes a separate [executor simulator](https://github.com/pauljoda/Prismedia/tree/main/apps/backend/tools/Prismedia.IntegrationSimulator)
+for synthetic publications and response-loss testing. See the [Archiver interface](./archiver-interface.md)
+for a rebuild specification independent of Prismedia's storage model.

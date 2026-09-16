@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Import books and comics from inspected URLs through compatible executor connections. Durable operations recover uncertain submissions, verify exact output files, and retry import acknowledgements independently. A separate Archiver simulator exercises restart and response-loss recovery.
+
 - Import EPUB/PDF books and CBZ comics from connected catalogs into a chosen library. Downloads retain verified bytes and durable progress across retries, protect existing files, and open the imported publication from the catalog view.
 
 - Catalog downloads can be cancelled before library import begins, without cancelling other transfers or discarding staged files.

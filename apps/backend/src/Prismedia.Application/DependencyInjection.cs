@@ -115,6 +115,7 @@ public static class DependencyInjection {
         services.AddScoped<IImportedVideoMaterializer, ImportedVideoMaterializer>();
         services.AddScoped<IImportedEntityMaterializer, ImportedEntityMaterializer>();
         services.AddScoped<Integrations.SourceTransferProcessor>();
+        services.AddScoped<Integrations.RemoteTransferProcessor>();
         services.AddScoped<DownloadClientCleanupService>();
         services.AddScoped<IAcquisitionImportEngineFactory, AcquisitionImportEngineFactory>();
 

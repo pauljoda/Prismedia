@@ -11,17 +11,17 @@ public static class IntegrationTransferEndpoints {
     public static RouteGroupBuilder MapIntegrationTransferEndpoints(this IEndpointRouteBuilder routes) {
         var group = routes.MapGroup("/api/integration-transfers").RequireAdmin().WithTags("Integration transfers");
         group.AddEndpointFilter<IntegrationTransferProblemFilter>();
-        group.MapGet("/", async (CatalogAcquisitionService service, CancellationToken cancellationToken) =>
+        group.MapGet("/", async (IntegrationTransferService service, CancellationToken cancellationToken) =>
             Results.Ok(await service.ListAsync(cancellationToken)))
             .WithName("ListIntegrationTransfers").Produces<IReadOnlyList<IntegrationTransferResponse>>();
-        group.MapGet("/{id:guid}", async (Guid id, CatalogAcquisitionService service, CancellationToken cancellationToken) =>
+        group.MapGet("/{id:guid}", async (Guid id, IntegrationTransferService service, CancellationToken cancellationToken) =>
             Results.Ok(await service.GetAsync(id, cancellationToken)))
             .WithName("GetIntegrationTransfer").Produces<IntegrationTransferResponse>().Produces<ApiProblem>(404);
-        group.MapPost("/{id:guid}/retry", async (Guid id, CatalogAcquisitionService service, CancellationToken cancellationToken) => {
+        group.MapPost("/{id:guid}/retry", async (Guid id, IntegrationTransferService service, CancellationToken cancellationToken) => {
             await service.RetryAsync(id, cancellationToken);
             return Results.Accepted($"/api/integration-transfers/{id}");
         }).WithName("RetryIntegrationTransfer").Produces(202).Produces<ApiProblem>(400).Produces<ApiProblem>(404);
-        group.MapPost("/{id:guid}/cancel", async (Guid id, CatalogAcquisitionService service, CancellationToken cancellationToken) =>
+        group.MapPost("/{id:guid}/cancel", async (Guid id, IntegrationTransferService service, CancellationToken cancellationToken) =>
             Results.Ok(await service.CancelAsync(id, cancellationToken)))
             .WithName("CancelIntegrationTransfer").Produces<IntegrationTransferResponse>().Produces<ApiProblem>(400).Produces<ApiProblem>(404).Produces<ApiProblem>(409);
         return group;

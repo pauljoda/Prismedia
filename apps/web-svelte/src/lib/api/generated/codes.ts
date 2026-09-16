@@ -1442,11 +1442,11 @@ export type ReleaseRejectionReasonCode = (typeof RELEASE_REJECTION_REASON)[keyof
 export const REMOTE_JOB_STATE = {
   queued: "queued",
   running: "running",
+  waiting: "waiting",
   partial: "partial",
   succeeded: "succeeded",
   failed: "failed",
   cancelled: "cancelled",
-  expired: "expired",
 } as const;
 
 export type RemoteJobStateCode = (typeof REMOTE_JOB_STATE)[keyof typeof REMOTE_JOB_STATE];

@@ -19,7 +19,8 @@ public sealed record RemoteTransferItemFailure(string ItemId, string Message);
 /// <summary>Authoritative snapshot correlated to an operation, installation, and stable job; terminal success identifies sealed outputs.</summary>
 public sealed record RemoteTransferSnapshot(string InstanceId, string JobId, Guid ClientOperationId, long Revision,
     RemoteJobState State, double? Progress, string? ManifestRevision, DateTimeOffset? RetainedUntil,
-    IReadOnlyList<RemoteTransferItemFailure> ItemFailures, string? Message = null);
+    IReadOnlyList<RemoteTransferItemFailure> ItemFailures, string? Message = null,
+    DateTimeOffset? NextPollAfter = null, bool ArtifactsExpired = false);
 
 /// <summary>Reads or cancels one exact job on the connection's bound remote installation.</summary>
 public sealed record RemoteTransferJobInput(string JobId);

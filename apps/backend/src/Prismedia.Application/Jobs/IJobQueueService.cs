@@ -133,7 +133,8 @@ public interface IJobQueueService {
 
     /// <summary>
     /// Returns a claimed job to the queue without consuming the claim as a failed attempt.
-    /// Use for local capacity throttles such as provider slots, not for work that actually ran.
+    /// Use for local capacity throttles or persisted remote reconciliation waits.
+    /// Keep hard execution failures on the bounded failure/retry path.
     /// </summary>
     Task DeferAsync(Guid id, string message, TimeSpan retryDelay, CancellationToken cancellationToken) =>
         FailAsync(id, message, retryDelay, cancellationToken);

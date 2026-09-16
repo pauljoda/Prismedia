@@ -6,6 +6,8 @@ public enum RemoteJobState {
     [Code("queued")] Queued,
     /// <summary>Executing the accepted selection.</summary>
     [Code("running")] Running,
+    /// <summary>Execution is durably waiting for a recoverable upstream condition.</summary>
+    [Code("waiting")] Waiting,
     /// <summary>Some selected items failed or remain incomplete.</summary>
     [Code("partial")] Partial,
     /// <summary>Execution finished and a sealed output manifest is available.</summary>
@@ -13,7 +15,5 @@ public enum RemoteJobState {
     /// <summary>Execution failed.</summary>
     [Code("failed")] Failed,
     /// <summary>Execution stopped after cancellation.</summary>
-    [Code("cancelled")] Cancelled,
-    /// <summary>Retained output bytes have expired.</summary>
-    [Code("expired")] Expired
+    [Code("cancelled")] Cancelled
 }

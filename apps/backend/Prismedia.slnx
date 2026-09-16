@@ -12,5 +12,9 @@
     <Project Path="tests/Prismedia.Api.Tests/Prismedia.Api.Tests.csproj" />
     <Project Path="tests/Prismedia.Domain.Tests/Prismedia.Domain.Tests.csproj" />
     <Project Path="tests/Prismedia.Infrastructure.Tests/Prismedia.Infrastructure.Tests.csproj" />
+    <Project Path="tests/Prismedia.IntegrationSimulator.Tests/Prismedia.IntegrationSimulator.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/Prismedia.IntegrationSimulator/Prismedia.IntegrationSimulator.csproj" />
   </Folder>
 </Solution>

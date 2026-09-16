@@ -23,7 +23,7 @@ public sealed class IntegrationTransferPostgresTests : IDisposable {
         await Store(worker).CreateAsync(transfer, plan, default);
         await Store(worker).CreateAsync(other, plan with { OwnershipKey = "another-owner" }, default);
         await using (var api = database.CreateContext()) {
-            var service = new CatalogAcquisitionService(Store(api), null!, null!, null!, null!, new JobQueueService(api));
+            var service = new IntegrationTransferService(Store(api), new JobQueueService(api));
             Assert.Equal(IntegrationTransferPhase.Cancelled, (await service.CancelAsync(transfer.State.OperationId, default)).Phase);
             Assert.Equal(IntegrationTransferPhase.Cancelled, (await service.CancelAsync(transfer.State.OperationId, default)).Phase);
         }

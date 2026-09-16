@@ -10,7 +10,7 @@ public sealed record IntegrationTransferState(Guid OperationId, Guid ConnectionI
     IntegrationTransferPhase Phase, string? JobId = null, long RemoteRevision = -1, string? ManifestRevision = null,
     IReadOnlyList<IntegrationArtifact>? Artifacts = null, IReadOnlyList<string>? VerifiedArtifactIds = null,
     IReadOnlyList<IntegrationArtifactImport>? Imports = null, Guid? ReceiptId = null,
-    IntegrationTransferMode Mode = IntegrationTransferMode.RemoteExecutor);
+    IntegrationTransferMode Mode = IntegrationTransferMode.RemoteExecutor, RemoteJobState? LastRemoteState = null);
 
 /// <summary>Enforces submission recovery and the separation between remote completion, verified bytes, committed imports, and acknowledgement.</summary>
 public sealed class IntegrationTransfer(IntegrationTransferState state) {
@@ -75,29 +75,44 @@ public sealed class IntegrationTransfer(IntegrationTransferState state) {
         if (revision <= State.RemoteRevision) return;
         if (State.Phase is not (IntegrationTransferPhase.AwaitingRemote or IntegrationTransferPhase.NeedsReview))
             throw InvalidTransition();
+        if (State.LastRemoteState is RemoteJobState.Succeeded or RemoteJobState.Partial or RemoteJobState.Failed or RemoteJobState.Cancelled
+            && (remoteState != State.LastRemoteState || manifestRevision != State.ManifestRevision))
+            throw new InvalidOperationException("A terminal execution result and its sealed output revision cannot be replaced.");
         if (remoteState == RemoteJobState.Succeeded && (string.IsNullOrWhiteSpace(manifestRevision) || manifestRevision.Length > 512))
             throw new InvalidOperationException("A successful executor must identify its sealed manifest revision.");
         var phase = remoteState switch {
-            RemoteJobState.Queued or RemoteJobState.Running => IntegrationTransferPhase.AwaitingRemote,
+            RemoteJobState.Queued or RemoteJobState.Running or RemoteJobState.Waiting => IntegrationTransferPhase.AwaitingRemote,
             RemoteJobState.Succeeded => IntegrationTransferPhase.AwaitingArtifacts,
-            RemoteJobState.Partial or RemoteJobState.Expired => IntegrationTransferPhase.NeedsReview,
+            RemoteJobState.Partial => IntegrationTransferPhase.NeedsReview,
             RemoteJobState.Failed => IntegrationTransferPhase.Failed,
             RemoteJobState.Cancelled => IntegrationTransferPhase.Cancelled,
             _ => throw InvalidTransition()
         };
-        Change(State with { RemoteRevision = revision, Phase = phase, ManifestRevision = remoteState == RemoteJobState.Succeeded ? manifestRevision : null });
+        Change(State with { RemoteRevision = revision, Phase = phase, LastRemoteState = remoteState,
+            ManifestRevision = remoteState is RemoteJobState.Succeeded or RemoteJobState.Partial ? manifestRevision : null });
     }
 
     /// <summary>Freezes every artifact from the accepted manifest revision; partial results require a separate reviewed intent.</summary>
     public void AcceptManifest(IntegrationArtifactManifest manifest) {
+        if (State.LastRemoteState != RemoteJobState.Succeeded) throw InvalidTransition();
         if (manifest.JobId != State.JobId || manifest.Revision != State.ManifestRevision)
             throw new InvalidOperationException("The output manifest belongs to another job or revision.");
         if (State.Artifacts is { } previous) {
             if (!previous.SequenceEqual(manifest.Artifacts)) throw new InvalidOperationException("A sealed artifact manifest changed its contents.");
+            if (State.Phase is IntegrationTransferPhase.AwaitingArtifacts or IntegrationTransferPhase.NeedsReview)
+                Change(State with { Phase = State.VerifiedArtifactIds?.Count == previous.Count ? IntegrationTransferPhase.Importing : IntegrationTransferPhase.Transferring });
             return;
         }
-        if (State.Phase != IntegrationTransferPhase.AwaitingArtifacts) throw InvalidTransition();
+        if (State.Phase is not (IntegrationTransferPhase.AwaitingArtifacts or IntegrationTransferPhase.NeedsReview)) throw InvalidTransition();
         Change(State with { Artifacts = manifest.Artifacts.ToArray(), VerifiedArtifactIds = [], Imports = [], Phase = IntegrationTransferPhase.Transferring });
+    }
+
+    /// <summary>Holds missing remote outputs separately from execution success, retaining all accepted byte evidence for reconciliation.</summary>
+    public void HoldUnavailableRemoteOutputs() {
+        if (State.Mode != IntegrationTransferMode.RemoteExecutor) throw InvalidTransition();
+        if (State.Phase == IntegrationTransferPhase.NeedsReview) return;
+        if (State.Phase is not (IntegrationTransferPhase.AwaitingArtifacts or IntegrationTransferPhase.Transferring)) throw InvalidTransition();
+        Change(State with { Phase = IntegrationTransferPhase.NeedsReview });
     }
 
     /// <summary>Records local byte evidence only when its size and SHA-256 match the frozen remote manifest.</summary>

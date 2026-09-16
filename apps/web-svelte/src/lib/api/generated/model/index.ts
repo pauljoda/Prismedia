@@ -6,6 +6,7 @@
  */
 
 export * from './acquireCatalogOfferRequest';
+export * from './acquireExecutorItemRequest';
 export * from './acquireVideoSubtitleRequest';
 export * from './acquireVideoSubtitleResponse';
 export * from './acquisitionAccessKind';
@@ -283,6 +284,7 @@ export * from './entityThumbnailHoverImage';
 export * from './entityThumbnailMeta';
 export * from './entityUrl';
 export * from './excludeFileParams';
+export * from './executorInspectionResponse';
 export * from './externalIdentity';
 export * from './fileArchivePreparation';
 export * from './fileArchiveRequest';
@@ -350,6 +352,8 @@ export * from './indexerConfigSummary';
 export * from './indexerKind';
 export * from './indexerTestRequest';
 export * from './indexerTestResponse';
+export * from './inspectedTransferItem';
+export * from './inspectExecutorRequest';
 export * from './integrationTransferMode';
 export * from './integrationTransferPhase';
 export * from './integrationTransferResponse';

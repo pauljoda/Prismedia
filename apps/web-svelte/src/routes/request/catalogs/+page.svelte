@@ -72,7 +72,8 @@
       rootId = roots[0]?.id ?? "";
       await refreshTransfers();
       connections = available.filter(item => item.status === CONNECTION_STATUS.ready
-        && item.effectiveCapabilities.some(capability => capability.kind === PLUGIN_CAPABILITY.catalogDiscovery));
+        && item.effectiveCapabilities.some(capability => capability.kind === PLUGIN_CAPABILITY.catalogDiscovery
+          && capability.operations.some(operation => operation === INTEGRATION_OPERATION.browse || operation === INTEGRATION_OPERATION.search)));
       const requested = page.url.searchParams.get("connection");
       await chooseConnection(connections.find(item => item.id === requested)?.id ?? connections[0]?.id ?? "");
     } catch (cause) { error = cause instanceof Error ? cause.message : "Could not load catalogs"; }

@@ -98,9 +98,12 @@ public static class DependencyInjection {
         services.AddScoped<IIntegrationDiscoveryGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
         services.AddScoped<IIntegrationTransferGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
         services.AddSingleton<IDiscoveryTokenProtector>(new DiscoveryTokenProtector(dataDir));
+        services.AddSingleton<IExecutorSelectionProtector>(new ExecutorSelectionProtector(dataDir));
         services.AddScoped<IntegrationConnectionAccess>();
         services.AddScoped<CatalogDiscoveryService>();
         services.AddScoped<CatalogAcquisitionService>();
+        services.AddScoped<ExecutorAcquisitionService>();
+        services.AddScoped<IntegrationTransferService>();
         services.AddScoped<IIntegrationTransferScheduler, IntegrationTransferScheduler>();
         services.AddScoped<IIntegrationTransferStore, EfIntegrationTransferStore>();
         services.AddSingleton(new TransferPlanProtector(dataDir));

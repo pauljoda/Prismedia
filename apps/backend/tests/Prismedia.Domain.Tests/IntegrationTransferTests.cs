@@ -52,6 +52,35 @@ public sealed class IntegrationTransferTests {
     }
 
     [Fact]
+    public void WaitingExecutionAndExpiredOutputsRemainSeparateFromCommittedLocalBytes() {
+        var transfer = Submitted();
+        transfer.Observe(Instance, Job, 1, RemoteJobState.Waiting, null);
+        Assert.Equal(IntegrationTransferPhase.AwaitingRemote, transfer.State.Phase);
+        transfer.Observe(Instance, Job, 2, RemoteJobState.Succeeded, Revision);
+        transfer.HoldUnavailableRemoteOutputs();
+        Assert.Equal(Revision, transfer.State.ManifestRevision);
+        Assert.Equal(IntegrationTransferPhase.NeedsReview, transfer.State.Phase);
+        transfer.AcceptManifest(new(Job, Revision, true, 1, [Artifact]));
+        transfer.HoldUnavailableRemoteOutputs();
+        transfer.AcceptManifest(new(Job, Revision, true, 1, [Artifact]));
+        Assert.Equal(IntegrationTransferPhase.Transferring, transfer.State.Phase);
+        transfer.RecordVerified(Artifact.Id, Artifact.SizeBytes, Artifact.Sha256);
+        Assert.Throws<InvalidOperationException>(() => transfer.HoldUnavailableRemoteOutputs());
+        Assert.Equal(IntegrationTransferPhase.Importing, transfer.State.Phase);
+    }
+
+    [Fact]
+    public void ReviewCannotRewriteTerminalExecutionOrItsSealedRevision() {
+        var transfer = WithManifest();
+        transfer.HoldUnavailableRemoteOutputs();
+        Assert.Throws<InvalidOperationException>(() => transfer.Observe(Instance, Job, 2, RemoteJobState.Running, null));
+        Assert.Throws<InvalidOperationException>(() => transfer.Observe(Instance, Job, 2, RemoteJobState.Succeeded, "replacement"));
+        var partial = Submitted();
+        partial.Observe(Instance, Job, 1, RemoteJobState.Partial, null);
+        Assert.Throws<InvalidOperationException>(() => partial.Observe(Instance, Job, 2, RemoteJobState.Succeeded, Revision));
+    }
+
+    [Fact]
     public void AmbiguousSubmissionRetainsItsOperationKeyAcrossRehydration() {
         var transfer = IntegrationTransfer.Create(Guid.NewGuid(), Guid.NewGuid(), Instance);
         var operation = transfer.State.OperationId;
@@ -77,7 +106,6 @@ public sealed class IntegrationTransferTests {
 
     [Theory]
     [InlineData(RemoteJobState.Partial, IntegrationTransferPhase.NeedsReview)]
-    [InlineData(RemoteJobState.Expired, IntegrationTransferPhase.NeedsReview)]
     [InlineData(RemoteJobState.Failed, IntegrationTransferPhase.Failed)]
     [InlineData(RemoteJobState.Cancelled, IntegrationTransferPhase.Cancelled)]
     public void IncompleteOutcomesCannotBecomeSuccessfulImports(RemoteJobState state, IntegrationTransferPhase expected) {
