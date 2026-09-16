@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Linked Radarr holdings can apply reviewed monitoring and profile changes and request searches. Manager actions retain progress across restarts, preserve uncertain responses for review, and keep search completion separate from file availability.
+
 - Radarr and Sonarr holdings can link to existing scanned items and track renamed, replaced, or missing files while retaining item identity and history. Ambiguous coverage requires review, and unavailable sources stay in the catalog without being advertised as playable.
 
 - Metadata plugins can retain exact comic issue and chapter labels separately from ordering, show them in review, and match fractional installments without merging coincidental positions.

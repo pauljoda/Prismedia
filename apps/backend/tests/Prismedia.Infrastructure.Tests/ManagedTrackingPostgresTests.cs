@@ -15,7 +15,7 @@ using Prismedia.Infrastructure.Settings;
 
 namespace Prismedia.Infrastructure.Tests;
 
-public sealed class ManagedTrackingPostgresTests : IDisposable {
+public sealed partial class ManagedTrackingPostgresTests : IDisposable {
     private readonly string workspace = Directory.CreateTempSubdirectory("prismedia-tracking-").FullName;
 
     [Theory]

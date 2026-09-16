@@ -6,6 +6,26 @@ namespace Prismedia.Infrastructure.Persistence;
 
 internal static partial class PrismediaModelConfiguration {
     private static void ConfigureIntegrationTables(ModelBuilder modelBuilder) {
+        modelBuilder.Entity<ManagedControlRow>(entity => {
+            entity.ToTable("managed_controls");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.ConnectionId).HasColumnName("connection_id");
+            entity.Property(row => row.HoldingId).HasColumnName("holding_id");
+            entity.Property(row => row.ActiveHoldingId).HasColumnName("active_holding_id");
+            entity.Property(row => row.Revision).HasColumnName("revision").IsConcurrencyToken();
+            entity.Property(row => row.StateJson).HasColumnName("state").HasColumnType("jsonb");
+            entity.Property(row => row.PlanJson).HasColumnName("plan").HasColumnType("jsonb");
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.Property(row => row.NextCheckAt).HasColumnName("next_check_at");
+            entity.Property(row => row.Problem).HasColumnName("problem").HasMaxLength(4096);
+            entity.HasOne<IntegrationConnectionRow>().WithMany().HasForeignKey(row => row.ConnectionId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<ManagedHoldingRow>().WithMany().HasForeignKey(row => row.HoldingId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(row => row.ActiveHoldingId).IsUnique();
+            entity.HasIndex(row => new { row.HoldingId, row.CreatedAt });
+            entity.HasIndex(row => row.NextCheckAt);
+        });
         modelBuilder.Entity<FulfillmentReservationRow>(entity => {
             entity.ToTable("fulfillment_reservations");
             entity.HasKey(row => row.Id);

@@ -98,10 +98,14 @@ public static class DependencyInjection {
         services.AddScoped<IIntegrationDiscoveryGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
         services.AddScoped<IIntegrationTransferGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
         services.AddScoped<IIntegrationManagerGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
+        services.AddScoped<IIntegrationManagerControlGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
         services.AddScoped<ManagedLibraryService>();
         services.AddScoped<IManagedTrackingStore, EfManagedTrackingStore>();
         services.AddScoped<IFulfillmentReservationStore, EfFulfillmentReservationStore>();
         services.AddScoped<ManagedTrackingService>();
+        services.AddScoped<IManagedControlStore, EfManagedControlStore>();
+        services.AddScoped<ManagedControlService>();
+        services.AddScoped<ManagedControlProcessor>();
         services.AddSingleton(new ExternalLibraryStorageOptions(dataDir, cacheDir));
         services.AddScoped<IExternalLibraryMountStore, EfExternalLibraryMountStore>();
         services.AddScoped<ExternalLibraryService>();

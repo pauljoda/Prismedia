@@ -250,6 +250,12 @@ const _JOB_DEFINITIONS = [
   },
   // Acquisition
   {
+    type: JOB_TYPE.managedControl,
+    queueName: JOB_TYPE.managedControl,
+    label: "Manager Action",
+    description: "Applies reviewed settings or observes a connected manager's search command.",
+  },
+  {
     type: JOB_TYPE.managedLibraryReconcile,
     queueName: JOB_TYPE.managedLibraryReconcile,
     label: "Connected Library Refresh",

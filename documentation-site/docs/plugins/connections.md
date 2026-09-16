@@ -235,9 +235,10 @@ not establish that Prismedia can read or play those files.
 
 The Radarr adapter supports Radarr 6.x API v3; the Sonarr adapter supports Sonarr 4.x API v3.
 Configure the application base URL, including any reverse-proxy prefix, and its API key.
-Multiple Connections keep their configuration and identities separate. The current adapters
-read existing holdings, profiles, and root folders; they do not issue acquisition or monitoring
-commands. Sonarr preserves exact episode-to-file associations, including specials and files
+Multiple Connections keep their configuration and identities separate. Both adapters
+read existing holdings, profiles, and root folders. Radarr also supports the reviewed
+controls described below; Sonarr currently exposes read-only operations.
+Sonarr preserves exact episode-to-file associations, including specials and files
 covering several episodes. Manager profile and folder IDs remain external choices.
 
 Neither API supplies a persistent installation UUID. Prismedia reports that limitation and
@@ -310,8 +311,44 @@ Once a root has a tracked holding, video scans delegate to its saved holdings. T
 reserves the entire mapped root against path-based discovery, including external folder
 renames. Scan the existing collection before linking it. New unscanned holdings and
 expanded episode coverage currently require a further explicit import/linking workflow;
-they are not silently added by ordinary scans. Tracking does not yet issue manager
-requests, change profiles, or enable external monitoring.
+they are not silently added by ordinary scans.
+
+### Control a linked Radarr holding
+
+Install Radarr plugin 1.1.1 or later and test its Connection again to negotiate the
+new operations. Open **Manager controls** on a linked holding, then **Review manager
+settings**. Choose an explicit profile or monitoring change, optionally select
+**Search now**, and choose **Apply manager action**. Omitted settings are preserved.
+Changing monitoring alone does not issue an immediate search.
+
+Prismedia derives the target scope from the saved associations and fulfillment owner.
+It checks the pinned metadata identity, reviewed folder, and relevant settings again
+before changing the manager. This workflow never creates a new remote movie, moves
+files, or removes an existing holding. Only one unfinished action can control a
+holding at a time; different configured instances remain independent.
+
+The accepted action and first background run commit together. Each write has a
+durable dispatch fence. A timeout or crash after that fence leaves an uncertain
+outcome: settings recover by observing the requested values, while a search without
+its returned command identity is never automatically sent again. Radarr does not
+provide idempotency keys or atomic compare-and-set for these writes, so a concurrent
+edit in Radarr can still race the adapter's fresh checks.
+
+An acknowledged search retains its command ID **and original queue timestamp**.
+Missing history, changed timestamps, or mismatched command scope remain unverified.
+**Search completed** describes execution only: a search can finish without finding
+a release. Existing tracking separately verifies final files and local byte access.
+
+**Cancel unsent stage** stops only a stage that has not crossed its dispatch fence.
+Previously confirmed settings stay applied. **Refresh action** observes retained
+progress. For an unresolved write, inspect the connected app before acknowledging
+**Close with outcome unverified**. Closing stops observation, does not undo settings
+or cancel remote work, and keeps the holding's fulfillment ownership. Creating a
+new action afterward is a new explicit request.
+
+Action history survives queue-history removal and connection outages. These controls
+use typed `reconcile-managed`, `configure-managed`, and `request-managed` contracts;
+plugins cannot expose arbitrary manager endpoints through this API.
 
 ## Import from a URL
 

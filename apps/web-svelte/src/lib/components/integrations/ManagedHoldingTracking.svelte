@@ -4,8 +4,9 @@
   import { MANAGED_TRACKING_STATUS } from "$lib/api/generated/codes";
   import type { ManagedLibraryItem, ManagedTrackingPreview, ManagedTrackingResponse } from "$lib/api/generated/model";
   import { fetchManagedTracking, previewTracking, saveManagedTracking, refreshTracking } from "$lib/api/managed-libraries";
+  import ManagedHoldingControls from "./ManagedHoldingControls.svelte";
 
-  let { connectionId, item = null }: { connectionId: string; item?: ManagedLibraryItem | null } = $props();
+  let { connectionId, item = null, showControls = false, canControl = false }: { connectionId: string; item?: ManagedLibraryItem | null; showControls?: boolean; canControl?: boolean } = $props();
   let holdings = $state<ManagedTrackingResponse[]>([]);
   let preview = $state<ManagedTrackingPreview | null>(null);
   let error = $state<string | null>(null);
@@ -67,6 +68,7 @@
         {#if holding.problem}<p class="break-words text-sm text-text-muted">{holding.problem}</p>{/if}
         {#if holding.lastCheckedAt}<p class="text-xs text-text-muted">Checked {new Date(holding.lastCheckedAt).toLocaleString()}</p>{/if}
         <Button variant="outline" size="sm" disabled={busy} onclick={() => void refresh(holding.id)}>Refresh tracking</Button>
+        {#if showControls}<ManagedHoldingControls {connectionId} holdingId={holding.id} canPreview={canControl && holding.status === MANAGED_TRACKING_STATUS.tracking} />{/if}
       </div>
     {/each}
     {#if item && !visible.length}

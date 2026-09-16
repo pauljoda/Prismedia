@@ -1190,6 +1190,7 @@ export const JOB_TYPE = {
   identifyCascade: "identify-cascade",
   integrationTransfer: "integration-transfer",
   managedLibraryReconcile: "managed-library-reconcile",
+  managedControl: "managed-control",
   acquisitionSearch: "acquisition-search",
   acquisitionMonitor: "acquisition-monitor",
   acquisitionImport: "acquisition-import",
@@ -1212,6 +1213,43 @@ export const LIBRARY_ROOT_MEDIA_CAPABILITY = {
 } as const;
 
 export type LibraryRootMediaCapabilityCode = (typeof LIBRARY_ROOT_MEDIA_CAPABILITY)[keyof typeof LIBRARY_ROOT_MEDIA_CAPABILITY];
+
+// source: enum ManagedCommandStatus
+export const MANAGED_COMMAND_STATUS = {
+  pending: "pending",
+  running: "running",
+  completed: "completed",
+  failed: "failed",
+  cancelled: "cancelled",
+  unknown: "unknown",
+} as const;
+
+export type ManagedCommandStatusCode = (typeof MANAGED_COMMAND_STATUS)[keyof typeof MANAGED_COMMAND_STATUS];
+
+// source: enum ManagedControlPhase
+export const MANAGED_CONTROL_PHASE = {
+  pendingConfiguration: "pending-configuration",
+  configurationUncertain: "configuration-uncertain",
+  pendingSearch: "pending-search",
+  searchUncertain: "search-uncertain",
+  awaitingCommand: "awaiting-command",
+  completed: "completed",
+  rejected: "rejected",
+  failed: "failed",
+  cancelled: "cancelled",
+  closedUnverified: "closed-unverified",
+} as const;
+
+export type ManagedControlPhaseCode = (typeof MANAGED_CONTROL_PHASE)[keyof typeof MANAGED_CONTROL_PHASE];
+
+// source: enum ManagedMutationOutcome
+export const MANAGED_MUTATION_OUTCOME = {
+  applied: "applied",
+  accepted: "accepted",
+  rejected: "rejected",
+} as const;
+
+export type ManagedMutationOutcomeCode = (typeof MANAGED_MUTATION_OUTCOME)[keyof typeof MANAGED_MUTATION_OUTCOME];
 
 // source: enum ManagedTrackingStatus
 export const MANAGED_TRACKING_STATUS = {
@@ -1778,6 +1816,7 @@ export const PROBLEM_CODE = {
   invalidUpload: "invalid_upload",
   lastAdminRequired: "last_admin_required",
   libraryRootPathConflict: "library_root_path_conflict",
+  managedControlConflict: "managed_control_conflict",
   metadataFieldConflict: "metadata_field_conflict",
   notFound: "not_found",
   passwordInvalid: "password_invalid",

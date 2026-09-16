@@ -15,4 +15,7 @@ public static class JobTargetKinds {
 
     /// <summary>Durable association with an externally managed holding.</summary>
     public const string ManagedHolding = "managed-holding";
+
+    /// <summary>Durable manager configuration or search action.</summary>
+    public const string ManagedControl = "managed-control";
 }

@@ -7,6 +7,7 @@ namespace Prismedia.Contracts.System;
 /// constants instead of bare string literals.
 /// </summary>
 public static class ApiProblemCodes {
+    public const string ManagedControlConflict = "managed_control_conflict";
     /// <summary>The requested connection no longer exists.</summary>
     public const string ConnectionNotFound = "connection_not_found";
     /// <summary>A connection owns persisted transfer history and cannot be deleted.</summary>

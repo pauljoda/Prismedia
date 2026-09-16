@@ -62,6 +62,7 @@ import type {
   CreateExternalLibraryMountRequest,
   CreateFileFolderParams,
   CreateFirstAdminRequest,
+  CreateManagedControlRequest,
   CustomFormatSaveRequest,
   CustomFormatView,
   DatabaseBackupDto,
@@ -200,6 +201,9 @@ import type {
   ListVideosParams,
   LoginRequest,
   LoginResponse,
+  ManagedControlActionResponse,
+  ManagedControlPreview,
+  ManagedControlRevisionRequest,
   ManagedItemInput,
   ManagedItemSnapshot,
   ManagedLibraryPage,
@@ -9045,6 +9049,273 @@ export const updatePluginAuth = async (provider: string,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       pluginAuthUpdateRequest,)
+  }
+);}
+
+
+
+export type previewManagedControlsResponse200 = {
+  data: ManagedControlPreview
+  status: 200
+}
+
+export type previewManagedControlsResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type previewManagedControlsResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type previewManagedControlsResponseSuccess = (previewManagedControlsResponse200) & {
+  headers: Headers;
+};
+export type previewManagedControlsResponseError = (previewManagedControlsResponse400 | previewManagedControlsResponse409) & {
+  headers: Headers;
+};
+
+export type previewManagedControlsResponse = (previewManagedControlsResponseSuccess | previewManagedControlsResponseError)
+
+export const getPreviewManagedControlsUrl = (id: string,
+    holdingId: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/tracking/${holdingId}/controls/preview`
+}
+
+export const previewManagedControls = async (id: string,
+    holdingId: string, options?: RequestInit): Promise<previewManagedControlsResponse> => {
+
+  return orvalFetch<previewManagedControlsResponse>(getPreviewManagedControlsUrl(id,holdingId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type listManagedControlsResponse200 = {
+  data: ManagedControlActionResponse[]
+  status: 200
+}
+
+export type listManagedControlsResponseSuccess = (listManagedControlsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listManagedControlsResponse = (listManagedControlsResponseSuccess)
+
+export const getListManagedControlsUrl = (id: string,
+    holdingId: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/tracking/${holdingId}/controls`
+}
+
+export const listManagedControls = async (id: string,
+    holdingId: string, options?: RequestInit): Promise<listManagedControlsResponse> => {
+
+  return orvalFetch<listManagedControlsResponse>(getListManagedControlsUrl(id,holdingId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createManagedControlResponse202 = {
+  data: ManagedControlActionResponse
+  status: 202
+}
+
+export type createManagedControlResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type createManagedControlResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type createManagedControlResponseSuccess = (createManagedControlResponse202) & {
+  headers: Headers;
+};
+export type createManagedControlResponseError = (createManagedControlResponse400 | createManagedControlResponse409) & {
+  headers: Headers;
+};
+
+export type createManagedControlResponse = (createManagedControlResponseSuccess | createManagedControlResponseError)
+
+export const getCreateManagedControlUrl = (id: string,
+    holdingId: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/tracking/${holdingId}/controls`
+}
+
+export const createManagedControl = async (id: string,
+    holdingId: string,
+    createManagedControlRequest: CreateManagedControlRequest, options?: RequestInit): Promise<createManagedControlResponse> => {
+
+  return orvalFetch<createManagedControlResponse>(getCreateManagedControlUrl(id,holdingId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createManagedControlRequest,)
+  }
+);}
+
+
+
+export type refreshManagedControlResponse202 = {
+  data: void
+  status: 202
+}
+
+export type refreshManagedControlResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type refreshManagedControlResponseSuccess = (refreshManagedControlResponse202) & {
+  headers: Headers;
+};
+export type refreshManagedControlResponseError = (refreshManagedControlResponse400) & {
+  headers: Headers;
+};
+
+export type refreshManagedControlResponse = (refreshManagedControlResponseSuccess | refreshManagedControlResponseError)
+
+export const getRefreshManagedControlUrl = (id: string,
+    holdingId: string,
+    actionId: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/tracking/${holdingId}/controls/${actionId}/refresh`
+}
+
+export const refreshManagedControl = async (id: string,
+    holdingId: string,
+    actionId: string, options?: RequestInit): Promise<refreshManagedControlResponse> => {
+
+  return orvalFetch<refreshManagedControlResponse>(getRefreshManagedControlUrl(id,holdingId,actionId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type cancelManagedControlResponse200 = {
+  data: ManagedControlActionResponse
+  status: 200
+}
+
+export type cancelManagedControlResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type cancelManagedControlResponseSuccess = (cancelManagedControlResponse200) & {
+  headers: Headers;
+};
+export type cancelManagedControlResponseError = (cancelManagedControlResponse409) & {
+  headers: Headers;
+};
+
+export type cancelManagedControlResponse = (cancelManagedControlResponseSuccess | cancelManagedControlResponseError)
+
+export const getCancelManagedControlUrl = (id: string,
+    holdingId: string,
+    actionId: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/tracking/${holdingId}/controls/${actionId}/cancel`
+}
+
+export const cancelManagedControl = async (id: string,
+    holdingId: string,
+    actionId: string,
+    managedControlRevisionRequest: ManagedControlRevisionRequest, options?: RequestInit): Promise<cancelManagedControlResponse> => {
+
+  return orvalFetch<cancelManagedControlResponse>(getCancelManagedControlUrl(id,holdingId,actionId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      managedControlRevisionRequest,)
+  }
+);}
+
+
+
+export type closeUnverifiedManagedControlResponse200 = {
+  data: ManagedControlActionResponse
+  status: 200
+}
+
+export type closeUnverifiedManagedControlResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type closeUnverifiedManagedControlResponseSuccess = (closeUnverifiedManagedControlResponse200) & {
+  headers: Headers;
+};
+export type closeUnverifiedManagedControlResponseError = (closeUnverifiedManagedControlResponse409) & {
+  headers: Headers;
+};
+
+export type closeUnverifiedManagedControlResponse = (closeUnverifiedManagedControlResponseSuccess | closeUnverifiedManagedControlResponseError)
+
+export const getCloseUnverifiedManagedControlUrl = (id: string,
+    holdingId: string,
+    actionId: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/tracking/${holdingId}/controls/${actionId}/close-unverified`
+}
+
+export const closeUnverifiedManagedControl = async (id: string,
+    holdingId: string,
+    actionId: string,
+    managedControlRevisionRequest: ManagedControlRevisionRequest, options?: RequestInit): Promise<closeUnverifiedManagedControlResponse> => {
+
+  return orvalFetch<closeUnverifiedManagedControlResponse>(getCloseUnverifiedManagedControlUrl(id,holdingId,actionId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      managedControlRevisionRequest,)
   }
 );}
 
