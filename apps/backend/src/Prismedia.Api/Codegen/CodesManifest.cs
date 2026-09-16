@@ -172,6 +172,7 @@ public sealed record RequestKindManifestEntry(
 /// <param name="ProblemCodes">Machine-readable API problem codes.</param>
 /// <param name="ThumbnailMetaIcons">Stable compact-thumbnail metadata icon codes.</param>
 /// <param name="EntityStatCodes">Prismedia-owned persisted statistic codes.</param>
+/// <param name="EntityPositionCodes">Canonical position codes used by labeled metadata entries.</param>
 /// <param name="CollectionRuleTargetKinds">Supported Entity kinds for each collection-rule field.</param>
 /// <param name="MediaResolutionTiers">Source-resolution thresholds in descending priority order.</param>
 public sealed record CodesManifest(
@@ -185,6 +186,7 @@ public sealed record CodesManifest(
     IReadOnlyList<ConstantEntry> ProblemCodes,
     IReadOnlyList<ConstantEntry> ThumbnailMetaIcons,
     IReadOnlyList<ConstantEntry> EntityStatCodes,
+    IReadOnlyList<ConstantEntry> EntityPositionCodes,
     IReadOnlyDictionary<string, IReadOnlyList<string>> CollectionRuleTargetKinds,
     IReadOnlyList<MediaResolutionManifestEntry> MediaResolutionTiers) {
     /// <summary>Reflects the current backend registries into a fresh manifest.</summary>
@@ -204,6 +206,7 @@ public sealed record CodesManifest(
             ReflectConstants(typeof(Contracts.System.ApiProblemCodes)),
             ReflectConstants(typeof(EntityThumbnailMetaIcons)),
             ReflectConstants(typeof(EntityStatCodes)),
+            ReflectConstants(typeof(Domain.Entities.EntityPositionCodes)),
             Enum.GetValues<CollectionRuleField>().ToDictionary(field => field.ToCode(),
                 field => (IReadOnlyList<string>)CollectionRuleFieldPolicy.SupportedKinds(field)
                     .Select(kind => kind.ToCode()).Order(StringComparer.Ordinal).ToArray()),

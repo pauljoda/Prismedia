@@ -139,6 +139,12 @@ async function main() {
     ),
   );
 
+  sections.push(constBlock(
+    "ENTITY_POSITION_CODE", "EntityPositionCode",
+    (manifest.entityPositionCodes ?? []).map((c) => [camel(c.name), c.value]),
+    "registry EntityPositionCodes",
+  ));
+
   // Complete Entity-kind definitions. One generated object carries identity, labels, storage facts,
   // presentation, and behavior flags so clients do not rebuild parallel maps for each concern.
   const entityKindFields = [

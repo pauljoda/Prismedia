@@ -158,13 +158,15 @@ public sealed partial class EntityMetadataApplyService {
             .Where(item => !IgnoredStatCodes.Contains(item.Key.Trim()))
             .ToDictionary(item => item.Key, item => item.Value, StringComparer.OrdinalIgnoreCase);
 
-    private async Task UpsertPositionsAsync(EntityRow entity, IReadOnlyDictionary<string, int> positions, DateTimeOffset now, CancellationToken cancellationToken) {
+    private async Task UpsertPositionsAsync(EntityRow entity, IReadOnlyDictionary<string, int> positions, DateTimeOffset now, CancellationToken cancellationToken,
+        IReadOnlyDictionary<string, string?>? labels = null) {
         foreach (var (code, value) in positions) {
             var existing = ReviveIfDeleted(await _db.EntityPositions.FindAsync([entity.Id, code], cancellationToken));
             if (existing is null) {
-                _db.EntityPositions.Add(new EntityPositionRow { EntityId = entity.Id, Code = code, Value = value, UpdatedAt = now });
+                _db.EntityPositions.Add(new EntityPositionRow { EntityId = entity.Id, Code = code, Value = value, Label = labels?.GetValueOrDefault(code), UpdatedAt = now });
             } else {
                 existing.Value = value;
+                if (labels?.TryGetValue(code, out var label) == true) existing.Label = label;
                 existing.UpdatedAt = now;
             }
         }
@@ -172,14 +174,15 @@ public sealed partial class EntityMetadataApplyService {
         await ApplyStructuralSortOrderAsync(entity, positions, now, cancellationToken);
     }
 
-    private async Task ReplacePositionsAsync(EntityRow entity, IReadOnlyDictionary<string, int> positions, DateTimeOffset now, CancellationToken cancellationToken) {
+    private async Task ReplacePositionsAsync(EntityRow entity, IReadOnlyDictionary<string, int> positions, DateTimeOffset now, CancellationToken cancellationToken,
+        IReadOnlyDictionary<string, string?>? labels = null) {
         var incoming = positions.Keys.ToHashSet(StringComparer.Ordinal);
         var existing = await _db.EntityPositions
             .Where(row => row.EntityId == entity.Id)
             .ToArrayAsync(cancellationToken);
         // See ReplaceDatesAsync: re-sent codes must update in place, not delete-and-re-add.
         _db.EntityPositions.RemoveRange(existing.Where(row => !incoming.Contains(row.Code)));
-        await UpsertPositionsAsync(entity, positions, now, cancellationToken);
+        await UpsertPositionsAsync(entity, positions, now, cancellationToken, labels);
     }
 
     private async Task ApplyStructuralSortOrderAsync(

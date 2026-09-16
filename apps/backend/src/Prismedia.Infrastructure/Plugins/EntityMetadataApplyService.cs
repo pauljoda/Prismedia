@@ -297,7 +297,7 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         }
 
         if (fields.Contains(MetadataPatchField.Positions.ToCode())) {
-            await ReplacePositionsAsync(entity, EntityMetadataPositionRules.Normalize(patch.Positions), now, cancellationToken);
+            await ReplacePositionsAsync(entity, EntityMetadataPositionRules.Normalize(patch), now, cancellationToken, EntityMetadataPositionRules.Labels(patch, allowClear: true));
         }
 
         if (fields.Contains(MetadataPatchField.Classification.ToCode())) {
@@ -490,8 +490,8 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         }
 
         if (selected.Contains(MetadataPatchField.Positions.ToCode())) {
-            var normalizedPositions = EntityMetadataPositionRules.Normalize(patch.Positions);
-            await UpsertPositionsAsync(entity, normalizedPositions, now, cancellationToken);
+            var normalizedPositions = EntityMetadataPositionRules.Normalize(patch);
+            await UpsertPositionsAsync(entity, normalizedPositions, now, cancellationToken, EntityMetadataPositionRules.Labels(patch));
         }
 
         if (selected.Contains(MetadataPatchField.Classification.ToCode()) && !string.IsNullOrWhiteSpace(patch.Classification)) {

@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Text;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
+using Prismedia.Application.Acquisition;
 
 namespace Prismedia.Infrastructure.Plugins;
 
@@ -13,6 +14,7 @@ internal static class StructuralChildMatcher {
         bool cautious) {
         var bestIndex = -1;
         var bestScore = 0;
+        var tied = false;
         for (var index = 0; index < providerChildren.Count; index++) {
             if (usedProviderIndexes.Contains(index)) {
                 continue;
@@ -22,10 +24,13 @@ internal static class StructuralChildMatcher {
             if (score > bestScore) {
                 bestIndex = index;
                 bestScore = score;
+                tied = false;
+            } else if (score > 0 && score == bestScore) {
+                tied = true;
             }
         }
 
-        if (bestIndex < 0) {
+        if (bestIndex < 0 || (tied && localChild.KindCode == EntityKind.ComicInstallment.ToCode())) {
             return null;
         }
 
@@ -40,6 +45,7 @@ internal static class StructuralChildMatcher {
         bool cautious) {
         StructuralLocalChild? bestChild = null;
         var bestScore = 0;
+        var tied = false;
         foreach (var localChild in localChildren) {
             if (usedLocalEntityIds.Contains(localChild.EntityId)) {
                 continue;
@@ -49,10 +55,13 @@ internal static class StructuralChildMatcher {
             if (score > bestScore) {
                 bestChild = localChild;
                 bestScore = score;
+                tied = false;
+            } else if (score > 0 && score == bestScore) {
+                tied = true;
             }
         }
 
-        if (bestChild is null) {
+        if (bestChild is null || (tied && providerChild.TargetKind == EntityKind.ComicInstallment)) {
             return null;
         }
 
@@ -75,6 +84,14 @@ internal static class StructuralChildMatcher {
             return leftId == rightId;
         }
 
+        if (left.TargetKind == EntityKind.ComicInstallment) {
+            if (left.Patch.ExternalIds.Any(identity => right.Patch.ExternalIds.TryGetValue(identity.Key, out var other)
+                && !string.Equals(identity.Value, other, StringComparison.Ordinal))) return false;
+            var leftNumber = InstallmentNumber(left);
+            var rightNumber = InstallmentNumber(right);
+            if (leftNumber is not null || rightNumber is not null) return leftNumber is not null && leftNumber == rightNumber;
+        }
+
         var leftSortOrder = StructuralSortOrder(left);
         var rightSortOrder = StructuralSortOrder(right);
         if (leftSortOrder is not null || rightSortOrder is not null) {
@@ -89,7 +106,7 @@ internal static class StructuralChildMatcher {
     public static int? StructuralSortOrder(EntityMetadataProposal child) =>
         EntityMetadataPositionRules.SortOrderFor(
             child.TargetKind.ToCode(),
-            EntityMetadataPositionRules.Normalize(child.Patch.Positions));
+            EntityMetadataPositionRules.Normalize(child.Patch));
 
     public static bool IsCompatibleStructuralKind(string localKind, EntityKind proposalKind) =>
         localKind == proposalKind.ToCode();
@@ -102,9 +119,18 @@ internal static class StructuralChildMatcher {
             return 0;
         }
 
+        if (providerChild.TargetKind == EntityKind.ComicInstallment) {
+            var localNumber = ComicInstallmentNumber.Parse(localChild.InstallmentLabel) ?? BookReleaseTokens.ParseInstallment(localChild.Title);
+            var remoteNumber = InstallmentNumber(providerChild);
+            if (localNumber is not null && remoteNumber is not null) return localNumber == remoteNumber ? 95 : 0;
+            // A shelf position is not evidence for an issue designation. With only one exact label,
+            // require an explicit binding instead of guessing from a coincidental title or ordinal.
+            if (localNumber is not null || remoteNumber is not null) return providerChild.TargetEntityId == localChild.EntityId ? 100 : 0;
+        }
+
         var providerSortOrder = EntityMetadataPositionRules.SortOrderFor(
             localChild.KindCode,
-            EntityMetadataPositionRules.Normalize(providerChild.Patch.Positions));
+            EntityMetadataPositionRules.Normalize(providerChild.Patch));
         var numbersMatch = localChild.SortOrder is { } localSortOrder &&
             providerSortOrder is { } matchedSortOrder &&
             localSortOrder == matchedSortOrder;
@@ -156,6 +182,10 @@ internal static class StructuralChildMatcher {
             ? StructuralTitleCompatibility.TinyDifference
             : StructuralTitleCompatibility.None;
     }
+
+    private static ComicInstallmentNumber? InstallmentNumber(EntityMetadataProposal proposal) =>
+        ComicInstallmentNumber.Parse(EntityMetadataPositionRules.Labels(proposal.Patch).GetValueOrDefault(EntityPositionCodes.Chapter))
+        ?? BookReleaseTokens.ParseInstallment(proposal.Patch.Title ?? string.Empty);
 
     private static bool HasUsefulTitle(string? value) {
         var tokens = NormalizeTitleTokens(value);
@@ -357,4 +387,6 @@ internal static class StructuralChildMatcher {
     }
 }
 
-internal sealed record StructuralLocalChild(Guid EntityId, string KindCode, string Title, int? SortOrder);
+internal sealed record StructuralLocalChild(Guid EntityId, string KindCode, string Title, int? SortOrder) {
+    public string? InstallmentLabel { get; init; }
+}

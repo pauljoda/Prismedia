@@ -37,7 +37,10 @@ public sealed record IdentifyEntitySnapshot(
 /// <param name="Positions">Known generic ordering/position values for the current entity.</param>
 public sealed record IdentifyStructuralContext(
     IReadOnlyList<IdentifyEntitySnapshot> Ancestors,
-    IReadOnlyDictionary<string, int> Positions);
+    IReadOnlyDictionary<string, int> Positions) {
+    /// <summary>Persisted positions including exact issue/chapter labels; integer values alone are not publication identity.</summary>
+    public IReadOnlyList<Prismedia.Contracts.Entities.EntityPosition> PositionEntries { get; init; } = [];
+}
 
 /// <summary>
 /// User-entered identify query overrides.

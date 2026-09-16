@@ -391,7 +391,10 @@ export function proposalFieldValue(result: EntityMetadataProposal, field: string
     return [...typed, ...entries(patch.dates)].join(", ");
   }
   if (field === METADATA_PATCH_FIELD.stats) return entries(patch.stats).join(", ");
-  if (field === METADATA_PATCH_FIELD.positions) return reviewPositionValue(patch.positions, result.targetKind);
+  if (field === METADATA_PATCH_FIELD.positions) return reviewPositionValue({
+    ...patch.positions,
+    ...Object.fromEntries((patch.positionEntries ?? []).map((entry) => [entry.code, entry.label?.trim() || entry.value])),
+  }, result.targetKind);
   if (field === METADATA_PATCH_FIELD.classification) return patch.classification ?? "";
   if (field === METADATA_PATCH_FIELD.images) return groupReviewImages(result).map((group) => `${group.kind} (${group.images.length})`).join(", ");
   return "";
@@ -429,7 +432,7 @@ export function currentFieldValueForReview(
   if (field === METADATA_PATCH_FIELD.positions) {
     const positions = getCapability(capabilities, CAPABILITY_KIND.position);
     return reviewPositionValue(
-      Object.fromEntries((positions?.items ?? []).map((item) => [item.code, item.value])),
+      Object.fromEntries((positions?.items ?? []).map((item) => [item.code, item.label?.trim() || item.value])),
       detail.kind ?? entity.kind,
     );
   }
@@ -595,6 +598,7 @@ function patchForSelectedFields(
     dateEntries: fields.dates ? (patch.dateEntries ?? []) : [],
     stats: fields.stats ? patch.stats : {},
     positions: fields.positions ? patch.positions : {},
+    positionEntries: fields.positions ? (patch.positionEntries ?? []) : [],
     classification: fields.classification ? patch.classification : null,
     flags: patch.flags ?? null,
   };

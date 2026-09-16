@@ -1,4 +1,5 @@
 using Prismedia.Domain.Entities;
+using Prismedia.Contracts.Plugins;
 
 namespace Prismedia.Infrastructure.Plugins;
 
@@ -33,6 +34,26 @@ internal static class PluginPositionField {
 }
 
 internal static class EntityMetadataPositionRules {
+    public static IReadOnlyDictionary<string, int> Normalize(EntityMetadataPatch patch) {
+        var values = new Dictionary<string, int>(Normalize(patch.Positions), StringComparer.OrdinalIgnoreCase);
+        foreach (var entry in Entries(patch)) values[NormalizeCode(entry.Code)] = entry.Value;
+        return values;
+    }
+
+    public static IReadOnlyDictionary<string, string?> Labels(EntityMetadataPatch patch, bool allowClear = false) =>
+        Entries(patch).Where(entry => entry.Label is not null && (allowClear || !string.IsNullOrWhiteSpace(entry.Label)))
+            .ToDictionary(entry => NormalizeCode(entry.Code), entry => string.IsNullOrWhiteSpace(entry.Label) ? null : entry.Label.Trim(), StringComparer.OrdinalIgnoreCase);
+
+    private static IReadOnlyList<Prismedia.Contracts.Entities.EntityPosition> Entries(EntityMetadataPatch patch) {
+        var entries = patch.PositionEntries ?? [];
+        if (entries.Count > 16 || entries.Any(entry => entry is null || string.IsNullOrWhiteSpace(entry.Code)
+            || entry.Code.Length > 64 || entry.Value < 0 || entry.Label?.Length > 128)
+            || entries.Select(entry => NormalizeCode(entry.Code)).Distinct(StringComparer.OrdinalIgnoreCase).Count() != entries.Count) {
+            throw new ArgumentException("Position entries require unique codes, nonnegative ordering values, and labels of at most 128 characters.");
+        }
+        return entries;
+    }
+
     /// <summary>Gets the plugin wire field for one canonical Prismedia position code.</summary>
     public static string PluginFieldFor(string positionCode) => positionCode switch {
         EntityPositionCodes.Season => PluginPositionField.SeasonNumber,

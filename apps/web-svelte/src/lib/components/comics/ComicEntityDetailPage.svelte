@@ -28,6 +28,7 @@
   import { useEntityAcquisition } from "$lib/components/acquisitions/use-entity-acquisition.svelte";
   import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
   import { getCapability } from "$lib/api/capabilities";
+  import { ENTITY_POSITION_CODE } from "$lib/api/generated/codes";
   import { updateEntityProgress } from "$lib/api/consumption";
   import { fetchEntityReaderManifest } from "$lib/api/entity-reader";
   import {
@@ -114,6 +115,10 @@
   const installmentMetadata = $derived(
     entity ? getCapability(entity.capabilities, CAPABILITY_KIND.comicInstallmentMetadata) : undefined,
   );
+  const installmentLabel = $derived(entity
+    ? getCapability(entity.capabilities, CAPABILITY_KIND.position)?.items
+      .find((position) => position.code === ENTITY_POSITION_CODE.chapter)?.label?.trim()
+    : undefined);
   const seriesMetadata = $derived(
     entity ? getCapability(entity.capabilities, CAPABILITY_KIND.seriesMetadata) : undefined,
   );
@@ -360,7 +365,7 @@
 
         {#snippet heroBadges()}
           {#if installmentMetadata}
-            <UiBadge variant="outline">{installmentKindLabel(installmentMetadata.installmentKind)}</UiBadge>
+            <UiBadge variant="outline">{[installmentKindLabel(installmentMetadata.installmentKind), installmentLabel].filter(Boolean).join(" ")}</UiBadge>
           {/if}
           {#if seriesMetadata?.status}
             <UiBadge variant="outline">{seriesMetadata.status}</UiBadge>

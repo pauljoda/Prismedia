@@ -113,6 +113,26 @@ turn absent provider evidence into a delete instruction. Populated tag and credi
 lists retain their reviewed replacement behavior. The manual metadata editor has a
 separate explicit field-selection contract and can clear those fields.
 
+### Exact publication numbering
+
+Plugins can send `positionEntries` alongside the legacy `positions` dictionary:
+
+```json
+{ "positionEntries": [{ "code": "chapter", "value": 13, "label": "12.5" }] }
+```
+
+`value` is a nonnegative integer ordering hint. `label` retains the exact issue or
+chapter designation, including fractions, suffixes, and signs. Typed entries take
+precedence for the same canonical code. Missing labels preserve existing evidence;
+an explicitly selected manual empty label clears it. Entries are limited to 16
+unique codes and labels to 128 characters. Identify requests also carry these entries
+in `structuralContext.positionEntries`.
+
+Comic matching compares exact designations independently from ordering, never
+rounding chapter 12.5 to 12. Ambiguous same-number local holdings remain unresolved.
+Release identities still distinguish translations and variants; a number alone does
+not establish that two provider releases are interchangeable.
+
 - `children` are structural: seasons, episodes, volumes, chapters, albums, or
   tracks.
 - `relationships` are non-structural: people, studios, tags, and related works.

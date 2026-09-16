@@ -1825,6 +1825,20 @@ export const ENTITY_STAT_CODE = {
 
 export type EntityStatCode = (typeof ENTITY_STAT_CODE)[keyof typeof ENTITY_STAT_CODE];
 
+// source: registry EntityPositionCodes
+export const ENTITY_POSITION_CODE = {
+  absoluteEpisode: "absolute-episode",
+  chapter: "chapter",
+  episode: "episode",
+  page: "page",
+  season: "season",
+  sort: "sort",
+  track: "track",
+  volume: "volume",
+} as const;
+
+export type EntityPositionCode = (typeof ENTITY_POSITION_CODE)[keyof typeof ENTITY_POSITION_CODE];
+
 // source: registry EntityKindDefinitions.Category
 export const ENTITY_KIND_CATEGORY = {
   collection: "Collection",

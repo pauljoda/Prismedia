@@ -60,6 +60,13 @@ public sealed record EntityMetadataPatch(
     public IReadOnlyList<EntityMetadataDatePatch> DateEntries { get; init; } = [];
 
     /// <summary>
+    /// Positions with exact display designations such as issue 12.5 or 12A. Value is an integer
+    /// ordering hint, not issue identity. Entries override the matching legacy Positions key.
+    /// An omitted label preserves existing evidence; a selected manual empty label clears it.
+    /// </summary>
+    public IReadOnlyList<Prismedia.Contracts.Entities.EntityPosition> PositionEntries { get; init; } = [];
+
+    /// <summary>
     /// Formal alternative names for this exact provider work, such as its original, translated, or
     /// romanized title. Franchise names, season labels, and unqualified scene synonyms do not belong
     /// here. Null preserves existing evidence during partial metadata updates; an empty list clears it.

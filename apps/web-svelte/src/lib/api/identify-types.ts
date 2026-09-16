@@ -1,5 +1,6 @@
 import type { EntityKind } from "$lib/api/generated/model";
 import type { PluginSearchDefinition } from "$lib/api/generated/model";
+import type { EntityMetadataPatch as GeneratedMetadataPatch } from "$lib/api/generated/model";
 import type {
   EntityDateTypeCode,
   IdentifyActionCode,
@@ -89,6 +90,7 @@ export interface EntityMetadataPatch {
   dateEntries?: Array<{ type: EntityDateTypeCode; value: string }>;
   stats: Record<string, number>;
   positions: Record<string, number>;
+  positionEntries?: GeneratedMetadataPatch["positionEntries"];
   classification?: string | null;
   flags?: EntityMetadataFlagsPatch | null;
 }

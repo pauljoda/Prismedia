@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { ENTITY_DATE_TYPE, ENTITY_KIND, METADATA_PATCH_FIELD } from "$lib/entities/entity-codes";
+import { ENTITY_POSITION_CODE } from "$lib/api/generated/codes";
 import type { EntityMetadataProposal } from "$lib/api/identify-types";
 import type { EntityCard as EntityDetailCard, EntityKind } from "$lib/api/generated/model";
 import {
@@ -513,6 +514,19 @@ describe("identify review helpers", () => {
     const season = proposal("season-1", "video-season");
     season.patch.positions = { seasonNumber: 1 };
     expect(proposalFieldValue(season, "positions")).toBe("Sort order: Season 1");
+  });
+
+  it("shows and submits exact comic designations independently of integer ordering", () => {
+    const root = proposal("issue", ENTITY_KIND.comicInstallment);
+    root.patch.positionEntries = [{ code: ENTITY_POSITION_CODE.chapter, value: 12, label: "12.5" }];
+    const selection = defaultFieldSelectionForReview(root);
+    expect(selection[METADATA_PATCH_FIELD.positions]).toBe(true);
+    expect(proposalFieldValue(root, METADATA_PATCH_FIELD.positions)).toContain("12.5");
+    const payload = buildProposalForApply(root, {
+      selectedFieldsByProposal: { issue: selection }, selectedImagesByProposal: {},
+      selectedCreditsByProposal: {}, selectedTagsByProposal: {}, selectedCascade: {},
+    });
+    expect(payload.patch.positionEntries).toEqual(root.patch.positionEntries);
   });
 
   it("allows studio logo artwork to be reviewed and carried through walked relationship selections", () => {

@@ -15,6 +15,32 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EntityMetadataApplyServiceTests {
     [Fact]
+    public async Task TypedPositionsRetainExactComicLabelsAndLegacyOmissionPreservesThem() {
+        await using var db = CreateContext();
+        var id = Guid.NewGuid();
+        SeedEntity(db, id, EntityKind.ComicInstallment.ToCode(), "Interlude");
+        await db.SaveChangesAsync();
+        var service = new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(Path.GetTempPath()));
+        var patch = EmptyPatch() with { PositionEntries = [new EntityPosition(EntityPositionCodes.Chapter, 12, "12.5")] };
+        var proposal = new EntityMetadataProposal("interlude", "fixture-provider", EntityKind.ComicInstallment, null, null,
+            patch, [], [], [], Relationships: []);
+        var fields = ProposalApplySelection.SelectAllPresentFields(proposal).ToArray();
+        Assert.Contains(MetadataPatchField.Positions.ToCode(), fields);
+        await service.ApplyAsync(id, proposal, fields, null, default);
+        var position = (await db.EntityPositions.FindAsync(id, EntityPositionCodes.Chapter))!;
+        Assert.Equal("12.5", position.Label);
+        Assert.Equal(12, position.Value);
+        await service.ApplyAsync(id, proposal with { Patch = EmptyPatch() with {
+            Positions = new Dictionary<string, int> { [EntityPositionCodes.Chapter] = 13 }
+        } }, fields, null, default);
+        Assert.Equal("12.5", position.Label);
+        await service.ApplyPatchAsync(id, new EntityMetadataUpdateRequest(fields, patch with {
+            PositionEntries = [new EntityPosition(EntityPositionCodes.Chapter, 13, "")]
+        }), default);
+        Assert.Null(position.Label);
+    }
+
+    [Fact]
     public async Task ManualScalarClearIsProtectedAndUnlockingAllowsAttributedProviderEnrichment() {
         await using var db = CreateContext();
         var id = Guid.NewGuid();

@@ -389,8 +389,8 @@ public sealed partial class EntityMetadataApplyService {
             await UpsertStatsAsync(entity.Id, patch.Stats, now, cancellationToken);
         }
 
-        if (patch.Positions.Count > 0) {
-            var normalizedPositions = EntityMetadataPositionRules.Normalize(patch.Positions);
+        if (patch.Positions.Count > 0 || patch.PositionEntries is { Count: > 0 }) {
+            var normalizedPositions = EntityMetadataPositionRules.Normalize(patch);
             // A complete canonical episode numbering snapshot replaces its optional absolute alias.
             // Sparse patches and fill-missing enrichment retain positions they do not address.
             if (entity.KindCode == EntityKind.VideoEpisode.ToCode()
@@ -400,7 +400,7 @@ public sealed partial class EntityMetadataApplyService {
                 && await _db.EntityPositions.FindAsync([entity.Id, EntityPositionCodes.AbsoluteEpisode], cancellationToken) is { } obsolete) {
                 _db.EntityPositions.Remove(obsolete);
             }
-            await UpsertPositionsAsync(entity, normalizedPositions, now, cancellationToken);
+            await UpsertPositionsAsync(entity, normalizedPositions, now, cancellationToken, EntityMetadataPositionRules.Labels(patch));
         }
 
         if (!string.IsNullOrWhiteSpace(patch.Classification)) {

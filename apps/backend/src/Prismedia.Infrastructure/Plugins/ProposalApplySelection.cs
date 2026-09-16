@@ -27,7 +27,7 @@ public static class ProposalApplySelection {
                 fields.Add(MetadataPatchField.Dates.ToCode());
             }
             if (patch.Stats is { Count: > 0 }) fields.Add(MetadataPatchField.Stats.ToCode());
-            if (patch.Positions is { Count: > 0 }) fields.Add(MetadataPatchField.Positions.ToCode());
+            if (patch.Positions is { Count: > 0 } || patch.PositionEntries is { Count: > 0 }) fields.Add(MetadataPatchField.Positions.ToCode());
             if (!string.IsNullOrWhiteSpace(patch.Classification)) fields.Add(MetadataPatchField.Classification.ToCode());
             if (patch.Flags is not null) fields.Add(MetadataPatchField.Flags.ToCode());
             if (patch.Tags is { Count: > 0 }) fields.Add(MetadataPatchField.Tags.ToCode());

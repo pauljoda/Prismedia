@@ -11,6 +11,7 @@ import type { EntityMetadataPatchDates } from './entityMetadataPatchDates';
 import type { EntityMetadataPatchExternalIds } from './entityMetadataPatchExternalIds';
 import type { EntityMetadataPatchPositions } from './entityMetadataPatchPositions';
 import type { EntityMetadataPatchStats } from './entityMetadataPatchStats';
+import type { EntityPosition } from './entityPosition';
 
 export interface EntityMetadataPatch {
   /** @nullable */
@@ -35,6 +36,7 @@ export interface EntityMetadataPatch {
   rating?: number | string | null;
   flags?: null | EntityMetadataFlagsPatch;
   dateEntries?: EntityMetadataDatePatch[];
+  positionEntries?: EntityPosition[];
   /** @nullable */
   alternativeTitles?: string[] | null;
 }
