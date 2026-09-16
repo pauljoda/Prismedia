@@ -132,6 +132,9 @@
                   <a class={buttonVariants({ variant: "secondary", size: "sm" })} href={`/request/catalogs?connection=${connection.id}`}>Browse catalog</a>
                 {/if}
                 <Button variant="ghost" size="sm" onclick={() => openEditor(connection)} disabled={editorOpen || !!testingId || !plugin?.enabled}>Edit</Button>
+                {#if connection.status === CONNECTION_STATUS.ready && connection.effectiveCapabilities.some(item => item.kind === PLUGIN_CAPABILITY.connectedLibrary)}
+                  <a class={buttonVariants({ variant: "secondary", size: "sm" })} href={`/request/libraries?connection=${connection.id}`}>Browse library</a>
+                {/if}
                 <Button variant="ghost" size="sm" onclick={() => deleteTarget = connection} disabled={editorOpen || !!testingId}>Remove</Button>
               </div>
             </article>

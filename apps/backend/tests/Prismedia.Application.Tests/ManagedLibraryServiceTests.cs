@@ -1,0 +1,85 @@
+using Prismedia.Application.Integrations;
+using Prismedia.Contracts.Integrations;
+using Prismedia.Contracts.Entities;
+using Prismedia.Contracts.Plugins;
+using Prismedia.Domain.Entities;
+using Prismedia.Domain.Integrations;
+
+namespace Prismedia.Application.Tests;
+
+public sealed class ManagedLibraryServiceTests {
+    [Fact]
+    public async Task ReadHoldingPinsIdentityAndReturnsRemoteEvidenceWithoutImporting() {
+        var fixture = new Fixture();
+        var page = await fixture.Service.SearchAsync(fixture.Connection.State.Id, new(EntityKind.Movie), default);
+        var item = Assert.Single(page.Items);
+        var snapshot = await fixture.Service.GetAsync(fixture.Connection.State.Id, new(item.EntityKind, item.RemoteId, item.ExternalIds), default);
+        Assert.Single(snapshot.Files);
+        fixture.Snapshot = snapshot with { Item = item with { ExternalIds = new Dictionary<string, string> { [ExternalIdProviders.Tmdb] = "other" } } };
+        await Assert.ThrowsAsync<IntegrationInvocationException>(() => fixture.Service.GetAsync(fixture.Connection.State.Id, new(item.EntityKind, item.RemoteId, item.ExternalIds), default));
+    }
+
+    [Fact]
+    public async Task RevokedManifestCannotReadSecretsOrExecuteLibraryOperations() {
+        var fixture = new Fixture();
+        fixture.Manifest = fixture.Manifest with { Integration = new(1, [], []) };
+        await Assert.ThrowsAsync<ArgumentException>(() => fixture.Service.SearchAsync(fixture.Connection.State.Id, new(EntityKind.Movie), default));
+        Assert.Equal(0, fixture.SecretReads);
+        Assert.Equal(0, fixture.Calls);
+    }
+
+    [Fact]
+    public async Task OversizedPagesAndDuplicateFileAssociationsAreRejected() {
+        var fixture = new Fixture();
+        fixture.Page = new([fixture.Snapshot.Item, fixture.Snapshot.Item]);
+        await Assert.ThrowsAsync<IntegrationInvocationException>(() => fixture.Service.SearchAsync(fixture.Connection.State.Id, new(EntityKind.Movie, Limit: 1), default));
+        fixture.Snapshot = fixture.Snapshot with { Files = [fixture.Snapshot.Files[0], fixture.Snapshot.Files[0]] };
+        await Assert.ThrowsAsync<IntegrationInvocationException>(() => fixture.Service.GetAsync(fixture.Connection.State.Id,
+            new(EntityKind.Movie, fixture.Snapshot.Item.RemoteId, fixture.Snapshot.Item.ExternalIds), default));
+    }
+
+    [Fact]
+    public async Task UnknownFileCountIsPreservedAndOptionsStayExternal() {
+        var fixture = new Fixture();
+        fixture.Page = new([fixture.Snapshot.Item with { RemoteFileCount = null }]);
+        Assert.Null(Assert.Single((await fixture.Service.SearchAsync(fixture.Connection.State.Id, new(EntityKind.Movie), default)).Items).RemoteFileCount);
+        var options = await fixture.Service.OptionsAsync(fixture.Connection.State.Id, new(EntityKind.Movie), default);
+        Assert.Equal("external-profile", Assert.Single(options.Profiles).Id);
+    }
+
+    private sealed class Fixture : IIntegrationConnectionStore, IIntegrationPluginGateway, IIntegrationManagerGateway {
+        private const string PluginId = "fixture-manager";
+        internal IntegrationConnection Connection { get; }
+        internal PluginManifest Manifest { get; set; }
+        internal ManagedLibraryPage Page { get; set; }
+        internal ManagedItemSnapshot Snapshot { get; set; }
+        internal ManagedLibraryService Service { get; }
+        internal int SecretReads { get; private set; }
+        internal int Calls { get; private set; }
+        internal Fixture() {
+            var support = new IntegrationSupport[] {
+                new(PluginCapability.ConnectedLibrary, [IntegrationOperation.SearchLibrary, IntegrationOperation.GetLibraryItem], [EntityKind.Movie]),
+                new(PluginCapability.ExternalManager, [IntegrationOperation.ManagerOptions], [EntityKind.Movie])
+            };
+            Connection = IntegrationConnection.Create(PluginId, "Manager", "http://manager.test/", true, support.Select(value => value.Kind).ToArray(), new Dictionary<string, string>());
+            Connection.RecordProbe("installation", support, null, DateTimeOffset.UtcNow);
+            Manifest = new(2, [], PluginId, "Manager", "1.0.0", "dotnet-process", "plugin.dll", new("2.0.0", null, "3.8.0", null), [], false, [],
+                Integration: new(1, support.Select(value => new PluginIntegrationCapability(value.Kind, value.Operations, value.EntityKinds)).ToArray(), []));
+            var item = new ManagedLibraryItem("1", EntityKind.Movie, "Movie", 2024, new Dictionary<string, string> { [ExternalIdProviders.Tmdb] = "1001" }, false, "external-profile", 1);
+            Page = new([item]);
+            Snapshot = new(item, "/remote/movie", [new("11", "/remote/movie/file.mkv", 128, null, [new("1", EntityKind.Movie, "Movie")])], DateTimeOffset.UtcNow);
+            Service = new(new(this, this), this);
+        }
+        public Task<IReadOnlyList<StoredIntegrationConnection>> ListAsync(CancellationToken cancellationToken) => throw new NotImplementedException();
+        public Task<StoredIntegrationConnection?> FindAsync(Guid id, CancellationToken cancellationToken) => Task.FromResult<StoredIntegrationConnection?>(id == Connection.State.Id ? new(Connection, []) : null);
+        public Task SaveAsync(IntegrationConnection connection, long? expectedRevision, IReadOnlyDictionary<string, string?> secretChanges, CancellationToken cancellationToken) => throw new NotImplementedException();
+        public Task<IReadOnlyDictionary<string, string>> ReadSecretsAsync(Guid id, CancellationToken cancellationToken) { SecretReads++; return Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>()); }
+        public Task DeleteAsync(Guid id, long expectedRevision, CancellationToken cancellationToken) => throw new NotImplementedException();
+        public Task<PluginManifest?> FindAsync(string pluginId, CancellationToken cancellationToken) => Task.FromResult<PluginManifest?>(Manifest);
+        public Task<ConnectionProbeResult> ProbeAsync(string pluginId, IntegrationConnectionContext connection, CancellationToken cancellationToken) => throw new NotImplementedException();
+        public Task<ManagedLibraryPage> SearchLibraryAsync(string pluginId, IntegrationConnectionContext connection, ManagedLibraryQuery input, CancellationToken cancellationToken) { Calls++; return Task.FromResult(Page); }
+        public Task<ManagedItemSnapshot> GetLibraryItemAsync(string pluginId, IntegrationConnectionContext connection, ManagedItemInput input, CancellationToken cancellationToken) { Calls++; return Task.FromResult(Snapshot); }
+        public Task<ManagerOptions> GetOptionsAsync(string pluginId, IntegrationConnectionContext connection, ManagerOptionsInput input, CancellationToken cancellationToken) =>
+            Task.FromResult(new ManagerOptions([new("external-profile", "Existing profile")], [new("root", "/remote", true)]));
+    }
+}

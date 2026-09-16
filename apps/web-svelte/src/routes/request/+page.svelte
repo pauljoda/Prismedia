@@ -33,6 +33,7 @@
       <div class="flex flex-wrap gap-2">
       <a class={buttonVariants({ variant: "secondary", size: "sm" })} href="/request/catalogs">Browse catalogs</a>
       <a class={buttonVariants({ variant: "secondary", size: "sm" })} href="/request/urls">Import from URL</a>
+      <a class={buttonVariants({ variant: "secondary", size: "sm" })} href="/request/libraries">Connected libraries</a>
       <Button
         type="button"
         variant="secondary"

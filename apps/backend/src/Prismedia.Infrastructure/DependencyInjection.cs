@@ -97,6 +97,8 @@ public static class DependencyInjection {
         services.AddScoped<IIntegrationPluginGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
         services.AddScoped<IIntegrationDiscoveryGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
         services.AddScoped<IIntegrationTransferGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
+        services.AddScoped<IIntegrationManagerGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
+        services.AddScoped<ManagedLibraryService>();
         services.AddSingleton<IDiscoveryTokenProtector>(new DiscoveryTokenProtector(dataDir));
         services.AddSingleton<IExecutorSelectionProtector>(new ExecutorSelectionProtector(dataDir));
         services.AddScoped<IntegrationConnectionAccess>();

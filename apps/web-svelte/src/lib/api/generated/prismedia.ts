@@ -198,6 +198,12 @@ import type {
   ListVideosParams,
   LoginRequest,
   LoginResponse,
+  ManagedItemInput,
+  ManagedItemSnapshot,
+  ManagedLibraryPage,
+  ManagedLibraryQuery,
+  ManagerOptions,
+  ManagerOptionsInput,
   ManualReplacementQueueRequest,
   ManualReplacementSearchRequest,
   ManualReplacementSearchResult,
@@ -9461,6 +9467,132 @@ export const acquireExecutorItem = async (id: string,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       acquireExecutorItemRequest,)
+  }
+);}
+
+
+
+export type searchConnectedLibraryResponse200 = {
+  data: ManagedLibraryPage
+  status: 200
+}
+
+export type searchConnectedLibraryResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type searchConnectedLibraryResponseSuccess = (searchConnectedLibraryResponse200) & {
+  headers: Headers;
+};
+export type searchConnectedLibraryResponseError = (searchConnectedLibraryResponse400) & {
+  headers: Headers;
+};
+
+export type searchConnectedLibraryResponse = (searchConnectedLibraryResponseSuccess | searchConnectedLibraryResponseError)
+
+export const getSearchConnectedLibraryUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/search`
+}
+
+export const searchConnectedLibrary = async (id: string,
+    managedLibraryQuery: ManagedLibraryQuery, options?: RequestInit): Promise<searchConnectedLibraryResponse> => {
+
+  return orvalFetch<searchConnectedLibraryResponse>(getSearchConnectedLibraryUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      managedLibraryQuery,)
+  }
+);}
+
+
+
+export type getConnectedLibraryItemResponse200 = {
+  data: ManagedItemSnapshot
+  status: 200
+}
+
+export type getConnectedLibraryItemResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type getConnectedLibraryItemResponseSuccess = (getConnectedLibraryItemResponse200) & {
+  headers: Headers;
+};
+export type getConnectedLibraryItemResponseError = (getConnectedLibraryItemResponse400) & {
+  headers: Headers;
+};
+
+export type getConnectedLibraryItemResponse = (getConnectedLibraryItemResponseSuccess | getConnectedLibraryItemResponseError)
+
+export const getGetConnectedLibraryItemUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/item`
+}
+
+export const getConnectedLibraryItem = async (id: string,
+    managedItemInput: ManagedItemInput, options?: RequestInit): Promise<getConnectedLibraryItemResponse> => {
+
+  return orvalFetch<getConnectedLibraryItemResponse>(getGetConnectedLibraryItemUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      managedItemInput,)
+  }
+);}
+
+
+
+export type getManagerOptionsResponse200 = {
+  data: ManagerOptions
+  status: 200
+}
+
+export type getManagerOptionsResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type getManagerOptionsResponseSuccess = (getManagerOptionsResponse200) & {
+  headers: Headers;
+};
+export type getManagerOptionsResponseError = (getManagerOptionsResponse400) & {
+  headers: Headers;
+};
+
+export type getManagerOptionsResponse = (getManagerOptionsResponseSuccess | getManagerOptionsResponseError)
+
+export const getGetManagerOptionsUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/manager/options`
+}
+
+export const getManagerOptions = async (id: string,
+    managerOptionsInput: ManagerOptionsInput, options?: RequestInit): Promise<getManagerOptionsResponse> => {
+
+  return orvalFetch<getManagerOptionsResponse>(getGetManagerOptionsUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      managerOptionsInput,)
   }
 );}
 

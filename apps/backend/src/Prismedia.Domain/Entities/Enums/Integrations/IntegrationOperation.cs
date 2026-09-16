@@ -62,6 +62,10 @@ public enum IntegrationOperation {
     [Code("lookup-managed")]
     LookupManaged,
 
+    /// <summary>Read external profile, root-folder, and request-policy choices without modifying them.</summary>
+    [Code("manager-options")]
+    ManagerOptions,
+
     /// <summary>Ensure a remote work exists using stable identities.</summary>
     [Code("ensure-managed")]
     EnsureManaged,

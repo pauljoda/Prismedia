@@ -11,7 +11,7 @@ public static class PluginCapabilityPolicy {
         PluginCapability.TransferExecutor => operation is IntegrationOperation.Submit or IntegrationOperation.FindSubmission or IntegrationOperation.CancelSubmission
             or IntegrationOperation.GetJob or IntegrationOperation.Cancel or IntegrationOperation.ListArtifacts
             or IntegrationOperation.AuthorizeArtifact or IntegrationOperation.RenewRetention or IntegrationOperation.Acknowledge,
-        PluginCapability.ExternalManager => operation is IntegrationOperation.LookupManaged or IntegrationOperation.EnsureManaged
+        PluginCapability.ExternalManager => operation is IntegrationOperation.LookupManaged or IntegrationOperation.ManagerOptions or IntegrationOperation.EnsureManaged
             or IntegrationOperation.RequestManaged or IntegrationOperation.ConfigureManaged or IntegrationOperation.ReconcileManaged,
         PluginCapability.ConnectedLibrary => operation is IntegrationOperation.SearchLibrary or IntegrationOperation.GetLibraryItem,
         _ => false

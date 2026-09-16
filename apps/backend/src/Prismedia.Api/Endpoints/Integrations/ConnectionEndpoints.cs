@@ -51,6 +51,15 @@ public static class ConnectionEndpoints {
                 return Results.Accepted($"/api/integration-transfers/{response.Id}", response);
             }).WithName("AcquireExecutorItem").Produces<IntegrationTransferResponse>(202).Produces<ApiProblem>(400).Produces<ApiProblem>(409)
             .AddEndpointFilter<IntegrationTransferProblemFilter>();
+        group.MapPost("/{id:guid}/library/search", async (Guid id, ManagedLibraryQuery request, ManagedLibraryService service, CancellationToken cancellationToken) =>
+            Results.Ok(await service.SearchAsync(id, request, cancellationToken)))
+            .WithName("SearchConnectedLibrary").Produces<ManagedLibraryPage>().Produces<ApiProblem>(400);
+        group.MapPost("/{id:guid}/library/item", async (Guid id, ManagedItemInput request, ManagedLibraryService service, CancellationToken cancellationToken) =>
+            Results.Ok(await service.GetAsync(id, request, cancellationToken)))
+            .WithName("GetConnectedLibraryItem").Produces<ManagedItemSnapshot>().Produces<ApiProblem>(400);
+        group.MapPost("/{id:guid}/manager/options", async (Guid id, ManagerOptionsInput request, ManagedLibraryService service, CancellationToken cancellationToken) =>
+            Results.Ok(await service.OptionsAsync(id, request, cancellationToken)))
+            .WithName("GetManagerOptions").Produces<ManagerOptions>().Produces<ApiProblem>(400);
         return group;
     }
 

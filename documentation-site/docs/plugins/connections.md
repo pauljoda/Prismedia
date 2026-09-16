@@ -225,6 +225,32 @@ Direct catalog downloads use the same byte evidence and local ownership rules,
 without inventing a remote job or requiring a remote receipt endpoint.
 
 
+## Connected libraries
+
+**Requests → Connected libraries**, or **Browse library** on a connection, reads existing
+holdings through the `connected-library` capability. Search by title or metadata identity,
+then inspect the holding's final file associations and external quality profile. An outage
+produces an error rather than an empty successful library. Remote file counts and paths do
+not establish that Prismedia can read or play those files.
+
+The Radarr adapter supports Radarr 6.x API v3; the Sonarr adapter supports Sonarr 4.x API v3.
+Configure the application base URL, including any reverse-proxy prefix, and its API key.
+Multiple Connections keep their configuration and identities separate. The current adapters
+read existing holdings, profiles, and root folders; they do not issue acquisition or monitoring
+commands. Sonarr preserves exact episode-to-file associations, including specials and files
+covering several episodes. Manager profile and folder IDs remain external choices.
+
+Neither API supplies a persistent installation UUID. Prismedia reports that limitation and
+scopes remote IDs to the Connection. Inspecting an item also verifies its selected metadata
+identities so a reused numeric ID cannot silently substitute another holding. A manager's
+remote filesystem path requires an explicit mapping before it can become a local library source.
+
+Plugin reads use `search-library`, `get-library-item`, and `manager-options` with typed host
+contracts. Pages are limited to 100 holdings; item snapshots to 10,000 files. Adapters reject
+unsupported server majors and credential-bearing redirects. Their library-list endpoints
+return the whole upstream catalog, so the adapter rejects responses exceeding 8 MiB rather
+than silently truncating them. Pagination reflects an observed library that may change between reads.
+
 ## Import from a URL
 
 **Requests → Import from URL** shows tested connections with URL inspection and
