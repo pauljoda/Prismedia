@@ -100,6 +100,12 @@ public static class DependencyInjection {
         services.AddSingleton<IDiscoveryTokenProtector>(new DiscoveryTokenProtector(dataDir));
         services.AddScoped<IntegrationConnectionAccess>();
         services.AddScoped<CatalogDiscoveryService>();
+        services.AddScoped<CatalogAcquisitionService>();
+        services.AddScoped<IIntegrationTransferScheduler, IntegrationTransferScheduler>();
+        services.AddScoped<IIntegrationTransferStore, EfIntegrationTransferStore>();
+        services.AddSingleton(new TransferPlanProtector(dataDir));
+        services.AddScoped<IIntegrationPublicationVerifier, IntegrationPublicationVerifier>();
+        services.AddScoped<IIntegrationImportPlacement, IntegrationImportPlacement>();
         services.AddScoped<ConnectionService>();
         services.AddScoped<IntegrationManifestReader>();
         services.AddSingleton(new IntegrationArtifactStorageOptions(Path.Combine(dataDir, "integrations", "artifacts")));

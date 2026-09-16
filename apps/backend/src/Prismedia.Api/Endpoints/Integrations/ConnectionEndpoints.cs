@@ -35,6 +35,12 @@ public static class ConnectionEndpoints {
             CatalogDiscoveryService service, CancellationToken cancellationToken) =>
             Results.Ok(await service.BrowseAsync(id, request, cancellationToken)))
             .WithName("BrowseConnection").Produces<DiscoveryPageResponse>().Produces<ApiProblem>(400);
+        group.MapPost("/{id:guid}/acquire", async (Guid id, AcquireCatalogOfferRequest request,
+            CatalogAcquisitionService service, CancellationToken cancellationToken) => {
+                var response = await service.AcquireAsync(id, request, cancellationToken);
+                return Results.Accepted($"/api/integration-transfers/{response.Id}", response);
+            }).WithName("AcquireCatalogOffer").Produces<IntegrationTransferResponse>(202).Produces<ApiProblem>(400).Produces<ApiProblem>(409)
+            .AddEndpointFilter<IntegrationTransferProblemFilter>();
         return group;
     }
 
@@ -42,6 +48,7 @@ public static class ConnectionEndpoints {
         public async ValueTask<object?> InvokeAsync(EndpointFilterInvocationContext context, EndpointFilterDelegate next) {
             try { return await next(context); }
             catch (ConnectionNotFoundException error) { return Results.NotFound(new ApiProblem(ApiProblemCodes.ConnectionNotFound, error.Message)); }
+            catch (ConnectionInUseException error) { return Results.Conflict(new ApiProblem(ApiProblemCodes.ConnectionInUse, error.Message)); }
             catch (ConnectionConflictException error) { return Results.Conflict(new ApiProblem(ApiProblemCodes.ConnectionConflict, error.Message)); }
             catch (ArgumentException error) { return Results.BadRequest(new ApiProblem(ApiProblemCodes.ConnectionInvalid, error.Message)); }
             catch (ConnectionSecretUnavailableException error) { return Results.BadRequest(new ApiProblem(ApiProblemCodes.ConnectionUnavailable, error.Message)); }

@@ -35,6 +35,7 @@ public static class EndpointRouteBuilderExtensions {
         routes.MapUpdateCheckEndpoints();
         routes.MapPluginEndpoints();
         routes.MapConnectionEndpoints();
+        routes.MapIntegrationTransferEndpoints();
         routes.MapIdentifyEndpoints();
         routes.MapOrganizeEndpoints();
         routes.MapRequestEndpoints();

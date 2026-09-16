@@ -1,15 +1,19 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { page } from "$app/state";
-  import { AlertTriangle, ArrowLeft, ArrowRight, BookOpen, FolderOpen, Search, ShieldUser } from "@lucide/svelte";
+  import { AlertTriangle, ArrowLeft, ArrowRight, BookOpen, Download, FolderOpen, Search, ShieldUser } from "@lucide/svelte";
   import { Alert, Badge, Button, Panel, Select, TextInput, buttonVariants } from "@prismedia/ui-svelte";
   import { CONNECTION_STATUS, INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
-  import type { ConnectionResponse, DiscoveryPageResponse, EntityKind } from "$lib/api/generated/model";
+  import type { ConnectionResponse, DiscoveryItemResponse, DiscoveryPageResponse, EntityKind, IntegrationTransferResponse, LibraryRoot } from "$lib/api/generated/model";
   import { fetchConnections, fetchConnectionCatalog } from "$lib/api/connections";
+  import { acquirePublication, fetchIntegrationTransfers } from "$lib/api/integration-transfers";
+  import { fetchLibraryRoots } from "$lib/api/settings";
+  import TransferList from "$lib/components/integrations/TransferList.svelte";
+  import { isTransferTerminal } from "$lib/integrations/transfer-labels";
   import BackLink from "$lib/components/BackLink.svelte";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import { getEntityKindLabel } from "$lib/entities/entity-grid";
-  import { acquisitionAccessLabels, publicationFormatLabel } from "$lib/integrations/catalog-labels";
+  import { acquisitionAccessLabels, publicationFormatLabel, canImportPublication } from "$lib/integrations/catalog-labels";
   import { useSession } from "$lib/stores/session.svelte";
 
   const session = useSession();
@@ -23,6 +27,13 @@
   let history = $state<Array<{ catalog: DiscoveryPageResponse; container: string | null; query: string | null }>>([]);
   let loading = $state(true);
   let error = $state<string | null>(null);
+  let roots = $state<LibraryRoot[]>([]);
+  let rootId = $state("");
+  let transfers = $state<IntegrationTransferResponse[]>([]);
+  let transferError = $state<string | null>(null);
+  let refreshError = $state<string | null>(null);
+  let submitting = $state(false);
+  const operations = new Map<string, string>();
   let requestSequence = 0;
   const connection = $derived(connections.find(item => item.id === connectionId));
   const support = $derived(connection?.effectiveCapabilities.find(item => item.kind === PLUGIN_CAPABILITY.catalogDiscovery));
@@ -30,11 +41,37 @@
   const canBrowse = $derived(support?.operations.includes(INTEGRATION_OPERATION.browse) ?? false);
 
 
-  onMount(() => { if (session.isAdmin) void initialize(); else loading = false; });
+  onMount(() => {
+    if (session.isAdmin) void initialize(); else loading = false;
+    const timer = setInterval(() => {
+      if (session.isAdmin && transfers.some(item => !isTransferTerminal(item.phase))) void refreshTransfers();
+    }, 5000);
+    return () => clearInterval(timer);
+  });
+  async function refreshTransfers() {
+    try { transfers = await fetchIntegrationTransfers(); refreshError = null; }
+    catch (cause) { refreshError = cause instanceof Error ? cause.message : "Could not refresh imports"; }
+  }
+  async function acquire(item: DiscoveryItemResponse, offerId: string) {
+    if (!rootId || submitting) return;
+    const key = JSON.stringify([connectionId, item.selectionToken, offerId, rootId]);
+    const operationId = operations.get(key) ?? crypto.randomUUID();
+    operations.set(key, operationId);
+    submitting = true; transferError = null;
+    try {
+      const accepted = await acquirePublication(connectionId, { operationId, selectionToken: item.selectionToken, offerId, libraryRootId: rootId });
+      transfers = [accepted, ...transfers.filter(transfer => transfer.id !== accepted.id)];
+    } catch (cause) { transferError = cause instanceof Error ? cause.message : "Could not accept this publication. Retry to check the same request."; }
+    finally { submitting = false; }
+  }
   async function initialize() {
     loading = true; error = null;
     try {
-      connections = (await fetchConnections()).filter(item => item.status === CONNECTION_STATUS.ready
+      const [available, libraries] = await Promise.all([fetchConnections(), fetchLibraryRoots()]);
+      roots = libraries.filter(root => root.enabled && root.scanBooks);
+      rootId = roots[0]?.id ?? "";
+      await refreshTransfers();
+      connections = available.filter(item => item.status === CONNECTION_STATUS.ready
         && item.effectiveCapabilities.some(capability => capability.kind === PLUGIN_CAPABILITY.catalogDiscovery));
       const requested = page.url.searchParams.get("connection");
       await chooseConnection(connections.find(item => item.id === requested)?.id ?? connections[0]?.id ?? "");
@@ -98,11 +135,20 @@
             <Button type="submit" variant="secondary" disabled={loading || (!query.trim() && !canBrowse)}><Search />Search</Button>
           </form>
         {/if}
+        <div class="space-y-2">
+          <p class="text-xs font-medium text-text-muted">Import destination</p>
+          <Select ariaLabel="Import destination" value={rootId} options={roots.map(root => ({ value: root.id, label: root.label }))}
+            onchange={value => rootId = value} disabled={submitting || !roots.length} placeholder="Choose a publication library" />
+          {#if !roots.length}<p class="text-sm text-text-muted">Add an enabled library with book scanning in Settings to import publications.</p>{/if}
+        </div>
       </Panel>
     {/if}
     {#if error}
       <Alert.Root variant="destructive"><AlertTriangle /><Alert.Description>{error}</Alert.Description></Alert.Root>
     {/if}
+    {#if transferError}<Alert.Root variant="destructive"><Alert.Description>{transferError}</Alert.Description></Alert.Root>{/if}
+    {#if refreshError}<Alert.Root variant="destructive"><Alert.Description>{refreshError}</Alert.Description></Alert.Root>{/if}
+    <TransferList {transfers} onrefresh={refreshTransfers} />
     {#if loading}
       <StatePlaceholder icon={BookOpen} title="Loading catalog" busy />
     {:else if !connections.length}
@@ -131,6 +177,13 @@
                     <div class="flex flex-wrap gap-2">{#each item.offers as offer (offer.id)}<Badge>{acquisitionAccessLabels[offer.access]}{publicationFormatLabel(offer.mediaType) ? ` · ${publicationFormatLabel(offer.mediaType)}` : ""}</Badge>{/each}</div>
                   {/if}
                 </div>
+                {#if !item.isContainer}
+                  <div class="flex shrink-0 flex-wrap gap-2 self-start">
+                    {#each item.offers.filter(offer => canImportPublication(item.entityKind, offer)) as offer (offer.id)}
+                      <Button variant="secondary" size="sm" disabled={!rootId || submitting} onclick={() => void acquire(item, offer.id)}><Download />Import {publicationFormatLabel(offer.mediaType)}</Button>
+                    {/each}
+                  </div>
+                {/if}
                 {#if item.isContainer}<Button variant="secondary" size="sm" onclick={() => void browse(item.selectionToken, null, null, true)} class="self-start sm:shrink-0"><FolderOpen />Open</Button>{/if}
               </article>
             </Panel>

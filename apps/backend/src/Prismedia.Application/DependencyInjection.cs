@@ -114,6 +114,7 @@ public static class DependencyInjection {
         Acquisition.AcquisitionStrategyRegistration.RegisterWorkerStrategies(services);
         services.AddScoped<IImportedVideoMaterializer, ImportedVideoMaterializer>();
         services.AddScoped<IImportedEntityMaterializer, ImportedEntityMaterializer>();
+        services.AddScoped<Integrations.SourceTransferProcessor>();
         services.AddScoped<DownloadClientCleanupService>();
         services.AddScoped<IAcquisitionImportEngineFactory, AcquisitionImportEngineFactory>();
 

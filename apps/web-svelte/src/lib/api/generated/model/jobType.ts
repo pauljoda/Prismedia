@@ -45,6 +45,7 @@ export const JobType = {
   'bulk-identify': 'bulk-identify',
   'auto-identify': 'auto-identify',
   'identify-cascade': 'identify-cascade',
+  'integration-transfer': 'integration-transfer',
   'acquisition-search': 'acquisition-search',
   'acquisition-monitor': 'acquisition-monitor',
   'acquisition-import': 'acquisition-import',

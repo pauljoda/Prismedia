@@ -27,5 +27,23 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.LastError).HasColumnName("last_error").HasMaxLength(4096);
             entity.HasIndex(row => row.PluginId); // Multiple instances of the same plugin are intentional.
         });
+        modelBuilder.Entity<IntegrationTransferRow>(entity => {
+            entity.ToTable("integration_transfers");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.ConnectionId).HasColumnName("connection_id");
+            entity.HasOne<IntegrationConnectionRow>().WithMany().HasForeignKey(row => row.ConnectionId).OnDelete(DeleteBehavior.Restrict);
+            entity.Property(row => row.Revision).HasColumnName("revision").IsConcurrencyToken();
+            entity.Property(row => row.Phase).HasColumnName("phase").HasMaxLength(40)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<IntegrationTransferPhase>());
+            entity.Property(row => row.StateJson).HasColumnName("state").HasColumnType("jsonb");
+            entity.Property(row => row.ProtectedPlan).HasColumnName("protected_plan");
+            entity.Property(row => row.ActiveOwnershipKey).HasColumnName("active_ownership_key").HasMaxLength(256);
+            entity.HasIndex(row => row.ActiveOwnershipKey).IsUnique();
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.Property(row => row.LastError).HasColumnName("last_error").HasMaxLength(4096);
+            entity.HasIndex(row => row.CreatedAt);
+        });
     }
 }

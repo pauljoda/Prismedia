@@ -27,3 +27,6 @@ public sealed class ConnectionNotFoundException() : Exception("The connection wa
 
 /// <summary>Persistent encryption keys are unavailable; stored secrets must be recovered or replaced.</summary>
 public sealed class ConnectionSecretUnavailableException() : Exception("Connection credentials could not be decrypted. Restore the key directory or enter the credentials again.");
+
+/// <summary>Transfer evidence still refers to this connection, so its identity must be retained.</summary>
+public sealed class ConnectionInUseException() : Exception("This connection has transfer history. Disable it to stop new work while preserving its records.");

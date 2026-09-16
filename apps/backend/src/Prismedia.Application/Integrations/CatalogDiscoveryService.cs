@@ -32,6 +32,11 @@ public sealed class CatalogDiscoveryService(IntegrationConnectionAccess access, 
     /// <summary>Resolves a protected selection for server-side acquisition. Lending, checkout, and sample offers cannot satisfy a full-content request.</summary>
     public async Task<ResolvedSourceOffer> ResolveAsync(Guid connectionId, string selectionToken, string offerId, CancellationToken cancellationToken) {
         var selection = tokens.ReadSelection(connectionId, selectionToken);
+        return await ResolveSelectionAsync(connectionId, selection, offerId, cancellationToken);
+    }
+
+    /// <summary>Revalidates a previously accepted server-side selection without depending on an expired browser token.</summary>
+    public async Task<ResolvedSourceOffer> ResolveSelectionAsync(Guid connectionId, SourceSelection selection, string offerId, CancellationToken cancellationToken) {
         if (string.IsNullOrWhiteSpace(offerId) || offerId.Length > 2048) throw new ArgumentException("Select a valid acquisition offer.");
         var authorized = await access.RequireAsync(connectionId, PluginCapability.AcquisitionSource,
             IntegrationOperation.Resolve, selection.EntityKind, cancellationToken);
@@ -39,6 +44,7 @@ public sealed class CatalogDiscoveryService(IntegrationConnectionAccess access, 
         if (resolved.Selection != selection || resolved.OfferId != offerId || resolved.Offer?.Id != offerId
             || resolved.Offer.Access != AcquisitionAccessKind.Download || resolved.Delivery is null)
             throw new IntegrationInvocationException("The source did not resolve the selected full-content offer.");
+        Validate(new("Resolved publication", [new(selection, false, resolved.Publication, [resolved.Offer])]), new(selection.EntityKind, Limit: 1));
         return resolved;
     }
 

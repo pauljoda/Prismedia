@@ -1,5 +1,6 @@
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using Prismedia.Application.Integrations;
 using Prismedia.Domain.Entities;
 using Prismedia.Domain.Integrations;
@@ -68,9 +69,11 @@ public sealed class EfIntegrationConnectionStore(PrismediaDbContext db, Connecti
         var row = await db.IntegrationConnections.SingleOrDefaultAsync(row => row.Id == id, cancellationToken)
             ?? throw new ConnectionNotFoundException();
         if (row.Revision != expectedRevision) throw new ConnectionConflictException();
+        if (await db.IntegrationTransfers.AsNoTracking().AnyAsync(transfer => transfer.ConnectionId == id, cancellationToken)) throw new ConnectionInUseException();
         db.IntegrationConnections.Remove(row);
         try { await db.SaveChangesAsync(cancellationToken); }
         catch (DbUpdateConcurrencyException) { throw new ConnectionConflictException(); }
+        catch (DbUpdateException error) when (error.InnerException is PostgresException { SqlState: PostgresErrorCodes.ForeignKeyViolation }) { throw new ConnectionInUseException(); }
     }
 
     private static T Read<T>(string json) where T : notnull => JsonSerializer.Deserialize<T>(json, Json)

@@ -75,6 +75,33 @@ page size. Changing a query requires starting a new page sequence. Plugin respon
 are bounded and validated before reaching the browser. Resolved download addresses
 and authentication headers remain server-only.
 
+### Import a publication
+
+Choose an enabled publication library as the **Import destination**, then select
+**Import EPUB**, **Import PDF**, or **Import CBZ** beside a full-content offer.
+Loans, purchases, samples, CBR, and formats requiring conversion cannot enter this
+importer. Current direct-publication transfers have a 2 GiB byte limit. Archives
+also have bounded entry counts, expanded bytes, and format validation.
+
+**Recent imports** shows durable progress and an **Open in library** action after
+the exact file has a local Entity owner. Artwork and chapter processing can continue
+after source ownership is committed. A failed attempt retains its intent and verified
+staging; **Retry import** resumes that same operation. Repeating an acceptance with
+the same operation ID does not create another queue run. A different active operation
+cannot acquire the same source item through the same connection concurrently.
+
+Prismedia records the selected destination path when accepting the request. Moving,
+disabling, or unmounting that library blocks placement. Files receive deterministic,
+operation-specific names, and existing files with different bytes are preserved.
+Import retries recheck local hashes and do not need the source online once byte
+verification has been committed. Keep `/data/integrations/artifacts` until unfinished
+imports have recovered; a database receipt alone cannot recreate missing staged bytes.
+
+Accepted intent and the initial background job are committed in one database
+transaction. Sensitive source locators in that intent use the same persistent key
+ring as connection credentials, with a separate operation-bound encryption purpose.
+Connections with transfer history can be disabled but cannot be deleted.
+
 ## Manifest declaration
 
 Manifest v2 accepts an optional `integration` section. Its `protocolVersion` is

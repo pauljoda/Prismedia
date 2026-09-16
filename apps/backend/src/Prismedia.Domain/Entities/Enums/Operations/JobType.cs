@@ -157,6 +157,10 @@ public enum JobType {
     IdentifyCascade,
 
     // ── Acquisition ─────────────────────────────────────────────
+    /// <summary>Retrieves and materializes one durable integration operation's exact outputs.</summary>
+    [Code("integration-transfer")]
+    IntegrationTransfer,
+
     /// <summary>Searches configured indexers for an acquisition's book and persists scored release candidates.</summary>
     [Code("acquisition-search")]
     AcquisitionSearch,

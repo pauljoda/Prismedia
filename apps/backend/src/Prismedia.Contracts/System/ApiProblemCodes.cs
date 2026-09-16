@@ -9,12 +9,22 @@ namespace Prismedia.Contracts.System;
 public static class ApiProblemCodes {
     /// <summary>The requested connection no longer exists.</summary>
     public const string ConnectionNotFound = "connection_not_found";
+    /// <summary>A connection owns persisted transfer history and cannot be deleted.</summary>
+    public const string ConnectionInUse = "connection_in_use";
     /// <summary>A connection changed since the submitted revision.</summary>
     public const string ConnectionConflict = "connection_conflict";
     /// <summary>Connection configuration violates its plugin schema.</summary>
     public const string ConnectionInvalid = "connection_invalid";
     /// <summary>The installed integration plugin is unavailable.</summary>
     public const string ConnectionUnavailable = "connection_unavailable";
+    /// <summary>An integration operation no longer exists.</summary>
+    public const string IntegrationTransferNotFound = "integration_transfer_not_found";
+    /// <summary>A transfer operation or active fulfillment owner conflicts with the submitted request.</summary>
+    public const string IntegrationTransferConflict = "integration_transfer_conflict";
+    /// <summary>A transfer selection or destination is invalid.</summary>
+    public const string IntegrationTransferInvalid = "integration_transfer_invalid";
+    /// <summary>Accepted transfer intent cannot be decrypted using the current persistent keys.</summary>
+    public const string IntegrationTransferUnavailable = "integration_transfer_unavailable";
 
     /// <summary>Problem code <c>calendar_range_invalid</c>.</summary>
     public const string CalendarRangeInvalid = "calendar_range_invalid";

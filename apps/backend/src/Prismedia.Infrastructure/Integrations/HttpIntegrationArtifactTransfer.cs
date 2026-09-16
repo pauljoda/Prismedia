@@ -30,7 +30,7 @@ public sealed class HttpIntegrationArtifactTransfer(IntegrationArtifactStorageOp
         var operationRoot = Path.Combine(root, request.OperationId.ToString("N"));
         Directory.CreateDirectory(operationRoot);
         RejectLinks(operationRoot);
-        var key = Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(request.ArtifactId)));
+        var key = ArtifactKey(request.ArtifactId);
         var finalPath = Path.Combine(operationRoot, key + Path.GetExtension(delivery.SuggestedFileName).ToLowerInvariant());
         var partialPath = Path.Combine(operationRoot, key + ".partial");
         var receiptPath = Path.Combine(operationRoot, key + ReceiptSuffix);
@@ -92,6 +92,31 @@ public sealed class HttpIntegrationArtifactTransfer(IntegrationArtifactStorageOp
         return verified;
     }
 
+    /// <inheritdoc />
+    public async Task<VerifiedIntegrationArtifact?> ReadVerifiedAsync(Guid operationId, string artifactId, string fileName,
+        long sizeBytes, string sha256, CancellationToken cancellationToken) {
+        if (operationId == Guid.Empty || string.IsNullOrWhiteSpace(artifactId) || artifactId.Length > 2048
+            || sizeBytes is <= 0 or > MaximumArtifactBytes || sha256 is not { Length: 64 } || !sha256.All(Uri.IsHexDigit))
+            throw new ArgumentException("Complete persisted artifact evidence is required for local recovery.");
+        ValidateFileName(fileName);
+        var root = Path.GetFullPath(options.RootPath);
+        var operationRoot = Path.Combine(root, operationId.ToString("N"));
+        var key = ArtifactKey(artifactId);
+        var finalPath = Path.Combine(operationRoot, key + Path.GetExtension(fileName).ToLowerInvariant());
+        var receiptPath = Path.Combine(operationRoot, key + ReceiptSuffix);
+        foreach (var path in new[] { root, operationRoot, finalPath, receiptPath }) RejectLinks(path);
+        if (!File.Exists(receiptPath) || !File.Exists(finalPath)) return null;
+        var receipt = await ReadReceiptAsync(receiptPath, cancellationToken);
+        if (receipt is null || receipt.ArtifactId != artifactId || receipt.FileName != fileName || receipt.SizeBytes != sizeBytes
+            || !string.Equals(receipt.Sha256, sha256, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The staged artifact receipt does not match the accepted transfer.");
+        await using var stream = new FileStream(finalPath, FileMode.Open, FileAccess.Read, FileShare.Read, 1024 * 128, true);
+        if (stream.Length != sizeBytes || !Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, cancellationToken)).Equals(sha256, StringComparison.OrdinalIgnoreCase))
+            throw new InvalidDataException("The staged artifact changed after verification.");
+        return new(artifactId, finalPath, sizeBytes, sha256.ToLowerInvariant(), fileName);
+    }
+
+    private static string ArtifactKey(string artifactId) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(artifactId)));
+
     private async Task<HttpResponseMessage> OpenAsync(Uri origin, Uri address, IReadOnlyDictionary<string, string> headers, long offset, CancellationToken cancellationToken) {
         for (var redirects = 0; redirects <= 5; redirects++) {
             using var request = new HttpRequestMessage(HttpMethod.Get, address);
@@ -115,15 +140,18 @@ public sealed class HttpIntegrationArtifactTransfer(IntegrationArtifactStorageOp
         var delivery = request.Delivery;
         if (delivery.ByteSize is < 0 || delivery.ByteSize > request.MaximumBytes || delivery.Sha256 is { } hash && (hash.Length != 64 || !hash.All(Uri.IsHexDigit)))
             throw new ArgumentException("The artifact size or SHA-256 is invalid.");
-        var name = delivery.SuggestedFileName;
-        if (string.IsNullOrWhiteSpace(name) || name.Length > 255 || name is "." or ".." || name.Any(character => char.IsControl(character) || character is '/' or '\\' or ':' or '\0')
-            || Path.GetExtension(name).Length > 16) throw new ArgumentException("The artifact must suggest a portable file name, not a destination path.");
+        ValidateFileName(delivery.SuggestedFileName);
         if (delivery.Headers is null || delivery.Headers.Count > 8 || delivery.Headers.Any(header =>
                 !(header.Key.Equals("Authorization", StringComparison.OrdinalIgnoreCase) || header.Key.Equals("Accept", StringComparison.OrdinalIgnoreCase))
                 || header.Value is null || header.Value.Length > 16384 || header.Value.Any(character => character is '\r' or '\n')))
             throw new ArgumentException("Artifact retrieval headers exceed their allowed scope.");
         if (!Uri.TryCreate(request.AllowedOrigin, UriKind.Absolute, out var origin)) throw new ArgumentException("A configured HTTP origin is required.");
         _ = RequireScope(origin, origin.AbsoluteUri);
+    }
+
+    private static void ValidateFileName(string name) {
+        if (string.IsNullOrWhiteSpace(name) || name.Length > 255 || name is "." or ".." || name.Any(character => char.IsControl(character) || character is '/' or '\\' or ':')
+            || Path.GetExtension(name).Length > 16) throw new ArgumentException("The artifact must suggest a portable file name, not a destination path.");
     }
 
     private static Uri RequireScope(Uri origin, string address) {
@@ -155,14 +183,18 @@ public sealed class HttpIntegrationArtifactTransfer(IntegrationArtifactStorageOp
 
     private static async Task<VerifiedIntegrationArtifact> ReadVerifiedAsync(IntegrationArtifactTransferRequest request, string finalPath, string receiptPath, CancellationToken cancellationToken) {
         if (new FileInfo(receiptPath).Length > 8192 || !File.Exists(finalPath)) throw new InvalidDataException("The verified artifact receipt has no valid staged file.");
-        Receipt? receipt;
-        try { receipt = JsonSerializer.Deserialize<Receipt>(await File.ReadAllTextAsync(receiptPath, cancellationToken), Json); }
-        catch (JsonException) { throw new InvalidDataException("The artifact receipt is invalid."); }
+        var receipt = await ReadReceiptAsync(receiptPath, cancellationToken);
         var verified = await VerifyAsync(request, finalPath, cancellationToken);
         if (receipt is null || receipt.ArtifactId != verified.ArtifactId || receipt.FileName != verified.FileName
             || receipt.SizeBytes != verified.SizeBytes || receipt.Sha256 != verified.Sha256)
             throw new InvalidDataException("The staged artifact changed after verification.");
         return verified;
+    }
+
+    private static async Task<Receipt?> ReadReceiptAsync(string path, CancellationToken cancellationToken) {
+        if (new FileInfo(path).Length > 8192) throw new InvalidDataException("The artifact receipt exceeds its size limit.");
+        try { return JsonSerializer.Deserialize<Receipt>(await File.ReadAllTextAsync(path, cancellationToken), Json); }
+        catch (JsonException) { throw new InvalidDataException("The artifact receipt is invalid."); }
     }
 
     private static async Task WriteReceiptAsync(string receiptPath, VerifiedIntegrationArtifact artifact, CancellationToken cancellationToken) {

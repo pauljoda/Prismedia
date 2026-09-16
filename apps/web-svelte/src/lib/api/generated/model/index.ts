@@ -5,6 +5,7 @@
  * OpenAPI spec version: 1.0.0
  */
 
+export * from './acquireCatalogOfferRequest';
 export * from './acquireVideoSubtitleRequest';
 export * from './acquireVideoSubtitleResponse';
 export * from './acquisitionAccessKind';
@@ -349,6 +350,9 @@ export * from './indexerConfigSummary';
 export * from './indexerKind';
 export * from './indexerTestRequest';
 export * from './indexerTestResponse';
+export * from './integrationTransferMode';
+export * from './integrationTransferPhase';
+export * from './integrationTransferResponse';
 export * from './jobCancelResponse';
 export * from './jobCreateResponse';
 export * from './jobFailureClearResponse';

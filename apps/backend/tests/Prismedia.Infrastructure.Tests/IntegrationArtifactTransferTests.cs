@@ -30,6 +30,18 @@ public sealed class IntegrationArtifactTransferTests : IDisposable {
     }
 
     [Fact]
+    public async Task LocalRecoveryNeedsNoLiveSourceAndMissingBytesDoNotStartANewDownload() {
+        var request = Request;
+        using var client = new HttpClient(new Handler(_ => Ok(Bytes)));
+        var result = await new HttpIntegrationArtifactTransfer(new(root), client).TransferAsync(request, default);
+        using var unavailable = new HttpClient(new Handler(_ => throw new InvalidOperationException("Source must not be called")));
+        var restarted = new HttpIntegrationArtifactTransfer(new(root), unavailable);
+        Assert.Equal(result, await restarted.ReadVerifiedAsync(request.OperationId, result.ArtifactId, result.FileName, result.SizeBytes, result.Sha256, default));
+        File.Delete(result.Path);
+        Assert.Null(await restarted.ReadVerifiedAsync(request.OperationId, result.ArtifactId, result.FileName, result.SizeBytes, result.Sha256, default));
+    }
+
+    [Fact]
     public async Task InterruptedHashPinnedTransferResumesAndVerifiesTheWholeFile() {
         var calls = 0;
         using var client = new HttpClient(new Handler(request => {

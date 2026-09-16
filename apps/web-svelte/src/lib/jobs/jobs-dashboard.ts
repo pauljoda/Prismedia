@@ -250,6 +250,12 @@ const _JOB_DEFINITIONS = [
   },
   // Acquisition
   {
+    type: JOB_TYPE.integrationTransfer,
+    queueName: JOB_TYPE.integrationTransfer,
+    label: "Publication Transfer",
+    description: "Verifies a connected source's outputs and imports exact files into the library.",
+  },
+  {
     type: JOB_TYPE.acquisitionSearch,
     queueName: "acquisition",
     label: "Acquisition Search",

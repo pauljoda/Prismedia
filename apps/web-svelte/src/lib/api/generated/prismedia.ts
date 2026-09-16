@@ -5,6 +5,7 @@
  * OpenAPI spec version: 1.0.0
  */
 import type {
+  AcquireCatalogOfferRequest,
   AcquireVideoSubtitleRequest,
   AcquireVideoSubtitleResponse,
   AcquisitionBlocklistClearResponse,
@@ -149,6 +150,7 @@ import type {
   IndexerConfigSummary,
   IndexerTestRequest,
   IndexerTestResponse,
+  IntegrationTransferResponse,
   JobCancelResponse,
   JobCreateResponse,
   JobFailureClearResponse,
@@ -9224,6 +9226,171 @@ export const browseConnection = async (id: string,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       browseConnectionRequest,)
+  }
+);}
+
+
+
+export type acquireCatalogOfferResponse202 = {
+  data: IntegrationTransferResponse
+  status: 202
+}
+
+export type acquireCatalogOfferResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type acquireCatalogOfferResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type acquireCatalogOfferResponseSuccess = (acquireCatalogOfferResponse202) & {
+  headers: Headers;
+};
+export type acquireCatalogOfferResponseError = (acquireCatalogOfferResponse400 | acquireCatalogOfferResponse409) & {
+  headers: Headers;
+};
+
+export type acquireCatalogOfferResponse = (acquireCatalogOfferResponseSuccess | acquireCatalogOfferResponseError)
+
+export const getAcquireCatalogOfferUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/acquire`
+}
+
+export const acquireCatalogOffer = async (id: string,
+    acquireCatalogOfferRequest: AcquireCatalogOfferRequest, options?: RequestInit): Promise<acquireCatalogOfferResponse> => {
+
+  return orvalFetch<acquireCatalogOfferResponse>(getAcquireCatalogOfferUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      acquireCatalogOfferRequest,)
+  }
+);}
+
+
+
+export type listIntegrationTransfersResponse200 = {
+  data: IntegrationTransferResponse[]
+  status: 200
+}
+
+export type listIntegrationTransfersResponseSuccess = (listIntegrationTransfersResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listIntegrationTransfersResponse = (listIntegrationTransfersResponseSuccess)
+
+export const getListIntegrationTransfersUrl = () => {
+
+
+
+
+  return `/api/integration-transfers`
+}
+
+export const listIntegrationTransfers = async ( options?: RequestInit): Promise<listIntegrationTransfersResponse> => {
+
+  return orvalFetch<listIntegrationTransfersResponse>(getListIntegrationTransfersUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getIntegrationTransferResponse200 = {
+  data: IntegrationTransferResponse
+  status: 200
+}
+
+export type getIntegrationTransferResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type getIntegrationTransferResponseSuccess = (getIntegrationTransferResponse200) & {
+  headers: Headers;
+};
+export type getIntegrationTransferResponseError = (getIntegrationTransferResponse404) & {
+  headers: Headers;
+};
+
+export type getIntegrationTransferResponse = (getIntegrationTransferResponseSuccess | getIntegrationTransferResponseError)
+
+export const getGetIntegrationTransferUrl = (id: string,) => {
+
+
+
+
+  return `/api/integration-transfers/${id}`
+}
+
+export const getIntegrationTransfer = async (id: string, options?: RequestInit): Promise<getIntegrationTransferResponse> => {
+
+  return orvalFetch<getIntegrationTransferResponse>(getGetIntegrationTransferUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type retryIntegrationTransferResponse202 = {
+  data: void
+  status: 202
+}
+
+export type retryIntegrationTransferResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type retryIntegrationTransferResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type retryIntegrationTransferResponseSuccess = (retryIntegrationTransferResponse202) & {
+  headers: Headers;
+};
+export type retryIntegrationTransferResponseError = (retryIntegrationTransferResponse400 | retryIntegrationTransferResponse404) & {
+  headers: Headers;
+};
+
+export type retryIntegrationTransferResponse = (retryIntegrationTransferResponseSuccess | retryIntegrationTransferResponseError)
+
+export const getRetryIntegrationTransferUrl = (id: string,) => {
+
+
+
+
+  return `/api/integration-transfers/${id}/retry`
+}
+
+export const retryIntegrationTransfer = async (id: string, options?: RequestInit): Promise<retryIntegrationTransferResponse> => {
+
+  return orvalFetch<retryIntegrationTransferResponse>(getRetryIntegrationTransferUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
   }
 );}
 

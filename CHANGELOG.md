@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Import EPUB/PDF books and CBZ comics from connected catalogs into a chosen library. Downloads retain verified bytes and durable progress across retries, protect existing files, and open the imported publication from the catalog view.
+
 - Connected catalogs can be browsed and searched from Requests, with book/comic source selections and clear distinctions between full publications, loans, purchases, and samples. OPDS catalog connections support independent credentials and paginated navigation.
 
 - Connections can configure multiple instances of an integration plugin, with independent credentials, capability selection, and remote health checks. Plugin packages can declare discovery, acquisition, download, external-manager, and connected-library capabilities independently from metadata identification.
