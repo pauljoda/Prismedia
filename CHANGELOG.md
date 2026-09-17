@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ### Added
 
 - Import JPEG, PNG, and WebP still images from connected catalogs, including anonymous Wikimedia Commons searches. Imports retain source attribution and license statements, verify the selected file version, and use image-specific library destinations and size limits.
+- View retained catalog credits and license statements in imported library items' source details, including image viewers, without contacting the original service.
 
 - Catalog plugins can declare separate HTTPS file hosts for anonymous downloads. Connections disclose those hosts, and imports recheck current permissions without forwarding authentication headers or cookies.
 

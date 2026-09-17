@@ -307,7 +307,7 @@
         return card.flags.length > 0;
       case "source":
       case "sources":
-        return (cardFull.sources?.length ?? 0) > 0 || (cardFull.fingerprints?.length ?? 0) > 0;
+        return (cardFull.sources?.length ?? 0) > 0 || (cardFull.fingerprints?.length ?? 0) > 0 || Boolean(cardFull.acquisitionAttribution);
       case "fingerprints":
         return (cardFull.fingerprints?.length ?? 0) > 0;
       default:

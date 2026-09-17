@@ -11,6 +11,7 @@ import { numberValue, formatDurationString, durationToSeconds } from "$lib/utils
 import { resolutionBadge } from "$lib/entities/media-resolution";
 import type {
   EntityCapability,
+  EntityCapabilityAcquisitionAttributionCapability,
   EntityCard,
   EntityDate,
   EntityExternalId,
@@ -230,6 +231,7 @@ export interface EntityDetailCardFull extends EntityDetailCard {
   positions: EntityDetailPosition[];
   classification: EntityDetailClassification | null;
   sources: EntitySource[];
+  acquisitionAttribution?: EntityCapabilityAcquisitionAttributionCapability;
 }
 
 
@@ -552,6 +554,7 @@ export function entityCardToDetailCard(entity: EntityCard): EntityDetailCardFull
         }
       : null,
     sources: sourcesCap?.items ?? [],
+    acquisitionAttribution: getCapability(capabilities, CAPABILITY_KIND.acquisitionAttribution),
     presentCapabilities,
   };
 }
@@ -602,6 +605,6 @@ export function presentSections(card: EntityDetailCard | EntityDetailCardFull): 
   if (full.progress) sections.push("progress");
   if (full.positions?.length > 0) sections.push("positions");
   if (full.classification) sections.push("classification");
-  if (full.sources?.length > 0) sections.push("sources");
+  if (full.sources?.length > 0 || full.acquisitionAttribution) sections.push("sources");
   return sections;
 }

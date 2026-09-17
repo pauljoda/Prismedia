@@ -173,9 +173,13 @@ another results page. Search does not add a content-rating filter.
 When a catalog supplies attribution, **Source attribution** shows its creator,
 credit, license and usage statements, with source and license links. Accepted
 metadata is retained in the encrypted import record and remains visible in
-**Recent imports**, including after restarts and retries. Later source changes do
-not rewrite that accepted snapshot or curated library metadata. Older imports that
-predate this capture have no attribution snapshot.
+**Recent imports** and the imported library item's source details, including image
+viewer details, after restarts and retries. Library details use completed import
+receipts for that exact entity and follow its normal access restrictions; they do
+not contact the source service. Later source changes do not rewrite that accepted
+snapshot or curated library metadata. Older imports that predate this capture have
+no attribution snapshot. If saved information cannot be decrypted, details report
+that attribution is unavailable while keeping the library item accessible.
 
 ## Manifest declaration
 

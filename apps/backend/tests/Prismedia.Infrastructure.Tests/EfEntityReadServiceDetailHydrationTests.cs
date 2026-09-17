@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Entities;
 using Prismedia.Contracts.Entities;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Entities;
@@ -10,6 +11,40 @@ using Prismedia.Infrastructure.Persistence.Entities;
 namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EfEntityReadServiceDetailHydrationTests {
+    [Fact]
+    public async Task AcquisitionAttributionIsOnlyReadForAnExistingVisibleDetail() {
+        await using var db = CreateContext();
+        var id = Guid.NewGuid();
+        var hiddenId = Guid.NewGuid();
+        db.Entities.AddRange(
+            new EntityRow { Id = id, KindCode = EntityKind.Image.ToCode(), Title = "Imported image" },
+            new EntityRow { Id = hiddenId, KindCode = EntityKind.Image.ToCode(), Title = "Hidden image", IsNsfw = true });
+        await db.SaveChangesAsync();
+        var attribution = new AttributionReader();
+        var currentUser = TestUserContext.Admin();
+        var repository = new EfEntityRepository(db, currentUser, EntityMappers.Kinds(db), EntityMappers.Capabilities(db, currentUser));
+        var service = new EfEntityReadService(db, currentUser, repository, [], new EfEntityProgressTopologyResolver(db), acquisitionAttribution: attribution);
+
+        Assert.Null(await service.GetAsync(hiddenId, true, default));
+        Assert.Null(await service.GetAsync(Guid.NewGuid(), false, default));
+        Assert.Empty(attribution.Requests);
+        var detail = await service.GetAsync(id, false, default);
+        Assert.NotNull(detail);
+        Assert.Same(attribution.Result, Assert.Single(detail.Capabilities.OfType<AcquisitionAttributionCapability>()));
+        Assert.Equal([id], attribution.Requests);
+    }
+
+    private sealed class AttributionReader : IEntityAcquisitionAttributionReader {
+        internal List<Guid> Requests { get; } = [];
+        internal AcquisitionAttributionCapability Result { get; } = new([
+            new(Guid.NewGuid(), DateTimeOffset.UtcNow, new("https://catalog.test/source", "Creator", null, "Public domain", null, null, false))
+        ]);
+        public Task<AcquisitionAttributionCapability?> ReadAsync(Guid entityId, CancellationToken cancellationToken) {
+            Requests.Add(entityId);
+            return Task.FromResult<AcquisitionAttributionCapability?>(Result);
+        }
+    }
+
     [Fact]
     public async Task GetAsyncProjectsMixedChildAndRelationshipGroupsThroughOneThumbnailPage() {
         await using var db = CreateContext();

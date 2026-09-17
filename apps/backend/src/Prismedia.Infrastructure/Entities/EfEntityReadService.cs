@@ -41,6 +41,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
     private readonly EfEntityAcquisitionStatusProjection _acquisitionStatuses;
     private readonly EfEntityLibraryVisibilityFilter _libraryVisibility;
     private readonly AssetPathService? _assets;
+    private readonly IEntityAcquisitionAttributionReader? _acquisitionAttribution;
 
     public EfEntityReadService(
         PrismediaDbContext db,
@@ -51,7 +52,8 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         AssetPathService? assets = null,
         IEntitySourceOwnershipReader? sourceOwnership = null,
         IEntityFileDeletionRecoveryReader? deletionRecovery = null,
-        EfEntityLibraryVisibilityFilter? libraryVisibility = null) {
+        EfEntityLibraryVisibilityFilter? libraryVisibility = null,
+        IEntityAcquisitionAttributionReader? acquisitionAttribution = null) {
         _db = db;
         _currentUser = currentUser;
         _repository = repository;
@@ -64,6 +66,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         _acquisitionStatuses = new EfEntityAcquisitionStatusProjection(db);
         _libraryVisibility = libraryVisibility ?? new EfEntityLibraryVisibilityFilter(db, currentUser);
         _assets = assets;
+        _acquisitionAttribution = acquisitionAttribution;
     }
 
     private Guid CurrentUserId => _currentUser.UserId;
@@ -668,6 +671,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             hideNsfw,
             enforceLibraryVisibility,
             cancellationToken);
+        var attribution = _acquisitionAttribution is null ? null : await _acquisitionAttribution.ReadAsync(id, cancellationToken);
         var projected = SanitizeLocalAssets(
             await EnrichBorrowedParentCoverAsync(
                 EntityCardProjector.ToCard(
@@ -675,7 +679,8 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                     fileManagementState,
                     CurrentUserId,
                     creditMetadata,
-                    sourceBackedChildKinds),
+                    sourceBackedChildKinds,
+                    attribution),
                 hideNsfw,
                 enforceLibraryVisibility,
                 cancellationToken));

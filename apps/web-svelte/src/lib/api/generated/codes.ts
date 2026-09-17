@@ -1667,6 +1667,7 @@ export type VideoSeriesRenderingModeCode = (typeof VIDEO_SERIES_RENDERING_MODE)[
 
 // source: registry CapabilityKinds
 export const CAPABILITY_KIND = {
+  acquisitionAttribution: "acquisition-attribution",
   bookMetadata: "book-metadata",
   classification: "classification",
   collectionConfiguration: "collection-configuration",
