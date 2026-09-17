@@ -53,6 +53,7 @@ public static class DependencyInjection {
         services.AddScoped<RequestTargetResolver>();
         services.AddScoped<IRequestAcquisitionFanoutScheduler, RequestAcquisitionFanoutScheduler>();
         services.AddScoped<RequestCommitService>();
+        services.AddScoped<ReviewedWantedMovieService>();
         services.AddScoped<IMonitoredEntityRecovery>(sp => sp.GetRequiredService<RequestCommitService>());
         services.AddScoped<IRequestChildHydrator>(sp => sp.GetRequiredService<RequestCommitService>());
         services.AddScoped<IRequestGraphAcquisitionStarter>(sp => sp.GetRequiredService<RequestCommitService>());

@@ -356,9 +356,19 @@ claim a content hash. The established holding tracker handles later replacements
 and missing files. **Imported into Prismedia** records that import occurred; current
 availability is shown by the tracked holding separately.
 
-This form currently accepts existing wanted movies. Metadata discovery still uses
-the native request flow; choosing an external manager directly from that review is
-a separate integration step.
+Administrators can also begin in **Requests → Discover**. On a movie review with an
+exact TMDB identity, choose a tested manager under **Acquisition owner**, then
+**Save metadata and review manager request**. This saves the selected metadata as a
+wanted movie without a native acquisition or monitor. The next form reviews the
+external library, profile, monitoring, and search choices. Leaving before submitting
+that form keeps the wanted movie available for later selection; it does not start
+external fulfillment. An already-owned movie instead links to its existing library
+record and uses the existing-file matching workflow.
+
+The metadata preparation validates the complete reviewed proposal and the exact
+enabled metadata-plugin identity route. Accepted metadata and external fulfillment
+are separate decisions. Once metadata is saved, this screen shows the manager request;
+subsequent metadata changes belong to the saved library item's review tools.
 
 ### Control a linked Radarr holding
 

@@ -9,6 +9,7 @@ import {
   REQUEST_COMMIT_OUTCOME,
   REQUEST_MEDIA_KIND,
   REQUEST_REVIEW_SELECTION,
+  CONNECTION_STATUS, INTEGRATION_OPERATION, PLUGIN_CAPABILITY,
 } from "$lib/api/generated/codes";
 import type {
   BookAcquisitionProfileView,
@@ -27,13 +28,18 @@ const mocks = vi.hoisted(() => ({
   fetchAccessibleLibraryRoots: vi.fn(),
   goto: vi.fn(async () => {}),
   reviewRequest: vi.fn(),
+  prepareManagedMovie: vi.fn(), fetchConnections: vi.fn(), fetchManagedRequests: vi.fn(), fetchLibraryMounts: vi.fn(), isAdmin: false,
 }));
 
 vi.mock("$lib/api/requests", () => ({
   commitReviewedRequest: mocks.commitReviewedRequest,
   fetchRequestReview: mocks.fetchRequestReview,
   reviewRequest: mocks.reviewRequest,
+  prepareManagedMovie: mocks.prepareManagedMovie,
 }));
+vi.mock("$lib/api/connections", () => ({ fetchConnections: mocks.fetchConnections }));
+vi.mock("$lib/api/managed-requests", () => ({ fetchManagedRequests: mocks.fetchManagedRequests }));
+vi.mock("$lib/api/managed-libraries", () => ({ fetchLibraryMounts: mocks.fetchLibraryMounts }));
 
 vi.mock("$lib/api/acquisitions", async (importOriginal) => ({
   ...await importOriginal<typeof import("$lib/api/acquisitions")>(),
@@ -56,12 +62,16 @@ vi.mock("$lib/nsfw/store.svelte", () => ({
 }));
 
 vi.mock("$lib/stores/session.svelte", () => ({
-  useSession: () => ({ canRequestContent: true }),
+  useSession: () => ({ canRequestContent: true, isAdmin: mocks.isAdmin }),
 }));
 
 describe("reviewed request route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mocks.isAdmin = false;
+    mocks.fetchConnections.mockResolvedValue([]);
+    mocks.fetchManagedRequests.mockResolvedValue([]);
+    mocks.fetchLibraryMounts.mockResolvedValue([]);
     page.params = {};
     page.url = new URL("http://localhost/request") as unknown as typeof page.url;
     mocks.fetchAccessibleLibraryRoots.mockResolvedValue([videoRoot()]);
@@ -71,6 +81,29 @@ describe("reviewed request route", () => {
 
   afterEach(() => {
     cleanup();
+  });
+
+  it("prepares the reviewed movie for the selected manager without sending a native request", async () => {
+    mocks.isAdmin = true;
+    const review = movieReview();
+    mocks.reviewRequest.mockResolvedValue(review);
+    mocks.fetchConnections.mockResolvedValue([{ id: "manager", name: "Movie manager", enabled: true, status: CONNECTION_STATUS.ready,
+      effectiveCapabilities: [{ kind: PLUGIN_CAPABILITY.externalManager, entityKinds: [ENTITY_KIND.movie],
+        operations: [INTEGRATION_OPERATION.lookupManaged, INTEGRATION_OPERATION.ensureManaged] }] }]);
+    mocks.prepareManagedMovie.mockResolvedValue({ entityId: "wanted-movie", title: "Prepared movie", hasFile: false });
+    setRoute(REQUEST_MEDIA_KIND.movie, review.externalIdentity.value, `plugin=${review.pluginId}&namespace=${EXTERNAL_ID_PROVIDER.tmdb}`);
+    render(Page);
+    await fireEvent.keyDown(await screen.findByRole("button", { name: "Acquisition owner" }), { key: "ArrowDown" });
+    await fireEvent.pointerUp(await screen.findByRole("option", { name: "Movie manager" }));
+    expect(mocks.prepareManagedMovie).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: /^Request$/ })).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Save metadata and review manager request" }));
+    await screen.findByText(/Metadata saved/);
+    expect(mocks.prepareManagedMovie).toHaveBeenCalledWith(expect.objectContaining({ review, rootExternalIdentity: review.externalIdentity, pluginId: review.pluginId }));
+    expect(mocks.commitReviewedRequest).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Acquisition owner" })).toBeDisabled();
+    expect(screen.getByText("Prepared movie")).toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Accept Title" })).not.toBeInTheDocument();
   });
 
   it("loads the exact plugin and opaque external identity under the NSFW ceiling", async () => {

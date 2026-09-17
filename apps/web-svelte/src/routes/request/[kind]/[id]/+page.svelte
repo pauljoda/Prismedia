@@ -4,14 +4,15 @@
   import { page } from "$app/state";
   import { ChevronLeft, Loader2, RefreshCw, Send } from "@lucide/svelte";
   import { Button, Select } from "@prismedia/ui-svelte";
-  import { ENTITY_KIND, PROBLEM_CODE, REQUEST_COMMIT_OUTCOME, REQUEST_REVIEW_SELECTION } from "$lib/api/generated/codes";
+  import { ENTITY_KIND, EXTERNAL_ID_PROVIDER, PROBLEM_CODE, REQUEST_COMMIT_OUTCOME, REQUEST_REVIEW_SELECTION } from "$lib/api/generated/codes";
   import type {
     MonitorPresetCode,
     RequestMediaKindCode,
   } from "$lib/api/generated/codes";
   import type { EntityMetadataProposal } from "$lib/api/identify-types";
   import { ApiError } from "$lib/api/orval-fetch";
-  import { commitReviewedRequest, fetchRequestReview, reviewRequest } from "$lib/api/requests";
+  import { commitReviewedRequest, fetchRequestReview, prepareManagedMovie, reviewRequest } from "$lib/api/requests";
+  import ManagerRequestOptions from "$lib/components/integrations/ManagerRequestOptions.svelte";
   import RequestTargetOptions from "$lib/components/acquisitions/RequestTargetOptions.svelte";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import {
@@ -49,7 +50,7 @@
     selectedProposalImageUrl,
     tagRelationshipForTitle,
   } from "$lib/components/identify/identify-review-helpers";
-  import type { RequestReviewResponse } from "$lib/api/generated/model";
+  import type { RequestReviewResponse, ReviewedRequestCommitRequest } from "$lib/api/generated/model";
   import { useSession } from "$lib/stores/session.svelte";
 
   interface ReviewLoadInput {
@@ -77,6 +78,8 @@
   let selectionCustomized = $state(false);
   let loading = $state(true);
   let submitting = $state(false);
+  let managerSelected = $state(false);
+  let managerMetadataSaved = $state(false);
   let error = $state<string | null>(null);
   let enrichmentError = $state<string | null>(null);
   let reviewChanged = $state(false);
@@ -196,6 +199,8 @@
     chosenPreset = DEFAULT_MONITOR_PRESET;
     targetLibraryRootId = null;
     profileId = null;
+    managerSelected = false;
+    managerMetadataSaved = false;
 
     try {
       if (!input.pluginId?.trim() || !input.namespace?.trim()) {
@@ -368,6 +373,34 @@
     }
   }
 
+  function reviewedCommitPayload(): ReviewedRequestCommitRequest {
+    if (!review || !proposal || !selection) throw new Error("Load the review before continuing");
+    const selectedIds = selection.mode === REQUEST_REVIEW_SELECTION.directChildren
+      ? selectedProposalIds.filter(id => selection.selectableIds.includes(id)) : selection.initialRootSelection;
+    const rootSelectedFields = selectedFieldsByProposal[proposal.proposalId] ?? defaultFieldSelectionForReview(proposal);
+    const rootSelectedImages = selectedImagesByProposal[proposal.proposalId] ?? defaultImageSelectionForReview(proposal);
+    const reviewedPayload = buildRootReviewApplyPayload(proposal, {
+      selectedFields: rootSelectedFields, selectedImages: rootSelectedImages,
+      selectedTags: selectedTagsByProposal[proposal.proposalId] ?? {}, selectedCascade,
+      selectedFieldsByProposal, selectedImagesByProposal, selectedTagsByProposal,
+    });
+    return {
+      kind: review.kind, pluginId: review.pluginId, rootExternalIdentity: review.externalIdentity,
+      proposalRevision: review.revision, selectedProposalIds: selectedIds, targetLibraryRootId, profileId, review,
+      proposal: reviewedPayload.proposal as RequestReviewResponse["proposal"],
+      selectedFields: reviewedPayload.selectedFields, selectedImages: reviewedPayload.selectedImages,
+      ...(selection.mode === REQUEST_REVIEW_SELECTION.directChildren ? { preset: chosenPreset } : {}),
+    };
+  }
+
+  async function prepareForManager() {
+    if (enrichmentRunning) throw new Error("Wait for metadata identification to finish");
+    const key = loadedKey;
+    const prepared = await prepareManagedMovie(reviewedCommitPayload());
+    if (key === loadedKey) managerMetadataSaved = true;
+    return prepared;
+  }
+
   async function requestSelection() {
     if (enrichmentRunning || !review || !proposal || !selection || !kindInfo?.committable) return;
     const selectedIds = selection.mode === REQUEST_REVIEW_SELECTION.directChildren
@@ -384,36 +417,7 @@
     error = null;
     reviewChanged = false;
     try {
-      const rootSelectedFields = selectedFieldsByProposal[proposal.proposalId]
-        ?? defaultFieldSelectionForReview(proposal);
-      const rootSelectedImages = selectedImagesByProposal[proposal.proposalId]
-        ?? defaultImageSelectionForReview(proposal);
-      const reviewedPayload = buildRootReviewApplyPayload(proposal, {
-        selectedFields: rootSelectedFields,
-        selectedImages: rootSelectedImages,
-        selectedTags: selectedTagsByProposal[proposal.proposalId] ?? {},
-        selectedCascade,
-        selectedFieldsByProposal,
-        selectedImagesByProposal,
-        selectedTagsByProposal,
-      });
-      const response = await commitReviewedRequest(
-        {
-          kind: review.kind,
-          pluginId: review.pluginId,
-          rootExternalIdentity: review.externalIdentity,
-          proposalRevision: review.revision,
-          selectedProposalIds: selectedIds,
-          targetLibraryRootId,
-          profileId,
-          review,
-          proposal: reviewedPayload.proposal as RequestReviewResponse["proposal"],
-          selectedFields: reviewedPayload.selectedFields,
-          selectedImages: reviewedPayload.selectedImages,
-          ...(selection.mode === REQUEST_REVIEW_SELECTION.directChildren ? { preset: chosenPreset } : {}),
-        },
-        nsfw.mode !== "show",
-      );
+      const response = await commitReviewedRequest(reviewedCommitPayload(), nsfw.mode !== "show");
 
       const requested = response.items.filter((item) => item.outcome === REQUEST_COMMIT_OUTCOME.requested);
       if (response.containerEntityId) {
@@ -518,8 +522,9 @@
       </Button>
     {/if}
 
-    {@render requestOptions()}
+    {@render requestOptions(true)}
 
+    {#if !managerMetadataSaved}
     <MetadataProposalReview
       proposal={activeProposal ?? proposal}
       title={activeTitle}
@@ -554,10 +559,11 @@
       showRelationships={false}
       statusLabel={identifyingStatus}
     />
+    {/if}
 
-    {@render requestOptions()}
+    {#if !managerSelected}{@render requestOptions(false)}{/if}
 
-    {#snippet requestOptions()}
+    {#snippet requestOptions(showManagerChoice: boolean)}
     <section class="space-y-3 rounded-sm border border-border-accent bg-surface-1 p-4" aria-label="Request options">
       <div>
         <h3 class="flex items-center gap-1.5 font-mono text-[0.68rem] font-semibold uppercase tracking-[0.04em] text-text-secondary">
@@ -584,7 +590,11 @@
         </label>
       {/if}
 
-      {#if kindInfo}
+      {#if showManagerChoice && session.isAdmin && review?.entityKind === ENTITY_KIND.movie && review.externalIdentity.namespace === EXTERNAL_ID_PROVIDER.tmdb}
+        <ManagerRequestOptions disabled={submitting || enrichmentRunning || !hasRequestIntent} onPrepare={prepareForManager} onActiveChanged={active => managerSelected = active} />
+      {/if}
+
+      {#if kindInfo && !managerSelected}
         <RequestTargetOptions {kindInfo} bind:targetLibraryRootId bind:profileId>
           {#snippet actions()}
             <Button

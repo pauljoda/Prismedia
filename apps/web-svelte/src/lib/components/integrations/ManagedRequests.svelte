@@ -9,11 +9,12 @@
   import EntityPicker, { type EntityPickerItem } from "$lib/components/forms/EntityPicker.svelte";
   import ManagedHoldingControls from "./ManagedHoldingControls.svelte";
 
-  let { connection }: { connection: ConnectionResponse } = $props();
+  let { connection, initialEntity = null }: { connection: ConnectionResponse; initialEntity?: EntityPickerItem | null } = $props();
   const canRequest = $derived(connection.enabled && connection.status === CONNECTION_STATUS.ready && connection.effectiveCapabilities.some(capability =>
     capability.kind === PLUGIN_CAPABILITY.externalManager && capability.entityKinds.includes(ENTITY_KIND.movie)
     && capability.operations.includes(INTEGRATION_OPERATION.lookupManaged) && capability.operations.includes(INTEGRATION_OPERATION.ensureManaged)));
   let requests = $state<ManagedRequestResponse[]>([]);
+  const visibleRequests = $derived(initialEntity ? requests.filter(request => request.entityId === initialEntity.id) : requests);
   let mounts = $state<ExternalLibraryMount[]>([]);
   let selected = $state<EntityPickerItem[]>([]);
   let libraryRootId = $state("");
@@ -37,6 +38,7 @@
   };
   const activePhases = new Set<ManagedRequestResponse["phase"]>([MANAGED_REQUEST_PHASE.pendingCreation, MANAGED_REQUEST_PHASE.creationUncertain, MANAGED_REQUEST_PHASE.awaitingFiles]);
   onMount(() => {
+    if (initialEntity) { selected = [initialEntity]; void open(); }
     void load();
     const timer = setInterval(() => { if (!busy) void load(); }, 5000);
     return () => { alive = false; sequence++; clearInterval(timer); };
@@ -47,7 +49,8 @@
       const result = await fetchManagedRequests(connection.id);
       if (!alive || current !== sequence) return;
       requests = result;
-      if (pending && result.some(item => item.id === pending?.operationId)) { pending = null; preview = null; selected = []; error = null; }
+      if (initialEntity && result.some(item => item.entityId === initialEntity.id && item.phase !== MANAGED_REQUEST_PHASE.cancelled)) expanded = false;
+      if (pending && result.some(item => item.id === pending?.operationId)) { pending = null; preview = null; selected = []; error = null; if (initialEntity) expanded = false; }
     } catch (cause) { if (alive && current === sequence) error = message(cause); }
   }
   async function open() {
@@ -80,7 +83,7 @@
     busy = true; error = null; sequence++;
     try {
       const saved = await saveManagedRequest(connection.id, pending!);
-      if (alive) { requests = [saved, ...requests.filter(item => item.id !== saved.id)]; pending = null; preview = null; selected = []; }
+      if (alive) { requests = [saved, ...requests.filter(item => item.id !== saved.id)]; pending = null; preview = null; selected = []; if (initialEntity) expanded = false; }
     } catch (cause) {
       if (alive) { error = message(cause); if (cause instanceof ManagedRequestRejectedError) { pending = null; preview = null; } }
     } finally { if (alive) busy = false; }
@@ -104,14 +107,15 @@
   <Panel class="min-w-0 space-y-4 p-4">
     <div class="flex flex-wrap items-center justify-between gap-3">
       <h2 class="text-sm font-semibold">Requests through {connection.name}</h2>
-      {#if canRequest}<Button variant="outline" size="sm" onclick={open} disabled={busy} aria-expanded={expanded}>{expanded ? "Hide request form" : "Request a wanted movie"}</Button>{/if}
+      {#if canRequest && !initialEntity}<Button variant="outline" size="sm" onclick={open} disabled={busy} aria-expanded={expanded}>{expanded ? "Hide request form" : "Request a wanted movie"}</Button>{/if}
     </div>
     {#if error}<Alert.Root variant="destructive"><Alert.Description>{error}</Alert.Description></Alert.Root>{/if}
     {#if expanded && canRequest}
       <div class="space-y-3">
         <p class="text-sm text-text-muted">Choose a wanted movie with an identified TMDB record. The connected app will own its acquisition and file organization.</p>
-        {#if !mounts.length && !busy}<p class="text-sm text-text-muted">Map and enable a video library below before requesting a movie.</p>{/if}
-        <EntityPicker label="Wanted movie" mode="single" values={selected} onChange={values => { selected = values; preview = null; }} onSearch={findWanted} disabled={busy || !!pending} placeholder="Find a wanted movie" />
+        {#if !mounts.length && !busy}<p class="text-sm text-text-muted">Map and enable a video library in Connected libraries before requesting a movie.</p>{/if}
+        {#if initialEntity}<p class="text-sm font-medium">{initialEntity.title}</p>
+        {:else}<EntityPicker label="Wanted movie" mode="single" values={selected} onChange={values => { selected = values; preview = null; }} onSearch={findWanted} disabled={busy || !!pending} placeholder="Find a wanted movie" />{/if}
         <Select ariaLabel="Mapped library" value={libraryRootId} options={mounts.map(mount => ({ value: mount.libraryRootId, label: mount.label }))}
           disabled={busy || !!pending} onchange={value => { libraryRootId = value; preview = null; }} />
         <Button variant="outline" size="sm" disabled={busy || !!pending || !selected.length || !libraryRootId} onclick={review}>Review manager request</Button>
@@ -129,7 +133,7 @@
         {/if}
       </div>
     {/if}
-    {#each requests as request (request.id)}
+    {#each visibleRequests as request (request.id)}
       <article class="space-y-2 border-t border-border-subtle pt-3">
         <p class="break-words text-sm font-medium">{request.title}</p>
         <Badge>{request.reviewRequired ? "Needs review" : phaseLabels[request.phase]}</Badge>

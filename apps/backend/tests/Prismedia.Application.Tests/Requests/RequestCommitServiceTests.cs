@@ -14,7 +14,7 @@ namespace Prismedia.Application.Tests.Requests;
 /// picked works with one acquisition each; leaves (book, movie, album) create themselves; owned and
 /// in-flight picks are skipped transparently; non-committable kinds (series) are refused.
 /// </summary>
-public sealed class RequestCommitServiceTests {
+public sealed partial class RequestCommitServiceTests {
     private const string Provider = "openlibrary";
 
     [Fact]

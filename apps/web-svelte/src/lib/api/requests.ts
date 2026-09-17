@@ -2,6 +2,7 @@ import type { BookRenditionCode, RequestMediaKindCode } from "$lib/api/generated
 import {
   commitEntityRequest as commitEntityRequestRequest,
   commitReviewedRequest as commitReviewedRequestRequest,
+  prepareManagedMovie as prepareManagedMovieRequest,
   getRequestReview,
   commitMissingChildrenRequest,
   removeWanted as removeWantedRequest,
@@ -17,6 +18,7 @@ import type {
   RequestReviewResponse,
   RequestSearchResponse,
   ReviewedRequestCommitRequest,
+  PreparedWantedMovieResponse,
   WantedRemovalResponse,
 } from "$lib/api/generated/model";
 import { unwrapGenerated } from "$lib/api/generated-response";
@@ -87,6 +89,11 @@ export async function commitReviewedRequest(
     await commitReviewedRequestRequest(request, { hideNsfw }),
     "Failed to commit the reviewed request",
   );
+}
+
+/** Saves reviewed metadata without acquisition, before explicit external-manager configuration. */
+export async function prepareManagedMovie(request: ReviewedRequestCommitRequest): Promise<PreparedWantedMovieResponse> {
+  return unwrapGenerated(await prepareManagedMovieRequest(request), "Could not save the reviewed movie");
 }
 
 /**

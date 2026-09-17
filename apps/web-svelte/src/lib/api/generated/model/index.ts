@@ -513,6 +513,7 @@ export * from './pluginProvider';
 export * from './pluginSearchDefinition';
 export * from './pluginSearchField';
 export * from './pluginSearchFieldType';
+export * from './preparedWantedMovieResponse';
 export * from './prepareFileArchiveParams';
 export * from './previewCollectionRulesParams';
 export * from './previewManagedRequestInput';

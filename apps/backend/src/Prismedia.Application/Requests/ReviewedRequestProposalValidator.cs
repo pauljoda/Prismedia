@@ -111,6 +111,8 @@ internal static class ReviewedRequestProposalValidator {
         ValidateDictionary(reviewed.Stats, selected.Stats);
         ValidateDictionary(reviewed.Positions, selected.Positions);
         ValidateSubset(reviewed.DateEntries, selected.DateEntries, "date");
+        ValidateSubset(reviewed.PositionEntries, selected.PositionEntries, "position");
+        ValidateSubset(reviewed.AlternativeTitles, selected.AlternativeTitles, "alternative title");
 
         if (reviewed.Rating != selected.Rating || reviewed.Flags != selected.Flags) {
             throw new RequestCommitValidationException("Non-selectable proposal state must match the reviewed proposal.");

@@ -70,4 +70,11 @@ describe("Managed requests", () => {
     expect(screen.queryByRole("button", { name: "Request a wanted movie" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Refresh request" })).toBeEnabled();
   });
+  it("reopens a prepared movie's retained request instead of offering a duplicate after navigation", async () => {
+    api.fetchManagedRequests.mockResolvedValue([request({ phase: MANAGED_REQUEST_PHASE.creationUncertain, canCancel: false, reviewRequired: true })]);
+    render(ManagedRequests, { connection, initialEntity: { id: "wanted", title: "Wanted film", thumbnailUrl: null } });
+    await screen.findByText("Needs review");
+    expect(screen.queryByRole("button", { name: "Review manager request" })).not.toBeInTheDocument();
+    expect(api.fetchEntities).not.toHaveBeenCalled();
+  });
 });

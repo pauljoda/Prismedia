@@ -238,6 +238,7 @@ import type {
   PluginAuthUpdateRequest,
   PluginProvider,
   PrepareFileArchiveParams,
+  PreparedWantedMovieResponse,
   PreviewCollectionRulesParams,
   PreviewManagedRequestInput,
   ProblemDetails,
@@ -11647,6 +11648,55 @@ export const commitReviewedRequest = async (reviewedRequestCommitRequest: Review
     params?: CommitReviewedRequestParams, options?: RequestInit): Promise<commitReviewedRequestResponse> => {
 
   return orvalFetch<commitReviewedRequestResponse>(getCommitReviewedRequestUrl(params),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      reviewedRequestCommitRequest,)
+  }
+);}
+
+
+
+export type prepareManagedMovieResponse200 = {
+  data: PreparedWantedMovieResponse
+  status: 200
+}
+
+export type prepareManagedMovieResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type prepareManagedMovieResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type prepareManagedMovieResponseSuccess = (prepareManagedMovieResponse200) & {
+  headers: Headers;
+};
+export type prepareManagedMovieResponseError = (prepareManagedMovieResponse400 | prepareManagedMovieResponse409) & {
+  headers: Headers;
+};
+
+export type prepareManagedMovieResponse = (prepareManagedMovieResponseSuccess | prepareManagedMovieResponseError)
+
+export const getPrepareManagedMovieUrl = () => {
+
+
+
+
+  return `/api/requests/prepare-managed-movie`
+}
+
+/**
+ * @summary Saves a reviewed wanted movie without native acquisition, before a separate external-manager request.
+ */
+export const prepareManagedMovie = async (reviewedRequestCommitRequest: ReviewedRequestCommitRequest, options?: RequestInit): Promise<prepareManagedMovieResponse> => {
+
+  return orvalFetch<prepareManagedMovieResponse>(getPrepareManagedMovieUrl(),
   {
     ...options,
     method: 'POST',

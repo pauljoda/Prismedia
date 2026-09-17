@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Movie discovery reviews can choose a connected acquisition manager, save the selected metadata as a wanted item, and review external fulfillment settings without starting a native download.
+
 - Wanted movies can delegate fulfillment to a Radarr connection with a reviewed profile, library, monitoring choice, and optional search. Durable requests recover uncertain creation responses and attach verified local files to the original item without losing its identity or history.
 
 - Linked Sonarr episodes can request scoped searches and change episode monitoring when the parent series is already monitored. Series-wide profiles and monitoring stay with Sonarr, and blocked controls explain the parent restriction.
@@ -154,6 +156,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Audio-track detail and saved-queue payloads no longer duplicate embedded artist and album fields outside the Entity's `embedded-audio-metadata` capability.
 
 ### Fixed
+
+- Request reviews reject issue labels and alternative titles that were not part of the reviewed provider proposal.
 
 - Catalog and URL imports use the selected publication title when embedded metadata has no title, keeping storage operation IDs out of book and comic names across rescans. Titles are recovered only for the exact accepted files and verified bytes.
 
