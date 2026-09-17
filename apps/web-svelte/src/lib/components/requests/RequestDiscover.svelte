@@ -1,11 +1,11 @@
 <script lang="ts">
   import { onMount, untrack } from "svelte";
-  import { AlertTriangle, PackageSearch, PlugZap, ArrowUpRight, Library, BookOpen } from "@lucide/svelte";
+  import { AlertTriangle, PackageSearch, PlugZap, ArrowLeft, ArrowUpRight, Library, BookOpen } from "@lucide/svelte";
   import { Alert, Button, ChoiceGroup, Select } from "@prismedia/ui-svelte";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
-  import { ENTITY_KIND, PLUGIN_CAPABILITY, INTEGRATION_OPERATION, CONNECTION_STATUS, type RequestMediaKindCode } from "$lib/api/generated/codes";
+  import { ENTITY_KIND, PLUGIN_CAPABILITY, CONNECTION_STATUS, type RequestMediaKindCode } from "$lib/api/generated/codes";
   import { fetchSettingsValues } from "$lib/api/settings";
   import type { ConnectionResponse, ExternalIdentity, RequestSearchResult } from "$lib/api/generated/model";
   import type { EntitySearchCandidate, PluginProvider } from "$lib/api/identify-types";
@@ -30,6 +30,7 @@
   import { discoverSearchProviders, discoverSearchSupport } from "$lib/requests/discovery-plugins";
   import { DISCOVERABLE_REQUEST_KINDS, numericValue } from "$lib/requests/request-helpers";
   import { requestKindAccent, requestKindIcon } from "$lib/requests/request-kind-presentation";
+  import { canBrowseRequestSource, requestSourceMode } from "$lib/requests/request-source-compatibility";
   import { settingKeys, valueAsStringMap } from "$lib/settings/app-settings";
 
   interface Props {
@@ -37,7 +38,9 @@
     back?: string | null;
     connections?: ConnectionResponse[];
     initialConnectionId?: string | null;
+    initialKind?: RequestMediaKindCode | null;
     onConnectionChange?: (id: string | null) => void;
+    onKindChange?: (kind: RequestMediaKindCode | null) => void;
   }
 
   type NavigableRequestResult = RequestSearchResult & {
@@ -50,16 +53,25 @@
     candidate: EntitySearchCandidate;
   }
 
-  let { back = null, connections = [], initialConnectionId = null, onConnectionChange }: Props = $props();
+  let {
+    back = null,
+    connections = [],
+    initialConnectionId = null,
+    initialKind,
+    onConnectionChange,
+    onKindChange,
+  }: Props = $props();
   // Preserve a browse draft while switching between workspace tabs.
   let selectedConnectionId = $state(untrack(() => initialConnectionId ?? ""));
-  const connection = $derived(connections.find(item => item.id === selectedConnectionId));
-  const browseConnections = $derived(connections.filter(item => item.enabled && (
-    item.enabledCapabilities.includes(PLUGIN_CAPABILITY.connectedLibrary) || item.effectiveCapabilities.some(capability =>
-      capability.kind === PLUGIN_CAPABILITY.catalogDiscovery && capability.operations.some(operation => operation === INTEGRATION_OPERATION.browse || operation === INTEGRATION_OPERATION.search))
-  )));
+  const selectedConnection = $derived(connections.find(item => item.id === selectedConnectionId));
+  const browseConnections = $derived(connections.filter(item => canBrowseRequestSource(item)));
+  const compatibleBrowseConnections = $derived.by(() => {
+    const entityKind = selectedKindInfo?.entityKind;
+    if (!entityKind) return browseConnections;
+    return browseConnections.filter((source) => canBrowseRequestSource(source, entityKind));
+  });
   function chooseSource(id: string) {
-    const source = browseConnections.find(item => item.id === id);
+    const source = compatibleBrowseConnections.find(item => item.id === id);
     selectedConnectionId = source?.id ?? "";
     onConnectionChange?.(source?.id ?? null);
     if (!source) chooseProvider(id);
@@ -71,7 +83,7 @@
   let defaultProviders = $state<Record<string, string>>({});
   let providersLoading = $state(true);
   let providersError = $state<string | null>(null);
-  let selectedKind = $state<RequestMediaKindCode | null>(null);
+  let selectedKind = $state<RequestMediaKindCode | null>(untrack(() => initialKind ?? null));
   let selectedProviderId = $state("");
   let searchValues = $state<Record<string, string>>({});
   let results = $state.raw<RequestSearchResult[]>([]);
@@ -87,6 +99,8 @@
   const selectedKindInfo = $derived(
     DISCOVERABLE_REQUEST_KINDS.find((kind) => kind.kind === selectedKind) ?? null,
   );
+  const connection = $derived(selectedConnection && canBrowseRequestSource(selectedConnection, selectedKindInfo?.entityKind)
+    ? selectedConnection : undefined);
   const defaultProviderId = $derived(
     selectedKindInfo
       ? defaultProviders[selectedKindInfo.pluginEntityKind]
@@ -97,11 +111,39 @@
       ? discoverSearchProviders(providers, selectedKind, hideNsfw, defaultProviderId)
       : [],
   );
-  $effect(() => { selectedConnectionId = initialConnectionId ?? ""; });
+  $effect(() => {
+    const nextConnectionId = initialConnectionId ?? "";
+    untrack(() => {
+      if (nextConnectionId === selectedConnectionId) return;
+      selectedConnectionId = nextConnectionId;
+    });
+  });
+  $effect(() => {
+    if (initialKind === undefined) return;
+    const nextKind = initialKind ?? null;
+    untrack(() => {
+      if (nextKind === selectedKind) return;
+      if (!nextKind) {
+        selectedKind = null;
+        selectedProviderId = "";
+        searchValues = {};
+        resetSearch();
+        return;
+      }
+      applyKind(nextKind);
+    });
+  });
+  $effect(() => {
+    const source = selectedConnection;
+    const entityKind = selectedKindInfo?.entityKind;
+    if (!source || !entityKind || canBrowseRequestSource(source, entityKind)) return;
+    selectedConnectionId = "";
+    onConnectionChange?.(null);
+  });
   const sourceOptions = $derived([
     ...eligibleProviders.map(item => ({ value: item.id, label: item.name, annotation: "Find new titles" })),
-    ...browseConnections.map(item => ({ value: item.id, label: item.name,
-      annotation: item.status !== CONNECTION_STATUS.ready ? "Unavailable" : item.enabledCapabilities.includes(PLUGIN_CAPABILITY.connectedLibrary) ? "Your collection" : "Browse & import" })),
+    ...compatibleBrowseConnections.map(item => ({ value: item.id, label: item.name,
+      annotation: item.status !== CONNECTION_STATUS.ready ? "Unavailable" : requestSourceMode(item, selectedKindInfo?.entityKind) === PLUGIN_CAPABILITY.connectedLibrary ? "Your collection" : "Browse & import" })),
   ]);
   const activeProvider = $derived(
     eligibleProviders.find((provider) => provider.id === selectedProviderId) ?? eligibleProviders[0] ?? null,
@@ -135,8 +177,8 @@
   const kindChoices = orderedKinds.map(kind => ({ value: kind.kind, label: kind.plural, icon: requestKindIcon(kind.kind), iconColor: requestKindAccent(kind.kind) }));
 
   /**
-   * How many installed providers can actually search each kind. Surfacing this on the chooser
-   * answers "what can I even request?" before a selection is made, instead of after.
+   * How many installed providers or connected sources can serve each kind. Surfacing this on the
+   * chooser answers "what can I even request?" before a selection is made, instead of after.
    */
   const sourceCountByKind = $derived.by(() => {
     const counts = new Map<RequestMediaKindCode, number>();
@@ -148,7 +190,7 @@
           info.kind,
           hideNsfw,
           defaultProviders[info.pluginEntityKind] ?? null,
-        ).length,
+        ).length + connections.filter((connection) => canBrowseRequestSource(connection, info.entityKind)).length,
       );
     }
     return counts;
@@ -256,7 +298,7 @@
     searchLimit = PLUGIN_SEARCH_PAGE_SIZE;
   }
 
-  function chooseKind(kind: RequestMediaKindCode) {
+  function applyKind(kind: RequestMediaKindCode) {
     selectedKind = kind;
     const pluginEntityKind = DISCOVERABLE_REQUEST_KINDS
       .find((candidate) => candidate.kind === kind)?.pluginEntityKind;
@@ -275,6 +317,11 @@
     resetSearch();
   }
 
+  function chooseKind(kind: RequestMediaKindCode) {
+    applyKind(kind);
+    onKindChange?.(kind);
+  }
+
   function chooseProvider(providerId: string) {
     selectedProviderId = providerId;
     const provider = eligibleProviders.find((item) => item.id === providerId) ?? null;
@@ -283,6 +330,14 @@
       : [];
     searchValues = seedPluginSearchFields(fields, {}, "");
     resetSearch();
+  }
+
+  function resetToHome() {
+    selectedKind = null;
+    selectedProviderId = "";
+    searchValues = {};
+    resetSearch();
+    onKindChange?.(null);
   }
 
   function clearSearch() {
@@ -372,9 +427,10 @@
       <div class="space-y-1"><h2 class="text-lg font-semibold">Your sources</h2><p class="text-sm text-text-muted">Explore the collections and services you’ve connected.</p></div>
       <div class="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {#each browseConnections as source (source.id)}
+          {@const sourceMode = requestSourceMode(source)}
           <Button variant="outline" class="h-auto min-w-0 justify-start gap-3 p-4 text-left" onclick={() => chooseSource(source.id)}>
-            {#if source.enabledCapabilities.includes(PLUGIN_CAPABILITY.connectedLibrary)}<Library class="size-5 shrink-0 text-text-muted" />{:else}<BookOpen class="size-5 shrink-0 text-text-muted" />{/if}
-            <span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold">{source.name}</span><span class="mt-1 block text-xs font-normal text-text-muted">{source.status !== CONNECTION_STATUS.ready ? "Connection unavailable" : source.enabledCapabilities.includes(PLUGIN_CAPABILITY.connectedLibrary) ? "Browse your collection" : "Find and import media"}</span></span>
+            {#if sourceMode === PLUGIN_CAPABILITY.connectedLibrary}<Library class="size-5 shrink-0 text-text-muted" />{:else}<BookOpen class="size-5 shrink-0 text-text-muted" />{/if}
+            <span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold">{source.name}</span><span class="mt-1 block text-xs font-normal text-text-muted">{source.status !== CONNECTION_STATUS.ready ? "Connection unavailable" : sourceMode === PLUGIN_CAPABILITY.connectedLibrary ? "Browse your collection" : "Find and import media"}</span></span>
             <ArrowUpRight class="size-4 shrink-0 text-text-muted" />
           </Button>
         {/each}
@@ -386,22 +442,24 @@
         <Select ariaLabel="Source" options={sourceOptions} value={connection?.id ?? activeProvider?.id ?? ""}
           placeholder="Browse a connected source" onchange={chooseSource} />
       </label>
-      {#if connection}<Button variant="ghost" size="sm" onclick={() => { selectedConnectionId = ""; onConnectionChange?.(null); }}>Find new titles</Button>
+      {#if connection}<Button variant="ghost" size="sm" onclick={() => { selectedConnectionId = ""; resetToHome(); onConnectionChange?.(null); }}><ArrowLeft />Back to Request</Button>
       {:else if activeProvider}<p class="pb-2 text-xs text-text-muted">Search {activeProvider.name}, then choose how to add a title.</p>{/if}
     </div>
   {/if}
 
   {#if connection}
     {#key connection.id}
-      {#if connection.enabledCapabilities.includes(PLUGIN_CAPABILITY.connectedLibrary)}<ConnectedLibraryBrowser {connection} />
-      {:else}<ConnectionCatalogBrowser {connection} />{/if}
+      {#if requestSourceMode(connection, selectedKindInfo?.entityKind) === PLUGIN_CAPABILITY.connectedLibrary}<ConnectedLibraryBrowser {connection} initialEntityKind={selectedKindInfo?.entityKind} />
+      {:else}<ConnectionCatalogBrowser {connection} initialEntityKind={selectedKindInfo?.entityKind} />{/if}
     {/key}
   {:else}
     {#if providersLoading}<StatePlaceholder icon={PackageSearch} title="Loading sources" busy />
     {:else if providersError}<Alert.Root variant="destructive"><Alert.Description>{providersError}</Alert.Description></Alert.Root>
-    {:else if selectedKind && !eligibleProviders.length}
+    {:else if selectedKind && !eligibleProviders.length && !compatibleBrowseConnections.length}
       <StatePlaceholder icon={PlugZap} title="No compatible provider" description={`Enable a source in Plugins for ${selectedKindInfo?.plural.toLowerCase() ?? "this media type"}.`} />
       <a class="text-sm underline" href="/plugins">Browse plugins</a>
+    {:else if selectedKind && !eligibleProviders.length && compatibleBrowseConnections.length}
+      <StatePlaceholder icon={Library} title="Browse a compatible source" description="Choose a source above to browse its catalog or connected library." />
     {/if}
     {#if searchError}<Alert.Root variant="destructive"><AlertTriangle /><Alert.Description>{searchError}</Alert.Description></Alert.Root>{/if}
     {#each providerWarnings as warning (warning)}<Alert.Root role="status"><Alert.Description>{warning}</Alert.Description></Alert.Root>{/each}

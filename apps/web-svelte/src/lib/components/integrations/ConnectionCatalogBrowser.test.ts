@@ -59,4 +59,15 @@ describe("Connected source browsing", () => {
     await waitFor(() => expect(api.acquirePublication).toHaveBeenCalledTimes(2));
     expect(api.acquirePublication.mock.calls[1]).toEqual(api.acquirePublication.mock.calls[0]);
   });
+
+  it("opens a multi-kind catalog with the kind selected in Request", async () => {
+    const multiKind = { ...connection, effectiveCapabilities: [{ ...connection.effectiveCapabilities[0]!, entityKinds: [ENTITY_KIND.musicArtist, ENTITY_KIND.book] }] };
+    const view = render(ConnectionCatalogBrowser, { connection: multiKind, initialEntityKind: ENTITY_KIND.book });
+
+    await screen.findByRole("button", { name: "A book" });
+    expect(api.fetchConnectionCatalog).toHaveBeenCalledWith(connection.id, expect.objectContaining({ entityKind: ENTITY_KIND.book }));
+    api.fetchConnectionCatalog.mockClear();
+    await view.rerender({ connection: multiKind, initialEntityKind: ENTITY_KIND.musicArtist });
+    await waitFor(() => expect(api.fetchConnectionCatalog).toHaveBeenCalledWith(connection.id, expect.objectContaining({ entityKind: ENTITY_KIND.musicArtist })));
+  });
 });

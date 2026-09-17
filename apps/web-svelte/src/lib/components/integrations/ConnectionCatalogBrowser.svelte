@@ -1,6 +1,6 @@
 <script lang="ts">
   import { fetchConnectionCatalog } from "$lib/api/connections";
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
 
   import { ArrowLeft, ArrowRight, BookOpen, Download, FolderOpen, Search } from "@lucide/svelte";
   import { Alert, Badge, Button, DialogBase, Panel, Select, TextInput } from "@prismedia/ui-svelte";
@@ -19,7 +19,7 @@
   import { getEntityKindLabel } from "$lib/entities/entity-grid";
   import { acquisitionAccessLabels, publicationFormatLabel, canImportPublication } from "$lib/integrations/catalog-labels";
 
-  let { connection }: { connection: ConnectionResponse } = $props();
+  let { connection, initialEntityKind = null }: { connection: ConnectionResponse; initialEntityKind?: EntityKind | null } = $props();
   const connectionId = $derived(connection.id);
   let selected = $state<DiscoveryItemResponse | null>(null);
   let acceptedTitle = $state<string | null>(null);
@@ -39,6 +39,7 @@
   let submitting = $state(false);
   const operations = new Map<string, string>();
   let requestSequence = 0;
+  let initialized = $state(false);
 
   const support = $derived(connection?.effectiveCapabilities.find(item => item.kind === PLUGIN_CAPABILITY.catalogDiscovery));
   const canSearch = $derived(support?.operations.includes(INTEGRATION_OPERATION.search) ?? false);
@@ -46,6 +47,15 @@
   const destinations = $derived(integrationImportRoots(roots, kind));
 
   onMount(() => { void initialize(); return () => { requestSequence++; }; });
+  $effect(() => {
+    const requestedKind = initialEntityKind;
+    if (!initialized) return;
+    untrack(() => {
+      const nextKind = preferredKind(requestedKind);
+      if (!nextKind || nextKind === kind) return;
+      void chooseKind(nextKind);
+    });
+  });
   async function acquire(item: DiscoveryItemResponse, offerId: string) {
     if (!rootId || submitting) return;
     const key = JSON.stringify([connectionId, item.selectionToken, offerId, rootId]);
@@ -62,11 +72,14 @@
     loading = true;
     try {
       roots = await fetchLibraryRoots();
-      kind = support?.entityKinds[0];
+      kind = preferredKind();
       chooseDestination();
       if (canBrowse) await browse();
     } catch (cause) { error = cause instanceof Error ? cause.message : "Could not load this source"; }
-    finally { loading = false; }
+    finally { loading = false; initialized = true; }
+  }
+  function preferredKind(requested = initialEntityKind) {
+    return support?.entityKinds.find(item => item === requested) ?? support?.entityKinds[0];
   }
   async function chooseKind(value: string) {
     requestSequence++; loading = false; query = ""; activeQuery = null;

@@ -8,7 +8,7 @@ import {
   REQUEST_MEDIA_KIND,
   REQUEST_PROVIDER_KIND,
 } from "$lib/api/generated/codes";
-import type { ConnectionResponse, RequestSearchResult } from "$lib/api/generated/model";
+import type { ConnectionResponse, EntityKind, RequestSearchResult } from "$lib/api/generated/model";
 import type { PluginProvider } from "$lib/api/identify-types";
 import RequestDiscoverHarness from "./RequestDiscover.test-harness.svelte";
 
@@ -60,8 +60,60 @@ describe("RequestDiscover", () => {
     expect(fetchConnectionCatalog).toHaveBeenCalledWith(connection.id, expect.objectContaining({ entityKind: ENTITY_KIND.book }));
     expect(screen.queryByText("What would you like to find?")).not.toBeInTheDocument();
     expect(searchRequestsByPlugin).not.toHaveBeenCalled();
-    await fireEvent.click(screen.getByRole("button", { name: "Find new titles" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Back to Request" }));
     expect(await screen.findByText("What would you like to find?")).toBeInTheDocument();
+  });
+
+  it("offers only sources that can browse the selected kind", async () => {
+    const bookCatalog = connection("book-catalog", "Book catalog", ENTITY_KIND.book);
+    const artistCatalog = connection("artist-catalog", "Artist catalog", ENTITY_KIND.musicArtist);
+    const unrelatedArtistManager = connection("artist-manager", "Artist manager", ENTITY_KIND.book, {
+      enabledCapabilities: [PLUGIN_CAPABILITY.catalogDiscovery, PLUGIN_CAPABILITY.externalManager],
+      effectiveCapabilities: [
+        { kind: PLUGIN_CAPABILITY.catalogDiscovery, operations: [INTEGRATION_OPERATION.browse], entityKinds: [ENTITY_KIND.book] },
+        { kind: PLUGIN_CAPABILITY.externalManager, operations: [INTEGRATION_OPERATION.managerOptions], entityKinds: [ENTITY_KIND.musicArtist] },
+      ],
+    });
+    render(RequestDiscoverHarness, { connections: [bookCatalog, artistCatalog, unrelatedArtistManager] });
+    await waitFor(() => expect(fetchPluginProviders).toHaveBeenCalledOnce());
+
+    await fireEvent.click(screen.getByRole("button", { name: "Artists" }));
+    expect(await screen.findByRole("button", { name: "Source" })).toBeInTheDocument();
+    expect(screen.queryByText("No compatible provider")).not.toBeInTheDocument();
+    expect(screen.getByText("Browse a compatible source")).toBeInTheDocument();
+    await fireEvent.keyDown(screen.getByRole("button", { name: "Source" }), { key: "ArrowDown" });
+
+    const listbox = await screen.findByRole("listbox");
+    expect(within(listbox).getByText("Artist catalog")).toBeInTheDocument();
+    expect(within(listbox).queryByText("Book catalog")).not.toBeInTheDocument();
+    expect(within(listbox).queryByText("Artist manager")).not.toBeInTheDocument();
+  });
+
+  it("does not render a directly linked source that cannot browse the selected kind", async () => {
+    const bookCatalog = connection("book-catalog", "Book catalog", ENTITY_KIND.book);
+    render(RequestDiscoverHarness, {
+      connections: [bookCatalog],
+      initialConnectionId: bookCatalog.id,
+      initialKind: REQUEST_MEDIA_KIND.artist,
+    });
+
+    await waitFor(() => expect(fetchPluginProviders).toHaveBeenCalledOnce());
+    expect(fetchConnectionCatalog).not.toHaveBeenCalled();
+    expect(screen.queryByText("Book catalog")).not.toBeInTheDocument();
+    expect(await screen.findByText("No compatible provider")).toBeInTheDocument();
+  });
+
+  it("resets a same-path source view when the Request URL loses its kind and connection", async () => {
+    const bookCatalog = connection("book-catalog", "Book catalog", ENTITY_KIND.book);
+    const view = render(RequestDiscoverHarness, {
+      connections: [bookCatalog], initialConnectionId: bookCatalog.id, initialKind: REQUEST_MEDIA_KIND.book,
+    });
+    await screen.findByText("Source books");
+
+    await view.rerender({ connections: [bookCatalog], initialConnectionId: null, initialKind: null });
+
+    expect(await screen.findByText("What would you like to find?")).toBeInTheDocument();
+    expect(screen.queryByText("Source books")).not.toBeInTheDocument();
   });
 
   it("keeps the current search draft when its selected kind is clicked again", async () => {
@@ -307,6 +359,22 @@ function openLibrary(): PluginProvider {
   return provider("openlibrary", "Open Library", ENTITY_KIND.book, [
     { key: "title", label: "Book title", type: PLUGIN_SEARCH_FIELD_TYPE.text, required: true },
   ], ["openlibrary"]);
+}
+
+function connection(
+  id: string,
+  name: string,
+  entityKind: EntityKind,
+  overrides: Partial<ConnectionResponse> = {},
+): ConnectionResponse {
+  return {
+    id, name, pluginId: "fixture-catalog", baseUrl: `http://${id}.test`, enabled: true,
+    enabledCapabilities: [PLUGIN_CAPABILITY.catalogDiscovery],
+    effectiveCapabilities: [{ kind: PLUGIN_CAPABILITY.catalogDiscovery, operations: [INTEGRATION_OPERATION.browse], entityKinds: [entityKind] }],
+    settings: {}, configuredSecretKeys: [], revision: 1, status: CONNECTION_STATUS.ready,
+    remoteInstanceId: null, hasPersistentRemoteIdentity: false, lastCheckedAt: null, lastError: null,
+    ...overrides,
+  };
 }
 
 function provider(
