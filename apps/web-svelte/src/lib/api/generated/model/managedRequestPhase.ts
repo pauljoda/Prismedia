@@ -15,4 +15,5 @@ export const ManagedRequestPhase = {
   completed: 'completed',
   rejected: 'rejected',
   cancelled: 'cancelled',
+  'ownership-released': 'ownership-released',
 } as const;

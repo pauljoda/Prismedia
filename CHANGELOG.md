@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Connected Radarr and Sonarr holdings can explicitly release acquisition ownership after monitoring and remote activity have stopped. Handoffs retain files and history, recover through outages, and keep ownership reserved until verification finishes.
+
 - The Metron community metadata plugin supports Western comic runs and issues, exact fractional and special issue labels, creator credits, and distinct cross-provider identities. Series and issue metadata can be reviewed before application.
 
 - Saved metadata plugin and OpenSubtitles credentials are encrypted with persistent application keys. Existing credentials upgrade automatically, and plugins receive only their declared credential fields.
@@ -164,6 +166,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Audio-track detail and saved-queue payloads no longer duplicate embedded artist and album fields outside the Entity's `embedded-audio-metadata` capability.
 
 ### Fixed
+
+- Rejected manager requests, actions, and handoff reviews can be reviewed again correctly; uncertain responses continue to retry the same accepted intent.
 
 - Completed-download cleanup resolves nested directory aliases before comparing library paths, preserving payloads that still back a linked library source and rejecting cyclic links.
 

@@ -36,6 +36,11 @@ public sealed class ManagedRequestOperation(ManagedRequestState state) {
         Require(ManagedRequestPhase.AwaitingFiles);
         Change(State with { Phase = ManagedRequestPhase.Completed, ReviewRequired = false });
     }
+    /// <summary>Stops fulfillment only after the associated holding has completed its explicit handoff.</summary>
+    public void ReleaseOwnership() {
+        if (State.Phase is not (ManagedRequestPhase.AwaitingFiles or ManagedRequestPhase.Completed) || State.RemoteId is null) throw Invalid();
+        Change(State with { Phase = ManagedRequestPhase.OwnershipReleased, ReviewRequired = false });
+    }
     /// <summary>A fresh valid observation may keep waiting for bytes without changing the accepted remote identity.</summary>
     public void ContinueWaiting() {
         Require(ManagedRequestPhase.AwaitingFiles);

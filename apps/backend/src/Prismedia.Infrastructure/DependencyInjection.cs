@@ -101,6 +101,7 @@ public static class DependencyInjection {
         services.AddScoped<IIntegrationTransferGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
         services.AddScoped<IIntegrationManagerGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
         services.AddScoped<IIntegrationManagerControlGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
+        services.AddScoped<IIntegrationManagerReleaseGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
         services.AddScoped<IIntegrationManagerCreationGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
         services.AddScoped<ManagedLibraryService>();
         services.AddScoped<IManagedTrackingStore, EfManagedTrackingStore>();
@@ -109,6 +110,8 @@ public static class DependencyInjection {
         services.AddScoped<IManagedControlStore, EfManagedControlStore>();
         services.AddScoped<ManagedControlService>();
         services.AddScoped<ManagedControlProcessor>();
+        services.AddScoped<IManagedReleaseStore, EfManagedReleaseStore>();
+        services.AddScoped<ManagedReleaseService>();
         services.AddScoped<IManagedRequestStore, EfManagedRequestStore>();
         services.AddScoped<ManagedRequestService>();
         services.AddScoped<ManagedRequestProcessor>();

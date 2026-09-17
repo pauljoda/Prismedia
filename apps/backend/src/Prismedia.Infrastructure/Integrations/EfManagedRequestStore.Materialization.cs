@@ -34,7 +34,7 @@ public sealed partial class EfManagedRequestStore {
             if (ExternalLibraryPaths.Resolve(target.Mount.RemotePath, target.Mount.LocalPath, snapshot.Path) is null)
                 throw new ArgumentException("The manager holding is outside this request's mapped root. Existing holdings are never moved implicitly.");
             if (await db.ManagedHoldings.AnyAsync(holding => holding.Id == state.OperationId
-                || holding.ConnectionId == state.ConnectionId && holding.Kind == snapshot.Item.EntityKind && holding.RemoteId == snapshot.Item.RemoteId, ct))
+                || holding.ConnectionId == state.ConnectionId && holding.Kind == snapshot.Item.EntityKind && holding.RemoteId == snapshot.Item.RemoteId && holding.ReleasedAt == null, ct))
                 throw new ArgumentException("This remote holding is already associated with another local intent. Review the existing association.");
             var operation = new ManagedRequestOperation(current.Operation.State);
             operation.AcceptHolding(snapshot.Item.RemoteId);

@@ -19,6 +19,14 @@ public sealed class ManagedHoldingRow {
     public DateTimeOffset? LastCheckedAt { get; set; }
     public DateTimeOffset NextCheckAt { get; set; }
     public string? Problem { get; set; }
+    /// <summary>Stable explicit handoff operation, retained after release for safe request replay.</summary>
+    public Guid? ReleaseOperationId { get; set; }
+    /// <summary>Reviewed scope and path, persisted before freezing host effects.</summary>
+    public string? ReleaseRequestJson { get; set; }
+    /// <summary>Completion of the verified handoff, never set by disabling a connection.</summary>
+    public DateTimeOffset? ReleasedAt { get; set; }
+    /// <summary>Historical file associations retained after active bindings have been removed.</summary>
+    public string ReleasedBindingsJson { get; set; } = "[]";
 }
 
 /// <summary>One stable external target attached to an existing local entity and its retained file row.</summary>

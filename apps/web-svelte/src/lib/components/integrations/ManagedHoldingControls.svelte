@@ -112,7 +112,7 @@
         {#if !monitoringChanged && preview.state.targets.some(target => target.monitored) && !preview.state.targets.every(target => target.monitored)}<p class="text-xs text-text-muted">Current monitoring varies across linked items. It will remain unchanged unless you change this control.</p>{/if}
         <label class="flex items-center gap-3 text-sm"><Checkbox aria-label="Search now" checked={search} onchange={value => search = value} disabled={busy || !!pending || !preview.state.capabilities.canSearch} />Search now</label>
         <p class="text-xs text-text-muted">Only settings you change are sent. The library folder stays managed by the connected app.</p>
-        <Button type="submit" variant="secondary" disabled={busy || !pending && (!changed || hasActive)}>{pending ? "Retry same action" : "Apply manager action"}</Button>
+        <Button type="submit" variant="secondary" disabled={busy || !canPreview || !pending && (!changed || hasActive)}>{pending ? "Retry same action" : "Apply manager action"}</Button>
       </form>
     {/if}
     {#each actions.slice(0, 10) as action (action.id)}

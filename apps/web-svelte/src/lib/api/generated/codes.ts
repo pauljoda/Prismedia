@@ -1060,6 +1060,7 @@ export const INTEGRATION_OPERATION = {
   requestManaged: "request-managed",
   configureManaged: "configure-managed",
   reconcileManaged: "reconcile-managed",
+  inspectManagedRelease: "inspect-managed-release",
   searchLibrary: "search-library",
   getLibraryItem: "get-library-item",
 } as const;
@@ -1259,6 +1260,7 @@ export const MANAGED_REQUEST_PHASE = {
   completed: "completed",
   rejected: "rejected",
   cancelled: "cancelled",
+  ownershipReleased: "ownership-released",
 } as const;
 
 export type ManagedRequestPhaseCode = (typeof MANAGED_REQUEST_PHASE)[keyof typeof MANAGED_REQUEST_PHASE];
@@ -1270,6 +1272,8 @@ export const MANAGED_TRACKING_STATUS = {
   tracking: "tracking",
   needsReview: "needs-review",
   stale: "stale",
+  releasePending: "release-pending",
+  released: "released",
 } as const;
 
 export type ManagedTrackingStatusCode = (typeof MANAGED_TRACKING_STATUS)[keyof typeof MANAGED_TRACKING_STATUS];

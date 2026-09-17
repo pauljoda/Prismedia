@@ -15,6 +15,7 @@
   const support = $derived(connection.effectiveCapabilities.find(item => item.kind === PLUGIN_CAPABILITY.connectedLibrary));
   const showControls = $derived(connection.enabledCapabilities.includes(PLUGIN_CAPABILITY.externalManager));
   const canControl = $derived(connection.effectiveCapabilities.some(capability => capability.kind === PLUGIN_CAPABILITY.externalManager && capability.operations.includes(INTEGRATION_OPERATION.reconcileManaged)));
+  const canRelease = $derived(connection.effectiveCapabilities.some(capability => capability.kind === PLUGIN_CAPABILITY.externalManager && capability.operations.includes(INTEGRATION_OPERATION.inspectManagedRelease)));
   let kind = $state<EntityKind | undefined>();
   let query = $state("");
   let activeQuery = $state<string | null>(null);
@@ -73,7 +74,7 @@
   }
 </script>
 
-<ManagedHoldingTracking connectionId={connection.id} {showControls} {canControl} />
+<ManagedHoldingTracking connectionId={connection.id} {showControls} {canControl} {canRelease} />
 <ManagedRequests {connection} />
 {#if connection.status !== CONNECTION_STATUS.ready}
   <Alert.Root><Alert.Description>Test this connection in Settings to resume remote observations. Saved tracking remains available here.</Alert.Description></Alert.Root>
@@ -146,7 +147,7 @@
         {#if !detail.files.length}<p class="py-3 text-sm text-text-muted">No final files are currently associated with this holding.</p>{/if}
       </div>
       {#if detail.files.length > visibleFiles}<Button variant="secondary" onclick={() => visibleFiles += 50}>Show more files</Button>{/if}
-      {#key detail.item.remoteId}<ManagedHoldingTracking connectionId={connection.id} item={detail.item} {showControls} {canControl} />{/key}
+      {#key detail.item.remoteId}<ManagedHoldingTracking connectionId={connection.id} item={detail.item} {showControls} {canControl} {canRelease} />{/key}
     {/if}
     <DialogBase.Footer><Button variant="outline" onclick={() => { detailOpen = false; detailSequence++; }}>Done</Button></DialogBase.Footer>
   </DialogBase.Content>

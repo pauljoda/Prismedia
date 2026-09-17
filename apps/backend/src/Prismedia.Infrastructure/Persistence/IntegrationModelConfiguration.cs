@@ -76,6 +76,11 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.ItemJson).HasColumnName("item").HasColumnType("jsonb");
             entity.Property(row => row.SelectionsJson).HasColumnName("selections").HasColumnType("jsonb");
             entity.Property(row => row.TargetsJson).HasColumnName("targets").HasColumnType("jsonb");
+            entity.Property(row => row.ReleaseOperationId).HasColumnName("release_operation_id");
+            entity.Property(row => row.ReleaseRequestJson).HasColumnName("release_request").HasColumnType("jsonb");
+            entity.Property(row => row.ReleasedAt).HasColumnName("released_at");
+            entity.Property(row => row.ReleasedBindingsJson).HasColumnName("released_bindings").HasColumnType("jsonb").HasDefaultValue("[]");
+            entity.HasIndex(row => row.ReleaseOperationId).IsUnique();
             entity.Property(row => row.Status).HasColumnName("status").HasMaxLength(32).HasConversion(value => value.ToCode(), value => value.DecodeAs<ManagedTrackingStatus>());
             entity.Property(row => row.Revision).HasColumnName("revision").IsConcurrencyToken();
             entity.Property(row => row.LastCheckedAt).HasColumnName("last_checked_at");
@@ -83,7 +88,7 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.Problem).HasColumnName("problem").HasMaxLength(4096);
             entity.HasOne<IntegrationConnectionRow>().WithMany().HasForeignKey(row => row.ConnectionId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<LibraryRootRow>().WithMany().HasForeignKey(row => row.LibraryRootId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasIndex(row => new { row.ConnectionId, row.Kind, row.RemoteId }).IsUnique();
+            entity.HasIndex(row => new { row.ConnectionId, row.Kind, row.RemoteId }).IsUnique().HasFilter("released_at IS NULL");
             entity.HasIndex(row => row.NextCheckAt);
         });
         modelBuilder.Entity<ManagedSourceBindingRow>(entity => {

@@ -29,6 +29,7 @@ export const PluginIntegrationCapabilityOperationsItem = {
   'request-managed': 'request-managed',
   'configure-managed': 'configure-managed',
   'reconcile-managed': 'reconcile-managed',
+  'inspect-managed-release': 'inspect-managed-release',
   'search-library': 'search-library',
   'get-library-item': 'get-library-item',
 } as const;

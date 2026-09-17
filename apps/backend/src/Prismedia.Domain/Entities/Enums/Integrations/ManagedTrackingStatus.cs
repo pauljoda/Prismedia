@@ -11,5 +11,9 @@ public enum ManagedTrackingStatus {
     /// <summary>Identity, coverage, or source ownership needs an explicit decision.</summary>
     [Code("needs-review")] NeedsReview,
     /// <summary>The connected service could not be observed; previous evidence is retained.</summary>
-    [Code("stale")] Stale
+    [Code("stale")] Stale,
+    /// <summary>Host actions are frozen while a fresh remote drain observation is pending.</summary>
+    [Code("release-pending")] ReleasePending,
+    /// <summary>Acquisition ownership and active source associations were explicitly released; files and history remain.</summary>
+    [Code("released")] Released
 }

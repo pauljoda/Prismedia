@@ -5,8 +5,9 @@
   import type { ManagedLibraryItem, ManagedTrackingPreview, ManagedTrackingResponse } from "$lib/api/generated/model";
   import { fetchManagedTracking, previewTracking, saveManagedTracking, refreshTracking } from "$lib/api/managed-libraries";
   import ManagedHoldingControls from "./ManagedHoldingControls.svelte";
+  import ManagedHoldingRelease from "./ManagedHoldingRelease.svelte";
 
-  let { connectionId, item = null, showControls = false, canControl = false }: { connectionId: string; item?: ManagedLibraryItem | null; showControls?: boolean; canControl?: boolean } = $props();
+  let { connectionId, item = null, showControls = false, canControl = false, canRelease = false }: { connectionId: string; item?: ManagedLibraryItem | null; showControls?: boolean; canControl?: boolean; canRelease?: boolean } = $props();
   let holdings = $state<ManagedTrackingResponse[]>([]);
   let preview = $state<ManagedTrackingPreview | null>(null);
   let error = $state<string | null>(null);
@@ -20,6 +21,8 @@
     [MANAGED_TRACKING_STATUS.tracking]: "Tracking",
     [MANAGED_TRACKING_STATUS.needsReview]: "Needs review",
     [MANAGED_TRACKING_STATUS.stale]: "Connection unavailable",
+    [MANAGED_TRACKING_STATUS.releasePending]: "Handoff pending",
+    [MANAGED_TRACKING_STATUS.released]: "Ownership released",
   };
   onMount(() => {
     void load();
@@ -65,14 +68,17 @@
       <div class="space-y-2 border-b border-border-subtle pb-3 last:border-b-0 last:pb-0">
         <p class="break-words text-sm">{holding.title}</p>
         <div class="flex flex-wrap items-center gap-2"><Badge>{statusLabels[holding.status]}</Badge>
-          <span class="text-xs text-text-muted">{#if holding.status === MANAGED_TRACKING_STATUS.waitingForFiles}{holding.targets.length} requested {holding.targets.length === 1 ? "item" : "items"}{:else}{holding.bindings.filter(file => file.isAvailable).length} of {holding.bindings.length} linked files available{/if}</span></div>
+          <span class="text-xs text-text-muted">{#if holding.status === MANAGED_TRACKING_STATUS.released}Files and history retained{:else if holding.status === MANAGED_TRACKING_STATUS.releasePending}Ownership reserved until verification completes{:else if holding.status === MANAGED_TRACKING_STATUS.waitingForFiles}{holding.targets.length} requested {holding.targets.length === 1 ? "item" : "items"}{:else}{holding.bindings.filter(file => file.isAvailable).length} of {holding.bindings.length} linked files available{/if}</span></div>
         {#if holding.problem}<p class="break-words text-sm text-text-muted">{holding.problem}</p>{/if}
         {#if holding.lastCheckedAt}<p class="text-xs text-text-muted">Checked {new Date(holding.lastCheckedAt).toLocaleString()}</p>{/if}
-        <Button variant="outline" size="sm" disabled={busy} onclick={() => void refresh(holding.id)}>Refresh tracking</Button>
+        {#if holding.status !== MANAGED_TRACKING_STATUS.released}<Button variant="outline" size="sm" disabled={busy} onclick={() => void refresh(holding.id)}>{holding.status === MANAGED_TRACKING_STATUS.releasePending ? "Refresh handoff" : "Refresh tracking"}</Button>{/if}
         {#if showControls}<ManagedHoldingControls {connectionId} holdingId={holding.id} canPreview={canControl && (holding.status === MANAGED_TRACKING_STATUS.tracking || holding.status === MANAGED_TRACKING_STATUS.waitingForFiles)} />{/if}
+        {#if showControls && canRelease && (holding.status === MANAGED_TRACKING_STATUS.tracking || holding.status === MANAGED_TRACKING_STATUS.waitingForFiles)}
+          <ManagedHoldingRelease {connectionId} holdingId={holding.id} onaccepted={saved => { holdings = holdings.map(item => item.id === saved.id ? saved : item); }} />
+        {/if}
       </div>
     {/each}
-    {#if item && !visible.length}
+    {#if item && !visible.some(holding => holding.status !== MANAGED_TRACKING_STATUS.released)}
       <p class="text-sm text-text-muted">Link this holding to its existing scanned items to retain your history across external renames and upgrades.</p>
       <Button variant="outline" size="sm" disabled={busy} onclick={match}>Match existing items</Button>
       {#if preview}

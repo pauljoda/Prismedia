@@ -323,8 +323,8 @@ also prevent duplicate local items from bypassing ownership. Titles alone do not
 equivalence. Failed acquisitions and paused monitors retain ownership until resolved.
 
 Disabling a connection, a remote outage, or clearing job history does not release its
-reservation. Moving between acquisition owners requires an explicit handoff; tracking
-does not yet offer that handoff. Database checks also reject metadata edits that would
+reservation. Moving between acquisition owners requires the explicit handoff below.
+Database checks also reject metadata edits that would
 merge two actively owned scopes.
 
 Tracking observes the connected application every five minutes and can be refreshed
@@ -345,6 +345,39 @@ renames. Scan the existing collection before linking it. Wanted-movie requests u
 explicit workflow below to attach newly available files. Other unscanned holdings and
 expanded episode coverage require a further import/linking workflow; ordinary scans
 do not silently expand the owned scope.
+
+### Release an acquisition owner
+
+Radarr plugin 1.3.0 and Sonarr plugin 1.2.0 add handoff inspection. Test the Connection
+again after upgrading. Turn off monitoring for the exact linked movie or episodes,
+let downloads and commands settle, then select **Review ownership handoff** on its
+tracked holding. Review the work, monitoring, and activity, acknowledge keeping that
+scope unmonitored, and choose **Release acquisition owner**.
+
+Acceptance freezes new Prismedia controls, requests, and source reconciliation for
+this holding while retaining its owner. The worker reads the same pinned identities
+again, verifies the reviewed path, and checks monitoring and activity before releasing
+ownership. **Handoff pending** retains ownership through an outage or changed evidence;
+**Refresh handoff** retries observation without sending remote mutations. Routine file
+observations do not invalidate a review when its target identities remain unchanged.
+
+The initial adapters conservatively require the application's entire download queue
+to be empty, including unrecognized items, and all reported commands to be terminal.
+Activity for another work can therefore delay a handoff. Missing or unknown activity
+is never evidence that work stopped. Unfinished Prismedia actions and actions closed
+with an unverified outcome block release; closing an uncertain action is not a way to
+discard its ownership risk.
+
+**Ownership released** stops tracking and preserves the source files, local items,
+user history, and archived associations. A wanted request also stops, keeping its
+existing local identity. The mapped folder remains read-only. Choose another owner
+explicitly afterward, or link the existing files again with a new reviewed association.
+Replaying the accepted handoff returns its existing result.
+
+These APIs provide observations rather than a remote transactional lock. Keep the
+old scope unmonitored and avoid starting work directly in the connected app during
+handoff. Prismedia does not delete remote holdings, cancel unrelated jobs, move files,
+or configure a replacement owner as part of release.
 
 ### Request a wanted movie through Radarr
 

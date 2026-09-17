@@ -210,6 +210,7 @@ import type {
   ManagedItemSnapshot,
   ManagedLibraryPage,
   ManagedLibraryQuery,
+  ManagedReleasePreview,
   ManagedRequestPreview,
   ManagedRequestResponse,
   ManagedTrackingPreview,
@@ -244,6 +245,7 @@ import type {
   ProblemDetails,
   RatingUpdateRequest,
   ReleaseCalendarEvent,
+  ReleaseManagedHoldingRequest,
   RemotePathMappingSaveRequest,
   RemotePathMappingView,
   RemoveFileExclusionParams,
@@ -9055,6 +9057,102 @@ export const updatePluginAuth = async (provider: string,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       pluginAuthUpdateRequest,)
+  }
+);}
+
+
+
+export type previewManagedReleaseResponse200 = {
+  data: ManagedReleasePreview
+  status: 200
+}
+
+export type previewManagedReleaseResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type previewManagedReleaseResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type previewManagedReleaseResponseSuccess = (previewManagedReleaseResponse200) & {
+  headers: Headers;
+};
+export type previewManagedReleaseResponseError = (previewManagedReleaseResponse400 | previewManagedReleaseResponse409) & {
+  headers: Headers;
+};
+
+export type previewManagedReleaseResponse = (previewManagedReleaseResponseSuccess | previewManagedReleaseResponseError)
+
+export const getPreviewManagedReleaseUrl = (id: string,
+    holdingId: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/tracking/${holdingId}/release/preview`
+}
+
+export const previewManagedRelease = async (id: string,
+    holdingId: string, options?: RequestInit): Promise<previewManagedReleaseResponse> => {
+
+  return orvalFetch<previewManagedReleaseResponse>(getPreviewManagedReleaseUrl(id,holdingId),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type releaseManagedHoldingResponse202 = {
+  data: ManagedTrackingResponse
+  status: 202
+}
+
+export type releaseManagedHoldingResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type releaseManagedHoldingResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type releaseManagedHoldingResponseSuccess = (releaseManagedHoldingResponse202) & {
+  headers: Headers;
+};
+export type releaseManagedHoldingResponseError = (releaseManagedHoldingResponse400 | releaseManagedHoldingResponse409) & {
+  headers: Headers;
+};
+
+export type releaseManagedHoldingResponse = (releaseManagedHoldingResponseSuccess | releaseManagedHoldingResponseError)
+
+export const getReleaseManagedHoldingUrl = (id: string,
+    holdingId: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/tracking/${holdingId}/release`
+}
+
+export const releaseManagedHolding = async (id: string,
+    holdingId: string,
+    releaseManagedHoldingRequest: ReleaseManagedHoldingRequest, options?: RequestInit): Promise<releaseManagedHoldingResponse> => {
+
+  return orvalFetch<releaseManagedHoldingResponse>(getReleaseManagedHoldingUrl(id,holdingId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      releaseManagedHoldingRequest,)
   }
 );}
 

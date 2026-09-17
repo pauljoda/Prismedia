@@ -1,6 +1,7 @@
 import { previewManagedControls, listManagedControls, createManagedControl, refreshManagedControl, cancelManagedControl, closeUnverifiedManagedControl } from "$lib/api/generated/prismedia";
 import type { CreateManagedControlRequest, ManagedControlActionResponse, ManagedControlPreview } from "$lib/api/generated/model";
-import { problemMessage, unwrapGenerated } from "$lib/api/generated-response";
+import { unwrapGenerated } from "$lib/api/generated-response";
+import { acceptManagedIntent } from "$lib/api/managed-acceptance";
 
 /** The server definitely refused acceptance, so the draft may safely be edited. */
 export class ManagerActionRejectedError extends Error {}
@@ -12,9 +13,8 @@ export const fetchControlActions = (connectionId: string, holdingId: string): Pr
   listManagedControls(connectionId, holdingId).then(response => unwrapGenerated(response, "Could not read manager actions"));
 /** Uses the same operation ID after response loss; an accepted action never submits an uncertain remote search again. */
 export async function saveControlAction(connectionId: string, holdingId: string, request: CreateManagedControlRequest): Promise<ManagedControlActionResponse> {
-  const response = await createManagedControl(connectionId, holdingId, request);
-  if ([400, 401, 403, 404, 409].includes(response.status)) throw new ManagerActionRejectedError(problemMessage(response.data) ?? "The manager action was not accepted");
-  return unwrapGenerated(response, "Could not confirm whether the action was accepted. Retry this same action to check.", [202]);
+  return acceptManagedIntent(createManagedControl(connectionId, holdingId, request), message => new ManagerActionRejectedError(message),
+    "Could not confirm whether the action was accepted. Retry this same action to check.");
 }
 /** Schedules observation of the saved command or uncertain settings. */
 export const refreshControlAction = (connectionId: string, holdingId: string, id: string) =>

@@ -14,4 +14,5 @@ public sealed record ManagedTrackingPreview(Guid? LibraryRootId, IReadOnlyList<M
 /// <summary>Durable tracking health and exact associations; available files refer only to verified local bytes.</summary>
 public sealed record ManagedTrackingResponse(Guid Id, Guid ConnectionId, Guid LibraryRootId, ManagedItemInput Item,
     string Title, ManagedTrackingStatus Status, long Revision, DateTimeOffset? LastCheckedAt, string? Problem,
-    IReadOnlyList<ManagedFileBinding> Bindings, IReadOnlyList<ManagedTargetBinding> Targets);
+    IReadOnlyList<ManagedFileBinding> Bindings, IReadOnlyList<ManagedTargetBinding> Targets,
+    Guid? ReleaseOperationId = null, DateTimeOffset? ReleasedAt = null);

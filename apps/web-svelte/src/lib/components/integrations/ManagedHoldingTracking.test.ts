@@ -56,4 +56,21 @@ describe("Managed holding tracking", () => {
     expect(screen.getByRole("button", { name: "Refresh tracking" })).toBeInTheDocument();
     expect(api.previewTracking).not.toHaveBeenCalled();
   });
+  it("keeps ownership visibly reserved while a handoff is pending", async () => {
+    api.fetchManagedTracking.mockResolvedValue([{ ...tracked, status: MANAGED_TRACKING_STATUS.releasePending }]);
+    render(ManagedHoldingTracking, { connectionId: "connection", item, canRelease: true });
+    await screen.findByText("Handoff pending");
+    expect(screen.getByText("Ownership reserved until verification completes")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Refresh handoff" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Match existing items" })).not.toBeInTheDocument();
+  });
+  it("retains released history and requires new review before linking the same files again", async () => {
+    api.fetchManagedTracking.mockResolvedValue([{ ...tracked, status: MANAGED_TRACKING_STATUS.released }]);
+    render(ManagedHoldingTracking, { connectionId: "connection", item });
+    await screen.findByText("Ownership released");
+    expect(screen.getByText("Files and history retained")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Refresh tracking" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Match existing items" })).toBeInTheDocument();
+    expect(api.saveManagedTracking).not.toHaveBeenCalled();
+  });
 });

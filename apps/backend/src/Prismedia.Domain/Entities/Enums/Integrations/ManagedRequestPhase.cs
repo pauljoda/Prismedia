@@ -14,4 +14,6 @@ public enum ManagedRequestPhase {
     [Code("rejected")] Rejected,
     /// <summary>Intent was cancelled before any possible remote creation effect.</summary>
     [Code("cancelled")] Cancelled,
+    /// <summary>The associated holding completed an explicit ownership handoff.</summary>
+    [Code("ownership-released")] OwnershipReleased,
 }

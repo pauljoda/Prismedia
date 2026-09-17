@@ -82,6 +82,10 @@ public enum IntegrationOperation {
     [Code("reconcile-managed")]
     ReconcileManaged,
 
+    /// <summary>Read exact monitoring and complete remote activity before releasing ownership.</summary>
+    [Code("inspect-managed-release")]
+    InspectManagedRelease,
+
     /// <summary>Search existing remote holdings.</summary>
     [Code("search-library")]
     SearchLibrary,

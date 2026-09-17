@@ -46,6 +46,7 @@ public sealed class ManagedTrackingService(ManagedLibraryService library, IManag
     /// <summary>Observes remote state before applying an all-or-nothing domain decision to the same saved local owners.</summary>
     public async Task ReconcileAsync(Guid id, CancellationToken token) {
         var work = await store.FindAsync(id, token) ?? throw new ArgumentException("This tracked holding no longer exists.");
+        if (work.Tracking.Status is ManagedTrackingStatus.ReleasePending or ManagedTrackingStatus.Released) return;
         try {
             var remote = await library.GetAsync(work.Tracking.ConnectionId, work.Tracking.Item, token);
             var observation = await store.ObserveAsync(work.Tracking.ConnectionId, remote, token);

@@ -24,4 +24,8 @@ export interface ManagedTrackingResponse {
   problem: string | null;
   bindings: ManagedFileBinding[];
   targets: ManagedTargetBinding[];
+  /** @nullable */
+  releaseOperationId?: string | null;
+  /** @nullable */
+  releasedAt?: string | null;
 }

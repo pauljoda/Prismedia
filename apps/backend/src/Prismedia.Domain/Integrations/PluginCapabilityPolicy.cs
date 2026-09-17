@@ -12,7 +12,7 @@ public static class PluginCapabilityPolicy {
             or IntegrationOperation.GetJob or IntegrationOperation.Cancel or IntegrationOperation.ListArtifacts
             or IntegrationOperation.AuthorizeArtifact or IntegrationOperation.RenewRetention or IntegrationOperation.Acknowledge,
         PluginCapability.ExternalManager => operation is IntegrationOperation.LookupManaged or IntegrationOperation.ManagerOptions or IntegrationOperation.EnsureManaged
-            or IntegrationOperation.RequestManaged or IntegrationOperation.ConfigureManaged or IntegrationOperation.ReconcileManaged,
+            or IntegrationOperation.RequestManaged or IntegrationOperation.ConfigureManaged or IntegrationOperation.ReconcileManaged or IntegrationOperation.InspectManagedRelease,
         PluginCapability.ConnectedLibrary => operation is IntegrationOperation.SearchLibrary or IntegrationOperation.GetLibraryItem,
         _ => false
     };

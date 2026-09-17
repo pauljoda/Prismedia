@@ -1,6 +1,7 @@
 import { previewManagedRequest, listManagedRequests, createManagedRequest, refreshManagedRequest, cancelManagedRequest } from "$lib/api/generated/prismedia";
 import type { CreateManagedRequestInput, ManagedRequestResponse, ManagedRequestPreview, PreviewManagedRequestInput } from "$lib/api/generated/model";
-import { problemMessage, unwrapGenerated } from "$lib/api/generated-response";
+import { unwrapGenerated } from "$lib/api/generated-response";
+import { acceptManagedIntent } from "$lib/api/managed-acceptance";
 
 /** A definite acceptance refusal permits editing the request after another review. */
 export class ManagedRequestRejectedError extends Error {}
@@ -12,9 +13,8 @@ export const fetchManagedRequests = (connectionId: string): Promise<ManagedReque
   listManagedRequests(connectionId).then(response => unwrapGenerated(response, "Could not read manager requests"));
 /** Retains the same operation identity after response loss to reconcile acceptance safely. */
 export async function saveManagedRequest(connectionId: string, input: CreateManagedRequestInput): Promise<ManagedRequestResponse> {
-  const response = await createManagedRequest(connectionId, input);
-  if ([400, 401, 403, 404, 409].includes(response.status)) throw new ManagedRequestRejectedError(problemMessage(response.data) ?? "The request was not accepted");
-  return unwrapGenerated(response, "Could not confirm acceptance. Retry this same request to check.", [202]);
+  return acceptManagedIntent(createManagedRequest(connectionId, input), message => new ManagedRequestRejectedError(message),
+    "Could not confirm acceptance. Retry this same request to check.");
 }
 /** Queues observation without repeating an uncertain creation. */
 export const refreshRequest = (connectionId: string, id: string) =>

@@ -78,13 +78,15 @@ public sealed partial class EfManagedTrackingStore(PrismediaDbContext db, IExter
     public async Task QueueAsync(Guid connectionId, Guid id, CancellationToken token) {
         var row = await db.ManagedHoldings.AsNoTracking().SingleOrDefaultAsync(row => row.Id == id && row.ConnectionId == connectionId, token)
             ?? throw new ArgumentException("This connection does not own the tracked holding.");
+        if (row.Status == ManagedTrackingStatus.Released) return;
         await PublishAsync(row, token);
     }
 
     /// <inheritdoc />
     public async Task QueueDueAsync(CancellationToken token) {
         var now = DateTimeOffset.UtcNow;
-        var due = await db.ManagedHoldings.Where(row => row.NextCheckAt <= now && row.Status != ManagedTrackingStatus.NeedsReview && row.Status != ManagedTrackingStatus.WaitingForFiles)
+        var due = await db.ManagedHoldings.Where(row => row.NextCheckAt <= now && row.Status != ManagedTrackingStatus.NeedsReview && row.Status != ManagedTrackingStatus.WaitingForFiles
+                && row.Status != ManagedTrackingStatus.Released)
             .Join(db.IntegrationConnections.Where(connection => connection.Enabled), row => row.ConnectionId, connection => connection.Id, (row, _) => row)
             .OrderBy(row => row.NextCheckAt).Take(25).ToArrayAsync(token);
         foreach (var row in due) {
@@ -113,6 +115,6 @@ public sealed partial class EfManagedTrackingStore(PrismediaDbContext db, IExter
         }).ToArray();
         return new(row.Id, row.ConnectionId, row.LibraryRootId, JsonSerializer.Deserialize<ManagedItemInput>(row.ItemJson, Json)!,
             row.Title, row.Status, row.Revision, row.LastCheckedAt, row.Problem, files,
-            JsonSerializer.Deserialize<ManagedTargetBinding[]>(row.TargetsJson, Json)!);
+            JsonSerializer.Deserialize<ManagedTargetBinding[]>(row.TargetsJson, Json)!, row.ReleaseOperationId, row.ReleasedAt);
     }
 }

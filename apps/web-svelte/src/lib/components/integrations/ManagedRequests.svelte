@@ -35,6 +35,7 @@
     [MANAGED_REQUEST_PHASE.completed]: "Imported into Prismedia",
     [MANAGED_REQUEST_PHASE.rejected]: "Creation refused",
     [MANAGED_REQUEST_PHASE.cancelled]: "Cancelled",
+    [MANAGED_REQUEST_PHASE.ownershipReleased]: "Ownership released",
   };
   const activePhases = new Set<ManagedRequestResponse["phase"]>([MANAGED_REQUEST_PHASE.pendingCreation, MANAGED_REQUEST_PHASE.creationUncertain, MANAGED_REQUEST_PHASE.awaitingFiles]);
   onMount(() => {
@@ -49,7 +50,7 @@
       const result = await fetchManagedRequests(connection.id);
       if (!alive || current !== sequence) return;
       requests = result;
-      if (initialEntity && result.some(item => item.entityId === initialEntity.id && item.phase !== MANAGED_REQUEST_PHASE.cancelled)) expanded = false;
+      if (initialEntity && result.some(item => item.entityId === initialEntity.id && item.phase !== MANAGED_REQUEST_PHASE.cancelled && item.phase !== MANAGED_REQUEST_PHASE.ownershipReleased)) expanded = false;
       if (pending && result.some(item => item.id === pending?.operationId)) { pending = null; preview = null; selected = []; error = null; if (initialEntity) expanded = false; }
     } catch (cause) { if (alive && current === sequence) error = message(cause); }
   }
@@ -142,7 +143,7 @@
           {#if activePhases.has(request.phase)}<Button variant="outline" size="sm" disabled={busy} onclick={() => void refresh(request)}>Refresh request</Button>{/if}
           {#if request.canCancel}<Button variant="outline" size="sm" disabled={busy} onclick={() => void cancel(request)}>Cancel request</Button>{/if}
         </div>
-        {#if request.remoteId}<ManagedHoldingControls connectionId={connection.id} holdingId={request.id} canPreview={canRequest} />{/if}
+        {#if request.remoteId}<ManagedHoldingControls connectionId={connection.id} holdingId={request.id} canPreview={canRequest && request.phase !== MANAGED_REQUEST_PHASE.ownershipReleased} />{/if}
       </article>
     {/each}
   </Panel>
