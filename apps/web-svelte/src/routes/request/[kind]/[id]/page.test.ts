@@ -10,6 +10,7 @@ import {
   REQUEST_MEDIA_KIND,
   REQUEST_REVIEW_SELECTION,
   CONNECTION_STATUS, INTEGRATION_OPERATION, PLUGIN_CAPABILITY,
+  CREDIT_ROLE, METADATA_PATCH_FIELD,
 } from "$lib/api/generated/codes";
 import type {
   BookAcquisitionProfileView,
@@ -238,6 +239,26 @@ describe("reviewed request route", () => {
       }), true);
     });
     expect(mocks.goto).toHaveBeenCalledWith("/series/series-entity");
+  });
+
+  it("reviews direct credits through All/None and omits rejected credits from the request", async () => {
+    const review = movieReview();
+    review.proposal.patch.credits = [{ name: "Direct provider credit", role: CREDIT_ROLE.actor, character: null, sortOrder: 0 }];
+    mocks.reviewRequest.mockResolvedValue(review);
+    setRoute(REQUEST_MEDIA_KIND.movie, review.externalIdentity.value, `plugin=${review.pluginId}&namespace=${review.externalIdentity.namespace}`);
+    render(Page);
+    const credits = await screen.findByRole("checkbox", { name: "Accept Credits" });
+    expect(credits).toBeChecked();
+    await fireEvent.click(screen.getByRole("button", { name: "None", exact: true }));
+    expect(credits).not.toBeChecked();
+    await fireEvent.click(screen.getByRole("button", { name: "All", exact: true }));
+    expect(credits).toBeChecked();
+    await fireEvent.click(credits);
+    await fireEvent.click(screen.getAllByRole("button", { name: "Request", exact: true })[0]);
+    await waitFor(() => expect(mocks.commitReviewedRequest).toHaveBeenCalled());
+    const payload = mocks.commitReviewedRequest.mock.calls[0][0];
+    expect(payload.selectedFields).not.toContain(METADATA_PATCH_FIELD.credits);
+    expect(payload.proposal.patch.credits).toEqual([]);
   });
 
   it("uses the identify metadata controls and sends the cached filtered proposal", async () => {

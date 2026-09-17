@@ -157,6 +157,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Metadata review shows creator credits and studio names even when a plugin does not supply separate person or studio proposals, with explicit accept/reject controls.
+
 - Discovery reports metadata plugin failures instead of displaying them as successful searches with no matches.
 
 - Library rescans preserve protected titles and deliberately cleared descriptions, including embedded book metadata and sidecars. Metadata protection identifies values supplied by a library scan.

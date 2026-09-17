@@ -23,7 +23,7 @@
     mergeProgressiveReviewSelectionDefaults,
     proposalHasField,
     relationshipProposals,
-    reviewDiffFieldKeys,
+    reviewBaseFieldKeys,
     structuralChildProposals,
   } from "$lib/components/identify-review";
   import MetadataProposalReview from "$lib/components/review/MetadataProposalReview.svelte";
@@ -322,7 +322,7 @@
       [activeProposal.proposalId]: {
         ...activeSelectedFields,
         ...Object.fromEntries(
-          reviewDiffFieldKeys.map((field) => [field, selected && proposalHasField(activeProposal, field)]),
+          reviewBaseFieldKeys(activeProposal).map((field) => [field, selected && proposalHasField(activeProposal, field)]),
         ),
       },
     };

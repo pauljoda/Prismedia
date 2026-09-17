@@ -51,6 +51,20 @@ export const reviewDiffFieldKeys = reviewFieldKeys.filter(
   (field) => !(reviewDetailedFieldKeys as readonly string[]).includes(field),
 );
 
+/** Keeps direct credits and studio names reviewable when a provider has no matching relationship cards. */
+export function reviewBaseFieldKeys(proposal: EntityMetadataProposal): (typeof reviewFieldKeys)[number][] {
+  const relationships = relationshipProposals(proposal);
+  const represented = (kind: string, name: string) => relationships.some((relationship) =>
+    relationship.targetKind === kind &&
+    (relationship.patch.title ?? "").trim().localeCompare(name.trim(), undefined, { sensitivity: "accent" }) === 0,
+  );
+  const hasDirectCredits = proposal.patch.credits.some((credit) => !represented(ENTITY_KIND.person, credit.name));
+  const hasDirectStudio = Boolean(proposal.patch.studio?.trim()) && !represented(ENTITY_KIND.studio, proposal.patch.studio!);
+  return reviewFieldKeys.filter((field) => reviewDiffFieldKeys.includes(field) ||
+    field === METADATA_PATCH_FIELD.credits && hasDirectCredits ||
+    field === METADATA_PATCH_FIELD.studio && hasDirectStudio);
+}
+
 export const reviewFieldLabels: Record<string, string> = {
   title: "Title",
   description: "Description",

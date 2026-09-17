@@ -29,7 +29,7 @@
     structuralChildProposals,
     relationshipProposals,
     relationshipTitlesForDetail,
-    reviewDiffFieldKeys,
+    reviewBaseFieldKeys,
   } from "$lib/components/identify-review";
   import {
     proposalImageUrl,
@@ -56,7 +56,7 @@
 
   const store = useIdentifyStore();
 
-  const DIFF_FIELD_KEYS = reviewDiffFieldKeys;
+  const DIFF_FIELD_KEYS = $derived(reviewBaseFieldKeys(proposal));
 
   let selectedFields = $state<Record<string, boolean>>({});
   let selectedImages = $state<Record<string, string | null>>({});
