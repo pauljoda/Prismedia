@@ -83,7 +83,7 @@ describe("Managed holding detail", () => {
     mocks.fetchManagedTracking.mockResolvedValue([]);
   });
 
-  it("presents the remote title through the shared detail hierarchy", () => {
+  it("presents the remote title through the shared detail hierarchy", async () => {
     render(ManagedHoldingDetail, {
       connection,
       detail: snapshot,
@@ -96,8 +96,14 @@ describe("Managed holding detail", () => {
     expect(screen.getByText("Profile: HD-1080p")).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: "Overview" })).toBeInTheDocument();
     expect(screen.getByRole("tab", { name: /Files/ })).toBeInTheDocument();
-    expect(screen.getByRole("tab", { name: "Library link" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "In Prismedia" })).toBeInTheDocument();
     expect(screen.getAllByText("Checking availability").length).toBeGreaterThan(0);
+
+    await fireEvent.click(screen.getByRole("tab", { name: "In Prismedia" }));
+    expect(screen.getByText("When linked, Prismedia reads Radarr's files in place and follows file changes automatically.")).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Find this title in Prismedia" })).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: "Link to your Prismedia library" })).not.toBeInTheDocument();
+    expect(screen.queryByText("Library link")).not.toBeInTheDocument();
   });
 
   it("does not describe an empty file list as locally available", () => {
@@ -234,7 +240,7 @@ describe("Managed holding detail", () => {
     };
     render(ManagedHoldingDetail, { connection, detail: comicDetail });
 
-    expect(screen.queryByRole("tab", { name: "Library link" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "In Prismedia" })).not.toBeInTheDocument();
     await fireEvent.click(screen.getByRole("tab", { name: /Files/ }));
     expect(screen.getByText("#½: Special")).toBeInTheDocument();
     expect(screen.getByText("#12.5: Interlude")).toBeInTheDocument();

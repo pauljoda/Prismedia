@@ -18,16 +18,17 @@ const accepted = { id: "holding", status: MANAGED_TRACKING_STATUS.releasePending
 describe("Managed ownership handoff", () => {
   beforeEach(() => { vi.resetAllMocks(); api.fetchReleasePreview.mockResolvedValue(preview); api.saveOwnershipRelease.mockResolvedValue(accepted); });
   async function open(onaccepted = vi.fn()) {
-    render(ManagedHoldingRelease, { connectionId: "connection", holdingId: "holding", onaccepted });
-    await fireEvent.click(screen.getByRole("button", { name: "Review ownership handoff" }));
+    render(ManagedHoldingRelease, { connectionId: "connection", holdingId: "holding", connectionName: "Radarr", onaccepted });
+    await fireEvent.click(screen.getByRole("button", { name: "Stop managing this title with Radarr" }));
+    await screen.findByRole("dialog", { name: "Stop managing with Radarr?" });
     await screen.findByText("Monitoring is off for 1 selected item.");
     return onaccepted;
   }
   it("requires an explicit review and acknowledgement before accepting a release", async () => {
     const saved = await open();
-    const submit = screen.getByRole("button", { name: "Release acquisition owner" });
+    const submit = screen.getByRole("button", { name: "Stop Prismedia management" });
     expect(submit).toBeDisabled(); expect(api.saveOwnershipRelease).not.toHaveBeenCalled();
-    await fireEvent.click(screen.getByRole("checkbox", { name: "I will keep this scope unmonitored in the connected app" }));
+    await fireEvent.click(screen.getByRole("checkbox", { name: "I will keep this title unmonitored in Radarr" }));
     await fireEvent.click(submit);
     await waitFor(() => expect(saved).toHaveBeenCalledWith(accepted));
     expect(api.saveOwnershipRelease).toHaveBeenCalledWith("connection", "holding", expect.objectContaining({ expectedRevision: 3,
@@ -42,21 +43,21 @@ describe("Managed ownership handoff", () => {
   it("replays identical intent after response loss without creating another handoff", async () => {
     api.saveOwnershipRelease.mockRejectedValueOnce(new Error("Response lost"));
     await open();
-    await fireEvent.click(screen.getByRole("checkbox", { name: "I will keep this scope unmonitored in the connected app" }));
-    await fireEvent.click(screen.getByRole("button", { name: "Release acquisition owner" }));
+    await fireEvent.click(screen.getByRole("checkbox", { name: "I will keep this title unmonitored in Radarr" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Stop Prismedia management" }));
     await screen.findByText("Response lost");
-    await fireEvent.click(screen.getByRole("button", { name: "Retry same handoff" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Retry same stop request" }));
     await waitFor(() => expect(api.saveOwnershipRelease).toHaveBeenCalledTimes(2));
     expect(api.saveOwnershipRelease.mock.calls[1][2]).toEqual(api.saveOwnershipRelease.mock.calls[0][2]);
   });
   it("permits a fresh review after a definite refusal", async () => {
     api.saveOwnershipRelease.mockRejectedValueOnce(new ManagedReleaseRejectedError("Review changed"));
     await open();
-    await fireEvent.click(screen.getByRole("checkbox", { name: "I will keep this scope unmonitored in the connected app" }));
-    await fireEvent.click(screen.getByRole("button", { name: "Release acquisition owner" }));
+    await fireEvent.click(screen.getByRole("checkbox", { name: "I will keep this title unmonitored in Radarr" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Stop Prismedia management" }));
     await screen.findByText("Review changed");
-    expect(screen.queryByRole("button", { name: "Retry same handoff" })).not.toBeInTheDocument();
-    await fireEvent.click(screen.getByRole("button", { name: "Review ownership handoff" }));
+    expect(screen.queryByRole("button", { name: "Retry same stop request" })).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Check again" }));
     await screen.findByText("Monitoring is off for 1 selected item.");
     expect(api.fetchReleasePreview).toHaveBeenCalledTimes(2);
   });

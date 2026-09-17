@@ -217,7 +217,7 @@
     { id: "overview", label: "Overview", icon: Server, sections: ["description", "tags", overviewSectionId] },
     { id: "files", label: "Files", count: detail.files.length, icon: FileText, sections: [filesSectionId] },
     ...(isTrackable
-      ? [{ id: "library", label: "Library link", icon: Link2, sections: [librarySectionId] }]
+      ? [{ id: "library", label: "In Prismedia", icon: Link2, sections: [librarySectionId] }]
       : []),
   ]);
   const actionButtons = $derived.by((): EntityDetailActionButton[] => hasMissingMapping && canConfigureMapping ? [{
@@ -379,15 +379,9 @@
 {/snippet}
 
 {#snippet libraryContent()}
-  <div class="space-y-3">
-    <div>
-      <h2 class="text-base font-semibold">Link to your Prismedia library</h2>
-      <p class="mt-1 text-sm text-text-muted">Keep this title aligned with scanned Prismedia items while {connection.name} continues to organize its files.</p>
-    </div>
-    {#key detail.item.remoteId}
-      <ManagedHoldingTracking connectionId={connection.id} item={detail.item} {showControls} {canControl} {canRelease} />
-    {/key}
-  </div>
+  {#key detail.item.remoteId}
+    <ManagedHoldingTracking connectionId={connection.id} connectionName={connection.name} item={detail.item} {showControls} {canControl} {canRelease} />
+  {/key}
 {/snippet}
 
 {#snippet sectionContent(section: EntityDetailSection)}

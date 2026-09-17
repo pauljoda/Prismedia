@@ -193,12 +193,12 @@
       {/if}
     </div>
     {#if expandedKey === item.key && item.type === ITEM.request && item.request.remoteId}
-      <div class="activity-details"><ManagedHoldingControls connectionId={item.connection.id} holdingId={item.request.id} canPreview={canControl(item.connection) && item.request.phase !== MANAGED_REQUEST_PHASE.ownershipReleased} /></div>
+      <div class="activity-details"><ManagedHoldingControls connectionId={item.connection.id} connectionName={item.connection.name} holdingId={item.request.id} canPreview={canControl(item.connection) && item.request.phase !== MANAGED_REQUEST_PHASE.ownershipReleased} /></div>
     {:else if expandedKey === item.key && item.type === ITEM.holding}
       <div class="activity-details space-y-3">
         {#if item.holding.lastCheckedAt}<p class="text-xs text-text-muted">Last checked {new Date(item.holding.lastCheckedAt).toLocaleString()}</p>{/if}
-        <ManagedHoldingControls connectionId={item.connection.id} holdingId={item.holding.id} canPreview={canControl(item.connection) && (item.holding.status === MANAGED_TRACKING_STATUS.tracking || item.holding.status === MANAGED_TRACKING_STATUS.waitingForFiles)} />
-        {#if canRelease(item.connection) && (item.holding.status === MANAGED_TRACKING_STATUS.tracking || item.holding.status === MANAGED_TRACKING_STATUS.waitingForFiles)}<ManagedHoldingRelease connectionId={item.connection.id} holdingId={item.holding.id} onaccepted={saved => updateHolding(item.connection.id, saved)} />{/if}
+        <ManagedHoldingControls connectionId={item.connection.id} connectionName={item.connection.name} holdingId={item.holding.id} canPreview={canControl(item.connection) && (item.holding.status === MANAGED_TRACKING_STATUS.tracking || item.holding.status === MANAGED_TRACKING_STATUS.waitingForFiles)} />
+        {#if canRelease(item.connection) && (item.holding.status === MANAGED_TRACKING_STATUS.tracking || item.holding.status === MANAGED_TRACKING_STATUS.waitingForFiles)}<ManagedHoldingRelease connectionId={item.connection.id} connectionName={item.connection.name} holdingId={item.holding.id} onaccepted={saved => updateHolding(item.connection.id, saved)} />{/if}
       </div>
     {/if}
   </article>

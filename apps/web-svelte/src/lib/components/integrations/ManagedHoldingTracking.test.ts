@@ -3,13 +3,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ENTITY_KIND, MANAGED_TRACKING_STATUS } from "$lib/api/generated/codes";
 import ManagedHoldingTracking from "./ManagedHoldingTracking.svelte";
 
-const api = vi.hoisted(() => ({ fetchManagedTracking: vi.fn(), previewTracking: vi.fn(), saveManagedTracking: vi.fn(), refreshTracking: vi.fn() }));
+const api = vi.hoisted(() => ({ fetchManagedTracking: vi.fn(), previewTracking: vi.fn(), saveManagedTracking: vi.fn(), refreshTracking: vi.fn(), resolveEntityHrefById: vi.fn(), goto: vi.fn() }));
 vi.mock("$lib/api/managed-libraries", () => api);
+vi.mock("$lib/entities/entity-route-resolver", () => ({ resolveEntityHrefById: api.resolveEntityHrefById }));
+vi.mock("$app/navigation", () => ({ goto: api.goto }));
 const item = { remoteId: "1", entityKind: ENTITY_KIND.movie, title: "A film", year: 2024, externalIds: { tmdb: "1" }, monitored: false, profileId: null, remoteFileCount: 1 };
 const selection = { remoteTargetId: "1", entityId: "local-item", sourceFileId: "local-file" };
 const preview = { libraryRootId: "mapped-root", selections: [selection], sources: [{ ...selection, localPath: "/library/film.mkv", kind: ENTITY_KIND.movie, seasonNumber: null, episodeNumber: null, absoluteNumber: null }], reviewReason: null };
 const tracked = { id: "tracking", connectionId: "connection", libraryRootId: "mapped-root", item: { entityKind: item.entityKind, remoteId: item.remoteId, expectedExternalIds: item.externalIds },
-  title: item.title, status: MANAGED_TRACKING_STATUS.pending, revision: 1, lastCheckedAt: null, problem: null, bindings: [] };
+  title: item.title, status: MANAGED_TRACKING_STATUS.pending, revision: 1, lastCheckedAt: null, problem: null, bindings: [],
+  targets: [{ target: { remoteTargetId: "1", kind: ENTITY_KIND.movie, seasonNumber: null, episodeNumber: null, absoluteNumber: null }, entityId: "local-item" }] };
 
 describe("Managed holding tracking", () => {
   beforeEach(() => {
@@ -17,6 +20,8 @@ describe("Managed holding tracking", () => {
     api.fetchManagedTracking.mockResolvedValue([]);
     api.previewTracking.mockResolvedValue(preview);
     api.saveManagedTracking.mockResolvedValue(tracked);
+    api.resolveEntityHrefById.mockResolvedValue("/movies/local-item");
+    api.goto.mockResolvedValue(undefined);
   });
 
   afterEach(() => {
@@ -27,8 +32,8 @@ describe("Managed holding tracking", () => {
     api.fetchManagedTracking.mockReturnValue(new Promise(() => {}));
     render(ManagedHoldingTracking, { connectionId: "connection", item });
 
-    expect(screen.getByText("Checking library link…")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Match existing items" })).not.toBeInTheDocument();
+    expect(screen.getByText("Checking Prismedia links…")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Find matching items" })).not.toBeInTheDocument();
   });
 
   it("does not let a slower poll replace a newer tracking response", async () => {
@@ -85,7 +90,7 @@ describe("Managed holding tracking", () => {
     await screen.findByText("First title");
 
     await view.rerender({ connectionId: "connection", item: nextItem });
-    expect(await screen.findByText("Checking library link…")).toBeInTheDocument();
+    expect(await screen.findByText("Checking Prismedia links…")).toBeInTheDocument();
     expect(screen.queryByText("First title")).not.toBeInTheDocument();
 
     nextRead.resolve([{
@@ -100,29 +105,29 @@ describe("Managed holding tracking", () => {
   it("requires reviewing exact local matches before persisting the association", async () => {
     render(ManagedHoldingTracking, { connectionId: "connection", item });
     expect(api.saveManagedTracking).not.toHaveBeenCalled();
-    await fireEvent.click(await screen.findByRole("button", { name: "Match existing items" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Find matching items" }));
     await screen.findByText("/library/film.mkv");
     expect(api.saveManagedTracking).not.toHaveBeenCalled();
-    await fireEvent.click(screen.getByRole("button", { name: "Link existing items" }));
-    await screen.findByText("Waiting for verification");
+    await fireEvent.click(screen.getByRole("button", { name: "Link matching items" }));
+    await screen.findByText("Link pending");
     expect(api.saveManagedTracking).toHaveBeenCalledWith("connection", expect.objectContaining({ libraryRootId: "mapped-root", selections: [selection], item: tracked.item }));
   });
 
   it("keeps ambiguous or unscanned coverage out of the linking action", async () => {
     api.previewTracking.mockResolvedValue({ ...preview, reviewReason: "Scan the existing source first." });
     render(ManagedHoldingTracking, { connectionId: "connection", item });
-    await fireEvent.click(await screen.findByRole("button", { name: "Match existing items" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Find matching items" }));
     await screen.findByText("Scan the existing source first.");
-    expect(screen.queryByRole("button", { name: "Link existing items" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Link matching items" })).not.toBeInTheDocument();
   });
 
   it("reuses the operation ID after a submission response is lost", async () => {
     api.saveManagedTracking.mockRejectedValueOnce(new Error("Response lost"));
     render(ManagedHoldingTracking, { connectionId: "connection", item });
-    await fireEvent.click(await screen.findByRole("button", { name: "Match existing items" }));
-    await fireEvent.click(await screen.findByRole("button", { name: "Link existing items" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Find matching items" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Link matching items" }));
     await screen.findByText("Response lost");
-    await fireEvent.click(screen.getByRole("button", { name: "Link existing items" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Link matching items" }));
     await waitFor(() => expect(api.saveManagedTracking).toHaveBeenCalledTimes(2));
     expect(api.saveManagedTracking.mock.calls[0]?.[1].operationId).toBe(api.saveManagedTracking.mock.calls[1]?.[1].operationId);
   });
@@ -131,31 +136,55 @@ describe("Managed holding tracking", () => {
     api.fetchManagedTracking.mockResolvedValue([{ ...tracked, status: MANAGED_TRACKING_STATUS.stale, problem: "Connection unavailable; bindings retained." }]);
     render(ManagedHoldingTracking, { connectionId: "connection" });
     await screen.findByText("Connection unavailable; bindings retained.");
-    expect(screen.getByRole("button", { name: "Refresh tracking" })).toBeInTheDocument();
+    expect(screen.getByText("The connection is unavailable. Previously linked items are retained, but file availability is unknown.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Check now" })).toBeInTheDocument();
     expect(api.previewTracking).not.toHaveBeenCalled();
   });
   it("keeps ownership visibly reserved while a handoff is pending", async () => {
     api.fetchManagedTracking.mockResolvedValue([{ ...tracked, status: MANAGED_TRACKING_STATUS.releasePending }]);
     render(ManagedHoldingTracking, { connectionId: "connection", item, canRelease: true });
-    await screen.findByText("Handoff pending");
-    expect(screen.getByText("Ownership reserved until verification completes")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Refresh handoff" })).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Match existing items" })).not.toBeInTheDocument();
+    await screen.findByText("Stopping management");
+    expect(screen.getByText("File tracking is paused while Prismedia verifies the stop request.")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Check now" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Find matching items" })).not.toBeInTheDocument();
   });
   it("does not reuse tracking when a manager recycles a remote ID for another external identity", async () => {
     api.fetchManagedTracking.mockResolvedValue([{ ...tracked, title: "Old identity", item: { ...tracked.item, expectedExternalIds: { tmdb: "999" } } }]);
     render(ManagedHoldingTracking, { connectionId: "connection", item });
-    await screen.findByRole("button", { name: "Match existing items" });
+    await screen.findByRole("button", { name: "Find matching items" });
     expect(screen.queryByText("Old identity")).not.toBeInTheDocument();
   });
-  it("retains released history and requires new review before linking the same files again", async () => {
+  it("keeps retained local targets openable after release and requires review before relinking", async () => {
     api.fetchManagedTracking.mockResolvedValue([{ ...tracked, status: MANAGED_TRACKING_STATUS.released }]);
-    render(ManagedHoldingTracking, { connectionId: "connection", item });
-    await screen.findByText("No longer managed");
-    expect(screen.getByText("Files and history retained")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Refresh tracking" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Match existing items" })).toBeInTheDocument();
+    render(ManagedHoldingTracking, { connectionId: "connection", connectionName: "Radarr", item });
+    await screen.findByText("Tracking stopped");
+    expect(screen.getByText(/previously linked item remains.*files and history are retained/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Check now" })).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Open in Prismedia" }));
+    expect(api.resolveEntityHrefById).toHaveBeenCalledWith("local-item");
+    expect(api.goto).toHaveBeenCalledWith("/movies/local-item");
+    expect(screen.getByRole("button", { name: "Find matching items" })).toBeInTheDocument();
     expect(api.saveManagedTracking).not.toHaveBeenCalled();
+  });
+
+  it("deduplicates retained episode targets and gives them a useful local label", async () => {
+    const episodeTarget = {
+      target: { remoteTargetId: "episode-1", kind: ENTITY_KIND.videoEpisode, seasonNumber: 2, episodeNumber: 1, absoluteNumber: 9 },
+      entityId: "episode-local",
+    };
+    api.fetchManagedTracking.mockResolvedValue([{
+      ...tracked,
+      status: MANAGED_TRACKING_STATUS.released,
+      bindings: [],
+      targets: [episodeTarget, { ...episodeTarget }],
+      item: { ...tracked.item, entityKind: ENTITY_KIND.videoSeries },
+    }]);
+    render(ManagedHoldingTracking, { connectionId: "connection", connectionName: "Sonarr", item: { ...item, entityKind: ENTITY_KIND.videoSeries } });
+
+    await screen.findByText("S2 E1");
+    expect(screen.getAllByText("S2 E1")).toHaveLength(1);
+    expect(screen.getByRole("button", { name: "Open S2 E1 in Prismedia" })).toBeInTheDocument();
+    expect(screen.getByText(/previously linked item remains.*files and history are retained/i)).toBeInTheDocument();
   });
 });
 

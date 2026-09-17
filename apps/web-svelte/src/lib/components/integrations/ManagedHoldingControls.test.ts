@@ -22,15 +22,16 @@ function action(values: Partial<ManagedControlActionResponse> = {}): ManagedCont
     reviewRequired: false, canCancel: true, canCloseUnverified: false, createdAt: "2026-09-16T12:00:00Z", updatedAt: "2026-09-16T12:00:00Z", problem: null, ...values };
 }
 async function open() {
-  render(ManagedHoldingControls, { connectionId: "connection", holdingId: "holding", canPreview: true });
-  await fireEvent.click(screen.getByRole("button", { name: "Manager controls" }));
+  render(ManagedHoldingControls, { connectionId: "connection", holdingId: "holding", canPreview: true, connectionName: "Radarr" });
+  await fireEvent.click(screen.getByRole("button", { name: "Radarr settings and activity" }));
+  await screen.findByRole("dialog", { name: "Settings & activity · Radarr" });
   await waitFor(() => expect(api.fetchControlActions).toHaveBeenCalled());
 }
 describe("Manager controls", () => {
   beforeEach(() => { vi.resetAllMocks(); api.fetchControlActions.mockResolvedValue([]); api.fetchControlPreview.mockResolvedValue(preview); api.saveControlAction.mockResolvedValue(action()); });
   it("searches the reviewed scope while preserving untouched settings", async () => {
-    await open(); await fireEvent.click(screen.getByRole("button", { name: "Review manager settings" }));
-    const submit = await screen.findByRole("button", { name: "Apply manager action" });
+    await open();
+    const submit = await screen.findByRole("button", { name: "Apply changes" });
     expect(submit).toBeDisabled();
     await fireEvent.click(screen.getByRole("checkbox", { name: "Search now" })); await fireEvent.click(submit);
     await waitFor(() => expect(api.saveControlAction).toHaveBeenCalled());
@@ -39,9 +40,9 @@ describe("Manager controls", () => {
   });
   it("retries the identical accepted intent after browser response loss", async () => {
     api.saveControlAction.mockRejectedValueOnce(new Error("Connection interrupted"));
-    await open(); await fireEvent.click(screen.getByRole("button", { name: "Review manager settings" }));
+    await open();
     await fireEvent.click(await screen.findByRole("checkbox", { name: "Search now" }));
-    await fireEvent.click(screen.getByRole("button", { name: "Apply manager action" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
     await screen.findByText("Connection interrupted");
     expect(screen.getByRole("checkbox", { name: "Search now" })).toBeDisabled();
     await fireEvent.click(screen.getByRole("button", { name: "Retry same action" }));
@@ -54,19 +55,33 @@ describe("Manager controls", () => {
     await open(); await fireEvent.click(await screen.findByRole("button", { name: "Review unresolved action" }));
     const close = screen.getByRole("button", { name: "Close with outcome unverified" }); expect(close).toBeDisabled();
     expect(screen.queryByRole("button", { name: "Cancel unsent stage" })).not.toBeInTheDocument();
-    await fireEvent.click(screen.getByRole("checkbox", { name: "I reviewed the connected app" })); await fireEvent.click(close);
+    await fireEvent.click(screen.getByRole("checkbox", { name: "I reviewed Radarr" })); await fireEvent.click(close);
     await waitFor(() => expect(api.closeControlAction).toHaveBeenCalledWith("connection", "holding", uncertain));
   });
   it("labels completed execution as search completion without claiming available files", async () => {
     api.fetchControlActions.mockResolvedValue([action({ phase: MANAGED_CONTROL_PHASE.completed, canCancel: false })]);
-    await open(); await screen.findByText("Search completed");
-    expect(screen.getByText(/Search completion does not mean a download or local file is available/)).toBeInTheDocument();
+    await open();
+    expect(screen.getByText("Search completed")).not.toBeVisible();
+    await fireEvent.click(await screen.findByRole("button", { name: /Recent activity/ }));
+    await screen.findByText("Search completed");
+    expect(screen.getByText(/Search completion does not confirm a download or readable file/)).toBeInTheDocument();
+  });
+  it("keeps closed uncertain outcomes visible above collapsed history", async () => {
+    api.fetchControlActions.mockResolvedValue([
+      action({ phase: MANAGED_CONTROL_PHASE.closedUnverified, reviewRequired: false, canCancel: false }),
+      action({ id: "completed", phase: MANAGED_CONTROL_PHASE.completed, canCancel: false }),
+    ]);
+    await open();
+
+    expect(await screen.findByText("Closed with outcome unverified")).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "Active and unresolved actions" })).toBeInTheDocument();
+    expect(screen.getByText("Search completed")).not.toBeVisible();
   });
   it("explains a parent monitoring restriction while leaving explicit search available", async () => {
     api.fetchControlPreview.mockResolvedValue({ ...preview, state: { ...preview.state, capabilities: {
       canSearch: true, canChangeProfile: false, canChangeMonitoring: false, monitoringUnavailableReason: "Series monitoring is disabled in the connected app.",
     } } });
-    await open(); await fireEvent.click(screen.getByRole("button", { name: "Review manager settings" }));
+    await open();
     await screen.findByText("Series monitoring is disabled in the connected app.");
     expect(screen.getByRole("switch", { name: "Monitoring" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "Manager profile" })).toBeDisabled();

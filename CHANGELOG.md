@@ -94,6 +94,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Connected titles show their linked Prismedia items and file availability in an In Prismedia tab, with settings, action history, and stopping management in focused dialogs.
+
 - Library detail pages include an External library tab with the source, read-in-place file access, and a return link to the connected title for administrators. External files no longer offer Prismedia's delete-files action.
 
 - Connections open in focused editors, explain their supported features, and distinguish API connectivity from linked library folders. Enabled connections test automatically after saving, and failed tests retain the saved configuration.

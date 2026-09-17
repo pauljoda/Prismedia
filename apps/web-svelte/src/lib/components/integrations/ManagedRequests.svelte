@@ -143,7 +143,7 @@
           {#if activePhases.has(request.phase)}<Button variant="outline" size="sm" disabled={busy} onclick={() => void refresh(request)}>Refresh request</Button>{/if}
           {#if request.canCancel}<Button variant="outline" size="sm" disabled={busy} onclick={() => void cancel(request)}>Cancel request</Button>{/if}
         </div>
-        {#if request.remoteId}<ManagedHoldingControls connectionId={connection.id} holdingId={request.id} canPreview={canRequest && request.phase !== MANAGED_REQUEST_PHASE.ownershipReleased} />{/if}
+        {#if request.remoteId}<ManagedHoldingControls connectionId={connection.id} connectionName={connection.name} holdingId={request.id} canPreview={canRequest && request.phase !== MANAGED_REQUEST_PHASE.ownershipReleased} />{/if}
       </article>
     {/each}
   </Panel>

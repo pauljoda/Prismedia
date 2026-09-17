@@ -424,9 +424,15 @@ history during scans. Their presence in the catalog does not prove current byte 
 
 ### Track existing holdings
 
-After the initial library scan, inspect a holding and choose **Match existing items**.
+The **In Prismedia** tab shows the library items associated with a connected title,
+their last observed file availability, and links to open them in Prismedia. This is
+a saved association with existing files. Prismedia reads those files in place while
+the connected application keeps organizing them. Background checks follow renames
+and upgrades so the associated library items keep their history.
+
+After the initial library scan, inspect a holding and choose **Find matching items**.
 Prismedia compares exact mapped source paths, media kinds, and episode coordinates,
-including all episodes sharing one file. **Link existing items** saves those reviewed
+including all episodes sharing one file. **Link matching items** saves those reviewed
 associations before a worker verifies them again. Conflicting provider identities,
 native monitors, unfinished acquisitions, or existing connected ownership prevent linking.
 
@@ -470,15 +476,16 @@ do not silently expand the owned scope.
 
 Radarr plugin 1.3.1 and Sonarr plugin 1.2.1 provide handoff inspection. Test the Connection
 again after upgrading. Turn off monitoring for the exact linked movie or episodes,
-let downloads and commands settle, then select **Review ownership handoff** on its
-tracked holding. Review the work, monitoring, and activity, acknowledge keeping that
-scope unmonitored, and choose **Release acquisition owner**.
+let downloads and commands settle, then select **Stop managing…** in **In Prismedia**.
+The dialog explains which requests and file tracking will stop. Review the monitoring
+and activity, acknowledge keeping that scope unmonitored, and confirm. This releases
+the acquisition reservation; it does not transfer ownership of the media files.
 
 Acceptance freezes new Prismedia controls, requests, and source reconciliation for
 this holding while retaining its owner. The worker reads the same pinned identities
 again, verifies the reviewed path, and checks monitoring and activity before releasing
-ownership. **Handoff pending** retains ownership through an outage or changed evidence;
-**Refresh handoff** retries observation without sending remote mutations. Routine file
+ownership. A pending stop retains ownership through an outage or changed evidence;
+checking again retries observation without sending remote mutations. Routine file
 observations do not invalidate a review when its target identities remain unchanged.
 
 The initial adapters conservatively require the application's entire download queue
@@ -490,7 +497,7 @@ is never evidence that work stopped. Unfinished Prismedia actions and actions cl
 with an unverified outcome block release; closing an uncertain action is not a way to
 discard its ownership risk.
 
-**Ownership released** stops tracking and preserves the source files, local items,
+Completed release stops tracking and preserves the source files, local items,
 user history, and archived associations. A wanted request also stops, keeping its
 existing local identity. The mapped folder remains read-only. Choose another owner
 explicitly afterward, or link the existing files again with a new reviewed association.
@@ -551,10 +558,13 @@ subsequent metadata changes belong to the saved library item's review tools.
 ### Control a linked Radarr holding
 
 Install Radarr plugin 1.1.1 or later and test its Connection again to negotiate the
-new operations. Open **Manager controls** on a linked holding, then **Review manager
-settings**. Choose an explicit profile or monitoring change, optionally select
-**Search now**, and choose **Apply manager action**. Omitted settings are preserved.
+new operations. Open **Settings & activity** on a linked holding. Review the current
+settings, choose an explicit profile or monitoring change, optionally select
+**Search now**, and apply the action. Omitted settings are preserved.
 Changing monitoring alone does not issue an immediate search.
+
+Active or unresolved actions stay visible in the dialog. Completed actions are kept
+under **Recent activity** so past searches do not crowd the current library link.
 
 Prismedia derives the target scope from the saved associations and fulfillment owner.
 It checks the pinned metadata identity, reviewed folder, and relevant settings again
