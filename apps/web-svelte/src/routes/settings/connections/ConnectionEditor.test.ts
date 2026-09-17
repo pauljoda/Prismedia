@@ -19,6 +19,27 @@ const connection: ConnectionResponse = {
 };
 
 describe("ConnectionEditor", () => {
+  it("describes options-only managers and inspect-only catalogs without promising acquisition", () => {
+    const limitedPlugin: PluginProvider = { ...plugin, integration: { ...plugin.integration!, capabilities: [
+      { kind: PLUGIN_CAPABILITY.externalManager, operations: [INTEGRATION_OPERATION.managerOptions], entityKinds: [ENTITY_KIND.comicSeries] },
+      { kind: PLUGIN_CAPABILITY.catalogDiscovery, operations: [INTEGRATION_OPERATION.inspect], entityKinds: [ENTITY_KIND.book] },
+    ] } };
+    render(ConnectionEditor, { plugins: [limitedPlugin], saving: false, error: null, onSave: vi.fn(), onCancel: vi.fn() });
+    expect(screen.getByText("Use the application's library folders and profiles for setup.")).toBeInTheDocument();
+    expect(screen.getByText("Inspect supplied URLs or catalog entries for supported content.")).toBeInTheDocument();
+    expect(screen.queryByText(/handle supported requests/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Browse titles and review/)).not.toBeInTheDocument();
+  });
+
+  it("opens as a focused dialog with explicit save and cancel actions", () => {
+    const onCancel = vi.fn();
+    render(ConnectionEditor, { open: true, plugins: [plugin], saving: false, error: null, onSave: vi.fn(), onCancel });
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    expect(screen.getByText("New connection", { selector: "h2" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Save connection" })).toBeInTheDocument();
+  });
+
   it("discloses the plugin's additional anonymous download hosts", () => {
     const catalog = { ...plugin, integration: { ...plugin.integration!, anonymousArtifactOrigins: ["https://files.test"] } };
     render(ConnectionEditor, { plugins: [catalog], saving: false, error: null, onSave: vi.fn(), onCancel: vi.fn() });

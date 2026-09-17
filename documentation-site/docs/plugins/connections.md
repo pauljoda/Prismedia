@@ -16,7 +16,10 @@ independent URLs, settings, credentials, and enabled capabilities.
 2. Open **Settings → Connections** and choose **Add connection**.
 3. Select the plugin, name this instance, and enter the URL reachable by the Prismedia server.
 4. Choose the capabilities to enable and enter connection-specific settings and credentials.
-5. Save, then select **Test connection** to verify remote support.
+5. Save. Enabled connections are tested automatically; **Test connection** retries the check later.
+
+**Edit** opens an editor for the selected instance. Saving or cancelling returns to
+the connection list without inserting a form above it.
 
 Changing configuration requires another test. Disabling a connection revokes its
 negotiated capabilities. Saved credentials are never returned to the browser:
@@ -45,10 +48,27 @@ An integration declares only the operations it implements. Metadata search resul
 are not automatically downloadable items. A manager's completed command is not proof
 of a file being available to Prismedia.
 
-Connections provide configuration, capability testing, and a catalog browser at
-**Requests → Browse catalogs**. The browser shows only tested connections that
-currently advertise catalog browse or search. Administrators can choose a connection and media type,
-open catalog sections, search supported sources, and move through result pages.
+Use **Request → Browse** to find new titles or browse a connected source. Source
+choices follow the selected media type and the operations enabled for that connection.
+Administrators can open catalog sections, search supported sources, and move through
+result pages. Breadcrumbs return to the source or Request home. **Activity** groups
+work needing attention, active requests, followed library items, and recent history.
+
+### Connected does not mean added to your library
+
+| State | What it means |
+| --- | --- |
+| Application connected | Prismedia can communicate with the source API. Its files may still be unavailable to the Prismedia server. |
+| Library folder linked | A source folder has an explicit mapping to an existing folder visible to Prismedia. Scanning determines which titles appear in your library. |
+| Files readable | Prismedia has checked the reported files through that mapping. This alone does not create library items. |
+| Title followed | A saved association links the external holding to Prismedia library items. Background tracking follows file changes and availability. |
+
+For connected libraries such as Radarr and Sonarr, Prismedia reads media in place.
+The external application keeps organizing the original files. A shared folder or
+container bind mount provides access; Prismedia does not create a second media copy,
+move the source files, or need a symlink for each title. Catalog acquisition and URL
+downloads are separate workflows that place newly selected files in a Prismedia
+destination library.
 
 Catalog pages distinguish full-publication offers from loans, purchases, samples,
 and external workflows. These distinctions do not grant permission to execute an
@@ -308,7 +328,7 @@ without inventing a remote job or requiring a remote receipt endpoint.
 
 ## Connected libraries
 
-**Requests → Connected libraries**, or **Browse library** on a connection, reads existing
+**Request → Browse**, or **Browse titles** on a connection, reads existing
 holdings through the `connected-library` capability. Search by title or metadata identity,
 then inspect the holding's final file associations and external quality profile. An outage
 produces an error rather than an empty successful library. Remote file counts and paths do
@@ -321,6 +341,19 @@ read existing holdings, profiles, and root folders. Both support the reviewed
 controls described below, with different authority for movies and episode scopes.
 Sonarr preserves exact episode-to-file associations, including specials and files
 covering several episodes. Manager profile and folder IDs remain external choices.
+
+Radarr 1.4.0 and Sonarr 1.3.0 plugins also supply optional poster, backdrop, overview,
+genre, runtime, and certification metadata. Connected titles use the same detail
+layout as library titles, with separate overview, file, and library-link sections.
+Previewing a title does not create a library entity or overwrite curated metadata.
+Artwork uses the source's public HTTP(S) remote image URLs; authenticated local cover
+paths and API keys are not sent to the browser. Missing artwork uses the normal
+Prismedia placeholder. A backdrop is shown only when the source explicitly supplies one.
+
+The optional `ManagedLibraryItem.presentation` contract carries `overview`, `posterUrl`,
+`backdropUrl`, `genres`, `runtimeMinutes`, and `contentRating`. Existing adapters may
+omit it. The host bounds and validates these fields independently of file evidence;
+presentation metadata never establishes ownership or file availability.
 
 Neither API supplies a persistent installation UUID. Prismedia reports that limitation and
 scopes remote IDs to the Connection. Inspecting an item also verifies its selected metadata
@@ -356,7 +389,7 @@ should omit query strings.
 
 ### Map local files
 
-In **Connected libraries**, choose **Map library folder**, select an existing remote
+Open a connection's library-folder settings and choose **Map library folder**, select an existing remote
 root, and enter the corresponding folder mounted on the Prismedia server. Use a
 dedicated folder outside existing libraries, download areas, and application data.
 A read-only container bind mount adds an operating-system boundary to Prismedia's
@@ -370,8 +403,11 @@ scanning or the Connection is disabled. Paths are fixed after creation; changing
 Connection's application address or source settings requires a separate Connection.
 Root removal is unavailable while the external mapping owns its boundary.
 
-**Check local access** reads fresh remote file associations and checks their mapped
-local paths, readability, and sizes. It rejects path traversal and symlinks escaping
+Opening a connected title automatically checks its mapped local paths, readability,
+and sizes while the source details remain visible. **Refresh** repeats this check.
+If no mapping covers the reported files, the page offers library-folder setup;
+closing that setup rechecks availability. A failed check leaves the title visible
+with availability unknown. The check rejects path traversal and symlinks escaping
 the local root. Missing or mismatched files remain explicit failures. Matching size
 does not establish a content hash, a completed library import, or playback availability.
 Missing external files and empty managed containers retain their catalog records and user
