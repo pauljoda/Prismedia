@@ -42,6 +42,32 @@ public sealed class IntegrationGalleryPlacementTests : IDisposable {
             Assert.Equal(await File.ReadAllBytesAsync(file.Path), await File.ReadAllBytesAsync(replay.Files[file.ArtifactId]));
     }
     [Fact]
+    public async Task PublishedGalleryRecoversAfterAllStagingIsLost() {
+        var request = await RequestAsync();
+        var placed = await placement.PlaceAsync(request, default);
+        foreach (var staged in request.VerifiedArtifacts) File.Delete(staged.Path);
+
+        var recovered = await placement.ReadPlacedAsync(request.OperationId, request.Plan, request.Root, request.Outputs, default);
+
+        Assert.NotNull(recovered);
+        Assert.Equal(placed.FolderPath, recovered.FolderPath);
+        Assert.Equal(placed.Files, recovered.Files);
+        await Assert.ThrowsAsync<InvalidDataException>(() => placement.ReadPlacedAsync(request.OperationId, request.Plan,
+            request.Root with { Recursive = false }, request.Outputs, default));
+    }
+    [Fact]
+    public async Task GalleryRecoveryRequiresEveryExactFileAndNoAdditionalContent() {
+        var request = await RequestAsync();
+        var placed = await placement.PlaceAsync(request, default);
+        File.Delete(placed.Files["page-1"]);
+        await Assert.ThrowsAsync<InvalidDataException>(() => placement.ReadPlacedAsync(request.OperationId,
+            request.Plan, request.Root, request.Outputs, default));
+        await File.WriteAllTextAsync(placed.Files["page-1"], "original page 1");
+        await File.WriteAllTextAsync(Path.Combine(placed.FolderPath, "unexpected.png"), "unexpected");
+        await Assert.ThrowsAsync<InvalidDataException>(() => placement.ReadPlacedAsync(request.OperationId,
+            request.Plan, request.Root, request.Outputs, default));
+    }
+    [Fact]
     public async Task FailedCopyNeverPublishesAPartialGalleryToScanning() {
         var request = await RequestAsync();
         var original = await File.ReadAllBytesAsync(request.VerifiedArtifacts[1].Path);

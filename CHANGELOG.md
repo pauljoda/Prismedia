@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Completed integration imports automatically release their temporary staging after a recovery grace period, while retaining library files and import history.
+
 - Compatible source connections can prepare an exact publication before importing it. Requests retain their identity through retries, show source progress in Activity, and distinguish stopping a local import from cancelling a source download.
 
 - Import JPEG, PNG, and WebP still images from connected catalogs, including anonymous Wikimedia Commons searches. Imports retain source attribution and license statements, verify the selected file version, and use image-specific library destinations and size limits.
@@ -197,6 +199,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Audio-track detail and saved-queue payloads no longer duplicate embedded artist and album fields outside the Entity's `embedded-audio-metadata` capability.
 
 ### Fixed
+
+- Interrupted catalog and executor imports can recover from an already placed file when staging is missing, after verifying the exact accepted bytes.
 
 - Open Library metadata review can unlink an exact superseded edition identity. Shared ISBNs and other providers remain intact, and later lookups no longer restore an old edition from stale hints.
 

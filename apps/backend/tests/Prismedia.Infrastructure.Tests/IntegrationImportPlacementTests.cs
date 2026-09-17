@@ -2,14 +2,18 @@ using System.Security.Cryptography;
 using Prismedia.Application.Integrations;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Domain.Entities;
+using Prismedia.Domain.Integrations;
 using Prismedia.Infrastructure.Integrations;
 
 namespace Prismedia.Infrastructure.Tests;
 
 public sealed class IntegrationImportPlacementTests : IDisposable {
     private readonly string workspace = Path.Combine(Path.GetTempPath(), "prismedia-placement-" + Guid.NewGuid().ToString("N"));
-    private readonly IntegrationImportPlacement placement = new(new TestFileMutationGuard());
+    private readonly RecordingMutationGuard mutations = new();
+    private readonly IntegrationImportPlacement placement;
     private readonly Guid operation = Guid.NewGuid();
+
+    public IntegrationImportPlacementTests() => placement = new(mutations);
 
     [Fact]
     public async Task RepeatedPlacementReusesExactBytesAndNeverReplacesConflictingFile() {
@@ -21,6 +25,40 @@ public sealed class IntegrationImportPlacementTests : IDisposable {
         await Assert.ThrowsAsync<InvalidDataException>(() => placement.PlaceAsync(operation, plan, root, artifact, default));
         Assert.Equal("user replacement", await File.ReadAllTextAsync(path));
         Assert.True(File.Exists(artifact.Path));
+    }
+
+    [Fact]
+    public async Task AlreadyPlacedBytesRecoverAfterStagingLossOnlyAtTheFrozenLibraryPath() {
+        var (plan, root, staged) = await FixtureAsync();
+        var path = await placement.PlaceAsync(operation, plan, root, staged, default);
+        var accepted = new IntegrationArtifact(staged.ArtifactId, "selected", staged.FileName, "application/epub+zip",
+            staged.SizeBytes, staged.Sha256, IntegrationArtifactRole.Content);
+        File.Delete(staged.Path);
+
+        var recovered = await placement.ReadPlacedAsync(operation, plan, root, accepted, default);
+
+        Assert.NotNull(recovered);
+        Assert.Equal(path, recovered.Path);
+        Assert.Equal([root.Path], mutations.LastPaths);
+        var other = Directory.CreateDirectory(Path.Combine(workspace, "other")).FullName;
+        await Assert.ThrowsAsync<InvalidDataException>(() => placement.ReadPlacedAsync(operation, plan,
+            root with { Path = other }, accepted, default));
+        await Assert.ThrowsAsync<InvalidDataException>(() => placement.ReadPlacedAsync(operation,
+            plan with { EntityKind = EntityKind.Image }, root, accepted, default));
+    }
+
+    [Fact]
+    public async Task PlacedRecoveryRejectsChangedBytesAndNeverFallsBackToAPartialFile() {
+        var (plan, root, staged) = await FixtureAsync();
+        var path = await placement.PlaceAsync(operation, plan, root, staged, default);
+        var accepted = new IntegrationArtifact(staged.ArtifactId, "selected", staged.FileName, "application/epub+zip",
+            staged.SizeBytes, staged.Sha256, IntegrationArtifactRole.Content);
+        await File.WriteAllTextAsync(path, "changed");
+        await Assert.ThrowsAsync<InvalidDataException>(() => placement.ReadPlacedAsync(operation, plan, root, accepted, default));
+        File.Delete(path);
+        await File.WriteAllTextAsync(Path.Combine(root.Path,
+            $".prismedia-{operation:N}-{IntegrationPublicationNames.ArtifactKey(accepted.Id)}.part"), "accepted bytes elsewhere");
+        Assert.Null(await placement.ReadPlacedAsync(operation, plan, root, accepted, default));
     }
 
     [Fact]
@@ -79,4 +117,14 @@ public sealed class IntegrationImportPlacementTests : IDisposable {
     }
 
     public void Dispose() { if (Directory.Exists(workspace)) Directory.Delete(workspace, true); }
+
+    private sealed class RecordingMutationGuard : Prismedia.Application.Files.ILibraryFileMutationGuard {
+        internal IReadOnlyCollection<string> LastPaths { get; private set; } = [];
+        public ValueTask<IAsyncDisposable> EnterAsync(IReadOnlyCollection<string> paths, CancellationToken cancellationToken) {
+            cancellationToken.ThrowIfCancellationRequested();
+            LastPaths = paths.ToArray();
+            return ValueTask.FromResult<IAsyncDisposable>(new Lease());
+        }
+        private sealed class Lease : IAsyncDisposable { public ValueTask DisposeAsync() => ValueTask.CompletedTask; }
+    }
 }

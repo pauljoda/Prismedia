@@ -125,7 +125,7 @@ public sealed class HttpIntegrationArtifactTransfer(IntegrationArtifactStorageOp
         return verified;
     }
 
-    private static string ArtifactKey(string artifactId) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(artifactId)));
+    internal static string ArtifactKey(string artifactId) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(artifactId)));
 
     private async Task<HttpResponseMessage> OpenAsync(Uri origin, Uri address, IReadOnlyDictionary<string, string> headers, long offset, CancellationToken cancellationToken) {
         for (var redirects = 0; redirects <= 5; redirects++) {

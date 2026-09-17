@@ -140,6 +140,7 @@ public static class DependencyInjection {
         services.AddHostedService<EntityAvailabilityReconciliationWorker>();
         services.AddHostedService<ManagedLibraryTrackingWorker>();
         services.AddHostedService<EntityAssetRowSweepWorker>();
+        services.AddHostedService<IntegrationArtifactCleanupWorker>();
 
         return services;
     }

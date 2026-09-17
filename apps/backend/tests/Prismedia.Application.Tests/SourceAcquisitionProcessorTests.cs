@@ -236,6 +236,9 @@ public sealed class SourceAcquisitionProcessorTests {
         public Task VerifyAsync(VerifiedIntegrationArtifact artifact, EntityKind kind, CancellationToken cancellationToken) => Task.CompletedTask;
         public Task<string> PlaceAsync(Guid operationId, IntegrationTransferPlan acceptedPlan, LibraryRootData acceptedRoot,
             VerifiedIntegrationArtifact artifact, CancellationToken cancellationToken) => Task.FromResult(Path.Combine(root.Path, "placed.epub"));
+        public Task<VerifiedIntegrationArtifact?> ReadPlacedAsync(Guid operationId, IntegrationTransferPlan acceptedPlan,
+            LibraryRootData acceptedRoot, IntegrationArtifact artifact, CancellationToken cancellationToken) =>
+            Task.FromResult<VerifiedIntegrationArtifact?>(null);
         public Task<ImportedEntityMaterializationResult> MaterializeAsync(EntityKind kind, JobContext context,
             ImportedEntityMaterializationRequest request, CancellationToken cancellationToken) {
             Imports++;

@@ -63,6 +63,18 @@ public sealed class SourceTransferProcessorTests {
         Assert.NotNull(fixture.Error);
     }
 
+    [Fact]
+    public async Task MissingStagingRecoversExactPlacedPublicationWithoutSourceDownload() {
+        var fixture = new Fixture { MissingStaging = true, PlacedRecoveryAvailable = true };
+
+        await fixture.RunAsync();
+
+        Assert.Equal(IntegrationTransferPhase.Completed, fixture.State.Phase);
+        Assert.Equal(0, fixture.Downloads);
+        Assert.Equal(1, fixture.PlacedReads);
+        Assert.Equal(1, fixture.Materializations);
+    }
+
     private sealed class Fixture : IIntegrationTransferStore, IIntegrationArtifactTransfer, IIntegrationMediaVerifier,
         IIntegrationImportPlacement, IImportedEntityMaterializer {
         private static readonly string Hash = new('a', 64);
@@ -70,12 +82,15 @@ public sealed class SourceTransferProcessorTests {
         internal IntegrationTransferState State { get; private set; }
         internal bool FailCompletionSaveOnce { get; set; }
         internal bool MissingStaging { get; set; }
+        internal bool PlacedRecoveryAvailable { get; set; }
         internal int LocalReads { get; private set; }
+        internal int PlacedReads { get; private set; }
         internal int Materializations { get; private set; }
         internal int Placements { get; private set; }
         internal string? Error { get; private set; }
         internal bool RemoveOriginAfterResolve { get; set; }
         internal IntegrationArtifactTransferRequest? Download { get; private set; }
+        internal int Downloads { get; private set; }
         private readonly bool pendingDownload;
         private readonly EntityKind kind;
         private readonly string fileName;
@@ -153,6 +168,15 @@ public sealed class SourceTransferProcessorTests {
         public Task<string> PlaceAsync(Guid operationId, IntegrationTransferPlan plan, LibraryRootData root, VerifiedIntegrationArtifact artifact, CancellationToken cancellationToken) {
             Placements++; return Task.FromResult(Path.Combine(root.Path, "placed.epub"));
         }
+        public Task<VerifiedIntegrationArtifact?> ReadPlacedAsync(Guid operationId, IntegrationTransferPlan acceptedPlan,
+            LibraryRootData acceptedRoot, IntegrationArtifact artifact, CancellationToken cancellationToken) {
+            PlacedReads++;
+            Assert.Equal(plan, acceptedPlan);
+            Assert.Equal(root, acceptedRoot);
+            return Task.FromResult<VerifiedIntegrationArtifact?>(PlacedRecoveryAvailable
+                ? new(artifact.Id, Path.Combine(root.Path, "placed.epub"), artifact.SizeBytes, artifact.Sha256, Path.GetFileName(artifact.RelativePath))
+                : null);
+        }
         public Task<ImportedEntityMaterializationResult> MaterializeAsync(EntityKind kind, JobContext context, ImportedEntityMaterializationRequest request, CancellationToken cancellationToken) {
             Materializations++;
             Assert.Equal(this.kind, kind);
@@ -160,6 +184,7 @@ public sealed class SourceTransferProcessorTests {
         }
         public Task<VerifiedIntegrationArtifact> TransferAsync(IntegrationArtifactTransferRequest request, CancellationToken cancellationToken) {
             if (!pendingDownload) throw new InvalidOperationException("Recovery attempted a remote download");
+            Downloads++;
             Download = request;
             return Task.FromResult(new VerifiedIntegrationArtifact(request.ArtifactId, Path.Combine(root.Path, "staged.epub"), 100, Hash, request.Delivery.SuggestedFileName));
         }

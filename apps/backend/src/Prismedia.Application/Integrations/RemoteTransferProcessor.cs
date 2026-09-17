@@ -169,11 +169,12 @@ public sealed class RemoteTransferProcessor(IIntegrationTransferStore store, Int
                 foreach (var artifact in transfer.State.Artifacts!) {
                     if (transfer.State.Imports?.Any(imported => imported.ArtifactId == artifact.Id) == true) continue;
                     await TryRenewAtLocalBoundaryAsync();
-                    var verified = await bytes.ReadVerifiedAsync(operationId, artifact.Id, Path.GetFileName(artifact.RelativePath), artifact.SizeBytes, artifact.Sha256, cancellationToken)
-                        ?? throw new InvalidDataException("Verified staging is missing.");
-                    await verifier.VerifyAsync(verified, work.Plan.EntityKind == EntityKind.Gallery ? EntityKind.Image : work.Plan.EntityKind, cancellationToken);
                     var root = await roots.GetLibraryRootAsync(work.Plan.LibraryRootId, cancellationToken)
                         ?? throw new InvalidDataException("The destination library is unavailable.");
+                    var verified = await bytes.ReadVerifiedAsync(operationId, artifact.Id, Path.GetFileName(artifact.RelativePath), artifact.SizeBytes, artifact.Sha256, cancellationToken)
+                        ?? await placement.ReadPlacedAsync(operationId, work.Plan, root, artifact, cancellationToken)
+                        ?? throw new InvalidDataException("Verified staging and the exact placed output are missing.");
+                    await verifier.VerifyAsync(verified, work.Plan.EntityKind == EntityKind.Gallery ? EntityKind.Image : work.Plan.EntityKind, cancellationToken);
                     await context.ReportProgressAsync(75, "Importing verified executor output", cancellationToken);
                     var path = await placement.PlaceAsync(operationId, work.Plan, root, verified, cancellationToken);
                     var imported = await materializer.MaterializeAsync(work.Plan.EntityKind, context, new(operationId, null, root, [path]), cancellationToken);

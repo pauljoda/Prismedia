@@ -2,19 +2,34 @@ using System.Security.Cryptography;
 using Prismedia.Application.Files;
 using Prismedia.Application.Integrations;
 using Prismedia.Application.Jobs.Ports;
+using Prismedia.Domain.Integrations;
 
 namespace Prismedia.Infrastructure.Integrations;
 
 /// <summary>Atomic, non-destructive media placement inside a frozen library boundary.</summary>
 public sealed class IntegrationImportPlacement(ILibraryFileMutationGuard mutations) : IIntegrationImportPlacement {
     /// <inheritdoc />
+    public async Task<VerifiedIntegrationArtifact?> ReadPlacedAsync(Guid operationId, IntegrationTransferPlan plan, LibraryRootData root,
+        IntegrationArtifact artifact, CancellationToken cancellationToken) {
+        await using var protection = await mutations.EnterAsync([root.Path], cancellationToken);
+        var rootPath = ValidateDestination(operationId, plan, root);
+        var fileName = Path.GetFileName(artifact.RelativePath);
+        if (!IntegrationMediaFormats.IsSupported(plan.EntityKind, fileName)
+            || artifact.SizeBytes <= 0 || artifact.Sha256 is not { Length: 64 } || !artifact.Sha256.All(Uri.IsHexDigit))
+            throw new InvalidDataException("The accepted media file has no valid placement evidence.");
+        var target = Path.Combine(rootPath, IntegrationPublicationNames.FileName(operationId, plan.Title, artifact.Id, fileName));
+        RejectLink(target);
+        if (!File.Exists(target)) return null;
+        var recovered = new VerifiedIntegrationArtifact(artifact.Id, target, artifact.SizeBytes, artifact.Sha256.ToLowerInvariant(), fileName);
+        await VerifyAsync(target, recovered, cancellationToken);
+        return recovered;
+    }
+
+    /// <inheritdoc />
     public async Task<string> PlaceAsync(Guid operationId, IntegrationTransferPlan plan, LibraryRootData root,
         VerifiedIntegrationArtifact artifact, CancellationToken cancellationToken) {
         await using var protection = await mutations.EnterAsync([root.Path], cancellationToken);
-        var rootPath = Path.GetFullPath(root.Path);
-        if (operationId == Guid.Empty || root.Id != plan.LibraryRootId || !IntegrationMediaFormats.SupportsRoot(plan.EntityKind, root)
-            || !FileSystemPathComparison.Comparer.Equals(rootPath, Path.GetFullPath(plan.LibraryPath)) || !Directory.Exists(rootPath))
-            throw new InvalidDataException("The accepted destination library is unavailable or has moved.");
+        var rootPath = ValidateDestination(operationId, plan, root);
         if (!IntegrationMediaFormats.IsSupported(plan.EntityKind, artifact.FileName)
             || artifact.SizeBytes <= 0 || artifact.Sha256 is not { Length: 64 } || !artifact.Sha256.All(Uri.IsHexDigit))
             throw new InvalidDataException("The media file has no valid placement evidence.");
@@ -51,6 +66,15 @@ public sealed class IntegrationImportPlacement(ILibraryFileMutationGuard mutatio
         try { File.Move(pending, target); }
         catch (IOException) when (File.Exists(target)) { await VerifyAsync(target, artifact, cancellationToken); }
         return target;
+    }
+
+    private static string ValidateDestination(Guid operationId, IntegrationTransferPlan plan, LibraryRootData root) {
+        var rootPath = Path.GetFullPath(root.Path);
+        if (operationId == Guid.Empty || root.Id != plan.LibraryRootId || !IntegrationMediaFormats.SupportsRoot(plan.EntityKind, root)
+            || !FileSystemPathComparison.Comparer.Equals(rootPath, Path.GetFullPath(plan.LibraryPath)) || !Directory.Exists(rootPath))
+            throw new InvalidDataException("The accepted destination library is unavailable or has moved.");
+        RejectLink(rootPath);
+        return rootPath;
     }
 
     private static async Task VerifyAsync(string path, VerifiedIntegrationArtifact artifact, CancellationToken cancellationToken) {

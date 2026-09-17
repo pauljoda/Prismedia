@@ -105,6 +105,22 @@ public sealed class RemoteTransferProcessorTests {
         Assert.Equal(fixture.EntityId, Assert.Single(Assert.Single(fixture.State.Imports!).EntityIds));
     }
 
+    [Theory]
+    [InlineData(EntityKind.Book)]
+    [InlineData(EntityKind.ComicInstallment)]
+    public async Task MissingStagingAfterSinglePlacementRecoversWithoutRemoteRedownload(EntityKind kind) {
+        var fixture = new Fixture(kind) { MissingStaging = true, PlacedRecoveryAvailable = true };
+        fixture.PrepareImport();
+
+        await fixture.RunAsync();
+
+        Assert.Equal(IntegrationTransferPhase.Completed, fixture.State.Phase);
+        Assert.Equal(0, fixture.Downloads);
+        Assert.Equal(0, fixture.ArtifactAuthorizations);
+        Assert.Equal(1, fixture.PlacedReads);
+        Assert.Equal(1, fixture.Materializations);
+    }
+
     [Fact]
     public async Task VerifiedLocalReceiptFinishesImportWhileExecutorRetentionIsUnavailable() {
         var fixture = new Fixture { RetentionUnavailable = true };
@@ -231,6 +247,19 @@ public sealed class RemoteTransferProcessorTests {
         Assert.Equal(2, fixture.Materializations);
     }
     [Fact]
+    public async Task MissingGalleryStagingRecoversExactPublishedGroupWithoutRemoteRedownload() {
+        var fixture = new Fixture(EntityKind.Gallery) { MissingStaging = true, PlacedRecoveryAvailable = true };
+        fixture.PrepareImport();
+
+        await fixture.RunAsync();
+
+        Assert.Equal(IntegrationTransferPhase.Completed, fixture.State.Phase);
+        Assert.Equal(0, fixture.Downloads);
+        Assert.Equal(0, fixture.ArtifactAuthorizations);
+        Assert.Equal(1, fixture.PlacedReads);
+        Assert.Equal(1, fixture.Materializations);
+    }
+    [Fact]
     public async Task GalleryDoesNotAcknowledgeImagesOwnedOutsideItsContainer() {
         var fixture = new Fixture(EntityKind.Gallery) { WrongImageParent = true };
         await Assert.ThrowsAsync<IntegrationInvocationException>(fixture.RunAsync);
@@ -267,6 +296,8 @@ public sealed class RemoteTransferProcessorTests {
         internal bool RetentionUnavailable { get; set; }
         internal bool ExecutorUnavailable { get; set; }
         internal bool UnexpectedRetentionFailure { get; set; }
+        internal bool MissingStaging { get; set; }
+        internal bool PlacedRecoveryAvailable { get; set; }
         private bool localReceiptBeforeVerificationCommit;
         private readonly Guid[] imageIds = [Guid.NewGuid(), Guid.NewGuid()];
         internal int Submissions { get; private set; }
@@ -279,6 +310,7 @@ public sealed class RemoteTransferProcessorTests {
         internal int LocalReads { get; private set; }
         internal int Verifications { get; private set; }
         internal int Cancellations { get; private set; }
+        internal int PlacedReads { get; private set; }
         internal Guid EntityId { get; } = Guid.NewGuid();
         internal List<Guid> Receipts { get; } = [];
         internal List<IntegrationTransferPhase> RetentionPhases { get; } = [];
@@ -288,7 +320,8 @@ public sealed class RemoteTransferProcessorTests {
         private readonly IntegrationConnection connection;
         private readonly PluginManifest manifest;
         private readonly IntegrationTransferPlan plan;
-        private IntegrationArtifact Artifact => new("artifact", WrongArtifactItem ? "unselected-item" : ItemId, "nested/" + FileName, "application/epub+zip", 100, Hash, IntegrationArtifactRole.Content);
+        private IntegrationArtifact Artifact => new("artifact", WrongArtifactItem ? "unselected-item" : ItemId, "nested/" + FileName,
+            kind == EntityKind.ComicInstallment ? "application/vnd.comicbook+zip" : "application/epub+zip", 100, Hash, IntegrationArtifactRole.Content);
         private IReadOnlyList<IntegrationArtifact> Artifacts => kind == EntityKind.Gallery
             ? Enumerable.Range(1, 2).Select(index => Artifact with { Id = "image-" + index, RelativePath = "nested/" + index + ".png", GroupId = "group", Ordinal = index + (GalleryOrderGap ? 1 : 0) }).ToArray()
             : [Artifact];
@@ -297,7 +330,7 @@ public sealed class RemoteTransferProcessorTests {
             RemoteState is RemoteJobState.Succeeded or RemoteJobState.Partial ? ManifestRevision : null,
             DateTimeOffset.UtcNow.AddHours(1), [], NextPollAfter: DateTimeOffset.UtcNow.AddSeconds(20), ArtifactsExpired: Expired);
         private readonly EntityKind kind;
-        private string FileName => kind is EntityKind.Image or EntityKind.Gallery ? "image.png" : "book.epub";
+        private string FileName => kind switch { EntityKind.Image or EntityKind.Gallery => "image.png", EntityKind.ComicInstallment => "comic.cbz", _ => "book.epub" };
         internal Fixture(EntityKind kind = EntityKind.Book) {
             this.kind = kind;
             var supports = new IntegrationSupport[] {
@@ -350,7 +383,11 @@ public sealed class RemoteTransferProcessorTests {
                 Verifications++;
                 return Task.CompletedTask;
             });
-            var placement = Proxy<IIntegrationImportPlacement>((_, _) => { Placements++; return Task.FromResult(Path.Combine(root.Path, "placed.epub")); });
+            var placement = Proxy<IIntegrationImportPlacement>((method, args) => method switch {
+                nameof(IIntegrationImportPlacement.PlaceAsync) => PlaceSingle(),
+                nameof(IIntegrationImportPlacement.ReadPlacedAsync) => ReadPlaced((IntegrationArtifact)args![3]!),
+                _ => throw new NotSupportedException(method)
+            });
             var roots = Proxy<ILibraryScanRootPersistence>((_, _) => Task.FromResult<LibraryRootData?>(root));
             var materializer = Proxy<IImportedEntityMaterializer>((_, args) => {
                 Assert.Equal(kind, args![0]);
@@ -360,11 +397,16 @@ public sealed class RemoteTransferProcessorTests {
                     ? new ImportedEntityMaterializationResult(imageIds.Select(id => new ImportedEntityReference(id, EntityKind.Image)).ToArray(), [EntityId], request.PlacedMediaPaths, [], [], [new(EntityId, EntityKind.Gallery)])
                     : new ImportedEntityMaterializationResult([new(EntityId, kind)], [], request.PlacedMediaPaths, [], []));
             });
-            var galleryPlacement = Proxy<IIntegrationGalleryPlacement>((_, args) => {
+            var galleryPlacement = Proxy<IIntegrationGalleryPlacement>((method, args) => {
+                var outputs = method == nameof(IIntegrationGalleryPlacement.PlaceAsync)
+                    ? ((IntegrationGalleryPlacementRequest)args![0]!).Outputs
+                    : (IntegrationGalleryOutputSet)args![3]!;
+                if (method == nameof(IIntegrationGalleryPlacement.ReadPlacedAsync)) {
+                    PlacedReads++;
+                    return Task.FromResult<PlacedIntegrationGallery?>(PlacedRecoveryAvailable ? GalleryResult(outputs) : null);
+                }
                 Placements++;
-                var request = (IntegrationGalleryPlacementRequest)args![0]!;
-                return Task.FromResult(new PlacedIntegrationGallery(Path.Combine(root.Path, "gallery"), request.Outputs.Artifacts.ToDictionary(artifact => artifact.Id,
-                    artifact => Path.Combine(root.Path, "gallery", artifact.Id + ".png"))));
+                return Task.FromResult(GalleryResult(outputs));
             });
             var readiness = Proxy<IImportedEntityReadinessPersistence>((_, args) => {
                 var path = ((IReadOnlyCollection<string>)args![0]!).Single();
@@ -416,7 +458,7 @@ public sealed class RemoteTransferProcessorTests {
         internal void PrepareImport() {
             StageArtifactBeforeVerificationCommit();
             var transfer = new IntegrationTransfer(State);
-            transfer.RecordVerified(Artifact.Id, Artifact.SizeBytes, Artifact.Sha256);
+            foreach (var artifact in Artifacts) transfer.RecordVerified(artifact.Id, artifact.SizeBytes, artifact.Sha256);
             State = transfer.State;
         }
         private Task<RemoteTransferSnapshot> Cancel() { Cancellations++; return Task.FromResult(Snapshot); }
@@ -446,11 +488,22 @@ public sealed class RemoteTransferProcessorTests {
             Assert.Equal(Path.GetFileName(accepted.RelativePath), fileName);
             Assert.Equal(accepted.SizeBytes, sizeBytes);
             Assert.Equal(accepted.Sha256, sha256);
-            var available = localReceiptBeforeVerificationCommit || State.VerifiedArtifactIds?.Contains(artifactId) == true;
+            var available = !MissingStaging && (localReceiptBeforeVerificationCommit || State.VerifiedArtifactIds?.Contains(artifactId) == true);
             return Task.FromResult<VerifiedIntegrationArtifact?>(available
                 ? new(artifactId, Path.Combine(root.Path, "staged.epub"), 100, Hash, fileName)
                 : null);
         }
+        private Task<string> PlaceSingle() { Placements++; return Task.FromResult(Path.Combine(root.Path, "placed" + Path.GetExtension(FileName))); }
+        private Task<VerifiedIntegrationArtifact?> ReadPlaced(IntegrationArtifact artifact) {
+            PlacedReads++;
+            return Task.FromResult<VerifiedIntegrationArtifact?>(PlacedRecoveryAvailable
+                ? new(artifact.Id, Path.Combine(root.Path, "placed" + Path.GetExtension(artifact.RelativePath)), artifact.SizeBytes,
+                    artifact.Sha256, Path.GetFileName(artifact.RelativePath))
+                : null);
+        }
+        private PlacedIntegrationGallery GalleryResult(IntegrationGalleryOutputSet outputs) =>
+            new(Path.Combine(root.Path, "gallery"), outputs.Artifacts.ToDictionary(artifact => artifact.Id,
+                artifact => Path.Combine(root.Path, "gallery", artifact.Id + ".png")));
         private Task<VerifiedIntegrationArtifact> Download(IntegrationArtifactTransferRequest request) {
             var artifact = Artifacts.Single(artifact => artifact.Id == request.ArtifactId);
             Assert.Equal(Path.GetFileName(artifact.RelativePath), request.Delivery.SuggestedFileName);

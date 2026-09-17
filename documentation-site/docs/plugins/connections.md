@@ -235,9 +235,15 @@ Book and comic display titles use embedded publication titles first, then the se
 source title when the retained import record matches the exact path and bytes. This
 keeps storage operation IDs out of display names during initial import and later scans;
 ordinary files and unverified replacements retain the normal metadata/filename fallback.
-Import retries recheck local hashes and do not need the source online once byte
-verification has been committed. Keep `/data/integrations/artifacts` until unfinished
-imports have recovered; a database receipt alone cannot recreate missing staged bytes.
+Import retries recheck local hashes and can recover from the exact file already placed
+in the destination when staging is missing. Neither path requires the source online.
+Keep `/data/integrations/artifacts` until unfinished imports have recovered; a database
+receipt alone cannot recreate bytes missing from both staging and the destination.
+
+Prismedia automatically removes private staging for completed imports after a 24-hour
+grace period. Executor imports must also have completed their acknowledgement. Active,
+failed, and unfinished imports retain staging for recovery. Cleanup preserves the
+imported library files and the external application's original files.
 
 Accepted intent and the initial background job are committed in one database
 transaction. Sensitive source locators in that intent use the same persistent key

@@ -1,6 +1,7 @@
 using System.Security.Cryptography;
 using Prismedia.Application.Files;
 using Prismedia.Application.Integrations;
+using Prismedia.Application.Jobs.Ports;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Infrastructure.Integrations;
@@ -8,14 +9,25 @@ namespace Prismedia.Infrastructure.Integrations;
 /// <summary>Builds a hidden verified group and publishes it through a same-filesystem directory rename.</summary>
 public sealed class IntegrationGalleryPlacement(ILibraryFileMutationGuard mutations) : IIntegrationGalleryPlacement {
     /// <inheritdoc />
+    public async Task<PlacedIntegrationGallery?> ReadPlacedAsync(Guid operationId, IntegrationTransferPlan plan, LibraryRootData root,
+        IntegrationGalleryOutputSet outputs, CancellationToken cancellationToken) {
+        await using var protection = await mutations.EnterAsync([root.Path], cancellationToken);
+        var rootPath = ValidateDestination(operationId, plan, root);
+        ValidateOutputs(outputs);
+        var target = Path.Combine(rootPath, IntegrationGalleryNames.FolderName(operationId, plan.Title, outputs.GroupId));
+        RejectLink(target);
+        if (File.Exists(target)) throw new InvalidDataException("A gallery placement directory conflicts with an existing file.");
+        if (!Directory.Exists(target)) return null;
+        await VerifyDirectoryAsync(target, outputs, cancellationToken);
+        return Result(target, outputs);
+    }
+
+    /// <inheritdoc />
     public async Task<PlacedIntegrationGallery> PlaceAsync(IntegrationGalleryPlacementRequest request, CancellationToken cancellationToken) {
         var (operationId, plan, root, outputs, verified) = request;
         await using var protection = await mutations.EnterAsync([root.Path], cancellationToken);
-        var rootPath = Path.GetFullPath(root.Path);
-        if (operationId == Guid.Empty || plan.EntityKind != EntityKind.Gallery || root.Id != plan.LibraryRootId
-            || !root.Enabled || root.IsReadOnly || !root.ScanImages || !root.Recursive || !Directory.Exists(rootPath)
-            || !FileSystemPathComparison.Equals(rootPath, Path.GetFullPath(plan.LibraryPath)))
-            throw new InvalidDataException("The accepted recursive image library is unavailable or has changed.");
+        var rootPath = ValidateDestination(operationId, plan, root);
+        ValidateOutputs(outputs);
         if (verified.Count != outputs.Artifacts.Count || verified.Select(file => file.ArtifactId).Distinct().Count() != verified.Count)
             throw new InvalidDataException("Every gallery member needs exact verified staging evidence.");
         var byId = verified.ToDictionary(file => file.ArtifactId);
@@ -29,7 +41,7 @@ public sealed class IntegrationGalleryPlacement(ILibraryFileMutationGuard mutati
         var pending = Path.Combine(rootPath, $".prismedia-{operationId:N}-gallery.part");
         RejectLink(rootPath); RejectLink(target); RejectLink(pending);
         if (File.Exists(target) || File.Exists(pending)) throw new InvalidDataException("A gallery placement directory conflicts with an existing file.");
-        if (Directory.Exists(target)) { await VerifyDirectoryAsync(target, request, cancellationToken); return Result(target, outputs); }
+        if (Directory.Exists(target)) { await VerifyDirectoryAsync(target, outputs, cancellationToken); return Result(target, outputs); }
         Directory.CreateDirectory(pending);
         foreach (var artifact in outputs.Artifacts) {
             cancellationToken.ThrowIfCancellationRequested();
@@ -37,26 +49,45 @@ public sealed class IntegrationGalleryPlacement(ILibraryFileMutationGuard mutati
             var path = Path.Combine(pending, IntegrationGalleryNames.FileName(artifact));
             await CopyAsync(byId[artifact.Id], path, cancellationToken);
         }
-        await VerifyDirectoryAsync(pending, request, cancellationToken);
+        await VerifyDirectoryAsync(pending, outputs, cancellationToken);
         cancellationToken.ThrowIfCancellationRequested();
         RejectLink(rootPath); RejectLink(pending); RejectLink(target);
         try { Directory.Move(pending, target); }
-        catch (IOException) when (Directory.Exists(target)) { await VerifyDirectoryAsync(target, request, cancellationToken); }
+        catch (IOException) when (Directory.Exists(target)) { await VerifyDirectoryAsync(target, outputs, cancellationToken); }
         return Result(target, outputs);
     }
 
     private static PlacedIntegrationGallery Result(string folder, IntegrationGalleryOutputSet outputs) =>
         new(folder, outputs.Artifacts.ToDictionary(artifact => artifact.Id, artifact => Path.Combine(folder, IntegrationGalleryNames.FileName(artifact))));
 
-    private static async Task VerifyDirectoryAsync(string folder, IntegrationGalleryPlacementRequest request, CancellationToken token) {
+    private static async Task VerifyDirectoryAsync(string folder, IntegrationGalleryOutputSet outputs, CancellationToken token) {
         RejectLink(folder);
-        var expected = Result(folder, request.Outputs).Files;
+        var expected = Result(folder, outputs).Files;
         var allowed = expected.Values.ToHashSet(FileSystemPathComparison.Comparer);
         foreach (var entry in Directory.EnumerateFileSystemEntries(folder)) {
             if (!allowed.Contains(entry) || Directory.Exists(entry))
                 throw new InvalidDataException("The gallery contains additional content. It was preserved for review.");
         }
-        foreach (var file in request.VerifiedArtifacts) await VerifyFileAsync(expected[file.ArtifactId], file, token);
+        foreach (var artifact in outputs.Artifacts) {
+            var file = new VerifiedIntegrationArtifact(artifact.Id, expected[artifact.Id], artifact.SizeBytes,
+                artifact.Sha256.ToLowerInvariant(), Path.GetFileName(artifact.RelativePath));
+            await VerifyFileAsync(file.Path, file, token);
+        }
+    }
+
+    private static string ValidateDestination(Guid operationId, IntegrationTransferPlan plan, LibraryRootData root) {
+        var rootPath = Path.GetFullPath(root.Path);
+        if (operationId == Guid.Empty || plan.EntityKind != EntityKind.Gallery || root.Id != plan.LibraryRootId
+            || !root.Enabled || root.IsReadOnly || !root.ScanImages || !root.Recursive || !Directory.Exists(rootPath)
+            || !FileSystemPathComparison.Equals(rootPath, Path.GetFullPath(plan.LibraryPath)))
+            throw new InvalidDataException("The accepted recursive image library is unavailable or has changed.");
+        RejectLink(rootPath);
+        return rootPath;
+    }
+
+    private static void ValidateOutputs(IntegrationGalleryOutputSet outputs) {
+        if (outputs.Artifacts.Count == 0 || outputs.Artifacts.Select(item => item.Id).Distinct(StringComparer.Ordinal).Count() != outputs.Artifacts.Count)
+            throw new InvalidDataException("The accepted gallery output set is invalid.");
     }
 
     private static async Task CopyAsync(VerifiedIntegrationArtifact artifact, string target, CancellationToken token) {

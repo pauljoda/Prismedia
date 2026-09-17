@@ -23,6 +23,7 @@ public sealed class SourceTransferProcessor(IIntegrationTransferStore store, Cat
         var revision = transfer.State.Revision;
         try {
             VerifiedIntegrationArtifact artifact;
+            LibraryRootData? root = null;
             if (transfer.State.Phase == IntegrationTransferPhase.Transferring) {
                 await context.ReportProgressAsync(transfer.State.Mode == IntegrationTransferMode.SourceRequest ? 55 : 5,
                     "Resolving selected publication", cancellationToken);
@@ -47,14 +48,17 @@ public sealed class SourceTransferProcessor(IIntegrationTransferStore store, Cat
                 revision = transfer.State.Revision;
             } else if (transfer.State.Phase == IntegrationTransferPhase.Importing && transfer.State.Artifacts is { Count: 1 } accepted) {
                 var expected = accepted[0];
+                root = await roots.GetLibraryRootAsync(work.Plan.LibraryRootId, cancellationToken)
+                    ?? throw new InvalidDataException("The accepted destination library is unavailable.");
                 artifact = await bytes.ReadVerifiedAsync(operationId, expected.Id, expected.RelativePath,
                     expected.SizeBytes, expected.Sha256, cancellationToken)
-                    ?? throw new InvalidDataException("Verified staging is missing. Restore the staged publication before retrying.");
+                    ?? await placement.ReadPlacedAsync(operationId, work.Plan, root, expected, cancellationToken)
+                    ?? throw new InvalidDataException("Verified staging and the exact placed publication are missing.");
                 await verifier.VerifyAsync(artifact, work.Plan.EntityKind, cancellationToken);
             } else throw new InvalidOperationException("This publication cannot advance from its current phase.");
 
             await context.ReportProgressAsync(70, "Importing verified publication", cancellationToken);
-            var root = await roots.GetLibraryRootAsync(work.Plan.LibraryRootId, cancellationToken)
+            root ??= await roots.GetLibraryRootAsync(work.Plan.LibraryRootId, cancellationToken)
                 ?? throw new InvalidDataException("The accepted destination library is unavailable.");
             var path = await placement.PlaceAsync(operationId, work.Plan, root, artifact, cancellationToken);
             var imported = await materializer.MaterializeAsync(work.Plan.EntityKind, context,
