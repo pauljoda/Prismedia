@@ -16,7 +16,7 @@ public sealed class DiscoveryTokenProtectorTests : IDisposable {
         Assert.DoesNotContain(selection.Locator, token);
         Assert.Equal(selection, new DiscoveryTokenProtector(_root).ReadSelection(connection, token));
         Assert.Throws<ArgumentException>(() => protector.ReadSelection(Guid.NewGuid(), token));
-        Assert.Throws<ArgumentException>(() => protector.ReadSelection(connection, token[..20] + "x" + token[21..]));
+        Assert.Throws<ArgumentException>(() => protector.ReadSelection(connection, token[..20] + (token[20] == 'x' ? "y" : "x") + token[21..]));
     }
 
     [Fact]
