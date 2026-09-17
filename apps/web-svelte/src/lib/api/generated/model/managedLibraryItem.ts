@@ -6,6 +6,7 @@
  */
 import type { EntityKind } from './entityKind';
 import type { ManagedLibraryItemExternalIds } from './managedLibraryItemExternalIds';
+import type { ManagedLibraryPresentation } from './managedLibraryPresentation';
 
 export interface ManagedLibraryItem {
   remoteId: string;
@@ -25,4 +26,5 @@ export interface ManagedLibraryItem {
      * @pattern ^-?(?:0|[1-9]\d*)$
      */
   remoteFileCount: number | string | null;
+  presentation?: null | ManagedLibraryPresentation;
 }

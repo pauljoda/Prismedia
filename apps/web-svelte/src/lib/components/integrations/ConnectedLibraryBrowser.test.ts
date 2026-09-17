@@ -4,93 +4,135 @@ import { CONNECTION_STATUS, ENTITY_KIND, INTEGRATION_OPERATION, PLUGIN_CAPABILIT
 import type { ConnectionResponse } from "$lib/api/generated/model";
 import ConnectedLibraryBrowser from "./ConnectedLibraryBrowser.svelte";
 
-const api = vi.hoisted(() => ({ fetchManagedTracking: vi.fn(), fetchManagedLibrary: vi.fn(), fetchManagedItem: vi.fn(), fetchManagerOptions: vi.fn(), fetchLibraryMounts: vi.fn(), inspectLocalLibraryAccess: vi.fn() }));
-vi.mock("$lib/api/managed-libraries", () => api);
+const mocks = vi.hoisted(() => ({
+  fetchLibraryMounts: vi.fn(),
+  fetchManagedLibrary: vi.fn(),
+  goto: vi.fn(async (_href: string) => {}),
+}));
+
+vi.mock("$lib/api/managed-libraries", () => ({
+  fetchLibraryMounts: mocks.fetchLibraryMounts,
+  fetchManagedLibrary: mocks.fetchManagedLibrary,
+}));
+vi.mock("$app/navigation", () => ({ goto: mocks.goto }));
+
 const connection: ConnectionResponse = {
-  id: "connection-one", pluginId: "fixture-manager", name: "Existing collection", baseUrl: "http://manager.test/", enabled: true,
-  enabledCapabilities: [PLUGIN_CAPABILITY.connectedLibrary, PLUGIN_CAPABILITY.externalManager], settings: {}, configuredSecretKeys: [],
-  revision: 1, status: CONNECTION_STATUS.ready, remoteInstanceId: null, hasPersistentRemoteIdentity: false, lastCheckedAt: null, lastError: null,
+  id: "connection-one",
+  pluginId: "fixture-manager",
+  name: "Existing collection",
+  baseUrl: "http://manager.test/",
+  enabled: true,
+  enabledCapabilities: [PLUGIN_CAPABILITY.connectedLibrary, PLUGIN_CAPABILITY.externalManager],
+  settings: {},
+  configuredSecretKeys: [],
+  revision: 1,
+  status: CONNECTION_STATUS.ready,
+  remoteInstanceId: null,
+  hasPersistentRemoteIdentity: false,
+  lastCheckedAt: null,
+  lastError: null,
   effectiveCapabilities: [
-    { kind: PLUGIN_CAPABILITY.connectedLibrary, operations: [INTEGRATION_OPERATION.searchLibrary, INTEGRATION_OPERATION.getLibraryItem], entityKinds: [ENTITY_KIND.movie] },
-    { kind: PLUGIN_CAPABILITY.externalManager, operations: [INTEGRATION_OPERATION.managerOptions], entityKinds: [ENTITY_KIND.movie] },
+    {
+      kind: PLUGIN_CAPABILITY.connectedLibrary,
+      operations: [INTEGRATION_OPERATION.searchLibrary, INTEGRATION_OPERATION.getLibraryItem],
+      entityKinds: [ENTITY_KIND.movie],
+    },
+    {
+      kind: PLUGIN_CAPABILITY.externalManager,
+      operations: [INTEGRATION_OPERATION.managerOptions],
+      entityKinds: [ENTITY_KIND.movie],
+    },
   ],
 };
-const item = { remoteId: "1", entityKind: ENTITY_KIND.movie, title: "A film", year: 2024, externalIds: { fixture: "identity" }, monitored: false, profileId: "4", remoteFileCount: 1 };
-const snapshot = { item, path: "/remote/film", files: [{ remoteId: "2", path: "/remote/film/film.mkv", sizeBytes: 128, addedAt: null, targets: [{ remoteId: "1", entityKind: ENTITY_KIND.movie, title: "A film", seasonNumber: null, episodeNumber: null, absoluteNumber: null }] }], observedAt: "2026-09-16T12:00:00Z" };
+const item = {
+  remoteId: "movie/1",
+  entityKind: ENTITY_KIND.movie,
+  title: "A film",
+  year: 2024,
+  externalIds: { fixture: "identity:1", tmdb: "42" },
+  monitored: false,
+  profileId: "4",
+  remoteFileCount: 1,
+};
 
 describe("Connected library browser", () => {
   beforeEach(() => {
-    vi.resetAllMocks();
-    api.fetchLibraryMounts.mockResolvedValue([]);
-    api.fetchManagedTracking.mockResolvedValue([]);
-    api.fetchManagedLibrary.mockResolvedValue({ items: [item], nextCursor: null });
-    api.fetchManagedItem.mockResolvedValue(snapshot);
-    api.fetchManagerOptions.mockResolvedValue({ profiles: [{ id: "4", label: "Existing quality" }], roots: [] });
+    vi.clearAllMocks();
+    mocks.fetchLibraryMounts.mockResolvedValue([]);
+    mocks.fetchManagedLibrary.mockResolvedValue({ items: [item], nextCursor: null });
   });
 
   it("keeps browsing separate from tracking and configuration", async () => {
     render(ConnectedLibraryBrowser, { connection });
+
     await screen.findByText("A film");
     expect(screen.queryByText("Local library mappings")).not.toBeInTheDocument();
-    expect(api.fetchManagedTracking).not.toHaveBeenCalled();
     expect(screen.getByRole("button", { name: "Library settings" })).toBeInTheDocument();
   });
 
-  it("shows exact comic issue labels without offering unsupported tracking or invented profiles", async () => {
-    const comic = { ...item, entityKind: ENTITY_KIND.comicSeries, profileId: null };
-    api.fetchManagedLibrary.mockResolvedValue({ items: [comic], nextCursor: null });
-    api.fetchManagedItem.mockResolvedValue({ ...snapshot, item: comic, files: [{ ...snapshot.files[0], targets: [
-      { remoteId: "half", entityKind: ENTITY_KIND.comicInstallment, title: "Special", issueLabel: "½" },
-      { remoteId: "decimal", entityKind: ENTITY_KIND.comicInstallment, title: "Interlude", issueLabel: "12.5" },
-    ] }] });
-    api.fetchManagerOptions.mockResolvedValue({ profiles: [], roots: [] });
-    render(ConnectedLibraryBrowser, { connection: { ...connection, effectiveCapabilities: connection.effectiveCapabilities.map(capability => ({ ...capability, entityKinds: [ENTITY_KIND.comicSeries] })) } });
+  it("opens a dedicated route pinned to the selected external identities", async () => {
+    render(ConnectedLibraryBrowser, { connection });
+
     await fireEvent.click(await screen.findByRole("button", { name: "A film" }));
-    await screen.findByText("#½: Special · #12.5: Interlude");
-    expect(screen.queryByText(/Profile:/)).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "Match existing items" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "Check local access" })).toBeInTheDocument();
+
+    expect(mocks.goto).toHaveBeenCalledOnce();
+    const href = String(mocks.goto.mock.calls[0]?.[0]);
+    const url = new URL(href, "http://localhost");
+    expect(url.pathname).toBe("/request/source/connection-one/movie/movie%2F1");
+    expect(JSON.parse(url.searchParams.get("identities") ?? "null")).toEqual({
+      fixture: "identity:1",
+      tmdb: "42",
+    });
   });
 
-  it("pins the selected external identity and explains that remote files are not verified local files", async () => {
+  it("does not fetch title details inside the browser", async () => {
     render(ConnectedLibraryBrowser, { connection });
-    await fireEvent.click(await screen.findByRole("button", { name: "A film" }));
-    await screen.findByText("Profile: Existing quality");
-    expect(api.fetchManagedItem).toHaveBeenCalledWith(connection.id, { entityKind: item.entityKind, remoteId: item.remoteId, expectedExternalIds: item.externalIds });
-    expect(screen.getByText(/Local access has not been checked/)).toBeInTheDocument();
-    expect(screen.getByText("/remote/film/film.mkv")).toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: /Download|Import|Request/ })).not.toBeInTheDocument();
+
+    await screen.findByText("A film");
+    expect(screen.queryByRole("dialog", { name: "A film" })).not.toBeInTheDocument();
+    expect(Object.hasOwn(mocks, "fetchManagedItem")).toBe(false);
   });
 
   it("does not turn an outage into an empty successful library", async () => {
-    api.fetchManagedLibrary.mockRejectedValue(new Error("The manager is unavailable"));
+    mocks.fetchManagedLibrary.mockRejectedValue(new Error("The manager is unavailable"));
     render(ConnectedLibraryBrowser, { connection });
+
     await screen.findByText("The manager is unavailable");
     expect(screen.queryByText("No matching titles")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
   });
 
-  it("checks local bytes separately and preserves unavailable file evidence", async () => {
-    api.inspectLocalLibraryAccess.mockResolvedValue({ remote: snapshot, files: [{ remoteId: "2", libraryRootId: null, localPath: null,
-      isReadable: false, sizeMatches: false, problem: "No local mapping covers this remote file." }] });
+  it("keeps exact remote availability wording in the result card", async () => {
+    mocks.fetchManagedLibrary.mockResolvedValue({
+      items: [{ ...item, remoteFileCount: null }],
+      nextCursor: null,
+    });
     render(ConnectedLibraryBrowser, { connection });
-    await fireEvent.click(await screen.findByRole("button", { name: "A film" }));
-    await screen.findByText("Profile: Existing quality");
-    await fireEvent.click(screen.getByRole("button", { name: "Check local access" }));
-    await screen.findByText("No local mapping covers this remote file.");
-    expect(screen.queryByText("Readable locally · size matches")).not.toBeInTheDocument();
+
+    expect((await screen.findAllByText("2024 · Availability unknown")).length).toBeGreaterThan(0);
   });
 
-  it("ignores a late detail response after the dialog was closed and reopened", async () => {
-    let finish: (value: typeof snapshot) => void = () => {};
-    api.fetchManagedItem.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
-    render(ConnectedLibraryBrowser, { connection });
-    await fireEvent.click(await screen.findByRole("button", { name: "A film" }));
-    await fireEvent.click(screen.getByRole("button", { name: "Done" }));
-    await fireEvent.click(screen.getByRole("button", { name: "A film" }));
-    await screen.findByText("Profile: Existing quality");
-    finish({ ...snapshot, path: "/stale/response" });
-    await waitFor(() => expect(api.fetchManagedItem).toHaveBeenCalledTimes(2));
-    expect(screen.queryByText("Remote folder: /stale/response")).not.toBeInTheDocument();
+  it("opens a multi-kind library with the kind selected in Request", async () => {
+    const multiKind = { ...connection, effectiveCapabilities: connection.effectiveCapabilities.map(capability =>
+      capability.kind === PLUGIN_CAPABILITY.connectedLibrary ? { ...capability, entityKinds: [ENTITY_KIND.movie, ENTITY_KIND.book] } : capability) };
+    const view = render(ConnectedLibraryBrowser, { connection: multiKind, initialEntityKind: ENTITY_KIND.book });
+
+    await screen.findByText("A film");
+    expect(mocks.fetchManagedLibrary).toHaveBeenCalledWith(connection.id, expect.objectContaining({ entityKind: ENTITY_KIND.book }));
+    mocks.fetchManagedLibrary.mockClear();
+    await view.rerender({ connection: multiKind, initialEntityKind: ENTITY_KIND.movie });
+    await waitFor(() => expect(mocks.fetchManagedLibrary).toHaveBeenCalledWith(connection.id, expect.objectContaining({ entityKind: ENTITY_KIND.movie })));
+  });
+
+  it("uses real source artwork in connected-library results", async () => {
+    const posterUrl = "https://images.example.test/poster.jpg";
+    mocks.fetchManagedLibrary.mockResolvedValue({
+      items: [{ ...item, presentation: { posterUrl } }],
+      nextCursor: null,
+    });
+    const { container } = render(ConnectedLibraryBrowser, { connection });
+
+    await screen.findByText("A film");
+    expect(container.querySelector(`img[src="${posterUrl}"]`)).toBeInTheDocument();
   });
 });

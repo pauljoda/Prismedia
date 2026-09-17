@@ -4,6 +4,7 @@ using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
 using Prismedia.Domain.Integrations;
+using System.Text.Json;
 
 namespace Prismedia.Application.Tests;
 
@@ -80,6 +81,78 @@ public sealed class ManagedLibraryServiceTests {
         Assert.Null(Assert.Single((await fixture.Service.SearchAsync(fixture.Connection.State.Id, new(EntityKind.Movie), default)).Items).RemoteFileCount);
         var options = await fixture.Service.OptionsAsync(fixture.Connection.State.Id, new(EntityKind.Movie), default);
         Assert.Equal("external-profile", Assert.Single(options.Profiles).Id);
+    }
+
+    [Fact]
+    public async Task LegacyItemsWithoutPresentationRemainValid() {
+        var fixture = new Fixture();
+
+        var item = Assert.Single((await fixture.Service.SearchAsync(fixture.Connection.State.Id, new(EntityKind.Movie), default)).Items);
+        var snapshot = await fixture.Service.GetAsync(fixture.Connection.State.Id,
+            new(item.EntityKind, item.RemoteId, item.ExternalIds), default);
+        var legacyJson = JsonSerializer.Serialize(new {
+            item.RemoteId,
+            item.EntityKind,
+            item.Title,
+            item.Year,
+            item.ExternalIds,
+            item.Monitored,
+            item.ProfileId,
+            item.RemoteFileCount,
+        }, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        var legacyItem = JsonSerializer.Deserialize<ManagedLibraryItem>(legacyJson,
+            new JsonSerializerOptions(JsonSerializerDefaults.Web));
+
+        Assert.Null(item.Presentation);
+        Assert.Null(snapshot.Item.Presentation);
+        Assert.NotNull(legacyItem);
+        Assert.Null(legacyItem.Presentation);
+    }
+
+    [Fact]
+    public async Task SourcePresentationIsReturnedWithoutCreatingLibraryMetadata() {
+        var fixture = new Fixture();
+        var presentation = new ManagedLibraryPresentation(
+            "First line\nSecond line\twith context.",
+            "https://images.example.test/poster.jpg?width=500",
+            "http://images.example.test/backdrop.jpg",
+            ["Science Fiction", "Drama"],
+            116,
+            "PG-13");
+        var item = fixture.Snapshot.Item with { Presentation = presentation };
+        fixture.Page = new([item]);
+        fixture.Snapshot = fixture.Snapshot with { Item = item };
+
+        var pageItem = Assert.Single((await fixture.Service.SearchAsync(fixture.Connection.State.Id, new(EntityKind.Movie), default)).Items);
+        var snapshot = await fixture.Service.GetAsync(fixture.Connection.State.Id,
+            new(item.EntityKind, item.RemoteId, item.ExternalIds), default);
+
+        Assert.Equal(presentation, pageItem.Presentation);
+        Assert.Equal(presentation, snapshot.Item.Presentation);
+    }
+
+    [Fact]
+    public async Task InvalidSourcePresentationIsRejectedAtTheIntegrationBoundary() {
+        var fixture = new Fixture();
+        var invalidPresentations = new ManagedLibraryPresentation[] {
+            new(Overview: "bad\u0000overview"),
+            new(Overview: new string('a', 32_769)),
+            new(PosterUrl: "javascript:alert(1)"),
+            new(PosterUrl: "https://user:secret@images.example.test/poster.jpg"),
+            new(BackdropUrl: "https://images.example.test/backdrop.jpg#fragment"),
+            new(Genres: Enumerable.Range(0, 65).Select(index => $"Genre {index}").ToArray()),
+            new(Genres: ["Drama", "Drama"]),
+            new(Genres: ["bad\nlabel"]),
+            new(RuntimeMinutes: 0),
+            new(RuntimeMinutes: 10_081),
+            new(ContentRating: "PG\n13"),
+        };
+
+        foreach (var presentation in invalidPresentations) {
+            fixture.Page = new([fixture.Snapshot.Item with { Presentation = presentation }]);
+            await Assert.ThrowsAsync<IntegrationInvocationException>(() => fixture.Service.SearchAsync(
+                fixture.Connection.State.Id, new(EntityKind.Movie), default));
+        }
     }
 
     private sealed class Fixture : IIntegrationConnectionStore, IIntegrationPluginGateway, IIntegrationManagerGateway {

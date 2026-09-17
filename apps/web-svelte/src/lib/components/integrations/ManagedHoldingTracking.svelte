@@ -1,9 +1,10 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import { Alert, Badge, Button, Panel } from "@prismedia/ui-svelte";
   import { MANAGED_TRACKING_STATUS } from "$lib/api/generated/codes";
   import type { ManagedLibraryItem, ManagedTrackingPreview, ManagedTrackingResponse } from "$lib/api/generated/model";
   import { fetchManagedTracking, previewTracking, saveManagedTracking, refreshTracking } from "$lib/api/managed-libraries";
+  import { isTrackedManagedItem } from "$lib/integrations/managed-item-identity";
   import ManagedHoldingControls from "./ManagedHoldingControls.svelte";
   import ManagedHoldingRelease from "./ManagedHoldingRelease.svelte";
 
@@ -13,9 +14,17 @@
   let preview = $state<ManagedTrackingPreview | null>(null);
   let error = $state<string | null>(null);
   let busy = $state(false);
+  let trackingKnown = $state(false);
   let operationId = "";
   let active = true;
-  const visible = $derived(holdings.filter(holding => !item || holding.item.remoteId === item.remoteId && holding.item.entityKind === item.entityKind));
+  let loadSequence = 0;
+  const trackingScope = $derived(JSON.stringify([
+    connectionId,
+    item?.entityKind ?? null,
+    item?.remoteId ?? null,
+    Object.entries(item?.externalIds ?? {}).sort(([left], [right]) => left.localeCompare(right)),
+  ]));
+  const visible = $derived(holdings.filter(holding => !item || isTrackedManagedItem(holding.item, item)));
   const statusLabels = {
     [MANAGED_TRACKING_STATUS.pending]: "Waiting for verification",
     [MANAGED_TRACKING_STATUS.waitingForFiles]: "Waiting for first files",
@@ -25,39 +34,73 @@
     [MANAGED_TRACKING_STATUS.releasePending]: "Handoff pending",
     [MANAGED_TRACKING_STATUS.released]: "No longer managed",
   };
-  onMount(() => {
-    void load();
-    const timer = setInterval(() => { if (!busy) void load(); }, 15000);
-    return () => { active = false; clearInterval(timer); };
+  $effect(() => {
+    const selectedConnectionId = connectionId;
+    const scope = trackingScope;
+    untrack(() => {
+      loadSequence += 1;
+      expandedId = null;
+      holdings = [];
+      preview = null;
+      error = null;
+      busy = false;
+      trackingKnown = false;
+      operationId = "";
+      void load(selectedConnectionId, scope);
+    });
   });
-  async function load() {
-    try { const results = await fetchManagedTracking(connectionId); if (active) { holdings = results; error = null; onLoaded?.(results); } }
-    catch (cause) { if (active) { error = cause instanceof Error ? cause.message : "Could not read tracked holdings"; onLoaded?.(holdings); } }
+  onMount(() => {
+    const timer = setInterval(() => { if (!busy) void load(connectionId, trackingScope); }, 15000);
+    return () => { active = false; loadSequence += 1; clearInterval(timer); };
+  });
+  async function load(selectedConnectionId: string, scope: string) {
+    const sequence = ++loadSequence;
+    try {
+      const results = await fetchManagedTracking(selectedConnectionId);
+      if (!active || sequence !== loadSequence || scope !== trackingScope) return;
+      holdings = results;
+      trackingKnown = true;
+      error = null;
+      onLoaded?.(results);
+    } catch (cause) {
+      if (!active || sequence !== loadSequence || scope !== trackingScope) return;
+      error = cause instanceof Error ? cause.message : "Could not read tracked holdings";
+      onLoaded?.(holdings);
+    }
   }
   async function match() {
-    if (!item) return;
+    const selectedItem = item;
+    if (!selectedItem) return;
+    const scope = trackingScope;
+    loadSequence += 1;
     busy = true; error = null; preview = null;
     try {
-      const result = await previewTracking(connectionId, { entityKind: item.entityKind, remoteId: item.remoteId, expectedExternalIds: item.externalIds });
-      if (active) { preview = result; operationId = crypto.randomUUID(); }
-    } catch (cause) { if (active) error = cause instanceof Error ? cause.message : "Could not match existing items"; }
-    finally { if (active) busy = false; }
+      const result = await previewTracking(connectionId, { entityKind: selectedItem.entityKind, remoteId: selectedItem.remoteId, expectedExternalIds: selectedItem.externalIds });
+      if (active && scope === trackingScope) { preview = result; operationId = crypto.randomUUID(); }
+    } catch (cause) { if (active && scope === trackingScope) error = cause instanceof Error ? cause.message : "Could not match existing items"; }
+    finally { if (active && scope === trackingScope) busy = false; }
   }
   async function link() {
-    if (!item || !preview?.libraryRootId || preview.reviewReason || !operationId) return;
+    const selectedItem = item;
+    const selectedPreview = preview;
+    if (!selectedItem || !selectedPreview?.libraryRootId || selectedPreview.reviewReason || !operationId) return;
+    const scope = trackingScope;
+    loadSequence += 1;
     busy = true; error = null;
     try {
-      const saved = await saveManagedTracking(connectionId, { operationId, libraryRootId: preview.libraryRootId,
-        item: { entityKind: item.entityKind, remoteId: item.remoteId, expectedExternalIds: item.externalIds }, selections: preview.selections });
-      if (active) { holdings = [...holdings.filter(holding => holding.id !== saved.id), saved]; preview = null; }
-    } catch (cause) { if (active) error = cause instanceof Error ? cause.message : "Could not link this holding"; }
-    finally { if (active) busy = false; }
+      const saved = await saveManagedTracking(connectionId, { operationId, libraryRootId: selectedPreview.libraryRootId,
+        item: { entityKind: selectedItem.entityKind, remoteId: selectedItem.remoteId, expectedExternalIds: selectedItem.externalIds }, selections: selectedPreview.selections });
+      if (active && scope === trackingScope) { holdings = [...holdings.filter(holding => holding.id !== saved.id), saved]; preview = null; }
+    } catch (cause) { if (active && scope === trackingScope) error = cause instanceof Error ? cause.message : "Could not link this holding"; }
+    finally { if (active && scope === trackingScope) busy = false; }
   }
   async function refresh(id: string) {
+    const scope = trackingScope;
+    loadSequence += 1;
     busy = true; error = null;
-    try { await refreshTracking(connectionId, id); await load(); }
-    catch (cause) { if (active) error = cause instanceof Error ? cause.message : "Could not queue refresh"; }
-    finally { if (active) busy = false; }
+    try { await refreshTracking(connectionId, id); if (scope === trackingScope) await load(connectionId, scope); }
+    catch (cause) { if (active && scope === trackingScope) error = cause instanceof Error ? cause.message : "Could not queue refresh"; }
+    finally { if (active && scope === trackingScope) busy = false; }
   }
 </script>
 
@@ -77,12 +120,14 @@
         {#if holding.status !== MANAGED_TRACKING_STATUS.released}<Button variant="outline" size="sm" disabled={busy} onclick={() => void refresh(holding.id)}>{holding.status === MANAGED_TRACKING_STATUS.releasePending ? "Refresh handoff" : "Refresh tracking"}</Button>{/if}
         {#if showControls}<ManagedHoldingControls {connectionId} holdingId={holding.id} canPreview={canControl && (holding.status === MANAGED_TRACKING_STATUS.tracking || holding.status === MANAGED_TRACKING_STATUS.waitingForFiles)} />{/if}
         {#if showControls && canRelease && (holding.status === MANAGED_TRACKING_STATUS.tracking || holding.status === MANAGED_TRACKING_STATUS.waitingForFiles)}
-          <ManagedHoldingRelease {connectionId} holdingId={holding.id} onaccepted={saved => { holdings = holdings.map(item => item.id === saved.id ? saved : item); }} />
+          <ManagedHoldingRelease {connectionId} holdingId={holding.id} onaccepted={saved => { loadSequence += 1; holdings = holdings.map(item => item.id === saved.id ? saved : item); }} />
         {/if}
         {/if}
       </div>
     {/each}
-    {#if item && !visible.some(holding => holding.status !== MANAGED_TRACKING_STATUS.released)}
+    {#if item && !trackingKnown && !error}
+      <p class="text-sm text-text-muted">Checking library link…</p>
+    {:else if item && trackingKnown && !visible.some(holding => holding.status !== MANAGED_TRACKING_STATUS.released)}
       <p class="text-sm text-text-muted">Link this holding to its existing scanned items to retain your history across external renames and upgrades.</p>
       <Button variant="outline" size="sm" disabled={busy} onclick={match}>Match existing items</Button>
       {#if preview}

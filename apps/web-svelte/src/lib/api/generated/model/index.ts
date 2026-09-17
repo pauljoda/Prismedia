@@ -449,6 +449,7 @@ export * from './managedLibraryFile';
 export * from './managedLibraryItem';
 export * from './managedLibraryItemExternalIds';
 export * from './managedLibraryPage';
+export * from './managedLibraryPresentation';
 export * from './managedLibraryQuery';
 export * from './managedLocalSource';
 export * from './managedLookupInput';

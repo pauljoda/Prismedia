@@ -69,8 +69,25 @@ public sealed class ManagedLibraryService(IntegrationConnectionAccess access, II
     private static void ValidateItem(ManagedLibraryItem item, EntityKind kind) {
         if (item is null || item.EntityKind != kind || !Text(item.RemoteId, 512) || !Text(item.Title, 512)
             || !Identities(item.ExternalIds) || item.Year is < 0 or > 9999 || item.RemoteFileCount < 0
-            || item.ProfileId is not null && !Text(item.ProfileId, 512)) throw Invalid();
+            || item.ProfileId is not null && !Text(item.ProfileId, 512)
+            || !ValidPresentation(item.Presentation)) throw Invalid();
     }
+    private static bool ValidPresentation(ManagedLibraryPresentation? presentation) => presentation is null ||
+        ((presentation.Overview is null || TextBlock(presentation.Overview, 32_768))
+            && (presentation.PosterUrl is null || SafeImageUrl(presentation.PosterUrl))
+            && (presentation.BackdropUrl is null || SafeImageUrl(presentation.BackdropUrl))
+            && presentation.Genres is null or { Count: <= 64 }
+            && (presentation.Genres is null || presentation.Genres.All(value => Text(value, 128))
+                && presentation.Genres.Distinct(StringComparer.Ordinal).Count() == presentation.Genres.Count)
+            && presentation.RuntimeMinutes is null or >= 1 and <= 10_080
+            && (presentation.ContentRating is null || Text(presentation.ContentRating, 128)));
+    private static bool SafeImageUrl(string value) => value.Length <= 8192
+        && !value.Any(character => char.IsWhiteSpace(character) || char.IsControl(character) || character == '\\')
+        && Uri.TryCreate(value, UriKind.Absolute, out var address)
+        && address.Scheme is "http" or "https" && address.Host.Length > 0
+        && address.UserInfo.Length == 0 && address.Fragment.Length == 0;
+    private static bool TextBlock(string? value, int limit) => !string.IsNullOrWhiteSpace(value) && value.Length <= limit
+        && !value.Any(character => char.IsControl(character) && character is not ('\r' or '\n' or '\t'));
     private static bool Identities(IReadOnlyDictionary<string, string>? ids) => ids is { Count: > 0 and <= 64 }
         && ids.All(pair => Text(pair.Key, 128) && Text(pair.Value, 2048));
     private static bool Text(string? value, int limit) => !string.IsNullOrWhiteSpace(value) && value.Length <= limit && !value.Any(char.IsControl);

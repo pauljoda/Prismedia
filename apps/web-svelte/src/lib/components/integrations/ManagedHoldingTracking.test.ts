@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ENTITY_KIND, MANAGED_TRACKING_STATUS } from "$lib/api/generated/codes";
 import ManagedHoldingTracking from "./ManagedHoldingTracking.svelte";
 
@@ -19,18 +19,88 @@ describe("Managed holding tracking", () => {
     api.saveManagedTracking.mockResolvedValue(tracked);
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it("waits for the initial tracking read before offering a new link", () => {
+    api.fetchManagedTracking.mockReturnValue(new Promise(() => {}));
+    render(ManagedHoldingTracking, { connectionId: "connection", item });
+
+    expect(screen.getByText("Checking library link…")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Match existing items" })).not.toBeInTheDocument();
+  });
+
+  it("does not let a slower poll replace a newer tracking response", async () => {
+    vi.useFakeTimers();
+    const first = deferred<Awaited<ReturnType<typeof api.fetchManagedTracking>>>();
+    const second = deferred<Awaited<ReturnType<typeof api.fetchManagedTracking>>>();
+    api.fetchManagedTracking.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    render(ManagedHoldingTracking, { connectionId: "connection", item });
+
+    await vi.advanceTimersByTimeAsync(15_000);
+    second.resolve([{ ...tracked, title: "Current tracking", status: MANAGED_TRACKING_STATUS.tracking }]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(screen.getByText("Current tracking")).toBeInTheDocument();
+
+    first.resolve([{ ...tracked, title: "Outdated tracking", status: MANAGED_TRACKING_STATUS.tracking }]);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(screen.getByText("Current tracking")).toBeInTheDocument();
+    expect(screen.queryByText("Outdated tracking")).not.toBeInTheDocument();
+  });
+
+  it("does not surface a slower poll failure after a newer read succeeds", async () => {
+    vi.useFakeTimers();
+    const first = deferred<Awaited<ReturnType<typeof api.fetchManagedTracking>>>();
+    const second = deferred<Awaited<ReturnType<typeof api.fetchManagedTracking>>>();
+    api.fetchManagedTracking.mockReturnValueOnce(first.promise).mockReturnValueOnce(second.promise);
+    render(ManagedHoldingTracking, { connectionId: "connection", item });
+
+    await vi.advanceTimersByTimeAsync(15_000);
+    second.resolve([{ ...tracked, title: "Current tracking", status: MANAGED_TRACKING_STATUS.tracking }]);
+    await vi.advanceTimersByTimeAsync(0);
+    first.reject(new Error("Stale tracking failure"));
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(screen.getByText("Current tracking")).toBeInTheDocument();
+    expect(screen.queryByText("Stale tracking failure")).not.toBeInTheDocument();
+  });
+
   it("keeps independent request history loadable when tracking cannot refresh", async () => {
     api.fetchManagedTracking.mockRejectedValue(new Error("Tracking unavailable"));
     const onLoaded = vi.fn();
     render(ManagedHoldingTracking, { connectionId: "connection", onLoaded });
     await screen.findByText("Tracking unavailable");
+    expect(screen.queryByText("Checking library link…")).not.toBeInTheDocument();
     expect(onLoaded).toHaveBeenCalledWith([]);
+  });
+
+  it("clears title-specific state and reloads when the selected identity changes", async () => {
+    const nextItem = { ...item, externalIds: { tmdb: "2" }, title: "Another film" };
+    const nextRead = deferred<Awaited<ReturnType<typeof api.fetchManagedTracking>>>();
+    api.fetchManagedTracking
+      .mockResolvedValueOnce([{ ...tracked, title: "First title", status: MANAGED_TRACKING_STATUS.tracking }])
+      .mockReturnValueOnce(nextRead.promise);
+    const view = render(ManagedHoldingTracking, { connectionId: "connection", item });
+    await screen.findByText("First title");
+
+    await view.rerender({ connectionId: "connection", item: nextItem });
+    expect(await screen.findByText("Checking library link…")).toBeInTheDocument();
+    expect(screen.queryByText("First title")).not.toBeInTheDocument();
+
+    nextRead.resolve([{
+      ...tracked,
+      title: "Second title",
+      status: MANAGED_TRACKING_STATUS.tracking,
+      item: { ...tracked.item, expectedExternalIds: nextItem.externalIds },
+    }]);
+    expect(await screen.findByText("Second title")).toBeInTheDocument();
   });
 
   it("requires reviewing exact local matches before persisting the association", async () => {
     render(ManagedHoldingTracking, { connectionId: "connection", item });
     expect(api.saveManagedTracking).not.toHaveBeenCalled();
-    await fireEvent.click(screen.getByRole("button", { name: "Match existing items" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Match existing items" }));
     await screen.findByText("/library/film.mkv");
     expect(api.saveManagedTracking).not.toHaveBeenCalled();
     await fireEvent.click(screen.getByRole("button", { name: "Link existing items" }));
@@ -41,7 +111,7 @@ describe("Managed holding tracking", () => {
   it("keeps ambiguous or unscanned coverage out of the linking action", async () => {
     api.previewTracking.mockResolvedValue({ ...preview, reviewReason: "Scan the existing source first." });
     render(ManagedHoldingTracking, { connectionId: "connection", item });
-    await fireEvent.click(screen.getByRole("button", { name: "Match existing items" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Match existing items" }));
     await screen.findByText("Scan the existing source first.");
     expect(screen.queryByRole("button", { name: "Link existing items" })).not.toBeInTheDocument();
   });
@@ -49,7 +119,7 @@ describe("Managed holding tracking", () => {
   it("reuses the operation ID after a submission response is lost", async () => {
     api.saveManagedTracking.mockRejectedValueOnce(new Error("Response lost"));
     render(ManagedHoldingTracking, { connectionId: "connection", item });
-    await fireEvent.click(screen.getByRole("button", { name: "Match existing items" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Match existing items" }));
     await fireEvent.click(await screen.findByRole("button", { name: "Link existing items" }));
     await screen.findByText("Response lost");
     await fireEvent.click(screen.getByRole("button", { name: "Link existing items" }));
@@ -72,6 +142,12 @@ describe("Managed holding tracking", () => {
     expect(screen.getByRole("button", { name: "Refresh handoff" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Match existing items" })).not.toBeInTheDocument();
   });
+  it("does not reuse tracking when a manager recycles a remote ID for another external identity", async () => {
+    api.fetchManagedTracking.mockResolvedValue([{ ...tracked, title: "Old identity", item: { ...tracked.item, expectedExternalIds: { tmdb: "999" } } }]);
+    render(ManagedHoldingTracking, { connectionId: "connection", item });
+    await screen.findByRole("button", { name: "Match existing items" });
+    expect(screen.queryByText("Old identity")).not.toBeInTheDocument();
+  });
   it("retains released history and requires new review before linking the same files again", async () => {
     api.fetchManagedTracking.mockResolvedValue([{ ...tracked, status: MANAGED_TRACKING_STATUS.released }]);
     render(ManagedHoldingTracking, { connectionId: "connection", item });
@@ -82,3 +158,13 @@ describe("Managed holding tracking", () => {
     expect(api.saveManagedTracking).not.toHaveBeenCalled();
   });
 });
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (reason?: unknown) => void;
+  const promise = new Promise<T>((onResolve, onReject) => {
+    resolve = onResolve;
+    reject = onReject;
+  });
+  return { promise, resolve, reject };
+}

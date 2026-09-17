@@ -6,7 +6,22 @@ namespace Prismedia.Contracts.Integrations;
 public sealed record ManagedLibraryQuery(EntityKind EntityKind, string? Query = null, string? Cursor = null, int Limit = 25);
 /// <summary>An external application's current holding. File counts are remote claims, not local playback availability.</summary>
 public sealed record ManagedLibraryItem(string RemoteId, EntityKind EntityKind, string Title, int? Year,
-    IReadOnlyDictionary<string, string> ExternalIds, bool Monitored, string? ProfileId, int? RemoteFileCount);
+    IReadOnlyDictionary<string, string> ExternalIds, bool Monitored, string? ProfileId, int? RemoteFileCount,
+    ManagedLibraryPresentation? Presentation = null);
+/// <summary>Optional source-owned presentation metadata for a connected holding; it is never persisted as Prismedia library metadata.</summary>
+/// <param name="Overview">Source description shown in the read-only holding detail.</param>
+/// <param name="PosterUrl">Absolute HTTP(S) poster image URL, when the source exposes one.</param>
+/// <param name="BackdropUrl">Absolute HTTP(S) backdrop image URL, when the source exposes one.</param>
+/// <param name="Genres">Source genre labels shown as read-only context.</param>
+/// <param name="RuntimeMinutes">Source runtime in whole minutes.</param>
+/// <param name="ContentRating">Source certification or content rating.</param>
+public sealed record ManagedLibraryPresentation(
+    string? Overview = null,
+    string? PosterUrl = null,
+    string? BackdropUrl = null,
+    IReadOnlyList<string>? Genres = null,
+    int? RuntimeMinutes = null,
+    string? ContentRating = null);
 /// <summary>Bounded observed holdings with adapter-owned pagination.</summary>
 public sealed record ManagedLibraryPage(IReadOnlyList<ManagedLibraryItem> Items, string? NextCursor = null);
 /// <summary>Addresses a holding and pins known external identities to detect a reused remote numeric ID.</summary>
