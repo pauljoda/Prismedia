@@ -67,13 +67,23 @@ public static class CompletedPayloadFileSystem {
         if (!Path.IsPathFullyQualified(path)) throw new IOException("Completed cleanup requires an absolute local path.");
         var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
         if (rejectLeafLink) EnsureNotLink(full);
+        return ResolveCanonicalPath(full, 0);
+    }
+
+    private static string ResolveCanonicalPath(string path, int redirects) {
+        if (redirects >= 40) throw new IOException("A cleanup path contains too many filesystem links or a link cycle.");
+        var full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
         var current = Path.GetPathRoot(full)!;
-        foreach (var part in full[current.Length..].Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries)) {
-            current = Path.Combine(current, part);
+        var parts = full[current.Length..].Split(Path.DirectorySeparatorChar, StringSplitOptions.RemoveEmptyEntries);
+        for (var index = 0; index < parts.Length; index++) {
+            current = Path.Combine(current, parts[index]);
             var info = Info(current);
             if (info.LinkTarget is not null) {
-                current = info.ResolveLinkTarget(returnFinalTarget: true)?.FullName
+                var target = info.ResolveLinkTarget(returnFinalTarget: true)?.FullName
                     ?? throw new IOException("A cleanup path contains an unresolved filesystem link.");
+                // A link's target may itself contain linked ancestors, including OS directory aliases.
+                // Restart at its root so overlap checks compare the actual bytes on both sides.
+                return ResolveCanonicalPath(Path.Combine([target, .. parts[(index + 1)..]]), redirects + 1);
             }
         }
         return Path.TrimEndingDirectorySeparator(current);

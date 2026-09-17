@@ -161,6 +161,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Completed-download cleanup resolves nested directory aliases before comparing library paths, preserving payloads that still back a linked library source and rejecting cyclic links.
+
 - Metadata reviews without exact issue positions retain their previous revision, while changes to fractional or special issue labels still require a fresh review.
 
 - Metadata review now reports failed provider lookups as provider errors, preserving the distinction between an unavailable service and a title that could not be found.

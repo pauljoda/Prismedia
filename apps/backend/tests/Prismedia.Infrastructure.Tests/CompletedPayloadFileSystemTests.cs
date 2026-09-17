@@ -73,6 +73,30 @@ public sealed class CompletedPayloadFileSystemTests : IDisposable {
     }
 
     [Fact]
+    public void SourceTargetsWithLinkedAncestorsStillProtectThePayload() {
+        var payload = FileAt("downloads/item/film.mkv");
+        var alias = Path.Combine(root, "download-alias");
+        Directory.CreateSymbolicLink(alias, Path.Combine(root, "downloads"));
+        var owned = Path.Combine(root, "library/film.mkv");
+        Directory.CreateDirectory(Path.GetDirectoryName(owned)!);
+        File.CreateSymbolicLink(owned, Path.Combine(alias, "item/film.mkv"));
+
+        Assert.Equal(CompletedPayloadFileSystem.CanonicalPath(payload), CompletedPayloadFileSystem.CanonicalPath(owned));
+        Assert.Throws<IOException>(() => CompletedPayloadFileSystem.Delete(Path.GetDirectoryName(payload)!, "receipt",
+            [Path.Combine(root, "library")], [owned], default));
+        Assert.Equal("validated", File.ReadAllText(payload));
+    }
+
+    [Fact]
+    public void CyclicAncestorLinksFailWithoutUnboundedRecursion() {
+        Directory.CreateDirectory(root);
+        var alias = Path.Combine(root, "loop");
+        Directory.CreateSymbolicLink(alias, Path.Combine(alias, "nested"));
+
+        Assert.Throws<IOException>(() => CompletedPayloadFileSystem.CanonicalPath(Path.Combine(alias, "file.mkv")));
+    }
+
+    [Fact]
     public void SingleFileCleanupAndRepeatedCleanupAreIdempotent() {
         var payload = FileAt("downloads/film.mkv");
         var owned = FileAt("library/film.mkv");
