@@ -7,5 +7,7 @@ public enum MetadataValueOrigin {
     /// <summary>A user explicitly edited or cleared the value.</summary>
     [Code("user")] User,
     /// <summary>An accepted provider proposal supplied the value.</summary>
-    [Code("provider")] Provider
+    [Code("provider")] Provider,
+    /// <summary>A library scan supplied a filename, embedded field, or sidecar value.</summary>
+    [Code("scan")] Scan
 }

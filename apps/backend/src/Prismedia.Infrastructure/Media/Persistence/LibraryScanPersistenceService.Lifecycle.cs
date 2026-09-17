@@ -73,13 +73,13 @@ public sealed partial class LibraryScanPersistenceService {
         }
 
         if (lifecycleEntityIds.Count == 0) {
-            await _db.SaveChangesAsync(cancellationToken);
+            await SaveProtectedScanChangesAsync(cancellationToken);
             return;
         }
 
         var executed = await _lifecycle.ExecuteManyAsync(
             lifecycleEntityIds,
-            token => _db.SaveChangesAsync(token),
+            SaveProtectedScanChangesAsync,
             cancellationToken);
         if (!executed) {
             throw new EntityLifecycleMutationConflictException(lifecycleEntityIds.Order().First());

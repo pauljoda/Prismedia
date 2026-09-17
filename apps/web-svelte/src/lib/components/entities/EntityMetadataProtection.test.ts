@@ -13,6 +13,14 @@ const field = {
 describe("Metadata protection", () => {
   beforeEach(() => vi.resetAllMocks());
 
+  it("identifies scan evidence and explains that locks also protect rescans", async () => {
+    api.getEntityMetadataFields.mockResolvedValue({ status: 200, data: [{ ...field, origin: METADATA_VALUE_ORIGIN.scan, isCleared: false, isLocked: false }] });
+    render(EntityMetadataProtection, { entityId: "entity-a" });
+    await fireEvent.click(screen.getByRole("button", { name: "Metadata protection" }));
+    expect(await screen.findByText("Library scan")).toBeInTheDocument();
+    expect(screen.getByText(/metadata providers and library scans/)).toBeInTheDocument();
+  });
+
   it("preserves attribution when unlocking a manual clear and sends its exact revision", async () => {
     api.getEntityMetadataFields.mockResolvedValue({ status: 200, data: [field] });
     api.setEntityMetadataFieldLock.mockResolvedValue({ status: 200, data: { ...field, isLocked: false, revision: 5 } });

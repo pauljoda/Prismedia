@@ -10,13 +10,15 @@ namespace Prismedia.Infrastructure.Entities;
 /// Pages themselves remain manifest resources and are never materialized as Entities.
 /// </summary>
 internal static class EntityPageCountPersistence {
-    /// <summary>Updates one leaf count and refreshes every affected ancestor rollup.</summary>
+    /// <summary>Updates one leaf count and refreshes every affected ancestor rollup, using the caller's save boundary when supplied.</summary>
     public static async Task SetAsync(
         PrismediaDbContext db,
         Guid entityId,
         int pageCount,
-        CancellationToken cancellationToken) {
+        CancellationToken cancellationToken,
+        Func<CancellationToken, Task>? saveChanges = null) {
         ArgumentOutOfRangeException.ThrowIfNegative(pageCount);
+        saveChanges ??= async token => { await db.SaveChangesAsync(token); };
 
         var entity = await db.Entities.SingleOrDefaultAsync(
             row => row.Id == entityId,
@@ -26,7 +28,7 @@ internal static class EntityPageCountPersistence {
         }
 
         await SetLeafDetailAsync(db, entity, pageCount, cancellationToken);
-        await db.SaveChangesAsync(cancellationToken);
+        await saveChanges(cancellationToken);
 
         var affected = new List<EntityRow> { entity };
         var parentId = entity.ParentEntityId;
@@ -48,7 +50,7 @@ internal static class EntityPageCountPersistence {
             await UpsertStatAsync(db, target.Id, count, now, cancellationToken);
         }
 
-        await db.SaveChangesAsync(cancellationToken);
+        await saveChanges(cancellationToken);
     }
 
     private static async Task SetLeafDetailAsync(

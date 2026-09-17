@@ -10,6 +10,9 @@ public sealed record MetadataFieldEvidence(MetadataValueOrigin Origin, string? P
     /// <summary>Records an explicit user edit, including a clear; manual values are protected until explicitly unlocked.</summary>
     public MetadataFieldEvidence WrittenByUser(bool cleared, DateTimeOffset now) =>
         new(MetadataValueOrigin.User, null, now, null, cleared, true, Revision + 1);
+    /// <summary>Records an actual scanner value change, preserving user locks and replacing stale provider attribution.</summary>
+    public MetadataFieldEvidence WrittenByScan(bool cleared, DateTimeOffset now) => IsLocked ? this :
+        new(MetadataValueOrigin.Scan, null, now, null, cleared, false, Revision + 1);
     /// <summary>Records accepted provider evidence only when unlocked. Provider omission must be filtered before this call.</summary>
     public MetadataFieldEvidence WrittenByProvider(string providerId, decimal? confidence, DateTimeOffset now) {
         if (IsLocked) return this;

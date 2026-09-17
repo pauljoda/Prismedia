@@ -12,4 +12,5 @@ export const MetadataValueOrigin = {
   unknown: 'unknown',
   user: 'user',
   provider: 'provider',
+  scan: 'scan',
 } as const;

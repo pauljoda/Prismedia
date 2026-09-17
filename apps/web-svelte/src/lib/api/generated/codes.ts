@@ -1342,6 +1342,7 @@ export const METADATA_VALUE_ORIGIN = {
   unknown: "unknown",
   user: "user",
   provider: "provider",
+  scan: "scan",
 } as const;
 
 export type MetadataValueOriginCode = (typeof METADATA_VALUE_ORIGIN)[keyof typeof METADATA_VALUE_ORIGIN];

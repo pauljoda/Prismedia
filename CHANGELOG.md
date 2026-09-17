@@ -157,6 +157,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Library rescans preserve protected titles and deliberately cleared descriptions, including embedded book metadata and sidecars. Metadata protection identifies values supplied by a library scan.
+
 - Request reviews reject issue labels and alternative titles that were not part of the reviewed provider proposal.
 
 - Catalog and URL imports use the selected publication title when embedded metadata has no title, keeping storage operation IDs out of book and comic names across rescans. Titles are recovered only for the exact accepted files and verified bytes.

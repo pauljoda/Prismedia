@@ -55,6 +55,7 @@
   function source(field: MetadataFieldResponse): string {
     if (field.origin === METADATA_VALUE_ORIGIN.user) return "Manual edit";
     if (field.origin === METADATA_VALUE_ORIGIN.provider) return field.providerId ?? "Metadata provider";
+    if (field.origin === METADATA_VALUE_ORIGIN.scan) return "Library scan";
     return "Source unknown";
   }
 </script>
@@ -64,7 +65,7 @@
   <DialogBase.Content>
     <DialogBase.Header>
       <DialogBase.Title>Metadata protection</DialogBase.Title>
-      <DialogBase.Description>Locks protect these fields from metadata providers. Manual edits lock automatically. Unlocking keeps the current value and allows future enrichment.</DialogBase.Description>
+      <DialogBase.Description>Locks protect these fields from metadata providers and library scans. Manual edits lock automatically. Unlocking keeps the current value and allows future enrichment.</DialogBase.Description>
     </DialogBase.Header>
     {#if error}<p role="alert" class="text-sm text-error-text">{error}</p>{/if}
     {#if loading}<p role="status" class="text-sm text-muted-foreground">Loading field sources…</p>{/if}
