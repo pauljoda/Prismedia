@@ -49,6 +49,7 @@
     type EntityThumbnailCard,
   } from "$lib/entities/entity-thumbnail";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
+  import MetadataCard from "$lib/components/MetadataCard.svelte";
   import MetadataCardGrid from "$lib/components/MetadataCardGrid.svelte";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import EntityDateEditRequest from "./EntityDateEditRequest.svelte";
@@ -166,6 +167,8 @@
   });
 
   type HeroMode = "image" | "poster-blur" | "gradient";
+  const standaloneDetailsTabId = "entity-details";
+  const externalLibraryTabId = "external-library";
 
   const renderedDescription = $derived(renderEntityDescriptionMarkdown(card.description));
   const hasStandaloneBodyContent = $derived(Boolean(renderedDescription) || card.tags.length > 0);
@@ -192,10 +195,31 @@
   const availableSections = $derived([...sections, ...coreSections]);
   const cardFull = $derived(card as EntityDetailCard & Partial<EntityDetailCardFull>);
   const visibleActionButtons = $derived.by(() => actionButtons.filter((action) => !action.hidden));
-  const visibleTabs = $derived.by(() => tabs.filter(tabHasContent));
+  const routeTabs = $derived.by(() => tabs.filter(tabHasContent));
+  const visibleTabs = $derived.by((): EntityDetailTab[] => {
+    if (!externalLibraryProvenance) return routeTabs;
+
+    const externalLibraryTab: EntityDetailTab = {
+      id: externalLibraryTabId,
+      label: "External library",
+      icon: HardDrive,
+      sections: [],
+    };
+    const contentTabs = routeTabs.length > 0
+      ? routeTabs
+      : [{
+          id: standaloneDetailsTabId,
+          label: "Details",
+          sections: [...new Set(["description", "tags", ...standaloneMetadataSectionIds])],
+        }];
+
+    return [contentTabs[0], externalLibraryTab, ...contentTabs.slice(1)];
+  });
   const hasTabs = $derived(visibleTabs.length > 0);
   const activeTab = $derived(visibleTabs.find((tab) => tab.id === activeTabId) ?? visibleTabs[0] ?? null);
   const activeTabSections = $derived(activeTab ? sectionsForTab(activeTab) : []);
+  const isExternalLibraryTab = $derived(activeTab?.id === externalLibraryTabId);
+  const isStandaloneDetailsTab = $derived(activeTab?.id === standaloneDetailsTabId);
   const standaloneMetadataSections = $derived.by(() =>
     standaloneMetadataSectionIds
       .map(findSection)
@@ -245,6 +269,7 @@
     { role: ENTITY_FILE_ROLE.backdrop, label: "Header", hasAsset: headerHasAsset },
   ].filter(asset => artwork.supports(asset.role)));
   const canEdit = $derived(Boolean(onMetadataSave));
+  const canEditActiveTab = $derived(canEdit && !isExternalLibraryTab);
   const editActionLabel = $derived(activeTab ? `Edit ${activeTab.label}` : "Edit details");
   const cancelEditActionLabel = $derived(activeTab ? `Cancel ${activeTab.label}` : "Cancel editing");
   const standaloneSections = $derived.by(() => {
@@ -552,6 +577,33 @@
   {/if}
 {/snippet}
 
+{#snippet externalLibraryContent()}
+  {#if externalLibraryProvenance}
+    <div class="external-library-content w-full max-w-xl">
+      <MetadataCard title={externalLibraryProvenance.connectionName} icon={HardDrive} wide>
+        <div class="space-y-3 break-words">
+          <div>
+            <p class="text-xs text-text-muted">Library</p>
+            <p class="text-sm font-medium text-text-primary">{externalLibraryProvenance.libraryLabel}</p>
+          </div>
+          <p class="text-sm leading-relaxed text-text-secondary">
+            Files stay managed by {externalLibraryProvenance.connectionName}. Prismedia reads them in place.
+          </p>
+          {#if externalLibraryLink}
+            <a
+              class={buttonVariants({ variant: "ghost", size: "sm" })}
+              href={externalLibraryLink.href}
+              aria-label={externalLibraryLink.ariaLabel}
+            >
+              {externalLibraryLink.label}<ArrowUpRight aria-hidden="true" />
+            </a>
+          {/if}
+        </div>
+      </MetadataCard>
+    </div>
+  {/if}
+{/snippet}
+
 <EntityDateEditRequest
   {canEdit}
   {hasTabs}
@@ -613,7 +665,7 @@
 
           <EntityDetailHeroControls
             actionButtons={visibleActionButtons}
-            {canEdit}
+            canEdit={canEditActiveTab}
             {cancelEditActionLabel}
             {card}
             {editActionLabel}
@@ -685,24 +737,6 @@
     <EntityDetailArtworkEditor assets={editableArtwork} busyRole={artwork.busyRole} onUpload={artwork.uploadAsset} onClear={artwork.clearAsset} />
   {/if}
 
-  {#if externalLibraryProvenance}
-    <aside class="external-library-origin" aria-label="External library origin">
-      <HardDrive class="external-library-origin__icon" aria-hidden="true" />
-      <div class="external-library-origin__copy">
-        <div class="external-library-origin__title">
-          <strong>External library</strong><span aria-hidden="true">·</span><span>{externalLibraryProvenance.connectionName}</span>
-        </div>
-        <p>This item’s files stay with {externalLibraryProvenance.connectionName}; Prismedia reads them in place.</p>
-        <p class="external-library-origin__scope">Mapped library: {externalLibraryProvenance.libraryLabel}</p>
-      </div>
-      {#if externalLibraryLink}
-        <a class={buttonVariants({ variant: "ghost", size: "sm" })} href={externalLibraryLink.href} aria-label={externalLibraryLink.ariaLabel}>
-          {externalLibraryLink.label}<ArrowUpRight aria-hidden="true" />
-        </a>
-      {/if}
-    </aside>
-  {/if}
-
   {#if hasTabs}
     <div class="detail-tabs">
       <Tabs.Root class="gap-0" activationMode="manual" bind:value={() => activeTab?.id ?? "", requestTab}>
@@ -728,19 +762,28 @@
       {#if activeTab}
         <Tabs.Content
           value={activeTab.id}
-          class="detail-tab-panel detail-content-card detail-content-card--tabbed"
+          class={isStandaloneDetailsTab
+            ? "detail-tab-panel"
+            : "detail-tab-panel detail-content-card detail-content-card--tabbed"}
           id={`entity-detail-panel-${activeTab.id}`}
           aria-labelledby={`entity-detail-tab-${activeTab.id}`}
         >
           {#key activeTab.id}
-            <div class="detail-tab-sections">
+            {#if isStandaloneDetailsTab}
+              {@render defaultDetailContent()}
+            {:else if isExternalLibraryTab}
+              <div class="detail-tab-sections">
+                {@render externalLibraryContent()}
+              </div>
+            {:else}
+              <div class="detail-tab-sections">
               {#if activeTabSections.length === 0 && !isEditingActiveTab}
                 {@const EmptyTabIcon = activeTab.icon ?? Pencil}
                 <StatePlaceholder
                   icon={EmptyTabIcon}
                   title={`No ${activeTab.label.toLowerCase()} yet`}
                 >
-                  {#if canEdit}
+                  {#if canEditActiveTab}
                     <Button
                       type="button"
                       variant="secondary"
@@ -761,9 +804,10 @@
                   {/each}
                 </MetadataCardGrid>
               {/if}
-            </div>
+              </div>
+            {/if}
           {/key}
-          {#if isEditingActiveTab}
+          {#if isEditingActiveTab && !isStandaloneDetailsTab}
             <EntityDetailEditControls
               cancelLabel={`Cancel ${activeTab.label}`}
               errors={editErrors}
@@ -815,63 +859,13 @@
     transition: background 180ms var(--ease-default);
   }
 
-  .external-library-origin {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
-    gap: 0.75rem;
-    margin: 0.75rem 1.5rem 0;
-    padding: 0.7rem 0.85rem;
-    border: 1px solid var(--detail-border);
-    border-left: 2px solid var(--color-border-strong, var(--detail-text-disabled));
-    border-radius: var(--radius-sm);
-    background: var(--detail-surface);
-    color: var(--detail-text-secondary);
-  }
-
-  .external-library-origin__icon {
-    width: 1rem;
-    height: 1rem;
-    color: var(--detail-text-muted);
-  }
-
-  .external-library-origin__copy {
-    min-width: 0;
-    overflow-wrap: anywhere;
-    font-size: 0.75rem;
-    line-height: 1.35;
-  }
-
-  .external-library-origin__title {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: baseline;
-    gap: 0.35rem;
-    color: var(--detail-text);
-    font-size: 0.8125rem;
-  }
-
-  .external-library-origin__scope {
-    margin-top: 0.15rem;
-    color: var(--detail-text-muted);
-    font-family: var(--font-mono);
-    font-size: 0.6875rem;
-  }
-
-  @media (max-width: 639px) {
-    .external-library-origin {
-      grid-template-columns: auto minmax(0, 1fr);
-      margin-inline: 1rem;
-    }
-
-    .external-library-origin > :global(a) {
-      grid-column: 2;
-      justify-self: start;
-    }
-  }
-
   .entity-detail > * {
     min-width: 0;
+  }
+
+  .external-library-content :global([data-slot="card-title"]) {
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
 
   /* ── Hero ────────────────────────────────────────────────── */

@@ -70,11 +70,11 @@ move the source files, or need a symlink for each title. Catalog acquisition and
 downloads are separate workflows that place newly selected files in a Prismedia
 destination library.
 
-Library entity detail pages also identify external library sources. The source
-notice names the connection and mapped library, explains that files are read in
+Library entity detail pages identify external sources in an **External library**
+tab beside the normal detail tabs. It names the connection and library, explains that files are read in
 place, and lets administrators return to the connected holding when an exact
 association exists. Otherwise they can browse the connected source. Household
-viewers can see the source notice without receiving connection-management controls.
+viewers can see the source details without receiving connection-management controls.
 This provenance comes from saved library associations, so it remains visible when
 the application is offline or tracking has been released. Metadata-provider badges
 describe metadata identity separately and do not establish file ownership.

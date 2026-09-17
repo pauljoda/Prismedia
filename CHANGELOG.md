@@ -94,7 +94,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
-- Library detail pages identify externally managed library sources, explain read-in-place file access, and link administrators back to connected titles. External files no longer offer Prismedia's delete-files action.
+- Library detail pages include an External library tab with the source, read-in-place file access, and a return link to the connected title for administrators. External files no longer offer Prismedia's delete-files action.
 
 - Connections open in focused editors, explain their supported features, and distinguish API connectivity from linked library folders. Enabled connections test automatically after saving, and failed tests retain the saved configuration.
 

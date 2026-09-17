@@ -44,39 +44,60 @@ describe("EntityDetail", () => {
   it("omits external-library origin for a native library entity", () => {
     render(EntityDetail, { card: buildCard() });
 
-    expect(screen.queryByRole("complementary", { name: "External library origin" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("tab", { name: "External library" })).not.toBeInTheDocument();
   });
 
-  it("shows external provenance to viewers without exposing a connected-source URL", () => {
+  it("shows external provenance in a read-only tab while retaining standalone detail content", async () => {
     const card = buildCard();
+    card.description = "A gentle rabbit adventure.";
     card.externalLibraryProvenance = externalLibraryProvenance();
-    render(EntityDetail, { card });
+    render(EntityDetail, {
+      props: {
+        card,
+        afterBody: createRawSnippet(() => ({ render: () => "<p>Route-specific content</p>" })),
+        extraSections: createRawSnippet(() => ({ render: () => "<p>Additional metadata</p>" })),
+      },
+    });
 
-    const origin = screen.getByRole("complementary", { name: "External library origin" });
-    expect(within(origin).getByText("External library")).toBeInTheDocument();
-    expect(within(origin).getByText("Radarr")).toBeInTheDocument();
-    expect(within(origin).getByText("This item’s files stay with Radarr; Prismedia reads them in place.")).toBeInTheDocument();
-    expect(within(origin).getByText("Mapped library: Movies on NAS")).toBeInTheDocument();
-    expect(within(origin).queryByRole("link")).not.toBeInTheDocument();
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent?.trim())).toEqual(["Details", "External library"]);
+    expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByText("A gentle rabbit adventure.")).toBeInTheDocument();
+    expect(screen.getByText("Route-specific content")).toBeInTheDocument();
+    expect(screen.getByText("Additional metadata")).toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("tab", { name: "External library" }));
+
+    const panel = screen.getByRole("tabpanel", { name: "External library" });
+    expect(within(panel).getByRole("heading", { name: "Radarr" })).toBeInTheDocument();
+    expect(within(panel).getByText("Movies on NAS")).toBeInTheDocument();
+    expect(within(panel).getByText("Files stay managed by Radarr. Prismedia reads them in place.")).toBeInTheDocument();
+    expect(within(panel).queryByRole("link")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Edit External library" })).not.toBeInTheDocument();
+
+    await fireEvent.click(screen.getByRole("tab", { name: "Details" }));
+    expect(screen.getByText("Route-specific content")).toBeInTheDocument();
+    expect(screen.getByText("Additional metadata")).toBeInTheDocument();
   });
 
-  it("links administrators to the exact identity-pinned connected holding", () => {
+  it("links administrators to the exact identity-pinned connected holding", async () => {
     const card = buildCard();
     card.externalLibraryProvenance = externalLibraryProvenance();
     render(EntityDetail, { card, admin: true });
 
+    await fireEvent.click(screen.getByRole("tab", { name: "External library" }));
     const link = screen.getByRole("link", { name: "Open Radarr connected title" });
     const url = new URL(link.getAttribute("href")!, "http://localhost");
     expect(url.pathname).toBe("/request/source/connection-one/movie/movie-42");
     expect(JSON.parse(url.searchParams.get("identities")!)).toEqual({ [EXTERNAL_ID_PROVIDER.tmdb]: "42" });
   });
 
-  it("links administrators back to the scoped source when no exact holding is saved", () => {
+  it("links administrators back to the scoped source when no exact holding is saved", async () => {
     const card = buildCard();
     card.entity.kind = ENTITY_KIND.movie;
     card.externalLibraryProvenance = { ...externalLibraryProvenance(), holding: null };
     render(EntityDetail, { card, admin: true });
 
+    await fireEvent.click(screen.getByRole("tab", { name: "External library" }));
     const link = screen.getByRole("link", { name: "Browse Radarr connected source" });
     const url = new URL(link.getAttribute("href")!, "http://localhost");
     expect(url.pathname).toBe("/request");
@@ -95,7 +116,7 @@ describe("EntityDetail", () => {
     };
     render(EntityDetail, { card });
 
-    expect(screen.getByRole("complementary", { name: "External library origin" })).toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "External library" })).toBeInTheDocument();
     expect(screen.getByLabelText("Metadata and monitoring source: metadata-router, imdb ID tt0000042"))
       .toBeInTheDocument();
   });
@@ -659,6 +680,7 @@ describe("EntityDetail", () => {
     const card = buildCard();
     card.description = "A visible details tab";
     card.links = [{ label: "https://example.test", url: "https://example.test" }];
+    card.externalLibraryProvenance = externalLibraryProvenance();
 
     render(EntityDetail, {
       props: {
@@ -678,7 +700,7 @@ describe("EntityDetail", () => {
       target: { value: "https://changed.test" },
     });
     await fireEvent.keyDown(screen.getByRole("textbox", { name: "Links item" }), { key: "Enter" });
-    await fireEvent.click(screen.getByRole("tab", { name: "Details" }));
+    await fireEvent.click(screen.getByRole("tab", { name: "External library" }));
 
     expect(screen.getByRole("dialog", { name: "Discard unsaved edits?" })).toBeInTheDocument();
     expect(screen.getAllByRole("heading", { name: "Discard unsaved edits?" })).toHaveLength(1);
@@ -690,11 +712,12 @@ describe("EntityDetail", () => {
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Discard unsaved edits?" })).not.toBeInTheDocument());
     expect(screen.getByRole("tab", { name: "Links" })).toHaveAttribute("aria-selected", "true");
 
-    await fireEvent.click(screen.getByRole("tab", { name: "Details" }));
+    await fireEvent.click(screen.getByRole("tab", { name: "External library" }));
 
     await fireEvent.click(screen.getByRole("button", { name: "Discard changes" }));
 
-    expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "External library" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.queryByRole("button", { name: "Edit External library" })).not.toBeInTheDocument();
     await waitFor(() => expect(screen.queryByRole("dialog", { name: "Discard unsaved edits?" })).not.toBeInTheDocument());
   });
 
