@@ -8,4 +8,6 @@
 export interface PreviewManagedRequestInput {
   entityId: string;
   libraryRootId: string;
+  /** @nullable */
+  targetEntityIds?: string[] | null;
 }

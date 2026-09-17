@@ -25,4 +25,6 @@ export interface ManagedRequestResponse {
   updatedAt: string;
   /** @nullable */
   problem: string | null;
+  /** @nullable */
+  targetEntityIds?: string[] | null;
 }

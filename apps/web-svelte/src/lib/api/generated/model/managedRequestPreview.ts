@@ -16,4 +16,6 @@ export interface ManagedRequestPreview {
   mount: ExternalLibraryMount;
   options: ManagerOptions;
   existing: null | ManagedItemSnapshot;
+  /** @nullable */
+  targetEntityIds?: string[] | null;
 }

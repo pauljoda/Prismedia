@@ -15,9 +15,34 @@ const connection: ConnectionResponse = {
   effectiveCapabilities: [{ kind: PLUGIN_CAPABILITY.externalManager, entityKinds: [ENTITY_KIND.movie],
     operations: [INTEGRATION_OPERATION.lookupManaged, INTEGRATION_OPERATION.ensureManaged] }],
 };
+const seriesConnection: ConnectionResponse = {
+  ...connection,
+  name: "Series manager",
+  effectiveCapabilities: [{
+    kind: PLUGIN_CAPABILITY.externalManager,
+    entityKinds: [ENTITY_KIND.videoSeries],
+    operations: [INTEGRATION_OPERATION.lookupManaged, INTEGRATION_OPERATION.ensureManaged],
+  }],
+};
 const mount = { id: "mount", connectionId: connection.id, libraryRootId: "root", remoteRootId: "1", remotePath: "/movies", localPath: "/local/movies", label: "Movie library" };
 const preview: ManagedRequestPreview = { entityId: "wanted", title: "Wanted film", work: { entityKind: ENTITY_KIND.movie, externalIds: { tmdb: "42" } },
   mount, options: { profiles: [{ id: "7", label: "Preferred quality" }], roots: [{ id: "1", path: "/movies", accessible: true }] }, existing: null };
+const seriesPreview: ManagedRequestPreview = {
+  entityId: "series",
+  title: "Wanted series",
+  work: {
+    entityKind: ENTITY_KIND.videoSeries,
+    externalIds: { tvdb: "42" },
+    targets: [
+      { entityKind: ENTITY_KIND.videoEpisode, externalIds: { tvdb: "101" }, seasonNumber: 1, episodeNumber: 1 },
+      { entityKind: ENTITY_KIND.videoEpisode, externalIds: { tvdb: "102" }, seasonNumber: 1, episodeNumber: 2 },
+    ],
+  },
+  mount: { ...mount, remoteRootId: "tv", remotePath: "/series", label: "Series library" },
+  options: { profiles: [{ id: "7", label: "Preferred quality" }], roots: [{ id: "tv", path: "/series", accessible: true }] },
+  existing: null,
+  targetEntityIds: ["episode-1", "episode-2"],
+};
 function request(values: Partial<ManagedRequestResponse> = {}): ManagedRequestResponse {
   return { id: "request", connectionId: connection.id, entityId: "wanted", libraryRootId: "root", title: "Wanted film", phase: MANAGED_REQUEST_PHASE.pendingCreation,
     revision: 1, remoteId: null, monitored: false, search: true, reviewRequired: false, canCancel: true,
@@ -84,5 +109,57 @@ describe("Managed requests", () => {
     await screen.findByText("Needs review");
     expect(screen.queryByRole("button", { name: "Review manager request" })).not.toBeInTheDocument();
     expect(api.fetchEntities).not.toHaveBeenCalled();
+  });
+
+  it("submits only the prepared finite episode scope without broad series monitoring", async () => {
+    api.fetchManagedRequestPreview.mockResolvedValue(seriesPreview);
+    api.saveManagedRequest.mockResolvedValue(request({
+      entityId: "series",
+      title: "Wanted series",
+      targetEntityIds: ["episode-1", "episode-2"],
+    }));
+    render(ManagedRequests, {
+      connection: seriesConnection,
+      entityKind: ENTITY_KIND.videoSeries,
+      initialEntity: { id: "series", title: "Wanted series", thumbnailUrl: null },
+      initialTargetEntityIds: ["episode-2", "episode-1"],
+    });
+
+    await fireEvent.click(await screen.findByRole("button", { name: "Review manager request" }));
+    expect(screen.queryByRole("checkbox", { name: "Monitor this movie" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("checkbox", { name: "Search now" })).not.toBeInTheDocument();
+    expect(await screen.findByText(/Only the 2 selected episodes will be searched/)).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Request through manager" }));
+
+    await waitFor(() => expect(api.saveManagedRequest).toHaveBeenCalledWith(seriesConnection.id, expect.objectContaining({
+      entityId: "series",
+      targetEntityIds: ["episode-1", "episode-2"],
+      monitored: false,
+      search: true,
+    })));
+    expect(api.fetchManagedRequestPreview).toHaveBeenCalledWith(seriesConnection.id, {
+      entityId: "series",
+      libraryRootId: "root",
+      targetEntityIds: ["episode-2", "episode-1"],
+    });
+  });
+
+  it("shows an explicit conflict when the active series request owns another episode scope", async () => {
+    api.fetchManagedRequests.mockResolvedValue([request({
+      entityId: "series",
+      title: "Wanted series",
+      targetEntityIds: ["episode-9"],
+      phase: MANAGED_REQUEST_PHASE.completed,
+      canCancel: false,
+    })]);
+    render(ManagedRequests, {
+      connection: seriesConnection,
+      entityKind: ENTITY_KIND.videoSeries,
+      initialEntity: { id: "series", title: "Wanted series", thumbnailUrl: null },
+      initialTargetEntityIds: ["episode-1"],
+    });
+
+    expect(await screen.findByText(/already follows a different episode selection/i)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Review manager request" })).not.toBeInTheDocument();
   });
 });

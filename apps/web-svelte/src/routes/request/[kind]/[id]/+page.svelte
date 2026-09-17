@@ -11,7 +11,7 @@
   } from "$lib/api/generated/codes";
   import type { EntityMetadataProposal } from "$lib/api/identify-types";
   import { ApiError } from "$lib/api/orval-fetch";
-  import { commitReviewedRequest, fetchRequestReview, prepareManagedMovie, reviewRequest } from "$lib/api/requests";
+  import { commitReviewedRequest, fetchRequestReview, prepareManagedMovie, prepareManagedSeries, reviewRequest } from "$lib/api/requests";
   import ManagerRequestOptions from "$lib/components/integrations/ManagerRequestOptions.svelte";
   import RequestTargetOptions from "$lib/components/acquisitions/RequestTargetOptions.svelte";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
@@ -396,9 +396,23 @@
   async function prepareForManager() {
     if (enrichmentRunning) throw new Error("Wait for metadata identification to finish");
     const key = loadedKey;
-    const prepared = await prepareManagedMovie(reviewedCommitPayload());
+    const payload = reviewedCommitPayload();
+    const prepared = review?.entityKind === ENTITY_KIND.videoSeries
+      ? await prepareManagedSeries(withFiniteEpisodeSelection(payload))
+      : await prepareManagedMovie(payload);
     if (key === loadedKey) managerMetadataSaved = true;
     return prepared;
+  }
+
+  function withFiniteEpisodeSelection(payload: ReviewedRequestCommitRequest): ReviewedRequestCommitRequest {
+    const episodeIds: string[] = [];
+    const visit = (node: EntityMetadataProposal) => {
+      if (node.targetKind === ENTITY_KIND.videoEpisode) episodeIds.push(node.proposalId);
+      for (const child of node.children ?? []) visit(child);
+    };
+    visit(payload.proposal as EntityMetadataProposal);
+    if (episodeIds.length === 0) throw new Error("Select at least one episode before choosing external fulfillment");
+    return { ...payload, selectedProposalIds: episodeIds };
   }
 
   async function requestSelection() {
@@ -572,15 +586,19 @@
         </h3>
         {#if selectsChildren}
           <p class="mt-1 text-[0.78rem] leading-relaxed text-text-muted">
-            Select the {childNoun}s above. Prismedia will create and monitor each chosen item through
-            the same reviewed plugin proposal.
+            {#if managerSelected && review?.entityKind === ENTITY_KIND.videoSeries}
+              Select the seasons and episodes above. Only the present selected episodes are sent to the manager; future episodes are not included.
+            {:else}
+              Select the {childNoun}s above. Prismedia will create and monitor each chosen item through
+              the same reviewed plugin proposal.
+            {/if}
           </p>
         {/if}
       </div>
 
       {#if selectsChildren}
         <label class="flex max-w-64 flex-col gap-1">
-          <span class="font-mono text-[0.66rem] font-semibold uppercase tracking-[0.04em] text-text-secondary">Monitor</span>
+          <span class="font-mono text-[0.66rem] font-semibold uppercase tracking-[0.04em] text-text-secondary">{managerSelected && review?.entityKind === ENTITY_KIND.videoSeries ? "Episode selection" : "Monitor"}</span>
           <Select
             options={presetOptions}
             value={presetDisplay}
@@ -590,8 +608,11 @@
         </label>
       {/if}
 
-      {#if showManagerChoice && session.isAdmin && review?.entityKind === ENTITY_KIND.movie && review.externalIdentity.namespace === EXTERNAL_ID_PROVIDER.tmdb}
-        <ManagerRequestOptions disabled={submitting || enrichmentRunning || !hasRequestIntent} onPrepare={prepareForManager} onActiveChanged={active => managerSelected = active} />
+      {#if showManagerChoice && session.isAdmin && review
+        && (review.entityKind === ENTITY_KIND.movie && review.externalIdentity.namespace === EXTERNAL_ID_PROVIDER.tmdb
+          || review.entityKind === ENTITY_KIND.videoSeries
+            && (review.externalIdentity.namespace === EXTERNAL_ID_PROVIDER.tmdb || review.externalIdentity.namespace === EXTERNAL_ID_PROVIDER.tvdb))}
+        <ManagerRequestOptions entityKind={review.entityKind} disabled={submitting || enrichmentRunning || !hasRequestIntent} onPrepare={prepareForManager} onActiveChanged={active => managerSelected = active} />
       {/if}
 
       {#if kindInfo && !managerSelected}

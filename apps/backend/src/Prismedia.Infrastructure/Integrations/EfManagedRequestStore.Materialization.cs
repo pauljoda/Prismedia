@@ -22,13 +22,23 @@ public sealed partial class EfManagedRequestStore {
     }
 
     /// <inheritdoc />
-    public async Task AcceptHoldingAsync(StoredManagedRequest work, ManagedItemSnapshot snapshot, CancellationToken token) {
+    public Task AcceptHoldingAsync(
+        StoredManagedRequest work,
+        ManagedItemSnapshot snapshot,
+        CancellationToken token) =>
+        AcceptHoldingAsync(work, snapshot, resolvedTargets: null, token);
+
+    /// <inheritdoc />
+    public async Task AcceptHoldingAsync(StoredManagedRequest work, ManagedItemSnapshot snapshot,
+        IReadOnlyList<ManagedResolvedTarget>? resolvedTargets, CancellationToken token) {
         ManagedCreationEvidence.ValidateHolding(work.Plan.Creation.Work, snapshot);
+        ManagedCreationEvidence.ValidateTargets(work.Plan.Creation.Work, resolvedTargets);
         var state = work.Operation.State;
         if (snapshot.Item.ProfileId != work.Plan.Creation.ProfileId)
-            throw new ArgumentException("The existing or created movie has a different profile. Review it before delegating fulfillment.");
+            throw new ArgumentException("The existing or created holding has a different profile. Review it before delegating fulfillment.");
         await using var transaction = await db.Database.BeginTransactionAsync(token);
-        if (!await lifecycle.ExecuteAsync(state.EntityId, async ct => {
+        var lifecycleIds = (work.Plan.Request.TargetEntityIds ?? []).Append(state.EntityId).ToArray();
+        if (!await lifecycle.ExecuteManyAsync(lifecycleIds, async ct => {
             var current = await LockAsync(state.OperationId, state.Revision, ct);
             var target = await RequireBoundaryAsync(current.Operation, current.Plan, true, ct);
             if (ExternalLibraryPaths.Resolve(target.Mount.RemotePath, target.Mount.LocalPath, snapshot.Path) is null)
@@ -39,11 +49,11 @@ public sealed partial class EfManagedRequestStore {
             var operation = new ManagedRequestOperation(current.Operation.State);
             operation.AcceptHolding(snapshot.Item.RemoteId);
             var item = new ManagedItemInput(snapshot.Item.EntityKind, snapshot.Item.RemoteId, current.Plan.Creation.Work.ExternalIds);
-            var binding = new ManagedTargetBinding(new(snapshot.Item.RemoteId, EntityKind.Movie, null, null, null), state.EntityId);
+            var bindings = ResolveBindings(target, snapshot, resolvedTargets);
             var now = DateTimeOffset.UtcNow;
             db.ManagedHoldings.Add(new() { Id = state.OperationId, ConnectionId = state.ConnectionId, LibraryRootId = state.LibraryRootId,
                 Kind = item.EntityKind, RemoteId = item.RemoteId, Title = current.Plan.Title, ItemJson = JsonSerializer.Serialize(item, Json),
-                TargetsJson = JsonSerializer.Serialize(new[] { binding }, Json), Status = ManagedTrackingStatus.WaitingForFiles,
+                TargetsJson = JsonSerializer.Serialize(bindings, Json), Status = ManagedTrackingStatus.WaitingForFiles,
                 Revision = 1, LastCheckedAt = now, NextCheckAt = now.AddMinutes(5) });
             await db.SaveChangesAsync(ct);
             await UpdateAsync(operation, state.Revision, null, ct);
@@ -51,8 +61,47 @@ public sealed partial class EfManagedRequestStore {
         await transaction.CommitAsync(token);
     }
 
+    private static IReadOnlyList<ManagedTargetBinding> ResolveBindings(
+        ManagedRequestTarget target,
+        ManagedItemSnapshot snapshot,
+        IReadOnlyList<ManagedResolvedTarget>? resolvedTargets) {
+        if (target.Targets is not { Count: > 0 }) {
+            return [new(new(snapshot.Item.RemoteId, EntityKind.Movie, null, null, null), target.EntityId)];
+        }
+
+        var requested = target.Work.Targets ?? [];
+        var resolved = resolvedTargets ?? [];
+        var bindings = new List<ManagedTargetBinding>(target.Targets.Count);
+        for (var index = 0; index < target.Targets.Count; index++) {
+            var local = target.Targets[index];
+            var request = requested[index];
+            var remote = resolved.Single(candidate =>
+                candidate.EntityKind == request.EntityKind
+                && candidate.SeasonNumber == request.SeasonNumber
+                && candidate.EpisodeNumber == request.EpisodeNumber
+                && (candidate.AbsoluteNumber is null
+                    || request.AbsoluteNumber is null
+                    || candidate.AbsoluteNumber == request.AbsoluteNumber)
+                && request.ExternalIds.All(pair => candidate.ExternalIds.GetValueOrDefault(pair.Key) == pair.Value));
+            bindings.Add(new(
+                new(remote.RemoteId, remote.EntityKind, remote.SeasonNumber, remote.EpisodeNumber, remote.AbsoluteNumber),
+                local.EntityId));
+        }
+        return bindings;
+    }
+
     /// <inheritdoc />
     public async Task<ManagedRequestMaterialization> MaterializeAsync(StoredManagedRequest work, ManagedItemSnapshot snapshot, CancellationToken token) {
+        if (work.Plan.Creation.Work.EntityKind == EntityKind.VideoSeries) {
+            return await MaterializeEpisodesAsync(work, snapshot, token);
+        }
+        return await MaterializeMovieAsync(work, snapshot, token);
+    }
+
+    private async Task<ManagedRequestMaterialization> MaterializeMovieAsync(
+        StoredManagedRequest work,
+        ManagedItemSnapshot snapshot,
+        CancellationToken token) {
         ManagedCreationEvidence.ValidateHolding(work.Plan.Creation.Work, snapshot);
         var state = work.Operation.State;
         if (state.Phase != ManagedRequestPhase.AwaitingFiles || snapshot.Item.RemoteId != state.RemoteId)
@@ -109,6 +158,211 @@ public sealed partial class EfManagedRequestStore {
         }, token)) throw new EntityLifecycleMutationConflictException(state.EntityId);
         await transaction.CommitAsync(token);
         return new(true);
+    }
+
+    private async Task<ManagedRequestMaterialization> MaterializeEpisodesAsync(
+        StoredManagedRequest work,
+        ManagedItemSnapshot snapshot,
+        CancellationToken token) {
+        ManagedCreationEvidence.ValidateHolding(work.Plan.Creation.Work, snapshot);
+        var state = work.Operation.State;
+        if (state.Phase != ManagedRequestPhase.AwaitingFiles || snapshot.Item.RemoteId != state.RemoteId)
+            throw new ArgumentException("The episode file evidence does not belong to this accepted holding.");
+
+        var holdingRow = await db.ManagedHoldings.AsNoTracking()
+            .SingleAsync(row => row.Id == state.OperationId, token);
+        var pinned = JsonSerializer.Deserialize<ManagedTargetBinding[]>(holdingRow.TargetsJson, Json)
+            ?? throw new InvalidDataException("Invalid managed target bindings.");
+        if (pinned.Length == 0
+            || pinned.Any(binding => binding.Target.Kind != EntityKind.VideoEpisode)
+            || pinned.Select(binding => binding.Target.RemoteTargetId).Distinct(StringComparer.Ordinal).Count() != pinned.Length
+            || pinned.Select(binding => binding.EntityId).Distinct().Count() != pinned.Length)
+            throw new ArgumentException("The accepted episode targets are incomplete or ambiguous.");
+        var pinnedByRemoteId = pinned.ToDictionary(
+            binding => binding.Target.RemoteTargetId,
+            StringComparer.Ordinal);
+
+        var relevantFiles = new List<ManagedLibraryFile>();
+        var observedTargetIds = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var file in snapshot.Files) {
+            var selected = file.Targets
+                .Where(target => pinnedByRemoteId.ContainsKey(target.RemoteId))
+                .ToArray();
+            if (selected.Length == 0) continue;
+            if (selected.Length != file.Targets.Count)
+                throw new ArgumentException(
+                    "A manager file mixes selected and unselected episodes. Review its shared coverage before importing it.");
+            foreach (var target in selected) {
+                var expected = pinnedByRemoteId[target.RemoteId].Target;
+                var observed = new ManagedTargetIdentity(
+                    target.RemoteId,
+                    target.EntityKind,
+                    target.SeasonNumber,
+                    target.EpisodeNumber,
+                    target.AbsoluteNumber);
+                if (observed != expected || !observedTargetIds.Add(target.RemoteId))
+                    throw new ArgumentException(
+                        "The manager returned changed or duplicate evidence for a selected episode.");
+            }
+            relevantFiles.Add(file);
+        }
+
+        var existingBindings = await db.ManagedSourceBindings.AsNoTracking()
+            .Where(binding => binding.HoldingId == state.OperationId)
+            .ToArrayAsync(token);
+        var fulfilledIds = existingBindings
+            .Select(binding => binding.RemoteTargetId)
+            .ToHashSet(StringComparer.Ordinal);
+        if (fulfilledIds.Count == pinned.Length)
+            throw new ArgumentException("All selected episodes were already materialized.");
+        if (relevantFiles.Count == 0)
+            return new(false, "Waiting for the manager to import selected episode files.");
+
+        var mappedFiles = await mounts.InspectAsync(state.ConnectionId, relevantFiles, token);
+        if (mappedFiles.Count != relevantFiles.Count)
+            throw new ArgumentException("The mapped episode evidence is incomplete.");
+        var candidates = new List<(ManagedLibraryFile Remote, MappedLibraryFile Mapped, string Path, DateTimeOffset Written)>();
+        for (var index = 0; index < relevantFiles.Count; index++) {
+            var remote = relevantFiles[index];
+            var mapped = mappedFiles[index];
+            if (!string.Equals(mapped.RemoteId, remote.RemoteId, StringComparison.Ordinal))
+                throw new ArgumentException("The mapped episode evidence changed order or identity.");
+            if (remote.Targets.Any(target => fulfilledIds.Contains(target.RemoteId))) {
+                if (remote.Targets.Any(target => !fulfilledIds.Contains(target.RemoteId)))
+                    throw new ArgumentException(
+                        "A manager file changed shared episode coverage after partial materialization.");
+                continue;
+            }
+            if (mapped.LibraryRootId != state.LibraryRootId || mapped.LocalPath is null)
+                throw new ArgumentException("A selected episode file is outside this request's mapped library.");
+            if (!mapped.IsReadable || !mapped.SizeMatches) continue;
+            if (!SupportedExtensions.Video.Contains(Path.GetExtension(mapped.LocalPath)))
+                throw new ArgumentException("A selected episode file is not a supported video source.");
+            candidates.Add((remote, mapped, mapped.LocalPath, WrittenAt(mapped.LocalPath)));
+        }
+        if (candidates.Count == 0)
+            return new(false, "The manager reports selected episode files, but Prismedia cannot yet read their expected bytes.");
+
+        var lifecycleIds = pinned.Select(binding => binding.EntityId).Append(state.EntityId).ToArray();
+        var completed = false;
+        await using var transaction = await db.Database.BeginTransactionAsync(token);
+        if (!await lifecycle.ExecuteManyAsync(lifecycleIds, async ct => {
+            var current = await LockAsync(state.OperationId, state.Revision, ct);
+            var boundary = await RequireBoundaryAsync(current.Operation, current.Plan, true, ct);
+            var holding = (await db.ManagedHoldings
+                .FromSqlInterpolated($"SELECT * FROM managed_holdings WHERE id = {state.OperationId} FOR UPDATE")
+                .ToArrayAsync(ct)).Single();
+            var currentPinned = JsonSerializer.Deserialize<ManagedTargetBinding[]>(holding.TargetsJson, Json)!;
+            if (holding.Status != ManagedTrackingStatus.WaitingForFiles
+                || !currentPinned.OrderBy(binding => binding.Target.RemoteTargetId, StringComparer.Ordinal)
+                    .SequenceEqual(pinned.OrderBy(binding => binding.Target.RemoteTargetId, StringComparer.Ordinal)))
+                throw new ArgumentException("The accepted episode targets changed before file materialization.");
+
+            var storedBindings = await db.ManagedSourceBindings
+                .Where(binding => binding.HoldingId == holding.Id)
+                .ToArrayAsync(ct);
+            var storedTargetIds = storedBindings.Select(binding => binding.RemoteTargetId)
+                .ToHashSet(StringComparer.Ordinal);
+            var candidatePaths = candidates.Select(candidate => candidate.Path).Distinct(FileSystemPathComparison.Comparer).ToArray();
+            var possiblePathOwners = await db.EntityFiles.AsNoTracking()
+                .Where(source => source.Role == EntityFileRole.Source || source.Role == EntityFileRole.UnavailableSource)
+                .Where(source => candidatePaths.Select(path => path.Length).Contains(source.Path.Length))
+                .Select(source => source.Path)
+                .ToArrayAsync(ct);
+            if (possiblePathOwners.Any(existingPath => candidates.Any(candidate =>
+                    FileSystemPathComparison.Equals(candidate.Path, existingPath))))
+                throw new ArgumentException(
+                    "A selected episode source already belongs to another local item. Review its existing identity instead of duplicating it.");
+
+            var now = DateTimeOffset.UtcNow;
+            var importedEntityIds = new HashSet<Guid>();
+            foreach (var candidate in candidates) {
+                await using var bytes = new FileStream(
+                    candidate.Path,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.Read,
+                    4096,
+                    true);
+                if (bytes.Length != candidate.Remote.SizeBytes || WrittenAt(candidate.Path) != candidate.Written)
+                    throw new ArgumentException(
+                        "A selected episode file changed during import verification. Refresh its evidence.");
+                foreach (var remoteTarget in candidate.Remote.Targets) {
+                    if (storedTargetIds.Contains(remoteTarget.RemoteId)) continue;
+                    var target = pinnedByRemoteId[remoteTarget.RemoteId];
+                    var sourceId = Guid.NewGuid();
+                    var entity = await db.Entities.SingleAsync(row => row.Id == target.EntityId, ct);
+                    entity.IsWanted = false;
+                    entity.UpdatedAt = now;
+                    if (await db.LibraryRoots.Where(root => root.Id == state.LibraryRootId)
+                        .Select(root => root.IsNsfw).SingleAsync(ct)) entity.IsNsfw = true;
+                    if (!await db.EntityLibraryRoots.AnyAsync(root =>
+                        root.EntityId == target.EntityId && root.LibraryRootId == state.LibraryRootId, ct))
+                        db.EntityLibraryRoots.Add(new() {
+                            EntityId = target.EntityId,
+                            LibraryRootId = state.LibraryRootId
+                        });
+                    db.EntityFiles.Add(new() {
+                        Id = sourceId,
+                        EntityId = target.EntityId,
+                        Role = EntityFileRole.Source,
+                        Path = candidate.Path,
+                        SizeBytes = candidate.Remote.SizeBytes,
+                        CreatedAt = now,
+                        UpdatedAt = now
+                    });
+                    db.ManagedSourceBindings.Add(new() {
+                        Id = Guid.NewGuid(),
+                        HoldingId = holding.Id,
+                        RemoteTargetId = target.Target.RemoteTargetId,
+                        Kind = target.Target.Kind,
+                        SeasonNumber = target.Target.SeasonNumber,
+                        EpisodeNumber = target.Target.EpisodeNumber,
+                        AbsoluteNumber = target.Target.AbsoluteNumber,
+                        EntityId = target.EntityId,
+                        SourceFileId = sourceId,
+                        RemoteFileId = candidate.Remote.RemoteId,
+                        LocalPath = candidate.Path,
+                        SizeBytes = candidate.Remote.SizeBytes,
+                        WrittenAt = candidate.Written,
+                        IsAvailable = true
+                    });
+                    storedTargetIds.Add(target.Target.RemoteTargetId);
+                    importedEntityIds.Add(target.EntityId);
+                }
+            }
+
+            completed = storedTargetIds.Count == pinned.Length;
+            var allBindings = db.ManagedSourceBindings.Local
+                .Where(binding => binding.HoldingId == holding.Id)
+                .Concat(storedBindings)
+                .DistinctBy(binding => binding.RemoteTargetId)
+                .ToArray();
+            holding.SelectionsJson = JsonSerializer.Serialize(allBindings.Select(binding =>
+                new ManagedBindingSelection(binding.RemoteTargetId, binding.EntityId, binding.SourceFileId)), Json);
+            holding.Status = completed ? ManagedTrackingStatus.Tracking : ManagedTrackingStatus.WaitingForFiles;
+            holding.Revision++;
+            holding.LastCheckedAt = now;
+            holding.NextCheckAt = now.AddMinutes(5);
+            holding.Problem = null;
+            if (completed) {
+                var operation = new ManagedRequestOperation(current.Operation.State);
+                operation.ConfirmFiles();
+                await UpdateAsync(operation, state.Revision, null, ct);
+            }
+            await db.SaveChangesAsync(ct);
+            foreach (var entityId in importedEntityIds) {
+                await queue.EnqueueAsync(EnqueueJobRequest.ForEntity(
+                    JobType.RefreshEntity,
+                    EntityKind.VideoEpisode,
+                    entityId.ToString(),
+                    boundary.Title), ct);
+            }
+        }, token)) throw new EntityLifecycleMutationConflictException(state.EntityId);
+        await transaction.CommitAsync(token);
+        return completed
+            ? new(true)
+            : new(false, "Waiting for the remaining selected episode files.");
     }
 
     private static DateTimeOffset WrittenAt(string path) {

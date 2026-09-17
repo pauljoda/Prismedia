@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Series discovery reviews can send selected episodes to Sonarr, preserve existing monitoring settings, and attach imported files to the original wanted episodes. Requests search only the reviewed episode selection and retain progress through retries and partial fulfillment.
+
 - Completed integration imports automatically release their temporary staging after a recovery grace period, while retaining library files and import history.
 
 - Compatible source connections can prepare an exact publication before importing it. Requests retain their identity through retries, show source progress in Activity, and distinguish stopping a local import from cancelling a source download.

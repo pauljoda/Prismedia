@@ -20,21 +20,151 @@ public sealed partial class EfManagedRequestStore(PrismediaDbContext db, IExtern
     private static readonly JsonSerializerOptions Json = PluginProcessTransport.JsonOptions;
 
     /// <inheritdoc />
-    public async Task<ManagedRequestTarget> RequireTargetAsync(Guid connectionId, Guid entityId, Guid libraryRootId, CancellationToken token) {
+    public Task<ManagedRequestTarget> RequireTargetAsync(
+        Guid connectionId,
+        Guid entityId,
+        Guid libraryRootId,
+        CancellationToken token) =>
+        RequireTargetAsync(connectionId, entityId, libraryRootId, targetEntityIds: null, token);
+
+    public Task<ManagedRequestTarget> RequireTargetAsync(Guid connectionId, Guid entityId, Guid libraryRootId,
+        IReadOnlyList<Guid>? targetEntityIds, CancellationToken token) =>
+        RequireTargetCoreAsync(connectionId, entityId, libraryRootId, targetEntityIds, ownerId: null, token);
+
+    private async Task<ManagedRequestTarget> RequireTargetCoreAsync(Guid connectionId, Guid entityId,
+        Guid libraryRootId, IReadOnlyList<Guid>? targetEntityIds, Guid? ownerId, CancellationToken token) {
+        var requestedTargetIds = targetEntityIds ?? [];
+        if (requestedTargetIds.Any(id => id == Guid.Empty)
+            || requestedTargetIds.Distinct().Count() != requestedTargetIds.Count)
+            throw new ArgumentException("Choose unique wanted targets.");
+        var entity = await db.Entities.AsNoTracking().SingleOrDefaultAsync(row => row.Id == entityId, token);
+        if (entity is null) throw new ArgumentException("Choose an existing wanted item.");
         var movieCode = EntityKind.Movie.ToCode();
-        var entity = await db.Entities.AsNoTracking().SingleOrDefaultAsync(row => row.Id == entityId && row.KindCode == movieCode, token);
-        if (entity is not { IsWanted: true } || await db.EntityFiles.AnyAsync(file => file.EntityId == entityId
-            && (file.Role == EntityFileRole.Source || file.Role == EntityFileRole.UnavailableSource), token))
-            throw new ArgumentException("Choose a wanted movie without a retained source. Existing files can be linked through connected-library tracking.");
+        var seriesCode = EntityKind.VideoSeries.ToCode();
+        if (entity.KindCode != movieCode && entity.KindCode != seriesCode)
+            throw new ArgumentException("Choose a wanted movie or video series.");
         var mount = (await mounts.ListAsync(connectionId, token)).SingleOrDefault(item => item.LibraryRootId == libraryRootId)
             ?? throw new ArgumentException("Choose a library mapped to this connection.");
         if (!await db.LibraryRoots.AnyAsync(root => root.Id == libraryRootId && root.Enabled && root.ScanVideos, token)
-            || await db.EntityLibraryRoots.AnyAsync(root => root.EntityId == entityId && root.LibraryRootId != libraryRootId, token))
+            || await db.EntityLibraryRoots.AnyAsync(root => (root.EntityId == entityId || requestedTargetIds.Contains(root.EntityId))
+                && root.LibraryRootId != libraryRootId, token))
             throw new ArgumentException("Enable the mapped video library and resolve any previous library association first.");
-        var identity = await db.EntityExternalIds.AsNoTracking().SingleOrDefaultAsync(row => row.EntityId == entityId && row.Provider == ExternalIdProviders.Tmdb, token);
-        if (identity is null || string.IsNullOrWhiteSpace(identity.Value)) throw new ArgumentException("Identify this wanted movie with an exact TMDB identity first.");
-        return new(entityId, entity.Title, new(EntityKind.Movie, new Dictionary<string, string> { [ExternalIdProviders.Tmdb] = identity.Value }), mount);
+        if (entity.KindCode == movieCode) {
+            if (requestedTargetIds.Count != 0 || !entity.IsWanted || await HasSourceAsync([entityId], token))
+                throw new ArgumentException("Choose a wanted movie without a retained source. Existing files can be linked through connected-library tracking.");
+            var identity = await db.EntityExternalIds.AsNoTracking().SingleOrDefaultAsync(
+                row => row.EntityId == entityId && row.Provider == ExternalIdProviders.Tmdb,
+                token);
+            if (identity is null || string.IsNullOrWhiteSpace(identity.Value))
+                throw new ArgumentException("Identify this wanted movie with an exact TMDB identity first.");
+            return new(entityId, entity.Title,
+                new(EntityKind.Movie, new Dictionary<string, string> { [ExternalIdProviders.Tmdb] = identity.Value }),
+                mount);
+        }
+
+        if (requestedTargetIds.Count == 0)
+            throw new ArgumentException("Select at least one finite wanted episode.");
+        var episodeCode = EntityKind.VideoEpisode.ToCode();
+        var episodes = await db.Entities.AsNoTracking()
+            .Where(row => requestedTargetIds.Contains(row.Id) && row.KindCode == episodeCode)
+            .ToDictionaryAsync(row => row.Id, token);
+        var ownedTargets = ownerId is { } acceptedOwner
+            ? await db.FulfillmentReservations.AsNoTracking()
+                .Where(row => row.OwnerId == acceptedOwner
+                    && row.OwnerKind == FulfillmentOwnerKind.ExternalManager
+                    && row.ConnectionId == connectionId
+                    && row.ReleasedAt == null
+                    && requestedTargetIds.Contains(row.EntityId))
+                .Select(row => row.EntityId)
+                .ToHashSetAsync(token)
+            : [];
+        var sourceTargetIds = await db.EntityFiles.AsNoTracking()
+            .Where(file => requestedTargetIds.Contains(file.EntityId)
+                && (file.Role == EntityFileRole.Source || file.Role == EntityFileRole.UnavailableSource))
+            .Select(file => file.EntityId)
+            .Distinct()
+            .ToArrayAsync(token);
+        if (episodes.Count != requestedTargetIds.Count
+            || episodes.Values.Any(episode =>
+                (!episode.IsWanted || sourceTargetIds.Contains(episode.Id))
+                && !ownedTargets.Contains(episode.Id)))
+            throw new ArgumentException("Every selected target must be a wanted episode without a retained source.");
+        var parentIds = episodes.Values.Select(episode => episode.ParentEntityId).OfType<Guid>().Distinct().ToArray();
+        var parents = await db.Entities.AsNoTracking()
+            .Where(row => parentIds.Contains(row.Id))
+            .ToDictionaryAsync(row => row.Id, token);
+        if (episodes.Values.Any(episode => episode.ParentEntityId is not { } parentId
+                || !parents.TryGetValue(parentId, out var parent)
+                || parent.Id != entityId && parent.ParentEntityId != entityId))
+            throw new ArgumentException("Every selected episode must belong to the reviewed series.");
+
+        var identityEntityIds = requestedTargetIds.Append(entityId).Distinct().ToArray();
+        var identityRows = await db.EntityExternalIds.AsNoTracking()
+            .Where(row => identityEntityIds.Contains(row.EntityId))
+            .ToArrayAsync(token);
+        var identities = identityRows
+            .GroupBy(row => row.EntityId)
+            .ToDictionary(
+                group => group.Key,
+                group => (IReadOnlyDictionary<string, string>)group
+                    .GroupBy(row => row.Provider.Trim().ToLowerInvariant(), StringComparer.Ordinal)
+                    .Where(provider => provider.Select(row => row.Value.Trim()).Distinct(StringComparer.Ordinal).Count() == 1)
+                    .ToDictionary(provider => provider.Key, provider => provider.First().Value.Trim(), StringComparer.Ordinal));
+        var sonarrProviders = new HashSet<string>(StringComparer.Ordinal) {
+            ExternalIdProviders.Tvdb,
+            ExternalIdProviders.Tmdb
+        };
+        if (!identities.TryGetValue(entityId, out var allSeriesIdentities))
+            throw new ArgumentException("Identify the series before choosing external fulfillment.");
+        var seriesIdentities = allSeriesIdentities
+            .Where(pair => sonarrProviders.Contains(pair.Key))
+            .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+        if (seriesIdentities.Count == 0)
+            throw new ArgumentException("Identify the series with a TVDB or TMDB identity before choosing external fulfillment.");
+
+        var positionEntityIds = requestedTargetIds.Concat(parentIds).Distinct().ToArray();
+        var positions = (await db.EntityPositions.AsNoTracking()
+                .Where(row => positionEntityIds.Contains(row.EntityId))
+                .ToArrayAsync(token))
+            .GroupBy(row => row.EntityId)
+            .ToDictionary(group => group.Key,
+                group => group.ToDictionary(row => row.Code, row => row.Value, StringComparer.Ordinal));
+        var targets = new List<ManagedRequestEntityTarget>(requestedTargetIds.Count);
+        foreach (var targetId in requestedTargetIds) {
+            var episode = episodes[targetId];
+            var episodePositions = positions.GetValueOrDefault(targetId)
+                ?? new Dictionary<string, int>();
+            var parentPositions = positions.GetValueOrDefault(episode.ParentEntityId!.Value)
+                ?? new Dictionary<string, int>();
+            var seasonNumber = episodePositions.GetValueOrDefault(
+                EntityPositionCodes.Season,
+                parentPositions.GetValueOrDefault(EntityPositionCodes.Season, -1));
+            var episodeNumber = episodePositions.GetValueOrDefault(EntityPositionCodes.Episode, -1);
+            var absoluteNumber = episodePositions.GetValueOrDefault(EntityPositionCodes.AbsoluteEpisode, -1);
+            if (seasonNumber < 0 || episodeNumber <= 0)
+                throw new ArgumentException("Every selected episode needs exact season and episode coordinates.");
+            targets.Add(new(targetId, new(
+                EntityKind.VideoEpisode,
+                identities.GetValueOrDefault(targetId)?
+                    .Where(pair => pair.Key == ExternalIdProviders.Tvdb)
+                    .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal)
+                    ?? new Dictionary<string, string>(),
+                seasonNumber,
+                episodeNumber,
+                absoluteNumber > 0 ? absoluteNumber : null)));
+        }
+        if (targets.Select(target => (target.Target.SeasonNumber, target.Target.EpisodeNumber)).Distinct().Count()
+            != targets.Count)
+            throw new ArgumentException("Selected episodes must have unique season and episode coordinates.");
+        return new(entityId, entity.Title,
+            new(EntityKind.VideoSeries, seriesIdentities, targets.Select(target => target.Target).ToArray()),
+            mount,
+            targets);
     }
+
+    private Task<bool> HasSourceAsync(IReadOnlyCollection<Guid> entityIds, CancellationToken token) =>
+        db.EntityFiles.AnyAsync(file => entityIds.Contains(file.EntityId)
+            && (file.Role == EntityFileRole.Source || file.Role == EntityFileRole.UnavailableSource), token);
     /// <inheritdoc />
     public async Task<StoredManagedRequest?> FindAsync(Guid id, CancellationToken token) =>
         await db.ManagedRequests.AsNoTracking().SingleOrDefaultAsync(row => row.Id == id, token) is { } row ? Map(row) : null;
@@ -57,13 +187,42 @@ public sealed partial class EfManagedRequestStore(PrismediaDbContext db, IExtern
             LibraryRootId = state.LibraryRootId, Revision = state.Revision, Phase = state.Phase, StateJson = JsonSerializer.Serialize(state, Json),
             PlanJson = JsonSerializer.Serialize(plan, Json), CreatedAt = now, UpdatedAt = now, NextCheckAt = now.AddSeconds(30) };
         try {
-            if (!await lifecycle.ExecuteAsync(state.EntityId, async ct => {
-                await RequireBoundaryAsync(operation, plan, false, ct);
+            var targetIds = plan.Request.TargetEntityIds is { Count: > 0 }
+                ? plan.Request.TargetEntityIds
+                : [state.EntityId];
+            if (!await lifecycle.ExecuteManyAsync(targetIds.Append(state.EntityId).ToArray(), async ct => {
+                var boundary = await RequireBoundaryAsync(operation, plan, false, ct);
                 if (await db.ManagedHoldings.AnyAsync(holding => holding.Id == row.Id, ct)
                     || await db.ManagedControls.AnyAsync(action => action.Id == row.Id, ct))
                     throw new ManagedRequestConflictException("This operation ID already belongs to another managed action.");
+                if (plan.Creation.Work.EntityKind == EntityKind.VideoSeries) {
+                    var active = await db.ManagedHoldings.AsNoTracking()
+                        .Where(holding => holding.ConnectionId == state.ConnectionId
+                            && holding.Kind == EntityKind.VideoSeries
+                            && holding.ReleasedAt == null)
+                        .ToArrayAsync(ct);
+                    if (active.Any(holding => {
+                        var item = JsonSerializer.Deserialize<ManagedItemInput>(holding.ItemJson, Json);
+                        return item is not null && plan.Creation.Work.ExternalIds.All(pair =>
+                            item.ExpectedExternalIds.GetValueOrDefault(pair.Key) == pair.Value);
+                    })) {
+                        throw new ManagedRequestConflictException(
+                            "This series already has active external-manager ownership. Adding episodes to an existing holding requires a separate reviewed expansion.");
+                    }
+                }
                 db.ManagedRequests.Add(row);
-                await new EfFulfillmentReservationStore(db).ReserveAsync(row.Id, FulfillmentOwnerKind.ExternalManager, row.ConnectionId, row.EntityId, null, ct);
+                var reservations = new EfFulfillmentReservationStore(db);
+                foreach (var targetId in boundary.Targets is { Count: > 0 }
+                    ? boundary.Targets.Select(target => target.EntityId)
+                    : [row.EntityId]) {
+                    await reservations.ReserveAsync(
+                        row.Id,
+                        FulfillmentOwnerKind.ExternalManager,
+                        row.ConnectionId,
+                        targetId,
+                        null,
+                        ct);
+                }
                 await db.SaveChangesAsync(ct);
                 await PublishAsync(row, ct);
             }, token)) throw new EntityLifecycleMutationConflictException(state.EntityId);
@@ -115,12 +274,31 @@ public sealed partial class EfManagedRequestStore(PrismediaDbContext db, IExtern
     }
     private async Task<ManagedRequestTarget> RequireBoundaryAsync(ManagedRequestOperation operation, ManagedRequestPlan plan, bool requireOwner, CancellationToken token) {
         var state = operation.State;
-        var target = await RequireTargetAsync(state.ConnectionId, state.EntityId, state.LibraryRootId, token);
+        var target = await RequireTargetCoreAsync(
+            state.ConnectionId,
+            state.EntityId,
+            state.LibraryRootId,
+            plan.Request.TargetEntityIds,
+            requireOwner ? state.OperationId : null,
+            token);
         if (!ManagedRequestIdentity.SameWork(target.Work, plan.Creation.Work) || target.Mount.RemoteRootId != plan.Creation.RootId
             || target.Mount.RemotePath != plan.Creation.ExpectedRootPath) throw new ManagedRequestConflictException("The accepted wanted identity or library boundary changed.");
-        if (requireOwner && !await db.FulfillmentReservations.AnyAsync(owner => owner.OwnerId == state.OperationId
-            && owner.OwnerKind == FulfillmentOwnerKind.ExternalManager && owner.ConnectionId == state.ConnectionId && owner.EntityId == state.EntityId && owner.ReleasedAt == null, token))
-            throw new ManagedRequestConflictException("The request no longer owns fulfillment for this wanted movie.");
+        if (requireOwner) {
+            var expectedOwners = target.Targets is { Count: > 0 }
+                ? target.Targets.Select(item => item.EntityId).ToArray()
+                : [state.EntityId];
+            var owned = await db.FulfillmentReservations.AsNoTracking()
+                .Where(owner => owner.OwnerId == state.OperationId
+                    && owner.OwnerKind == FulfillmentOwnerKind.ExternalManager
+                    && owner.ConnectionId == state.ConnectionId
+                    && owner.ReleasedAt == null
+                    && expectedOwners.Contains(owner.EntityId))
+                .Select(owner => owner.EntityId)
+                .Distinct()
+                .CountAsync(token);
+            if (owned != expectedOwners.Length)
+                throw new ManagedRequestConflictException("The request no longer owns fulfillment for every wanted target.");
+        }
         return target;
     }
     private async Task<StoredManagedRequest> LockAsync(Guid id, long revision, CancellationToken token) {

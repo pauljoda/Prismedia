@@ -1,3 +1,6 @@
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
 using Prismedia.Application.Integrations;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Integrations;
@@ -8,6 +11,99 @@ using Prismedia.Domain.Integrations;
 namespace Prismedia.Application.Tests;
 
 public sealed class ManagedRequestProcessorTests {
+    [Fact]
+    public void FiniteSeriesRequestMustSearchExactEpisodesWithoutBroadMonitoring() {
+        var targetId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+        var work = SeriesWork();
+        var request = new CreateManagedRequestInput(
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            Guid.NewGuid(),
+            work,
+            "1",
+            Monitored: false,
+            Search: true,
+            [targetId]);
+
+        ManagedRequestService.Validate(request);
+        Assert.Null(ManagedRequestProcessor.InitialConfiguration(request).Monitored);
+        Assert.Throws<ArgumentException>(() => ManagedRequestService.Validate(request with { Monitored = true }));
+        Assert.Throws<ArgumentException>(() => ManagedRequestService.Validate(request with { Search = false }));
+    }
+
+    [Fact]
+    public void MovieFingerprintRemainsCompatibleWithArchivedContractBeforeFiniteTargets() {
+        const string archivedJson = """{"OperationId":"11111111-1111-1111-1111-111111111111","EntityId":"22222222-2222-2222-2222-222222222222","LibraryRootId":"33333333-3333-3333-3333-333333333333","ReviewedWork":{"EntityKind":15,"ExternalIds":{"tmdb":"42"}},"ProfileId":"1","Monitored":true,"Search":true}""";
+        const string archivedFingerprint = "11c79bfde3e2129600000e151f40128ad0dc6369aa7c3cbd0b9b45edf9ec63a8";
+        var request = new CreateManagedRequestInput(
+            Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            Guid.Parse("22222222-2222-2222-2222-222222222222"),
+            Guid.Parse("33333333-3333-3333-3333-333333333333"),
+            new(EntityKind.Movie, new Dictionary<string, string> { [ExternalIdProviders.Tmdb] = "42" }),
+            "1",
+            true,
+            true);
+
+        Assert.Equal(archivedJson, JsonSerializer.Serialize(request));
+        Assert.Equal(archivedFingerprint,
+            Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(archivedJson))));
+        Assert.Equal(archivedFingerprint, ManagedRequestIdentity.Fingerprint(request));
+        Assert.Equal(archivedFingerprint, ManagedRequestIdentity.Fingerprint(request with {
+            ReviewedWork = request.ReviewedWork with { Targets = [] },
+            TargetEntityIds = []
+        }));
+    }
+
+    [Fact]
+    public void MissingSeriesLookupMayDeferEpisodeIdsButExistingHoldingMustResolveEveryTarget() {
+        var work = SeriesWork();
+        var candidate = new ManagedCandidate(
+            EntityKind.VideoSeries,
+            "Series",
+            2026,
+            work.ExternalIds);
+
+        ManagedCreationEvidence.ValidateLookup(work, new(candidate, Existing: null, Targets: null));
+
+        var holding = new ManagedItemSnapshot(
+            new("series", EntityKind.VideoSeries, "Series", 2026, work.ExternalIds, false, "profile", 0),
+            "/series/Series",
+            [],
+            DateTimeOffset.UtcNow);
+        Assert.Throws<IntegrationInvocationException>(() =>
+            ManagedCreationEvidence.ValidateLookup(work, new(candidate, holding, Targets: null)));
+    }
+
+    [Fact]
+    public void FiniteTargetEvidenceRequiresUniqueExactEpisodeCoverageAndAllowsOmittedAbsoluteNumber() {
+        var work = SeriesWork();
+        var resolved = new[] {
+            new ManagedResolvedTarget(
+                "episode-1",
+                EntityKind.VideoEpisode,
+                new Dictionary<string, string> { [ExternalIdProviders.Tvdb] = "101" },
+                0,
+                1,
+                AbsoluteNumber: null)
+        };
+
+        ManagedCreationEvidence.ValidateTargets(work, resolved);
+        Assert.Throws<IntegrationInvocationException>(() =>
+            ManagedCreationEvidence.ValidateTargets(work, [resolved[0], resolved[0] with { RemoteId = "duplicate" }]));
+        Assert.Throws<IntegrationInvocationException>(() =>
+            ManagedCreationEvidence.ValidateTargets(work, [resolved[0] with { EpisodeNumber = 2 }]));
+    }
+
+    private static ManagedLookupInput SeriesWork() => new(
+        EntityKind.VideoSeries,
+        new Dictionary<string, string> { [ExternalIdProviders.Tvdb] = "42" },
+        [new(
+            EntityKind.VideoEpisode,
+            new Dictionary<string, string> { [ExternalIdProviders.Tvdb] = "101" },
+            SeasonNumber: 0,
+            EpisodeNumber: 1,
+            AbsoluteNumber: 100)]);
+
     [Fact]
     public async Task LostCreationResponseRecoversExactHoldingWithoutAnotherPost() {
         var fixture = new Fixture { LoseResponse = true };

@@ -44,7 +44,7 @@ public sealed class ManagedRequestProcessor(IManagedRequestStore store, Integrat
         var lookup = await creation.LookupAsync(connection.Manifest.Id, connection.Context, work.Plan.Creation.Work, token);
         ManagedCreationEvidence.ValidateLookup(work.Plan.Creation.Work, lookup);
         if (lookup.Existing is { } existing) {
-            await store.AcceptHoldingAsync(work, existing, token);
+            await store.AcceptHoldingAsync(work, existing, lookup.Targets, token);
             return;
         }
         if (state.Phase == ManagedRequestPhase.CreationUncertain) {
@@ -63,7 +63,7 @@ public sealed class ManagedRequestProcessor(IManagedRequestStore store, Integrat
             var revision = work.Operation.State.Revision;
             work.Operation.RejectCreation();
             await store.SaveAsync(work.Operation, revision, result.Problem ?? "The manager rejected initial creation.", false, token);
-        } else await store.AcceptHoldingAsync(work, result.Holding!, token);
+        } else await store.AcceptHoldingAsync(work, result.Holding!, result.Targets, token);
     }
 
     private async Task EnsureControlsAsync(StoredManagedRequest work, CancellationToken token) {
@@ -79,6 +79,16 @@ public sealed class ManagedRequestProcessor(IManagedRequestStore store, Integrat
         await controls.CreateAsync(state.ConnectionId, state.OperationId,
             new(state.OperationId, preview.ScopeFingerprint, preview.State.Path, preview.State.Item.ProfileId!,
                 preview.State.Targets.ToDictionary(target => target.Target.RemoteId, target => target.Monitored),
-                new(Monitored: work.Plan.Request.Monitored), work.Plan.Request.Search), token);
+                InitialConfiguration(work.Plan.Request), work.Plan.Request.Search), token);
     }
+
+    /// <summary>
+    /// Initial finite-series fulfillment preserves existing episode monitoring. A newly created
+    /// series is already unmonitored by the adapter, and the durable control requests only the exact
+    /// episode search.
+    /// </summary>
+    internal static ManagedConfigurationChange InitialConfiguration(CreateManagedRequestInput request) =>
+        request.ReviewedWork.EntityKind == EntityKind.VideoSeries
+            ? new()
+            : new(Monitored: request.Monitored);
 }

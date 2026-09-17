@@ -21,7 +21,7 @@ every feature of the application it connects to.
 | Suwayomi through OPDS | Browse and import chapters already downloaded by Suwayomi. | Downloads the selected CBZ into a Prismedia library. | Does not request missing chapters or synchronize reading progress. |
 | Suwayomi source plugin | Browse an installed source, choose a manga and exact chapter, then request and import its CBZ. | Suwayomi downloads the chapter; Prismedia verifies and imports a copy. | Source extensions stay in Suwayomi. Requests are finite and do not synchronize reading progress or series monitoring. |
 | Radarr | Browse an existing collection, follow linked movies, or request a wanted movie. | Reads files in a mapped folder while Radarr organizes them. | Requires an explicit folder mapping and a reviewed movie identity and profile. |
-| Sonarr | Browse existing series and follow or control exact linked episodes. | Reads files in a mapped folder while Sonarr organizes them. | Adding a series or requesting episodes that have not been linked is not available yet. |
+| Sonarr | Browse existing series, follow linked episodes, or request a reviewed episode selection. | Reads files in a mapped folder while Sonarr organizes them. | Requests cover a finite episode selection. Adding more episodes to an already followed series requires a future scope-expansion workflow. |
 | Kapowarr | Browse existing comic runs and inspect their issue files. | Reads files in a mapped folder while Kapowarr organizes them. | Does not request missing comics or follow issue upgrades yet. |
 | Wikimedia Commons | Search and import an original image with its source attribution. | Downloads the selected image into a Prismedia library. | Imports still images; source statements are retained for review. |
 | Archiver API v1 | Inspect a URL, select a publication, image, or ordered gallery, and follow its import. | Retrieves verified outputs into a Prismedia library. | Requires an application implementing the new API. The included simulator is the reference; legacy Archiver routes are incompatible. |
@@ -615,7 +615,7 @@ claim a content hash. The established holding tracker handles later replacements
 and missing files. **Imported into Prismedia** records that import occurred; current
 availability is shown by the tracked holding separately.
 
-Administrators can also begin in **Requests → Discover**. On a movie review with an
+Administrators can also begin in **Request → Browse**. On a movie review with an
 exact TMDB identity, choose a tested manager under **Acquisition owner**, then
 **Save metadata and review manager request**. This saves the selected metadata as a
 wanted movie without a native acquisition or monitor. The next form reviews the
@@ -628,6 +628,33 @@ The metadata preparation validates the complete reviewed proposal and the exact
 enabled metadata-plugin identity route. Accepted metadata and external fulfillment
 are separate decisions. Once metadata is saved, this screen shows the manager request;
 subsequent metadata changes belong to the saved library item's review tools.
+
+### Request selected episodes through Sonarr
+
+Begin in **Request → Browse**, identify a series, and review its seasons and episodes.
+Choose the exact episodes to request, including specials when needed, then choose
+a compatible Sonarr connection under **Acquisition owner**. Saving the metadata creates
+wanted library items without starting a native download. Review the selected episodes,
+mapped video library, and external profile before submitting the manager request.
+Episodes already in your library are excluded from the new request.
+
+The request pins an exact TVDB or TMDB series identity and a finite list of episodes.
+Sonarr adds a missing series unmonitored, with automatic searches disabled, or reuses
+the exact existing series and preserves its profile, folder, and monitoring settings.
+When Sonarr has finished building the episode catalog, Prismedia verifies each remote
+episode ID and submits a separate search for only those episodes. It never substitutes
+a season-wide or series-wide search, and does not enable future episode monitoring.
+
+Individual episodes appear in Prismedia as their final files become readable through
+the mapped folder. Partial fulfillment keeps waiting for the remaining episodes.
+One file may cover several selected episodes; a file that also covers unselected
+episodes requires review. Existing wanted IDs and viewing history are retained.
+
+Creation uncertainty, retries, cancellation, and file ownership follow the same rules
+as movie requests. A repeated request with the same accepted operation reopens that
+operation. Adding a different episode selection to a series already followed by
+Prismedia is currently blocked; the existing selection continues to be tracked.
+It must not be released merely to work around that boundary.
 
 ### Control a linked Radarr holding
 

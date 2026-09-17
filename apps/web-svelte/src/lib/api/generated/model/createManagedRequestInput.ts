@@ -14,4 +14,6 @@ export interface CreateManagedRequestInput {
   profileId: string;
   monitored: boolean;
   search: boolean;
+  /** @nullable */
+  targetEntityIds?: string[] | null;
 }

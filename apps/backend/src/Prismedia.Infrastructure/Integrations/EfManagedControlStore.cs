@@ -22,10 +22,20 @@ public sealed class EfManagedControlStore(PrismediaDbContext db, IManagedTrackin
             throw new ManagedControlConflictException("Refresh and verify this holding's tracked associations before changing its manager settings.");
         var entityIds = holding.Targets.Select(binding => binding.EntityId).Distinct().ToArray();
         var sourceTargets = holding.Bindings.SelectMany(file => file.Entities)
-            .Select(binding => new ManagedTargetBinding(binding.Target, binding.EntityId)).OrderBy(binding => binding.Target.RemoteTargetId, StringComparer.Ordinal);
+            .Select(binding => new ManagedTargetBinding(binding.Target, binding.EntityId))
+            .OrderBy(binding => binding.Target.RemoteTargetId, StringComparer.Ordinal)
+            .ToArray();
+        var retainedTargets = holding.Targets
+            .OrderBy(binding => binding.Target.RemoteTargetId, StringComparer.Ordinal)
+            .ToArray();
+        var retainedByRemoteId = retainedTargets.ToDictionary(
+            binding => binding.Target.RemoteTargetId,
+            StringComparer.Ordinal);
         if (entityIds.Length != holding.Targets.Count || holding.Targets.Select(binding => binding.Target.RemoteTargetId).Distinct(StringComparer.Ordinal).Count() != holding.Targets.Count
-            || holding.Status == ManagedTrackingStatus.Tracking && !sourceTargets.SequenceEqual(holding.Targets.OrderBy(binding => binding.Target.RemoteTargetId, StringComparer.Ordinal))
-            || holding.Status == ManagedTrackingStatus.WaitingForFiles && holding.Bindings.Count != 0)
+            || sourceTargets.Select(binding => binding.Target.RemoteTargetId).Distinct(StringComparer.Ordinal).Count() != sourceTargets.Length
+            || sourceTargets.Any(binding => !retainedByRemoteId.TryGetValue(binding.Target.RemoteTargetId, out var retained)
+                || retained != binding)
+            || holding.Status == ManagedTrackingStatus.Tracking && !sourceTargets.SequenceEqual(retainedTargets))
             throw new ManagedControlConflictException("The holding's source associations no longer match its retained target identities.");
         var reserved = await db.FulfillmentReservations.AsNoTracking().Where(row => row.OwnerId == holdingId
             && (row.OwnerKind == FulfillmentOwnerKind.ExternalManager || holding.Status == ManagedTrackingStatus.Tracking && row.OwnerKind == FulfillmentOwnerKind.ConnectedLibrary)

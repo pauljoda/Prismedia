@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Files;
 using Prismedia.Application.Integrations;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Integrations;
@@ -14,6 +15,161 @@ using Prismedia.Infrastructure.Settings;
 namespace Prismedia.Infrastructure.Tests;
 
 public sealed partial class ManagedTrackingPostgresTests {
+    [Fact]
+    public async Task FiniteSeriesRequiresASonarrLookupIdentityBeforeManagerPreview() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var fixture = await SeedWantedSeriesAsync(db);
+        var identity = await db.EntityExternalIds.SingleAsync(row =>
+            row.EntityId == fixture.Operation.State.EntityId
+            && row.Provider == ExternalIdProviders.Tvdb);
+        identity.Provider = ExternalIdProviders.Imdb;
+        await db.SaveChangesAsync();
+
+        var error = await Assert.ThrowsAsync<ArgumentException>(() => Requests(db).RequireTargetAsync(
+            fixture.ConnectionId,
+            fixture.Operation.State.EntityId,
+            fixture.Operation.State.LibraryRootId,
+            fixture.EpisodeIds,
+            default));
+
+        Assert.Contains("TVDB or TMDB", error.Message, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task FiniteSeriesRequestReservesEpisodesAndMaterializesPartialSharedFilesBeforeCompletion() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var fixture = await SeedWantedSeriesAsync(db);
+        var store = Requests(db);
+
+        var accepted = await store.CreateAsync(fixture.Operation, fixture.Plan, default);
+        var owners = await db.FulfillmentReservations.AsNoTracking()
+            .OrderBy(row => row.EntityId)
+            .ToArrayAsync();
+        Assert.Equal(fixture.EpisodeIds.Order().ToArray(), owners.Select(owner => owner.EntityId).ToArray());
+        Assert.All(owners, owner => Assert.Equal(FulfillmentOwnerKind.ExternalManager, owner.OwnerKind));
+
+        await store.AcceptHoldingAsync(
+            accepted,
+            fixture.EmptySnapshot,
+            fixture.ResolvedTargets,
+            default);
+        var waiting = (await store.FindAsync(accepted.Operation.State.OperationId, default))!;
+        var partial = await store.MaterializeAsync(waiting, fixture.PartialSnapshot, default);
+
+        Assert.False(partial.Imported);
+        Assert.Contains("remaining", partial.WaitingReason, StringComparison.OrdinalIgnoreCase);
+        var firstBindings = await db.ManagedSourceBindings.AsNoTracking().ToArrayAsync();
+        Assert.Equal(2, firstBindings.Length);
+        Assert.Single(firstBindings.Select(binding => binding.LocalPath).Distinct(FileSystemPathComparison.Comparer));
+        Assert.Equal(2, await db.EntityFiles.AsNoTracking().CountAsync());
+        var holding = (await Store(db).FindAsync(accepted.Operation.State.OperationId, default))!.Tracking;
+        Assert.Equal(ManagedTrackingStatus.WaitingForFiles, holding.Status);
+        Assert.Equal(3, (await Controls(db).RequireScopeAsync(fixture.ConnectionId, holding.Id, default)).Scope.Targets.Count);
+
+        var completed = await store.MaterializeAsync(waiting, fixture.CompleteSnapshot, default);
+
+        Assert.True(completed.Imported);
+        Assert.Equal(ManagedRequestPhase.Completed,
+            (await store.FindAsync(accepted.Operation.State.OperationId, default))!.Operation.State.Phase);
+        Assert.Equal(3, await db.ManagedSourceBindings.AsNoTracking().CountAsync());
+        Assert.Equal(3, await db.EntityFiles.AsNoTracking().CountAsync());
+        Assert.All(await db.Entities.AsNoTracking().Where(row => fixture.EpisodeIds.Contains(row.Id)).ToArrayAsync(),
+            episode => Assert.False(episode.IsWanted));
+        holding = (await Store(db).FindAsync(accepted.Operation.State.OperationId, default))!.Tracking;
+        Assert.Equal(ManagedTrackingStatus.Tracking, holding.Status);
+        Assert.Equal(2, Assert.Single(holding.Bindings, binding => binding.RemoteFileId == "shared").Entities.Count);
+    }
+
+    [Fact]
+    public async Task FiniteSeriesRejectsMixedSelectedAndUnselectedSharedFileWithoutImporting() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var fixture = await SeedWantedSeriesAsync(db);
+        var store = Requests(db);
+        var accepted = await store.CreateAsync(fixture.Operation, fixture.Plan, default);
+        await store.AcceptHoldingAsync(accepted, fixture.EmptySnapshot, fixture.ResolvedTargets, default);
+        var waiting = (await store.FindAsync(accepted.Operation.State.OperationId, default))!;
+        var mixed = fixture.PartialSnapshot with {
+            Files = [fixture.PartialSnapshot.Files[0] with {
+                Targets = [.. fixture.PartialSnapshot.Files[0].Targets,
+                    new("unselected", EntityKind.VideoEpisode, "Other", 1, 9)]
+            }]
+        };
+
+        await Assert.ThrowsAsync<ArgumentException>(() => store.MaterializeAsync(waiting, mixed, default));
+
+        Assert.Empty(await db.ManagedSourceBindings.ToArrayAsync());
+        Assert.Empty(await db.EntityFiles.ToArrayAsync());
+        Assert.All(await db.Entities.AsNoTracking().Where(row => fixture.EpisodeIds.Contains(row.Id)).ToArrayAsync(),
+            episode => Assert.True(episode.IsWanted));
+    }
+
+    [Fact]
+    public async Task AdditionalEpisodeRequestTruthfullyRejectsUntilHoldingExpansionHasItsOwnJournal() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var fixture = await SeedWantedSeriesAsync(db);
+        var store = Requests(db);
+        var accepted = await store.CreateAsync(fixture.Operation, fixture.Plan, default);
+        await store.AcceptHoldingAsync(accepted, fixture.EmptySnapshot, fixture.ResolvedTargets, default);
+        var seriesId = fixture.Operation.State.EntityId;
+        var seasonId = (await db.Entities.AsNoTracking()
+            .SingleAsync(row => row.Id == fixture.EpisodeIds[1])).ParentEntityId!.Value;
+        var episodeId = Guid.NewGuid();
+        db.Entities.Add(new() {
+            Id = episodeId,
+            ParentEntityId = seasonId,
+            KindCode = EntityKind.VideoEpisode.ToCode(),
+            Title = "Later",
+            IsWanted = true
+        });
+        db.EntityPositions.AddRange(
+            new() { EntityId = episodeId, Code = EntityPositionCodes.Season, Value = 1 },
+            new() { EntityId = episodeId, Code = EntityPositionCodes.Episode, Value = 3 });
+        db.EntityExternalIds.Add(new() {
+            Id = Guid.NewGuid(),
+            EntityId = episodeId,
+            Provider = ExternalIdProviders.Tvdb,
+            Value = "103"
+        });
+        await db.SaveChangesAsync();
+        var target = await store.RequireTargetAsync(
+            fixture.ConnectionId,
+            seriesId,
+            fixture.Operation.State.LibraryRootId,
+            [episodeId],
+            default);
+        var operation = ManagedRequestOperation.Create(
+            Guid.NewGuid(),
+            fixture.ConnectionId,
+            seriesId,
+            fixture.Operation.State.LibraryRootId);
+        var request = new CreateManagedRequestInput(
+            operation.State.OperationId,
+            seriesId,
+            operation.State.LibraryRootId,
+            target.Work,
+            "profile",
+            Monitored: true,
+            Search: true,
+            TargetEntityIds: [episodeId]);
+        var plan = new ManagedRequestPlan(
+            request,
+            new(operation.State.OperationId, target.Work, "profile", "tv", "/series"),
+            target.Title,
+            ManagedRequestIdentity.Fingerprint(request));
+
+        var error = await Assert.ThrowsAsync<ManagedRequestConflictException>(() =>
+            store.CreateAsync(operation, plan, default));
+
+        Assert.Contains("reviewed expansion", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Single(await db.ManagedRequests.AsNoTracking().ToArrayAsync());
+        Assert.DoesNotContain(await db.FulfillmentReservations.AsNoTracking().ToArrayAsync(),
+            owner => owner.EntityId == episodeId);
+    }
+
     [Fact]
     public async Task WantedRequestReservesOwnershipAndRootBeforeRemoteDispatch() {
         await using var database = await PostgresTestDatabase.CreateAsync();
@@ -196,4 +352,137 @@ public sealed partial class ManagedTrackingPostgresTests {
         return new(fixture, operation, plan);
     }
     private sealed record WantedFixture(Fixture Fixture, ManagedRequestOperation Operation, ManagedRequestPlan Plan);
+
+    private async Task<WantedSeriesFixture> SeedWantedSeriesAsync(PrismediaDbContext db) {
+        var connectionId = Guid.NewGuid();
+        var rootId = Guid.NewGuid();
+        var seriesId = Guid.NewGuid();
+        var specialsId = Guid.NewGuid();
+        var seasonId = Guid.NewGuid();
+        var specialId = Guid.NewGuid();
+        var pilotId = Guid.NewGuid();
+        var secondId = Guid.NewGuid();
+        var directory = Directory.CreateDirectory(Path.Combine(workspace, "series"));
+        var sharedPath = Path.Combine(directory.FullName, "shared.mkv");
+        var secondPath = Path.Combine(directory.FullName, "second.mkv");
+        await File.WriteAllBytesAsync(sharedPath, [1, 2, 3]);
+        await File.WriteAllBytesAsync(secondPath, [4, 5, 6, 7]);
+        db.IntegrationConnections.Add(new() {
+            Id = connectionId,
+            PluginId = "fixture",
+            Name = "Fixture",
+            BaseUrl = "http://manager.test/",
+            Enabled = true,
+            Status = ConnectionStatus.Ready,
+            Revision = 1
+        });
+        db.LibraryRoots.Add(new() {
+            Id = rootId,
+            Path = directory.FullName,
+            Label = "Series",
+            Enabled = true,
+            ScanVideos = true
+        });
+        db.ExternalLibraryMounts.Add(new() {
+            Id = Guid.NewGuid(),
+            ConnectionId = connectionId,
+            LibraryRootId = rootId,
+            RemoteRootId = "tv",
+            RemotePath = "/series",
+            LocalPath = directory.FullName
+        });
+        db.Entities.AddRange(
+            new() { Id = seriesId, KindCode = EntityKind.VideoSeries.ToCode(), Title = "Fixture Series" },
+            new() { Id = specialsId, ParentEntityId = seriesId, KindCode = EntityKind.VideoSeason.ToCode(), Title = "Specials", IsWanted = true },
+            new() { Id = seasonId, ParentEntityId = seriesId, KindCode = EntityKind.VideoSeason.ToCode(), Title = "Season 1", IsWanted = true },
+            new() { Id = specialId, ParentEntityId = specialsId, KindCode = EntityKind.VideoEpisode.ToCode(), Title = "Special", IsWanted = true },
+            new() { Id = pilotId, ParentEntityId = seasonId, KindCode = EntityKind.VideoEpisode.ToCode(), Title = "Pilot", IsWanted = true },
+            new() { Id = secondId, ParentEntityId = seasonId, KindCode = EntityKind.VideoEpisode.ToCode(), Title = "Second", IsWanted = true });
+        db.EntityPositions.AddRange(
+            new() { EntityId = specialsId, Code = EntityPositionCodes.Season, Value = 0 },
+            new() { EntityId = seasonId, Code = EntityPositionCodes.Season, Value = 1 },
+            new() { EntityId = specialId, Code = EntityPositionCodes.Season, Value = 0 },
+            new() { EntityId = specialId, Code = EntityPositionCodes.Episode, Value = 1 },
+            new() { EntityId = specialId, Code = EntityPositionCodes.AbsoluteEpisode, Value = 100 },
+            new() { EntityId = pilotId, Code = EntityPositionCodes.Season, Value = 1 },
+            new() { EntityId = pilotId, Code = EntityPositionCodes.Episode, Value = 1 },
+            new() { EntityId = secondId, Code = EntityPositionCodes.Season, Value = 1 },
+            new() { EntityId = secondId, Code = EntityPositionCodes.Episode, Value = 2 });
+        db.EntityExternalIds.AddRange(
+            new() { Id = Guid.NewGuid(), EntityId = seriesId, Provider = ExternalIdProviders.Tvdb, Value = "42" },
+            new() { Id = Guid.NewGuid(), EntityId = specialId, Provider = ExternalIdProviders.Tvdb, Value = "900" },
+            new() { Id = Guid.NewGuid(), EntityId = pilotId, Provider = ExternalIdProviders.Tvdb, Value = "101" },
+            new() { Id = Guid.NewGuid(), EntityId = secondId, Provider = ExternalIdProviders.Tvdb, Value = "102" });
+        await db.SaveChangesAsync();
+
+        var targetIds = new[] { specialId, pilotId, secondId };
+        var target = await Requests(db).RequireTargetAsync(connectionId, seriesId, rootId, targetIds, default);
+        var operation = ManagedRequestOperation.Create(Guid.NewGuid(), connectionId, seriesId, rootId);
+        var request = new CreateManagedRequestInput(
+            operation.State.OperationId,
+            seriesId,
+            rootId,
+            target.Work,
+            "profile",
+            Monitored: true,
+            Search: true,
+            TargetEntityIds: targetIds);
+        var plan = new ManagedRequestPlan(
+            request,
+            new(operation.State.OperationId, target.Work, "profile", "tv", "/series"),
+            target.Title,
+            ManagedRequestIdentity.Fingerprint(request));
+        var resolved = new[] {
+            new ManagedResolvedTarget("900", EntityKind.VideoEpisode,
+                new Dictionary<string, string> { [ExternalIdProviders.Tvdb] = "900" }, 0, 1),
+            new ManagedResolvedTarget("101", EntityKind.VideoEpisode,
+                new Dictionary<string, string> { [ExternalIdProviders.Tvdb] = "101" }, 1, 1),
+            new ManagedResolvedTarget("102", EntityKind.VideoEpisode,
+                new Dictionary<string, string> { [ExternalIdProviders.Tvdb] = "102" }, 1, 2)
+        };
+        var item = new ManagedLibraryItem(
+            "series-remote",
+            EntityKind.VideoSeries,
+            target.Title,
+            2026,
+            target.Work.ExternalIds,
+            false,
+            "profile",
+            0);
+        var empty = new ManagedItemSnapshot(item, "/series/Fixture Series", [], DateTimeOffset.UtcNow);
+        var shared = new ManagedLibraryFile(
+            "shared",
+            "/series/shared.mkv",
+            3,
+            null,
+            [
+                new("900", EntityKind.VideoEpisode, "Special", 0, 1),
+                new("101", EntityKind.VideoEpisode, "Pilot", 1, 1)
+            ]);
+        var second = new ManagedLibraryFile(
+            "second",
+            "/series/second.mkv",
+            4,
+            null,
+            [new("102", EntityKind.VideoEpisode, "Second", 1, 2)]);
+        return new(
+            connectionId,
+            operation,
+            plan,
+            targetIds,
+            resolved,
+            empty,
+            empty with { Files = [shared] },
+            empty with { Files = [shared, second] });
+    }
+
+    private sealed record WantedSeriesFixture(
+        Guid ConnectionId,
+        ManagedRequestOperation Operation,
+        ManagedRequestPlan Plan,
+        IReadOnlyList<Guid> EpisodeIds,
+        IReadOnlyList<ManagedResolvedTarget> ResolvedTargets,
+        ManagedItemSnapshot EmptySnapshot,
+        ManagedItemSnapshot PartialSnapshot,
+        ManagedItemSnapshot CompleteSnapshot);
 }

@@ -3,6 +3,7 @@ import {
   commitEntityRequest as commitEntityRequestRequest,
   commitReviewedRequest as commitReviewedRequestRequest,
   prepareManagedMovie as prepareManagedMovieRequest,
+  prepareManagedSeries as prepareManagedSeriesRequest,
   getRequestReview,
   commitMissingChildrenRequest,
   removeWanted as removeWantedRequest,
@@ -19,6 +20,7 @@ import type {
   RequestSearchResponse,
   ReviewedRequestCommitRequest,
   PreparedWantedMovieResponse,
+  PreparedWantedSeriesResponse,
   WantedRemovalResponse,
 } from "$lib/api/generated/model";
 import { unwrapGenerated } from "$lib/api/generated-response";
@@ -94,6 +96,11 @@ export async function commitReviewedRequest(
 /** Saves reviewed metadata without acquisition, before explicit external-manager configuration. */
 export async function prepareManagedMovie(request: ReviewedRequestCommitRequest): Promise<PreparedWantedMovieResponse> {
   return unwrapGenerated(await prepareManagedMovieRequest(request), "Could not save the reviewed movie");
+}
+
+/** Saves a finite reviewed episode selection without acquisition or broad series monitoring. */
+export async function prepareManagedSeries(request: ReviewedRequestCommitRequest): Promise<PreparedWantedSeriesResponse> {
+  return unwrapGenerated(await prepareManagedSeriesRequest(request), "Could not save the reviewed series selection");
 }
 
 /**

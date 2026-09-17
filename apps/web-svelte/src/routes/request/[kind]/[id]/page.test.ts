@@ -29,7 +29,7 @@ const mocks = vi.hoisted(() => ({
   fetchAccessibleLibraryRoots: vi.fn(),
   goto: vi.fn(async () => {}),
   reviewRequest: vi.fn(),
-  prepareManagedMovie: vi.fn(), fetchConnections: vi.fn(), fetchManagedRequests: vi.fn(), fetchLibraryMounts: vi.fn(), isAdmin: false,
+  prepareManagedMovie: vi.fn(), prepareManagedSeries: vi.fn(), fetchConnections: vi.fn(), fetchManagedRequests: vi.fn(), fetchLibraryMounts: vi.fn(), isAdmin: false,
 }));
 
 vi.mock("$lib/api/requests", () => ({
@@ -37,6 +37,7 @@ vi.mock("$lib/api/requests", () => ({
   fetchRequestReview: mocks.fetchRequestReview,
   reviewRequest: mocks.reviewRequest,
   prepareManagedMovie: mocks.prepareManagedMovie,
+  prepareManagedSeries: mocks.prepareManagedSeries,
 }));
 vi.mock("$lib/api/connections", () => ({ fetchConnections: mocks.fetchConnections }));
 vi.mock("$lib/api/managed-requests", () => ({ fetchManagedRequests: mocks.fetchManagedRequests }));
@@ -105,6 +106,121 @@ describe("reviewed request route", () => {
     expect(screen.getByRole("button", { name: "Acquisition owner" })).toBeDisabled();
     expect(screen.getByText("Prepared movie")).toBeInTheDocument();
     expect(screen.queryByRole("checkbox", { name: "Accept Title" })).not.toBeInTheDocument();
+  });
+
+  it("prepares only hydrated episodes retained by season and nested episode review", async () => {
+    mocks.isAdmin = true;
+    const review = seriesReview();
+    const seasonOne = review.proposal.children[0] as EntityMetadataProposal;
+    const seasonTwo = review.proposal.children[1] as EntityMetadataProposal;
+    const episodeThree = proposal("episode-3", ENTITY_KIND.videoEpisode, "Episode 3", [], {
+      seasonNumber: 1,
+      episodeNumber: 3,
+    });
+    const episodeFour = proposal("episode-4", ENTITY_KIND.videoEpisode, "Episode 4", [], {
+      seasonNumber: 1,
+      episodeNumber: 4,
+    });
+    const episodeTwo = proposal("episode-2", ENTITY_KIND.videoEpisode, "Episode 2", [], {
+      seasonNumber: 2,
+      episodeNumber: 2,
+    });
+    seasonOne.children.push(episodeThree);
+    seasonOne.children.push(episodeFour);
+    seasonTwo.children.push(episodeTwo);
+    review.proposal.patch.externalIds = { [EXTERNAL_ID_PROVIDER.tmdb]: review.externalIdentity.value };
+    seasonOne.patch.externalIds = { [EXTERNAL_ID_PROVIDER.tmdb]: "Show:AbC:01:1" };
+    seasonTwo.patch.externalIds = { [EXTERNAL_ID_PROVIDER.tmdb]: "Show:AbC:01:2" };
+    seasonOne.children[0]!.patch.externalIds = { [EXTERNAL_ID_PROVIDER.tmdb]: "Show:AbC:01:1:1" };
+    episodeThree.patch.externalIds = { [EXTERNAL_ID_PROVIDER.tmdb]: "Show:AbC:01:1:3" };
+    episodeFour.patch.externalIds = { [EXTERNAL_ID_PROVIDER.tmdb]: "Show:AbC:01:1:4" };
+    episodeTwo.patch.externalIds = { [EXTERNAL_ID_PROVIDER.tmdb]: "Show:AbC:01:2:2" };
+    review.targets.push(
+      {
+        proposalId: episodeThree.proposalId,
+        kind: REQUEST_MEDIA_KIND.episode,
+        entityKind: ENTITY_KIND.videoEpisode,
+        externalIdentity: { namespace: EXTERNAL_ID_PROVIDER.tmdb, value: "Show:AbC:01:1:3" },
+        requestable: true,
+        position: 3,
+      },
+      {
+        proposalId: episodeTwo.proposalId,
+        kind: REQUEST_MEDIA_KIND.episode,
+        entityKind: ENTITY_KIND.videoEpisode,
+        externalIdentity: { namespace: EXTERNAL_ID_PROVIDER.tmdb, value: "Show:AbC:01:2:2" },
+        requestable: true,
+        position: 2,
+      },
+      {
+        proposalId: episodeFour.proposalId,
+        kind: REQUEST_MEDIA_KIND.episode,
+        entityKind: ENTITY_KIND.videoEpisode,
+        externalIdentity: { namespace: EXTERNAL_ID_PROVIDER.tmdb, value: "Show:AbC:01:1:4" },
+        requestable: true,
+        position: 4,
+      },
+    );
+    mocks.reviewRequest.mockResolvedValue(review);
+    mocks.fetchConnections.mockResolvedValue([{ id: "manager", name: "Series manager", enabled: true, status: CONNECTION_STATUS.ready,
+      effectiveCapabilities: [{ kind: PLUGIN_CAPABILITY.externalManager, entityKinds: [ENTITY_KIND.videoSeries],
+        operations: [INTEGRATION_OPERATION.lookupManaged, INTEGRATION_OPERATION.ensureManaged] }] }]);
+    mocks.prepareManagedSeries.mockResolvedValue({
+      seriesEntityId: "wanted-series",
+      title: "Andor",
+      episodes: [
+        {
+          entityId: "owned-episode-4",
+          seasonEntityId: "wanted-season-1",
+          title: "Episode 4",
+          seasonNumber: 1,
+          episodeNumber: 4,
+          absoluteNumber: null,
+          hasFile: true,
+          externalIdentity: { namespace: EXTERNAL_ID_PROVIDER.tmdb, value: "Show:AbC:01:1:4" },
+        },
+        {
+          entityId: "wanted-episode-3",
+          seasonEntityId: "wanted-season-1",
+          title: "Episode 3",
+          seasonNumber: 1,
+          episodeNumber: 3,
+          absoluteNumber: null,
+          hasFile: false,
+          externalIdentity: { namespace: EXTERNAL_ID_PROVIDER.tmdb, value: "Show:AbC:01:1:3" },
+        },
+      ],
+    });
+    setRoute(REQUEST_MEDIA_KIND.series, review.externalIdentity.value, `plugin=${review.pluginId}&namespace=${review.externalIdentity.namespace}`);
+    render(Page);
+
+    await screen.findByRole("heading", { name: "Andor" });
+    await fireEvent.click(screen.getByRole("button", { name: "Review Season 1" }));
+    await fireEvent.click(screen.getByRole("checkbox", { name: "Deselect Episode 1" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Back to Andor" }));
+    await fireEvent.click(screen.getByRole("checkbox", { name: "Deselect Season 2" }));
+    await fireEvent.keyDown(screen.getByRole("button", { name: "Acquisition owner" }), { key: "ArrowDown" });
+    await fireEvent.pointerUp(await screen.findByRole("option", { name: "Series manager" }));
+    expect(screen.getAllByText("Episode selection").length).toBeGreaterThan(0);
+    await fireEvent.click(screen.getByRole("button", { name: "Save metadata and review manager request" }));
+
+    await waitFor(() => expect(mocks.prepareManagedSeries).toHaveBeenCalledWith(expect.objectContaining({
+      selectedProposalIds: ["episode-3", "episode-4"],
+      proposal: expect.objectContaining({
+        children: [expect.objectContaining({
+          proposalId: "season-1",
+          children: [
+            expect.objectContaining({ proposalId: "episode-3" }),
+            expect.objectContaining({ proposalId: "episode-4" }),
+          ],
+        })],
+      }),
+    })));
+    expect(mocks.prepareManagedMovie).not.toHaveBeenCalled();
+    expect(screen.getByText(/1 already-owned episode is omitted/)).toBeInTheDocument();
+    expect(await screen.findByText("S01E03")).toBeInTheDocument();
+    expect(screen.queryByText("S01E04")).not.toBeInTheDocument();
+    expect(screen.getByText("Episode 3")).toBeInTheDocument();
   });
 
   it("loads the exact plugin and opaque external identity under the NSFW ceiling", async () => {

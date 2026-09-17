@@ -3,8 +3,11 @@ using Prismedia.Domain.Integrations;
 
 namespace Prismedia.Application.Integrations;
 
+/// <summary>One server-derived local wanted target paired with the manager lookup evidence sent for it.</summary>
+public sealed record ManagedRequestEntityTarget(Guid EntityId, ManagedLookupTarget Target);
 /// <summary>Server-derived wanted identity and immutable mapped boundary.</summary>
-public sealed record ManagedRequestTarget(Guid EntityId, string Title, ManagedLookupInput Work, ExternalLibraryMount Mount);
+public sealed record ManagedRequestTarget(Guid EntityId, string Title, ManagedLookupInput Work,
+    ExternalLibraryMount Mount, IReadOnlyList<ManagedRequestEntityTarget>? Targets = null);
 /// <summary>Immutable creation and fulfillment intent; credentials remain on the connection.</summary>
 public sealed record ManagedRequestPlan(CreateManagedRequestInput Request, EnsureManagedInput Creation, string Title, string Fingerprint);
 /// <summary>Request journal independent of transient jobs and manager queue history.</summary>
@@ -15,8 +18,16 @@ public sealed record ManagedRequestMaterialization(bool Imported, string? Waitin
 
 /// <summary>Atomic request ownership, revision fences, and exact wanted-identity materialization.</summary>
 public interface IManagedRequestStore {
-    /// <summary>Requires a fileless wanted movie with an exact identity and a mapped enabled video library.</summary>
-    Task<ManagedRequestTarget> RequireTargetAsync(Guid connectionId, Guid entityId, Guid libraryRootId, CancellationToken token);
+    /// <summary>Requires fileless wanted work with an exact identity and a mapped enabled video library.</summary>
+    Task<ManagedRequestTarget> RequireTargetAsync(
+        Guid connectionId,
+        Guid entityId,
+        Guid libraryRootId,
+        CancellationToken token);
+    /// <summary>Requires a finite child scope when the managed work is a container.</summary>
+    Task<ManagedRequestTarget> RequireTargetAsync(Guid connectionId, Guid entityId, Guid libraryRootId,
+        IReadOnlyList<Guid>? targetEntityIds, CancellationToken token) =>
+        RequireTargetAsync(connectionId, entityId, libraryRootId, token);
     /// <summary>Loads retained intent without contacting the manager.</summary>
     Task<StoredManagedRequest?> FindAsync(Guid id, CancellationToken token);
     /// <summary>Lists recent requests for one connection.</summary>
@@ -27,6 +38,10 @@ public interface IManagedRequestStore {
     Task SaveAsync(ManagedRequestOperation operation, long expectedRevision, string? problem, bool beforeDispatch, CancellationToken token);
     /// <summary>Accepts a pinned holding and its stable wanted targets in the same transaction as request progress.</summary>
     Task AcceptHoldingAsync(StoredManagedRequest work, ManagedItemSnapshot snapshot, CancellationToken token);
+    /// <summary>Accepts a holding only after every finite child target has one resolved remote identity.</summary>
+    Task AcceptHoldingAsync(StoredManagedRequest work, ManagedItemSnapshot snapshot,
+        IReadOnlyList<ManagedResolvedTarget>? resolvedTargets, CancellationToken token) =>
+        AcceptHoldingAsync(work, snapshot, token);
     /// <summary>Rechecks pinned identity, ownership, and mapped path before dispatching initial fulfillment controls.</summary>
     Task ValidateHoldingAsync(StoredManagedRequest work, ManagedItemSnapshot snapshot, CancellationToken token);
     /// <summary>Attaches only verified mapped files to the retained wanted identities, then enables ordinary managed tracking.</summary>

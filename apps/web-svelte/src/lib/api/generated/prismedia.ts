@@ -240,6 +240,7 @@ import type {
   PluginProvider,
   PrepareFileArchiveParams,
   PreparedWantedMovieResponse,
+  PreparedWantedSeriesResponse,
   PreviewCollectionRulesParams,
   PreviewManagedRequestInput,
   ProblemDetails,
@@ -11857,6 +11858,55 @@ export const getPrepareManagedMovieUrl = () => {
 export const prepareManagedMovie = async (reviewedRequestCommitRequest: ReviewedRequestCommitRequest, options?: RequestInit): Promise<prepareManagedMovieResponse> => {
 
   return orvalFetch<prepareManagedMovieResponse>(getPrepareManagedMovieUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      reviewedRequestCommitRequest,)
+  }
+);}
+
+
+
+export type prepareManagedSeriesResponse200 = {
+  data: PreparedWantedSeriesResponse
+  status: 200
+}
+
+export type prepareManagedSeriesResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type prepareManagedSeriesResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type prepareManagedSeriesResponseSuccess = (prepareManagedSeriesResponse200) & {
+  headers: Headers;
+};
+export type prepareManagedSeriesResponseError = (prepareManagedSeriesResponse400 | prepareManagedSeriesResponse409) & {
+  headers: Headers;
+};
+
+export type prepareManagedSeriesResponse = (prepareManagedSeriesResponseSuccess | prepareManagedSeriesResponseError)
+
+export const getPrepareManagedSeriesUrl = () => {
+
+
+
+
+  return `/api/requests/prepare-managed-series`
+}
+
+/**
+ * @summary Saves a finite reviewed episode selection without native acquisition or monitoring, before a separate external-manager request.
+ */
+export const prepareManagedSeries = async (reviewedRequestCommitRequest: ReviewedRequestCommitRequest, options?: RequestInit): Promise<prepareManagedSeriesResponse> => {
+
+  return orvalFetch<prepareManagedSeriesResponse>(getPrepareManagedSeriesUrl(),
   {
     ...options,
     method: 'POST',

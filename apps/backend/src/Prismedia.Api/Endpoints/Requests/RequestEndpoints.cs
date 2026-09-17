@@ -183,6 +183,19 @@ public static class RequestEndpoints {
             .WithSummary("Saves a reviewed wanted movie without native acquisition, before a separate external-manager request.")
             .Produces<PreparedWantedMovieResponse>().Produces<ApiProblem>(400).Produces<ApiProblem>(409);
 
+        group.MapPost("/prepare-managed-series", async (
+            ReviewedRequestCommitRequest request, ReviewedWantedSeriesService service, CancellationToken token) => {
+                try { return Results.Ok(await service.PrepareAsync(request, token)); }
+                catch (RequestCommitValidationException error) {
+                    return Results.BadRequest(new ApiProblem(ApiProblemCodes.RequestInvalid, error.Message));
+                }
+                catch (ExternalIdentityAmbiguityException error) { return ExternalIdentityConflict(error); }
+            })
+            .RequireAdmin()
+            .WithName("PrepareManagedSeries")
+            .WithSummary("Saves a finite reviewed episode selection without native acquisition or monitoring, before a separate external-manager request.")
+            .Produces<PreparedWantedSeriesResponse>().Produces<ApiProblem>(400).Produces<ApiProblem>(409);
+
         group.MapPost("/commit-entity", async (
             RequestEntityCommitRequest request,
             bool? hideNsfw,

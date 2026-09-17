@@ -6,8 +6,11 @@
  */
 import type { EntityKind } from './entityKind';
 import type { ManagedLookupInputExternalIds } from './managedLookupInputExternalIds';
+import type { ManagedLookupTarget } from './managedLookupTarget';
 
 export interface ManagedLookupInput {
   entityKind: EntityKind;
   externalIds: ManagedLookupInputExternalIds;
+  /** @nullable */
+  targets?: ManagedLookupTarget[] | null;
 }
