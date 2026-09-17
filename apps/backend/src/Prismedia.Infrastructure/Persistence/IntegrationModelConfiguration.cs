@@ -6,6 +6,27 @@ namespace Prismedia.Infrastructure.Persistence;
 
 internal static partial class PrismediaModelConfiguration {
     private static void ConfigureIntegrationTables(ModelBuilder modelBuilder) {
+        modelBuilder.Entity<ManagedRequestRow>(entity => {
+            entity.ToTable("managed_requests");
+            entity.HasKey(row => row.Id);
+            entity.Property(row => row.Id).HasColumnName("id").ValueGeneratedNever();
+            entity.Property(row => row.ConnectionId).HasColumnName("connection_id");
+            entity.Property(row => row.EntityId).HasColumnName("entity_id");
+            entity.Property(row => row.LibraryRootId).HasColumnName("library_root_id");
+            entity.Property(row => row.Revision).HasColumnName("revision").IsConcurrencyToken();
+            entity.Property(row => row.Phase).HasColumnName("phase").HasMaxLength(32).HasConversion(value => value.ToCode(), value => value.DecodeAs<ManagedRequestPhase>());
+            entity.Property(row => row.StateJson).HasColumnName("state").HasColumnType("jsonb");
+            entity.Property(row => row.PlanJson).HasColumnName("plan").HasColumnType("jsonb");
+            entity.Property(row => row.CreatedAt).HasColumnName("created_at");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.Property(row => row.NextCheckAt).HasColumnName("next_check_at");
+            entity.Property(row => row.Problem).HasColumnName("problem").HasMaxLength(4096);
+            entity.HasOne<IntegrationConnectionRow>().WithMany().HasForeignKey(row => row.ConnectionId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<EntityRow>().WithMany().HasForeignKey(row => row.EntityId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne<LibraryRootRow>().WithMany().HasForeignKey(row => row.LibraryRootId).OnDelete(DeleteBehavior.Restrict);
+            entity.HasIndex(row => row.NextCheckAt);
+            entity.HasIndex(row => new { row.ConnectionId, row.CreatedAt });
+        });
         modelBuilder.Entity<ManagedControlRow>(entity => {
             entity.ToTable("managed_controls");
             entity.HasKey(row => row.Id);

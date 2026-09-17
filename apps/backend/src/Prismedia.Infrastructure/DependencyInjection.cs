@@ -107,6 +107,9 @@ public static class DependencyInjection {
         services.AddScoped<IManagedControlStore, EfManagedControlStore>();
         services.AddScoped<ManagedControlService>();
         services.AddScoped<ManagedControlProcessor>();
+        services.AddScoped<IManagedRequestStore, EfManagedRequestStore>();
+        services.AddScoped<ManagedRequestService>();
+        services.AddScoped<ManagedRequestProcessor>();
         services.AddSingleton(new ExternalLibraryStorageOptions(dataDir, cacheDir));
         services.AddScoped<IExternalLibraryMountStore, EfExternalLibraryMountStore>();
         services.AddScoped<ExternalLibraryService>();

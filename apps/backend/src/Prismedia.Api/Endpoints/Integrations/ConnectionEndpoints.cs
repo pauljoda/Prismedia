@@ -12,6 +12,7 @@ public static class ConnectionEndpoints {
         var group = routes.MapGroup("/api/connections").RequireAdmin().WithTags("Connections");
         group.AddEndpointFilter<ConnectionProblemFilter>();
         group.MapManagedControlEndpoints();
+        group.MapManagedRequestEndpoints();
         group.MapGet("/", async (ConnectionService service, CancellationToken cancellationToken) =>
             Results.Ok(await service.ListAsync(cancellationToken)))
             .WithName("ListConnections").Produces<IReadOnlyList<ConnectionResponse>>();
@@ -93,6 +94,7 @@ public static class ConnectionEndpoints {
             catch (ConnectionInUseException error) { return Results.Conflict(new ApiProblem(ApiProblemCodes.ConnectionInUse, error.Message)); }
             catch (ConnectionConflictException error) { return Results.Conflict(new ApiProblem(ApiProblemCodes.ConnectionConflict, error.Message)); }
             catch (ManagedControlConflictException error) { return Results.Conflict(new ApiProblem(ApiProblemCodes.ManagedControlConflict, error.Message)); }
+            catch (ManagedRequestConflictException error) { return Results.Conflict(new ApiProblem(ApiProblemCodes.ManagedRequestConflict, error.Message)); }
             catch (FulfillmentOwnershipConflictException error) { return Results.Conflict(new ApiProblem(ApiProblemCodes.FulfillmentOwnershipConflict, error.Message)); }
             catch (ArgumentException error) { return Results.BadRequest(new ApiProblem(ApiProblemCodes.ConnectionInvalid, error.Message)); }
             catch (ConnectionSecretUnavailableException error) { return Results.BadRequest(new ApiProblem(ApiProblemCodes.ConnectionUnavailable, error.Message)); }

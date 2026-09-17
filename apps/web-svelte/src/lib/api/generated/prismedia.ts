@@ -37,6 +37,7 @@ import type {
   BrowserSessionResponse,
   BulkJobResponse,
   CancelJobsParams,
+  CancelManagedRequestInput,
   ChangeOwnPasswordRequest,
   ClearAcquisitionBlocklistParams,
   ClearJobFailuresParams,
@@ -63,6 +64,7 @@ import type {
   CreateFileFolderParams,
   CreateFirstAdminRequest,
   CreateManagedControlRequest,
+  CreateManagedRequestInput,
   CustomFormatSaveRequest,
   CustomFormatView,
   DatabaseBackupDto,
@@ -208,6 +210,8 @@ import type {
   ManagedItemSnapshot,
   ManagedLibraryPage,
   ManagedLibraryQuery,
+  ManagedRequestPreview,
+  ManagedRequestResponse,
   ManagedTrackingPreview,
   ManagedTrackingResponse,
   ManagerOptions,
@@ -235,6 +239,7 @@ import type {
   PluginProvider,
   PrepareFileArchiveParams,
   PreviewCollectionRulesParams,
+  PreviewManagedRequestInput,
   ProblemDetails,
   RatingUpdateRequest,
   ReleaseCalendarEvent,
@@ -9316,6 +9321,214 @@ export const closeUnverifiedManagedControl = async (id: string,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       managedControlRevisionRequest,)
+  }
+);}
+
+
+
+export type previewManagedRequestResponse200 = {
+  data: ManagedRequestPreview
+  status: 200
+}
+
+export type previewManagedRequestResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type previewManagedRequestResponseSuccess = (previewManagedRequestResponse200) & {
+  headers: Headers;
+};
+export type previewManagedRequestResponseError = (previewManagedRequestResponse400) & {
+  headers: Headers;
+};
+
+export type previewManagedRequestResponse = (previewManagedRequestResponseSuccess | previewManagedRequestResponseError)
+
+export const getPreviewManagedRequestUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/manager/requests/preview`
+}
+
+export const previewManagedRequest = async (id: string,
+    previewManagedRequestInput: PreviewManagedRequestInput, options?: RequestInit): Promise<previewManagedRequestResponse> => {
+
+  return orvalFetch<previewManagedRequestResponse>(getPreviewManagedRequestUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      previewManagedRequestInput,)
+  }
+);}
+
+
+
+export type listManagedRequestsResponse200 = {
+  data: ManagedRequestResponse[]
+  status: 200
+}
+
+export type listManagedRequestsResponseSuccess = (listManagedRequestsResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listManagedRequestsResponse = (listManagedRequestsResponseSuccess)
+
+export const getListManagedRequestsUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/manager/requests`
+}
+
+export const listManagedRequests = async (id: string, options?: RequestInit): Promise<listManagedRequestsResponse> => {
+
+  return orvalFetch<listManagedRequestsResponse>(getListManagedRequestsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type createManagedRequestResponse202 = {
+  data: ManagedRequestResponse
+  status: 202
+}
+
+export type createManagedRequestResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type createManagedRequestResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type createManagedRequestResponseSuccess = (createManagedRequestResponse202) & {
+  headers: Headers;
+};
+export type createManagedRequestResponseError = (createManagedRequestResponse400 | createManagedRequestResponse409) & {
+  headers: Headers;
+};
+
+export type createManagedRequestResponse = (createManagedRequestResponseSuccess | createManagedRequestResponseError)
+
+export const getCreateManagedRequestUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/manager/requests`
+}
+
+export const createManagedRequest = async (id: string,
+    createManagedRequestInput: CreateManagedRequestInput, options?: RequestInit): Promise<createManagedRequestResponse> => {
+
+  return orvalFetch<createManagedRequestResponse>(getCreateManagedRequestUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      createManagedRequestInput,)
+  }
+);}
+
+
+
+export type refreshManagedRequestResponse202 = {
+  data: void
+  status: 202
+}
+
+export type refreshManagedRequestResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type refreshManagedRequestResponseSuccess = (refreshManagedRequestResponse202) & {
+  headers: Headers;
+};
+export type refreshManagedRequestResponseError = (refreshManagedRequestResponse400) & {
+  headers: Headers;
+};
+
+export type refreshManagedRequestResponse = (refreshManagedRequestResponseSuccess | refreshManagedRequestResponseError)
+
+export const getRefreshManagedRequestUrl = (id: string,
+    requestId: string,) => {
+
+
+
+
+  return `/api/connections/${id}/manager/requests/${requestId}/refresh`
+}
+
+export const refreshManagedRequest = async (id: string,
+    requestId: string, options?: RequestInit): Promise<refreshManagedRequestResponse> => {
+
+  return orvalFetch<refreshManagedRequestResponse>(getRefreshManagedRequestUrl(id,requestId),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+export type cancelManagedRequestResponse200 = {
+  data: ManagedRequestResponse
+  status: 200
+}
+
+export type cancelManagedRequestResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type cancelManagedRequestResponseSuccess = (cancelManagedRequestResponse200) & {
+  headers: Headers;
+};
+export type cancelManagedRequestResponseError = (cancelManagedRequestResponse409) & {
+  headers: Headers;
+};
+
+export type cancelManagedRequestResponse = (cancelManagedRequestResponseSuccess | cancelManagedRequestResponseError)
+
+export const getCancelManagedRequestUrl = (id: string,
+    requestId: string,) => {
+
+
+
+
+  return `/api/connections/${id}/manager/requests/${requestId}/cancel`
+}
+
+export const cancelManagedRequest = async (id: string,
+    requestId: string,
+    cancelManagedRequestInput: CancelManagedRequestInput, options?: RequestInit): Promise<cancelManagedRequestResponse> => {
+
+  return orvalFetch<cancelManagedRequestResponse>(getCancelManagedRequestUrl(id,requestId),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      cancelManagedRequestInput,)
   }
 );}
 

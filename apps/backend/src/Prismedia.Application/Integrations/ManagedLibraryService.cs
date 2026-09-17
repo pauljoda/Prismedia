@@ -23,6 +23,13 @@ public sealed class ManagedLibraryService(IntegrationConnectionAccess access, II
             throw new ArgumentException("Select an existing holding with its current identities.");
         var authorized = await access.RequireAsync(connectionId, PluginCapability.ConnectedLibrary, IntegrationOperation.GetLibraryItem, input.EntityKind, cancellationToken);
         var snapshot = await gateway.GetLibraryItemAsync(authorized.Manifest.Id, authorized.Context, input, cancellationToken);
+        ValidateSnapshot(input, snapshot);
+        return snapshot;
+    }
+
+    /// <summary>Validates exact holding identity and complete finite file evidence before any application use case trusts it.</summary>
+    public static void ValidateSnapshot(ManagedItemInput input, ManagedItemSnapshot snapshot) {
+        if (snapshot is null) throw Invalid();
         ValidateItem(snapshot.Item, input.EntityKind);
         if (snapshot.Item.RemoteId != input.RemoteId || input.ExpectedExternalIds.Any(pair => snapshot.Item.ExternalIds.GetValueOrDefault(pair.Key) != pair.Value)
             || !Text(snapshot.Path, 8192) || snapshot.ObservedAt == default || snapshot.ObservedAt > DateTimeOffset.UtcNow.AddMinutes(5)
@@ -42,7 +49,6 @@ public sealed class ManagedLibraryService(IntegrationConnectionAccess access, II
                 || target.SeasonNumber is not null || target.EpisodeNumber is not null || target.AbsoluteNumber is not null)
             || input.EntityKind == EntityKind.VideoSeries && targets.Any(target => target.EntityKind != EntityKind.VideoEpisode
                 || target.SeasonNumber is null || target.EpisodeNumber is null)) throw Invalid();
-        return snapshot;
     }
 
     /// <summary>Reads existing profiles and folders without persisting defaults or issuing remote commands.</summary>

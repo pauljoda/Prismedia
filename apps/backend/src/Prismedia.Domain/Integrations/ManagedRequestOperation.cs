@@ -36,6 +36,11 @@ public sealed class ManagedRequestOperation(ManagedRequestState state) {
         Require(ManagedRequestPhase.AwaitingFiles);
         Change(State with { Phase = ManagedRequestPhase.Completed, ReviewRequired = false });
     }
+    /// <summary>A fresh valid observation may keep waiting for bytes without changing the accepted remote identity.</summary>
+    public void ContinueWaiting() {
+        Require(ManagedRequestPhase.AwaitingFiles);
+        Change(State with { ReviewRequired = false });
+    }
     /// <summary>A definite creation refusal retains intent for review; it makes cancellation safe.</summary>
     public void RejectCreation() {
         Require(ManagedRequestPhase.CreationUncertain);

@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Wanted movies can delegate fulfillment to a Radarr connection with a reviewed profile, library, monitoring choice, and optional search. Durable requests recover uncertain creation responses and attach verified local files to the original item without losing its identity or history.
+
 - Linked Sonarr episodes can request scoped searches and change episode monitoring when the parent series is already monitored. Series-wide profiles and monitoring stay with Sonarr, and blocked controls explain the parent restriction.
 
 - Linked Radarr holdings can apply reviewed monitoring and profile changes and request searches. Manager actions retain progress across restarts, preserve uncertain responses for review, and keep search completion separate from file availability.

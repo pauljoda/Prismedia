@@ -10,6 +10,7 @@ export type ManagedTrackingStatus = typeof ManagedTrackingStatus[keyof typeof Ma
 
 export const ManagedTrackingStatus = {
   pending: 'pending',
+  'waiting-for-files': 'waiting-for-files',
   tracking: 'tracking',
   'needs-review': 'needs-review',
   stale: 'stale',

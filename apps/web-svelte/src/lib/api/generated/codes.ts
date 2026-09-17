@@ -1266,6 +1266,7 @@ export type ManagedRequestPhaseCode = (typeof MANAGED_REQUEST_PHASE)[keyof typeo
 // source: enum ManagedTrackingStatus
 export const MANAGED_TRACKING_STATUS = {
   pending: "pending",
+  waitingForFiles: "waiting-for-files",
   tracking: "tracking",
   needsReview: "needs-review",
   stale: "stale",
@@ -1829,6 +1830,7 @@ export const PROBLEM_CODE = {
   lastAdminRequired: "last_admin_required",
   libraryRootPathConflict: "library_root_path_conflict",
   managedControlConflict: "managed_control_conflict",
+  managedRequestConflict: "managed_request_conflict",
   metadataFieldConflict: "metadata_field_conflict",
   notFound: "not_found",
   passwordInvalid: "password_invalid",

@@ -16,6 +16,7 @@ public sealed class ManagedLibraryTrackingWorker(IServiceScopeFactory scopes, IL
                     await using var scope = scopes.CreateAsyncScope();
                     await scope.ServiceProvider.GetRequiredService<IManagedTrackingStore>().QueueDueAsync(stoppingToken);
                     await scope.ServiceProvider.GetRequiredService<IManagedControlStore>().QueueDueAsync(stoppingToken);
+                    await scope.ServiceProvider.GetRequiredService<IManagedRequestStore>().QueueDueAsync(stoppingToken);
                 } catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
                 catch (Exception error) { logger.LogWarning(error, "Could not publish due connected-library reconciliation."); }
             }

@@ -7,6 +7,7 @@
   import { fetchManagedItem, fetchManagedLibrary, fetchManagerOptions, inspectLocalLibraryAccess } from "$lib/api/managed-libraries";
   import ExternalLibraryMappings from "./ExternalLibraryMappings.svelte";
   import ManagedHoldingTracking from "./ManagedHoldingTracking.svelte";
+  import ManagedRequests from "./ManagedRequests.svelte";
   import { getEntityKindLabel } from "$lib/entities/entity-grid";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
 
@@ -73,6 +74,7 @@
 </script>
 
 <ManagedHoldingTracking connectionId={connection.id} {showControls} {canControl} />
+<ManagedRequests {connection} />
 {#if connection.status !== CONNECTION_STATUS.ready}
   <Alert.Root><Alert.Description>Test this connection in Settings to resume remote observations. Saved tracking remains available here.</Alert.Description></Alert.Root>
 {/if}

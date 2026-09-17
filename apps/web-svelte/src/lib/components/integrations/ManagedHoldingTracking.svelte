@@ -16,6 +16,7 @@
   const visible = $derived(holdings.filter(holding => !item || holding.item.remoteId === item.remoteId && holding.item.entityKind === item.entityKind));
   const statusLabels = {
     [MANAGED_TRACKING_STATUS.pending]: "Waiting for verification",
+    [MANAGED_TRACKING_STATUS.waitingForFiles]: "Waiting for first files",
     [MANAGED_TRACKING_STATUS.tracking]: "Tracking",
     [MANAGED_TRACKING_STATUS.needsReview]: "Needs review",
     [MANAGED_TRACKING_STATUS.stale]: "Connection unavailable",
@@ -64,11 +65,11 @@
       <div class="space-y-2 border-b border-border-subtle pb-3 last:border-b-0 last:pb-0">
         <p class="break-words text-sm">{holding.title}</p>
         <div class="flex flex-wrap items-center gap-2"><Badge>{statusLabels[holding.status]}</Badge>
-          <span class="text-xs text-text-muted">{holding.bindings.filter(file => file.isAvailable).length} of {holding.bindings.length} linked files available</span></div>
+          <span class="text-xs text-text-muted">{#if holding.status === MANAGED_TRACKING_STATUS.waitingForFiles}{holding.targets.length} requested {holding.targets.length === 1 ? "item" : "items"}{:else}{holding.bindings.filter(file => file.isAvailable).length} of {holding.bindings.length} linked files available{/if}</span></div>
         {#if holding.problem}<p class="break-words text-sm text-text-muted">{holding.problem}</p>{/if}
         {#if holding.lastCheckedAt}<p class="text-xs text-text-muted">Checked {new Date(holding.lastCheckedAt).toLocaleString()}</p>{/if}
         <Button variant="outline" size="sm" disabled={busy} onclick={() => void refresh(holding.id)}>Refresh tracking</Button>
-        {#if showControls}<ManagedHoldingControls {connectionId} holdingId={holding.id} canPreview={canControl && holding.status === MANAGED_TRACKING_STATUS.tracking} />{/if}
+        {#if showControls}<ManagedHoldingControls {connectionId} holdingId={holding.id} canPreview={canControl && (holding.status === MANAGED_TRACKING_STATUS.tracking || holding.status === MANAGED_TRACKING_STATUS.waitingForFiles)} />{/if}
       </div>
     {/each}
     {#if item && !visible.length}

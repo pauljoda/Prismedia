@@ -8,6 +8,8 @@ namespace Prismedia.Contracts.System;
 /// </summary>
 public static class ApiProblemCodes {
     public const string ManagedControlConflict = "managed_control_conflict";
+    /// <summary>Managed request identity, ownership, or progress changed after review.</summary>
+    public const string ManagedRequestConflict = "managed_request_conflict";
     /// <summary>The requested connection no longer exists.</summary>
     public const string ConnectionNotFound = "connection_not_found";
     /// <summary>A connection owns persisted transfer history and cannot be deleted.</summary>

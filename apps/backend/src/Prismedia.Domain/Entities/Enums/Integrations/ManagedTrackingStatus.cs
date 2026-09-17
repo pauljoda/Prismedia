@@ -4,6 +4,8 @@ namespace Prismedia.Domain.Entities;
 public enum ManagedTrackingStatus {
     /// <summary>Explicit local associations are awaiting worker verification.</summary>
     [Code("pending")] Pending,
+    /// <summary>Owned wanted targets exist independently of their first locally readable source files.</summary>
+    [Code("waiting-for-files")] WaitingForFiles,
     /// <summary>The most recent observation reconciled the established scope.</summary>
     [Code("tracking")] Tracking,
     /// <summary>Identity, coverage, or source ownership needs an explicit decision.</summary>

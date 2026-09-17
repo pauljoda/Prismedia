@@ -318,9 +318,47 @@ remains intact. Restoring the expected scope and refreshing tracking can recover
 
 Once a root has a tracked holding, video scans delegate to its saved holdings. This
 reserves the entire mapped root against path-based discovery, including external folder
-renames. Scan the existing collection before linking it. New unscanned holdings and
-expanded episode coverage currently require a further explicit import/linking workflow;
-they are not silently added by ordinary scans.
+renames. Scan the existing collection before linking it. Wanted-movie requests use the
+explicit workflow below to attach newly available files. Other unscanned holdings and
+expanded episode coverage require a further import/linking workflow; ordinary scans
+do not silently expand the owned scope.
+
+### Request a wanted movie through Radarr
+
+Radarr plugin 1.2.0 or later supports exact movie lookup and initial creation. Test
+the Connection again after upgrading. In **Connected libraries**, choose **Request
+a wanted movie**, select an existing wanted movie with a TMDB identity, and choose
+an enabled mapped video library. Review its external profile, monitoring choice,
+and optional **Search now**, then select **Request through manager**.
+
+The item must have no retained source, native acquisition, native monitor, or other
+fulfillment owner. Existing files use the linking workflow above. Existing Radarr
+holdings must already belong to the selected mapped root and use the selected
+profile; initial delegation never moves them or overwrites another profile.
+
+Acceptance saves the request, exclusive acquisition owner, and first background job
+together. New Radarr movies are created unmonitored without an automatic search;
+separate durable manager actions then apply the explicit monitoring/search choices.
+Existing exact holdings are reused. A lost or malformed creation response preserves
+uncertainty: subsequent observations look up the same TMDB identity and never send
+another creation automatically. **Refresh request** reconciles that retained intent.
+
+**Cancel request** releases ownership only before creation can have run or after a
+definite rejection. Once a holding may exist, cancellation cannot establish that
+the remote app has stopped managing it; ownership remains until an explicit handoff.
+Disabling a connection and removing queue history do not release the request.
+
+**Waiting for files** creates no fictional source records. The worker verifies the
+exact remote holding and final file association, mapped boundary, local readability,
+and expected size before attaching a source to the original wanted entity. This
+preserves its title, organization flag, and user history. Size/path checks do not
+claim a content hash. The established holding tracker handles later replacements
+and missing files. **Imported into Prismedia** records that import occurred; current
+availability is shown by the tracked holding separately.
+
+This form currently accepts existing wanted movies. Metadata discovery still uses
+the native request flow; choosing an external manager directly from that review is
+a separate integration step.
 
 ### Control a linked Radarr holding
 

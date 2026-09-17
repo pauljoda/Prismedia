@@ -84,7 +84,7 @@ public sealed partial class EfManagedTrackingStore(PrismediaDbContext db, IExter
     /// <inheritdoc />
     public async Task QueueDueAsync(CancellationToken token) {
         var now = DateTimeOffset.UtcNow;
-        var due = await db.ManagedHoldings.Where(row => row.NextCheckAt <= now && row.Status != ManagedTrackingStatus.NeedsReview)
+        var due = await db.ManagedHoldings.Where(row => row.NextCheckAt <= now && row.Status != ManagedTrackingStatus.NeedsReview && row.Status != ManagedTrackingStatus.WaitingForFiles)
             .Join(db.IntegrationConnections.Where(connection => connection.Enabled), row => row.ConnectionId, connection => connection.Id, (row, _) => row)
             .OrderBy(row => row.NextCheckAt).Take(25).ToArrayAsync(token);
         foreach (var row in due) {
