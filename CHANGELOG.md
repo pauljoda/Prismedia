@@ -12,7 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
-- Connected Radarr and Sonarr holdings can explicitly release acquisition ownership after monitoring and remote activity have stopped. Handoffs retain files and history, recover through outages, and keep ownership reserved until verification finishes.
+- Connected Radarr and Sonarr holdings can explicitly release acquisition ownership after monitoring and remote activity have stopped. Download-client health problems block handoff. Handoffs retain files and history, recover through outages, and keep ownership reserved until verification finishes.
 
 - The Metron community metadata plugin supports Western comic runs and issues, exact fractional and special issue labels, creator credits, and distinct cross-provider identities. Series and issue metadata can be reviewed before application.
 

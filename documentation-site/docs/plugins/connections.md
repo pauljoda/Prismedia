@@ -348,7 +348,7 @@ do not silently expand the owned scope.
 
 ### Release an acquisition owner
 
-Radarr plugin 1.3.0 and Sonarr plugin 1.2.0 add handoff inspection. Test the Connection
+Radarr plugin 1.3.1 and Sonarr plugin 1.2.1 provide handoff inspection. Test the Connection
 again after upgrading. Turn off monitoring for the exact linked movie or episodes,
 let downloads and commands settle, then select **Review ownership handoff** on its
 tracked holding. Review the work, monitoring, and activity, acknowledge keeping that
@@ -363,6 +363,8 @@ observations do not invalidate a review when its target identities remain unchan
 
 The initial adapters conservatively require the application's entire download queue
 to be empty, including unrecognized items, and all reported commands to be terminal.
+Reported download-client health problems also block release, since a client outage
+can hide activity from the queue. These health observations can lag a new outage.
 Activity for another work can therefore delay a handoff. Missing or unknown activity
 is never evidence that work stopped. Unfinished Prismedia actions and actions closed
 with an unverified outcome block release; closing an uncertain action is not a way to
