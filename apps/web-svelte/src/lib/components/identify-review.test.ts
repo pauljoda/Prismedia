@@ -31,6 +31,21 @@ import {
 } from "./identify-review";
 
 describe("identify review helpers", () => {
+  it("shows exact identity removals and submits them only with accepted provider IDs", () => {
+    const book = proposal("book", ENTITY_KIND.book);
+    book.patch.externalIds = { provider: "new-work" };
+    book.patch.retiredExternalIds = [{ namespace: "provider-edition", value: "old-edition" }];
+    expect(proposalFieldValue(book, METADATA_PATCH_FIELD.externalIds)).toContain("Unlink provider-edition: old-edition");
+    const selection = { ...defaultFieldSelectionForReview(book), [METADATA_PATCH_FIELD.externalIds]: true };
+    const accepted = buildRootReviewApplyPayload(book, { selectedFields: selection, selectedImages: {} });
+    expect(accepted.proposal.patch.retiredExternalIds).toEqual(book.patch.retiredExternalIds);
+    const omitted = buildRootReviewApplyPayload(book, {
+      selectedFields: { ...selection, [METADATA_PATCH_FIELD.externalIds]: false }, selectedImages: {},
+    });
+    expect(omitted.proposal.patch.externalIds).toEqual({});
+    expect(omitted.proposal.patch.retiredExternalIds).toEqual([]);
+  });
+
   it("merges newly identified defaults without resetting existing review choices", () => {
     const shell = proposal("series", "video-series", {
       children: [proposal("season-1", "video-season", { title: "Season 1" })],

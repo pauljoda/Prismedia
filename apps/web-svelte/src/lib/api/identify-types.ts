@@ -83,6 +83,7 @@ export interface EntityMetadataPatch {
   description?: string | null;
   externalIds: Record<string, string>;
   urls: string[];
+  retiredExternalIds?: GeneratedMetadataPatch["retiredExternalIds"];
   tags: string[];
   studio?: string | null;
   credits: CreditPatch[];

@@ -12,6 +12,7 @@ import type { EntityMetadataPatchExternalIds } from './entityMetadataPatchExtern
 import type { EntityMetadataPatchPositions } from './entityMetadataPatchPositions';
 import type { EntityMetadataPatchStats } from './entityMetadataPatchStats';
 import type { EntityPosition } from './entityPosition';
+import type { ExternalIdentityRetirement } from './externalIdentityRetirement';
 
 export interface EntityMetadataPatch {
   /** @nullable */
@@ -39,4 +40,5 @@ export interface EntityMetadataPatch {
   positionEntries?: EntityPosition[];
   /** @nullable */
   alternativeTitles?: string[] | null;
+  retiredExternalIds?: ExternalIdentityRetirement[];
 }

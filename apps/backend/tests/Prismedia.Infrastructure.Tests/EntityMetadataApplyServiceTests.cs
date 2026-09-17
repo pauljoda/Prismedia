@@ -15,6 +15,119 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EntityMetadataApplyServiceTests {
     [Fact]
+    public async Task ProviderCannotRetireAnIdentityOutsideItsDeclaredRoute() {
+        await using var db = CreateContext();
+        var id = Guid.NewGuid();
+        SeedEntity(db, id, EntityKind.Book.ToCode(), "Existing book");
+        db.EntityExternalIds.Add(new EntityExternalIdRow {
+            Id = Guid.NewGuid(),
+            EntityId = id,
+            Provider = "googlebooks",
+            Value = "shared-volume",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var proposal = new EntityMetadataProposal(
+            "openlibrary:work:OL9W:book",
+            "openlibrary",
+            EntityKind.Book,
+            1,
+            "external-id",
+            EmptyPatch() with {
+                RetiredExternalIds = [new("googlebooks", "shared-volume")]
+            },
+            [], [], [], Relationships: []);
+        var service = new EntityMetadataApplyService(
+            db,
+            new PluginArtworkServiceOptions(Path.GetTempPath()),
+            identityRouter: new ConfiguredIdentityRouter());
+
+        await Assert.ThrowsAsync<ArgumentException>(() => service.ApplyAsync(
+            id,
+            proposal,
+            [MetadataPatchField.ExternalIds.ToCode()],
+            null,
+            default));
+
+        Assert.True(await db.EntityExternalIds.AnyAsync(row =>
+            row.EntityId == id && row.Provider == "googlebooks" && row.Value == "shared-volume"));
+    }
+
+    [Fact]
+    public async Task ReviewedIdentityTransitionRetiresOnlyExactProviderEvidence() {
+        await using var db = CreateContext();
+        var id = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        SeedEntity(db, id, EntityKind.Book.ToCode(), "Old work");
+        db.EntityExternalIds.AddRange(
+            ExternalId("openlibrary", "OL1W", "https://openlibrary.org/works/OL1W"),
+            ExternalId("openlibrarywork", "OL1W", "https://openlibrary.org/works/OL1W"),
+            ExternalId("openlibraryedition", "OL2M", "https://openlibrary.org/books/OL2M"),
+            ExternalId("isbn13", "9780140328721", null),
+            ExternalId("googlebooks", "shared-volume", "https://books.google.com/books?id=shared-volume"));
+        db.EntityUrls.AddRange(
+            Url("https://openlibrary.org/works/OL1W", 0),
+            Url("https://openlibrary.org/books/OL2M", 1),
+            Url("https://example.test/curated", 2));
+        await db.SaveChangesAsync();
+
+        var proposal = new EntityMetadataProposal(
+            "openlibrary:work:OL9W:book",
+            "openlibrary",
+            EntityKind.Book,
+            1,
+            "external-id",
+            EmptyPatch() with {
+                ExternalIds = new Dictionary<string, string> {
+                    ["openlibrary"] = "OL9W",
+                    ["openlibrarywork"] = "OL9W"
+                },
+                Urls = ["https://openlibrary.org/works/OL9W"],
+                RetiredExternalIds = [
+                    new("openlibrary", "OL1W"),
+                    new("openlibrarywork", "OL1W"),
+                    new("openlibraryedition", "OL2M")
+                ]
+            },
+            [], [], [], Relationships: []);
+        var service = new EntityMetadataApplyService(
+            db,
+            new PluginArtworkServiceOptions(Path.GetTempPath()),
+            identityRouter: new ConfiguredIdentityRouter(
+                new PluginIdentityRoute("openlibrary", new ExternalIdentity("openlibrary", "OL1W")),
+                new PluginIdentityRoute("openlibrary", new ExternalIdentity("openlibrarywork", "OL1W")),
+                new PluginIdentityRoute("openlibrary", new ExternalIdentity("openlibraryedition", "OL2M"))));
+
+        Assert.True(await service.ApplyAsync(
+            id,
+            proposal,
+            [MetadataPatchField.ExternalIds.ToCode()],
+            null,
+            default));
+
+        var identities = await db.EntityExternalIds.Where(row => row.EntityId == id)
+            .ToDictionaryAsync(row => row.Provider, row => row.Value);
+        Assert.Equal("OL9W", identities["openlibrary"]);
+        Assert.Equal("OL9W", identities["openlibrarywork"]);
+        Assert.DoesNotContain("openlibraryedition", identities.Keys);
+        Assert.Equal("9780140328721", identities["isbn13"]);
+        Assert.Equal("shared-volume", identities["googlebooks"]);
+        var urls = await db.EntityUrls.Where(row => row.EntityId == id).Select(row => row.Url).ToArrayAsync();
+        Assert.Contains("https://openlibrary.org/works/OL1W", urls);
+        Assert.Contains("https://openlibrary.org/books/OL2M", urls);
+        Assert.Contains("https://example.test/curated", urls);
+
+        EntityExternalIdRow ExternalId(string provider, string value, string? url) => new() {
+            Id = Guid.NewGuid(), EntityId = id, Provider = provider, Value = value, Url = url,
+            CreatedAt = now, UpdatedAt = now
+        };
+        EntityUrlRow Url(string url, int sortOrder) => new() {
+            Id = Guid.NewGuid(), EntityId = id, Url = url, SortOrder = sortOrder, CreatedAt = now
+        };
+    }
+
+    [Fact]
     public async Task TypedPositionsRetainExactComicLabelsAndLegacyOmissionPreservesThem() {
         await using var db = CreateContext();
         var id = Guid.NewGuid();
@@ -542,6 +655,17 @@ public sealed class EntityMetadataApplyServiceTests {
                     ["published"] = "2021-05-29T13:00:12-07:00"
                 }
             });
+    }
+
+    [Fact]
+    public void ManualPatchCannotRetireAProviderIdentity() {
+        var exception = Assert.Throws<ArgumentException>(() => EntityMetadataPatchValidator.Validate(
+            EntityMetadataPatchValidator.NormalizeFieldSet([MetadataPatchField.ExternalIds.ToCode()]),
+            EmptyPatch() with {
+                RetiredExternalIds = [new("openlibraryedition", "OL2M")]
+            }));
+
+        Assert.Contains("reviewed provider proposal", exception.Message, StringComparison.Ordinal);
     }
 
     [Fact]

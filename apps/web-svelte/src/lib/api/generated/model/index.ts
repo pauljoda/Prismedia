@@ -297,6 +297,7 @@ export * from './entityUrl';
 export * from './excludeFileParams';
 export * from './executorInspectionResponse';
 export * from './externalIdentity';
+export * from './externalIdentityRetirement';
 export * from './externalLibraryMount';
 export * from './externalManagedHoldingReference';
 export * from './fileArchivePreparation';

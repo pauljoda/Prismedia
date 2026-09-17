@@ -101,6 +101,24 @@ public sealed class RequestProposalRevisionTests {
     }
 
     [Fact]
+    public void AbsentAndEmptyIdentityRetirementsKeepTheSameRevision() {
+        var proposal = Proposal(new Dictionary<string, string>(), new Dictionary<string, string>());
+        var absent = proposal with { Patch = proposal.Patch with { RetiredExternalIds = null! } };
+
+        Assert.Equal(RequestProposalRevision.Compute(proposal), RequestProposalRevision.Compute(absent));
+    }
+
+    [Fact]
+    public void IdentityRetirementChangesTheReviewedProposalRevision() {
+        var proposal = Proposal(new Dictionary<string, string>(), new Dictionary<string, string>());
+        var retired = proposal with { Patch = proposal.Patch with {
+            RetiredExternalIds = [new("openlibraryedition", "OL2M")]
+        } };
+
+        Assert.NotEqual(RequestProposalRevision.Compute(proposal), RequestProposalRevision.Compute(retired));
+    }
+
+    [Fact]
     public void ChangedExactIssueLabelChangesTheRevisionEvenWhenOrderingIsUnchanged() {
         var proposal = Proposal(new Dictionary<string, string>(), new Dictionary<string, string>());
         var first = proposal with { Patch = proposal.Patch with {

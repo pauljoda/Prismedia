@@ -13,7 +13,7 @@ namespace Prismedia.Application.Requests;
 public static class RequestProposalRevision {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) {
         TypeInfoResolver = new DefaultJsonTypeInfoResolver {
-            Modifiers = { PreserveLegacyPositionRevisions }
+            Modifiers = { PreserveLegacyOptionalPatchRevisions }
         },
         Converters = {
             new EntityKindRevisionConverter(),
@@ -21,12 +21,18 @@ public static class RequestProposalRevision {
         }
     };
 
-    private static void PreserveLegacyPositionRevisions(JsonTypeInfo typeInfo) {
+    private static void PreserveLegacyOptionalPatchRevisions(JsonTypeInfo typeInfo) {
         if (typeInfo.Type != typeof(EntityMetadataPatch)) return;
         var positionsName = JsonNamingPolicy.CamelCase.ConvertName(nameof(EntityMetadataPatch.PositionEntries));
         // Adding optional exact issue labels must not invalidate older proposals with no such evidence.
         var positions = typeInfo.Properties.Single(property => property.Name == positionsName);
         positions.ShouldSerialize = (_, value) => value is IReadOnlyCollection<EntityPosition> { Count: > 0 };
+
+        var retirementsName = JsonNamingPolicy.CamelCase.ConvertName(nameof(EntityMetadataPatch.RetiredExternalIds));
+        // Older reviewed proposals did not serialize retirement evidence. Preserve their revisions
+        // when the new optional collection is absent or empty while hashing any actual retirement.
+        var retirements = typeInfo.Properties.Single(property => property.Name == retirementsName);
+        retirements.ShouldSerialize = (_, value) => value is IReadOnlyCollection<ExternalIdentityRetirement> { Count: > 0 };
     }
 
     /// <summary>

@@ -73,7 +73,18 @@ public sealed record EntityMetadataPatch(
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public IReadOnlyList<string>? AlternativeTitles { get; init; }
+
+    /// <summary>
+    /// Exact provider-owned identities superseded by this proposal. The host removes only an
+    /// existing namespace/value pair that matches one of these entries; unrelated identities in
+    /// the same Entity remain untouched. Retirements are applied only when external IDs are among
+    /// the fields accepted from the reviewed proposal.
+    /// </summary>
+    public IReadOnlyList<ExternalIdentityRetirement> RetiredExternalIds { get; init; } = [];
 }
+
+/// <summary>An exact external identity that a reviewed provider proposal supersedes.</summary>
+public sealed record ExternalIdentityRetirement(string Namespace, string Value);
 
 /// <summary>A typed metadata date whose meaning is stable across providers.</summary>
 public sealed record EntityMetadataDatePatch(EntityDateType Type, string Value);

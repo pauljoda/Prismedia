@@ -391,7 +391,10 @@ export function proposalFieldValue(result: EntityMetadataProposal, field: string
   const patch = result.patch;
   if (field === METADATA_PATCH_FIELD.title) return patch.title ?? "";
   if (field === METADATA_PATCH_FIELD.description) return patch.description ?? "";
-  if (field === METADATA_PATCH_FIELD.externalIds) return entries(patch.externalIds).join(", ");
+  if (field === METADATA_PATCH_FIELD.externalIds) return [
+    ...entries(patch.externalIds),
+    ...(patch.retiredExternalIds ?? []).map(identity => `Unlink ${identity.namespace}: ${identity.value}`),
+  ].join("; ");
   if (field === METADATA_PATCH_FIELD.urls) return patch.urls.join(", ");
   if (field === METADATA_PATCH_FIELD.tags) return patch.tags.join(", ");
   if (field === METADATA_PATCH_FIELD.studio) return patch.studio ?? "";
@@ -604,6 +607,7 @@ function patchForSelectedFields(
     title: fields.title ? patch.title : null,
     description: fields.description ? patch.description : null,
     externalIds: fields.externalIds ? patch.externalIds : {},
+    retiredExternalIds: fields.externalIds ? (patch.retiredExternalIds ?? []) : [],
     urls: fields.urls ? patch.urls : [],
     tags: fields.tags ? tags : [],
     studio: fields.studio ? studio : null,

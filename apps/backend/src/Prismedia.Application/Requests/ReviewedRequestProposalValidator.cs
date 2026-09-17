@@ -113,6 +113,10 @@ internal static class ReviewedRequestProposalValidator {
         ValidateSubset(reviewed.DateEntries, selected.DateEntries, "date");
         ValidateSubset(reviewed.PositionEntries, selected.PositionEntries, "position");
         ValidateSubset(reviewed.AlternativeTitles, selected.AlternativeTitles, "alternative title");
+        // Deselecting Provider IDs omits the entire field, including its exact retirement evidence.
+        // Any retained identity content must preserve the reviewed removals without editing them.
+        if (selected.ExternalIds is { Count: > 0 } || selected.RetiredExternalIds is { Count: > 0 })
+            ValidateExact(reviewed.RetiredExternalIds, selected.RetiredExternalIds, "identity retirement");
 
         if (reviewed.Rating != selected.Rating || reviewed.Flags != selected.Flags) {
             throw new RequestCommitValidationException("Non-selectable proposal state must match the reviewed proposal.");
@@ -148,6 +152,16 @@ internal static class ReviewedRequestProposalValidator {
                 throw new RequestCommitValidationException($"Selected {label} metadata must come from the reviewed proposal.");
             }
             remaining.RemoveAt(index);
+        }
+    }
+
+    private static void ValidateExact<T>(
+        IReadOnlyList<T>? reviewed,
+        IReadOnlyList<T>? selected,
+        string label) {
+        if (!(reviewed ?? []).SequenceEqual(selected ?? [])) {
+            throw new RequestCommitValidationException(
+                $"Non-selectable {label} metadata must match the reviewed proposal.");
         }
     }
 }

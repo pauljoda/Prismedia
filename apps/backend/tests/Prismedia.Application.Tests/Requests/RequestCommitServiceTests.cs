@@ -1340,7 +1340,8 @@ public sealed partial class RequestCommitServiceTests {
                 Confidence = 1.000m,
                 Patch = Patch("The Matrix", identity.Value) with {
                     Description = "Provider overview",
-                    Tags = ["science-fiction", "cyberpunk"]
+                    Tags = ["science-fiction", "cyberpunk"],
+                    RetiredExternalIds = [new("tmdb", "Movie:1")]
                 },
                 Images = [
                     new ImageCandidate("poster", "https://images.test/poster.jpg", "tmdb", 2.2780m, null, 1000, 1500),
@@ -1393,8 +1394,69 @@ public sealed partial class RequestCommitServiceTests {
         var applied = Assert.Single(writer.Applied).Proposal;
         Assert.Null(applied.Patch.Description);
         Assert.Equal(["cyberpunk"], applied.Patch.Tags);
+        Assert.Equal([new ExternalIdentityRetirement("tmdb", "Movie:1")], applied.Patch.RetiredExternalIds);
         Assert.Equal("https://images.test/poster.jpg", Assert.Single(applied.Images).Url);
         Assert.Empty(applied.Relationships);
+    }
+
+    [Fact]
+    public async Task ReviewedCommitAllowsDeselectingProviderIdentitiesAndTheirRetirements() {
+        var identity = new ExternalIdentity("tmdb", "Movie:603");
+        var proposal = Node("movie:603", "cinema-metadata", EntityKind.Movie, "The Matrix", identity);
+        proposal = proposal with { Patch = proposal.Patch with { RetiredExternalIds = [new("tmdb", "Movie:1")] } };
+        var review = Review("cinema-metadata", RequestMediaKind.Movie, identity, proposal,
+            [Target(proposal, RequestMediaKind.Movie, identity)]);
+        var selected = proposal with { Patch = proposal.Patch with { ExternalIds = new Dictionary<string, string>(), RetiredExternalIds = [] } };
+        var reviews = new FakeReviewSource(_ => throw new InvalidOperationException("Provider review must not run."));
+        var (service, writer, _, _, _) = ReviewedService(proposal, reviews);
+
+        await service.CommitReviewedAsync(new ReviewedRequestCommitRequest(RequestMediaKind.Movie, review.PluginId, identity,
+            review.Revision, [proposal.ProposalId], Review: review, Proposal: selected,
+            SelectedFields: [MetadataPatchField.Title.ToCode()], SelectedImages: new Dictionary<string, string?>()), false, CancellationToken.None);
+
+        var applied = Assert.Single(writer.Applied).Proposal;
+        Assert.Empty(applied.Patch.ExternalIds);
+        Assert.Empty(applied.Patch.RetiredExternalIds);
+    }
+
+    [Fact]
+    public async Task ReviewedCommitRejectsClientInjectedIdentityRetirement() {
+        var identity = new ExternalIdentity("tmdb", "Movie:603");
+        var reviewedProposal = Node(
+            "movie:603",
+            "cinema-metadata",
+            EntityKind.Movie,
+            "The Matrix",
+            identity);
+        var review = Review(
+            "cinema-metadata",
+            RequestMediaKind.Movie,
+            identity,
+            reviewedProposal,
+            [Target(reviewedProposal, RequestMediaKind.Movie, identity)]);
+        var injected = reviewedProposal with {
+            Patch = reviewedProposal.Patch with {
+                RetiredExternalIds = [new("tmdb", "Movie:1")]
+            }
+        };
+        var reviews = new FakeReviewSource(_ => throw new InvalidOperationException("Provider review must not run."));
+        var (service, writer, _, _, _) = ReviewedService(reviewedProposal, reviews);
+
+        await Assert.ThrowsAsync<RequestCommitValidationException>(() => service.CommitReviewedAsync(
+            new ReviewedRequestCommitRequest(
+                RequestMediaKind.Movie,
+                review.PluginId,
+                identity,
+                review.Revision,
+                [reviewedProposal.ProposalId],
+                Review: review,
+                Proposal: injected,
+                SelectedFields: [MetadataPatchField.ExternalIds.ToCode()],
+                SelectedImages: new Dictionary<string, string?>()),
+            hideNsfw: false,
+            CancellationToken.None));
+
+        Assert.Empty(writer.Applied);
     }
 
     [Fact]
