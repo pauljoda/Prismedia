@@ -10,6 +10,7 @@ using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 using Prismedia.Infrastructure.Serialization;
 using Prismedia.Infrastructure.StashCompat;
+using Prismedia.Infrastructure.Security;
 
 namespace Prismedia.Infrastructure.Plugins;
 
@@ -54,9 +55,12 @@ public sealed partial class PluginCatalogService : IPluginCatalogService {
     private readonly PluginCatalogOptions _options;
     private readonly HttpClient _http;
     private readonly PluginIndexCache _indexCache;
+    private readonly ProviderCredentialStore _credentials;
 
+    /// <summary>Uses the shared protected credential store independently of transient plugin caches.</summary>
     public PluginCatalogService(
-        PrismediaDbContext db, PluginCatalogOptions options, HttpClient? http = null, PluginIndexCache? indexCache = null) {
+        ProviderCredentialStore credentials, PrismediaDbContext db, PluginCatalogOptions options, HttpClient? http = null, PluginIndexCache? indexCache = null) {
+        _credentials = credentials;
         _db = db;
         _options = options;
         // A bounded timeout: the remote index and artifact downloads ride this client, and a hung
@@ -273,8 +277,7 @@ public sealed partial class PluginCatalogService : IPluginCatalogService {
                 _db.ProviderCredentials.Add(credential);
             }
 
-            credential.EncryptedValue = value;
-            credential.UpdatedAt = now;
+            _credentials.SetValue(credential, value, now);
         }
 
         config.UpdatedAt = now;
@@ -291,19 +294,13 @@ public sealed partial class PluginCatalogService : IPluginCatalogService {
         var config = await _db.ProviderConfigs
             .AsNoTracking()
             .FirstOrDefaultAsync(row => row.ProviderCode == manifest.Id && row.Enabled, cancellationToken);
+        var environment = manifest.Auth.Select(field => (field.Key, Value: PluginCredentialResolver.ResolveEnvironmentCredential(manifest.Id, field.Key)))
+            .Where(field => !string.IsNullOrWhiteSpace(field.Value)).ToDictionary(field => field.Key, field => field.Value!, StringComparer.Ordinal);
         var stored = config is null
             ? new Dictionary<string, string>(StringComparer.Ordinal)
-            : await _db.ProviderCredentials
-                .AsNoTracking()
-                .Where(row => row.ProviderConfigId == config.Id)
-                .ToDictionaryAsync(row => row.CredentialKey, row => row.EncryptedValue, StringComparer.Ordinal, cancellationToken);
+            : await _credentials.ReadAsync(config.Id, manifest.Auth.Select(field => field.Key).Where(key => !environment.ContainsKey(key)).ToArray(), cancellationToken);
 
-        foreach (var field in manifest.Auth) {
-            var value = PluginCredentialResolver.ResolveEnvironmentCredential(manifest.Id, field.Key);
-            if (!string.IsNullOrWhiteSpace(value)) {
-                stored[field.Key] = value;
-            }
-        }
+        foreach (var (key, value) in environment) stored[key] = value;
 
         return stored;
     }

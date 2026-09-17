@@ -24,7 +24,7 @@ public sealed class IntegrationGatewayTests : IDisposable {
         var executor = new ProbeExecutor(wrongInvocation, wrongVersion);
         await using var db = CreateContext();
         var options = new PluginCatalogOptions([], _root, "3.8.0");
-        var gateway = new IntegrationPluginGateway(db, new PluginCatalogService(db, options), new PluginProcessTransport(executor, options));
+        var gateway = new IntegrationPluginGateway(db, new PluginCatalogService(ProviderCredentialTestStore.Create(db), db, options), new PluginProcessTransport(executor, options));
         var call = () => gateway.InvokeAsync<ConnectionProbeInput, ConnectionProbeResult>(Descriptor(), IntegrationOperation.Probe,
             new(Guid.NewGuid(), "http://catalog.test", null, new Dictionary<string, string>(), new Dictionary<string, string> { [CredentialKey] = Credential }),
             new(), CancellationToken.None);
@@ -39,7 +39,7 @@ public sealed class IntegrationGatewayTests : IDisposable {
         var executor = new ProbeExecutor(false, false, fail: true);
         await using var db = CreateContext();
         var options = new PluginCatalogOptions([], _root, "3.8.0");
-        var gateway = new IntegrationPluginGateway(db, new PluginCatalogService(db, options), new PluginProcessTransport(executor, options));
+        var gateway = new IntegrationPluginGateway(db, new PluginCatalogService(ProviderCredentialTestStore.Create(db), db, options), new PluginProcessTransport(executor, options));
         var error = await Assert.ThrowsAsync<IntegrationInvocationException>(() => gateway.InvokeAsync<ConnectionProbeInput, ConnectionProbeResult>(
             Descriptor(), IntegrationOperation.Probe, new(Guid.NewGuid(), "http://catalog.test", null, new Dictionary<string, string>(),
                 new Dictionary<string, string> { [CredentialKey] = Credential }), new(), CancellationToken.None));

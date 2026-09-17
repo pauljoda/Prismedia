@@ -690,7 +690,7 @@ public sealed class StashCompatTests {
         await File.WriteAllTextAsync(Path.Combine(root, "Test Site.yml"), SampleYaml);
         try {
             await using var db = CreateContext();
-            var catalog = new PluginCatalogService(db, new PluginCatalogOptions([root], root, "1.0.0"));
+            var catalog = new PluginCatalogService(ProviderCredentialTestStore.Create(db), db, new PluginCatalogOptions([root], root, "1.0.0"));
 
             var providers = await catalog.ListProvidersAsync(CancellationToken.None);
             var provider = Assert.Single(providers, candidate => candidate.Id == "stash-test-site");
@@ -773,7 +773,7 @@ public sealed class StashCompatTests {
             await using var db = CreateContext();
             var options = new PluginCatalogOptions([], cacheRoot, "1.0.0", null, indexUrl);
             var http = new HttpClient(new IndexAndArchiveHandler(indexUrl, indexYaml, archives));
-            var catalog = new PluginCatalogService(db, options, http);
+            var catalog = new PluginCatalogService(ProviderCredentialTestStore.Create(db), db, options, http);
 
             var available = await catalog.ListStashScrapersAsync(CancellationToken.None);
             Assert.Contains(available, entry => entry.ProviderId == "stash-testsite");

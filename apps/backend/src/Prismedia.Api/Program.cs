@@ -178,6 +178,7 @@ if (File.Exists(staticIndexPath)) {
 
 await DatabaseRestoreRunner.ApplyPendingRestoreAsync(app.Services, app.Configuration);
 await PrismediaMigrationRunner.ApplyPrismediaMigrationsAsync(app.Services, app.Configuration);
+await ProviderCredentialUpgradeRunner.UpgradeAsync(app.Services, app.Configuration);
 await UserBootstrapRunner.RunUserBootstrapAsync(app.Services, app.Configuration);
 
 app.Run();

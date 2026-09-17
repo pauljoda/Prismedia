@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Saved metadata plugin and OpenSubtitles credentials are encrypted with persistent application keys. Existing credentials upgrade automatically, and plugins receive only their declared credential fields.
+
 - Movie discovery reviews can choose a connected acquisition manager, save the selected metadata as a wanted item, and review external fulfillment settings without starting a native download.
 
 - Wanted movies can delegate fulfillment to a Radarr connection with a reviewed profile, library, monitoring choice, and optional search. Durable requests recover uncertain creation responses and attach verified local files to the original item without losing its identity or history.

@@ -174,12 +174,15 @@ remote polling returns the worker slot to the durable queue between snapshots.
 Connection credentials use ASP.NET Core Data Protection with a key ring in
 `/data/keys/connections` (under the configured data directory). API and worker share
 that directory. Each encrypted value is bound to its connection and credential key.
+Metadata plugin and OpenSubtitles credentials share this key ring under a separate
+provider-specific purpose. Existing unencrypted provider rows are upgraded at startup;
+concurrent credential changes take precedence over that upgrade.
 The Unix key directory is owner-only. Filesystem keys rely on those permissions;
 this does not protect against access as the Prismedia operating-system user.
 
 Back up the persistent data volume, including this key directory. A database-only
 backup does not contain the keys. On another installation, restore both the database
-and key directory, or re-enter connection credentials. There is no plaintext fallback
+and key directory, or re-enter connection and provider credentials. There is no plaintext fallback
 when a key is missing. See Microsoft's
 [Data Protection configuration guidance](https://learn.microsoft.com/en-us/aspnet/core/security/data-protection/configuration/overview?view=aspnetcore-10.0).
 

@@ -234,7 +234,7 @@ public static class PrismediaMigrationRunner {
         services.GetService<ILoggerFactory>()?.CreateLogger("Prismedia.Migrations")
         ?? NullLogger.Instance;
 
-    private static bool ShouldApply(IConfiguration configuration) {
+    internal static bool ShouldApply(IConfiguration configuration) {
         if (AppDomain.CurrentDomain
             .GetAssemblies()
             .Any(assembly => assembly.GetName().Name == "Microsoft.AspNetCore.Mvc.Testing")) {

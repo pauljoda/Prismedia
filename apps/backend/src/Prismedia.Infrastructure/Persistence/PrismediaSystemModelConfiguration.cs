@@ -185,6 +185,7 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.ProviderConfigId).HasColumnName("provider_config_id");
             entity.Property(row => row.CredentialKey).HasColumnName("credential_key").HasMaxLength(128).IsRequired();
             entity.Property(row => row.EncryptedValue).HasColumnName("encrypted_value").IsRequired();
+            entity.Property(row => row.ProtectionVersion).HasColumnName("protection_version").HasDefaultValue(Security.ProviderCredentialProtector.LegacyVersion);
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
             entity.HasIndex(row => new { row.ProviderConfigId, row.CredentialKey }).IsUnique();

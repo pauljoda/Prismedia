@@ -96,6 +96,8 @@ public sealed class ProviderCredentialRow {
     public Guid ProviderConfigId { get; set; }
     public string CredentialKey { get; set; } = string.Empty;
     public string EncryptedValue { get; set; } = string.Empty;
+    /// <summary>Explicit storage format version; zero marks legacy plaintext awaiting automatic protection.</summary>
+    public int ProtectionVersion { get; set; }
     public DateTimeOffset CreatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }

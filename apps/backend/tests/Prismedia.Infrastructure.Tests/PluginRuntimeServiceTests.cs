@@ -64,7 +64,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             """{ "manifestVersion": 1, "apiTags": ["other"], "id": "old", "name": "Old", "version": "1.0.0", "runtime": "typescript" }""");
 
         await using var db = CreateContext();
-        var catalog = new PluginCatalogService(db, new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0"));
+        var catalog = new PluginCatalogService(ProviderCredentialTestStore.Create(db), db, new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0"));
 
         var providers = await catalog.ListProvidersAsync(CancellationToken.None);
 
@@ -125,7 +125,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             UpdatedAt = now
         });
         await db.SaveChangesAsync();
-        var catalog = new PluginCatalogService(db, new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0"));
+        var catalog = new PluginCatalogService(ProviderCredentialTestStore.Create(db), db, new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0"));
 
         var provider = Assert.Single(await catalog.ListProvidersAsync(CancellationToken.None));
         var auth = await catalog.GetAuthAsync((await catalog.FindProviderAsync("tmdb", "video", CancellationToken.None))!.Manifest, CancellationToken.None);
@@ -133,6 +133,14 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         Assert.True(provider.Installed);
         Assert.Empty(provider.MissingAuthKeys);
         Assert.Equal("stored-secret", auth["apiKey"]);
+        Assert.NotEqual("stored-secret", (await db.ProviderCredentials.AsNoTracking().SingleAsync()).EncryptedValue);
+        Assert.True(await catalog.SaveAuthAsync("tmdb", new Dictionary<string, string?> { ["apiKey"] = "updated-secret" }, default));
+        Assert.NotEqual("updated-secret", (await db.ProviderCredentials.AsNoTracking().SingleAsync()).EncryptedValue);
+        var updated = await catalog.GetAuthAsync((await catalog.FindProviderAsync("tmdb", "video", default))!.Manifest, default);
+        Assert.Equal("updated-secret", updated["apiKey"]);
+        Assert.True(await catalog.SaveAuthAsync("tmdb", new Dictionary<string, string?> { ["apiKey"] = "" }, default));
+        Assert.Empty(await db.ProviderCredentials.ToArrayAsync());
+        Assert.Empty(await catalog.GetAuthAsync((await catalog.FindProviderAsync("tmdb", "video", default))!.Manifest, default));
     }
 
     [Fact]
@@ -194,7 +202,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             ["https://plugins.example.test/plugins/tmdb.zip"] = archive
         });
         await using var db = CreateContext();
-        var catalog = new PluginCatalogService(
+        var catalog = new PluginCatalogService(ProviderCredentialTestStore.Create(db),
             db,
             new PluginCatalogOptions([], _tempRoot, "1.0.0", "https://plugins.example.test/index.json"),
             new HttpClient(handler));
@@ -307,7 +315,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             UpdatedAt = DateTimeOffset.UtcNow
         });
         await db.SaveChangesAsync();
-        var catalog = new PluginCatalogService(
+        var catalog = new PluginCatalogService(ProviderCredentialTestStore.Create(db),
             db,
             new PluginCatalogOptions([], _tempRoot, "1.0.0", "https://plugins.example.test/index.json"),
             new HttpClient(handler));
@@ -397,7 +405,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
                 System.Text.Encoding.UTF8.GetBytes(index)
         });
         await using var db = CreateContext();
-        var catalog = new PluginCatalogService(
+        var catalog = new PluginCatalogService(ProviderCredentialTestStore.Create(db),
             db,
             new PluginCatalogOptions(
                 [],
@@ -447,7 +455,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
             }
             """);
         await using var db = CreateContext();
-        var catalog = new PluginCatalogService(
+        var catalog = new PluginCatalogService(ProviderCredentialTestStore.Create(db),
             db,
             new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0", "https://plugins.example.test/index.yml"),
             new HttpClient(new ThrowingHttpMessageHandler(new NullReferenceException("simulated internal transport failure"))));
@@ -1394,7 +1402,7 @@ public sealed class PluginRuntimeServiceTests : IDisposable {
         string pluginDir) =>
         new(
             db,
-            new PluginCatalogService(db, new PluginCatalogOptions([pluginDir], _tempRoot, "1.0.0")),
+            new PluginCatalogService(ProviderCredentialTestStore.Create(db), db, new PluginCatalogOptions([pluginDir], _tempRoot, "1.0.0")),
             new IdentifyMatchHintResolver(db),
             new IdentifyRunnerSelector([new DotnetPluginProcessRunner(executor, new PluginCatalogOptions([], _tempRoot, "1.0.0"))]),
             new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(_tempRoot)),

@@ -32,7 +32,7 @@ public sealed class PluginManifestV2CatalogTests : IDisposable {
             }
             """);
         await using var db = CreateContext();
-        var catalog = new PluginCatalogService(db, new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0"));
+        var catalog = new PluginCatalogService(ProviderCredentialTestStore.Create(db), db, new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0"));
 
         var descriptor = await catalog.FindProviderAsync(
             "musicbrainz",
@@ -65,7 +65,7 @@ public sealed class PluginManifestV2CatalogTests : IDisposable {
             }
             """);
         await using var db = CreateContext();
-        var catalog = new PluginCatalogService(db, new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0"));
+        var catalog = new PluginCatalogService(ProviderCredentialTestStore.Create(db), db, new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0"));
 
         Assert.Empty(await catalog.ListProvidersAsync(CancellationToken.None));
     }
@@ -96,7 +96,7 @@ public sealed class PluginManifestV2CatalogTests : IDisposable {
             }
             """);
         await using var db = CreateContext();
-        var catalog = new PluginCatalogService(db, new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0"));
+        var catalog = new PluginCatalogService(ProviderCredentialTestStore.Create(db), db, new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0"));
 
         var provider = Assert.Single(await catalog.ListProvidersAsync(CancellationToken.None));
         var support = Assert.Single(provider.Supports);
@@ -152,7 +152,7 @@ public sealed class PluginManifestV2CatalogTests : IDisposable {
             }
             """);
         await using var db = CreateContext();
-        var catalog = new PluginCatalogService(db, new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0"));
+        var catalog = new PluginCatalogService(ProviderCredentialTestStore.Create(db), db, new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0"));
 
         var provider = Assert.Single(await catalog.ListProvidersAsync(CancellationToken.None));
         var support = Assert.Single(provider.Supports);
@@ -207,7 +207,7 @@ public sealed class PluginManifestV2CatalogTests : IDisposable {
             }
             """);
         await using var db = CreateContext();
-        var catalog = new PluginCatalogService(db, new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0"));
+        var catalog = new PluginCatalogService(ProviderCredentialTestStore.Create(db), db, new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0"));
 
         Assert.Empty(await catalog.ListProvidersAsync(CancellationToken.None));
     }
@@ -243,7 +243,7 @@ public sealed class PluginManifestV2CatalogTests : IDisposable {
             }
             """);
         await using var db = CreateContext();
-        var catalog = new PluginCatalogService(db, new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0"));
+        var catalog = new PluginCatalogService(ProviderCredentialTestStore.Create(db), db, new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0"));
 
         Assert.Empty(await catalog.ListProvidersAsync(CancellationToken.None));
     }
@@ -262,7 +262,7 @@ public sealed class PluginManifestV2CatalogTests : IDisposable {
         }
         """;
         await using var db = CreateContext();
-        var catalog = new PluginCatalogService(
+        var catalog = new PluginCatalogService(ProviderCredentialTestStore.Create(db),
             db,
             new PluginCatalogOptions([], _tempRoot, "1.0.0", "https://plugins.example.test/index.json"),
             new HttpClient(new StaticIndexHandler(index)));

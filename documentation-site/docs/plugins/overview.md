@@ -63,6 +63,19 @@ supplied credentials and are limited to 4,096 characters. These protections redu
 accidental exposure and resource use; only install executable packages you trust.
 Stash-compatible scrapers use their separate compatibility runner.
 
+### Saved credentials
+
+Metadata plugin credentials and native OpenSubtitles credentials are encrypted with
+the persistent application key ring. Startup upgrades legacy stored values automatically,
+including disabled providers. Plugins receive only credential keys declared by their
+current manifest. Canonical environment variables override saved values without replacing
+them in storage.
+
+Back up the data directory and its `keys/connections` folder along with the database.
+Restoring a database without these keys requires entering saved credentials again;
+unreadable encrypted values are never treated as plaintext. See
+[credential storage and recovery](./connections.md#credential-storage-and-recovery).
+
 ## Connected applications
 
 Packages may also declare separately versioned integration capabilities. Configure

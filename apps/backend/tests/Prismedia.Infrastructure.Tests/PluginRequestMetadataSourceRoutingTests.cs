@@ -888,7 +888,7 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
     }
 
     private PluginCatalogService Catalog(PrismediaDbContext db) =>
-        new(db, new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0"));
+        new(ProviderCredentialTestStore.Create(db), db, new PluginCatalogOptions([_tempRoot], _tempRoot, "1.0.0"));
 
     public void Dispose() {
         if (Directory.Exists(_tempRoot)) {

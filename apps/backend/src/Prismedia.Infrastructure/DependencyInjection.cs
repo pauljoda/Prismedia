@@ -91,6 +91,8 @@ public static class DependencyInjection {
         RegisterMediaProcessing(services, mediaToolOptions, dataDir, cacheDir);
         RegisterPluginsAndIdentify(services, configuration, pathBase, cacheDir);
         services.AddSingleton(new ConnectionSecretProtector(dataDir));
+        services.AddSingleton(new ProviderCredentialProtector(dataDir));
+        services.AddScoped<ProviderCredentialStore>();
         services.AddSingleton<PluginProcessTransport>();
         services.AddScoped<IIntegrationConnectionStore, EfIntegrationConnectionStore>();
         services.AddScoped<IntegrationPluginGateway>();
@@ -220,6 +222,7 @@ public static class DependencyInjection {
         services.AddSingleton<IdentifyRunnerSelector>();
         services.AddSingleton<PluginIndexCache>();
         services.AddScoped(provider => new PluginCatalogService(
+            provider.GetRequiredService<ProviderCredentialStore>(),
             provider.GetRequiredService<PrismediaDbContext>(),
             provider.GetRequiredService<PluginCatalogOptions>(),
             indexCache: provider.GetRequiredService<PluginIndexCache>()));

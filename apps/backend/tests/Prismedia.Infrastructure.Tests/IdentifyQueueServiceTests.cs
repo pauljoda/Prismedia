@@ -1851,7 +1851,7 @@ public sealed class IdentifyQueueServiceTests : IDisposable {
         WriteManifest(tempRoot);
         return new IdentifyPluginService(
             db,
-            new PluginCatalogService(db, new PluginCatalogOptions([tempRoot], tempRoot, "1.0.0")),
+            new PluginCatalogService(ProviderCredentialTestStore.Create(db), db, new PluginCatalogOptions([tempRoot], tempRoot, "1.0.0")),
             new IdentifyMatchHintResolver(db),
             new IdentifyRunnerSelector([new DotnetPluginProcessRunner(executor, new PluginCatalogOptions([], tempRoot, "1.0.0"))]),
             new EntityMetadataApplyService(db, new PluginArtworkServiceOptions(tempRoot)),

@@ -19,7 +19,7 @@ public sealed class IntegrationManifestTests : IDisposable {
         await File.WriteAllTextAsync(Path.Combine(_root, "manifest.json"), ManifestJson);
         await using var db = new PrismediaDbContext(new DbContextOptionsBuilder<PrismediaDbContext>()
             .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
-        var catalog = new PluginCatalogService(db, new PluginCatalogOptions([_root], _root, "3.8.0"), new HttpClient(new EmptyIndexHandler()));
+        var catalog = new PluginCatalogService(ProviderCredentialTestStore.Create(db), db, new PluginCatalogOptions([_root], _root, "3.8.0"), new HttpClient(new EmptyIndexHandler()));
 
         var provider = Assert.Single(await catalog.ListProvidersAsync(CancellationToken.None));
 
