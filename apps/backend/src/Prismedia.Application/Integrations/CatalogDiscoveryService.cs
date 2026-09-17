@@ -45,6 +45,7 @@ public sealed class CatalogDiscoveryService(IntegrationConnectionAccess access, 
             || resolved.Offer.Access != AcquisitionAccessKind.Download || resolved.Delivery is null)
             throw new IntegrationInvocationException("The source did not resolve the selected full-content offer.");
         Validate(new("Resolved publication", [new(selection, false, resolved.Publication, [resolved.Offer])]), new(selection.EntityKind, Limit: 1));
+        _ = IntegrationDeliveryOriginPolicy.RequireAllowedOrigin(authorized.Manifest.Integration, authorized.Context.BaseUrl, resolved.Delivery);
         return resolved;
     }
 

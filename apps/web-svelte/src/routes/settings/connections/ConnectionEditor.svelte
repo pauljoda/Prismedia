@@ -72,6 +72,17 @@
         {/each}
       </Field.Group>
     </Field.Set>
+    {#if plugin?.integration?.anonymousArtifactOrigins?.length}
+      <Field.Set>
+        <Field.Legend>Additional download hosts</Field.Legend>
+        <Field.Description>Downloads from these hosts use no authentication headers or cookies. The installed plugin declares this list.</Field.Description>
+        <ul class="text-sm text-muted-foreground break-all">
+          {#each plugin.integration.anonymousArtifactOrigins as origin (origin)}
+            <li>{origin}</li>
+          {/each}
+        </ul>
+      </Field.Set>
+    {/if}
     {#each plugin?.integration?.settings ?? [] as field (field.key)}
       <TextField label={field.label} value={settings[field.key] ?? ""} onChange={value => settings = { ...settings, [field.key]: value }}
         required={field.required} disabled={saving} placeholder={field.placeholder ?? undefined} helper={field.help ?? undefined}

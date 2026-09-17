@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Catalog plugins can declare separate HTTPS file hosts for anonymous downloads. Connections disclose those hosts, and imports recheck current permissions without forwarding authentication headers or cookies.
+
 - Kapowarr connections can browse existing comic runs, inspect exact issue labels and combined-file associations, and map read-only comic libraries. Local readability remains a separate check; comic acquisition controls are not yet offered.
 
 - URL executors can import complete ordered image galleries, with bounded image validation, atomic folder placement, stable gallery and image identities, and recoverable import receipts. Explicit galleries remain galleries even when they contain one image.

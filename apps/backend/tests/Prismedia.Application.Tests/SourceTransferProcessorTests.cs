@@ -3,12 +3,32 @@ using Prismedia.Application.Integrations;
 using Prismedia.Application.Jobs;
 using Prismedia.Application.Jobs.Handlers.Scan;
 using Prismedia.Application.Jobs.Ports;
+using Prismedia.Contracts.Integrations;
+using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
 using Prismedia.Domain.Integrations;
 
 namespace Prismedia.Application.Tests;
 
 public sealed class SourceTransferProcessorTests {
+    [Fact]
+    public async Task DeclaredForeignDownloadIsPassedToTransportWithoutHeaders() {
+        var fixture = new Fixture(pendingDownload: true);
+        await fixture.RunAsync();
+        Assert.Equal(IntegrationTransferPhase.Completed, fixture.State.Phase);
+        Assert.Equal("https://files.test", fixture.Download!.AllowedOrigin);
+        Assert.Empty(fixture.Download.Delivery.Headers);
+    }
+
+    [Fact]
+    public async Task RemovingOriginDuringResolutionBlocksWorkerBeforeByteRetrieval() {
+        var fixture = new Fixture(pendingDownload: true) { RemoveOriginAfterResolve = true };
+        await Assert.ThrowsAsync<IntegrationInvocationException>(() => fixture.RunAsync());
+        Assert.Null(fixture.Download);
+        Assert.Equal(0, fixture.Placements);
+        Assert.Equal(IntegrationTransferPhase.Transferring, fixture.State.Phase);
+    }
+
     [Fact]
     public async Task RestartAfterCommittedMaterializationUsesLocalBytesAndKeepsExactEntityReceipt() {
         var fixture = new Fixture { FailCompletionSaveOnce = true };
@@ -46,11 +66,22 @@ public sealed class SourceTransferProcessorTests {
         internal int Materializations { get; private set; }
         internal int Placements { get; private set; }
         internal string? Error { get; private set; }
+        internal bool RemoveOriginAfterResolve { get; set; }
+        internal IntegrationArtifactTransferRequest? Download { get; private set; }
+        private readonly bool pendingDownload;
+        private readonly IntegrationConnection connection;
+        private PluginManifest manifest;
         private readonly LibraryRootData root = new(Guid.NewGuid(), Path.GetTempPath(), "Library", true, false, false, false, false, true, false, false);
         private readonly IntegrationTransferPlan plan;
-        internal Fixture() {
-            var transfer = IntegrationTransfer.CreateSourceDownload(Guid.NewGuid(), Guid.NewGuid());
-            transfer.AcceptSourceArtifact(new("artifact", "publication", "book.epub", "application/epub+zip", 100, Hash, IntegrationArtifactRole.Content));
+        internal Fixture(bool pendingDownload = false) {
+            this.pendingDownload = pendingDownload;
+            var supports = new IntegrationSupport[] { new(PluginCapability.AcquisitionSource, [IntegrationOperation.Resolve], [EntityKind.Book]) };
+            connection = IntegrationConnection.Create("test-catalog", "Catalog", "https://catalog.test", true, [PluginCapability.AcquisitionSource], new Dictionary<string, string>());
+            connection.RecordProbe(null, supports, null, DateTimeOffset.UtcNow, false);
+            manifest = new(2, [], "test-catalog", "Catalog", "1.0.0", "dotnet-process", "plugin.dll", new("2.0.0", null, "3.8.0", null), [], false, [],
+                Integration: new(1, supports.Select(item => new PluginIntegrationCapability(item.Kind, item.Operations, item.EntityKinds)).ToArray(), [], ["https://files.test"]));
+            var transfer = IntegrationTransfer.CreateSourceDownload(Guid.NewGuid(), connection.State.Id);
+            if (!pendingDownload) transfer.AcceptSourceArtifact(new("artifact", "publication", "book.epub", "application/epub+zip", 100, Hash, IntegrationArtifactRole.Content));
             State = transfer.State;
             plan = new("Publication", EntityKind.Book, root.Id, root.Path, "owner", Hash, new(new("publication", "unreachable-source", EntityKind.Book), "artifact"));
         }
@@ -65,8 +96,30 @@ public sealed class SourceTransferProcessorTests {
                 _ => throw new NotSupportedException(method)
             };
             // Discovery/access are intentionally unavailable: recovery from Importing cannot depend on either.
-            var processor = new SourceTransferProcessor(this, null!, null!, this, this, this, roots, this);
+            var access = pendingDownload ? CreateAccess() : null;
+            var gateway = DispatchProxy.Create<IIntegrationDiscoveryGateway, Boundary>();
+            ((Boundary)(object)gateway).Call = (_, _) => {
+                if (RemoveOriginAfterResolve) manifest = manifest with { Integration = manifest.Integration! with { AnonymousArtifactOrigins = [] } };
+                return Task.FromResult(new ResolvedSourceOffer(plan.Source!.Selection, plan.Source.OfferId,
+                    new("Book", null, [], new Dictionary<string, string>()), new(plan.Source.OfferId, "Download", AcquisitionAccessKind.Download),
+                    new("https://files.test/book.epub", new Dictionary<string, string>(), "book.epub", 100, Hash)));
+            };
+            var discovery = pendingDownload ? new CatalogDiscoveryService(access!, gateway, null!) : null;
+            var processor = new SourceTransferProcessor(this, discovery!, access!, this, this, this, roots, this);
             return processor.ProcessAsync(State.OperationId, new(Job, queue), default);
+        }
+
+        private IntegrationConnectionAccess CreateAccess() {
+            var connections = DispatchProxy.Create<IIntegrationConnectionStore, Boundary>();
+            ((Boundary)(object)connections).Call = (method, _) => method switch {
+                nameof(IIntegrationConnectionStore.FindAsync) => Task.FromResult<StoredIntegrationConnection?>(new(connection, [])),
+                nameof(IIntegrationConnectionStore.ReadSecretsAsync) => Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>()),
+                _ => throw new NotSupportedException(method)
+            };
+            var plugins = DispatchProxy.Create<IIntegrationPluginGateway, Boundary>();
+            ((Boundary)(object)plugins).Call = (method, _) => method == nameof(IIntegrationPluginGateway.FindAsync)
+                ? Task.FromResult<PluginManifest?>(manifest) : throw new NotSupportedException(method);
+            return new(connections, plugins);
         }
         private JobRunSnapshot Job => new(Guid.NewGuid(), JobType.IntegrationTransfer, JobRunStatus.Running, 0, null, "{}",
             JobTargetKinds.IntegrationTransfer, State.OperationId.ToString(), "Publication", DateTimeOffset.UtcNow, null, null);
@@ -91,7 +144,11 @@ public sealed class SourceTransferProcessorTests {
             Materializations++;
             return Task.FromResult(new ImportedEntityMaterializationResult([new(EntityId, EntityKind.Book)], [], request.PlacedMediaPaths, [], []));
         }
-        public Task<VerifiedIntegrationArtifact> TransferAsync(IntegrationArtifactTransferRequest request, CancellationToken cancellationToken) => throw new InvalidOperationException("Recovery attempted a remote download");
+        public Task<VerifiedIntegrationArtifact> TransferAsync(IntegrationArtifactTransferRequest request, CancellationToken cancellationToken) {
+            if (!pendingDownload) throw new InvalidOperationException("Recovery attempted a remote download");
+            Download = request;
+            return Task.FromResult(new VerifiedIntegrationArtifact(request.ArtifactId, Path.Combine(root.Path, "staged.epub"), 100, Hash, request.Delivery.SuggestedFileName));
+        }
         public Task<IReadOnlyList<StoredIntegrationTransfer>> ListAsync(int limit, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<StoredIntegrationTransfer> CreateAsync(IntegrationTransfer transfer, IntegrationTransferPlan intent, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task EnqueueRetryAsync(Guid operationId, CancellationToken cancellationToken) => throw new NotSupportedException();

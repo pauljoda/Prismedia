@@ -12,4 +12,6 @@ export interface PluginIntegrationDefinition {
   protocolVersion: number | string;
   capabilities: PluginIntegrationCapability[];
   settings: PluginSearchField[];
+  /** @nullable */
+  anonymousArtifactOrigins?: string[] | null;
 }

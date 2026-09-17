@@ -3,11 +3,34 @@ using System.Net.Http.Headers;
 using System.Security.Cryptography;
 using Prismedia.Application.Integrations;
 using Prismedia.Contracts.Integrations;
+using Prismedia.Contracts.Plugins;
+using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Integrations;
 
 namespace Prismedia.Infrastructure.Tests;
 
 public sealed class IntegrationArtifactTransferTests : IDisposable {
+    [Fact]
+    public async Task AnonymousDownloadDoesNotFollowRedirectEvenToAnotherDeclaredOrigin() {
+        var declaration = new PluginIntegrationDefinition(1,
+            [new(PluginCapability.AcquisitionSource, [IntegrationOperation.Resolve], [EntityKind.Book])], [],
+            ["https://first.test", "https://second.test"]);
+        var delivery = Request.Delivery with { Url = "https://first.test/book.epub", Headers = new Dictionary<string, string>() };
+        var origin = IntegrationDeliveryOriginPolicy.RequireAllowedOrigin(declaration, "https://catalog.test", delivery);
+        var calls = 0;
+        using var client = new HttpClient(new Handler(request => {
+            calls++;
+            Assert.Null(request.Headers.Authorization);
+            Assert.False(request.Headers.Contains("Cookie"));
+            var response = new HttpResponseMessage(HttpStatusCode.Redirect);
+            response.Headers.Location = new Uri("https://second.test/book.epub");
+            return response;
+        }));
+        await Assert.ThrowsAsync<InvalidDataException>(() => new HttpIntegrationArtifactTransfer(new(root), client)
+            .TransferAsync(Request with { AllowedOrigin = origin, Delivery = delivery }, default));
+        Assert.Equal(1, calls);
+    }
+
     private readonly string root = Path.Combine(Path.GetTempPath(), "prismedia-artifacts-" + Guid.NewGuid().ToString("N"));
     private static readonly byte[] Bytes = "verified publication bytes"u8.ToArray();
     private static string Hash => Convert.ToHexStringLower(SHA256.HashData(Bytes));

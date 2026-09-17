@@ -8,6 +8,39 @@ using Prismedia.Infrastructure.Serialization;
 namespace Prismedia.Infrastructure.Tests;
 
 public sealed class IntegrationManifestTests : IDisposable {
+    [Theory]
+    [InlineData("[\"http://files.test\"]")]
+    [InlineData("[\"https://files.test/path\"]")]
+    [InlineData("[\"https://user@files.test\"]")]
+    [InlineData("[\"https://files.test?query\"]")]
+    [InlineData("[\"https://files.test#fragment\"]")]
+    [InlineData("[\"https://files.test?\"]")]
+    [InlineData("[\" https://files.test\"]")]
+    [InlineData("[\"https://files.test/..\"]")]
+    [InlineData("[\"https:files.test\"]")]
+    [InlineData("[null]")]
+    [InlineData("[\"https://files.test\",\"https://FILES.test:443/\"]")]
+    public void InvalidAnonymousArtifactOriginsAreRejected(string origins) {
+        var json = ManifestJson.Replace("catalog-discovery", "acquisition-source").Replace("search", "resolve")
+            .Replace("\"settings\": []", "\"settings\": [], \"anonymousArtifactOrigins\": " + origins);
+        var manifest = JsonSerializer.Deserialize<PluginManifest>(json, Wire)!;
+        Assert.False(PluginCompatibilityResolver.IsCompatible(manifest, new Version(3, 8, 0)));
+    }
+
+    [Fact]
+    public void AnonymousOriginsRoundTripAndRequireAnAcquisitionCapability() {
+        var json = ManifestJson.Replace("\"settings\": []", "\"settings\": [], \"anonymousArtifactOrigins\": [\"https://files.test\"]");
+        Assert.False(PluginCompatibilityResolver.IsCompatible(JsonSerializer.Deserialize<PluginManifest>(json, Wire)!, new Version(3, 8, 0)));
+        json = json.Replace("catalog-discovery", "acquisition-source").Replace("search", "resolve");
+        var manifest = JsonSerializer.Deserialize<PluginManifest>(json, Wire)!;
+        Assert.True(PluginCompatibilityResolver.IsCompatible(manifest, new Version(3, 8, 0)));
+        Assert.Equal("https://files.test", Assert.Single(manifest.Integration!.AnonymousArtifactOrigins!));
+        var index = "[" + json.Replace("\"entry\": \"Fixture.dll\"", "\"path\": \"plugins/fixture.zip\"") + "]";
+        Assert.Equal("https://files.test", Assert.Single(Assert.Single(PluginIndexParser.Parse(index, "index.yml")).Integration!.AnonymousArtifactOrigins!));
+        manifest = manifest with { Integration = manifest.Integration with { AnonymousArtifactOrigins = Enumerable.Range(0, 9).Select(index => $"https://files{index}.test").ToArray() } };
+        Assert.False(PluginCompatibilityResolver.IsCompatible(manifest, new Version(3, 8, 0)));
+    }
+
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"prismedia-integration-manifest-{Guid.NewGuid():N}");
     private static readonly JsonSerializerOptions Wire = new(JsonSerializerDefaults.Web) {
         Converters = { new CodecJsonConverterFactory() }

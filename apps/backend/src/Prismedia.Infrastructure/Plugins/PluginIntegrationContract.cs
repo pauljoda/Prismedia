@@ -1,4 +1,5 @@
 using Prismedia.Contracts.Plugins;
+using Prismedia.Application.Integrations;
 using Prismedia.Domain.Entities;
 using Prismedia.Domain.Integrations;
 
@@ -8,7 +9,8 @@ namespace Prismedia.Infrastructure.Plugins;
 internal static class PluginIntegrationContract {
     internal static bool IsValid(PluginIntegrationDefinition definition) {
         if (definition.ProtocolVersion != IntegrationProtocol.CurrentVersion || definition.Capabilities is not { Count: > 0 and <= 8 }
-            || definition.Settings is null || definition.Settings.Count > 32) return false;
+            || definition.Settings is null || definition.Settings.Count > 32
+            || !IntegrationDeliveryOriginPolicy.HasValidDeclaration(definition)) return false;
         var kinds = new HashSet<PluginCapability>();
         foreach (var capability in definition.Capabilities) {
             if (capability is null || !kinds.Add(capability.Kind) || !Enum.IsDefined(capability.Kind)

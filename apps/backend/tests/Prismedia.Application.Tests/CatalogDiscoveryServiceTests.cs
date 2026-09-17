@@ -8,6 +8,40 @@ namespace Prismedia.Application.Tests;
 
 public sealed class CatalogDiscoveryServiceTests {
     [Fact]
+    public async Task DeclaredAnonymousOriginCanResolveButCannotReceiveHeadersOrSurviveDeclarationRemoval() {
+        var fixture = new Fixture();
+        fixture.Manifest = fixture.Manifest with { Integration = fixture.Manifest.Integration! with {
+            AnonymousArtifactOrigins = ["https://files.test"] } };
+        fixture.Resolved = fixture.Resolved with { Delivery = fixture.Resolved.Delivery with { Url = "https://files.test/book.epub" } };
+        Assert.Equal(fixture.Resolved, await fixture.Service.ResolveAsync(fixture.Connection.State.Id, Fixture.ProtectedSelection, Fixture.OfferId, default));
+        fixture.Resolved = fixture.Resolved with { Delivery = fixture.Resolved.Delivery with { Headers = new Dictionary<string, string> { ["Authorization"] = "Bearer private" } } };
+        await Assert.ThrowsAsync<IntegrationInvocationException>(() => fixture.Service.ResolveAsync(fixture.Connection.State.Id, Fixture.ProtectedSelection, Fixture.OfferId, default));
+        fixture.Resolved = fixture.Resolved with { Delivery = fixture.Resolved.Delivery with { Headers = new Dictionary<string, string>() } };
+        fixture.Manifest = fixture.Manifest with { Integration = fixture.Manifest.Integration! with { AnonymousArtifactOrigins = [] } };
+        await Assert.ThrowsAsync<IntegrationInvocationException>(() => fixture.Service.ResolveAsync(fixture.Connection.State.Id, Fixture.ProtectedSelection, Fixture.OfferId, default));
+    }
+
+    [Fact]
+    public async Task SameOriginPublicationKeepsAuthenticatedDelivery() {
+        var fixture = new Fixture();
+        fixture.Resolved = fixture.Resolved with { Delivery = fixture.Resolved.Delivery with { Headers = new Dictionary<string, string> { ["Authorization"] = "Bearer private" } } };
+        Assert.Equal(fixture.Resolved, await fixture.Service.ResolveAsync(fixture.Connection.State.Id, Fixture.ProtectedSelection, Fixture.OfferId, default));
+    }
+
+    [Theory]
+    [InlineData("https://files.test/book.epub")]
+    [InlineData("http://catalog.test:8080/book.epub")]
+    [InlineData("https://catalog.test/book.epub")]
+    [InlineData("http://user@catalog.test/book.epub")]
+    [InlineData("http://catalog.test/book.epub#fragment")]
+    public async Task ResolveRejectsUndeclaredOrUnsafeDownloadOrigins(string url) {
+        var fixture = new Fixture();
+        fixture.Resolved = fixture.Resolved with { Delivery = fixture.Resolved.Delivery with { Url = url } };
+        await Assert.ThrowsAsync<IntegrationInvocationException>(() => fixture.Service.ResolveAsync(
+            fixture.Connection.State.Id, Fixture.ProtectedSelection, Fixture.OfferId, default));
+    }
+
+    [Fact]
     public async Task DisabledOrChangedPluginCannotReadCredentialsOrInvokeDiscovery() {
         var fixture = new Fixture();
         fixture.PluginAvailable = false;

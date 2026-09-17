@@ -24,12 +24,13 @@ public sealed class SourceTransferProcessor(IIntegrationTransferStore store, Cat
             VerifiedIntegrationArtifact artifact;
             if (transfer.State.Phase == IntegrationTransferPhase.Transferring) {
                 await context.ReportProgressAsync(5, "Resolving selected publication", cancellationToken);
+                var resolved = await discovery.ResolveSelectionAsync(transfer.State.ConnectionId, source.Selection, source.OfferId, cancellationToken);
                 var connection = await access.RequireAsync(transfer.State.ConnectionId, PluginCapability.AcquisitionSource,
                     IntegrationOperation.Resolve, work.Plan.EntityKind, cancellationToken);
-                var resolved = await discovery.ResolveSelectionAsync(transfer.State.ConnectionId, source.Selection, source.OfferId, cancellationToken);
                 if (!IntegrationMediaFormats.IsSupported(work.Plan.EntityKind, resolved.Delivery.SuggestedFileName))
                     throw new InvalidDataException("The selected source changed to an unsupported publication format.");
-                artifact = await bytes.TransferAsync(new(operationId, source.OfferId, connection.Context.BaseUrl,
+                var origin = IntegrationDeliveryOriginPolicy.RequireAllowedOrigin(connection.Manifest.Integration, connection.Context.BaseUrl, resolved.Delivery);
+                artifact = await bytes.TransferAsync(new(operationId, source.OfferId, origin,
                     resolved.Delivery, MaximumPublicationBytes), cancellationToken);
                 await verifier.VerifyAsync(artifact, work.Plan.EntityKind, cancellationToken);
                 transfer.AcceptSourceArtifact(new(artifact.ArtifactId, source.Selection.ItemId, artifact.FileName,

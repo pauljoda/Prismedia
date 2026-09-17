@@ -19,6 +19,14 @@ const connection: ConnectionResponse = {
 };
 
 describe("ConnectionEditor", () => {
+  it("discloses the plugin's additional anonymous download hosts", () => {
+    const catalog = { ...plugin, integration: { ...plugin.integration!, anonymousArtifactOrigins: ["https://files.test"] } };
+    render(ConnectionEditor, { plugins: [catalog], saving: false, error: null, onSave: vi.fn(), onCancel: vi.fn() });
+    expect(screen.getByText("Additional download hosts")).toBeInTheDocument();
+    expect(screen.getByText("https://files.test")).toBeInTheDocument();
+    expect(screen.getByText(/Downloads from these hosts use no authentication headers or cookies/)).toBeInTheDocument();
+  });
+
   it("keeps existing credentials when a saved connection is edited without replacing them", async () => {
     const onSave = vi.fn();
     render(ConnectionEditor, { connection, plugins: [plugin], saving: false, error: null, onSave, onCancel: vi.fn() });

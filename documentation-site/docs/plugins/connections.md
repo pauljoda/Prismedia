@@ -75,6 +75,27 @@ page size. Changing a query requires starting a new page sequence. Plugin respon
 are bounded and validated before reaching the browser. Resolved download addresses
 and authentication headers remain server-only.
 
+### Separate file hosts
+
+An acquisition plugin can declare up to eight `integration.anonymousArtifactOrigins`
+for catalogs whose files live on a separate HTTPS host. Connection settings show
+these additional download hosts. Each declaration is an exact origin, including a
+nondefault port when needed; paths, credentials, query strings, and fragments are
+not allowed. For example:
+
+```json
+"anonymousArtifactOrigins": ["https://files.example.org"]
+```
+
+The host checks the current installed declaration when resolving a selection and
+again before retrieving its bytes. Cross-origin retrieval requires an empty delivery
+header dictionary and sends no cookies. Redirects remain confined to the selected
+origin, even when another origin is also declared. Removing an origin blocks pending
+downloads that still need it; already verified local bytes can finish importing.
+Authenticated same-origin downloads keep their existing behavior. This declaration
+applies only to acquisition sources; executor artifacts remain connection-scoped.
+It does not turn OPDS cross-origin offers into downloads automatically.
+
 ### Suwayomi downloaded chapters
 
 Suwayomi Server's OPDS catalog can expose existing downloaded chapters through the
