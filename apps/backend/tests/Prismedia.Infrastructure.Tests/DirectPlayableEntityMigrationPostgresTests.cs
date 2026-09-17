@@ -86,7 +86,7 @@ public sealed class DirectPlayableEntityMigrationPostgresTests {
             Assert.Equal(fixture.MovieId.ToString(), await ScalarAsync<string>(connection, "SELECT target_entity_id FROM job_runs WHERE id = @id", fixture.JobRunId));
             Assert.Equal(EntityKind.Movie.ToCode(), await ScalarAsync<string>(connection, "SELECT target_entity_kind FROM job_runs WHERE id = @id", fixture.JobRunId));
             Assert.Equal($"{JobType.ScanLibrary.ToCode()}:{fixture.MovieId}", await ScalarAsync<string>(connection, "SELECT node_key FROM job_runs WHERE id = @id", fixture.JobRunId));
-            Assert.Equal(JobResourceKeys.Entity(fixture.MovieId.ToString()), await ScalarAsync<string>(connection, "SELECT resource_key FROM job_runs WHERE id = @id", fixture.JobRunId));
+            Assert.Equal(JobResourceKeys.LibraryScan, await ScalarAsync<string>(connection, "SELECT resource_key FROM job_runs WHERE id = @id", fixture.JobRunId));
             var payload = await ScalarAsync<string>(connection, "SELECT payload_json::text FROM job_runs WHERE id = @id", fixture.JobRunId);
             Assert.Contains(fixture.MovieId.ToString(), payload, StringComparison.Ordinal);
             Assert.Contains($"legacy text {fixture.LegacyMovieVideoId}", payload, StringComparison.Ordinal);

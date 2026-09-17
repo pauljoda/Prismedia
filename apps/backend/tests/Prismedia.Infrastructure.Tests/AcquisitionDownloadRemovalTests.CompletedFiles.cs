@@ -16,7 +16,6 @@ public sealed partial class AcquisitionDownloadRemovalTests {
         await using var db = database.CreateContext();
         var migrations = db.Database.GetMigrations().ToArray();
         var recovery = migrations.Single(name => name.EndsWith("_" + nameof(RequeueCompletedUsenetPayloadCleanup), StringComparison.Ordinal));
-        await database.MigrateAsync(migrations[Array.IndexOf(migrations, recovery) - 1]);
         var (owner, client, transfer) = await SeedAsync(db);
         (await db.DownloadTransfers.FindAsync(transfer))!.ContentPath = "/downloads/completed-item";
         var active = await AddOwnerAsync(db, client, AcquisitionStatus.Downloading, "active-item");
@@ -29,12 +28,17 @@ public sealed partial class AcquisitionDownloadRemovalTests {
         (await db.DownloadTransfers.FindAsync(torrentTransfer))!.ContentPath = "/downloads/torrent-item";
         await db.SaveChangesAsync();
 
+        // Seed with the current model before stepping back: later nullable columns are absent
+        // in the historical schema and cannot be written through today's EF entity mapping.
+        await database.MigrateAsync(migrations[Array.IndexOf(migrations, recovery) - 1]);
         await database.MigrateAsync(recovery);
         db.ChangeTracker.Clear();
 
-        var reopened = Assert.Single(await db.DownloadTransfers.Where(row => row.SeedingSince != null).ToArrayAsync());
-        Assert.Equal(transfer, reopened.Id);
-        Assert.Equal(owner, reopened.AcquisitionId);
+        var reopened = Assert.Single(await db.Database.SqlQuery<Guid>(
+            $"""SELECT id AS "Value" FROM download_transfers WHERE seeding_since IS NOT NULL""").ToArrayAsync());
+        Assert.Equal(transfer, reopened);
+        Assert.Equal(owner, await db.Database.SqlQuery<Guid>(
+            $"""SELECT acquisition_id AS "Value" FROM download_transfers WHERE id = {reopened}""").SingleAsync());
     }
 
     [Theory]

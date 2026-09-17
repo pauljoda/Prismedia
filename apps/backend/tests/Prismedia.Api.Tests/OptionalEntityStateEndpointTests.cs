@@ -1,5 +1,9 @@
 using System.Net;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.DependencyInjection.Extensions;
+using Prismedia.Infrastructure.Persistence;
 
 namespace Prismedia.Api.Tests;
 
@@ -11,7 +15,13 @@ public sealed class OptionalEntityStateEndpointTests {
     [InlineData("/api/acquisitions/for-entity/{0}")]
     [InlineData("/api/monitors/for-entity/{0}")]
     public async Task OptionalEntityStateReturnsNoContentWhenItDoesNotExist(string routeTemplate) {
-        using var factory = new WebApplicationFactory<Program>().WithTestAuth();
+        var options = new DbContextOptionsBuilder<PrismediaDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
+        using var factory = new WebApplicationFactory<Program>().WithTestAuth()
+            .WithWebHostBuilder(builder => builder.ConfigureServices(services => {
+                services.RemoveAll<PrismediaDbContext>();
+                services.AddScoped(_ => new PrismediaDbContext(options));
+            }));
         using var client = factory.CreateAuthenticatedClient();
         var route = string.Format(routeTemplate, Guid.NewGuid());
 
