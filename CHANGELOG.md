@@ -94,6 +94,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Unified media discovery and connected collections in Request, with visual library cards, a shared source picker, and a separate Activity view. Imports choose their destination after selecting a title, and completed manager requests no longer repeat as separate tracked items.
+
 - Native plugin concurrency and start-rate limits now apply across interactive requests and background work, sharing one persistent budget per plugin across all Connections.
 
 - Connected-library tracking retains item associations independently of file bindings, keeping manager control scopes stable through missing files and upgrades.

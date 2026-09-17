@@ -28,6 +28,14 @@ describe("Connected library browser", () => {
     api.fetchManagerOptions.mockResolvedValue({ profiles: [{ id: "4", label: "Existing quality" }], roots: [] });
   });
 
+  it("keeps browsing separate from tracking and configuration", async () => {
+    render(ConnectedLibraryBrowser, { connection });
+    await screen.findByText("A film");
+    expect(screen.queryByText("Local library mappings")).not.toBeInTheDocument();
+    expect(api.fetchManagedTracking).not.toHaveBeenCalled();
+    expect(screen.getByRole("button", { name: "Library settings" })).toBeInTheDocument();
+  });
+
   it("shows exact comic issue labels without offering unsupported tracking or invented profiles", async () => {
     const comic = { ...item, entityKind: ENTITY_KIND.comicSeries, profileId: null };
     api.fetchManagedLibrary.mockResolvedValue({ items: [comic], nextCursor: null });
@@ -37,7 +45,7 @@ describe("Connected library browser", () => {
     ] }] });
     api.fetchManagerOptions.mockResolvedValue({ profiles: [], roots: [] });
     render(ConnectedLibraryBrowser, { connection: { ...connection, effectiveCapabilities: connection.effectiveCapabilities.map(capability => ({ ...capability, entityKinds: [ENTITY_KIND.comicSeries] })) } });
-    await fireEvent.click(await screen.findByRole("button", { name: "Inspect holding" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "A film" }));
     await screen.findByText("#½: Special · #12.5: Interlude");
     expect(screen.queryByText(/Profile:/)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Match existing items" })).not.toBeInTheDocument();
@@ -46,7 +54,7 @@ describe("Connected library browser", () => {
 
   it("pins the selected external identity and explains that remote files are not verified local files", async () => {
     render(ConnectedLibraryBrowser, { connection });
-    await fireEvent.click(await screen.findByRole("button", { name: "Inspect holding" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "A film" }));
     await screen.findByText("Profile: Existing quality");
     expect(api.fetchManagedItem).toHaveBeenCalledWith(connection.id, { entityKind: item.entityKind, remoteId: item.remoteId, expectedExternalIds: item.externalIds });
     expect(screen.getByText(/Local access has not been checked/)).toBeInTheDocument();
@@ -58,7 +66,7 @@ describe("Connected library browser", () => {
     api.fetchManagedLibrary.mockRejectedValue(new Error("The manager is unavailable"));
     render(ConnectedLibraryBrowser, { connection });
     await screen.findByText("The manager is unavailable");
-    expect(screen.queryByText("No matching holdings")).not.toBeInTheDocument();
+    expect(screen.queryByText("No matching titles")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Retry" })).toBeInTheDocument();
   });
 
@@ -66,7 +74,7 @@ describe("Connected library browser", () => {
     api.inspectLocalLibraryAccess.mockResolvedValue({ remote: snapshot, files: [{ remoteId: "2", libraryRootId: null, localPath: null,
       isReadable: false, sizeMatches: false, problem: "No local mapping covers this remote file." }] });
     render(ConnectedLibraryBrowser, { connection });
-    await fireEvent.click(await screen.findByRole("button", { name: "Inspect holding" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "A film" }));
     await screen.findByText("Profile: Existing quality");
     await fireEvent.click(screen.getByRole("button", { name: "Check local access" }));
     await screen.findByText("No local mapping covers this remote file.");
@@ -77,9 +85,9 @@ describe("Connected library browser", () => {
     let finish: (value: typeof snapshot) => void = () => {};
     api.fetchManagedItem.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
     render(ConnectedLibraryBrowser, { connection });
-    await fireEvent.click(await screen.findByRole("button", { name: "Inspect holding" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "A film" }));
     await fireEvent.click(screen.getByRole("button", { name: "Done" }));
-    await fireEvent.click(screen.getByRole("button", { name: "Inspect holding" }));
+    await fireEvent.click(screen.getByRole("button", { name: "A film" }));
     await screen.findByText("Profile: Existing quality");
     finish({ ...snapshot, path: "/stale/response" });
     await waitFor(() => expect(api.fetchManagedItem).toHaveBeenCalledTimes(2));

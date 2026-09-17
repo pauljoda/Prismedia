@@ -128,13 +128,10 @@
                 <Button variant="secondary" size="sm" onclick={() => void test(connection)} disabled={!connection.enabled || !!testingId || editorOpen || !plugin?.enabled}>
                   <RefreshCw class={testingId === connection.id ? "animate-spin" : undefined} />{testingId === connection.id ? "Testing…" : "Test connection"}
                 </Button>
-                {#if connection.status === CONNECTION_STATUS.ready && connection.effectiveCapabilities.some(item => item.kind === PLUGIN_CAPABILITY.catalogDiscovery)}
-                  <a class={buttonVariants({ variant: "secondary", size: "sm" })} href={`/request/catalogs?connection=${connection.id}`}>Browse catalog</a>
+                {#if connection.status === CONNECTION_STATUS.ready && connection.effectiveCapabilities.some(item => item.kind === PLUGIN_CAPABILITY.catalogDiscovery || item.kind === PLUGIN_CAPABILITY.connectedLibrary)}
+                  <a class={buttonVariants({ variant: "secondary", size: "sm" })} href={`/request?connection=${connection.id}`}>Browse titles</a>
                 {/if}
                 <Button variant="ghost" size="sm" onclick={() => openEditor(connection)} disabled={editorOpen || !!testingId || !plugin?.enabled}>Edit</Button>
-                {#if connection.status === CONNECTION_STATUS.ready && connection.effectiveCapabilities.some(item => item.kind === PLUGIN_CAPABILITY.connectedLibrary)}
-                  <a class={buttonVariants({ variant: "secondary", size: "sm" })} href={`/request/libraries?connection=${connection.id}`}>Browse library</a>
-                {/if}
                 <Button variant="ghost" size="sm" onclick={() => deleteTarget = connection} disabled={editorOpen || !!testingId}>Remove</Button>
               </div>
             </article>

@@ -38,6 +38,14 @@ describe("Managed requests", () => {
     api.fetchEntities.mockResolvedValue({ items: [{ id: "wanted", title: "Wanted film", coverThumbUrl: null }] });
     api.fetchManagedRequestPreview.mockResolvedValue(preview); api.saveManagedRequest.mockResolvedValue(request());
   });
+  it("does not repeat a request already represented by a followed library item", async () => {
+    api.fetchManagedRequests.mockResolvedValue([request({ phase: MANAGED_REQUEST_PHASE.completed, canCancel: false }), request({ id: "still-pending", title: "Another film" })]);
+    render(ManagedRequests, { connection, excludeIds: ["request"] });
+    await screen.findByText("Another film");
+    expect(screen.queryByText("Wanted film")).not.toBeInTheDocument();
+    expect(screen.getByText("Request queued")).toBeInTheDocument();
+  });
+
   it("submits the exact reviewed identity and explicit choices", async () => {
     await review(); await fireEvent.click(screen.getByRole("checkbox", { name: "Search now" }));
     await fireEvent.click(screen.getByRole("button", { name: "Request through manager" }));

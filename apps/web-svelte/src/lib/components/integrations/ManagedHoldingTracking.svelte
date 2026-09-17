@@ -7,7 +7,8 @@
   import ManagedHoldingControls from "./ManagedHoldingControls.svelte";
   import ManagedHoldingRelease from "./ManagedHoldingRelease.svelte";
 
-  let { connectionId, item = null, showControls = false, canControl = false, canRelease = false }: { connectionId: string; item?: ManagedLibraryItem | null; showControls?: boolean; canControl?: boolean; canRelease?: boolean } = $props();
+  let { connectionId, item = null, showControls = false, canControl = false, canRelease = false, compact = false, onLoaded }: { connectionId: string; item?: ManagedLibraryItem | null; showControls?: boolean; canControl?: boolean; canRelease?: boolean; compact?: boolean; onLoaded?: (holdings: ManagedTrackingResponse[]) => void } = $props();
+  let expandedId = $state<string | null>(null);
   let holdings = $state<ManagedTrackingResponse[]>([]);
   let preview = $state<ManagedTrackingPreview | null>(null);
   let error = $state<string | null>(null);
@@ -22,7 +23,7 @@
     [MANAGED_TRACKING_STATUS.needsReview]: "Needs review",
     [MANAGED_TRACKING_STATUS.stale]: "Connection unavailable",
     [MANAGED_TRACKING_STATUS.releasePending]: "Handoff pending",
-    [MANAGED_TRACKING_STATUS.released]: "Ownership released",
+    [MANAGED_TRACKING_STATUS.released]: "No longer managed",
   };
   onMount(() => {
     void load();
@@ -30,8 +31,8 @@
     return () => { active = false; clearInterval(timer); };
   });
   async function load() {
-    try { const results = await fetchManagedTracking(connectionId); if (active) holdings = results; }
-    catch (cause) { if (active) error = cause instanceof Error ? cause.message : "Could not read tracked holdings"; }
+    try { const results = await fetchManagedTracking(connectionId); if (active) { holdings = results; error = null; onLoaded?.(results); } }
+    catch (cause) { if (active) { error = cause instanceof Error ? cause.message : "Could not read tracked holdings"; onLoaded?.(holdings); } }
   }
   async function match() {
     if (!item) return;
@@ -63,18 +64,21 @@
 {#if error}<Alert.Root variant="destructive"><Alert.Description>{error}</Alert.Description></Alert.Root>{/if}
 {#if item || visible.length}
   <Panel class="min-w-0 space-y-3 p-4">
-    <h3 class="text-sm font-semibold">{item ? "Prismedia tracking" : "Tracked holdings"}</h3>
+    <h3 class="text-sm font-semibold">{item ? "Library link" : "Following in your library"}</h3>
     {#each visible as holding (holding.id)}
       <div class="space-y-2 border-b border-border-subtle pb-3 last:border-b-0 last:pb-0">
         <p class="break-words text-sm">{holding.title}</p>
         <div class="flex flex-wrap items-center gap-2"><Badge>{statusLabels[holding.status]}</Badge>
           <span class="text-xs text-text-muted">{#if holding.status === MANAGED_TRACKING_STATUS.released}Files and history retained{:else if holding.status === MANAGED_TRACKING_STATUS.releasePending}Ownership reserved until verification completes{:else if holding.status === MANAGED_TRACKING_STATUS.waitingForFiles}{holding.targets.length} requested {holding.targets.length === 1 ? "item" : "items"}{:else}{holding.bindings.filter(file => file.isAvailable).length} of {holding.bindings.length} linked files available{/if}</span></div>
+        {#if compact}<Button variant="ghost" size="sm" aria-expanded={expandedId === holding.id} onclick={() => expandedId = expandedId === holding.id ? null : holding.id}>{expandedId === holding.id ? "Hide details" : "View details"}</Button>{/if}
+        {#if !compact || expandedId === holding.id}
         {#if holding.problem}<p class="break-words text-sm text-text-muted">{holding.problem}</p>{/if}
         {#if holding.lastCheckedAt}<p class="text-xs text-text-muted">Checked {new Date(holding.lastCheckedAt).toLocaleString()}</p>{/if}
         {#if holding.status !== MANAGED_TRACKING_STATUS.released}<Button variant="outline" size="sm" disabled={busy} onclick={() => void refresh(holding.id)}>{holding.status === MANAGED_TRACKING_STATUS.releasePending ? "Refresh handoff" : "Refresh tracking"}</Button>{/if}
         {#if showControls}<ManagedHoldingControls {connectionId} holdingId={holding.id} canPreview={canControl && (holding.status === MANAGED_TRACKING_STATUS.tracking || holding.status === MANAGED_TRACKING_STATUS.waitingForFiles)} />{/if}
         {#if showControls && canRelease && (holding.status === MANAGED_TRACKING_STATUS.tracking || holding.status === MANAGED_TRACKING_STATUS.waitingForFiles)}
           <ManagedHoldingRelease {connectionId} holdingId={holding.id} onaccepted={saved => { holdings = holdings.map(item => item.id === saved.id ? saved : item); }} />
+        {/if}
         {/if}
       </div>
     {/each}

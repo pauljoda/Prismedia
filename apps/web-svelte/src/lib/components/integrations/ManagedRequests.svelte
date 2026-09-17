@@ -9,12 +9,12 @@
   import EntityPicker, { type EntityPickerItem } from "$lib/components/forms/EntityPicker.svelte";
   import ManagedHoldingControls from "./ManagedHoldingControls.svelte";
 
-  let { connection, initialEntity = null }: { connection: ConnectionResponse; initialEntity?: EntityPickerItem | null } = $props();
+  let { connection, initialEntity = null, excludeIds = [] }: { connection: ConnectionResponse; initialEntity?: EntityPickerItem | null; excludeIds?: string[] } = $props();
   const canRequest = $derived(connection.enabled && connection.status === CONNECTION_STATUS.ready && connection.effectiveCapabilities.some(capability =>
     capability.kind === PLUGIN_CAPABILITY.externalManager && capability.entityKinds.includes(ENTITY_KIND.movie)
     && capability.operations.includes(INTEGRATION_OPERATION.lookupManaged) && capability.operations.includes(INTEGRATION_OPERATION.ensureManaged)));
   let requests = $state<ManagedRequestResponse[]>([]);
-  const visibleRequests = $derived(initialEntity ? requests.filter(request => request.entityId === initialEntity.id) : requests);
+  const visibleRequests = $derived(requests.filter(request => !excludeIds.includes(request.id) && (!initialEntity || request.entityId === initialEntity.id)));
   let mounts = $state<ExternalLibraryMount[]>([]);
   let selected = $state<EntityPickerItem[]>([]);
   let libraryRootId = $state("");
@@ -35,7 +35,7 @@
     [MANAGED_REQUEST_PHASE.completed]: "Imported into Prismedia",
     [MANAGED_REQUEST_PHASE.rejected]: "Creation refused",
     [MANAGED_REQUEST_PHASE.cancelled]: "Cancelled",
-    [MANAGED_REQUEST_PHASE.ownershipReleased]: "Ownership released",
+    [MANAGED_REQUEST_PHASE.ownershipReleased]: "No longer managed",
   };
   const activePhases = new Set<ManagedRequestResponse["phase"]>([MANAGED_REQUEST_PHASE.pendingCreation, MANAGED_REQUEST_PHASE.creationUncertain, MANAGED_REQUEST_PHASE.awaitingFiles]);
   onMount(() => {
@@ -104,7 +104,7 @@
   function message(cause: unknown) { return cause instanceof Error ? cause.message : "The manager request could not be completed"; }
 </script>
 
-{#if canRequest || requests.length || error}
+{#if canRequest || visibleRequests.length || error}
   <Panel class="min-w-0 space-y-4 p-4">
     <div class="flex flex-wrap items-center justify-between gap-3">
       <h2 class="text-sm font-semibold">Requests through {connection.name}</h2>
@@ -114,7 +114,7 @@
     {#if expanded && canRequest}
       <div class="space-y-3">
         <p class="text-sm text-text-muted">Choose a wanted movie with an identified TMDB record. The connected app will own its acquisition and file organization.</p>
-        {#if !mounts.length && !busy}<p class="text-sm text-text-muted">Map and enable a video library in Connected libraries before requesting a movie.</p>{/if}
+        {#if !mounts.length && !busy}<p class="text-sm text-text-muted">Open this source in Browse → Library settings to connect a video library first.</p>{/if}
         {#if initialEntity}<p class="text-sm font-medium">{initialEntity.title}</p>
         {:else}<EntityPicker label="Wanted movie" mode="single" values={selected} onChange={values => { selected = values; preview = null; }} onSearch={findWanted} disabled={busy || !!pending} placeholder="Find a wanted movie" />{/if}
         <Select ariaLabel="Mapped library" value={libraryRootId} options={mounts.map(mount => ({ value: mount.libraryRootId, label: mount.label }))}

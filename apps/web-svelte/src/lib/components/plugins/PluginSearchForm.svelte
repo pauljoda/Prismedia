@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { Loader2, Search, X } from "@lucide/svelte";
+  import { Loader2, Search, SlidersHorizontal, X } from "@lucide/svelte";
   import { Button, TextInput } from "@prismedia/ui-svelte";
   import { PLUGIN_SEARCH_FIELD_TYPE } from "$lib/api/generated/codes";
   import type { PluginSearchField } from "$lib/api/generated/model";
@@ -14,6 +14,8 @@
     disabled?: boolean;
     submitDisabled?: boolean;
     submitLabel?: string;
+    /** Lead with required fields; optional refinements stay available on demand. */
+    compact?: boolean;
   }
 
   let {
@@ -26,7 +28,12 @@
     disabled = false,
     submitDisabled = false,
     submitLabel = "Search",
+    compact = false,
   }: Props = $props();
+
+  let expanded = $state(false);
+  const hasOptionalFields = $derived(fields.some(field => !field.required));
+  const visibleFields = $derived(compact && !expanded ? fields.filter((field, index) => field.required || index === 0) : fields);
 
   function inputType(field: PluginSearchField): "text" | "number" {
     return field.type === PLUGIN_SEARCH_FIELD_TYPE.text ? "text" : "number";
@@ -38,13 +45,13 @@
 </script>
 
 <form
-  class="grid grid-cols-1 gap-3 md:grid-cols-[repeat(auto-fit,minmax(10rem,1fr))_auto] md:items-end"
+  class={`grid grid-cols-1 gap-3 sm:items-end ${compact && visibleFields.length === 1 ? "sm:grid-cols-[minmax(0,1fr)_auto]" : "sm:grid-cols-2 xl:grid-cols-3"}`}
   onsubmit={(event) => {
     event.preventDefault();
     if (!disabled && !submitDisabled && !loading) onSubmit();
   }}
 >
-  {#each fields as field (field.key)}
+  {#each visibleFields as field (field.key)}
     <label class="flex min-w-0 flex-col gap-1.5">
       <span class="flex items-baseline gap-1.5 font-mono text-[0.72rem] text-text-muted">
         {field.label}
@@ -68,10 +75,11 @@
     </label>
   {/each}
 
-  <div class="flex flex-col gap-2 sm:flex-row md:self-end">
-    <Button type="button" variant="secondary" disabled={disabled || loading} class="gap-1.5" onclick={onClear}>
+  <div class="flex flex-wrap items-center gap-2 sm:self-end">
+    {#if compact && hasOptionalFields}<Button type="button" variant="ghost" disabled={disabled || loading} aria-expanded={expanded} onclick={() => expanded = !expanded}><SlidersHorizontal />{expanded ? "Fewer filters" : "More filters"}</Button>{/if}
+    <Button type="button" variant="secondary" disabled={disabled || loading} class="gap-1.5" aria-label="Clear" onclick={onClear}>
       <X class="h-3.5 w-3.5" />
-      Clear
+      {#if !compact}Clear{/if}
     </Button>
     <Button type="submit" variant="primary" disabled={disabled || submitDisabled || loading} class="gap-1.5">
       {#if loading}

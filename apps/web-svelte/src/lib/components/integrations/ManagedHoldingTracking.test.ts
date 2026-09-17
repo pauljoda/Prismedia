@@ -19,6 +19,14 @@ describe("Managed holding tracking", () => {
     api.saveManagedTracking.mockResolvedValue(tracked);
   });
 
+  it("keeps independent request history loadable when tracking cannot refresh", async () => {
+    api.fetchManagedTracking.mockRejectedValue(new Error("Tracking unavailable"));
+    const onLoaded = vi.fn();
+    render(ManagedHoldingTracking, { connectionId: "connection", onLoaded });
+    await screen.findByText("Tracking unavailable");
+    expect(onLoaded).toHaveBeenCalledWith([]);
+  });
+
   it("requires reviewing exact local matches before persisting the association", async () => {
     render(ManagedHoldingTracking, { connectionId: "connection", item });
     expect(api.saveManagedTracking).not.toHaveBeenCalled();
@@ -67,7 +75,7 @@ describe("Managed holding tracking", () => {
   it("retains released history and requires new review before linking the same files again", async () => {
     api.fetchManagedTracking.mockResolvedValue([{ ...tracked, status: MANAGED_TRACKING_STATUS.released }]);
     render(ManagedHoldingTracking, { connectionId: "connection", item });
-    await screen.findByText("Ownership released");
+    await screen.findByText("No longer managed");
     expect(screen.getByText("Files and history retained")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Refresh tracking" })).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Match existing items" })).toBeInTheDocument();

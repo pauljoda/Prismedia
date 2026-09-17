@@ -1,13 +1,14 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { ArrowLeft, ArrowRight, FolderOpen, Library, RefreshCw, Search } from "@lucide/svelte";
-  import { Alert, Badge, Button, DialogBase, Panel, Select, TextInput } from "@prismedia/ui-svelte";
+  import { ArrowLeft, ArrowRight, Library, RefreshCw, Search } from "@lucide/svelte";
+  import { Alert, Button, DialogBase, Panel, Select, TextInput } from "@prismedia/ui-svelte";
   import { CONNECTION_STATUS, ENTITY_KIND, INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
   import type { ConnectionResponse, EntityKind, ManagedItemSnapshot, ManagedLibraryItem, ManagedLibraryPage, ManagerOptions, MappedLibraryFile } from "$lib/api/generated/model";
   import { fetchManagedItem, fetchManagedLibrary, fetchManagerOptions, inspectLocalLibraryAccess } from "$lib/api/managed-libraries";
   import ExternalLibraryMappings from "./ExternalLibraryMappings.svelte";
   import ManagedHoldingTracking from "./ManagedHoldingTracking.svelte";
-  import ManagedRequests from "./ManagedRequests.svelte";
+  import DiscoveryResults from "$lib/components/requests/DiscoveryResults.svelte";
+  import { entityReferenceToThumbnailCard } from "$lib/entities/entity-thumbnail";
   import { getEntityKindLabel } from "$lib/entities/entity-grid";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
 
@@ -26,6 +27,7 @@
   let options = $state<ManagerOptions | null>(null);
   let detail = $state<ManagedItemSnapshot | null>(null);
   let detailOpen = $state(false);
+  let settingsOpen = $state(false);
   let detailLoading = $state(false);
   let detailError = $state<string | null>(null);
   let visibleFiles = $state(50);
@@ -74,45 +76,37 @@
   }
 </script>
 
-<ManagedHoldingTracking connectionId={connection.id} {showControls} {canControl} {canRelease} />
-<ManagedRequests {connection} />
 {#if connection.status !== CONNECTION_STATUS.ready}
-  <Alert.Root><Alert.Description>Test this connection in Settings to resume remote observations. Saved tracking remains available here.</Alert.Description></Alert.Root>
+  <Alert.Root><Alert.Description>This source is unavailable. Your saved requests are in Activity. Test the connection in Settings to browse again.</Alert.Description></Alert.Root>
 {/if}
-
-{#if connection.effectiveCapabilities.some(capability => capability.kind === PLUGIN_CAPABILITY.externalManager && capability.operations.includes(INTEGRATION_OPERATION.managerOptions))}
-  <ExternalLibraryMappings {connection} {kind} />
-{/if}
+<div class="flex flex-wrap items-center justify-between gap-3">
+  <p class="text-sm text-text-muted">Browse titles already in {connection.name}. Open a title to view its files and library access.</p>
+  {#if connection.effectiveCapabilities.some(capability => capability.kind === PLUGIN_CAPABILITY.externalManager && capability.operations.includes(INTEGRATION_OPERATION.managerOptions))}
+    <Button variant="ghost" size="sm" onclick={() => settingsOpen = true}>Library settings</Button>
+  {/if}
+</div>
 <Panel class="flex min-w-0 flex-col gap-3 p-4">
   {#if (support?.entityKinds.length ?? 0) > 1}
     <Select ariaLabel="Library media type" value={kind} options={(support?.entityKinds ?? []).map(value => ({ value, label: getEntityKindLabel(value) }))}
       onchange={value => { kind = support?.entityKinds.find(item => item === value); results = null; history = []; void search(); }} disabled={loading} />
   {/if}
   <form class="flex min-w-0 gap-2" onsubmit={event => { event.preventDefault(); void search(); }}>
-    <TextInput aria-label="Search connected library" placeholder="Search existing holdings…" bind:value={query} maxlength={512} class="min-w-0 flex-1" disabled={loading} />
-    <Button type="submit" variant="secondary" disabled={loading}><Search />Search</Button>
+    <TextInput aria-label="Search connected library" placeholder={`Search ${connection.name}…`} bind:value={query} maxlength={512} class="min-w-0 flex-1" disabled={loading} />
+    <Button type="submit" variant="secondary" disabled={loading || !kind}><Search />Search</Button>
   </form>
-  <p class="text-xs text-text-muted">Searches holdings in {connection.name}. File availability here is reported by the connected application.</p>
+
 </Panel>
 {#if error}<Alert.Root variant="destructive"><Alert.Description>{error}</Alert.Description><Alert.Action><Button variant="secondary" size="sm" onclick={() => void search()}>Retry</Button></Alert.Action></Alert.Root>{/if}
 {#if loading}<StatePlaceholder icon={Library} title="Reading connected library" busy />
 {:else if results}
   <div class="flex items-center justify-between gap-3">
-    <h2 class="text-base font-semibold">Existing holdings</h2>
+    <h2 class="text-base font-semibold">In {connection.name}</h2>
     <Button variant="ghost" size="sm" onclick={() => void search()}><RefreshCw />Refresh</Button>
   </div>
-  {#if !results.items.length}<StatePlaceholder icon={Library} title="No matching holdings" description="Try another title or metadata ID." />{/if}
-  {#each results.items as item (item.remoteId)}
-    <Panel class="p-4">
-      <article class="flex min-w-0 flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div class="min-w-0 space-y-2">
-          <h3 class="break-words text-sm font-semibold">{item.title}{item.year ? ` (${item.year})` : ""}</h3>
-          <div class="flex flex-wrap gap-2"><Badge>{item.monitored ? "Monitored" : "Not monitored"}</Badge><Badge>{item.remoteFileCount == null ? "File count unknown" : `${item.remoteFileCount} ${item.remoteFileCount === 1 ? "file" : "files"} reported`}</Badge></div>
-        </div>
-        <Button variant="secondary" size="sm" class="self-start sm:shrink-0" onclick={() => void inspect(item)}><FolderOpen />Inspect holding</Button>
-      </article>
-    </Panel>
-  {/each}
+  {#if !results.items.length}<StatePlaceholder icon={Library} title="No matching titles" description="Try another title or metadata ID." />{/if}
+  <DiscoveryResults cards={results.items.map(item => entityReferenceToThumbnailCard({ id: item.remoteId, kind: item.entityKind, title: item.title }, {
+    subtitle: [item.year, item.remoteFileCount == null ? "Availability unknown" : Number(item.remoteFileCount) > 0 ? "Files in source" : "Waiting for files"].filter(Boolean).join(" · "),
+  }))} onActivate={card => { const item = results?.items.find(item => item.remoteId === card.entity.id); if (item) void inspect(item); }} />
   <div class="flex flex-wrap justify-between gap-2">
     {#if history.length}<Button variant="secondary" onclick={back}><ArrowLeft />Previous</Button>{/if}
     {#if results.nextCursor}<Button variant="secondary" onclick={() => void search(results?.nextCursor)}>Next<ArrowRight /></Button>{/if}
@@ -122,7 +116,7 @@
 <DialogBase.Root open={detailOpen} onOpenChange={value => { detailOpen = value; if (!value) detailSequence++; }}>
   <DialogBase.Content class="max-h-[85dvh] overflow-y-auto sm:max-w-2xl">
     <DialogBase.Header>
-      <DialogBase.Title>{detail?.item.title ?? "Connected holding"}</DialogBase.Title>
+      <DialogBase.Title>{detail?.item.title ?? "Title details"}</DialogBase.Title>
       <DialogBase.Description>Files reported by {connection.name}. {localFiles ? "Local checks confirm readability and size; importing into the library is a separate step." : "Local access has not been checked."}</DialogBase.Description>
     </DialogBase.Header>
     {#if detailError}<p role="alert" class="text-sm text-error-text">{detailError}</p>{/if}
@@ -152,5 +146,14 @@
       {/if}
     {/if}
     <DialogBase.Footer><Button variant="outline" onclick={() => { detailOpen = false; detailSequence++; }}>Done</Button></DialogBase.Footer>
+  </DialogBase.Content>
+</DialogBase.Root>
+
+<DialogBase.Root open={settingsOpen} onOpenChange={value => settingsOpen = value}>
+  <DialogBase.Content class="max-h-[85dvh] overflow-y-auto sm:max-w-2xl">
+    <DialogBase.Header><DialogBase.Title>Library settings · {connection.name}</DialogBase.Title>
+      <DialogBase.Description>Connect the folders Prismedia can read. {connection.name} continues to organize its files.</DialogBase.Description></DialogBase.Header>
+    {#if settingsOpen}<ExternalLibraryMappings {connection} {kind} />{/if}
+    <DialogBase.Footer><Button variant="outline" onclick={() => settingsOpen = false}>Done</Button></DialogBase.Footer>
   </DialogBase.Content>
 </DialogBase.Root>
