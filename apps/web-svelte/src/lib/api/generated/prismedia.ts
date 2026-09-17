@@ -11393,10 +11393,15 @@ export type reviewRequestResponse404 = {
   status: 404
 }
 
+export type reviewRequestResponse502 = {
+  data: ApiProblem
+  status: 502
+}
+
 export type reviewRequestResponseSuccess = (reviewRequestResponse200) & {
   headers: Headers;
 };
-export type reviewRequestResponseError = (reviewRequestResponse400 | reviewRequestResponse404) & {
+export type reviewRequestResponseError = (reviewRequestResponse400 | reviewRequestResponse404 | reviewRequestResponse502) & {
   headers: Headers;
 };
 

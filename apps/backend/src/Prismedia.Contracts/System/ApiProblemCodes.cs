@@ -7,6 +7,8 @@ namespace Prismedia.Contracts.System;
 /// constants instead of bare string literals.
 /// </summary>
 public static class ApiProblemCodes {
+    /// <summary>A metadata plugin failed to answer, rather than confirming that no matching work exists.</summary>
+    public const string PluginProviderUnavailable = "plugin_provider_unavailable";
     public const string ManagedControlConflict = "managed_control_conflict";
     /// <summary>Managed request identity, ownership, or progress changed after review.</summary>
     public const string ManagedRequestConflict = "managed_request_conflict";

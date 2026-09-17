@@ -48,6 +48,30 @@ public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
         public Task<IdentifyPluginResponse> IdentifyAsync(PluginDescriptor descriptor, IdentifyPluginRequest request, CancellationToken token) => Task.FromResult(response);
     }
 
+    [Theory]
+    [InlineData("Provider is rate limited.")]
+    [InlineData(null)]
+    public async Task FailedExactLookupIsNotReportedAsAMissingWork(string? message) {
+        await using var db = await CreateInstalledPluginAsync("cinema-metadata");
+        var catalog = Catalog(db);
+        var source = new PluginRequestMetadataSource(catalog, new PluginIdentityRouter(catalog),
+            new IdentifyRunnerSelector([new FixedResponseRunner(new(false, null, message))]));
+        var error = await Assert.ThrowsAnyAsync<InvalidOperationException>(() => source.ReviewAsync(
+            new(RequestMediaKind.Movie, "cinema-metadata", new("tmdb", Guid.NewGuid().ToString("N"))), false, default));
+        Assert.False(string.IsNullOrWhiteSpace(error.Message));
+        if (message is not null) Assert.Equal(message, error.Message);
+    }
+
+    [Fact]
+    public async Task SuccessfulExactLookupWithoutAMatchRemainsMissing() {
+        await using var db = await CreateInstalledPluginAsync("cinema-metadata");
+        var catalog = Catalog(db);
+        var source = new PluginRequestMetadataSource(catalog, new PluginIdentityRouter(catalog),
+            new IdentifyRunnerSelector([new FixedResponseRunner(IdentifyPluginResponse.NoMatch())]));
+        Assert.Null(await source.ReviewAsync(new(RequestMediaKind.Movie, "cinema-metadata",
+            new("tmdb", Guid.NewGuid().ToString("N"))), false, default));
+    }
+
     [Fact]
     public async Task LookupRoutesNamespaceThroughDistinctPluginIdAndSendsNamespaceToPlugin() {
         await using var db = await CreateInstalledPluginAsync("cinema-metadata");

@@ -58,6 +58,7 @@ public static class RequestEndpoints {
             .WithName("ReviewRequest")
             .WithSummary("Gets the core plugin proposal immediately and starts progressive child and relationship identification.")
             .Produces<RequestReviewResponse>()
+            .Produces<ApiProblem>(StatusCodes.Status502BadGateway)
             .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 

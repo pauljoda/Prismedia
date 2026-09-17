@@ -159,6 +159,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Metadata review now reports failed provider lookups as provider errors, preserving the distinction between an unavailable service and a title that could not be found.
+
 - Metadata review shows creator credits and studio names even when a plugin does not supply separate person or studio proposals, with explicit accept/reject controls.
 
 - Discovery reports metadata plugin failures instead of displaying them as successful searches with no matches.
