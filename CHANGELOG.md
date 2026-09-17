@@ -94,6 +94,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Request Activity separates problems, active work, followed library titles, and recent history in compact rows, with full source credits available on demand.
+
 - Request breadcrumbs and browser history restore source context, and source choices filter to the selected media type and supported operations.
 
 - Connected titles open in full detail pages with source artwork and descriptions, automatic file-access checks, and guided folder setup. Radarr and Sonarr retain control of the original files while Prismedia reads them in place.
