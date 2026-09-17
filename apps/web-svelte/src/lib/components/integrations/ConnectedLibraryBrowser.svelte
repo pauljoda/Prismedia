@@ -2,7 +2,7 @@
   import { onMount } from "svelte";
   import { ArrowLeft, ArrowRight, FolderOpen, Library, RefreshCw, Search } from "@lucide/svelte";
   import { Alert, Badge, Button, DialogBase, Panel, Select, TextInput } from "@prismedia/ui-svelte";
-  import { CONNECTION_STATUS, INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
+  import { CONNECTION_STATUS, ENTITY_KIND, INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
   import type { ConnectionResponse, EntityKind, ManagedItemSnapshot, ManagedLibraryItem, ManagedLibraryPage, ManagerOptions, MappedLibraryFile } from "$lib/api/generated/model";
   import { fetchManagedItem, fetchManagedLibrary, fetchManagerOptions, inspectLocalLibraryAccess } from "$lib/api/managed-libraries";
   import ExternalLibraryMappings from "./ExternalLibraryMappings.svelte";
@@ -130,7 +130,7 @@
     {#if detail}
       <div class="space-y-2 text-sm text-text-muted">
         <p>Observed {new Date(detail.observedAt).toLocaleString()}</p>
-        <p>Profile: {options?.profiles.find(profile => profile.id === detail?.item.profileId)?.label ?? detail.item.profileId ?? "Unknown"}</p>
+        {#if detail.item.profileId || options?.profiles.length}<p>Profile: {options?.profiles.find(profile => profile.id === detail?.item.profileId)?.label ?? detail.item.profileId ?? "Unknown"}</p>{/if}
         <p class="break-all">Remote folder: {detail.path}</p>
         <Button variant="outline" size="sm" disabled={detailLoading} onclick={checkLocalAccess}>Check local access</Button>
       </div>
@@ -140,14 +140,16 @@
           <div class="space-y-2 py-3">
             <p class="break-all font-mono text-xs">{file.path}</p>
             <p class="text-xs text-text-muted">{(Number(file.sizeBytes) / 1024 / 1024).toFixed(1)} MiB · {file.targets.length} content {file.targets.length === 1 ? "target" : "targets"}</p>
-            <p class="break-words text-sm text-text-muted">{file.targets.slice(0, 6).map(target => target.seasonNumber != null ? `S${target.seasonNumber} E${target.episodeNumber}: ${target.title}` : target.title).join(" · ")}{file.targets.length > 6 ? ` · ${file.targets.length - 6} more` : ""}</p>
+            <p class="break-words text-sm text-text-muted">{file.targets.slice(0, 6).map(target => target.issueLabel != null ? `#${target.issueLabel}: ${target.title}` : target.seasonNumber != null ? `S${target.seasonNumber} E${target.episodeNumber}: ${target.title}` : target.title).join(" · ")}{file.targets.length > 6 ? ` · ${file.targets.length - 6} more` : ""}</p>
             {#if local}<p class="text-xs text-text-muted">{local.isReadable && local.sizeMatches ? "Readable locally · size matches" : local.problem}</p>{/if}
           </div>
         {/each}
         {#if !detail.files.length}<p class="py-3 text-sm text-text-muted">No final files are currently associated with this holding.</p>{/if}
       </div>
       {#if detail.files.length > visibleFiles}<Button variant="secondary" onclick={() => visibleFiles += 50}>Show more files</Button>{/if}
-      {#key detail.item.remoteId}<ManagedHoldingTracking connectionId={connection.id} item={detail.item} {showControls} {canControl} {canRelease} />{/key}
+      {#if detail.item.entityKind === ENTITY_KIND.movie || detail.item.entityKind === ENTITY_KIND.videoSeries}
+        {#key detail.item.remoteId}<ManagedHoldingTracking connectionId={connection.id} item={detail.item} {showControls} {canControl} {canRelease} />{/key}
+      {/if}
     {/if}
     <DialogBase.Footer><Button variant="outline" onclick={() => { detailOpen = false; detailSequence++; }}>Done</Button></DialogBase.Footer>
   </DialogBase.Content>

@@ -28,6 +28,22 @@ describe("Connected library browser", () => {
     api.fetchManagerOptions.mockResolvedValue({ profiles: [{ id: "4", label: "Existing quality" }], roots: [] });
   });
 
+  it("shows exact comic issue labels without offering unsupported tracking or invented profiles", async () => {
+    const comic = { ...item, entityKind: ENTITY_KIND.comicSeries, profileId: null };
+    api.fetchManagedLibrary.mockResolvedValue({ items: [comic], nextCursor: null });
+    api.fetchManagedItem.mockResolvedValue({ ...snapshot, item: comic, files: [{ ...snapshot.files[0], targets: [
+      { remoteId: "half", entityKind: ENTITY_KIND.comicInstallment, title: "Special", issueLabel: "½" },
+      { remoteId: "decimal", entityKind: ENTITY_KIND.comicInstallment, title: "Interlude", issueLabel: "12.5" },
+    ] }] });
+    api.fetchManagerOptions.mockResolvedValue({ profiles: [], roots: [] });
+    render(ConnectedLibraryBrowser, { connection: { ...connection, effectiveCapabilities: connection.effectiveCapabilities.map(capability => ({ ...capability, entityKinds: [ENTITY_KIND.comicSeries] })) } });
+    await fireEvent.click(await screen.findByRole("button", { name: "Inspect holding" }));
+    await screen.findByText("#½: Special · #12.5: Interlude");
+    expect(screen.queryByText(/Profile:/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Match existing items" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Check local access" })).toBeInTheDocument();
+  });
+
   it("pins the selected external identity and explains that remote files are not verified local files", async () => {
     render(ConnectedLibraryBrowser, { connection });
     await fireEvent.click(await screen.findByRole("button", { name: "Inspect holding" }));

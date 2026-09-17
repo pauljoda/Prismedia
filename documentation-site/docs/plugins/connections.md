@@ -279,6 +279,27 @@ unsupported server majors and credential-bearing redirects. Their library-list e
 return the whole upstream catalog, so the adapter rejects responses exceeding 8 MiB rather
 than silently truncating them. Pagination reflects an observed library that may change between reads.
 
+### Kapowarr comic libraries
+
+The Kapowarr plugin connects to existing **Kapowarr 1.3.x** libraries. Configure
+its base address and API key, then use **Connected libraries** to search existing
+comic runs and inspect their final files. Exact issue labels such as `½` and
+`12.5` remain visible; one archive may cover several issues. Cover files and other
+sidecars are excluded. A downloaded-issue count is not presented as a file count.
+
+Its external-manager capability currently lists root folders. Map a root to a
+dedicated read-only local folder, check access, and enable its library scan when
+ready. Kapowarr continues organizing those files. Comic acquisition ownership,
+monitoring controls, release searches, and upgrade reconciliation are not yet
+offered. Multiple renditions for one issue require review in Kapowarr.
+
+The plugin does not need a Comic Vine account to read existing holdings; adding
+new runs inside Kapowarr depends on that application's own catalog configuration.
+Kapowarr supplies no persistent installation UUID, so keep a connection pointed
+at the same installation. Its API requires a query-string API key; the adapter
+keeps that address server-side and refuses redirects. Reverse-proxy access logs
+should omit query strings.
+
 ### Map local files
 
 In **Connected libraries**, choose **Map library folder**, select an existing remote

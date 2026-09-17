@@ -40,7 +40,8 @@ public sealed class ManagedLibraryService(IntegrationConnectionAccess access, II
                 || file.Targets is not { Count: > 0 and <= 1000 } || file.Targets.Select(target => target?.RemoteId).Distinct().Count() != file.Targets.Count) throw Invalid();
             foreach (var target in file.Targets) {
                 if (target is null || !Text(target.RemoteId, 512) || !Text(target.Title, 512) || !Enum.IsDefined(target.EntityKind)
-                    || target.SeasonNumber < 0 || target.EpisodeNumber < 0 || target.AbsoluteNumber < 0) throw Invalid();
+                    || target.SeasonNumber < 0 || target.EpisodeNumber < 0 || target.AbsoluteNumber < 0
+                    || target.IssueLabel is not null && (!Text(target.IssueLabel, 128) || target.EntityKind != EntityKind.ComicInstallment)) throw Invalid();
             }
         }
         var targets = snapshot.Files.SelectMany(file => file.Targets).ToArray();
@@ -48,7 +49,9 @@ public sealed class ManagedLibraryService(IntegrationConnectionAccess access, II
             || input.EntityKind == EntityKind.Movie && targets.Any(target => target.EntityKind != EntityKind.Movie || target.RemoteId != input.RemoteId
                 || target.SeasonNumber is not null || target.EpisodeNumber is not null || target.AbsoluteNumber is not null)
             || input.EntityKind == EntityKind.VideoSeries && targets.Any(target => target.EntityKind != EntityKind.VideoEpisode
-                || target.SeasonNumber is null || target.EpisodeNumber is null)) throw Invalid();
+                || target.SeasonNumber is null || target.EpisodeNumber is null)
+            || input.EntityKind == EntityKind.ComicSeries && targets.Any(target => target.EntityKind != EntityKind.ComicInstallment
+                || !Text(target.IssueLabel, 128) || target.SeasonNumber is not null || target.EpisodeNumber is not null || target.AbsoluteNumber is not null)) throw Invalid();
     }
 
     /// <summary>Reads existing profiles and folders without persisting defaults or issuing remote commands.</summary>

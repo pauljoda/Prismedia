@@ -11,9 +11,9 @@ public sealed record ManagedLibraryItem(string RemoteId, EntityKind EntityKind, 
 public sealed record ManagedLibraryPage(IReadOnlyList<ManagedLibraryItem> Items, string? NextCursor = null);
 /// <summary>Addresses a holding and pins known external identities to detect a reused remote numeric ID.</summary>
 public sealed record ManagedItemInput(EntityKind EntityKind, string RemoteId, IReadOnlyDictionary<string, string> ExpectedExternalIds);
-/// <summary>One content target covered by an externally managed file, including multi-episode files.</summary>
+/// <summary>One content target covered by an externally managed file. IssueLabel preserves comic designations such as ½ and 12.5 independently of television numbering.</summary>
 public sealed record ManagedFileTarget(string RemoteId, EntityKind EntityKind, string Title,
-    int? SeasonNumber = null, int? EpisodeNumber = null, int? AbsoluteNumber = null);
+    int? SeasonNumber = null, int? EpisodeNumber = null, int? AbsoluteNumber = null, string? IssueLabel = null);
 /// <summary>Remote file evidence. Paths belong to the connected server and require an explicit local mapping before access.</summary>
 public sealed record ManagedLibraryFile(string RemoteId, string Path, long SizeBytes, DateTimeOffset? AddedAt,
     IReadOnlyList<ManagedFileTarget> Targets);

@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Kapowarr connections can browse existing comic runs, inspect exact issue labels and combined-file associations, and map read-only comic libraries. Local readability remains a separate check; comic acquisition controls are not yet offered.
+
 - URL executors can import complete ordered image galleries, with bounded image validation, atomic folder placement, stable gallery and image identities, and recoverable import receipts. Explicit galleries remain galleries even when they contain one image.
 
 - URL executor connections can import verified JPEG, PNG, and WebP still images into image libraries. Imports preserve image identity across retries and rescans, and the Archiver adapter negotiates image support separately from publications.

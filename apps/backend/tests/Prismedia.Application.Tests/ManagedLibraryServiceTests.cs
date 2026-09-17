@@ -8,6 +8,25 @@ using Prismedia.Domain.Integrations;
 namespace Prismedia.Application.Tests;
 
 public sealed class ManagedLibraryServiceTests {
+    private const string FixtureProvider = "fixture-catalog";
+    [Fact]
+    public void ComicEvidencePreservesExactLabelsWithoutBorrowingTelevisionNumbering() {
+        var item = new ManagedLibraryItem("run", EntityKind.ComicSeries, "Comics", 2026,
+            new Dictionary<string, string> { [FixtureProvider] = "fixture-run" }, false, null, 1);
+        var input = new ManagedItemInput(item.EntityKind, item.RemoteId, item.ExternalIds);
+        var snapshot = new ManagedItemSnapshot(item, "/comics/run", [new("file", "/comics/run/issues.cbz", 128, null,
+            [new("half", EntityKind.ComicInstallment, "Special", IssueLabel: "½"), new("fraction", EntityKind.ComicInstallment, "Interlude", IssueLabel: "12.5")])], DateTimeOffset.UtcNow);
+        ManagedLibraryService.ValidateSnapshot(input, snapshot);
+        foreach (var invalid in new[] {
+            snapshot.Files[0].Targets[0] with { IssueLabel = null },
+            snapshot.Files[0].Targets[0] with { IssueLabel = "bad\nlabel" },
+            snapshot.Files[0].Targets[0] with { IssueLabel = new string('a', 129) },
+            snapshot.Files[0].Targets[0] with { EntityKind = EntityKind.VideoEpisode },
+            snapshot.Files[0].Targets[0] with { SeasonNumber = 1 }
+        }) Assert.Throws<IntegrationInvocationException>(() => ManagedLibraryService.ValidateSnapshot(input,
+            snapshot with { Files = [snapshot.Files[0] with { Targets = [invalid] }] }));
+    }
+
     [Fact]
     public async Task ReadHoldingPinsIdentityAndReturnsRemoteEvidenceWithoutImporting() {
         var fixture = new Fixture();
