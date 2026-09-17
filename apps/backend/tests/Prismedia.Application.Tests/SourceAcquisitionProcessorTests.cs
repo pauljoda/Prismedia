@@ -95,11 +95,26 @@ public sealed class SourceAcquisitionProcessorTests {
             ChangeResolvedPublication = publication,
             ChangeResolvedFormat = format
         };
-        await Assert.ThrowsAsync<JobRetryLaterException>(fixture.RunAsync);
+        await Assert.ThrowsAsync<IntegrationInvocationException>(fixture.RunAsync);
         Assert.Equal(IntegrationTransferPhase.Transferring, fixture.State.Phase);
         Assert.Equal(1, fixture.Resolves);
         Assert.Equal(0, fixture.Downloads);
         Assert.Equal(0, fixture.Imports);
+        Assert.Equal("Publication transfer could not finish. Verified files and accepted intent are retained; check the connection and destination, then retry.", fixture.Error);
+        Assert.Single(fixture.ErrorRevisions);
+    }
+
+    [Fact]
+    public async Task MaterializationFailureAfterArtifactFenceKeepsTransferErrorAtCurrentRevision() {
+        var fixture = new Fixture { SourceState = SourceAcquisitionState.Ready, FailMaterialization = true };
+
+        await Assert.ThrowsAsync<IntegrationInvocationException>(fixture.RunAsync);
+
+        Assert.Equal(IntegrationTransferPhase.Importing, fixture.State.Phase);
+        Assert.Equal(1, fixture.Downloads);
+        Assert.Equal(1, fixture.Imports);
+        Assert.Equal("Publication transfer could not finish. Verified files and accepted intent are retained; check the connection and destination, then retry.", fixture.Error);
+        Assert.Equal([fixture.State.Revision], fixture.ErrorRevisions);
     }
 
     private sealed class Fixture : IIntegrationTransferStore, IIntegrationSourceAcquisitionGateway,
@@ -123,10 +138,13 @@ public sealed class SourceAcquisitionProcessorTests {
         internal bool ChangePublication { get; set; }
         internal bool ChangeResolvedPublication { get; set; }
         internal bool ChangeResolvedFormat { get; set; }
+        internal bool FailMaterialization { get; set; }
         internal int Requests { get; private set; }
         internal int Resolves { get; private set; }
         internal int Downloads { get; private set; }
         internal int Imports { get; private set; }
+        internal string? Error { get; private set; }
+        internal List<long> ErrorRevisions { get; } = [];
         internal List<Guid> RequestOperationIds { get; } = [];
 
         internal Fixture() {
@@ -225,7 +243,13 @@ public sealed class SourceAcquisitionProcessorTests {
             }
             return Task.CompletedTask;
         }
-        public Task RecordErrorAsync(Guid operationId, long expectedRevision, string error, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task RecordErrorAsync(Guid operationId, long expectedRevision, string error, CancellationToken cancellationToken) {
+            Assert.Equal(State.OperationId, operationId);
+            Assert.Equal(State.Revision, expectedRevision);
+            Error = error;
+            ErrorRevisions.Add(expectedRevision);
+            return Task.CompletedTask;
+        }
         public Task<VerifiedIntegrationArtifact> TransferAsync(IntegrationArtifactTransferRequest request, CancellationToken cancellationToken) {
             Downloads++;
             return Task.FromResult(new VerifiedIntegrationArtifact(request.ArtifactId, Path.Combine(root.Path, "staged.epub"), 100, Hash, "book.epub"));
@@ -242,6 +266,7 @@ public sealed class SourceAcquisitionProcessorTests {
         public Task<ImportedEntityMaterializationResult> MaterializeAsync(EntityKind kind, JobContext context,
             ImportedEntityMaterializationRequest request, CancellationToken cancellationToken) {
             Imports++;
+            if (FailMaterialization) throw new InvalidDataException("The downloaded publication is not a valid archive.");
             return Task.FromResult(new ImportedEntityMaterializationResult([new(Guid.NewGuid(), kind)], [], request.PlacedMediaPaths, [], []));
         }
         public Task<IReadOnlyList<StoredIntegrationTransfer>> ListAsync(int limit, CancellationToken cancellationToken) => throw new NotSupportedException();

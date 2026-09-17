@@ -200,6 +200,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Source-backed imports retain the correct transfer or import failure after the source is ready, keeping retry progress and verified files intact.
+
 - Interrupted catalog and executor imports can recover from an already placed file when staging is missing, after verifying the exact accepted bytes.
 
 - Open Library metadata review can unlink an exact superseded edition identity. Shared ISBNs and other providers remain intact, and later lookups no longer restore an old edition from stale hints.

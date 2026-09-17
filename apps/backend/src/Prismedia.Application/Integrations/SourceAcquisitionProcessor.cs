@@ -52,9 +52,6 @@ public sealed class SourceAcquisitionProcessor(IIntegrationTransferStore store, 
                 if (transfer.State.Phase != IntegrationTransferPhase.Transferring)
                     throw new JobRetryLaterException("Waiting for the source to prepare the selected publication.", PollDelay(observation.NextPollAfter));
             }
-
-            if (transfer.State.Phase is IntegrationTransferPhase.Transferring or IntegrationTransferPhase.Importing)
-                await sourceTransfers.ProcessAsync(operationId, context, cancellationToken);
         } catch (JobRetryLaterException) { throw; }
         catch (OperationCanceledException) { throw; }
         catch (IntegrationTransferConflictException) { throw; }
@@ -64,6 +61,11 @@ public sealed class SourceAcquisitionProcessor(IIntegrationTransferStore store, 
             await store.RecordErrorAsync(operationId, revision, message, cancellationToken);
             throw new JobRetryLaterException(message, TimeSpan.FromMinutes(1));
         }
+
+        // Preparation ends at the persisted Ready/Transferring boundary. Resolution, verified byte
+        // transfer, and local import own their failures and revision after this delegation begins.
+        if (transfer.State.Phase is IntegrationTransferPhase.Transferring or IntegrationTransferPhase.Importing)
+            await sourceTransfers.ProcessAsync(operationId, context, cancellationToken);
     }
 
     private static Task ReportAsync(Prismedia.Contracts.Integrations.SourceAcquisitionObservation observation,
