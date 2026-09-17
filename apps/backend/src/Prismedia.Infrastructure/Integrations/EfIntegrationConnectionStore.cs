@@ -64,10 +64,11 @@ public sealed class EfIntegrationConnectionStore(PrismediaDbContext db, Connecti
     }
 
     /// <inheritdoc />
-    public async Task<IReadOnlyDictionary<string, string>> ReadSecretsAsync(Guid id, CancellationToken cancellationToken) {
+    public async Task<IReadOnlyDictionary<string, string>> ReadSecretsAsync(Guid id, IReadOnlyCollection<string> credentialKeys, CancellationToken cancellationToken) {
         var row = await db.IntegrationConnections.AsNoTracking().SingleOrDefaultAsync(row => row.Id == id, cancellationToken)
             ?? throw new ConnectionNotFoundException();
-        return Read<Dictionary<string, string>>(row.ProtectedSecretsJson).ToDictionary(pair => pair.Key,
+        var allowed = credentialKeys.ToHashSet(StringComparer.Ordinal);
+        return Read<Dictionary<string, string>>(row.ProtectedSecretsJson).Where(pair => allowed.Contains(pair.Key)).ToDictionary(pair => pair.Key,
             pair => secrets.Unprotect(id, pair.Key, pair.Value), StringComparer.Ordinal);
     }
 

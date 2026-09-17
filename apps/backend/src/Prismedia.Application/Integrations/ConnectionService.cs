@@ -44,9 +44,8 @@ public sealed class ConnectionService(IIntegrationConnectionStore store, IIntegr
         if (!connection.State.Enabled) throw new ArgumentException("Enable the connection before testing it.");
         try {
             var manifest = await RequirePluginAsync(connection.State.PluginId, cancellationToken);
-            var auth = await store.ReadSecretsAsync(id, cancellationToken);
-            if (manifest.Auth.Any(field => field.Required && (!auth.TryGetValue(field.Key, out var value) || string.IsNullOrWhiteSpace(value))))
-                throw new IntegrationInvocationException("Required connection credentials are missing.");
+            var auth = IntegrationCredentialScope.ForManifest(manifest,
+                await store.ReadSecretsAsync(id, manifest.Auth.Select(field => field.Key).ToArray(), cancellationToken));
             var result = await plugins.ProbeAsync(manifest.Id, new IntegrationConnectionContext(id, connection.State.BaseUrl,
                 connection.State.HasPersistentRemoteIdentity ? connection.State.RemoteInstanceId : null, connection.State.Settings, auth), cancellationToken);
             if (result.Capabilities is null || result.Capabilities.Count > 8 || result.Capabilities.Any(item => item is null)

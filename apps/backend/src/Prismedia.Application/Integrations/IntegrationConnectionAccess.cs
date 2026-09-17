@@ -20,9 +20,8 @@ public sealed class IntegrationConnectionAccess(IIntegrationConnectionStore stor
             || manifest.Integration?.Capabilities.Any(support => support.Kind == capability
                 && support.Operations.Contains(operation) && support.EntityKinds.Contains(kind)) != true)
             throw new ConnectionCapabilityUnavailableException();
-        var auth = await store.ReadSecretsAsync(id, cancellationToken);
-        if (manifest.Auth.Any(field => field.Required && (!auth.TryGetValue(field.Key, out var value) || string.IsNullOrWhiteSpace(value))))
-            throw new IntegrationInvocationException("Required connection credentials are missing.");
+        var auth = IntegrationCredentialScope.ForManifest(manifest,
+            await store.ReadSecretsAsync(id, manifest.Auth.Select(field => field.Key).ToArray(), cancellationToken));
         return new(connection, manifest, new(id, connection.State.BaseUrl,
             connection.State.HasPersistentRemoteIdentity ? connection.State.RemoteInstanceId : null, connection.State.Settings, auth));
     }

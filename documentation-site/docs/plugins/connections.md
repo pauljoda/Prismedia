@@ -194,6 +194,10 @@ remote polling returns the worker slot to the durable queue between snapshots.
 Connection credentials use ASP.NET Core Data Protection with a key ring in
 `/data/keys/connections` (under the configured data directory). API and worker share
 that directory. Each encrypted value is bound to its connection and credential key.
+Only keys declared by the current plugin manifest are decrypted for an invocation.
+The executable boundary checks that declaration again before passing credentials.
+Fields retired by a plugin update remain encrypted for recovery, and unreadable
+retired values do not block the credentials still in use.
 Metadata plugin and OpenSubtitles credentials share this key ring under a separate
 provider-specific purpose. Existing unencrypted provider rows are upgraded at startup;
 concurrent credential changes take precedence over that upgrade.

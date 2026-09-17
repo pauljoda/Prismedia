@@ -45,6 +45,7 @@ public sealed partial class IntegrationPluginGateway(PrismediaDbContext db, Plug
     /// <summary>Executes one bounded typed call and validates protocol and invocation correlation before returning a result.</summary>
     internal async Task<TOutput> InvokeAsync<TInput, TOutput>(PluginDescriptor descriptor, IntegrationOperation operation,
         IntegrationConnectionContext connection, TInput input, CancellationToken cancellationToken) where TOutput : class {
+        connection = connection with { Auth = IntegrationCredentialScope.ForManifest(descriptor.Manifest, connection.Auth) };
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(TimeSpan.FromSeconds(60));
         var invocationId = Guid.NewGuid();

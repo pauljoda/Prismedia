@@ -175,6 +175,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Connections pass only credentials declared by the current plugin version. Retired encrypted fields remain recoverable and cannot block an invocation when their old values are unreadable.
+
 - Book naming templates must preserve the publication extension, and rendered filenames are checked before import placement. Acquisition actions blocked by retained import recovery now return an actionable conflict instead of a server error.
 
 - Soulseek release titles now preserve author and work boundaries for slash-separated peer paths, so valid publication matches are not rejected.

@@ -88,7 +88,7 @@ public sealed class CatalogDiscoveryServiceTests {
         public Task<IReadOnlyList<StoredIntegrationConnection>> ListAsync(CancellationToken cancellationToken) => throw new NotImplementedException();
         public Task<StoredIntegrationConnection?> FindAsync(Guid id, CancellationToken cancellationToken) => Task.FromResult<StoredIntegrationConnection?>(id == Connection.State.Id ? new(Connection, []) : null);
         public Task SaveAsync(IntegrationConnection connection, long? expectedRevision, IReadOnlyDictionary<string, string?> secretChanges, CancellationToken cancellationToken) => throw new NotImplementedException();
-        public Task<IReadOnlyDictionary<string, string>> ReadSecretsAsync(Guid id, CancellationToken cancellationToken) { SecretReads++; return Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>()); }
+        public Task<IReadOnlyDictionary<string, string>> ReadSecretsAsync(Guid id, IReadOnlyCollection<string> credentialKeys, CancellationToken cancellationToken) { SecretReads++; return Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>()); }
         public Task DeleteAsync(Guid id, long expectedRevision, CancellationToken cancellationToken) => throw new NotImplementedException();
         public Task<PluginManifest?> FindAsync(string pluginId, CancellationToken cancellationToken) => Task.FromResult(PluginAvailable ? Manifest : null);
         public Task<ConnectionProbeResult> ProbeAsync(string pluginId, IntegrationConnectionContext connection, CancellationToken cancellationToken) => throw new NotImplementedException();

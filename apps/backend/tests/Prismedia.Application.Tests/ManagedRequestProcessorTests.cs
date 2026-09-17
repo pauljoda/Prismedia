@@ -140,7 +140,7 @@ public sealed class ManagedRequestProcessorTests {
         public Task QueueAsync(Guid id, CancellationToken token) => throw new NotImplementedException();
         public Task QueueDueAsync(CancellationToken token) => throw new NotImplementedException();
         Task<StoredIntegrationConnection?> IIntegrationConnectionStore.FindAsync(Guid id, CancellationToken token) => Task.FromResult<StoredIntegrationConnection?>(new(connection, []));
-        public Task<IReadOnlyDictionary<string,string>> ReadSecretsAsync(Guid id, CancellationToken token) => Task.FromResult<IReadOnlyDictionary<string,string>>(new Dictionary<string,string>());
+        public Task<IReadOnlyDictionary<string,string>> ReadSecretsAsync(Guid id, IReadOnlyCollection<string> credentialKeys, CancellationToken token) => Task.FromResult<IReadOnlyDictionary<string,string>>(new Dictionary<string,string>());
         public Task<PluginManifest?> FindAsync(string id, CancellationToken token) => Task.FromResult<PluginManifest?>(Manifest);
         public Task<ConnectionProbeResult> ProbeAsync(string pluginId, IntegrationConnectionContext context, CancellationToken token) => throw new NotImplementedException();
         public Task<IReadOnlyList<StoredIntegrationConnection>> ListAsync(CancellationToken token) => throw new NotImplementedException();

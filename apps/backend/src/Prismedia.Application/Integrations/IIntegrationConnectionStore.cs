@@ -13,8 +13,8 @@ public interface IIntegrationConnectionStore {
     Task<StoredIntegrationConnection?> FindAsync(Guid id, CancellationToken cancellationToken);
     /// <summary>Atomically persists a new revision and explicit secret updates. Null expected revision creates.</summary>
     Task SaveAsync(IntegrationConnection connection, long? expectedRevision, IReadOnlyDictionary<string, string?> secretChanges, CancellationToken cancellationToken);
-    /// <summary>Decrypts saved credentials only at an authorized invocation boundary.</summary>
-    Task<IReadOnlyDictionary<string, string>> ReadSecretsAsync(Guid id, CancellationToken cancellationToken);
+    /// <summary>Decrypts only the requested, currently declared keys at an authorized invocation boundary; leaves all other encrypted values untouched.</summary>
+    Task<IReadOnlyDictionary<string, string>> ReadSecretsAsync(Guid id, IReadOnlyCollection<string> credentialKeys, CancellationToken cancellationToken);
     /// <summary>Removes an unused connection at the expected revision.</summary>
     Task DeleteAsync(Guid id, long expectedRevision, CancellationToken cancellationToken);
 }

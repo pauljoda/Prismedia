@@ -9,6 +9,22 @@ namespace Prismedia.Application.Tests;
 
 public sealed class ManagedLibraryServiceTests {
     private const string FixtureProvider = "fixture-catalog";
+    private const string CurrentCredentialKey = "current-token";
+    private const string RetiredCredentialKey = "retired-token";
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task ProbeAndLibraryReadsRequestAndPassOnlyCurrentlyDeclaredCredentials(bool probe) {
+        var fixture = new Fixture();
+        fixture.Manifest = fixture.Manifest with { Auth = [new(CurrentCredentialKey, "Token", true, null)] };
+        fixture.Secrets = new Dictionary<string, string> { [CurrentCredentialKey] = "current-secret", [RetiredCredentialKey] = "retired-secret" };
+        if (probe) await new ConnectionService(fixture, fixture).ProbeAsync(fixture.Connection.State.Id, default);
+        else await fixture.Service.SearchAsync(fixture.Connection.State.Id, new(EntityKind.Movie), default);
+        Assert.Equal([CurrentCredentialKey], fixture.RequestedSecretKeys);
+        Assert.Equal([CurrentCredentialKey], fixture.LastAuth!.Keys);
+        Assert.Equal("current-secret", fixture.LastAuth[CurrentCredentialKey]);
+    }
     [Fact]
     public void ComicEvidencePreservesExactLabelsWithoutBorrowingTelevisionNumbering() {
         var item = new ManagedLibraryItem("run", EntityKind.ComicSeries, "Comics", 2026,
@@ -75,6 +91,9 @@ public sealed class ManagedLibraryServiceTests {
         internal ManagedLibraryService Service { get; }
         internal int SecretReads { get; private set; }
         internal int Calls { get; private set; }
+        internal IReadOnlyDictionary<string, string> Secrets { get; set; } = new Dictionary<string, string>();
+        internal IReadOnlyCollection<string>? RequestedSecretKeys { get; private set; }
+        internal IReadOnlyDictionary<string, string>? LastAuth { get; private set; }
         internal Fixture() {
             var support = new IntegrationSupport[] {
                 new(PluginCapability.ConnectedLibrary, [IntegrationOperation.SearchLibrary, IntegrationOperation.GetLibraryItem], [EntityKind.Movie]),
@@ -91,12 +110,12 @@ public sealed class ManagedLibraryServiceTests {
         }
         public Task<IReadOnlyList<StoredIntegrationConnection>> ListAsync(CancellationToken cancellationToken) => throw new NotImplementedException();
         public Task<StoredIntegrationConnection?> FindAsync(Guid id, CancellationToken cancellationToken) => Task.FromResult<StoredIntegrationConnection?>(id == Connection.State.Id ? new(Connection, []) : null);
-        public Task SaveAsync(IntegrationConnection connection, long? expectedRevision, IReadOnlyDictionary<string, string?> secretChanges, CancellationToken cancellationToken) => throw new NotImplementedException();
-        public Task<IReadOnlyDictionary<string, string>> ReadSecretsAsync(Guid id, CancellationToken cancellationToken) { SecretReads++; return Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>()); }
+        public Task SaveAsync(IntegrationConnection connection, long? expectedRevision, IReadOnlyDictionary<string, string?> secretChanges, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task<IReadOnlyDictionary<string, string>> ReadSecretsAsync(Guid id, IReadOnlyCollection<string> credentialKeys, CancellationToken cancellationToken) { SecretReads++; RequestedSecretKeys = credentialKeys; return Task.FromResult(Secrets); }
         public Task DeleteAsync(Guid id, long expectedRevision, CancellationToken cancellationToken) => throw new NotImplementedException();
         public Task<PluginManifest?> FindAsync(string pluginId, CancellationToken cancellationToken) => Task.FromResult<PluginManifest?>(Manifest);
-        public Task<ConnectionProbeResult> ProbeAsync(string pluginId, IntegrationConnectionContext connection, CancellationToken cancellationToken) => throw new NotImplementedException();
-        public Task<ManagedLibraryPage> SearchLibraryAsync(string pluginId, IntegrationConnectionContext connection, ManagedLibraryQuery input, CancellationToken cancellationToken) { Calls++; return Task.FromResult(Page); }
+        public Task<ConnectionProbeResult> ProbeAsync(string pluginId, IntegrationConnectionContext connection, CancellationToken cancellationToken) { LastAuth = connection.Auth; return Task.FromResult(new ConnectionProbeResult("installation", "Fixture", "1.0.0", Manifest.Integration!.Capabilities)); }
+        public Task<ManagedLibraryPage> SearchLibraryAsync(string pluginId, IntegrationConnectionContext connection, ManagedLibraryQuery input, CancellationToken cancellationToken) { Calls++; LastAuth = connection.Auth; return Task.FromResult(Page); }
         public Task<ManagedItemSnapshot> GetLibraryItemAsync(string pluginId, IntegrationConnectionContext connection, ManagedItemInput input, CancellationToken cancellationToken) { Calls++; return Task.FromResult(Snapshot); }
         public Task<ManagerOptions> GetOptionsAsync(string pluginId, IntegrationConnectionContext connection, ManagerOptionsInput input, CancellationToken cancellationToken) =>
             Task.FromResult(new ManagerOptions([new("external-profile", "Existing profile")], [new("root", "/remote", true)]));

@@ -13,11 +13,30 @@ public sealed class IntegrationConnectionStoreTests : IDisposable {
     private const string CredentialKey = "api-key";
     private const string Credential = "fixture-secret-never-in-public-documents";
     private const string PluginId = "fixture";
+    private const string RetiredCredentialKey = "retired-token";
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"prismedia-connection-store-{Guid.NewGuid():N}");
     private readonly DbContextOptions<PrismediaDbContext> _options = new DbContextOptionsBuilder<PrismediaDbContext>()
         .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
     private static IntegrationConnection NewConnection() => IntegrationConnection.Create(PluginId, "Books", "http://catalog.test", true,
         [PluginCapability.CatalogDiscovery], new Dictionary<string, string>());
+
+    [Fact]
+    public async Task UndeclaredCredentialsRemainEncryptedAndAreNotDecryptedEvenWhenCorrupt() {
+        var connection = NewConnection();
+        await using var db = new PrismediaDbContext(_options);
+        var store = new EfIntegrationConnectionStore(db, new ConnectionSecretProtector(_root));
+        await store.SaveAsync(connection, null, new Dictionary<string, string?> { [CredentialKey] = Credential, [RetiredCredentialKey] = "retired-secret" }, default);
+        var row = await db.IntegrationConnections.SingleAsync();
+        var encrypted = JsonSerializer.Deserialize<Dictionary<string, string>>(row.ProtectedSecretsJson)!;
+        encrypted[RetiredCredentialKey] = "damaged-retired-value";
+        row.ProtectedSecretsJson = JsonSerializer.Serialize(encrypted);
+        await db.SaveChangesAsync();
+        Assert.Equal(Credential, Assert.Single(await store.ReadSecretsAsync(connection.State.Id, [CredentialKey], default)).Value);
+        Assert.Empty(await store.ReadSecretsAsync(connection.State.Id, [], default));
+        Assert.Contains(RetiredCredentialKey, (await store.FindAsync(connection.State.Id, default))!.ConfiguredSecretKeys);
+        Assert.Equal(encrypted[RetiredCredentialKey], JsonSerializer.Deserialize<Dictionary<string, string>>(row.ProtectedSecretsJson)![RetiredCredentialKey]);
+        await Assert.ThrowsAsync<ConnectionSecretUnavailableException>(() => store.ReadSecretsAsync(connection.State.Id, [RetiredCredentialKey], default));
+    }
 
     [Fact]
     public async Task CredentialsPersistEncryptedAcrossRestartsAndCannotMoveBetweenConnections() {
@@ -34,8 +53,8 @@ public sealed class IntegrationConnectionStoreTests : IDisposable {
         await using (var db = new PrismediaDbContext(_options)) {
             var protector = new ConnectionSecretProtector(_root);
             var store = new EfIntegrationConnectionStore(db, protector);
-            Assert.Equal(Credential, (await store.ReadSecretsAsync(first.State.Id, CancellationToken.None))[CredentialKey]);
-            Assert.Empty(await store.ReadSecretsAsync(second.State.Id, CancellationToken.None));
+            Assert.Equal(Credential, (await store.ReadSecretsAsync(first.State.Id, [CredentialKey], CancellationToken.None))[CredentialKey]);
+            Assert.Empty(await store.ReadSecretsAsync(second.State.Id, [CredentialKey], CancellationToken.None));
             var encrypted = JsonSerializer.Deserialize<Dictionary<string, string>>((await db.IntegrationConnections.SingleAsync(item => item.Id == first.State.Id)).ProtectedSecretsJson)![CredentialKey];
             Assert.Throws<ConnectionSecretUnavailableException>(() => protector.Unprotect(second.State.Id, CredentialKey, encrypted));
         }
@@ -56,7 +75,7 @@ public sealed class IntegrationConnectionStoreTests : IDisposable {
         Assert.Equal("Updated", saved.Connection.State.Name);
         Assert.Equal(ConnectionStatus.Disabled, saved.Connection.State.Status);
         Assert.Empty(saved.ConfiguredSecretKeys);
-        Assert.Empty(await store.ReadSecretsAsync(connection.State.Id, CancellationToken.None));
+        Assert.Empty(await store.ReadSecretsAsync(connection.State.Id, [CredentialKey], CancellationToken.None));
     }
 
     [Fact]
