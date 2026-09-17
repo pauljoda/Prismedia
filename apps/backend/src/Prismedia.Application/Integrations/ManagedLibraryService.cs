@@ -19,13 +19,19 @@ public sealed class ManagedLibraryService(IntegrationConnectionAccess access, II
 
     /// <summary>Returns remote file evidence only after verifying the selected holding's identity.</summary>
     public async Task<ManagedItemSnapshot> GetAsync(Guid connectionId, ManagedItemInput input, CancellationToken cancellationToken) {
-        if (!Enum.IsDefined(input.EntityKind) || !Text(input.RemoteId, 512) || !Identities(input.ExpectedExternalIds))
+        if (!IsValidInput(input))
             throw new ArgumentException("Select an existing holding with its current identities.");
         var authorized = await access.RequireAsync(connectionId, PluginCapability.ConnectedLibrary, IntegrationOperation.GetLibraryItem, input.EntityKind, cancellationToken);
         var snapshot = await gateway.GetLibraryItemAsync(authorized.Manifest.Id, authorized.Context, input, cancellationToken);
         ValidateSnapshot(input, snapshot);
         return snapshot;
     }
+
+    /// <summary>Checks whether a saved holding reference contains the complete bounded identity pin required for a safe lookup.</summary>
+    public static bool IsValidInput(ManagedItemInput? input) => input is not null
+        && Enum.IsDefined(input.EntityKind)
+        && Text(input.RemoteId, 512)
+        && Identities(input.ExpectedExternalIds);
 
     /// <summary>Validates exact holding identity and complete finite file evidence before any application use case trusts it.</summary>
     public static void ValidateSnapshot(ManagedItemInput input, ManagedItemSnapshot snapshot) {

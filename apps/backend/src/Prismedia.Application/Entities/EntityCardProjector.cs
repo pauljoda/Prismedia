@@ -36,7 +36,8 @@ public static class EntityCardProjector {
         Guid? currentUserId = null,
         IReadOnlyList<EntityCreditMetadata>? creditMetadata = null,
         IReadOnlySet<EntityKind>? sourceBackedChildKinds = null,
-        AcquisitionAttributionCapability? acquisitionAttribution = null) =>
+        AcquisitionAttributionCapability? acquisitionAttribution = null,
+        ExternalLibraryProvenanceCapability? externalLibraryProvenance = null) =>
         new() {
             Id = entity.Id,
             Kind = entity.Kind,
@@ -50,7 +51,8 @@ public static class EntityCardProjector {
                 currentUserId,
                 creditMetadata,
                 sourceBackedChildKinds ?? new HashSet<EntityKind>(),
-                acquisitionAttribution),
+                acquisitionAttribution,
+                externalLibraryProvenance),
             ChildrenByKind = ToGroups(entity.ChildrenByKind),
             Relationships = ToGroups(entity.RelationshipsByKind),
         };

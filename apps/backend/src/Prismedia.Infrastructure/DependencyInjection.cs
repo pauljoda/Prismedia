@@ -129,6 +129,7 @@ public static class DependencyInjection {
         services.AddScoped<IIntegrationTransferScheduler, IntegrationTransferScheduler>();
         services.AddScoped<IIntegrationTransferStore, EfIntegrationTransferStore>();
         services.AddScoped<IEntityAcquisitionAttributionReader, EfEntityAcquisitionAttributionReader>();
+        services.AddScoped<IEntityExternalLibraryProvenanceReader, EfEntityExternalLibraryProvenanceReader>();
         services.AddSingleton(new TransferPlanProtector(dataDir));
         services.AddScoped<IIntegrationMediaVerifier, IntegrationMediaVerifier>();
         services.AddScoped<IIntegrationImportPlacement, IntegrationImportPlacement>();

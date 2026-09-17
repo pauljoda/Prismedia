@@ -12,7 +12,7 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EfEntityReadServiceDetailHydrationTests {
     [Fact]
-    public async Task AcquisitionAttributionIsOnlyReadForAnExistingVisibleDetail() {
+    public async Task OptionalProvenanceReadersOnlyRunForAnExistingVisibleDetail() {
         await using var db = CreateContext();
         var id = Guid.NewGuid();
         var hiddenId = Guid.NewGuid();
@@ -21,17 +21,32 @@ public sealed class EfEntityReadServiceDetailHydrationTests {
             new EntityRow { Id = hiddenId, KindCode = EntityKind.Image.ToCode(), Title = "Hidden image", IsNsfw = true });
         await db.SaveChangesAsync();
         var attribution = new AttributionReader();
+        var externalLibrary = new ExternalLibraryReader();
         var currentUser = TestUserContext.Admin();
         var repository = new EfEntityRepository(db, currentUser, EntityMappers.Kinds(db), EntityMappers.Capabilities(db, currentUser));
-        var service = new EfEntityReadService(db, currentUser, repository, [], new EfEntityProgressTopologyResolver(db), acquisitionAttribution: attribution);
+        var service = new EfEntityReadService(db, currentUser, repository, [], new EfEntityProgressTopologyResolver(db),
+            acquisitionAttribution: attribution, externalLibraryProvenance: externalLibrary);
 
         Assert.Null(await service.GetAsync(hiddenId, true, default));
         Assert.Null(await service.GetAsync(Guid.NewGuid(), false, default));
         Assert.Empty(attribution.Requests);
+        Assert.Empty(externalLibrary.Requests);
         var detail = await service.GetAsync(id, false, default);
         Assert.NotNull(detail);
         Assert.Same(attribution.Result, Assert.Single(detail.Capabilities.OfType<AcquisitionAttributionCapability>()));
+        Assert.Same(externalLibrary.Result, Assert.Single(detail.Capabilities.OfType<ExternalLibraryProvenanceCapability>()));
         Assert.Equal([id], attribution.Requests);
+        Assert.Equal([id], externalLibrary.Requests);
+    }
+
+    private sealed class ExternalLibraryReader : IEntityExternalLibraryProvenanceReader {
+        internal List<Guid> Requests { get; } = [];
+        internal ExternalLibraryProvenanceCapability Result { get; } = new(
+            Guid.NewGuid(), "Saved source", "source-plugin", Guid.NewGuid(), "Mapped library");
+        public Task<ExternalLibraryProvenanceCapability?> ReadAsync(Guid entityId, CancellationToken cancellationToken) {
+            Requests.Add(entityId);
+            return Task.FromResult<ExternalLibraryProvenanceCapability?>(Result);
+        }
     }
 
     private sealed class AttributionReader : IEntityAcquisitionAttributionReader {

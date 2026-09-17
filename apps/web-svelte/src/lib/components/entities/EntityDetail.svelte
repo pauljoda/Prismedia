@@ -17,6 +17,7 @@
   import { resolve } from "$app/paths";
   import {
     Badge,
+    ArrowUpRight,
     BarChart3,
     Building2,
     Calendar,
@@ -25,6 +26,7 @@
     Star,
     Heart,
     Flame,
+    HardDrive,
     CheckCircle,
     Link,
     ListOrdered,
@@ -33,7 +35,7 @@
     Play,
     Users,
   } from "@lucide/svelte";
-  import { Button, Tabs } from "@prismedia/ui-svelte";
+  import { Button, Tabs, buttonVariants } from "@prismedia/ui-svelte";
   import EntityDetailEditLayout from "./EntityDetailEditLayout.svelte";
   import EntityDetailArtworkEditor from "./EntityDetailArtworkEditor.svelte";
   import type { EntityDetailCard, EntityDetailCardFull } from "$lib/entities/entity-detail";
@@ -76,8 +78,11 @@
   import EntityDetailMetadataSection from "./EntityDetailMetadataSection.svelte";
   import { EntityDetailEditController } from "./entity-detail-edit-controller.svelte";
   import { useEntityArtworkTransition } from "$lib/motion/entity-artwork-transition";
+  import { managedHoldingInputHref, managedHoldingSourceHref } from "$lib/integrations/managed-holding-route";
+  import { useSession } from "$lib/stores/session.svelte";
 
   const artworkTransition = useEntityArtworkTransition();
+  const session = useSession();
 
   type Props = EntityDetailProps;
 
@@ -129,6 +134,23 @@
       background: "#000000",
     },
   );
+  const externalLibraryProvenance = $derived(card.externalLibraryProvenance ?? null);
+  const externalLibraryLink = $derived.by(() => {
+    if (!session.isAdmin || !externalLibraryProvenance) return null;
+    const holding = externalLibraryProvenance.holding;
+    const identities = Object.entries(holding?.item.expectedExternalIds ?? {});
+    const hasIdentityPin = identities.length > 0
+      && identities.every(([provider, value]) => provider.trim().length > 0 && value.trim().length > 0);
+    return {
+      href: holding && hasIdentityPin
+        ? managedHoldingInputHref(externalLibraryProvenance.connectionId, holding.item)
+        : managedHoldingSourceHref(externalLibraryProvenance.connectionId, holding?.item.entityKind ?? card.entity.kind),
+      label: holding && hasIdentityPin ? "Open connected title" : "Browse source",
+      ariaLabel: holding && hasIdentityPin
+        ? `Open ${externalLibraryProvenance.connectionName} connected title`
+        : `Browse ${externalLibraryProvenance.connectionName} connected source`,
+    };
+  });
 
   function captureArtworkPalette(image: HTMLImageElement) {
     const palette = paletteFromImage(image);
@@ -663,6 +685,24 @@
     <EntityDetailArtworkEditor assets={editableArtwork} busyRole={artwork.busyRole} onUpload={artwork.uploadAsset} onClear={artwork.clearAsset} />
   {/if}
 
+  {#if externalLibraryProvenance}
+    <aside class="external-library-origin" aria-label="External library origin">
+      <HardDrive class="external-library-origin__icon" aria-hidden="true" />
+      <div class="external-library-origin__copy">
+        <div class="external-library-origin__title">
+          <strong>External library</strong><span aria-hidden="true">·</span><span>{externalLibraryProvenance.connectionName}</span>
+        </div>
+        <p>This item’s files stay with {externalLibraryProvenance.connectionName}; Prismedia reads them in place.</p>
+        <p class="external-library-origin__scope">Mapped library: {externalLibraryProvenance.libraryLabel}</p>
+      </div>
+      {#if externalLibraryLink}
+        <a class={buttonVariants({ variant: "ghost", size: "sm" })} href={externalLibraryLink.href} aria-label={externalLibraryLink.ariaLabel}>
+          {externalLibraryLink.label}<ArrowUpRight aria-hidden="true" />
+        </a>
+      {/if}
+    </aside>
+  {/if}
+
   {#if hasTabs}
     <div class="detail-tabs">
       <Tabs.Root class="gap-0" activationMode="manual" bind:value={() => activeTab?.id ?? "", requestTab}>
@@ -773,6 +813,61 @@
       radial-gradient(circle at 96% 32%, color-mix(in srgb, var(--detail-secondary) 7%, transparent), transparent 34rem),
       linear-gradient(180deg, color-mix(in srgb, var(--detail-background) 88%, #000 12%), #000 45rem);
     transition: background 180ms var(--ease-default);
+  }
+
+  .external-library-origin {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 0.75rem;
+    margin: 0.75rem 1.5rem 0;
+    padding: 0.7rem 0.85rem;
+    border: 1px solid var(--detail-border);
+    border-left: 2px solid var(--color-border-strong, var(--detail-text-disabled));
+    border-radius: var(--radius-sm);
+    background: var(--detail-surface);
+    color: var(--detail-text-secondary);
+  }
+
+  .external-library-origin__icon {
+    width: 1rem;
+    height: 1rem;
+    color: var(--detail-text-muted);
+  }
+
+  .external-library-origin__copy {
+    min-width: 0;
+    overflow-wrap: anywhere;
+    font-size: 0.75rem;
+    line-height: 1.35;
+  }
+
+  .external-library-origin__title {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.35rem;
+    color: var(--detail-text);
+    font-size: 0.8125rem;
+  }
+
+  .external-library-origin__scope {
+    margin-top: 0.15rem;
+    color: var(--detail-text-muted);
+    font-family: var(--font-mono);
+    font-size: 0.6875rem;
+  }
+
+  @media (max-width: 639px) {
+    .external-library-origin {
+      grid-template-columns: auto minmax(0, 1fr);
+      margin-inline: 1rem;
+    }
+
+    .external-library-origin > :global(a) {
+      grid-column: 2;
+      justify-self: start;
+    }
   }
 
   .entity-detail > * {

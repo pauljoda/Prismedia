@@ -70,6 +70,15 @@ move the source files, or need a symlink for each title. Catalog acquisition and
 downloads are separate workflows that place newly selected files in a Prismedia
 destination library.
 
+Library entity detail pages also identify external library sources. The source
+notice names the connection and mapped library, explains that files are read in
+place, and lets administrators return to the connected holding when an exact
+association exists. Otherwise they can browse the connected source. Household
+viewers can see the source notice without receiving connection-management controls.
+This provenance comes from saved library associations, so it remains visible when
+the application is offline or tracking has been released. Metadata-provider badges
+describe metadata identity separately and do not establish file ownership.
+
 Catalog pages distinguish full-publication offers from loans, purchases, samples,
 and external workflows. These distinctions do not grant permission to execute an
 external workflow. Acquisition operations use separate typed orchestration contracts;

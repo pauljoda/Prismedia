@@ -56,6 +56,24 @@ public sealed class EntityCardProjectorContractTests {
     }
 
     [Fact]
+    public void ExternalReadOnlyLibrariesSuppressFileDeletionWithoutChangingNativeFileManagement() {
+        var movie = new Movie(Guid.NewGuid(), "Arrival");
+        var native = EntityCardProjector.ToCard(
+            movie,
+            new EntityFileManagementState(HasSourceBackedSubtree: true, HasRecoverableDeletion: false));
+        var provenance = new ExternalLibraryProvenanceCapability(
+            Guid.NewGuid(), "Radarr", "radarr", Guid.NewGuid(), "External movies");
+        var external = EntityCardProjector.ToCard(
+            movie,
+            new EntityFileManagementState(HasSourceBackedSubtree: true, HasRecoverableDeletion: false),
+            externalLibraryProvenance: provenance);
+
+        Assert.True(AssertCapability<FileManagementCapability>(native).CanDeleteFiles);
+        Assert.Empty(external.Capabilities.OfType<FileManagementCapability>());
+        Assert.Same(provenance, AssertCapability<ExternalLibraryProvenanceCapability>(external));
+    }
+
+    [Fact]
     public void ProjectsPlayableVideoOnlyForPlayableDefinitionsWithTheirOwnSourceFile() {
         var movie = new Movie(Guid.NewGuid(), "Arrival");
         movie.AttachFile(EntityFileRole.Source, "/media/movies/Arrival.mkv", "video/x-matroska");

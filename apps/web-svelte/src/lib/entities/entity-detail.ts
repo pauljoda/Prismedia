@@ -12,6 +12,7 @@ import { resolutionBadge } from "$lib/entities/media-resolution";
 import type {
   EntityCapability,
   EntityCapabilityAcquisitionAttributionCapability,
+  EntityCapabilityExternalLibraryProvenanceCapability,
   EntityCard,
   EntityDate,
   EntityExternalId,
@@ -213,6 +214,8 @@ export interface EntityDetailCard {
   tags: EntityDetailTag[];
   links: EntityDetailLink[];
   providerIdentity: EntityDetailProviderIdentity | null;
+  /** Saved external-library scope for files this Entity reads in place. */
+  externalLibraryProvenance?: EntityCapabilityExternalLibraryProvenanceCapability | null;
   files: EntityDetailFile[];
   presentCapabilities: EntityCapabilityKind[];
 }
@@ -536,6 +539,7 @@ export function entityCardToDetailCard(entity: EntityCard): EntityDetailCardFull
     technical: resolveTechnical(capabilities),
     links: resolveLinks(capabilities),
     providerIdentity: resolveProviderIdentity(capabilities),
+    externalLibraryProvenance: getCapability(capabilities, CAPABILITY_KIND.externalLibraryProvenance) ?? null,
     files: (filesCap?.items ?? []).map((item) => ({
       role: String(item.role),
       path: item.path,

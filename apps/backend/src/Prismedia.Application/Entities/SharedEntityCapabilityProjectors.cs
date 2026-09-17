@@ -35,7 +35,8 @@ internal sealed class FlagsCapabilityProjector : EntityCapabilityProjector<Flags
 internal sealed class FileManagementCapabilityProjector : EntityCapabilityProjector<FileManagementCapability> {
     public override FileManagementCapability? Project(EntityCapabilityProjectionContext context) =>
         EntityKindRegistry.Describe(context.Entity.Kind).SupportsFileDeletion &&
-        context.FileManagementState.CanDeleteFiles
+        context.FileManagementState.CanDeleteFiles &&
+        context.ExternalLibraryProvenance is null
             ? new FileManagementCapability(CanDeleteFiles: true)
             : null;
 }

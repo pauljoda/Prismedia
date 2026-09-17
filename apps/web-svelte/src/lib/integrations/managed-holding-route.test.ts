@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { ENTITY_KIND } from "$lib/api/generated/codes";
 import {
   managedHoldingHref,
+  managedHoldingInputHref,
   managedHoldingSourceHref,
   parseManagedHoldingIdentities,
 } from "./managed-holding-route";
@@ -26,6 +27,18 @@ describe("managed holding route", () => {
       alpha: "Value:01",
       zeta: "value/2",
     });
+  });
+
+  it("builds the same pinned route from a saved managed item input", () => {
+    const href = managedHoldingInputHref("source/id", {
+      entityKind: ENTITY_KIND.movie,
+      remoteId: "movie:part/1",
+      expectedExternalIds: { alpha: "Value:01" },
+    });
+    const url = new URL(href, "http://localhost");
+
+    expect(url.pathname).toBe("/request/source/source%2Fid/movie/movie%3Apart%2F1");
+    expect(parseManagedHoldingIdentities(url.searchParams.get("identities"))).toEqual({ alpha: "Value:01" });
   });
 
   it.each([

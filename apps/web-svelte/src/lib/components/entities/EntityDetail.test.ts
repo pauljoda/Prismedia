@@ -4,7 +4,7 @@ import { createRawSnippet } from "svelte";
 import * as navigation from "$app/navigation";
 import type { BeforeNavigate } from "@sveltejs/kit";
 import { describe, expect, it, vi } from "vitest";
-import { ACQUISITION_STATUS, CAPABILITY_KIND, ENTITY_KIND, FINGERPRINT_ALGORITHM } from "$lib/api/generated/codes";
+import { ACQUISITION_STATUS, CAPABILITY_KIND, ENTITY_KIND, EXTERNAL_ID_PROVIDER, FINGERPRINT_ALGORITHM, MANAGED_TRACKING_STATUS, REQUEST_MEDIA_KIND } from "$lib/api/generated/codes";
 import type { EntityDetailCard, EntityDetailCardFull } from "$lib/entities/entity-detail";
 import type { EntityDetailSection } from "./EntityDetail.svelte";
 import EntityDetail from "./EntityDetail.test-harness.svelte";
@@ -41,6 +41,65 @@ function buildCard(): EntityDetailCard {
 }
 
 describe("EntityDetail", () => {
+  it("omits external-library origin for a native library entity", () => {
+    render(EntityDetail, { card: buildCard() });
+
+    expect(screen.queryByRole("complementary", { name: "External library origin" })).not.toBeInTheDocument();
+  });
+
+  it("shows external provenance to viewers without exposing a connected-source URL", () => {
+    const card = buildCard();
+    card.externalLibraryProvenance = externalLibraryProvenance();
+    render(EntityDetail, { card });
+
+    const origin = screen.getByRole("complementary", { name: "External library origin" });
+    expect(within(origin).getByText("External library")).toBeInTheDocument();
+    expect(within(origin).getByText("Radarr")).toBeInTheDocument();
+    expect(within(origin).getByText("This item’s files stay with Radarr; Prismedia reads them in place.")).toBeInTheDocument();
+    expect(within(origin).getByText("Mapped library: Movies on NAS")).toBeInTheDocument();
+    expect(within(origin).queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  it("links administrators to the exact identity-pinned connected holding", () => {
+    const card = buildCard();
+    card.externalLibraryProvenance = externalLibraryProvenance();
+    render(EntityDetail, { card, admin: true });
+
+    const link = screen.getByRole("link", { name: "Open Radarr connected title" });
+    const url = new URL(link.getAttribute("href")!, "http://localhost");
+    expect(url.pathname).toBe("/request/source/connection-one/movie/movie-42");
+    expect(JSON.parse(url.searchParams.get("identities")!)).toEqual({ [EXTERNAL_ID_PROVIDER.tmdb]: "42" });
+  });
+
+  it("links administrators back to the scoped source when no exact holding is saved", () => {
+    const card = buildCard();
+    card.entity.kind = ENTITY_KIND.movie;
+    card.externalLibraryProvenance = { ...externalLibraryProvenance(), holding: null };
+    render(EntityDetail, { card, admin: true });
+
+    const link = screen.getByRole("link", { name: "Browse Radarr connected source" });
+    const url = new URL(link.getAttribute("href")!, "http://localhost");
+    expect(url.pathname).toBe("/request");
+    expect(url.searchParams.get("connection")).toBe("connection-one");
+    expect(url.searchParams.get("kind")).toBe(REQUEST_MEDIA_KIND.movie);
+  });
+
+  it("keeps external-library origin independent from metadata-provider identity", () => {
+    const card = buildCard();
+    card.externalLibraryProvenance = externalLibraryProvenance();
+    card.providerIdentity = {
+      pluginId: "metadata-router",
+      identityNamespace: EXTERNAL_ID_PROVIDER.imdb,
+      identityValue: "tt0000042",
+      url: null,
+    };
+    render(EntityDetail, { card });
+
+    expect(screen.getByRole("complementary", { name: "External library origin" })).toBeInTheDocument();
+    expect(screen.getByLabelText("Metadata and monitoring source: metadata-router, imdb ID tt0000042"))
+      .toBeInTheDocument();
+  });
+
   it("protects the shared editor draft on route navigation and releases the guard after cancel", async () => {
     let guard: ((event: BeforeNavigate) => void) | undefined;
     const hook = vi.spyOn(navigation, "beforeNavigate").mockImplementation((callback) => { guard = callback; });
@@ -741,3 +800,23 @@ describe("EntityDetail", () => {
     expect(screen.getByText("418214")).toBeInTheDocument();
   });
 });
+
+function externalLibraryProvenance(): NonNullable<EntityDetailCard["externalLibraryProvenance"]> {
+  return {
+    kind: CAPABILITY_KIND.externalLibraryProvenance,
+    connectionId: "connection-one",
+    connectionName: "Radarr",
+    pluginId: "radarr",
+    libraryRootId: "library-one",
+    libraryLabel: "Movies on NAS",
+    holding: {
+      holdingId: "holding-one",
+      item: {
+        entityKind: ENTITY_KIND.movie,
+        remoteId: "movie-42",
+        expectedExternalIds: { [EXTERNAL_ID_PROVIDER.tmdb]: "42" },
+      },
+      status: MANAGED_TRACKING_STATUS.released,
+    },
+  };
+}

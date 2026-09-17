@@ -42,6 +42,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
     private readonly EfEntityLibraryVisibilityFilter _libraryVisibility;
     private readonly AssetPathService? _assets;
     private readonly IEntityAcquisitionAttributionReader? _acquisitionAttribution;
+    private readonly IEntityExternalLibraryProvenanceReader? _externalLibraryProvenance;
 
     public EfEntityReadService(
         PrismediaDbContext db,
@@ -53,7 +54,8 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         IEntitySourceOwnershipReader? sourceOwnership = null,
         IEntityFileDeletionRecoveryReader? deletionRecovery = null,
         EfEntityLibraryVisibilityFilter? libraryVisibility = null,
-        IEntityAcquisitionAttributionReader? acquisitionAttribution = null) {
+        IEntityAcquisitionAttributionReader? acquisitionAttribution = null,
+        IEntityExternalLibraryProvenanceReader? externalLibraryProvenance = null) {
         _db = db;
         _currentUser = currentUser;
         _repository = repository;
@@ -67,6 +69,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         _libraryVisibility = libraryVisibility ?? new EfEntityLibraryVisibilityFilter(db, currentUser);
         _assets = assets;
         _acquisitionAttribution = acquisitionAttribution;
+        _externalLibraryProvenance = externalLibraryProvenance;
     }
 
     private Guid CurrentUserId => _currentUser.UserId;
@@ -672,6 +675,9 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             enforceLibraryVisibility,
             cancellationToken);
         var attribution = _acquisitionAttribution is null ? null : await _acquisitionAttribution.ReadAsync(id, cancellationToken);
+        var externalLibraryProvenance = _externalLibraryProvenance is null
+            ? null
+            : await _externalLibraryProvenance.ReadAsync(id, cancellationToken);
         var projected = SanitizeLocalAssets(
             await EnrichBorrowedParentCoverAsync(
                 EntityCardProjector.ToCard(
@@ -680,7 +686,8 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                     CurrentUserId,
                     creditMetadata,
                     sourceBackedChildKinds,
-                    attribution),
+                    attribution,
+                    externalLibraryProvenance),
                 hideNsfw,
                 enforceLibraryVisibility,
                 cancellationToken));

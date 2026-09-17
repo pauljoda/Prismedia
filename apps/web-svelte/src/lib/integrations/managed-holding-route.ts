@@ -1,4 +1,4 @@
-import type { ManagedLibraryItem, ManagedLibraryItemExternalIds } from "$lib/api/generated/model";
+import type { ManagedItemInput, ManagedLibraryItem, ManagedLibraryItemExternalIds } from "$lib/api/generated/model";
 import { requestKindForEntityKind } from "$lib/requests/request-helpers";
 
 const EXTERNAL_IDENTITIES_PARAMETER = "identities";
@@ -11,12 +11,26 @@ const MAX_IDENTITY_VALUE_LENGTH = 2048;
  * with the link so a later lookup remains pinned to the title that was selected in the manager.
  */
 export function managedHoldingHref(connectionId: string, item: ManagedLibraryItem): string {
+  return managedHoldingIdentityHref(connectionId, item.entityKind, item.remoteId, item.externalIds);
+}
+
+/** Builds the same exact holding address from an identity pin saved with a library Entity. */
+export function managedHoldingInputHref(connectionId: string, item: ManagedItemInput): string {
+  return managedHoldingIdentityHref(connectionId, item.entityKind, item.remoteId, item.expectedExternalIds);
+}
+
+function managedHoldingIdentityHref(
+  connectionId: string,
+  entityKind: string,
+  remoteId: string,
+  externalIds: ManagedLibraryItemExternalIds,
+): string {
   const identities = Object.fromEntries(
-    Object.entries(item.externalIds).sort(([left], [right]) => left.localeCompare(right)),
+    Object.entries(externalIds).sort(([left], [right]) => left.localeCompare(right)),
   );
   const query = new URLSearchParams({ [EXTERNAL_IDENTITIES_PARAMETER]: JSON.stringify(identities) });
 
-  return `/request/source/${encodeURIComponent(connectionId)}/${encodeURIComponent(item.entityKind)}/${encodeURIComponent(item.remoteId)}?${query}`;
+  return `/request/source/${encodeURIComponent(connectionId)}/${encodeURIComponent(entityKind)}/${encodeURIComponent(remoteId)}?${query}`;
 }
 
 /** Builds the Request workspace address that restores the source and matching media kind. */

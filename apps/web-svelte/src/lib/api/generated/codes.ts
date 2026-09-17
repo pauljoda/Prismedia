@@ -1678,6 +1678,7 @@ export const CAPABILITY_KIND = {
   dates: "dates",
   description: "description",
   embeddedAudioMetadata: "embedded-audio-metadata",
+  externalLibraryProvenance: "external-library-provenance",
   fileManagement: "file-management",
   files: "files",
   fingerprints: "fingerprints",
