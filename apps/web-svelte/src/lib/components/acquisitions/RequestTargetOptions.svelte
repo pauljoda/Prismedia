@@ -40,6 +40,7 @@
       (root) =>
         kindInfo.rootFlag !== null &&
         root[kindInfo.rootFlag] &&
+        !root.isReadOnly &&
         (nsfw.mode === "show" || !root.isNsfw),
     ),
   );
@@ -85,7 +86,7 @@
       if (!profileId && defaultProfile) {
         profileId = defaultProfile.id;
       }
-      if (!targetLibraryRootId) {
+      if (!targetLibraryRootId || !suitableRoots.some((root) => root.id === targetLibraryRootId)) {
         targetLibraryRootId = defaultRootFor(kindProfiles.find((profile) => profile.id === profileId) ?? defaultProfile);
       }
     } catch {
@@ -108,6 +109,7 @@
     {#if !loaded || profileOptions.length > 0}
       <Select
         disabled={!loaded}
+        ariaLabel="Quality profile"
         value={profileId ?? ""}
         options={profileOptions}
         onchange={selectProfile}
@@ -126,6 +128,7 @@
     {#if !loaded || rootOptions.length > 0}
       <Select
         disabled={!loaded}
+        ariaLabel="Import destination"
         value={targetLibraryRootId ?? ""}
         options={rootOptions}
         onchange={(value) => (targetLibraryRootId = value || null)}

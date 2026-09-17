@@ -153,6 +153,9 @@
       ? MONITOR_PRESET_CUSTOM
       : chosenPreset,
   );
+  const managedSeriesSelected = $derived(
+    managerSelected && review?.entityKind === ENTITY_KIND.videoSeries,
+  );
   const presetOptions = $derived([
     ...MONITOR_PRESET_OPTIONS.map((option) => ({ value: option.value, label: option.label })),
     ...(presetDisplay === MONITOR_PRESET_CUSTOM
@@ -522,7 +525,7 @@
   {:else if error && !review}
     <div class="surface-panel p-6 text-[0.82rem] leading-relaxed text-error-text">{error}</div>
   {:else if review && proposal && selection}
-    {#if proposalPath.length > 1 && activeParent}
+    {#if !managerMetadataSaved && proposalPath.length > 1 && activeParent}
       <Button
         type="button"
         variant="secondary"
@@ -582,12 +585,16 @@
       <div>
         <h3 class="flex items-center gap-1.5 font-mono text-[0.68rem] font-semibold uppercase tracking-[0.04em] text-text-secondary">
           <Send class="h-3.5 w-3.5 text-text-accent" />
-          {selectsChildren ? `Request ${childNoun}s` : `Request this ${kindInfo?.label.toLowerCase() ?? "item"}`}
+          {managedSeriesSelected
+            ? "Request selected episodes"
+            : selectsChildren
+              ? `Request ${childNoun}s`
+              : `Request this ${kindInfo?.label.toLowerCase() ?? "item"}`}
         </h3>
-        {#if selectsChildren}
+        {#if selectsChildren && !managerMetadataSaved}
           <p class="mt-1 text-[0.78rem] leading-relaxed text-text-muted">
-            {#if managerSelected && review?.entityKind === ENTITY_KIND.videoSeries}
-              Select the seasons and episodes above. Only the present selected episodes are sent to the manager; future episodes are not included.
+            {#if managedSeriesSelected}
+              Choose seasons and episodes in the metadata review. Only the present selected episodes are sent to the manager; future episodes are not included.
             {:else}
               Select the {childNoun}s above. Prismedia will create and monitor each chosen item through
               the same reviewed plugin proposal.
@@ -596,9 +603,9 @@
         {/if}
       </div>
 
-      {#if selectsChildren}
+      {#if selectsChildren && !managerMetadataSaved && !managedSeriesSelected}
         <label class="flex max-w-64 flex-col gap-1">
-          <span class="font-mono text-[0.66rem] font-semibold uppercase tracking-[0.04em] text-text-secondary">{managerSelected && review?.entityKind === ENTITY_KIND.videoSeries ? "Episode selection" : "Monitor"}</span>
+          <span class="font-mono text-[0.66rem] font-semibold uppercase tracking-[0.04em] text-text-secondary">Monitor</span>
           <Select
             options={presetOptions}
             value={presetDisplay}

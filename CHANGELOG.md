@@ -202,6 +202,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Native download destinations exclude read-only external libraries, including saved profile defaults. Sonarr request reviews show only the selected episode scope and remove selection controls once that scope has been saved.
+
 - Imported-item links respect the current content visibility mode, including nested comic and book pages. Activity explains when a retained import is unavailable or hidden.
 
 - Source-backed imports retain the correct transfer or import failure after the source is ready, keeping retry progress and verified files intact.

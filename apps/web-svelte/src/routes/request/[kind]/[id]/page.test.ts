@@ -195,13 +195,16 @@ describe("reviewed request route", () => {
     render(Page);
 
     await screen.findByRole("heading", { name: "Andor" });
+    await fireEvent.click(screen.getByRole("checkbox", { name: "Deselect Season 2" }));
     await fireEvent.click(screen.getByRole("button", { name: "Review Season 1" }));
     await fireEvent.click(screen.getByRole("checkbox", { name: "Deselect Episode 1" }));
-    await fireEvent.click(screen.getByRole("button", { name: "Back to Andor" }));
-    await fireEvent.click(screen.getByRole("checkbox", { name: "Deselect Season 2" }));
     await fireEvent.keyDown(screen.getByRole("button", { name: "Acquisition owner" }), { key: "ArrowDown" });
     await fireEvent.pointerUp(await screen.findByRole("option", { name: "Series manager" }));
-    expect(screen.getAllByText("Episode selection").length).toBeGreaterThan(0);
+    expect(screen.getAllByText("Request selected episodes").length).toBeGreaterThan(0);
+    expect(screen.queryByRole("button", { name: "Monitor" })).not.toBeInTheDocument();
+    expect(screen.queryByText("All current and future")).not.toBeInTheDocument();
+    expect(screen.getAllByText(/Choose seasons and episodes in the metadata review/).length).toBeGreaterThan(0);
+    expect(screen.getByRole("button", { name: "Back to Andor" })).toBeInTheDocument();
     await fireEvent.click(screen.getByRole("button", { name: "Save metadata and review manager request" }));
 
     await waitFor(() => expect(mocks.prepareManagedSeries).toHaveBeenCalledWith(expect.objectContaining({
@@ -221,6 +224,9 @@ describe("reviewed request route", () => {
     expect(await screen.findByText("S01E03")).toBeInTheDocument();
     expect(screen.queryByText("S01E04")).not.toBeInTheDocument();
     expect(screen.getByText("Episode 3")).toBeInTheDocument();
+    expect(screen.queryAllByText("Episode selection")).toHaveLength(0);
+    expect(screen.queryAllByText(/Choose seasons and episodes in the metadata review/)).toHaveLength(0);
+    expect(screen.queryByRole("button", { name: "Back to Andor" })).not.toBeInTheDocument();
   });
 
   it("loads the exact plugin and opaque external identity under the NSFW ceiling", async () => {
