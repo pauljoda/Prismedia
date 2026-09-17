@@ -54,6 +54,11 @@ Review the title, author, language, and completeness of a peer's release before 
 Profile matching and import verification still apply; a peer filename alone cannot establish an
 edition or a complete audiobook. Music searches retain their album and track behavior.
 
+Book profile filenames must end with `.{ext}`, for example `{Author}/{Title}/{Title}.{ext}`.
+This preserves the selected EPUB or PDF extension. An existing invalid template fails before new files
+are placed; correct the profile and retry the import. If an earlier import already placed files,
+Prismedia retains its recovery evidence and explains why cancellation is blocked.
+
 Keep download staging outside your watched roots. If the download client and Prismedia use different
 paths for the same files, follow the [download-path example](../getting-started/organize-folders.md#an-example-with-a-separate-download-client).
 

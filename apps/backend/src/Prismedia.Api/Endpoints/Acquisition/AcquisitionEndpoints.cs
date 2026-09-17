@@ -371,8 +371,9 @@ public static class AcquisitionEndpoints {
                     : Results.Ok(detail);
             })
             .WithName("CancelAcquisition")
-            .WithSummary("Cancels an acquisition, removing the torrent from the download client.")
+            .WithSummary("Cancels an acquisition and removes its transfer when retained import recovery permits cancellation.")
             .Produces<AcquisitionDetail>()
+            .Produces<ApiProblem>(StatusCodes.Status409Conflict)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
         group.MapDelete("/{id:guid}", async (

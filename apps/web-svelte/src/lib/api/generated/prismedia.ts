@@ -13049,10 +13049,15 @@ export type cancelAcquisitionResponse404 = {
   status: 404
 }
 
+export type cancelAcquisitionResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
 export type cancelAcquisitionResponseSuccess = (cancelAcquisitionResponse200) & {
   headers: Headers;
 };
-export type cancelAcquisitionResponseError = (cancelAcquisitionResponse404) & {
+export type cancelAcquisitionResponseError = (cancelAcquisitionResponse404 | cancelAcquisitionResponse409) & {
   headers: Headers;
 };
 
@@ -13067,7 +13072,7 @@ export const getCancelAcquisitionUrl = (id: string,) => {
 }
 
 /**
- * @summary Cancels an acquisition, removing the torrent from the download client.
+ * @summary Cancels an acquisition and removes its transfer when retained import recovery permits cancellation.
  */
 export const cancelAcquisition = async (id: string, options?: RequestInit): Promise<cancelAcquisitionResponse> => {
 

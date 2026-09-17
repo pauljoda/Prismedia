@@ -169,6 +169,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Book naming templates must preserve the publication extension, and rendered filenames are checked before import placement. Acquisition actions blocked by retained import recovery now return an actionable conflict instead of a server error.
+
 - Soulseek release titles now preserve author and work boundaries for slash-separated peer paths, so valid publication matches are not rejected.
 
 - Rejected manager requests, actions, and handoff reviews can be reviewed again correctly; uncertain responses continue to retry the same accepted intent.

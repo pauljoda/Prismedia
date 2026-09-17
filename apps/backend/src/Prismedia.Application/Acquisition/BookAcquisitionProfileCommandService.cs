@@ -104,7 +104,7 @@ public sealed class BookAcquisitionProfileCommandService(
     /// Resolves and validates the path template a profile will store. A media kind (movie, TV, music)
     /// stores its kind default when the incoming template is blank and validates a non-blank template with
     /// <see cref="MediaNamingTemplates.Validate"/>; a book keeps its existing "a template is required" rule
-    /// (its own renderer needs no structural validation).
+    /// and requires book filenames to preserve the selected payload extension.
     /// </summary>
     private static string ResolvePathTemplate(EntityKind kind, string pathTemplate) {
         if (MediaNamingTemplates.IsMediaKind(kind)) {
@@ -123,6 +123,9 @@ public sealed class BookAcquisitionProfileCommandService(
 
         if (string.IsNullOrWhiteSpace(pathTemplate)) {
             throw new AcquisitionConfigurationException(ApiProblemCodes.AcquisitionProfileInvalid, "A path template is required.");
+        }
+        if (kind == EntityKind.Book && BookNamingTemplates.ValidateFileTemplate(pathTemplate) is { } problem) {
+            throw new AcquisitionConfigurationException(ApiProblemCodes.AcquisitionProfileInvalid, problem);
         }
 
         return pathTemplate.Trim();

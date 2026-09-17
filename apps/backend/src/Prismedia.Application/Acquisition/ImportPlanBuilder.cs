@@ -126,9 +126,15 @@ public static partial class ImportPlanBuilder {
             if (distinctBooks > 1) {
                 return ImportPlan.Block(ImportBlockReason.AmbiguousMultiplePrimaries);
             }
+            if (BookNamingTemplates.ValidateFileTemplate(pathTemplate) is { } problem) {
+                throw new InvalidDataException(problem);
+            }
 
             var chosen = PreferredPrimary(primaries);
             var target = RenderPath(pathTemplate, context, Path.GetExtension(chosen), fileNameOnly: false);
+            if (BookNamingTemplates.ValidateRenderedFile(target, Path.GetExtension(chosen)) is { } renderedProblem) {
+                throw new InvalidDataException(renderedProblem);
+            }
             return ImportPlan.For([new ImportPlanItem(chosen, target)]);
         }
 
@@ -172,7 +178,7 @@ public static partial class ImportPlanBuilder {
                 StringComparison.Ordinal)
             .Replace("{Title}", context.Title, StringComparison.Ordinal)
             .Replace("{Year}", context.Year?.ToString() ?? string.Empty, StringComparison.Ordinal)
-            .Replace("{ext}", extension.TrimStart('.'), StringComparison.Ordinal);
+            .Replace(BookNamingTemplates.ExtensionToken, extension.TrimStart('.'), StringComparison.Ordinal);
 
         return CleanEmptyDecorations(result);
     }

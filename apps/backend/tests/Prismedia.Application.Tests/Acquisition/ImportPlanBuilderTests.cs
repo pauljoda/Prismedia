@@ -5,6 +5,19 @@ namespace Prismedia.Application.Tests.Acquisition;
 
 public sealed class ImportPlanBuilderTests {
     [Fact]
+    public void OptionalMetadataCannotLeaveAnExtensionOnlyFilename() {
+        Assert.Throws<InvalidDataException>(() => ImportPlanBuilder.Plan(["Book.epub"], Context(author: null), "{Author}.{ext}"));
+    }
+
+    [Theory]
+    [InlineData("{Title}")]
+    [InlineData("{Title}.pdf")]
+    public void ExistingInvalidBookTemplatesFailBeforePlacementIsPlanned(string template) {
+        var error = Assert.Throws<InvalidDataException>(() => ImportPlanBuilder.Plan(["Book.epub"], Context(), template));
+        Assert.Contains(".{ext}", error.Message);
+    }
+
+    [Fact]
     public void AudiobookRenditionImportsAllOrderedAudioParts() {
         var plan = ImportPlanBuilder.Plan(
             ["Disc 02.mp3", "Book.epub", "Disc 01.m4b"],
