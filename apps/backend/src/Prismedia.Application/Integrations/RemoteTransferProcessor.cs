@@ -35,12 +35,19 @@ public sealed class RemoteTransferProcessor(IIntegrationTransferStore store, Int
                 throw new IntegrationInvocationException("The executor installation differs from the accepted operation.");
             return connection;
         }
-        async Task RenewAsync() {
+        async Task RenewRequiredAsync() {
             var connection = await AuthorizeAsync(IntegrationOperation.RenewRetention);
             var until = DateTimeOffset.UtcNow.AddHours(1);
             var result = await gateway.RenewRetentionAsync(connection.Manifest.Id, connection.Context, new(transfer.State.JobId!, until), cancellationToken);
             if (result.JobId != transfer.State.JobId || result.RetainedUntil < until)
                 throw new IntegrationInvocationException("The executor did not guarantee the requested output retention.");
+        }
+        async Task TryRenewAtLocalBoundaryAsync() {
+            try { await RenewRequiredAsync(); }
+            catch (Exception error) when (error is IntegrationInvocationException or ConnectionNotFoundException
+                or ConnectionSecretUnavailableException or ConnectionCapabilityUnavailableException) {
+                // A bounded lease attempt must not block import or receipt delivery once exact local bytes are durable.
+            }
         }
         void ValidateSnapshot(RemoteTransferSnapshot snapshot) {
             if (snapshot is null || snapshot.ClientOperationId != operationId || snapshot.InstanceId != transfer.State.InstanceId
@@ -105,7 +112,7 @@ public sealed class RemoteTransferProcessor(IIntegrationTransferStore store, Int
                     throw new JobRetryLaterException("Waiting for the executor to finish the accepted item.", PollDelay(snapshot.NextPollAfter));
                 if (snapshot.State is RemoteJobState.Failed or RemoteJobState.Cancelled) return;
                 if (snapshot.State == RemoteJobState.Partial) {
-                    await RenewAsync();
+                    await RenewRequiredAsync();
                     await PersistAsync("The executor produced only part of the selected item. No partial content was imported.");
                     throw new JobRetryLaterException("Partial outputs require review; preserving the executor's retention lease.", TimeSpan.FromMinutes(5));
                 }
@@ -116,7 +123,7 @@ public sealed class RemoteTransferProcessor(IIntegrationTransferStore store, Int
                 }
             }
             if (transfer.State.Phase is IntegrationTransferPhase.AwaitingArtifacts or IntegrationTransferPhase.NeedsReview) {
-                await RenewAsync();
+                await RenewRequiredAsync();
                 var connection = await AuthorizeAsync(IntegrationOperation.ListArtifacts);
                 var manifest = await manifests.ReadAsync(connection.Manifest.Id, connection.Context, transfer.State.JobId!, transfer.State.ManifestRevision!, cancellationToken);
                 if (!SupportsOutputs(manifest.Artifacts, work.Plan, intent)) {
@@ -130,21 +137,27 @@ public sealed class RemoteTransferProcessor(IIntegrationTransferStore store, Int
             if (transfer.State.Phase == IntegrationTransferPhase.Transferring) {
                 foreach (var artifact in transfer.State.Artifacts!) {
                     if (transfer.State.VerifiedArtifactIds?.Contains(artifact.Id) == true) continue;
-                    await RenewAsync();
-                    var connection = await AuthorizeAsync(IntegrationOperation.AuthorizeArtifact);
-                    var delivery = await gateway.AuthorizeArtifactAsync(connection.Manifest.Id, connection.Context,
-                        new(transfer.State.JobId!, transfer.State.ManifestRevision!, artifact.Id), cancellationToken);
-                    if (delivery.ByteSize != artifact.SizeBytes || !string.Equals(delivery.Sha256, artifact.Sha256, StringComparison.OrdinalIgnoreCase))
-                        throw new IntegrationInvocationException("Artifact delivery differs from the accepted output manifest.");
-                    var verified = await bytes.TransferAsync(new(operationId, artifact.Id, connection.Context.BaseUrl,
-                        delivery with { SuggestedFileName = Path.GetFileName(artifact.RelativePath) },
-                        work.Plan.EntityKind == EntityKind.Gallery ? Math.Min(intent.MaximumBytes, IntegrationMediaFormats.MaximumImageBytes) : intent.MaximumBytes), cancellationToken);
+                    var fileName = Path.GetFileName(artifact.RelativePath);
+                    var verified = await bytes.ReadVerifiedAsync(operationId, artifact.Id, fileName,
+                        artifact.SizeBytes, artifact.Sha256, cancellationToken);
+                    if (verified is null) {
+                        await RenewRequiredAsync();
+                        var connection = await AuthorizeAsync(IntegrationOperation.AuthorizeArtifact);
+                        var delivery = await gateway.AuthorizeArtifactAsync(connection.Manifest.Id, connection.Context,
+                            new(transfer.State.JobId!, transfer.State.ManifestRevision!, artifact.Id), cancellationToken);
+                        if (delivery.ByteSize != artifact.SizeBytes || !string.Equals(delivery.Sha256, artifact.Sha256, StringComparison.OrdinalIgnoreCase))
+                            throw new IntegrationInvocationException("Artifact delivery differs from the accepted output manifest.");
+                        verified = await bytes.TransferAsync(new(operationId, artifact.Id, connection.Context.BaseUrl,
+                            delivery with { SuggestedFileName = fileName },
+                            work.Plan.EntityKind == EntityKind.Gallery ? Math.Min(intent.MaximumBytes, IntegrationMediaFormats.MaximumImageBytes) : intent.MaximumBytes), cancellationToken);
+                    }
                     await verifier.VerifyAsync(verified, work.Plan.EntityKind == EntityKind.Gallery ? EntityKind.Image : work.Plan.EntityKind, cancellationToken);
                     transfer.RecordVerified(artifact.Id, verified.SizeBytes, verified.Sha256);
                     await PersistAsync();
                 }
             }
             if (transfer.State.Phase == IntegrationTransferPhase.Importing && work.Plan.EntityKind == EntityKind.Gallery) {
+                await TryRenewAtLocalBoundaryAsync();
                 await context.ReportProgressAsync(75, "Importing verified gallery", cancellationToken);
                 var receipts = await galleries.ImportAsync(work, context, cancellationToken);
                 foreach (var receipt in receipts) {
@@ -155,6 +168,7 @@ public sealed class RemoteTransferProcessor(IIntegrationTransferStore store, Int
             if (transfer.State.Phase == IntegrationTransferPhase.Importing) {
                 foreach (var artifact in transfer.State.Artifacts!) {
                     if (transfer.State.Imports?.Any(imported => imported.ArtifactId == artifact.Id) == true) continue;
+                    await TryRenewAtLocalBoundaryAsync();
                     var verified = await bytes.ReadVerifiedAsync(operationId, artifact.Id, Path.GetFileName(artifact.RelativePath), artifact.SizeBytes, artifact.Sha256, cancellationToken)
                         ?? throw new InvalidDataException("Verified staging is missing.");
                     await verifier.VerifyAsync(verified, work.Plan.EntityKind == EntityKind.Gallery ? EntityKind.Image : work.Plan.EntityKind, cancellationToken);
@@ -169,6 +183,7 @@ public sealed class RemoteTransferProcessor(IIntegrationTransferStore store, Int
                 }
             }
             if (transfer.State.Phase == IntegrationTransferPhase.AwaitingAcknowledgement) {
+                await TryRenewAtLocalBoundaryAsync();
                 var connection = await AuthorizeAsync(IntegrationOperation.Acknowledge);
                 var receiptId = transfer.State.ReceiptId!.Value;
                 var acknowledgement = await gateway.AcknowledgeAsync(connection.Manifest.Id, connection.Context,

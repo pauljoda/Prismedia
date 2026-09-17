@@ -105,6 +105,54 @@ public sealed class RemoteTransferProcessorTests {
         Assert.Equal(fixture.EntityId, Assert.Single(Assert.Single(fixture.State.Imports!).EntityIds));
     }
 
+    [Fact]
+    public async Task VerifiedLocalReceiptFinishesImportWhileExecutorRetentionIsUnavailable() {
+        var fixture = new Fixture { RetentionUnavailable = true };
+        fixture.StageArtifactBeforeVerificationCommit();
+        await fixture.RunAsync();
+        Assert.Equal(IntegrationTransferPhase.Completed, fixture.State.Phase);
+        Assert.Equal(0, fixture.Downloads);
+        Assert.Equal(0, fixture.ArtifactAuthorizations);
+        Assert.Equal(2, fixture.LocalReads);
+        Assert.Equal(2, fixture.Renewals);
+        Assert.Equal(2, fixture.Verifications);
+        Assert.Equal(1, fixture.Materializations);
+        Assert.Single(fixture.Receipts);
+    }
+
+    [Fact]
+    public async Task AcknowledgementContinuesWhenRetentionRenewalIsUnavailable() {
+        var fixture = new Fixture { RetentionUnavailable = true };
+        fixture.PrepareAwaitingAcknowledgement();
+        var receipt = fixture.State.ReceiptId;
+        await fixture.RunAsync();
+        Assert.Equal(IntegrationTransferPhase.Completed, fixture.State.Phase);
+        Assert.Equal(1, fixture.Renewals);
+        Assert.Equal(receipt, Assert.Single(fixture.Receipts));
+    }
+
+    [Fact]
+    public async Task VerifiedLocalReceiptCommitsImportWhileExecutorIsUnavailable() {
+        var fixture = new Fixture { ExecutorUnavailable = true };
+        fixture.StageArtifactBeforeVerificationCommit();
+        await Assert.ThrowsAsync<JobRetryLaterException>(fixture.RunAsync);
+        Assert.Equal(IntegrationTransferPhase.AwaitingAcknowledgement, fixture.State.Phase);
+        Assert.Equal(0, fixture.Downloads);
+        Assert.Equal(0, fixture.ArtifactAuthorizations);
+        Assert.Equal(1, fixture.Materializations);
+        Assert.Empty(fixture.Receipts);
+    }
+
+    [Fact]
+    public async Task UnexpectedRetentionFailureStopsBeforeLocalImport() {
+        var fixture = new Fixture { UnexpectedRetentionFailure = true };
+        fixture.PrepareImport();
+        await Assert.ThrowsAsync<IntegrationInvocationException>(fixture.RunAsync);
+        Assert.Equal(IntegrationTransferPhase.Importing, fixture.State.Phase);
+        Assert.Equal(0, fixture.Materializations);
+        Assert.Empty(fixture.Receipts);
+    }
+
     [Theory]
     [InlineData(RemoteJobState.Partial, false)]
     [InlineData(RemoteJobState.Succeeded, true)]
@@ -166,6 +214,8 @@ public sealed class RemoteTransferProcessorTests {
         Assert.Equal(1, fixture.Materializations);
         Assert.Equal(2, fixture.Receipts.Count);
         Assert.Single(fixture.Receipts.Distinct());
+        Assert.Contains(IntegrationTransferPhase.Importing, fixture.RetentionPhases);
+        Assert.Equal(2, fixture.RetentionPhases.Count(phase => phase == IntegrationTransferPhase.AwaitingAcknowledgement));
     }
     [Fact]
     public async Task GalleryRecoversWhenSomeImportReceiptsWereCommittedBeforeACrash() {
@@ -214,6 +264,10 @@ public sealed class RemoteTransferProcessorTests {
         internal bool WrongArtifactItem { get; set; }
         internal bool WrongImageParent { get; set; }
         internal bool GalleryOrderGap { get; set; }
+        internal bool RetentionUnavailable { get; set; }
+        internal bool ExecutorUnavailable { get; set; }
+        internal bool UnexpectedRetentionFailure { get; set; }
+        private bool localReceiptBeforeVerificationCommit;
         private readonly Guid[] imageIds = [Guid.NewGuid(), Guid.NewGuid()];
         internal int Submissions { get; private set; }
         internal int Lookups { get; private set; }
@@ -221,9 +275,13 @@ public sealed class RemoteTransferProcessorTests {
         internal int Materializations { get; private set; }
         internal int Placements { get; private set; }
         internal int Renewals { get; private set; }
+        internal int ArtifactAuthorizations { get; private set; }
+        internal int LocalReads { get; private set; }
+        internal int Verifications { get; private set; }
         internal int Cancellations { get; private set; }
         internal Guid EntityId { get; } = Guid.NewGuid();
         internal List<Guid> Receipts { get; } = [];
+        internal List<IntegrationTransferPhase> RetentionPhases { get; } = [];
         private bool accepted;
         private long remoteRevision;
         private readonly LibraryRootData root = new(Guid.NewGuid(), Path.GetTempPath(), "Library", true, false, false, false, false, true, false, false);
@@ -267,7 +325,9 @@ public sealed class RemoteTransferProcessorTests {
                 nameof(IIntegrationConnectionStore.ReadSecretsAsync) => Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>()),
                 _ => throw new NotSupportedException(method)
             });
-            var plugins = Proxy<IIntegrationPluginGateway>((method, _) => method == nameof(IIntegrationPluginGateway.FindAsync) ? Task.FromResult<PluginManifest?>(manifest) : throw new NotSupportedException(method));
+            var plugins = Proxy<IIntegrationPluginGateway>((method, _) => method == nameof(IIntegrationPluginGateway.FindAsync)
+                ? Task.FromResult<PluginManifest?>(ExecutorUnavailable ? null : manifest)
+                : throw new NotSupportedException(method));
             var gateway = Proxy<IIntegrationTransferGateway>((method, args) => method switch {
                 nameof(IIntegrationTransferGateway.FindSubmissionAsync) => Find(),
                 nameof(IIntegrationTransferGateway.CancelSubmissionAsync) => Task.FromResult(new CancelSubmissionResult(InstanceId, State.OperationId, true, null)),
@@ -276,16 +336,20 @@ public sealed class RemoteTransferProcessorTests {
                 nameof(IIntegrationTransferGateway.CancelAsync) => Cancel(),
                 nameof(IIntegrationTransferGateway.RenewRetentionAsync) => Renew((RenewTransferRetentionInput)args![2]!),
                 nameof(IIntegrationTransferGateway.ReadManifestAsync) => Task.FromResult(new TransferManifestPage(JobId, WrongManifest ? "another-revision" : ManifestRevision, true, Artifacts.Count, Artifacts)),
-                nameof(IIntegrationTransferGateway.AuthorizeArtifactAsync) => Task.FromResult(new HttpArtifactDelivery("http://executor.test/file", new Dictionary<string, string>(), FileName, ByteSize: 100, Sha256: Hash)),
+                nameof(IIntegrationTransferGateway.AuthorizeArtifactAsync) => Authorize(),
                 nameof(IIntegrationTransferGateway.AcknowledgeAsync) => Acknowledge((AcknowledgeTransferInput)args![2]!),
                 _ => throw new NotSupportedException(method)
             });
             var bytes = Proxy<IIntegrationArtifactTransfer>((method, args) => method switch {
                 nameof(IIntegrationArtifactTransfer.TransferAsync) => (object)Download((IntegrationArtifactTransferRequest)args![0]!),
-                nameof(IIntegrationArtifactTransfer.ReadVerifiedAsync) => Task.FromResult<VerifiedIntegrationArtifact?>(new((string)args![1]!, Path.Combine(root.Path, "staged.epub"), 100, Hash, (string)args[2]!)),
+                nameof(IIntegrationArtifactTransfer.ReadVerifiedAsync) => ReadVerified((string)args![1]!, (string)args[2]!, (long)args[3]!, (string)args[4]!),
                 _ => throw new NotSupportedException(method)
             });
-            var verifier = Proxy<IIntegrationMediaVerifier>((_, args) => { Assert.Equal(kind == EntityKind.Gallery ? EntityKind.Image : kind, args![1]); return Task.CompletedTask; });
+            var verifier = Proxy<IIntegrationMediaVerifier>((_, args) => {
+                Assert.Equal(kind == EntityKind.Gallery ? EntityKind.Image : kind, args![1]);
+                Verifications++;
+                return Task.CompletedTask;
+            });
             var placement = Proxy<IIntegrationImportPlacement>((_, _) => { Placements++; return Task.FromResult(Path.Combine(root.Path, "placed.epub")); });
             var roots = Proxy<ILibraryScanRootPersistence>((_, _) => Task.FromResult<LibraryRootData?>(root));
             var materializer = Proxy<IImportedEntityMaterializer>((_, args) => {
@@ -335,6 +399,26 @@ public sealed class RemoteTransferProcessorTests {
         internal void MarkSubmissionUncertain() {
             var transfer = new IntegrationTransfer(State); transfer.BeginSubmission(); State = transfer.State;
         }
+        internal void StageArtifactBeforeVerificationCommit() {
+            var transfer = new IntegrationTransfer(State);
+            transfer.BeginSubmission(); transfer.AcceptSubmission(State.OperationId, InstanceId, JobId);
+            transfer.Observe(InstanceId, JobId, 1, RemoteJobState.Succeeded, ManifestRevision);
+            transfer.AcceptManifest(new(JobId, ManifestRevision, true, Artifacts.Count, Artifacts));
+            State = transfer.State;
+            localReceiptBeforeVerificationCommit = true;
+        }
+        internal void PrepareAwaitingAcknowledgement() {
+            PrepareImport();
+            var transfer = new IntegrationTransfer(State);
+            transfer.RecordImported(new(Artifact.Id, Artifact.Sha256, [EntityId]));
+            State = transfer.State;
+        }
+        internal void PrepareImport() {
+            StageArtifactBeforeVerificationCommit();
+            var transfer = new IntegrationTransfer(State);
+            transfer.RecordVerified(Artifact.Id, Artifact.SizeBytes, Artifact.Sha256);
+            State = transfer.State;
+        }
         private Task<RemoteTransferSnapshot> Cancel() { Cancellations++; return Task.FromResult(Snapshot); }
         private Task<FindTransferResult> Find() { Lookups++; return Task.FromResult(new FindTransferResult(accepted ? Snapshot : null)); }
         private Task<RemoteTransferSnapshot> Submit(SubmitTransferInput input) {
@@ -344,7 +428,29 @@ public sealed class RemoteTransferProcessorTests {
             if (LoseSubmissionOnce) { LoseSubmissionOnce = false; throw new IntegrationInvocationException("Response lost"); }
             return Task.FromResult(Snapshot);
         }
-        private Task<TransferRetentionResult> Renew(RenewTransferRetentionInput input) { Renewals++; return Task.FromResult(new TransferRetentionResult(input.JobId, input.RetainUntil)); }
+        private Task<TransferRetentionResult> Renew(RenewTransferRetentionInput input) {
+            Renewals++;
+            RetentionPhases.Add(State.Phase);
+            if (UnexpectedRetentionFailure) return Task.FromException<TransferRetentionResult>(new InvalidOperationException("Unexpected renewal failure"));
+            return RetentionUnavailable
+                ? Task.FromException<TransferRetentionResult>(new IntegrationInvocationException("Retention unavailable"))
+                : Task.FromResult(new TransferRetentionResult(input.JobId, input.RetainUntil));
+        }
+        private Task<HttpArtifactDelivery> Authorize() {
+            ArtifactAuthorizations++;
+            return Task.FromResult(new HttpArtifactDelivery("http://executor.test/file", new Dictionary<string, string>(), FileName, ByteSize: 100, Sha256: Hash));
+        }
+        private Task<VerifiedIntegrationArtifact?> ReadVerified(string artifactId, string fileName, long sizeBytes, string sha256) {
+            LocalReads++;
+            var accepted = Artifacts.Single(artifact => artifact.Id == artifactId);
+            Assert.Equal(Path.GetFileName(accepted.RelativePath), fileName);
+            Assert.Equal(accepted.SizeBytes, sizeBytes);
+            Assert.Equal(accepted.Sha256, sha256);
+            var available = localReceiptBeforeVerificationCommit || State.VerifiedArtifactIds?.Contains(artifactId) == true;
+            return Task.FromResult<VerifiedIntegrationArtifact?>(available
+                ? new(artifactId, Path.Combine(root.Path, "staged.epub"), 100, Hash, fileName)
+                : null);
+        }
         private Task<VerifiedIntegrationArtifact> Download(IntegrationArtifactTransferRequest request) {
             var artifact = Artifacts.Single(artifact => artifact.Id == request.ArtifactId);
             Assert.Equal(Path.GetFileName(artifact.RelativePath), request.Delivery.SuggestedFileName);

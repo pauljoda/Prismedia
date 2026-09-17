@@ -196,6 +196,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Interrupted executor imports recover verified local files without requiring the source to be online, including crashes before the staging receipt was saved. Import acknowledgements remain retryable when remote retention renewal fails.
+
 - Identify now explains missing metadata-provider setup and preserves the item’s review when visiting Plugins, with a clear route back after configuration.
 
 - Plugin updates preserve the installed adapter while connected transfers and manager requests are unfinished. Updated Connections require a fresh test, and plugins supporting active Connections or mapped libraries cannot be removed.

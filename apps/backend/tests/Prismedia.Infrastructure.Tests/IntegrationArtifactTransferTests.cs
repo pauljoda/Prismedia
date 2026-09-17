@@ -90,6 +90,30 @@ public sealed class IntegrationArtifactTransferTests : IDisposable {
     [Theory]
     [InlineData(false)]
     [InlineData(true)]
+    public async Task LocalRecoveryAfterReceiptWriteCrashRequiresTheAcceptedBytes(bool tampered) {
+        var request = Request;
+        using var client = new HttpClient(new Handler(_ => Ok(Bytes)));
+        var result = await new HttpIntegrationArtifactTransfer(new(root), client).TransferAsync(request, default);
+        var receipt = Assert.Single(Directory.GetFiles(root, "*.verified.json", SearchOption.AllDirectories));
+        File.Delete(receipt); // A crash after the atomic file move, before publishing its receipt.
+        if (tampered) await File.WriteAllBytesAsync(result.Path, new byte[Bytes.Length]);
+        using var unavailable = new HttpClient(new Handler(_ => throw new InvalidOperationException("Source must not be called")));
+        var restarted = new HttpIntegrationArtifactTransfer(new(root), unavailable);
+
+        if (tampered) {
+            await Assert.ThrowsAsync<InvalidDataException>(() => restarted.ReadVerifiedAsync(request.OperationId,
+                result.ArtifactId, result.FileName, result.SizeBytes, result.Sha256, default));
+            Assert.False(File.Exists(receipt));
+            return;
+        }
+        Assert.Equal(result, await restarted.ReadVerifiedAsync(request.OperationId, result.ArtifactId,
+            result.FileName, result.SizeBytes, result.Sha256, default));
+        Assert.True(File.Exists(receipt));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
     public async Task InterruptedHashPinnedTransferResumesAndVerifiesTheWholeFile(bool sourceSha1) {
         var calls = 0;
         using var client = new HttpClient(new Handler(request => {

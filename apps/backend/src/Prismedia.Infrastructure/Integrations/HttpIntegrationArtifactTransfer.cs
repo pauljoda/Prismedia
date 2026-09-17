@@ -105,15 +105,24 @@ public sealed class HttpIntegrationArtifactTransfer(IntegrationArtifactStorageOp
         var key = ArtifactKey(artifactId);
         var finalPath = Path.Combine(operationRoot, key + Path.GetExtension(fileName).ToLowerInvariant());
         var receiptPath = Path.Combine(operationRoot, key + ReceiptSuffix);
-        foreach (var path in new[] { root, operationRoot, finalPath, receiptPath }) RejectLinks(path);
-        if (!File.Exists(receiptPath) || !File.Exists(finalPath)) return null;
-        var receipt = await ReadReceiptAsync(receiptPath, cancellationToken);
-        if (receipt is null || receipt.ArtifactId != artifactId || receipt.FileName != fileName || receipt.SizeBytes != sizeBytes
-            || !string.Equals(receipt.Sha256, sha256, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The staged artifact receipt does not match the accepted transfer.");
+        var lockPath = Path.Combine(operationRoot, key + ".lock");
+        foreach (var path in new[] { root, operationRoot, finalPath, receiptPath, lockPath, receiptPath + ".tmp" }) RejectLinks(path);
+        if (!File.Exists(finalPath)) return null;
+        await using var ownership = new FileStream(lockPath, FileMode.OpenOrCreate, FileAccess.ReadWrite, FileShare.None);
+        var hasReceipt = File.Exists(receiptPath);
+        if (hasReceipt) {
+            var receipt = await ReadReceiptAsync(receiptPath, cancellationToken);
+            if (receipt is null || receipt.ArtifactId != artifactId || receipt.FileName != fileName || receipt.SizeBytes != sizeBytes
+                || !string.Equals(receipt.Sha256, sha256, StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("The staged artifact receipt does not match the accepted transfer.");
+        }
         await using var stream = new FileStream(finalPath, FileMode.Open, FileAccess.Read, FileShare.Read, 1024 * 128, true);
         if (stream.Length != sizeBytes || !Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, cancellationToken)).Equals(sha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("The staged artifact changed after verification.");
-        return new(artifactId, finalPath, sizeBytes, sha256.ToLowerInvariant(), fileName);
+        var verified = new VerifiedIntegrationArtifact(artifactId, finalPath, sizeBytes, sha256.ToLowerInvariant(), fileName);
+        // A crash can leave the atomic final file without its receipt. Persisted size/hash evidence
+        // lets us reconstruct that receipt locally, without reauthorizing or fetching remote bytes.
+        if (!hasReceipt) await WriteReceiptAsync(receiptPath, verified, cancellationToken);
+        return verified;
     }
 
     private static string ArtifactKey(string artifactId) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(artifactId)));
