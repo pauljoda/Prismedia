@@ -103,6 +103,11 @@ public sealed class PluginRequestMetadataSource(
             IncludeStructuralChildren: false);
 
         var response = await runners.Resolve(descriptor).IdentifyAsync(descriptor, request, cancellationToken);
+        if (!response.Ok) {
+            throw new InvalidOperationException(string.IsNullOrWhiteSpace(response.Error)
+                ? $"{provider.Name} could not complete the search."
+                : response.Error);
+        }
         return (response.Result?.Candidates ?? [])
             .Select(candidate => MapCandidate(provider, candidate, requestKind))
             .Where(result => result is not null)

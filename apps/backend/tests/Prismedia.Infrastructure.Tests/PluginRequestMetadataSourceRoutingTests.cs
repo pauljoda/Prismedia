@@ -14,6 +14,40 @@ namespace Prismedia.Infrastructure.Tests;
 public sealed class PluginRequestMetadataSourceRoutingTests : IDisposable {
     private readonly string _tempRoot = Path.Combine(Path.GetTempPath(), $"prismedia-request-routing-{Guid.NewGuid():N}");
 
+    [Theory]
+    [InlineData("Provider is rate limited.")]
+    [InlineData(null)]
+    public async Task DiscoverReportsPluginFailureInsteadOfAnEmptySuccessfulSearch(string? message) {
+        await using var db = await CreateInstalledPluginAsync("cinema-metadata");
+        var catalog = Catalog(db);
+        var source = new PluginRequestMetadataSource(catalog, new PluginIdentityRouter(catalog),
+            new IdentifyRunnerSelector([new FixedResponseRunner(new(false, null, message))]));
+        var response = await new RequestPluginSearchService(source).SearchAsync(
+            new(RequestMediaKind.Movie, "cinema-metadata", new Dictionary<string, string> { ["workName"] = "Example" }), false, default);
+        Assert.Empty(response.Results);
+        var error = Assert.Single(response.ProviderErrors);
+        Assert.Equal("cinema-metadata", error.DisplayName);
+        Assert.Equal(RequestProviderKind.Plugin, error.Kind);
+        Assert.False(string.IsNullOrWhiteSpace(error.Message));
+        if (message is not null) Assert.Equal(message, error.Message);
+    }
+
+    [Fact]
+    public async Task ARealNoMatchRemainsASuccessfulEmptySearch() {
+        await using var db = await CreateInstalledPluginAsync("cinema-metadata");
+        var catalog = Catalog(db);
+        var source = new PluginRequestMetadataSource(catalog, new PluginIdentityRouter(catalog),
+            new IdentifyRunnerSelector([new FixedResponseRunner(IdentifyPluginResponse.NoMatch())]));
+        var response = await new RequestPluginSearchService(source).SearchAsync(
+            new(RequestMediaKind.Movie, "cinema-metadata", new Dictionary<string, string> { ["workName"] = "Example" }), false, default);
+        Assert.Empty(response.Results); Assert.Empty(response.ProviderErrors);
+    }
+
+    private sealed class FixedResponseRunner(IdentifyPluginResponse response) : IIdentifyRunner {
+        public string RuntimeCode => DotnetPluginProcessRunner.Code;
+        public Task<IdentifyPluginResponse> IdentifyAsync(PluginDescriptor descriptor, IdentifyPluginRequest request, CancellationToken token) => Task.FromResult(response);
+    }
+
     [Fact]
     public async Task LookupRoutesNamespaceThroughDistinctPluginIdAndSendsNamespaceToPlugin() {
         await using var db = await CreateInstalledPluginAsync("cinema-metadata");
