@@ -145,12 +145,33 @@ credentials.
 ## First-party plugins
 
 The first-party set includes **TMDB**, **AniList**, **YouTube**,
-**MusicBrainz**, **MangaDex**, and **Open Library**. They live in the
+**MusicBrainz**, **MangaDex**, **Open Library**, **Google Books**, and **Metron**. They live in the
 [Prismedia-Plugins](https://github.com/pauljoda/Prismedia-Plugins) sister repo,
 not in the main application repo. They are the best reference implementations
 for the current protocol.
 
 You install them from **Plugins → Prismedia Community** in the web app. One click downloads, verifies, and registers them.
+
+### Book and comic metadata
+
+Open Library and Google Books provide complementary book and edition metadata.
+MangaDex provides manga titles and chapters; AniList supports manga work metadata
+without inventing chapters from aggregate counts.
+
+Metron supplies Western comic series and issue metadata. Configure an account API
+token in its plugin settings, then choose a series run by title, start year,
+publisher, and run volume. Series review exposes independently identified issues
+with exact designations such as `½`, `12.5`, and `Annual 1`. Existing installments
+can also use Metron's issue search in Identify. Writing and art credits, publication
+dates, and supported covers remain reviewable before application.
+
+Metron series and issue identities use separate namespaces; its run-volume number
+does not create a collected-volume entity. Cover variants remain within the provider
+issue until Prismedia supports independently identified variant releases. Series
+expansion is bounded to 500 issues and fails visibly for larger or inconsistent lists.
+The plugin README describes API-token setup, numeric API-URL lookup, quota handling,
+and metadata limits. Metadata results do not provide comic downloads; acquisition
+uses the separately configured discovery and download capabilities.
 
 ## Where plugin code lives
 

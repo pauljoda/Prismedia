@@ -8,6 +8,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- The Metron community metadata plugin supports Western comic runs and issues, exact fractional and special issue labels, creator credits, and distinct cross-provider identities. Series and issue metadata can be reviewed before application.
+
 - Saved metadata plugin and OpenSubtitles credentials are encrypted with persistent application keys. Existing credentials upgrade automatically, and plugins receive only their declared credential fields.
 
 - Movie discovery reviews can choose a connected acquisition manager, save the selected metadata as a wanted item, and review external fulfillment settings without starting a native download.
