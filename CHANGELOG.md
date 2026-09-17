@@ -6,6 +6,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ## [Unreleased]
 
+### Docs
+
+- Documented connecting Suwayomi OPDS catalogs to browse and import already downloaded CBZ chapters, including authentication and reading-progress settings.
+
 ### Added
 
 - The Metron community metadata plugin supports Western comic runs and issues, exact fractional and special issue labels, creator credits, and distinct cross-provider identities. Series and issue metadata can be reviewed before application.

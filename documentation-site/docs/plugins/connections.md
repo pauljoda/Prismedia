@@ -75,6 +75,26 @@ page size. Changing a query requires starting a new page sequence. Plugin respon
 are bounded and validated before reaching the browser. Resolved download addresses
 and authentication headers remain server-only.
 
+### Suwayomi downloaded chapters
+
+Suwayomi Server's OPDS catalog can expose existing downloaded chapters through the
+OPDS Catalogs plugin. Configure a connection with its server URL followed by
+`/api/opds/v1.2`, and supply the server's Basic authentication credentials when enabled.
+Use the address reachable from Prismedia, including its container network if applicable.
+
+In **Browse catalogs**, select **Installments**, search the library or open a
+series, then open a chapter's metadata entry and choose **Import CBZ**. A chapter
+must already be downloaded in Suwayomi before its full-content offer appears.
+Enable CBZ downloads in Suwayomi and keep its OPDS **Mark as read on download**
+setting disabled if importing should leave Suwayomi's reading progress unchanged.
+
+This connection copies the selected publication into the chosen Prismedia library.
+It does not enqueue missing chapters, install source extensions, synchronize reading
+progress, or delegate series monitoring. Suwayomi owns its original files; Prismedia
+owns the imported copy. Undownloaded chapter entries can be browsable without offering
+a file. Existing-library retrieval has been exercised against Suwayomi Server 2.3.2243;
+remote-source downloading requires a separate manager or executor integration.
+
 ### Import a publication
 
 Choose an enabled publication library as the **Import destination**, then select
