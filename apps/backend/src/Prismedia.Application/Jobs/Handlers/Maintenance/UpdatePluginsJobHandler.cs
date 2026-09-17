@@ -24,6 +24,7 @@ public sealed class UpdatePluginsJobHandler(
         }
 
         var updatedCount = 0;
+        var deferredCount = 0;
         var failures = new List<(string Name, Exception Error)>();
         foreach (var provider in updates) {
             cancellationToken.ThrowIfCancellationRequested();
@@ -35,9 +36,14 @@ public sealed class UpdatePluginsJobHandler(
 
                 updatedCount++;
                 await context.ReportProgressAsync(
-                    updatedCount * 100 / updates.Length,
+                    (updatedCount + deferredCount + failures.Count) * 100 / updates.Length,
                     $"Updated {provider.Name} to {updated.Version}",
                     cancellationToken);
+            } catch (PluginInUseException) {
+                deferredCount++;
+                await context.ReportProgressAsync((updatedCount + deferredCount + failures.Count) * 100 / updates.Length,
+                    $"Deferred {provider.Name}: connected work is still active", cancellationToken);
+                logger.LogInformation("Deferred automatic update for plugin {PluginId} while connected work is active.", provider.Id);
             } catch (OperationCanceledException ex)
                 when (cancellationToken.IsCancellationRequested || ex.CancellationToken == cancellationToken) {
                 throw;

@@ -8,6 +8,7 @@ using Prismedia.Infrastructure.Files;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 using Prismedia.Infrastructure.Settings;
+using Prismedia.Infrastructure.Plugins;
 
 namespace Prismedia.Infrastructure.Integrations;
 
@@ -31,7 +32,9 @@ public sealed class EfExternalLibraryMountStore(PrismediaDbContext db, ExternalL
             throw new ArgumentException("Choose an existing absolute local folder that Prismedia can read.");
         _ = ExternalLibraryPaths.NormalizeRemote(request.ExpectedRemotePath);
         var local = CompletedPayloadFileSystem.CanonicalPath(Path.GetFullPath(request.LocalPath));
-        await using var transaction = await LibraryRootConfigurationLease.AcquireAsync(db, token);
+        await using var transaction = db.Database.IsRelational() && db.Database.CurrentTransaction is null ? await db.Database.BeginTransactionAsync(token) : null;
+        await PluginLifecycleLease.LockConnectionAsync(db, connectionId, token);
+        await using var rootBoundary = await LibraryRootConfigurationLease.AcquireAsync(db, token);
         var connection = await db.IntegrationConnections.AsNoTracking().SingleOrDefaultAsync(row => row.Id == connectionId, token)
             ?? throw new ConnectionNotFoundException();
         if (connection.Revision != expectedRevision) throw new ConnectionConflictException();

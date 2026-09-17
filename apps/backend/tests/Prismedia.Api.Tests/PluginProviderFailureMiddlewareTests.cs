@@ -9,6 +9,20 @@ namespace Prismedia.Api.Tests;
 
 public sealed class PluginProviderFailureMiddlewareTests {
     [Fact]
+    public async Task BusyPluginHasAStableConflictProblem() {
+        using var services = new ServiceCollection().AddLogging().AddOptions().BuildServiceProvider();
+        var context = new DefaultHttpContext { RequestServices = services };
+        context.Response.Body = new MemoryStream();
+        var middleware = new PluginProviderFailureMiddleware(_ => throw new PluginInUseException("Finish the accepted transfer first."));
+        await middleware.InvokeAsync(context);
+        Assert.Equal(StatusCodes.Status409Conflict, context.Response.StatusCode);
+        context.Response.Body.Position = 0;
+        var result = await JsonSerializer.DeserializeAsync<ApiProblem>(context.Response.Body, new JsonSerializerOptions(JsonSerializerDefaults.Web));
+        Assert.Equal(ApiProblemCodes.PluginInUse, result!.Code);
+        Assert.Equal("Finish the accepted transfer first.", result.Message);
+    }
+
+    [Fact]
     public async Task ProviderFailureHasAStableUpstreamProblemInsteadOfNotFound() {
         using var services = new ServiceCollection().AddLogging().AddOptions().BuildServiceProvider();
         var context = new DefaultHttpContext { RequestServices = services };

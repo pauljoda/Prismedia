@@ -1842,6 +1842,7 @@ export const PROBLEM_CODE = {
   passwordInvalid: "password_invalid",
   playbackItemNotFound: "playback_item_not_found",
   playbackSourceNotFound: "playback_source_not_found",
+  pluginInUse: "plugin_in_use",
   pluginNotFound: "plugin_not_found",
   pluginProviderUnavailable: "plugin_provider_unavailable",
   pluginUpdateNotFound: "plugin_update_not_found",

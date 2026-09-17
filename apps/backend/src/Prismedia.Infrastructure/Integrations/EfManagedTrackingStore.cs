@@ -49,6 +49,7 @@ public sealed partial class EfManagedTrackingStore(PrismediaDbContext db, IExter
             throw new ArgumentException("Choose a library mapped to this connection.");
         if (item.EntityKind is not (EntityKind.Movie or EntityKind.VideoSeries)) throw new ArgumentException("Tracking currently supports movie and television holdings.");
         await using var transaction = await db.Database.BeginTransactionAsync(token);
+        await PluginLifecycleLease.LockConnectionAsync(db, connectionId, token, requireReady: true);
         var row = new ManagedHoldingRow { Id = request.OperationId, ConnectionId = connectionId, LibraryRootId = request.LibraryRootId,
             Kind = item.EntityKind, RemoteId = item.RemoteId, Title = title, ItemJson = itemJson,
             SelectionsJson = JsonSerializer.Serialize(selections, Json), Revision = 1, Status = ManagedTrackingStatus.Pending, NextCheckAt = DateTimeOffset.UtcNow };

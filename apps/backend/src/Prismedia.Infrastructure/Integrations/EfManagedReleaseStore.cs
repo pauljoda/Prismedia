@@ -40,6 +40,7 @@ public sealed class EfManagedReleaseStore(PrismediaDbContext db, IManagedTrackin
     public async Task<ManagedTrackingResponse> BeginAsync(Guid connectionId, Guid holdingId, ReleaseManagedHoldingRequest request, CancellationToken token) {
         var holding = await RequireHoldingAsync(connectionId, holdingId, token);
         await using var transaction = await db.Database.BeginTransactionAsync(token);
+        await PluginLifecycleLease.LockConnectionAsync(db, connectionId, token, requireReady: true);
         await WithOwnersAsync(holding, async ct => {
             var row = await LockAsync(holdingId, ct);
             if (row.ReleaseOperationId is not null) {

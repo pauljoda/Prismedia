@@ -104,8 +104,8 @@ public sealed partial class PluginCatalogService {
 
         var descriptors = await DiscoverAsync(cancellationToken);
         return descriptors
-            .Where(descriptor => descriptor.Manifest.Id.Equals(providerId, StringComparison.OrdinalIgnoreCase))
-            .OrderByDescending(descriptor => ParseVersion(descriptor.Manifest.Version))
+            .Where(descriptor => descriptor.Manifest.Id.Equals(providerId, StringComparison.OrdinalIgnoreCase)
+                && descriptor.Manifest.Version == entry.Version)
             .FirstOrDefault();
     }
 

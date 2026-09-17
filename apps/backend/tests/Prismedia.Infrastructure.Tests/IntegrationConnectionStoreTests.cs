@@ -23,7 +23,7 @@ public sealed class IntegrationConnectionStoreTests : IDisposable {
     [Fact]
     public async Task UndeclaredCredentialsRemainEncryptedAndAreNotDecryptedEvenWhenCorrupt() {
         var connection = NewConnection();
-        await using var db = new PrismediaDbContext(_options);
+        await using var db = CreateContext();
         var store = new EfIntegrationConnectionStore(db, new ConnectionSecretProtector(_root));
         await store.SaveAsync(connection, null, new Dictionary<string, string?> { [CredentialKey] = Credential, [RetiredCredentialKey] = "retired-secret" }, default);
         var row = await db.IntegrationConnections.SingleAsync();
@@ -42,7 +42,7 @@ public sealed class IntegrationConnectionStoreTests : IDisposable {
     public async Task CredentialsPersistEncryptedAcrossRestartsAndCannotMoveBetweenConnections() {
         var first = NewConnection();
         var second = NewConnection();
-        await using (var db = new PrismediaDbContext(_options)) {
+        await using (var db = CreateContext()) {
             var store = new EfIntegrationConnectionStore(db, new ConnectionSecretProtector(_root));
             await store.SaveAsync(first, null, new Dictionary<string, string?> { [CredentialKey] = Credential }, CancellationToken.None);
             await store.SaveAsync(second, null, new Dictionary<string, string?>(), CancellationToken.None);
@@ -50,7 +50,7 @@ public sealed class IntegrationConnectionStoreTests : IDisposable {
             Assert.DoesNotContain(Credential, row.ProtectedSecretsJson);
             Assert.DoesNotContain(Credential, JsonSerializer.Serialize(await store.ListAsync(CancellationToken.None)));
         }
-        await using (var db = new PrismediaDbContext(_options)) {
+        await using (var db = CreateContext()) {
             var protector = new ConnectionSecretProtector(_root);
             var store = new EfIntegrationConnectionStore(db, protector);
             Assert.Equal(Credential, (await store.ReadSecretsAsync(first.State.Id, [CredentialKey], CancellationToken.None))[CredentialKey]);
@@ -63,7 +63,7 @@ public sealed class IntegrationConnectionStoreTests : IDisposable {
     [Fact]
     public async Task StaleProbeCannotOverwriteEditedConfigurationAndSecretsCanBeExplicitlyRemoved() {
         var connection = NewConnection();
-        await using var db = new PrismediaDbContext(_options);
+        await using var db = CreateContext();
         var store = new EfIntegrationConnectionStore(db, new ConnectionSecretProtector(_root));
         await store.SaveAsync(connection, null, new Dictionary<string, string?> { [CredentialKey] = Credential }, CancellationToken.None);
         var stale = (await store.FindAsync(connection.State.Id, CancellationToken.None))!.Connection;
@@ -80,7 +80,7 @@ public sealed class IntegrationConnectionStoreTests : IDisposable {
 
     [Fact]
     public async Task MappedConnectionCannotChangeSourceOrBeDeletedButCanBeDisabled() {
-        await using var db = new PrismediaDbContext(_options);
+        await using var db = CreateContext();
         var store = new EfIntegrationConnectionStore(db, new ConnectionSecretProtector(_root));
         var connection = NewConnection();
         await store.SaveAsync(connection, null, new Dictionary<string, string?>(), default);
@@ -95,6 +95,15 @@ public sealed class IntegrationConnectionStoreTests : IDisposable {
         await store.SaveAsync(connection, 1, new Dictionary<string, string?>(), default);
         Assert.False((await store.FindAsync(connection.State.Id, default))!.Connection.State.Enabled);
         Assert.Single(await db.ExternalLibraryMounts.ToArrayAsync());
+    }
+
+    private PrismediaDbContext CreateContext() {
+        var db = new PrismediaDbContext(_options);
+        if (!db.ProviderConfigs.Any()) {
+            db.ProviderConfigs.Add(new() { Id = Guid.NewGuid(), ProviderCode = PluginId, DisplayName = "Fixture", Enabled = true });
+            db.SaveChanges();
+        }
+        return db;
     }
 
     public void Dispose() { if (Directory.Exists(_root)) Directory.Delete(_root, true); }

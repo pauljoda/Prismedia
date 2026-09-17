@@ -115,7 +115,7 @@ public sealed class IntegrationTransferPostgresTests : IDisposable {
         new(new("publication", "https://catalog.test/entry", EntityKind.Book), "epub"));
     private static async Task<Guid> AddConnectionAsync(PostgresTestDatabase database) {
         await using var db = database.CreateContext();
-        var row = new IntegrationConnectionRow { Id = Guid.NewGuid(), PluginId = "catalog-test", Name = "Catalog", BaseUrl = "https://catalog.test/", Revision = 1, Status = ConnectionStatus.Unverified };
+        var row = new IntegrationConnectionRow { Id = Guid.NewGuid(), PluginId = "catalog-test", Name = "Catalog", BaseUrl = "https://catalog.test/", Revision = 1, Status = ConnectionStatus.Ready, Enabled = true };
         db.IntegrationConnections.Add(row);
         await db.SaveChangesAsync();
         return row.Id;

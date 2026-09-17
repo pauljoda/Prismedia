@@ -219,6 +219,9 @@ public static class ApiProblemCodes {
     /// <summary>Problem code <c>plugin_update_not_found</c>.</summary>
     public const string PluginUpdateNotFound = "plugin_update_not_found";
 
+    /// <summary>A plugin still owns connected work or library authority and cannot be changed yet.</summary>
+    public const string PluginInUse = "plugin_in_use";
+
     /// <summary>Problem code <c>request_invalid</c>.</summary>
     public const string RequestInvalid = "request_invalid";
 

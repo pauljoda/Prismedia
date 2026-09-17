@@ -84,6 +84,28 @@ kinds and identify actions it serves.
 | `dotnet-process` | Compiled plugin assembly, e.g. `dist/MyPlugin.dll`. | Executed by the .NET plugin process runner. |
 | `stash-compat` | A standard Stash YAML scraper definition. | Executed natively by Prismedia's Stash-compat engine. You normally never write this manifest by hand — installing a scraper from the CommunityScrapers index synthesizes it (with a `stash-` id prefix). See [Stash Compatibility](./stash-compat.md). |
 
+## Installed versions and active work
+
+Installation records the selected package version and paths. Discovering or downloading
+a newer package does not activate it. Saving credentials and repeating an installation
+preserve that selection. If its files disappear, Prismedia reports the installed entry
+as unavailable instead of silently executing another version; an explicit update can
+select an available compatible package.
+
+Updates wait until the plugin's accepted transfers, manager requests, manager actions,
+initial library associations, and ownership handoffs have finished or been resolved.
+This includes disabled Connections and transfers waiting for import acknowledgement
+or review. Automatic updates defer these plugins and continue with other packages.
+New work acceptance and package changes share a database lock across API and worker
+processes. Packages downloaded before a deferred update remain available for a later
+attempt, while the installed version stays selected.
+
+An activated update invalidates each Connection's previous capability test. Test the
+Connection again before using it; credentials, remote installation identity, library
+bindings, and operation history remain intact. Removal requires disabled Connections,
+no unfinished connected work, and no mapped external libraries. Inactive historical
+transfers are retained independently of installed provider configuration.
+
 ## Invocation limits
 
 Native `dotnet-process` plugins may declare an `execution` policy:

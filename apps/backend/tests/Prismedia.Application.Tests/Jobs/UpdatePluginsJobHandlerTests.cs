@@ -9,6 +9,19 @@ namespace Prismedia.Application.Tests.Jobs;
 
 public sealed class UpdatePluginsJobHandlerTests {
     [Fact]
+    public async Task BusyPluginsAreDeferredWhileOtherUpdatesContinueSuccessfully() {
+        var plugins = new RecordingPluginCatalog([
+            Provider("busy", installed: true, updateAvailable: true),
+            Provider("healthy", installed: true, updateAvailable: true),
+        ], busyProviderId: "busy");
+        var queue = new ProgressJobQueue();
+        await new UpdatePluginsJobHandler(plugins, NullLogger<UpdatePluginsJobHandler>.Instance).HandleAsync(Context(queue), default);
+        Assert.Equal(["busy", "healthy"], plugins.UpdateAttempts);
+        Assert.Contains(queue.Progress, progress => progress.Message == "Deferred busy: connected work is still active");
+        Assert.Equal(100, queue.Progress.Last().Progress);
+    }
+
+    [Fact]
     public async Task UpdatesOnlyInstalledProvidersThatAdvertiseANewerVersion() {
         var plugins = new RecordingPluginCatalog([
             Provider("tmdb", installed: true, updateAvailable: true),
@@ -78,7 +91,7 @@ public sealed class UpdatePluginsJobHandlerTests {
 
     private sealed class RecordingPluginCatalog(
         IReadOnlyList<PluginProvider> providers,
-        string? failingProviderId = null) : IPluginCatalogService {
+        string? failingProviderId = null, string? busyProviderId = null) : IPluginCatalogService {
         public List<string> UpdateAttempts { get; } = [];
 
         public Task<IReadOnlyList<PluginProvider>> ListProvidersAsync(CancellationToken cancellationToken) =>
@@ -92,6 +105,7 @@ public sealed class UpdatePluginsJobHandlerTests {
 
         public Task<PluginProvider?> UpdateAsync(string providerId, CancellationToken cancellationToken) {
             UpdateAttempts.Add(providerId);
+            if (providerId == busyProviderId) throw new PluginInUseException("Busy fixture.");
             if (providerId == failingProviderId) {
                 throw new IOException("download failed");
             }

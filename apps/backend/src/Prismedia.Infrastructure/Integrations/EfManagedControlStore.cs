@@ -49,6 +49,7 @@ public sealed class EfManagedControlStore(PrismediaDbContext db, IManagedTrackin
         if (operation.State.Revision != 1 || plan.Request.OperationId != operation.State.OperationId
             || plan.RequestFingerprint != ManagedControlIdentity.RequestFingerprint(plan.Request)) throw new ArgumentException("Invalid manager action intent.");
         await using var transaction = await db.Database.BeginTransactionAsync(token);
+        await PluginLifecycleLease.LockConnectionAsync(db, operation.State.ConnectionId, token, requireReady: true);
         await ValidateScopeAsync(operation, plan, token);
         var now = DateTimeOffset.UtcNow;
         var row = new ManagedControlRow { Id = operation.State.OperationId, ConnectionId = operation.State.ConnectionId,

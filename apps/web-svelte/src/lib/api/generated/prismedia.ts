@@ -8941,10 +8941,15 @@ export type removePluginResponse404 = {
   status: 404
 }
 
+export type removePluginResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
 export type removePluginResponseSuccess = (removePluginResponse204) & {
   headers: Headers;
 };
-export type removePluginResponseError = (removePluginResponse404) & {
+export type removePluginResponseError = (removePluginResponse404 | removePluginResponse409) & {
   headers: Headers;
 };
 
@@ -8984,10 +8989,15 @@ export type updatePluginResponse404 = {
   status: 404
 }
 
+export type updatePluginResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
 export type updatePluginResponseSuccess = (updatePluginResponse200) & {
   headers: Headers;
 };
-export type updatePluginResponseError = (updatePluginResponse404) & {
+export type updatePluginResponseError = (updatePluginResponse404 | updatePluginResponse409) & {
   headers: Headers;
 };
 

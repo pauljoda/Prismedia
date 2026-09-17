@@ -26,9 +26,13 @@ public sealed class EfIntegrationConnectionStore(PrismediaDbContext db, Connecti
     /// <inheritdoc />
     public async Task SaveAsync(IntegrationConnection connection, long? expectedRevision,
         IReadOnlyDictionary<string, string?> secretChanges, CancellationToken cancellationToken) {
-        await using var transaction = await LibraryRootConfigurationLease.AcquireAsync(db, cancellationToken);
         var state = connection.State;
+        await using var transaction = await PluginLifecycleLease.AcquireAsync(db, state.PluginId, cancellationToken);
+        await using var rootBoundary = await LibraryRootConfigurationLease.AcquireAsync(db, cancellationToken);
         var row = await db.IntegrationConnections.SingleOrDefaultAsync(row => row.Id == state.Id, cancellationToken);
+        if (state.Enabled && (row is null || !row.Enabled)
+            && !await db.ProviderConfigs.AnyAsync(provider => provider.ProviderCode == state.PluginId && provider.Enabled, cancellationToken))
+            throw new ConnectionConflictException();
         if (expectedRevision is null) {
             if (row is not null || state.Revision != 1) throw new ConnectionConflictException();
             row = new IntegrationConnectionRow { Id = state.Id, PluginId = state.PluginId };

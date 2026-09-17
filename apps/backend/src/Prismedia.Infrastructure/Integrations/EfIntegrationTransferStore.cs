@@ -29,6 +29,7 @@ public sealed class EfIntegrationTransferStore(PrismediaDbContext db, TransferPl
         Validate(transfer, plan);
         if (await FindAsync(transfer.State.OperationId, cancellationToken) is { } existing) return SameIntent(existing, transfer, plan);
         await using var transaction = db.Database.IsRelational() ? await db.Database.BeginTransactionAsync(cancellationToken) : null;
+        await PluginLifecycleLease.LockConnectionAsync(db, transfer.State.ConnectionId, cancellationToken, requireReady: true);
         var now = DateTimeOffset.UtcNow;
         var row = new IntegrationTransferRow {
             Id = transfer.State.OperationId, ConnectionId = transfer.State.ConnectionId, Revision = transfer.State.Revision,

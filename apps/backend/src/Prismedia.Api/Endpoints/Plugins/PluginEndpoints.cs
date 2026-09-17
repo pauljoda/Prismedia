@@ -55,6 +55,7 @@ public static class PluginEndpoints {
             .WithName("UpdatePlugin")
             .WithSummary("Downloads and enables the newest compatible community plugin artifact.")
             .Produces<PluginProvider>()
+            .Produces<ApiProblem>(StatusCodes.Status409Conflict)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
         group.MapDelete("/{provider}", async (
@@ -67,6 +68,7 @@ public static class PluginEndpoints {
             .WithName("RemovePlugin")
             .WithSummary("Removes local installed state for a community plugin.")
             .Produces(StatusCodes.Status204NoContent)
+            .Produces<ApiProblem>(StatusCodes.Status409Conflict)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
         group.MapPut("/{provider}/auth", async (

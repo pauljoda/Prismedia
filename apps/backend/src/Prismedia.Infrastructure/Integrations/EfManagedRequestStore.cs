@@ -51,6 +51,7 @@ public sealed partial class EfManagedRequestStore(PrismediaDbContext db, IExtern
             || plan.Creation.ProfileId != plan.Request.ProfileId || !ManagedRequestIdentity.SameWork(plan.Creation.Work, plan.Request.ReviewedWork)
             || plan.Fingerprint != ManagedRequestIdentity.Fingerprint(plan.Request)) throw new ArgumentException("Invalid managed request intent.");
         await using var transaction = await db.Database.BeginTransactionAsync(token);
+        await PluginLifecycleLease.LockConnectionAsync(db, state.ConnectionId, token, requireReady: true);
         var now = DateTimeOffset.UtcNow;
         var row = new ManagedRequestRow { Id = state.OperationId, ConnectionId = state.ConnectionId, EntityId = state.EntityId,
             LibraryRootId = state.LibraryRootId, Revision = state.Revision, Phase = state.Phase, StateJson = JsonSerializer.Serialize(state, Json),

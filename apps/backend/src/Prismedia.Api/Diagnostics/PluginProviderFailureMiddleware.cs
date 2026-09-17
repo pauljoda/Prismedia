@@ -12,5 +12,9 @@ public sealed class PluginProviderFailureMiddleware(RequestDelegate next) {
             context.Response.StatusCode = StatusCodes.Status502BadGateway;
             await context.Response.WriteAsJsonAsync(new ApiProblem(ApiProblemCodes.PluginProviderUnavailable, error.Message), context.RequestAborted);
         }
+        catch (PluginInUseException error) when (!context.Response.HasStarted) {
+            context.Response.StatusCode = StatusCodes.Status409Conflict;
+            await context.Response.WriteAsJsonAsync(new ApiProblem(ApiProblemCodes.PluginInUse, error.Message), context.RequestAborted);
+        }
     }
 }

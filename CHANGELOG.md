@@ -184,6 +184,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 - Identify now explains missing metadata-provider setup and preserves the item’s review when visiting Plugins, with a clear route back after configuration.
 
+- Plugin updates preserve the installed adapter while connected transfers and manager requests are unfinished. Updated Connections require a fresh test, and plugins supporting active Connections or mapped libraries cannot be removed.
+
 - Connections pass only credentials declared by the current plugin version. Retired encrypted fields remain recoverable and cannot block an invocation when their old values are unreadable.
 
 - Book naming templates must preserve the publication extension, and rendered filenames are checked before import placement. Acquisition actions blocked by retained import recovery now return an actionable conflict instead of a server error.

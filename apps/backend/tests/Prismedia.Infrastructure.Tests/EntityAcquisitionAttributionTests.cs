@@ -59,7 +59,7 @@ public sealed class EntityAcquisitionAttributionTests : IDisposable {
     private async Task<Guid> AddAsync(PrismediaDbContext db, Guid entityId, CatalogAttribution? attribution) {
         var connection = new IntegrationConnectionRow {
             Id = Guid.NewGuid(), PluginId = "catalog-test", Name = "Catalog", BaseUrl = "https://catalog.test/",
-            Revision = 1, Status = ConnectionStatus.Unverified
+            Revision = 1, Status = ConnectionStatus.Ready, Enabled = true
         };
         db.IntegrationConnections.Add(connection);
         await db.SaveChangesAsync();

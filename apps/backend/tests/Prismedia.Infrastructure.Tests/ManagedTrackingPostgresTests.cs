@@ -243,7 +243,7 @@ public sealed partial class ManagedTrackingPostgresTests : IDisposable {
         var connection = Guid.NewGuid(); var root = Guid.NewGuid(); var entity = Guid.NewGuid(); var file = Guid.NewGuid();
         var path = Path.Combine(Directory.CreateDirectory(Path.Combine(workspace, "external")).FullName, "film.mkv");
         await File.WriteAllBytesAsync(path, [1, 2, 3]);
-        db.IntegrationConnections.Add(new() { Id = connection, PluginId = "fixture", Name = "Fixture", BaseUrl = "http://manager.test/", Enabled = true, Revision = 1 });
+        db.IntegrationConnections.Add(new() { Id = connection, PluginId = "fixture", Name = "Fixture", BaseUrl = "http://manager.test/", Enabled = true, Status = ConnectionStatus.Ready, Revision = 1 });
         db.LibraryRoots.Add(new() { Id = root, Path = Path.GetDirectoryName(path)!, Label = "Films", Enabled = true, ScanVideos = true });
         db.ExternalLibraryMounts.Add(new() { Id = Guid.NewGuid(), ConnectionId = connection, LibraryRootId = root, RemoteRootId = "1", RemotePath = "/movies", LocalPath = Path.GetDirectoryName(path)! });
         db.Entities.Add(new() { Id = entity, KindCode = EntityKind.Movie.ToCode(), Title = "Retained title", IsOrganized = true });
