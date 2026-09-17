@@ -1,5 +1,7 @@
 <script lang="ts">
   import { Layers } from "@lucide/svelte";
+  import { buttonVariants } from "@prismedia/ui-svelte";
+  import { labelForEntityKind } from "$lib/entities/entity-codes";
   import IdentifyTargetPreview from "./IdentifyTargetPreview.svelte";
   import IdentifyRejectQueueActions from "./IdentifyRejectQueueActions.svelte";
   import PluginSearchSurface from "$lib/components/plugins/PluginSearchSurface.svelte";
@@ -342,8 +344,17 @@
     {rescanning}
     onLoadMore={canLoadMore ? () => void handleSearch(nextPluginSearchLimit(searchLimit)) : null}
     loadingMore={surfaceSearching && searchLimit > PLUGIN_SEARCH_PAGE_SIZE}
-    noProvidersMessage={`No enabled provider supports ${entity.kind}.`}
-  />
+    noProvidersMessage={`No metadata provider is ready for ${labelForEntityKind(entity.kind)}. Install a compatible plugin and configure any required credentials.`}
+  >
+    {#snippet noProvidersAction()}
+      <div>
+        <a
+          class={buttonVariants({ variant: "secondary", size: "sm" })}
+          href={`/plugins?${new URLSearchParams({ identifyId: entity.id, identifyKind: entity.kind })}`}
+        >Set up metadata providers</a>
+      </div>
+    {/snippet}
+  </PluginSearchSurface>
 
   <div class="flex flex-col gap-2 py-2 md:flex-row md:justify-end">
     <IdentifyRejectQueueActions

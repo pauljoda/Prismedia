@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Snippet } from "svelte";
   import { Loader2, RefreshCw, ScanSearch, Search } from "@lucide/svelte";
   import { Button, cn } from "@prismedia/ui-svelte";
   import type { PluginSearchField } from "$lib/api/generated/model";
@@ -39,6 +40,7 @@
     onRescan?: (() => void) | null;
     rescanning?: boolean;
     noProvidersMessage?: string;
+    noProvidersAction?: Snippet;
   }
 
   let {
@@ -73,6 +75,7 @@
     onRescan = null,
     rescanning = false,
     noProvidersMessage = "No enabled provider supports this content kind.",
+    noProvidersAction,
   }: Props = $props();
 
   const activeProvider = $derived(
@@ -90,7 +93,7 @@
       <span class="text-kicker text-text-accent">{title}</span>
       <span class="hidden font-mono text-[0.7rem] text-text-muted sm:inline">{description}</span>
       <div class="flex-1"></div>
-      {#if onRescan}
+      {#if onRescan && providers.length > 0}
         <Button
           type="button"
           size="sm"
@@ -147,6 +150,7 @@
         <div class="rounded-xs border border-warning/30 bg-warning-muted px-3 py-2.5 text-[0.82rem] text-warning-text">
           {noProvidersMessage}
         </div>
+        {#if noProvidersAction}{@render noProvidersAction()}{/if}
       {/if}
       {#if searchStatus}
         <div class="flex items-center gap-2 rounded-xs border border-border-subtle bg-surface-1 px-3 py-2 font-mono text-[0.72rem] text-text-muted">

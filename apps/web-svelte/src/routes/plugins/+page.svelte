@@ -1,5 +1,9 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { page } from "$app/state";
+  import { isEntityKindCode } from "$lib/entities/entity-codes";
+  import { selectIdentifyProviders } from "$lib/identify/provider-selection";
+  import IdentifyPluginSetupNotice from "./IdentifyPluginSetupNotice.svelte";
   import InstalledPluginsTab from "./InstalledPluginsTab.svelte";
   import PluginPageShell from "./PluginPageShell.svelte";
   import PrismediaCommunityTab from "./PrismediaCommunityTab.svelte";
@@ -21,12 +25,21 @@
   const nsfw = useNsfw();
   const isSfw = $derived(nsfw.mode === "off");
 
+  const identifyContext = $derived.by(() => {
+    const entityId = page.url.searchParams.get("identifyId");
+    const entityKind = page.url.searchParams.get("identifyKind") ?? "";
+    return entityId && isEntityKindCode(entityKind) ? { entityId, entityKind } : null;
+  });
+
   let tab = $state<PluginsTab>("installed");
   let loading = $state(true);
   let error = $state<string | null>(null);
   let message = $state<string | null>(null);
 
   let pluginProviders = $state<PluginProvider[]>([]);
+  const identifyReady = $derived(identifyContext !== null &&
+    selectIdentifyProviders(pluginProviders, identifyContext.entityKind, null, isSfw).length > 0);
+
   let providerInstallingId = $state<string | null>(null);
   let providerRemovingId = $state<string | null>(null);
   let providerUpdatingId = $state<string | null>(null);
@@ -92,6 +105,7 @@
   }
 
   onMount(() => {
+    if (identifyContext) tab = "prismedia-index";
     void loadInstalled();
   });
 
@@ -240,6 +254,12 @@
 <svelte:head>
   <title>Plugins · Prismedia</title>
 </svelte:head>
+
+{#if identifyContext}
+  <div class="mb-5">
+    <IdentifyPluginSetupNotice {...identifyContext} ready={identifyReady} />
+  </div>
+{/if}
 
 <PluginPageShell
   {loading}
