@@ -11,6 +11,29 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class IntegrationArtifactTransferTests : IDisposable {
     [Fact]
+    public async Task SourceSha1IsVerifiedWhileLocalEvidenceRemainsSha256() {
+        using var client = new HttpClient(new Handler(_ => Ok(Bytes)));
+        var sha1 = Convert.ToHexStringLower(SHA1.HashData(Bytes));
+        var request = Request;
+        request = request with { Delivery = request.Delivery with { Sha256 = null, Sha1 = sha1 } };
+        var transfer = new HttpIntegrationArtifactTransfer(new(root), client);
+        var result = await transfer.TransferAsync(request, default);
+        Assert.Equal(Hash, result.Sha256);
+        Assert.Equal(result, await transfer.TransferAsync(request, default));
+        await Assert.ThrowsAsync<InvalidDataException>(() => transfer.TransferAsync(request with { Delivery = request.Delivery with { Sha1 = new string('0', 40) } }, default));
+        await Assert.ThrowsAsync<ArgumentException>(() => transfer.TransferAsync(request with { Delivery = request.Delivery with { Sha1 = "invalid" } }, default));
+    }
+
+    [Fact]
+    public async Task SourceSha1MismatchNeverProducesAVerifiedReceipt() {
+        using var client = new HttpClient(new Handler(_ => Ok(Bytes)));
+        var request = Request;
+        await Assert.ThrowsAsync<InvalidDataException>(() => new HttpIntegrationArtifactTransfer(new(root), client).TransferAsync(
+            request with { Delivery = request.Delivery with { Sha256 = null, Sha1 = new string('0', 40) } }, default));
+        Assert.Empty(Directory.GetFiles(root, "*.verified.json", SearchOption.AllDirectories));
+    }
+
+    [Fact]
     public async Task AnonymousDownloadDoesNotFollowRedirectEvenToAnotherDeclaredOrigin() {
         var declaration = new PluginIntegrationDefinition(1,
             [new(PluginCapability.AcquisitionSource, [IntegrationOperation.Resolve], [EntityKind.Book])], [],
@@ -64,8 +87,10 @@ public sealed class IntegrationArtifactTransferTests : IDisposable {
         Assert.Null(await restarted.ReadVerifiedAsync(request.OperationId, result.ArtifactId, result.FileName, result.SizeBytes, result.Sha256, default));
     }
 
-    [Fact]
-    public async Task InterruptedHashPinnedTransferResumesAndVerifiesTheWholeFile() {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task InterruptedHashPinnedTransferResumesAndVerifiesTheWholeFile(bool sourceSha1) {
         var calls = 0;
         using var client = new HttpClient(new Handler(request => {
             if (++calls == 1) return new(HttpStatusCode.OK) { Content = new StreamContent(new InterruptedStream(Bytes, 8)) };
@@ -75,6 +100,7 @@ public sealed class IntegrationArtifactTransferTests : IDisposable {
             return response;
         }));
         var request = Request;
+        if (sourceSha1) request = request with { Delivery = request.Delivery with { Sha256 = null, Sha1 = Convert.ToHexStringLower(SHA1.HashData(Bytes)) } };
         await Assert.ThrowsAsync<IOException>(() => new HttpIntegrationArtifactTransfer(new(root), client).TransferAsync(request, default));
         var result = await new HttpIntegrationArtifactTransfer(new(root), client).TransferAsync(request, default);
         Assert.Equal(Hash, result.Sha256);

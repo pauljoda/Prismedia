@@ -66,7 +66,8 @@ public sealed class CatalogDiscoveryService(IntegrationConnectionAccess access, 
                 || publication.ExternalIds is null || publication.ExternalIds.Count > 64
                 || publication.ExternalIds.Any(pair => string.IsNullOrWhiteSpace(pair.Key) || pair.Key.Length > 128
                     || string.IsNullOrWhiteSpace(pair.Value) || pair.Value.Length > 2048)
-                || new[] { publication.Language, publication.Publisher, publication.EditionLabel, publication.IssueLabel }.Any(value => value?.Length > 512)) throw InvalidPage();
+                || new[] { publication.Language, publication.Publisher, publication.EditionLabel, publication.IssueLabel }.Any(value => value?.Length > 512)
+                || !ValidAttribution(publication.Attribution)) throw InvalidPage();
             var offers = new HashSet<string>(StringComparer.Ordinal);
             foreach (var offer in item.Offers) {
                 if (offer is null || string.IsNullOrWhiteSpace(offer.Id) || offer.Id.Length > 2048 || !offers.Add(offer.Id)
@@ -75,6 +76,16 @@ public sealed class CatalogDiscoveryService(IntegrationConnectionAccess access, 
             }
         }
     }
+
+    private static bool ValidAttribution(CatalogAttribution? attribution) => attribution is null ||
+        (SafeWebLink(attribution.SourceUrl) && (attribution.LicenseUrl is null || SafeWebLink(attribution.LicenseUrl))
+            && attribution.Creator?.Length is not > 2048 && attribution.Credit?.Length is not > 8192
+            && attribution.LicenseName?.Length is not > 256 && attribution.UsageTerms?.Length is not > 2048);
+
+    private static bool SafeWebLink(string value) => !string.IsNullOrWhiteSpace(value) && value.Length <= 2048
+        && !value.Any(character => char.IsWhiteSpace(character) || char.IsControl(character) || character == '\\')
+        && Uri.TryCreate(value, UriKind.Absolute, out var address) && address.UserInfo.Length == 0 && address.Host.Length > 0
+        && (address.Scheme == Uri.UriSchemeHttp || address.Scheme == Uri.UriSchemeHttps);
 
     private static IntegrationInvocationException InvalidPage() => new("The source returned an invalid or oversized catalog page.");
 }

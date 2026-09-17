@@ -15,6 +15,7 @@ public sealed class HttpIntegrationArtifactTransfer(IntegrationArtifactStorageOp
     private sealed record Receipt(string ArtifactId, string FileName, long SizeBytes, string Sha256);
     private const string ReceiptSuffix = ".verified.json";
     private const long MaximumArtifactBytes = 250L * 1024 * 1024 * 1024;
+    private const string UserAgent = "Prismedia (+https://pauljoda.github.io/Prismedia/)";
     private static readonly JsonSerializerOptions Json = new(JsonSerializerDefaults.Web) { MaxDepth = 8 };
 
     /// <inheritdoc />
@@ -46,7 +47,7 @@ public sealed class HttpIntegrationArtifactTransfer(IntegrationArtifactStorageOp
             return recovered;
         }
         if (delivery.ExpiresAt is { } expires && expires <= DateTimeOffset.UtcNow) throw new InvalidDataException("The artifact retrieval authorization expired.");
-        var offset = File.Exists(partialPath) && delivery.Sha256 is not null ? new FileInfo(partialPath).Length : 0;
+        var offset = File.Exists(partialPath) && (delivery.Sha256 is not null || delivery.Sha1 is not null) ? new FileInfo(partialPath).Length : 0;
         if (offset > request.MaximumBytes || delivery.ByteSize is { } expected && offset > expected) offset = 0;
         if (offset > 0 && delivery.ByteSize == offset) {
             var recovered = await VerifyAsync(request, partialPath, cancellationToken);
@@ -120,6 +121,7 @@ public sealed class HttpIntegrationArtifactTransfer(IntegrationArtifactStorageOp
     private async Task<HttpResponseMessage> OpenAsync(Uri origin, Uri address, IReadOnlyDictionary<string, string> headers, long offset, CancellationToken cancellationToken) {
         for (var redirects = 0; redirects <= 5; redirects++) {
             using var request = new HttpRequestMessage(HttpMethod.Get, address);
+            request.Headers.UserAgent.ParseAdd(UserAgent);
             foreach (var header in headers) request.Headers.Add(header.Key, header.Value);
             request.Headers.AcceptEncoding.ParseAdd("identity");
             if (offset > 0) request.Headers.Range = new RangeHeaderValue(offset, null);
@@ -138,8 +140,10 @@ public sealed class HttpIntegrationArtifactTransfer(IntegrationArtifactStorageOp
             || request.MaximumBytes is <= 0 or > MaximumArtifactBytes || request.Delivery is null)
             throw new ArgumentException("A stable operation, artifact identity, and bounded transfer size are required.");
         var delivery = request.Delivery;
-        if (delivery.ByteSize is < 0 || delivery.ByteSize > request.MaximumBytes || delivery.Sha256 is { } hash && (hash.Length != 64 || !hash.All(Uri.IsHexDigit)))
-            throw new ArgumentException("The artifact size or SHA-256 is invalid.");
+        if (delivery.ByteSize is < 0 || delivery.ByteSize > request.MaximumBytes
+            || delivery.Sha256 is { } hash && (hash.Length != 64 || !hash.All(Uri.IsHexDigit))
+            || delivery.Sha1 is { } sourceHash && (sourceHash.Length != 40 || !sourceHash.All(Uri.IsHexDigit)))
+            throw new ArgumentException("The artifact size or declared checksum is invalid.");
         ValidateFileName(delivery.SuggestedFileName);
         if (delivery.Headers is null || delivery.Headers.Count > 8 || delivery.Headers.Any(header =>
                 !(header.Key.Equals("Authorization", StringComparison.OrdinalIgnoreCase) || header.Key.Equals("Accept", StringComparison.OrdinalIgnoreCase))
@@ -178,6 +182,13 @@ public sealed class HttpIntegrationArtifactTransfer(IntegrationArtifactStorageOp
         var hash = Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, cancellationToken));
         if (request.Delivery.Sha256 is { } expected && !hash.Equals(expected, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("The staged artifact SHA-256 does not match its manifest.");
+        if (request.Delivery.Sha1 is { } sourceHash) {
+            // Some catalogs publish only SHA-1 version checksums. Always retain our independent SHA-256 receipt.
+            stream.Position = 0;
+            var sourceChecksum = Convert.ToHexStringLower(await SHA1.HashDataAsync(stream, cancellationToken));
+            if (!sourceChecksum.Equals(sourceHash, StringComparison.OrdinalIgnoreCase))
+                throw new InvalidDataException("The staged artifact does not match the source version checksum.");
+        }
         return new(request.ArtifactId, path, stream.Length, hash, request.Delivery.SuggestedFileName);
     }
 

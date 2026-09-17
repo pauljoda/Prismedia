@@ -5,7 +5,8 @@
   import { Alert, Button, Panel, Select, TextInput, buttonVariants } from "@prismedia/ui-svelte";
   import { CONNECTION_STATUS, INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
   import type { ConnectionResponse, EntityKind, ExecutorInspectionResponse, IntegrationTransferResponse, LibraryRoot } from "$lib/api/generated/model";
-  import { executorKinds, executorRoots } from "$lib/integrations/executor-options";
+  import { executorKinds } from "$lib/integrations/executor-options";
+  import { integrationImportRoots } from "$lib/integrations/import-options";
   import { fetchConnections } from "$lib/api/connections";
   import { inspectPublicationUrl, acquireExecutorPublication, fetchIntegrationTransfers } from "$lib/api/integration-transfers";
   import { fetchLibraryRoots } from "$lib/api/settings";
@@ -32,7 +33,7 @@
   const operations = new Map<string, string>();
   const connection = $derived(connections.find(item => item.id === connectionId));
   const kinds = $derived(executorKinds(connection));
-  const destinations = $derived(executorRoots(roots, kind));
+  const destinations = $derived(integrationImportRoots(roots, kind));
   $effect(() => { if (!destinations.some(root => root.id === rootId)) rootId = destinations[0]?.id ?? ""; });
 
   onMount(() => {

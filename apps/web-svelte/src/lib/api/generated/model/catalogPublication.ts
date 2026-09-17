@@ -4,6 +4,7 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { CatalogAttribution } from './catalogAttribution';
 import type { CatalogPublicationExternalIds } from './catalogPublicationExternalIds';
 
 export interface CatalogPublication {
@@ -20,4 +21,5 @@ export interface CatalogPublication {
   editionLabel?: string | null;
   /** @nullable */
   issueLabel?: string | null;
+  attribution?: null | CatalogAttribution;
 }

@@ -73,6 +73,7 @@ export * from './browserSessionResponse';
 export * from './bulkJobResponse';
 export * from './cancelJobsParams';
 export * from './cancelManagedRequestInput';
+export * from './catalogAttribution';
 export * from './catalogOffer';
 export * from './catalogPublication';
 export * from './catalogPublicationExternalIds';

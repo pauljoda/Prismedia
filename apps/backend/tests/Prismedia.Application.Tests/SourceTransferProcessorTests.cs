@@ -12,6 +12,14 @@ namespace Prismedia.Application.Tests;
 
 public sealed class SourceTransferProcessorTests {
     [Fact]
+    public async Task ImageDownloadUsesTheImageByteBudgetAndRecordsExactImageOwnership() {
+        var fixture = new Fixture(pendingDownload: true, kind: EntityKind.Image);
+        await fixture.RunAsync();
+        Assert.Equal(IntegrationMediaFormats.MaximumImageBytes, fixture.Download!.MaximumBytes);
+        Assert.Equal(IntegrationTransferPhase.Completed, fixture.State.Phase);
+        Assert.Equal(fixture.EntityId, Assert.Single(Assert.Single(fixture.State.Imports!).EntityIds));
+    }
+    [Fact]
     public async Task DeclaredForeignDownloadIsPassedToTransportWithoutHeaders() {
         var fixture = new Fixture(pendingDownload: true);
         await fixture.RunAsync();
@@ -69,13 +77,18 @@ public sealed class SourceTransferProcessorTests {
         internal bool RemoveOriginAfterResolve { get; set; }
         internal IntegrationArtifactTransferRequest? Download { get; private set; }
         private readonly bool pendingDownload;
+        private readonly EntityKind kind;
+        private readonly string fileName;
         private readonly IntegrationConnection connection;
         private PluginManifest manifest;
-        private readonly LibraryRootData root = new(Guid.NewGuid(), Path.GetTempPath(), "Library", true, false, false, false, false, true, false, false);
+        private readonly LibraryRootData root;
         private readonly IntegrationTransferPlan plan;
-        internal Fixture(bool pendingDownload = false) {
+        internal Fixture(bool pendingDownload = false, EntityKind kind = EntityKind.Book) {
             this.pendingDownload = pendingDownload;
-            var supports = new IntegrationSupport[] { new(PluginCapability.AcquisitionSource, [IntegrationOperation.Resolve], [EntityKind.Book]) };
+            this.kind = kind;
+            fileName = kind == EntityKind.Image ? "image.jpg" : "book.epub";
+            root = new(Guid.NewGuid(), Path.GetTempPath(), "Library", true, false, false, kind == EntityKind.Image, false, kind == EntityKind.Book, false, false);
+            var supports = new IntegrationSupport[] { new(PluginCapability.AcquisitionSource, [IntegrationOperation.Resolve], [kind]) };
             connection = IntegrationConnection.Create("test-catalog", "Catalog", "https://catalog.test", true, [PluginCapability.AcquisitionSource], new Dictionary<string, string>());
             connection.RecordProbe(null, supports, null, DateTimeOffset.UtcNow, false);
             manifest = new(2, [], "test-catalog", "Catalog", "1.0.0", "dotnet-process", "plugin.dll", new("2.0.0", null, "3.8.0", null), [], false, [],
@@ -83,7 +96,7 @@ public sealed class SourceTransferProcessorTests {
             var transfer = IntegrationTransfer.CreateSourceDownload(Guid.NewGuid(), connection.State.Id);
             if (!pendingDownload) transfer.AcceptSourceArtifact(new("artifact", "publication", "book.epub", "application/epub+zip", 100, Hash, IntegrationArtifactRole.Content));
             State = transfer.State;
-            plan = new("Publication", EntityKind.Book, root.Id, root.Path, "owner", Hash, new(new("publication", "unreachable-source", EntityKind.Book), "artifact"));
+            plan = new("Publication", kind, root.Id, root.Path, "owner", Hash, new(new("publication", "unreachable-source", kind), "artifact"));
         }
         internal Task RunAsync() {
             var roots = DispatchProxy.Create<ILibraryScanRootPersistence, Boundary>();
@@ -102,7 +115,7 @@ public sealed class SourceTransferProcessorTests {
                 if (RemoveOriginAfterResolve) manifest = manifest with { Integration = manifest.Integration! with { AnonymousArtifactOrigins = [] } };
                 return Task.FromResult(new ResolvedSourceOffer(plan.Source!.Selection, plan.Source.OfferId,
                     new("Book", null, [], new Dictionary<string, string>()), new(plan.Source.OfferId, "Download", AcquisitionAccessKind.Download),
-                    new("https://files.test/book.epub", new Dictionary<string, string>(), "book.epub", 100, Hash)));
+                    new("https://files.test/" + fileName, new Dictionary<string, string>(), fileName, 100, Hash)));
             };
             var discovery = pendingDownload ? new CatalogDiscoveryService(access!, gateway, null!) : null;
             var processor = new SourceTransferProcessor(this, discovery!, access!, this, this, this, roots, this);
@@ -142,7 +155,8 @@ public sealed class SourceTransferProcessorTests {
         }
         public Task<ImportedEntityMaterializationResult> MaterializeAsync(EntityKind kind, JobContext context, ImportedEntityMaterializationRequest request, CancellationToken cancellationToken) {
             Materializations++;
-            return Task.FromResult(new ImportedEntityMaterializationResult([new(EntityId, EntityKind.Book)], [], request.PlacedMediaPaths, [], []));
+            Assert.Equal(this.kind, kind);
+            return Task.FromResult(new ImportedEntityMaterializationResult([new(EntityId, kind)], [], request.PlacedMediaPaths, [], []));
         }
         public Task<VerifiedIntegrationArtifact> TransferAsync(IntegrationArtifactTransferRequest request, CancellationToken cancellationToken) {
             if (!pendingDownload) throw new InvalidOperationException("Recovery attempted a remote download");

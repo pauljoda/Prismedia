@@ -23,19 +23,21 @@ public sealed class CatalogAcquisitionService(IIntegrationTransferStore store, I
             return IntegrationTransferService.ToResponse(previous);
         }
         var selection = tokens.ReadSelection(connectionId, request.SelectionToken);
-        if (selection.EntityKind is not (EntityKind.Book or EntityKind.ComicInstallment))
-            throw new ArgumentException("Direct catalog imports currently support books and comic installments.");
+        if (selection.EntityKind is not (EntityKind.Book or EntityKind.ComicInstallment or EntityKind.Image))
+            throw new ArgumentException("Direct catalog imports currently support books, comic installments, and still images.");
         var allowedRoots = await currentUser.GetAllowedLibraryRootIdsAsync(cancellationToken);
         var root = await roots.GetLibraryRootAsync(request.LibraryRootId, cancellationToken);
-        if (root is null || root.IsReadOnly || !root.Enabled || !root.ScanBooks || allowedRoots is not null && !allowedRoots.Contains(root.Id))
-            throw new ArgumentException("Choose an accessible, enabled publication library.");
+        if (root is null || !IntegrationMediaFormats.SupportsRoot(selection.EntityKind, root) || allowedRoots is not null && !allowedRoots.Contains(root.Id))
+            throw new ArgumentException("Choose an accessible, enabled library that scans this media type.");
         var offer = await discovery.ResolveAsync(connectionId, request.SelectionToken, request.OfferId, cancellationToken);
         if (!IntegrationMediaFormats.IsSupported(selection.EntityKind, offer.Delivery.SuggestedFileName))
-            throw new ArgumentException("This publication format cannot be imported. Choose an EPUB/PDF book or a CBZ comic offer.");
+            throw new ArgumentException("This format cannot be imported. Choose an EPUB/PDF book, a CBZ comic, or a JPEG/PNG/WebP still image.");
+        if (selection.EntityKind == EntityKind.Image && offer.Delivery.ByteSize > IntegrationMediaFormats.MaximumImageBytes)
+            throw new ArgumentException("Choose an image no larger than 64 MiB.");
         var ownership = Fingerprint(new { connectionId, selection.ItemId, selection.EntityKind });
         var transfer = IntegrationTransfer.CreateSourceDownload(request.OperationId, connectionId);
         var plan = new IntegrationTransferPlan(offer.Publication.Title, selection.EntityKind, root.Id, Path.GetFullPath(root.Path), ownership, fingerprint,
-            new(selection, request.OfferId));
+            new(selection, request.OfferId, offer.Publication));
         return IntegrationTransferService.ToResponse(await store.CreateAsync(transfer, plan, cancellationToken));
     }
 

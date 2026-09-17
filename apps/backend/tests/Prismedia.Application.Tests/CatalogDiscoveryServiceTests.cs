@@ -7,6 +7,27 @@ using Prismedia.Domain.Integrations;
 namespace Prismedia.Application.Tests;
 
 public sealed class CatalogDiscoveryServiceTests {
+    [Theory]
+    [InlineData("javascript:alert(1)")]
+    [InlineData("https://user:secret@catalog.test/source")]
+    [InlineData("not a URL")]
+    public async Task AttributionLinksMustBeSafeWebAddresses(string url) {
+        var fixture = new Fixture();
+        var attribution = new CatalogAttribution(url, null, null, null, null, null, null);
+        fixture.Resolved = fixture.Resolved with { Publication = fixture.Resolved.Publication with { Attribution = attribution } };
+        await Assert.ThrowsAsync<IntegrationInvocationException>(() => fixture.Service.ResolveAsync(fixture.Connection.State.Id, Fixture.ProtectedSelection, Fixture.OfferId, default));
+        fixture.Resolved = fixture.Resolved with { Publication = fixture.Resolved.Publication with { Attribution = attribution with { SourceUrl = "https://catalog.test/source", LicenseUrl = url } } };
+        await Assert.ThrowsAsync<IntegrationInvocationException>(() => fixture.Service.ResolveAsync(fixture.Connection.State.Id, Fixture.ProtectedSelection, Fixture.OfferId, default));
+    }
+
+    [Fact]
+    public async Task OversizedAttributionCannotEnterTheCatalogOrDurableImport() {
+        var fixture = new Fixture();
+        fixture.Resolved = fixture.Resolved with { Publication = fixture.Resolved.Publication with {
+            Attribution = new("https://catalog.test/source", new string('a', 2049), null, null, null, null, null) } };
+        await Assert.ThrowsAsync<IntegrationInvocationException>(() => fixture.Service.ResolveAsync(fixture.Connection.State.Id, Fixture.ProtectedSelection, Fixture.OfferId, default));
+    }
+
     [Fact]
     public async Task DeclaredAnonymousOriginCanResolveButCannotReceiveHeadersOrSurviveDeclarationRemoval() {
         var fixture = new Fixture();

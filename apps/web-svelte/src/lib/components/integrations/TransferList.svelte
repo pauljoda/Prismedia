@@ -7,6 +7,7 @@
   import { cancelPublicationTransfer, retryPublicationTransfer } from "$lib/api/integration-transfers";
   import { resolveEntityHrefById } from "$lib/entities/entity-route-resolver";
   import { isTransferTerminal, transferPhaseLabels } from "$lib/integrations/transfer-labels";
+  import SourceAttribution from "./SourceAttribution.svelte";
 
   let { transfers, onrefresh }: { transfers: IntegrationTransferResponse[]; onrefresh: () => Promise<void> } = $props();
   let busy = $state<string | null>(null);
@@ -48,6 +49,7 @@
           <h3 class="break-words text-sm font-medium">{transfer.title}</h3>
           <Badge>{transfer.cancellationRequested && !isTransferTerminal(transfer.phase) ? "Cancellation requested" : transferPhaseLabels[transfer.phase]}</Badge>
           {#if transfer.lastError}<p class="break-words text-sm text-text-muted">{transfer.lastError}</p>{/if}
+          {#if transfer.sourcePublication?.attribution}<SourceAttribution attribution={transfer.sourcePublication.attribution} />{/if}
         </div>
         <div class="flex shrink-0 flex-wrap gap-2">
           {#if transfer.canCancel}

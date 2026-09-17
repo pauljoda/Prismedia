@@ -3,7 +3,7 @@ import type { CatalogOffer, EntityKind } from "$lib/api/generated/model";
 
 /** User-facing access constraints; only a full publication can satisfy a download request. */
 export const acquisitionAccessLabels: Record<AcquisitionAccessKindCode, string> = {
-  [ACQUISITION_ACCESS_KIND.download]: "Full publication",
+  [ACQUISITION_ACCESS_KIND.download]: "Full download",
   [ACQUISITION_ACCESS_KIND.borrow]: "Loan",
   [ACQUISITION_ACCESS_KIND.purchase]: "Purchase",
   [ACQUISITION_ACCESS_KIND.sample]: "Sample",
@@ -21,6 +21,9 @@ export function publicationFormatLabel(mediaType: string | null | undefined): st
     case "application/x-cbr": return "CBR";
     case "application/x-mobipocket-ebook": return "MOBI";
     case "application/vnd.amazon.ebook": return "Kindle";
+    case "image/jpeg": return "JPEG";
+    case "image/png": return "PNG";
+    case "image/webp": return "WebP";
     default: return null;
   }
 }
@@ -30,5 +33,6 @@ export function canImportPublication(kind: EntityKind, offer: CatalogOffer): boo
   if (offer.access !== ACQUISITION_ACCESS_KIND.download) return false;
   const format = publicationFormatLabel(offer.mediaType);
   return kind === ENTITY_KIND.book ? format === "EPUB" || format === "PDF"
-    : kind === ENTITY_KIND.comicInstallment && format === "CBZ";
+    : kind === ENTITY_KIND.comicInstallment ? format === "CBZ"
+    : kind === ENTITY_KIND.image && (format === "JPEG" || format === "PNG" || format === "WebP");
 }

@@ -31,7 +31,7 @@ public sealed class SourceTransferProcessor(IIntegrationTransferStore store, Cat
                     throw new InvalidDataException("The selected source changed to an unsupported publication format.");
                 var origin = IntegrationDeliveryOriginPolicy.RequireAllowedOrigin(connection.Manifest.Integration, connection.Context.BaseUrl, resolved.Delivery);
                 artifact = await bytes.TransferAsync(new(operationId, source.OfferId, origin,
-                    resolved.Delivery, MaximumPublicationBytes), cancellationToken);
+                    resolved.Delivery, work.Plan.EntityKind == EntityKind.Image ? IntegrationMediaFormats.MaximumImageBytes : MaximumPublicationBytes), cancellationToken);
                 await verifier.VerifyAsync(artifact, work.Plan.EntityKind, cancellationToken);
                 transfer.AcceptSourceArtifact(new(artifact.ArtifactId, source.Selection.ItemId, artifact.FileName,
                     resolved.Offer.MediaType ?? "application/octet-stream", artifact.SizeBytes, artifact.Sha256, IntegrationArtifactRole.Content));

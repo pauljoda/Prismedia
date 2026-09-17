@@ -3,12 +3,14 @@
   import { page } from "$app/state";
   import { AlertTriangle, ArrowLeft, ArrowRight, BookOpen, Download, FolderOpen, Search, ShieldUser } from "@lucide/svelte";
   import { Alert, Badge, Button, Panel, Select, TextInput, buttonVariants } from "@prismedia/ui-svelte";
-  import { CONNECTION_STATUS, INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
+  import { CONNECTION_STATUS, ENTITY_KIND, INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
   import type { ConnectionResponse, DiscoveryItemResponse, DiscoveryPageResponse, EntityKind, IntegrationTransferResponse, LibraryRoot } from "$lib/api/generated/model";
   import { fetchConnections, fetchConnectionCatalog } from "$lib/api/connections";
   import { acquirePublication, fetchIntegrationTransfers } from "$lib/api/integration-transfers";
   import { fetchLibraryRoots } from "$lib/api/settings";
   import TransferList from "$lib/components/integrations/TransferList.svelte";
+  import SourceAttribution from "$lib/components/integrations/SourceAttribution.svelte";
+  import { integrationImportRoots } from "$lib/integrations/import-options";
   import { isTransferTerminal } from "$lib/integrations/transfer-labels";
   import BackLink from "$lib/components/BackLink.svelte";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
@@ -39,6 +41,7 @@
   const support = $derived(connection?.effectiveCapabilities.find(item => item.kind === PLUGIN_CAPABILITY.catalogDiscovery));
   const canSearch = $derived(support?.operations.includes(INTEGRATION_OPERATION.search) ?? false);
   const canBrowse = $derived(support?.operations.includes(INTEGRATION_OPERATION.browse) ?? false);
+  const destinations = $derived(integrationImportRoots(roots, kind));
 
 
   onMount(() => {
@@ -61,15 +64,14 @@
     try {
       const accepted = await acquirePublication(connectionId, { operationId, selectionToken: item.selectionToken, offerId, libraryRootId: rootId });
       transfers = [accepted, ...transfers.filter(transfer => transfer.id !== accepted.id)];
-    } catch (cause) { transferError = cause instanceof Error ? cause.message : "Could not accept this publication. Retry to check the same request."; }
+    } catch (cause) { transferError = cause instanceof Error ? cause.message : "Could not accept this item. Retry to check the same request."; }
     finally { submitting = false; }
   }
   async function initialize() {
     loading = true; error = null;
     try {
       const [available, libraries] = await Promise.all([fetchConnections(), fetchLibraryRoots()]);
-      roots = libraries.filter(root => root.enabled && !root.isReadOnly && root.scanBooks);
-      rootId = roots[0]?.id ?? "";
+      roots = libraries;
       await refreshTransfers();
       connections = available.filter(item => item.status === CONNECTION_STATUS.ready
         && item.effectiveCapabilities.some(capability => capability.kind === PLUGIN_CAPABILITY.catalogDiscovery
@@ -82,12 +84,18 @@
   async function chooseConnection(id: string) {
     requestSequence++; connectionId = id;
     kind = connections.find(item => item.id === id)?.effectiveCapabilities.find(item => item.kind === PLUGIN_CAPABILITY.catalogDiscovery)?.entityKinds[0];
+    chooseDestination();
     query = ""; activeQuery = null; container = null; history = []; catalog = null;
     if (kind && connections.find(item => item.id === id)?.effectiveCapabilities.some(item => item.kind === PLUGIN_CAPABILITY.catalogDiscovery && item.operations.includes(INTEGRATION_OPERATION.browse))) await browse();
   }
   async function chooseKind(value: string) {
     kind = support?.entityKinds.find(item => item === value); history = []; container = null; catalog = null;
+    chooseDestination();
     if (canBrowse) await browse();
+  }
+  function chooseDestination() {
+    const compatible = integrationImportRoots(roots, kind);
+    if (!compatible.some(root => root.id === rootId)) rootId = compatible[0]?.id ?? "";
   }
   async function browse(nextContainer: string | null = null, nextQuery: string | null = null, cursor: string | null = null, remember = false) {
     if (!kind || !connectionId) return;
@@ -118,7 +126,7 @@
       <div class="space-y-2">
         <BackLink fallback="/request" label="Requests" />
         <h1 class="flex items-center gap-2.5"><BookOpen class="size-5 text-text-accent" />Catalogs</h1>
-        <p class="text-sm text-text-muted">Explore publications available from your connected sources.</p>
+        <p class="text-sm text-text-muted">Explore media available from your connected sources.</p>
       </div>
       <a class={buttonVariants({ variant: "secondary", size: "sm" })} href="/settings/connections">Manage connections</a>
     </header>
@@ -138,9 +146,10 @@
         {/if}
         <div class="space-y-2">
           <p class="text-xs font-medium text-text-muted">Import destination</p>
-          <Select ariaLabel="Import destination" value={rootId} options={roots.map(root => ({ value: root.id, label: root.label }))}
-            onchange={value => rootId = value} disabled={submitting || !roots.length} placeholder="Choose a publication library" />
-          {#if !roots.length}<p class="text-sm text-text-muted">Add an enabled library with book scanning in Settings to import publications.</p>{/if}
+          <Select ariaLabel="Import destination" value={rootId} options={destinations.map(root => ({ value: root.id, label: root.label }))}
+            onchange={value => rootId = value} disabled={submitting || !destinations.length}
+            placeholder={kind === ENTITY_KIND.image ? "Choose an image library" : "Choose a publication library"} />
+          {#if !destinations.length}<p class="text-sm text-text-muted">Add an enabled library with {kind === ENTITY_KIND.image ? "image" : "book"} scanning in Settings to import this media type.</p>{/if}
         </div>
       </Panel>
     {/if}
@@ -149,11 +158,10 @@
     {/if}
     {#if transferError}<Alert.Root variant="destructive"><Alert.Description>{transferError}</Alert.Description></Alert.Root>{/if}
     {#if refreshError}<Alert.Root variant="destructive"><Alert.Description>{refreshError}</Alert.Description></Alert.Root>{/if}
-    <TransferList {transfers} onrefresh={refreshTransfers} />
     {#if loading}
       <StatePlaceholder icon={BookOpen} title="Loading catalog" busy />
     {:else if !connections.length}
-      <StatePlaceholder icon={BookOpen} title="Connect a catalog" description="Add and test a connection with discovery support to browse its publications." />
+      <StatePlaceholder icon={BookOpen} title="Connect a catalog" description="Add and test a connection with discovery support to browse its media." />
     {:else if catalog}
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div class="flex min-w-0 items-center gap-3">
@@ -163,7 +171,7 @@
         {#if (container || activeQuery) && canBrowse}<Button variant="ghost" size="sm" onclick={() => { history = []; query = ""; void browse(); }}>Catalog home</Button>{/if}
       </div>
       {#if !catalog.items.length}
-        <StatePlaceholder icon={BookOpen} title="No publications on this page" description="Try another media type, search, or the next page if available." />
+        <StatePlaceholder icon={BookOpen} title="No media on this page" description="Try another media type, search, or the next page if available." />
       {:else}
         <div class="flex flex-col gap-3">
           {#each catalog.items as item (item.id)}
@@ -174,6 +182,7 @@
                   {#if item.publication.authors.length}<p class="text-sm text-text-muted">{item.publication.authors.join(", ")}</p>{/if}
                   {#if item.publication.description}<p class="line-clamp-3 break-words text-sm text-text-muted">{item.publication.description}</p>{/if}
                   {#if item.publication.publisher || item.publication.language}<p class="text-xs text-text-muted">{[item.publication.publisher, item.publication.language].filter(Boolean).join(" · ")}</p>{/if}
+                  {#if item.publication.attribution}<SourceAttribution attribution={item.publication.attribution} />{/if}
                   {#if item.offers.length}
                     <div class="flex flex-wrap gap-2">{#each item.offers as offer (offer.id)}<Badge>{acquisitionAccessLabels[offer.access]}{publicationFormatLabel(offer.mediaType) ? ` · ${publicationFormatLabel(offer.mediaType)}` : ""}</Badge>{/each}</div>
                   {/if}
@@ -192,6 +201,9 @@
         </div>
       {/if}
       {#if catalog.nextCursor}<Button variant="secondary" class="self-end" onclick={() => void browse(container, activeQuery, catalog?.nextCursor, true)}>Next page<ArrowRight /></Button>{/if}
+    {:else}
+      <StatePlaceholder icon={Search} title="Search this catalog" description="Enter a title or keyword to find media from this source." />
     {/if}
+    <TransferList {transfers} onrefresh={refreshTransfers} />
   </div>
 {/if}

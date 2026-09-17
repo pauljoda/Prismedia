@@ -4,6 +4,7 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { CatalogPublication } from './catalogPublication';
 import type { EntityKind } from './entityKind';
 import type { IntegrationTransferMode } from './integrationTransferMode';
 import type { IntegrationTransferPhase } from './integrationTransferPhase';
@@ -25,4 +26,5 @@ export interface IntegrationTransferResponse {
   lastError: string | null;
   canCancel: boolean;
   cancellationRequested: boolean;
+  sourcePublication?: null | CatalogPublication;
 }

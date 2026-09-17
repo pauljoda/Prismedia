@@ -17,7 +17,12 @@ public sealed record CatalogOffer(string Id, string Label, AcquisitionAccessKind
 /// <summary>Source metadata describing a particular holding or edition. It is not automatically applied to the library.</summary>
 public sealed record CatalogPublication(
     string Title, string? Description, IReadOnlyList<string> Authors, IReadOnlyDictionary<string, string> ExternalIds,
-    string? Language = null, string? Publisher = null, string? EditionLabel = null, string? IssueLabel = null);
+    string? Language = null, string? Publisher = null, string? EditionLabel = null, string? IssueLabel = null,
+    CatalogAttribution? Attribution = null);
+
+/// <summary>Plain-text attribution and licensing statements reported by a source, retained with accepted import intent. These statements do not alter curated library metadata.</summary>
+public sealed record CatalogAttribution(string SourceUrl, string? Creator, string? Credit, string? LicenseName,
+    string? LicenseUrl, string? UsageTerms, bool? AttributionRequired);
 
 /// <summary>Internal plugin result retaining the provider locator. Containers represent navigation, never downloadable content.</summary>
 public sealed record CatalogItem(SourceSelection Selection, bool IsContainer, CatalogPublication Publication, IReadOnlyList<CatalogOffer> Offers);
@@ -37,7 +42,8 @@ public sealed record ResolveSourceOfferInput(SourceSelection Selection, string O
 
 /// <summary>Server-only byte delivery instructions. Credentials and signed URLs never become browser-visible offers.</summary>
 public sealed record HttpArtifactDelivery(string Url, IReadOnlyDictionary<string, string> Headers,
-    string SuggestedFileName, long? ByteSize = null, string? Sha256 = null, DateTimeOffset? ExpiresAt = null);
+    string SuggestedFileName, long? ByteSize = null, string? Sha256 = null, DateTimeOffset? ExpiresAt = null,
+    string? Sha1 = null);
 
 /// <summary>A resolved full-content offer. The host still owns validation, staging, verification, and import.</summary>
 public sealed record ResolvedSourceOffer(SourceSelection Selection, string OfferId, CatalogPublication Publication,

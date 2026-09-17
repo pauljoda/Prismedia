@@ -152,6 +152,31 @@ is persisted before stopping the queue run, so an older worker cannot place file
 after cancellation wins. Existing staged bytes remain available for inspection.
 Once placement can have begun, use **Retry import** to reconcile the existing files.
 
+## Image catalogs
+
+Catalog acquisition also accepts JPEG, PNG, and WebP still images. Choose an enabled,
+writable library with image scanning; book-only and externally managed roots are not
+image import destinations. Images have a 64 MiB compressed-byte limit and bounded
+dimension and still-image validation. Source-provided SHA-1 checksums can pin a file
+version; Prismedia always computes and retains its own SHA-256 import evidence.
+
+The **Wikimedia Commons** plugin searches the public catalog without an account or
+API key. Set its connection URL to `https://commons.wikimedia.org`, enable catalog
+discovery and acquisition, test the connection, and search under **Browse catalogs**.
+Its additional anonymous file host is `https://upload.wikimedia.org`.
+
+Commons selections pin the page and uploaded file version. If that version changes
+before import, search again to select the current file. Unsupported formats and
+oversized images are omitted from results; a page can be empty while still offering
+another results page. Search does not add a content-rating filter.
+
+When a catalog supplies attribution, **Source attribution** shows its creator,
+credit, license and usage statements, with source and license links. Accepted
+metadata is retained in the encrypted import record and remains visible in
+**Recent imports**, including after restarts and retries. Later source changes do
+not rewrite that accepted snapshot or curated library metadata. Older imports that
+predate this capture have no attribution snapshot.
+
 ## Manifest declaration
 
 Manifest v2 accepts an optional `integration` section. Its `protocolVersion` is

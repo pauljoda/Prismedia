@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Integrations;
+using Prismedia.Contracts.Integrations;
 using Prismedia.Domain.Entities;
 using Prismedia.Domain.Integrations;
 using Prismedia.Infrastructure.Integrations;
@@ -8,6 +9,24 @@ using Prismedia.Infrastructure.Persistence;
 namespace Prismedia.Infrastructure.Tests;
 
 public sealed class IntegrationTransferStoreTests : IDisposable {
+    [Fact]
+    public async Task SourceAttributionSurvivesRestartInsideTheAcceptedEncryptedSnapshot() {
+        var transfer = IntegrationTransfer.CreateSourceDownload(Guid.NewGuid(), Guid.NewGuid());
+        var publication = new CatalogPublication("Source title", "Source description", ["Creator"], new Dictionary<string, string>(),
+            Attribution: new("https://catalog.test/source", "Creator", "Source credit", "CC BY 4.0", "https://creativecommons.org/licenses/by/4.0/", "Attribution", true));
+        var plan = Plan;
+        plan = plan with { Source = plan.Source! with { Publication = publication } };
+        await using (var db = new PrismediaDbContext(options)) {
+            await new EfIntegrationTransferStore(db, new(root), new Scheduler()).CreateAsync(transfer, plan, default);
+            Assert.DoesNotContain("Source credit", (await db.IntegrationTransfers.SingleAsync()).ProtectedPlan);
+        }
+        await using (var db = new PrismediaDbContext(options)) {
+            var restored = await new EfIntegrationTransferStore(db, new(root), new Scheduler()).FindAsync(transfer.State.OperationId, default);
+            Assert.Equal(publication.Attribution, restored!.Plan.Source!.Publication!.Attribution);
+            Assert.Equal(publication.Authors, restored.Plan.Source.Publication.Authors);
+        }
+    }
+
     private readonly string root = Path.Combine(Path.GetTempPath(), "prismedia-transfer-store-" + Guid.NewGuid().ToString("N"));
     private readonly DbContextOptions<PrismediaDbContext> options = new DbContextOptionsBuilder<PrismediaDbContext>().UseInMemoryDatabase(Guid.NewGuid().ToString()).Options;
     private const string SensitiveLocator = "https://catalog.test/page?opaque=private-source-ticket";

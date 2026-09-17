@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Import JPEG, PNG, and WebP still images from connected catalogs, including anonymous Wikimedia Commons searches. Imports retain source attribution and license statements, verify the selected file version, and use image-specific library destinations and size limits.
+
 - Catalog plugins can declare separate HTTPS file hosts for anonymous downloads. Connections disclose those hosts, and imports recheck current permissions without forwarding authentication headers or cookies.
 
 - Kapowarr connections can browse existing comic runs, inspect exact issue labels and combined-file associations, and map read-only comic libraries. Local readability remains a separate check; comic acquisition controls are not yet offered.
