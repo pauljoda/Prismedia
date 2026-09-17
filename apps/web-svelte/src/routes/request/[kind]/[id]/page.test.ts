@@ -249,12 +249,12 @@ describe("reviewed request route", () => {
     render(Page);
     const credits = await screen.findByRole("checkbox", { name: "Accept Credits" });
     expect(credits).toBeChecked();
-    await fireEvent.click(screen.getByRole("button", { name: "None", exact: true }));
+    await fireEvent.click(screen.getByRole("button", { name: "None" }));
     expect(credits).not.toBeChecked();
-    await fireEvent.click(screen.getByRole("button", { name: "All", exact: true }));
+    await fireEvent.click(screen.getByRole("button", { name: "All" }));
     expect(credits).toBeChecked();
     await fireEvent.click(credits);
-    await fireEvent.click(screen.getAllByRole("button", { name: "Request", exact: true })[0]);
+    await fireEvent.click(screen.getAllByRole("button", { name: "Request" })[0]);
     await waitFor(() => expect(mocks.commitReviewedRequest).toHaveBeenCalled());
     const payload = mocks.commitReviewedRequest.mock.calls[0][0];
     expect(payload.selectedFields).not.toContain(METADATA_PATCH_FIELD.credits);
