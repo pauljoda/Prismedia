@@ -26,7 +26,7 @@ app.Use(async (context, next) => {
 app.MapOpenApi();
 var api = app.MapGroup("/api/v1");
 api.MapGet("/system", (SimulatorStore store) => store.Info);
-api.MapGet("/sources", () => new { items = new[] { new SourceInfo(ArchiverWire.SourceId, "Synthetic publications", [ArchiverWire.Inspect], [ArchiverWire.Book, ArchiverWire.Comic, ArchiverWire.Image], true) }, nextCursor = (string?)null });
+api.MapGet("/sources", () => new { items = new[] { new SourceInfo(ArchiverWire.SourceId, "Synthetic publications", [ArchiverWire.Inspect], [ArchiverWire.Book, ArchiverWire.Comic, ArchiverWire.Image, ArchiverWire.Gallery], true) }, nextCursor = (string?)null });
 api.MapPost("/inspect", (InspectRequest input, SimulatorStore store) => store.InspectAsync(input));
 api.MapGet("/operations/{operation:guid}", (Guid operation, SimulatorStore store) => store.FindOperationAsync(operation));
 api.MapPost("/operations/{operation:guid}/cancel", (Guid operation, SimulatorStore store) => store.CancelOperationAsync(operation));

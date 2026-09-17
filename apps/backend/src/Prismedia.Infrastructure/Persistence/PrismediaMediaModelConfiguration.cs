@@ -23,6 +23,7 @@ internal static partial class PrismediaModelConfiguration {
                 .HasMaxLength(64)
                 .HasConversion(value => value.ToCode(), value => value.DecodeAs<GalleryType>());
             entity.Property(row => row.CoverImageEntityId).HasColumnName("cover_image_entity_id");
+            entity.Property(row => row.PreserveContainer).HasColumnName("preserve_container").HasDefaultValue(false);
             entity.HasOne<EntityRow>().WithOne().HasForeignKey<GalleryDetailRow>(row => row.EntityId).OnDelete(DeleteBehavior.Cascade);
         });
 

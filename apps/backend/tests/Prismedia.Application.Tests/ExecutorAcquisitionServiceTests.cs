@@ -62,13 +62,23 @@ public sealed class ExecutorAcquisitionServiceTests {
         await Assert.ThrowsAsync<ArgumentException>(() => fixture.Service.AcquireAsync(fixture.Connection.State.Id, fixture.Request, default));
         Assert.Equal(0, fixture.Creates);
     }
+    [Fact]
+    public async Task GalleryAcceptanceRequiresRecursiveImagesAndKeepsOneLogicalSelection() {
+        var fixture = new Fixture(EntityKind.Gallery);
+        await fixture.Service.AcquireAsync(fixture.Connection.State.Id, fixture.Request, default);
+        Assert.Equal(1, fixture.AcceptedPlan!.Executor!.MaximumItems);
+        Assert.Equal(ExecutorAcquisitionService.MaximumPublicationBytes, fixture.AcceptedPlan.Executor.MaximumBytes);
+        var nonrecursive = new Fixture(EntityKind.Gallery, recursive: false);
+        await Assert.ThrowsAsync<ArgumentException>(() => nonrecursive.Service.AcquireAsync(nonrecursive.Connection.State.Id, nonrecursive.Request, default));
+        Assert.Equal(0, nonrecursive.Creates);
+    }
     private sealed class Fixture {
         internal const string InstanceId = "executor-installation";
         private const string PluginId = "executor-test";
         internal static readonly IntegrationSupport[] Supports = [
-            new(PluginCapability.CatalogDiscovery, [IntegrationOperation.Inspect], [EntityKind.Book, EntityKind.Image]),
+            new(PluginCapability.CatalogDiscovery, [IntegrationOperation.Inspect], [EntityKind.Book, EntityKind.Image, EntityKind.Gallery]),
             new(PluginCapability.TransferExecutor, [IntegrationOperation.Submit, IntegrationOperation.FindSubmission, IntegrationOperation.GetJob,
-                IntegrationOperation.ListArtifacts, IntegrationOperation.AuthorizeArtifact, IntegrationOperation.RenewRetention, IntegrationOperation.Acknowledge, IntegrationOperation.Cancel, IntegrationOperation.CancelSubmission], [EntityKind.Book, EntityKind.Image])
+                IntegrationOperation.ListArtifacts, IntegrationOperation.AuthorizeArtifact, IntegrationOperation.RenewRetention, IntegrationOperation.Acknowledge, IntegrationOperation.Cancel, IntegrationOperation.CancelSubmission], [EntityKind.Book, EntityKind.Image, EntityKind.Gallery])
         ];
         internal IntegrationConnection Connection { get; }
         internal PluginManifest Manifest { get; set; }
@@ -79,13 +89,13 @@ public sealed class ExecutorAcquisitionServiceTests {
         internal int Creates { get; private set; }
         private StoredIntegrationTransfer? stored;
         internal IntegrationTransferPlan? AcceptedPlan => stored?.Plan;
-        internal Fixture(EntityKind kind = EntityKind.Book, bool imageLibrary = true) {
+        internal Fixture(EntityKind kind = EntityKind.Book, bool imageLibrary = true, bool recursive = true) {
             Connection = IntegrationConnection.Create(PluginId, "Executor", "http://executor.test/", true,
                 Supports.Select(item => item.Kind).ToArray(), new Dictionary<string, string>());
             Connection.RecordProbe(InstanceId, Supports, null, DateTimeOffset.UtcNow);
             Manifest = new(2, [], PluginId, "Executor", "1.0.0", "dotnet-process", "plugin.dll", new("2.0.0", null, "3.8.0", null), [], false, [],
                 Integration: new(1, Supports.Select(item => new PluginIntegrationCapability(item.Kind, item.Operations, item.EntityKinds)).ToArray(), []));
-            var root = new LibraryRootData(Guid.NewGuid(), Path.GetTempPath(), "Library", true, false, false, kind == EntityKind.Image && imageLibrary, false, kind != EntityKind.Image || !imageLibrary, false, false);
+            var root = new LibraryRootData(Guid.NewGuid(), Path.GetTempPath(), "Library", true, recursive, false, kind is EntityKind.Image or EntityKind.Gallery && imageLibrary, false, kind is not (EntityKind.Image or EntityKind.Gallery) || !imageLibrary, false, false);
             Request = new(Guid.NewGuid(), "protected-selection", "publication", root.Id);
             var selection = new AcceptedExecutorSelection(InstanceId, Connection.State.Revision, kind,
                 new("selection", "revision", DateTimeOffset.UtcNow.AddMinutes(5), "https://source.test/publication", [new(Request.ItemId, "Publication", kind)], false, []));

@@ -11,6 +11,8 @@ public sealed class GalleryDetailRow {
     public Guid EntityId { get; set; }
     public GalleryType GalleryType { get; set; } = GalleryType.Virtual;
     public Guid? CoverImageEntityId { get; set; }
+    /// <summary>Explicit grouping survives automatic collapse of single-image folders.</summary>
+    public bool PreserveContainer { get; set; }
 }
 
 public sealed class BookDetailRow {

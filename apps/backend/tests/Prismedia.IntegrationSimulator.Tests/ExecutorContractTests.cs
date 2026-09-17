@@ -30,6 +30,40 @@ public sealed class ExecutorContractTests : IDisposable {
         Assert.Equal(artifact.Sha256, Convert.ToHexStringLower(SHA256.HashData(bytes)));
     }
     [Fact]
+    public async Task GalleryInspectionRejectsAComicUrl() {
+        await Assert.ThrowsAsync<ApiFailure>(() => Open().InspectAsync(new("https://fixtures.example/comic", ArchiverWire.Gallery, 1)));
+    }
+    [Theory]
+    [InlineData("/gallery", 3)]
+    [InlineData("/gallery-single", 1)]
+    public async Task GalleryFixtureProducesOneOrderedGroupAndEnforcesTheTotalBudget(string path, int count) {
+        var store = Open();
+        await store.ConfigureAsync(new(ExecutionDelaySeconds: 0));
+        var selection = await store.InspectAsync(new("https://fixtures.example" + path, ArchiverWire.Gallery, 1));
+        var request = new SubmitJob(Guid.NewGuid(), new(selection.CanonicalUrl), new(selection.Id, selection.Revision, [selection.Items[0].Id]),
+            new(ArchiverWire.GalleryProfile, ArchiverWire.ImageSet), new(1, 1048576));
+        var (job, _) = await store.SubmitAsync(request, request.ClientOperationId.ToString());
+        await store.AdvanceAsync();
+        var finished = await Open().GetAsync(job.JobId);
+        var manifest = await Open().ManifestAsync(job.JobId, finished.ManifestRevision!, null);
+        Assert.Equal(count, manifest.ArtifactCount);
+        Assert.Single(manifest.Artifacts.Select(artifact => artifact.GroupId).Distinct());
+        Assert.Equal(Enumerable.Range(1, count), manifest.Artifacts.Select(artifact => artifact.Ordinal!.Value));
+        long size = 0;
+        foreach (var artifact in manifest.Artifacts) {
+            var (file, _) = await store.ContentAsync(artifact.Id);
+            var bytes = await File.ReadAllBytesAsync(file);
+            Assert.Equal(artifact.SizeBytes, bytes.Length);
+            Assert.Equal(artifact.Sha256, Convert.ToHexStringLower(SHA256.HashData(bytes)));
+            size += bytes.Length;
+        }
+        var insufficient = request with { ClientOperationId = Guid.NewGuid(), Limits = new(1, size - 1) };
+        var (failed, _) = await store.SubmitAsync(insufficient, insufficient.ClientOperationId.ToString());
+        await store.AdvanceAsync();
+        Assert.Equal(ArchiverWire.Failed, (await store.GetAsync(failed.JobId)).State);
+        Assert.Null((await store.GetAsync(failed.JobId)).ManifestRevision);
+    }
+    [Fact]
     public async Task OperationCancellationSurvivesRestartAndFencesLateSubmissionWithoutCreatingAJob() {
         var store = Open();
         var request = await RequestAsync(store);

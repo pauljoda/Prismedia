@@ -51,7 +51,7 @@ Animated items play inline in the gallery feed and in the lightbox.
 
 ## Single-image folders are collapsed
 
-If a folder holds **just one image** and nothing else, Prismedia does **not** create a one-item gallery. Instead the image is shown directly under the nearest parent gallery, or as a loose image when there is no parent. This avoids the single-image "gallery" artifact some downloaders produce. Existing libraries clean themselves up on the next scan.
+If a folder holds **just one image** and nothing else, Prismedia does **not** create a one-item gallery. Instead the image is shown directly under the nearest parent gallery, or as a loose image when there is no parent. This avoids the single-image "gallery" artifact some downloaders produce. Existing libraries clean themselves up on the next scan. Galleries explicitly imported through a URL executor keep their container, including when they contain one image.
 
 ## Browsing
 

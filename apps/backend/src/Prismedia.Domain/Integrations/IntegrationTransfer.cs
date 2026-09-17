@@ -2,8 +2,8 @@ using Prismedia.Domain.Entities;
 
 namespace Prismedia.Domain.Integrations;
 
-/// <summary>Exact imported output and the local entities that own it. Artwork/sidecars may have no separate source entity.</summary>
-public sealed record IntegrationArtifactImport(string ArtifactId, string Sha256, IReadOnlyList<Guid> EntityIds);
+/// <summary>Exact local source owners for one artifact, plus an optional containing gallery used as its library entrypoint.</summary>
+public sealed record IntegrationArtifactImport(string ArtifactId, string Sha256, IReadOnlyList<Guid> EntityIds, Guid? ContainerEntityId = null);
 
 /// <summary>Rehydratable transfer state; operation identity is allocated before any remote side effect.</summary>
 public sealed record IntegrationTransferState(Guid OperationId, Guid ConnectionId, string? InstanceId, long Revision,
@@ -172,12 +172,12 @@ public sealed class IntegrationTransfer(IntegrationTransferState state) {
     public void RecordImported(IntegrationArtifactImport imported) {
         var artifact = FindArtifact(imported.ArtifactId);
         if (State.VerifiedArtifactIds?.Contains(artifact.Id) != true || string.IsNullOrWhiteSpace(imported.Sha256) || artifact.Sha256 != imported.Sha256.ToLowerInvariant()
-            || imported.EntityIds is null || imported.EntityIds.Any(id => id == Guid.Empty)
+            || imported.EntityIds is null || imported.EntityIds.Any(id => id == Guid.Empty) || imported.ContainerEntityId == Guid.Empty
             || artifact.Role == IntegrationArtifactRole.Content && imported.EntityIds.Count == 0)
             throw new InvalidOperationException("An import needs verified bytes and exact local source ownership.");
         var imports = State.Imports ?? [];
         if (imports.FirstOrDefault(item => item.ArtifactId == imported.ArtifactId) is { } previous) {
-            if (previous.Sha256 != imported.Sha256.ToLowerInvariant() || !previous.EntityIds.Order().SequenceEqual(imported.EntityIds.Distinct().Order()))
+            if (previous.ContainerEntityId != imported.ContainerEntityId || previous.Sha256 != imported.Sha256.ToLowerInvariant() || !previous.EntityIds.Order().SequenceEqual(imported.EntityIds.Distinct().Order()))
                 throw new InvalidOperationException("An already committed artifact import cannot be replaced.");
             return;
         }

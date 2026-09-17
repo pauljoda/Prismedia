@@ -16,7 +16,7 @@ internal sealed class GalleryKindMapper(PrismediaDbContext db) : IEntityKindMapp
             row.Id,
             row.Title,
             detail?.GalleryType ?? GalleryType.Virtual,
-            detail?.CoverImageEntityId);
+            detail?.CoverImageEntityId, preserveContainer: detail?.PreserveContainer ?? false);
     }
 
 }

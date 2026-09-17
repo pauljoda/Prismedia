@@ -36,6 +36,26 @@ public sealed class ImportedPublicationTitleResolverTests {
         fixture.Work = fixture.Work with { Transfer = new(fixture.Work.Transfer.State with { VerifiedArtifactIds = [] }) };
         Assert.Null(await resolver.ResolveAsync(fixture.Work.Plan.LibraryRootId, EntityKind.Book, fixture.Path, default));
     }
+    [Fact] public async Task GalleryAndMembersRecoverSourceTitlesFromOrderedVerifiedJournalWithDottedTitle() {
+        using var fixture = await ImportedTitleFixture.CreateGalleryAsync();
+        var resolver = new ImportedPublicationTitleResolver(fixture);
+        var root = fixture.Work.Plan.LibraryRootId;
+        Assert.Equal(fixture.Work.Plan.Title, await resolver.ResolveAsync(root, EntityKind.Gallery, fixture.Path, default));
+        foreach (var artifact in fixture.Work.Transfer.State.Artifacts!) {
+            var path = System.IO.Path.Combine(fixture.Path, IntegrationGalleryNames.FileName(artifact));
+            Assert.Equal(System.IO.Path.GetFileNameWithoutExtension(artifact.RelativePath), await resolver.ResolveAsync(root, EntityKind.Image, path, default));
+        }
+        Assert.Null(await resolver.ResolveAsync(Guid.NewGuid(), EntityKind.Gallery, fixture.Path, default));
+        var first = fixture.Work.Transfer.State.Artifacts![0];
+        await File.WriteAllTextAsync(System.IO.Path.Combine(fixture.Path, IntegrationGalleryNames.FileName(first)), "changed!");
+        Assert.Null(await resolver.ResolveAsync(root, EntityKind.Gallery, fixture.Path, default));
+        Assert.Null(await resolver.ResolveAsync(root, EntityKind.Image, System.IO.Path.Combine(fixture.Path, IntegrationGalleryNames.FileName(first)), default));
+    }
+    [Fact] public async Task GalleryTitleRequiresEveryMembersVerifiedEvidence() {
+        using var fixture = await ImportedTitleFixture.CreateGalleryAsync();
+        fixture.Work = fixture.Work with { Transfer = new(fixture.Work.Transfer.State with { VerifiedArtifactIds = [fixture.Work.Transfer.State.Artifacts![0].Id] }) };
+        Assert.Null(await new ImportedPublicationTitleResolver(fixture).ResolveAsync(fixture.Work.Plan.LibraryRootId, EntityKind.Gallery, fixture.Path, default));
+    }
     [Fact] public async Task OrdinaryFilenamesDoNotReadTheTransferJournal() {
         using var fixture = await ImportedTitleFixture.CreateAsync();
         Assert.Null(await new ImportedPublicationTitleResolver(fixture).ResolveAsync(fixture.Work.Plan.LibraryRootId, EntityKind.Book,
@@ -63,6 +83,23 @@ internal sealed class ImportedTitleFixture : IIntegrationTransferStore, IDisposa
         fixture.Work = new(transfer, plan, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
         fixture.Path = System.IO.Path.Combine(fixture.Directory, IntegrationPublicationNames.FileName(transfer.State.OperationId, plan.Title, artifact.Id, name));
         await File.WriteAllBytesAsync(fixture.Path, bytes);
+        return fixture;
+    }
+    internal static async Task<ImportedTitleFixture> CreateGalleryAsync() {
+        var fixture = new ImportedTitleFixture();
+        var transfer = IntegrationTransfer.Create(Guid.NewGuid(), Guid.NewGuid(), "installation");
+        transfer.BeginSubmission(); transfer.AcceptSubmission(transfer.State.OperationId, transfer.State.InstanceId!, "gallery-job");
+        transfer.Observe(transfer.State.InstanceId!, "gallery-job", 1, RemoteJobState.Succeeded, "sealed");
+        var bytes = "original"u8.ToArray();
+        var artifacts = Enumerable.Range(1, 2).Select(index => new IntegrationArtifact("image-" + index, "selected", "Original page " + index + ".png",
+            "image/png", bytes.Length, Convert.ToHexStringLower(SHA256.HashData(bytes)), IntegrationArtifactRole.Content, "group", index)).ToArray();
+        transfer.AcceptManifest(new("gallery-job", "sealed", true, 2, artifacts));
+        foreach (var artifact in artifacts) transfer.RecordVerified(artifact.Id, artifact.SizeBytes, artifact.Sha256);
+        var plan = new IntegrationTransferPlan("Collection Vol. 1: source title", EntityKind.Gallery, Guid.NewGuid(), fixture.Directory, "owner", new string('a', 64),
+            Executor: new(transfer.State.OperationId, "https://source.test/gallery", "selection", "revision", ["selected"], 1, 1000));
+        fixture.Work = new(transfer, plan, DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
+        fixture.Path = System.IO.Directory.CreateDirectory(System.IO.Path.Combine(fixture.Directory, IntegrationGalleryNames.FolderName(transfer.State.OperationId, plan.Title, "group"))).FullName;
+        foreach (var artifact in artifacts) await File.WriteAllBytesAsync(System.IO.Path.Combine(fixture.Path, IntegrationGalleryNames.FileName(artifact)), bytes);
         return fixture;
     }
     public Task<StoredIntegrationTransfer?> FindAsync(Guid id, CancellationToken token) { Reads++; return Task.FromResult(Found && id == Work.Transfer.State.OperationId ? Work : null); }

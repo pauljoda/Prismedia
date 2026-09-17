@@ -495,9 +495,9 @@ The publication executor profile imports one complete EPUB/PDF book or CBZ comic
 with a 2 GiB byte limit. The optional image profile imports one JPEG, PNG, or WebP
 still image, limited to 64 MiB and 100 million pixels. Images must decode completely,
 match their filename format, and use a writable library with image scanning enabled.
-Animated images and ordered galleries are not supported yet.
+Animated images are not supported by these profiles. Ordered galleries use their own profile below.
 
-Each sealed manifest must contain exactly one content file
+For publication and standalone-image profiles, each sealed manifest contains exactly one content file
 for the selected item. Additional covers, sidecars, or pages hold the operation for
 review; Prismedia does not acknowledge outputs it has not imported.
 
@@ -519,10 +519,18 @@ a never-submitted operation stops locally. If execution finished first, Prismedi
 preserves that remote result and cancels the local import without acknowledging its
 outputs. Direct catalog downloads retain their **Cancel download** action.
 
+Gallery imports require a writable image library with recursive scanning enabled.
+They accept one complete gallery of up to 1,000 ordered JPEG/PNG/WebP still images,
+64 MiB per image and 2 GiB total. Prismedia verifies every image before publishing
+one folder, preserves the source order through rescans, and opens the resulting
+gallery from the transfer. A one-image gallery keeps its gallery identity. Missing
+members, inconsistent ordering, and extra sidecars remain held for review without
+acknowledgement. Retries preserve existing files and image identities.
+
 The Archiver adapter targets the proposed executor API v1, including its explicit
-`single-publication` and optional `single-image` output profiles. Image choices appear
-only when the server advertises that profile. It requires that interface to be implemented;
+`single-publication`, optional `single-image`, and optional `ordered-gallery` output profiles.
+Image and gallery choices appear only when the server advertises their profile. It requires that interface to be implemented;
 older Archiver installations that only return success messages are not compatible.
 The repository includes a separate [executor simulator](https://github.com/pauljoda/Prismedia/tree/main/apps/backend/tools/Prismedia.IntegrationSimulator)
-for synthetic publications, images, and response-loss testing. See the [Archiver interface](./archiver-interface.md)
+for synthetic publications, images, galleries, and response-loss testing. See the [Archiver interface](./archiver-interface.md)
 for a rebuild specification independent of Prismedia's storage model.

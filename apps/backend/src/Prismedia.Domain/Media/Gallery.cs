@@ -45,6 +45,9 @@ public sealed class GalleryEntityKindDefinition() : EntityKindDefinition<Gallery
     public override bool OwnsMetadataRelationships => true;
 
     /// <inheritdoc />
+    public override JobType? ImportScanJobType => JobType.ScanGallery;
+
+    /// <inheritdoc />
     public override IReadOnlyList<EntityStructuralCountDefinition> StructuralThumbnailCounts =>
         [new(EntityKind.Image, 1, ThumbnailMetaIcons.Image)];
 
@@ -71,12 +74,16 @@ public sealed class Gallery : Entity<GalleryEntityKindDefinition> {
         string title,
         GalleryType galleryType,
         Guid? coverImageId,
-        IEnumerable<EntityCapability>? capabilities = null)
+        IEnumerable<EntityCapability>? capabilities = null,
+        bool preserveContainer = false)
         : base(id, title, capabilities) {
         GalleryType = galleryType;
         CoverImageId = coverImageId;
+        PreserveContainer = preserveContainer;
     }
 
+    /// <summary>Whether explicitly selected grouping survives single-image folder collapse.</summary>
+    public bool PreserveContainer { get; }
     public GalleryType GalleryType { get; private set; }
     public Guid? CoverImageId { get; private set; }
 }

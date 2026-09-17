@@ -96,7 +96,7 @@
       <div class="space-y-2">
         <BackLink fallback="/request" label="Requests" />
         <h1 class="flex items-center gap-2.5"><Link class="size-5 text-text-accent" />Import from URL</h1>
-        <p class="text-sm text-text-muted">Inspect a source, choose a book, comic, or image, and import it into your library.</p>
+        <p class="text-sm text-text-muted">Inspect a source, choose a book, comic, image, or gallery, and import it into your library.</p>
       </div>
       <a class={buttonVariants({ variant: "secondary", size: "sm" })} href="/settings/connections">Manage connections</a>
     </header>

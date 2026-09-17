@@ -151,6 +151,50 @@ public sealed class RemoteTransferProcessorTests {
         Assert.Single(fixture.Receipts);
     }
 
+    [Fact]
+    public async Task GalleryImportsEveryExactImageBeforeAcknowledgingAndRetainsItsContainerAcrossReceiptRetry() {
+        var fixture = new Fixture(EntityKind.Gallery) { LoseAcknowledgementOnce = true };
+        await Assert.ThrowsAsync<JobRetryLaterException>(fixture.RunAsync);
+        Assert.Equal(IntegrationTransferPhase.AwaitingAcknowledgement, fixture.State.Phase);
+        Assert.Equal(2, fixture.State.Imports!.Count);
+        Assert.All(fixture.State.Imports, receipt => Assert.Equal(fixture.EntityId, receipt.ContainerEntityId));
+        Assert.Equal(2, fixture.State.Imports.SelectMany(receipt => receipt.EntityIds).Distinct().Count());
+        await fixture.RunAsync();
+        Assert.Equal(IntegrationTransferPhase.Completed, fixture.State.Phase);
+        Assert.Equal(2, fixture.Downloads);
+        Assert.Equal(1, fixture.Placements);
+        Assert.Equal(1, fixture.Materializations);
+        Assert.Equal(2, fixture.Receipts.Count);
+        Assert.Single(fixture.Receipts.Distinct());
+    }
+    [Fact]
+    public async Task GalleryRecoversWhenSomeImportReceiptsWereCommittedBeforeACrash() {
+        var fixture = new Fixture(EntityKind.Gallery) { FailImportSaveOnce = true };
+        await Assert.ThrowsAsync<IntegrationInvocationException>(fixture.RunAsync);
+        Assert.Equal(IntegrationTransferPhase.Importing, fixture.State.Phase);
+        var first = Assert.Single(fixture.State.Imports!);
+        Assert.Empty(fixture.Receipts);
+        await fixture.RunAsync();
+        Assert.Equal(IntegrationTransferPhase.Completed, fixture.State.Phase);
+        Assert.Equal(first, fixture.State.Imports![0]);
+        Assert.Equal(2, fixture.Downloads);
+        Assert.Equal(2, fixture.Materializations);
+    }
+    [Fact]
+    public async Task GalleryDoesNotAcknowledgeImagesOwnedOutsideItsContainer() {
+        var fixture = new Fixture(EntityKind.Gallery) { WrongImageParent = true };
+        await Assert.ThrowsAsync<IntegrationInvocationException>(fixture.RunAsync);
+        Assert.Empty(fixture.State.Imports!);
+        Assert.Empty(fixture.Receipts);
+    }
+    [Fact]
+    public async Task GalleryWithAnOrderGapIsRetainedForReviewBeforeDownloading() {
+        var fixture = new Fixture(EntityKind.Gallery) { GalleryOrderGap = true };
+        await Assert.ThrowsAsync<JobRetryLaterException>(fixture.RunAsync);
+        Assert.Equal(IntegrationTransferPhase.NeedsReview, fixture.State.Phase);
+        Assert.Equal(0, fixture.Downloads);
+        Assert.Empty(fixture.Receipts);
+    }
     private sealed class Fixture {
         private const string PluginId = "executor-fixture";
         private const string InstanceId = "fixture-installation";
@@ -168,6 +212,9 @@ public sealed class RemoteTransferProcessorTests {
         internal bool WrongOperation { get; set; }
         internal bool WrongManifest { get; set; }
         internal bool WrongArtifactItem { get; set; }
+        internal bool WrongImageParent { get; set; }
+        internal bool GalleryOrderGap { get; set; }
+        private readonly Guid[] imageIds = [Guid.NewGuid(), Guid.NewGuid()];
         internal int Submissions { get; private set; }
         internal int Lookups { get; private set; }
         internal int Downloads { get; private set; }
@@ -184,12 +231,15 @@ public sealed class RemoteTransferProcessorTests {
         private readonly PluginManifest manifest;
         private readonly IntegrationTransferPlan plan;
         private IntegrationArtifact Artifact => new("artifact", WrongArtifactItem ? "unselected-item" : ItemId, "nested/" + FileName, "application/epub+zip", 100, Hash, IntegrationArtifactRole.Content);
+        private IReadOnlyList<IntegrationArtifact> Artifacts => kind == EntityKind.Gallery
+            ? Enumerable.Range(1, 2).Select(index => Artifact with { Id = "image-" + index, RelativePath = "nested/" + index + ".png", GroupId = "group", Ordinal = index + (GalleryOrderGap ? 1 : 0) }).ToArray()
+            : [Artifact];
         private RemoteTransferSnapshot Snapshot => new(WrongInstance ? "another-installation" : InstanceId, JobId,
             WrongOperation ? Guid.NewGuid() : State.OperationId, ++remoteRevision, RemoteState, 0.5,
             RemoteState is RemoteJobState.Succeeded or RemoteJobState.Partial ? ManifestRevision : null,
             DateTimeOffset.UtcNow.AddHours(1), [], NextPollAfter: DateTimeOffset.UtcNow.AddSeconds(20), ArtifactsExpired: Expired);
         private readonly EntityKind kind;
-        private string FileName => kind == EntityKind.Image ? "image.png" : "book.epub";
+        private string FileName => kind is EntityKind.Image or EntityKind.Gallery ? "image.png" : "book.epub";
         internal Fixture(EntityKind kind = EntityKind.Book) {
             this.kind = kind;
             var supports = new IntegrationSupport[] {
@@ -225,25 +275,39 @@ public sealed class RemoteTransferProcessorTests {
                 nameof(IIntegrationTransferGateway.GetJobAsync) => Task.FromResult(Snapshot),
                 nameof(IIntegrationTransferGateway.CancelAsync) => Cancel(),
                 nameof(IIntegrationTransferGateway.RenewRetentionAsync) => Renew((RenewTransferRetentionInput)args![2]!),
-                nameof(IIntegrationTransferGateway.ReadManifestAsync) => Task.FromResult(new TransferManifestPage(JobId, WrongManifest ? "another-revision" : ManifestRevision, true, 1, [Artifact])),
+                nameof(IIntegrationTransferGateway.ReadManifestAsync) => Task.FromResult(new TransferManifestPage(JobId, WrongManifest ? "another-revision" : ManifestRevision, true, Artifacts.Count, Artifacts)),
                 nameof(IIntegrationTransferGateway.AuthorizeArtifactAsync) => Task.FromResult(new HttpArtifactDelivery("http://executor.test/file", new Dictionary<string, string>(), FileName, ByteSize: 100, Sha256: Hash)),
                 nameof(IIntegrationTransferGateway.AcknowledgeAsync) => Acknowledge((AcknowledgeTransferInput)args![2]!),
                 _ => throw new NotSupportedException(method)
             });
             var bytes = Proxy<IIntegrationArtifactTransfer>((method, args) => method switch {
                 nameof(IIntegrationArtifactTransfer.TransferAsync) => (object)Download((IntegrationArtifactTransferRequest)args![0]!),
-                nameof(IIntegrationArtifactTransfer.ReadVerifiedAsync) => Task.FromResult<VerifiedIntegrationArtifact?>(new(Artifact.Id, Path.Combine(root.Path, "staged.epub"), 100, Hash, FileName)),
+                nameof(IIntegrationArtifactTransfer.ReadVerifiedAsync) => Task.FromResult<VerifiedIntegrationArtifact?>(new((string)args![1]!, Path.Combine(root.Path, "staged.epub"), 100, Hash, (string)args[2]!)),
                 _ => throw new NotSupportedException(method)
             });
-            var verifier = Proxy<IIntegrationMediaVerifier>((_, args) => { Assert.Equal(kind, args![1]); return Task.CompletedTask; });
+            var verifier = Proxy<IIntegrationMediaVerifier>((_, args) => { Assert.Equal(kind == EntityKind.Gallery ? EntityKind.Image : kind, args![1]); return Task.CompletedTask; });
             var placement = Proxy<IIntegrationImportPlacement>((_, _) => { Placements++; return Task.FromResult(Path.Combine(root.Path, "placed.epub")); });
             var roots = Proxy<ILibraryScanRootPersistence>((_, _) => Task.FromResult<LibraryRootData?>(root));
             var materializer = Proxy<IImportedEntityMaterializer>((_, args) => {
                 Assert.Equal(kind, args![0]);
                 Materializations++;
                 var request = (ImportedEntityMaterializationRequest)args![2]!;
-                return Task.FromResult(new ImportedEntityMaterializationResult([new(EntityId, kind)], [], request.PlacedMediaPaths, [], []));
+                return Task.FromResult(kind == EntityKind.Gallery
+                    ? new ImportedEntityMaterializationResult(imageIds.Select(id => new ImportedEntityReference(id, EntityKind.Image)).ToArray(), [EntityId], request.PlacedMediaPaths, [], [], [new(EntityId, EntityKind.Gallery)])
+                    : new ImportedEntityMaterializationResult([new(EntityId, kind)], [], request.PlacedMediaPaths, [], []));
             });
+            var galleryPlacement = Proxy<IIntegrationGalleryPlacement>((_, args) => {
+                Placements++;
+                var request = (IntegrationGalleryPlacementRequest)args![0]!;
+                return Task.FromResult(new PlacedIntegrationGallery(Path.Combine(root.Path, "gallery"), request.Outputs.Artifacts.ToDictionary(artifact => artifact.Id,
+                    artifact => Path.Combine(root.Path, "gallery", artifact.Id + ".png"))));
+            });
+            var readiness = Proxy<IImportedEntityReadinessPersistence>((_, args) => {
+                var path = ((IReadOnlyCollection<string>)args![0]!).Single();
+                var index = Array.FindIndex(Artifacts.ToArray(), artifact => Path.GetFileNameWithoutExtension(path) == artifact.Id);
+                return Task.FromResult(new ImportedEntityReadyScope([new(imageIds[index], EntityKind.Image)], WrongImageParent ? [] : [EntityId]));
+            });
+            var galleries = new IntegrationGalleryImporter(bytes, verifier, galleryPlacement, roots, materializer, readiness);
             var job = new JobRunSnapshot(Guid.NewGuid(), JobType.IntegrationTransfer, JobRunStatus.Running, 0, null, "{}",
                 JobTargetKinds.IntegrationTransfer, State.OperationId.ToString(), "Publication", DateTimeOffset.UtcNow, null, null);
             var queue = Proxy<IJobQueueService>((method, _) => method switch {
@@ -252,7 +316,7 @@ public sealed class RemoteTransferProcessorTests {
                 nameof(IJobQueueService.EnqueueChildAsync) => Task.FromResult(job),
                 _ => throw new NotSupportedException(method)
             });
-            return new RemoteTransferProcessor(store, new(connections, plugins), gateway, new(gateway), bytes, verifier, placement, roots, materializer)
+            return new RemoteTransferProcessor(store, new(connections, plugins), gateway, new(gateway), bytes, verifier, placement, roots, materializer, galleries)
                 .ProcessAsync(State.OperationId, new(job, queue), default);
         }
         private Task Save(IntegrationTransfer transfer, long expectedRevision) {
@@ -282,13 +346,18 @@ public sealed class RemoteTransferProcessorTests {
         }
         private Task<TransferRetentionResult> Renew(RenewTransferRetentionInput input) { Renewals++; return Task.FromResult(new TransferRetentionResult(input.JobId, input.RetainUntil)); }
         private Task<VerifiedIntegrationArtifact> Download(IntegrationArtifactTransferRequest request) {
-            Assert.Equal(FileName, request.Delivery.SuggestedFileName);
-            Downloads++; return Task.FromResult(new VerifiedIntegrationArtifact(Artifact.Id, Path.Combine(root.Path, "staged.epub"), 100, Hash, FileName));
+            var artifact = Artifacts.Single(artifact => artifact.Id == request.ArtifactId);
+            Assert.Equal(Path.GetFileName(artifact.RelativePath), request.Delivery.SuggestedFileName);
+            Downloads++; return Task.FromResult(new VerifiedIntegrationArtifact(artifact.Id, Path.Combine(root.Path, "staged.epub"), 100, Hash, Path.GetFileName(artifact.RelativePath)));
         }
         private Task<TransferAcknowledgement> Acknowledge(AcknowledgeTransferInput input) {
             Assert.Equal(IntegrationTransferPhase.AwaitingAcknowledgement, State.Phase);
             Assert.Equal(State.ReceiptId, input.ReceiptId);
-            Assert.Equal(EntityId, Assert.Single(Assert.Single(input.Artifacts).EntityIds));
+            if (kind == EntityKind.Gallery) {
+                Assert.Equal(2, input.Artifacts.Count);
+                Assert.All(input.Artifacts, artifact => Assert.Equal(EntityId, artifact.ContainerEntityId));
+                Assert.Equal(imageIds.Order(), input.Artifacts.SelectMany(artifact => artifact.EntityIds).Order());
+            } else Assert.Equal(EntityId, Assert.Single(Assert.Single(input.Artifacts).EntityIds));
             Receipts.Add(input.ReceiptId);
             if (LoseAcknowledgementOnce) { LoseAcknowledgementOnce = false; throw new IntegrationInvocationException("Receipt response lost"); }
             return Task.FromResult(new TransferAcknowledgement(input.JobId, input.ReceiptId, true));

@@ -3,6 +3,9 @@ namespace Prismedia.IntegrationSimulator;
 /// <summary>Independent Archiver HTTP vocabulary. No Prismedia domain, database, or entity schema is required.</summary>
 public static class ArchiverWire {
     public const string ApiVersion = "1.0";
+    public const string Gallery = "gallery";
+    public const string GalleryProfile = "ordered-gallery";
+    public const string ImageSet = "image-set";
     public const string Image = "image";
     public const string ImageProfile = "single-image";
     public const string Png = "png";
@@ -57,7 +60,7 @@ public sealed record JobLimits(int MaxItems, long MaxBytes);
 /// <summary>Idempotent job submission. The body operation ID must match the Idempotency-Key header.</summary>
 public sealed record SubmitJob(Guid ClientOperationId, JobInput Input, JobSelection Selection, JobOutput Output, JobLimits Limits);
 /// <summary>Exact immutable artifact evidence, including an API-relative retrieval location.</summary>
-public sealed record Artifact(string Id, string ItemId, string RelativePath, string MediaType, long SizeBytes, string Sha256, string Role, string ContentPath);
+public sealed record Artifact(string Id, string ItemId, string RelativePath, string MediaType, long SizeBytes, string Sha256, string Role, string ContentPath, string? GroupId = null, int? Ordinal = null);
 /// <summary>Structured per-item terminal execution failure.</summary>
 public sealed record ItemFailure(string ItemId, string Message);
 /// <summary>Durable authoritative execution snapshot; artifact expiration never rewrites execution state.</summary>

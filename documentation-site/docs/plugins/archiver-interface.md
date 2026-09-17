@@ -7,11 +7,10 @@ description: An independent HTTP contract for URL execution, durable jobs, verif
 # Archiver executor interface
 
 This is the proposed production contract for an Archiver rebuild. Prismedia's adapter
-and separate simulator implement the single-publication and single-image subsets: URL inspection,
+and separate simulator implement single-publication, single-image, and ordered-gallery profiles: URL inspection,
 idempotent submission, snapshots, cancellation at the remote API, sealed manifests,
 HTTP retrieval, leases, and receipts. The simulator is a single-principal fixture;
-production client isolation, incremental reconciliation, lease release, search,
-and gallery outputs remain implementation requirements or optional extensions as
+production client isolation, incremental reconciliation, lease release, and search remain implementation requirements or optional extensions as
 specified below. No changes to an existing Archiver installation are implied.
 
 This document stands alone as a brief for rebuilding The Archiver. Prismedia is the first consumer, but the API should work for any authenticated client. The Archiver need not adopt Prismedia's entities, database, framework, language, or request system.
@@ -64,10 +63,37 @@ SHA-256. The existing retention, resumable retrieval, cancellation, and receipt
 requirements apply unchanged.
 
 Prismedia limits this profile to 64 MiB and 100 million pixels and decodes the image
-before import. It currently accepts still images only. Use separate future profiles
-for animations and ordered galleries; a gallery must not silently become a single
-loose image. The simulator supports `https://fixtures.example/image` with PNG output.
+before import. It currently accepts still images only. Animations need a separate future profile. Use `ordered-gallery` for a gallery;
+it must not silently become a loose image. The simulator supports `https://fixtures.example/image` with PNG output.
 This validates the communication contract; it does not exercise a real image source.
+
+### Optional ordered-gallery output profile
+
+Advertise `ordered-gallery` in `outputProfiles`. Inspection uses media kind `gallery`
+and declares `image-set` as its format. Submission selects **one logical gallery**;
+`limits.maxItems` remains one and `limits.maxBytes` applies to the sum of all images.
+The existing submission JSON fields stay unchanged, preserving old idempotency fingerprints.
+
+Prismedia accepts 1–1,000 JPEG/PNG/WebP still-image content artifacts, totaling at
+most 2 GiB. Each image has the single-image profile's 64 MiB and 100-million-pixel
+limits. All artifacts must belong to the selected item, share one nonempty `groupId`,
+and declare unique contiguous `ordinal` values from 1 through the image count.
+The sealed manifest may arrive in a different order. Sidecars, mixed groups, gaps,
+and partial results require review; they are never acknowledged as complete galleries.
+
+Every image is retrieved and decoded before placement. Prismedia builds a hidden
+folder inside the selected writable, recursive image library, verifies it, and
+publishes the whole folder with a directory rename. Retries reuse exact matching
+files and reject conflicting content. Deterministic member names preserve the
+manifest order on later scans; library titles retain the accepted source names.
+Even a one-image gallery retains its container.
+
+Each artifact receipt identifies its actual image owner. Prismedia also retains the
+containing gallery locally for navigation; the Archiver need not model that hierarchy.
+Acknowledgement follows durable import of **all** members. Lost responses retry the
+same receipt without downloading or importing again. The simulator provides
+`https://fixtures.example/gallery` (three images) and `/gallery-single` (one image).
+These fixtures validate the interface, not real source extraction.
 
 ## 3. HTTP surface
 
@@ -233,7 +259,7 @@ Required artifact fields:
 
 Manifest envelope includes job ID, manifest revision, sealed flag, artifact count, and pagination. All pages from a revision are stable. Files cannot change beneath a published hash; new bytes require a new artifact ID/revision. Failed outputs have structured item outcome records, not imaginary zero-byte artifacts.
 
-For comics, prefer one CBZ per independently acquired issue/chapter. Prismedia currently limits an automatic comic-installment import to one file. An optional page-directory output requires an explicitly supported client packaging/import step with correct page order. A gallery may legitimately consist of many ordered images plus one metadata sidecar.
+For comics, prefer one CBZ per independently acquired issue/chapter. Prismedia currently limits an automatic comic-installment import to one file. An optional page-directory output requires an explicitly supported client packaging/import step with correct page order. The current ordered-gallery profile accepts only ordered image content. A metadata sidecar needs a separately negotiated profile and an explicit import policy.
 
 Metadata sidecars are versioned JSON or an advertised standard such as ComicInfo. Preserve source facts, ordering, attribution, language, and identifiers. A sidecar must not instruct the client to execute a command or write outside staging.
 

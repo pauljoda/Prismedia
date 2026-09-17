@@ -130,6 +130,7 @@ public static class DependencyInjection {
         services.AddSingleton(new TransferPlanProtector(dataDir));
         services.AddScoped<IIntegrationMediaVerifier, IntegrationMediaVerifier>();
         services.AddScoped<IIntegrationImportPlacement, IntegrationImportPlacement>();
+        services.AddScoped<IIntegrationGalleryPlacement, IntegrationGalleryPlacement>();
         services.AddScoped<IImportedPublicationTitleResolver, ImportedPublicationTitleResolver>();
         services.AddScoped<ConnectionService>();
         services.AddScoped<IntegrationManifestReader>();

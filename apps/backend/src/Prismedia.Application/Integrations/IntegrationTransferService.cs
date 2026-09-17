@@ -44,7 +44,7 @@ public sealed class IntegrationTransferService(IIntegrationTransferStore store, 
         var state = work.Transfer.State;
         return new(state.OperationId, state.ConnectionId, work.Plan.Title, work.Plan.EntityKind, work.Plan.LibraryRootId,
             state.Mode, state.Phase, work.CreatedAt, work.UpdatedAt, state.Artifacts?.Count ?? 0,
-            state.Imports?.SelectMany(imported => imported.EntityIds).Distinct().ToArray() ?? [], work.LastError,
+            state.Imports?.SelectMany(imported => imported.ContainerEntityId is { } container ? new[] { container } : imported.EntityIds).Distinct().ToArray() ?? [], work.LastError,
             work.Transfer.CanCancelSource || work.Transfer.CanCancelRemote, state.CancellationRequested);
     }
 }

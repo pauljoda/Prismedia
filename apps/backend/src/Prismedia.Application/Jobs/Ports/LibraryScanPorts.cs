@@ -172,6 +172,10 @@ public interface IImageGalleryScanPersistence {
     Task<IReadOnlyList<Guid>> UpsertImagesBatchAsync(
         IReadOnlyList<ImageUpsertItem> items, CancellationToken cancellationToken);
 
+    /// <summary>Folders whose explicit gallery grouping must survive single-image scanner collapse.</summary>
+    Task<IReadOnlySet<string>> GetPreservedGalleryPathsAsync(Guid rootId, CancellationToken cancellationToken) =>
+        Task.FromResult<IReadOnlySet<string>>(new HashSet<string>());
+
     Task<int> RemoveStaleLooseImagesInRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken);
     Task<int> RemoveStaleImagesInGalleryAsync(Guid galleryEntityId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken);
     Task<int> RemoveStaleGalleriesInRootAsync(Guid rootId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken);
@@ -752,13 +756,15 @@ public sealed record ImageUpsertItem(
 /// <param name="ParentGalleryEntityId">Optional parent gallery entity ID.</param>
 /// <param name="SortOrder">Position within the parent gallery.</param>
 /// <param name="IsNsfw">Whether the owning library root marks discovered media as NSFW.</param>
+/// <param name="PreserveContainer">Retain this explicit group even when it contains only one image.</param>
 public sealed record GalleryUpsertItem(
     string FolderPath,
     string Title,
     Guid LibraryRootId,
     Guid? ParentGalleryEntityId,
     int SortOrder,
-    bool IsNsfw);
+    bool IsNsfw,
+    bool PreserveContainer = false);
 
 /// <summary>
 /// Audio track discovered during an audio scan.

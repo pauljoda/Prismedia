@@ -19,7 +19,9 @@ Use **Requests → Import from URL** with:
 
 - `https://fixtures.example/book` — original synthetic EPUB;
 - `https://fixtures.example/comic` — original synthetic one-page CBZ;
-- `https://fixtures.example/image` — synthetic PNG through the separate `single-image` profile.
+- `https://fixtures.example/image` — synthetic PNG through the separate `single-image` profile;
+- `https://fixtures.example/gallery` — three ordered PNG images through `ordered-gallery`;
+- `https://fixtures.example/gallery-single` — one explicitly grouped PNG image.
 
 No arbitrary source URL is fetched. The generated files, persistent installation ID,
 selections, operation mappings, jobs, manifests, and receipts stay in the configured
@@ -51,8 +53,7 @@ execution state. It never deletes another application's files.
 
 This is a single-principal contract test fixture, not a production download service.
 It has no source credentials, search, arbitrary downloads, multi-client authorization,
-retention cleanup, subscriptions, release endpoint, incremental change feed, or gallery
-packaging. Its JSON document is a small test persistence mechanism, not a recommended
+retention cleanup, subscriptions, release endpoint, incremental change feed, or real source extraction. Its JSON document is a small test persistence mechanism, not a recommended
 production database. The independent HTTP records and generated OpenAPI provide the
 starting interface; the published integration documentation defines broader semantics.
 

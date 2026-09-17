@@ -16,7 +16,12 @@ public static partial class IntegrationPublicationNames {
     public static string ArtifactKey(string artifactId) => Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(artifactId)))[..16];
     /// <summary>Finds only a candidate journal ID. Callers must verify the accepted path and bytes before trusting any title.</summary>
     public static Guid? CandidateOperation(string path) {
-        var match = OperationSuffix().Match(Path.GetFileNameWithoutExtension(path));
+        return ParseOperation(Path.GetFileNameWithoutExtension(path));
+    }
+    /// <summary>Finds a candidate on a folder without treating dots in its display title as an extension.</summary>
+    public static Guid? CandidateFolderOperation(string path) => ParseOperation(Path.GetFileName(Path.TrimEndingDirectorySeparator(path)));
+    private static Guid? ParseOperation(string name) {
+        var match = OperationSuffix().Match(name);
         return match.Success && Guid.TryParseExact(match.Groups[1].Value, "N", out var id) ? id : null;
     }
     [GeneratedRegex(@" \[([a-f0-9]{32})-[a-f0-9]{16}\]$", RegexOptions.CultureInvariant)]

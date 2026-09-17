@@ -18,6 +18,7 @@ public static class IntegrationMediaFormats {
     public static bool SupportsRoot(EntityKind kind, LibraryRootData root) => root.Enabled && !root.IsReadOnly && kind switch {
         EntityKind.Book or EntityKind.ComicInstallment => root.ScanBooks,
         EntityKind.Image => root.ScanImages,
+        EntityKind.Gallery => root.ScanImages && root.Recursive,
         _ => false
     };
 }

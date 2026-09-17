@@ -85,7 +85,7 @@ public sealed class ExecutorAcquisitionService(IntegrationConnectionAccess acces
         RequireSourceUrl(inspection.CanonicalUrl);
     }
     private static void RequireImportKind(EntityKind kind) {
-        if (kind is not (EntityKind.Book or EntityKind.ComicInstallment or EntityKind.Image)) throw new ArgumentException("Choose a book, comic installment, or image for URL acquisition.");
+        if (kind is not (EntityKind.Book or EntityKind.ComicInstallment or EntityKind.Image or EntityKind.Gallery)) throw new ArgumentException("Choose a book, comic installment, image, or gallery for URL acquisition.");
     }
     private static void RequireSourceUrl(string url) {
         if (string.IsNullOrWhiteSpace(url) || url.Length > 8192 || !Uri.TryCreate(url, UriKind.Absolute, out var address)

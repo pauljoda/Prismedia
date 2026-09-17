@@ -357,7 +357,7 @@ public sealed class ImportedComicMaterializationPolicy(ScanComicJobHandler scan)
             cancellationToken);
 }
 
-/// <summary>Imports exact loose images through the image scanner without discovering or removing unrelated content.</summary>
+/// <summary>Imports exact images and their explicit gallery scope without discovering or removing unrelated content.</summary>
 public sealed class ImportedImageMaterializationPolicy(ScanGalleryJobHandler scan) : IImportedEntityMaterializationPolicy {
     /// <inheritdoc />
     public JobType ScanJobType => JobType.ScanGallery;

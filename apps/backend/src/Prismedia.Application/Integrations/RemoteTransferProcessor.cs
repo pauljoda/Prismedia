@@ -11,7 +11,7 @@ namespace Prismedia.Application.Integrations;
 public sealed class RemoteTransferProcessor(IIntegrationTransferStore store, IntegrationConnectionAccess access,
     IIntegrationTransferGateway gateway, IntegrationManifestReader manifests, IIntegrationArtifactTransfer bytes,
     IIntegrationMediaVerifier verifier, IIntegrationImportPlacement placement, ILibraryScanRootPersistence roots,
-    IImportedEntityMaterializer materializer) {
+    IImportedEntityMaterializer materializer, IntegrationGalleryImporter galleries) {
     /// <summary>Runs until a durable remote wait or local completion boundary. A wait releases the queue worker without consuming a failure attempt.</summary>
     public async Task ProcessAsync(Guid operationId, JobContext context, CancellationToken cancellationToken) {
         var work = await store.FindAsync(operationId, cancellationToken) ?? throw new IntegrationTransferNotFoundException();
@@ -119,9 +119,9 @@ public sealed class RemoteTransferProcessor(IIntegrationTransferStore store, Int
                 await RenewAsync();
                 var connection = await AuthorizeAsync(IntegrationOperation.ListArtifacts);
                 var manifest = await manifests.ReadAsync(connection.Manifest.Id, connection.Context, transfer.State.JobId!, transfer.State.ManifestRevision!, cancellationToken);
-                if (!SupportsSingleArtifact(manifest.Artifacts, work.Plan, intent)) {
+                if (!SupportsOutputs(manifest.Artifacts, work.Plan, intent)) {
                     if (transfer.State.Phase == IntegrationTransferPhase.AwaitingArtifacts) transfer.HoldUnavailableRemoteOutputs();
-                    await PersistAsync("This import profile requires one complete EPUB/PDF book, CBZ comic, or JPEG/PNG/WebP image. Additional outputs are retained by the executor for review.");
+                    await PersistAsync("The outputs do not match the accepted complete media selection and its size or ordering limits. The executor retains them for review.");
                     throw new JobRetryLaterException("Outputs require review; preserving the executor's retention lease.", TimeSpan.FromMinutes(5));
                 }
                 transfer.AcceptManifest(manifest);
@@ -137,9 +137,18 @@ public sealed class RemoteTransferProcessor(IIntegrationTransferStore store, Int
                     if (delivery.ByteSize != artifact.SizeBytes || !string.Equals(delivery.Sha256, artifact.Sha256, StringComparison.OrdinalIgnoreCase))
                         throw new IntegrationInvocationException("Artifact delivery differs from the accepted output manifest.");
                     var verified = await bytes.TransferAsync(new(operationId, artifact.Id, connection.Context.BaseUrl,
-                        delivery with { SuggestedFileName = Path.GetFileName(artifact.RelativePath) }, intent.MaximumBytes), cancellationToken);
-                    await verifier.VerifyAsync(verified, work.Plan.EntityKind, cancellationToken);
+                        delivery with { SuggestedFileName = Path.GetFileName(artifact.RelativePath) },
+                        work.Plan.EntityKind == EntityKind.Gallery ? Math.Min(intent.MaximumBytes, IntegrationMediaFormats.MaximumImageBytes) : intent.MaximumBytes), cancellationToken);
+                    await verifier.VerifyAsync(verified, work.Plan.EntityKind == EntityKind.Gallery ? EntityKind.Image : work.Plan.EntityKind, cancellationToken);
                     transfer.RecordVerified(artifact.Id, verified.SizeBytes, verified.Sha256);
+                    await PersistAsync();
+                }
+            }
+            if (transfer.State.Phase == IntegrationTransferPhase.Importing && work.Plan.EntityKind == EntityKind.Gallery) {
+                await context.ReportProgressAsync(75, "Importing verified gallery", cancellationToken);
+                var receipts = await galleries.ImportAsync(work, context, cancellationToken);
+                foreach (var receipt in receipts) {
+                    transfer.RecordImported(receipt);
                     await PersistAsync();
                 }
             }
@@ -148,7 +157,7 @@ public sealed class RemoteTransferProcessor(IIntegrationTransferStore store, Int
                     if (transfer.State.Imports?.Any(imported => imported.ArtifactId == artifact.Id) == true) continue;
                     var verified = await bytes.ReadVerifiedAsync(operationId, artifact.Id, Path.GetFileName(artifact.RelativePath), artifact.SizeBytes, artifact.Sha256, cancellationToken)
                         ?? throw new InvalidDataException("Verified staging is missing.");
-                    await verifier.VerifyAsync(verified, work.Plan.EntityKind, cancellationToken);
+                    await verifier.VerifyAsync(verified, work.Plan.EntityKind == EntityKind.Gallery ? EntityKind.Image : work.Plan.EntityKind, cancellationToken);
                     var root = await roots.GetLibraryRootAsync(work.Plan.LibraryRootId, cancellationToken)
                         ?? throw new InvalidDataException("The destination library is unavailable.");
                     await context.ReportProgressAsync(75, "Importing verified executor output", cancellationToken);
@@ -181,6 +190,13 @@ public sealed class RemoteTransferProcessor(IIntegrationTransferStore store, Int
             await store.RecordErrorAsync(operationId, persistedRevision, message, cancellationToken);
             throw new IntegrationInvocationException(message);
         }
+    }
+
+    private static bool SupportsOutputs(IReadOnlyList<IntegrationArtifact> artifacts, IntegrationTransferPlan plan, SubmitTransferInput intent) {
+        if (plan.EntityKind != EntityKind.Gallery) return SupportsSingleArtifact(artifacts, plan, intent);
+        if (intent.ItemIds.Count != 1) return false;
+        try { _ = new IntegrationGalleryOutputSet(artifacts, intent.ItemIds[0], intent.MaximumBytes); return true; }
+        catch (ArgumentException) { return false; }
     }
 
     private static bool SupportsSingleArtifact(IReadOnlyList<IntegrationArtifact> artifacts, IntegrationTransferPlan plan, SubmitTransferInput intent) =>

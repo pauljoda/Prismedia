@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- URL executors can import complete ordered image galleries, with bounded image validation, atomic folder placement, stable gallery and image identities, and recoverable import receipts. Explicit galleries remain galleries even when they contain one image.
+
 - URL executor connections can import verified JPEG, PNG, and WebP still images into image libraries. Imports preserve image identity across retries and rescans, and the Archiver adapter negotiates image support separately from publications.
 
 - Soulseek searches through slskd now support EPUB/PDF books, CBZ/ZIP comics, and audiobook files. Publication formats stay separately selectable, and audiobook chapter folders retain their file order without including neighboring books or cover images.

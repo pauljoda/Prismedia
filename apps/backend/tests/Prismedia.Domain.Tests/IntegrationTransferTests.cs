@@ -22,6 +22,21 @@ public sealed class IntegrationTransferTests {
     }
 
     [Fact]
+    public void GalleryReceiptRetainsExactImageOwnersAndAnImmutableContainer() {
+        var transfer = WithManifest();
+        transfer.RecordVerified(Artifact.Id, Artifact.SizeBytes, Artifact.Sha256);
+        var image = Guid.NewGuid(); var gallery = Guid.NewGuid();
+        Assert.Throws<InvalidOperationException>(() => transfer.RecordImported(new(Artifact.Id, Artifact.Sha256, [image], Guid.Empty)));
+        transfer.RecordImported(new(Artifact.Id, Artifact.Sha256, [image], gallery));
+        var revision = transfer.State.Revision;
+        transfer.RecordImported(new(Artifact.Id, Artifact.Sha256, [image], gallery));
+        Assert.Equal(revision, transfer.State.Revision);
+        Assert.Equal(image, Assert.Single(Assert.Single(transfer.State.Imports!).EntityIds));
+        Assert.Equal(gallery, Assert.Single(transfer.State.Imports!).ContainerEntityId);
+        Assert.Throws<InvalidOperationException>(() => transfer.RecordImported(new(Artifact.Id, Artifact.Sha256, [image], Guid.NewGuid())));
+    }
+
+    [Fact]
     public void RemoteCancellationStopsUnsentIntentAndCannotInterruptCommittedImport() {
         var unsent = IntegrationTransfer.Create(Guid.NewGuid(), Guid.NewGuid(), Instance);
         unsent.RequestRemoteCancellation();
