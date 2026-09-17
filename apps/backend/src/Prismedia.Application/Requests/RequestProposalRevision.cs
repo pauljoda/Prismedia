@@ -2,6 +2,8 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
+using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
 
@@ -10,11 +12,22 @@ namespace Prismedia.Application.Requests;
 /// <summary>Computes stable content revisions for complete plugin metadata proposals.</summary>
 public static class RequestProposalRevision {
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web) {
+        TypeInfoResolver = new DefaultJsonTypeInfoResolver {
+            Modifiers = { PreserveLegacyPositionRevisions }
+        },
         Converters = {
             new EntityKindRevisionConverter(),
             new JsonStringEnumConverter(JsonNamingPolicy.CamelCase)
         }
     };
+
+    private static void PreserveLegacyPositionRevisions(JsonTypeInfo typeInfo) {
+        if (typeInfo.Type != typeof(EntityMetadataPatch)) return;
+        var positionsName = JsonNamingPolicy.CamelCase.ConvertName(nameof(EntityMetadataPatch.PositionEntries));
+        // Adding optional exact issue labels must not invalidate older proposals with no such evidence.
+        var positions = typeInfo.Properties.Single(property => property.Name == positionsName);
+        positions.ShouldSerialize = (_, value) => value is IReadOnlyCollection<EntityPosition> { Count: > 0 };
+    }
 
     /// <summary>
     /// Returns the lower-case SHA-256 digest of a proposal serialized with object keys in ordinal

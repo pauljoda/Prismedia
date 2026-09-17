@@ -161,6 +161,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Metadata reviews without exact issue positions retain their previous revision, while changes to fractional or special issue labels still require a fresh review.
+
 - Metadata review now reports failed provider lookups as provider errors, preserving the distinction between an unavailable service and a title that could not be found.
 
 - Metadata review shows creator credits and studio names even when a plugin does not supply separate person or studio proposals, with explicit accept/reject controls.

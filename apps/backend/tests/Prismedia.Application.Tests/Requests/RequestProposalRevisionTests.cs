@@ -92,6 +92,28 @@ public sealed class RequestProposalRevisionTests {
             RequestProposalRevision.Compute(proposal));
     }
 
+    [Fact]
+    public void AbsentAndEmptyExactPositionsKeepTheSameRevision() {
+        var proposal = Proposal(new Dictionary<string, string>(), new Dictionary<string, string>());
+        var absent = proposal with { Patch = proposal.Patch with { PositionEntries = null! } };
+
+        Assert.Equal(RequestProposalRevision.Compute(proposal), RequestProposalRevision.Compute(absent));
+    }
+
+    [Fact]
+    public void ChangedExactIssueLabelChangesTheRevisionEvenWhenOrderingIsUnchanged() {
+        var proposal = Proposal(new Dictionary<string, string>(), new Dictionary<string, string>());
+        var first = proposal with { Patch = proposal.Patch with {
+            PositionEntries = [new(EntityPositionCodes.Chapter, 12, "12")]
+        } };
+        var fractional = first with { Patch = first.Patch with {
+            PositionEntries = [new(EntityPositionCodes.Chapter, 12, "12.5")]
+        } };
+
+        Assert.NotEqual(RequestProposalRevision.Compute(proposal), RequestProposalRevision.Compute(first));
+        Assert.NotEqual(RequestProposalRevision.Compute(first), RequestProposalRevision.Compute(fractional));
+    }
+
     private static EntityMetadataProposal Proposal(
         IReadOnlyDictionary<string, string> externalIds,
         IReadOnlyDictionary<string, string> dates) =>
