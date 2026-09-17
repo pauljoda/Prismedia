@@ -270,7 +270,7 @@
 
   async function resolveReaderReturnHref(bookEntityId: string, nextContext: BookReaderRouteContext) {
     if (nextContext.returnId) {
-      const href = await resolveEntityHrefById(nextContext.returnId).catch(() => null);
+      const href = await resolveEntityHrefById(nextContext.returnId, { hideNsfw: nsfw.mode !== "show" }).catch(() => null);
       if (href) return href;
     }
     return bookReaderReturnHref(bookEntityId, nextContext);

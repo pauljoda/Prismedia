@@ -7,6 +7,7 @@
   import { cancelPublicationTransfer, retryPublicationTransfer } from "$lib/api/integration-transfers";
   import { resolveEntityHrefById } from "$lib/entities/entity-route-resolver";
   import { isTransferTerminal, transferCancelLabel, transferStatusLabel, transferRetryLabel, transferProblem } from "$lib/integrations/transfer-labels";
+  import { useNsfw } from "$lib/nsfw/store.svelte";
   import { formatRelativeTime } from "$lib/utils/format";
   import SourceAttribution from "./SourceAttribution.svelte";
 
@@ -16,6 +17,7 @@
     title?: string | null;
     description?: string | null;
   } = $props();
+  const nsfw = useNsfw();
   let busy = $state<string | null>(null);
   let error = $state<string | null>(null);
 
@@ -28,7 +30,7 @@
   async function open(id: string) {
     busy = id; error = null;
     try {
-      const href = await resolveEntityHrefById(id);
+      const href = await resolveEntityHrefById(id, { hideNsfw: nsfw.mode !== "show" });
       if (!href) throw new Error("The imported entity does not have a library page yet.");
       await goto(href);
     } catch (cause) { error = cause instanceof Error ? cause.message : "Could not open the imported item"; }

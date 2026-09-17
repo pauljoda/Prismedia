@@ -200,6 +200,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Imported-item links respect the current content visibility mode, including nested comic and book pages. Activity explains when a retained import is unavailable or hidden.
+
 - Source-backed imports retain the correct transfer or import failure after the source is ready, keeping retry progress and verified files intact.
 
 - Interrupted catalog and executor imports can recover from an already placed file when staging is missing, after verifying the exact accepted bytes.

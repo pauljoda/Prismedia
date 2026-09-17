@@ -1,12 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
+  getEntity: vi.fn(),
   getEntityChildReferences: vi.fn(),
   getEntityChildren: vi.fn(),
 }));
 
 vi.mock("$lib/api/generated/prismedia", () => ({
-  getEntity: vi.fn(),
+  getEntity: mocks.getEntity,
   getEntityChildReferences: mocks.getEntityChildReferences,
   getEntityChildren: mocks.getEntityChildren,
   getEntityThumbnails: vi.fn(),
@@ -14,12 +15,22 @@ vi.mock("$lib/api/generated/prismedia", () => ({
   refreshEntity: vi.fn(),
 }));
 
-import { fetchEntityChildReferences, fetchEntityChildren } from "$lib/api/entities";
+import { fetchEntity, fetchEntityChildReferences, fetchEntityChildren } from "$lib/api/entities";
 
 describe("fetchEntityChildren", () => {
   beforeEach(() => {
     mocks.getEntityChildReferences.mockReset();
     mocks.getEntityChildren.mockReset();
+    mocks.getEntity.mockReset();
+  });
+
+  it("forwards explicit NSFW visibility to entity detail reads", async () => {
+    const signal = new AbortController().signal;
+    mocks.getEntity.mockResolvedValue({ status: 200, data: { id: "entity" } });
+
+    await fetchEntity("entity", { hideNsfw: false, signal });
+
+    expect(mocks.getEntity).toHaveBeenCalledWith("entity", { hideNsfw: false }, { signal });
   });
 
   it("deduplicates parents and keeps response groups in server order", async () => {

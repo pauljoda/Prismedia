@@ -438,7 +438,7 @@ export class IdentifyStore {
       }
 
       if (!afterApply && this.returnEntityId) {
-        const href = await resolveEntityHrefById(this.returnEntityId);
+        const href = await resolveEntityHrefById(this.returnEntityId, { hideNsfw: this.#getHideNsfw() });
         if (href) {
           afterApply = () => goto(href);
         }
@@ -485,7 +485,7 @@ export class IdentifyStore {
       }
 
       if (!afterReject && this.returnEntityId) {
-        const href = await resolveEntityHrefById(this.returnEntityId);
+        const href = await resolveEntityHrefById(this.returnEntityId, { hideNsfw: this.#getHideNsfw() });
         if (href) {
           afterReject = () => goto(href);
         }

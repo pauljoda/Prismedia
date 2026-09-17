@@ -9,13 +9,16 @@ import RequestActivity from "./RequestActivity.svelte";
 
 const api = vi.hoisted(() => ({
   fetchIntegrationTransfers: vi.fn(), cancelPublicationTransfer: vi.fn(), retryPublicationTransfer: vi.fn(),
+  fetchEntityThumbnails: vi.fn(),
   fetchManagedRequests: vi.fn(), refreshRequest: vi.fn(), cancelRequest: vi.fn(),
   fetchManagedTracking: vi.fn(), refreshTracking: vi.fn(), resolveEntityHrefById: vi.fn(), goto: vi.fn(),
 }));
 vi.mock("$lib/api/integration-transfers", () => api);
+vi.mock("$lib/api/entities", () => ({ fetchEntityThumbnails: api.fetchEntityThumbnails }));
 vi.mock("$lib/api/managed-requests", () => api);
 vi.mock("$lib/api/managed-libraries", () => api);
 vi.mock("$lib/entities/entity-route-resolver", () => ({ resolveEntityHrefById: api.resolveEntityHrefById }));
+vi.mock("$lib/nsfw/store.svelte", () => ({ useNsfw: () => ({ mode: "off" }) }));
 vi.mock("$app/navigation", () => ({ goto: api.goto }));
 
 const connection: ConnectionResponse = {
@@ -49,6 +52,7 @@ describe("request activity", () => {
     api.fetchIntegrationTransfers.mockResolvedValue([]);
     api.fetchManagedRequests.mockResolvedValue([]);
     api.fetchManagedTracking.mockResolvedValue([]);
+    api.fetchEntityThumbnails.mockImplementation(async (ids: string[]) => ids.map(id => ({ id })));
     api.refreshTracking.mockResolvedValue(undefined);
     api.refreshRequest.mockResolvedValue(undefined);
   });
@@ -114,5 +118,18 @@ describe("request activity", () => {
     expect(screen.getByText("Retry the chapter in its source app, then check again.")).toBeInTheDocument();
     await fireEvent.click(screen.getByRole("button", { name: "Check again" }));
     await waitFor(() => expect(api.retryPublicationTransfer).toHaveBeenCalledWith("1"));
+  });
+
+  it("keeps completed history but disables links hidden by the current library view", async () => {
+    api.fetchIntegrationTransfers.mockResolvedValue([transfer("1")]);
+    api.fetchEntityThumbnails.mockResolvedValue([]);
+    render(RequestActivity, { connections: [connection] });
+
+    await screen.findByText("Completed 1");
+    const unavailable = await screen.findByRole("button", { name: "Unavailable" });
+    expect(unavailable).toBeDisabled();
+    expect(screen.getByText(/unavailable or hidden by your current visibility settings/i)).toBeInTheDocument();
+    expect(api.fetchEntityThumbnails).toHaveBeenCalledWith(["entity-1"], { hideNsfw: true });
+    expect(api.resolveEntityHrefById).not.toHaveBeenCalled();
   });
 });

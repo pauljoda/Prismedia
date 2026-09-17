@@ -6,6 +6,7 @@ import ManagedHoldingTracking from "./ManagedHoldingTracking.svelte";
 const api = vi.hoisted(() => ({ fetchManagedTracking: vi.fn(), previewTracking: vi.fn(), saveManagedTracking: vi.fn(), refreshTracking: vi.fn(), resolveEntityHrefById: vi.fn(), goto: vi.fn() }));
 vi.mock("$lib/api/managed-libraries", () => api);
 vi.mock("$lib/entities/entity-route-resolver", () => ({ resolveEntityHrefById: api.resolveEntityHrefById }));
+vi.mock("$lib/nsfw/store.svelte", () => ({ useNsfw: () => ({ mode: "show" }) }));
 vi.mock("$app/navigation", () => ({ goto: api.goto }));
 const item = { remoteId: "1", entityKind: ENTITY_KIND.movie, title: "A film", year: 2024, externalIds: { tmdb: "1" }, monitored: false, profileId: null, remoteFileCount: 1 };
 const selection = { remoteTargetId: "1", entityId: "local-item", sourceFileId: "local-file" };
@@ -161,7 +162,7 @@ describe("Managed holding tracking", () => {
     expect(screen.getByText(/previously linked item remains.*files and history are retained/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Check now" })).not.toBeInTheDocument();
     await fireEvent.click(screen.getByRole("button", { name: "Open in Prismedia" }));
-    expect(api.resolveEntityHrefById).toHaveBeenCalledWith("local-item");
+    expect(api.resolveEntityHrefById).toHaveBeenCalledWith("local-item", { hideNsfw: false });
     expect(api.goto).toHaveBeenCalledWith("/movies/local-item");
     expect(screen.getByRole("button", { name: "Find matching items" })).toBeInTheDocument();
     expect(api.saveManagedTracking).not.toHaveBeenCalled();

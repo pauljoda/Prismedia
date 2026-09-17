@@ -6,6 +6,7 @@
   import { INTEGRATION_OPERATION, INTEGRATION_TRANSFER_MODE, INTEGRATION_TRANSFER_PHASE, MANAGED_REQUEST_PHASE, MANAGED_TRACKING_STATUS, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
   import type { ConnectionResponse, IntegrationTransferResponse, ManagedRequestResponse, ManagedTrackingResponse, PluginIntegrationCapabilityOperationsItem } from "$lib/api/generated/model";
   import { cancelPublicationTransfer, fetchIntegrationTransfers, retryPublicationTransfer } from "$lib/api/integration-transfers";
+  import { fetchEntityThumbnails } from "$lib/api/entities";
   import { fetchManagedTracking, refreshTracking } from "$lib/api/managed-libraries";
   import { cancelRequest, fetchManagedRequests, refreshRequest } from "$lib/api/managed-requests";
   import ManagedHoldingControls from "$lib/components/integrations/ManagedHoldingControls.svelte";
@@ -15,6 +16,7 @@
   import { entityKindIcon } from "$lib/entities/entity-kind-icons";
   import { resolveEntityHrefById } from "$lib/entities/entity-route-resolver";
   import { isTransferTerminal, transferCancelLabel, transferStatusLabel, transferRetryLabel, transferProblem } from "$lib/integrations/transfer-labels";
+  import { useNsfw } from "$lib/nsfw/store.svelte";
   import { managedRequestActivityGroup, managedTrackingActivityGroup, removeTrackedRequests, REQUEST_ACTIVITY_GROUP, transferActivityGroup, type RequestActivityGroup } from "$lib/requests/request-activity";
   import { formatRelativeTime } from "$lib/utils/format";
 
@@ -26,6 +28,7 @@
   type ActivityItem = TransferItem | RequestItem | HoldingItem;
 
   let { connections }: { connections: ConnectionResponse[] } = $props();
+  const nsfw = useNsfw();
   let connectionId = $state("");
   let transfers = $state<IntegrationTransferResponse[]>([]);
   let requestsByConnection = $state<Record<string, ManagedRequestResponse[]>>({});
@@ -36,6 +39,9 @@
   let busyKey = $state<string | null>(null);
   let expandedKey = $state<string | null>(null);
   let showAllRecent = $state(false);
+  let visibleImportedEntityIds = $state<Set<string> | null>(null);
+  let importedVisibilityScope = "";
+  let importedVisibilitySequence = 0;
   let alive = true;
   let loadSequence = 0;
 
@@ -64,6 +70,26 @@
   const followingItems = $derived(activityItems.filter(item => item.group === REQUEST_ACTIVITY_GROUP.following));
   const recentItems = $derived(activityItems.filter(item => item.group === REQUEST_ACTIVITY_GROUP.recent));
   const visibleRecentItems = $derived(showAllRecent ? recentItems : recentItems.slice(0, RECENT_PREVIEW_COUNT));
+  const importedEntityIds = $derived([...new Set(transfers.flatMap(transfer => transfer.importedEntityIds))]);
+
+  $effect(() => {
+    const hideNsfw = nsfw.mode !== "show";
+    const ids = importedEntityIds;
+    const scope = JSON.stringify([hideNsfw, ids]);
+    if (scope === importedVisibilityScope) return;
+    importedVisibilityScope = scope;
+    const sequence = ++importedVisibilitySequence;
+    visibleImportedEntityIds = ids.length ? null : new Set();
+    if (!ids.length) return;
+    void fetchEntityThumbnails(ids, { hideNsfw }).then(items => {
+      if (alive && sequence === importedVisibilitySequence) {
+        visibleImportedEntityIds = new Set(items.map(item => item.id));
+      }
+    }).catch(() => {
+      // A failed availability check must not turn a transient API error into a hidden-item claim.
+      if (alive && sequence === importedVisibilitySequence) visibleImportedEntityIds = null;
+    });
+  });
 
   onMount(() => {
     void load();
@@ -112,7 +138,7 @@
   async function openEntity(key: string, id: string) {
     busyKey = key; actionError = null;
     try {
-      const href = await resolveEntityHrefById(id);
+      const href = await resolveEntityHrefById(id, { hideNsfw: nsfw.mode !== "show" });
       if (!href) throw new Error("The imported entity does not have a library page yet.");
       await goto(href);
     } catch (cause) { actionError = message(cause, "Could not open the imported item"); }
@@ -173,6 +199,7 @@
       {#if item.type === ITEM.holding}<p class="mt-1 text-xs text-text-muted">{localAvailability(item.holding)}</p>{/if}
       {#if item.type === ITEM.request && item.request.phase === MANAGED_REQUEST_PHASE.awaitingFiles}<p class="mt-1 text-xs text-text-muted">The remote manager is following this title; Prismedia has not confirmed a local file yet.</p>{/if}
       {#if item.type === ITEM.transfer && item.transfer.phase === INTEGRATION_TRANSFER_PHASE.completed && item.transfer.importedEntityIds.length}<p class="mt-1 text-xs text-text-muted">Added to your Prismedia library</p>{/if}
+      {#if item.type === ITEM.transfer && item.transfer.importedEntityIds.some(id => visibleImportedEntityIds !== null && !visibleImportedEntityIds.has(id))}<p class="mt-1 text-xs text-text-muted">An imported item is unavailable or hidden by your current visibility settings.</p>{/if}
       {#if item.type === ITEM.transfer && item.transfer.mode === INTEGRATION_TRANSFER_MODE.sourceRequest && item.transfer.canCancel}<p class="mt-1 text-xs text-text-muted">Stopping this import leaves the source’s download running.</p>{/if}
       {#if item.type === ITEM.transfer && item.transfer.sourcePublication?.attribution}<div class="mt-1"><SourceAttribution attribution={item.transfer.sourcePublication.attribution} compact /></div>{/if}
       {#if item.type === ITEM.transfer && transferProblem(item.transfer)}<p class="mt-2 break-words text-sm text-text-muted">{transferProblem(item.transfer)}</p>{/if}
@@ -183,7 +210,10 @@
       {#if item.type === ITEM.transfer}
         {#if item.transfer.canCancel}<Button variant="ghost" size="sm" disabled={busyKey !== null} onclick={() => void runAction(item.key, () => cancelPublicationTransfer(item.transfer.id))}><X />{transferCancelLabel(item.transfer.mode)}</Button>{/if}
         {#if transferProblem(item.transfer) && !isTransferTerminal(item.transfer.phase)}<Button variant="secondary" size="sm" disabled={busyKey !== null} onclick={() => void runAction(item.key, () => retryPublicationTransfer(item.transfer.id))}><RotateCcw />{transferRetryLabel(item.transfer)}</Button>{/if}
-        {#each item.transfer.importedEntityIds as entityId}<Button variant="secondary" size="sm" disabled={busyKey !== null} onclick={() => void openEntity(item.key, entityId)}>Open<ArrowUpRight /></Button>{/each}
+        {#each item.transfer.importedEntityIds as entityId}
+          {@const unavailable = visibleImportedEntityIds !== null && !visibleImportedEntityIds.has(entityId)}
+          <Button variant="secondary" size="sm" disabled={busyKey !== null || unavailable} title={unavailable ? "Unavailable or hidden by current visibility settings" : undefined} onclick={() => void openEntity(item.key, entityId)}>{unavailable ? "Unavailable" : "Open"}<ArrowUpRight /></Button>
+        {/each}
       {:else if item.type === ITEM.request}
         {#if refreshableRequestPhases.has(item.request.phase)}<Button variant="outline" size="sm" disabled={busyKey !== null} onclick={() => void runAction(item.key, () => refreshRequest(item.connection.id, item.request.id))}><RefreshCw />Refresh</Button>{/if}
         {#if item.request.canCancel}<Button variant="ghost" size="sm" disabled={busyKey !== null} onclick={() => void runAction(item.key, () => cancelRequest(item.connection.id, item.request))}><X />Cancel</Button>{/if}

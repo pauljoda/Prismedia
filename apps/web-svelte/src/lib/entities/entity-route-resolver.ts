@@ -9,10 +9,20 @@ export interface EntityRouteRecord {
 
 export type EntityRouteFetcher = (id: string) => Promise<EntityRouteRecord>;
 
+export interface EntityRouteResolveOptions {
+  hideNsfw?: boolean;
+  fetchRecord?: EntityRouteFetcher;
+}
+
 export async function resolveEntityHrefById(
   entityId: string,
-  fetchRecord: EntityRouteFetcher = fetchEntity,
+  optionsOrFetcher: EntityRouteResolveOptions | EntityRouteFetcher = {},
 ): Promise<string | null> {
+  const options = typeof optionsOrFetcher === "function"
+    ? { fetchRecord: optionsOrFetcher }
+    : optionsOrFetcher;
+  const fetchRecord = options.fetchRecord
+    ?? ((id: string) => fetchEntity(id, { hideNsfw: options.hideNsfw }));
   const entity = await fetchRecord(entityId);
   return resolveEntityHrefForRecord(entity, fetchRecord, new Set([entity.id]));
 }

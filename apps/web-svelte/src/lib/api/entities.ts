@@ -36,9 +36,11 @@ export type EntityShelfResponse = GeneratedEntityShelfResponse;
 
 const ENTITY_CHILDREN_BATCH_SIZE = 250;
 
-export interface EntityThumbnailRequestOptions extends RequestOptions {
+export interface EntityVisibilityRequestOptions extends RequestOptions {
   hideNsfw?: boolean;
 }
+
+export type EntityThumbnailRequestOptions = EntityVisibilityRequestOptions;
 
 export function fetchEntities(
   params?: ListEntitiesParams,
@@ -137,8 +139,8 @@ export async function fetchEntityChildReferences(
     ).groups);
 }
 
-export function fetchEntity(id: string, options?: RequestOptions): Promise<EntityCardFull> {
-  return getEntity(id, undefined, requestInit(options)).then((r) =>
+export function fetchEntity(id: string, options?: EntityVisibilityRequestOptions): Promise<EntityCardFull> {
+  return getEntity(id, { hideNsfw: options?.hideNsfw }, requestInit(options)).then((r) =>
     unwrapGenerated(r, `Failed to fetch entity ${id}`),
   );
 }

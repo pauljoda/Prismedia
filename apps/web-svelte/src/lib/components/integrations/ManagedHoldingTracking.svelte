@@ -9,10 +9,12 @@
   import { displayNameForEntityKind } from "$lib/entities/entity-codes";
   import { resolveEntityHrefById } from "$lib/entities/entity-route-resolver";
   import { isTrackedManagedItem } from "$lib/integrations/managed-item-identity";
+  import { useNsfw } from "$lib/nsfw/store.svelte";
   import ManagedHoldingControls from "./ManagedHoldingControls.svelte";
   import ManagedHoldingRelease from "./ManagedHoldingRelease.svelte";
 
   let { connectionId, connectionName = "Connected app", item = null, showControls = false, canControl = false, canRelease = false, compact = false, onLoaded }: { connectionId: string; connectionName?: string; item?: ManagedLibraryItem | null; showControls?: boolean; canControl?: boolean; canRelease?: boolean; compact?: boolean; onLoaded?: (holdings: ManagedTrackingResponse[]) => void } = $props();
+  const nsfw = useNsfw();
   let expandedId = $state<string | null>(null);
   let holdings = $state<ManagedTrackingResponse[]>([]);
   let preview = $state<ManagedTrackingPreview | null>(null);
@@ -120,7 +122,7 @@
     openingEntityId = entityId;
     error = null;
     try {
-      const href = await resolveEntityHrefById(entityId);
+      const href = await resolveEntityHrefById(entityId, { hideNsfw: nsfw.mode !== "show" });
       if (!active || scope !== trackingScope) return;
       if (!href) throw new Error("This item does not have a Prismedia page yet.");
       await goto(href);
