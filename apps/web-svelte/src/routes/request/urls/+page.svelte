@@ -5,6 +5,7 @@
   import { Alert, Button, Panel, Select, TextInput, buttonVariants } from "@prismedia/ui-svelte";
   import { CONNECTION_STATUS, INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
   import type { ConnectionResponse, EntityKind, ExecutorInspectionResponse, IntegrationTransferResponse, LibraryRoot } from "$lib/api/generated/model";
+  import { executorKinds, executorRoots } from "$lib/integrations/executor-options";
   import { fetchConnections } from "$lib/api/connections";
   import { inspectPublicationUrl, acquireExecutorPublication, fetchIntegrationTransfers } from "$lib/api/integration-transfers";
   import { fetchLibraryRoots } from "$lib/api/settings";
@@ -30,7 +31,9 @@
   let refreshError = $state<string | null>(null);
   const operations = new Map<string, string>();
   const connection = $derived(connections.find(item => item.id === connectionId));
-  const kinds = $derived(connection?.effectiveCapabilities.find(item => item.kind === PLUGIN_CAPABILITY.catalogDiscovery)?.entityKinds ?? []);
+  const kinds = $derived(executorKinds(connection));
+  const destinations = $derived(executorRoots(roots, kind));
+  $effect(() => { if (!destinations.some(root => root.id === rootId)) rootId = destinations[0]?.id ?? ""; });
 
   onMount(() => {
     if (session.isAdmin) void initialize(); else loading = false;
@@ -49,8 +52,8 @@
       connections = available.filter(item => item.status === CONNECTION_STATUS.ready && item.hasPersistentRemoteIdentity
         && item.effectiveCapabilities.some(capability => capability.kind === PLUGIN_CAPABILITY.catalogDiscovery && capability.operations.includes(INTEGRATION_OPERATION.inspect))
         && item.effectiveCapabilities.some(capability => capability.kind === PLUGIN_CAPABILITY.transferExecutor));
-      roots = libraries.filter(root => root.enabled && !root.isReadOnly && root.scanBooks);
-      rootId = roots[0]?.id ?? "";
+      roots = libraries;
+      rootId = "";
       const requested = page.url.searchParams.get("connection");
       chooseConnection(connections.find(item => item.id === requested)?.id ?? connections[0]?.id ?? "");
       await refreshTransfers();
@@ -59,7 +62,7 @@
   }
   function chooseConnection(value: string) {
     connectionId = value;
-    kind = connections.find(item => item.id === value)?.effectiveCapabilities.find(item => item.kind === PLUGIN_CAPABILITY.catalogDiscovery)?.entityKinds[0];
+    kind = executorKinds(connections.find(item => item.id === value))[0];
     inspection = null; error = null;
   }
   async function inspect() {
@@ -78,7 +81,7 @@
     try {
       const accepted = await acquireExecutorPublication(connectionId, { operationId, selectionToken: inspection.selectionToken, itemId, libraryRootId: rootId });
       transfers = [accepted, ...transfers.filter(item => item.id !== accepted.id)];
-    } catch (cause) { error = cause instanceof Error ? cause.message : "Could not accept this publication. Retry to check the same request."; }
+    } catch (cause) { error = cause instanceof Error ? cause.message : "Could not accept this item. Retry to check the same request."; }
     finally { busy = false; }
   }
 </script>
@@ -93,14 +96,14 @@
       <div class="space-y-2">
         <BackLink fallback="/request" label="Requests" />
         <h1 class="flex items-center gap-2.5"><Link class="size-5 text-text-accent" />Import from URL</h1>
-        <p class="text-sm text-text-muted">Inspect a source, choose a publication, and import it into your library.</p>
+        <p class="text-sm text-text-muted">Inspect a source, choose a book, comic, or image, and import it into your library.</p>
       </div>
       <a class={buttonVariants({ variant: "secondary", size: "sm" })} href="/settings/connections">Manage connections</a>
     </header>
     {#if loading}
       <StatePlaceholder icon={Link} title="Loading connections" busy />
     {:else if !connections.length}
-      <StatePlaceholder icon={Link} title="Connect a URL executor" description="Add and test a connection that supports URL inspection and publication downloads." />
+      <StatePlaceholder icon={Link} title="Connect a URL executor" description="Add and test a connection that supports URL inspection and downloads." />
     {:else}
       <Panel class="flex flex-col gap-4 p-4">
         <div class="grid min-w-0 gap-3 sm:grid-cols-2">
@@ -114,22 +117,22 @@
         </form>
         <div class="space-y-2">
           <p class="text-xs font-medium text-text-muted">Import destination</p>
-          <Select ariaLabel="Import destination" value={rootId} options={roots.map(root => ({ value: root.id, label: root.label }))} onchange={value => rootId = value}
-            disabled={busy || !roots.length} placeholder="Choose a publication library" />
-          {#if !roots.length}<p class="text-sm text-text-muted">Add an enabled library with book scanning in Settings to import publications.</p>{/if}
+          <Select ariaLabel="Import destination" value={rootId} options={destinations.map(root => ({ value: root.id, label: root.label }))} onchange={value => rootId = value}
+            disabled={busy || !destinations.length} placeholder="Choose an import library" />
+          {#if !destinations.length}<p class="text-sm text-text-muted">Add an enabled library with scanning for this media type in Settings.</p>{/if}
         </div>
       </Panel>
     {/if}
     {#if error}<Alert.Root variant="destructive"><Alert.Description>{error}</Alert.Description></Alert.Root>{/if}
     {#if refreshError}<Alert.Root variant="destructive"><Alert.Description>{refreshError}</Alert.Description></Alert.Root>{/if}
     {#if inspection}
-      <section class="space-y-3" aria-label="Inspected publications">
-        <h2 class="text-base font-semibold">Choose a publication</h2>
+      <section class="space-y-3" aria-label="Inspected items">
+        <h2 class="text-base font-semibold">Choose an item</h2>
         {#each inspection.warnings as warning}<Alert.Root><Alert.Description>{warning}</Alert.Description></Alert.Root>{/each}
         {#each inspection.items as item (item.id)}
           <Panel class="flex min-w-0 flex-wrap items-center justify-between gap-3 p-4">
             <h3 class="min-w-0 break-words text-sm font-semibold">{item.title}</h3>
-            <Button variant="secondary" size="sm" disabled={busy || !rootId} onclick={() => void acquire(item.id)}><Download />Import publication</Button>
+            <Button variant="secondary" size="sm" disabled={busy || !rootId} onclick={() => void acquire(item.id)}><Download />Import item</Button>
           </Panel>
         {/each}
       </section>

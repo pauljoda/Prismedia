@@ -8,7 +8,7 @@ using Prismedia.Domain.Integrations;
 
 namespace Prismedia.Application.Integrations;
 
-/// <summary>Inspects source URLs and accepts explicit publication selections before any remote job submission.</summary>
+/// <summary>Inspects source URLs and accepts explicit media selections before any remote job submission.</summary>
 public sealed class ExecutorAcquisitionService(IntegrationConnectionAccess access, IIntegrationTransferGateway gateway,
     IExecutorSelectionProtector selections, IIntegrationTransferStore store, ILibraryScanRootPersistence roots,
     ICurrentUserContext currentUser, IntegrationTransferService status) {
@@ -21,7 +21,7 @@ public sealed class ExecutorAcquisitionService(IntegrationConnectionAccess acces
 
     /// <summary>Returns finite choices from an executor that provides durable identity, submission recovery, retained outputs, and receipts.</summary>
     public async Task<ExecutorInspectionResponse> InspectAsync(Guid connectionId, InspectExecutorRequest request, CancellationToken cancellationToken) {
-        RequirePublicationKind(request.EntityKind);
+        RequireImportKind(request.EntityKind);
         RequireSourceUrl(request.Url);
         var connection = await access.RequireAsync(connectionId, PluginCapability.CatalogDiscovery, IntegrationOperation.Inspect, request.EntityKind, cancellationToken);
         RequireExecutor(connection, request.EntityKind);
@@ -38,7 +38,7 @@ public sealed class ExecutorAcquisitionService(IntegrationConnectionAccess acces
     public async Task<IntegrationTransferResponse> AcquireAsync(Guid connectionId, AcquireExecutorItemRequest request, CancellationToken cancellationToken) {
         if (request.OperationId == Guid.Empty || request.LibraryRootId == Guid.Empty || string.IsNullOrWhiteSpace(request.ItemId)
             || request.ItemId.Length > 2048 || string.IsNullOrWhiteSpace(request.SelectionToken) || request.SelectionToken.Length > 262144)
-            throw new ArgumentException("Select an inspected publication, destination, and stable operation ID.");
+            throw new ArgumentException("Select an inspected item, destination, and stable operation ID.");
         var fingerprint = Hash(new { connectionId, request.SelectionToken, request.ItemId, request.LibraryRootId });
         if (await store.FindAsync(request.OperationId, cancellationToken) is { } existing) {
             if (existing.Transfer.State.ConnectionId != connectionId || existing.Plan.RequestFingerprint != fingerprint)
@@ -55,10 +55,10 @@ public sealed class ExecutorAcquisitionService(IntegrationConnectionAccess acces
             ?? throw new ArgumentException("Choose an item from the inspected selection.");
         var allowed = await currentUser.GetAllowedLibraryRootIdsAsync(cancellationToken);
         var root = await roots.GetLibraryRootAsync(request.LibraryRootId, cancellationToken);
-        if (root is null || root.IsReadOnly || !root.Enabled || !root.ScanBooks || allowed is not null && !allowed.Contains(root.Id))
-            throw new ArgumentException("Choose an accessible, enabled publication library.");
+        if (root is null || root.IsReadOnly || !IntegrationMediaFormats.SupportsRoot(selection.EntityKind, root) || allowed is not null && !allowed.Contains(root.Id))
+            throw new ArgumentException("Choose an accessible, enabled library that scans the selected media type.");
         var intent = new SubmitTransferInput(request.OperationId, selection.Inspection.CanonicalUrl, selection.Inspection.SelectionId,
-            selection.Inspection.Revision, [item.Id], 1, MaximumPublicationBytes);
+            selection.Inspection.Revision, [item.Id], 1, selection.EntityKind == EntityKind.Image ? IntegrationMediaFormats.MaximumImageBytes : MaximumPublicationBytes);
         var plan = new IntegrationTransferPlan(item.Title, selection.EntityKind, root.Id, Path.GetFullPath(root.Path),
             Hash(new { connectionId, ItemId = item.Id, selection.EntityKind }), fingerprint, Executor: intent);
         await store.CreateAsync(IntegrationTransfer.Create(request.OperationId, connectionId, selection.InstanceId), plan, cancellationToken);
@@ -73,7 +73,7 @@ public sealed class ExecutorAcquisitionService(IntegrationConnectionAccess acces
             throw new ArgumentException("This executor must support persistent identity, submission recovery, retained artifacts, and import receipts.");
     }
     private static void ValidateInspection(TransferInspection inspection, EntityKind kind) {
-        RequirePublicationKind(kind);
+        RequireImportKind(kind);
         if (inspection is null || string.IsNullOrWhiteSpace(inspection.SelectionId) || inspection.SelectionId.Length > 512
             || string.IsNullOrWhiteSpace(inspection.Revision) || inspection.Revision.Length > 512 || inspection.ExpiresAt <= DateTimeOffset.UtcNow
             || inspection.Items is not { Count: > 0 and <= MaximumInspectedItems } || inspection.Items.Any(item => item is null)
@@ -81,11 +81,11 @@ public sealed class ExecutorAcquisitionService(IntegrationConnectionAccess acces
             || inspection.Items.Any(item => string.IsNullOrWhiteSpace(item.Id) || item.Id.Length > 2048 || string.IsNullOrWhiteSpace(item.Title)
                 || item.Title.Length > 512 || item.EntityKind != kind)
             || inspection.Warnings is null || inspection.Warnings.Count > 20 || inspection.Warnings.Any(message => message is null || message.Length > 1024))
-            throw new IntegrationInvocationException("The executor returned an invalid, expired, or unbounded publication selection.");
+            throw new IntegrationInvocationException("The executor returned an invalid, expired, or unbounded media selection.");
         RequireSourceUrl(inspection.CanonicalUrl);
     }
-    private static void RequirePublicationKind(EntityKind kind) {
-        if (kind is not (EntityKind.Book or EntityKind.ComicInstallment)) throw new ArgumentException("Choose a book or comic installment for publication acquisition.");
+    private static void RequireImportKind(EntityKind kind) {
+        if (kind is not (EntityKind.Book or EntityKind.ComicInstallment or EntityKind.Image)) throw new ArgumentException("Choose a book, comic installment, or image for URL acquisition.");
     }
     private static void RequireSourceUrl(string url) {
         if (string.IsNullOrWhiteSpace(url) || url.Length > 8192 || !Uri.TryCreate(url, UriKind.Absolute, out var address)

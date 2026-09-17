@@ -487,12 +487,17 @@ episode IDs and preserve unrelated episode flags, profile, folder, and files.
 ## Import from a URL
 
 **Requests → Import from URL** shows tested connections with URL inspection and
-transfer execution. Choose a connection and publication kind, inspect the URL, then
-select one publication and an enabled destination library. Inspection creates no
+transfer execution. Choose a connection and media kind, inspect the URL, then
+select one item and an enabled destination library. Inspection creates no
 remote job. Selections expire, and connection changes require inspecting again.
 
-The initial executor profile imports one complete EPUB/PDF book or CBZ comic,
-with a 2 GiB byte limit. Its sealed manifest must contain exactly one content file
+The publication executor profile imports one complete EPUB/PDF book or CBZ comic,
+with a 2 GiB byte limit. The optional image profile imports one JPEG, PNG, or WebP
+still image, limited to 64 MiB and 100 million pixels. Images must decode completely,
+match their filename format, and use a writable library with image scanning enabled.
+Animated images and ordered galleries are not supported yet.
+
+Each sealed manifest must contain exactly one content file
 for the selected item. Additional covers, sidecars, or pages hold the operation for
 review; Prismedia does not acknowledge outputs it has not imported.
 
@@ -504,7 +509,7 @@ never substitutes for verifying its output bytes.
 
 After local source ownership commits, acknowledgement is a separate step. An unavailable
 receipt endpoint leaves **Awaiting acknowledgement**; retries reuse the same receipt
-without downloading or materializing the publication again. Partial results remain
+without downloading or materializing the item again. Partial results remain
 held with renewable retention. **Cancel request** is available until local import starts. Prismedia persists the
 cancellation before contacting the executor and reserves ownership until remote
 execution has stopped. A running transfer observes cancellation at its next durable
@@ -515,8 +520,9 @@ preserves that remote result and cancels the local import without acknowledging 
 outputs. Direct catalog downloads retain their **Cancel download** action.
 
 The Archiver adapter targets the proposed executor API v1, including its explicit
-`single-publication` output profile. It requires that interface to be implemented;
+`single-publication` and optional `single-image` output profiles. Image choices appear
+only when the server advertises that profile. It requires that interface to be implemented;
 older Archiver installations that only return success messages are not compatible.
 The repository includes a separate [executor simulator](https://github.com/pauljoda/Prismedia/tree/main/apps/backend/tools/Prismedia.IntegrationSimulator)
-for synthetic publications and response-loss testing. See the [Archiver interface](./archiver-interface.md)
+for synthetic publications, images, and response-loss testing. See the [Archiver interface](./archiver-interface.md)
 for a rebuild specification independent of Prismedia's storage model.

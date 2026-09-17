@@ -35,7 +35,7 @@ public sealed class SourceTransferProcessorTests {
         Assert.NotNull(fixture.Error);
     }
 
-    private sealed class Fixture : IIntegrationTransferStore, IIntegrationArtifactTransfer, IIntegrationPublicationVerifier,
+    private sealed class Fixture : IIntegrationTransferStore, IIntegrationArtifactTransfer, IIntegrationMediaVerifier,
         IIntegrationImportPlacement, IImportedEntityMaterializer {
         private static readonly string Hash = new('a', 64);
         internal Guid EntityId { get; } = Guid.NewGuid();

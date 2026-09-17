@@ -7,6 +7,8 @@ namespace Prismedia.IntegrationSimulator;
 public static class PublicationFixtures {
     /// <summary>Returns a small valid EPUB or one-page CBZ for the requested declared output format.</summary>
     public static byte[] Create(string format) {
+        if (format == ArchiverWire.Png)
+            return Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=");
         using var stream = new MemoryStream();
         using (var archive = new ZipArchive(stream, ZipArchiveMode.Create, true)) {
             if (format == ArchiverWire.Epub) {

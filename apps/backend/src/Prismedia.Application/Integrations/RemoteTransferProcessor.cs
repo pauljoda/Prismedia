@@ -10,7 +10,7 @@ namespace Prismedia.Application.Integrations;
 /// <summary>Resumes durable executor fulfillment across submission ambiguity, remote waits, byte transfer, local import, and receipt delivery.</summary>
 public sealed class RemoteTransferProcessor(IIntegrationTransferStore store, IntegrationConnectionAccess access,
     IIntegrationTransferGateway gateway, IntegrationManifestReader manifests, IIntegrationArtifactTransfer bytes,
-    IIntegrationPublicationVerifier verifier, IIntegrationImportPlacement placement, ILibraryScanRootPersistence roots,
+    IIntegrationMediaVerifier verifier, IIntegrationImportPlacement placement, ILibraryScanRootPersistence roots,
     IImportedEntityMaterializer materializer) {
     /// <summary>Runs until a durable remote wait or local completion boundary. A wait releases the queue worker without consuming a failure attempt.</summary>
     public async Task ProcessAsync(Guid operationId, JobContext context, CancellationToken cancellationToken) {
@@ -102,11 +102,11 @@ public sealed class RemoteTransferProcessor(IIntegrationTransferStore store, Int
                 transfer.Observe(snapshot.InstanceId, snapshot.JobId, snapshot.Revision, snapshot.State, snapshot.ManifestRevision);
                 await PersistAsync();
                 if (transfer.State.Phase == IntegrationTransferPhase.AwaitingRemote)
-                    throw new JobRetryLaterException("Waiting for the executor to finish the accepted publication.", PollDelay(snapshot.NextPollAfter));
+                    throw new JobRetryLaterException("Waiting for the executor to finish the accepted item.", PollDelay(snapshot.NextPollAfter));
                 if (snapshot.State is RemoteJobState.Failed or RemoteJobState.Cancelled) return;
                 if (snapshot.State == RemoteJobState.Partial) {
                     await RenewAsync();
-                    await PersistAsync("The executor produced only part of the selected publication. No partial content was imported.");
+                    await PersistAsync("The executor produced only part of the selected item. No partial content was imported.");
                     throw new JobRetryLaterException("Partial outputs require review; preserving the executor's retention lease.", TimeSpan.FromMinutes(5));
                 }
                 if (snapshot.ArtifactsExpired) {
@@ -119,9 +119,9 @@ public sealed class RemoteTransferProcessor(IIntegrationTransferStore store, Int
                 await RenewAsync();
                 var connection = await AuthorizeAsync(IntegrationOperation.ListArtifacts);
                 var manifest = await manifests.ReadAsync(connection.Manifest.Id, connection.Context, transfer.State.JobId!, transfer.State.ManifestRevision!, cancellationToken);
-                if (!SupportsPublication(manifest.Artifacts, work.Plan, intent)) {
+                if (!SupportsSingleArtifact(manifest.Artifacts, work.Plan, intent)) {
                     if (transfer.State.Phase == IntegrationTransferPhase.AwaitingArtifacts) transfer.HoldUnavailableRemoteOutputs();
-                    await PersistAsync("This publication profile requires one complete EPUB/PDF book or CBZ comic. Additional outputs are retained by the executor for review.");
+                    await PersistAsync("This import profile requires one complete EPUB/PDF book, CBZ comic, or JPEG/PNG/WebP image. Additional outputs are retained by the executor for review.");
                     throw new JobRetryLaterException("Outputs require review; preserving the executor's retention lease.", TimeSpan.FromMinutes(5));
                 }
                 transfer.AcceptManifest(manifest);
@@ -183,10 +183,10 @@ public sealed class RemoteTransferProcessor(IIntegrationTransferStore store, Int
         }
     }
 
-    private static bool SupportsPublication(IReadOnlyList<IntegrationArtifact> artifacts, IntegrationTransferPlan plan, SubmitTransferInput intent) =>
+    private static bool SupportsSingleArtifact(IReadOnlyList<IntegrationArtifact> artifacts, IntegrationTransferPlan plan, SubmitTransferInput intent) =>
         intent.ItemIds.Count == 1 && artifacts.Count == 1 && artifacts[0].Role == IntegrationArtifactRole.Content
         && artifacts[0].ItemId == intent.ItemIds[0] && artifacts[0].SizeBytes <= intent.MaximumBytes
-        && IntegrationPublicationFormats.IsSupported(plan.EntityKind, artifacts[0].RelativePath);
+        && IntegrationMediaFormats.IsSupported(plan.EntityKind, artifacts[0].RelativePath);
 
     private static TimeSpan PollDelay(DateTimeOffset? nextPollAfter) =>
         TimeSpan.FromSeconds(Math.Clamp((nextPollAfter - DateTimeOffset.UtcNow)?.TotalSeconds ?? 15, 5, 3600));

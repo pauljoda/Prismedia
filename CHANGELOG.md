@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- URL executor connections can import verified JPEG, PNG, and WebP still images into image libraries. Imports preserve image identity across retries and rescans, and the Archiver adapter negotiates image support separately from publications.
+
 - Soulseek searches through slskd now support EPUB/PDF books, CBZ/ZIP comics, and audiobook files. Publication formats stay separately selectable, and audiobook chapter folders retain their file order without including neighboring books or cover images.
 
 - Connected Radarr and Sonarr holdings can explicitly release acquisition ownership after monitoring and remote activity have stopped. Download-client health problems block handoff. Handoffs retain files and history, recover through outages, and keep ownership reserved until verification finishes.

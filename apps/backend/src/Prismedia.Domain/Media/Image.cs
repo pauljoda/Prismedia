@@ -44,6 +44,9 @@ public sealed class ImageEntityKindDefinition() : RootEntityKindDefinition<Image
 
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;
+
+    /// <inheritdoc />
+    public override JobType? ImportScanJobType => JobType.ScanGallery;
 }
 
 /// <summary>

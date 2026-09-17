@@ -55,7 +55,7 @@ internal sealed class ImportedTitleFixture : IIntegrationTransferStore, IDisposa
         var fixture = new ImportedTitleFixture();
         var transfer = IntegrationTransfer.CreateSourceDownload(Guid.NewGuid(), Guid.NewGuid());
         bytes ??= "original"u8.ToArray();
-        var name = kind == EntityKind.Book ? "book.epub" : "comic.cbz";
+        var name = kind switch { EntityKind.Book => "book.epub", EntityKind.Image => "image.png", _ => "comic.cbz" };
         var artifact = new IntegrationArtifact("publication", "selected-item", name, "application/octet-stream", bytes.Length,
             Convert.ToHexStringLower(SHA256.HashData(bytes)), IntegrationArtifactRole.Content);
         transfer.AcceptSourceArtifact(artifact);

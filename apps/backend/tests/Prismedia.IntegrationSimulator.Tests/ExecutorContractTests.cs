@@ -12,6 +12,24 @@ public sealed class ExecutorContractTests : IDisposable {
             new(ArchiverWire.PublicationProfile, ArchiverWire.Epub), new(1, 1048576));
     }
     [Fact]
+    public async Task ImageFixtureUsesItsOwnProfileAndProducesExactPngBytes() {
+        var store = Open();
+        await store.ConfigureAsync(new(ExecutionDelaySeconds: 0));
+        var selected = await store.InspectAsync(new("https://fixtures.example/image", ArchiverWire.Image, 1));
+        var request = new SubmitJob(Guid.NewGuid(), new(selected.CanonicalUrl), new(selected.Id, selected.Revision, [selected.Items[0].Id]),
+            new(ArchiverWire.ImageProfile, ArchiverWire.Png), new(1, 1048576));
+        await Assert.ThrowsAsync<ApiFailure>(() => store.SubmitAsync(request with { Output = new(ArchiverWire.PublicationProfile, ArchiverWire.Png) }, request.ClientOperationId.ToString()));
+        var (job, _) = await store.SubmitAsync(request, request.ClientOperationId.ToString());
+        await store.AdvanceAsync();
+        var finished = await store.GetAsync(job.JobId);
+        var artifact = Assert.Single((await store.ManifestAsync(job.JobId, finished.ManifestRevision!, null)).Artifacts);
+        Assert.Equal("image/png", artifact.MediaType);
+        var (path, _) = await store.ContentAsync(artifact.Id);
+        var bytes = await File.ReadAllBytesAsync(path);
+        Assert.Equal(new byte[] { 137, 80, 78, 71, 13, 10, 26, 10 }, bytes[..8]);
+        Assert.Equal(artifact.Sha256, Convert.ToHexStringLower(SHA256.HashData(bytes)));
+    }
+    [Fact]
     public async Task OperationCancellationSurvivesRestartAndFencesLateSubmissionWithoutCreatingAJob() {
         var store = Open();
         var request = await RequestAsync(store);

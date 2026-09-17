@@ -7,7 +7,7 @@ description: An independent HTTP contract for URL execution, durable jobs, verif
 # Archiver executor interface
 
 This is the proposed production contract for an Archiver rebuild. Prismedia's adapter
-and separate simulator implement the single-publication subset: URL inspection,
+and separate simulator implement the single-publication and single-image subsets: URL inspection,
 idempotent submission, snapshots, cancellation at the remote API, sealed manifests,
 HTTP retrieval, leases, and receipts. The simulator is a single-principal fixture;
 production client isolation, incremental reconciliation, lease release, search,
@@ -53,6 +53,21 @@ schema at authenticated `/openapi/v1.json`; its independent records live in
 `apps/backend/tools/Prismedia.IntegrationSimulator/ArchiverContract.cs`.
 
 A source can be URL-only. Search support must be explicitly declared per installed source, not inferred from its URL patterns. A boolean flag should not imply that every source in an Archiver installation has the capability.
+
+### Optional single-image output profile
+
+Advertise `single-image` in `outputProfiles` to enable standalone image acquisition.
+Inspection uses media kind `image`; a selected item declares `png`, `jpg`, or `webp`
+as an available format. Submission pins that exact format and profile. Return one
+content artifact for the selected item, with a matching extension, exact size, and
+SHA-256. The existing retention, resumable retrieval, cancellation, and receipt
+requirements apply unchanged.
+
+Prismedia limits this profile to 64 MiB and 100 million pixels and decodes the image
+before import. It currently accepts still images only. Use separate future profiles
+for animations and ordered galleries; a gallery must not silently become a single
+loose image. The simulator supports `https://fixtures.example/image` with PNG output.
+This validates the communication contract; it does not exercise a real image source.
 
 ## 3. HTTP surface
 

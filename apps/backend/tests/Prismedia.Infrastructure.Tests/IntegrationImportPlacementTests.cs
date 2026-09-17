@@ -24,6 +24,18 @@ public sealed class IntegrationImportPlacementTests : IDisposable {
     }
 
     [Fact]
+    public async Task ImagePlacementRequiresImageScanningAndRejectsBookOnlyRoots() {
+        var (plan, root, artifact) = await FixtureAsync();
+        plan = plan with { EntityKind = EntityKind.Image };
+        artifact = artifact with { FileName = "image.png" };
+        await Assert.ThrowsAsync<InvalidDataException>(() => placement.PlaceAsync(operation, plan, root, artifact, default));
+        root = root with { ScanBooks = false, ScanImages = true };
+        var path = await placement.PlaceAsync(operation, plan, root, artifact, default);
+        Assert.EndsWith(".png", path);
+        Assert.Equal(await File.ReadAllBytesAsync(artifact.Path), await File.ReadAllBytesAsync(path));
+    }
+
+    [Fact]
     public async Task ChangedAndMissingLibraryCannotRedirectOrRecreateDestination() {
         var (plan, root, artifact) = await FixtureAsync();
         var moved = Path.Combine(workspace, "moved");

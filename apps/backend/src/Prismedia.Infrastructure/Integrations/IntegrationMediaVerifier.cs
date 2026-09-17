@@ -1,4 +1,5 @@
 using System.IO.Compression;
+using System.Buffers.Binary;
 using System.Text;
 using System.Xml;
 using System.Xml.Linq;
@@ -9,8 +10,8 @@ using UglyToad.PdfPig;
 
 namespace Prismedia.Infrastructure.Integrations;
 
-/// <summary>Bounded format checks for direct EPUB/PDF books and CBZ comics before library placement.</summary>
-public sealed class IntegrationPublicationVerifier : IIntegrationPublicationVerifier {
+/// <summary>Bounded format checks for EPUB/PDF books, CBZ comics, and standalone images before library placement.</summary>
+public sealed class IntegrationMediaVerifier : IIntegrationMediaVerifier {
     private const int MaximumEntries = 10000;
     private const long MaximumExpandedBytes = 2L * 1024 * 1024 * 1024;
     private const int MaximumXmlBytes = 2 * 1024 * 1024;
@@ -20,9 +21,13 @@ public sealed class IntegrationPublicationVerifier : IIntegrationPublicationVeri
 
     /// <inheritdoc />
     public async Task VerifyAsync(VerifiedIntegrationArtifact artifact, EntityKind kind, CancellationToken cancellationToken) {
-        if (!IntegrationPublicationFormats.IsSupported(kind, artifact.FileName)) throw new InvalidDataException("This publication format cannot be imported.");
+        if (!IntegrationMediaFormats.IsSupported(kind, artifact.FileName)) throw new InvalidDataException("This media format cannot be imported.");
         cancellationToken.ThrowIfCancellationRequested();
         try {
+            if (kind == EntityKind.Image) {
+                ValidateImage(artifact, cancellationToken);
+                return;
+            }
             if (Path.GetExtension(artifact.FileName).Equals(".pdf", StringComparison.OrdinalIgnoreCase)) {
                 using var document = PdfDocument.Open(artifact.Path);
                 if (document.NumberOfPages is < 1 or > MaximumEntries) throw new InvalidDataException("The PDF has no readable pages or exceeds the page limit.");
@@ -40,8 +45,50 @@ public sealed class IntegrationPublicationVerifier : IIntegrationPublicationVeri
         catch (InvalidDataException) { throw; }
         catch (Exception error) when (error is IOException or XmlException or ArgumentException or InvalidOperationException
             || error.GetType().Namespace?.StartsWith("UglyToad.PdfPig", StringComparison.Ordinal) == true) {
-            throw new InvalidDataException("The downloaded file is not a readable publication.");
+            throw new InvalidDataException("The downloaded file is not readable supported media.");
         }
+    }
+
+    private static void ValidateImage(VerifiedIntegrationArtifact artifact, CancellationToken cancellationToken) {
+        var file = new FileInfo(artifact.Path);
+        if (artifact.SizeBytes <= 0 || file.Length != artifact.SizeBytes || file.Length > IntegrationMediaFormats.MaximumImageBytes)
+            throw new InvalidDataException("The image exceeds its byte limit or differs from verified staging.");
+        using var stream = File.OpenRead(artifact.Path);
+        if (Path.GetExtension(artifact.FileName).Equals(".png", StringComparison.OrdinalIgnoreCase))
+            RejectAnimatedPng(stream, cancellationToken);
+        using var codec = SKCodec.Create(stream);
+        var expected = Path.GetExtension(artifact.FileName).ToLowerInvariant() switch {
+            ".png" => SKEncodedImageFormat.Png,
+            ".webp" => SKEncodedImageFormat.Webp,
+            _ => SKEncodedImageFormat.Jpeg
+        };
+        if (codec is null || codec.EncodedFormat != expected || codec.FrameCount > 1 || codec.Info.Width <= 0 || codec.Info.Height <= 0
+            || (long)codec.Info.Width * codec.Info.Height > 100_000_000)
+            throw new InvalidDataException("The file is not a supported, bounded still image matching its extension.");
+        var scale = Math.Min(1f, 1024f / Math.Max(codec.Info.Width, codec.Info.Height));
+        using var bitmap = new SKBitmap(codec.Info.WithSize(codec.GetScaledDimensions(scale)));
+        if (codec.GetPixels(bitmap.Info, bitmap.GetPixels()) != SKCodecResult.Success)
+            throw new InvalidDataException("The image could not be decoded completely.");
+    }
+
+    private static void RejectAnimatedPng(Stream stream, CancellationToken cancellationToken) {
+        stream.Position = 8; // The decoder validates the PNG signature; this pass inspects bounded chunks.
+        Span<byte> header = stackalloc byte[8];
+        var chunks = 0;
+        while (stream.Position < stream.Length) {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (++chunks > MaximumEntries || stream.Length - stream.Position < 12)
+                throw new InvalidDataException("The PNG chunk structure is invalid or exceeds its limit.");
+            stream.ReadExactly(header);
+            var length = BinaryPrimitives.ReadUInt32BigEndian(header);
+            if ((long)length + 4 > stream.Length - stream.Position)
+                throw new InvalidDataException("The PNG contains a truncated chunk.");
+            // prism-vocab: external — APNG's animation-control chunk is decoded only at this boundary.
+            if (header[4..].SequenceEqual("acTL"u8))
+                throw new InvalidDataException("Animated PNG images require a separate animation output profile.");
+            stream.Seek((long)length + 4, SeekOrigin.Current);
+        }
+        stream.Position = 0;
     }
 
     private static void ValidateArchive(ZipArchive archive) {

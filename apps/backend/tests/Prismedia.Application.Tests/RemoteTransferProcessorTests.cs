@@ -141,6 +141,16 @@ public sealed class RemoteTransferProcessorTests {
         Assert.Empty(fixture.Receipts);
     }
 
+    [Fact]
+    public async Task ImageOutputIsVerifiedImportedAndAcknowledgedAsAnImage() {
+        var fixture = new Fixture(EntityKind.Image);
+        await fixture.RunAsync();
+        Assert.Equal(IntegrationTransferPhase.Completed, fixture.State.Phase);
+        Assert.Equal(1, fixture.Downloads);
+        Assert.Equal(1, fixture.Materializations);
+        Assert.Single(fixture.Receipts);
+    }
+
     private sealed class Fixture {
         private const string PluginId = "executor-fixture";
         private const string InstanceId = "fixture-installation";
@@ -173,23 +183,26 @@ public sealed class RemoteTransferProcessorTests {
         private readonly IntegrationConnection connection;
         private readonly PluginManifest manifest;
         private readonly IntegrationTransferPlan plan;
-        private IntegrationArtifact Artifact => new("artifact", WrongArtifactItem ? "unselected-item" : ItemId, "nested/book.epub", "application/epub+zip", 100, Hash, IntegrationArtifactRole.Content);
+        private IntegrationArtifact Artifact => new("artifact", WrongArtifactItem ? "unselected-item" : ItemId, "nested/" + FileName, "application/epub+zip", 100, Hash, IntegrationArtifactRole.Content);
         private RemoteTransferSnapshot Snapshot => new(WrongInstance ? "another-installation" : InstanceId, JobId,
             WrongOperation ? Guid.NewGuid() : State.OperationId, ++remoteRevision, RemoteState, 0.5,
             RemoteState is RemoteJobState.Succeeded or RemoteJobState.Partial ? ManifestRevision : null,
             DateTimeOffset.UtcNow.AddHours(1), [], NextPollAfter: DateTimeOffset.UtcNow.AddSeconds(20), ArtifactsExpired: Expired);
-        internal Fixture() {
+        private readonly EntityKind kind;
+        private string FileName => kind == EntityKind.Image ? "image.png" : "book.epub";
+        internal Fixture(EntityKind kind = EntityKind.Book) {
+            this.kind = kind;
             var supports = new IntegrationSupport[] {
                 new(PluginCapability.TransferExecutor, [IntegrationOperation.Submit, IntegrationOperation.FindSubmission,
                     IntegrationOperation.GetJob, IntegrationOperation.ListArtifacts, IntegrationOperation.AuthorizeArtifact,
-                    IntegrationOperation.RenewRetention, IntegrationOperation.Acknowledge, IntegrationOperation.Cancel, IntegrationOperation.CancelSubmission], [EntityKind.Book])
+                    IntegrationOperation.RenewRetention, IntegrationOperation.Acknowledge, IntegrationOperation.Cancel, IntegrationOperation.CancelSubmission], [kind])
             };
             connection = IntegrationConnection.Create(PluginId, "Executor", "http://executor.test/", true, [PluginCapability.TransferExecutor], new Dictionary<string, string>());
             connection.RecordProbe(InstanceId, supports, null, DateTimeOffset.UtcNow);
             manifest = new(2, [], PluginId, "Executor", "1.0.0", "dotnet-process", "plugin.dll", new("2.0.0", null, "3.8.0", null), [], false, [],
                 Integration: new(1, supports.Select(s => new PluginIntegrationCapability(s.Kind, s.Operations, s.EntityKinds)).ToArray(), []));
             State = IntegrationTransfer.Create(Guid.NewGuid(), connection.State.Id, InstanceId).State;
-            plan = new("Publication", EntityKind.Book, root.Id, root.Path, "owner", Hash,
+            plan = new("Publication", kind, root.Id, root.Path, "owner", Hash,
                 Executor: new(State.OperationId, "http://source.test/book", "selection", "selection-1", [ItemId], 1, 1000));
         }
         internal Task RunAsync() {
@@ -213,22 +226,23 @@ public sealed class RemoteTransferProcessorTests {
                 nameof(IIntegrationTransferGateway.CancelAsync) => Cancel(),
                 nameof(IIntegrationTransferGateway.RenewRetentionAsync) => Renew((RenewTransferRetentionInput)args![2]!),
                 nameof(IIntegrationTransferGateway.ReadManifestAsync) => Task.FromResult(new TransferManifestPage(JobId, WrongManifest ? "another-revision" : ManifestRevision, true, 1, [Artifact])),
-                nameof(IIntegrationTransferGateway.AuthorizeArtifactAsync) => Task.FromResult(new HttpArtifactDelivery("http://executor.test/file", new Dictionary<string, string>(), "book.epub", ByteSize: 100, Sha256: Hash)),
+                nameof(IIntegrationTransferGateway.AuthorizeArtifactAsync) => Task.FromResult(new HttpArtifactDelivery("http://executor.test/file", new Dictionary<string, string>(), FileName, ByteSize: 100, Sha256: Hash)),
                 nameof(IIntegrationTransferGateway.AcknowledgeAsync) => Acknowledge((AcknowledgeTransferInput)args![2]!),
                 _ => throw new NotSupportedException(method)
             });
             var bytes = Proxy<IIntegrationArtifactTransfer>((method, args) => method switch {
                 nameof(IIntegrationArtifactTransfer.TransferAsync) => (object)Download((IntegrationArtifactTransferRequest)args![0]!),
-                nameof(IIntegrationArtifactTransfer.ReadVerifiedAsync) => Task.FromResult<VerifiedIntegrationArtifact?>(new(Artifact.Id, Path.Combine(root.Path, "staged.epub"), 100, Hash, "book.epub")),
+                nameof(IIntegrationArtifactTransfer.ReadVerifiedAsync) => Task.FromResult<VerifiedIntegrationArtifact?>(new(Artifact.Id, Path.Combine(root.Path, "staged.epub"), 100, Hash, FileName)),
                 _ => throw new NotSupportedException(method)
             });
-            var verifier = Proxy<IIntegrationPublicationVerifier>((_, _) => Task.CompletedTask);
+            var verifier = Proxy<IIntegrationMediaVerifier>((_, args) => { Assert.Equal(kind, args![1]); return Task.CompletedTask; });
             var placement = Proxy<IIntegrationImportPlacement>((_, _) => { Placements++; return Task.FromResult(Path.Combine(root.Path, "placed.epub")); });
             var roots = Proxy<ILibraryScanRootPersistence>((_, _) => Task.FromResult<LibraryRootData?>(root));
             var materializer = Proxy<IImportedEntityMaterializer>((_, args) => {
+                Assert.Equal(kind, args![0]);
                 Materializations++;
                 var request = (ImportedEntityMaterializationRequest)args![2]!;
-                return Task.FromResult(new ImportedEntityMaterializationResult([new(EntityId, EntityKind.Book)], [], request.PlacedMediaPaths, [], []));
+                return Task.FromResult(new ImportedEntityMaterializationResult([new(EntityId, kind)], [], request.PlacedMediaPaths, [], []));
             });
             var job = new JobRunSnapshot(Guid.NewGuid(), JobType.IntegrationTransfer, JobRunStatus.Running, 0, null, "{}",
                 JobTargetKinds.IntegrationTransfer, State.OperationId.ToString(), "Publication", DateTimeOffset.UtcNow, null, null);
@@ -268,8 +282,8 @@ public sealed class RemoteTransferProcessorTests {
         }
         private Task<TransferRetentionResult> Renew(RenewTransferRetentionInput input) { Renewals++; return Task.FromResult(new TransferRetentionResult(input.JobId, input.RetainUntil)); }
         private Task<VerifiedIntegrationArtifact> Download(IntegrationArtifactTransferRequest request) {
-            Assert.Equal("book.epub", request.Delivery.SuggestedFileName);
-            Downloads++; return Task.FromResult(new VerifiedIntegrationArtifact(Artifact.Id, Path.Combine(root.Path, "staged.epub"), 100, Hash, "book.epub"));
+            Assert.Equal(FileName, request.Delivery.SuggestedFileName);
+            Downloads++; return Task.FromResult(new VerifiedIntegrationArtifact(Artifact.Id, Path.Combine(root.Path, "staged.epub"), 100, Hash, FileName));
         }
         private Task<TransferAcknowledgement> Acknowledge(AcknowledgeTransferInput input) {
             Assert.Equal(IntegrationTransferPhase.AwaitingAcknowledgement, State.Phase);

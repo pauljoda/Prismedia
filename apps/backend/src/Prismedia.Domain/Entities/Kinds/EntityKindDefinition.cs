@@ -209,6 +209,9 @@ public abstract class EntityKindDefinition {
     /// </summary>
     public virtual AcquisitionProfileDefinition? AcquisitionProfile => null;
 
+    /// <summary>Exact-file import policy; executor imports may support kinds without native acquisition profiles.</summary>
+    public virtual JobType? ImportScanJobType => AcquisitionProfile?.ImportScanJobType;
+
     /// <summary>
     /// Search-context contribution made when this kind is encountered as an ancestor of a graph-backed
     /// acquisition. Definitions own the meaning so request traversal never maintains a parallel kind list.

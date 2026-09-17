@@ -8,7 +8,7 @@ namespace Prismedia.Application.Integrations;
 
 /// <summary>Recovers a finite catalog import from its last persisted boundary without repeating committed effects.</summary>
 public sealed class SourceTransferProcessor(IIntegrationTransferStore store, CatalogDiscoveryService discovery,
-    IntegrationConnectionAccess access, IIntegrationArtifactTransfer bytes, IIntegrationPublicationVerifier verifier,
+    IntegrationConnectionAccess access, IIntegrationArtifactTransfer bytes, IIntegrationMediaVerifier verifier,
     IIntegrationImportPlacement placement, ILibraryScanRootPersistence roots, IImportedEntityMaterializer materializer) {
     private const long MaximumPublicationBytes = 2L * 1024 * 1024 * 1024;
 
@@ -27,7 +27,7 @@ public sealed class SourceTransferProcessor(IIntegrationTransferStore store, Cat
                 var connection = await access.RequireAsync(transfer.State.ConnectionId, PluginCapability.AcquisitionSource,
                     IntegrationOperation.Resolve, work.Plan.EntityKind, cancellationToken);
                 var resolved = await discovery.ResolveSelectionAsync(transfer.State.ConnectionId, source.Selection, source.OfferId, cancellationToken);
-                if (!IntegrationPublicationFormats.IsSupported(work.Plan.EntityKind, resolved.Delivery.SuggestedFileName))
+                if (!IntegrationMediaFormats.IsSupported(work.Plan.EntityKind, resolved.Delivery.SuggestedFileName))
                     throw new InvalidDataException("The selected source changed to an unsupported publication format.");
                 artifact = await bytes.TransferAsync(new(operationId, source.OfferId, connection.Context.BaseUrl,
                     resolved.Delivery, MaximumPublicationBytes), cancellationToken);

@@ -189,7 +189,8 @@ public sealed class ImportedEntityMaterializer(
         ImportedEntityMaterializationRequest request,
         CancellationToken cancellationToken) {
         var profileKind = AcquisitionProfileKinds.For(kind);
-        var scanJobType = EntityKindRegistry.Describe(profileKind).AcquisitionProfile?.ImportScanJobType;
+        var scanJobType = EntityKindRegistry.Describe(kind).ImportScanJobType
+            ?? EntityKindRegistry.Describe(profileKind).ImportScanJobType;
         if (scanJobType is null || !_byScanJobType.TryGetValue(scanJobType.Value, out var policy)) {
             throw new InvalidOperationException($"No imported Entity materializer is registered for {kind.ToCode()}.");
         }
@@ -354,4 +355,13 @@ public sealed class ImportedComicMaterializationPolicy(ScanComicJobHandler scan)
             request.Root,
             request.PlacedMediaPaths,
             cancellationToken);
+}
+
+/// <summary>Imports exact loose images through the image scanner without discovering or removing unrelated content.</summary>
+public sealed class ImportedImageMaterializationPolicy(ScanGalleryJobHandler scan) : IImportedEntityMaterializationPolicy {
+    /// <inheritdoc />
+    public JobType ScanJobType => JobType.ScanGallery;
+    /// <inheritdoc />
+    public Task MaterializeAsync(JobContext context, ImportedEntityMaterializationRequest request, CancellationToken cancellationToken) =>
+        scan.MaterializeImportedPathsAsync(request.Root, request.PlacedMediaPaths, cancellationToken);
 }

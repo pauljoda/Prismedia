@@ -20,7 +20,8 @@ public sealed class ScanGalleryJobHandler(
     IImageGalleryScanPersistence images,
     IDownstreamNeedsPersistence downstreamNeeds,
     IScanSnapshotStore? snapshots = null,
-    ILibraryFileChangeIntake? changeIntake = null) : ScanJobHandler(logger, fileDiscovery, roots, snapshots, changeIntake: changeIntake) {
+    ILibraryFileChangeIntake? changeIntake = null,
+    IImportedPublicationTitleResolver? importedTitles = null) : ScanJobHandler(logger, fileDiscovery, roots, snapshots, changeIntake: changeIntake) {
     protected override bool IsEligibleRoot(LibraryRootData root) => root.ScanImages;
 
     protected override IReadOnlyList<MediaCategory> ScanCategories => [MediaCategory.Image];
@@ -115,7 +116,7 @@ public sealed class ScanGalleryJobHandler(
 
             for (var i = 0; i < orderedImageFiles.Length; i++) {
                 var filePath = orderedImageFiles[i];
-                var title = Path.GetFileNameWithoutExtension(filePath);
+                var title = await ImportedTitleAsync(root, filePath, cancellationToken);
                 validImagePaths.Add(filePath);
 
                 long? size = null;
@@ -180,6 +181,23 @@ public sealed class ScanGalleryJobHandler(
 
         return ScanRootOutcome.Success;
     }
+
+    /// <summary>Materializes only exact loose-image output in the root directory; no discovery or stale cleanup runs.</summary>
+    public async Task MaterializeImportedPathsAsync(LibraryRootData root, IReadOnlyList<string> paths, CancellationToken cancellationToken) {
+        if (!root.Enabled || root.IsReadOnly || !root.ScanImages || paths.Count == 0
+            || paths.Any(path => !SamePath(Path.GetDirectoryName(Path.GetFullPath(path))!, root.Path) || !File.Exists(path)))
+            throw new InvalidOperationException("Image imports require existing files directly inside an enabled image library.");
+        var items = new List<ImageUpsertItem>();
+        foreach (var path in paths) {
+            items.Add(new(path, await ImportedTitleAsync(root, path, cancellationToken), root.Id, null,
+                new FileInfo(path).Length, 0, root.IsNsfw));
+        }
+        await images.UpsertImagesBatchAsync(items, cancellationToken);
+    }
+
+    private async Task<string> ImportedTitleAsync(LibraryRootData root, string path, CancellationToken cancellationToken) =>
+        (importedTitles is null ? null : await importedTitles.ResolveAsync(root.Id, EntityKind.Image, path, cancellationToken))
+        ?? Path.GetFileNameWithoutExtension(path);
 
     private static bool SamePath(string left, string right) =>
         FileSystemPathComparison.Equals(NormalizePath(left), NormalizePath(right));

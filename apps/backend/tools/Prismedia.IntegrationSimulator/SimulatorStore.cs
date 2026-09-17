@@ -22,17 +22,17 @@ public sealed class SimulatorStore {
     /// <summary>Reads the service's stable installation identity and negotiated executor profile.</summary>
     public SystemInfo Info => new(state.InstanceId, ArchiverWire.ApiVersion, "1.0.0-simulator",
         [ArchiverWire.Inspect, ArchiverWire.Submit, ArchiverWire.Cancel, ArchiverWire.CancelOperation, ArchiverWire.Artifacts, ArchiverWire.Retention, ArchiverWire.Receipts],
-        [ArchiverWire.PublicationProfile], 1, 2L * 1024 * 1024 * 1024, 7, 30);
+        [ArchiverWire.PublicationProfile, ArchiverWire.ImageProfile], 1, 2L * 1024 * 1024 * 1024, 7, 30);
 
     /// <summary>Inspects only reserved synthetic URLs. No arbitrary URL is fetched.</summary>
     public Task<Inspection> InspectAsync(InspectRequest request) => Locked(() => {
-        if (request is null || request.MediaKind is not (ArchiverWire.Book or ArchiverWire.Comic) || request.MaxItems is < 1 or > 100
+        if (request is null || request.MediaKind is not (ArchiverWire.Book or ArchiverWire.Comic or ArchiverWire.Image) || request.MaxItems is < 1 or > 100
             || !Uri.TryCreate(request.Url, UriKind.Absolute, out var url) || url.Scheme != "https" || url.Host != "fixtures.example"
             || url.UserInfo.Length != 0 || url.Query.Length != 0 || url.Fragment.Length != 0
-            || url.AbsolutePath != (request.MediaKind == ArchiverWire.Book ? "/book" : "/comic"))
-            throw new ApiFailure(400, ArchiverWire.Invalid, "Use https://fixtures.example/book or https://fixtures.example/comic with its matching media kind.");
-        var item = new SourceItem(Hash(url.AbsoluteUri), request.MediaKind == ArchiverWire.Book ? "Integration Field Notes" : "Integration Comic", request.MediaKind,
-            [request.MediaKind == ArchiverWire.Book ? ArchiverWire.Epub : ArchiverWire.Cbz]);
+            || url.AbsolutePath != (request.MediaKind switch { ArchiverWire.Book => "/book", ArchiverWire.Image => "/image", _ => "/comic" }))
+            throw new ApiFailure(400, ArchiverWire.Invalid, "Use https://fixtures.example/book or https://fixtures.example/comic or https://fixtures.example/image with its matching media kind.");
+        var item = new SourceItem(Hash(url.AbsoluteUri), request.MediaKind switch { ArchiverWire.Book => "Integration Field Notes", ArchiverWire.Image => "Integration Image", _ => "Integration Comic" }, request.MediaKind,
+            [request.MediaKind switch { ArchiverWire.Book => ArchiverWire.Epub, ArchiverWire.Image => ArchiverWire.Png, _ => ArchiverWire.Cbz }]);
         var inspection = new Inspection(Guid.NewGuid().ToString("N"), Hash(item.Id), DateTimeOffset.UtcNow.AddMinutes(30), url.AbsoluteUri,
             ArchiverWire.SourceId, [item], []);
         state.Selections[inspection.Id] = inspection;
@@ -51,8 +51,8 @@ public sealed class SimulatorStore {
         }
         if (request.Selection?.ItemIds is not { Count: 1 } || request.Input is null || request.Output is null || request.Limits is null
             || request.Limits.MaxItems != 1 || request.Limits.MaxBytes is < 1 or > 2147483648
-            || request.Output.Profile != ArchiverWire.PublicationProfile)
-            throw new ApiFailure(400, ArchiverWire.Invalid, "Choose one item and the finite single-publication output profile.");
+            || request.Output.Profile != (request.Output.Format == ArchiverWire.Png ? ArchiverWire.ImageProfile : ArchiverWire.PublicationProfile))
+            throw new ApiFailure(400, ArchiverWire.Invalid, "Choose one item and the matching finite output profile.");
         if (state.CancelledOperations.Contains(request.ClientOperationId))
             throw new ApiFailure(409, ArchiverWire.Cancelled, "This operation was cancelled before acceptance and cannot create a job.");
         if (!state.Selections.TryGetValue(request.Selection.Id, out var inspection) || inspection.Revision != request.Selection.Revision
@@ -157,7 +157,7 @@ public sealed class SimulatorStore {
                 var id = Guid.NewGuid().ToString("N");
                 AtomicWrite(Path.Combine(directory, id), bytes);
                 job.Artifacts = [new(id, job.Request.Selection.ItemIds[0], "publication." + job.Request.Output.Format,
-                    job.Request.Output.Format == ArchiverWire.Epub ? "application/epub+zip" : "application/vnd.comicbook+zip",
+                    job.Request.Output.Format switch { ArchiverWire.Epub => "application/epub+zip", ArchiverWire.Png => "image/png", _ => "application/vnd.comicbook+zip" },
                     bytes.Length, Convert.ToHexStringLower(SHA256.HashData(bytes)), ArchiverWire.Content, $"/api/v1/artifacts/{id}/content")];
                 job.ManifestRevision = Guid.NewGuid().ToString("N");
                 job.Status = ArchiverWire.Succeeded;

@@ -5,19 +5,19 @@ using Prismedia.Application.Jobs.Ports;
 
 namespace Prismedia.Infrastructure.Integrations;
 
-/// <summary>Atomic, non-destructive publication placement inside a frozen library boundary.</summary>
+/// <summary>Atomic, non-destructive media placement inside a frozen library boundary.</summary>
 public sealed class IntegrationImportPlacement(ILibraryFileMutationGuard mutations) : IIntegrationImportPlacement {
     /// <inheritdoc />
     public async Task<string> PlaceAsync(Guid operationId, IntegrationTransferPlan plan, LibraryRootData root,
         VerifiedIntegrationArtifact artifact, CancellationToken cancellationToken) {
         await using var protection = await mutations.EnterAsync([root.Path], cancellationToken);
         var rootPath = Path.GetFullPath(root.Path);
-        if (operationId == Guid.Empty || root.Id != plan.LibraryRootId || !root.Enabled || !root.ScanBooks
+        if (operationId == Guid.Empty || root.Id != plan.LibraryRootId || !IntegrationMediaFormats.SupportsRoot(plan.EntityKind, root)
             || !FileSystemPathComparison.Comparer.Equals(rootPath, Path.GetFullPath(plan.LibraryPath)) || !Directory.Exists(rootPath))
             throw new InvalidDataException("The accepted destination library is unavailable or has moved.");
-        if (!IntegrationPublicationFormats.IsSupported(plan.EntityKind, artifact.FileName)
+        if (!IntegrationMediaFormats.IsSupported(plan.EntityKind, artifact.FileName)
             || artifact.SizeBytes <= 0 || artifact.Sha256 is not { Length: 64 } || !artifact.Sha256.All(Uri.IsHexDigit))
-            throw new InvalidDataException("The publication has no valid placement evidence.");
+            throw new InvalidDataException("The media file has no valid placement evidence.");
         RejectLink(rootPath);
         var artifactKey = IntegrationPublicationNames.ArtifactKey(artifact.ArtifactId);
         var target = Path.Combine(rootPath, IntegrationPublicationNames.FileName(operationId, plan.Title, artifact.ArtifactId, artifact.FileName));

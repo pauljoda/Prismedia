@@ -18,7 +18,8 @@ base address and token. Enable discovery and transfer execution; test the connec
 Use **Requests → Import from URL** with:
 
 - `https://fixtures.example/book` — original synthetic EPUB;
-- `https://fixtures.example/comic` — original synthetic one-page CBZ.
+- `https://fixtures.example/comic` — original synthetic one-page CBZ;
+- `https://fixtures.example/image` — synthetic PNG through the separate `single-image` profile.
 
 No arbitrary source URL is fetched. The generated files, persistent installation ID,
 selections, operation mappings, jobs, manifests, and receipts stay in the configured

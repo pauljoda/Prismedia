@@ -24,7 +24,7 @@
       const href = await resolveEntityHrefById(id);
       if (!href) throw new Error("The imported entity does not have a library page yet.");
       await goto(href);
-    } catch (cause) { error = cause instanceof Error ? cause.message : "Could not open the imported publication"; }
+    } catch (cause) { error = cause instanceof Error ? cause.message : "Could not open the imported item"; }
     finally { busy = null; }
   }
   async function cancel(id: string) {
@@ -39,7 +39,7 @@
 </script>
 
 {#if transfers.length}
-  <section class="flex min-w-0 flex-col gap-3" aria-label="Publication imports">
+  <section class="flex min-w-0 flex-col gap-3" aria-label="Media imports">
     <h2 class="text-base font-semibold">Recent imports</h2>
     {#if error}<Alert.Root variant="destructive"><Alert.Description>{error}</Alert.Description></Alert.Root>{/if}
     {#each transfers as transfer (transfer.id)}

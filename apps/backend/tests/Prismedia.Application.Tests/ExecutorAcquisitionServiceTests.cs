@@ -48,13 +48,27 @@ public sealed class ExecutorAcquisitionServiceTests {
             new("https://source.test/publication", EntityKind.Book), default));
         Assert.Equal(0, fixture.Creates);
     }
+    [Fact]
+    public async Task ImageAcceptanceUsesAnImageLibraryAndPersistsABoundedIntent() {
+        var fixture = new Fixture(EntityKind.Image);
+        var result = await fixture.Service.AcquireAsync(fixture.Connection.State.Id, fixture.Request, default);
+        Assert.Equal(IntegrationTransferPhase.PendingSubmission, result.Phase);
+        Assert.Equal(1, fixture.Creates);
+        Assert.Equal(64L * 1024 * 1024, fixture.AcceptedPlan!.Executor!.MaximumBytes);
+    }
+    [Fact]
+    public async Task ImageCannotBeSentToABookOnlyLibrary() {
+        var fixture = new Fixture(EntityKind.Image, imageLibrary: false);
+        await Assert.ThrowsAsync<ArgumentException>(() => fixture.Service.AcquireAsync(fixture.Connection.State.Id, fixture.Request, default));
+        Assert.Equal(0, fixture.Creates);
+    }
     private sealed class Fixture {
         internal const string InstanceId = "executor-installation";
         private const string PluginId = "executor-test";
         internal static readonly IntegrationSupport[] Supports = [
-            new(PluginCapability.CatalogDiscovery, [IntegrationOperation.Inspect], [EntityKind.Book]),
+            new(PluginCapability.CatalogDiscovery, [IntegrationOperation.Inspect], [EntityKind.Book, EntityKind.Image]),
             new(PluginCapability.TransferExecutor, [IntegrationOperation.Submit, IntegrationOperation.FindSubmission, IntegrationOperation.GetJob,
-                IntegrationOperation.ListArtifacts, IntegrationOperation.AuthorizeArtifact, IntegrationOperation.RenewRetention, IntegrationOperation.Acknowledge, IntegrationOperation.Cancel, IntegrationOperation.CancelSubmission], [EntityKind.Book])
+                IntegrationOperation.ListArtifacts, IntegrationOperation.AuthorizeArtifact, IntegrationOperation.RenewRetention, IntegrationOperation.Acknowledge, IntegrationOperation.Cancel, IntegrationOperation.CancelSubmission], [EntityKind.Book, EntityKind.Image])
         ];
         internal IntegrationConnection Connection { get; }
         internal PluginManifest Manifest { get; set; }
@@ -64,16 +78,17 @@ public sealed class ExecutorAcquisitionServiceTests {
         internal bool DenyRoot { get; set; }
         internal int Creates { get; private set; }
         private StoredIntegrationTransfer? stored;
-        internal Fixture() {
+        internal IntegrationTransferPlan? AcceptedPlan => stored?.Plan;
+        internal Fixture(EntityKind kind = EntityKind.Book, bool imageLibrary = true) {
             Connection = IntegrationConnection.Create(PluginId, "Executor", "http://executor.test/", true,
                 Supports.Select(item => item.Kind).ToArray(), new Dictionary<string, string>());
             Connection.RecordProbe(InstanceId, Supports, null, DateTimeOffset.UtcNow);
             Manifest = new(2, [], PluginId, "Executor", "1.0.0", "dotnet-process", "plugin.dll", new("2.0.0", null, "3.8.0", null), [], false, [],
                 Integration: new(1, Supports.Select(item => new PluginIntegrationCapability(item.Kind, item.Operations, item.EntityKinds)).ToArray(), []));
-            var root = new LibraryRootData(Guid.NewGuid(), Path.GetTempPath(), "Library", true, false, false, false, false, true, false, false);
+            var root = new LibraryRootData(Guid.NewGuid(), Path.GetTempPath(), "Library", true, false, false, kind == EntityKind.Image && imageLibrary, false, kind != EntityKind.Image || !imageLibrary, false, false);
             Request = new(Guid.NewGuid(), "protected-selection", "publication", root.Id);
-            var selection = new AcceptedExecutorSelection(InstanceId, Connection.State.Revision, EntityKind.Book,
-                new("selection", "revision", DateTimeOffset.UtcNow.AddMinutes(5), "https://source.test/publication", [new(Request.ItemId, "Publication", EntityKind.Book)], false, []));
+            var selection = new AcceptedExecutorSelection(InstanceId, Connection.State.Revision, kind,
+                new("selection", "revision", DateTimeOffset.UtcNow.AddMinutes(5), "https://source.test/publication", [new(Request.ItemId, "Publication", kind)], false, []));
             var connections = Proxy<IIntegrationConnectionStore>((method, _) => method switch {
                 nameof(IIntegrationConnectionStore.FindAsync) => Task.FromResult<StoredIntegrationConnection?>(new(Connection, [])),
                 nameof(IIntegrationConnectionStore.ReadSecretsAsync) => Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string>()),

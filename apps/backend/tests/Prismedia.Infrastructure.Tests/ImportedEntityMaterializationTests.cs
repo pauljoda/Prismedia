@@ -1630,7 +1630,8 @@ public sealed partial class ImportedEntityMaterializationTests : IDisposable {
             bool scanVideos = false,
             bool scanAudio = false,
             bool scanBooks = false,
-            bool autoGenerateMetadata = false) {
+            bool autoGenerateMetadata = false,
+            bool scanImages = false) {
             _autoGenerateMetadata = autoGenerateMetadata;
             Root = new LibraryRootData(
                 Guid.NewGuid(),
@@ -1639,7 +1640,7 @@ public sealed partial class ImportedEntityMaterializationTests : IDisposable {
                 Enabled: true,
                 Recursive: true,
                 ScanVideos: scanVideos,
-                ScanImages: false,
+                ScanImages: scanImages,
                 ScanAudio: scanAudio,
                 ScanBooks: scanBooks,
                 IsNsfw: false);

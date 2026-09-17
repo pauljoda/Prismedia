@@ -30,7 +30,7 @@ public sealed class CatalogAcquisitionService(IIntegrationTransferStore store, I
         if (root is null || root.IsReadOnly || !root.Enabled || !root.ScanBooks || allowedRoots is not null && !allowedRoots.Contains(root.Id))
             throw new ArgumentException("Choose an accessible, enabled publication library.");
         var offer = await discovery.ResolveAsync(connectionId, request.SelectionToken, request.OfferId, cancellationToken);
-        if (!IntegrationPublicationFormats.IsSupported(selection.EntityKind, offer.Delivery.SuggestedFileName))
+        if (!IntegrationMediaFormats.IsSupported(selection.EntityKind, offer.Delivery.SuggestedFileName))
             throw new ArgumentException("This publication format cannot be imported. Choose an EPUB/PDF book or a CBZ comic offer.");
         var ownership = Fingerprint(new { connectionId, selection.ItemId, selection.EntityKind });
         var transfer = IntegrationTransfer.CreateSourceDownload(request.OperationId, connectionId);
@@ -41,14 +41,4 @@ public sealed class CatalogAcquisitionService(IIntegrationTransferStore store, I
 
     private static string Fingerprint<T>(T value) => Convert.ToHexStringLower(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(value)));
 
-}
-
-/// <summary>Formats that the existing publication scanners can safely materialize without conversion.</summary>
-public static class IntegrationPublicationFormats {
-    /// <summary>Whether the suggested extension is supported for this exact media kind.</summary>
-    public static bool IsSupported(EntityKind kind, string fileName) => kind switch {
-        EntityKind.Book => Path.GetExtension(fileName).ToLowerInvariant() is ".epub" or ".pdf",
-        EntityKind.ComicInstallment => Path.GetExtension(fileName).Equals(".cbz", StringComparison.OrdinalIgnoreCase),
-        _ => false
-    };
 }

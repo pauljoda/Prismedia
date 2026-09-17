@@ -3,6 +3,9 @@ namespace Prismedia.IntegrationSimulator;
 /// <summary>Independent Archiver HTTP vocabulary. No Prismedia domain, database, or entity schema is required.</summary>
 public static class ArchiverWire {
     public const string ApiVersion = "1.0";
+    public const string Image = "image";
+    public const string ImageProfile = "single-image";
+    public const string Png = "png";
     public const string Book = "book";
     public const string Comic = "comic";
     public const string Queued = "queued";
