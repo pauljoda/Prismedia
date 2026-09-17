@@ -38,6 +38,22 @@ available. Supported connections include Prowlarr, Torznab, and Newznab indexers
 Transmission, and SABnzbd download clients. Configure the connections you already use under
 **Settings → Acquisition**, then choose them in a profile that targets the appropriate library.
 
+### Books and comics through Soulseek
+
+An existing slskd server can serve as both a **Soulseek (slskd)** indexer and download client.
+Configure both entries, including the download directory visible to Prismedia, and test that slskd
+has a connected Soulseek session. Choose the ebook or audiobook rendition when requesting a book.
+
+- EPUB and PDF books are separate choices, including alternate formats in the same peer folder.
+- CBZ and ZIP comics are selected one archive at a time, retaining issue and chapter labels.
+- M4B audiobooks are separate file choices. MP3 and M4A chapter files are grouped within their exact
+  peer folder and format; alternate encodings are separate choices.
+
+Publication searches exclude cover images and formats the publication importer cannot read.
+Review the title, author, language, and completeness of a peer's release before downloading.
+Profile matching and import verification still apply; a peer filename alone cannot establish an
+edition or a complete audiobook. Music searches retain their album and track behavior.
+
 Keep download staging outside your watched roots. If the download client and Prismedia use different
 paths for the same files, follow the [download-path example](../getting-started/organize-folders.md#an-example-with-a-separate-download-client).
 

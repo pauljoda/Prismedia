@@ -13,6 +13,21 @@ namespace Prismedia.Application.Tests.Acquisition;
 /// </summary>
 public sealed class AcquisitionSearchRunnerTests {
     [Theory]
+    [InlineData(BookRendition.Ebook)]
+    [InlineData(BookRendition.Audiobook)]
+    public async Task PublicationRenditionReachesEveryIndexerQuery(BookRendition rendition) {
+        var client = new FakeIndexerSearchClient([]);
+        var runner = new AcquisitionSearchRunner(new FakeIndexerConfigStore(), new FakeClientFactory(client),
+            new FakeProfileStore(), new FakeBlocklistStore("unrelated"),
+            new FakeDownloadClientConfigStore(DownloadProtocol.Soulseek), new FakeIndexerStatusStore(),
+            new IndexerQueryWindow(), Policies(new BookAcquisitionPolicyModule()), Settings());
+        await runner.RunAsync(new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author", EntityKind.Book,
+            BookRendition: rendition), default);
+        Assert.NotEmpty(client.Queries);
+        Assert.All(client.Queries, query => Assert.Equal(rendition, query.BookRendition));
+    }
+
+    [Theory]
     [InlineData(false, false)]
     [InlineData(true, false)]
     [InlineData(false, true)]

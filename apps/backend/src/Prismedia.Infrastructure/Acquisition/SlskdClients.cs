@@ -120,9 +120,11 @@ public sealed partial class SlskdIndexerClient(
         IndexerConnection connection,
         IndexerQuery query,
         CancellationToken cancellationToken) {
-        if (query.Kind is not (EntityKind.AudioLibrary or EntityKind.AudioTrack or EntityKind.MusicArtist)) {
+        if (query.Kind is not (EntityKind.AudioLibrary or EntityKind.AudioTrack or EntityKind.MusicArtist)
+            && !IsPublication(query.Kind)) {
             return [];
         }
+        if (query.Protocols is { } protocols && !protocols.Contains(DownloadProtocol.Soulseek)) return [];
 
         using var searchLease = concurrency is null
             ? null
@@ -148,6 +150,7 @@ public sealed partial class SlskdIndexerClient(
         await EnsureSuccessAsync(response, "read Soulseek search responses", cancellationToken);
         var peers = await response.Content.ReadFromJsonAsync<SlskdSearchResponse[]>(SoulseekLocator.JsonOptions, cancellationToken) ?? [];
 
+        if (IsPublication(query.Kind)) return PublicationReleases(query, searchId, peers);
         return query.Kind == EntityKind.AudioTrack
             ? TrackReleases(query, searchId, peers)
             : AlbumReleases(query, searchId, peers);
@@ -253,7 +256,7 @@ public sealed partial class SlskdIndexerClient(
     }
     private static string PathContext(string path) => string.Join(
         " / ",
-        path.Split('\\', '/', StringSplitOptions.RemoveEmptyEntries).TakeLast(4));
+        path.Split(['\\', '/'], StringSplitOptions.RemoveEmptyEntries).TakeLast(4));
     private static string[] SignificantWords(string value) => Normalize(value).Split(' ', StringSplitOptions.RemoveEmptyEntries);
     private static string Normalize(string value) => NonWordRegex().Replace(value.ToLowerInvariant(), " ").Trim();
     private static bool HasState(string? value, string state) => value?.Split(',', StringSplitOptions.TrimEntries)

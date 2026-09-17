@@ -47,13 +47,16 @@ public sealed record ImportTemplateContext(
 /// deterministic so the format rules, ambiguity handling, and path sanitization are unit-testable.
 /// </summary>
 public static partial class ImportPlanBuilder {
-    private static readonly IReadOnlySet<string> PrimaryBookExtensions =
+    /// <summary>Standalone ebook formats accepted by publication import and file-based discovery.</summary>
+    public static IReadOnlySet<string> PrimaryBookExtensions { get; } =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".epub", ".pdf" };
 
-    private static readonly IReadOnlySet<string> ComicArchiveExtensions =
+    /// <summary>Serialized comic archives accepted by publication import and file-based discovery.</summary>
+    public static IReadOnlySet<string> ComicArchiveExtensions { get; } =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".cbz", ".zip" };
 
-    private static readonly IReadOnlySet<string> AudiobookExtensions =
+    /// <summary>Audiobook formats accepted by publication import and file-based discovery.</summary>
+    public static IReadOnlySet<string> AudiobookExtensions { get; } =
         new HashSet<string>(StringComparer.OrdinalIgnoreCase) { ".m4b", ".m4a", ".mp3" };
 
     [GeneratedRegex(@"[<>:""/\\|?*\x00-\x1f]")]

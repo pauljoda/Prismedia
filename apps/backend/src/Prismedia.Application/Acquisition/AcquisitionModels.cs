@@ -235,6 +235,9 @@ public sealed record IndexerQuery(
     EntityKind Kind) {
     /// <summary>Download protocols the caller can acquire; null leaves the provider scope unrestricted.</summary>
     public IReadOnlyList<DownloadProtocol>? Protocols { get; init; }
+
+    /// <summary>Publication rendition requested by the caller; null keeps the default ebook selection for books.</summary>
+    public BookRendition? BookRendition { get; init; }
 }
 
 /// <summary>Result of probing an indexer connection.</summary>

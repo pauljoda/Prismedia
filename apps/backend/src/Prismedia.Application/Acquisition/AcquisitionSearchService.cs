@@ -204,7 +204,9 @@ public sealed class AcquisitionSearchRunner(
             // Narrow the indexer's configured categories to the acquisition kind's Torznab range, so a
             // movie or album search never queries the book categories the indexer was set up with.
             var categories = connection.Categories;
-            var found = await client.SearchAsync(connection, new IndexerQuery(text, categories, input.Kind) { Protocols = protocols }, cancellationToken);
+            var found = await client.SearchAsync(connection, new IndexerQuery(text, categories, input.Kind) {
+                Protocols = protocols, BookRendition = input.BookRendition
+            }, cancellationToken);
             return new IndexerSearchResult(config, found, null);
         } catch (OperationCanceledException ex) when (!cancellationToken.IsCancellationRequested) {
             // HttpClient reports its own Timeout as TaskCanceledException. That is one indexer's

@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Soulseek searches through slskd now support EPUB/PDF books, CBZ/ZIP comics, and audiobook files. Publication formats stay separately selectable, and audiobook chapter folders retain their file order without including neighboring books or cover images.
+
 - Connected Radarr and Sonarr holdings can explicitly release acquisition ownership after monitoring and remote activity have stopped. Download-client health problems block handoff. Handoffs retain files and history, recover through outages, and keep ownership reserved until verification finishes.
 
 - The Metron community metadata plugin supports Western comic runs and issues, exact fractional and special issue labels, creator credits, and distinct cross-provider identities. Series and issue metadata can be reviewed before application.
@@ -166,6 +168,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Audio-track detail and saved-queue payloads no longer duplicate embedded artist and album fields outside the Entity's `embedded-audio-metadata` capability.
 
 ### Fixed
+
+- Soulseek release titles now preserve author and work boundaries for slash-separated peer paths, so valid publication matches are not rejected.
 
 - Rejected manager requests, actions, and handoff reviews can be reviewed again correctly; uncertain responses continue to retry the same accepted intent.
 
