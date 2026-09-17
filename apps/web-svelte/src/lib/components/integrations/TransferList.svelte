@@ -6,7 +6,7 @@
   import type { IntegrationTransferResponse } from "$lib/api/generated/model";
   import { cancelPublicationTransfer, retryPublicationTransfer } from "$lib/api/integration-transfers";
   import { resolveEntityHrefById } from "$lib/entities/entity-route-resolver";
-  import { isTransferTerminal, transferPhaseLabels } from "$lib/integrations/transfer-labels";
+  import { isTransferTerminal, transferCancelLabel, transferStatusLabel, transferRetryLabel, transferProblem } from "$lib/integrations/transfer-labels";
   import { formatRelativeTime } from "$lib/utils/format";
   import SourceAttribution from "./SourceAttribution.svelte";
 
@@ -53,17 +53,18 @@
       <Panel class="transfer-row min-w-0 p-4">
         <div class="transfer-icon" aria-hidden="true"><Download /></div>
         <div class="min-w-0 space-y-2">
-          <div class="flex flex-wrap items-center gap-2"><h3 class="break-words text-sm font-medium">{transfer.title}</h3><Badge>{transfer.cancellationRequested && !isTransferTerminal(transfer.phase) ? "Cancellation requested" : transferPhaseLabels[transfer.phase]}</Badge></div>
+          <div class="flex flex-wrap items-center gap-2"><h3 class="break-words text-sm font-medium">{transfer.title}</h3><Badge>{transferStatusLabel(transfer)}</Badge></div>
           <div class="flex flex-wrap gap-x-3 gap-y-1 text-xs text-text-muted"><span>Updated {formatRelativeTime(transfer.updatedAt)}</span>{#if Number(transfer.artifactCount) > 0}<span>{transfer.artifactCount} {Number(transfer.artifactCount) === 1 ? "file" : "files"}</span>{/if}</div>
-          {#if transfer.lastError}<p class="break-words text-sm text-text-muted">{transfer.lastError}</p>{/if}
+          {#if transfer.mode === INTEGRATION_TRANSFER_MODE.sourceRequest && transfer.canCancel}<p class="text-xs text-text-muted">Stopping this import leaves the source’s download running.</p>{/if}
+          {#if transferProblem(transfer)}<p class="break-words text-sm text-text-muted">{transferProblem(transfer)}</p>{/if}
           {#if transfer.sourcePublication?.attribution}<SourceAttribution attribution={transfer.sourcePublication.attribution} compact />{/if}
         </div>
         <div class="flex shrink-0 flex-wrap items-start gap-2">
           {#if transfer.canCancel}
-            <Button variant="ghost" size="sm" disabled={busy !== null} onclick={() => void cancel(transfer.id)}><X />{transfer.mode === INTEGRATION_TRANSFER_MODE.remoteExecutor ? "Cancel request" : "Cancel download"}</Button>
+            <Button variant="ghost" size="sm" disabled={busy !== null} onclick={() => void cancel(transfer.id)}><X />{transferCancelLabel(transfer.mode)}</Button>
           {/if}
-          {#if transfer.lastError && !isTransferTerminal(transfer.phase)}
-            <Button variant="secondary" size="sm" disabled={busy !== null} onclick={() => void retry(transfer.id)}><RotateCcw />{transfer.cancellationRequested ? "Retry cancellation" : "Retry import"}</Button>
+          {#if transferProblem(transfer) && !isTransferTerminal(transfer.phase)}
+            <Button variant="secondary" size="sm" disabled={busy !== null} onclick={() => void retry(transfer.id)}><RotateCcw />{transferRetryLabel(transfer)}</Button>
           {/if}
           {#each transfer.importedEntityIds as id}
             <Button variant="secondary" size="sm" disabled={busy !== null} onclick={() => void open(id)}>Open in library<ArrowUpRight /></Button>

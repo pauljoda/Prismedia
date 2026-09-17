@@ -14,7 +14,7 @@
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import { entityKindIcon } from "$lib/entities/entity-kind-icons";
   import { resolveEntityHrefById } from "$lib/entities/entity-route-resolver";
-  import { isTransferTerminal, transferPhaseLabels } from "$lib/integrations/transfer-labels";
+  import { isTransferTerminal, transferCancelLabel, transferStatusLabel, transferRetryLabel, transferProblem } from "$lib/integrations/transfer-labels";
   import { managedRequestActivityGroup, managedTrackingActivityGroup, removeTrackedRequests, REQUEST_ACTIVITY_GROUP, transferActivityGroup, type RequestActivityGroup } from "$lib/requests/request-activity";
   import { formatRelativeTime } from "$lib/utils/format";
 
@@ -162,7 +162,7 @@
     <div class="min-w-0">
       <div class="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1">
         <h4 class="min-w-0 break-words text-sm font-medium text-text-primary">{title}</h4>
-        {#if item.type === ITEM.transfer}<Badge variant={item.group === REQUEST_ACTIVITY_GROUP.attention ? "warning" : "default"}>{item.transfer.cancellationRequested && !isTransferTerminal(item.transfer.phase) ? "Cancellation requested" : transferPhaseLabels[item.transfer.phase]}</Badge>
+        {#if item.type === ITEM.transfer}<Badge variant={item.group === REQUEST_ACTIVITY_GROUP.attention ? "warning" : "default"}>{transferStatusLabel(item.transfer)}</Badge>
         {:else if item.type === ITEM.request}<Badge variant={item.group === REQUEST_ACTIVITY_GROUP.attention ? "warning" : "default"}>{item.group === REQUEST_ACTIVITY_GROUP.attention && item.request.reviewRequired ? "Needs review" : requestLabels[item.request.phase]}</Badge>
         {:else}<Badge variant={item.group === REQUEST_ACTIVITY_GROUP.attention ? "warning" : "default"}>{holdingLabels[item.holding.status]}</Badge>{/if}
       </div>
@@ -173,15 +173,16 @@
       {#if item.type === ITEM.holding}<p class="mt-1 text-xs text-text-muted">{localAvailability(item.holding)}</p>{/if}
       {#if item.type === ITEM.request && item.request.phase === MANAGED_REQUEST_PHASE.awaitingFiles}<p class="mt-1 text-xs text-text-muted">The remote manager is following this title; Prismedia has not confirmed a local file yet.</p>{/if}
       {#if item.type === ITEM.transfer && item.transfer.phase === INTEGRATION_TRANSFER_PHASE.completed && item.transfer.importedEntityIds.length}<p class="mt-1 text-xs text-text-muted">Added to your Prismedia library</p>{/if}
+      {#if item.type === ITEM.transfer && item.transfer.mode === INTEGRATION_TRANSFER_MODE.sourceRequest && item.transfer.canCancel}<p class="mt-1 text-xs text-text-muted">Stopping this import leaves the source’s download running.</p>{/if}
       {#if item.type === ITEM.transfer && item.transfer.sourcePublication?.attribution}<div class="mt-1"><SourceAttribution attribution={item.transfer.sourcePublication.attribution} compact /></div>{/if}
-      {#if item.type === ITEM.transfer && item.transfer.lastError}<p class="mt-2 break-words text-sm text-text-muted">{item.transfer.lastError}</p>{/if}
+      {#if item.type === ITEM.transfer && transferProblem(item.transfer)}<p class="mt-2 break-words text-sm text-text-muted">{transferProblem(item.transfer)}</p>{/if}
       {#if item.type === ITEM.request && item.request.problem}<p class="mt-2 break-words text-sm text-text-muted">{item.request.problem}</p>{/if}
       {#if item.type === ITEM.holding && item.holding.problem}<p class="mt-2 break-words text-sm text-text-muted">{item.holding.problem}</p>{/if}
     </div>
     <div class="activity-actions">
       {#if item.type === ITEM.transfer}
-        {#if item.transfer.canCancel}<Button variant="ghost" size="sm" disabled={busyKey !== null} onclick={() => void runAction(item.key, () => cancelPublicationTransfer(item.transfer.id))}><X />{item.transfer.mode === INTEGRATION_TRANSFER_MODE.remoteExecutor ? "Cancel request" : "Cancel download"}</Button>{/if}
-        {#if item.transfer.lastError && !isTransferTerminal(item.transfer.phase)}<Button variant="secondary" size="sm" disabled={busyKey !== null} onclick={() => void runAction(item.key, () => retryPublicationTransfer(item.transfer.id))}><RotateCcw />{item.transfer.cancellationRequested ? "Retry cancellation" : "Retry import"}</Button>{/if}
+        {#if item.transfer.canCancel}<Button variant="ghost" size="sm" disabled={busyKey !== null} onclick={() => void runAction(item.key, () => cancelPublicationTransfer(item.transfer.id))}><X />{transferCancelLabel(item.transfer.mode)}</Button>{/if}
+        {#if transferProblem(item.transfer) && !isTransferTerminal(item.transfer.phase)}<Button variant="secondary" size="sm" disabled={busyKey !== null} onclick={() => void runAction(item.key, () => retryPublicationTransfer(item.transfer.id))}><RotateCcw />{transferRetryLabel(item.transfer)}</Button>{/if}
         {#each item.transfer.importedEntityIds as entityId}<Button variant="secondary" size="sm" disabled={busyKey !== null} onclick={() => void openEntity(item.key, entityId)}>Open<ArrowUpRight /></Button>{/each}
       {:else if item.type === ITEM.request}
         {#if refreshableRequestPhases.has(item.request.phase)}<Button variant="outline" size="sm" disabled={busyKey !== null} onclick={() => void runAction(item.key, () => refreshRequest(item.connection.id, item.request.id))}><RefreshCw />Refresh</Button>{/if}

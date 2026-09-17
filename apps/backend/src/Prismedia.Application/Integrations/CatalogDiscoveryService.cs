@@ -22,11 +22,11 @@ public sealed class CatalogDiscoveryService(IntegrationConnectionAccess access, 
         var cursor = string.IsNullOrWhiteSpace(request.Cursor) ? null : tokens.ReadCursor(connectionId, request, request.Cursor);
         var page = await gateway.DiscoverAsync(authorized.Manifest.Id, operation, authorized.Context,
             new(request.EntityKind, request.Query, cursor, container, request.Limit), cancellationToken);
-        Validate(page, request);
+        ValidatePage(page, request);
         return new(connectionId, page.Title, page.Items.Select(item => new DiscoveryItemResponse(
             item.Selection.ItemId, tokens.ProtectSelection(connectionId, item.Selection), item.Selection.EntityKind,
             item.IsContainer, item.Publication, item.Offers)).ToArray(),
-            string.IsNullOrEmpty(page.NextCursor) ? null : tokens.ProtectCursor(connectionId, request, page.NextCursor));
+            string.IsNullOrEmpty(page.NextCursor) ? null : tokens.ProtectCursor(connectionId, request, page.NextCursor), page.CanSearch);
     }
 
     /// <summary>Resolves a protected selection for server-side acquisition. Lending, checkout, and sample offers cannot satisfy a full-content request.</summary>
@@ -44,12 +44,12 @@ public sealed class CatalogDiscoveryService(IntegrationConnectionAccess access, 
         if (resolved.Selection != selection || resolved.OfferId != offerId || resolved.Offer?.Id != offerId
             || resolved.Offer.Access != AcquisitionAccessKind.Download || resolved.Delivery is null)
             throw new IntegrationInvocationException("The source did not resolve the selected full-content offer.");
-        Validate(new("Resolved publication", [new(selection, false, resolved.Publication, [resolved.Offer])]), new(selection.EntityKind, Limit: 1));
+        ValidatePage(new("Resolved publication", [new(selection, false, resolved.Publication, [resolved.Offer])]), new(selection.EntityKind, Limit: 1));
         _ = IntegrationDeliveryOriginPolicy.RequireAllowedOrigin(authorized.Manifest.Integration, authorized.Context.BaseUrl, resolved.Delivery);
         return resolved;
     }
 
-    private static void Validate(CatalogPage page, BrowseConnectionRequest request) {
+    internal static void ValidatePage(CatalogPage page, BrowseConnectionRequest request) {
         if (string.IsNullOrWhiteSpace(page.Title) || page.Title.Length > 512 || page.NextCursor?.Length > 8192
             || page.Items is null || page.Items.Count > request.Limit) throw InvalidPage();
         var identities = new HashSet<string>(StringComparer.Ordinal);

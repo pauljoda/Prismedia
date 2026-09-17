@@ -27,15 +27,15 @@ public sealed record CatalogAttribution(string SourceUrl, string? Creator, strin
 /// <summary>Internal plugin result retaining the provider locator. Containers represent navigation, never downloadable content.</summary>
 public sealed record CatalogItem(SourceSelection Selection, bool IsContainer, CatalogPublication Publication, IReadOnlyList<CatalogOffer> Offers);
 
-/// <summary>A bounded page returned by an integration plugin, with a provider-owned continuation cursor.</summary>
-public sealed record CatalogPage(string Title, IReadOnlyList<CatalogItem> Items, string? NextCursor = null);
+/// <summary>A bounded page returned by an integration plugin. CanSearch can restrict search in this container; null inherits the negotiated capability.</summary>
+public sealed record CatalogPage(string Title, IReadOnlyList<CatalogItem> Items, string? NextCursor = null, bool? CanSearch = null);
 
 /// <summary>Public source item with a host-protected selection token in place of the provider locator.</summary>
 public sealed record DiscoveryItemResponse(string Id, string SelectionToken, EntityKind EntityKind, bool IsContainer,
     CatalogPublication Publication, IReadOnlyList<CatalogOffer> Offers);
 
 /// <summary>Public page scoped to one connection. NextCursor can only be used with that connection and media kind.</summary>
-public sealed record DiscoveryPageResponse(Guid ConnectionId, string Title, IReadOnlyList<DiscoveryItemResponse> Items, string? NextCursor);
+public sealed record DiscoveryPageResponse(Guid ConnectionId, string Title, IReadOnlyList<DiscoveryItemResponse> Items, string? NextCursor, bool? CanSearch = null);
 
 /// <summary>Resolves exactly one acquisition offer selected from a source item.</summary>
 public sealed record ResolveSourceOfferInput(SourceSelection Selection, string OfferId);

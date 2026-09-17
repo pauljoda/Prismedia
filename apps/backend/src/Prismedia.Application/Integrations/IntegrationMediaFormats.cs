@@ -14,6 +14,16 @@ public static class IntegrationMediaFormats {
         EntityKind.Image => Path.GetExtension(fileName).ToLowerInvariant() is ".jpg" or ".jpeg" or ".png" or ".webp",
         _ => false
     };
+    /// <summary>Whether a declared source media type can become an exact supported import for this media kind.</summary>
+    public static bool IsSupportedMediaType(EntityKind kind, string mediaType) {
+        var normalized = mediaType.Split(';', 2)[0].Trim().ToLowerInvariant();
+        return kind switch {
+            EntityKind.Book => normalized is "application/epub+zip" or "application/pdf",
+            EntityKind.ComicInstallment => normalized is "application/vnd.comicbook+zip" or "application/zip",
+            EntityKind.Image => normalized is "image/jpeg" or "image/png" or "image/webp",
+            _ => false
+        };
+    }
     /// <summary>Rechecks the destination's enabled scanner before acceptance and before placement.</summary>
     public static bool SupportsRoot(EntityKind kind, LibraryRootData root) => root.Enabled && !root.IsReadOnly && kind switch {
         EntityKind.Book or EntityKind.ComicInstallment => root.ScanBooks,

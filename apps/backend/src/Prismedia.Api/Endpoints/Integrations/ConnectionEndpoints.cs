@@ -43,6 +43,12 @@ public static class ConnectionEndpoints {
                 return Results.Accepted($"/api/integration-transfers/{response.Id}", response);
             }).WithName("AcquireCatalogOffer").Produces<IntegrationTransferResponse>(202).Produces<ApiProblem>(400).Produces<ApiProblem>(409)
             .AddEndpointFilter<IntegrationTransferProblemFilter>();
+        group.MapPost("/{id:guid}/catalog/requests", async (Guid id, AcquireCatalogOfferRequest request,
+            SourceAcquisitionService service, CancellationToken cancellationToken) => {
+                var response = await service.AcquireAsync(id, request, cancellationToken);
+                return Results.Accepted($"/api/integration-transfers/{response.Id}", response);
+            }).WithName("RequestCatalogSource").Produces<IntegrationTransferResponse>(202).Produces<ApiProblem>(400).Produces<ApiProblem>(409)
+            .AddEndpointFilter<IntegrationTransferProblemFilter>();
         group.MapPost("/{id:guid}/inspect", async (Guid id, InspectExecutorRequest request,
             ExecutorAcquisitionService service, CancellationToken cancellationToken) =>
             Results.Ok(await service.InspectAsync(id, request, cancellationToken)))

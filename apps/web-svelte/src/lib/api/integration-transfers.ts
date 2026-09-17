@@ -1,10 +1,14 @@
-import { acquireExecutorItem, inspectExecutorUrl, acquireCatalogOffer, cancelIntegrationTransfer, listIntegrationTransfers, retryIntegrationTransfer } from "$lib/api/generated/prismedia";
+import { acquireExecutorItem, inspectExecutorUrl, acquireCatalogOffer, requestCatalogSource, cancelIntegrationTransfer, listIntegrationTransfers, retryIntegrationTransfer } from "$lib/api/generated/prismedia";
 import type { AcquireExecutorItemRequest, InspectExecutorRequest, ExecutorInspectionResponse, AcquireCatalogOfferRequest, IntegrationTransferResponse } from "$lib/api/generated/model";
 import { unwrapGenerated } from "$lib/api/generated-response";
 
 /** Accepts one explicit publication offer using an operation ID retained across uncertain retries. */
 export const acquirePublication = (connectionId: string, request: AcquireCatalogOfferRequest): Promise<IntegrationTransferResponse> =>
   acquireCatalogOffer(connectionId, request).then(response => unwrapGenerated(response, "Could not accept this publication", [202]));
+
+/** Requests one exact source item and follows its preparation before importing verified bytes. */
+export const requestSourcePublication = (connectionId: string, request: AcquireCatalogOfferRequest): Promise<IntegrationTransferResponse> =>
+  requestCatalogSource(connectionId, request).then(response => unwrapGenerated(response, "Could not request this publication", [202]));
 
 /** Reads persisted transfer progress independently of queue history. */
 export const fetchIntegrationTransfers = (): Promise<IntegrationTransferResponse[]> =>

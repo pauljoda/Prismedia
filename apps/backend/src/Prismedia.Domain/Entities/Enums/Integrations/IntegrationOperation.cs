@@ -93,4 +93,12 @@ public enum IntegrationOperation {
     /// <summary>Read exact remote holdings and file availability.</summary>
     [Code("get-library-item")]
     GetLibraryItem,
+
+    /// <summary>Idempotently request preparation of one exact source selection; never expands its scope.</summary>
+    [Code("request-source")]
+    RequestSource,
+
+    /// <summary>Observe exact source preparation and file readiness without starting or changing remote work.</summary>
+    [Code("observe-source")]
+    ObserveSource,
 }

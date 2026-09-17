@@ -78,11 +78,13 @@ public sealed class CatalogDiscoveryServiceTests {
     [Fact]
     public async Task DiscoveryReturnsProtectedSelectionsAndPreservesAcquisitionDistinctions() {
         var fixture = new Fixture();
+        fixture.Page = fixture.Page with { CanSearch = false };
         var page = await fixture.Service.BrowseAsync(fixture.Connection.State.Id, new(EntityKind.Book), default);
         var item = Assert.Single(page.Items);
         Assert.Equal(Fixture.ProtectedSelection, item.SelectionToken);
         Assert.Equal(AcquisitionAccessKind.Borrow, item.Offers[0].Access);
         Assert.Equal(1, fixture.SecretReads);
+        Assert.False(page.CanSearch);
     }
 
     [Fact]
@@ -99,6 +101,7 @@ public sealed class CatalogDiscoveryServiceTests {
     [InlineData(AcquisitionAccessKind.Purchase)]
     [InlineData(AcquisitionAccessKind.Sample)]
     [InlineData(AcquisitionAccessKind.External)]
+    [InlineData(AcquisitionAccessKind.Request)]
     public async Task NonFullContentOffersCannotBecomeExecutableAcquisitions(AcquisitionAccessKind access) {
         var fixture = new Fixture();
         fixture.Resolved = fixture.Resolved with { Offer = fixture.Resolved.Offer with { Access = access } };

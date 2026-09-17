@@ -4,8 +4,9 @@ using Prismedia.Domain.Integrations;
 
 namespace Prismedia.Application.Integrations;
 
-/// <summary>Durable direct-source selection. Transient delivery URLs and credentials are resolved immediately before transfer.</summary>
-public sealed record SourceTransferPlan(SourceSelection Selection, string OfferId, CatalogPublication? Publication = null);
+/// <summary>Durable direct or prepared source selection. Transient delivery URLs and credentials are resolved immediately before transfer.</summary>
+public sealed record SourceTransferPlan(SourceSelection Selection, string OfferId, CatalogPublication? Publication = null,
+    CatalogOffer? Offer = null);
 
 /// <summary>Accepted finite transfer intent. Sensitive source locators and executor URLs require encrypted persistence.</summary>
 public sealed record IntegrationTransferPlan(string Title, EntityKind EntityKind, Guid LibraryRootId, string LibraryPath,

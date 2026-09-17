@@ -265,6 +265,7 @@ export const ACQUISITION_ACCESS_KIND = {
   purchase: "purchase",
   sample: "sample",
   external: "external",
+  request: "request",
 } as const;
 
 export type AcquisitionAccessKindCode = (typeof ACQUISITION_ACCESS_KIND)[keyof typeof ACQUISITION_ACCESS_KIND];
@@ -1063,6 +1064,8 @@ export const INTEGRATION_OPERATION = {
   inspectManagedRelease: "inspect-managed-release",
   searchLibrary: "search-library",
   getLibraryItem: "get-library-item",
+  requestSource: "request-source",
+  observeSource: "observe-source",
 } as const;
 
 export type IntegrationOperationCode = (typeof INTEGRATION_OPERATION)[keyof typeof INTEGRATION_OPERATION];
@@ -1071,6 +1074,7 @@ export type IntegrationOperationCode = (typeof INTEGRATION_OPERATION)[keyof type
 export const INTEGRATION_TRANSFER_MODE = {
   remoteExecutor: "remote-executor",
   sourceDownload: "source-download",
+  sourceRequest: "source-request",
 } as const;
 
 export type IntegrationTransferModeCode = (typeof INTEGRATION_TRANSFER_MODE)[keyof typeof INTEGRATION_TRANSFER_MODE];
@@ -1582,6 +1586,17 @@ export const REQUEST_REVIEW_SELECTION = {
 } as const;
 
 export type RequestReviewSelectionCode = (typeof REQUEST_REVIEW_SELECTION)[keyof typeof REQUEST_REVIEW_SELECTION];
+
+// source: enum SourceAcquisitionState
+export const SOURCE_ACQUISITION_STATE = {
+  notObserved: "not-observed",
+  queued: "queued",
+  downloading: "downloading",
+  ready: "ready",
+  failed: "failed",
+} as const;
+
+export type SourceAcquisitionStateCode = (typeof SOURCE_ACQUISITION_STATE)[keyof typeof SOURCE_ACQUISITION_STATE];
 
 // source: enum StreamKind
 export const STREAM_KIND = {

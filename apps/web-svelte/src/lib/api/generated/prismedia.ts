@@ -9982,6 +9982,53 @@ export const acquireCatalogOffer = async (id: string,
 
 
 
+export type requestCatalogSourceResponse202 = {
+  data: IntegrationTransferResponse
+  status: 202
+}
+
+export type requestCatalogSourceResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type requestCatalogSourceResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type requestCatalogSourceResponseSuccess = (requestCatalogSourceResponse202) & {
+  headers: Headers;
+};
+export type requestCatalogSourceResponseError = (requestCatalogSourceResponse400 | requestCatalogSourceResponse409) & {
+  headers: Headers;
+};
+
+export type requestCatalogSourceResponse = (requestCatalogSourceResponseSuccess | requestCatalogSourceResponseError)
+
+export const getRequestCatalogSourceUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/catalog/requests`
+}
+
+export const requestCatalogSource = async (id: string,
+    acquireCatalogOfferRequest: AcquireCatalogOfferRequest, options?: RequestInit): Promise<requestCatalogSourceResponse> => {
+
+  return orvalFetch<requestCatalogSourceResponse>(getRequestCatalogSourceUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      acquireCatalogOfferRequest,)
+  }
+);}
+
+
+
 export type inspectExecutorUrlResponse200 = {
   data: ExecutorInspectionResponse
   status: 200

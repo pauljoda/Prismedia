@@ -11,14 +11,21 @@ public sealed record IntegrationTransferState(Guid OperationId, Guid ConnectionI
     IReadOnlyList<IntegrationArtifact>? Artifacts = null, IReadOnlyList<string>? VerifiedArtifactIds = null,
     IReadOnlyList<IntegrationArtifactImport>? Imports = null, Guid? ReceiptId = null,
     IntegrationTransferMode Mode = IntegrationTransferMode.RemoteExecutor, RemoteJobState? LastRemoteState = null,
-    bool CancellationRequested = false);
+    bool CancellationRequested = false, SourceAcquisitionState? LastSourceState = null,
+    double? SourceProgress = null, string? SourceProblem = null);
 
 /// <summary>Enforces submission recovery and the separation between remote completion, verified bytes, committed imports, and acknowledgement.</summary>
 public sealed class IntegrationTransfer(IntegrationTransferState state) {
     /// <summary>Immutable state to persist with optimistic concurrency after each external boundary.</summary>
     public IntegrationTransferState State { get; private set; } = state;
-    /// <summary>Direct retrieval can stop only before a persisted import boundary permits library placement.</summary>
-    public bool CanCancelSource => State.Mode == IntegrationTransferMode.SourceDownload && State.Phase == IntegrationTransferPhase.Transferring;
+    /// <summary>Source fulfillment can stop locally only before a persisted import boundary permits library placement.</summary>
+    public bool CanCancelSource => State.Mode switch {
+        IntegrationTransferMode.SourceDownload => State.Phase == IntegrationTransferPhase.Transferring,
+        IntegrationTransferMode.SourceRequest => State.Phase is IntegrationTransferPhase.PendingSubmission
+            or IntegrationTransferPhase.SubmissionUncertain or IntegrationTransferPhase.AwaitingRemote
+            or IntegrationTransferPhase.NeedsReview or IntegrationTransferPhase.Transferring,
+        _ => false
+    };
     /// <summary>Remote work can be stopped until local import starts; ownership remains reserved until execution has stopped.</summary>
     public bool CanCancelRemote => State.Mode == IntegrationTransferMode.RemoteExecutor && !State.CancellationRequested
         && State.Phase is IntegrationTransferPhase.PendingSubmission or IntegrationTransferPhase.SubmissionUncertain
@@ -38,9 +45,15 @@ public sealed class IntegrationTransfer(IntegrationTransferState state) {
         return new(new(operationId, connectionId, null, 1, IntegrationTransferPhase.Transferring, Mode: IntegrationTransferMode.SourceDownload));
     }
 
+    /// <summary>Creates a durable exact-source request before any remote preparation is dispatched.</summary>
+    public static IntegrationTransfer CreateSourceRequest(Guid operationId, Guid connectionId) {
+        if (operationId == Guid.Empty || connectionId == Guid.Empty) throw new ArgumentException("Stable operation and connection identities are required.");
+        return new(new(operationId, connectionId, null, 1, IntegrationTransferPhase.PendingSubmission, Mode: IntegrationTransferMode.SourceRequest));
+    }
+
     /// <summary>Seals the exact downloaded source bytes after local verification; direct catalogs need not supply a pre-existing hash.</summary>
     public void AcceptSourceArtifact(IntegrationArtifact artifact) {
-        if (State.Mode != IntegrationTransferMode.SourceDownload) throw InvalidTransition();
+        if (State.Mode is not (IntegrationTransferMode.SourceDownload or IntegrationTransferMode.SourceRequest)) throw InvalidTransition();
         var manifest = new IntegrationArtifactManifest(State.OperationId.ToString("N"), artifact.Sha256, true, 1, [artifact]);
         if (State.Artifacts is { } previous) {
             if (!previous.SequenceEqual(manifest.Artifacts)) throw new InvalidOperationException("The accepted source bytes changed.");
@@ -51,12 +64,39 @@ public sealed class IntegrationTransfer(IntegrationTransferState state) {
             Phase = IntegrationTransferPhase.Importing });
     }
 
-    /// <summary>Cancels direct retrieval before local placement starts; persisted cancellation fences any stale downloading worker.</summary>
+    /// <summary>Cancels source follow-up before local placement starts; it does not claim that source-owned preparation stopped.</summary>
     public void CancelSourceDownload() {
-        if (State.Mode != IntegrationTransferMode.SourceDownload) throw InvalidTransition();
+        if (State.Mode is not (IntegrationTransferMode.SourceDownload or IntegrationTransferMode.SourceRequest)) throw InvalidTransition();
         if (State.Phase == IntegrationTransferPhase.Cancelled) return;
         if (!CanCancelSource) throw InvalidTransition();
         Change(State with { Phase = IntegrationTransferPhase.Cancelled });
+    }
+
+    /// <summary>Persists the ambiguity fence before requesting exact source preparation.</summary>
+    public void BeginSourceRequest() {
+        if (State.Mode != IntegrationTransferMode.SourceRequest || State.LastSourceState != SourceAcquisitionState.NotObserved
+            || State.Phase is not (IntegrationTransferPhase.PendingSubmission or IntegrationTransferPhase.SubmissionUncertain
+                or IntegrationTransferPhase.AwaitingRemote or IntegrationTransferPhase.NeedsReview)) throw InvalidTransition();
+        if (State.Phase == IntegrationTransferPhase.SubmissionUncertain) return;
+        Change(State with { Phase = IntegrationTransferPhase.SubmissionUncertain });
+    }
+
+    /// <summary>Records bounded source-owned readiness without treating it as retained bytes or a local import.</summary>
+    public void ObserveSource(SourceAcquisitionState sourceState, double? progress, string? problem) {
+        if (State.Mode != IntegrationTransferMode.SourceRequest || !Enum.IsDefined(sourceState)
+            || progress is { } value && (!double.IsFinite(value) || value is < 0 or > 1) || problem?.Length > 4096
+            || State.Phase is not (IntegrationTransferPhase.PendingSubmission or IntegrationTransferPhase.SubmissionUncertain
+                or IntegrationTransferPhase.AwaitingRemote or IntegrationTransferPhase.NeedsReview)) throw InvalidTransition();
+        var phase = sourceState switch {
+            SourceAcquisitionState.NotObserved => State.Phase,
+            SourceAcquisitionState.Queued or SourceAcquisitionState.Downloading => IntegrationTransferPhase.AwaitingRemote,
+            SourceAcquisitionState.Ready => IntegrationTransferPhase.Transferring,
+            SourceAcquisitionState.Failed => IntegrationTransferPhase.NeedsReview,
+            _ => throw InvalidTransition()
+        };
+        problem = string.IsNullOrWhiteSpace(problem) ? null : problem.Trim();
+        if (State.LastSourceState == sourceState && State.SourceProgress == progress && State.SourceProblem == problem && State.Phase == phase) return;
+        Change(State with { LastSourceState = sourceState, SourceProgress = progress, SourceProblem = problem, Phase = phase });
     }
 
     /// <summary>Persists a cancellation fence before any remote call. A never-submitted operation can stop immediately.</summary>

@@ -7,7 +7,7 @@ public static class PluginCapabilityPolicy {
     /// <summary>Whether an operation belongs to this capability. Probe is connection-wide; metadata uses identify v2.</summary>
     public static bool Allows(PluginCapability capability, IntegrationOperation operation) => capability switch {
         PluginCapability.CatalogDiscovery => operation is IntegrationOperation.Search or IntegrationOperation.Browse or IntegrationOperation.Inspect,
-        PluginCapability.AcquisitionSource => operation is IntegrationOperation.Resolve,
+        PluginCapability.AcquisitionSource => operation is IntegrationOperation.Resolve or IntegrationOperation.RequestSource or IntegrationOperation.ObserveSource,
         PluginCapability.TransferExecutor => operation is IntegrationOperation.Submit or IntegrationOperation.FindSubmission or IntegrationOperation.CancelSubmission
             or IntegrationOperation.GetJob or IntegrationOperation.Cancel or IntegrationOperation.ListArtifacts
             or IntegrationOperation.AuthorizeArtifact or IntegrationOperation.RenewRetention or IntegrationOperation.Acknowledge,

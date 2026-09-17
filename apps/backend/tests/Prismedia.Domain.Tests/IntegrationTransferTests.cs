@@ -93,6 +93,45 @@ public sealed class IntegrationTransferTests {
     }
 
     [Fact]
+    public void SourceRequestSeparatesPreparationReadinessFromVerifiedBytesAndLocalOwnership() {
+        var transfer = IntegrationTransfer.CreateSourceRequest(Guid.NewGuid(), Guid.NewGuid());
+        Assert.Equal(IntegrationTransferPhase.PendingSubmission, transfer.State.Phase);
+        Assert.Null(transfer.State.JobId);
+        transfer.ObserveSource(SourceAcquisitionState.NotObserved, null, null);
+        transfer.BeginSourceRequest();
+        Assert.Equal(IntegrationTransferPhase.SubmissionUncertain, transfer.State.Phase);
+        transfer.ObserveSource(SourceAcquisitionState.Downloading, 0.5, null);
+        Assert.Equal(IntegrationTransferPhase.AwaitingRemote, transfer.State.Phase);
+        Assert.Null(transfer.State.Artifacts);
+        transfer.ObserveSource(SourceAcquisitionState.Ready, 1, null);
+        Assert.Equal(IntegrationTransferPhase.Transferring, transfer.State.Phase);
+        transfer.AcceptSourceArtifact(Artifact);
+        transfer.RecordImported(new(Artifact.Id, Artifact.Sha256, [Guid.NewGuid()]));
+        Assert.Equal(IntegrationTransferPhase.Completed, transfer.State.Phase);
+    }
+
+    [Fact]
+    public void SourceRequestCancellationIsOnlyALocalFenceBeforeImport() {
+        var transfer = IntegrationTransfer.CreateSourceRequest(Guid.NewGuid(), Guid.NewGuid());
+        transfer.ObserveSource(SourceAcquisitionState.Queued, 0, null);
+        Assert.True(transfer.CanCancelSource);
+        transfer.CancelSourceDownload();
+        Assert.Equal(IntegrationTransferPhase.Cancelled, transfer.State.Phase);
+        Assert.False(transfer.State.CancellationRequested);
+        Assert.Null(transfer.State.JobId);
+        Assert.Throws<InvalidOperationException>(() => transfer.AcceptSourceArtifact(Artifact));
+    }
+
+    [Fact]
+    public void SourceRequestRejectsUnboundedProgressAndProblems() {
+        var transfer = IntegrationTransfer.CreateSourceRequest(Guid.NewGuid(), Guid.NewGuid());
+        Assert.Throws<InvalidOperationException>(() => transfer.ObserveSource(SourceAcquisitionState.Downloading, double.NaN, null));
+        Assert.Throws<InvalidOperationException>(() => transfer.ObserveSource(SourceAcquisitionState.Downloading, 1.01, null));
+        Assert.Throws<InvalidOperationException>(() => transfer.ObserveSource(SourceAcquisitionState.Failed, null, new string('x', 4097)));
+        Assert.Equal(IntegrationTransferPhase.PendingSubmission, transfer.State.Phase);
+    }
+
+    [Fact]
     public void WaitingExecutionAndExpiredOutputsRemainSeparateFromCommittedLocalBytes() {
         var transfer = Submitted();
         transfer.Observe(Instance, Job, 1, RemoteJobState.Waiting, null);

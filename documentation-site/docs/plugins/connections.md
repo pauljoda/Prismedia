@@ -10,6 +10,27 @@ A **plugin** is an installed package. A **Connection** is one configured applica
 or catalog using that package. Several connections can use the same plugin with
 independent URLs, settings, credentials, and enabled capabilities.
 
+## Choose an integration
+
+Choose a connection by the job it should do. Installing a plugin does not enable
+every feature of the application it connects to.
+
+| Connection | Available workflow | File handling | Current boundary |
+| --- | --- | --- | --- |
+| OPDS catalog | Browse books and comics, then import a selected EPUB, PDF, or CBZ. | Downloads one selected publication into a Prismedia library. | Loans, purchases, samples, DRM, and CBR conversion remain outside this importer. |
+| Suwayomi through OPDS | Browse and import chapters already downloaded by Suwayomi. | Downloads the selected CBZ into a Prismedia library. | Does not request missing chapters or synchronize reading progress. |
+| Suwayomi source plugin | Browse an installed source, choose a manga and exact chapter, then request and import its CBZ. | Suwayomi downloads the chapter; Prismedia verifies and imports a copy. | Source extensions stay in Suwayomi. Requests are finite and do not synchronize reading progress or series monitoring. |
+| Radarr | Browse an existing collection, follow linked movies, or request a wanted movie. | Reads files in a mapped folder while Radarr organizes them. | Requires an explicit folder mapping and a reviewed movie identity and profile. |
+| Sonarr | Browse existing series and follow or control exact linked episodes. | Reads files in a mapped folder while Sonarr organizes them. | Adding a series or requesting episodes that have not been linked is not available yet. |
+| Kapowarr | Browse existing comic runs and inspect their issue files. | Reads files in a mapped folder while Kapowarr organizes them. | Does not request missing comics or follow issue upgrades yet. |
+| Wikimedia Commons | Search and import an original image with its source attribution. | Downloads the selected image into a Prismedia library. | Imports still images; source statements are retained for review. |
+| Archiver API v1 | Inspect a URL, select a publication, image, or ordered gallery, and follow its import. | Retrieves verified outputs into a Prismedia library. | Requires an application implementing the new API. The included simulator is the reference; legacy Archiver routes are incompatible. |
+
+Metadata providers such as Open Library, Google Books, Metron, MangaDex, and AniList
+are configured in **Plugins**. They identify titles and propose metadata; enabling
+one does not provide a download source. Each connection's tested capabilities
+determine which actions appear in **Request**.
+
 ## Configure a connection
 
 1. Install a compatible integration plugin from **Plugins**.
@@ -143,7 +164,54 @@ It does not enqueue missing chapters, install source extensions, synchronize rea
 progress, or delegate series monitoring. Suwayomi owns its original files; Prismedia
 owns the imported copy. Undownloaded chapter entries can be browsable without offering
 a file. Existing-library retrieval has been exercised against Suwayomi Server 2.3.2243;
-remote-source downloading requires a separate manager or executor integration.
+remote-source downloading uses the dedicated source plugin described below.
+
+## Request chapters through Suwayomi
+
+The dedicated **Suwayomi** plugin connects to Suwayomi Server 2.3.2243's source API.
+Use the server's base URL and Basic credentials when enabled. Install and configure
+source extensions in Suwayomi first, then test the Prismedia connection with catalog
+discovery and acquisition enabled.
+
+In **Request → Browse**, select the connection, open a source, and browse or search
+within that source. Open a manga to choose one exact chapter. The review identifies
+the source, language, and chapter. Choose a comic library and **Request & import CBZ**.
+An already downloaded, accessible chapter offers **Import CBZ** directly.
+
+The source performs the download first. Prismedia follows that chapter, retrieves its
+CBZ when ready, and verifies the archive before adding it to the selected library.
+This workflow creates an imported copy; mapped external libraries remain the way to
+read another application's files in place. Requests do not add a manga to Suwayomi's
+library, change reading progress, or request other chapters. Existing library manga
+use their cached chapter list; refresh that list in Suwayomi when needed.
+
+**Activity** separates source download progress from local transfer and import. If
+the source reports a failed chapter, retry it in Suwayomi, then choose **Check again**.
+**Stop import** stops Prismedia's follow-up before import starts; it does not cancel
+Suwayomi's download or delete its files. The original source selection and operation
+are retained across retries and lost responses.
+
+### Source preparation contract
+
+An acquisition source can negotiate `request-source` and `observe-source` alongside
+`resolve`. A `request` offer describes full content that must be prepared first.
+`observe-source` is read-only and reports `not-observed`, `queued`, `downloading`,
+`ready`, or `failed` for the exact selection and offer. `request-source` receives the
+host's durable operation ID and must coalesce repeated requests for that same exact
+selection, including after a lost response. The host observes before dispatching
+and only repeats a request when the source reports `not-observed`.
+
+Readiness permits `resolve`; it does not prove local bytes or an imported Entity.
+Publication identity and format are pinned throughout preparation. A plugin must
+revalidate its source, manga, and chapter identities rather than trusting a reused
+remote numeric ID. Optional per-page `canSearch` restricts the search affordance to
+containers that support it; omitted values inherit the negotiated capability.
+
+This capability does not claim durable executor jobs, output retention, remote
+cancellation, or acknowledgement. Applications that provide those guarantees use
+the executor contract instead. Suwayomi's dynamically produced CBZ can have a different
+length from its HEAD estimate, so the adapter leaves the exact delivery length unset;
+Prismedia still enforces its byte limits and records the downloaded file's SHA-256.
 
 ### Import a publication
 

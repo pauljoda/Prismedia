@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CONNECTION_STATUS, ENTITY_KIND, INTEGRATION_OPERATION, INTEGRATION_TRANSFER_MODE,
-  INTEGRATION_TRANSFER_PHASE, MANAGED_REQUEST_PHASE, MANAGED_TRACKING_STATUS, PLUGIN_CAPABILITY,
+  INTEGRATION_TRANSFER_PHASE, MANAGED_REQUEST_PHASE, MANAGED_TRACKING_STATUS, PLUGIN_CAPABILITY, SOURCE_ACQUISITION_STATE,
 } from "$lib/api/generated/codes";
 import type { ConnectionResponse, IntegrationTransferResponse, ManagedRequestResponse, ManagedTrackingResponse } from "$lib/api/generated/model";
 import RequestActivity from "./RequestActivity.svelte";
@@ -92,5 +92,27 @@ describe("request activity", () => {
     expect(screen.getByText("Dune")).toBeInTheDocument();
     expect(screen.queryByText("All caught up.")).not.toBeInTheDocument();
     await waitFor(() => expect(api.refreshTracking).toHaveBeenCalledWith(connection.id, "managed"));
+  });
+
+  it("distinguishes stopping a source import from cancelling its remote download", async () => {
+    api.fetchIntegrationTransfers.mockResolvedValue([transfer("1", { title: "Requested chapter", mode: INTEGRATION_TRANSFER_MODE.sourceRequest,
+      phase: INTEGRATION_TRANSFER_PHASE.awaitingRemote, importedEntityIds: [], canCancel: true })]);
+    render(RequestActivity, { connections: [connection] });
+    await screen.findByText("Requested chapter");
+    expect(screen.getByText(/leaves the source’s download running/)).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Cancel download" })).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Stop import" }));
+    await waitFor(() => expect(api.cancelPublicationTransfer).toHaveBeenCalledWith("1"));
+  });
+
+  it("shows a source failure and offers to check it again without claiming to restart it", async () => {
+    api.fetchIntegrationTransfers.mockResolvedValue([transfer("1", { title: "Requested chapter", mode: INTEGRATION_TRANSFER_MODE.sourceRequest,
+      phase: INTEGRATION_TRANSFER_PHASE.needsReview, sourceState: SOURCE_ACQUISITION_STATE.failed,
+      sourceProblem: "Retry the chapter in its source app, then check again.", importedEntityIds: [], canCancel: true })]);
+    render(RequestActivity, { connections: [connection] });
+    await screen.findByText("Requested chapter");
+    expect(screen.getByText("Retry the chapter in its source app, then check again.")).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Check again" }));
+    await waitFor(() => expect(api.retryPublicationTransfer).toHaveBeenCalledWith("1"));
   });
 });

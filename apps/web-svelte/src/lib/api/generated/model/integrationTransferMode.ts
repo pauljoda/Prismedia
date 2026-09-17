@@ -11,4 +11,5 @@ export type IntegrationTransferMode = typeof IntegrationTransferMode[keyof typeo
 export const IntegrationTransferMode = {
   'remote-executor': 'remote-executor',
   'source-download': 'source-download',
+  'source-request': 'source-request',
 } as const;

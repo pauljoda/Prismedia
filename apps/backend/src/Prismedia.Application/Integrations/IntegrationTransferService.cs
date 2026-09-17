@@ -30,8 +30,8 @@ public sealed class IntegrationTransferService(IIntegrationTransferStore store, 
             else if (transfer.State.Phase != IntegrationTransferPhase.Cancelled) await store.EnqueueRetryAsync(id, cancellationToken);
             return await GetAsync(id, cancellationToken);
         }
-        if (transfer.State.Mode != IntegrationTransferMode.SourceDownload
-            || transfer.State.Phase is not (IntegrationTransferPhase.Transferring or IntegrationTransferPhase.Cancelled))
+        if (transfer.State.Mode is not (IntegrationTransferMode.SourceDownload or IntegrationTransferMode.SourceRequest)
+            || !transfer.CanCancelSource && transfer.State.Phase != IntegrationTransferPhase.Cancelled)
             throw new ArgumentException("This transfer has already begun library import and cannot be cancelled. Retry it to reconcile its files.");
         var revision = transfer.State.Revision;
         transfer.CancelSourceDownload();
@@ -45,6 +45,7 @@ public sealed class IntegrationTransferService(IIntegrationTransferStore store, 
         return new(state.OperationId, state.ConnectionId, work.Plan.Title, work.Plan.EntityKind, work.Plan.LibraryRootId,
             state.Mode, state.Phase, work.CreatedAt, work.UpdatedAt, state.Artifacts?.Count ?? 0,
             state.Imports?.SelectMany(imported => imported.ContainerEntityId is { } container ? new[] { container } : imported.EntityIds).Distinct().ToArray() ?? [], work.LastError,
-            work.Transfer.CanCancelSource || work.Transfer.CanCancelRemote, state.CancellationRequested, work.Plan.Source?.Publication);
+            work.Transfer.CanCancelSource || work.Transfer.CanCancelRemote, state.CancellationRequested, work.Plan.Source?.Publication,
+            state.LastSourceState, state.SourceProgress, state.SourceProblem);
     }
 }

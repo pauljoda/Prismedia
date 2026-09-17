@@ -371,6 +371,7 @@ export * from './inspectExecutorRequest';
 export * from './integrationTransferMode';
 export * from './integrationTransferPhase';
 export * from './integrationTransferResponse';
+export * from './integrationTransferResponseSourceState';
 export * from './jobCancelResponse';
 export * from './jobCreateResponse';
 export * from './jobFailureClearResponse';

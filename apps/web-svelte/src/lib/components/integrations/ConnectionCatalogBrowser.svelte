@@ -4,10 +4,10 @@
 
   import { ArrowLeft, ArrowRight, BookOpen, Download, FolderOpen, Search } from "@lucide/svelte";
   import { Alert, Badge, Button, DialogBase, Panel, Select, TextInput } from "@prismedia/ui-svelte";
-  import { INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
-  import type { ConnectionResponse, DiscoveryItemResponse, DiscoveryPageResponse, EntityKind, LibraryRoot } from "$lib/api/generated/model";
+  import { ACQUISITION_ACCESS_KIND, INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
+  import type { CatalogOffer, ConnectionResponse, DiscoveryItemResponse, DiscoveryPageResponse, EntityKind, LibraryRoot } from "$lib/api/generated/model";
 
-  import { acquirePublication } from "$lib/api/integration-transfers";
+  import { acquirePublication, requestSourcePublication } from "$lib/api/integration-transfers";
   import { fetchLibraryRoots } from "$lib/api/settings";
 
   import SourceAttribution from "$lib/components/integrations/SourceAttribution.svelte";
@@ -17,7 +17,7 @@
   import { entityReferenceToThumbnailCard } from "$lib/entities/entity-thumbnail";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import { getEntityKindLabel } from "$lib/entities/entity-grid";
-  import { acquisitionAccessLabels, publicationFormatLabel, canImportPublication } from "$lib/integrations/catalog-labels";
+  import { acquisitionAccessLabels, publicationFormatLabel, canImportPublication, canRequestPublication } from "$lib/integrations/catalog-labels";
 
   let { connection, initialEntityKind = null }: { connection: ConnectionResponse; initialEntityKind?: EntityKind | null } = $props();
   const connectionId = $derived(connection.id);
@@ -42,9 +42,16 @@
   let initialized = $state(false);
 
   const support = $derived(connection?.effectiveCapabilities.find(item => item.kind === PLUGIN_CAPABILITY.catalogDiscovery));
-  const canSearch = $derived(support?.operations.includes(INTEGRATION_OPERATION.search) ?? false);
+  const canSearch = $derived((support?.operations.includes(INTEGRATION_OPERATION.search) ?? false) && catalog?.canSearch !== false);
   const canBrowse = $derived(support?.operations.includes(INTEGRATION_OPERATION.browse) ?? false);
+  const acquisition = $derived(connection.effectiveCapabilities.find(item => item.kind === PLUGIN_CAPABILITY.acquisitionSource));
   const destinations = $derived(integrationImportRoots(roots, kind));
+
+  function canAcquire(item: DiscoveryItemResponse, offer: CatalogOffer) {
+    if (!acquisition?.entityKinds.includes(item.entityKind) || !acquisition.operations.includes(INTEGRATION_OPERATION.resolve)) return false;
+    return canImportPublication(item.entityKind, offer) || canRequestPublication(item.entityKind, offer)
+      && acquisition.operations.includes(INTEGRATION_OPERATION.requestSource) && acquisition.operations.includes(INTEGRATION_OPERATION.observeSource);
+  }
 
   onMount(() => { void initialize(); return () => { requestSequence++; }; });
   $effect(() => {
@@ -56,14 +63,16 @@
       void chooseKind(nextKind);
     });
   });
-  async function acquire(item: DiscoveryItemResponse, offerId: string) {
-    if (!rootId || submitting) return;
+  async function acquire(item: DiscoveryItemResponse, offer: CatalogOffer) {
+    if (!rootId || submitting || !canAcquire(item, offer)) return;
+    const offerId = offer.id;
     const key = JSON.stringify([connectionId, item.selectionToken, offerId, rootId]);
     const operationId = operations.get(key) ?? crypto.randomUUID();
     operations.set(key, operationId);
     submitting = true; transferError = null;
     try {
-      const accepted = await acquirePublication(connectionId, { operationId, selectionToken: item.selectionToken, offerId, libraryRootId: rootId });
+      const accept = offer.access === ACQUISITION_ACCESS_KIND.request ? requestSourcePublication : acquirePublication;
+      const accepted = await accept(connectionId, { operationId, selectionToken: item.selectionToken, offerId, libraryRootId: rootId });
       acceptedTitle = accepted.title; selected = null;
     } catch (cause) { transferError = cause instanceof Error ? cause.message : "Could not accept this item. Retry to check the same request."; }
     finally { submitting = false; }
@@ -99,7 +108,7 @@
       const result = await fetchConnectionCatalog(connectionId, { entityKind: kind, query: nextQuery, container: nextContainer, cursor, limit: 25 });
       if (sequence !== requestSequence) return;
       if (remember && catalog) history = [...history, { catalog, container, query: activeQuery }];
-      catalog = result; container = nextContainer; activeQuery = nextQuery;
+      catalog = result; container = nextContainer; activeQuery = nextQuery; query = nextQuery ?? "";
     } catch (cause) { if (sequence === requestSequence) error = cause instanceof Error ? cause.message : "Could not load catalog"; }
     finally { if (sequence === requestSequence) loading = false; }
   }
@@ -117,8 +126,8 @@
         onchange={value => void chooseKind(value)} disabled={loading} />
     {/if}
     {#if canSearch}
-      <form class="flex min-w-0 gap-2" onsubmit={event => { event.preventDefault(); history = []; void browse(null, query.trim() || null); }}>
-        <TextInput aria-label="Search source" placeholder={`Search ${connection.name}…`} bind:value={query} maxlength={512} class="min-w-0 flex-1" disabled={loading} />
+      <form class="flex min-w-0 gap-2" onsubmit={event => { event.preventDefault(); void browse(container, query.trim() || null); }}>
+        <TextInput aria-label="Search source" placeholder={`Search ${container && catalog ? catalog.title : connection.name}…`} bind:value={query} maxlength={512} class="min-w-0 flex-1" disabled={loading} />
         <Button type="submit" disabled={loading || (!query.trim() && !canBrowse)}><Search />Search</Button>
       </form>
     {/if}
@@ -159,9 +168,11 @@
       {#if selected.publication.authors.length}<p class="text-sm text-text-muted">{selected.publication.authors.join(", ")}</p>{/if}
       {#if selected.publication.description}<p class="text-sm text-text-muted whitespace-pre-line">{selected.publication.description}</p>{/if}
       {#if selected.publication.publisher || selected.publication.language}<p class="text-xs text-text-muted">{[selected.publication.publisher, selected.publication.language].filter(Boolean).join(" · ")}</p>{/if}
+      {#if selected.publication.editionLabel || selected.publication.issueLabel}<p class="text-xs text-text-muted">{[selected.publication.editionLabel, selected.publication.issueLabel].filter(Boolean).join(" · ")}</p>{/if}
       {#if selected.publication.attribution}<SourceAttribution attribution={selected.publication.attribution} />{/if}
       <div class="flex flex-wrap gap-2">{#each selected.offers as offer (offer.id)}<Badge>{acquisitionAccessLabels[offer.access]} · {publicationFormatLabel(offer.mediaType)}</Badge>{/each}</div>
-      {#if selected.offers.some(offer => canImportPublication(selected!.entityKind, offer))}
+      {#if selected.offers.some(offer => canAcquire(selected!, offer))}
+        {#if selected.offers.some(offer => canRequestPublication(selected!.entityKind, offer))}<p class="text-sm text-text-muted">{connection.name} downloads this item first. Prismedia then saves a verified copy in your chosen library.</p>{/if}
         <label class="space-y-2 text-sm">Save to library
           <Select ariaLabel="Import destination" value={rootId} options={destinations.map(root => ({ value: root.id, label: root.label }))}
             onchange={value => rootId = value} disabled={submitting || !destinations.length} placeholder="Choose a library" />
@@ -171,8 +182,8 @@
       {#if transferError}<Alert.Root variant="destructive"><Alert.Description>{transferError}</Alert.Description></Alert.Root>{/if}
       <DialogBase.Footer>
         <Button variant="outline" disabled={submitting} onclick={() => selected = null}>Close</Button>
-        {#each selected.offers.filter(offer => canImportPublication(selected!.entityKind, offer)) as offer (offer.id)}
-          <Button disabled={!rootId || submitting} onclick={() => { if (selected) void acquire(selected, offer.id); }}><Download />Import {publicationFormatLabel(offer.mediaType)}</Button>
+        {#each selected.offers.filter(offer => canAcquire(selected!, offer)) as offer (offer.id)}
+          <Button disabled={!rootId || submitting} onclick={() => { if (selected) void acquire(selected, offer); }}><Download />{offer.access === ACQUISITION_ACCESS_KIND.request ? "Request & import" : "Import"} {publicationFormatLabel(offer.mediaType)}</Button>
         {/each}
       </DialogBase.Footer>
     {/if}

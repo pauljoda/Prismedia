@@ -99,6 +99,7 @@ public static class DependencyInjection {
         services.AddScoped<IntegrationPluginGateway>();
         services.AddScoped<IIntegrationPluginGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
         services.AddScoped<IIntegrationDiscoveryGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
+        services.AddScoped<IIntegrationSourceAcquisitionGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
         services.AddScoped<IIntegrationTransferGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
         services.AddScoped<IIntegrationManagerGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
         services.AddScoped<IIntegrationManagerControlGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
@@ -124,6 +125,7 @@ public static class DependencyInjection {
         services.AddScoped<IntegrationConnectionAccess>();
         services.AddScoped<CatalogDiscoveryService>();
         services.AddScoped<CatalogAcquisitionService>();
+        services.AddScoped<SourceAcquisitionService>();
         services.AddScoped<ExecutorAcquisitionService>();
         services.AddScoped<IntegrationTransferService>();
         services.AddScoped<IIntegrationTransferScheduler, IntegrationTransferScheduler>();

@@ -12,4 +12,6 @@ export interface DiscoveryPageResponse {
   items: DiscoveryItemResponse[];
   /** @nullable */
   nextCursor: string | null;
+  /** @nullable */
+  canSearch?: boolean | null;
 }

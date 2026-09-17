@@ -8,6 +8,7 @@ import type { CatalogPublication } from './catalogPublication';
 import type { EntityKind } from './entityKind';
 import type { IntegrationTransferMode } from './integrationTransferMode';
 import type { IntegrationTransferPhase } from './integrationTransferPhase';
+import type { IntegrationTransferResponseSourceState } from './integrationTransferResponseSourceState';
 
 export interface IntegrationTransferResponse {
   id: string;
@@ -27,4 +28,12 @@ export interface IntegrationTransferResponse {
   canCancel: boolean;
   cancellationRequested: boolean;
   sourcePublication?: null | CatalogPublication;
+  sourceState?: IntegrationTransferResponseSourceState;
+  /**
+     * @nullable
+     * @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$
+     */
+  sourceProgress?: number | string | null;
+  /** @nullable */
+  sourceProblem?: string | null;
 }

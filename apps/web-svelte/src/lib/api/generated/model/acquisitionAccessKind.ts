@@ -14,4 +14,5 @@ export const AcquisitionAccessKind = {
   purchase: 'purchase',
   sample: 'sample',
   external: 'external',
+  request: 'request',
 } as const;

@@ -55,6 +55,26 @@ public sealed class IntegrationTransferStoreTests : IDisposable {
     }
 
     [Fact]
+    public async Task SourceRequestUsesTheExistingEncryptedSourcePlanAndOneStableOperation() {
+        var transfer = IntegrationTransfer.CreateSourceRequest(Guid.NewGuid(), Guid.NewGuid());
+        var plan = Plan with { Source = Plan.Source! with {
+            Publication = new("Book", null, [], new Dictionary<string, string>()),
+            Offer = new("offer", "Request", AcquisitionAccessKind.Request, "application/epub+zip")
+        } };
+        var scheduler = new Scheduler();
+        await using (var db = new PrismediaDbContext(options))
+            await new EfIntegrationTransferStore(db, new(root), scheduler).CreateAsync(transfer, plan, default);
+        await using (var db = new PrismediaDbContext(options)) {
+            var restored = await new EfIntegrationTransferStore(db, new(root), scheduler).FindAsync(transfer.State.OperationId, default);
+            Assert.Equal(IntegrationTransferMode.SourceRequest, restored!.Transfer.State.Mode);
+            Assert.Equal(plan.Source!.Selection, restored.Plan.Source!.Selection);
+            Assert.Equal(plan.Source.Offer, restored.Plan.Source.Offer);
+            Assert.Equal(plan.Source.Publication!.Title, restored.Plan.Source.Publication!.Title);
+            Assert.Equal(1, scheduler.Calls);
+        }
+    }
+
+    [Fact]
     public async Task StaleWriterCannotOverwriteVerifiedArtifactEvidence() {
         var transfer = IntegrationTransfer.CreateSourceDownload(Guid.NewGuid(), Guid.NewGuid());
         await using var db = new PrismediaDbContext(options);

@@ -115,7 +115,11 @@ public sealed class EfIntegrationTransferStore(PrismediaDbContext db, TransferPl
             || string.IsNullOrWhiteSpace(plan.OwnershipKey) || plan.OwnershipKey.Length > 256
             || plan.RequestFingerprint is not { Length: 64 } || !plan.RequestFingerprint.All(Uri.IsHexDigit)
             || (plan.Source is null) == (plan.Executor is null)
-            || transfer.State.Mode == IntegrationTransferMode.SourceDownload != (plan.Source is not null))
+            || (transfer.State.Mode switch {
+                IntegrationTransferMode.SourceDownload or IntegrationTransferMode.SourceRequest => plan.Source is null || plan.Executor is not null,
+                IntegrationTransferMode.RemoteExecutor => plan.Executor is null || plan.Source is not null,
+                _ => true
+            }))
             throw new ArgumentException("A transfer needs one valid finite intent, destination, and request identity.");
     }
 }
