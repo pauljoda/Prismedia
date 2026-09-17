@@ -5,6 +5,9 @@ namespace Prismedia.Domain.Integrations;
 /// <summary>Stable content identity within one connected holding, with coordinates that must not silently change.</summary>
 public sealed record ManagedTargetIdentity(string RemoteTargetId, EntityKind Kind, int? SeasonNumber, int? EpisodeNumber, int? AbsoluteNumber);
 
+/// <summary>Retained requested content identity, independent of whether its first source file exists yet.</summary>
+public sealed record ManagedTargetBinding(ManagedTargetIdentity Target, Guid EntityId);
+
 /// <summary>One remote target's established local identity and source-file evidence.</summary>
 public sealed record ManagedEntityBinding(ManagedTargetIdentity Target, Guid EntityId, Guid SourceFileId);
 

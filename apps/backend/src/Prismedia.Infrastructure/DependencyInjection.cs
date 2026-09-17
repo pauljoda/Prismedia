@@ -99,6 +99,7 @@ public static class DependencyInjection {
         services.AddScoped<IIntegrationTransferGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
         services.AddScoped<IIntegrationManagerGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
         services.AddScoped<IIntegrationManagerControlGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
+        services.AddScoped<IIntegrationManagerCreationGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
         services.AddScoped<ManagedLibraryService>();
         services.AddScoped<IManagedTrackingStore, EfManagedTrackingStore>();
         services.AddScoped<IFulfillmentReservationStore, EfFulfillmentReservationStore>();

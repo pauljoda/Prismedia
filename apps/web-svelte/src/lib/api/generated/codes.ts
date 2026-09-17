@@ -1251,6 +1251,18 @@ export const MANAGED_MUTATION_OUTCOME = {
 
 export type ManagedMutationOutcomeCode = (typeof MANAGED_MUTATION_OUTCOME)[keyof typeof MANAGED_MUTATION_OUTCOME];
 
+// source: enum ManagedRequestPhase
+export const MANAGED_REQUEST_PHASE = {
+  pendingCreation: "pending-creation",
+  creationUncertain: "creation-uncertain",
+  awaitingFiles: "awaiting-files",
+  completed: "completed",
+  rejected: "rejected",
+  cancelled: "cancelled",
+} as const;
+
+export type ManagedRequestPhaseCode = (typeof MANAGED_REQUEST_PHASE)[keyof typeof MANAGED_REQUEST_PHASE];
+
 // source: enum ManagedTrackingStatus
 export const MANAGED_TRACKING_STATUS = {
   pending: "pending",

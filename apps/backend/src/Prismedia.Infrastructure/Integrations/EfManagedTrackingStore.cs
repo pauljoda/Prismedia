@@ -112,6 +112,7 @@ public sealed partial class EfManagedTrackingStore(PrismediaDbContext db, IExter
                     binding.EpisodeNumber, binding.AbsoluteNumber), binding.EntityId, binding.SourceFileId)).ToArray());
         }).ToArray();
         return new(row.Id, row.ConnectionId, row.LibraryRootId, JsonSerializer.Deserialize<ManagedItemInput>(row.ItemJson, Json)!,
-            row.Title, row.Status, row.Revision, row.LastCheckedAt, row.Problem, files);
+            row.Title, row.Status, row.Revision, row.LastCheckedAt, row.Problem, files,
+            JsonSerializer.Deserialize<ManagedTargetBinding[]>(row.TargetsJson, Json)!);
     }
 }

@@ -9,7 +9,7 @@ namespace Prismedia.Application.Integrations;
 public static class ManagedControlIdentity {
     /// <summary>Includes pinned work IDs, exact target coordinates, local owners, connection, and mapped root.</summary>
     public static OwnedManagedControlScope From(ManagedTrackingResponse holding) {
-        var bindings = holding.Bindings.SelectMany(file => file.Entities).OrderBy(item => item.Target.RemoteTargetId, StringComparer.Ordinal).ToArray();
+        var bindings = holding.Targets.OrderBy(item => item.Target.RemoteTargetId, StringComparer.Ordinal).ToArray();
         var item = holding.Item with { ExpectedExternalIds = holding.Item.ExpectedExternalIds.OrderBy(pair => pair.Key, StringComparer.Ordinal).ToDictionary() };
         var targets = bindings.Select(binding => new ManagedControlTarget(binding.Target.RemoteTargetId, binding.Target.Kind,
             binding.Target.SeasonNumber, binding.Target.EpisodeNumber, binding.Target.AbsoluteNumber)).ToArray();

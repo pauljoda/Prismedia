@@ -54,6 +54,7 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.Title).HasColumnName("title").HasMaxLength(512);
             entity.Property(row => row.ItemJson).HasColumnName("item").HasColumnType("jsonb");
             entity.Property(row => row.SelectionsJson).HasColumnName("selections").HasColumnType("jsonb");
+            entity.Property(row => row.TargetsJson).HasColumnName("targets").HasColumnType("jsonb");
             entity.Property(row => row.Status).HasColumnName("status").HasMaxLength(32).HasConversion(value => value.ToCode(), value => value.DecodeAs<ManagedTrackingStatus>());
             entity.Property(row => row.Revision).HasColumnName("revision").IsConcurrencyToken();
             entity.Property(row => row.LastCheckedAt).HasColumnName("last_checked_at");

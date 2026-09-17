@@ -18,9 +18,14 @@ public sealed class EfManagedControlStore(PrismediaDbContext db, IManagedTrackin
     public async Task<OwnedManagedControlScope> RequireScopeAsync(Guid connectionId, Guid holdingId, CancellationToken token) {
         var holding = (await tracking.FindAsync(holdingId, token))?.Tracking;
         if (holding is null || holding.ConnectionId != connectionId || holding.Status != ManagedTrackingStatus.Tracking
-            || holding.Bindings.Count == 0)
+            || holding.Targets.Count == 0)
             throw new ManagedControlConflictException("Refresh and verify this holding's tracked associations before changing its manager settings.");
-        var entityIds = holding.Bindings.SelectMany(file => file.Entities).Select(binding => binding.EntityId).Distinct().ToArray();
+        var entityIds = holding.Targets.Select(binding => binding.EntityId).Distinct().ToArray();
+        var sourceTargets = holding.Bindings.SelectMany(file => file.Entities)
+            .Select(binding => new ManagedTargetBinding(binding.Target, binding.EntityId)).OrderBy(binding => binding.Target.RemoteTargetId, StringComparer.Ordinal);
+        if (entityIds.Length != holding.Targets.Count || holding.Targets.Select(binding => binding.Target.RemoteTargetId).Distinct(StringComparer.Ordinal).Count() != holding.Targets.Count
+            || !sourceTargets.SequenceEqual(holding.Targets.OrderBy(binding => binding.Target.RemoteTargetId, StringComparer.Ordinal)))
+            throw new ManagedControlConflictException("The holding's source associations no longer match its retained target identities.");
         var reserved = await db.FulfillmentReservations.AsNoTracking().Where(row => row.OwnerId == holdingId
             && row.OwnerKind == FulfillmentOwnerKind.ConnectedLibrary && row.ConnectionId == connectionId && row.ReleasedAt == null
             && entityIds.Contains(row.EntityId)).Select(row => row.EntityId).Distinct().CountAsync(token);

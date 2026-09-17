@@ -6,6 +6,7 @@
  */
 import type { ManagedFileBinding } from './managedFileBinding';
 import type { ManagedItemInput } from './managedItemInput';
+import type { ManagedTargetBinding } from './managedTargetBinding';
 import type { ManagedTrackingStatus } from './managedTrackingStatus';
 
 export interface ManagedTrackingResponse {
@@ -22,4 +23,5 @@ export interface ManagedTrackingResponse {
   /** @nullable */
   problem: string | null;
   bindings: ManagedFileBinding[];
+  targets: ManagedTargetBinding[];
 }

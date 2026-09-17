@@ -12,6 +12,8 @@ public sealed class ManagedHoldingRow {
     public string Title { get; set; } = string.Empty;
     public string ItemJson { get; set; } = "{}";
     public string SelectionsJson { get; set; } = "[]";
+    /// <summary>Stable local target identities retained before and across source-file availability.</summary>
+    public string TargetsJson { get; set; } = "[]";
     public ManagedTrackingStatus Status { get; set; }
     public long Revision { get; set; }
     public DateTimeOffset? LastCheckedAt { get; set; }

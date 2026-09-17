@@ -445,6 +445,7 @@ export * from './managedLibraryItemExternalIds';
 export * from './managedLibraryPage';
 export * from './managedLibraryQuery';
 export * from './managedLocalSource';
+export * from './managedTargetBinding';
 export * from './managedTargetIdentity';
 export * from './managedTargetMonitoring';
 export * from './managedTrackingPreview';

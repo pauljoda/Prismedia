@@ -287,6 +287,11 @@ including all episodes sharing one file. **Link existing items** saves those rev
 associations before a worker verifies them again. Conflicting provider identities,
 native monitors, unfinished acquisitions, or existing connected ownership prevent linking.
 
+Tracked holdings expose stable `targets` independently of their current file `bindings`.
+Each target pins its remote identity, coordinates, and local entity. Replacing or losing
+a file does not redefine that scope; manager controls verify that retained targets,
+file associations, and fulfillment ownership still agree before dispatch.
+
 Linking reserves acquisition ownership in the same transaction as the saved intent and
 background job. Native searches, retries, replacements, and monitoring cannot take over
 that scope. Series and season requests overlap their contained episodes; independent

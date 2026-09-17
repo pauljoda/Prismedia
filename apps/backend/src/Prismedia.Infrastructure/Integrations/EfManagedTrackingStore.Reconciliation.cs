@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Files;
 using Prismedia.Application.Integrations;
@@ -29,6 +30,8 @@ public sealed partial class EfManagedTrackingStore {
                 var current = await SourcesAsync(observation.Files.Select(file => file.LocalPath).ToArray(), leaseToken);
                 var checkedPlan = ManagedSourceAdoption.Plan(observation.Files, work.Selections, current);
                 if (checkedPlan.ReviewReason is not null) throw new ArgumentException(checkedPlan.ReviewReason);
+                row.TargetsJson = JsonSerializer.Serialize(checkedPlan.Bindings.SelectMany(file => file.Entities)
+                    .Select(owner => new ManagedTargetBinding(owner.Target, owner.EntityId)).ToArray(), Json);
                 await RequireUnownedAsync(ids, work.Tracking.Item.EntityKind, work.Tracking.Item.ExpectedExternalIds, leaseToken);
                 foreach (var id in ids)
                     await new EfFulfillmentReservationStore(db).ReserveAsync(row.Id, FulfillmentOwnerKind.ConnectedLibrary,

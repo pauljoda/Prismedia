@@ -67,6 +67,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Connected-library tracking retains item associations independently of file bindings, keeping manager control scopes stable through missing files and upgrades.
+
 - Linked external holdings reserve their acquisition scope before background work starts. Native searches, retries, replacements, and monitoring cannot compete with that owner; books retain independent ebook and audiobook ownership.
 
 - Episode searches and automatic grabs reject releases whose distinctive title confidently identifies another episode in the known series catalog, even when the advertised season and episode number match. Unnamed, translated, ambiguous, and multi-episode releases retain their existing checks.
