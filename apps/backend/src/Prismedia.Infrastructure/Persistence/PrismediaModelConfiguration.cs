@@ -15,5 +15,6 @@ internal static partial class PrismediaModelConfiguration {
         ConfigureSystemTables(modelBuilder);
         ConfigureAcquisitionTables(modelBuilder);
         ConfigureIntegrationTables(modelBuilder);
+        ConfigurePluginInvocationTables(modelBuilder);
     }
 }

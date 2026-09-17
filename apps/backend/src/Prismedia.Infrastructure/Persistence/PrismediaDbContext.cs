@@ -138,6 +138,8 @@ public sealed class PrismediaDbContext : DbContext {
     public DbSet<IntegrationConnectionRow> IntegrationConnections => Set<IntegrationConnectionRow>();
 
     public DbSet<IntegrationTransferRow> IntegrationTransfers => Set<IntegrationTransferRow>();
+    public DbSet<PluginInvocationStateRow> PluginInvocationStates => Set<PluginInvocationStateRow>();
+    public DbSet<PluginInvocationLeaseRow> PluginInvocationLeases => Set<PluginInvocationLeaseRow>();
     public DbSet<ExternalLibraryMountRow> ExternalLibraryMounts => Set<ExternalLibraryMountRow>();
     public DbSet<ManagedHoldingRow> ManagedHoldings => Set<ManagedHoldingRow>();
     public DbSet<ManagedControlRow> ManagedControls => Set<ManagedControlRow>();

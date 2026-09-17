@@ -9,7 +9,8 @@ namespace Prismedia.Infrastructure.Plugins;
 /// Bounded invocation transport shared by executable plugin capabilities. Plugins remain trusted
 /// processes; environment filtering and private request files are not an operating-system sandbox.
 /// </summary>
-public sealed class PluginProcessTransport(ProcessExecutor processes, PluginCatalogOptions options) {
+public sealed class PluginProcessTransport(ProcessExecutor processes, PluginCatalogOptions options, IPluginInvocationGate? invocations = null) {
+    internal static readonly TimeSpan MaximumInvocationDuration = TimeSpan.FromSeconds(60);
     private const int MaximumRequestCharacters = 4 * 1024 * 1024;
     private static readonly ProcessExecutionOptions Execution = new(
         MaxStandardOutputCharacters: 16 * 1024 * 1024,
@@ -29,6 +30,8 @@ public sealed class PluginProcessTransport(ProcessExecutor processes, PluginCata
     /// <returns>Complete bounded process output and exit status.</returns>
     public async Task<ProcessExecutionResult> RunAsync<TRequest>(PluginDescriptor descriptor, TRequest request,
         CancellationToken cancellationToken) where TRequest : notnull {
+        using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        deadline.CancelAfter(MaximumInvocationDuration);
         var json = JsonSerializer.Serialize(request, JsonOptions);
         if (json.Length > MaximumRequestCharacters) throw new InvalidDataException("Plugin request exceeded its size limit.");
         var directory = Path.Combine(options.CacheRoot, "plugins", "requests");
@@ -43,10 +46,15 @@ public sealed class PluginProcessTransport(ProcessExecutor processes, PluginCata
             };
             if (!OperatingSystem.IsWindows()) fileOptions.UnixCreateMode = UnixFileMode.UserRead | UnixFileMode.UserWrite;
             await using (var file = new FileStream(path, fileOptions)) {
-                await file.WriteAsync(Encoding.UTF8.GetBytes(json), cancellationToken);
+                await file.WriteAsync(Encoding.UTF8.GetBytes(json), deadline.Token);
             }
+            await using var admission = descriptor.Manifest.Execution is { } policy
+                ? await (invocations ?? throw new InvalidOperationException("Plugin invocation admission is not configured."))
+                    .AcquireAsync(descriptor.Manifest.Id, policy, deadline.Token)
+                : null;
+            deadline.Token.ThrowIfCancellationRequested();
             return await processes.RunAsync("dotnet", [descriptor.EntryPath, path],
-                PluginProcessEnvironment.Create(), cancellationToken, Execution);
+                PluginProcessEnvironment.Create(), deadline.Token, Execution);
         } finally {
             try { File.Delete(path); }
             catch (IOException) { }

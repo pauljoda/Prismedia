@@ -84,6 +84,30 @@ kinds and identify actions it serves.
 | `dotnet-process` | Compiled plugin assembly, e.g. `dist/MyPlugin.dll`. | Executed by the .NET plugin process runner. |
 | `stash-compat` | A standard Stash YAML scraper definition. | Executed natively by Prismedia's Stash-compat engine. You normally never write this manifest by hand — installing a scraper from the CommunityScrapers index synthesizes it (with a `stash-` id prefix). See [Stash Compatibility](./stash-compat.md). |
 
+## Invocation limits
+
+Native `dotnet-process` plugins may declare an `execution` policy:
+
+```json
+"execution": {
+  "maxConcurrentInvocations": 1,
+  "minimumStartIntervalMs": 1100
+}
+```
+
+Prismedia enforces this policy at the executable boundary across API and worker
+processes, metadata and integration calls, and every Connection using the same plugin.
+PostgreSQL stores active invocation reservations and the next permitted start time.
+Different plugins have independent budgets. Queued identification also uses its
+existing scheduling limits; interactive calls cannot bypass the executable budget.
+
+Waiting for a slot respects cancellation and counts against the 60-second invocation
+deadline. Successful, failed, and cancelled child processes release their slot;
+releasing capacity does not erase the minimum start interval. If a host stops before
+cleanup, its reservation expires after two minutes. Admission fails closed when
+PostgreSQL is unavailable. These are process admission limits, not a per-HTTP-request
+limiter inside the plugin or an operating-system sandbox.
+
 ## Auth fields
 
 Each entry in `auth` declares one credential the plugin wants:

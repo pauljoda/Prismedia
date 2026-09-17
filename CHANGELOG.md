@@ -94,6 +94,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Native plugin concurrency and start-rate limits now apply across interactive requests and background work, sharing one persistent budget per plugin across all Connections.
+
 - Connected-library tracking retains item associations independently of file bindings, keeping manager control scopes stable through missing files and upgrades.
 
 - Linked external holdings reserve their acquisition scope before background work starts. Native searches, retries, replacements, and monitoring cannot compete with that owner; books retain independent ebook and audiobook ownership.

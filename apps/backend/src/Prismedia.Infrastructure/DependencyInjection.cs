@@ -94,6 +94,7 @@ public static class DependencyInjection {
         services.AddSingleton(new ProviderCredentialProtector(dataDir));
         services.AddScoped<ProviderCredentialStore>();
         services.AddSingleton<PluginProcessTransport>();
+        services.AddSingleton<IPluginInvocationGate, PostgresPluginInvocationGate>();
         services.AddScoped<IIntegrationConnectionStore, EfIntegrationConnectionStore>();
         services.AddScoped<IntegrationPluginGateway>();
         services.AddScoped<IIntegrationPluginGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
@@ -218,7 +219,7 @@ public static class DependencyInjection {
             ResolveCurrentVersion(configuration, pathBase),
             ResolvePluginIndexUrl(configuration),
             ResolveStashScraperIndexUrl(configuration)));
-        services.AddSingleton<DotnetPluginProcessRunner>();
+        services.AddSingleton(provider => new DotnetPluginProcessRunner(provider.GetRequiredService<PluginProcessTransport>()));
         services.AddSingleton<IIdentifyRunner>(provider =>
             provider.GetRequiredService<DotnetPluginProcessRunner>());
         services.AddSingleton<IIdentifyRunner>(provider => new StashCompatRunner(

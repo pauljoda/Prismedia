@@ -47,7 +47,7 @@ public sealed partial class IntegrationPluginGateway(PrismediaDbContext db, Plug
         IntegrationConnectionContext connection, TInput input, CancellationToken cancellationToken) where TOutput : class {
         connection = connection with { Auth = IntegrationCredentialScope.ForManifest(descriptor.Manifest, connection.Auth) };
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        deadline.CancelAfter(TimeSpan.FromSeconds(60));
+        deadline.CancelAfter(PluginProcessTransport.MaximumInvocationDuration);
         var invocationId = Guid.NewGuid();
         var request = new IntegrationPluginRequest<TInput>(IntegrationProtocol.Name, IntegrationProtocol.CurrentVersion,
             invocationId, operation, connection, input);
