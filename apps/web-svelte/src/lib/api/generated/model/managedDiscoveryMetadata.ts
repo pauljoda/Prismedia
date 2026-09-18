@@ -5,6 +5,7 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { ManagedDiscoveryMetadataDates } from './managedDiscoveryMetadataDates';
+import type { ManagedPersonCredit } from './managedPersonCredit';
 
 export interface ManagedDiscoveryMetadata {
   /** @nullable */
@@ -35,4 +36,6 @@ export interface ManagedDiscoveryMetadata {
   posterUrl?: string | null;
   /** @nullable */
   backdropUrl?: string | null;
+  /** @nullable */
+  credits?: ManagedPersonCredit[] | null;
 }

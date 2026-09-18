@@ -627,6 +627,13 @@ choose **Request** once. The request stays with the selected Radarr connection. 
 plugin key is not needed for this path. **In your library** shows titles already
 managed by that instance.
 
+Exact reviews of movies already in Radarr can include cast, characters, supported
+crew roles, TMDB person identities, and headshots. Selecting Credits uses the same
+reviewed metadata application and protection rules as other providers. Search and
+library listing do not fetch credits for every result. New Radarr lookup results
+and Sonarr's public API do not provide these credits; use a metadata provider such
+as TMDB for those titles.
+
 Plugins opt into this discovery surface with the external-manager
 `discover-managed` operation. The connection-scoped `/manager/discovery/search`
 endpoint returns normalized candidates and canonical identities. Exact review uses

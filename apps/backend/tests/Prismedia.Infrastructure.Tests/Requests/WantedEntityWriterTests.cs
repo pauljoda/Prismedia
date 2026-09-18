@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Plugins;
 using Prismedia.Application.Requests;
+using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Entities;
@@ -482,6 +483,72 @@ public sealed class WantedEntityWriterTests {
         Assert.Equal(2, artwork.Length);
         Assert.Equal([firstUrl, secondUrl], artwork.Select(file => file.Path).ToArray());
         Assert.All(artwork, file => Assert.Equal(FileSourceKind.Custom.ToCode(), file.Source));
+    }
+
+    [Fact]
+    public async Task DeferredArtworkApplyPersistsManagerPersonIdentityRoleAndHeadshot() {
+        await using var db = CreateContext();
+        var movieId = AddEntity(db, EntityKind.Movie.ToCode(), "Reviewed Movie", isWanted: true);
+        await db.SaveChangesAsync();
+        var headshot = "https://images.test/people/101.jpg";
+        var person = new EntityMetadataProposal(
+            "manager:person:101",
+            "radarr",
+            EntityKind.Person,
+            null,
+            "Connected catalog",
+            new EntityMetadataPatch(
+                "Lead Actor",
+                null,
+                new Dictionary<string, string> { [ExternalIdProviders.Tmdb] = "101" },
+                ["https://www.themoviedb.org/person/101"],
+                [],
+                null,
+                [],
+                new Dictionary<string, string>(),
+                new Dictionary<string, int>(),
+                new Dictionary<string, int>(),
+                null),
+            [new ImageCandidate(MediaImageKind.Profile.ToCode(), headshot, "radarr", null, null, null, null)],
+            [],
+            []);
+        var proposal = new EntityMetadataProposal(
+            "manager:movie:19",
+            "radarr",
+            EntityKind.Movie,
+            null,
+            "Connected catalog",
+            new EntityMetadataPatch(
+                "Reviewed Movie",
+                null,
+                new Dictionary<string, string> { [ExternalIdProviders.Tmdb] = "19" },
+                [],
+                [],
+                null,
+                [new CreditPatch("Lead Actor", CreditRole.Actor.ToCode(), "Hero", 0)],
+                new Dictionary<string, string>(),
+                new Dictionary<string, int>(),
+                new Dictionary<string, int>(),
+                null),
+            [],
+            [],
+            [],
+            movieId,
+            [person]);
+
+        await Writer(db).ApplyProposalWithDeferredArtworkAsync(movieId, proposal, CancellationToken.None);
+
+        var personId = await db.Entities.Where(row => row.KindCode == EntityKind.Person.ToCode()
+            && row.Title == "Lead Actor").Select(row => row.Id).SingleAsync();
+        var externalId = await db.EntityExternalIds.SingleAsync(row => row.EntityId == personId);
+        Assert.Equal((ExternalIdProviders.Tmdb, "101"), (externalId.Provider, externalId.Value));
+        var credit = await db.EntityRelationshipLinks.SingleAsync(row => row.EntityId == movieId
+            && row.TargetEntityId == personId && row.RelationshipCode == RelationshipKind.Cast.ToCode());
+        Assert.Contains($"\"role\":\"{CreditRole.Actor.ToCode()}\"", credit.MetadataJson ?? string.Empty, StringComparison.Ordinal);
+        Assert.Contains("Hero", credit.MetadataJson ?? string.Empty, StringComparison.Ordinal);
+        var artwork = await db.EntityFiles.SingleAsync(row => row.EntityId == personId);
+        Assert.Equal((EntityFileRole.Thumbnail, headshot, FileSourceKind.Custom.ToCode()),
+            (artwork.Role, artwork.Path, artwork.Source));
     }
 
     [Fact]

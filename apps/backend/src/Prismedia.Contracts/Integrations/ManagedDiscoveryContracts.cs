@@ -6,6 +6,15 @@ namespace Prismedia.Contracts.Integrations;
 /// <summary>A bounded title search of one external manager's upstream catalog.</summary>
 public sealed record ManagedDiscoveryQuery(EntityKind EntityKind, string Query, int Limit = 25);
 
+/// <summary>A normalized person credit supplied by an external manager during exact metadata review.</summary>
+public sealed record ManagedPersonCredit(
+    string Name,
+    CreditRole Role,
+    string? Character,
+    int? SortOrder,
+    IReadOnlyDictionary<string, string>? ExternalIds = null,
+    string? ProfileUrl = null);
+
 /// <summary>Optional normalized descriptive metadata supplied by an external manager catalog.</summary>
 public sealed record ManagedDiscoveryMetadata(
     string? OriginalTitle = null,
@@ -18,7 +27,8 @@ public sealed record ManagedDiscoveryMetadata(
     IReadOnlyDictionary<string, string>? Dates = null,
     IReadOnlyList<string>? Urls = null,
     string? PosterUrl = null,
-    string? BackdropUrl = null);
+    string? BackdropUrl = null,
+    IReadOnlyList<ManagedPersonCredit>? Credits = null);
 
 /// <summary>Manager-confirmed catalog candidate. External ids are evidence from the selected connection.</summary>
 public sealed record ManagedDiscoveryCandidate(

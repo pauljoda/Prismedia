@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Existing Radarr movie reviews can include cast, characters, supported crew roles, and linked People with TMDB identities and headshots.
+
 - Provider libraries can be discovered and linked from Settings → Libraries, including multiple folders per connection, with shared visibility, scanning, and playback controls.
 
 - Radarr connections can search new movies directly, show their artwork and metadata for review, and submit requests through the selected instance without a separate metadata-provider key.

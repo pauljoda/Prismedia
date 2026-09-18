@@ -84,6 +84,54 @@ public sealed class ManagedDiscoveryServiceTests {
         Assert.Equal(1, fixture.Writer.ApplyCalls);
     }
 
+    [Fact]
+    public async Task ExactReviewProjectsManagerCreditsIntoStandardPeopleRelationships() {
+        var fixture = new Fixture();
+
+        var reviewed = await fixture.Service.ReviewAsync(fixture.Connection.State.Id,
+            new(EntityKind.Movie, fixture.Identity), default);
+
+        var credits = reviewed.Review.Proposal.Patch.Credits;
+        var actor = Assert.Single(credits, credit => credit.Role == CreditRole.Actor.ToCode());
+        Assert.Equal("Lead Actor", actor.Name);
+        Assert.Equal("Hero", actor.Character);
+        var person = Assert.Single(reviewed.Review.Proposal.Relationships,
+            relationship => relationship.Patch.Title == actor.Name);
+        Assert.Equal(EntityKind.Person, person.TargetKind);
+        Assert.Equal("101", person.Patch.ExternalIds[ExternalIdProviders.Tmdb]);
+        Assert.Equal("https://www.themoviedb.org/person/101", Assert.Single(person.Patch.Urls));
+        Assert.Equal(MediaImageKind.Profile.ToCode(), Assert.Single(person.Images).Kind);
+    }
+
+    [Fact]
+    public async Task InvalidManagerPersonEvidenceIsRejectedBeforeReview() {
+        var fixture = new Fixture {
+            Credits = [new("Lead Actor", CreditRole.Actor, null, 0, ProfileUrl: "http://127.0.0.1/person.jpg")]
+        };
+
+        await Assert.ThrowsAsync<IntegrationInvocationException>(() => fixture.Service.ReviewAsync(
+            fixture.Connection.State.Id,
+            new(EntityKind.Movie, fixture.Identity),
+            default));
+
+        Assert.Equal(0, fixture.Writer.EnsureCalls);
+    }
+
+    [Fact]
+    public async Task NoncanonicalManagerPersonTmdbIdentityIsRejectedBeforeUrlProjection() {
+        var fixture = new Fixture {
+            Credits = [new("Lead Actor", CreditRole.Actor, null, 0,
+                new Dictionary<string, string> { [ExternalIdProviders.Tmdb] = "0" })]
+        };
+
+        await Assert.ThrowsAsync<IntegrationInvocationException>(() => fixture.Service.ReviewAsync(
+            fixture.Connection.State.Id,
+            new(EntityKind.Movie, fixture.Identity),
+            default));
+
+        Assert.Equal(0, fixture.Writer.EnsureCalls);
+    }
+
     private static ReviewedRequestCommitRequest Commit(RequestReviewResponse review, EntityMetadataProposal proposal) => new(
         RequestMediaKind.Movie,
         review.PluginId,
@@ -105,6 +153,13 @@ public sealed class ManagedDiscoveryServiceTests {
         internal ManagedDiscoveryService Service { get; }
         internal int DiscoveryCalls { get; private set; }
         internal int LookupCalls { get; private set; }
+        internal IReadOnlyList<ManagedPersonCredit>? Credits { get; set; } = [
+            new("Lead Actor", CreditRole.Actor, "Hero", 0,
+                new Dictionary<string, string> { [ExternalIdProviders.Tmdb] = "101" },
+                "https://images.example.test/people/101.jpg"),
+            new("Director Person", CreditRole.Director, null, 1000,
+                new Dictionary<string, string> { [ExternalIdProviders.Tmdb] = "202" })
+        ];
         private readonly PluginManifest manifest;
 
         internal Fixture() {
@@ -127,7 +182,8 @@ public sealed class ManagedDiscoveryServiceTests {
         private ManagedCandidate Candidate() => new(EntityKind.Movie, "Metropolis", 1927,
             new Dictionary<string, string> { [Identity.Namespace] = Identity.Value, [ExternalIdProviders.Imdb] = "tt0017136" },
             new(Overview: "A city divided.", Studio: "UFA", Classification: "PG",
-                Tags: ["Science Fiction"], PosterUrl: "https://images.example.test/poster.jpg"));
+                Tags: ["Science Fiction"], PosterUrl: "https://images.example.test/poster.jpg",
+                Credits: Credits));
 
         public Task<ManagedDiscoveryPage> DiscoverAsync(string pluginId, IntegrationConnectionContext connection,
             ManagedDiscoveryQuery input, CancellationToken token) {

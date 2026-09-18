@@ -15,6 +15,7 @@ public sealed class ManagedDiscoveryService(
     IIntegrationManagerCreationGateway lookup,
     ReviewedWantedMovieService wanted) {
     private const string DiscoveryMatchReason = "Connected catalog";
+    private const int MaximumCredits = 1000;
     /// <summary>Returns bounded manager candidates with server-selected persistent identities.</summary>
     public async Task<ManagedDiscoverySearchResponse> SearchAsync(
         Guid connectionId,
@@ -138,6 +139,13 @@ public sealed class ManagedDiscoveryService(
             images.Add(new(MediaImageKind.Poster.ToCode(), poster, pluginId, null, null, null, null));
         if (metadata?.BackdropUrl is { } backdrop)
             images.Add(new(MediaImageKind.Backdrop.ToCode(), backdrop, pluginId, null, null, null, null));
+        var credits = (metadata?.Credits ?? [])
+            .Select(credit => new CreditPatch(
+                credit.Name,
+                credit.Role.ToCode(),
+                credit.Character,
+                credit.SortOrder))
+            .ToArray();
         var patch = new EntityMetadataPatch(
             candidate.Title,
             metadata?.Overview,
@@ -145,7 +153,7 @@ public sealed class ManagedDiscoveryService(
             metadata?.Urls ?? [],
             metadata?.Tags ?? [],
             metadata?.Studio,
-            [],
+            credits,
             new Dictionary<string, string>(),
             new Dictionary<string, int>(),
             new Dictionary<string, int>(),
@@ -157,8 +165,56 @@ public sealed class ManagedDiscoveryService(
             DateEntries = dates
         };
         var identity = CanonicalIdentity(candidate.EntityKind, candidate.ExternalIds);
+        var relationships = PersonRelationships(connectionId, pluginId, metadata?.Credits ?? []);
         return new($"manager:{connectionId:D}:{identity.Namespace}:{identity.Value}", pluginId, candidate.EntityKind, null,
-            DiscoveryMatchReason, patch, images, [], [], Relationships: []);
+            DiscoveryMatchReason, patch, images, [], [], Relationships: relationships);
+    }
+
+    private static IReadOnlyList<EntityMetadataProposal> PersonRelationships(
+        Guid connectionId,
+        string pluginId,
+        IReadOnlyList<ManagedPersonCredit> credits) {
+        var relationships = new List<EntityMetadataProposal>();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var credit in credits) {
+            var externalIds = credit.ExternalIds ?? new Dictionary<string, string>();
+            var hasTmdbIdentity = TryCanonicalTmdbPersonId(externalIds, out var tmdb);
+            var key = hasTmdbIdentity
+                ? $"{ExternalIdProviders.Tmdb}:{tmdb}"
+                : $"name:{credit.Name.Trim()}";
+            if (!seen.Add(key)) continue;
+
+            var urls = hasTmdbIdentity
+                ? new[] { $"https://www.themoviedb.org/person/{tmdb}" }
+                : [];
+            var personImages = credit.ProfileUrl is { } profile
+                ? new[] { new ImageCandidate(MediaImageKind.Profile.ToCode(), profile, pluginId, null, null, null, null) }
+                : [];
+            var personPatch = new EntityMetadataPatch(
+                credit.Name,
+                null,
+                externalIds,
+                urls,
+                [],
+                null,
+                [],
+                new Dictionary<string, string>(),
+                new Dictionary<string, int>(),
+                new Dictionary<string, int>(),
+                null);
+            relationships.Add(new(
+                $"manager:{connectionId:D}:person:{relationships.Count}",
+                pluginId,
+                EntityKind.Person,
+                null,
+                DiscoveryMatchReason,
+                personPatch,
+                personImages,
+                [],
+                [],
+                Relationships: []));
+        }
+        return relationships;
     }
 
     private static void ValidateSearch(ManagedDiscoveryQuery input) {
@@ -181,7 +237,35 @@ public sealed class ManagedDiscoveryService(
             && OptionalList(value.Tags, 64, 128) && OptionalDictionary(value.Dates, 32, 128, 128)
             && OptionalList(value.Urls, 64, 8192) && (value.Urls is null || value.Urls.All(SafeUrl))
             && (value.PosterUrl is null || SafeImageUrl(value.PosterUrl))
-            && (value.BackdropUrl is null || SafeImageUrl(value.BackdropUrl)));
+            && (value.BackdropUrl is null || SafeImageUrl(value.BackdropUrl))
+            && ValidCredits(value.Credits));
+
+    private static bool ValidCredits(IReadOnlyList<ManagedPersonCredit>? credits) => credits is null
+        || credits.Count <= MaximumCredits && credits.All(credit => credit is not null
+            && Text(credit.Name, 512)
+            && Enum.IsDefined(credit.Role)
+            && OptionalText(credit.Character, 512)
+            && credit.SortOrder is null or >= 0 and <= 1_000_000
+            && PersonIdentities(credit.ExternalIds)
+            && (credit.ProfileUrl is null || SafeImageUrl(credit.ProfileUrl)));
+
+    private static bool PersonIdentities(IReadOnlyDictionary<string, string>? values) => values is null
+        || values.Count <= 8 && values.All(pair => Text(pair.Key, 128) && Text(pair.Value, 2048))
+        && (!values.ContainsKey(ExternalIdProviders.Tmdb) || TryCanonicalTmdbPersonId(values, out _));
+
+    private static bool TryCanonicalTmdbPersonId(
+        IReadOnlyDictionary<string, string> values,
+        out string tmdb) {
+        if (values.TryGetValue(ExternalIdProviders.Tmdb, out var value)
+            && int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var id)
+            && id > 0
+            && id.ToString(CultureInfo.InvariantCulture) == value) {
+            tmdb = value;
+            return true;
+        }
+        tmdb = string.Empty;
+        return false;
+    }
 
     private static ExternalIdentity CanonicalIdentity(EntityKind kind, IReadOnlyDictionary<string, string> ids) {
         if (kind == EntityKind.Movie && ids.TryGetValue(ExternalIdProviders.Tmdb, out var tmdb)
