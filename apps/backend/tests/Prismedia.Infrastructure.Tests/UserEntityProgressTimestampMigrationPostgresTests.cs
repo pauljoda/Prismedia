@@ -1,6 +1,4 @@
-using Microsoft.EntityFrameworkCore;
 using Prismedia.Domain.Entities;
-using Prismedia.Infrastructure.Persistence.Entities;
 
 namespace Prismedia.Infrastructure.Tests;
 
@@ -22,7 +20,6 @@ public sealed class UserEntityProgressTimestampMigrationPostgresTests {
         var progressUpdatedAt = DateTimeOffset.Parse("2026-07-31T12:00:00Z");
         var ratingUpdatedAt = progressUpdatedAt.AddMinutes(1);
 
-        await AddCurrentModelCompatibilityAsync(database);
         await SeedUserAndEntitiesAsync(database, userId, progressEntityId, ratingEntityId);
         await using (var connection = await database.OpenConnectionAsync()) {
             await using var command = new Npgsql.NpgsqlCommand(
@@ -61,52 +58,18 @@ public sealed class UserEntityProgressTimestampMigrationPostgresTests {
         Assert.False(await ColumnExistsAsync(database, "progress_updated_at"));
     }
 
-    private static async Task AddCurrentModelCompatibilityAsync(PostgresTestDatabase database) {
-        await using var connection = await database.OpenConnectionAsync();
-        await using var command = new Npgsql.NpgsqlCommand(
-            """
-            ALTER TABLE users ADD COLUMN can_request_content boolean NOT NULL DEFAULT false;
-            ALTER TABLE entities ADD COLUMN is_library_archived boolean NOT NULL DEFAULT false;
-            """,
-            connection);
-        await command.ExecuteNonQueryAsync();
-    }
-
     private static async Task SeedUserAndEntitiesAsync(
         PostgresTestDatabase database,
         Guid userId,
         Guid progressEntityId,
         Guid ratingEntityId) {
-        var now = DateTimeOffset.UtcNow;
-        await using var context = database.CreateContext();
-        context.Users.Add(new UserRow {
-            Id = userId,
-            Username = $"migration-user-{userId:N}",
-            NormalizedUsername = $"migration-user-{userId:N}",
-            DisplayName = "Migration Tester",
-            Role = UserRole.Admin,
-            AllowNsfw = true,
-            CanCreateLibraries = true,
-            Enabled = true,
-            CreatedAt = now,
-            UpdatedAt = now
-        });
-        context.Entities.AddRange(
-            new EntityRow {
-                Id = progressEntityId,
-                KindCode = EntityKind.Book.ToCode(),
-                Title = "Progress row",
-                CreatedAt = now,
-                UpdatedAt = now
-            },
-            new EntityRow {
-                Id = ratingEntityId,
-                KindCode = EntityKind.Video.ToCode(),
-                Title = "Rating row",
-                CreatedAt = now,
-                UpdatedAt = now
-            });
-        await context.SaveChangesAsync();
+        await database.SeedHistoricalUserAndEntitiesAsync(
+            userId,
+            $"migration-user-{userId:N}",
+            "Migration Tester",
+            UserRole.Admin.ToCode(),
+            (progressEntityId, EntityKind.Book.ToCode(), "Progress row"),
+            (ratingEntityId, EntityKind.Video.ToCode(), "Rating row"));
     }
 
     private static async Task<bool> ColumnExistsAsync(PostgresTestDatabase database, string column) {

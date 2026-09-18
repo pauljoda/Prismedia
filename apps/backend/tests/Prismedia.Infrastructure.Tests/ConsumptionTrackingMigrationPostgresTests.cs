@@ -25,7 +25,6 @@ public sealed class ConsumptionTrackingMigrationPostgresTests {
         var skippedEventId = Guid.NewGuid();
         var progressAt = DateTimeOffset.Parse("2026-07-30T02:03:04Z");
         var lastActiveAt = progressAt.AddHours(1);
-        await AddCurrentModelCompatibilityAsync(database);
         await SeedUserAndEntitiesAsync(database, userId, bookId, chapterId);
 
         await using (var connection = await database.OpenConnectionAsync()) {
@@ -88,7 +87,6 @@ public sealed class ConsumptionTrackingMigrationPostgresTests {
         var userId = Guid.NewGuid();
         var entityId = Guid.NewGuid();
         var now = DateTimeOffset.Parse("2026-08-02T12:00:00Z");
-        await AddCurrentModelCompatibilityAsync(database);
         await SeedUserAndEntitiesAsync(database, userId, entityId);
 
         await using (var seed = database.CreateContext()) {
@@ -141,43 +139,20 @@ public sealed class ConsumptionTrackingMigrationPostgresTests {
             CreatedAt = occurredAt
         };
 
-    private static async Task AddCurrentModelCompatibilityAsync(PostgresTestDatabase database) {
-        await using var connection = await database.OpenConnectionAsync();
-        await using var command = new NpgsqlCommand(
-            """
-            ALTER TABLE users ADD COLUMN can_request_content boolean NOT NULL DEFAULT false;
-            ALTER TABLE entities ADD COLUMN is_library_archived boolean NOT NULL DEFAULT false;
-            """,
-            connection);
-        await command.ExecuteNonQueryAsync();
-    }
-
     private static async Task SeedUserAndEntitiesAsync(
         PostgresTestDatabase database,
         Guid userId,
         params Guid[] entityIds) {
-        var now = DateTimeOffset.UtcNow;
-        await using var context = database.CreateContext();
-        context.Users.Add(new UserRow {
-            Id = userId,
-            Username = $"consumption-migration-{userId:N}",
-            NormalizedUsername = $"consumption-migration-{userId:N}",
-            DisplayName = "Consumption Migration Tester",
-            Role = UserRole.Admin,
-            AllowNsfw = true,
-            CanCreateLibraries = true,
-            Enabled = true,
-            CreatedAt = now,
-            UpdatedAt = now
-        });
-        context.Entities.AddRange(entityIds.Select((id, index) => new EntityRow {
-            Id = id,
-            KindCode = index == 0 ? EntityKind.Book.ToCode() : EntityKind.BookChapter.ToCode(),
-            Title = $"Migration entity {index + 1}",
-            CreatedAt = now,
-            UpdatedAt = now
-        }));
-        await context.SaveChangesAsync();
+        await database.SeedHistoricalUserAndEntitiesAsync(
+            userId,
+            $"consumption-migration-{userId:N}",
+            "Consumption Migration Tester",
+            UserRole.Admin.ToCode(),
+            entityIds.Select((id, index) => (
+                id,
+                index == 0 ? EntityKind.Book.ToCode() : EntityKind.BookChapter.ToCode(),
+                $"Migration entity {index + 1}"))
+                .ToArray());
     }
 
     private static async Task InsertLegacyStateAsync(

@@ -35,6 +35,44 @@ internal sealed class PostgresTestDatabase(
         await context.GetService<IMigrator>().MigrateAsync(targetMigration);
     }
 
+    /// <summary>
+    /// Seeds the stable user and entity columns available to historical migration fixtures without
+    /// asking the current EF model to write columns that did not exist at the fixture's schema point.
+    /// </summary>
+    internal async Task SeedHistoricalUserAndEntitiesAsync(
+        Guid userId,
+        string username,
+        string displayName,
+        string userRole,
+        params (Guid Id, string KindCode, string Title)[] entities) {
+        var now = DateTimeOffset.UtcNow;
+        await using var connection = await OpenConnectionAsync();
+        await using var command = new NpgsqlCommand(
+            """
+            INSERT INTO users (
+                id, username, normalized_username, display_name, allow_nsfw, enabled, role,
+                can_create_libraries, created_at, updated_at)
+            VALUES (
+                @user_id, @username, @normalized_username, @display_name, TRUE, TRUE, @user_role,
+                TRUE, @now, @now);
+
+            INSERT INTO entities (id, kind_code, title, created_at, updated_at)
+            SELECT id, kind_code, title, @now, @now
+            FROM unnest(@entity_ids, @kind_codes, @titles) AS seed(id, kind_code, title);
+            """,
+            connection);
+        command.Parameters.AddWithValue("user_id", userId);
+        command.Parameters.AddWithValue("username", username);
+        command.Parameters.AddWithValue("normalized_username", username.ToUpperInvariant());
+        command.Parameters.AddWithValue("display_name", displayName);
+        command.Parameters.AddWithValue("user_role", userRole);
+        command.Parameters.AddWithValue("now", now);
+        command.Parameters.AddWithValue("entity_ids", entities.Select(entity => entity.Id).ToArray());
+        command.Parameters.AddWithValue("kind_codes", entities.Select(entity => entity.KindCode).ToArray());
+        command.Parameters.AddWithValue("titles", entities.Select(entity => entity.Title).ToArray());
+        await command.ExecuteNonQueryAsync();
+    }
+
     /// <summary>Creates, migrates, and returns a new current-schema test database.</summary>
     internal static async Task<PostgresTestDatabase> CreateAsync(string? targetMigration = null) {
         var configured = Environment.GetEnvironmentVariable("PRISMEDIA_TEST_DATABASE_URL")
