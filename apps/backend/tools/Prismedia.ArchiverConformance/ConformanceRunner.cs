@@ -127,47 +127,93 @@ public sealed class ConformanceRunner(HttpClient http) {
         } while (cursor is not null);
         Require(artifacts.Count == count && artifacts.Select(x => x.Id).Distinct().Count() == count, "The manifest must contain every artifact exactly once.");
         Require(artifacts.All(x => x.SizeBytes is > 0 and <= MaximumBytes && request.Selection.ItemIds.Contains(x.ItemId)
-            && x.Role == ArchiverWire.Content && x.Sha256.Length == 64 && x.Sha256.All(Uri.IsHexDigit))
+            && x.Role == ArchiverWire.Content && PortablePath(x.RelativePath) && x.Sha256.Length == 64 && x.Sha256.All(Uri.IsHexDigit))
             && artifacts.Sum(x => x.SizeBytes) <= request.Limits.MaxBytes, "Artifact identities, roles, hashes and sizes must match the bounded selection.");
         if (request.Output.Profile == ArchiverWire.GalleryProfile) {
-            Require(artifacts.All(x => !string.IsNullOrWhiteSpace(x.GroupId) && x.Ordinal >= 0)
+            Require(artifacts.All(x => !string.IsNullOrWhiteSpace(x.GroupId) && x.Ordinal >= 1)
                 && artifacts.Select(x => x.GroupId).Distinct().Count() == 1
-                && artifacts.Select(x => x.Ordinal).Distinct().Count() == count, "Gallery outputs need one explicit group and unique ordering.");
+                && artifacts.Select(x => x.Ordinal!.Value).Order().SequenceEqual(Enumerable.Range(1, count!.Value)), "Gallery outputs need one explicit group and contiguous one-based ordering.");
         } else Require(artifacts.Count == 1, "The single-item output profile requires one artifact.");
         return artifacts;
     }
 
     private async Task VerifyArtifactAsync(Artifact artifact, string destination, CancellationToken token) {
-        var uri = new Uri(http.BaseAddress!, artifact.ContentPath);
+        var contentPath = artifact.ContentPath;
+        Require(!string.IsNullOrWhiteSpace(contentPath) && !contentPath.StartsWith("//", StringComparison.Ordinal)
+            && !contentPath.Contains('\\') && !contentPath.Contains('#') && !contentPath.Contains('?')
+            && Uri.TryCreate(contentPath, UriKind.Relative, out _)
+            && PortablePath(Uri.UnescapeDataString(contentPath.TrimStart('/'))), "Artifact contentPath must be a portable API-relative path.");
+        var uri = new Uri(http.BaseAddress!, contentPath);
         Require(uri.Scheme == http.BaseAddress!.Scheme && uri.Authority == http.BaseAddress.Authority
             && uri.UserInfo.Length == 0 && uri.Fragment.Length == 0
             && uri.AbsolutePath.StartsWith(http.BaseAddress.AbsolutePath, StringComparison.Ordinal), "Artifact retrieval must remain inside the authenticated API origin and base path.");
+        Require(new FileInfo(destination).LinkTarget is null && new DirectoryInfo(Path.GetDirectoryName(destination)!).LinkTarget is null,
+            "The validation destination must not be a symbolic link.");
         using var head = await http.SendAsync(new(HttpMethod.Head, uri), HttpCompletionOption.ResponseHeadersRead, token);
-        Require(head.StatusCode == HttpStatusCode.OK && head.Content.Headers.ContentLength == artifact.SizeBytes, "HEAD must report the exact artifact size.");
-        using var file = new FileStream(destination, FileMode.Create, FileAccess.Write, FileShare.None, 81920, FileOptions.Asynchronous);
-        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
-        using var response = await http.SendAsync(new(HttpMethod.Get, uri), HttpCompletionOption.ResponseHeadersRead, token);
-        Require(response.StatusCode == HttpStatusCode.OK, "Artifact GET failed.");
+        Require(head.StatusCode == HttpStatusCode.OK && head.Content.Headers.ContentLength == artifact.SizeBytes
+            && string.Equals(head.Content.Headers.ContentType?.MediaType, artifact.MediaType, StringComparison.OrdinalIgnoreCase)
+            && head.Headers.ETag is { IsWeak: false }, "HEAD must report the exact size, media type and a strong ETag.");
+        var validator = head.Headers.ETag!;
+        var temporary = destination + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try {
+            using (var file = new FileStream(temporary, FileMode.CreateNew, FileAccess.Write, FileShare.None, 81920, FileOptions.Asynchronous)) {
+                if (!OperatingSystem.IsWindows()) File.SetUnixFileMode(temporary, UnixFileMode.UserRead | UnixFileMode.UserWrite);
+                using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+                using var response = await http.SendAsync(new(HttpMethod.Get, uri), HttpCompletionOption.ResponseHeadersRead, token);
+                Require(response.StatusCode == HttpStatusCode.OK && response.Headers.ETag?.Equals(validator) == true
+                    && string.Equals(response.Content.Headers.ContentType?.MediaType, artifact.MediaType, StringComparison.OrdinalIgnoreCase)
+                    && response.Content.Headers.ContentLength == artifact.SizeBytes, "GET must retain the manifest size, media type and HEAD validator.");
+                await ReadBytesAsync(response, artifact.SizeBytes, hash, file, token);
+                Require(HashMatches(hash, artifact), "Downloaded bytes do not match the sealed SHA-256.");
+                await file.FlushAsync(token); file.Flush(flushToDisk: true);
+            }
+            // Reconstruct the same bytes across two independently requested ranges using If-Range.
+            using var resumedHash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+            var split = Math.Max(1, artifact.SizeBytes / 2);
+            await VerifyRangeAsync(uri, artifact, validator, 0, split - 1, resumedHash, token);
+            if (split < artifact.SizeBytes) await VerifyRangeAsync(uri, artifact, validator, split, artifact.SizeBytes - 1, resumedHash, token);
+            Require(HashMatches(resumedHash, artifact), "Resumed ranges do not reconstruct the sealed artifact.");
+            File.Move(temporary, destination, overwrite: true);
+        } finally {
+            if (File.Exists(temporary)) File.Delete(temporary);
+        }
+    }
+
+    private async Task VerifyRangeAsync(Uri uri, Artifact artifact, EntityTagHeaderValue validator,
+        long from, long to, IncrementalHash hash, CancellationToken token) {
+        using var request = new HttpRequestMessage(HttpMethod.Get, uri);
+        request.Headers.Range = new RangeHeaderValue(from, to);
+        request.Headers.IfRange = new RangeConditionHeaderValue(validator);
+        using var response = await http.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, token);
+        Require(response.StatusCode == HttpStatusCode.PartialContent
+            && response.Headers.ETag?.Equals(validator) == true
+            && string.Equals(response.Content.Headers.ContentType?.MediaType, artifact.MediaType, StringComparison.OrdinalIgnoreCase)
+            && response.Content.Headers.ContentRange is { } range && range.From == from && range.To == to
+            && range.Length == artifact.SizeBytes && response.Content.Headers.ContentLength == to - from + 1,
+            "Validator-bound Range GET must retain the exact range, media type, total size and ETag.");
+        await ReadBytesAsync(response, to - from + 1, hash, null, token);
+    }
+
+    private static async Task ReadBytesAsync(HttpResponseMessage response, long expectedSize,
+        IncrementalHash hash, Stream? output, CancellationToken token) {
         await using var stream = await response.Content.ReadAsStreamAsync(token);
-        var buffer = new byte[81920]; long total = 0; byte first = 0;
+        var buffer = new byte[81920]; long total = 0;
         int read;
         while ((read = await stream.ReadAsync(buffer, token)) != 0) {
-            if (total == 0) first = buffer[0]; total += read;
-            Require(total <= artifact.SizeBytes, "Artifact response exceeded the sealed size.");
-            hash.AppendData(buffer, 0, read); await file.WriteAsync(buffer.AsMemory(0, read), token);
+            total += read;
+            Require(total <= expectedSize, "Artifact response exceeded the sealed size.");
+            hash.AppendData(buffer, 0, read);
+            if (output is not null) await output.WriteAsync(buffer.AsMemory(0, read), token);
         }
-        Require(total == artifact.SizeBytes && Convert.ToHexStringLower(hash.GetHashAndReset()).Equals(artifact.Sha256, StringComparison.OrdinalIgnoreCase), "Downloaded bytes do not match the sealed size and SHA-256.");
-        await file.FlushAsync(token); file.Flush(flushToDisk: true);
-        using var range = new HttpRequestMessage(HttpMethod.Get, uri);
-        range.Headers.Range = new RangeHeaderValue(0, 0);
-        using var partial = await http.SendAsync(range, HttpCompletionOption.ResponseHeadersRead, token);
-        Require(partial.StatusCode == HttpStatusCode.PartialContent && partial.Content.Headers.ContentRange is { From: 0, To: 0 } cr
-            && cr.Length == artifact.SizeBytes && partial.Content.Headers.ContentLength == 1, "Range GET must return the requested byte and full size.");
-        await using var partialStream = await partial.Content.ReadAsStreamAsync(token);
-        var bytes = new byte[2];
-        var partialLength = await partialStream.ReadAtLeastAsync(bytes, 2, throwOnEndOfStream: false, token);
-        Require(partialLength == 1 && bytes[0] == first, "Range GET returned different bytes.");
+        Require(total == expectedSize, "Artifact response did not contain the sealed size.");
     }
+
+    private static bool HashMatches(IncrementalHash hash, Artifact artifact) =>
+        Convert.ToHexStringLower(hash.GetHashAndReset()).Equals(artifact.Sha256, StringComparison.OrdinalIgnoreCase);
+
+    private static bool PortablePath(string? path) => !string.IsNullOrWhiteSpace(path)
+        && path.Length <= 4096 && !path.Any(char.IsControl) && path.IndexOfAny(['<', '>', ':', '"', '\\', '|', '?', '*']) < 0
+        && path.Split('/').All(part => part.Length > 0 && part is not ("." or "..") && !part.EndsWith('.') && !part.EndsWith(' '));
 
     private async Task<T> SendAsync<T>(HttpMethod method, string path, object? body, CancellationToken token, Guid? operation = null) {
         using var request = Request(method, path, body, operation);

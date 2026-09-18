@@ -37,13 +37,14 @@ Each run writes a private operation directory containing:
   ID, saved before the first submission. This file contains source details; keep
   the directory private and outside version control.
 - `artifact-NNN.bin`: bytes verified against the sealed manifest, flushed to disk
-  before any import receipt is sent. Manifest paths are never used as local paths.
+  before any import receipt is sent. Only verified files receive final names; interrupted
+  or invalid files are discarded. Manifest paths are never used as local paths.
 - `report.json`: checks passed, only written after all checks complete.
 
 Checks cover identical submission replay, recovery by operation ID, rejection of
 changed submissions, cancellation before acceptance, job identity/revisions,
 sealed and paginated output manifests, size/hash verification, HEAD/Range
-retrieval, retention leases and repeatable receipts. Redirects are disabled and
+retrieval with a strong ETag and If-Range reconstruction, retention leases and repeatable receipts. Redirects are disabled and
 artifact URLs must stay within the configured API origin and base path.
 
 ## Restart and lost-response checks
