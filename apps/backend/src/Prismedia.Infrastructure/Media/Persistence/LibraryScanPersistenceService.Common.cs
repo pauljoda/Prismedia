@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Files;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Settings;
 using Prismedia.Domain.Entities;
@@ -131,6 +132,24 @@ public sealed partial class LibraryScanPersistenceService {
         if (file is null && (entity is null || _db.Entry(entity).State != EntityState.Added)) {
             file = await _db.EntityFiles.FirstOrDefaultAsync(row =>
                 row.EntityId == entityId && row.Role == role, cancellationToken);
+        }
+        if (file is null && role == EntityFileRole.Source) {
+            file = _db.EntityFiles.Local.FirstOrDefault(row =>
+                row.EntityId == entityId
+                && row.Role == EntityFileRole.UnavailableSource
+                && FileSystemPathComparison.Equals(row.Path, path));
+            if (file is null) {
+                var unavailableCandidates = await _db.EntityFiles
+                    .Where(row => row.EntityId == entityId
+                        && row.Role == EntityFileRole.UnavailableSource
+                        && row.Path.Length == path.Length)
+                    .ToArrayAsync(cancellationToken);
+                file = unavailableCandidates.SingleOrDefault(row =>
+                    FileSystemPathComparison.Equals(row.Path, path));
+            }
+            if (file is not null) {
+                file.Role = EntityFileRole.Source;
+            }
         }
         if (file is null) {
             _db.EntityFiles.Add(new EntityFileRow {

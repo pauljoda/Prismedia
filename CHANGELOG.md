@@ -204,6 +204,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Enabled external libraries scan automatically after linking and at regular intervals. Missing untracked video files become unavailable without losing library history, and returning files retain their original identities.
+
 - Alert actions stay vertically inside compact error banners, keeping connected-library retry controls within the rounded border.
 
 - Native download destinations exclude read-only external libraries, including saved profile defaults. Sonarr request reviews show only the selected episode scope and remove selection controls once that scope has been saved.

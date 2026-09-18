@@ -19,28 +19,57 @@ public sealed class LibraryScanPersistenceServiceTests {
     private static readonly Guid RootId = Guid.Parse("aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa");
 
     [Fact]
-    public async Task ExternalLibraryMissingFilesAndEmptyContainersRetainIdentityAndHistory() {
+    public async Task ExternalLibraryMissingSourceBecomesUnavailableAndExactPathRestoreReusesIdentity() {
         await using var database = await PostgresTestDatabase.CreateAsync();
         await using var db = database.CreateContext();
         var rootId = Guid.NewGuid(); var connectionId = Guid.NewGuid();
-        var movieId = Guid.NewGuid(); var seriesId = Guid.NewGuid();
-        var path = Path.Combine(Path.GetTempPath(), "external-missing-" + Guid.NewGuid().ToString("N"));
+        var videoId = Guid.NewGuid(); var seriesId = Guid.NewGuid();
+        var path = Directory.CreateTempSubdirectory("external-missing-").FullName;
+        var sourcePath = Path.Combine(path, "missing.mkv");
+        await File.WriteAllBytesAsync(sourcePath, [1, 2, 3]);
         SeedLibraryRoot(db, rootId, path);
         db.IntegrationConnections.Add(new IntegrationConnectionRow { Id = connectionId, PluginId = "fixture-manager", Name = "Offline manager", BaseUrl = "http://manager.test/", Enabled = false });
         db.ExternalLibraryMounts.Add(new ExternalLibraryMountRow { Id = Guid.NewGuid(), ConnectionId = connectionId, LibraryRootId = rootId,
             RemoteRootId = "1", RemotePath = "/library", LocalPath = path });
-        SeedSourceEntity(db, movieId, EntityKind.Movie.ToCode(), Path.Combine(path, "missing.mkv"));
+        SeedSourceEntity(db, videoId, EntityKind.Video.ToCode(), sourcePath);
         db.Entities.Add(new EntityRow { Id = seriesId, KindCode = EntityKind.VideoSeries.ToCode(), Title = "Empty managed series" });
-        db.EntityLibraryRoots.AddRange(new EntityLibraryRootRow { EntityId = movieId, LibraryRootId = rootId }, new EntityLibraryRootRow { EntityId = seriesId, LibraryRootId = rootId });
-        db.EntityConsumptionEvents.Add(new EntityConsumptionEventRow { Id = Guid.NewGuid(), EntityId = movieId, Kind = ConsumptionEventKind.Completed,
+        db.EntityLibraryRoots.AddRange(new EntityLibraryRootRow { EntityId = videoId, LibraryRootId = rootId }, new EntityLibraryRootRow { EntityId = seriesId, LibraryRootId = rootId });
+        db.EntityConsumptionEvents.Add(new EntityConsumptionEventRow { Id = Guid.NewGuid(), EntityId = videoId, Kind = ConsumptionEventKind.Completed,
             OccurredAt = DateTimeOffset.UtcNow, CreatedAt = DateTimeOffset.UtcNow });
         await db.SaveChangesAsync();
+        var sourceFileId = await db.EntityFiles.Where(file => file.EntityId == videoId).Select(file => file.Id).SingleAsync();
         var service = new LibraryScanPersistenceService(db);
-        Assert.Equal(0, await service.RemoveStalePlayableVideosByRootAsync(rootId, new HashSet<string>(), default));
+
+        File.Delete(sourcePath);
+        Assert.Equal(0, await service.RemoveStalePlayableVideosByRootAsync(
+            rootId, new HashSet<string>(), default, authoritativeSnapshot: false));
+        Assert.Equal(
+            EntityFileRole.Source,
+            (await db.EntityFiles.SingleAsync(file => file.Id == sourceFileId)).Role);
+        Assert.Equal(1, await service.RemoveStalePlayableVideosByRootAsync(
+            rootId, new HashSet<string>(), default, authoritativeSnapshot: true));
         Assert.Equal(0, await service.RemoveOrphanSeriesAndSeasonsAsync(default));
-        Assert.True(await db.Entities.AnyAsync(entity => entity.Id == movieId));
+        Assert.True(await db.Entities.AnyAsync(entity => entity.Id == videoId));
         Assert.True(await db.Entities.AnyAsync(entity => entity.Id == seriesId));
         Assert.Single(await db.EntityConsumptionEvents.ToArrayAsync());
+        var missing = await db.EntityFiles.SingleAsync(file => file.Id == sourceFileId);
+        Assert.Equal(EntityFileRole.UnavailableSource, missing.Role);
+
+        await File.WriteAllBytesAsync(sourcePath, [4, 5, 6, 7]);
+        var restoredIds = await service.UpsertVideosBatchAsync([
+            new VideoUpsertItem(sourcePath, "missing", rootId, false, PlayableVideoScanPlacement.Standalone)
+        ], default);
+        Assert.Equal(videoId, Assert.Single(restoredIds));
+        var restored = await db.EntityFiles.SingleAsync(file => file.Id == sourceFileId);
+        Assert.Equal(EntityFileRole.Source, restored.Role);
+        Assert.Equal(4, restored.SizeBytes);
+        Assert.Empty(await db.ManagedHoldings.ToArrayAsync());
+        Assert.Empty(await db.ManagedSourceBindings.ToArrayAsync());
+        Assert.Empty(await db.FulfillmentReservations.ToArrayAsync());
+        Assert.Empty(await db.Acquisitions.ToArrayAsync());
+        Assert.Empty(await db.Monitors.ToArrayAsync());
+
+        Directory.Delete(path, recursive: true);
     }
 
     [Theory]

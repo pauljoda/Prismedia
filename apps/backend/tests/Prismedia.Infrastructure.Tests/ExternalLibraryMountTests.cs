@@ -58,8 +58,12 @@ public sealed class ExternalLibraryMountTests : IDisposable {
         var store = new EfExternalLibraryMountStore(db, new(Path.Combine(workspace, "data"), Path.Combine(workspace, "cache")), new SettingsSnapshotCache());
         var request = new AttachExistingExternalLibraryMountRequest(EntityKind.Movie, "1", "/movies", rootId, path);
 
-        var mount = await store.AttachAsync(connectionId, 3, request, default);
-        Assert.Equal(mount.Id, (await store.AttachAsync(connectionId, 3, request, default)).Id);
+        var firstAttachment = await store.AttachWithResultAsync(connectionId, 3, request, default);
+        var replay = await store.AttachWithResultAsync(connectionId, 3, request, default);
+        var mount = firstAttachment.Mount;
+        Assert.True(firstAttachment.Created);
+        Assert.False(replay.Created);
+        Assert.Equal(mount.Id, replay.Mount.Id);
         await Assert.ThrowsAsync<ConnectionConflictException>(() =>
             store.AttachAsync(connectionId, 3, request with { ExistingLibraryRootId = Guid.NewGuid() }, default));
         db.ChangeTracker.Clear();

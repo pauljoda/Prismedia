@@ -343,7 +343,7 @@ public sealed class GeneratePreviewJobHandlerTests : IDisposable {
         public Task<Guid> UpsertMusicArtistAsync(string folderPath, string title, Guid libraryRootId, int sortOrder, bool isNsfw, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<Guid> UpsertBookAsync(string sourcePath, string title, Guid libraryRootId, bool isNsfw, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<Guid> UpsertSingleFileBookAsync(string sourcePath, string title, Guid libraryRootId, bool isNsfw, BookType bookType, BookFormat format, string contentType, Guid? parentBookEntityId, int? sortOrder, CancellationToken cancellationToken) => throw new NotSupportedException();
-        public Task<int> RemoveStalePlayableVideosByRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) => throw new NotSupportedException();
+        public Task<int> RemoveStalePlayableVideosByRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken, bool authoritativeSnapshot = true) => throw new NotSupportedException();
         public Task<int> RemoveStaleMoviesByRootAsync(Guid rootId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<int> RemoveStaleLooseImagesInRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) => throw new NotSupportedException();
         public Task<int> RemoveStaleImagesInGalleryAsync(Guid galleryEntityId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) => throw new NotSupportedException();

@@ -213,7 +213,7 @@ public sealed partial class LibraryScanPersistenceService {
         // key a dictionary on the path — a unique-key dictionary here crashed every scan of a
         // library containing such a file.
         var existingEntities = (await _db.EntityFiles.AsNoTracking()
-            .Where(f => f.Role == EntityFileRole.Source
+            .Where(f => (f.Role == EntityFileRole.Source || f.Role == EntityFileRole.UnavailableSource)
                 && filePathLengths.Contains(f.Path.Length))
             .Join(_db.Entities, f => f.EntityId, e => e.Id,
                 (f, e) => new ExistingPlayableSourceOwner(f.Path, e.Id, e.KindCode, e.CreatedAt, e.SortOrder))

@@ -1,10 +1,15 @@
 using Prismedia.Contracts.Integrations;
 using Prismedia.Domain.Entities;
+using Prismedia.Application.Settings;
 
 namespace Prismedia.Application.Integrations;
 
 /// <summary>Configures explicit remote-to-local library boundaries and separates remote availability from local byte access.</summary>
-public sealed class ExternalLibraryService(IExternalLibraryMountStore mounts, ManagedLibraryService library, IntegrationConnectionAccess access) {
+public sealed class ExternalLibraryService(
+    IExternalLibraryMountStore mounts,
+    ManagedLibraryService library,
+    IntegrationConnectionAccess access,
+    SettingsService settings) {
     /// <summary>Reads retained mappings without requiring the remote application to be online.</summary>
     public Task<IReadOnlyList<ExternalLibraryMount>> ListAsync(Guid connectionId, CancellationToken token) => mounts.ListAsync(connectionId, token);
 
@@ -28,7 +33,14 @@ public sealed class ExternalLibraryService(IExternalLibraryMountStore mounts, Ma
         var choices = await library.OptionsAsync(connectionId, new(request.EntityKind), token);
         if (!choices.Roots.Any(root => root.Id == request.RemoteRootId && root.Path == request.ExpectedRemotePath))
             throw new ArgumentException("The external root changed. Refresh its choices before mapping it.");
-        return await mounts.AttachAsync(connectionId, authorized.Connection.State.Revision, request, token);
+        var attachment = await mounts.AttachWithResultAsync(connectionId, authorized.Connection.State.Revision, request, token);
+        if (attachment.Created) {
+            await settings.QueueLibraryRootScansIfEnabledAsync(
+                attachment.Mount.LibraryRootId,
+                "attaching external library",
+                token);
+        }
+        return attachment.Mount;
     }
 
     /// <summary>Reads a fresh holding, checks its identity, then inspects only the files it currently reports.</summary>

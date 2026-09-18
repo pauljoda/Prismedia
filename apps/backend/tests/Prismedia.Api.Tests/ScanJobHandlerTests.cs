@@ -3804,7 +3804,7 @@ public sealed class ScanJobHandlerTests {
         public Task<int> RemoveEmptyComicContainersAsync(CancellationToken cancellationToken) =>
             Task.FromResult(0);
 
-        public Task<int> RemoveStalePlayableVideosByRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken) =>
+        public Task<int> RemoveStalePlayableVideosByRootAsync(Guid rootId, IReadOnlySet<string> validPaths, CancellationToken cancellationToken, bool authoritativeSnapshot = true) =>
             Task.FromResult(0);
 
         public Task<int> RemoveStaleMoviesByRootAsync(Guid rootId, IReadOnlySet<string> validFolderPaths, CancellationToken cancellationToken) {

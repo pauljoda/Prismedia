@@ -394,7 +394,8 @@ public sealed class RefreshEntityJobHandlerTests {
         public Task<int> RemoveStalePlayableVideosByRootAsync(
             Guid rootId,
             IReadOnlySet<string> validPaths,
-            CancellationToken cancellationToken) => throw new NotSupportedException();
+            CancellationToken cancellationToken,
+            bool authoritativeSnapshot = true) => throw new NotSupportedException();
 
         public Task<int> RemoveStaleMoviesByRootAsync(
             Guid rootId,

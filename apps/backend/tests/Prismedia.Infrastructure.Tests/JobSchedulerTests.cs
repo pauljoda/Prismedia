@@ -5,8 +5,10 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Prismedia.Application.Acquisition;
 using Prismedia.Application.Jobs;
 using Prismedia.Application.Jobs.Handlers;
+using Prismedia.Application.Integrations;
 using Prismedia.Application.Settings;
 using Prismedia.Contracts.Acquisition;
+using Prismedia.Contracts.Integrations;
 using Prismedia.Contracts.Settings;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Acquisition;
@@ -104,6 +106,28 @@ public sealed class JobSchedulerTests {
         await scheduler.ScheduleRecurringScansAsync(CancellationToken.None);
 
         Assert.Empty(queue.Enqueued);
+    }
+
+    [Fact]
+    public async Task DisabledGlobalAutoScanStillQueuesOnlyDueExternalRoots() {
+        var now = new DateTimeOffset(2026, 5, 30, 10, 37, 0, TimeSpan.Zero);
+        var externalRoot = CreateRoot(Guid.NewGuid(), lastScannedAt: now.AddMinutes(-61)) with { IsReadOnly = true };
+        var ordinaryRoot = CreateRoot(Guid.NewGuid(), lastScannedAt: now.AddMinutes(-61));
+        var settings = new SchedulerSettingsPersistence(
+            [externalRoot, ordinaryRoot],
+            scanAutoEnabled: false);
+        var queue = new SchedulerJobQueue();
+        await using var provider = CreateProvider(
+            settings,
+            queue,
+            mountedRootIds: new HashSet<Guid> { externalRoot.Id });
+
+        await CreateScheduler(provider, now).ScheduleRecurringScansAsync(CancellationToken.None);
+
+        var request = Assert.Single(queue.Enqueued);
+        Assert.Equal(externalRoot.Id.ToString(), request.TargetEntityId);
+        Assert.Equal(now, settings.Roots.Single(root => root.Id == externalRoot.Id).LastScannedAt);
+        Assert.Equal(ordinaryRoot.LastScannedAt, settings.Roots.Single(root => root.Id == ordinaryRoot.Id).LastScannedAt);
     }
 
     [Fact]
@@ -368,11 +392,14 @@ public sealed class JobSchedulerTests {
         ISettingsPersistence settings,
         IJobQueueService queue,
         IAcquisitionLifecycleStore? acquisitions = null,
-        IAcquisitionImportEngineFactory? importEngines = null) {
+        IAcquisitionImportEngineFactory? importEngines = null,
+        IReadOnlySet<Guid>? mountedRootIds = null) {
         var services = new ServiceCollection();
         services.AddSingleton(settings);
         services.AddScoped<SettingsService>();
         services.AddSingleton(queue);
+        services.AddSingleton<IExternalLibraryMountStore>(
+            new SchedulerExternalLibraryMountStore(mountedRootIds ?? new HashSet<Guid>()));
         var lifecycle = acquisitions ?? new SchedulerAcquisitionLifecycleStore([]);
         services.AddSingleton(lifecycle);
         if (lifecycle is IAcquisitionStore store) {
@@ -380,6 +407,26 @@ public sealed class JobSchedulerTests {
         }
         services.AddSingleton(importEngines ?? new SchedulerImportEngineFactory([]));
         return services.BuildServiceProvider();
+    }
+
+    private sealed class SchedulerExternalLibraryMountStore(IReadOnlySet<Guid> rootIds) : IExternalLibraryMountStore {
+        public Task<IReadOnlySet<Guid>> ListMountedLibraryRootIdsAsync(CancellationToken token) =>
+            Task.FromResult(rootIds);
+
+        public Task<IReadOnlyList<ExternalLibraryMount>> ListAsync(Guid connectionId, CancellationToken token) =>
+            throw new NotSupportedException();
+
+        public Task<ExternalLibraryMount> CreateAsync(Guid connectionId, long expectedRevision, CreateExternalLibraryMountRequest request, CancellationToken token) =>
+            throw new NotSupportedException();
+
+        public Task<ExternalLibraryMount> AttachAsync(Guid connectionId, long expectedRevision, AttachExistingExternalLibraryMountRequest request, CancellationToken token) =>
+            throw new NotSupportedException();
+
+        public Task<ExternalLibraryMountAttachment> AttachWithResultAsync(Guid connectionId, long expectedRevision, AttachExistingExternalLibraryMountRequest request, CancellationToken token) =>
+            throw new NotSupportedException();
+
+        public Task<IReadOnlyList<MappedLibraryFile>> InspectAsync(Guid connectionId, IReadOnlyList<ManagedLibraryFile> files, CancellationToken token) =>
+            throw new NotSupportedException();
     }
 
     private static JobScheduler CreateScheduler(ServiceProvider provider, DateTimeOffset now) =>
@@ -415,14 +462,15 @@ public sealed class JobSchedulerTests {
     private sealed class SchedulerSettingsPersistence(
         IEnumerable<LibraryRoot> roots,
         bool collectionAutoRefreshEnabled = true,
-        bool pluginAutoUpdateEnabled = true) : ISettingsPersistence {
+        bool pluginAutoUpdateEnabled = true,
+        bool scanAutoEnabled = true) : ISettingsPersistence {
         private readonly List<LibraryRoot> _roots = roots.ToList();
 
         public IReadOnlyList<LibraryRoot> Roots => _roots;
 
         public Task<IReadOnlyDictionary<string, string>> LoadSettingOverridesAsync(CancellationToken cancellationToken) =>
             Task.FromResult<IReadOnlyDictionary<string, string>>(new Dictionary<string, string> {
-                [AppSettings.Scan.AutoScanEnabled.Key] = JsonSerializer.Serialize(true),
+                [AppSettings.Scan.AutoScanEnabled.Key] = JsonSerializer.Serialize(scanAutoEnabled),
                 [AppSettings.Scan.IntervalMinutes.Key] = JsonSerializer.Serialize(60),
                 [AppSettings.Collections.AutoRefreshEnabled.Key] = JsonSerializer.Serialize(collectionAutoRefreshEnabled),
                 [AppSettings.Plugins.AutoUpdateEnabled.Key] = JsonSerializer.Serialize(pluginAutoUpdateEnabled),

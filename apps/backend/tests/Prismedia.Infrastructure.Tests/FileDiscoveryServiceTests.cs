@@ -162,6 +162,19 @@ public sealed class FileDiscoveryServiceTests : IDisposable {
         Assert.Contains(lower.FullName, groups.Keys);
     }
 
+    [Fact]
+    public async Task MissingRootFailsInsteadOfPublishingAnEmptyAuthoritativeSnapshot() {
+        var missing = Path.Combine(_root.FullName, "unavailable-root");
+        var service = new FileDiscoveryService();
+
+        await Assert.ThrowsAsync<DirectoryNotFoundException>(() => service.DiscoverFileSignaturesAsync(
+            missing,
+            SupportedExtensions.Video,
+            recursive: true,
+            excludedPaths: null,
+            CancellationToken.None));
+    }
+
     public void Dispose() {
         if (_root.Exists) {
             _root.Delete(recursive: true);

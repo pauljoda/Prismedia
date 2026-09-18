@@ -19,6 +19,13 @@ public sealed record ExternalLibraryStorageOptions(string DataPath, string Cache
 /// <summary>Creates immutable external boundaries with their paused watched roots, and observes local bytes without writing them.</summary>
 public sealed class EfExternalLibraryMountStore(PrismediaDbContext db, ExternalLibraryStorageOptions storage, SettingsSnapshotCache cache) : IExternalLibraryMountStore {
     /// <inheritdoc />
+    public async Task<IReadOnlySet<Guid>> ListMountedLibraryRootIdsAsync(CancellationToken token) =>
+        (await db.ExternalLibraryMounts.AsNoTracking()
+            .Select(mount => mount.LibraryRootId)
+            .ToArrayAsync(token))
+        .ToHashSet();
+
+    /// <inheritdoc />
     public async Task<IReadOnlyList<ExternalLibraryMount>> ListAsync(Guid connectionId, CancellationToken token) =>
         await (from mount in db.ExternalLibraryMounts.AsNoTracking()
                join root in db.LibraryRoots.AsNoTracking() on mount.LibraryRootId equals root.Id
@@ -73,6 +80,11 @@ public sealed class EfExternalLibraryMountStore(PrismediaDbContext db, ExternalL
 
     /// <inheritdoc />
     public async Task<ExternalLibraryMount> AttachAsync(Guid connectionId, long expectedRevision,
+        AttachExistingExternalLibraryMountRequest request, CancellationToken token) =>
+        (await AttachWithResultAsync(connectionId, expectedRevision, request, token)).Mount;
+
+    /// <inheritdoc />
+    public async Task<ExternalLibraryMountAttachment> AttachWithResultAsync(Guid connectionId, long expectedRevision,
         AttachExistingExternalLibraryMountRequest request, CancellationToken token) {
         if (string.IsNullOrWhiteSpace(request.ExpectedLocalPath) || request.ExpectedLocalPath.Length > 8192
             || request.ExpectedLocalPath.Any(char.IsControl) || !Path.IsPathFullyQualified(request.ExpectedLocalPath)
@@ -94,7 +106,7 @@ public sealed class EfExternalLibraryMountStore(PrismediaDbContext db, ExternalL
                 CompletedPayloadFileSystem.CanonicalPath(existing.LocalPath), local);
             if (existing.LibraryRootId != request.ExistingLibraryRootId || existing.RemotePath != request.ExpectedRemotePath || !sameLocalPath)
                 throw new ConnectionConflictException("This remote root already has an immutable mapping. Use its existing library.");
-            return existing;
+            return new(existing, Created: false);
         }
         if (configured.Any(mount => {
             var other = ExternalLibraryPaths.NormalizeRemote(mount.RemotePath);
@@ -126,7 +138,7 @@ public sealed class EfExternalLibraryMountStore(PrismediaDbContext db, ExternalL
         await db.SaveChangesAsync(token);
         if (transaction is not null) await transaction.CommitAsync(token);
         cache.InvalidateRoots();
-        return new(mount.Id, connectionId, root.Id, mount.RemoteRootId, mount.RemotePath, local, root.Label);
+        return new(new(mount.Id, connectionId, root.Id, mount.RemoteRootId, mount.RemotePath, local, root.Label), Created: true);
     }
 
     private async Task RequireDedicatedPathAsync(string local, CancellationToken token) {

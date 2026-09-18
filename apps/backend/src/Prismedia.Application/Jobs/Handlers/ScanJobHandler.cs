@@ -292,7 +292,13 @@ public abstract class ScanJobHandler(
             using (timer.Phase("detailed-reconcile")) {
                 detailedOutcome = previous.Count == 0
                     ? await ScanRootCoreAsync(context, root, cancellationToken)
-                    : await ScanRootDeltaAsync(context, root, current, delta, cancellationToken);
+                    : await ScanRootDeltaAsync(
+                        context,
+                        root,
+                        current,
+                        delta,
+                        authoritativeSnapshot: !changesOnly,
+                        cancellationToken);
             }
 
             // Files the scan could not persist are withheld from the snapshot so the next scan sees
@@ -535,6 +541,7 @@ public abstract class ScanJobHandler(
         LibraryRootData root,
         IReadOnlyList<FileSignature> current,
         ScanDelta delta,
+        bool authoritativeSnapshot,
         CancellationToken cancellationToken) =>
         ScanRootCoreAsync(context, root, cancellationToken);
 

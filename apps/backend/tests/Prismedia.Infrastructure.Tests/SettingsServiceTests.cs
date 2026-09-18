@@ -125,6 +125,71 @@ public sealed class SettingsServiceTests {
     }
 
     [Fact]
+    public async Task EnablingLibraryRootQueuesItsSelectedScans() {
+        await using var db = CreateContext();
+        var rootId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.LibraryRoots.Add(new LibraryRootRow {
+            Id = rootId,
+            Path = "/media/external",
+            Label = "External",
+            Enabled = false,
+            Recursive = true,
+            ScanVideos = true,
+            ScanImages = false,
+            ScanAudio = true,
+            ScanBooks = false,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+        var queue = new RecordingJobQueue();
+        var service = new SettingsService(new EfSettingsPersistence(db), queue);
+
+        await service.UpdateLibraryRootAsync(
+            rootId,
+            new LibraryRootUpdateRequest(null, null, Enabled: true, null, null, null, null, null, null),
+            CancellationToken.None);
+
+        Assert.Equal(
+            [JobType.ScanLibrary, JobType.ScanAudio],
+            queue.Enqueued.Select(request => request.Type));
+    }
+
+    [Fact]
+    public async Task ExistingEnabledLibraryScanKickoffUsesCurrentSelectedKinds() {
+        await using var db = CreateContext();
+        var rootId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.LibraryRoots.Add(new LibraryRootRow {
+            Id = rootId,
+            Path = "/media/attached",
+            Label = "Attached",
+            Enabled = true,
+            Recursive = true,
+            ScanVideos = true,
+            ScanImages = false,
+            ScanAudio = false,
+            ScanBooks = true,
+            CreatedAt = now,
+            UpdatedAt = now,
+        });
+        await db.SaveChangesAsync();
+        var queue = new RecordingJobQueue();
+        var service = new SettingsService(new EfSettingsPersistence(db), queue);
+
+        var queued = await service.QueueLibraryRootScansIfEnabledAsync(
+            rootId,
+            "attaching external library",
+            CancellationToken.None);
+
+        Assert.Equal(3, queued);
+        Assert.Equal(
+            [JobType.ScanLibrary, JobType.ScanBook, JobType.ScanComic],
+            queue.Enqueued.Select(request => request.Type));
+    }
+
+    [Fact]
     public async Task DeleteLibraryRootRemovesRootEntitiesBeforeDeletingRoot() {
         await using var db = CreateContext();
         var rootId = Guid.NewGuid();
