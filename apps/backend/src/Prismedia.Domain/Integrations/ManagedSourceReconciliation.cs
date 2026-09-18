@@ -34,8 +34,14 @@ public static class ManagedSourceReconciliation {
             || known.Select(owner => owner.EntityId).Distinct().Count() != known.Length
             || known.Any(owner => owner.EntityId == Guid.Empty || owner.SourceFileId == Guid.Empty))
             return Review("The saved source bindings are incomplete or ambiguous.");
-        var targets = observed.SelectMany(file => file.Targets).ToArray();
-        if (observed.Any(file => file.Targets.Count == 0) || observed.Select(file => file.RemoteFileId).Distinct(StringComparer.Ordinal).Count() != observed.Count
+        var retainedTargets = known.Select(owner => owner.Target).ToArray();
+        var scopedObserved = observed
+            .Where(file => bindings.Any(binding => binding.RemoteFileId == file.RemoteFileId)
+                || IntersectsEstablishedScope(retainedTargets, file.Targets))
+            .ToArray();
+        var targets = scopedObserved.SelectMany(file => file.Targets).ToArray();
+        if (scopedObserved.Any(file => file.Targets.Count == 0)
+            || scopedObserved.Select(file => file.RemoteFileId).Distinct(StringComparer.Ordinal).Count() != scopedObserved.Length
             || targets.Select(target => target.RemoteTargetId).Distinct(StringComparer.Ordinal).Count() != targets.Length)
             return Review("The connected library reports ambiguous file coverage.");
         var knownById = known.ToDictionary(owner => owner.Target.RemoteTargetId, StringComparer.Ordinal);
@@ -44,7 +50,7 @@ public static class ManagedSourceReconciliation {
                 return Review("The connected holding has new targets. Link their local identities before expanding this tracked scope.");
             if (target != owner.Target) return Review("A tracked content identity or episode coordinate changed. Review its mapping before replacing files.");
         }
-        var filesByTarget = observed.SelectMany(file => file.Targets.Select(target => (target.RemoteTargetId, File: file)))
+        var filesByTarget = scopedObserved.SelectMany(file => file.Targets.Select(target => (target.RemoteTargetId, File: file)))
             .ToDictionary(pair => pair.RemoteTargetId, pair => pair.File, StringComparer.Ordinal);
         var changes = new List<ManagedSourceChange>();
         foreach (var previous in bindings) {
@@ -62,6 +68,23 @@ public static class ManagedSourceReconciliation {
                 changes.Add(new(previous, current));
         }
         return new(changes, null);
+    }
+
+    /// <summary>
+    /// Includes exact remote identities and plausible identity changes for retained content. A file
+    /// that intersects the scope stays whole so shared bytes can never hide unowned coverage.
+    /// </summary>
+    public static bool IntersectsEstablishedScope(
+        IReadOnlyList<ManagedTargetIdentity> retained,
+        IReadOnlyList<ManagedTargetIdentity> observed) => observed.Any(candidate => retained.Any(saved =>
+            saved.RemoteTargetId == candidate.RemoteTargetId || PlausiblySameCoordinates(saved, candidate)));
+
+    private static bool PlausiblySameCoordinates(ManagedTargetIdentity saved, ManagedTargetIdentity candidate) {
+        if (saved.Kind != candidate.Kind) return false;
+        if (saved.Kind != EntityKind.VideoEpisode) return false;
+        return saved.SeasonNumber is not null && saved.EpisodeNumber is not null
+                && saved.SeasonNumber == candidate.SeasonNumber && saved.EpisodeNumber == candidate.EpisodeNumber
+            || saved.AbsoluteNumber is not null && saved.AbsoluteNumber == candidate.AbsoluteNumber;
     }
 
     private static ManagedSourceReconciliationPlan Review(string reason) => new([], reason);

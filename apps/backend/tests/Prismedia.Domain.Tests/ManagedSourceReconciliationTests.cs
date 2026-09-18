@@ -72,8 +72,24 @@ public sealed class ManagedSourceReconciliationTests {
     }
 
     [Fact]
-    public void NewlyReportedTargetsRequireExplicitLinkingBeforeTheTrackedScopeExpands() {
+    public void SeparateUnownedTargetsDoNotExpandOrInvalidateTheFiniteTrackedScope() {
         var result = ManagedSourceReconciliation.Plan([Binding(Episode)], [Observed(Episode), Observed(Episode with { RemoteTargetId = "new-episode", EpisodeNumber = 4 }) with { RemoteFileId = "new-episode-file" }]);
+        Assert.Null(result.ReviewReason);
+        Assert.Single(result.Changes);
+    }
+
+    [Fact]
+    public void UnownedTargetSharingOwnedBytesRequiresReview() {
+        var unowned = Episode with { RemoteTargetId = "new-episode", EpisodeNumber = 4 };
+        var result = ManagedSourceReconciliation.Plan([Binding(Episode)], [Observed(Episode, unowned)]);
+        Assert.NotNull(result.ReviewReason);
+        Assert.Empty(result.Changes);
+    }
+
+    [Fact]
+    public void ChangedRemoteIdAtOwnedCoordinatesRequiresReview() {
+        var changedIdentity = Episode with { RemoteTargetId = "replacement-id" };
+        var result = ManagedSourceReconciliation.Plan([Binding(Episode)], [Observed(changedIdentity)]);
         Assert.NotNull(result.ReviewReason);
         Assert.Empty(result.Changes);
     }

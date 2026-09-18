@@ -57,8 +57,11 @@ public sealed class ManagedTrackingService(
                     "The removed remote identity exists again. Review it before restoring this association.", token);
                 return;
             }
-            var observation = await store.ObserveAsync(work.Tracking.ConnectionId, remote, token);
-            if (remote.Files.Count > 0 && observation.LibraryRootId != work.Tracking.LibraryRootId)
+            var scopedRemote = work.Tracking.Bindings.Count == 0
+                ? remote
+                : ScopeToEstablishedTargets(work.Tracking.Targets, work.Tracking.Bindings, remote);
+            var observation = await store.ObserveAsync(work.Tracking.ConnectionId, scopedRemote, token);
+            if (scopedRemote.Files.Count > 0 && observation.LibraryRootId != work.Tracking.LibraryRootId)
                 throw new ArgumentException("The holding moved outside its established mapping. Review its library boundary.");
             if (work.Tracking.Bindings.Count == 0) {
                 var plan = ManagedSourceAdoption.Plan(observation.Files, work.Selections, observation.Sources);
@@ -98,5 +101,27 @@ public sealed class ManagedTrackingService(
         } catch (ArgumentException error) {
             await store.RecordProblemAsync(id, work.Tracking.Revision, ManagedTrackingStatus.NeedsReview, error.Message, token);
         }
+    }
+
+    /// <summary>
+    /// Limits routine reconciliation to retained targets while keeping every target on a relevant
+    /// physical file. Coordinate matches remain visible so a changed remote ID requires review.
+    /// </summary>
+    internal static ManagedItemSnapshot ScopeToEstablishedTargets(
+        IReadOnlyList<ManagedTargetBinding> retained,
+        IReadOnlyList<ManagedFileBinding> bindings,
+        ManagedItemSnapshot remote) {
+        var targets = retained.Select(binding => binding.Target).ToArray();
+        return remote with {
+            Files = remote.Files.Where(file => bindings.Any(binding => binding.RemoteFileId == file.RemoteId)
+                || ManagedSourceReconciliation.IntersectsEstablishedScope(
+                    targets,
+                    file.Targets.Select(target => new ManagedTargetIdentity(
+                        target.RemoteId,
+                        target.EntityKind,
+                        target.SeasonNumber,
+                        target.EpisodeNumber,
+                        target.AbsoluteNumber)).ToArray())).ToArray()
+        };
     }
 }

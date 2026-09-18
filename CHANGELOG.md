@@ -166,6 +166,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Selected-episode requests stay linked when Sonarr also contains episodes outside that request; shared files and changed identities still receive a separate review.
+
 - External series request buttons show the selected episode count, including only newly requested episodes when expanding an existing request.
 
 - External requests resume automatically after a temporary connection check interrupts observation, while identity and ownership conflicts remain protected for review.
