@@ -609,6 +609,13 @@ The dialog explains which requests and file tracking will stop. Review the monit
 and activity, acknowledge keeping that scope unmonitored, and confirm. This releases
 the acquisition reservation; it does not transfer ownership of the media files.
 
+Radarr plugin 1.7.1 and Sonarr plugin 1.6.1 also support stopping an association
+after confirmed removal. Prismedia checks that neither the saved remote ID nor
+another item with the same provider identity is present, then checks download
+health, queue activity, and commands. The dialog describes the confirmed removal
+without inventing current monitoring settings or a remote path. A reappearing item
+or an unavailable API blocks this handoff; retained metadata and history remain intact.
+
 Acceptance freezes new Prismedia controls, requests, and source reconciliation for
 this holding while retaining its owner. The worker reads the same pinned identities
 again, verifies the reviewed path, and checks monitoring and activity before releasing

@@ -215,6 +215,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Removed Radarr and Sonarr titles can complete an explicit ownership handoff after fresh removal and activity checks, while retaining their metadata and history.
+
 - Titles confirmed removed from Radarr or Sonarr leave normal library lists when no playable files remain, while metadata and watch history are retained. Connection failures do not count as removal.
 - Plugin updates can proceed while accepted manager requests only wait for files, without releasing their ownership. Active or uncertain changes still block updates.
 

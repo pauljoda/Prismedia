@@ -10,5 +10,7 @@ export interface ReleaseManagedHoldingRequest {
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   expectedRevision: number | string;
   scopeFingerprint: string;
-  expectedPath: string;
+  /** @nullable */
+  expectedPath: string | null;
+  remoteItemAbsent?: boolean;
 }

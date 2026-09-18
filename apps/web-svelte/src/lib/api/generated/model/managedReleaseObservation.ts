@@ -7,7 +7,8 @@
 import type { ManagedControlState } from './managedControlState';
 
 export interface ManagedReleaseObservation {
-  state: ManagedControlState;
+  state: null | ManagedControlState;
   queueEmpty: boolean;
   commandsIdle: boolean;
+  remoteItemAbsent?: boolean;
 }

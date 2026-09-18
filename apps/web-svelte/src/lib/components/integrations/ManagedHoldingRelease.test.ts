@@ -17,11 +17,11 @@ const accepted = { id: "holding", status: MANAGED_TRACKING_STATUS.releasePending
 
 describe("Managed ownership handoff", () => {
   beforeEach(() => { vi.resetAllMocks(); api.fetchReleasePreview.mockResolvedValue(preview); api.saveOwnershipRelease.mockResolvedValue(accepted); });
-  async function open(onaccepted = vi.fn()) {
+  async function open(onaccepted = vi.fn(), readyText = "Monitoring is off for 1 selected item.") {
     render(ManagedHoldingRelease, { connectionId: "connection", holdingId: "holding", connectionName: "Radarr", onaccepted });
     await fireEvent.click(screen.getByRole("button", { name: "Stop managing this title with Radarr" }));
     await screen.findByRole("dialog", { name: "Stop managing with Radarr?" });
-    await screen.findByText("Monitoring is off for 1 selected item.");
+    await screen.findByText(readyText);
     return onaccepted;
   }
   it("requires an explicit review and acknowledgement before accepting a release", async () => {
@@ -32,7 +32,34 @@ describe("Managed ownership handoff", () => {
     await fireEvent.click(submit);
     await waitFor(() => expect(saved).toHaveBeenCalledWith(accepted));
     expect(api.saveOwnershipRelease).toHaveBeenCalledWith("connection", "holding", expect.objectContaining({ expectedRevision: 3,
-      scopeFingerprint: preview.scopeFingerprint, expectedPath: "/remote/film" }));
+      scopeFingerprint: preview.scopeFingerprint, expectedPath: "/remote/film", remoteItemAbsent: false }));
+  });
+  it("releases a confirmed removed title without fabricating remote state", async () => {
+    const removedPreview: ManagedReleasePreview = {
+      ...preview,
+      observation: {
+        state: null,
+        queueEmpty: true,
+        commandsIdle: true,
+        remoteItemAbsent: true,
+      },
+    };
+    api.fetchReleasePreview.mockResolvedValue(removedPreview);
+
+    await open(vi.fn(), "Radarr no longer reports this title. Prismedia retained its metadata and history; any local files remain in place.");
+
+    expect(screen.queryByText("Film")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Monitoring is/)).not.toBeInTheDocument();
+    expect(screen.getByText("Stopping management lets you request this title through another source. It does not delete retained library data or local files.")).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("checkbox", { name: "I understand Prismedia will stop managing this title" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Stop Prismedia management" }));
+
+    await waitFor(() => expect(api.saveOwnershipRelease).toHaveBeenCalledWith("connection", "holding", expect.objectContaining({
+      expectedRevision: 3,
+      scopeFingerprint: preview.scopeFingerprint,
+      expectedPath: null,
+      remoteItemAbsent: true,
+    })));
   });
   it("shows remote activity and cannot release an unready scope", async () => {
     api.fetchReleasePreview.mockResolvedValue({ ...preview, canRelease: false, problem: "Downloads are still active.", observation: { ...preview.observation, queueEmpty: false } });

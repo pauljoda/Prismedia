@@ -137,7 +137,7 @@ public sealed partial class ManagedTrackingPostgresTests {
         await store.BeginAsync(fixture.ConnectionId, holding.Tracking.Id, ReleaseIntent(holding), default);
         var work = (await store.FindAsync(holding.Tracking.Id, default))!; var evidence = ReleaseEvidence(work);
         await Assert.ThrowsAsync<ArgumentException>(() => store.CompleteAsync(work, evidence with { QueueEmpty = false }, default));
-        await Assert.ThrowsAsync<ArgumentException>(() => store.CompleteAsync(work, evidence with { State = evidence.State with { Path = "/different" } }, default));
+        await Assert.ThrowsAsync<ArgumentException>(() => store.CompleteAsync(work, evidence with { State = evidence.State! with { Path = "/different" } }, default));
         await using (var worker = database.CreateContext())
             await Assert.ThrowsAsync<ConnectionConflictException>(() => Store(worker).ApplyAsync(holding, observation, null, [], default));
         await store.RecordProblemAsync(work, "Remote app unavailable", default);
@@ -152,6 +152,6 @@ public sealed partial class ManagedTrackingPostgresTests {
     private static ManagedReleaseObservation ReleaseEvidence(ManagedReleaseWork work) {
         var scope = ManagedControlIdentity.From(work.Holding).Scope;
         return new(new(new(scope.Item.RemoteId, scope.Item.EntityKind, "Film", 2024, scope.Item.ExpectedExternalIds, false, "1", 1),
-            work.Request.ExpectedPath, scope.Targets.Select(target => new ManagedTargetMonitoring(target, false)).ToArray(), new(true, true, true)), true, true);
+            work.Request.ExpectedPath!, scope.Targets.Select(target => new ManagedTargetMonitoring(target, false)).ToArray(), new(true, true, true)), true, true);
     }
 }

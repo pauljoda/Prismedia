@@ -12,7 +12,8 @@ public sealed class ManagedReleaseService(IManagedReleaseStore store, IManagedTr
         var owned = await controls.RequireScopeAsync(connectionId, holdingId, token);
         await store.RequireSettledControlsAsync(holdingId, token);
         var holding = (await tracking.FindAsync(holdingId, token))!.Tracking;
-        var observation = await InspectAsync(connectionId, owned.Scope, token);
+        var observation = await InspectAsync(connectionId, owned.Scope,
+            expectRemoteAbsence: holding.Status == ManagedTrackingStatus.Removed, token);
         var problem = Readiness(observation).Problem;
         return new(holding.Revision, owned.Fingerprint, observation, problem is null, problem);
     }
@@ -20,12 +21,15 @@ public sealed class ManagedReleaseService(IManagedReleaseStore store, IManagedTr
     /// <summary>Persists reviewed release intent before any ownership change; retries return the same handoff.</summary>
     public async Task<ManagedTrackingResponse> BeginAsync(Guid connectionId, Guid holdingId, ReleaseManagedHoldingRequest request, CancellationToken token) {
         if (request.OperationId == Guid.Empty || request.ExpectedRevision < 1 || request.ScopeFingerprint is not { Length: 64 }
-            || !request.ScopeFingerprint.All(Uri.IsHexDigit) || string.IsNullOrWhiteSpace(request.ExpectedPath) || request.ExpectedPath.Length > 8192)
+            || !request.ScopeFingerprint.All(Uri.IsHexDigit)
+            || request.RemoteItemAbsent && request.ExpectedPath is not null
+            || !request.RemoteItemAbsent && (string.IsNullOrWhiteSpace(request.ExpectedPath) || request.ExpectedPath.Length > 8192))
             throw new ArgumentException("Review the exact holding and its activity before releasing ownership.");
         if (await store.FindAsync(holdingId, token) is not null) return await store.BeginAsync(connectionId, holdingId, request, token);
         var preview = await PreviewAsync(connectionId, holdingId, token);
         if (preview.Revision < request.ExpectedRevision || preview.ScopeFingerprint != request.ScopeFingerprint
-            || preview.Observation.State.Path != request.ExpectedPath)
+            || preview.Observation.RemoteItemAbsent != request.RemoteItemAbsent
+            || !request.RemoteItemAbsent && preview.Observation.State?.Path != request.ExpectedPath)
             throw new ManagedControlConflictException("The reviewed holding changed. Review the handoff again.");
         if (!preview.CanRelease) throw new ManagedControlConflictException(preview.Problem!);
         return await store.BeginAsync(connectionId, holdingId, request, token);
@@ -37,13 +41,14 @@ public sealed class ManagedReleaseService(IManagedReleaseStore store, IManagedTr
         if (work is null) return false;
         if (work.Holding.Status == ManagedTrackingStatus.Released) return true;
         try {
-            var observation = await InspectAsync(work.Holding.ConnectionId, ManagedControlIdentity.From(work.Holding).Scope, token);
+            var observation = await InspectAsync(work.Holding.ConnectionId,
+                ManagedControlIdentity.From(work.Holding).Scope, work.Request.RemoteItemAbsent, token);
             ValidateEvidence(work, observation);
             await store.CompleteAsync(work, observation, token);
         } catch (Exception error) when (error is IntegrationInvocationException or ConnectionNotFoundException
             or ConnectionSecretUnavailableException or ConnectionCapabilityUnavailableException) {
             await store.RecordProblemAsync(work, "The connected application could not be verified. Ownership remains reserved; refresh after restoring the connection.", token);
-        } catch (ArgumentException error) {
+        } catch (Exception error) when (error is ArgumentException or ManagedControlConflictException) {
             await store.RecordProblemAsync(work, error.Message, token);
         }
         return true;
@@ -52,20 +57,39 @@ public sealed class ManagedReleaseService(IManagedReleaseStore store, IManagedTr
     /// <summary>Checks pinned identity, path, complete finite coverage, monitoring and activity at the commit boundary.</summary>
     public static void ValidateEvidence(ManagedReleaseWork work, ManagedReleaseObservation observation) {
         var owned = ManagedControlIdentity.From(work.Holding);
-        if (owned.Fingerprint != work.Request.ScopeFingerprint || observation?.State is null)
+        if (owned.Fingerprint != work.Request.ScopeFingerprint || observation is null
+            || observation.RemoteItemAbsent != work.Request.RemoteItemAbsent)
             throw new ArgumentException("The accepted release scope no longer has complete evidence.");
-        ManagedControlValidation.Validate(owned.Scope, observation.State);
-        if (observation.State.Path != work.Request.ExpectedPath)
-            throw new ArgumentException("The holding moved since handoff review. Ownership remains reserved.");
+        if (observation.RemoteItemAbsent) {
+            if (observation.State is not null || work.Request.ExpectedPath is not null)
+                throw new ArgumentException("The confirmed remote absence no longer matches the reviewed handoff.");
+        } else {
+            if (observation.State is null) throw new ArgumentException("The manager returned no holding state for the reviewed handoff.");
+            ManagedControlValidation.Validate(owned.Scope, observation.State);
+            if (observation.State.Path != work.Request.ExpectedPath)
+                throw new ArgumentException("The holding moved since handoff review. Ownership remains reserved.");
+        }
         if (Readiness(observation).Problem is { } problem) throw new ArgumentException(problem);
     }
-    private async Task<ManagedReleaseObservation> InspectAsync(Guid connectionId, ManagedControlScope scope, CancellationToken token) {
+    private async Task<ManagedReleaseObservation> InspectAsync(Guid connectionId, ManagedControlScope scope,
+        bool expectRemoteAbsence, CancellationToken token) {
         var connection = await access.RequireAsync(connectionId, PluginCapability.ExternalManager, IntegrationOperation.InspectManagedRelease, scope.Item.EntityKind, token);
         var observation = await gateway.InspectReleaseAsync(connection.Manifest.Id, connection.Context, new(scope), token);
         if (observation is null) throw new IntegrationInvocationException("The manager returned no release evidence.");
-        ManagedControlValidation.Validate(scope, observation.State);
+        if (observation.RemoteItemAbsent) {
+            if (!expectRemoteAbsence)
+                throw new ManagedControlConflictException("The remote holding disappeared after review. Refresh its library state before releasing ownership.");
+            if (observation.State is not null)
+                throw new IntegrationInvocationException("The manager returned conflicting present and absent release evidence.");
+        } else {
+            if (expectRemoteAbsence)
+                throw new ManagedControlConflictException("The removed remote identity exists again. Review it before releasing ownership.");
+            if (observation.State is null)
+                throw new IntegrationInvocationException("The manager returned incomplete release evidence.");
+            ManagedControlValidation.Validate(scope, observation.State);
+        }
         return observation;
     }
     private static ManagedReleaseReadiness Readiness(ManagedReleaseObservation observation) =>
-        new(observation.State.Targets.Any(target => target.Monitored), observation.QueueEmpty, observation.CommandsIdle);
+        new(observation.State?.Targets.Any(target => target.Monitored) == true, observation.QueueEmpty, observation.CommandsIdle);
 }
