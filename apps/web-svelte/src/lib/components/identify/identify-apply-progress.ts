@@ -5,11 +5,17 @@ import {
 import type { EntityMetadataProposal, IdentifyApplyProgress } from "$lib/api/identify-types";
 import type { EntityCard } from "$lib/api/entities";
 import { isTaxonomyEntityKind } from "$lib/entities/entity-codes";
+import { createUuid } from "$lib/utils/uuid";
 
 const MIN_APPLY_PROGRESS_VISIBLE_MS = 650;
 
+/**
+ * Creates the apply operation id. The server types this as a `Guid` on both the apply request
+ * body and the `:guid`-constrained progress route, so it must always be a real UUID — including
+ * on the plain-HTTP LAN origins where `crypto.randomUUID` is unavailable.
+ */
 export function createOperationId(): string {
-  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  return createUuid();
 }
 
 export function nowMs(): number {

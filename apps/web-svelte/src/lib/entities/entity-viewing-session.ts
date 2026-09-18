@@ -1,6 +1,7 @@
 import { recordEntityConsumptionEvent, updateEntityConsumption } from "$lib/api/consumption";
 import { CONSUMPTION_EVENT_KIND } from "$lib/api/generated/codes";
 import { ConsumptionActivityClock } from "$lib/entities/consumption-activity-clock";
+import { createUuid } from "$lib/utils/uuid";
 
 export interface EntityViewingSink {
   recordAccess(entityId: string, sessionId: string): Promise<unknown>;
@@ -86,7 +87,7 @@ const apiViewingSink: EntityViewingSink = {
 };
 
 function createSessionId(): string {
-  return globalThis.crypto?.randomUUID?.() ?? `view-${Date.now()}-${Math.random()}`;
+  return createUuid();
 }
 
 function currentTimeMs(): number {

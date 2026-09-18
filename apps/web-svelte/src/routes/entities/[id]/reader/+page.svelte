@@ -15,6 +15,7 @@
   import type { EntityReaderManifestResponse } from "$lib/api/generated/model";
   import type { ImageListItemDto } from "$lib/entities/media-view-models";
   import { resolveOrderedEntitySequence } from "$lib/entities/ordered-entity-sequence";
+  import { createUuid } from "$lib/utils/uuid";
 
   type LoadState = "loading" | "ready" | "error";
   type ComicReaderMode = typeof READER_MODE.paged | typeof READER_MODE.webtoon;
@@ -89,7 +90,7 @@
 
       void recordEntityConsumptionEvent(nextEntity.id, {
         kind: CONSUMPTION_EVENT_KIND.accessed,
-        sessionId: crypto.randomUUID(),
+        sessionId: createUuid(),
       }).catch(() => undefined);
       if (reset) queueProgressSave(0, readerMode);
     } catch (error) {
