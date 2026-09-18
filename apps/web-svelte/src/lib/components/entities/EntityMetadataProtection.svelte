@@ -17,6 +17,7 @@
     [METADATA_PATCH_FIELD.title]: "Title",
     [METADATA_PATCH_FIELD.description]: "Description",
     [METADATA_PATCH_FIELD.classification]: "Classification",
+    [METADATA_PATCH_FIELD.credits]: "Credits",
   };
 
   async function load(id: string) {

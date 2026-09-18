@@ -2,7 +2,7 @@ using Prismedia.Domain.Entities;
 
 namespace Prismedia.Infrastructure.Persistence.Entities;
 
-/// <summary>Current value provenance and user protection for one supported scalar metadata field.</summary>
+/// <summary>Current value or section provenance and user protection for one supported metadata field.</summary>
 public sealed class EntityMetadataFieldRow {
     public Guid EntityId { get; set; }
     public MetadataPatchField Field { get; set; }

@@ -130,6 +130,11 @@ public static class DependencyInjection {
         services.AddSingleton<IDiscoveryTokenProtector>(new DiscoveryTokenProtector(dataDir));
         services.AddSingleton<IExecutorSelectionProtector>(new ExecutorSelectionProtector(dataDir));
         services.AddScoped<IntegrationConnectionAccess>();
+        services.AddScoped<ExternalPeopleEnrichmentPlanResolver>();
+        services.AddScoped<IExternalPeopleEnrichmentPlanResolver>(provider =>
+            provider.GetRequiredService<ExternalPeopleEnrichmentPlanResolver>());
+        services.AddScoped<IExternalPeopleEnrichmentScheduler, ExternalPeopleEnrichmentScheduler>();
+        services.AddScoped<IExternalPeopleEnrichmentRunner, ExternalPeopleEnrichmentRunner>();
         services.AddScoped<CatalogDiscoveryService>();
         services.AddScoped<CatalogAcquisitionService>();
         services.AddScoped<SourceAcquisitionService>();
@@ -260,6 +265,8 @@ public static class DependencyInjection {
             releaseDateChanges: provider.GetRequiredService<IAcquisitionReleaseDateChangeHandler>(),
             settings: provider.GetRequiredService<Prismedia.Application.Settings.SettingsService>()));
         services.AddScoped<IEntityMetadataPatchService>(provider =>
+            provider.GetRequiredService<EntityMetadataApplyService>());
+        services.AddScoped<IExternalPeopleCreditsApplier>(provider =>
             provider.GetRequiredService<EntityMetadataApplyService>());
         services.AddScoped<IMetadataFieldService, EfMetadataFieldService>();
         services.AddScoped<IEntityPositionEnricher>(provider =>

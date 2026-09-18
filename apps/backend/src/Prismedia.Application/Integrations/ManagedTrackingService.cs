@@ -5,7 +5,10 @@ using Prismedia.Domain.Integrations;
 namespace Prismedia.Application.Integrations;
 
 /// <summary>Links reviewed existing holdings and reconciles only their established local identities.</summary>
-public sealed class ManagedTrackingService(ManagedLibraryService library, IManagedTrackingStore store) {
+public sealed class ManagedTrackingService(
+    ManagedLibraryService library,
+    IManagedTrackingStore store,
+    IExternalPeopleEnrichmentScheduler? peopleEnrichment = null) {
     /// <summary>Lists durable tracking without contacting the remote app.</summary>
     public Task<IReadOnlyList<ManagedTrackingResponse>> ListAsync(Guid connectionId, CancellationToken token) => store.ListAsync(connectionId, token);
 
@@ -65,6 +68,21 @@ public sealed class ManagedTrackingService(ManagedLibraryService library, IManag
                 var plan = ManagedSourceReconciliation.Plan(work.Tracking.Bindings, observation.Files);
                 if (plan.ReviewReason is not null) throw new ArgumentException(plan.ReviewReason);
                 await store.ApplyAsync(work, observation, null, plan.Changes, token);
+            }
+            if (peopleEnrichment is not null) {
+                try {
+                    await peopleEnrichment.ScheduleAsync(work.Tracking.Id, token);
+                } catch (ArgumentException error) {
+                    var current = await store.FindAsync(id, token);
+                    if (current is not null) {
+                        await store.RecordProblemAsync(
+                            id,
+                            current.Tracking.Revision,
+                            ManagedTrackingStatus.NeedsReview,
+                            error.Message,
+                            token);
+                    }
+                }
             }
         } catch (IntegrationInvocationException error) when (error.Code == IntegrationErrorCode.ManagedItemNotFound) {
             await store.ConfirmRemovalAsync(work,

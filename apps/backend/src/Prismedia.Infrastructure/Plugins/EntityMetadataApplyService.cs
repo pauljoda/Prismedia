@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Acquisition;
 using Prismedia.Application.Entities;
+using Prismedia.Application.Integrations;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Plugins;
 using Prismedia.Application.Security;
@@ -22,7 +23,7 @@ public sealed record PluginArtworkServiceOptions(string CacheRoot);
 /// <summary>
 /// Applies selected plugin metadata proposals into entity capability rows.
 /// </summary>
-public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchService, IEntityPositionEnricher {
+public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchService, IEntityPositionEnricher, IExternalPeopleCreditsApplier {
     // Stat codes are an open provider vocabulary (plugins may send any code; rows are
     // stored and displayed as-is), so this filter matches wire strings rather than a
     // closed [Code] enum. prism-vocab: external
@@ -232,7 +233,7 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
 
         var now = DateTimeOffset.UtcNow;
         await ApplyScopedPatchToEntityAsync(entity, fields, request.Patch, now, cancellationToken);
-        await RecordScalarEvidenceAsync(entity.Id, request.Patch, fields, null, now, cancellationToken);
+        await RecordMetadataEvidenceAsync(entity.Id, request.Patch, fields, null, now, cancellationToken);
 
         if (fields.Contains(MetadataPatchField.Images.ToCode()) && request.SelectedImages is not null) {
             await _artwork.DownloadSelectedImagesAsync(entityId, request.SelectedImages, now, cancellationToken);
@@ -373,6 +374,78 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
             identifyEligibility,
             cancellationToken);
 
+    /// <inheritdoc />
+    public async Task<ExternalPeopleCreditsApplyResult> ApplyIfMissingAsync(
+        Guid entityId,
+        EntityMetadataProposal proposal,
+        CancellationToken cancellationToken) {
+        ArgumentNullException.ThrowIfNull(proposal);
+        _structurePlacement.Reset();
+        proposal = EntityMetadataProposalIdentityPolicy.RemoveSharedStructuralIdentities(proposal);
+        var selectedFields = new[] { MetadataPatchField.Credits.ToCode() };
+
+        await _artwork.StageAsync(ProposalArtworkUrls([proposal]), cancellationToken);
+
+        var result = ExternalPeopleCreditsApplyResult.NotFound;
+        bool accepted;
+        try {
+            accepted = await _lifecycle.ExecuteAsync(
+                entityId,
+                async leaseCancellationToken => {
+                    if (!await _db.Entities.AnyAsync(row => row.Id == entityId, leaseCancellationToken)) {
+                        return;
+                    }
+
+                    var creditsEvidence = await _db.EntityMetadataFields.FindAsync(
+                        [entityId, MetadataPatchField.Credits],
+                        leaseCancellationToken);
+                    if (creditsEvidence?.IsLocked == true) {
+                        result = ExternalPeopleCreditsApplyResult.ProtectedByUser;
+                        return;
+                    }
+
+                    var peopleRelationshipCodes = new[] {
+                        RelationshipKind.Cast.ToCode(),
+                        RelationshipKind.Credits.ToCode()
+                    };
+                    if (await _db.EntityRelationshipLinks.AnyAsync(
+                            row => row.EntityId == entityId
+                                && peopleRelationshipCodes.Contains(row.RelationshipCode),
+                            leaseCancellationToken)) {
+                        result = ExternalPeopleCreditsApplyResult.ExistingCredits;
+                        return;
+                    }
+
+                    result = await ApplyWithinLifecycleAsync(
+                        entityId,
+                        proposal,
+                        selectedFields,
+                        selectedImages: null,
+                        progress: null,
+                        identifyEligibility: null,
+                        leaseCancellationToken)
+                        ? ExternalPeopleCreditsApplyResult.Applied
+                        : ExternalPeopleCreditsApplyResult.NotFound;
+                },
+                cancellationToken);
+        } catch {
+            _artwork.RollbackStagedWrites();
+            throw;
+        }
+
+        if (!accepted) {
+            _artwork.RollbackStagedWrites();
+            return ExternalPeopleCreditsApplyResult.LifecycleConflict;
+        }
+        if (result == ExternalPeopleCreditsApplyResult.Applied) {
+            _artwork.CommitStagedWrites();
+            await RefreshGridThumbnailsForDownloadedArtworkAsync(cancellationToken);
+        } else {
+            _artwork.RollbackStagedWrites();
+        }
+        return result;
+    }
+
     private async Task<bool> ApplyAsyncCore(
         Guid entityId,
         EntityMetadataProposal proposal,
@@ -438,7 +511,7 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
         }
 
         var selected = selectedFields.ToHashSet(StringComparer.OrdinalIgnoreCase);
-        var locked = await LockedScalarFieldsAsync(entity.Id, cancellationToken);
+        var locked = await LockedMetadataFieldsAsync(entity.Id, cancellationToken);
         selected.ExceptWith(locked.Select(field => field.ToCode()));
         var patch = proposal.Patch;
         var now = DateTimeOffset.UtcNow;
@@ -506,7 +579,7 @@ public sealed partial class EntityMetadataApplyService : IEntityMetadataPatchSer
             await UpsertFlagsAsync(entityId, new EntityMetadataFlagsPatch(null, true, null), now, cancellationToken);
         }
 
-        await RecordScalarEvidenceAsync(entity.Id, patch, selected, proposal, now, cancellationToken);
+        await RecordMetadataEvidenceAsync(entity.Id, patch, selected, proposal, now, cancellationToken);
 
         // Walk the root's related entities and structural children through the single recursive node
         // applier. Relationship proposals only enrich entities the root's credit/studio/tags fields

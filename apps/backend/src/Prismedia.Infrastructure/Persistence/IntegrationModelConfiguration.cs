@@ -76,6 +76,8 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.ItemJson).HasColumnName("item").HasColumnType("jsonb");
             entity.Property(row => row.SelectionsJson).HasColumnName("selections").HasColumnType("jsonb");
             entity.Property(row => row.TargetsJson).HasColumnName("targets").HasColumnType("jsonb");
+            entity.Property(row => row.PeopleEnrichmentFingerprint).HasColumnName("people_enrichment_fingerprint").HasMaxLength(64);
+            entity.Property(row => row.PeopleEnrichmentCompletedAt).HasColumnName("people_enrichment_completed_at");
             entity.Property(row => row.ReleaseOperationId).HasColumnName("release_operation_id");
             entity.Property(row => row.ReleaseRequestJson).HasColumnName("release_request").HasColumnType("jsonb");
             entity.Property(row => row.ReleasedAt).HasColumnName("released_at");

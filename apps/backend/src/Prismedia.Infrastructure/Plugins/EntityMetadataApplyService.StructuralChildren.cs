@@ -294,10 +294,10 @@ public sealed partial class EntityMetadataApplyService {
         var path = parentPath.Count == 0 ? [title] : parentPath.Concat([title]).ToArray();
         await ReportApplyProgressAsync(progress, entity.KindCode.DecodeAs<EntityKind>(), title, path, cancellationToken);
 
-        var locked = await LockedScalarFieldsAsync(entity.Id, cancellationToken);
-        var acceptedPatch = PreserveLockedScalars(node.Patch, locked);
+        var locked = await LockedMetadataFieldsAsync(entity.Id, cancellationToken);
+        var acceptedPatch = PreserveLockedMetadata(node.Patch, locked);
         await ApplyPatchToEntityAsync(entity, acceptedPatch, isRelationship ? [] : node.Images, now, cancellationToken);
-        await RecordScalarEvidenceAsync(entity.Id, acceptedPatch, MetadataFieldProtection.Fields.Select(field => field.ToCode()), node, now, cancellationToken);
+        await RecordMetadataEvidenceAsync(entity.Id, acceptedPatch, MetadataFieldProtection.Fields.Select(field => field.ToCode()), node, now, cancellationToken);
         await BindProviderIdentityAsync(
             entity,
             node.Provider,
@@ -308,9 +308,9 @@ public sealed partial class EntityMetadataApplyService {
             await ApplyRelationshipArtworkAsync(entity, node, now, cancellationToken);
         }
 
-        var hasRelationshipFields = node.Patch.Credits.Count > 0
-            || !string.IsNullOrWhiteSpace(node.Patch.Studio)
-            || node.Patch.Tags.Count > 0;
+        var hasRelationshipFields = acceptedPatch.Credits.Count > 0
+            || !string.IsNullOrWhiteSpace(acceptedPatch.Studio)
+            || acceptedPatch.Tags.Count > 0;
         await ApplyChildNodesAsync(
             entity.Id,
             entity.KindCode.DecodeAs<EntityKind>(),

@@ -14,6 +14,10 @@ public sealed class ManagedHoldingRow {
     public string SelectionsJson { get; set; } = "[]";
     /// <summary>Stable local target identities retained before and across source-file availability.</summary>
     public string TargetsJson { get; set; } = "[]";
+    /// <summary>Last provider/identity configuration for which people enrichment reached a terminal result.</summary>
+    public string? PeopleEnrichmentFingerprint { get; set; }
+    /// <summary>When credits were found locally or safely applied from an exact external identity.</summary>
+    public DateTimeOffset? PeopleEnrichmentCompletedAt { get; set; }
     public ManagedTrackingStatus Status { get; set; }
     public long Revision { get; set; }
     public DateTimeOffset? LastCheckedAt { get; set; }

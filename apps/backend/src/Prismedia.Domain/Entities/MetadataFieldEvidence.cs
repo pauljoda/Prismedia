@@ -21,12 +21,18 @@ public sealed record MetadataFieldEvidence(MetadataValueOrigin Origin, string? P
     }
 }
 
-/// <summary>Scalar descriptive fields with complete provenance and enrichment-lock semantics.</summary>
+/// <summary>Metadata fields with complete value or section-level provenance and enrichment-lock semantics.</summary>
 public static class MetadataFieldProtection {
-    /// <summary>Collection sections need member-level provenance and are intentionally outside this scalar policy.</summary>
+    /// <summary>
+    /// Protected fields whose user-authored replacement or clear is authoritative. Credits use
+    /// section-level ownership: the evidence protects the complete ordered credit collection.
+    /// </summary>
     public static IReadOnlyList<MetadataPatchField> Fields { get; } = Array.AsReadOnly(new[] {
-        MetadataPatchField.Title, MetadataPatchField.Description, MetadataPatchField.Classification
+        MetadataPatchField.Title,
+        MetadataPatchField.Description,
+        MetadataPatchField.Classification,
+        MetadataPatchField.Credits
     });
-    /// <summary>Whether this field has complete scalar value ownership semantics.</summary>
+    /// <summary>Whether this field has complete value or section-level ownership semantics.</summary>
     public static bool Supports(MetadataPatchField field) => Fields.Contains(field);
 }

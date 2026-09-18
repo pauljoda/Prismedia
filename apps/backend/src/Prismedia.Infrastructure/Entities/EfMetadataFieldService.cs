@@ -7,7 +7,7 @@ using Prismedia.Infrastructure.Persistence.Entities;
 
 namespace Prismedia.Infrastructure.Entities;
 
-/// <summary>Persists descriptive provenance protection under the same lifecycle boundary as metadata application.</summary>
+/// <summary>Persists metadata provenance protection under the same lifecycle boundary as metadata application.</summary>
 public sealed class EfMetadataFieldService(PrismediaDbContext db, IEntityLifecycleMutationLease lifecycle) : IMetadataFieldService {
     /// <inheritdoc />
     public async Task<IReadOnlyList<MetadataFieldResponse>?> ReadAsync(Guid entityId, CancellationToken cancellationToken) {
