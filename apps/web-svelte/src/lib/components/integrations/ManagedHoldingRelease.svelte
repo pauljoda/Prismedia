@@ -4,6 +4,7 @@
   import { Alert, Button, Checkbox, DialogBase } from "@prismedia/ui-svelte";
   import type { ManagedReleasePreview, ManagedTrackingResponse, ReleaseManagedHoldingRequest } from "$lib/api/generated/model";
   import { fetchReleasePreview, ManagedReleaseRejectedError, saveOwnershipRelease } from "$lib/api/managed-release";
+  import { createUuid } from "$lib/utils/uuid";
   let {
     connectionId,
     holdingId,
@@ -45,7 +46,7 @@
     if (!pending && preview) {
       const remoteItemAbsent = preview.observation.remoteItemAbsent === true;
       pending = {
-        operationId: crypto.randomUUID(),
+        operationId: createUuid(),
         expectedRevision: preview.revision,
         scopeFingerprint: preview.scopeFingerprint,
         expectedPath: remoteItemAbsent ? null : preview.observation.state!.path,

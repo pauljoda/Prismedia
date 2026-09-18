@@ -7,6 +7,7 @@
   import FormField from "$lib/components/forms/FormField.svelte";
   import { cancelControlAction, closeControlAction, fetchControlActions, fetchControlPreview, ManagerActionRejectedError, refreshControlAction, saveControlAction } from "$lib/api/managed-controls";
 
+  import { createUuid } from "$lib/utils/uuid";
   let {
     connectionId,
     holdingId,
@@ -109,7 +110,7 @@
       if (!alive || sequence !== inspectSequence || !dialogOpen) return;
       preview = result; profileId = result.state.item.profileId ?? "";
       monitored = result.state.targets.every(target => target.monitored); monitoringChanged = false; search = false;
-      operationId = crypto.randomUUID();
+      operationId = createUuid();
     } catch (cause) { if (alive && sequence === inspectSequence && dialogOpen) error = message(cause); }
     finally { if (alive && sequence === inspectSequence) busy = false; }
   }

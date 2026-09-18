@@ -13,6 +13,7 @@
   import ManagedHoldingControls from "./ManagedHoldingControls.svelte";
   import ManagedHoldingRelease from "./ManagedHoldingRelease.svelte";
 
+  import { createUuid } from "$lib/utils/uuid";
   let { connectionId, connectionName = "Connected app", item = null, showControls = false, canControl = false, canRelease = false, compact = false, onLoaded }: { connectionId: string; connectionName?: string; item?: ManagedLibraryItem | null; showControls?: boolean; canControl?: boolean; canRelease?: boolean; compact?: boolean; onLoaded?: (holdings: ManagedTrackingResponse[]) => void } = $props();
   const nsfw = useNsfw();
   let expandedId = $state<string | null>(null);
@@ -92,7 +93,7 @@
     busy = true; error = null; preview = null;
     try {
       const result = await previewTracking(connectionId, { entityKind: selectedItem.entityKind, remoteId: selectedItem.remoteId, expectedExternalIds: selectedItem.externalIds });
-      if (active && scope === trackingScope) { preview = result; operationId = crypto.randomUUID(); }
+      if (active && scope === trackingScope) { preview = result; operationId = createUuid(); }
     } catch (cause) { if (active && scope === trackingScope) error = cause instanceof Error ? cause.message : "Could not match existing items"; }
     finally { if (active && scope === trackingScope) busy = false; }
   }

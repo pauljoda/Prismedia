@@ -59,6 +59,7 @@
   import { useSession } from "$lib/stores/session.svelte";
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
 
+  import { createUuid } from "$lib/utils/uuid";
   interface ReviewLoadInput {
     kind: RequestMediaKindCode;
     pluginId: string | null;
@@ -488,7 +489,7 @@
           pendingManagerCommit = {
             connectionId: managerChoice.connectionId,
             input: {
-              operationId: crypto.randomUUID(),
+              operationId: createUuid(),
               expectedConnectionRevision: managerChoice.review.connectionRevision,
               libraryRootId: managerChoice.review.mount.libraryRootId,
               profileId: managerChoice.profileId,

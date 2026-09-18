@@ -9,6 +9,7 @@
   import EntityPicker, { type EntityPickerItem } from "$lib/components/forms/EntityPicker.svelte";
   import ManagedHoldingControls from "./ManagedHoldingControls.svelte";
 
+  import { createUuid } from "$lib/utils/uuid";
   let {
     connection,
     entityKind = ENTITY_KIND.movie,
@@ -112,7 +113,7 @@
   async function submit() {
     if (!pending && (!preview || !profileId)) return;
     if (!pending && preview) pending = {
-      operationId: crypto.randomUUID(),
+      operationId: createUuid(),
       entityId: preview.entityId,
       libraryRootId: preview.mount.libraryRootId,
       reviewedWork: preview.work,

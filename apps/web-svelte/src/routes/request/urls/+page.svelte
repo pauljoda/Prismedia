@@ -17,6 +17,7 @@
   import { getEntityKindLabel } from "$lib/entities/entity-grid";
   import { useSession } from "$lib/stores/session.svelte";
 
+  import { createUuid } from "$lib/utils/uuid";
   const session = useSession();
   let connections = $state<ConnectionResponse[]>([]);
   let connectionId = $state("");
@@ -76,7 +77,7 @@
   async function acquire(itemId: string) {
     if (!inspection || !rootId || busy) return;
     const key = JSON.stringify([connectionId, inspection.selectionToken, itemId, rootId]);
-    const operationId = operations.get(key) ?? crypto.randomUUID();
+    const operationId = operations.get(key) ?? createUuid();
     operations.set(key, operationId);
     busy = true; error = null;
     try {

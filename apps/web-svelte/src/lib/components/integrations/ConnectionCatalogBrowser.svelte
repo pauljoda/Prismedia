@@ -19,6 +19,7 @@
   import { getEntityKindLabel } from "$lib/entities/entity-grid";
   import { acquisitionAccessLabels, publicationFormatLabel, canImportPublication, canRequestPublication } from "$lib/integrations/catalog-labels";
 
+  import { createUuid } from "$lib/utils/uuid";
   let { connection, initialEntityKind = null }: { connection: ConnectionResponse; initialEntityKind?: EntityKind | null } = $props();
   const connectionId = $derived(connection.id);
   let selected = $state<DiscoveryItemResponse | null>(null);
@@ -67,7 +68,7 @@
     if (!rootId || submitting || !canAcquire(item, offer)) return;
     const offerId = offer.id;
     const key = JSON.stringify([connectionId, item.selectionToken, offerId, rootId]);
-    const operationId = operations.get(key) ?? crypto.randomUUID();
+    const operationId = operations.get(key) ?? createUuid();
     operations.set(key, operationId);
     submitting = true; transferError = null;
     try {
