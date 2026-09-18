@@ -2,6 +2,7 @@ using Prismedia.Api.Security;
 using Prismedia.Application.Integrations;
 using Prismedia.Contracts.Integrations;
 using Prismedia.Contracts.System;
+using Microsoft.AspNetCore.Mvc;
 
 namespace Prismedia.Api.Endpoints;
 
@@ -14,6 +15,20 @@ public static class ConnectionEndpoints {
         group.MapManagedControlEndpoints();
         group.MapManagedRequestEndpoints();
         group.MapManagedDiscoveryEndpoints();
+        group.MapGet("/activity", async (
+            [FromQuery] Guid? connectionId,
+            [FromQuery] string? cursor,
+            [FromQuery] int limit,
+            [FromQuery] bool? hideNsfw,
+            HttpContext httpContext,
+            IRequestActivityReader activity,
+            CancellationToken cancellationToken) =>
+            Results.Ok(await activity.ListAsync(connectionId, cursor, limit,
+                NsfwVisibility.ShouldHide(hideNsfw, httpContext), cancellationToken)))
+            .WithName("ListRequestActivity")
+            .WithSummary("Lists a bounded page of locally retained request and import activity.")
+            .Produces<RequestActivityPage>()
+            .Produces<ApiProblem>(400);
         group.MapGet("/", async (ConnectionService service, CancellationToken cancellationToken) =>
             Results.Ok(await service.ListAsync(cancellationToken)))
             .WithName("ListConnections").Produces<IReadOnlyList<ConnectionResponse>>();

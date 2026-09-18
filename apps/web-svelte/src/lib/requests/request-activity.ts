@@ -35,7 +35,7 @@ export function managedRequestActivityGroup(request: ManagedRequestResponse): Re
     || request.phase === MANAGED_REQUEST_PHASE.ownershipReleased || request.phase === MANAGED_REQUEST_PHASE.remoteRemoved) {
     return REQUEST_ACTIVITY_GROUP.recent;
   }
-  if (request.reviewRequired || request.problem || request.phase === MANAGED_REQUEST_PHASE.creationUncertain || request.phase === MANAGED_REQUEST_PHASE.rejected) {
+  if (request.reviewRequired || request.phase === MANAGED_REQUEST_PHASE.creationUncertain || request.phase === MANAGED_REQUEST_PHASE.rejected) {
     return REQUEST_ACTIVITY_GROUP.attention;
   }
   return REQUEST_ACTIVITY_GROUP.progress;
@@ -53,8 +53,8 @@ export function managedTrackingActivityGroup(holding: ManagedTrackingResponse): 
   return REQUEST_ACTIVITY_GROUP.progress;
 }
 
-/** A tracked holding supersedes the manager request that created it. */
+/** A tracked holding supersedes ordinary request progress while an explicit review remains actionable. */
 export function removeTrackedRequests(requests: ManagedRequestResponse[], holdings: ManagedTrackingResponse[]): ManagedRequestResponse[] {
   const trackedIds = new Set(holdings.map(holding => holding.id));
-  return requests.filter(request => !trackedIds.has(request.id));
+  return requests.filter(request => request.reviewRequired || !trackedIds.has(request.id));
 }

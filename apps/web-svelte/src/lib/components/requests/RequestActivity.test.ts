@@ -8,12 +8,13 @@ import type { ConnectionResponse, IntegrationTransferResponse, ManagedRequestRes
 import RequestActivity from "./RequestActivity.svelte";
 
 const api = vi.hoisted(() => ({
-  fetchIntegrationTransfers: vi.fn(), cancelPublicationTransfer: vi.fn(), retryPublicationTransfer: vi.fn(),
+  fetchRequestActivity: vi.fn(), cancelPublicationTransfer: vi.fn(), retryPublicationTransfer: vi.fn(),
   fetchEntityThumbnails: vi.fn(),
-  fetchManagedRequests: vi.fn(), refreshRequest: vi.fn(), cancelRequest: vi.fn(),
-  fetchManagedTracking: vi.fn(), refreshTracking: vi.fn(), resolveEntityHrefById: vi.fn(), goto: vi.fn(),
+  refreshRequest: vi.fn(), cancelRequest: vi.fn(),
+  refreshTracking: vi.fn(), resolveEntityHrefById: vi.fn(), goto: vi.fn(),
 }));
 vi.mock("$lib/api/integration-transfers", () => api);
+vi.mock("$lib/api/request-activity", () => ({ fetchRequestActivity: api.fetchRequestActivity }));
 vi.mock("$lib/api/entities", () => ({ fetchEntityThumbnails: api.fetchEntityThumbnails }));
 vi.mock("$lib/api/managed-requests", () => api);
 vi.mock("$lib/api/managed-libraries", () => api);
@@ -38,20 +39,30 @@ const request = (values: Partial<ManagedRequestResponse> = {}): ManagedRequestRe
   id: "managed", connectionId: connection.id, entityId: "entity", libraryRootId: "root", title: "Managed request",
   phase: MANAGED_REQUEST_PHASE.awaitingFiles, revision: 1, remoteId: "remote", monitored: true, search: true,
   reviewRequired: false, canCancel: true, createdAt: "2026-09-17T12:00:00Z", updatedAt: "2026-09-17T12:00:00Z",
-  problem: null, ...values,
+  problem: null, holdingId: "managed", ...values,
 });
 const holding = (values: Partial<ManagedTrackingResponse> = {}): ManagedTrackingResponse => ({
   id: "managed", connectionId: connection.id, libraryRootId: "root", title: "Dune", status: MANAGED_TRACKING_STATUS.tracking,
   revision: 1, lastCheckedAt: "2026-09-17T12:00:00Z", problem: null, bindings: [], targets: [],
   item: { entityKind: ENTITY_KIND.movie, remoteId: "remote", expectedExternalIds: { tmdb: "438631" } }, ...values,
 });
+const activityPage = ({ transfers = [], requests = [], holdings = [], sources = [], nextCursor = null }: {
+  transfers?: IntegrationTransferResponse[]; requests?: ManagedRequestResponse[]; holdings?: ManagedTrackingResponse[];
+  sources?: Array<{ connectionId: string; name: string; status: string; isStale: boolean; lastCheckedAt: string | null; problem: string | null }>;
+  nextCursor?: string | null;
+} = {}) => ({
+  items: [
+    ...transfers.map(item => ({ id: item.id, connectionId: item.connectionId, occurredAt: item.updatedAt, transfer: item })),
+    ...requests.map(item => ({ id: item.id, connectionId: item.connectionId, occurredAt: item.updatedAt, request: item })),
+    ...holdings.map(item => ({ id: item.id, connectionId: item.connectionId, occurredAt: item.lastCheckedAt ?? "2026-09-17T12:00:00Z", holding: item })),
+  ],
+  sources, nextCursor, readAt: "2026-09-18T12:00:00Z",
+});
 
 describe("request activity", () => {
   beforeEach(() => {
     vi.resetAllMocks();
-    api.fetchIntegrationTransfers.mockResolvedValue([]);
-    api.fetchManagedRequests.mockResolvedValue([]);
-    api.fetchManagedTracking.mockResolvedValue([]);
+    api.fetchRequestActivity.mockResolvedValue(activityPage());
     api.fetchEntityThumbnails.mockImplementation(async (ids: string[]) => ids.map(id => ({ id })));
     api.refreshTracking.mockResolvedValue(undefined);
     api.refreshRequest.mockResolvedValue(undefined);
@@ -60,9 +71,9 @@ describe("request activity", () => {
   });
 
   it("deduplicates tracked requests and caps history beneath priority sections", async () => {
-    api.fetchIntegrationTransfers.mockResolvedValue(Array.from({ length: 8 }, (_, index) => transfer(String(index + 1))));
-    api.fetchManagedRequests.mockResolvedValue([request({ title: "Duplicate request" })]);
-    api.fetchManagedTracking.mockResolvedValue([holding()]);
+    api.fetchRequestActivity.mockResolvedValue(activityPage({
+      transfers: Array.from({ length: 8 }, (_, index) => transfer(String(index + 1))).reverse(), holdings: [holding()],
+    }));
     render(RequestActivity, { connections: [connection] });
 
     await screen.findByText("Dune");
@@ -75,9 +86,10 @@ describe("request activity", () => {
   });
 
   it("keeps safe transfer, manager request, and tracking controls on their compact rows", async () => {
-    api.fetchIntegrationTransfers.mockResolvedValue([transfer("1", { title: "Downloading book", phase: INTEGRATION_TRANSFER_PHASE.transferring, importedEntityIds: [], canCancel: true })]);
-    api.fetchManagedRequests.mockResolvedValue([request({ id: "request-only", title: "Waiting film" })]);
-    api.fetchManagedTracking.mockResolvedValue([holding()]);
+    api.fetchRequestActivity.mockResolvedValue(activityPage({
+      transfers: [transfer("1", { title: "Downloading book", phase: INTEGRATION_TRANSFER_PHASE.transferring, importedEntityIds: [], canCancel: true })],
+      requests: [request({ id: "request-only", title: "Waiting film" })], holdings: [holding()],
+    }));
     render(RequestActivity, { connections: [connection] });
 
     await screen.findByText("Downloading book");
@@ -88,21 +100,47 @@ describe("request activity", () => {
   });
 
   it("retains last known rows and does not claim all-clear after a partial refresh failure", async () => {
-    api.fetchManagedTracking.mockResolvedValueOnce([holding()]);
+    api.fetchRequestActivity.mockResolvedValueOnce(activityPage({ holdings: [holding()] }));
     render(RequestActivity, { connections: [connection] });
     await screen.findByText("Dune");
 
-    api.fetchManagedTracking.mockRejectedValueOnce(new Error("Tracking endpoint unavailable"));
+    api.fetchRequestActivity.mockRejectedValueOnce(new Error("Activity endpoint unavailable"));
     await fireEvent.click(screen.getByRole("button", { name: "Refresh" }));
-    await screen.findByText(/Tracking endpoint unavailable/);
+    await screen.findByText(/Activity endpoint unavailable/);
     expect(screen.getByText("Dune")).toBeInTheDocument();
     expect(screen.queryByText("All caught up.")).not.toBeInTheDocument();
     await waitFor(() => expect(api.refreshTracking).toHaveBeenCalledWith(connection.id, "managed"));
   });
 
+  it("distinguishes persisted stale source health from an activity transport failure", async () => {
+    api.fetchRequestActivity.mockResolvedValue(activityPage({
+      holdings: [holding()],
+      sources: [{ connectionId: connection.id, name: connection.name, status: CONNECTION_STATUS.unavailable,
+        isStale: true, lastCheckedAt: "2026-09-17T12:00:00Z", problem: "Connection refused" }],
+    }));
+    render(RequestActivity, { connections: [connection] });
+
+    await screen.findByText("Dune");
+    expect(screen.getByText(/Movie manager: Connection refused/)).toBeInTheDocument();
+    expect(screen.getByText(/Showing locally retained activity/)).toBeInTheDocument();
+    expect(screen.queryByText("All caught up.")).not.toBeInTheDocument();
+  });
+
+  it("loads another bounded page only when history is requested", async () => {
+    api.fetchRequestActivity
+      .mockResolvedValueOnce(activityPage({ transfers: Array.from({ length: 6 }, (_, index) => transfer(String(index + 2))), nextCursor: "next" }))
+      .mockResolvedValueOnce(activityPage({ transfers: [transfer("1")] }));
+    render(RequestActivity, { connections: [connection] });
+
+    await screen.findByText("Completed 2");
+    await fireEvent.click(screen.getByRole("button", { name: "Load more activity" }));
+    await screen.findByText("Completed 1");
+    expect(api.fetchRequestActivity).toHaveBeenNthCalledWith(2, expect.objectContaining({ cursor: "next", limit: 50 }));
+  });
+
   it("distinguishes stopping a source import from cancelling its remote download", async () => {
-    api.fetchIntegrationTransfers.mockResolvedValue([transfer("1", { title: "Requested chapter", mode: INTEGRATION_TRANSFER_MODE.sourceRequest,
-      phase: INTEGRATION_TRANSFER_PHASE.awaitingRemote, importedEntityIds: [], canCancel: true })]);
+    api.fetchRequestActivity.mockResolvedValue(activityPage({ transfers: [transfer("1", { title: "Requested chapter", mode: INTEGRATION_TRANSFER_MODE.sourceRequest,
+      phase: INTEGRATION_TRANSFER_PHASE.awaitingRemote, importedEntityIds: [], canCancel: true })] }));
     render(RequestActivity, { connections: [connection] });
     await screen.findByText("Requested chapter");
     expect(screen.getByText(/leaves the source’s download running/)).toBeInTheDocument();
@@ -112,9 +150,9 @@ describe("request activity", () => {
   });
 
   it("shows a source failure and offers to check it again without claiming to restart it", async () => {
-    api.fetchIntegrationTransfers.mockResolvedValue([transfer("1", { title: "Requested chapter", mode: INTEGRATION_TRANSFER_MODE.sourceRequest,
+    api.fetchRequestActivity.mockResolvedValue(activityPage({ transfers: [transfer("1", { title: "Requested chapter", mode: INTEGRATION_TRANSFER_MODE.sourceRequest,
       phase: INTEGRATION_TRANSFER_PHASE.needsReview, sourceState: SOURCE_ACQUISITION_STATE.failed,
-      sourceProblem: "Retry the chapter in its source app, then check again.", importedEntityIds: [], canCancel: true })]);
+      sourceProblem: "Retry the chapter in its source app, then check again.", importedEntityIds: [], canCancel: true })] }));
     render(RequestActivity, { connections: [connection] });
     await screen.findByText("Requested chapter");
     expect(screen.getByText("Retry the chapter in its source app, then check again.")).toBeInTheDocument();
@@ -123,7 +161,7 @@ describe("request activity", () => {
   });
 
   it("keeps completed history but disables links hidden by the current library view", async () => {
-    api.fetchIntegrationTransfers.mockResolvedValue([transfer("1")]);
+    api.fetchRequestActivity.mockResolvedValue(activityPage({ transfers: [transfer("1")] }));
     api.fetchEntityThumbnails.mockResolvedValue([]);
     render(RequestActivity, { connections: [connection] });
 
@@ -136,13 +174,12 @@ describe("request activity", () => {
   });
 
   it("keeps removed source records as terminal history with clear local availability", async () => {
-    api.fetchManagedRequests.mockResolvedValue([request({
+    api.fetchRequestActivity.mockResolvedValue(activityPage({ requests: [request({
       id: "removed-request",
       title: "Removed request",
       phase: MANAGED_REQUEST_PHASE.remoteRemoved,
       canCancel: false,
-    })]);
-    api.fetchManagedTracking.mockResolvedValue([holding({
+    })], holdings: [holding({
       id: "removed-holding",
       title: "Removed holding",
       status: MANAGED_TRACKING_STATUS.removed,
@@ -158,7 +195,7 @@ describe("request activity", () => {
         isAvailable: true,
         entities: [],
       }],
-    })]);
+    })] }));
     render(RequestActivity, { connections: [connection] });
 
     await screen.findByText("Removed request");

@@ -25,7 +25,7 @@ const request = (values: Partial<ManagedRequestResponse> = {}): ManagedRequestRe
   id: "request", connectionId: "source", entityId: "entity", libraryRootId: "root", title: "Dune",
   phase: MANAGED_REQUEST_PHASE.awaitingFiles, revision: 1, remoteId: "remote", monitored: true, search: true,
   reviewRequired: false, canCancel: true, createdAt: "2026-09-17T12:00:00Z", updatedAt: "2026-09-17T12:00:00Z",
-  problem: null, ...values,
+  problem: null, holdingId: "request", ...values,
 });
 const holding = (values: Partial<ManagedTrackingResponse> = {}): ManagedTrackingResponse => ({
   id: "request", connectionId: "source", libraryRootId: "root", title: "Dune", status: MANAGED_TRACKING_STATUS.tracking,
@@ -38,6 +38,7 @@ describe("request activity presentation", () => {
     expect(transferActivityGroup(transfer({ lastError: "Checksum mismatch" }))).toBe(REQUEST_ACTIVITY_GROUP.attention);
     expect(transferActivityGroup(transfer({ phase: INTEGRATION_TRANSFER_PHASE.failed }))).toBe(REQUEST_ACTIVITY_GROUP.attention);
     expect(managedRequestActivityGroup(request({ reviewRequired: true }))).toBe(REQUEST_ACTIVITY_GROUP.attention);
+    expect(managedRequestActivityGroup(request({ problem: "The manager is still searching." }))).toBe(REQUEST_ACTIVITY_GROUP.progress);
     expect(managedTrackingActivityGroup(holding({ status: MANAGED_TRACKING_STATUS.stale }))).toBe(REQUEST_ACTIVITY_GROUP.attention);
     expect(transferActivityGroup(transfer())).toBe(REQUEST_ACTIVITY_GROUP.progress);
   });
@@ -54,5 +55,6 @@ describe("request activity presentation", () => {
 
   it("removes a manager request once its tracked holding represents the same operation", () => {
     expect(removeTrackedRequests([request(), request({ id: "other" })], [holding()]).map(item => item.id)).toEqual(["other"]);
+    expect(removeTrackedRequests([request({ reviewRequired: true })], [holding()])).toHaveLength(1);
   });
 });

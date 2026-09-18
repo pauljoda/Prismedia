@@ -5,13 +5,14 @@ import { CONNECTION_STATUS, ENTITY_KIND, INTEGRATION_OPERATION, PLUGIN_CAPABILIT
 import type { ConnectionResponse } from "$lib/api/generated/model";
 import Page from "./+page.svelte";
 
-const mocks = vi.hoisted(() => ({ isAdmin: true, canRequestContent: true, fetchConnections: vi.fn(), fetchConnectionCatalog: vi.fn(), fetchIntegrationTransfers: vi.fn(), fetchManagedRequests: vi.fn(), fetchManagedTracking: vi.fn(), setBreadcrumbs: vi.fn((_items: Array<{ label: string; href?: string }>) => () => {}), goto: vi.fn(), afterNavigate: vi.fn() }));
+const mocks = vi.hoisted(() => ({ isAdmin: true, canRequestContent: true, fetchConnections: vi.fn(), fetchConnectionCatalog: vi.fn(), fetchRequestActivity: vi.fn(), fetchIntegrationTransfers: vi.fn(), fetchManagedRequests: vi.fn(), fetchManagedTracking: vi.fn(), setBreadcrumbs: vi.fn((_items: Array<{ label: string; href?: string }>) => () => {}), goto: vi.fn(), afterNavigate: vi.fn() }));
 vi.mock("$lib/stores/session.svelte", () => ({ useSession: () => mocks }));
 vi.mock("$lib/stores/app-chrome.svelte", () => ({ useAppChrome: () => ({ setBreadcrumbs: mocks.setBreadcrumbs }) }));
 vi.mock("$lib/nsfw/store.svelte", () => ({ useNsfw: () => ({ mode: "off" }) }));
 vi.mock("$lib/api/connections", () => ({ fetchConnections: mocks.fetchConnections, fetchConnectionCatalog: mocks.fetchConnectionCatalog }));
 vi.mock("$lib/api/plugins", () => ({ fetchPluginProviders: async () => [] }));
 vi.mock("$lib/api/settings", () => ({ fetchSettingsValues: async () => ({ values: {} }), fetchLibraryRoots: async () => [] }));
+vi.mock("$lib/api/request-activity", () => ({ fetchRequestActivity: mocks.fetchRequestActivity }));
 vi.mock("$lib/api/integration-transfers", () => ({ fetchIntegrationTransfers: mocks.fetchIntegrationTransfers }));
 vi.mock("$lib/api/managed-requests", () => ({ fetchManagedRequests: mocks.fetchManagedRequests }));
 vi.mock("$lib/api/managed-libraries", () => ({ fetchManagedTracking: mocks.fetchManagedTracking }));
@@ -21,6 +22,7 @@ describe("Request workspace", () => {
   beforeEach(() => {
     vi.clearAllMocks(); mocks.isAdmin = true; mocks.canRequestContent = true;
     mocks.fetchConnections.mockResolvedValue([]); mocks.fetchIntegrationTransfers.mockResolvedValue([]); mocks.fetchManagedRequests.mockResolvedValue([]); mocks.fetchManagedTracking.mockResolvedValue([]);
+    mocks.fetchRequestActivity.mockResolvedValue({ items: [], sources: [], nextCursor: null });
     mocks.fetchConnectionCatalog.mockResolvedValue({ title: "Books", items: [], nextCursor: null });
     page.url = new URL("http://localhost/request") as unknown as typeof page.url;
     window.history.replaceState({}, "", "/request");
@@ -31,7 +33,8 @@ describe("Request workspace", () => {
     expect(mocks.fetchIntegrationTransfers).not.toHaveBeenCalled();
     await fireEvent.click(screen.getByRole("tab", { name: "Activity" }));
     expect(await screen.findByRole("heading", { name: "Request activity" })).toBeVisible();
-    await waitFor(() => expect(mocks.fetchIntegrationTransfers).toHaveBeenCalledOnce());
+    await waitFor(() => expect(mocks.fetchRequestActivity).toHaveBeenCalledOnce());
+    expect(mocks.fetchRequestActivity).toHaveBeenCalledWith(expect.objectContaining({ limit: 50, hideNsfw: true }));
     expect(mocks.goto.mock.calls[0][0].searchParams.has("activity")).toBe(true);
     expect(mocks.goto.mock.calls[0][1]).toEqual(expect.objectContaining({ replaceState: true }));
     await fireEvent.click(screen.getByRole("tab", { name: "Browse" }));
@@ -46,6 +49,7 @@ describe("Request workspace", () => {
     expect(screen.queryByRole("tab", { name: "Activity" })).not.toBeInTheDocument();
     expect(screen.queryByRole("link", { name: "Sources" })).not.toBeInTheDocument();
     expect(mocks.fetchConnections).not.toHaveBeenCalled();
+    expect(mocks.fetchRequestActivity).not.toHaveBeenCalled();
     expect(mocks.fetchIntegrationTransfers).not.toHaveBeenCalled();
   });
 

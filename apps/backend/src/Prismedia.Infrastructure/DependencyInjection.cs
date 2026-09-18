@@ -142,6 +142,7 @@ public static class DependencyInjection {
         services.AddScoped<IntegrationTransferService>();
         services.AddScoped<IIntegrationTransferScheduler, IntegrationTransferScheduler>();
         services.AddScoped<IIntegrationTransferStore, EfIntegrationTransferStore>();
+        services.AddScoped<IRequestActivityReader, EfRequestActivityReader>();
         services.AddScoped<IIntegrationArtifactStagingMaintenance, EfIntegrationArtifactStagingMaintenance>();
         services.AddScoped<IEntityAcquisitionAttributionReader, EfEntityAcquisitionAttributionReader>();
         services.AddScoped<IEntityExternalLibraryProvenanceReader, EfEntityExternalLibraryProvenanceReader>();

@@ -56,6 +56,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Request Activity loads a paged server feed, prioritizes problems and active requests, and shows retained history even when a source is offline.
+
 - External library tracking checks for changes every minute. Open external Entity pages refresh availability and request progress automatically without reloading unchanged artwork or playback.
 
 - External requests now load provider choices alongside metadata and submit in one step, then open the normal entity page. The External library tab shows provider progress in place of native acquisition controls.

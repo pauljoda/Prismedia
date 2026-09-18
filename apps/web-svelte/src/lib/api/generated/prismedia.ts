@@ -200,6 +200,7 @@ import type {
   ListMusicArtistsParams,
   ListPeopleParams,
   ListReleaseCalendarParams,
+  ListRequestActivityParams,
   ListStudiosParams,
   ListTagsParams,
   ListVideoSeriesParams,
@@ -261,6 +262,7 @@ import type {
   RemoveFileExclusionParams,
   RenameFileParams,
   ReplaceBookChapterMappingsRequest,
+  RequestActivityPage,
   RequestCommitRequest,
   RequestCommitResponse,
   RequestEntityCommitRequest,
@@ -9928,6 +9930,56 @@ export const prepareManagedDiscovery = async (id: string,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       prepareManagedDiscoveryRequest,)
+  }
+);}
+
+
+
+export type listRequestActivityResponse200 = {
+  data: RequestActivityPage
+  status: 200
+}
+
+export type listRequestActivityResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type listRequestActivityResponseSuccess = (listRequestActivityResponse200) & {
+  headers: Headers;
+};
+export type listRequestActivityResponseError = (listRequestActivityResponse400) & {
+  headers: Headers;
+};
+
+export type listRequestActivityResponse = (listRequestActivityResponseSuccess | listRequestActivityResponseError)
+
+export const getListRequestActivityUrl = (params: ListRequestActivityParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/connections/activity?${stringifiedParams}` : `/api/connections/activity`
+}
+
+/**
+ * @summary Lists a bounded page of locally retained request and import activity.
+ */
+export const listRequestActivity = async (params: ListRequestActivityParams, options?: RequestInit): Promise<listRequestActivityResponse> => {
+
+  return orvalFetch<listRequestActivityResponse>(getListRequestActivityUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
   }
 );}
 

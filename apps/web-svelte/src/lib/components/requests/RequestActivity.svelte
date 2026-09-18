@@ -4,11 +4,12 @@
   import { Activity, AlertTriangle, ArrowUpRight, CheckCircle2, History, RefreshCw, RotateCcw, X } from "@lucide/svelte";
   import { Alert, Badge, Button, Panel, Select, buttonVariants } from "@prismedia/ui-svelte";
   import { INTEGRATION_OPERATION, INTEGRATION_TRANSFER_MODE, INTEGRATION_TRANSFER_PHASE, MANAGED_REQUEST_PHASE, MANAGED_TRACKING_STATUS, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
-  import type { ConnectionResponse, IntegrationTransferResponse, ManagedRequestResponse, ManagedTrackingResponse, PluginIntegrationCapabilityOperationsItem } from "$lib/api/generated/model";
-  import { cancelPublicationTransfer, fetchIntegrationTransfers, retryPublicationTransfer } from "$lib/api/integration-transfers";
+  import type { ConnectionResponse, IntegrationTransferResponse, ManagedRequestResponse, ManagedTrackingResponse, PluginIntegrationCapabilityOperationsItem, RequestActivityItem as RequestActivityRecord, RequestActivitySource } from "$lib/api/generated/model";
+  import { cancelPublicationTransfer, retryPublicationTransfer } from "$lib/api/integration-transfers";
   import { fetchEntityThumbnails } from "$lib/api/entities";
-  import { fetchManagedTracking, refreshTracking } from "$lib/api/managed-libraries";
-  import { cancelRequest, fetchManagedRequests, refreshRequest } from "$lib/api/managed-requests";
+  import { refreshTracking } from "$lib/api/managed-libraries";
+  import { cancelRequest, refreshRequest } from "$lib/api/managed-requests";
+  import { fetchRequestActivity } from "$lib/api/request-activity";
   import ManagedHoldingControls from "$lib/components/integrations/ManagedHoldingControls.svelte";
   import ManagedHoldingRelease from "$lib/components/integrations/ManagedHoldingRelease.svelte";
   import SourceAttribution from "$lib/components/integrations/SourceAttribution.svelte";
@@ -17,10 +18,11 @@
   import { resolveEntityHrefById } from "$lib/entities/entity-route-resolver";
   import { isTransferTerminal, transferCancelLabel, transferStatusLabel, transferRetryLabel, transferProblem } from "$lib/integrations/transfer-labels";
   import { useNsfw } from "$lib/nsfw/store.svelte";
-  import { managedRequestActivityGroup, managedTrackingActivityGroup, removeTrackedRequests, REQUEST_ACTIVITY_GROUP, transferActivityGroup, type RequestActivityGroup } from "$lib/requests/request-activity";
+  import { managedRequestActivityGroup, managedTrackingActivityGroup, REQUEST_ACTIVITY_GROUP, transferActivityGroup, type RequestActivityGroup } from "$lib/requests/request-activity";
   import { formatRelativeTime } from "$lib/utils/format";
 
   const ITEM = { transfer: "transfer", request: "request", holding: "holding" } as const;
+  const PAGE_SIZE = 50;
   const RECENT_PREVIEW_COUNT = 6;
   type TransferItem = { type: typeof ITEM.transfer; key: string; group: RequestActivityGroup; timestamp: string; connection: ConnectionResponse | null; transfer: IntegrationTransferResponse };
   type RequestItem = { type: typeof ITEM.request; key: string; group: RequestActivityGroup; timestamp: string; connection: ConnectionResponse; request: ManagedRequestResponse };
@@ -30,12 +32,13 @@
   let { connections }: { connections: ConnectionResponse[] } = $props();
   const nsfw = useNsfw();
   let connectionId = $state("");
-  let transfers = $state<IntegrationTransferResponse[]>([]);
-  let requestsByConnection = $state<Record<string, ManagedRequestResponse[]>>({});
-  let holdingsByConnection = $state<Record<string, ManagedTrackingResponse[]>>({});
+  let records = $state<RequestActivityRecord[]>([]);
+  let sources = $state<RequestActivitySource[]>([]);
+  let nextCursor = $state<string | null>(null);
   let error = $state<string | null>(null);
   let actionError = $state<string | null>(null);
   let loading = $state(true);
+  let loadingMore = $state(false);
   let busyKey = $state<string | null>(null);
   let expandedKey = $state<string | null>(null);
   let showAllRecent = $state(false);
@@ -44,33 +47,40 @@
   let importedVisibilitySequence = 0;
   let alive = true;
   let loadSequence = 0;
+  let loadedNsfwMode = nsfw.mode;
 
-  const selectedConnections = $derived(connections.filter(connection => !connectionId || connection.id === connectionId));
   const connectionLookup = $derived(new Map(connections.map(connection => [connection.id, connection])));
   const activityItems = $derived.by(() => {
     const items: ActivityItem[] = [];
-    for (const transfer of transfers) {
-      if (connectionId && transfer.connectionId !== connectionId) continue;
-      items.push({ type: ITEM.transfer, key: `transfer:${transfer.id}`, group: transferActivityGroup(transfer), timestamp: transfer.updatedAt,
-        connection: connectionLookup.get(transfer.connectionId) ?? null, transfer });
-    }
-    for (const connection of selectedConnections) {
-      const holdings = holdingsByConnection[connection.id] ?? [];
-      for (const request of removeTrackedRequests(requestsByConnection[connection.id] ?? [], holdings)) {
-        items.push({ type: ITEM.request, key: `request:${request.id}`, group: managedRequestActivityGroup(request), timestamp: request.updatedAt, connection, request });
+    for (const record of records) {
+      const connection = connectionLookup.get(record.connectionId) ?? null;
+      if (record.transfer) {
+        items.push({ type: ITEM.transfer, key: `transfer:${record.id}`, group: transferActivityGroup(record.transfer), timestamp: record.occurredAt,
+          connection, transfer: record.transfer });
+        continue;
       }
-      for (const holding of holdings) {
-        items.push({ type: ITEM.holding, key: `holding:${holding.id}`, group: managedTrackingActivityGroup(holding), timestamp: holding.lastCheckedAt ?? holding.releasedAt ?? "", connection, holding });
+      if (record.request && connection) {
+        items.push({ type: ITEM.request, key: `request:${record.id}`, group: managedRequestActivityGroup(record.request), timestamp: record.occurredAt,
+          connection, request: record.request });
+        continue;
+      }
+      if (record.holding && connection) {
+        items.push({ type: ITEM.holding, key: `holding:${record.id}`, group: managedTrackingActivityGroup(record.holding), timestamp: record.occurredAt,
+          connection, holding: record.holding });
       }
     }
-    return items.sort((left, right) => Date.parse(right.timestamp || "1970-01-01") - Date.parse(left.timestamp || "1970-01-01"));
+    return items;
   });
   const attentionItems = $derived(activityItems.filter(item => item.group === REQUEST_ACTIVITY_GROUP.attention));
   const progressItems = $derived(activityItems.filter(item => item.group === REQUEST_ACTIVITY_GROUP.progress));
   const followingItems = $derived(activityItems.filter(item => item.group === REQUEST_ACTIVITY_GROUP.following));
   const recentItems = $derived(activityItems.filter(item => item.group === REQUEST_ACTIVITY_GROUP.recent));
   const visibleRecentItems = $derived(showAllRecent ? recentItems : recentItems.slice(0, RECENT_PREVIEW_COUNT));
-  const importedEntityIds = $derived([...new Set(transfers.flatMap(transfer => transfer.importedEntityIds))]);
+  const importedEntityIds = $derived([...new Set(records.flatMap(record => record.transfer?.importedEntityIds ?? []))]);
+  const staleSources = $derived(sources.filter(source => source.isStale));
+  const sourceWarning = $derived(staleSources.map(source => source.problem ? `${source.name}: ${source.problem}`
+    : source.lastCheckedAt ? `${source.name}: last verified ${formatRelativeTime(source.lastCheckedAt)}`
+      : `${source.name}: not verified yet`).join(" "));
 
   $effect(() => {
     const hideNsfw = nsfw.mode !== "show";
@@ -91,47 +101,48 @@
     });
   });
 
+  $effect(() => {
+    const mode = nsfw.mode;
+    if (mode === loadedNsfwMode) return;
+    loadedNsfwMode = mode;
+    records = [];
+    sources = [];
+    nextCursor = null;
+    showAllRecent = false;
+    loading = true;
+    void load(true);
+  });
+
   onMount(() => {
-    void load();
-    const timer = setInterval(() => { if (!busyKey) void load(); }, 10000);
+    void load(true);
+    const timer = setInterval(() => { if (!busyKey && !showAllRecent) void load(); }, 10000);
     return () => { alive = false; clearInterval(timer); };
   });
 
-  async function load() {
+  async function load(reset = true) {
     const sequence = ++loadSequence;
-    const managers = connections.filter(connection => connection.enabledCapabilities.includes(PLUGIN_CAPABILITY.externalManager));
-    const [transferResult, ...managerResults] = await Promise.allSettled([
-      fetchIntegrationTransfers(),
-      ...managers.map(async connection => {
-        const [requests, holdings] = await Promise.allSettled([fetchManagedRequests(connection.id), fetchManagedTracking(connection.id)]);
-        return { connectionId: connection.id, requests, holdings };
-      }),
-    ]);
-    if (!alive || sequence !== loadSequence) return;
-    const failures: string[] = [];
-    if (transferResult.status === "fulfilled") transfers = transferResult.value;
-    else failures.push(message(transferResult.reason, "Could not refresh imports"));
-    const nextRequests = { ...requestsByConnection };
-    const nextHoldings = { ...holdingsByConnection };
-    managerResults.forEach((result, index) => {
-      const connection = managers[index];
-      if (!connection) return;
-      if (result.status === "fulfilled") {
-        if (result.value.requests.status === "fulfilled") nextRequests[result.value.connectionId] = result.value.requests.value;
-        else failures.push(`${connection.name}: ${message(result.value.requests.reason, "Could not refresh manager requests")}`);
-        if (result.value.holdings.status === "fulfilled") nextHoldings[result.value.connectionId] = result.value.holdings.value;
-        else failures.push(`${connection.name}: ${message(result.value.holdings.reason, "Could not refresh followed library items")}`);
-      } else failures.push(`${connection.name}: ${message(result.reason, "Could not refresh manager activity")}`);
-    });
-    requestsByConnection = nextRequests;
-    holdingsByConnection = nextHoldings;
-    error = failures.length ? failures.join(" ") : null;
-    loading = false;
+    if (!reset) loadingMore = true;
+    try {
+      const page = await fetchRequestActivity({ connectionId: connectionId || undefined, cursor: reset ? undefined : nextCursor ?? undefined,
+        limit: PAGE_SIZE, hideNsfw: nsfw.mode !== "show" });
+      if (!alive || sequence !== loadSequence) return;
+      records = reset ? page.items : mergeRecords(records, page.items);
+      sources = page.sources;
+      nextCursor = page.nextCursor ?? null;
+      error = null;
+    } catch (cause) {
+      if (alive && sequence === loadSequence) error = message(cause, "Could not refresh request activity");
+    } finally {
+      if (alive && sequence === loadSequence) {
+        loading = false;
+        loadingMore = false;
+      }
+    }
   }
 
   async function runAction(key: string, action: () => Promise<unknown>) {
     busyKey = key; actionError = null;
-    try { await action(); await load(); }
+    try { await action(); await load(true); }
     catch (cause) { actionError = message(cause, "Could not update this activity"); }
     finally { busyKey = null; }
   }
@@ -145,8 +156,28 @@
     finally { busyKey = null; }
   }
   function updateHolding(connectionId: string, saved: ManagedTrackingResponse) {
-    const holdings = holdingsByConnection[connectionId] ?? [];
-    holdingsByConnection = { ...holdingsByConnection, [connectionId]: holdings.map(item => item.id === saved.id ? saved : item) };
+    records = records.map(record => record.connectionId === connectionId && record.holding?.id === saved.id
+      ? { ...record, holding: saved }
+      : record);
+  }
+  function mergeRecords(current: RequestActivityRecord[], next: RequestActivityRecord[]) {
+    const merged = new Map(current.map(record => [recordKey(record), record]));
+    for (const record of next) merged.set(recordKey(record), record);
+    return [...merged.values()];
+  }
+  function recordKey(record: RequestActivityRecord) {
+    if (record.transfer) return `${ITEM.transfer}:${record.id}`;
+    if (record.request) return `${ITEM.request}:${record.id}`;
+    return `${ITEM.holding}:${record.id}`;
+  }
+  function selectConnection(value: string) {
+    connectionId = value;
+    records = [];
+    sources = [];
+    nextCursor = null;
+    showAllRecent = false;
+    loading = true;
+    void load(true);
   }
   function hasManagerOperation(connection: ConnectionResponse, operation: PluginIntegrationCapabilityOperationsItem) {
     return connection.enabled && connection.enabledCapabilities.includes(PLUGIN_CAPABILITY.externalManager)
@@ -238,7 +269,7 @@
     </div>
     {#if expandedKey === item.key && item.type === ITEM.request && item.request.remoteId
       && item.request.phase !== MANAGED_REQUEST_PHASE.remoteRemoved}
-      <div class="activity-details"><ManagedHoldingControls connectionId={item.connection.id} connectionName={item.connection.name} holdingId={item.request.id} canPreview={canControl(item.connection) && item.request.phase !== MANAGED_REQUEST_PHASE.ownershipReleased} /></div>
+      <div class="activity-details"><ManagedHoldingControls connectionId={item.connection.id} connectionName={item.connection.name} holdingId={item.request.holdingId} canPreview={canControl(item.connection) && item.request.phase !== MANAGED_REQUEST_PHASE.ownershipReleased} /></div>
     {:else if expandedKey === item.key && item.type === ITEM.holding
       && item.holding.status !== MANAGED_TRACKING_STATUS.removed}
       <div class="activity-details space-y-3">
@@ -261,19 +292,21 @@
 
 <div class="space-y-6">
   <div class="flex flex-wrap items-end justify-between gap-3"><div class="space-y-1"><h2 class="text-lg font-semibold">Request activity</h2><p class="text-sm text-text-muted">Review work that needs you, follow active requests, and revisit recent additions.</p></div><a class={buttonVariants({ variant: "ghost", size: "sm" })} href="/downloads">Download queue<ArrowUpRight /></a></div>
-  <Panel class="flex-row flex-wrap items-center justify-between gap-3 p-3"><div class="w-full sm:w-72"><Select ariaLabel="Activity source" value={connectionId} options={[{ value: "", label: "All sources" }, ...connections.map(item => ({ value: item.id, label: item.name }))]} onchange={value => { connectionId = value; showAllRecent = false; }} /></div>{#if !loading}<p class="text-xs text-text-muted">{attentionItems.length + progressItems.length} active · {followingItems.length} followed · {recentItems.length} recent</p>{/if}</Panel>
+  <Panel class="flex-row flex-wrap items-center justify-between gap-3 p-3"><div class="w-full sm:w-72"><Select ariaLabel="Activity source" value={connectionId} options={[{ value: "", label: "All sources" }, ...connections.map(item => ({ value: item.id, label: item.name }))]} onchange={selectConnection} /></div><div class="flex items-center gap-2">{#if showAllRecent}<Button variant="ghost" size="sm" onclick={() => { showAllRecent = false; loading = true; void load(true); }}><RefreshCw />Refresh activity</Button>{/if}{#if !loading}<p class="text-xs text-text-muted">{attentionItems.length + progressItems.length} active · {followingItems.length} followed · {recentItems.length} recent{nextCursor ? "+" : ""}</p>{/if}</div></Panel>
   {#if error}<Alert.Root><AlertTriangle /><Alert.Description>{error} Showing the last activity that is still available.</Alert.Description></Alert.Root>{/if}
+  {#if !error && sourceWarning}<Alert.Root><AlertTriangle /><Alert.Description>{sourceWarning} Showing locally retained activity; source status may be stale.</Alert.Description></Alert.Root>{/if}
   {#if actionError}<Alert.Root variant="destructive"><Alert.Description>{actionError}</Alert.Description></Alert.Root>{/if}
   {#if loading}<StatePlaceholder icon={Activity} title="Loading activity" busy />
   {:else if !activityItems.length && error}<StatePlaceholder icon={AlertTriangle} title="Activity is unavailable" description="Prismedia could not confirm whether requests need attention. Try again when the connected sources are available." />
+  {:else if !activityItems.length && nextCursor}<div class="space-y-3"><StatePlaceholder icon={Activity} title="More activity is available" description="The current visibility settings hid this page." /><div class="flex justify-center"><Button variant="ghost" size="sm" disabled={loadingMore} onclick={() => void load(false)}><History />Load more activity</Button></div></div>
   {:else if !activityItems.length}<StatePlaceholder icon={Activity} title="Nothing to follow yet" description="Choose a title in Browse to start a request or import." />
   {:else}
     {@render activitySection(REQUEST_ACTIVITY_GROUP.attention, "Needs attention", "Review errors or uncertain outcomes before starting the same work again.", attentionItems)}
     {@render activitySection(REQUEST_ACTIVITY_GROUP.progress, "In progress", "Work still moving through a connected source or into your local library.", progressItems)}
-    {#if !error && !attentionItems.length && !progressItems.length}<Panel class="flex-row items-center gap-3 px-3 py-2"><div class="caught-up-icon" aria-hidden="true"><CheckCircle2 /></div><p class="text-sm text-text-muted"><strong class="font-medium text-text-primary">All caught up.</strong> No requests need attention and nothing is currently moving.</p></Panel>{/if}
+    {#if !error && !sourceWarning && !attentionItems.length && !progressItems.length}<Panel class="flex-row items-center gap-3 px-3 py-2"><div class="caught-up-icon" aria-hidden="true"><CheckCircle2 /></div><p class="text-sm text-text-muted"><strong class="font-medium text-text-primary">All caught up.</strong> No requests need attention and nothing is currently moving.</p></Panel>{/if}
     {@render activitySection(REQUEST_ACTIVITY_GROUP.following, "Following in your library", "These titles remain connected to remote managers; local availability is shown separately.", followingItems)}
     {@render activitySection(REQUEST_ACTIVITY_GROUP.recent, "Recent history", "Completed, cancelled, and released work stays available without crowding active requests.", visibleRecentItems, recentItems.length)}
-    {#if recentItems.length > RECENT_PREVIEW_COUNT}<div class="flex justify-center"><Button variant="ghost" size="sm" onclick={() => showAllRecent = !showAllRecent}><History />{showAllRecent ? "Show recent preview" : `Show all ${recentItems.length} recent items`}</Button></div>{/if}
+    {#if recentItems.length > RECENT_PREVIEW_COUNT || nextCursor}<div class="flex justify-center"><Button variant="ghost" size="sm" disabled={busyKey !== null || loadingMore} onclick={() => { if (nextCursor) { showAllRecent = true; void load(false); } else showAllRecent = !showAllRecent; }}><History />{showAllRecent && !nextCursor ? "Show recent preview" : nextCursor ? "Load more activity" : `Show all ${recentItems.length} recent items`}</Button></div>{/if}
   {/if}
 </div>
 
