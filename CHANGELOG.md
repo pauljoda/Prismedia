@@ -162,6 +162,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Plugin updates automatically recheck enabled connections; only failed checks need attention.
+
 - Native monitoring explains when a connected application already owns acquisition, including equivalent titles and selected episode scopes.
 
 - Scan cleanup checks external-library retention only for deletion candidates, avoiding unrelated library trees during small scans.

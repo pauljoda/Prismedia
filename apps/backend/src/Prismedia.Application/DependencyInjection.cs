@@ -140,6 +140,8 @@ public static class DependencyInjection {
         services.AddHostedService<LibraryFileChangeMonitor>();
         services.AddHostedService<EntityAvailabilityReconciliationWorker>();
         services.AddHostedService<ManagedLibraryTrackingWorker>();
+        services.AddSingleton<Integrations.ConnectionRevalidationService>();
+        services.AddHostedService<ConnectionRevalidationWorker>();
         services.AddHostedService<EntityAssetRowSweepWorker>();
         services.AddHostedService<IntegrationArtifactCleanupWorker>();
 

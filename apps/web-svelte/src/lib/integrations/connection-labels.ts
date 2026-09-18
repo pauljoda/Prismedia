@@ -10,7 +10,7 @@ export const capabilityLabels: Record<PluginCapabilityCode, string> = {
 };
 
 export const connectionStatusLabels: Record<ConnectionStatusCode, string> = {
-  [CONNECTION_STATUS.unverified]: "Needs testing",
+  [CONNECTION_STATUS.unverified]: "Checking",
   [CONNECTION_STATUS.ready]: "Connected",
   [CONNECTION_STATUS.unavailable]: "Unavailable",
   [CONNECTION_STATUS.identityChanged]: "Application changed",

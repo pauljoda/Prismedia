@@ -117,6 +117,35 @@ public sealed class PluginInstalledVersionTests : IDisposable {
     }
 
     [Fact]
+    public async Task UpdateQueuesOnlyEnabledConnectionsForAutomaticRevalidation() {
+        await using var db = CreateContext();
+        var catalog = Catalog(db);
+        await WriteAsync("1.0.0"); await catalog.InstallAsync(ProviderId, default);
+        var enabled = Connection();
+        enabled.EffectiveCapabilitiesJson = "[{}]";
+        enabled.LastError = "old failure";
+        var disabled = Connection();
+        disabled.Enabled = false;
+        disabled.Status = ConnectionStatus.Disabled;
+        disabled.EffectiveCapabilitiesJson = "[{}]";
+        disabled.LastError = "old failure";
+        db.IntegrationConnections.AddRange(enabled, disabled);
+        await db.SaveChangesAsync();
+        await WriteAsync("2.0.0");
+
+        await catalog.UpdateAsync(ProviderId, default);
+
+        Assert.Equal(ConnectionStatus.Unverified, enabled.Status);
+        Assert.Null(enabled.LastCheckedAt);
+        Assert.Null(enabled.LastError);
+        Assert.Equal("[]", enabled.EffectiveCapabilitiesJson);
+        Assert.Equal(ConnectionStatus.Disabled, disabled.Status);
+        Assert.Null(disabled.LastCheckedAt);
+        Assert.Null(disabled.LastError);
+        Assert.Equal("[]", disabled.EffectiveCapabilitiesJson);
+    }
+
+    [Fact]
     public async Task RemovalPreservesEnabledConnectionsAndMappedRootsButAllowsInactiveHistory() {
         await using var db = CreateContext();
         var catalog = Catalog(db);

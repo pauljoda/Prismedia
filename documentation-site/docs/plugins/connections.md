@@ -42,7 +42,13 @@ determine which actions appear in **Request**.
 **Edit** opens an editor for the selected instance. Saving or cancelling returns to
 the connection list without inserting a form above it.
 
-Changing configuration requires another test. Disabling a connection revokes its
+Updating a plugin automatically checks its enabled connections again in the
+background, including checks still pending after a restart. Connections show
+**Checking** until the new plugin has verified their capabilities. Successful checks
+restore access; failed checks explain the issue and offer **Test connection** to
+retry. Disabled connections stay disabled.
+
+Changing configuration also triggers a fresh check. Disabling a connection revokes its
 negotiated capabilities. Saved credentials are never returned to the browser:
 leaving a saved credential blank preserves it, and selecting its removal clears it.
 A verified application's address is bound to the connection. Create a new connection
@@ -607,8 +613,8 @@ do not silently expand the owned scope.
 
 ### Release an acquisition owner
 
-Radarr plugin 1.3.1 and Sonarr plugin 1.2.1 provide handoff inspection. Test the Connection
-again after upgrading. Turn off monitoring for the exact linked movie or episodes,
+Radarr plugin 1.3.1 and Sonarr plugin 1.2.1 provide handoff inspection. Turn off
+monitoring for the exact linked movie or episodes,
 let downloads and commands settle, then select **Stop managing…** in **In Prismedia**.
 The dialog explains which requests and file tracking will stop. Review the monitoring
 and activity, acknowledge keeping that scope unmonitored, and confirm. This releases
@@ -676,8 +682,8 @@ fulfillment ownership, and initial background work in one local transaction.
 The client retains one operation ID through a lost response; retrying checks that
 same accepted request. A changed source or proposal requires another review.
 
-Radarr plugin 1.2.0 or later supports exact movie lookup and initial creation. Test
-the Connection again after upgrading. In **Connected libraries**, choose **Request
+Radarr plugin 1.2.0 or later supports exact movie lookup and initial creation.
+In **Connected libraries**, choose **Request
 a wanted movie**, select an existing wanted movie with a TMDB identity, and choose
 an enabled mapped video library. Review its external profile, monitoring choice,
 and optional **Search now**, then select **Request through manager**.
@@ -747,8 +753,7 @@ It must not be released merely to work around that boundary.
 
 ### Control a linked Radarr holding
 
-Install Radarr plugin 1.1.1 or later and test its Connection again to negotiate the
-new operations. Open **Settings & activity** on a linked holding. Review the current
+Install Radarr plugin 1.1.1 or later. Open **Settings & activity** on a linked holding. Review the current
 settings, choose an explicit profile or monitoring change, optionally select
 **Search now**, and apply the action. Omitted settings are preserved.
 Changing monitoring alone does not issue an immediate search.

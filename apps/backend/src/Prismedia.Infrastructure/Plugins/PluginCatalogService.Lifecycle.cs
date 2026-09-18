@@ -55,7 +55,7 @@ public sealed partial class PluginCatalogService {
             connection.Status = connection.Enabled ? ConnectionStatus.Unverified : ConnectionStatus.Disabled;
             connection.EffectiveCapabilitiesJson = "[]";
             connection.LastCheckedAt = null;
-            connection.LastError = "The plugin was updated. Test this connection again before using it.";
+            connection.LastError = null;
         }
     }
 

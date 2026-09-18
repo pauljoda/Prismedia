@@ -1,5 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CONNECTION_STATUS, ENTITY_KIND, INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
 import type { ConnectionResponse, ExternalLibraryMount, PluginProvider } from "$lib/api/generated/model";
 import Page from "./+page.svelte";
@@ -70,12 +70,81 @@ describe("Settings connections", () => {
     mocks.session.isAdmin = true;
   });
 
-  it("tests an enabled connection after saving and reports the confirmed status", async () => {
+  afterEach(() => vi.useRealTimers());
+
+  it("shows automatic checking neutrally and refreshes into the tested result", async () => {
+    vi.useFakeTimers();
+    const checking = connection(managerPlugin, {
+      lastError: "The plugin was updated. Test this connection again before using it.",
+      effectiveCapabilities: [],
+    });
+    const ready = {
+      ...checking,
+      status: CONNECTION_STATUS.ready,
+      lastError: null,
+      effectiveCapabilities: managerPlugin.integration!.capabilities,
+    };
+    const mount: ExternalLibraryMount = {
+      id: "mount-automatic", connectionId: checking.id, libraryRootId: "library-1", remoteRootId: "remote-1",
+      remotePath: "/books", localPath: "/media/books", label: "Books",
+    };
+    setup(managerPlugin, checking);
+    mocks.fetchLibraryMounts.mockResolvedValue([mount]);
+    mocks.fetchConnections
+      .mockResolvedValueOnce([checking])
+      .mockResolvedValueOnce([ready]);
+
+    render(Page);
+    await vi.waitFor(() => expect(screen.getByText("Checking")).toBeInTheDocument());
+    expect(screen.getByText("Prismedia is checking this connection automatically.")).toBeInTheDocument();
+    expect(screen.queryByText(checking.lastError!)).not.toBeInTheDocument();
+
+    await vi.advanceTimersByTimeAsync(2_000);
+
+    await vi.waitFor(() => expect(screen.getByText("Connected")).toBeInTheDocument());
+    expect(screen.getByText("1 library folder linked")).toBeInTheDocument();
+    expect(mocks.fetchLibraryMounts).toHaveBeenCalledWith(checking.id);
+    expect(mocks.fetchConnections).toHaveBeenCalledTimes(2);
+  });
+
+  it("shows a real automatic-check failure and keeps explicit retry available", async () => {
+    vi.useFakeTimers();
+    const checking = connection(catalogPlugin);
+    const unavailable = {
+      ...checking,
+      revision: 2,
+      status: CONNECTION_STATUS.unavailable,
+      lastError: "The application is offline.",
+      effectiveCapabilities: [],
+    };
+    setup(catalogPlugin, checking);
+    mocks.fetchConnections
+      .mockResolvedValueOnce([checking])
+      .mockResolvedValueOnce([unavailable]);
+    mocks.probeConnection.mockResolvedValue({
+      ...unavailable,
+      revision: 3,
+      status: CONNECTION_STATUS.ready,
+      lastError: null,
+      effectiveCapabilities: catalogPlugin.integration!.capabilities,
+    });
+
+    render(Page);
+    await vi.waitFor(() => expect(screen.getByText("Checking")).toBeInTheDocument());
+    await vi.advanceTimersByTimeAsync(2_000);
+    await vi.waitFor(() => expect(screen.getByText("The application is offline.")).toBeInTheDocument());
+
+    await fireEvent.click(screen.getByRole("button", { name: "Test connection" }));
+
+    await vi.waitFor(() => expect(screen.getByText("Connected")).toBeInTheDocument());
+    expect(mocks.probeConnection).toHaveBeenCalledWith(checking.id);
+  });
+
+  it("queues an enabled connection for server-owned checking after saving", async () => {
     const current = connection(catalogPlugin);
     const saved = { ...current, name: "Updated connection" };
     setup(catalogPlugin, current);
     mocks.saveConnection.mockResolvedValue(saved);
-    mocks.probeConnection.mockResolvedValue({ ...saved, status: CONNECTION_STATUS.ready });
 
     render(Page);
     const edit = await screen.findByRole("button", { name: "Edit" });
@@ -84,8 +153,8 @@ describe("Settings connections", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Save connection" }));
 
     await waitFor(() => expect(mocks.saveConnection).toHaveBeenCalledOnce());
-    expect(mocks.probeConnection).toHaveBeenCalledWith(current.id);
-    expect(await screen.findByText("Connection saved and tested.")).toBeInTheDocument();
+    expect(mocks.probeConnection).not.toHaveBeenCalled();
+    expect(await screen.findByText("Connection saved. Prismedia is checking it automatically.")).toBeInTheDocument();
     await waitFor(() => expect(edit).toHaveFocus());
   });
 
@@ -110,24 +179,8 @@ describe("Settings connections", () => {
     await fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
     await fireEvent.click(screen.getByRole("button", { name: "Save connection" }));
 
-    await waitFor(() => expect(screen.getByText("Connection saved. Enable it and test the connection when ready.")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("Connection saved. Enable it when ready; Prismedia will check it automatically.")).toBeInTheDocument());
     expect(mocks.probeConnection).not.toHaveBeenCalled();
-  });
-
-  it("keeps the saved row when the automatic test fails", async () => {
-    const current = connection(catalogPlugin);
-    const saved = { ...current, name: "Saved despite timeout" };
-    setup(catalogPlugin, current);
-    mocks.saveConnection.mockResolvedValue(saved);
-    mocks.probeConnection.mockRejectedValue(new Error("timed out"));
-
-    render(Page);
-    await fireEvent.click(await screen.findByRole("button", { name: "Edit" }));
-    await fireEvent.input(screen.getByRole("textbox", { name: "Connection name" }), { target: { value: saved.name } });
-    await fireEvent.click(screen.getByRole("button", { name: "Save connection" }));
-
-    expect(await screen.findByRole("article", { name: saved.name })).toBeInTheDocument();
-    expect(await screen.findByText("Connection saved. Automatic testing failed; use Test connection to retry.")).toBeInTheDocument();
   });
 
   it("refreshes retained folder counts after closing the mapping dialog", async () => {

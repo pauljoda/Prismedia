@@ -40,6 +40,33 @@
   const availablePlugins = $derived(plugins.filter(item => item.installed && item.enabled && item.integration));
 
   onMount(() => { if (session.isAdmin) void load(); else loading = false; });
+  $effect(() => {
+    if (loading || !connections.some(connection => connection.enabled
+      && connection.status === CONNECTION_STATUS.unverified)) return;
+    let active = true;
+    let refreshing = false;
+    const timer = setInterval(async () => {
+      if (refreshing) return;
+      refreshing = true;
+      try {
+        const refreshed = await fetchConnections();
+        if (!active) return;
+        const currentById = new Map(connections.map(connection => [connection.id, connection]));
+        const merged = refreshed.map(connection => {
+          const current = currentById.get(connection.id);
+          return current && current.revision > connection.revision ? current : connection;
+        });
+        connections = merged;
+        await Promise.all(merged
+          .filter(connection => connection.status === CONNECTION_STATUS.ready
+            && currentById.get(connection.id)?.status !== CONNECTION_STATUS.ready)
+          .map(refreshLibraryMounts));
+      }
+      catch { /* The normal page error surface remains reserved for user-initiated reads. */ }
+      finally { refreshing = false; }
+    }, 2_000);
+    return () => { active = false; clearInterval(timer); };
+  });
   function supportsLibraryMappings(connection: ConnectionResponse) {
     return connection.effectiveCapabilities.some(item => item.kind === PLUGIN_CAPABILITY.connectedLibrary || item.kind === PLUGIN_CAPABILITY.externalManager);
   }
@@ -83,10 +110,13 @@
       return;
     }
     try {
-      libraryMounts = { ...libraryMounts, [connection.id]: await fetchLibraryMounts(connection.id) };
+      const mounts = await fetchLibraryMounts(connection.id);
+      if (!connections.some(item => item.id === connection.id && item.revision === connection.revision)) return;
+      libraryMounts = { ...libraryMounts, [connection.id]: mounts };
       const { [connection.id]: _, ...remainingErrors } = libraryMountErrors;
       libraryMountErrors = remainingErrors;
     } catch (cause) {
+      if (!connections.some(item => item.id === connection.id && item.revision === connection.revision)) return;
       const message = cause instanceof Error ? cause.message : "Could not read library folders";
       const { [connection.id]: _, ...remainingMounts } = libraryMounts;
       libraryMounts = remainingMounts;
@@ -133,18 +163,9 @@
       editing = null;
       await refreshLibraryMounts(result);
       if (result.enabled) {
-        try {
-          const tested = await probeConnection(result.id);
-          upsert(tested);
-          await refreshLibraryMounts(tested);
-          message = tested.status === CONNECTION_STATUS.ready
-            ? "Connection saved and tested."
-            : `Connection saved. Test status: ${connectionStatusLabels[tested.status]}. Review the row and test again if needed.`;
-        } catch {
-          message = "Connection saved. Automatic testing failed; use Test connection to retry.";
-        }
+        message = "Connection saved. Prismedia is checking it automatically.";
       } else {
-        message = "Connection saved. Enable it and test the connection when ready.";
+        message = "Connection saved. Enable it when ready; Prismedia will check it automatically.";
       }
     } catch (cause) { editorError = cause instanceof Error ? cause.message : "Could not save connection"; }
     finally {
@@ -239,7 +260,9 @@
                 </div>
                 <p class="text-xs text-text-muted">{connection.enabledCapabilities.map(capability => capabilityPurpose(connection, capability)).join(" · ")}</p>
               </div>
-              {#if connection.lastError}
+              {#if connection.status === CONNECTION_STATUS.unverified}
+                <p class="text-xs text-text-muted">Prismedia is checking this connection automatically.</p>
+              {:else if connection.lastError}
                 <Alert.Root variant="destructive"><Alert.Description>{connection.lastError}</Alert.Description></Alert.Root>
               {:else if connection.status === CONNECTION_STATUS.ready}
                 <p class="text-xs text-text-muted">API reachable{connection.lastCheckedAt ? ` · tested ${new Date(connection.lastCheckedAt).toLocaleString()}` : ""}</p>
