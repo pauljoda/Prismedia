@@ -22,4 +22,6 @@ export interface PluginProvider {
   /** @nullable */
   availableVersion?: string | null;
   integration?: null | PluginIntegrationDefinition;
+  /** @nullable */
+  iconUrl?: string | null;
 }

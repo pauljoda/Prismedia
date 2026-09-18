@@ -12,6 +12,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Radarr connections can search new movies directly, show their artwork and metadata for review, and submit requests through the selected instance without a separate metadata-provider key.
+- Plugins can supply packaged icons, shown consistently in plugin listings, connections, and Request source choices. Maintained community plugins include their own logos, and Request source cards summarize supported actions and media types.
+
 - Existing Prismedia libraries can link to an external manager without copying files or recreating library entries. Linking preserves library settings and makes the folder read-only to Prismedia while the connected app continues organizing it.
 
 - Series discovery reviews can send selected episodes to Sonarr, preserve existing monitoring settings, and attach imported files to the original wanted episodes. Requests search only the reviewed episode selection and retain progress through retries and partial fulfillment.

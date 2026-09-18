@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { CONNECTION_STATUS, ENTITY_KIND, INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
 import type { ConnectionResponse } from "$lib/api/generated/model";
-import { canBrowseRequestSource, requestSourceMode } from "./request-source-compatibility";
+import { canBrowseRequestSource, canDiscoverManagerTitles, requestSourceMode } from "./request-source-compatibility";
 
 function source(overrides: Partial<ConnectionResponse> = {}): ConnectionResponse {
   return {
@@ -29,6 +29,23 @@ function source(overrides: Partial<ConnectionResponse> = {}): ConnectionResponse
 }
 
 describe("request source compatibility", () => {
+  it("prefers admitted manager discovery while retaining the connected collection", () => {
+    const connection = source({
+      enabledCapabilities: [PLUGIN_CAPABILITY.externalManager, PLUGIN_CAPABILITY.connectedLibrary],
+      effectiveCapabilities: [
+        { kind: PLUGIN_CAPABILITY.externalManager, entityKinds: [ENTITY_KIND.movie],
+          operations: [INTEGRATION_OPERATION.discoverManaged, INTEGRATION_OPERATION.lookupManaged, INTEGRATION_OPERATION.ensureManaged] },
+        { kind: PLUGIN_CAPABILITY.connectedLibrary, entityKinds: [ENTITY_KIND.movie],
+          operations: [INTEGRATION_OPERATION.searchLibrary, INTEGRATION_OPERATION.getLibraryItem] },
+      ],
+    });
+    expect(requestSourceMode(connection, ENTITY_KIND.movie)).toBe(PLUGIN_CAPABILITY.externalManager);
+    expect(canDiscoverManagerTitles(connection, ENTITY_KIND.book)).toBe(false);
+    connection.enabledCapabilities = [PLUGIN_CAPABILITY.connectedLibrary];
+    expect(requestSourceMode(connection, ENTITY_KIND.movie)).toBe(PLUGIN_CAPABILITY.connectedLibrary);
+    expect(canDiscoverManagerTitles(connection, ENTITY_KIND.movie)).toBe(false);
+  });
+
   it("requires the enabled catalog capability to support the requested entity kind", () => {
     expect(canBrowseRequestSource(source(), ENTITY_KIND.book)).toBe(true);
     expect(canBrowseRequestSource(source(), ENTITY_KIND.musicArtist)).toBe(false);

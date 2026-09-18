@@ -11,6 +11,7 @@
   import { Badge, Button, SearchInput } from "@prismedia/ui-svelte";
   import type { PluginProvider } from "$lib/api/generated/model";
   import PluginIntegrationCapabilities from "$lib/components/plugins/PluginIntegrationCapabilities.svelte";
+  import PluginIcon from "$lib/components/plugins/PluginIcon.svelte";
   import PluginCapabilityChips from "$lib/components/plugins/PluginCapabilityChips.svelte";
   import { pluginCapabilities } from "$lib/plugins/plugin-capabilities";
   import PluginCredentialForm from "./PluginCredentialForm.svelte";
@@ -123,6 +124,7 @@
         {@const authExpanded = authExpandedFor === plugin.id}
         {@const hasAuth = plugin.supports.length > 0 && plugin.auth.length > 0}
         <div class="surface-card no-lift px-4 py-3 flex items-center gap-3">
+          <PluginIcon name={plugin.name} iconUrl={plugin.iconUrl} class="size-11" />
           <div class="min-w-0 flex-1">
             <div class="flex items-center gap-2 flex-wrap">
               <p class="text-sm font-medium">{plugin.name}</p>

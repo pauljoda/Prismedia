@@ -13,6 +13,7 @@ public static class ConnectionEndpoints {
         group.AddEndpointFilter<ConnectionProblemFilter>();
         group.MapManagedControlEndpoints();
         group.MapManagedRequestEndpoints();
+        group.MapManagedDiscoveryEndpoints();
         group.MapGet("/", async (ConnectionService service, CancellationToken cancellationToken) =>
             Results.Ok(await service.ListAsync(cancellationToken)))
             .WithName("ListConnections").Produces<IReadOnlyList<ConnectionResponse>>();

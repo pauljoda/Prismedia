@@ -13,6 +13,8 @@
   import { ApiError } from "$lib/api/orval-fetch";
   import { commitReviewedRequest, fetchRequestReview, prepareManagedMovie, prepareManagedSeries, reviewRequest } from "$lib/api/requests";
   import ManagerRequestOptions from "$lib/components/integrations/ManagerRequestOptions.svelte";
+  import { prepareManagerTitle, reviewManagerTitle } from "$lib/api/managed-discovery";
+  import { fetchConnections } from "$lib/api/connections";
   import RequestTargetOptions from "$lib/components/acquisitions/RequestTargetOptions.svelte";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import {
@@ -50,12 +52,14 @@
     selectedProposalImageUrl,
     tagRelationshipForTitle,
   } from "$lib/components/identify/identify-review-helpers";
-  import type { RequestReviewResponse, ReviewedRequestCommitRequest } from "$lib/api/generated/model";
+  import type { ConnectionResponse, RequestReviewResponse, ReviewedRequestCommitRequest } from "$lib/api/generated/model";
   import { useSession } from "$lib/stores/session.svelte";
+  import { useAppChrome } from "$lib/stores/app-chrome.svelte";
 
   interface ReviewLoadInput {
     kind: RequestMediaKindCode;
     pluginId: string | null;
+    connectionId: string | null;
     namespace: string | null;
     value: string;
     hideNsfw: boolean;
@@ -63,12 +67,14 @@
 
   const params = $derived(page.params as { kind: RequestMediaKindCode; id: string });
   const pluginQuery = $derived(page.url.searchParams.get("plugin"));
+  const connectionQuery = $derived(page.url.searchParams.get("connection"));
   const namespaceQuery = $derived(page.url.searchParams.get("namespace"));
   /** Query string of the originating search page, chained through so Back returns to live results. */
   const backQuery = $derived(page.url.searchParams.get("back"));
   const backHref = $derived(backQuery ? `/request?${backQuery}` : "/request");
   const nsfw = useNsfw();
   const session = useSession();
+  const appChrome = useAppChrome();
 
   let review = $state.raw<RequestReviewResponse | null>(null);
   let selectedProposalIds = $state<string[]>([]);
@@ -80,6 +86,8 @@
   let submitting = $state(false);
   let managerSelected = $state(false);
   let managerMetadataSaved = $state(false);
+  let managerConnection = $state<ConnectionResponse | null>(null);
+  let managerRevision = $state<number | string | null>(null);
   let error = $state<string | null>(null);
   let enrichmentError = $state<string | null>(null);
   let reviewChanged = $state(false);
@@ -163,6 +171,12 @@
       : []),
   ]);
 
+  $effect(() => appChrome.setBreadcrumbs([
+    { label: "Request", href: "/request" },
+    ...(managerConnection ? [{ label: managerConnection.name, href: backHref }] : [{ label: "Search", href: backHref }]),
+    { label: activeTitle },
+  ]));
+
   let loadedKey = $state("");
   $effect(() => {
     if (!session.canRequestContent) {
@@ -181,6 +195,7 @@
     return {
       kind: params.kind,
       pluginId: pluginQuery,
+      connectionId: connectionQuery,
       namespace: namespaceQuery,
       value: params.id,
       hideNsfw: nsfw.mode !== "show",
@@ -202,23 +217,35 @@
     chosenPreset = DEFAULT_MONITOR_PRESET;
     targetLibraryRootId = null;
     profileId = null;
-    managerSelected = false;
+    managerSelected = Boolean(input.connectionId);
     managerMetadataSaved = false;
+    managerConnection = null;
+    managerRevision = null;
 
     try {
-      if (!input.pluginId?.trim() || !input.namespace?.trim()) {
+      if ((!input.pluginId?.trim() && !input.connectionId?.trim()) || !input.namespace?.trim()) {
         throw new Error("This review link is missing its plugin identity. Return to search and choose the result again.");
       }
 
-      const response = await reviewRequest({
-        kind: input.kind,
-        pluginId: input.pluginId,
-        externalIdentity: {
-          namespace: input.namespace,
-          value: input.value,
-        },
-        hideNsfw: input.hideNsfw,
-      });
+      const externalIdentity = { namespace: input.namespace, value: input.value };
+      let response: RequestReviewResponse;
+      if (input.connectionId) {
+        if (!session.isAdmin) throw new Error("An administrator must review requests through connected applications.");
+        const entityKind = requestKindInfo(input.kind)?.entityKind;
+        if (!entityKind) throw new Error("This media type cannot be requested through this source.");
+        const [result, connections] = await Promise.all([
+          reviewManagerTitle(input.connectionId, { entityKind, externalIdentity }),
+          fetchConnections(),
+        ]);
+        if (key !== loadedKey) return;
+        const connection = connections.find(item => item.id === input.connectionId);
+        if (!connection) throw new Error("This connection is no longer available. Return to Request and choose a source.");
+        managerConnection = connection;
+        managerRevision = result.connectionRevision;
+        response = result.review;
+      } else {
+        response = await reviewRequest({ kind: input.kind, pluginId: input.pluginId!, externalIdentity, hideNsfw: input.hideNsfw });
+      }
       if (key !== loadedKey) return;
 
       const nextSelection = deriveRequestReviewSelection(response);
@@ -400,7 +427,10 @@
     if (enrichmentRunning) throw new Error("Wait for metadata identification to finish");
     const key = loadedKey;
     const payload = reviewedCommitPayload();
-    const prepared = review?.entityKind === ENTITY_KIND.videoSeries
+    if (connectionQuery && (!managerConnection || managerRevision === null)) throw new Error("Reload this source review before continuing");
+    const prepared = managerConnection && managerRevision !== null
+      ? await prepareManagerTitle(managerConnection.id, { connectionRevision: managerRevision, request: payload })
+      : review?.entityKind === ENTITY_KIND.videoSeries
       ? await prepareManagedSeries(withFiniteEpisodeSelection(payload))
       : await prepareManagedMovie(payload);
     if (key === loadedKey) managerMetadataSaved = true;
@@ -619,7 +649,7 @@
         && (review.entityKind === ENTITY_KIND.movie && review.externalIdentity.namespace === EXTERNAL_ID_PROVIDER.tmdb
           || review.entityKind === ENTITY_KIND.videoSeries
             && (review.externalIdentity.namespace === EXTERNAL_ID_PROVIDER.tmdb || review.externalIdentity.namespace === EXTERNAL_ID_PROVIDER.tvdb))}
-        <ManagerRequestOptions entityKind={review.entityKind} disabled={submitting || enrichmentRunning || !hasRequestIntent} onPrepare={prepareForManager} onActiveChanged={active => managerSelected = active} />
+        <ManagerRequestOptions entityKind={review.entityKind} fixedConnection={managerConnection} disabled={submitting || enrichmentRunning || !hasRequestIntent} onPrepare={prepareForManager} onActiveChanged={active => managerSelected = active} />
       {/if}
 
       {#if kindInfo && !managerSelected}

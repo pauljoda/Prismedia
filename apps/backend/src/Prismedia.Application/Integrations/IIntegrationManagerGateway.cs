@@ -4,6 +4,9 @@ namespace Prismedia.Application.Integrations;
 
 /// <summary>Reads connected holdings and external management choices through independently versioned plugins.</summary>
 public interface IIntegrationManagerGateway {
+    /// <summary>Searches the manager's upstream catalog without creating or changing a holding.</summary>
+    Task<ManagedDiscoveryPage> DiscoverAsync(string pluginId, IntegrationConnectionContext connection, ManagedDiscoveryQuery input, CancellationToken cancellationToken) =>
+        Task.FromException<ManagedDiscoveryPage>(new NotSupportedException("This manager gateway does not support catalog discovery."));
     /// <summary>Lists existing holdings only; never adds or searches for releases.</summary>
     Task<ManagedLibraryPage> SearchLibraryAsync(string pluginId, IntegrationConnectionContext connection, ManagedLibraryQuery input, CancellationToken cancellationToken);
     /// <summary>Reconciles exact remote file associations while checking pinned metadata identities.</summary>

@@ -53,7 +53,8 @@ internal static class PluginIndexParser {
             Execution: ParseJsonExecution(entry),
             Integration: entry.TryGetProperty("integration", out var integration) && integration.ValueKind != JsonValueKind.Null
                 ? integration.Deserialize<PluginIntegrationDefinition>(PluginProcessTransport.JsonOptions)
-                : null);
+                : null,
+            Icon: GetNullableString(entry, "icon"));
     }
 
     private static PluginExecutionPolicy? ParseJsonExecution(JsonElement entry) {

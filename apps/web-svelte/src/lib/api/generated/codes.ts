@@ -1056,6 +1056,7 @@ export const INTEGRATION_OPERATION = {
   renewRetention: "renew-retention",
   acknowledge: "acknowledge",
   lookupManaged: "lookup-managed",
+  discoverManaged: "discover-managed",
   managerOptions: "manager-options",
   ensureManaged: "ensure-managed",
   requestManaged: "request-managed",

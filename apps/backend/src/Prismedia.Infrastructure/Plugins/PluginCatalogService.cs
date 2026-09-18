@@ -135,7 +135,8 @@ public sealed partial class PluginCatalogService : IPluginCatalogService {
                     entry.Supports,
                     Auth: [],
                     MissingAuthKeys: [],
-                    Integration: entry.Integration);
+                    Integration: entry.Integration,
+                    IconUrl: PluginIconUrl(entry.Id, entry.Version, entry.Icon));
             }));
         var listedIds = providers.Select(provider => provider.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
         providers.AddRange(configs.Values.Where(config => !listedIds.Contains(config.ProviderCode)
@@ -158,6 +159,24 @@ public sealed partial class PluginCatalogService : IPluginCatalogService {
         var selected = SelectInstalledDescriptor(descriptors.Where(descriptor => descriptor.Manifest.Id.Equals(providerId, StringComparison.OrdinalIgnoreCase)), config);
         return selected is not null && (entityKind is null || selected.Manifest.Supports.Any(support =>
             PluginEntityKindCompatibility.SupportsKind(support, entityKind))) ? selected : null;
+    }
+
+    /// <inheritdoc />
+    public async Task<PluginIconAsset?> GetIconAsync(string providerId, string? version, CancellationToken cancellationToken) {
+        if (string.IsNullOrWhiteSpace(providerId)) return null;
+
+        var local = (await DiscoverAsync(cancellationToken))
+            .Where(descriptor => descriptor.Manifest.Id.Equals(providerId, StringComparison.OrdinalIgnoreCase))
+            .Where(descriptor => version is null || descriptor.Manifest.Version == version)
+            .OrderByDescending(descriptor => ParseVersion(descriptor.Manifest.Version))
+            .FirstOrDefault();
+        if (local is not null && PluginIconAssetReader.TryRead(local, out var icon)) return icon;
+
+        var current = ParseVersion(_options.CurrentPrismediaVersion);
+        var remote = (await ListRemoteIndexEntriesAsync(current, cancellationToken))
+            .Where(entry => entry.Id.Equals(providerId, StringComparison.OrdinalIgnoreCase))
+            .FirstOrDefault(entry => version is null || entry.Version == version);
+        return remote is null ? null : await FetchCatalogIconAsync(remote, cancellationToken);
     }
 
     private static PluginDescriptor? SelectInstalledDescriptor(IEnumerable<PluginDescriptor> candidates, ProviderConfigRow? config) {
@@ -385,6 +404,9 @@ public sealed partial class PluginCatalogService : IPluginCatalogService {
                 var manifest = PluginManifestContract.Normalize(discoveredManifest);
 
                 var directory = Path.GetDirectoryName(manifestPath) ?? root;
+                if (manifest.Icon is not null && !PluginIconAssetReader.TryRead(directory, manifest.Icon, out _)) {
+                    continue;
+                }
                 var entryPath = Path.GetFullPath(Path.IsPathRooted(manifest.Entry)
                     ? manifest.Entry
                     : Path.Combine(directory, manifest.Entry));
@@ -487,8 +509,12 @@ public sealed partial class PluginCatalogService : IPluginCatalogService {
             missing,
             UpdateAvailable: updateAvailable,
             AvailableVersion: updateAvailable ? availableVersion : null,
-            Integration: descriptor.Manifest.Integration);
+            Integration: descriptor.Manifest.Integration,
+            IconUrl: PluginIconUrl(descriptor.Manifest.Id, descriptor.Manifest.Version, descriptor.Manifest.Icon));
     }
+
+    private static string? PluginIconUrl(string id, string version, string? icon) =>
+        icon is null ? null : $"/api/plugins/{Uri.EscapeDataString(id)}/icon?v={Uri.EscapeDataString(version)}";
 
     private IEnumerable<string> EnumerateDiscoveryRoots() {
         foreach (var path in _options.DevPaths) {

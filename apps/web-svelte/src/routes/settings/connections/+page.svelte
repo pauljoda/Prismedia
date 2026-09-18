@@ -15,6 +15,7 @@
   import { SETTING_SECTION, settingsSectionById } from "$lib/settings/settings-section-catalog";
   import { useSession } from "$lib/stores/session.svelte";
   import ExternalLibraryMappings from "$lib/components/integrations/ExternalLibraryMappings.svelte";
+  import PluginIcon from "$lib/components/plugins/PluginIcon.svelte";
   import ConnectionEditor from "./ConnectionEditor.svelte";
 
   const session = useSession();
@@ -221,10 +222,13 @@
           <Panel class="p-5">
             <article class="flex flex-col gap-4" aria-label={connection.name}>
               <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div class="flex min-w-0 flex-col gap-1">
-                  <h2 class="text-base font-semibold">{connection.name}</h2>
-                  <p class="text-sm text-text-muted">{plugin?.name ?? connection.pluginId}</p>
-                  <p class="break-all font-mono text-xs text-text-muted">{connection.baseUrl}</p>
+                <div class="flex min-w-0 items-start gap-3">
+                  <PluginIcon name={plugin?.name ?? connection.pluginId} iconUrl={plugin?.iconUrl} class="size-11" />
+                  <div class="flex min-w-0 flex-col gap-1">
+                    <h2 class="text-base font-semibold">{connection.name}</h2>
+                    <p class="text-sm text-text-muted">{plugin?.name ?? connection.pluginId}</p>
+                    <p class="break-all font-mono text-xs text-text-muted">{connection.baseUrl}</p>
+                  </div>
                 </div>
                 <Badge>{connectionStatusLabels[connection.status]}</Badge>
               </div>

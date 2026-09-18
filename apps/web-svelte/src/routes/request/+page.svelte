@@ -43,14 +43,15 @@
   }
   function chooseConnection(id: string | null) {
     routeConnectionId = id;
-    navigateRoute(false);
+    navigateRoute(false, true);
   }
   function chooseKind(kind: RequestMediaKindCode | null) {
     routeRequestKind = kind;
     navigateRoute(true);
   }
-  function navigateRoute(replaceHistory: boolean) {
+  function navigateRoute(replaceHistory: boolean, clearSourceSearch = false) {
     const url = new URL(window.location.href);
+    if (clearSourceSearch) url.searchParams.delete("managerQuery");
     if (activeTab === activityTab) url.searchParams.set("activity", ""); else url.searchParams.delete("activity");
     if (routeConnectionId) url.searchParams.set("connection", routeConnectionId); else url.searchParams.delete("connection");
     if (routeRequestKind) url.searchParams.set("kind", routeRequestKind); else url.searchParams.delete("kind");

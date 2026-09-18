@@ -1,6 +1,6 @@
 <script lang="ts">
   import { onMount, untrack } from "svelte";
-  import { AlertTriangle, PackageSearch, PlugZap, ArrowLeft, ArrowUpRight, Library, BookOpen } from "@lucide/svelte";
+  import { AlertTriangle, PackageSearch, PlugZap, ArrowLeft, ArrowUpRight, Library } from "@lucide/svelte";
   import { Alert, Button, ChoiceGroup, Select } from "@prismedia/ui-svelte";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import { goto } from "$app/navigation";
@@ -15,6 +15,9 @@
   import DiscoveryResults from "./DiscoveryResults.svelte";
   import ConnectionCatalogBrowser from "$lib/components/integrations/ConnectionCatalogBrowser.svelte";
   import ConnectedLibraryBrowser from "$lib/components/integrations/ConnectedLibraryBrowser.svelte";
+  import ConnectionCapabilityChips from "$lib/components/integrations/ConnectionCapabilityChips.svelte";
+  import ManagerSourceBrowser from "$lib/components/integrations/ManagerSourceBrowser.svelte";
+  import PluginIcon from "$lib/components/plugins/PluginIcon.svelte";
   import { entityReferenceToThumbnailCard } from "$lib/entities/entity-thumbnail";
   import {
     nextPluginSearchLimit,
@@ -143,8 +146,14 @@
   const sourceOptions = $derived([
     ...eligibleProviders.map(item => ({ value: item.id, label: item.name, annotation: "Find new titles" })),
     ...compatibleBrowseConnections.map(item => ({ value: item.id, label: item.name,
-      annotation: item.status !== CONNECTION_STATUS.ready ? "Unavailable" : requestSourceMode(item, selectedKindInfo?.entityKind) === PLUGIN_CAPABILITY.connectedLibrary ? "Your collection" : "Browse & import" })),
+      annotation: item.status !== CONNECTION_STATUS.ready ? "Unavailable"
+        : requestSourceMode(item, selectedKindInfo?.entityKind) === PLUGIN_CAPABILITY.externalManager ? "Find & request"
+        : requestSourceMode(item, selectedKindInfo?.entityKind) === PLUGIN_CAPABILITY.connectedLibrary ? "Your collection" : "Browse & import" })),
   ]);
+  function sourceIconUrl(id: string) {
+    const pluginId = connections.find(item => item.id === id)?.pluginId ?? id;
+    return providers.find(provider => provider.id === pluginId)?.iconUrl;
+  }
   const activeProvider = $derived(
     eligibleProviders.find((provider) => provider.id === selectedProviderId) ?? eligibleProviders[0] ?? null,
   );
@@ -429,8 +438,8 @@
         {#each browseConnections as source (source.id)}
           {@const sourceMode = requestSourceMode(source)}
           <Button variant="outline" class="h-auto min-w-0 justify-start gap-3 p-4 text-left" onclick={() => chooseSource(source.id)}>
-            {#if sourceMode === PLUGIN_CAPABILITY.connectedLibrary}<Library class="size-5 shrink-0 text-text-muted" />{:else}<BookOpen class="size-5 shrink-0 text-text-muted" />{/if}
-            <span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold">{source.name}</span><span class="mt-1 block text-xs font-normal text-text-muted">{source.status !== CONNECTION_STATUS.ready ? "Connection unavailable" : sourceMode === PLUGIN_CAPABILITY.connectedLibrary ? "Browse your collection" : "Find and import media"}</span></span>
+            <PluginIcon name={source.name} iconUrl={sourceIconUrl(source.id)} class="size-7" />
+            <span class="min-w-0 flex-1"><span class="block truncate text-sm font-semibold">{source.name}</span><span class="mt-1 block text-xs font-normal text-text-muted"><ConnectionCapabilityChips connection={source} /></span></span>
             <ArrowUpRight class="size-4 shrink-0 text-text-muted" />
           </Button>
         {/each}
@@ -440,7 +449,9 @@
     <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:gap-4">
       <label class="w-full space-y-1.5 sm:max-w-sm"><span class="text-xs font-medium text-text-muted">Source</span>
         <Select ariaLabel="Source" options={sourceOptions} value={connection?.id ?? activeProvider?.id ?? ""}
-          placeholder="Browse a connected source" onchange={chooseSource} />
+          placeholder="Browse a connected source" onchange={chooseSource}>
+          {#snippet optionLeading(option)}<PluginIcon name={option.label} iconUrl={sourceIconUrl(option.value)} class="size-5" />{/snippet}
+        </Select>
       </label>
       {#if connection}<Button variant="ghost" size="sm" onclick={() => { selectedConnectionId = ""; resetToHome(); onConnectionChange?.(null); }}><ArrowLeft />Back to Request</Button>
       {:else if activeProvider}<p class="pb-2 text-xs text-text-muted">Search {activeProvider.name}, then choose how to add a title.</p>{/if}
@@ -449,7 +460,8 @@
 
   {#if connection}
     {#key connection.id}
-      {#if requestSourceMode(connection, selectedKindInfo?.entityKind) === PLUGIN_CAPABILITY.connectedLibrary}<ConnectedLibraryBrowser {connection} initialEntityKind={selectedKindInfo?.entityKind} />
+      {#if requestSourceMode(connection, selectedKindInfo?.entityKind) === PLUGIN_CAPABILITY.externalManager}<ManagerSourceBrowser {connection} initialEntityKind={selectedKindInfo?.entityKind} />
+      {:else if requestSourceMode(connection, selectedKindInfo?.entityKind) === PLUGIN_CAPABILITY.connectedLibrary}<ConnectedLibraryBrowser {connection} initialEntityKind={selectedKindInfo?.entityKind} />
       {:else}<ConnectionCatalogBrowser {connection} initialEntityKind={selectedKindInfo?.entityKind} />{/if}
     {/key}
   {:else}

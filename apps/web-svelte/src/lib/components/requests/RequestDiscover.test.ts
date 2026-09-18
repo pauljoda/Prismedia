@@ -55,7 +55,7 @@ describe("RequestDiscover", () => {
       enabledCapabilities: [PLUGIN_CAPABILITY.catalogDiscovery], effectiveCapabilities: [{ kind: PLUGIN_CAPABILITY.catalogDiscovery, operations: [INTEGRATION_OPERATION.browse], entityKinds: [ENTITY_KIND.book] }],
       settings: {}, configuredSecretKeys: [], revision: 1, status: CONNECTION_STATUS.ready, remoteInstanceId: null, hasPersistentRemoteIdentity: false, lastCheckedAt: null, lastError: null };
     render(RequestDiscoverHarness, { connections: [connection] });
-    await fireEvent.click(screen.getByRole("button", { name: "Reading collection Find and import media" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Reading collection Browse Books" }));
     await screen.findByText("Source books");
     expect(fetchConnectionCatalog).toHaveBeenCalledWith(connection.id, expect.objectContaining({ entityKind: ENTITY_KIND.book }));
     expect(screen.queryByText("What would you like to find?")).not.toBeInTheDocument();

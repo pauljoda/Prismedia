@@ -62,6 +62,10 @@ public enum IntegrationOperation {
     [Code("lookup-managed")]
     LookupManaged,
 
+    /// <summary>Search a manager's upstream catalog without creating or changing a holding.</summary>
+    [Code("discover-managed")]
+    DiscoverManaged,
+
     /// <summary>Read external profile, root-folder, and request-policy choices without modifying them.</summary>
     [Code("manager-options")]
     ManagerOptions,

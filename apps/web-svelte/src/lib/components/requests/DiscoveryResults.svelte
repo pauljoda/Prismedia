@@ -12,7 +12,7 @@
 
 <div class="discovery-grid" aria-label="Browse results" aria-busy={disabled}>
   {#each cards as card (card.entity.id)}
-    <EntityThumbnail {card} linkable={false} artworkReactive={false} showBadges={false}
+    <EntityThumbnail {card} linkable={false} artworkReactive={false} showBadges={false} hoverPreviewsEnabled={false}
       interactive={!disabled} onActivate={() => onActivate(card)} />
   {/each}
 </div>

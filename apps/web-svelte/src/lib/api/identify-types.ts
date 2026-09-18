@@ -35,6 +35,7 @@ export interface PluginProvider {
   missingAuthKeys: string[];
   updateAvailable?: boolean;
   availableVersion?: string | null;
+  iconUrl?: string | null;
 }
 
 export interface IdentifyQuery {

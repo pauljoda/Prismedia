@@ -24,6 +24,7 @@ export const PluginIntegrationCapabilityOperationsItem = {
   'renew-retention': 'renew-retention',
   acknowledge: 'acknowledge',
   'lookup-managed': 'lookup-managed',
+  'discover-managed': 'discover-managed',
   'manager-options': 'manager-options',
   'ensure-managed': 'ensure-managed',
   'request-managed': 'request-managed',

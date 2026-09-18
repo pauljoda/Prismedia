@@ -14,17 +14,36 @@ public sealed class ReviewedWantedMovieService(IWantedEntityWriter wanted, IWant
     public async Task<PreparedWantedMovieResponse> PrepareAsync(ReviewedRequestCommitRequest request, CancellationToken token) {
         Validate(request);
         var review = ReviewedRequestProposalValidator.Validate(request, request.Review!, request.Proposal!);
-        var selection = ReviewedRequestSelectionResolver.Resolve(RequestKindRegistry.Find(RequestMediaKind.Movie)!, review, request.SelectedProposalIds, null);
-        if (!selection.SelectRoot || selection.Nodes.Count != 0) throw Invalid("Select the reviewed movie itself.");
         var exactRoutes = (await routes.ResolveAsync(EntityKind.Movie.ToCode(), IdentifyAction.LookupId, [review.ExternalIdentity], token))
             .Where(route => route.Identity == review.ExternalIdentity && string.Equals(route.PluginId, review.PluginId, StringComparison.OrdinalIgnoreCase)).ToArray();
         if (exactRoutes.Length != 1) throw Invalid("The exact metadata plugin route is unavailable. Review this movie again through an enabled plugin.");
+        return await MaterializeAsync(request, review, exactRoutes[0], token);
+    }
+
+    /// <summary>Saves a movie from a fresh connection-scoped manager review without claiming a metadata-plugin binding.</summary>
+    public async Task<PreparedWantedMovieResponse> PrepareFromManagerAsync(
+        ReviewedRequestCommitRequest request,
+        RequestReviewResponse canonicalReview,
+        CancellationToken token) {
+        request = request with { Review = canonicalReview };
+        Validate(request);
+        var review = ReviewedRequestProposalValidator.Validate(request, canonicalReview, request.Proposal!);
+        return await MaterializeAsync(request, review, route: null, token);
+    }
+
+    private async Task<PreparedWantedMovieResponse> MaterializeAsync(
+        ReviewedRequestCommitRequest request,
+        RequestReviewResponse review,
+        PluginIdentityRoute? route,
+        CancellationToken token) {
+        var selection = ReviewedRequestSelectionResolver.Resolve(RequestKindRegistry.Find(RequestMediaKind.Movie)!, review, request.SelectedProposalIds, null);
+        if (!selection.SelectRoot || selection.Nodes.Count != 0) throw Invalid("Select the reviewed movie itself.");
         var title = review.Proposal.Patch.Title ?? request.Review!.Proposal.Patch.Title ?? review.ExternalIdentity.Value;
         if (string.IsNullOrWhiteSpace(title) || title.Length > 512) throw Invalid("The reviewed movie needs a valid title.");
         var entity = await wanted.EnsureAsync(EntityKind.Movie, review.ExternalIdentity, title, null, false, token);
         if (entity.HasFile) return new(entity.EntityId, title, true);
         if (!await lifecycle.ExecuteAsync(entity.EntityId, async ct => {
-            if (!await wanted.BindProviderIdentityAsync(entity.EntityId, exactRoutes[0], ct))
+            if (route is not null && !await wanted.BindProviderIdentityAsync(entity.EntityId, route, ct))
                 throw Invalid("The selected metadata route changed before saving. Review the movie again.");
             await wanted.ApplyProposalWithDeferredArtworkAsync(entity.EntityId, review.Proposal, ct);
             await suppressions.ClearAsync([review.ExternalIdentity], ct);

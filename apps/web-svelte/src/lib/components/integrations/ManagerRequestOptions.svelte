@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import { Alert, Button, Disclosure, Select, buttonVariants } from "@prismedia/ui-svelte";
   import { CONNECTION_STATUS, ENTITY_KIND, INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
   import type { ConnectionResponse, EntityKind, PreparedWantedMovieResponse, PreparedWantedSeriesResponse } from "$lib/api/generated/model";
@@ -7,14 +7,16 @@
   import { resolveEntityHref } from "$lib/entities/entity-codes";
   import ManagedRequests from "./ManagedRequests.svelte";
 
-  let { entityKind, disabled = false, onPrepare, onActiveChanged }: {
+  let { entityKind, disabled = false, fixedConnection = null, onPrepare, onActiveChanged }: {
     entityKind: EntityKind;
     disabled?: boolean;
+    /** A manager discovery review can only be fulfilled through its originating connection. */
+    fixedConnection?: ConnectionResponse | null;
     onPrepare: () => Promise<PreparedWantedMovieResponse | PreparedWantedSeriesResponse>;
     onActiveChanged: (active: boolean) => void;
   } = $props();
   let connections = $state<ConnectionResponse[]>([]);
-  let connectionId = $state("");
+  let connectionId = $state(untrack(() => fixedConnection?.id ?? ""));
   let prepared = $state<PreparedWantedMovieResponse | PreparedWantedSeriesResponse | null>(null);
   let busy = $state(false);
   let error = $state<string | null>(null);
@@ -28,6 +30,12 @@
   const ownedEpisodeCount = $derived(preparedEpisodes.length - requestableEpisodes.length);
   let alive = true;
   onMount(() => {
+    if (fixedConnection) {
+      connections = [fixedConnection];
+      connectionId = fixedConnection.id;
+      onActiveChanged(true);
+      return () => { alive = false; };
+    }
     void fetchConnections().then(items => {
       if (!alive) return;
       connections = items.filter(item => item.enabled && item.status === CONNECTION_STATUS.ready && item.effectiveCapabilities.some(capability =>
@@ -51,7 +59,9 @@
 {#if connections.length || error}
   <div class="space-y-3">
     {#if error}<Alert.Root variant="destructive"><Alert.Description>{error}</Alert.Description></Alert.Root>{/if}
-    {#if connections.length}
+    {#if fixedConnection}
+      <p class="text-sm font-semibold">Request through {fixedConnection.name}</p>
+    {:else if connections.length}
       <Select ariaLabel="Acquisition owner" value={connectionId} disabled={disabled || busy || !!prepared}
         options={[{ value: "", label: "Prismedia downloads" }, ...connections.map(item => ({ value: item.id, label: item.name }))]}
         onchange={value => { connectionId = value; error = null; onActiveChanged(!!value); }} />

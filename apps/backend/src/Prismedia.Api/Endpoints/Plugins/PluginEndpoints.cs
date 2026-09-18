@@ -17,6 +17,28 @@ public static class PluginEndpoints {
             .WithSummary("Lists compatible community plugins discovered from installed and local development sources.")
             .Produces<IReadOnlyList<PluginProvider>>();
 
+        routes.MapGet("/api/plugins/{provider}/icon", async (
+            string provider,
+            string? v,
+            IPluginCatalogService plugins,
+            HttpContext context,
+            CancellationToken cancellationToken) => {
+                var icon = await plugins.GetIconAsync(provider, v, cancellationToken);
+                if (icon is null) return Results.NotFound();
+                context.Response.Headers.CacheControl = v is null
+                    ? "public, max-age=0, must-revalidate"
+                    : "public, max-age=31536000, immutable";
+                context.Response.Headers.ContentSecurityPolicy = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
+                context.Response.Headers.XContentTypeOptions = "nosniff";
+                return Results.File(icon.Content, icon.ContentType, enableRangeProcessing: false,
+                    entityTag: new Microsoft.Net.Http.Headers.EntityTagHeaderValue($"\"{icon.ETag}\""));
+            })
+            .WithTags("Plugins")
+            .WithName("GetPluginIcon")
+            .WithSummary("Returns a validated icon packaged with a plugin.")
+            .Produces(StatusCodes.Status200OK)
+            .Produces(StatusCodes.Status404NotFound);
+
         var group = routes.MapGroup("/api/plugins")
             .RequireAdmin()
             .WithTags("Plugins");

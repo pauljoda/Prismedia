@@ -12,11 +12,26 @@ internal static class PluginManifestContract {
 
     /// <summary>Returns whether the manifest schema and support declarations are usable.</summary>
     internal static bool IsValid(PluginManifest manifest) =>
+        IsValidIconPath(manifest.Icon) &&
         IsValid(manifest.ManifestVersion, manifest.Id, manifest.Supports, manifest.Execution, manifest.Integration);
 
     /// <summary>Returns whether the index entry schema and support declarations are usable.</summary>
     internal static bool IsValid(PluginIndexEntry entry) =>
+        IsValidIconPath(entry.Icon) &&
         IsValid(entry.ManifestVersion, entry.Id, entry.Supports, entry.Execution, entry.Integration);
+
+    /// <summary>Returns whether an optional icon is a safe package-relative SVG or PNG path.</summary>
+    internal static bool IsValidIconPath(string? icon) {
+        if (icon is null) return true;
+        if (string.IsNullOrWhiteSpace(icon) || icon.Length > 256 || Path.IsPathRooted(icon) || icon.Contains('\\')) return false;
+
+        var segments = icon.Split('/');
+        if (segments.Any(segment => segment.Length == 0 || segment is "." or "..")) return false;
+
+        var extension = Path.GetExtension(icon);
+        return extension.Equals(".svg", StringComparison.OrdinalIgnoreCase) ||
+            extension.Equals(".png", StringComparison.OrdinalIgnoreCase);
+    }
 
     /// <summary>Returns a manifest whose support declarations are complete for runtime consumers.</summary>
     internal static PluginManifest Normalize(PluginManifest manifest) =>

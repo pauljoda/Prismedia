@@ -25,6 +25,7 @@ kinds and identify actions it serves.
   "version": "0.3.0",
   "runtime": "dotnet-process",
   "entry": "dist/Prismedia.Plugin.OpenLibrary.dll",
+  "icon": "assets/icon.svg",
   "compat": {
     "pluginApiMin": "2.0.0",
     "pluginApiMax": null,
@@ -71,11 +72,28 @@ kinds and identify actions it serves.
 | `version` | string | Artifact SemVer. |
 | `runtime` | string | Runtime code — see [Runtimes](#runtimes). |
 | `entry` | string | Entry artifact path, relative to the manifest directory when not rooted. |
+| `icon` | string? | Packaged SVG or PNG path — see [Plugin icons](#plugin-icons). |
 | `compat.pluginApiMin` / `compat.pluginApiMax` | string / string? | Plugin-protocol version bounds. `null` max means "no upper bound". |
 | `compat.prismediaMin` / `compat.prismediaMax` | string / string? | Prismedia application version bounds. |
 | `auth` | object[] | Credential fields the plugin requests — see [Auth fields](#auth-fields). |
 | `isNsfw` | boolean | Whether imported metadata should be marked NSFW by default. |
 | `supports` | object[] | Entity kinds and identify actions the plugin serves — see [Entity support](#entity-support). |
+
+## Plugin icons
+
+Set `icon` to a package-relative SVG or PNG path, such as `assets/icon.svg`, and
+include that file in the plugin archive. Maintained community packages require an
+icon. Older third-party manifests may omit it and use Prismedia's default icon.
+
+Use a clean upstream logo and retain its attribution and asset terms. Icons are
+limited to 256 KiB. SVGs must be passive vector artwork without scripts, embedded
+documents, stylesheets, or external resources. Paths cannot leave the package or
+traverse symlinks. The host serves validated assets from its own origin; drawing
+an icon never installs or runs plugin code.
+
+The registry index uses a path relative to the index location, such as
+`plugins/example/assets/icon.svg`. The package manifest continues to use the
+path relative to its own directory. The build tool generates this index path.
 
 ## Runtimes
 

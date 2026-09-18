@@ -6,6 +6,9 @@ namespace Prismedia.Infrastructure.Integrations;
 
 public sealed partial class IntegrationPluginGateway : IIntegrationManagerGateway {
     /// <inheritdoc />
+    public async Task<ManagedDiscoveryPage> DiscoverAsync(string pluginId, IntegrationConnectionContext connection, ManagedDiscoveryQuery input, CancellationToken cancellationToken) =>
+        await InvokeAsync<ManagedDiscoveryQuery, ManagedDiscoveryPage>(await RequireManagerAsync(pluginId, cancellationToken), IntegrationOperation.DiscoverManaged, connection, input, cancellationToken);
+    /// <inheritdoc />
     public async Task<ManagedLibraryPage> SearchLibraryAsync(string pluginId, IntegrationConnectionContext connection, ManagedLibraryQuery input, CancellationToken cancellationToken) =>
         await InvokeAsync<ManagedLibraryQuery, ManagedLibraryPage>(await RequireManagerAsync(pluginId, cancellationToken), IntegrationOperation.SearchLibrary, connection, input, cancellationToken);
     /// <inheritdoc />

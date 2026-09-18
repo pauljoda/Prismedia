@@ -45,6 +45,13 @@ public sealed class ScopedPluginCatalogCache(IPluginCatalogService inner) : IPlu
     }
 
     /// <inheritdoc />
+    public Task<PluginIconAsset?> GetIconAsync(
+        string providerId,
+        string? version,
+        CancellationToken cancellationToken) =>
+        inner.GetIconAsync(providerId, version, cancellationToken);
+
+    /// <inheritdoc />
     public Task<PluginProvider?> InstallAsync(
         string providerId,
         CancellationToken cancellationToken) =>

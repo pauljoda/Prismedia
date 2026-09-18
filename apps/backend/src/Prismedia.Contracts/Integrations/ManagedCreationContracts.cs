@@ -10,7 +10,8 @@ public sealed record ManagedLookupTarget(EntityKind EntityKind, IReadOnlyDiction
 public sealed record ManagedLookupInput(EntityKind EntityKind, IReadOnlyDictionary<string, string> ExternalIds,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ManagedLookupTarget>? Targets = null);
 /// <summary>A work confirmed by the manager's metadata source; it is not evidence of owned files.</summary>
-public sealed record ManagedCandidate(EntityKind EntityKind, string Title, int? Year, IReadOnlyDictionary<string, string> ExternalIds);
+public sealed record ManagedCandidate(EntityKind EntityKind, string Title, int? Year,
+    IReadOnlyDictionary<string, string> ExternalIds, ManagedDiscoveryMetadata? Metadata = null);
 /// <summary>One manager-resolved stable child identity corresponding to an exact requested target.</summary>
 public sealed record ManagedResolvedTarget(string RemoteId, EntityKind EntityKind,
     IReadOnlyDictionary<string, string> ExternalIds, int? SeasonNumber = null, int? EpisodeNumber = null,

@@ -29,6 +29,7 @@ const mocks = vi.hoisted(() => ({
   fetchAccessibleLibraryRoots: vi.fn(),
   goto: vi.fn(async () => {}),
   reviewRequest: vi.fn(),
+  reviewManagerTitle: vi.fn(), prepareManagerTitle: vi.fn(),
   prepareManagedMovie: vi.fn(), prepareManagedSeries: vi.fn(), fetchConnections: vi.fn(), fetchManagedRequests: vi.fn(), fetchLibraryMounts: vi.fn(), isAdmin: false,
 }));
 
@@ -40,6 +41,8 @@ vi.mock("$lib/api/requests", () => ({
   prepareManagedSeries: mocks.prepareManagedSeries,
 }));
 vi.mock("$lib/api/connections", () => ({ fetchConnections: mocks.fetchConnections }));
+vi.mock("$lib/api/managed-discovery", () => ({ reviewManagerTitle: mocks.reviewManagerTitle, prepareManagerTitle: mocks.prepareManagerTitle }));
+vi.mock("$lib/stores/app-chrome.svelte", () => ({ useAppChrome: () => ({ setBreadcrumbs: () => () => {} }) }));
 vi.mock("$lib/api/managed-requests", () => ({ fetchManagedRequests: mocks.fetchManagedRequests }));
 vi.mock("$lib/api/managed-libraries", () => ({ fetchLibraryMounts: mocks.fetchLibraryMounts }));
 
@@ -83,6 +86,31 @@ describe("reviewed request route", () => {
 
   afterEach(() => {
     cleanup();
+  });
+
+  it("keeps a manager-originated review and its metadata preparation on the same connection", async () => {
+    mocks.isAdmin = true;
+    const review = movieReview();
+    const connection = { id: "manager", name: "Selected movie manager", enabled: true, status: CONNECTION_STATUS.ready,
+      effectiveCapabilities: [{ kind: PLUGIN_CAPABILITY.externalManager, entityKinds: [ENTITY_KIND.movie],
+        operations: [INTEGRATION_OPERATION.lookupManaged, INTEGRATION_OPERATION.ensureManaged] }] };
+    mocks.fetchConnections.mockResolvedValue([connection]);
+    mocks.reviewManagerTitle.mockResolvedValue({ connectionRevision: 7, review });
+    mocks.prepareManagerTitle.mockResolvedValue({ entityId: "wanted-movie", title: "Prepared movie", hasFile: false });
+    setRoute(REQUEST_MEDIA_KIND.movie, review.externalIdentity.value, `connection=manager&namespace=${EXTERNAL_ID_PROVIDER.tmdb}`);
+    render(Page);
+    await screen.findByText("Request through Selected movie manager");
+    expect(mocks.reviewManagerTitle).toHaveBeenCalledWith("manager", { entityKind: ENTITY_KIND.movie, externalIdentity: review.externalIdentity });
+    expect(mocks.reviewRequest).not.toHaveBeenCalled();
+    expect(screen.queryByRole("button", { name: "Acquisition owner" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /^Request$/ })).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Save metadata and review manager request" }));
+    await screen.findByText(/Metadata saved/);
+    expect(mocks.prepareManagerTitle).toHaveBeenCalledWith("manager", expect.objectContaining({
+      connectionRevision: 7, request: expect.objectContaining({ rootExternalIdentity: review.externalIdentity, proposalRevision: review.revision }),
+    }));
+    expect(mocks.prepareManagedMovie).not.toHaveBeenCalled();
+    expect(mocks.commitReviewedRequest).not.toHaveBeenCalled();
   });
 
   it("prepares the reviewed movie for the selected manager without sending a native request", async () => {

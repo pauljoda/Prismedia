@@ -20,7 +20,7 @@ every feature of the application it connects to.
 | OPDS catalog | Browse books and comics, then import a selected EPUB, PDF, or CBZ. | Downloads one selected publication into a Prismedia library. | Loans, purchases, samples, DRM, and CBR conversion remain outside this importer. |
 | Suwayomi through OPDS | Browse and import chapters already downloaded by Suwayomi. | Downloads the selected CBZ into a Prismedia library. | Does not request missing chapters or synchronize reading progress. |
 | Suwayomi source plugin | Browse an installed source, choose a manga and exact chapter, then request and import its CBZ. | Suwayomi downloads the chapter; Prismedia verifies and imports a copy. | Source extensions stay in Suwayomi. Requests are finite and do not synchronize reading progress or series monitoring. |
-| Radarr | Browse an existing collection, follow linked movies, or request a wanted movie. | Reads files in a mapped folder while Radarr organizes them. | Requires an explicit folder mapping and a reviewed movie identity and profile. |
+| Radarr | Search new movies, review their metadata, request them through Radarr, or browse an existing collection. | Reads files in a mapped folder while Radarr organizes them. | Requires an explicit folder mapping and a reviewed movie identity and profile. |
 | Sonarr | Browse existing series, follow linked episodes, or request a reviewed episode selection. | Reads files in a mapped folder while Sonarr organizes them. | Requests cover a finite episode selection. Adding more episodes to an already followed series requires a future scope-expansion workflow. |
 | Kapowarr | Browse existing comic runs and inspect their issue files. | Reads files in a mapped folder while Kapowarr organizes them. | Does not request missing comics or follow issue upgrades yet. |
 | Wikimedia Commons | Search and import an original image with its source attribution. | Downloads the selected image into a Prismedia library. | Imports still images; source statements are retained for review. |
@@ -488,6 +488,20 @@ Neither choice copies or moves files. Mappings cannot overlap other libraries or
 A read-only container bind mount adds an operating-system boundary to Prismedia's
 own file protection.
 
+Attaching an enabled library, or enabling a paused library, queues its initial scan.
+Prismedia watches enabled folders for changes and periodically scans external
+libraries at the configured scan interval, even when general automatic scanning
+is off. Completed files added directly in the external app can therefore appear
+without a request in Prismedia. The external API connection alone is insufficient:
+the folder must be mapped, enabled, and readable.
+
+For untracked video files, a complete successful scan marks missing sources
+unavailable and restores their original library and file identities if the same
+path returns. A failed or incomplete folder scan retains the last known state.
+Automatic scans do not take acquisition ownership or turn on remote monitoring.
+Following an exact external holding separately provides identity preservation when
+the manager renames or replaces its files.
+
 The external app continues organizing its files. Prismedia blocks local deletion, replacement, moves,
 uploads, and native acquisition destinations in this root. Protection remains when
 scanning or the Connection is disabled. Paths are fixed after creation; changing the
@@ -591,6 +605,23 @@ handoff. Prismedia does not delete remote holdings, cancel unrelated jobs, move 
 or configure a replacement owner as part of release.
 
 ### Request a wanted movie through Radarr
+
+In **Request → Browse**, choose your Radarr connection and use **Find new titles**.
+Searches go through that Radarr instance's movie catalog and include its posters
+and descriptions. Choose a result to review the metadata, then save the reviewed
+movie and confirm the mapped library, quality profile, monitoring, and search
+settings. The request stays with the selected Radarr connection. A separate TMDB
+plugin key is not needed for this path. **In your library** shows titles already
+managed by that instance.
+
+Plugins opt into this discovery surface with the external-manager
+`discover-managed` operation. The connection-scoped `/manager/discovery/search`
+endpoint returns normalized candidates and canonical identities. Exact review uses
+`/manager/discovery/review`; `/manager/discovery/prepare` refreshes the identity and
+validates both the connection revision and the reviewed metadata before saving a
+wanted movie. Search and review do not add movies or start downloads. Preparation
+does not start acquisition; the existing durable manager-request workflow handles
+the explicit submission. A changed source or proposal requires another review.
 
 Radarr plugin 1.2.0 or later supports exact movie lookup and initial creation. Test
 the Connection again after upgrading. In **Connected libraries**, choose **Request

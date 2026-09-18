@@ -140,6 +140,7 @@ import type {
   GetOpdsTagBooksParams,
   GetOpdsTagsParams,
   GetOrganizePlanParams,
+  GetPluginIconParams,
   GetSettingValuesParams,
   GetUpdateCheckParams,
   GetVideoPlaybackHlsAssetParams,
@@ -207,6 +208,10 @@ import type {
   ManagedControlActionResponse,
   ManagedControlPreview,
   ManagedControlRevisionRequest,
+  ManagedDiscoveryQuery,
+  ManagedDiscoveryReviewRequest,
+  ManagedDiscoveryReviewResponse,
+  ManagedDiscoverySearchResponse,
   ManagedItemInput,
   ManagedItemSnapshot,
   ManagedLibraryPage,
@@ -240,6 +245,7 @@ import type {
   PluginAuthUpdateRequest,
   PluginProvider,
   PrepareFileArchiveParams,
+  PrepareManagedDiscoveryRequest,
   PreparedWantedMovieResponse,
   PreparedWantedSeriesResponse,
   PreviewCollectionRulesParams,
@@ -1541,6 +1547,58 @@ export const getListPluginsUrl = () => {
 export const listPlugins = async ( options?: RequestInit): Promise<listPluginsResponse> => {
 
   return orvalFetch<listPluginsResponse>(getListPluginsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type getPluginIconResponse200 = {
+  data: void
+  status: 200
+}
+
+export type getPluginIconResponse404 = {
+  data: void
+  status: 404
+}
+
+export type getPluginIconResponseSuccess = (getPluginIconResponse200) & {
+  headers: Headers;
+};
+export type getPluginIconResponseError = (getPluginIconResponse404) & {
+  headers: Headers;
+};
+
+export type getPluginIconResponse = (getPluginIconResponseSuccess | getPluginIconResponseError)
+
+export const getGetPluginIconUrl = (provider: string,
+    params?: GetPluginIconParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/plugins/${provider}/icon?${stringifiedParams}` : `/api/plugins/${provider}/icon`
+}
+
+/**
+ * @summary Returns a validated icon packaged with a plugin.
+ */
+export const getPluginIcon = async (provider: string,
+    params?: GetPluginIconParams, options?: RequestInit): Promise<getPluginIconResponse> => {
+
+  return orvalFetch<getPluginIconResponse>(getGetPluginIconUrl(provider,params),
   {
     ...options,
     method: 'GET'
@@ -9640,6 +9698,137 @@ export const cancelManagedRequest = async (id: string,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       cancelManagedRequestInput,)
+  }
+);}
+
+
+
+export type searchManagedDiscoveryResponse200 = {
+  data: ManagedDiscoverySearchResponse
+  status: 200
+}
+
+export type searchManagedDiscoveryResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type searchManagedDiscoveryResponseSuccess = (searchManagedDiscoveryResponse200) & {
+  headers: Headers;
+};
+export type searchManagedDiscoveryResponseError = (searchManagedDiscoveryResponse400) & {
+  headers: Headers;
+};
+
+export type searchManagedDiscoveryResponse = (searchManagedDiscoveryResponseSuccess | searchManagedDiscoveryResponseError)
+
+export const getSearchManagedDiscoveryUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/manager/discovery/search`
+}
+
+export const searchManagedDiscovery = async (id: string,
+    managedDiscoveryQuery: ManagedDiscoveryQuery, options?: RequestInit): Promise<searchManagedDiscoveryResponse> => {
+
+  return orvalFetch<searchManagedDiscoveryResponse>(getSearchManagedDiscoveryUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      managedDiscoveryQuery,)
+  }
+);}
+
+
+
+export type reviewManagedDiscoveryResponse200 = {
+  data: ManagedDiscoveryReviewResponse
+  status: 200
+}
+
+export type reviewManagedDiscoveryResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type reviewManagedDiscoveryResponseSuccess = (reviewManagedDiscoveryResponse200) & {
+  headers: Headers;
+};
+export type reviewManagedDiscoveryResponseError = (reviewManagedDiscoveryResponse400) & {
+  headers: Headers;
+};
+
+export type reviewManagedDiscoveryResponse = (reviewManagedDiscoveryResponseSuccess | reviewManagedDiscoveryResponseError)
+
+export const getReviewManagedDiscoveryUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/manager/discovery/review`
+}
+
+export const reviewManagedDiscovery = async (id: string,
+    managedDiscoveryReviewRequest: ManagedDiscoveryReviewRequest, options?: RequestInit): Promise<reviewManagedDiscoveryResponse> => {
+
+  return orvalFetch<reviewManagedDiscoveryResponse>(getReviewManagedDiscoveryUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      managedDiscoveryReviewRequest,)
+  }
+);}
+
+
+
+export type prepareManagedDiscoveryResponse200 = {
+  data: PreparedWantedMovieResponse
+  status: 200
+}
+
+export type prepareManagedDiscoveryResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type prepareManagedDiscoveryResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type prepareManagedDiscoveryResponseSuccess = (prepareManagedDiscoveryResponse200) & {
+  headers: Headers;
+};
+export type prepareManagedDiscoveryResponseError = (prepareManagedDiscoveryResponse400 | prepareManagedDiscoveryResponse409) & {
+  headers: Headers;
+};
+
+export type prepareManagedDiscoveryResponse = (prepareManagedDiscoveryResponseSuccess | prepareManagedDiscoveryResponseError)
+
+export const getPrepareManagedDiscoveryUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/manager/discovery/prepare`
+}
+
+export const prepareManagedDiscovery = async (id: string,
+    prepareManagedDiscoveryRequest: PrepareManagedDiscoveryRequest, options?: RequestInit): Promise<prepareManagedDiscoveryResponse> => {
+
+  return orvalFetch<prepareManagedDiscoveryResponse>(getPrepareManagedDiscoveryUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      prepareManagedDiscoveryRequest,)
   }
 );}
 

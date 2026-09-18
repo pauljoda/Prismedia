@@ -15,18 +15,30 @@ export function canBrowseRequestSource(
 ): boolean {
   if (!connection.enabled) return false;
 
-  return hasCatalogBrowse(connection, entityKind) || hasConnectedLibraryBrowse(connection, entityKind);
+  return canDiscoverManagerTitles(connection, entityKind) || hasCatalogBrowse(connection, entityKind) || hasConnectedLibraryBrowse(connection, entityKind);
 }
 
-/** Returns the connected-library or catalog mode available for a source. */
+/** Returns the primary discovery surface available for a source. */
 export function requestSourceMode(
   connection: ConnectionResponse,
   entityKind?: EntityKind,
-): typeof PLUGIN_CAPABILITY.connectedLibrary | typeof PLUGIN_CAPABILITY.catalogDiscovery | null {
+): typeof PLUGIN_CAPABILITY.externalManager | typeof PLUGIN_CAPABILITY.connectedLibrary | typeof PLUGIN_CAPABILITY.catalogDiscovery | null {
   if (!connection.enabled) return null;
+  if (canDiscoverManagerTitles(connection, entityKind)) return PLUGIN_CAPABILITY.externalManager;
   if (hasConnectedLibraryBrowse(connection, entityKind)) return PLUGIN_CAPABILITY.connectedLibrary;
   if (hasCatalogBrowse(connection, entityKind)) return PLUGIN_CAPABILITY.catalogDiscovery;
   return null;
+}
+
+/** New-title discovery must be explicitly admitted by this connection and its plugin. */
+export function canDiscoverManagerTitles(connection: ConnectionResponse, entityKind?: EntityKind): boolean {
+  if (!connection.enabled || !connection.enabledCapabilities.includes(PLUGIN_CAPABILITY.externalManager)) return false;
+  return connection.effectiveCapabilities.some(capability =>
+    capability.kind === PLUGIN_CAPABILITY.externalManager
+      && capability.operations.includes(INTEGRATION_OPERATION.discoverManaged)
+      && capability.operations.includes(INTEGRATION_OPERATION.lookupManaged)
+      && capability.operations.includes(INTEGRATION_OPERATION.ensureManaged)
+      && (!entityKind || capability.entityKinds.includes(entityKind)));
 }
 
 function hasCatalogBrowse(connection: ConnectionResponse, entityKind?: EntityKind): boolean {
