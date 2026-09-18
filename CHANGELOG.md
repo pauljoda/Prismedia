@@ -211,6 +211,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Request reviews now recognize existing requests and linked library items before submission, with a direct path to their library page and current progress.
+
 - Enabled external libraries scan automatically after linking and at regular intervals. Missing untracked video files become unavailable without losing library history, and returning files retain their original identities.
 
 - Alert actions stay vertically inside compact error banners, keeping connected-library retry controls within the rounded border.

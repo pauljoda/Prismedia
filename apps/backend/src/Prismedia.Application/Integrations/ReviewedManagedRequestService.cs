@@ -14,6 +14,7 @@ public sealed class ReviewedManagedRequestService(
     IIntegrationManagerCreationGateway gateway,
     ManagedLibraryService library,
     ExternalLibraryService externalLibraries,
+    IReviewedFulfillmentOwnershipReader fulfillmentOwnership,
     IManagedRequestStore requests,
     ManagedRequestService managedRequests,
     IReviewedManagedRequestCommitScope commitScope) {
@@ -51,6 +52,7 @@ public sealed class ReviewedManagedRequestService(
             await externalLibraries.ListSuitableAsync(connectionId, plan.Work.EntityKind, token),
             input.LibraryRootId,
             lookup.Existing);
+        var existingFulfillments = await fulfillmentOwnership.ListAsync(plan.Work, token);
         return new(
             authorized.Connection.State.Revision,
             input.ManagerDiscoveryRevision,
@@ -59,7 +61,8 @@ public sealed class ReviewedManagedRequestService(
             plan.Work,
             mount,
             options,
-            lookup.Existing);
+            lookup.Existing,
+            existingFulfillments);
     }
 
     /// <summary>Commits reviewed metadata and durable fulfillment ownership as one local transaction.</summary>
@@ -82,6 +85,9 @@ public sealed class ReviewedManagedRequestService(
             token);
         if (review.ConnectionRevision != input.ExpectedConnectionRevision)
             throw new ConnectionConflictException("The selected manager connection changed. Review its options again.");
+        if (ExistingSourceResponse(review) is { } owned) return owned;
+        if (review.ExistingFulfillments.Count != 0)
+            throw new FulfillmentOwnershipConflictException();
         if (!review.Options.Profiles.Any(profile => profile.Id == input.ProfileId))
             throw new ArgumentException("Choose an existing external profile.");
         if (review.Existing is { } existing && existing.Item.ProfileId != input.ProfileId)
@@ -159,6 +165,22 @@ public sealed class ReviewedManagedRequestService(
             throw new RequestCommitValidationException("Submit a complete reviewed request.");
         if (input.Request.SelectedProposalIds is null)
             throw new RequestCommitValidationException("Submit the reviewed proposal selection.");
+    }
+
+    private static ReviewedManagedRequestCommitResponse? ExistingSourceResponse(ReviewedManagedRequest review) {
+        var locallyOwned = review.ExistingFulfillments
+            .Where(ownership => ownership.HasLocalSource)
+            .ToArray();
+        if (review.Work.EntityKind == EntityKind.Movie && locallyOwned.Length != 0)
+            return new(locallyOwned[0].EntityId, TargetEntityIds: null, ManagedRequest: null);
+        if (review.Work.EntityKind != EntityKind.VideoSeries || review.Work.Targets is null) return null;
+        var targetIds = locallyOwned
+            .SelectMany(ownership => ownership.TargetEntityIds ?? [])
+            .Distinct()
+            .ToArray();
+        return targetIds.Length == review.Work.Targets.Count
+            ? new(locallyOwned[0].EntityId, targetIds, ManagedRequest: null)
+            : null;
     }
 
     private static ExternalLibraryMount SelectMount(

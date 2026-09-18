@@ -2,7 +2,7 @@
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
-  import { ChevronLeft, Loader2, RefreshCw, Send } from "@lucide/svelte";
+  import { ChevronLeft, Clock3, ExternalLink, Loader2, RefreshCw, Send } from "@lucide/svelte";
   import { Button, Select } from "@prismedia/ui-svelte";
   import { ENTITY_KIND, EXTERNAL_ID_PROVIDER, PROBLEM_CODE, REQUEST_COMMIT_OUTCOME, REQUEST_REVIEW_SELECTION } from "$lib/api/generated/codes";
   import type {
@@ -15,6 +15,7 @@
   import { saveReviewedManagedRequest, type ManagedRequestChoice } from "$lib/api/reviewed-managed-requests";
   import { ManagedRequestRejectedError } from "$lib/api/managed-requests";
   import ManagerRequestOptions from "$lib/components/integrations/ManagerRequestOptions.svelte";
+  import type { ManagedRequestOwnership } from "$lib/components/integrations/ManagerRequestOptions.svelte";
   import { reviewManagerTitle } from "$lib/api/managed-discovery";
   import { fetchConnections } from "$lib/api/connections";
   import RequestTargetOptions from "$lib/components/acquisitions/RequestTargetOptions.svelte";
@@ -89,12 +90,14 @@
   let managerSelected = $state(false);
   let managerRefreshToken = $state(0);
   let managerChoice = $state<ManagedRequestChoice | null>(null);
+  let managerOwnership = $state<ManagedRequestOwnership | null>(null);
   let pendingManagerCommit = $state<{ connectionId: string; input: CommitReviewedManagedRequestInput } | null>(null);
   let managerConnection = $state<ConnectionResponse | null>(null);
   let managerRevision = $state<number | string | null>(null);
   let error = $state<string | null>(null);
   let enrichmentError = $state<string | null>(null);
   let reviewChanged = $state(false);
+  let ownershipConflictRefresh = $state(false);
   let proposalPath = $state<string[]>([]);
   let selectedFieldsByProposal = $state<Record<string, Record<string, boolean>>>({});
   let selectedImagesByProposal = $state<Record<string, Record<string, string | null>>>({});
@@ -212,6 +215,7 @@
     error = null;
     enrichmentError = null;
     reviewChanged = false;
+    ownershipConflictRefresh = false;
     proposalPath = [];
     selectedFieldsByProposal = {};
     selectedImagesByProposal = {};
@@ -223,6 +227,7 @@
     profileId = null;
     managerSelected = Boolean(input.connectionId);
     managerChoice = null;
+    managerOwnership = null;
     pendingManagerCommit = null;
     managerConnection = null;
     managerRevision = null;
@@ -457,7 +462,7 @@
 
   async function requestSelection() {
     if (submitting || enrichmentRunning || !review || !proposal || !selection || !kindInfo?.committable) return;
-    if (managerSelected && !managerChoice && !pendingManagerCommit) return;
+    if (managerSelected && !managerChoice && !pendingManagerCommit && !managerOwnership) return;
     const selectedIds = selection.mode === REQUEST_REVIEW_SELECTION.directChildren
       ? selectedProposalIds.filter((id) => selection.selectableIds.includes(id))
       : selection.initialRootSelection;
@@ -488,9 +493,15 @@
             },
           };
         }
-        if (!pendingManagerCommit) return;
-        const result = await saveReviewedManagedRequest(pendingManagerCommit.connectionId, pendingManagerCommit.input);
-        await goto(resolve((resolveEntityHref(review.entityKind, result.entityId) ?? "/request") as "/"));
+        if (pendingManagerCommit) {
+          const result = await saveReviewedManagedRequest(pendingManagerCommit.connectionId, pendingManagerCommit.input);
+          await goto(resolve((resolveEntityHref(review.entityKind, result.entityId) ?? "/request") as "/"));
+          return;
+        }
+        if (managerOwnership) {
+          await goto(resolve((resolveEntityHref(review.entityKind, managerOwnership.entityId) ?? "/request") as "/"));
+          return;
+        }
         return;
       }
       const response = await commitReviewedRequest(reviewedCommitPayload(), nsfw.mode !== "show");
@@ -520,6 +531,9 @@
       if (err instanceof ManagedRequestRejectedError) {
         pendingManagerCommit = null;
         managerChoice = null;
+        if (err.problemCode === PROBLEM_CODE.fulfillmentOwnershipConflict) {
+          ownershipConflictRefresh = true;
+        }
         managerRefreshToken++;
       }
       if ((err instanceof ApiError || err instanceof ManagedRequestRejectedError) && err.problemCode === PROBLEM_CODE.requestProposalChanged) {
@@ -648,8 +662,10 @@
     <section class="space-y-3 rounded-sm border border-border-accent bg-surface-1 p-4">
       <div>
         <h3 class="flex items-center gap-1.5 font-mono text-[0.68rem] font-semibold uppercase tracking-[0.04em] text-text-secondary">
-          <Send class="h-3.5 w-3.5 text-text-accent" />
-          {managedSeriesSelected
+          {#if managerOwnership}<Clock3 class="h-3.5 w-3.5 text-text-muted" />{:else}<Send class="h-3.5 w-3.5 text-text-accent" />{/if}
+          {managerOwnership
+            ? "Request status"
+            : managedSeriesSelected
             ? "Request selected episodes"
             : selectsChildren
               ? `Request ${childNoun}s`
@@ -687,17 +703,25 @@
         <ManagerRequestOptions entityKind={review.entityKind} fixedConnection={managerConnection}
           request={reviewChanged ? null : managerReviewPayload} managerDiscoveryRevision={managerRevision} refreshToken={managerRefreshToken}
           disabled={submitting || !!pendingManagerCommit || enrichmentRunning || !hasRequestIntent}
-          onChange={(choice, active) => { managerChoice = choice; managerSelected = active; }} />
+          onChange={(choice, active, ownership) => {
+            managerChoice = choice;
+            managerSelected = active;
+            managerOwnership = ownership;
+            if (ownership && ownershipConflictRefresh) {
+              error = null;
+              ownershipConflictRefresh = false;
+            }
+          }} />
       {/if}
 
       {#if kindInfo && !managerSelected}
         <RequestTargetOptions {kindInfo} bind:targetLibraryRootId bind:profileId stacked />
       {/if}
       <Button type="button" variant="primary" class="w-full gap-2"
-        disabled={submitting || reviewChanged || enrichmentRunning || !hasRequestIntent || (managerSelected && !managerChoice && !pendingManagerCommit)}
+        disabled={submitting || reviewChanged || enrichmentRunning || !hasRequestIntent || (managerSelected && !managerChoice && !pendingManagerCommit && !managerOwnership)}
         onclick={() => void requestSelection()}>
-        {#if submitting}<Loader2 class="h-4 w-4 animate-spin" />{:else}<Send class="h-4 w-4" />{/if}
-        {submitting ? "Requesting…" : pendingManagerCommit ? "Retry request" : selectsChildren && selectedProposalIds.length > 0
+        {#if submitting}<Loader2 class="h-4 w-4 animate-spin" />{:else if managerOwnership && !pendingManagerCommit}<ExternalLink class="h-4 w-4" />{:else}<Send class="h-4 w-4" />{/if}
+        {submitting ? (managerOwnership && !pendingManagerCommit ? "Opening…" : "Requesting…") : pendingManagerCommit ? "Retry request" : managerOwnership ? "Open in library" : selectsChildren && selectedProposalIds.length > 0
           ? `Request ${selectedProposalIds.length} ${childNoun}${selectedProposalIds.length === 1 ? "" : "s"}` : "Request"}
       </Button>
       {#if pendingManagerCommit && !submitting}

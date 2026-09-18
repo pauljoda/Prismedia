@@ -3,7 +3,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   CONNECTION_STATUS,
   ENTITY_KIND,
+  FULFILLMENT_OWNER_KIND,
   INTEGRATION_OPERATION,
+  MANAGED_REQUEST_PHASE,
   PLUGIN_CAPABILITY,
   REQUEST_MEDIA_KIND,
 } from "$lib/api/generated/codes";
@@ -94,6 +96,7 @@ function reviewed(
     },
     options: { profiles, roots: [] },
     existing: null,
+    existingFulfillments: [],
   };
 }
 
@@ -131,7 +134,7 @@ describe("Manager request options", () => {
       onChange,
     });
 
-    expect(onChange).toHaveBeenCalledWith(null, true);
+    expect(onChange).toHaveBeenCalledWith(null, true, null);
     await screen.findByRole("button", { name: "Manager quality profile" });
 
     expect(mocks.fetchReviewedManagedRequest).toHaveBeenCalledWith(connection.id, {
@@ -144,7 +147,7 @@ describe("Manager request options", () => {
       profileId: "profile-one",
       monitored: false,
       search: true,
-    }), true);
+    }), true, null);
   });
 
   it("ignores a delayed response after the reviewed metadata changes", async () => {
@@ -176,15 +179,100 @@ describe("Manager request options", () => {
     second.resolve(reviewed(requestTwo));
     await waitFor(() => expect(onChange).toHaveBeenLastCalledWith(
       expect.objectContaining({ review: expect.objectContaining({ title: "Movie 2" }) }),
-      true,
+      true, null,
     ));
 
-    first.resolve(reviewed(requestOne));
+    first.resolve({
+      ...reviewed(requestOne),
+      existingFulfillments: [{
+        entityId: "stale-movie",
+        targetEntityIds: null,
+        ownerKind: FULFILLMENT_OWNER_KIND.externalManager,
+        connectionId: connection.id,
+        connectionName: connection.name,
+        requestId: "stale-request",
+        requestPhase: MANAGED_REQUEST_PHASE.awaitingFiles,
+        hasLocalSource: false,
+      }],
+    });
     await new Promise((resolve) => window.setTimeout(resolve, 0));
     expect(onChange).toHaveBeenLastCalledWith(
       expect.objectContaining({ review: expect.objectContaining({ title: "Movie 2" }) }),
-      true,
+      true, null,
     );
+    expect(screen.queryByText(/already requested/i)).not.toBeInTheDocument();
+  });
+
+  it("publishes an existing owner and hides choices that cannot apply", async () => {
+    const onChange = vi.fn();
+    mocks.fetchReviewedManagedRequest.mockResolvedValue({
+      ...reviewed(request("1")),
+      existingFulfillments: [{
+        entityId: "existing-movie",
+        targetEntityIds: null,
+        ownerKind: FULFILLMENT_OWNER_KIND.externalManager,
+        connectionId: "other-manager",
+        connectionName: "House Radarr",
+        requestId: "active-request",
+        requestPhase: MANAGED_REQUEST_PHASE.awaitingFiles,
+        hasLocalSource: false,
+      }],
+    });
+
+    render(ManagerRequestOptions, {
+      entityKind: ENTITY_KIND.movie,
+      fixedConnection: connection,
+      request: request("1"),
+      onChange,
+    });
+
+    expect(await screen.findByText("Already requested through House Radarr")).toBeInTheDocument();
+    expect(screen.getByText("Waiting for files")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Manager quality profile" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Manager library" })).not.toBeInTheDocument();
+    expect(onChange).toHaveBeenLastCalledWith(null, true, expect.objectContaining({
+      entityId: "existing-movie",
+      partialSelection: false,
+    }));
+  });
+
+  it("explains a partial series overlap so the selection can be changed", async () => {
+    const onChange = vi.fn();
+    mocks.fetchReviewedManagedRequest.mockResolvedValue({
+      ...reviewed(request("series")),
+      work: {
+        entityKind: ENTITY_KIND.videoSeries,
+        externalIds: { tvdb: "100" },
+        targets: [
+          { entityKind: ENTITY_KIND.videoEpisode, externalIds: { tvdb: "101" }, seasonNumber: 1, episodeNumber: 1 },
+          { entityKind: ENTITY_KIND.videoEpisode, externalIds: { tvdb: "102" }, seasonNumber: 1, episodeNumber: 2 },
+        ],
+      },
+      existingFulfillments: [{
+        entityId: "existing-series",
+        targetEntityIds: ["existing-episode-one"],
+        ownerKind: null,
+        connectionId: null,
+        connectionName: "Prismedia",
+        requestId: "episode-request",
+        requestPhase: MANAGED_REQUEST_PHASE.awaitingFiles,
+        hasLocalSource: false,
+      }],
+    });
+
+    render(ManagerRequestOptions, {
+      entityKind: ENTITY_KIND.videoSeries,
+      fixedConnection: connection,
+      request: request("series"),
+      onChange,
+    });
+
+    expect(await screen.findByText("Some selected episodes are already requested or in your library")).toBeInTheDocument();
+    expect(screen.getByText(/Change the episode selection to request the rest/)).toBeInTheDocument();
+    expect(onChange).toHaveBeenLastCalledWith(null, true, expect.objectContaining({
+      entityId: "existing-series",
+      partialSelection: true,
+    }));
   });
 
   it("re-runs read-only review when a definite rejection requests a refresh", async () => {
@@ -210,7 +298,7 @@ describe("Manager request options", () => {
     await waitFor(() => expect(mocks.fetchReviewedManagedRequest.mock.calls.length).toBeGreaterThan(previousCalls));
     await waitFor(() => expect(onChange).toHaveBeenLastCalledWith(
       expect.objectContaining({ connectionId: connection.id }),
-      true,
+      true, null,
     ));
   });
 
@@ -226,7 +314,7 @@ describe("Manager request options", () => {
     profile.focus();
     await fireEvent.keyDown(profile, { key: "ArrowDown" });
     await fireEvent.pointerUp(await screen.findByRole("option", { name: "Archive" }));
-    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ profileId: "profile-two" }), true);
+    expect(onChange).toHaveBeenLastCalledWith(expect.objectContaining({ profileId: "profile-two" }), true, null);
 
     const library = screen.getByRole("button", { name: "Manager library" });
     library.focus();
@@ -241,7 +329,7 @@ describe("Manager request options", () => {
         review: expect.objectContaining({ mount: expect.objectContaining({ libraryRootId: "library-two" }) }),
         profileId: "profile-two",
       }),
-      true,
+      true, null,
     ));
   });
 });

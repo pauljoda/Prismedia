@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/svelte";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { CONNECTION_STATUS, ENTITY_KIND, INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
 import type { ConnectionResponse, ExternalLibraryMount, LibraryRoot } from "$lib/api/generated/model";
 import ExternalLibraryMappings from "./ExternalLibraryMappings.svelte";
@@ -34,6 +34,12 @@ const mount: ExternalLibraryMount = {
 };
 
 describe("External library mappings", () => {
+  afterEach(async () => {
+    cleanup();
+    // DialogBase releases its shared body scroll lock asynchronously after unmount.
+    await waitFor(() => expect(document.body.style.overflow).not.toBe("hidden"));
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mocks.fetchLibraryMounts.mockResolvedValue([]);
@@ -63,6 +69,7 @@ describe("External library mappings", () => {
       existingLibraryRootId: libraryRoot.id,
       expectedLocalPath: libraryRoot.path,
     }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
     expect(mocks.saveLibraryMount).not.toHaveBeenCalled();
   });
 
@@ -86,5 +93,9 @@ describe("External library mappings", () => {
     expect(screen.queryByRole("option", { name: "Movies · /media/movies" })).not.toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "Books · /media/books" })).not.toBeInTheDocument();
     expect(screen.queryByRole("option", { name: "External · /media/external" })).not.toBeInTheDocument();
+    await fireEvent.keyDown(screen.getByRole("listbox"), { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("listbox")).not.toBeInTheDocument());
+    await fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("dialog")).not.toBeInTheDocument());
   });
 });

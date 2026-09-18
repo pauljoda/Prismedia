@@ -44,6 +44,7 @@ const review: ReviewedManagedRequest = {
   },
   options: { profiles: [{ id: "profile", label: "Balanced" }], roots: [] },
   existing: null,
+  existingFulfillments: [],
 };
 
 describe("reviewed managed requests API", () => {

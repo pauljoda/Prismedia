@@ -8,6 +8,7 @@ import type { ExternalLibraryMount } from './externalLibraryMount';
 import type { ManagedItemSnapshot } from './managedItemSnapshot';
 import type { ManagedLookupInput } from './managedLookupInput';
 import type { ManagerOptions } from './managerOptions';
+import type { ReviewedFulfillmentOwnership } from './reviewedFulfillmentOwnership';
 import type { ReviewedRequestCommitRequest } from './reviewedRequestCommitRequest';
 
 export interface ReviewedManagedRequest {
@@ -24,4 +25,5 @@ export interface ReviewedManagedRequest {
   mount: ExternalLibraryMount;
   options: ManagerOptions;
   existing: null | ManagedItemSnapshot;
+  existingFulfillments: ReviewedFulfillmentOwnership[];
 }

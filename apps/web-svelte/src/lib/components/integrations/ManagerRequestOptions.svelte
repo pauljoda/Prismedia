@@ -1,11 +1,13 @@
 <script lang="ts">
   import { onMount, untrack } from "svelte";
-  import { Loader2 } from "@lucide/svelte";
+  import { CircleCheck, Clock3, Loader2 } from "@lucide/svelte";
   import { Alert, Button, Checkbox, Select } from "@prismedia/ui-svelte";
   import {
     CONNECTION_STATUS,
     ENTITY_KIND,
+    FULFILLMENT_OWNER_KIND,
     INTEGRATION_OPERATION,
+    MANAGED_REQUEST_PHASE,
     PLUGIN_CAPABILITY,
   } from "$lib/api/generated/codes";
   import { getGetPluginIconUrl } from "$lib/api/generated/prismedia";
@@ -14,6 +16,7 @@
     EntityKind,
     ExternalLibraryMount,
     LibraryRootSummary,
+    ReviewedFulfillmentOwnership,
     ReviewedManagedRequest,
     ReviewedRequestCommitRequest,
   } from "$lib/api/generated/model";
@@ -26,6 +29,12 @@
   import { fetchAccessibleLibraryRoots } from "$lib/api/settings";
   import PluginIcon from "$lib/components/plugins/PluginIcon.svelte";
 
+  export interface ManagedRequestOwnership {
+    entityId: string;
+    partialSelection: boolean;
+    fulfillments: ReviewedFulfillmentOwnership[];
+  }
+
   interface Props {
     entityKind: EntityKind;
     /** Manager-origin reviews can only be fulfilled through the originating connection. */
@@ -35,7 +44,11 @@
     /** Forces a fresh read-only preflight after the server definitely rejects a commit. */
     refreshToken?: number;
     disabled?: boolean;
-    onChange: (value: ManagedRequestChoice | null, active: boolean) => void;
+    onChange: (
+      value: ManagedRequestChoice | null,
+      active: boolean,
+      ownership: ManagedRequestOwnership | null,
+    ) => void;
   }
 
   let {
@@ -84,13 +97,25 @@
     value: profile.id,
     label: profile.label,
   })) ?? []);
+  const ownership = $derived.by((): ManagedRequestOwnership | null => {
+    const fulfillments = review?.existingFulfillments ?? [];
+    if (fulfillments.length === 0) return null;
+    if (!isSeries) return { entityId: fulfillments[0].entityId, partialSelection: false, fulfillments };
+    const selectedCount = review?.work.targets?.length ?? 0;
+    const overlappingTargets = new Set(fulfillments.flatMap((item) => item.targetEntityIds ?? []));
+    return {
+      entityId: fulfillments[0].entityId,
+      partialSelection: selectedCount > 0 && overlappingTargets.size < selectedCount,
+      fulfillments,
+    };
+  });
 
   onMount(() => {
     mounted = true;
     if (fixedConnection) {
       connections = [fixedConnection];
       connectionId = fixedConnection.id;
-      onChange(null, true);
+      onChange(null, true, null);
     } else {
       void loadConnections();
     }
@@ -113,13 +138,13 @@
       sequence++;
       review = null;
       loadingReview = false;
-      onChange(null, Boolean(selectedConnectionId));
+      onChange(null, Boolean(selectedConnectionId), null);
       return;
     }
     const current = ++sequence;
     loadingReview = true;
     error = null;
-    onChange(null, true);
+    onChange(null, true, null);
     const timer = window.setTimeout(() => {
       void loadReview(current, selectedConnectionId, payload, revision);
     }, 240);
@@ -187,7 +212,7 @@
       if (!mounted || current !== sequence) return;
       review = null;
       error = message(cause, "Could not review the manager request");
-      onChange(null, true);
+      onChange(null, true, null);
     } finally {
       if (mounted && current === sequence) loadingReview = false;
     }
@@ -202,7 +227,7 @@
     libraryRootId = "";
     profileId = "";
     error = null;
-    onChange(null, Boolean(value));
+    onChange(null, Boolean(value), null);
   }
 
   function selectLibrary(value: string) {
@@ -211,7 +236,7 @@
     libraryRootId = value;
     loadingReview = true;
     error = null;
-    onChange(null, true);
+    onChange(null, true, null);
   }
 
   function selectProfile(value: string) {
@@ -220,11 +245,15 @@
   }
 
   function publishChoice() {
-    if (!connectionId || !review || !profileId || loadingReview || error) {
-      onChange(null, Boolean(connectionId));
+    if (ownership) {
+      onChange(null, Boolean(connectionId), ownership);
       return;
     }
-    onChange({ connectionId, review, profileId, monitored, search }, true);
+    if (!connectionId || !review || !profileId || loadingReview || error) {
+      onChange(null, Boolean(connectionId), null);
+      return;
+    }
+    onChange({ connectionId, review, profileId, monitored, search }, true, null);
   }
 
   function supportsReviewedRequest(candidate: ConnectionResponse, kind: EntityKind): boolean {
@@ -251,6 +280,34 @@
 
   function message(cause: unknown, fallback: string): string {
     return cause instanceof Error ? cause.message : fallback;
+  }
+
+  function ownerName(item: ReviewedFulfillmentOwnership): string {
+    return item.connectionName?.trim() || "Prismedia";
+  }
+
+  function fulfillmentLabel(item: ReviewedFulfillmentOwnership): string {
+    if (item.hasLocalSource) return `Already in your library through ${ownerName(item)}`;
+    if (item.ownerKind === FULFILLMENT_OWNER_KIND.connectedLibrary) {
+      return `Already linked through ${ownerName(item)}`;
+    }
+    if (item.ownerKind === FULFILLMENT_OWNER_KIND.externalManager) {
+      return `Already requested through ${ownerName(item)}`;
+    }
+    return "Already requested in Prismedia";
+  }
+
+  function phaseLabel(item: ReviewedFulfillmentOwnership): string | null {
+    if (!item.requestPhase) return null;
+    return {
+      [MANAGED_REQUEST_PHASE.pendingCreation]: "Queued",
+      [MANAGED_REQUEST_PHASE.creationUncertain]: "Checking acceptance",
+      [MANAGED_REQUEST_PHASE.awaitingFiles]: "Waiting for files",
+      [MANAGED_REQUEST_PHASE.completed]: "Request complete",
+      [MANAGED_REQUEST_PHASE.rejected]: "Needs attention",
+      [MANAGED_REQUEST_PHASE.cancelled]: "Cancelled",
+      [MANAGED_REQUEST_PHASE.ownershipReleased]: "Ownership released",
+    }[item.requestPhase];
   }
 </script>
 
@@ -308,6 +365,37 @@
     <div class="flex items-center gap-2 py-1 text-sm text-text-muted" role="status">
       <Loader2 class="size-4 animate-spin" />
       Reviewing manager options…
+    </div>
+  {:else if connection && review && ownership}
+    <div class="border-l-2 border-border-accent pl-3" aria-live="polite">
+      <p class="flex items-center gap-2 text-sm font-medium text-text-primary">
+        {#if ownership.fulfillments.every((item) => item.hasLocalSource || item.requestPhase === MANAGED_REQUEST_PHASE.completed)}
+          <CircleCheck class="size-4 shrink-0 text-text-accent" />
+        {:else}
+          <Clock3 class="size-4 shrink-0 text-text-muted" />
+        {/if}
+        {ownership.partialSelection
+          ? "Some selected episodes are already requested or in your library"
+          : ownership.fulfillments.length > 1
+            ? "Selected episodes are already requested or in your library"
+            : fulfillmentLabel(ownership.fulfillments[0])}
+      </p>
+      {#if ownership.partialSelection || ownership.fulfillments.length > 1}
+        <ul class="mt-1 space-y-0.5 text-xs leading-relaxed text-text-muted">
+          {#each ownership.fulfillments as fulfillment}
+            <li>
+              {fulfillmentLabel(fulfillment)}{#if phaseLabel(fulfillment)} · {phaseLabel(fulfillment)}{/if}
+            </li>
+          {/each}
+        </ul>
+      {/if}
+      {#if ownership.partialSelection}
+        <p class="mt-1 text-xs leading-relaxed text-text-muted">
+          Change the episode selection to request the rest, or open the existing series.
+        </p>
+      {:else if ownership.fulfillments.length === 1 && phaseLabel(ownership.fulfillments[0])}
+        <p class="mt-1 text-xs text-text-muted">{phaseLabel(ownership.fulfillments[0])}</p>
+      {/if}
     </div>
   {:else if connection && review}
     <div class="grid gap-3">

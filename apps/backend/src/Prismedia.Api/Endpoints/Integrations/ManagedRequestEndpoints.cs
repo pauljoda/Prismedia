@@ -31,6 +31,9 @@ public static class ManagedRequestEndpoints {
             catch (RequestCommitValidationException error) {
                 return Results.BadRequest(new ApiProblem(ApiProblemCodes.RequestInvalid, error.Message));
             }
+            catch (FulfillmentOwnershipConflictException error) {
+                return Results.Conflict(new ApiProblem(ApiProblemCodes.FulfillmentOwnershipConflict, error.Message));
+            }
         }).WithName("CommitReviewedManagedRequest").Produces<ReviewedManagedRequestCommitResponse>(202)
             .Produces<ApiProblem>(400).Produces<ApiProblem>(409);
         group.MapGet("/", async (Guid id, ManagedRequestService service, CancellationToken token) =>

@@ -4,6 +4,8 @@ import { page } from "$app/state";
 import {
   ENTITY_KIND,
   EXTERNAL_ID_PROVIDER,
+  FULFILLMENT_OWNER_KIND,
+  MANAGED_REQUEST_PHASE,
   MONITOR_PRESET,
   PROBLEM_CODE,
   REQUEST_COMMIT_OUTCOME,
@@ -90,6 +92,7 @@ describe("reviewed request route", () => {
       request: input.request, title: "Reviewed title", work: { entityKind: input.request.review.entityKind, externalIds: {} },
       mount: { id: "mount", connectionId: "manager", libraryRootId: "external-root", label: "Movie library", remoteRootId: "1", remotePath: "/movies", localPath: "/movies" },
       options: { profiles: [{ id: "profile", label: "Any" }], roots: [{ id: "1", path: "/movies" }] }, existing: null,
+      existingFulfillments: [],
     }));
     mocks.saveReviewedManagedRequest.mockResolvedValue({ entityId: "wanted-movie", targetEntityIds: null, managedRequest: null });
     page.params = {};
@@ -131,6 +134,35 @@ describe("reviewed request route", () => {
     expect(mocks.commitReviewedRequest).not.toHaveBeenCalled();
   });
 
+  it("opens the existing library entity from preflight without committing again", async () => {
+    mocks.isAdmin = true;
+    const review = movieReview();
+    const connection = { id: "manager", pluginId: "radarr", name: "Selected movie manager", enabled: true, status: CONNECTION_STATUS.ready,
+      effectiveCapabilities: [{ kind: PLUGIN_CAPABILITY.externalManager, entityKinds: [ENTITY_KIND.movie],
+        operations: [INTEGRATION_OPERATION.lookupManaged, INTEGRATION_OPERATION.ensureManaged, INTEGRATION_OPERATION.requestManaged, INTEGRATION_OPERATION.reconcileManaged, INTEGRATION_OPERATION.configureManaged] }, { kind: PLUGIN_CAPABILITY.connectedLibrary, entityKinds: [ENTITY_KIND.movie], operations: [INTEGRATION_OPERATION.getLibraryItem, INTEGRATION_OPERATION.listLibraries] }] };
+    mocks.fetchConnections.mockResolvedValue([connection]);
+    mocks.reviewManagerTitle.mockResolvedValue({ connectionRevision: 7, review });
+    mocks.fetchReviewedManagedRequest.mockImplementation(async (_id, input) => ({
+      connectionRevision: 7, managerDiscoveryRevision: input.managerDiscoveryRevision ?? null,
+      request: input.request, title: "Reviewed title", work: { entityKind: ENTITY_KIND.movie, externalIds: {} },
+      mount: { id: "mount", connectionId: "manager", libraryRootId: "external-root", label: "Movie library", remoteRootId: "1", remotePath: "/movies", localPath: "/movies" },
+      options: { profiles: [{ id: "profile", label: "Any" }], roots: [] }, existing: null,
+      existingFulfillments: [{
+        entityId: "existing-movie", targetEntityIds: null, ownerKind: FULFILLMENT_OWNER_KIND.externalManager, connectionId: "other-manager",
+        connectionName: "House Radarr", requestId: "existing-request", requestPhase: MANAGED_REQUEST_PHASE.awaitingFiles, hasLocalSource: false,
+      }],
+    }));
+    setRoute(REQUEST_MEDIA_KIND.movie, review.externalIdentity.value, `connection=manager&namespace=${EXTERNAL_ID_PROVIDER.tmdb}`);
+
+    render(Page);
+
+    const open = await screen.findByRole("button", { name: "Open in library" });
+    expect(screen.getByText("Already requested through House Radarr")).toBeInTheDocument();
+    await fireEvent.click(open);
+    await waitFor(() => expect(mocks.goto).toHaveBeenCalledWith("/movies/existing-movie"));
+    expect(mocks.saveReviewedManagedRequest).not.toHaveBeenCalled();
+  });
+
   it("retains the operation and reviewed metadata when retrying uncertain provider acceptance", async () => {
     mocks.isAdmin = true;
     const review = movieReview();
@@ -166,6 +198,48 @@ describe("reviewed request route", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Request" }));
     await screen.findByRole("button", { name: "Reload review" });
     expect(screen.getByRole("button", { name: "Request" })).toBeDisabled();
+    expect(mocks.saveReviewedManagedRequest).toHaveBeenCalledTimes(1);
+  });
+
+  it("refreshes an ownership race into the existing item without retrying the commit", async () => {
+    mocks.isAdmin = true;
+    const review = movieReview();
+    const connection = { id: "manager", pluginId: "radarr", name: "Movie manager", enabled: true, status: CONNECTION_STATUS.ready, effectiveCapabilities: [] };
+    mocks.fetchConnections.mockResolvedValue([connection]);
+    mocks.reviewManagerTitle.mockResolvedValue({ connectionRevision: 7, review });
+    const reviewedResult = (existingFulfillments: Array<Record<string, unknown>>) => ({
+      connectionRevision: 7, managerDiscoveryRevision: 7,
+      title: "Reviewed title", work: { entityKind: ENTITY_KIND.movie, externalIds: {} },
+      mount: { id: "mount", connectionId: "manager", libraryRootId: "external-root", label: "Movie library", remoteRootId: "1", remotePath: "/movies", localPath: "/movies" },
+      options: { profiles: [{ id: "profile", label: "Any" }], roots: [] }, existing: null, existingFulfillments,
+    });
+    let ownershipClaimed = false;
+    mocks.fetchReviewedManagedRequest.mockImplementation(async (_id, input) => ({
+      ...reviewedResult(ownershipClaimed
+        ? [{
+          entityId: "race-winner", targetEntityIds: null, ownerKind: FULFILLMENT_OWNER_KIND.externalManager,
+          connectionId: "other-manager", connectionName: "House Radarr", requestId: "winning-request",
+          requestPhase: MANAGED_REQUEST_PHASE.awaitingFiles, hasLocalSource: false,
+        }]
+        : []),
+      request: input.request,
+    }));
+    mocks.saveReviewedManagedRequest.mockImplementationOnce(async () => {
+      ownershipClaimed = true;
+      throw new ManagedRequestRejectedError("Ownership changed", PROBLEM_CODE.fulfillmentOwnershipConflict);
+    });
+    setRoute(REQUEST_MEDIA_KIND.movie, review.externalIdentity.value, `connection=manager&namespace=${EXTERNAL_ID_PROVIDER.tmdb}`);
+
+    render(Page);
+    await waitFor(() => expect(screen.getByRole("button", { name: "Request" })).toBeEnabled());
+    await fireEvent.click(screen.getByRole("button", { name: "Request" }));
+
+    await waitFor(() => expect(mocks.saveReviewedManagedRequest).toHaveBeenCalledTimes(1));
+    const open = await screen.findByRole("button", { name: "Open in library" }, { timeout: 3_000 });
+    expect(screen.queryByText("Ownership changed")).not.toBeInTheDocument();
+    expect(mocks.saveReviewedManagedRequest).toHaveBeenCalledTimes(1);
+    await fireEvent.click(open);
+    await waitFor(() => expect(mocks.goto).toHaveBeenCalledWith("/movies/race-winner"));
     expect(mocks.saveReviewedManagedRequest).toHaveBeenCalledTimes(1);
   });
 

@@ -38,7 +38,23 @@ public sealed record ReviewedManagedRequest(
     ManagedLookupInput Work,
     ExternalLibraryMount Mount,
     ManagerOptions Options,
-    ManagedItemSnapshot? Existing);
+    ManagedItemSnapshot? Existing,
+    IReadOnlyList<ReviewedFulfillmentOwnership> ExistingFulfillments);
+
+/// <summary>
+/// Existing Prismedia ownership of canonical reviewed work. A missing owner kind identifies native
+/// Prismedia ownership; finite series scopes list only the selected episodes that already have an owner.
+/// </summary>
+/// <param name="HasLocalSource">True only when every represented movie or episode retains a local source.</param>
+public sealed record ReviewedFulfillmentOwnership(
+    Guid EntityId,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<Guid>? TargetEntityIds,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] FulfillmentOwnerKind? OwnerKind,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? ConnectionId,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? ConnectionName,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] Guid? RequestId,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ManagedRequestPhase? RequestPhase,
+    bool HasLocalSource);
 
 /// <summary>Atomically saves reviewed metadata and accepts durable external-manager fulfillment intent.</summary>
 public sealed record CommitReviewedManagedRequestInput(
