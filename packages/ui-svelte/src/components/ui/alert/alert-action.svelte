@@ -13,7 +13,7 @@
 <div
 	bind:this={ref}
 	data-slot="alert-action"
-	class={cn("absolute top-2 right-2", className)}
+	class={cn("col-start-[-2] row-span-full row-start-1 flex items-center self-center", className)}
 	{...restProps}
 >
 	{@render children?.()}
