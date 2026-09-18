@@ -20,6 +20,17 @@ public sealed class ExternalLibraryService(IExternalLibraryMountStore mounts, Ma
         return await mounts.CreateAsync(connectionId, authorized.Connection.State.Revision, request, token);
     }
 
+    /// <summary>Verifies current root choices before attaching an existing local library as an immutable external boundary.</summary>
+    public async Task<ExternalLibraryMount> AttachAsync(Guid connectionId, AttachExistingExternalLibraryMountRequest request, CancellationToken token) {
+        if (string.IsNullOrWhiteSpace(request.RemoteRootId) || request.RemoteRootId.Length > 512)
+            throw new ArgumentException("Choose an external root.");
+        var authorized = await access.RequireAsync(connectionId, PluginCapability.ExternalManager, IntegrationOperation.ManagerOptions, request.EntityKind, token);
+        var choices = await library.OptionsAsync(connectionId, new(request.EntityKind), token);
+        if (!choices.Roots.Any(root => root.Id == request.RemoteRootId && root.Path == request.ExpectedRemotePath))
+            throw new ArgumentException("The external root changed. Refresh its choices before mapping it.");
+        return await mounts.AttachAsync(connectionId, authorized.Connection.State.Revision, request, token);
+    }
+
     /// <summary>Reads a fresh holding, checks its identity, then inspects only the files it currently reports.</summary>
     public async Task<MappedLibrarySnapshot> InspectAsync(Guid connectionId, ManagedItemInput request, CancellationToken token) {
         var remote = await library.GetAsync(connectionId, request, token);

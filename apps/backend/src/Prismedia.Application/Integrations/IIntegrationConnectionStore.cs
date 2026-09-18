@@ -19,8 +19,8 @@ public interface IIntegrationConnectionStore {
     Task DeleteAsync(Guid id, long expectedRevision, CancellationToken cancellationToken);
 }
 
-/// <summary>The caller attempted to replace newer connection configuration or health.</summary>
-public sealed class ConnectionConflictException() : Exception("The connection changed. Reload it before retrying.");
+/// <summary>The caller attempted to replace newer connection configuration or one of its immutable resources.</summary>
+public sealed class ConnectionConflictException(string? message = null) : Exception(message ?? "The connection changed. Reload it before retrying.");
 
 /// <summary>The selected connection no longer exists.</summary>
 public sealed class ConnectionNotFoundException() : Exception("The connection was not found.");

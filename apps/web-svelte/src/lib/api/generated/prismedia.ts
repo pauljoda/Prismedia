@@ -27,6 +27,7 @@ import type {
   ApiProblem,
   ApplyIdentifyProposalRequest,
   ApplyIdentifyQueueItemRequest,
+  AttachExistingExternalLibraryMountRequest,
   AudioPlaybackDiagnosticRequest,
   BookAcquisitionProfileSaveRequest,
   BookAcquisitionProfileView,
@@ -10320,6 +10321,53 @@ export const createExternalLibraryMount = async (id: string,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       createExternalLibraryMountRequest,)
+  }
+);}
+
+
+
+export type attachExistingExternalLibraryMountResponse200 = {
+  data: ExternalLibraryMount
+  status: 200
+}
+
+export type attachExistingExternalLibraryMountResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type attachExistingExternalLibraryMountResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type attachExistingExternalLibraryMountResponseSuccess = (attachExistingExternalLibraryMountResponse200) & {
+  headers: Headers;
+};
+export type attachExistingExternalLibraryMountResponseError = (attachExistingExternalLibraryMountResponse400 | attachExistingExternalLibraryMountResponse409) & {
+  headers: Headers;
+};
+
+export type attachExistingExternalLibraryMountResponse = (attachExistingExternalLibraryMountResponseSuccess | attachExistingExternalLibraryMountResponseError)
+
+export const getAttachExistingExternalLibraryMountUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/library/mounts/attach`
+}
+
+export const attachExistingExternalLibraryMount = async (id: string,
+    attachExistingExternalLibraryMountRequest: AttachExistingExternalLibraryMountRequest, options?: RequestInit): Promise<attachExistingExternalLibraryMountResponse> => {
+
+  return orvalFetch<attachExistingExternalLibraryMountResponse>(getAttachExistingExternalLibraryMountUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      attachExistingExternalLibraryMountRequest,)
   }
 );}
 

@@ -10,6 +10,13 @@ public sealed record ExternalLibraryMount(Guid Id, Guid ConnectionId, Guid Libra
 public sealed record CreateExternalLibraryMountRequest(EntityKind EntityKind, string RemoteRootId,
     string ExpectedRemotePath, string LocalPath, string Label, bool IsNsfw = false);
 
+/// <summary>
+/// Attaches a reviewed external root to an existing local library without changing that library's
+/// path, settings, access grants, entities, or files.
+/// </summary>
+public sealed record AttachExistingExternalLibraryMountRequest(EntityKind EntityKind, string RemoteRootId,
+    string ExpectedRemotePath, Guid ExistingLibraryRootId, string ExpectedLocalPath);
+
 /// <summary>Local filesystem evidence for one remote file. Matching size establishes readable bytes, not an imported entity or verified content hash.</summary>
 public sealed record MappedLibraryFile(string RemoteId, Guid? LibraryRootId, string? LocalPath,
     bool IsReadable, bool SizeMatches, string? Problem);

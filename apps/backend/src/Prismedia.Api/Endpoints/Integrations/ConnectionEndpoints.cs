@@ -74,6 +74,9 @@ public static class ConnectionEndpoints {
         group.MapPost("/{id:guid}/library/mounts", async (Guid id, CreateExternalLibraryMountRequest request, ExternalLibraryService service, CancellationToken cancellationToken) =>
             Results.Ok(await service.CreateAsync(id, request, cancellationToken)))
             .WithName("CreateExternalLibraryMount").Produces<ExternalLibraryMount>().Produces<ApiProblem>(400).Produces<ApiProblem>(409);
+        group.MapPost("/{id:guid}/library/mounts/attach", async (Guid id, AttachExistingExternalLibraryMountRequest request, ExternalLibraryService service, CancellationToken cancellationToken) =>
+            Results.Ok(await service.AttachAsync(id, request, cancellationToken)))
+            .WithName("AttachExistingExternalLibraryMount").Produces<ExternalLibraryMount>().Produces<ApiProblem>(400).Produces<ApiProblem>(409);
         group.MapPost("/{id:guid}/library/local-access", async (Guid id, ManagedItemInput request, ExternalLibraryService service, CancellationToken cancellationToken) =>
             Results.Ok(await service.InspectAsync(id, request, cancellationToken)))
             .WithName("InspectExternalLibraryAccess").Produces<MappedLibrarySnapshot>().Produces<ApiProblem>(400);

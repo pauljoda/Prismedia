@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Files;
 using Prismedia.Application.Integrations;
 using Prismedia.Application.Settings;
 using Prismedia.Contracts.Integrations;
@@ -70,6 +71,64 @@ public sealed class EfExternalLibraryMountStore(PrismediaDbContext db, ExternalL
         return new(mount.Id, connectionId, root.Id, mount.RemoteRootId, mount.RemotePath, local, root.Label);
     }
 
+    /// <inheritdoc />
+    public async Task<ExternalLibraryMount> AttachAsync(Guid connectionId, long expectedRevision,
+        AttachExistingExternalLibraryMountRequest request, CancellationToken token) {
+        if (string.IsNullOrWhiteSpace(request.ExpectedLocalPath) || request.ExpectedLocalPath.Length > 8192
+            || request.ExpectedLocalPath.Any(char.IsControl) || !Path.IsPathFullyQualified(request.ExpectedLocalPath)
+            || !Directory.Exists(request.ExpectedLocalPath))
+            throw new ArgumentException("Choose an existing absolute local library folder that Prismedia can read.");
+        var remote = ExternalLibraryPaths.NormalizeRemote(request.ExpectedRemotePath);
+        var local = CompletedPayloadFileSystem.CanonicalPath(Path.GetFullPath(request.ExpectedLocalPath));
+        await using var transaction = db.Database.IsRelational() && db.Database.CurrentTransaction is null ? await db.Database.BeginTransactionAsync(token) : null;
+        await PluginLifecycleLease.LockConnectionAsync(db, connectionId, token);
+        await using var rootBoundary = await LibraryRootConfigurationLease.AcquireAsync(db, token);
+        var connection = await db.IntegrationConnections.AsNoTracking().SingleOrDefaultAsync(row => row.Id == connectionId, token)
+            ?? throw new ConnectionNotFoundException();
+        if (connection.Revision != expectedRevision) throw new ConnectionConflictException();
+
+        var configured = await ListAsync(connectionId, token);
+        var existing = configured.FirstOrDefault(mount => mount.RemoteRootId == request.RemoteRootId);
+        if (existing is not null) {
+            var sameLocalPath = FileSystemPathComparison.Comparer.Equals(
+                CompletedPayloadFileSystem.CanonicalPath(existing.LocalPath), local);
+            if (existing.LibraryRootId != request.ExistingLibraryRootId || existing.RemotePath != request.ExpectedRemotePath || !sameLocalPath)
+                throw new ConnectionConflictException("This remote root already has an immutable mapping. Use its existing library.");
+            return existing;
+        }
+        if (configured.Any(mount => {
+            var other = ExternalLibraryPaths.NormalizeRemote(mount.RemotePath);
+            return remote.StartsWith(other, StringComparison.OrdinalIgnoreCase) || other.StartsWith(remote, StringComparison.OrdinalIgnoreCase);
+        })) throw new ArgumentException("This remote folder overlaps an existing mapping for this connection.");
+
+        var root = await db.LibraryRoots.SingleOrDefaultAsync(row => row.Id == request.ExistingLibraryRootId, token)
+            ?? throw new ArgumentException("The selected local library no longer exists. Refresh the library choices.");
+        if (!Path.IsPathFullyQualified(root.Path) || !Directory.Exists(root.Path))
+            throw new ArgumentException("The selected local library folder no longer exists or is not an absolute path.");
+        var rootPath = CompletedPayloadFileSystem.CanonicalPath(Path.GetFullPath(root.Path));
+        if (!FileSystemPathComparison.Comparer.Equals(rootPath, local))
+            throw new ArgumentException("The selected local library path changed. Refresh the library choices before attaching it.");
+        if (!Supports(root, request.EntityKind))
+            throw new ArgumentException("The selected local library does not scan this media kind.");
+        if (await db.ExternalLibraryMounts.AnyAsync(mount => mount.LibraryRootId == root.Id, token))
+            throw new ArgumentException("The selected local library is already managed by another external mapping.");
+
+        await RequireAdoptablePathAsync(root.Id, local, token);
+        await RequireNoNativeWorkAsync(root.Id, token);
+        try { using var entries = Directory.EnumerateFileSystemEntries(local).GetEnumerator(); _ = entries.MoveNext(); }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException) {
+            throw new ArgumentException("The selected local library folder cannot be read.");
+        }
+
+        var mount = new ExternalLibraryMountRow { Id = Guid.NewGuid(), ConnectionId = connectionId, LibraryRootId = root.Id,
+            RemoteRootId = request.RemoteRootId, RemotePath = request.ExpectedRemotePath, LocalPath = local, CreatedAt = DateTimeOffset.UtcNow };
+        db.ExternalLibraryMounts.Add(mount);
+        await db.SaveChangesAsync(token);
+        if (transaction is not null) await transaction.CommitAsync(token);
+        cache.InvalidateRoots();
+        return new(mount.Id, connectionId, root.Id, mount.RemoteRootId, mount.RemotePath, local, root.Label);
+    }
+
     private async Task RequireDedicatedPathAsync(string local, CancellationToken token) {
         var reserved = new List<string?> { storage.DataPath, storage.CachePath };
         reserved.AddRange(await db.LibraryRoots.Select(root => root.Path).ToArrayAsync(token));
@@ -85,6 +144,40 @@ public sealed class EfExternalLibraryMountStore(PrismediaDbContext db, ExternalL
             CompletedPayloadFileSystem.Overlaps(local, CompletedPayloadFileSystem.CanonicalPath(path!))))
             throw new ArgumentException("Use a dedicated folder outside existing libraries, downloads, recycle folders, and Prismedia data or cache.");
     }
+
+    private async Task RequireAdoptablePathAsync(Guid rootId, string local, CancellationToken token) {
+        var reserved = new List<string?> { storage.DataPath, storage.CachePath };
+        reserved.AddRange(await db.LibraryRoots.Where(root => root.Id != rootId).Select(root => root.Path).ToArrayAsync(token));
+        reserved.AddRange(await db.ExternalLibraryMounts.Select(mount => mount.LocalPath).ToArrayAsync(token));
+        reserved.AddRange(await db.DownloadClientConfigs.Select(client => client.DownloadDirectory).ToArrayAsync(token));
+        reserved.AddRange(await db.RemotePathMappings.Select(mapping => mapping.LocalPath).ToArrayAsync(token));
+        reserved.AddRange(await db.DownloadTransfers.Select(transfer => transfer.ContentPath).ToArrayAsync(token));
+        reserved.AddRange(await db.DownloadTransfers.Select(transfer => transfer.SavePath).ToArrayAsync(token));
+        var terminal = new[] { AcquisitionStatus.Imported, AcquisitionStatus.Cancelled, AcquisitionStatus.Failed };
+        reserved.AddRange(await db.Acquisitions.Where(acquisition => !terminal.Contains(acquisition.Status))
+            .Select(acquisition => acquisition.FinalSourcePath).ToArrayAsync(token));
+        reserved.AddRange(await db.DetachedDownloadCleanups.Select(cleanup => cleanup.ContentPath).ToArrayAsync(token));
+        reserved.Add((await new SettingsService(new EfSettingsPersistence(db)).GetRecycleBinSettingsAsync(token)).Path);
+        if (reserved.Where(path => !string.IsNullOrWhiteSpace(path) && Path.IsPathFullyQualified(path)).Any(path =>
+            CompletedPayloadFileSystem.Overlaps(local, CompletedPayloadFileSystem.CanonicalPath(path!))))
+            throw new ArgumentException("The selected library overlaps another library, download folder, recycle folder, or Prismedia data or cache.");
+    }
+
+    private async Task RequireNoNativeWorkAsync(Guid rootId, CancellationToken token) {
+        var terminal = new[] { AcquisitionStatus.Imported, AcquisitionStatus.Cancelled, AcquisitionStatus.Failed };
+        if (await db.Acquisitions.AnyAsync(acquisition => acquisition.TargetLibraryRootId == rootId && !terminal.Contains(acquisition.Status), token))
+            throw new ArgumentException("The selected library has an active native acquisition. Finish or cancel it before attaching an external manager.");
+        if (await db.Monitors.AnyAsync(monitor => monitor.TargetLibraryRootId == rootId && monitor.Status != MonitorStatus.Fulfilled, token))
+            throw new ArgumentException("The selected library has a native monitor that can still acquire files. Remove it before attaching an external manager.");
+    }
+
+    private static bool Supports(LibraryRootRow root, EntityKind kind) => kind switch {
+        EntityKind.Movie or EntityKind.VideoSeries => root.ScanVideos,
+        EntityKind.Book or EntityKind.ComicSeries => root.ScanBooks,
+        EntityKind.Image or EntityKind.Gallery => root.ScanImages,
+        EntityKind.AudioLibrary => root.ScanAudio,
+        _ => false
+    };
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<MappedLibraryFile>> InspectAsync(Guid connectionId, IReadOnlyList<ManagedLibraryFile> files, CancellationToken token) {

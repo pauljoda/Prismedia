@@ -472,15 +472,23 @@ should omit query strings.
 
 ### Map local files
 
-Open a connection's library-folder settings and choose **Map library folder**, select an existing remote
-root, and enter the corresponding folder mounted on the Prismedia server. Use a
-dedicated folder outside existing libraries, download areas, and application data.
+Open a connection's library-folder settings and choose **Map library folder**.
+Select the external root and the corresponding folder visible to the Prismedia server:
+
+- **Use existing library** links a compatible Prismedia library. Its files, library
+  entries, access permissions, and scanning settings stay in place. The library becomes
+  read-only to Prismedia. Finish or cancel native acquisitions and remove unfinished
+  native monitors targeting that library before linking it.
+- **Add a library folder** registers a folder that is not already a Prismedia library.
+  Use a dedicated folder outside existing libraries, download areas, and application data.
+  This creates a library with scanning and automatic identification paused; enable
+  scanning in **Settings → Libraries** when ready.
+
+Neither choice copies or moves files. Mappings cannot overlap other libraries or download areas.
 A read-only container bind mount adds an operating-system boundary to Prismedia's
 own file protection.
 
-The mapping creates a watched library with scanning and automatic identification
-paused. Enable scanning in **Settings → Libraries** when ready. The external app
-continues organizing its files. Prismedia blocks local deletion, replacement, moves,
+The external app continues organizing its files. Prismedia blocks local deletion, replacement, moves,
 uploads, and native acquisition destinations in this root. Protection remains when
 scanning or the Connection is disabled. Paths are fixed after creation; changing the
 Connection's application address or source settings requires a separate Connection.

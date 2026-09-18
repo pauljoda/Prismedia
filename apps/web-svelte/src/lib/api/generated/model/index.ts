@@ -45,6 +45,7 @@ export * from './applyIdentifyProposalRequest';
 export * from './applyIdentifyProposalRequestSelectedImages';
 export * from './applyIdentifyQueueItemRequest';
 export * from './applyIdentifyQueueItemRequestSelectedImages';
+export * from './attachExistingExternalLibraryMountRequest';
 export * from './audioPlaybackDiagnosticEvent';
 export * from './audioPlaybackDiagnosticRequest';
 export * from './audioPlaybackItem';

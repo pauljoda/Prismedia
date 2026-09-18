@@ -1,5 +1,5 @@
-import { getConnectedLibraryItem, getManagerOptions, searchConnectedLibrary, listExternalLibraryMounts, createExternalLibraryMount, inspectExternalLibraryAccess } from "$lib/api/generated/prismedia";
-import type { ManagedItemInput, ManagedItemSnapshot, ManagedLibraryPage, ManagedLibraryQuery, ManagerOptions, EntityKind, ExternalLibraryMount, CreateExternalLibraryMountRequest, MappedLibrarySnapshot } from "$lib/api/generated/model";
+import { getConnectedLibraryItem, getManagerOptions, searchConnectedLibrary, listExternalLibraryMounts, createExternalLibraryMount, attachExistingExternalLibraryMount, inspectExternalLibraryAccess } from "$lib/api/generated/prismedia";
+import type { ManagedItemInput, ManagedItemSnapshot, ManagedLibraryPage, ManagedLibraryQuery, ManagerOptions, EntityKind, ExternalLibraryMount, CreateExternalLibraryMountRequest, AttachExistingExternalLibraryMountRequest, MappedLibrarySnapshot } from "$lib/api/generated/model";
 import { unwrapGenerated } from "$lib/api/generated-response";
 import { listManagedTracking, previewManagedTracking, trackManagedHolding, refreshManagedHolding } from "$lib/api/generated/prismedia";
 import type { ManagedTrackingResponse, ManagedTrackingPreview, TrackManagedHoldingRequest } from "$lib/api/generated/model";
@@ -20,6 +20,9 @@ export const fetchLibraryMounts = (connectionId: string): Promise<ExternalLibrar
 /** Creates a paused read-only library after validating both sides of its mapping. */
 export const saveLibraryMount = (connectionId: string, request: CreateExternalLibraryMountRequest): Promise<ExternalLibraryMount> =>
   createExternalLibraryMount(connectionId, request).then(response => unwrapGenerated(response, "Could not map the library"));
+/** Attaches an existing Prismedia library root after matching its remote and local paths. */
+export const attachExistingLibraryMount = (connectionId: string, request: AttachExistingExternalLibraryMountRequest): Promise<ExternalLibraryMount> =>
+  attachExistingExternalLibraryMount(connectionId, request).then(response => unwrapGenerated(response, "Could not link the existing library"));
 /** Separately checks the bytes Prismedia can read for a fresh remote holding observation. */
 export const inspectLocalLibraryAccess = (connectionId: string, input: ManagedItemInput): Promise<MappedLibrarySnapshot> =>
   inspectExternalLibraryAccess(connectionId, input).then(response => unwrapGenerated(response, "Could not check local library files"));
