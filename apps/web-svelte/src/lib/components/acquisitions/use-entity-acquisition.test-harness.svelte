@@ -50,7 +50,9 @@
 {/if}
 <span data-testid="show-sync">{acq.showSync ? "yes" : "no"}</span>
 <span data-testid="show-search-missing">{acq.showSearchMissing ? "yes" : "no"}</span>
+<span data-testid="show-search">{acq.showSearch ? "yes" : "no"}</span>
 <span data-testid="missing-count">{acq.missingChildCount}</span>
 <span data-testid="visible">{acq.visible ? "yes" : "no"}</span>
+{#if acq.monitorUnavailableReason}<p role="status">{acq.monitorUnavailableReason}</p>{/if}
 {#if acq.monitorError}<p role="alert">{acq.monitorError}</p>{/if}
 <span data-testid="acquisition-id">{acq.acquisition?.summary.id ?? "none"}</span>

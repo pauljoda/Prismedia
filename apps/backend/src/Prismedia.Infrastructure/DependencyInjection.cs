@@ -111,6 +111,7 @@ public static class DependencyInjection {
         services.AddScoped<ManagedDiscoveryService>();
         services.AddScoped<IManagedTrackingStore, EfManagedTrackingStore>();
         services.AddScoped<IFulfillmentReservationStore, EfFulfillmentReservationStore>();
+        services.AddScoped<IExternalFulfillmentOwnershipReader, EfExternalFulfillmentOwnershipReader>();
         services.AddScoped<IReviewedFulfillmentOwnershipReader, EfReviewedFulfillmentOwnershipReader>();
         services.AddScoped<ManagedTrackingService>();
         services.AddScoped<IManagedControlStore, EfManagedControlStore>();

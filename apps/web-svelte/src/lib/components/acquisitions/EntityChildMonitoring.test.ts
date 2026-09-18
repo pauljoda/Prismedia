@@ -172,6 +172,29 @@ describe("EntityChildMonitoring", () => {
     expect(mocks.startEntityMonitor).not.toHaveBeenCalled();
   });
 
+  it("explains external ownership and blocks native monitor and request actions", async () => {
+    const reason = "Acquisition is managed by Living Room Radarr. Release its ownership before enabling Prismedia monitoring.";
+    mocks.fetchEntityMonitorStates.mockResolvedValue([
+      entityState("book-1", {
+        canRequest: true,
+        canMonitor: true,
+        unavailableReason: reason,
+      }),
+    ]);
+
+    render(EntityChildMonitoring, {
+      cards: [childCard("book-1", ENTITY_KIND.book, "Managed Book", true)],
+    });
+
+    await expand();
+    expect(screen.getByText("Managed externally")).toBeInTheDocument();
+    expect(screen.getByText(reason)).toBeInTheDocument();
+    expect(screen.getByRole("switch", { name: "Monitor Managed Book" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Monitor all" })).toBeDisabled();
+    expect(mocks.commitEntityRequest).not.toHaveBeenCalled();
+    expect(mocks.startEntityMonitor).not.toHaveBeenCalled();
+  });
+
   it("shows monitored Wanted children as preparing metadata before acquisition work is published", async () => {
     const wanted = childCard("album-1", ENTITY_KIND.audioLibrary, "First Album", true);
     mocks.fetchEntityMonitorStates.mockResolvedValue([
@@ -650,6 +673,7 @@ function entityState(
   overrides: {
     canMonitor?: boolean;
     canRequest?: boolean;
+    unavailableReason?: string | null;
     latestAcquisition?: AcquisitionSummary | null;
     monitor?: MonitorView | null;
   } = {},
@@ -662,5 +686,6 @@ function entityState(
     discoversChildren: false,
     monitor: overrides.monitor ?? null,
     latestAcquisition: overrides.latestAcquisition ?? null,
+    unavailableReason: overrides.unavailableReason ?? null,
   };
 }

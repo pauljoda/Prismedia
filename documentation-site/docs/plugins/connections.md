@@ -557,6 +557,11 @@ episodes and book renditions can have separate owners. Known equivalent provider
 also prevent duplicate local items from bypassing ownership. Titles alone do not prove
 equivalence. Failed acquisitions and paused monitors retain ownership until resolved.
 
+Native monitoring eligibility names the connected application when it already owns
+the scope. Starting a native monitor through the API returns an ownership conflict
+without creating a monitor or queueing acquisition work. Database checks remain the
+final authority when native and external requests arrive concurrently.
+
 Disabling a connection, a remote outage, or clearing job history does not release its
 reservation. Moving between acquisition owners requires the explicit handoff below.
 Database checks also reject metadata edits that would

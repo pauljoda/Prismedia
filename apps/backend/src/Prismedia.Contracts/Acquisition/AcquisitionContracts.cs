@@ -528,13 +528,16 @@ public sealed record WantedPageView(IReadOnlyList<WantedListItemView> Items, int
 /// request registry exposes at least one committable direct <see cref="MissingChildEntityKinds"/> entry. They are
 /// deliberately independent.
 /// <see cref="TrackableProviders"/> names the provider routes available to the UI.
+/// <see cref="UnavailableReason"/> explains a server-known ownership conflict without weakening the
+/// database invariant that arbitrates concurrent starts.
 /// </summary>
 public sealed record MonitorEligibilityView(
     bool CanMonitor,
     IReadOnlyList<string> TrackableProviders,
     bool DiscoversChildren,
     bool CanSearchMissingChildren,
-    IReadOnlyList<EntityKind> MissingChildEntityKinds);
+    IReadOnlyList<EntityKind> MissingChildEntityKinds,
+    string? UnavailableReason = null);
 
 /// <summary>Bounded batch request for direct Entity monitoring state.</summary>
 public sealed record EntityMonitorStateRequest(IReadOnlyList<Guid> EntityIds);
@@ -553,7 +556,8 @@ public sealed record EntityMonitorStateView(
     bool CanSearchMissingChildren,
     IReadOnlyList<EntityKind> MissingChildEntityKinds,
     MonitorView? Monitor,
-    AcquisitionSummary? LatestAcquisition);
+    AcquisitionSummary? LatestAcquisition,
+    string? UnavailableReason = null);
 
 /// <summary>Request to start monitoring (keep re-searching) an existing acquisition until it is acquired.</summary>
 public sealed record MonitorCreateRequest(Guid AcquisitionId);

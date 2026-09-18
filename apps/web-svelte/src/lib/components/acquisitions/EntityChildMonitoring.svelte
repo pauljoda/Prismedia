@@ -38,6 +38,7 @@
     monitor: MonitorView | null;
     canMonitor: boolean;
     canRequest: boolean;
+    unavailableReason: string | null;
   }
 
   interface RefreshOptions {
@@ -195,7 +196,8 @@
           acquisition: state?.latestAcquisition ?? null,
           monitor: state?.monitor ?? null,
           canMonitor: state?.canMonitor ?? false,
-          canRequest: state?.canRequest ?? false,
+          canRequest: state?.canRequest === true && !state.unavailableReason,
+          unavailableReason: state?.unavailableReason ?? null,
         };
       });
       rows = nextRows;
@@ -223,7 +225,8 @@
    * acquisition rows are display state, never authority to create a new monitor.
    */
   function canSetMonitoring(row: ChildMonitoringRow): boolean {
-    return row.monitor !== null || row.canMonitor || row.canRequest;
+    return row.monitor !== null
+      || (!row.unavailableReason && (row.canMonitor || row.canRequest));
   }
 
   function isActive(row: ChildMonitoringRow): boolean {
@@ -278,6 +281,7 @@
     if (isPreparingMetadata(row)) return "Preparing metadata · Monitoring";
     if (isActive(row)) return acquisitionLabel ? `${acquisitionLabel} · Monitoring` : "Monitoring";
     if (row.monitor) return acquisitionLabel ? `${acquisitionLabel} · Paused` : "Paused";
+    if (row.unavailableReason) return "Managed externally";
     if (acquisitionStatus && acquisitionStatus !== ACQUISITION_STATUS.imported) {
       return `${acquisitionLabel} · Not monitored`;
     }
@@ -356,6 +360,7 @@
       if (!isActive(row)) await resumeMonitor(row.monitor.id);
       return;
     }
+    if (row.unavailableReason) throw new Error(row.unavailableReason);
     // A fileless requestable leaf must commit first so its initial search starts immediately. It may
     // also be provider-monitorable, but a bare monitor waits for the periodic sweep. Source-backed
     // children without request work enter through the stable Entity/plugin identity monitor path.
@@ -514,6 +519,9 @@
                     <span class="row-title">{row.card.entity.title}</span>
                   {/if}
                   <span class:active class="row-status">{rowStatus(row)}</span>
+                  {#if row.unavailableReason}
+                    <span class="row-reason">{row.unavailableReason}</span>
+                  {/if}
                 </span>
                 {#if isStopping(row)}
                   <Button
@@ -568,6 +576,11 @@
   }
   .row-status {
     color: var(--color-text-muted);
+  }
+  .row-reason {
+    color: var(--color-text-secondary);
+    font-size: var(--text-caption);
+    line-height: 1.4;
   }
   .body {
     display: grid;

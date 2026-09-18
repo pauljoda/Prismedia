@@ -18,4 +18,6 @@ export interface EntityMonitorStateView {
   missingChildEntityKinds: EntityMonitorStateViewMissingChildEntityKindsItem[];
   monitor: null | MonitorView;
   latestAcquisition: null | AcquisitionSummary;
+  /** @nullable */
+  unavailableReason?: string | null;
 }

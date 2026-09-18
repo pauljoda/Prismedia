@@ -48,6 +48,21 @@ describe("EntityAcquisitionCard", () => {
     expect(screen.queryByRole("button", { name: "Notify imported" })).not.toBeInTheDocument();
   });
 
+  it("explains manager ownership without presenting native acquisition controls", () => {
+    const reason = "Acquisition is managed by Living Room Radarr. Release its ownership before enabling Prismedia monitoring.";
+    render(Harness, {
+      initialAcquisition: null,
+      refresh: vi.fn(async () => {}),
+      monitorUnavailableReason: reason,
+      showSearch: false,
+      showMonitor: false,
+    });
+
+    expect(screen.getByRole("heading", { name: "Managed acquisition" })).toBeInTheDocument();
+    expect(screen.getByText(reason)).toBeInTheDocument();
+    expect(screen.queryByRole("switch", { name: "Monitor" })).not.toBeInTheDocument();
+  });
+
   it.each([ENTITY_KIND.audioLibrary, ENTITY_KIND.videoEpisode])("keeps reviewed replacement search in a quiet secondary-actions disclosure for %s", async (entityKind) => {
     render(Harness, {
       initialAcquisition: acquisition("album-acquisition"),

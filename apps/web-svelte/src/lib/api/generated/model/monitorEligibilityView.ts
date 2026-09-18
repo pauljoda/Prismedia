@@ -12,4 +12,6 @@ export interface MonitorEligibilityView {
   discoversChildren: boolean;
   canSearchMissingChildren: boolean;
   missingChildEntityKinds: MonitorEligibilityViewMissingChildEntityKindsItem[];
+  /** @nullable */
+  unavailableReason?: string | null;
 }

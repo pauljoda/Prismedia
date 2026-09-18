@@ -162,6 +162,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Native monitoring explains when a connected application already owns acquisition, including equivalent titles and selected episode scopes.
+
 - Scan cleanup checks external-library retention only for deletion candidates, avoiding unrelated library trees during small scans.
 
 - Removed Radarr and Sonarr titles can complete an explicit ownership handoff after fresh removal and activity checks, while retaining their metadata and history.

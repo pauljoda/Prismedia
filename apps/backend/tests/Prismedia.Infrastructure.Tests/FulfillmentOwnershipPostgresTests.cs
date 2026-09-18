@@ -212,6 +212,40 @@ public sealed class FulfillmentOwnershipPostgresTests {
             .ExecuteUpdateAsync(update => update.SetProperty(row => row.ReleasedAt, (DateTimeOffset?)null)));
     }
 
+    [Fact]
+    public async Task EligibilityReaderUsesGuardMatcherForHierarchyIdentityAndBookRendition() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var (connection, movie) = await SeedAsync(db);
+        var duplicate = Entity(EntityKind.Movie);
+        var series = Entity(EntityKind.VideoSeries);
+        var episode = Entity(EntityKind.VideoEpisode, series.Id);
+        var book = Entity(EntityKind.Book);
+        db.Entities.AddRange(duplicate, series, episode, book);
+        db.EntityExternalIds.AddRange(
+            Identity(movie, ExternalIdProviders.Tmdb, "123"),
+            Identity(duplicate.Id, ExternalIdProviders.Tmdb, "123"));
+        await db.SaveChangesAsync();
+        await ReserveAsync(db, connection, movie);
+        await ReserveAsync(db, connection, episode.Id);
+        await ReserveAsync(db, connection, book.Id, BookRendition.Ebook);
+
+        var owners = await new EfExternalFulfillmentOwnershipReader(db).ListAsync([
+            new(duplicate.Id, EntityKind.Movie),
+            new(series.Id, EntityKind.VideoSeries),
+            new(book.Id, EntityKind.Book, BookRendition.Audiobook),
+        ], default);
+        var ebookOwner = await new EfExternalFulfillmentOwnershipReader(db).ListAsync([
+            new(book.Id, EntityKind.Book, BookRendition.Ebook),
+        ], default);
+
+        Assert.Equal("Fixture", owners[duplicate.Id].ConnectionName);
+        Assert.Equal("Fixture", owners[series.Id].ConnectionName);
+        Assert.False(owners.ContainsKey(book.Id));
+        Assert.Equal("Fixture", ebookOwner[book.Id].ConnectionName);
+        Assert.Equal(2, owners.Count);
+    }
+
     private static async Task ReserveAsync(PrismediaDbContext db, Guid connection, Guid entity, BookRendition? rendition = null, Guid? ownerId = null) {
         await using var transaction = await db.Database.BeginTransactionAsync();
         await new EfFulfillmentReservationStore(db).ReserveAsync(ownerId ?? Guid.NewGuid(), FulfillmentOwnerKind.ExternalManager,

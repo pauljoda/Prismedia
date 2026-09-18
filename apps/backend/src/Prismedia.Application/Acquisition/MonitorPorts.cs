@@ -2,6 +2,20 @@ using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Acquisition;
 
+/// <summary>The Entity scope whose active external acquisition owner must be projected for monitoring.</summary>
+public sealed record FulfillmentOwnershipQuery(Guid EntityId, EntityKind Kind, BookRendition? BookRendition = null);
+
+/// <summary>An active connected application that owns acquisition for a native monitoring scope.</summary>
+public sealed record ExternalFulfillmentOwnership(string? ConnectionName);
+
+/// <summary>Reads the external ownership invariant used by monitor eligibility; persistence remains the atomic authority.</summary>
+public interface IExternalFulfillmentOwnershipReader {
+    /// <summary>Returns active external owners keyed by requested Entity id, including equivalent and hierarchical scopes.</summary>
+    Task<IReadOnlyDictionary<Guid, ExternalFulfillmentOwnership>> ListAsync(
+        IReadOnlyCollection<FulfillmentOwnershipQuery> scopes,
+        CancellationToken cancellationToken);
+}
+
 /// <summary>
 /// One stable Entity-monitor intent recorded before its transient acquisition work is published.
 /// Container request fan-out batches these intents so every explicit child selection is durable and

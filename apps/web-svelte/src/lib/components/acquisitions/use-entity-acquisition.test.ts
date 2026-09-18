@@ -118,6 +118,41 @@ describe("useEntityAcquisition", () => {
     expect(mocks.fetchEntity).not.toHaveBeenCalled();
   });
 
+  it("shows equivalent external ownership while suppressing native request actions", async () => {
+    const reason = "Acquisition is managed by Living Room Radarr. Release its ownership before enabling Prismedia monitoring.";
+    mocks.fetchAcquisitionForEntity.mockResolvedValue(null);
+    mocks.fetchMonitorEligibility.mockResolvedValue({
+      canMonitor: false,
+      trackableProviders: ["tmdb"],
+      discoversChildren: false,
+      canSearchMissingChildren: false,
+      missingChildEntityKinds: [],
+      unavailableReason: reason,
+    });
+
+    render(Harness, {
+      entityId: "duplicate-movie-1",
+      capabilities: [{
+        kind: CAPABILITY_KIND.flags,
+        isFavorite: null,
+        isNsfw: null,
+        isOrganized: null,
+        isWanted: true,
+      } as never, {
+        kind: CAPABILITY_KIND.links,
+        externalIds: [{ provider: "tmdb", value: "123", url: null }],
+        urls: [],
+      } as never],
+    });
+
+    expect(await screen.findByRole("status")).toHaveTextContent(reason);
+    expect(screen.getByTestId("visible")).toHaveTextContent("yes");
+    expect(screen.getByTestId("show-search")).toHaveTextContent("no");
+    expect(screen.queryByRole("button", { name: "Monitor" })).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Search for release" }));
+    expect(mocks.commitEntityRequest).not.toHaveBeenCalled();
+  });
+
   it("reloads the entity when an active external request projection changes", async () => {
     vi.useFakeTimers();
     const onStatusChanged = vi.fn(async () => {});
