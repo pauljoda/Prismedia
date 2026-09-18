@@ -1,4 +1,4 @@
-namespace Prismedia.IntegrationSimulator;
+namespace Prismedia.Archiver;
 
 /// <summary>Independent Archiver HTTP vocabulary. No Prismedia domain, database, or entity schema is required.</summary>
 public static class ArchiverWire {
@@ -83,10 +83,3 @@ public sealed record ReceiptRequest(Guid ReceiptId, string ManifestRevision, IRe
 public sealed record ReceiptResult(string JobId, Guid ReceiptId, bool Accepted);
 /// <summary>Stable HTTP failure without internal paths or secrets.</summary>
 public sealed record ApiProblem(string Code, string Message, bool Retryable = false);
-/// <summary>Explicit simulator controls; these are not part of the proposed production Archiver API.</summary>
-public sealed record SimulationControls(bool LoseNextSubmissionResponse = false, bool LoseNextReceiptResponse = false, int ExecutionDelaySeconds = 1);
-/// <summary>Typed internal rejection translated to an HTTP problem.</summary>
-public sealed class ApiFailure(int status, string code, string message) : Exception(message) {
-    public int Status { get; } = status;
-    public string Code { get; } = code;
-}

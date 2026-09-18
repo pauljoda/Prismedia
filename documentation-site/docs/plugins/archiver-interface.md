@@ -13,6 +13,23 @@ HTTP retrieval, leases, and receipts. The simulator is a single-principal fixtur
 production client isolation, incremental reconciliation, lease release, and search remain implementation requirements or optional extensions as
 specified below. No changes to an existing Archiver installation are implied.
 
+The repository includes a standalone **ArchiverConformance** command-line checker.
+It probes the public interface and can execute a bounded fixture, verify sealed
+bytes, replay submissions and receipts, and resume the same operation after a
+restart. Set `ARCHIVER_TOKEN`, then run:
+
+```sh
+dotnet run --project apps/backend/tools/Prismedia.ArchiverConformance -- \
+  --endpoint http://localhost:19090 --execute \
+  --input https://fixtures.example/book --kind book --format epub \
+  --output-directory .tmp/archiver-acceptance
+```
+
+The fixture URL above belongs to the simulator. Use an appropriate test URL for
+the real app. Omit `--execute` and selection options for a read-only system probe;
+use `--resume <plan.json>` to check restart recovery. The tool README documents
+limits, retained evidence, failure injection and the boundaries of this check.
+
 This document stands alone as a brief for rebuilding The Archiver. Prismedia is the first consumer, but the API should work for any authenticated client. The Archiver need not adopt Prismedia's entities, database, framework, language, or request system.
 
 ## 1. Goal and responsibility
@@ -49,7 +66,7 @@ and returns exactly one EPUB/PDF book or CBZ comic content artifact. It includes
 separate artwork or metadata sidecars. Clients and servers must negotiate another
 profile before adding those outputs. The simulator publishes its exact OpenAPI
 schema at authenticated `/openapi/v1.json`; its independent records live in
-`apps/backend/tools/Prismedia.IntegrationSimulator/ArchiverContract.cs`.
+`apps/backend/tools/Prismedia.ArchiverContract/ArchiverContract.cs`.
 
 A source can be URL-only. Search support must be explicitly declared per installed source, not inferred from its URL patterns. A boolean flag should not imply that every source in an Archiver installation has the capability.
 

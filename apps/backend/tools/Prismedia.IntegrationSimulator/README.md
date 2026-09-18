@@ -60,3 +60,8 @@ starting interface; the published integration documentation defines broader sema
 ```sh
 dotnet test apps/backend/tests/Prismedia.IntegrationSimulator.Tests
 ```
+
+The sibling `Prismedia.ArchiverConformance` tool exercises the HTTP interface of
+this simulator or a real implementation. Its README covers bounded execution,
+restart recovery and saved acceptance reports. The common wire records now live
+in the independent `Prismedia.ArchiverContract` project.

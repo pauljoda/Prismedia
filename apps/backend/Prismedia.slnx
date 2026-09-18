@@ -15,6 +15,8 @@
     <Project Path="tests/Prismedia.IntegrationSimulator.Tests/Prismedia.IntegrationSimulator.Tests.csproj" />
   </Folder>
   <Folder Name="/tools/">
+    <Project Path="tools/Prismedia.ArchiverContract/Prismedia.ArchiverContract.csproj" />
+    <Project Path="tools/Prismedia.ArchiverConformance/Prismedia.ArchiverConformance.csproj" />
     <Project Path="tools/Prismedia.IntegrationSimulator/Prismedia.IntegrationSimulator.csproj" />
   </Folder>
 </Solution>
