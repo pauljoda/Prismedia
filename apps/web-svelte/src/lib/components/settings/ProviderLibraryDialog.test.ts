@@ -49,6 +49,11 @@ describe("Provider library dialog", () => {
     providerSelect.focus();
     await fireEvent.keyDown(providerSelect, { key: "ArrowDown" });
     await fireEvent.pointerUp(await screen.findByRole("option", { name: "Radarr · Cinema · /radarr/movies" }));
+    expect(screen.getByText("Provider path: /radarr/movies")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Folder visible to Prismedia" })).toBeInTheDocument();
+    expect(screen.getByText(/The Radarr API reports paths and metadata; this mapping translates paths and does not transfer media files/)).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Shared storage example" }));
+    expect(screen.getByText(/A symbolic link alone does not provide network access/)).toBeInTheDocument();
     await fireEvent.click(screen.getByRole("radio", { name: "Use existing library" }));
     const rootSelect = screen.getByRole("button", { name: "Existing Prismedia library" });
     rootSelect.focus();
@@ -64,5 +69,37 @@ describe("Provider library dialog", () => {
       expectedLocalPath: "/media/movies",
     }));
     expect(mocks.saveLibraryMount).not.toHaveBeenCalled();
+  });
+
+  it("explains how to make a provider library available when none are discovered", async () => {
+    mocks.fetchProviderLibraries.mockResolvedValue([]);
+    render(ProviderLibraryDialog, { roots: [root], onComplete: vi.fn(), onError: vi.fn(), onMessage: vi.fn() });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Add provider library" }));
+
+    expect(await screen.findByText(/Check that the provider connection is enabled and exposes a library/)).toBeInTheDocument();
+    expect(screen.getByText(/make its media folder readable by the Prismedia server through a mount or network share/)).toBeInTheDocument();
+  });
+
+  it("reports when every discovered provider library is already linked", async () => {
+    const linkedRoot: LibraryRoot = {
+      ...root,
+      isReadOnly: true,
+      externalOrigin: {
+        connectionId: provider.connectionId,
+        connectionName: provider.connectionName,
+        pluginId: provider.pluginId,
+        remoteLibraryId: "4",
+        remotePath: "/radarr/movies",
+        managementUrl: "https://radarr.example/",
+      },
+    };
+    render(ProviderLibraryDialog, { roots: [linkedRoot], onComplete: vi.fn(), onError: vi.fn(), onMessage: vi.fn() });
+
+    await fireEvent.click(screen.getByRole("button", { name: "Add provider library" }));
+
+    expect(await screen.findByText("Every discovered provider library is already linked.")).toBeInTheDocument();
+    expect(screen.queryByText(/make its media folder readable/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Shared storage example" })).not.toBeInTheDocument();
   });
 });

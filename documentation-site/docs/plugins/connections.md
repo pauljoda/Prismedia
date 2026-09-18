@@ -507,6 +507,14 @@ Neither choice copies or moves files. Mappings cannot overlap other libraries or
 A read-only container bind mount adds an operating-system boundary to Prismedia's
 own file protection.
 
+For a provider on another machine, share its media storage with NFS or SMB and mount
+that share on the Prismedia host. For example, mount the share at `/srv/media`, expose
+it to the Prismedia container as `/srv/media:/media/external:ro`, then map the provider path
+`/movies` to the folder visible to Prismedia at `/media/external`. The browser may run
+on any device; only the Prismedia server needs filesystem access. The provider API
+does not carry media bytes, and a symbolic link by itself does not provide network
+access. Prismedia reads the shared files in place, so no copy or move is required.
+
 Attaching an enabled library, or enabling a paused library, queues its initial scan.
 Prismedia watches enabled folders for changes and periodically scans external
 libraries at the configured scan interval, even when general automatic scanning

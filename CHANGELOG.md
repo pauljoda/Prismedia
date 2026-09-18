@@ -56,6 +56,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- External library setup distinguishes provider paths from folders readable by the Prismedia server, with shared-storage guidance for separate hosts and read-only mounts.
+
 - Request Activity loads a paged server feed, prioritizes problems and active requests, and shows retained history even when a source is offline.
 
 - External library tracking checks for changes every minute. Open external Entity pages refresh availability and request progress automatically without reloading unchanged artwork or playback.
@@ -163,6 +165,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Audio-track detail and saved-queue payloads no longer duplicate embedded artist and album fields outside the Entity's `embedded-audio-metadata` capability.
 
 ### Fixed
+
+- External series request buttons show the selected episode count, including only newly requested episodes when expanding an existing request.
 
 - External requests resume automatically after a temporary connection check interrupts observation, while identity and ownership conflicts remain protected for review.
 

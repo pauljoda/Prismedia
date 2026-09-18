@@ -89,7 +89,7 @@
       <Button variant="ghost" size="sm" onclick={() => settingsOpen = true}>Library settings</Button>
     </div>
     {#if connection.status !== CONNECTION_STATUS.ready}
-      <Alert.Root><Alert.Description>This source is unavailable. Test the connection in Settings to search again.</Alert.Description></Alert.Root>
+      <Alert.Root><Alert.Description>This source is unavailable. Check its connection status in Settings.</Alert.Description></Alert.Root>
     {/if}
     <Panel class="p-4">
       <form class="flex min-w-0 gap-2" onsubmit={event => { event.preventDefault(); void search(); }}>

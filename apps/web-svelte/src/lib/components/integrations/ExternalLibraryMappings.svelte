@@ -6,11 +6,12 @@
   import { attachExistingLibraryMount, fetchLibraryMounts, fetchManagerOptions, saveLibraryMount } from "$lib/api/managed-libraries";
   import { fetchLibraryRoots } from "$lib/api/settings";
   import { SETTING_SECTION } from "$lib/settings/settings-section-catalog";
+  import SharedStorageHelp from "./SharedStorageHelp.svelte";
 
   const MAPPING_MODE = { newFolder: "new-folder", existingLibrary: "existing-library" } as const;
   type MappingMode = typeof MAPPING_MODE[keyof typeof MAPPING_MODE];
   const mappingModeOptions: ChoiceOption<MappingMode>[] = [
-    { value: MAPPING_MODE.newFolder, label: "Add a library folder" },
+    { value: MAPPING_MODE.newFolder, label: "Add mounted folder" },
     { value: MAPPING_MODE.existingLibrary, label: "Use existing library" },
   ];
 
@@ -55,7 +56,7 @@
       if (current !== sequence) return;
       options = choices; libraryRoots = roots; mounts = currentMounts;
       remoteRootId = choices.roots.find(root => !mounts.some(mount => mount.remoteRootId === root.id))?.id ?? "";
-    } catch (cause) { if (current === sequence) error = cause instanceof Error ? cause.message : "Could not read remote folders"; }
+    } catch (cause) { if (current === sequence) error = cause instanceof Error ? cause.message : "Could not read folders reported by the provider. Check its API connection and try again."; }
     finally { if (current === sequence) busy = false; }
   }
   async function save() {
@@ -83,16 +84,16 @@
 
 <Panel class="space-y-3 p-4">
   <div class="flex flex-wrap items-center justify-between gap-2">
-    <h2 class="text-sm font-semibold">Local library mappings</h2>
-    <Button variant="outline" size="sm" disabled={!kind || busy} onclick={begin}>Map library folder</Button>
+    <h2 class="text-sm font-semibold">Shared folder mappings</h2>
+    <Button variant="outline" size="sm" disabled={!kind || busy} onclick={begin}>Map shared folder</Button>
   </div>
-  <p class="text-xs text-text-muted">Connect an existing folder visible to Prismedia. Files stay under the external application's control.</p>
+  <p class="text-xs text-text-muted">Map a path reported by {connection.name} to the same media folder already mounted on and readable by the Prismedia server.</p>
   {#if error && !open}<p role="alert" class="text-sm text-error-text">{error}</p>{/if}
   {#each mounts as mount (mount.id)}
     <div class="space-y-1 border-t border-border-subtle pt-3 text-xs">
       <p class="font-medium">{mount.label} · read-only</p>
-      <p class="break-all text-text-muted">Remote: {mount.remotePath}</p>
-      <p class="break-all text-text-muted">Local: {mount.localPath}</p>
+      <p class="break-all text-text-muted">Provider path: {mount.remotePath}</p>
+      <p class="break-all text-text-muted">Folder visible to Prismedia: {mount.localPath}</p>
     </div>
   {/each}
   {#if mounts.length}<p class="text-xs text-text-muted">Newly added libraries start paused; linked existing libraries keep their scan settings. Manage scanning in <a class="underline" href={`/settings/${SETTING_SECTION.libraries}`}>Libraries</a>.</p>{/if}
@@ -104,21 +105,21 @@
       <DialogBase.Title>Map an external library</DialogBase.Title>
       <DialogBase.Description>
         {#if mappingMode === MAPPING_MODE.existingLibrary}
-          Keep this library's files, entries, and settings. {connection.name} organizes the files; Prismedia reads them in place.
+          Keep this library's files, entries, and settings. {connection.name} organizes the files; Prismedia reads them through the server's existing mount or share.
         {:else}
-          Add a dedicated folder already mounted on the Prismedia server. The mapping is fixed; new mappings start paused and can be enabled in Libraries.
+          Choose a dedicated folder already mounted or shared with the Prismedia server. The mapping is fixed; new mappings start paused and can be enabled in Libraries.
         {/if}
       </DialogBase.Description>
     </DialogBase.Header>
     <form class="space-y-4" onsubmit={event => { event.preventDefault(); void save(); }}>
       {#if error}<p role="alert" class="text-sm text-error-text">{error}</p>{/if}
       {#if options && !options.roots.some(root => !mounts.some(mount => mount.remoteRootId === root.id))}
-        <p class="text-sm text-text-muted">There are no unmapped root folders in this connection.</p>
+        <p class="text-sm text-text-muted">There are no unmapped folders reported by {connection.name}. Refresh its API connection if a provider folder is missing.</p>
       {/if}
       <ChoiceGroup type="single" options={mappingModeOptions} value={mappingMode}
         onValueChange={value => { mappingMode = value; existingLibraryRootId = ""; }} ariaLabel="Library mapping method" disabled={busy} />
-      <label class="block space-y-1 text-sm">External folder
-        <Select ariaLabel="External folder" value={remoteRootId} options={(options?.roots ?? []).filter(root => !mounts.some(mount => mount.remoteRootId === root.id)).map(root => ({ value: root.id, label: root.path }))} onchange={value => remoteRootId = value} disabled={busy} />
+      <label class="block space-y-1 text-sm">Path reported by {connection.name}
+        <Select ariaLabel={`Path reported by ${connection.name}`} value={remoteRootId} options={(options?.roots ?? []).filter(root => !mounts.some(mount => mount.remoteRootId === root.id)).map(root => ({ value: root.id, label: root.path }))} onchange={value => remoteRootId = value} disabled={busy} />
       </label>
       {#if mappingMode === MAPPING_MODE.existingLibrary}
         <div class="space-y-2">
@@ -134,10 +135,11 @@
           {/if}
         </div>
       {:else}
-        <label class="block space-y-1 text-sm">Local folder<TextInput bind:value={localPath} placeholder="/media/external-library" disabled={busy} required /></label>
+        <label class="block space-y-1 text-sm">Folder visible to Prismedia<TextInput bind:value={localPath} placeholder="/media/external" disabled={busy} required /></label>
         <label class="block space-y-1 text-sm">Library name<TextInput bind:value={label} disabled={busy} required /></label>
         <label class="flex items-center justify-between text-sm">NSFW library<Toggle ariaLabel="NSFW library" checked={isNsfw} onchange={value => isNsfw = value} disabled={busy} /></label>
       {/if}
+      <SharedStorageHelp providerName={connection.name} />
       <DialogBase.Footer><Button type="button" variant="outline" disabled={busy} onclick={() => open = false}>Cancel</Button><Button type="submit" disabled={busy || !remoteRootId || (mappingMode === MAPPING_MODE.existingLibrary ? !selectedExistingRoot : !localPath.trim() || !label.trim())}>{mappingMode === MAPPING_MODE.existingLibrary ? "Link existing library" : "Create read-only library"}</Button></DialogBase.Footer>
     </form>
   </DialogBase.Content>

@@ -52,8 +52,13 @@ describe("External library mappings", () => {
   it("links a reviewed paused library without creating a new root", async () => {
     render(ExternalLibraryMappings, { connection, kind: ENTITY_KIND.movie });
 
-    await fireEvent.click(screen.getByRole("button", { name: "Map library folder" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Map shared folder" }));
     await screen.findByRole("dialog");
+    expect(screen.getByRole("button", { name: "Path reported by Radarr" })).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Folder visible to Prismedia" })).toBeInTheDocument();
+    expect(screen.getByText(/The Radarr API reports paths and metadata; this mapping translates paths and does not transfer media files/)).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Shared storage example" }));
+    expect(screen.getByText(/Your browser can be on another device/)).toBeInTheDocument();
     await fireEvent.click(screen.getByRole("radio", { name: "Use existing library" }));
     const existingLibrary = screen.getByRole("button", { name: "Existing Prismedia library" });
     existingLibrary.focus();
@@ -82,8 +87,9 @@ describe("External library mappings", () => {
     mocks.fetchLibraryMounts.mockResolvedValue([{ ...mount, libraryRootId: libraryRoot.id }]);
 
     render(ExternalLibraryMappings, { connection, kind: ENTITY_KIND.movie });
-    await fireEvent.click(screen.getByRole("button", { name: "Map library folder" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Map shared folder" }));
     await screen.findByRole("dialog");
+    expect(screen.getByText("There are no unmapped folders reported by Radarr. Refresh its API connection if a provider folder is missing.")).toBeInTheDocument();
     await fireEvent.click(screen.getByRole("radio", { name: "Use existing library" }));
     const existingLibrary = screen.getByRole("button", { name: "Existing Prismedia library" });
     existingLibrary.focus();

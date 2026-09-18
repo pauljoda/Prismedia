@@ -172,6 +172,11 @@
     managerSelected && review?.entityKind === ENTITY_KIND.videoSeries,
   );
   const managerExpansionCount = $derived(Number(managerChoice?.review.expansion?.newTargetCount ?? 0));
+  const managedSeriesTargetCount = $derived(
+    managerChoice?.review.expansion
+      ? Number(managerChoice.review.expansion.newTargetCount)
+      : (managerChoice?.review.work.targets?.length ?? 0),
+  );
   const presetOptions = $derived([
     ...MONITOR_PRESET_OPTIONS.map((option) => ({ value: option.value, label: option.label })),
     ...(presetDisplay === MONITOR_PRESET_CUSTOM
@@ -724,8 +729,9 @@
         disabled={submitting || reviewChanged || enrichmentRunning || !hasRequestIntent || (managerSelected && !managerChoice && !pendingManagerCommit && !managerOwnership)}
         onclick={() => void requestSelection()}>
         {#if submitting}<Loader2 class="h-4 w-4 animate-spin" />{:else if managerOwnership && !pendingManagerCommit}<ExternalLink class="h-4 w-4" />{:else}<Send class="h-4 w-4" />{/if}
-        {submitting ? (managerOwnership && !pendingManagerCommit ? "Opening…" : "Requesting…") : pendingManagerCommit ? "Retry request" : managerOwnership ? "Open in library" : selectsChildren && selectedProposalIds.length > 0
-          ? `Request ${selectedProposalIds.length} ${childNoun}${selectedProposalIds.length === 1 ? "" : "s"}` : "Request"}
+        {submitting ? (managerOwnership && !pendingManagerCommit ? "Opening…" : "Requesting…") : pendingManagerCommit ? "Retry request" : managerOwnership ? "Open in library" : managedSeriesSelected && managedSeriesTargetCount > 0
+          ? `Request ${managedSeriesTargetCount}${managerChoice?.review.expansion ? " more" : ""} episode${managedSeriesTargetCount === 1 ? "" : "s"}` : managedSeriesSelected ? "Request selected episodes" : selectsChildren && selectedProposalIds.length > 0
+            ? `Request ${selectedProposalIds.length} ${childNoun}${selectedProposalIds.length === 1 ? "" : "s"}` : "Request"}
       </Button>
       {#if pendingManagerCommit && !submitting}
         <p class="text-sm text-text-muted">Acceptance could not be confirmed. Retry checks this same request safely.</p>

@@ -5,6 +5,7 @@
   import { attachExistingLibraryMount, fetchProviderLibraries, saveLibraryMount } from "$lib/api/managed-libraries";
   import { ENTITY_KIND } from "$lib/api/generated/codes";
   import { labelForEntityKind } from "$lib/entities/entity-codes";
+  import SharedStorageHelp from "$lib/components/integrations/SharedStorageHelp.svelte";
 
   const MODE = { newFolder: "new-folder", existingLibrary: "existing-library" } as const;
   type MappingMode = typeof MODE[keyof typeof MODE];
@@ -123,7 +124,7 @@
     <DialogBase.Header>
       <DialogBase.Title>Add provider library</DialogBase.Title>
       <DialogBase.Description>
-        Link a library from a connected application to the same visibility, scanning, and playback controls as any Prismedia library.
+        Add a provider's library to Prismedia for browsing and playback. The provider continues to organize its files.
       </DialogBase.Description>
     </DialogBase.Header>
     <form class="space-y-4" onsubmit={event => { event.preventDefault(); void save(); }}>
@@ -144,7 +145,7 @@
         <div class="surface-well flex flex-wrap items-start justify-between gap-3 p-3 text-xs">
           <div class="min-w-0">
             <p class="font-medium text-text-primary">{selected.connection.connectionName}</p>
-            <p class="break-all font-mono text-text-muted">{selected.library.remotePath}</p>
+            <p class="break-all font-mono text-text-muted">Provider path: {selected.library.remotePath}</p>
           </div>
           <a class="inline-flex items-center gap-1 text-text-accent hover:underline" href={selected.library.managementUrl ?? `/settings/connections`} target={selected.library.managementUrl ? "_blank" : undefined} rel={selected.library.managementUrl ? "noreferrer" : undefined}>
             Manage provider <ExternalLink class="size-3.5" />
@@ -167,13 +168,20 @@
           </label>
           {#if compatibleRoots.length === 0}<p class="text-sm text-text-muted">No compatible writable library is available for this type.</p>{/if}
         {:else}
-          <label class="block space-y-1 text-sm">Mounted local folder<TextInput bind:value={localPath} placeholder="/media/provider-library" disabled={busy} required /></label>
+          <label class="block space-y-1 text-sm">Folder visible to Prismedia<TextInput bind:value={localPath} placeholder="/media/external" disabled={busy} required /></label>
           <label class="block space-y-1 text-sm">Library name<TextInput bind:value={label} disabled={busy} required /></label>
           <label class="flex items-center justify-between text-sm">NSFW library<Toggle ariaLabel="NSFW library" checked={isNsfw} onchange={value => isNsfw = value} disabled={busy} /></label>
-          <p class="text-xs text-text-muted">Prismedia reads this folder in place. The provider continues to organize its files; no copy or symbolic link is created.</p>
+          <p class="text-xs text-text-muted">Prismedia reads this folder in place. The provider continues to organize its files; no copy or move is needed.</p>
         {/if}
       {:else if !busy && availableChoices.length === 0}
-        <p class="text-sm text-text-muted">Every discovered provider library is already linked, or no connection currently exposes libraries.</p>
+        {#if providerChoices.length === 0}
+          <p class="text-sm text-text-muted">No provider libraries were discovered. Check that the provider connection is enabled and exposes a library, then make its media folder readable by the Prismedia server through a mount or network share.</p>
+        {:else}
+          <p class="text-sm text-text-muted">Every discovered provider library is already linked.</p>
+        {/if}
+      {/if}
+      {#if !busy && (availableChoices.length > 0 || providerChoices.length === 0)}
+        <SharedStorageHelp providerName={selected?.connection.connectionName} />
       {/if}
       <DialogBase.Footer>
         <Button type="button" variant="outline" disabled={busy} onclick={() => open = false}>Cancel</Button>

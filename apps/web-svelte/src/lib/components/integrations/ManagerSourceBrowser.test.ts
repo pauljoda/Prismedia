@@ -48,4 +48,36 @@ describe("Manager source discovery", () => {
     await screen.findByText("No matching titles");
     expect(mocks.fetchManagedLibrary).toHaveBeenCalledWith(connection.id, expect.objectContaining({ entityKind: ENTITY_KIND.movie }));
   });
+
+  it("opens a manager-discovered series through the series review route", async () => {
+    const seriesConnection: ConnectionResponse = {
+      ...connection,
+      id: "series-manager",
+      name: "Sonarr",
+      effectiveCapabilities: connection.effectiveCapabilities.map(capability => ({
+        ...capability,
+        entityKinds: [ENTITY_KIND.videoSeries],
+      })),
+    };
+    mocks.searchManagerTitles.mockResolvedValue({
+      items: [{
+        entityKind: ENTITY_KIND.videoSeries,
+        title: "Chernobyl",
+        year: 2019,
+        externalIdentity: { namespace: EXTERNAL_ID_PROVIDER.tvdb, value: "360893" },
+        metadata: { posterUrl: "https://example.test/chernobyl.jpg" },
+      }],
+    });
+    render(ManagerSourceBrowser, { connection: seriesConnection });
+
+    await fireEvent.input(screen.getByRole("textbox", { name: "Find new titles in Sonarr" }), {
+      target: { value: "Chernobyl" },
+    });
+    await fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Chernobyl" }));
+
+    const url = new URL(mocks.goto.mock.calls[0]![0], "http://localhost");
+    expect(url.pathname).toBe("/request/series/360893");
+    expect(url.searchParams.get("namespace")).toBe(EXTERNAL_ID_PROVIDER.tvdb);
+  });
 });

@@ -400,10 +400,8 @@
                   </p>
                   <p class="mt-1 break-all text-mono-sm text-text-disabled">Provider path: {root.externalOrigin.remotePath}</p>
                 {:else if root.isReadOnly}<p class="mt-1 text-xs text-text-muted">Externally managed · files are read-only</p>{/if}
-                <p
-                  class="mt-1.5 truncate text-mono-sm text-text-disabled bg-surface-1/50 rounded-xs border border-border-subtle px-2 py-0.5 inline-block max-w-full shadow-sm"
-                >
-                  {root.path}
+                <p class="mt-1.5 truncate text-mono-sm text-text-disabled bg-surface-1/50 rounded-xs border border-border-subtle px-2 py-0.5 inline-block max-w-full shadow-sm">
+                  {root.externalOrigin ? "Folder visible to Prismedia: " : ""}{root.path}
                 </p>
               </div>
             </div>
