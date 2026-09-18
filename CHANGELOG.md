@@ -12,69 +12,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
-- Existing Radarr movie reviews can include cast, characters, supported crew roles, and linked People with TMDB identities and headshots.
-
-- Provider libraries can be discovered and linked from Settings → Libraries, including multiple folders per connection, with shared visibility, scanning, and playback controls.
-
-- Radarr connections can search new movies directly, show their artwork and metadata for review, and submit requests through the selected instance without a separate metadata-provider key.
-- Plugins can supply packaged icons, shown consistently in plugin listings, connections, and Request source choices. Maintained community plugins include their own logos, and Request source cards summarize supported actions and media types.
-
-- Existing Prismedia libraries can link to an external manager without copying files or recreating library entries. Linking preserves library settings and makes the folder read-only to Prismedia while the connected app continues organizing it.
-
-- Series discovery reviews can send selected episodes to Sonarr, preserve existing monitoring settings, and attach imported files to the original wanted episodes. Requests search only the reviewed episode selection and retain progress through retries and partial fulfillment.
-
-- Completed integration imports automatically release their temporary staging after a recovery grace period, while retaining library files and import history.
-
-- Compatible source connections can prepare an exact publication before importing it. Requests retain their identity through retries, show source progress in Activity, and distinguish stopping a local import from cancelling a source download.
-
-- Import JPEG, PNG, and WebP still images from connected catalogs, including anonymous Wikimedia Commons searches. Imports retain source attribution and license statements, verify the selected file version, and use image-specific library destinations and size limits.
-- View retained catalog credits and license statements in imported library items' source details, including image viewers, without contacting the original service.
-
-- Catalog plugins can declare separate HTTPS file hosts for anonymous downloads. Connections disclose those hosts, and imports recheck current permissions without forwarding authentication headers or cookies.
-
-- Kapowarr connections can browse existing comic runs, inspect exact issue labels and combined-file associations, and map read-only comic libraries. Local readability remains a separate check; comic acquisition controls are not yet offered.
-
-- URL executors can import complete ordered image galleries, with bounded image validation, atomic folder placement, stable gallery and image identities, and recoverable import receipts. Explicit galleries remain galleries even when they contain one image.
-
-- URL executor connections can import verified JPEG, PNG, and WebP still images into image libraries. Imports preserve image identity across retries and rescans, and the Archiver adapter negotiates image support separately from publications.
-
-- Soulseek searches through slskd now support EPUB/PDF books, CBZ/ZIP comics, and audiobook files. Publication formats stay separately selectable, and audiobook chapter folders retain their file order without including neighboring books or cover images.
-
-- Connected Radarr and Sonarr holdings can explicitly release acquisition ownership after monitoring and remote activity have stopped. Download-client health problems block handoff. Handoffs retain files and history, recover through outages, and keep ownership reserved until verification finishes.
-
-- The Metron community metadata plugin supports Western comic runs and issues, exact fractional and special issue labels, creator credits, and distinct cross-provider identities. Series and issue metadata can be reviewed before application.
-
-- Saved metadata plugin and OpenSubtitles credentials are encrypted with persistent application keys. Existing credentials upgrade automatically, and plugins receive only their declared credential fields.
-
-- Movie discovery reviews can choose a connected acquisition manager, save the selected metadata as a wanted item, and review external fulfillment settings without starting a native download.
-
-- Wanted movies can delegate fulfillment to a Radarr connection with a reviewed profile, library, monitoring choice, and optional search. Durable requests recover uncertain creation responses and attach verified local files to the original item without losing its identity or history.
-
-- Linked Sonarr episodes can request scoped searches and change episode monitoring when the parent series is already monitored. Series-wide profiles and monitoring stay with Sonarr, and blocked controls explain the parent restriction.
-
-- Linked Radarr holdings can apply reviewed monitoring and profile changes and request searches. Manager actions retain progress across restarts, preserve uncertain responses for review, and keep search completion separate from file availability.
-
-- Radarr and Sonarr holdings can link to existing scanned items and track renamed, replaced, or missing files while retaining item identity and history. Ambiguous coverage requires review, and unavailable sources stay in the catalog without being advertised as playable.
-
-- Metadata plugins can retain exact comic issue and chapter labels separately from ordering, show them in review, and match fractional installments without merging coincidental positions.
-
-- Connected libraries can map external roots to dedicated read-only folders and check local file access separately from remote availability. Mappings start with scanning paused, protect files even when the connection is disabled, and stay out of native acquisition destinations.
-
-- Connected libraries can browse Radarr and Sonarr holdings, inspect final file associations, and show existing external profiles. Reported remote availability is kept separate from verified local access.
-
-- Metadata protection shows the source of titles, descriptions, and classifications. Manual edits and explicit clears are protected from provider enrichment until unlocked; protection also applies to children updated through a parent proposal.
-
-- URL executor requests can be cancelled before local import. Cancellation survives restarts, reconciles uncertain submissions, and preserves the actual remote outcome when completion wins the race.
-
-- Import books and comics from inspected URLs through compatible executor connections. Durable operations recover uncertain submissions, verify exact output files, and retry import acknowledgements independently. A separate Archiver simulator exercises restart and response-loss recovery.
-
-- Import EPUB/PDF books and CBZ comics from connected catalogs into a chosen library. Downloads retain verified bytes and durable progress across retries, protect existing files, and open the imported publication from the catalog view.
-
-- Catalog downloads can be cancelled before library import begins, without cancelling other transfers or discarding staged files.
-
-- Connected catalogs can be browsed and searched from Requests, with book/comic source selections and clear distinctions between full publications, loans, purchases, and samples. OPDS catalog connections support independent credentials and paginated navigation.
-
-- Connections can configure multiple instances of an integration plugin, with independent credentials, capability selection, and remote health checks. Plugin packages can declare discovery, acquisition, download, external-manager, and connected-library capabilities independently from metadata identification.
+- Plugins can provide metadata, discovery, acquisition, downloads, and external-library capabilities independently. Connections support multiple instances with separate credentials, health checks, and packaged provider logos.
+- Request combines visual discovery, connected collections, metadata review, and provider choices. Radarr can search new movies directly; reviewed movie and selected-episode requests can delegate acquisition to Radarr or Sonarr and open the normal Prismedia entity page.
+- Provider folders appear in Settings → Libraries and can attach to existing Prismedia libraries. External files stay in place and read-only to Prismedia, with shared visibility, playback, and watch history across renames, missing files, and upgrades.
+- Linked Radarr and Sonarr titles offer scoped monitoring, profile, and search controls. Durable ownership prevents competing acquisition, preserves uncertain outcomes for review, and supports explicit handoff after remote activity stops.
+- OPDS and compatible catalogs can browse and import books, comics, and still images, including Wikimedia Commons. Imports distinguish downloads from loans, purchases, and samples; preserve source attribution; and recover verified files through cancellation, retries, and interrupted placement.
+- URL executor connections can import publications, still images, and ordered galleries through durable jobs, exact output manifests, and retryable acknowledgements. An Archiver simulator supports interface validation while the separate app is rebuilt; completed staging is cleaned up after recovery safeguards.
+- Kapowarr can expose existing comic collections and exact issue/file associations through read-only library mappings. Comic acquisition controls remain a future addition.
+- Book and comic metadata now supports exact installment labels, reviewed identity changes, field provenance, and protection for manual edits. Metron supplies comic metadata; existing Radarr movie reviews can include cast, characters, crew, and linked People with headshots.
+- Soulseek searches through slskd support EPUB/PDF books, CBZ/ZIP comics, and ordered audiobook files while keeping publication formats separately selectable.
+- Saved metadata-plugin and OpenSubtitles credentials are encrypted with persistent application keys, and plugins receive only their declared credentials.
 
 - Monitored movies and TV units can look for better matches while keeping unattended automatic import holds available for review. Recovery compares episode coverage and profile quality, backs off from hours to weekly searches, and only cleans up superseded downloads after a replacement finishes importing. Unresolved foreign-season extras remain available for review.
 
