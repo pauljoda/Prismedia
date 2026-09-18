@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using Prismedia.Application.Integrations;
 using Prismedia.Application.Jobs;
+using Prismedia.Contracts.Integrations;
 using Prismedia.Domain.Entities;
 using Prismedia.Domain.Integrations;
 using Prismedia.Infrastructure.Persistence;
@@ -16,6 +17,19 @@ public sealed class EfManagedControlStore(PrismediaDbContext db, IManagedTrackin
     private static readonly JsonSerializerOptions Json = PluginProcessTransport.JsonOptions;
     /// <inheritdoc />
     public async Task<OwnedManagedControlScope> RequireScopeAsync(Guid connectionId, Guid holdingId, CancellationToken token) {
+        var holding = await RequireHoldingAsync(connectionId, holdingId, token);
+        return ManagedControlIdentity.From(holding);
+    }
+    /// <inheritdoc />
+    public async Task<OwnedManagedControlScope> RequireScopeAsync(Guid connectionId, Guid holdingId,
+        IReadOnlyList<Guid> entityIds, CancellationToken token) {
+        if (entityIds.Count == 0 || entityIds.Any(id => id == Guid.Empty)
+            || entityIds.Distinct().Count() != entityIds.Count)
+            throw new ManagedControlConflictException("Choose an exact non-empty append scope.");
+        var holding = await RequireHoldingAsync(connectionId, holdingId, token);
+        return ManagedControlIdentity.From(holding, entityIds);
+    }
+    private async Task<ManagedTrackingResponse> RequireHoldingAsync(Guid connectionId, Guid holdingId, CancellationToken token) {
         var holding = (await tracking.FindAsync(holdingId, token))?.Tracking;
         if (holding is null || holding.ConnectionId != connectionId || holding.Status is not (ManagedTrackingStatus.Tracking
                 or ManagedTrackingStatus.WaitingForFiles or ManagedTrackingStatus.Removed)
@@ -47,7 +61,7 @@ public sealed class EfManagedControlStore(PrismediaDbContext db, IManagedTrackin
         if (reserved != entityIds.Length || !await db.ExternalLibraryMounts.AnyAsync(row => row.ConnectionId == connectionId
             && row.LibraryRootId == holding.LibraryRootId, token))
             throw new ManagedControlConflictException("The holding no longer has its reviewed library mapping and fulfillment ownership.");
-        return ManagedControlIdentity.From(holding);
+        return holding;
     }
     /// <inheritdoc />
     public async Task<StoredManagedControl?> FindAsync(Guid id, CancellationToken token) =>
@@ -123,7 +137,9 @@ public sealed class EfManagedControlStore(PrismediaDbContext db, IManagedTrackin
     private async Task ValidateScopeAsync(ManagedControlOperation operation, ManagedControlPlan plan, CancellationToken token) {
         // Serializes validation with holding reconciliation. No network call occurs inside this transaction.
         await db.ManagedHoldings.FromSqlInterpolated($"SELECT * FROM managed_holdings WHERE id = {operation.State.HoldingId} FOR UPDATE").AsNoTracking().ToArrayAsync(token);
-        var current = await RequireScopeAsync(operation.State.ConnectionId, operation.State.HoldingId, token);
+        var current = plan.ScopeEntityIds is { Count: > 0 } subset
+            ? await RequireScopeAsync(operation.State.ConnectionId, operation.State.HoldingId, subset, token)
+            : await RequireScopeAsync(operation.State.ConnectionId, operation.State.HoldingId, token);
         if (current.Fingerprint != plan.Request.ScopeFingerprint)
             throw new ManagedControlConflictException("The reviewed target associations changed. Refresh the holding before creating another action.");
     }

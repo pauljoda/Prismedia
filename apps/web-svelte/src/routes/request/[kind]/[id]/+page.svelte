@@ -171,6 +171,7 @@
   const managedSeriesSelected = $derived(
     managerSelected && review?.entityKind === ENTITY_KIND.videoSeries,
   );
+  const managerExpansionCount = $derived(Number(managerChoice?.review.expansion?.newTargetCount ?? 0));
   const presetOptions = $derived([
     ...MONITOR_PRESET_OPTIONS.map((option) => ({ value: option.value, label: option.label })),
     ...(presetDisplay === MONITOR_PRESET_CUSTOM
@@ -665,6 +666,8 @@
           {#if managerOwnership}<Clock3 class="h-3.5 w-3.5 text-text-muted" />{:else}<Send class="h-3.5 w-3.5 text-text-accent" />{/if}
           {managerOwnership
             ? "Request status"
+            : managerExpansionCount > 0
+            ? `Request ${managerExpansionCount} more episode${managerExpansionCount === 1 ? "" : "s"}`
             : managedSeriesSelected
             ? "Request selected episodes"
             : selectsChildren

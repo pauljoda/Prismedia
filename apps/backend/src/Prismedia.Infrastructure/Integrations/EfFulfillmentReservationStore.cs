@@ -19,7 +19,7 @@ public sealed class EfFulfillmentReservationStore(PrismediaDbContext db) : IFulf
             throw new InvalidOperationException("Fulfillment ownership must be accepted with its durable intent in one transaction.");
         if (ownerId == Guid.Empty || connectionId == Guid.Empty || !Enum.IsDefined(ownerKind))
             throw new ArgumentException("Choose an explicit connection and durable ownership operation.");
-        var existing = await db.FulfillmentReservations.SingleOrDefaultAsync(row => row.OwnerId == ownerId
+        var existing = await db.FulfillmentReservations.AsNoTracking().SingleOrDefaultAsync(row => row.OwnerId == ownerId
             && row.OwnerKind == ownerKind && row.EntityId == entityId && row.BookRendition == rendition, token);
         if (existing is not null) {
             if (existing.ConnectionId != connectionId || existing.ReleasedAt is not null)

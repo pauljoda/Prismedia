@@ -47,7 +47,7 @@ public sealed class ManagedRequestService(IManagedRequestStore store, Integratio
         if (input.Search) await access.RequireAsync(connectionId, PluginCapability.ExternalManager, IntegrationOperation.RequestManaged, preview.Work.EntityKind, token);
         await access.RequireAsync(connectionId, PluginCapability.ConnectedLibrary, IntegrationOperation.GetLibraryItem, preview.Work.EntityKind, token);
         return await AcceptAsync(connectionId, input, preview, reviewedCommitFingerprint: null,
-            expectedConnectionRevision: null, token);
+            expectedConnectionRevision: null, existingHoldingId: null, token);
     }
 
     /// <summary>Returns a previously accepted reviewed commit without requiring current provider availability.</summary>
@@ -70,6 +70,7 @@ public sealed class ManagedRequestService(IManagedRequestStore store, Integratio
         ManagedRequestPreview preview,
         string? reviewedCommitFingerprint,
         long? expectedConnectionRevision,
+        Guid? existingHoldingId,
         CancellationToken token) {
         Validate(input);
         var fingerprint = ManagedRequestIdentity.Fingerprint(input);
@@ -102,7 +103,8 @@ public sealed class ManagedRequestService(IManagedRequestStore store, Integratio
             target.Title,
             fingerprint,
             reviewedCommitFingerprint,
-            expectedConnectionRevision);
+            expectedConnectionRevision,
+            existingHoldingId);
         return Map(await store.CreateAsync(action, plan, token));
     }
     /// <summary>Lists durable intent independently of current connection health.</summary>
@@ -149,6 +151,7 @@ public sealed class ManagedRequestService(IManagedRequestStore store, Integratio
         return new(state.OperationId, state.ConnectionId, state.EntityId, state.LibraryRootId, work.Plan.Title, state.Phase,
             state.Revision, state.RemoteId, work.Plan.Request.Monitored, work.Plan.Request.Search, state.ReviewRequired,
             work.Operation.CanCancel, work.CreatedAt, work.UpdatedAt, work.Problem,
+            work.Plan.ExistingHoldingId ?? state.OperationId,
             work.Plan.Request.TargetEntityIds);
     }
 }

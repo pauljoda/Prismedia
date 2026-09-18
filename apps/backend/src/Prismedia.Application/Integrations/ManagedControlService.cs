@@ -10,6 +10,14 @@ public sealed class ManagedControlService(IManagedControlStore store, Integratio
     /// <summary>Reads current configuration for the server-derived finite owned scope.</summary>
     public async Task<ManagedControlPreview> PreviewAsync(Guid connectionId, Guid holdingId, CancellationToken token) {
         var owned = await store.RequireScopeAsync(connectionId, holdingId, token);
+        return await PreviewAsync(connectionId, owned, token);
+    }
+    internal async Task<ManagedControlPreview> PreviewAsync(Guid connectionId, Guid holdingId,
+        IReadOnlyList<Guid> entityIds, CancellationToken token) {
+        var owned = await store.RequireScopeAsync(connectionId, holdingId, entityIds, token);
+        return await PreviewAsync(connectionId, owned, token);
+    }
+    private async Task<ManagedControlPreview> PreviewAsync(Guid connectionId, OwnedManagedControlScope owned, CancellationToken token) {
         var connection = await access.RequireAsync(connectionId, PluginCapability.ExternalManager, IntegrationOperation.ReconcileManaged, owned.Scope.Item.EntityKind, token);
         var state = await gateway.ReconcileAsync(connection.Manifest.Id, connection.Context, new(owned.Scope), token);
         ManagedControlValidation.Validate(owned.Scope, state);
@@ -17,6 +25,10 @@ public sealed class ManagedControlService(IManagedControlStore store, Integratio
     }
     /// <summary>Accepts one reviewed action and durable queue intent before any remote mutation.</summary>
     public async Task<ManagedControlActionResponse> CreateAsync(Guid connectionId, Guid holdingId, CreateManagedControlRequest request, CancellationToken token) {
+        return await CreateAsync(connectionId, holdingId, request, null, token);
+    }
+    internal async Task<ManagedControlActionResponse> CreateAsync(Guid connectionId, Guid holdingId,
+        CreateManagedControlRequest request, IReadOnlyList<Guid>? scopeEntityIds, CancellationToken token) {
         Validate(request);
         var fingerprint = ManagedControlIdentity.RequestFingerprint(request);
         if (await store.FindAsync(request.OperationId, token) is { } existing) {
@@ -24,7 +36,9 @@ public sealed class ManagedControlService(IManagedControlStore store, Integratio
                 throw new ManagedControlConflictException("This operation ID already accepted a different manager action.");
             return Map(existing);
         }
-        var owned = await store.RequireScopeAsync(connectionId, holdingId, token);
+        var owned = scopeEntityIds is null
+            ? await store.RequireScopeAsync(connectionId, holdingId, token)
+            : await store.RequireScopeAsync(connectionId, holdingId, scopeEntityIds, token);
         if (owned.Fingerprint != request.ScopeFingerprint || !owned.Scope.Targets.Select(target => target.RemoteId).ToHashSet(StringComparer.Ordinal).SetEquals(request.ExpectedMonitoring.Keys))
             throw new ManagedControlConflictException("The reviewed target scope changed. Refresh the manager controls.");
         await access.RequireAsync(connectionId, PluginCapability.ExternalManager, IntegrationOperation.ReconcileManaged, owned.Scope.Item.EntityKind, token);
@@ -32,7 +46,7 @@ public sealed class ManagedControlService(IManagedControlStore store, Integratio
         if (configure) await access.RequireAsync(connectionId, PluginCapability.ExternalManager, IntegrationOperation.ConfigureManaged, owned.Scope.Item.EntityKind, token);
         if (request.Search) await access.RequireAsync(connectionId, PluginCapability.ExternalManager, IntegrationOperation.RequestManaged, owned.Scope.Item.EntityKind, token);
         var action = ManagedControlOperation.Create(request.OperationId, connectionId, holdingId, configure, request.Search);
-        return Map(await store.CreateAsync(action, new(owned.Scope, request, fingerprint), token));
+        return Map(await store.CreateAsync(action, new(owned.Scope, request, fingerprint, scopeEntityIds), token));
     }
     /// <summary>Reads retained results even while the connection is disabled or unavailable.</summary>
     public async Task<IReadOnlyList<ManagedControlActionResponse>> ListAsync(Guid connectionId, Guid holdingId, CancellationToken token) =>

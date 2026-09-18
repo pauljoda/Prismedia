@@ -11,6 +11,7 @@ public sealed class ManagedRequestProcessor(IManagedRequestStore store, Integrat
     public async Task<bool> ProcessAsync(Guid id, CancellationToken token) {
         var work = await store.FindAsync(id, token);
         if (work is null) return false;
+        var holdingId = work.Plan.ExistingHoldingId ?? id;
         if (!work.Operation.IsActive) return work.Operation.State.Phase != ManagedRequestPhase.Completed;
         try {
             if (work.Operation.State.Phase is ManagedRequestPhase.PendingCreation or ManagedRequestPhase.CreationUncertain) {
@@ -18,8 +19,17 @@ public sealed class ManagedRequestProcessor(IManagedRequestStore store, Integrat
                 return true;
             }
             var state = work.Operation.State;
-            var snapshot = await library.GetAsync(state.ConnectionId,
-                new(work.Plan.Creation.Work.EntityKind, state.RemoteId!, work.Plan.Creation.Work.ExternalIds), token);
+            ManagedItemSnapshot snapshot;
+            try {
+                snapshot = await library.GetAsync(state.ConnectionId,
+                    new(work.Plan.Creation.Work.EntityKind, state.RemoteId!, work.Plan.Creation.Work.ExternalIds), token);
+            } catch (IntegrationInvocationException error) when (state.Phase == ManagedRequestPhase.AwaitingFiles
+                && error.Code != IntegrationErrorCode.ManagedItemNotFound) {
+                var revision = work.Operation.State.Revision;
+                work.Operation.RecordRetryableObservation();
+                await store.SaveAsync(work.Operation, revision, error.Message, false, token);
+                return true;
+            }
             if (state.Phase == ManagedRequestPhase.RemoteRemoved) {
                 var revision = work.Operation.State.Revision;
                 work.Operation.RequireReview();
@@ -40,7 +50,7 @@ public sealed class ManagedRequestProcessor(IManagedRequestStore store, Integrat
                 await store.SaveAsync(work.Operation, revision, materialized.WaitingReason, false, token);
             }
         } catch (IntegrationInvocationException error) when (error.Code == IntegrationErrorCode.ManagedItemNotFound) {
-            var holding = await tracking.FindAsync(id, token);
+            var holding = await tracking.FindAsync(holdingId, token);
             if (holding is null) {
                 var revision = work.Operation.State.Revision;
                 work.Operation.RequireReview();
@@ -53,9 +63,15 @@ public sealed class ManagedRequestProcessor(IManagedRequestStore store, Integrat
         } catch (Exception error) when (work.Operation.State.Phase == ManagedRequestPhase.RemoteRemoved
             && error is IntegrationInvocationException or ConnectionNotFoundException
                 or ConnectionSecretUnavailableException or ConnectionCapabilityUnavailableException) {
-            if (await tracking.FindAsync(id, token) is { } holding)
-                await tracking.RecordProblemAsync(id, holding.Tracking.Revision, ManagedTrackingStatus.Removed,
+            if (await tracking.FindAsync(holdingId, token) is { } holding)
+                await tracking.RecordProblemAsync(holdingId, holding.Tracking.Revision, ManagedTrackingStatus.Removed,
                     "The connection could not be verified. The last confirmed removal and local data were retained.", token);
+        } catch (Exception error) when (work.Operation.State.Phase == ManagedRequestPhase.AwaitingFiles
+            && error is ConnectionNotFoundException or ConnectionSecretUnavailableException
+                or ConnectionCapabilityUnavailableException) {
+            var revision = work.Operation.State.Revision;
+            work.Operation.RecordRetryableObservation();
+            await store.SaveAsync(work.Operation, revision, error.Message, false, token);
         } catch (Exception error) when (error is IntegrationInvocationException or ConnectionNotFoundException
             or ConnectionSecretUnavailableException or ConnectionCapabilityUnavailableException or ArgumentException or ManagedControlConflictException) {
             var revision = work.Operation.State.Revision;
@@ -73,6 +89,12 @@ public sealed class ManagedRequestProcessor(IManagedRequestStore store, Integrat
         ManagedCreationEvidence.ValidateLookup(work.Plan.Creation.Work, lookup);
         if (lookup.Existing is { } existing) {
             await store.AcceptHoldingAsync(work, existing, lookup.Targets, token);
+            return;
+        }
+        if (work.Plan.ExistingHoldingId is not null) {
+            work.Operation.RequireReview();
+            await store.SaveAsync(work.Operation, state.Revision,
+                "The reviewed series holding is no longer visible. No replacement series was created.", false, token);
             return;
         }
         if (state.Phase == ManagedRequestPhase.CreationUncertain) {
@@ -96,18 +118,26 @@ public sealed class ManagedRequestProcessor(IManagedRequestStore store, Integrat
 
     private async Task EnsureControlsAsync(StoredManagedRequest work, CancellationToken token) {
         var state = work.Operation.State;
+        var holdingId = work.Plan.ExistingHoldingId ?? state.OperationId;
         if (await controlStore.FindAsync(state.OperationId, token) is { } accepted) {
-            if (accepted.Operation.State.HoldingId != state.OperationId || accepted.Operation.State.ConnectionId != state.ConnectionId)
+            if (accepted.Operation.State.HoldingId != holdingId || accepted.Operation.State.ConnectionId != state.ConnectionId)
                 throw new ManagedControlConflictException("This request's manager-action identity is already in use.");
             return;
         }
-        var preview = await controls.PreviewAsync(state.ConnectionId, state.OperationId, token);
+        var scopeEntityIds = work.Plan.ExistingHoldingId is null ? null : work.Plan.Request.TargetEntityIds;
+        var preview = scopeEntityIds is null
+            ? await controls.PreviewAsync(state.ConnectionId, holdingId, token)
+            : await controls.PreviewAsync(state.ConnectionId, holdingId, scopeEntityIds, token);
         if (preview.State.Item.ProfileId != work.Plan.Creation.ProfileId)
             throw new ManagedControlConflictException("The manager profile changed before fulfillment dispatch. Review its settings before continuing.");
-        await controls.CreateAsync(state.ConnectionId, state.OperationId,
-            new(state.OperationId, preview.ScopeFingerprint, preview.State.Path, preview.State.Item.ProfileId!,
-                preview.State.Targets.ToDictionary(target => target.Target.RemoteId, target => target.Monitored),
-                InitialConfiguration(work.Plan.Request), work.Plan.Request.Search), token);
+        var request = new CreateManagedControlRequest(
+            state.OperationId, preview.ScopeFingerprint, preview.State.Path, preview.State.Item.ProfileId!,
+            preview.State.Targets.ToDictionary(target => target.Target.RemoteId, target => target.Monitored),
+            InitialConfiguration(work.Plan.Request), work.Plan.Request.Search);
+        if (scopeEntityIds is null) await controls.CreateAsync(state.ConnectionId, holdingId,
+            request, token);
+        else await controls.CreateAsync(state.ConnectionId, holdingId,
+            request, scopeEntityIds, token);
     }
 
     /// <summary>

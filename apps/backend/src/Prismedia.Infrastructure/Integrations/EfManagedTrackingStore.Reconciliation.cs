@@ -106,6 +106,38 @@ public sealed partial class EfManagedTrackingStore {
                         .SetProperty(request => request.NextCheckAt, now.Add(TrackingInterval))
                         .SetProperty(request => request.Problem, safeProblem), leaseToken) != 1)
                     throw new ConnectionConflictException();
+
+                var relatedRows = await db.ManagedRequests
+                    .FromSqlInterpolated($"SELECT * FROM managed_requests WHERE connection_id = {row.ConnectionId} AND entity_id = {requestRow.EntityId} AND id <> {row.Id} FOR UPDATE")
+                    .AsNoTracking().ToArrayAsync(leaseToken);
+                foreach (var related in relatedRows.OrderBy(request => request.Id)) {
+                    var plan = JsonSerializer.Deserialize<ManagedRequestPlan>(related.PlanJson, Json);
+                    if (plan?.ExistingHoldingId != row.Id) continue;
+                    var relatedState = JsonSerializer.Deserialize<ManagedRequestState>(related.StateJson, Json)
+                        ?? throw new InvalidDataException("Invalid managed request state.");
+                    if (relatedState.Revision != related.Revision || relatedState.Phase != related.Phase)
+                        throw new ConnectionConflictException();
+                    var relatedOperation = new ManagedRequestOperation(relatedState);
+                    if (relatedState.Phase is ManagedRequestPhase.AwaitingFiles
+                        or ManagedRequestPhase.RemoteRemoved or ManagedRequestPhase.Completed)
+                        relatedOperation.ConfirmRemoteRemoval();
+                    else if (relatedOperation.IsActive)
+                        relatedOperation.RequireReview();
+                    else continue;
+                    var relatedJson = JsonSerializer.Serialize(relatedOperation.State, Json);
+                    if (await db.ManagedRequests.Where(request => request.Id == related.Id && request.Revision == related.Revision)
+                        .ExecuteUpdateAsync(set => set
+                            .SetProperty(request => request.StateJson, relatedJson)
+                            .SetProperty(request => request.Phase, relatedOperation.State.Phase)
+                            .SetProperty(request => request.Revision, relatedOperation.State.Revision)
+                            .SetProperty(request => request.UpdatedAt, now)
+                            .SetProperty(request => request.NextCheckAt,
+                                relatedOperation.IsActive && !relatedOperation.State.ReviewRequired
+                                    ? now.Add(TrackingInterval)
+                                    : (DateTimeOffset?)null)
+                            .SetProperty(request => request.Problem, safeProblem), leaseToken) != 1)
+                        throw new ConnectionConflictException();
+                }
             }
 
             var bindings = await db.ManagedSourceBindings

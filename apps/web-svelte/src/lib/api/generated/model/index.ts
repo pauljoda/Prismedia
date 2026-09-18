@@ -479,6 +479,7 @@ export * from './managedPersonCredit';
 export * from './managedPersonCreditExternalIds';
 export * from './managedReleaseObservation';
 export * from './managedReleasePreview';
+export * from './managedRequestExpansion';
 export * from './managedRequestPhase';
 export * from './managedRequestPreview';
 export * from './managedRequestResponse';

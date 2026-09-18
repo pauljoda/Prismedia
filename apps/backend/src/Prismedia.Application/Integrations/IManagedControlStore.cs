@@ -6,7 +6,8 @@ namespace Prismedia.Application.Integrations;
 /// <summary>Server-derived owned targets. Remote file paths and IDs are deliberately excluded from its stable fingerprint.</summary>
 public sealed record OwnedManagedControlScope(ManagedControlScope Scope, string Fingerprint);
 /// <summary>Immutable reviewed mutation intent, containing no credentials.</summary>
-public sealed record ManagedControlPlan(ManagedControlScope Scope, CreateManagedControlRequest Request, string RequestFingerprint);
+public sealed record ManagedControlPlan(ManagedControlScope Scope, CreateManagedControlRequest Request, string RequestFingerprint,
+    IReadOnlyList<Guid>? ScopeEntityIds = null);
 /// <summary>Durable manager action independent of queue or upstream command history.</summary>
 public sealed record StoredManagedControl(ManagedControlOperation Operation, ManagedControlPlan Plan,
     DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, string? Problem);
@@ -15,6 +16,10 @@ public sealed record StoredManagedControl(ManagedControlOperation Operation, Man
 public interface IManagedControlStore {
     /// <summary>Derives exact targets from established bindings and verifies their retained fulfillment owner.</summary>
     Task<OwnedManagedControlScope> RequireScopeAsync(Guid connectionId, Guid holdingId, CancellationToken token);
+    /// <summary>Derives an exact append-only subset from an established holding.</summary>
+    Task<OwnedManagedControlScope> RequireScopeAsync(Guid connectionId, Guid holdingId,
+        IReadOnlyList<Guid> entityIds, CancellationToken token) =>
+        throw new NotSupportedException("Subset manager controls are not supported by this store.");
     /// <summary>Loads retained progress without contacting the connected application.</summary>
     Task<StoredManagedControl?> FindAsync(Guid id, CancellationToken token);
     /// <summary>Lists recent actions for this holding.</summary>

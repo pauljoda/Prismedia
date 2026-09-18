@@ -2,6 +2,7 @@ using Prismedia.Application.Requests;
 using Prismedia.Contracts.Integrations;
 using Prismedia.Contracts.Requests;
 using Prismedia.Domain.Entities;
+using Prismedia.Domain.Integrations;
 
 namespace Prismedia.Application.Integrations;
 
@@ -15,6 +16,7 @@ public sealed class ReviewedManagedRequestService(
     ManagedLibraryService library,
     ExternalLibraryService externalLibraries,
     IReviewedFulfillmentOwnershipReader fulfillmentOwnership,
+    IManagedTrackingStore tracking,
     IManagedRequestStore requests,
     ManagedRequestService managedRequests,
     IReviewedManagedRequestCommitScope commitScope) {
@@ -33,8 +35,7 @@ public sealed class ReviewedManagedRequestService(
                 canonical,
                 managerOrigin: input.ManagerDiscoveryRevision is not null,
                 token),
-            RequestMediaKind.Series when input.ManagerDiscoveryRevision is null =>
-                await series.ReviewForManagerAsync(canonical, token),
+            RequestMediaKind.Series => await series.ReviewForManagerAsync(canonical, token),
             _ => throw new RequestCommitValidationException(
                 "Choose a reviewed movie or finite series episode selection for external fulfillment.")
         };
@@ -53,6 +54,8 @@ public sealed class ReviewedManagedRequestService(
             input.LibraryRootId,
             lookup.Existing);
         var existingFulfillments = await fulfillmentOwnership.ListAsync(plan.Work, token);
+        var expansion = await ResolveExpansionAsync(
+            connectionId, mount.LibraryRootId, plan.Work, lookup.Existing, existingFulfillments, token);
         return new(
             authorized.Connection.State.Revision,
             input.ManagerDiscoveryRevision,
@@ -62,7 +65,8 @@ public sealed class ReviewedManagedRequestService(
             mount,
             options,
             lookup.Existing,
-            existingFulfillments);
+            existingFulfillments,
+            expansion);
     }
 
     /// <summary>Commits reviewed metadata and durable fulfillment ownership as one local transaction.</summary>
@@ -86,7 +90,8 @@ public sealed class ReviewedManagedRequestService(
         if (review.ConnectionRevision != input.ExpectedConnectionRevision)
             throw new ConnectionConflictException("The selected manager connection changed. Review its options again.");
         if (ExistingSourceResponse(review) is { } owned) return owned;
-        if (review.ExistingFulfillments.Count != 0)
+        var expansion = review.Expansion;
+        if (expansion is null && review.ExistingFulfillments.Count != 0)
             throw new FulfillmentOwnershipConflictException();
         if (!review.Options.Profiles.Any(profile => profile.Id == input.ProfileId))
             throw new ArgumentException("Choose an existing external profile.");
@@ -122,6 +127,10 @@ public sealed class ReviewedManagedRequestService(
                     var prepared = await series.PrepareAsync(review.Request, ct);
                     entityId = prepared.SeriesEntityId;
                     targetEntityIds = prepared.Episodes.Where(episode => !episode.HasFile).Select(episode => episode.EntityId).ToArray();
+                    if (expansion is { } existingHolding) {
+                        var retained = existingHolding.RetainedTargetEntityIds.ToHashSet();
+                        targetEntityIds = targetEntityIds.Where(id => !retained.Contains(id)).ToArray();
+                    }
                     if (targetEntityIds.Count == 0) return new(entityId, targetEntityIds, ManagedRequest: null);
                 }
 
@@ -155,9 +164,52 @@ public sealed class ReviewedManagedRequestService(
                     preview,
                     reviewedFingerprint,
                     input.ExpectedConnectionRevision,
+                    expansion?.HoldingId,
                     ct);
                 return new(entityId, targetEntityIds, accepted);
             }, token);
+    }
+
+    private async Task<ManagedRequestExpansion?> ResolveExpansionAsync(
+        Guid connectionId,
+        Guid libraryRootId,
+        ManagedLookupInput work,
+        ManagedItemSnapshot? existing,
+        IReadOnlyList<ReviewedFulfillmentOwnership> existingFulfillments,
+        CancellationToken token) {
+        if (work.EntityKind != EntityKind.VideoSeries) return null;
+        var holdings = (await tracking.ListAsync(connectionId, token))
+            .Where(holding => holding.Item.EntityKind == EntityKind.VideoSeries
+                && holding.Status != ManagedTrackingStatus.Released
+                && work.ExternalIds.All(pair =>
+                    holding.Item.ExpectedExternalIds.GetValueOrDefault(pair.Key) == pair.Value))
+            .ToArray();
+        if (holdings.Length == 0) {
+            return null;
+        }
+        if (holdings.Length != 1) return null;
+        var holding = holdings[0];
+        if (holding.Status is not (ManagedTrackingStatus.Tracking or ManagedTrackingStatus.WaitingForFiles)
+            || holding.LibraryRootId != libraryRootId
+            || existing is null || existing.Item.RemoteId != holding.Item.RemoteId)
+            return null;
+        var ownerRequest = await requests.FindAsync(holding.Id, token);
+        if (ownerRequest is not null && (ownerRequest.Operation.State.ReviewRequired
+            || ownerRequest.Operation.State.Phase is not (ManagedRequestPhase.AwaitingFiles or ManagedRequestPhase.Completed)
+            || ownerRequest.Plan.ExistingHoldingId is not null))
+            return null;
+        if (existingFulfillments.Any(owner => owner.OwnerKind != FulfillmentOwnerKind.ExternalManager
+                || owner.ConnectionId != connectionId || owner.RequestId != holding.Id))
+            return null;
+        var selectedOwned = existingFulfillments
+            .SelectMany(owner => owner.TargetEntityIds ?? [])
+            .Distinct().Count();
+        var selectedCount = work.Targets?.Count ?? 0;
+        return new(
+            holding.Id,
+            holding.Targets.Select(target => target.EntityId).Distinct().ToArray(),
+            selectedOwned,
+            Math.Max(0, selectedCount - selectedOwned));
     }
 
     internal static void ValidateCommitInput(CommitReviewedManagedRequestInput? input) {

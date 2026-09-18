@@ -56,6 +56,54 @@ public sealed class ManagedDiscoveryServiceTests {
     }
 
     [Fact]
+    public async Task SeriesSearchUsesSonarrCanonicalTvdbIdentityAndOpensNormalFiniteMetadataReview() {
+        var router = new SeriesRouter();
+        var reviews = new SeriesReviewPreparation();
+        var fixture = new Fixture(series: true, router, reviews);
+
+        var searched = await fixture.Service.SearchAsync(fixture.Connection.State.Id,
+            new(EntityKind.VideoSeries, "Breaking Bad", 10), default);
+        var result = Assert.Single(searched.Items);
+        Assert.Equal(new ExternalIdentity(ExternalIdProviders.Tvdb, "81189"), result.ExternalIdentity);
+        Assert.Equal("https://images.example.test/series-poster.jpg", result.Metadata!.PosterUrl);
+
+        var reviewed = await fixture.Service.ReviewAsync(fixture.Connection.State.Id,
+            new(EntityKind.VideoSeries, result.ExternalIdentity), default);
+
+        Assert.Equal("tmdb", reviewed.Review.PluginId);
+        Assert.Equal(RequestMediaKind.Series, reviewed.Review.Kind);
+        Assert.Equal(EntityKind.VideoSeries, reviewed.Review.EntityKind);
+        var season = Assert.Single(reviewed.Review.Proposal.Children);
+        Assert.Equal(EntityKind.VideoSeason, season.TargetKind);
+        Assert.Equal(EntityKind.VideoEpisode, Assert.Single(season.Children).TargetKind);
+        Assert.Equal("81189", reviewed.Review.Proposal.Patch.ExternalIds[ExternalIdProviders.Tvdb]);
+        Assert.Equal(1, router.Calls);
+        Assert.Equal(1, reviews.Calls);
+
+        var commit = Commit(reviewed.Review, reviewed.Review.Proposal);
+        var canonical = await fixture.Service.CanonicalizeAsync(
+            fixture.Connection.State.Id, reviewed.ConnectionRevision, commit, default);
+
+        Assert.Equal(new ExternalIdentity(ExternalIdProviders.Tmdb, "1396"), canonical.Request.RootExternalIdentity);
+        Assert.Equal(ExternalIdProviders.Tvdb, fixture.LookupInputs.Last().ExternalIds.Single().Key);
+        Assert.Equal("81189", fixture.LookupInputs.Last().ExternalIds.Single().Value);
+    }
+
+    [Fact]
+    public async Task SeriesReviewUsesConfiguredProviderOrderBeforeAlphabeticalRouteOrder() {
+        var router = new SeriesRouter("alphabetical-fixture", "tmdb");
+        var reviews = new SeriesReviewPreparation();
+        var providers = new SeriesProviders("tmdb", "alphabetical-fixture");
+        var fixture = new Fixture(series: true, router, reviews, providers);
+
+        var reviewed = await fixture.Service.ReviewAsync(fixture.Connection.State.Id,
+            new(EntityKind.VideoSeries, new(ExternalIdProviders.Tvdb, "81189")), default);
+
+        Assert.Equal("tmdb", reviewed.Review.PluginId);
+        Assert.Equal(["tmdb"], reviews.ProviderCalls);
+    }
+
+    [Fact]
     public async Task ReviewFromAnotherConnectionCannotBePreparedWhenRevisionsMatch() {
         var fixture = new Fixture();
         var reviewed = await fixture.Service.ReviewAsync(fixture.Connection.State.Id,
@@ -133,7 +181,7 @@ public sealed class ManagedDiscoveryServiceTests {
     }
 
     private static ReviewedRequestCommitRequest Commit(RequestReviewResponse review, EntityMetadataProposal proposal) => new(
-        RequestMediaKind.Movie,
+        review.Kind,
         review.PluginId,
         review.ExternalIdentity,
         review.Revision,
@@ -146,7 +194,8 @@ public sealed class ManagedDiscoveryServiceTests {
     private sealed class Fixture : IIntegrationConnectionStore, IIntegrationPluginGateway,
         IIntegrationManagerGateway, IIntegrationManagerCreationGateway {
         private const string PluginId = "fixture-radarr";
-        internal ExternalIdentity Identity { get; } = new(ExternalIdProviders.Tmdb, "19");
+        internal ExternalIdentity Identity { get; }
+        internal EntityKind Kind { get; }
         internal IntegrationConnection Connection { get; }
         internal IntegrationConnection OtherConnection { get; }
         internal FakeWriter Writer { get; } = new();
@@ -161,10 +210,17 @@ public sealed class ManagedDiscoveryServiceTests {
                 new Dictionary<string, string> { [ExternalIdProviders.Tmdb] = "202" })
         ];
         private readonly PluginManifest manifest;
+        internal List<ManagedLookupInput> LookupInputs { get; } = [];
 
-        internal Fixture() {
+        internal Fixture(
+            bool series = false,
+            IPluginIdentityRouter? router = null,
+            IPluginRequestReviewSource? reviews = null,
+            IIdentifyProviderService? providers = null) {
+            Kind = series ? EntityKind.VideoSeries : EntityKind.Movie;
+            Identity = new(ExternalIdProviders.Tmdb, series ? "1396" : "19");
             IntegrationSupport[] support = [new(PluginCapability.ExternalManager,
-                [IntegrationOperation.DiscoverManaged, IntegrationOperation.LookupManaged], [EntityKind.Movie])];
+                [IntegrationOperation.DiscoverManaged, IntegrationOperation.LookupManaged], [Kind])];
             Connection = IntegrationConnection.Create(PluginId, "Radarr", "https://radarr.test", true,
                 [PluginCapability.ExternalManager], new Dictionary<string, string>());
             Connection.RecordProbe(null, support, null, DateTimeOffset.UtcNow, false);
@@ -176,14 +232,25 @@ public sealed class ManagedDiscoveryServiceTests {
                 Integration: new(1, support.Select(value => new PluginIntegrationCapability(
                     value.Kind, value.Operations, value.EntityKinds)).ToArray(), []));
             var wanted = new ReviewedWantedMovieService(Writer, new Suppressions(), new NeverRouter(), new Lease());
-            Service = new(new(this, this), this, this, wanted);
+            Service = new(new(this, this), this, this, wanted,
+                router ?? new NeverRouter(), reviews ?? new NeverReviewSource(),
+                providers ?? new SeriesProviders("tmdb"));
         }
 
-        private ManagedCandidate Candidate() => new(EntityKind.Movie, "Metropolis", 1927,
-            new Dictionary<string, string> { [Identity.Namespace] = Identity.Value, [ExternalIdProviders.Imdb] = "tt0017136" },
-            new(Overview: "A city divided.", Studio: "UFA", Classification: "PG",
-                Tags: ["Science Fiction"], PosterUrl: "https://images.example.test/poster.jpg",
-                Credits: Credits));
+        private ManagedCandidate Candidate() => Kind == EntityKind.VideoSeries
+            ? new(EntityKind.VideoSeries, "Breaking Bad", 2008,
+                new Dictionary<string, string> {
+                    [ExternalIdProviders.Tmdb] = "1396",
+                    [ExternalIdProviders.Tvdb] = "81189",
+                    [ExternalIdProviders.Imdb] = "tt0903747"
+                },
+                new(Overview: "A chemistry teacher builds a criminal empire.", Studio: "AMC",
+                    PosterUrl: "https://images.example.test/series-poster.jpg"))
+            : new(EntityKind.Movie, "Metropolis", 1927,
+                new Dictionary<string, string> { [Identity.Namespace] = Identity.Value, [ExternalIdProviders.Imdb] = "tt0017136" },
+                new(Overview: "A city divided.", Studio: "UFA", Classification: "PG",
+                    Tags: ["Science Fiction"], PosterUrl: "https://images.example.test/poster.jpg",
+                    Credits: Credits));
 
         public Task<ManagedDiscoveryPage> DiscoverAsync(string pluginId, IntegrationConnectionContext connection,
             ManagedDiscoveryQuery input, CancellationToken token) {
@@ -193,7 +260,11 @@ public sealed class ManagedDiscoveryServiceTests {
                 candidate.ExternalIds, candidate.Metadata)]));
         }
         public Task<ManagedLookupResult> LookupAsync(string pluginId, IntegrationConnectionContext connection,
-            ManagedLookupInput input, CancellationToken token) { LookupCalls++; return Task.FromResult(new ManagedLookupResult(Candidate(), null)); }
+            ManagedLookupInput input, CancellationToken token) {
+            LookupCalls++;
+            LookupInputs.Add(input);
+            return Task.FromResult(new ManagedLookupResult(Candidate(), null));
+        }
         public Task<EnsureManagedResult> EnsureAsync(string pluginId, IntegrationConnectionContext connection, EnsureManagedInput input, CancellationToken token) => throw new NotImplementedException();
         public Task<StoredIntegrationConnection?> FindAsync(Guid id, CancellationToken token) => Task.FromResult<StoredIntegrationConnection?>(
             id == Connection.State.Id ? new(Connection, []) : id == OtherConnection.State.Id ? new(OtherConnection, []) : null);
@@ -228,6 +299,87 @@ public sealed class ManagedDiscoveryServiceTests {
     }
     private sealed class NeverRouter : IPluginIdentityRouter {
         public Task<IReadOnlyList<PluginIdentityRoute>> ResolveAsync(string kind, IdentifyAction action, IReadOnlyList<ExternalIdentity> identities, CancellationToken token) => throw new InvalidOperationException("Manager discovery must not route as metadata.");
+    }
+    private sealed class NeverReviewSource : IPluginRequestReviewSource {
+        public Task<RequestReviewResponse?> ReviewAsync(RequestReviewRequest request, bool hideNsfw, CancellationToken cancellationToken) =>
+            throw new InvalidOperationException("Movie manager discovery must not route as metadata.");
+    }
+    private sealed class SeriesRouter(params string[] providerIds) : IPluginIdentityRouter {
+        internal int Calls;
+        public Task<IReadOnlyList<PluginIdentityRoute>> ResolveAsync(
+            string kind,
+            IdentifyAction action,
+            IReadOnlyList<ExternalIdentity> identities,
+            CancellationToken token) {
+            Calls++;
+            Assert.Equal(EntityKind.VideoSeries.ToCode(), kind);
+            Assert.Equal(IdentifyAction.LookupId, action);
+            var ids = providerIds.Length == 0 ? ["tmdb"] : providerIds;
+            return Task.FromResult<IReadOnlyList<PluginIdentityRoute>>(ids.Select(provider =>
+                new PluginIdentityRoute(provider,
+                    identities.Single(identity => identity.Namespace == ExternalIdProviders.Tmdb))).ToArray());
+        }
+    }
+    private sealed class SeriesReviewPreparation : IPluginRequestReviewSource {
+        internal int Calls;
+        internal List<string> ProviderCalls { get; } = [];
+        public Task<RequestReviewResponse?> ReviewAsync(
+            RequestReviewRequest request,
+            bool hideNsfw,
+            CancellationToken cancellationToken) {
+            Calls++;
+            ProviderCalls.Add(request.PluginId);
+            var episode = Proposal("episode", EntityKind.VideoEpisode, "Pilot",
+                new Dictionary<string, string> { [ExternalIdProviders.Tmdb] = "1396:1:1" }, request.PluginId);
+            var season = Proposal("season", EntityKind.VideoSeason, "Season 1",
+                new Dictionary<string, string> { [ExternalIdProviders.Tmdb] = "1396:1" }, request.PluginId, [episode]);
+            var root = Proposal("series", EntityKind.VideoSeries, "Breaking Bad",
+                new Dictionary<string, string> {
+                    [ExternalIdProviders.Tmdb] = "1396"
+                }, request.PluginId, [season]);
+            var review = new RequestReviewResponse(
+                request.PluginId,
+                request.ExternalIdentity,
+                EntityKind.VideoSeries,
+                RequestMediaKind.Series,
+                root,
+                RequestProposalRevision.Compute(root),
+                [new(root.ProposalId, RequestMediaKind.Series, EntityKind.VideoSeries, request.ExternalIdentity, true)]);
+            return Task.FromResult<RequestReviewResponse?>(review);
+        }
+        private static EntityMetadataProposal Proposal(
+            string id,
+            EntityKind kind,
+            string title,
+            IReadOnlyDictionary<string, string> ids,
+            string pluginId,
+            IReadOnlyList<EntityMetadataProposal>? children = null) => new(
+                id,
+                pluginId,
+                kind,
+                1,
+                "Exact identity",
+                new(title, null, ids, [], [], null, [], new Dictionary<string, string>(),
+                    new Dictionary<string, int>(), new Dictionary<string, int>(), null),
+                [],
+                children ?? [],
+                [],
+                Relationships: []);
+    }
+    private sealed class SeriesProviders(params string[] ids) : IIdentifyProviderService {
+        public Task<IReadOnlyList<PluginProvider>> ListProvidersAsync(
+            string? entityKind,
+            CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<PluginProvider>>(ids.Select(id =>
+                new PluginProvider(id, id, "1.0.0", true, true, false, [], [], [])).ToArray());
+        public Task<IdentifyPluginResponse> IdentifyAsync(
+            Guid entityId, string providerId, IdentifyQuery? query,
+            IReadOnlyDictionary<string, string>? parentExternalIds, bool hideNsfw,
+            CancellationToken cancellationToken, bool cascadeChildren = true,
+            IIdentifyCascadeSink? sink = null, bool hydrateRelationships = true) => throw new NotImplementedException();
+        public Task<bool> ApplyAsync(
+            Guid entityId, EntityMetadataProposal proposal, IReadOnlyCollection<string> selectedFields,
+            IReadOnlyDictionary<string, string?>? selectedImages, CancellationToken cancellationToken,
+            IIdentifyApplyProgressReporter? progress = null) => throw new NotImplementedException();
     }
     private sealed class Lease : IEntityLifecycleMutationLease {
         public async Task<bool> ExecuteAsync(Guid id, Func<CancellationToken, Task> mutation, CancellationToken token) { await mutation(token); return true; }

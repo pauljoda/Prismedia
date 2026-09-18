@@ -203,7 +203,7 @@ describe("Manager request options", () => {
     expect(screen.queryByText(/already requested/i)).not.toBeInTheDocument();
   });
 
-  it("publishes an existing owner and hides choices that cannot apply", async () => {
+  it("keeps repeated movie review openable when an existing request owns it", async () => {
     const onChange = vi.fn();
     mocks.fetchReviewedManagedRequest.mockResolvedValue({
       ...reviewed(request("1")),
@@ -273,6 +273,54 @@ describe("Manager request options", () => {
       entityId: "existing-series",
       partialSelection: true,
     }));
+  });
+
+  it("submits only the reviewed append when selected episodes share the retained holding", async () => {
+    const onChange = vi.fn();
+    mocks.fetchReviewedManagedRequest.mockResolvedValue({
+      ...reviewed(request("series")),
+      work: {
+        entityKind: ENTITY_KIND.videoSeries,
+        externalIds: { tvdb: "100" },
+        targets: [
+          { entityKind: ENTITY_KIND.videoEpisode, externalIds: {}, seasonNumber: 1, episodeNumber: 1 },
+          { entityKind: ENTITY_KIND.videoEpisode, externalIds: {}, seasonNumber: 1, episodeNumber: 2 },
+        ],
+      },
+      existingFulfillments: [{
+        entityId: "existing-series",
+        targetEntityIds: ["existing-episode-one"],
+        ownerKind: FULFILLMENT_OWNER_KIND.externalManager,
+        connectionId: connection.id,
+        connectionName: connection.name,
+        requestId: "holding-one",
+        requestPhase: MANAGED_REQUEST_PHASE.completed,
+        hasLocalSource: true,
+      }],
+      expansion: {
+        holdingId: "holding-one",
+        retainedTargetEntityIds: ["existing-episode-one"],
+        selectedOwnedTargetCount: 1,
+        newTargetCount: 1,
+      },
+    });
+
+    render(ManagerRequestOptions, {
+      entityKind: ENTITY_KIND.videoSeries,
+      fixedConnection: connection,
+      request: request("series"),
+      onChange,
+    });
+
+    expect(await screen.findByText("Request 1 more episode")).toBeInTheDocument();
+    expect(screen.getByText(/Only the new selection will be searched/)).toBeInTheDocument();
+    await waitFor(() => expect(onChange).toHaveBeenLastCalledWith(
+      expect.objectContaining({ review: expect.objectContaining({
+        expansion: expect.objectContaining({ holdingId: "holding-one", newTargetCount: 1 }),
+      }) }),
+      true,
+      null,
+    ));
   });
 
   it("re-runs read-only review when a definite rejection requests a refresh", async () => {

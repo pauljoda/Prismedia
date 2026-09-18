@@ -19,6 +19,7 @@ public sealed record CreateManagedRequestInput(Guid OperationId, Guid EntityId, 
 public sealed record ManagedRequestResponse(Guid Id, Guid ConnectionId, Guid EntityId, Guid LibraryRootId,
     string Title, ManagedRequestPhase Phase, long Revision, string? RemoteId, bool Monitored, bool Search,
     bool ReviewRequired, bool CanCancel, DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, string? Problem,
+    Guid HoldingId,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<Guid>? TargetEntityIds = null);
 /// <summary>Revision-fenced cancellation of intent that has no possible creation effect.</summary>
 public sealed record CancelManagedRequestInput(long ExpectedRevision);
@@ -39,7 +40,15 @@ public sealed record ReviewedManagedRequest(
     ExternalLibraryMount Mount,
     ManagerOptions Options,
     ManagedItemSnapshot? Existing,
-    IReadOnlyList<ReviewedFulfillmentOwnership> ExistingFulfillments);
+    IReadOnlyList<ReviewedFulfillmentOwnership> ExistingFulfillments,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] ManagedRequestExpansion? Expansion = null);
+
+/// <summary>An exact reviewed append to one retained finite-series holding.</summary>
+public sealed record ManagedRequestExpansion(
+    Guid HoldingId,
+    IReadOnlyList<Guid> RetainedTargetEntityIds,
+    int SelectedOwnedTargetCount,
+    int NewTargetCount);
 
 /// <summary>
 /// Existing Prismedia ownership of canonical reviewed work. A missing owner kind identifies native

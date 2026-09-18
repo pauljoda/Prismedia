@@ -46,7 +46,8 @@ const seriesPreview: ManagedRequestPreview = {
 function request(values: Partial<ManagedRequestResponse> = {}): ManagedRequestResponse {
   return { id: "request", connectionId: connection.id, entityId: "wanted", libraryRootId: "root", title: "Wanted film", phase: MANAGED_REQUEST_PHASE.pendingCreation,
     revision: 1, remoteId: null, monitored: false, search: true, reviewRequired: false, canCancel: true,
-    createdAt: "2026-09-16T12:00:00Z", updatedAt: "2026-09-16T12:00:00Z", problem: null, ...values };
+    createdAt: "2026-09-16T12:00:00Z", updatedAt: "2026-09-16T12:00:00Z", problem: null,
+    holdingId: "request", ...values };
 }
 async function review() {
   render(ManagedRequests, { connection });

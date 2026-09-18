@@ -152,8 +152,6 @@ public sealed class ReviewedWantedSeriesService(
                 .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
             if (episode.Identity.Namespace == ExternalIdProviders.Tvdb)
                 ids[episode.Identity.Namespace] = episode.Identity.Value;
-            if (ids.Count == 0)
-                throw Invalid("Every selected episode needs an exact TVDB identity for external fulfillment.");
             return new ManagedLookupTarget(
                 EntityKind.VideoEpisode,
                 ids,

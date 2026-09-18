@@ -13,7 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 ### Added
 
 - Plugins can provide metadata, discovery, acquisition, downloads, and external-library capabilities independently. Connections support multiple instances with separate credentials, health checks, and packaged provider logos.
-- Request combines visual discovery, connected collections, metadata review, and provider choices. Radarr can search new movies directly; reviewed movie and selected-episode requests can delegate acquisition to Radarr or Sonarr and open the normal Prismedia entity page.
+- Request combines visual discovery, connected collections, metadata review, and provider choices. Radarr and Sonarr can search new titles directly; reviewed movie and selected-episode requests can delegate acquisition and open the normal Prismedia entity page. Already-followed series can request additional selected episodes while retaining their existing library links.
 - Provider folders appear in Settings → Libraries and can attach to existing Prismedia libraries. External files stay in place and read-only to Prismedia, with shared visibility, playback, and watch history across renames, missing files, and upgrades.
 - Linked Radarr and Sonarr titles offer scoped monitoring, profile, and search controls. Durable ownership prevents competing acquisition, preserves uncertain outcomes for review, and supports explicit handoff after remote activity stops.
 - OPDS and compatible catalogs can browse and import books, comics, and still images, including Wikimedia Commons. Imports distinguish downloads from loans, purchases, and samples; preserve source attribution; and recover verified files through cancellation, retries, and interrupted placement.
@@ -161,6 +161,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Audio-track detail and saved-queue payloads no longer duplicate embedded artist and album fields outside the Entity's `embedded-audio-metadata` capability.
 
 ### Fixed
+
+- External requests resume automatically after a temporary connection check interrupts observation, while identity and ownership conflicts remain protected for review.
 
 - Plugin updates automatically recheck enabled connections; only failed checks need attention.
 

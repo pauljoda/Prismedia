@@ -54,7 +54,7 @@ public sealed class EfManagedReleaseStore(PrismediaDbContext db, IManagedTrackin
             var owned = await controls.RequireScopeAsync(connectionId, holdingId, ct);
             if (owned.Fingerprint != request.ScopeFingerprint) throw Conflict();
             await RequireSettledControlsAsync(holdingId, ct);
-            await PauseRequestAsync(holdingId, false, ct);
+            await PauseRequestsAsync(row, false, ct);
             var now = DateTimeOffset.UtcNow;
             var serialized = JsonSerializer.Serialize(request, Json);
             await db.ManagedHoldings.Where(value => value.Id == holdingId && value.Revision == row.Revision)
@@ -84,7 +84,7 @@ public sealed class EfManagedReleaseStore(PrismediaDbContext db, IManagedTrackin
             var owners = db.FulfillmentReservations.Where(owner => owner.OwnerId == row.Id && owner.ConnectionId == row.ConnectionId
                 && owner.ReleasedAt == null && (owner.OwnerKind == FulfillmentOwnerKind.ConnectedLibrary || owner.OwnerKind == FulfillmentOwnerKind.ExternalManager));
             if (!(await owners.Select(owner => owner.EntityId).Distinct().ToArrayAsync(ct)).ToHashSet().SetEquals(entityIds)) throw Conflict();
-            await PauseRequestAsync(row.Id, true, ct);
+            await PauseRequestsAsync(row, true, ct);
             var now = DateTimeOffset.UtcNow;
             var archived = JsonSerializer.Serialize(current.Holding.Bindings, Json);
             await db.ManagedSourceBindings.Where(binding => binding.HoldingId == row.Id).ExecuteDeleteAsync(ct);
@@ -120,24 +120,52 @@ public sealed class EfManagedReleaseStore(PrismediaDbContext db, IManagedTrackin
     }
     private async Task<ManagedHoldingRow> LockAsync(Guid holdingId, CancellationToken token) {
         // Match materialization's lock order after the entity lifecycle lease: request, then holding.
-        await db.ManagedRequests.FromSqlInterpolated($"SELECT * FROM managed_requests WHERE id = {holdingId} FOR UPDATE").AsNoTracking().ToArrayAsync(token);
+        var original = (await db.ManagedRequests
+            .FromSqlInterpolated($"SELECT * FROM managed_requests WHERE id = {holdingId} FOR UPDATE")
+            .AsNoTracking().ToArrayAsync(token)).SingleOrDefault();
+        if (original is not null)
+            await db.ManagedRequests
+                .FromSqlInterpolated($"SELECT * FROM managed_requests WHERE connection_id = {original.ConnectionId} AND entity_id = {original.EntityId} ORDER BY id FOR UPDATE")
+                .AsNoTracking().ToArrayAsync(token);
         return (await db.ManagedHoldings.FromSqlInterpolated($"SELECT * FROM managed_holdings WHERE id = {holdingId} FOR UPDATE")
             .AsNoTracking().ToArrayAsync(token)).SingleOrDefault() ?? throw Conflict();
     }
-    private async Task PauseRequestAsync(Guid holdingId, bool complete, CancellationToken token) {
-        var row = await db.ManagedRequests.AsNoTracking().SingleOrDefaultAsync(row => row.Id == holdingId, token);
-        if (row is null) return;
-        var state = JsonSerializer.Deserialize<ManagedRequestState>(row.StateJson, Json)!;
-        var operation = new ManagedRequestOperation(state);
-        if (state.Revision != row.Revision || state.Phase != row.Phase) throw Conflict();
-        if (complete) operation.ReleaseOwnership();
-        else if (operation.IsActive) operation.RequireReview();
-        else return;
-        var serialized = JsonSerializer.Serialize(operation.State, Json);
-        if (await db.ManagedRequests.Where(value => value.Id == row.Id && value.Revision == row.Revision)
-            .ExecuteUpdateAsync(set => set.SetProperty(value => value.StateJson, serialized).SetProperty(value => value.Phase, operation.State.Phase)
-                .SetProperty(value => value.Revision, operation.State.Revision).SetProperty(value => value.NextCheckAt, (DateTimeOffset?)null)
-                .SetProperty(value => value.UpdatedAt, DateTimeOffset.UtcNow).SetProperty(value => value.Problem, (string?)null), token) != 1) throw Conflict();
+    private async Task PauseRequestsAsync(ManagedHoldingRow holding, bool complete, CancellationToken token) {
+        var original = await db.ManagedRequests.AsNoTracking()
+            .SingleOrDefaultAsync(row => row.Id == holding.Id, token);
+        if (original is null) return;
+        var rows = await db.ManagedRequests
+            .FromSqlInterpolated($"SELECT * FROM managed_requests WHERE connection_id = {holding.ConnectionId} AND entity_id = {original.EntityId} FOR UPDATE")
+            .AsNoTracking().ToArrayAsync(token);
+        var retainedIds = JsonSerializer.Deserialize<ManagedTargetBinding[]>(holding.TargetsJson, Json)!
+            .Select(binding => binding.EntityId).ToHashSet();
+        foreach (var row in rows.OrderBy(row => row.Id)) {
+            var plan = JsonSerializer.Deserialize<ManagedRequestPlan>(row.PlanJson, Json)
+                ?? throw new InvalidDataException("Invalid managed request intent.");
+            if (row.Id != holding.Id && plan.ExistingHoldingId != holding.Id) continue;
+            var state = JsonSerializer.Deserialize<ManagedRequestState>(row.StateJson, Json)!;
+            if (state.Revision != row.Revision || state.Phase != row.Phase) throw Conflict();
+            var operation = new ManagedRequestOperation(state);
+            if (complete) {
+                if (state.Phase is not (ManagedRequestPhase.AwaitingFiles
+                    or ManagedRequestPhase.RemoteRemoved or ManagedRequestPhase.Completed)) continue;
+                operation.ReleaseOwnership();
+            } else if (plan.ExistingHoldingId == holding.Id && operation.CanCancel) {
+                var targets = (plan.Request.TargetEntityIds ?? []).ToArray();
+                if (targets.Any(retainedIds.Contains)) throw Conflict();
+                operation.Cancel();
+                await db.FulfillmentReservations.Where(owner => owner.OwnerId == holding.Id
+                        && owner.OwnerKind == FulfillmentOwnerKind.ExternalManager
+                        && owner.ReleasedAt == null && targets.Contains(owner.EntityId))
+                    .ExecuteUpdateAsync(set => set.SetProperty(owner => owner.ReleasedAt, DateTimeOffset.UtcNow), token);
+            } else if (operation.IsActive) operation.RequireReview();
+            else continue;
+            var serialized = JsonSerializer.Serialize(operation.State, Json);
+            if (await db.ManagedRequests.Where(value => value.Id == row.Id && value.Revision == row.Revision)
+                .ExecuteUpdateAsync(set => set.SetProperty(value => value.StateJson, serialized).SetProperty(value => value.Phase, operation.State.Phase)
+                    .SetProperty(value => value.Revision, operation.State.Revision).SetProperty(value => value.NextCheckAt, (DateTimeOffset?)null)
+                    .SetProperty(value => value.UpdatedAt, DateTimeOffset.UtcNow).SetProperty(value => value.Problem, (string?)null), token) != 1) throw Conflict();
+        }
     }
     private static ManagedControlConflictException Conflict() => new("This ownership handoff changed. Refresh its retained progress before continuing.");
 }

@@ -203,7 +203,54 @@ public sealed partial class EfManagedRequestStore(PrismediaDbContext db, IExtern
                 if (await db.ManagedHoldings.AnyAsync(holding => holding.Id == row.Id, ct)
                     || await db.ManagedControls.AnyAsync(action => action.Id == row.Id, ct))
                     throw new ManagedRequestConflictException("This operation ID already belongs to another managed action.");
-                if (plan.Creation.Work.EntityKind == EntityKind.VideoSeries) {
+                if (plan.ExistingHoldingId is { } existingHoldingId) {
+                    var ownerRequest = (await db.ManagedRequests
+                        .FromSqlInterpolated($"SELECT * FROM managed_requests WHERE id = {existingHoldingId} FOR UPDATE")
+                        .AsNoTracking().ToArrayAsync(ct)).SingleOrDefault();
+                    var holding = (await db.ManagedHoldings
+                        .FromSqlInterpolated($"SELECT * FROM managed_holdings WHERE id = {existingHoldingId} FOR UPDATE")
+                        .AsNoTracking().ToArrayAsync(ct)).SingleOrDefault();
+                    var item = holding is null ? null : JsonSerializer.Deserialize<ManagedItemInput>(holding.ItemJson, Json);
+                    var ownerState = ownerRequest is null
+                        ? null
+                        : JsonSerializer.Deserialize<ManagedRequestState>(ownerRequest.StateJson, Json);
+                    if (ownerRequest is not null && (ownerState is null
+                            || ownerRequest.ConnectionId != state.ConnectionId || ownerRequest.EntityId != state.EntityId
+                            || ownerState.Revision != ownerRequest.Revision || ownerState.Phase != ownerRequest.Phase
+                            || ownerState.ReviewRequired
+                            || ownerState.Phase is not (ManagedRequestPhase.AwaitingFiles or ManagedRequestPhase.Completed))
+                        || holding is null || holding.ConnectionId != state.ConnectionId
+                        || holding.LibraryRootId != state.LibraryRootId || holding.ReleasedAt is not null
+                        || holding.ReleaseOperationId is not null
+                        || holding.Status is not (ManagedTrackingStatus.Tracking or ManagedTrackingStatus.WaitingForFiles)
+                        || item is null || item.EntityKind != EntityKind.VideoSeries
+                        || plan.Creation.Work.ExternalIds.Any(pair => item.ExpectedExternalIds.GetValueOrDefault(pair.Key) != pair.Value))
+                        throw new ManagedRequestConflictException("The reviewed series holding is no longer available for expansion.");
+                    if (await db.ManagedControls.AsNoTracking()
+                        .AnyAsync(action => action.ActiveHoldingId == existingHoldingId, ct))
+                        throw new ManagedRequestConflictException(
+                            "Finish the holding's current manager action before adding more episodes.");
+                    var requestedIds = (plan.Request.TargetEntityIds ?? []).ToHashSet();
+                    var retainedIds = JsonSerializer.Deserialize<ManagedTargetBinding[]>(holding.TargetsJson, Json)!
+                        .Select(binding => binding.EntityId).ToHashSet();
+                    if (requestedIds.Overlaps(retainedIds))
+                        throw new ManagedRequestConflictException(
+                            "The reviewed episode append changed because this holding already retained one or more selected targets.");
+                    var activeExpansions = await db.ManagedRequests.AsNoTracking()
+                        .Where(request => request.ConnectionId == state.ConnectionId
+                            && request.EntityId == state.EntityId
+                            && request.Id != state.OperationId
+                            && (request.Phase == ManagedRequestPhase.PendingCreation
+                                || request.Phase == ManagedRequestPhase.CreationUncertain
+                                || request.Phase == ManagedRequestPhase.AwaitingFiles))
+                        .ToArrayAsync(ct);
+                    if (activeExpansions.Any(request => {
+                        var accepted = JsonSerializer.Deserialize<ManagedRequestPlan>(request.PlanJson, Json);
+                        return accepted?.ExistingHoldingId == existingHoldingId;
+                    }))
+                        throw new ManagedRequestConflictException(
+                            "Finish the holding's accepted episode expansion before adding another.");
+                } else if (plan.Creation.Work.EntityKind == EntityKind.VideoSeries) {
                     var active = await db.ManagedHoldings.AsNoTracking()
                         .Where(holding => holding.ConnectionId == state.ConnectionId
                             && holding.Kind == EntityKind.VideoSeries
@@ -223,8 +270,16 @@ public sealed partial class EfManagedRequestStore(PrismediaDbContext db, IExtern
                 foreach (var targetId in boundary.Targets is { Count: > 0 }
                     ? boundary.Targets.Select(target => target.EntityId)
                     : [row.EntityId]) {
+                    if (plan.ExistingHoldingId is { } expansionOwner)
+                        await db.FulfillmentReservations
+                            .Where(owner => owner.OwnerId == expansionOwner
+                                && owner.OwnerKind == FulfillmentOwnerKind.ExternalManager
+                                && owner.ConnectionId == row.ConnectionId
+                                && owner.EntityId == targetId
+                                && owner.ReleasedAt != null)
+                            .ExecuteDeleteAsync(ct);
                     await reservations.ReserveAsync(
-                        row.Id,
+                        OwnerId(plan, state),
                         FulfillmentOwnerKind.ExternalManager,
                         row.ConnectionId,
                         targetId,
@@ -265,10 +320,20 @@ public sealed partial class EfManagedRequestStore(PrismediaDbContext db, IExtern
             if (beforeDispatch) await RequireBoundaryAsync(operation, current.Plan, true, ct);
             await UpdateAsync(operation, expectedRevision, problem, ct);
             if (operation.State.Phase == ManagedRequestPhase.Cancelled) {
-                if (!current.Operation.CanCancel || await db.ManagedHoldings.AnyAsync(holding => holding.Id == operation.State.OperationId, ct))
+                if (!current.Operation.CanCancel || current.Plan.ExistingHoldingId is null
+                    && await db.ManagedHoldings.AnyAsync(holding => holding.Id == operation.State.OperationId, ct))
                     throw new ManagedRequestConflictException("This request may have remote effects and cannot release ownership by cancellation.");
-                await db.FulfillmentReservations.Where(owner => owner.OwnerId == operation.State.OperationId
+                var ownerId = OwnerId(current.Plan, operation.State);
+                var appended = current.Plan.ExistingHoldingId is { } holdingId
+                    ? JsonSerializer.Deserialize<ManagedTargetBinding[]>((await db.ManagedHoldings.AsNoTracking()
+                        .Where(holding => holding.Id == holdingId).Select(holding => holding.TargetsJson).SingleAsync(ct)), Json)!
+                        .Select(binding => binding.EntityId).ToHashSet()
+                    : [];
+                var releasable = (current.Plan.Request.TargetEntityIds ?? [operation.State.EntityId])
+                    .Where(id => !appended.Contains(id)).ToArray();
+                await db.FulfillmentReservations.Where(owner => owner.OwnerId == ownerId
                     && owner.OwnerKind == FulfillmentOwnerKind.ExternalManager && owner.ReleasedAt == null)
+                    .Where(owner => releasable.Contains(owner.EntityId))
                     .ExecuteUpdateAsync(set => set.SetProperty(owner => owner.ReleasedAt, DateTimeOffset.UtcNow), ct);
             }
         }, token)) throw new EntityLifecycleMutationConflictException(operation.State.EntityId);
@@ -309,7 +374,7 @@ public sealed partial class EfManagedRequestStore(PrismediaDbContext db, IExtern
             state.EntityId,
             state.LibraryRootId,
             plan.Request.TargetEntityIds,
-            requireOwner ? state.OperationId : null,
+            requireOwner ? OwnerId(plan, state) : null,
             token);
         if (!ManagedRequestIdentity.SameWork(target.Work, plan.Creation.Work) || target.Mount.RemoteRootId != plan.Creation.RootId
             || target.Mount.RemotePath != plan.Creation.ExpectedRootPath) throw new ManagedRequestConflictException("The accepted wanted identity or library boundary changed.");
@@ -318,7 +383,7 @@ public sealed partial class EfManagedRequestStore(PrismediaDbContext db, IExtern
                 ? target.Targets.Select(item => item.EntityId).ToArray()
                 : [state.EntityId];
             var owned = await db.FulfillmentReservations.AsNoTracking()
-                .Where(owner => owner.OwnerId == state.OperationId
+                .Where(owner => owner.OwnerId == OwnerId(plan, state)
                     && owner.OwnerKind == FulfillmentOwnerKind.ExternalManager
                     && owner.ConnectionId == state.ConnectionId
                     && owner.ReleasedAt == null
@@ -367,5 +432,7 @@ public sealed partial class EfManagedRequestStore(PrismediaDbContext db, IExtern
         if (existing.Operation.State.ConnectionId != operation.State.ConnectionId || existing.Plan.Fingerprint != plan.Fingerprint) throw Conflict();
         return existing;
     }
+    private static Guid OwnerId(ManagedRequestPlan plan, ManagedRequestState state) =>
+        plan.ExistingHoldingId ?? state.OperationId;
     private static ManagedRequestConflictException Conflict() => new("This managed request changed. Reload its progress before continuing.");
 }

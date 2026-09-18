@@ -97,6 +97,7 @@
     value: profile.id,
     label: profile.label,
   })) ?? []);
+  const canExpand = $derived(Number(review?.expansion?.newTargetCount ?? 0) > 0);
   const ownership = $derived.by((): ManagedRequestOwnership | null => {
     const fulfillments = review?.existingFulfillments ?? [];
     if (fulfillments.length === 0) return null;
@@ -245,7 +246,7 @@
   }
 
   function publishChoice() {
-    if (ownership) {
+    if (ownership && !canExpand) {
       onChange(null, Boolean(connectionId), ownership);
       return;
     }
@@ -367,7 +368,7 @@
       <Loader2 class="size-4 animate-spin" />
       Reviewing manager options…
     </div>
-  {:else if connection && review && ownership}
+  {:else if connection && review && ownership && !canExpand}
     <div class="border-l-2 border-border-accent pl-3" aria-live="polite">
       <p class="flex items-center gap-2 text-sm font-medium text-text-primary">
         {#if ownership.fulfillments.every((item) => item.hasLocalSource || item.requestPhase === MANAGED_REQUEST_PHASE.completed)}
@@ -399,6 +400,16 @@
       {/if}
     </div>
   {:else if connection && review}
+    {#if ownership && review.expansion && canExpand}
+      <div class="border-l-2 border-border-accent pl-3" aria-live="polite">
+        <p class="text-sm font-medium text-text-primary">
+          Request {review.expansion.newTargetCount} more episode{review.expansion.newTargetCount === 1 ? "" : "s"}
+        </p>
+        <p class="mt-1 text-xs leading-relaxed text-text-muted">
+          {review.expansion.selectedOwnedTargetCount} selected episode{review.expansion.selectedOwnedTargetCount === 1 ? " is" : "s are"} already retained by this series. Only the new selection will be searched.
+        </p>
+      </div>
+    {/if}
     <div class="grid gap-3">
       <label class="space-y-1.5">
         <span class="text-sm font-medium text-text-secondary">Library</span>

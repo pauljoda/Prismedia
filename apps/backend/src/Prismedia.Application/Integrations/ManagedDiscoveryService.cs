@@ -1,4 +1,5 @@
 using System.Globalization;
+using Prismedia.Application.Plugins;
 using Prismedia.Application.Requests;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Integrations;
@@ -13,8 +14,10 @@ public sealed class ManagedDiscoveryService(
     IntegrationConnectionAccess access,
     IIntegrationManagerGateway discovery,
     IIntegrationManagerCreationGateway lookup,
-    ReviewedWantedMovieService wanted) {
-    private const string DiscoveryMatchReason = "Connected catalog";
+    ReviewedWantedMovieService wanted,
+    IPluginIdentityRouter identityRouter,
+    IPluginRequestReviewSource metadataReviews,
+    IIdentifyProviderService identifyProviders) {
     private const int MaximumCredits = 1000;
     /// <summary>Returns bounded manager candidates with server-selected persistent identities.</summary>
     public async Task<ManagedDiscoverySearchResponse> SearchAsync(
@@ -47,7 +50,7 @@ public sealed class ManagedDiscoveryService(
         Guid connectionId,
         ManagedDiscoveryReviewRequest input,
         CancellationToken token) {
-        var (connection, review, metadata) = await ResolveReviewAsync(connectionId, input.EntityKind, input.ExternalIdentity, token);
+        var (connection, review, metadata) = await ResolveReviewAsync(connectionId, input.EntityKind, input.ExternalIdentity, null, token);
         return new(connection.Connection.State.Revision, review, metadata);
     }
 
@@ -58,18 +61,37 @@ public sealed class ManagedDiscoveryService(
         ReviewedRequestCommitRequest request,
         CancellationToken token) {
         if (request is null) throw new RequestCommitValidationException("Submit the reviewed manager movie.");
+        var kind = request.Kind switch {
+            RequestMediaKind.Movie => EntityKind.Movie,
+            RequestMediaKind.Series => EntityKind.VideoSeries,
+            _ => throw new RequestCommitValidationException("Submit a reviewed manager movie or series.")
+        };
         var (connection, review, _) = await ResolveReviewAsync(
             connectionId,
-            EntityKind.Movie,
-            request.RootExternalIdentity,
+            kind,
+            kind == EntityKind.VideoSeries ? ManagerSeriesIdentity(request) : request.RootExternalIdentity,
+            request.PluginId,
             token);
         if (connection.Connection.State.Revision != expectedRevision)
-            throw new ConnectionConflictException("The selected manager connection changed. Review the movie again.");
-        if (!string.Equals(request.PluginId, connection.Manifest.Id, StringComparison.OrdinalIgnoreCase))
-            throw new RequestCommitValidationException("The reviewed movie belongs to another manager connection.");
+            throw new ConnectionConflictException("The selected manager connection changed. Review the title again.");
+        if (kind == EntityKind.Movie
+            && !string.Equals(request.PluginId, connection.Manifest.Id, StringComparison.OrdinalIgnoreCase))
+            throw new RequestCommitValidationException("The reviewed title belongs to another manager connection.");
+        if (kind == EntityKind.VideoSeries && request.RootExternalIdentity != review.ExternalIdentity)
+            throw new RequestCommitValidationException(
+                "The reviewed metadata series no longer matches the exact Sonarr TVDB identity.");
         if (!string.Equals(request.ProposalRevision, review.Revision, StringComparison.Ordinal))
             throw new RequestProposalChangedException();
         return (connection.Connection.State.Revision, request with { Review = review });
+    }
+
+    private static ExternalIdentity ManagerSeriesIdentity(ReviewedRequestCommitRequest request) {
+        var tvdb = request.Proposal?.Patch.ExternalIds.GetValueOrDefault(ExternalIdProviders.Tvdb);
+        var identity = tvdb is null ? null : new ExternalIdentity(ExternalIdProviders.Tvdb, tvdb);
+        if (!CanonicalSeriesIdentity(identity))
+            throw new RequestCommitValidationException(
+                "The reviewed series no longer includes Sonarr's exact TVDB identity.");
+        return identity!;
     }
 
     /// <summary>Creates or enriches a wanted movie only after refreshing the exact connection-scoped review.</summary>
@@ -79,7 +101,7 @@ public sealed class ManagedDiscoveryService(
         CancellationToken token) {
         if (input?.Request is null) throw new RequestCommitValidationException("Submit the reviewed manager movie.");
         var request = input.Request;
-        var (connection, review, _) = await ResolveReviewAsync(connectionId, EntityKind.Movie, request.RootExternalIdentity, token);
+        var (connection, review, _) = await ResolveReviewAsync(connectionId, EntityKind.Movie, request.RootExternalIdentity, null, token);
         if (connection.Connection.State.Revision != input.ConnectionRevision)
             throw new ConnectionConflictException("The selected manager connection changed. Review the movie again.");
         if (!string.Equals(request.PluginId, connection.Manifest.Id, StringComparison.OrdinalIgnoreCase))
@@ -93,9 +115,10 @@ public sealed class ManagedDiscoveryService(
         Guid connectionId,
         EntityKind kind,
         ExternalIdentity identity,
+        string? expectedReviewPluginId,
         CancellationToken token) {
-        if (kind != EntityKind.Movie || !CanonicalMovieIdentity(identity))
-            throw new ArgumentException("Select a manager-discovered movie with its canonical TMDB identity.");
+        if (!SupportedDiscoveryIdentity(kind, identity))
+            throw new ArgumentException("Select a manager-discovered movie or series with its canonical identity.");
         var discoveryConnection = await access.RequireAsync(
             connectionId,
             PluginCapability.ExternalManager,
@@ -109,13 +132,20 @@ public sealed class ManagedDiscoveryService(
             kind,
             token);
         if (discoveryConnection.Connection.State.Revision != connection.Connection.State.Revision)
-            throw new ConnectionConflictException("The selected manager connection changed. Review the movie again.");
+            throw new ConnectionConflictException("The selected manager connection changed. Review the title again.");
         var work = new ManagedLookupInput(kind, new Dictionary<string, string> { [identity.Namespace] = identity.Value });
         var result = await lookup.LookupAsync(connection.Manifest.Id, connection.Context, work, token);
         ManagedCreationEvidence.ValidateLookup(work, result);
         ValidateCandidate(new(result.Candidate.EntityKind, result.Candidate.Title, result.Candidate.Year,
             result.Candidate.ExternalIds, result.Candidate.Metadata), kind);
-        var proposal = Proposal(connectionId, connection.Manifest.Id, result.Candidate);
+        if (kind == EntityKind.VideoSeries) {
+            var seriesReview = await ResolveSeriesReviewAsync(result.Candidate, expectedReviewPluginId, token);
+            return (connection, seriesReview, result.Candidate.Metadata);
+        }
+        var proposal = ManagedMetadataProposalFactory.Create(
+            connectionId,
+            connection.Manifest.Id,
+            result.Candidate);
         var review = new RequestReviewResponse(
             connection.Manifest.Id,
             identity,
@@ -127,100 +157,71 @@ public sealed class ManagedDiscoveryService(
         return (connection, review, result.Candidate.Metadata);
     }
 
-    private static EntityMetadataProposal Proposal(Guid connectionId, string pluginId, ManagedCandidate candidate) {
-        var metadata = candidate.Metadata;
-        var dates = (metadata?.Dates ?? new Dictionary<string, string>())
-            .Select(pair => pair.Key.TryDecodeAs<EntityDateType>(out var type) ? new EntityMetadataDatePatch(type, pair.Value) : null)
-            .Where(value => value is not null)
-            .Select(value => value!)
+    private async Task<RequestReviewResponse> ResolveSeriesReviewAsync(
+        ManagedCandidate candidate,
+        string? expectedPluginId,
+        CancellationToken token) {
+        var identities = candidate.ExternalIds
+            .Where(pair => CanonicalSeriesIdentity(new(pair.Key, pair.Value)))
+            .Select(pair => new ExternalIdentity(pair.Key, pair.Value))
             .ToArray();
-        var images = new List<ImageCandidate>();
-        if (metadata?.PosterUrl is { } poster)
-            images.Add(new(MediaImageKind.Poster.ToCode(), poster, pluginId, null, null, null, null));
-        if (metadata?.BackdropUrl is { } backdrop)
-            images.Add(new(MediaImageKind.Backdrop.ToCode(), backdrop, pluginId, null, null, null, null));
-        var credits = (metadata?.Credits ?? [])
-            .Select(credit => new CreditPatch(
-                credit.Name,
-                credit.Role.ToCode(),
-                credit.Character,
-                credit.SortOrder))
+        var routes = await identityRouter.ResolveAsync(
+                EntityKind.VideoSeries.ToCode(),
+                IdentifyAction.LookupId,
+                identities,
+                token);
+        var providerOrder = (await identifyProviders.ListProvidersAsync(EntityKind.VideoSeries.ToCode(), token))
+            .Where(provider => provider.Enabled && provider.MissingAuthKeys.Count == 0)
+            .Select((provider, index) => (provider.Id, index))
+            .ToDictionary(pair => pair.Id, pair => pair.index, StringComparer.OrdinalIgnoreCase);
+        var orderedRoutes = routes
+            .Where(route => expectedPluginId is null
+                || string.Equals(route.PluginId, expectedPluginId, StringComparison.OrdinalIgnoreCase))
+            .Where(route => providerOrder.ContainsKey(route.PluginId))
+            .OrderBy(route => providerOrder[route.PluginId])
+            .ThenBy(route => route.Identity.Namespace == ExternalIdProviders.Tmdb ? 0 : 1)
             .ToArray();
-        var patch = new EntityMetadataPatch(
-            candidate.Title,
-            metadata?.Overview,
-            candidate.ExternalIds,
-            metadata?.Urls ?? [],
-            metadata?.Tags ?? [],
-            metadata?.Studio,
-            credits,
-            new Dictionary<string, string>(),
-            new Dictionary<string, int>(),
-            new Dictionary<string, int>(),
-            metadata?.Classification) {
-            AlternativeTitles = string.IsNullOrWhiteSpace(metadata?.OriginalTitle)
-                || string.Equals(metadata.OriginalTitle, candidate.Title, StringComparison.Ordinal)
-                    ? []
-                    : [metadata.OriginalTitle],
-            DateEntries = dates
-        };
-        var identity = CanonicalIdentity(candidate.EntityKind, candidate.ExternalIds);
-        var relationships = PersonRelationships(connectionId, pluginId, metadata?.Credits ?? []);
-        return new($"manager:{connectionId:D}:{identity.Namespace}:{identity.Value}", pluginId, candidate.EntityKind, null,
-            DiscoveryMatchReason, patch, images, [], [], Relationships: relationships);
+        foreach (var route in orderedRoutes) {
+            var review = await metadataReviews.ReviewAsync(
+                new(RequestMediaKind.Series, route.PluginId, route.Identity),
+                hideNsfw: false,
+                token);
+            if (ValidSeriesReview(review, route, candidate)) return MergeManagerSeriesIdentity(review!, candidate);
+        }
+        throw new RequestCommitValidationException(
+            "No enabled metadata provider can review this manager series with its confirmed TVDB or TMDB identity.");
     }
 
-    private static IReadOnlyList<EntityMetadataProposal> PersonRelationships(
-        Guid connectionId,
-        string pluginId,
-        IReadOnlyList<ManagedPersonCredit> credits) {
-        var relationships = new List<EntityMetadataProposal>();
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        foreach (var credit in credits) {
-            var externalIds = credit.ExternalIds ?? new Dictionary<string, string>();
-            var hasTmdbIdentity = TryCanonicalTmdbPersonId(externalIds, out var tmdb);
-            var key = hasTmdbIdentity
-                ? $"{ExternalIdProviders.Tmdb}:{tmdb}"
-                : $"name:{credit.Name.Trim()}";
-            if (!seen.Add(key)) continue;
+    private static bool ValidSeriesReview(
+        RequestReviewResponse? review,
+        PluginIdentityRoute route,
+        ManagedCandidate candidate) {
+        if (review is null || review.Kind != RequestMediaKind.Series || review.EntityKind != EntityKind.VideoSeries
+            || review.Proposal.TargetKind != EntityKind.VideoSeries || review.ExternalIdentity != route.Identity
+            || !string.Equals(review.PluginId, route.PluginId, StringComparison.OrdinalIgnoreCase)) return false;
+        return candidate.ExternalIds.GetValueOrDefault(route.Identity.Namespace) == route.Identity.Value
+            && review.Proposal.Patch.ExternalIds.GetValueOrDefault(route.Identity.Namespace) == route.Identity.Value;
+    }
 
-            var urls = hasTmdbIdentity
-                ? new[] { $"https://www.themoviedb.org/person/{tmdb}" }
-                : [];
-            var personImages = credit.ProfileUrl is { } profile
-                ? new[] { new ImageCandidate(MediaImageKind.Profile.ToCode(), profile, pluginId, null, null, null, null) }
-                : [];
-            var personPatch = new EntityMetadataPatch(
-                credit.Name,
-                null,
-                externalIds,
-                urls,
-                [],
-                null,
-                [],
-                new Dictionary<string, string>(),
-                new Dictionary<string, int>(),
-                new Dictionary<string, int>(),
-                null);
-            relationships.Add(new(
-                $"manager:{connectionId:D}:person:{relationships.Count}",
-                pluginId,
-                EntityKind.Person,
-                null,
-                DiscoveryMatchReason,
-                personPatch,
-                personImages,
-                [],
-                [],
-                Relationships: []));
+    private static RequestReviewResponse MergeManagerSeriesIdentity(
+        RequestReviewResponse review,
+        ManagedCandidate candidate) {
+        var externalIds = review.Proposal.Patch.ExternalIds.ToDictionary(StringComparer.Ordinal);
+        foreach (var pair in candidate.ExternalIds.Where(pair =>
+                     pair.Key is ExternalIdProviders.Tvdb or ExternalIdProviders.Tmdb or ExternalIdProviders.Imdb)) {
+            if (externalIds.TryGetValue(pair.Key, out var value) && value != pair.Value) throw InvalidEvidence();
+            externalIds[pair.Key] = pair.Value;
         }
-        return relationships;
+        var proposal = review.Proposal with {
+            Patch = review.Proposal.Patch with { ExternalIds = externalIds }
+        };
+        return review with { Proposal = proposal, Revision = RequestProposalRevision.Compute(proposal) };
     }
 
     private static void ValidateSearch(ManagedDiscoveryQuery input) {
-        if (input is null || input.EntityKind != EntityKind.Movie || string.IsNullOrWhiteSpace(input.Query)
+        if (input is null || input.EntityKind is not (EntityKind.Movie or EntityKind.VideoSeries) || string.IsNullOrWhiteSpace(input.Query)
             || input.Query.Length > 512 || input.Query.Any(char.IsControl) || input.Limit is < 1 or > 100)
-            throw new ArgumentException("Enter a movie title up to 512 characters and a result limit from 1 to 100.");
+            throw new ArgumentException("Enter a movie or series title up to 512 characters and a result limit from 1 to 100.");
     }
 
     private static void ValidateCandidate(ManagedDiscoveryCandidate candidate, EntityKind kind) {
@@ -270,12 +271,26 @@ public sealed class ManagedDiscoveryService(
     private static ExternalIdentity CanonicalIdentity(EntityKind kind, IReadOnlyDictionary<string, string> ids) {
         if (kind == EntityKind.Movie && ids.TryGetValue(ExternalIdProviders.Tmdb, out var tmdb)
             && CanonicalMovieIdentity(new(ExternalIdProviders.Tmdb, tmdb))) return new(ExternalIdProviders.Tmdb, tmdb);
+        if (kind == EntityKind.VideoSeries) {
+            if (ids.TryGetValue(ExternalIdProviders.Tvdb, out var tvdb)
+                && CanonicalSeriesIdentity(new(ExternalIdProviders.Tvdb, tvdb))) return new(ExternalIdProviders.Tvdb, tvdb);
+            if (ids.TryGetValue(ExternalIdProviders.Tmdb, out tmdb)
+                && CanonicalSeriesIdentity(new(ExternalIdProviders.Tmdb, tmdb))) return new(ExternalIdProviders.Tmdb, tmdb);
+        }
         throw InvalidEvidence();
     }
 
     private static bool CanonicalMovieIdentity(ExternalIdentity? identity) => identity?.Namespace == ExternalIdProviders.Tmdb
         && int.TryParse(identity.Value, NumberStyles.None, CultureInfo.InvariantCulture, out var id) && id > 0
         && id.ToString(CultureInfo.InvariantCulture) == identity.Value;
+    private static bool CanonicalSeriesIdentity(ExternalIdentity? identity) => identity?.Namespace is ExternalIdProviders.Tmdb or ExternalIdProviders.Tvdb
+        && int.TryParse(identity.Value, NumberStyles.None, CultureInfo.InvariantCulture, out var id) && id > 0
+        && id.ToString(CultureInfo.InvariantCulture) == identity.Value;
+    private static bool SupportedDiscoveryIdentity(EntityKind kind, ExternalIdentity? identity) => kind switch {
+        EntityKind.Movie => CanonicalMovieIdentity(identity),
+        EntityKind.VideoSeries => CanonicalSeriesIdentity(identity),
+        _ => false
+    };
     private static bool Identities(IReadOnlyDictionary<string, string>? values) => values is { Count: > 0 and <= 64 }
         && values.All(pair => Text(pair.Key, 128) && Text(pair.Value, 2048));
     private static bool OptionalList(IReadOnlyList<string>? values, int count, int length) => values is null

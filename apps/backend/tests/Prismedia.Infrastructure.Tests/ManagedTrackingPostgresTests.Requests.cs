@@ -114,13 +114,15 @@ public sealed partial class ManagedTrackingPostgresTests {
     }
 
     [Fact]
-    public async Task AdditionalEpisodeRequestTruthfullyRejectsUntilHoldingExpansionHasItsOwnJournal() {
+    public async Task ReviewedExpansionReservesAndAppendsOnlyNewEpisodeToExistingHolding() {
         await using var database = await PostgresTestDatabase.CreateAsync();
         await using var db = database.CreateContext();
         var fixture = await SeedWantedSeriesAsync(db);
         var store = Requests(db);
         var accepted = await store.CreateAsync(fixture.Operation, fixture.Plan, default);
         await store.AcceptHoldingAsync(accepted, fixture.EmptySnapshot, fixture.ResolvedTargets, default);
+        var initialWaiting = (await store.FindAsync(accepted.Operation.State.OperationId, default))!;
+        Assert.True((await store.MaterializeAsync(initialWaiting, fixture.CompleteSnapshot, default)).Imported);
         var seriesId = fixture.Operation.State.EntityId;
         var seasonId = (await db.Entities.AsNoTracking()
             .SingleAsync(row => row.Id == fixture.EpisodeIds[1])).ParentEntityId!.Value;
@@ -159,22 +161,216 @@ public sealed partial class ManagedTrackingPostgresTests {
             operation.State.LibraryRootId,
             target.Work,
             "profile",
-            Monitored: true,
+            Monitored: false,
             Search: true,
             TargetEntityIds: [episodeId]);
         var plan = new ManagedRequestPlan(
             request,
             new(operation.State.OperationId, target.Work, "profile", "tv", "/series"),
             target.Title,
-            ManagedRequestIdentity.Fingerprint(request));
+            ManagedRequestIdentity.Fingerprint(request),
+            ExistingHoldingId: accepted.Operation.State.OperationId);
 
-        var error = await Assert.ThrowsAsync<ManagedRequestConflictException>(() =>
-            store.CreateAsync(operation, plan, default));
+        var expansion = await store.CreateAsync(operation, plan, default);
+        var owner = await db.FulfillmentReservations.AsNoTracking()
+            .SingleAsync(row => row.EntityId == episodeId && row.ReleasedAt == null);
+        Assert.Equal(accepted.Operation.State.OperationId, owner.OwnerId);
+        Assert.Equal(ManagedRequestPhase.PendingCreation, expansion.Operation.State.Phase);
 
-        Assert.Contains("reviewed expansion", error.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Single(await db.ManagedRequests.AsNoTracking().ToArrayAsync());
-        Assert.DoesNotContain(await db.FulfillmentReservations.AsNoTracking().ToArrayAsync(),
-            owner => owner.EntityId == episodeId);
+        var overlapOperation = ManagedRequestOperation.Create(Guid.NewGuid(), fixture.ConnectionId,
+            seriesId, fixture.Operation.State.LibraryRootId);
+        var overlapRequest = request with { OperationId = overlapOperation.State.OperationId };
+        var overlapPlan = plan with {
+            Request = overlapRequest,
+            Creation = plan.Creation with { OperationId = overlapOperation.State.OperationId },
+            Fingerprint = ManagedRequestIdentity.Fingerprint(overlapRequest)
+        };
+        await Assert.ThrowsAsync<ManagedRequestConflictException>(() =>
+            store.CreateAsync(overlapOperation, overlapPlan, default));
+
+        var disjointEpisodeId = Guid.NewGuid();
+        db.Entities.Add(new() {
+            Id = disjointEpisodeId,
+            ParentEntityId = seasonId,
+            KindCode = EntityKind.VideoEpisode.ToCode(),
+            Title = "Disjoint later",
+            IsWanted = true
+        });
+        db.EntityPositions.AddRange(
+            new() { EntityId = disjointEpisodeId, Code = EntityPositionCodes.Season, Value = 1 },
+            new() { EntityId = disjointEpisodeId, Code = EntityPositionCodes.Episode, Value = 4 });
+        db.EntityExternalIds.Add(new() {
+            Id = Guid.NewGuid(), EntityId = disjointEpisodeId,
+            Provider = ExternalIdProviders.Tvdb, Value = "104"
+        });
+        await db.SaveChangesAsync();
+        var disjointTarget = await store.RequireTargetAsync(
+            fixture.ConnectionId, seriesId, fixture.Operation.State.LibraryRootId,
+            [disjointEpisodeId], default);
+        var disjointOperation = ManagedRequestOperation.Create(Guid.NewGuid(), fixture.ConnectionId,
+            seriesId, fixture.Operation.State.LibraryRootId);
+        var disjointRequest = request with {
+            OperationId = disjointOperation.State.OperationId,
+            ReviewedWork = disjointTarget.Work,
+            TargetEntityIds = [disjointEpisodeId]
+        };
+        var disjointPlan = plan with {
+            Request = disjointRequest,
+            Creation = plan.Creation with {
+                OperationId = disjointOperation.State.OperationId,
+                Work = disjointTarget.Work
+            },
+            Fingerprint = ManagedRequestIdentity.Fingerprint(disjointRequest)
+        };
+        await Assert.ThrowsAsync<ManagedRequestConflictException>(() =>
+            store.CreateAsync(disjointOperation, disjointPlan, default));
+
+        expansion.Operation.Cancel();
+        await store.SaveAsync(expansion.Operation, expectedRevision: 1, problem: null, beforeDispatch: false, default);
+        Assert.Null(await db.FulfillmentReservations.AsNoTracking()
+            .Where(row => row.EntityId == episodeId && row.ReleasedAt == null)
+            .SingleOrDefaultAsync());
+
+        var retryOperation = ManagedRequestOperation.Create(Guid.NewGuid(), fixture.ConnectionId,
+            seriesId, fixture.Operation.State.LibraryRootId);
+        var retryRequest = request with { OperationId = retryOperation.State.OperationId };
+        var retryPlan = plan with {
+            Request = retryRequest,
+            Creation = plan.Creation with { OperationId = retryOperation.State.OperationId },
+            Fingerprint = ManagedRequestIdentity.Fingerprint(retryRequest)
+        };
+        expansion = await store.CreateAsync(retryOperation, retryPlan, default);
+
+        await store.AcceptHoldingAsync(
+            expansion,
+            fixture.EmptySnapshot,
+            [new("103", EntityKind.VideoEpisode,
+                new Dictionary<string, string> { [ExternalIdProviders.Tvdb] = "103" }, 1, 3)],
+            default);
+
+        var laterPath = Path.Combine(workspace, "series", "later.mkv");
+        await File.WriteAllBytesAsync(laterPath, [8, 9, 10, 11, 12]);
+        var laterSnapshot = fixture.EmptySnapshot with {
+            Files = [new(
+                "later",
+                "/series/later.mkv",
+                5,
+                null,
+                [new("103", EntityKind.VideoEpisode, "Later", 1, 3)])]
+        };
+        var expansionWaiting = (await store.FindAsync(expansion.Operation.State.OperationId, default))!;
+        Assert.True((await store.MaterializeAsync(expansionWaiting, laterSnapshot, default)).Imported);
+        Assert.Equal(ManagedRequestPhase.Completed,
+            (await store.FindAsync(expansion.Operation.State.OperationId, default))!.Operation.State.Phase);
+
+        var holding = (await Store(db).FindAsync(accepted.Operation.State.OperationId, default))!.Tracking;
+        Assert.Equal(4, holding.Targets.Count);
+        Assert.Equal(ManagedTrackingStatus.Tracking, holding.Status);
+        Assert.Contains(holding.Targets, binding => binding.EntityId == episodeId
+            && binding.Target.RemoteTargetId == "103");
+        var appendScope = await Controls(db).RequireScopeAsync(
+            fixture.ConnectionId,
+            holding.Id,
+            [episodeId],
+            default);
+        Assert.Equal("103", Assert.Single(appendScope.Scope.Targets).RemoteId);
+
+        var tracking = Store(db);
+        await tracking.ConfirmRemovalAsync(
+            (await tracking.FindAsync(holding.Id, default))!,
+            "Removed upstream",
+            default);
+        Assert.Equal(ManagedTrackingStatus.Removed,
+            (await tracking.FindAsync(holding.Id, default))!.Tracking.Status);
+        Assert.Equal(ManagedRequestPhase.RemoteRemoved,
+            (await store.FindAsync(accepted.Operation.State.OperationId, default))!.Operation.State.Phase);
+        Assert.Equal(ManagedRequestPhase.RemoteRemoved,
+            (await store.FindAsync(expansion.Operation.State.OperationId, default))!.Operation.State.Phase);
+
+        var removed = (await tracking.FindAsync(holding.Id, default))!;
+        var releaseStore = Releases(db);
+        var release = new ReleaseManagedHoldingRequest(
+            Guid.NewGuid(),
+            removed.Tracking.Revision,
+            ManagedControlIdentity.From(removed.Tracking).Fingerprint,
+            ExpectedPath: null,
+            RemoteItemAbsent: true);
+        await releaseStore.BeginAsync(fixture.ConnectionId, holding.Id, release, default);
+        var releaseWork = (await releaseStore.FindAsync(holding.Id, default))!;
+        await releaseStore.CompleteAsync(releaseWork,
+            new(State: null, QueueEmpty: true, CommandsIdle: true, RemoteItemAbsent: true), default);
+        Assert.Equal(ManagedRequestPhase.OwnershipReleased,
+            (await store.FindAsync(accepted.Operation.State.OperationId, default))!.Operation.State.Phase);
+        Assert.Equal(ManagedRequestPhase.OwnershipReleased,
+            (await store.FindAsync(expansion.Operation.State.OperationId, default))!.Operation.State.Phase);
+    }
+
+    [Fact]
+    public async Task ExistingTrackedSeriesWithoutRequestJournalCanBeExpanded() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var fixture = await SeedWantedSeriesAsync(db);
+        var store = Requests(db);
+        var accepted = await store.CreateAsync(fixture.Operation, fixture.Plan, default);
+        await store.AcceptHoldingAsync(accepted, fixture.EmptySnapshot, fixture.ResolvedTargets, default);
+        await db.ManagedRequests
+            .Where(request => request.Id == accepted.Operation.State.OperationId)
+            .ExecuteDeleteAsync();
+
+        var seasonId = (await db.Entities.AsNoTracking()
+            .SingleAsync(row => row.Id == fixture.EpisodeIds[1])).ParentEntityId!.Value;
+        var episodeId = Guid.NewGuid();
+        db.Entities.Add(new() {
+            Id = episodeId,
+            ParentEntityId = seasonId,
+            KindCode = EntityKind.VideoEpisode.ToCode(),
+            Title = "Adopted holding expansion",
+            IsWanted = true
+        });
+        db.EntityPositions.AddRange(
+            new() { EntityId = episodeId, Code = EntityPositionCodes.Season, Value = 1 },
+            new() { EntityId = episodeId, Code = EntityPositionCodes.Episode, Value = 3 });
+        db.EntityExternalIds.Add(new() {
+            Id = Guid.NewGuid(),
+            EntityId = episodeId,
+            Provider = ExternalIdProviders.Tvdb,
+            Value = "103"
+        });
+        await db.SaveChangesAsync();
+
+        var target = await store.RequireTargetAsync(
+            fixture.ConnectionId,
+            fixture.Operation.State.EntityId,
+            fixture.Operation.State.LibraryRootId,
+            [episodeId],
+            default);
+        var operation = ManagedRequestOperation.Create(
+            Guid.NewGuid(),
+            fixture.ConnectionId,
+            fixture.Operation.State.EntityId,
+            fixture.Operation.State.LibraryRootId);
+        var request = new CreateManagedRequestInput(
+            operation.State.OperationId,
+            operation.State.EntityId,
+            operation.State.LibraryRootId,
+            target.Work,
+            "profile",
+            Monitored: false,
+            Search: true,
+            TargetEntityIds: [episodeId]);
+        var plan = new ManagedRequestPlan(
+            request,
+            new(operation.State.OperationId, target.Work, "profile", "tv", "/series"),
+            target.Title,
+            ManagedRequestIdentity.Fingerprint(request),
+            ExistingHoldingId: accepted.Operation.State.OperationId);
+
+        var expansion = await store.CreateAsync(operation, plan, default);
+
+        Assert.Equal(accepted.Operation.State.OperationId, expansion.Plan.ExistingHoldingId);
+        var reservation = await db.FulfillmentReservations.AsNoTracking()
+            .SingleAsync(owner => owner.EntityId == episodeId && owner.ReleasedAt == null);
+        Assert.Equal(accepted.Operation.State.OperationId, reservation.OwnerId);
     }
 
     [Fact]
