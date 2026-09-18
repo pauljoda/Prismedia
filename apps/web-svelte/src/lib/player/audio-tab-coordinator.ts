@@ -1,3 +1,5 @@
+import { createUuid } from "$lib/utils/uuid";
+
 const CHANNEL_NAME = "prismedia-audio-playback";
 const LEASE_KEY = "prismedia:audio-active-tab";
 const LEASE_TTL_MS = 6000;
@@ -45,9 +47,7 @@ function isFresh(lease: Lease | null, at = now()): lease is Lease {
 }
 
 function randomTabId(): string {
-  return typeof crypto !== "undefined" && "randomUUID" in crypto
-    ? crypto.randomUUID()
-    : `${now().toString(36)}-${Math.random().toString(36).slice(2)}`;
+  return createUuid();
 }
 
 export function createAudioTabCoordinator(): AudioTabCoordinator {

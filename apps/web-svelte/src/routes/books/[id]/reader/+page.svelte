@@ -18,6 +18,7 @@
   import BookFileReader from "$lib/components/BookFileReader.svelte";
   import PdfReader from "$lib/components/PdfReader.svelte";
   import { ConsumptionActivityClock } from "$lib/entities/consumption-activity-clock";
+  import { createUuid } from "$lib/utils/uuid";
   import {
     exactWebEpubResumeLocation,
     webEpubLaunchLocation,
@@ -99,7 +100,7 @@
   });
 
   function createReaderSessionId(): string {
-    return globalThis.crypto?.randomUUID?.() ?? `reader-${Date.now()}-${Math.random()}`;
+    return createUuid();
   }
 
   function queueReaderActivityHeartbeat(stop: boolean) {

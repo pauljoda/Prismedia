@@ -1,6 +1,7 @@
 import { recordEntityConsumptionEvent, updateEntityConsumption } from "$lib/api/consumption";
 import { CONSUMPTION_EVENT_KIND } from "$lib/api/generated/codes";
 import { ConsumptionActivityClock } from "$lib/entities/consumption-activity-clock";
+import { createUuid } from "$lib/utils/uuid";
 
 interface MusicConsumptionSnapshot {
   positionSeconds: number;
@@ -73,8 +74,7 @@ export class MusicConsumptionReporter {
 }
 
 export function createConsumptionSessionId(entityId: string): string {
-  const suffix = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
-  return `${entityId}:${suffix}`;
+  return `${entityId}:${createUuid()}`;
 }
 
 /** Records an audio owner opening without coupling the caller to the event payload. */

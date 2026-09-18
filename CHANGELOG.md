@@ -123,6 +123,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Applying a reviewed Identify match no longer fails with a "400 Bad Request" when Prismedia is reached over a plain `http://` address on your network, such as `http://192.168.1.10:8008`. Identify apply, its live progress readout, and opening the comic reader all work on those addresses again; previously they only worked over HTTPS or from `localhost`.
+
 - Documentation search preserves queries typed while the page is still loading.
 - Older automatic TV imports incorrectly marked for manual review during upgrade can recover when their matching completed job proves automatic intent; explicit reviews and uncertain history remain protected.
 
