@@ -72,6 +72,7 @@
   } from "$lib/player/quality-preference";
   import { resolveInitialVideoPlayerSourcePolicy } from "$lib/player/video-player-source-policy";
   import { isFatalVideoDecodeError } from "$lib/player/video-player-errors";
+  import { shouldPreferNativeHLS } from "$lib/player/native-hls";
   import {
     pickPreferredSubtitleTrack,
     readLocalSubtitleAppearance,
@@ -264,6 +265,7 @@
   // source is still spinning up, or the request was interrupted by a load); we retry once rather
   // than treating it as a fatal error. Reset on each new source.
   let playRetried = false;
+  const preferNativeHLS = shouldPreferNativeHLS(typeof navigator === "undefined" ? null : navigator);
 
   let playbackMode = $state<PlaybackMode>("hls");
   let qualityMode = $state<QualityMode>("auto");
@@ -1533,8 +1535,8 @@
     {#if playerSrc && mediaMounted}
       <!--
         preferNativeHLS reorders vidstack's loaders so the plain <video> element is tried before
-        hls.js. Only Safari/WebKit can play application/vnd.apple.mpegurl natively, so that is the
-        only place it changes anything; Chromium and Firefox still get hls.js.
+        hls.js. Keep that preference scoped to Apple WebKit: recent Chromium can optimistically
+        report native HLS support and then fail to load the playlist, bypassing hls.js entirely.
 
         This is a correctness fix, not a preference. Stream-copied HEVC keeps the source's GOP
         structure, and most HEVC encodes are open-GOP: many segments begin on a CRA picture whose
@@ -1554,7 +1556,7 @@
         streamType="on-demand"
         crossOrigin
         playsInline
-        preferNativeHLS
+        preferNativeHLS={preferNativeHLS || undefined}
         load={mediaLoadStrategy}
         preload="metadata"
         posterLoad="eager"
