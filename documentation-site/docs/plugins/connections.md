@@ -562,13 +562,32 @@ reservation. Moving between acquisition owners requires the explicit handoff bel
 Database checks also reject metadata edits that would
 merge two actively owned scopes.
 
-Tracking observes the connected application every five minutes and can be refreshed
+Tracking observes the connected application every minute and can be refreshed
 manually. Renames, including a renamed containing folder, and same-scope replacements
 retain local entity IDs, file IDs, and user history. Byte-derived metadata and cached
 playback assets are refreshed for replacements. Missing or unreadable files retain
 their records with an unavailable source role, so catalog presence does not imply
 playability. Connection outages retain the last associations and show stale status;
 they never start a native fallback acquisition.
+
+Open Entity pages check saved availability and request progress every 15 seconds
+while visible, and when returning to the page. These checks reflect background
+observations; they do not send new acquisition requests or reload unchanged artwork.
+
+Confirmed removal from Radarr or Sonarr shows **Removed from source**. If no playable
+files or another active acquisition owner remain, the item leaves normal library
+lists. Prismedia retains the Entity identity, metadata, viewing history, and request
+history. Files that are still readable remain available in the library; Prismedia
+does not move or delete them. A returning verified source can restore the retained
+library entry. Removal does not start a replacement download or release ownership.
+Use the explicit handoff to choose another owner. Reappearance of the same remote
+identity requires review before resuming its external association.
+
+Adapters confirm removal only after a working application API, a missing exact
+holding, and a successful complete library response that also excludes that holding.
+A timeout, authentication error, or unavailable endpoint does not establish removal.
+The optional integration response `errorCode: "managed-item-not-found"` carries this
+evidence only for `get-library-item`; other failures remain unverified problems.
 
 Changed target identity, numbering, shared-file coverage, or a conflicting local owner
 requires review. Unverified source availability is withdrawn while the association

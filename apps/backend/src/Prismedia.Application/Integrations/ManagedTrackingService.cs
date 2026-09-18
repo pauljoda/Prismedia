@@ -49,6 +49,11 @@ public sealed class ManagedTrackingService(ManagedLibraryService library, IManag
         if (work.Tracking.Status is ManagedTrackingStatus.ReleasePending or ManagedTrackingStatus.Released) return;
         try {
             var remote = await library.GetAsync(work.Tracking.ConnectionId, work.Tracking.Item, token);
+            if (work.Tracking.Status == ManagedTrackingStatus.Removed) {
+                await store.RecordReappearanceAsync(id, work.Tracking.Revision,
+                    "The removed remote identity exists again. Review it before restoring this association.", token);
+                return;
+            }
             var observation = await store.ObserveAsync(work.Tracking.ConnectionId, remote, token);
             if (remote.Files.Count > 0 && observation.LibraryRootId != work.Tracking.LibraryRootId)
                 throw new ArgumentException("The holding moved outside its established mapping. Review its library boundary.");
@@ -61,9 +66,17 @@ public sealed class ManagedTrackingService(ManagedLibraryService library, IManag
                 if (plan.ReviewReason is not null) throw new ArgumentException(plan.ReviewReason);
                 await store.ApplyAsync(work, observation, null, plan.Changes, token);
             }
+        } catch (IntegrationInvocationException error) when (error.Code == IntegrationErrorCode.ManagedItemNotFound) {
+            await store.ConfirmRemovalAsync(work,
+                "The connected manager no longer contains this holding. Local files, metadata, and history were retained.", token);
         } catch (Exception error) when (error is IntegrationInvocationException or ConnectionNotFoundException or ConnectionSecretUnavailableException or ConnectionCapabilityUnavailableException) {
-            await store.RecordProblemAsync(id, work.Tracking.Revision, ManagedTrackingStatus.Stale,
-                "The connection could not be verified. Previous bindings are retained; no alternate acquisition was started.", token);
+            var status = work.Tracking.Status == ManagedTrackingStatus.Removed
+                ? ManagedTrackingStatus.Removed
+                : ManagedTrackingStatus.Stale;
+            var problem = status == ManagedTrackingStatus.Removed
+                ? "The connection could not be verified. The last confirmed removal and local data were retained."
+                : "The connection could not be verified. Previous bindings are retained; no alternate acquisition was started.";
+            await store.RecordProblemAsync(id, work.Tracking.Revision, status, problem, token);
         } catch (ArgumentException error) {
             await store.RecordProblemAsync(id, work.Tracking.Revision, ManagedTrackingStatus.NeedsReview, error.Message, token);
         }

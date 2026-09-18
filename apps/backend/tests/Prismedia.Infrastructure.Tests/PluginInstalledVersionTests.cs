@@ -9,6 +9,7 @@ using Prismedia.Application.Plugins;
 using Prismedia.Application.Integrations;
 using Prismedia.Domain.Integrations;
 using Prismedia.Infrastructure.Integrations;
+using Prismedia.Infrastructure.Processes;
 
 namespace Prismedia.Infrastructure.Tests;
 
@@ -79,18 +80,35 @@ public sealed class PluginInstalledVersionTests : IDisposable {
     }
 
     [Fact]
-    public async Task ManagerActionsAndRequestsDeferUpdatesUntilTheirDurableWorkCompletes() {
+    public async Task UpdatesAllowAcceptedHoldingObservationButStillBlockActionsAndUnacceptedRequests() {
         await using var db = CreateContext();
         var catalog = Catalog(db);
         await WriteAsync("1.0.0"); await catalog.InstallAsync(ProviderId, default); await WriteAsync("2.0.0");
         var connection = Connection(); db.IntegrationConnections.Add(connection);
         var control = new ManagedControlRow { Id = Guid.NewGuid(), ConnectionId = connection.Id, ActiveHoldingId = Guid.NewGuid() };
-        var request = new ManagedRequestRow { Id = Guid.NewGuid(), ConnectionId = connection.Id, Phase = ManagedRequestPhase.AwaitingFiles };
+        var requestId = Guid.NewGuid();
+        var entityId = Guid.NewGuid();
+        var libraryRootId = Guid.NewGuid();
+        var requestState = new ManagedRequestState(requestId, connection.Id, entityId, libraryRootId,
+            1, ManagedRequestPhase.AwaitingFiles, "accepted-remote-id");
+        var request = new ManagedRequestRow { Id = requestId, ConnectionId = connection.Id,
+            EntityId = entityId, LibraryRootId = libraryRootId, Revision = 1,
+            Phase = ManagedRequestPhase.AwaitingFiles,
+            StateJson = JsonSerializer.Serialize(requestState, PluginProcessTransport.JsonOptions) };
         db.ManagedControls.Add(control); db.ManagedRequests.Add(request); await db.SaveChangesAsync();
         await Assert.ThrowsAsync<PluginInUseException>(() => catalog.UpdateAsync(ProviderId, default));
         control.ActiveHoldingId = null; await db.SaveChangesAsync();
         await Assert.ThrowsAsync<PluginInUseException>(() => catalog.UpdateAsync(ProviderId, default));
-        request.Phase = ManagedRequestPhase.Completed; await db.SaveChangesAsync();
+        db.ManagedHoldings.Add(new() {
+            Id = request.Id,
+            ConnectionId = connection.Id,
+            LibraryRootId = libraryRootId,
+            Kind = EntityKind.Movie,
+            RemoteId = "accepted-remote-id",
+            Title = "Accepted holding",
+            Status = ManagedTrackingStatus.WaitingForFiles
+        });
+        await db.SaveChangesAsync();
         Assert.Equal("2.0.0", (await catalog.UpdateAsync(ProviderId, default))!.Version);
         Assert.Equal(ConnectionStatus.Unverified, connection.Status);
         Assert.Equal(2, connection.Revision);

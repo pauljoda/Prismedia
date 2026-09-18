@@ -161,12 +161,14 @@
     [MANAGED_REQUEST_PHASE.awaitingFiles]: "Waiting for files", [MANAGED_REQUEST_PHASE.completed]: "Imported",
     [MANAGED_REQUEST_PHASE.rejected]: "Request refused", [MANAGED_REQUEST_PHASE.cancelled]: "Cancelled",
     [MANAGED_REQUEST_PHASE.ownershipReleased]: "Ownership released",
+    [MANAGED_REQUEST_PHASE.remoteRemoved]: "Removed from source",
   };
   const holdingLabels: Record<ManagedTrackingResponse["status"], string> = {
     [MANAGED_TRACKING_STATUS.pending]: "Verifying", [MANAGED_TRACKING_STATUS.waitingForFiles]: "Waiting for files",
     [MANAGED_TRACKING_STATUS.tracking]: "Following", [MANAGED_TRACKING_STATUS.needsReview]: "Review tracking",
     [MANAGED_TRACKING_STATUS.stale]: "Source unavailable", [MANAGED_TRACKING_STATUS.releasePending]: "Handoff pending",
     [MANAGED_TRACKING_STATUS.released]: "Ownership released",
+    [MANAGED_TRACKING_STATUS.removed]: "Removed from source",
   };
   const refreshableRequestPhases = new Set<ManagedRequestResponse["phase"]>([
     MANAGED_REQUEST_PHASE.pendingCreation, MANAGED_REQUEST_PHASE.creationUncertain, MANAGED_REQUEST_PHASE.awaitingFiles,
@@ -174,6 +176,11 @@
   function localAvailability(holding: ManagedTrackingResponse) {
     if (holding.status === MANAGED_TRACKING_STATUS.released) return "Existing file links and history retained";
     const available = holding.bindings.filter(binding => binding.isAvailable).length;
+    if (holding.status === MANAGED_TRACKING_STATUS.removed) {
+      return available > 0
+        ? `${available} linked ${available === 1 ? "file remains" : "files remain"} available locally`
+        : "Metadata and request history retained; no local files remain";
+    }
     if (!holding.bindings.length) return `${holding.targets.length} remote ${holding.targets.length === 1 ? "item" : "items"} · no local files linked yet`;
     return `${available} of ${holding.bindings.length} linked files available locally`;
   }
@@ -198,6 +205,7 @@
       </div>
       {#if item.type === ITEM.holding}<p class="mt-1 text-xs text-text-muted">{localAvailability(item.holding)}</p>{/if}
       {#if item.type === ITEM.request && item.request.phase === MANAGED_REQUEST_PHASE.awaitingFiles}<p class="mt-1 text-xs text-text-muted">The remote manager is following this title; Prismedia has not confirmed a local file yet.</p>{/if}
+      {#if item.type === ITEM.request && item.request.phase === MANAGED_REQUEST_PHASE.remoteRemoved}<p class="mt-1 text-xs text-text-muted">Metadata and request history retained; this title is no longer waiting for files.</p>{/if}
       {#if item.type === ITEM.transfer && item.transfer.phase === INTEGRATION_TRANSFER_PHASE.completed && item.transfer.importedEntityIds.length}<p class="mt-1 text-xs text-text-muted">Added to your Prismedia library</p>{/if}
       {#if item.type === ITEM.transfer && item.transfer.importedEntityIds.some(id => visibleImportedEntityIds !== null && !visibleImportedEntityIds.has(id))}<p class="mt-1 text-xs text-text-muted">An imported item is unavailable or hidden by your current visibility settings.</p>{/if}
       {#if item.type === ITEM.transfer && item.transfer.mode === INTEGRATION_TRANSFER_MODE.sourceRequest && item.transfer.canCancel}<p class="mt-1 text-xs text-text-muted">Stopping this import leaves the source’s download running.</p>{/if}
@@ -217,15 +225,22 @@
       {:else if item.type === ITEM.request}
         {#if refreshableRequestPhases.has(item.request.phase)}<Button variant="outline" size="sm" disabled={busyKey !== null} onclick={() => void runAction(item.key, () => refreshRequest(item.connection.id, item.request.id))}><RefreshCw />Refresh</Button>{/if}
         {#if item.request.canCancel}<Button variant="ghost" size="sm" disabled={busyKey !== null} onclick={() => void runAction(item.key, () => cancelRequest(item.connection.id, item.request))}><X />Cancel</Button>{/if}
-        {#if item.request.remoteId}<Button variant="ghost" size="sm" aria-expanded={expandedKey === item.key} onclick={() => expandedKey = expandedKey === item.key ? null : item.key}>{expandedKey === item.key ? "Hide controls" : "Manage"}</Button>{/if}
+        {#if item.request.remoteId && item.request.phase !== MANAGED_REQUEST_PHASE.remoteRemoved}<Button variant="ghost" size="sm" aria-expanded={expandedKey === item.key} onclick={() => expandedKey = expandedKey === item.key ? null : item.key}>{expandedKey === item.key ? "Hide controls" : "Manage"}</Button>{/if}
       {:else}
-        {#if item.holding.status !== MANAGED_TRACKING_STATUS.released}<Button variant="outline" size="sm" disabled={busyKey !== null} onclick={() => void runAction(item.key, () => refreshTracking(item.connection.id, item.holding.id))}><RefreshCw />{item.holding.status === MANAGED_TRACKING_STATUS.releasePending ? "Refresh handoff" : "Refresh"}</Button>{/if}
-        {#if item.holding.status !== MANAGED_TRACKING_STATUS.released}<Button variant="ghost" size="sm" aria-expanded={expandedKey === item.key} onclick={() => expandedKey = expandedKey === item.key ? null : item.key}>{expandedKey === item.key ? "Hide controls" : "Manage"}</Button>{/if}
+        {#if item.holding.status !== MANAGED_TRACKING_STATUS.released && item.holding.status !== MANAGED_TRACKING_STATUS.removed}<Button variant="outline" size="sm" disabled={busyKey !== null} onclick={() => void runAction(item.key, () => refreshTracking(item.connection.id, item.holding.id))}><RefreshCw />{item.holding.status === MANAGED_TRACKING_STATUS.releasePending ? "Refresh handoff" : "Refresh"}</Button>{/if}
+        {#if item.holding.status !== MANAGED_TRACKING_STATUS.released && item.holding.status !== MANAGED_TRACKING_STATUS.removed}<Button variant="ghost" size="sm" aria-expanded={expandedKey === item.key} onclick={() => expandedKey = expandedKey === item.key ? null : item.key}>{expandedKey === item.key ? "Hide controls" : "Manage"}</Button>{/if}
+        {#if item.holding.status === MANAGED_TRACKING_STATUS.removed}
+          {#each [...new Set(item.holding.targets.map(target => target.entityId))] as entityId}
+            <Button variant="secondary" size="sm" disabled={busyKey !== null} onclick={() => void openEntity(item.key, entityId)}>Open<ArrowUpRight /></Button>
+          {/each}
+        {/if}
       {/if}
     </div>
-    {#if expandedKey === item.key && item.type === ITEM.request && item.request.remoteId}
+    {#if expandedKey === item.key && item.type === ITEM.request && item.request.remoteId
+      && item.request.phase !== MANAGED_REQUEST_PHASE.remoteRemoved}
       <div class="activity-details"><ManagedHoldingControls connectionId={item.connection.id} connectionName={item.connection.name} holdingId={item.request.id} canPreview={canControl(item.connection) && item.request.phase !== MANAGED_REQUEST_PHASE.ownershipReleased} /></div>
-    {:else if expandedKey === item.key && item.type === ITEM.holding}
+    {:else if expandedKey === item.key && item.type === ITEM.holding
+      && item.holding.status !== MANAGED_TRACKING_STATUS.removed}
       <div class="activity-details space-y-3">
         {#if item.holding.lastCheckedAt}<p class="text-xs text-text-muted">Last checked {new Date(item.holding.lastCheckedAt).toLocaleString()}</p>{/if}
         <ManagedHoldingControls connectionId={item.connection.id} connectionName={item.connection.name} holdingId={item.holding.id} canPreview={canControl(item.connection) && (item.holding.status === MANAGED_TRACKING_STATUS.tracking || item.holding.status === MANAGED_TRACKING_STATUS.waitingForFiles)} />

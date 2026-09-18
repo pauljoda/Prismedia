@@ -55,6 +55,8 @@ describe("request activity", () => {
     api.fetchEntityThumbnails.mockImplementation(async (ids: string[]) => ids.map(id => ({ id })));
     api.refreshTracking.mockResolvedValue(undefined);
     api.refreshRequest.mockResolvedValue(undefined);
+    api.resolveEntityHrefById.mockResolvedValue("/movies/retained-entity");
+    api.goto.mockResolvedValue(undefined);
   });
 
   it("deduplicates tracked requests and caps history beneath priority sections", async () => {
@@ -131,5 +133,44 @@ describe("request activity", () => {
     expect(screen.getByText(/unavailable or hidden by your current visibility settings/i)).toBeInTheDocument();
     expect(api.fetchEntityThumbnails).toHaveBeenCalledWith(["entity-1"], { hideNsfw: true });
     expect(api.resolveEntityHrefById).not.toHaveBeenCalled();
+  });
+
+  it("keeps removed source records as terminal history with clear local availability", async () => {
+    api.fetchManagedRequests.mockResolvedValue([request({
+      id: "removed-request",
+      title: "Removed request",
+      phase: MANAGED_REQUEST_PHASE.remoteRemoved,
+      canCancel: false,
+    })]);
+    api.fetchManagedTracking.mockResolvedValue([holding({
+      id: "removed-holding",
+      title: "Removed holding",
+      status: MANAGED_TRACKING_STATUS.removed,
+      targets: [{
+        target: { remoteTargetId: "remote", kind: ENTITY_KIND.movie, seasonNumber: null, episodeNumber: null, absoluteNumber: null },
+        entityId: "retained-entity",
+      }],
+      bindings: [{
+        remoteFileId: "remote-file",
+        localPath: "/media/remaining.mkv",
+        sizeBytes: 10,
+        writtenAt: "2026-09-18T12:00:00Z",
+        isAvailable: true,
+        entities: [],
+      }],
+    })]);
+    render(RequestActivity, { connections: [connection] });
+
+    await screen.findByText("Removed request");
+    expect(screen.getByRole("heading", { name: "Recent history" })).toBeInTheDocument();
+    expect(screen.getAllByText("Removed from source")).toHaveLength(2);
+    expect(screen.getByText("Metadata and request history retained; this title is no longer waiting for files.")).toBeInTheDocument();
+    expect(screen.getByText("1 linked file remains available locally")).toBeInTheDocument();
+    expect(screen.queryByText(/has not confirmed a local file yet/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Manage" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Refresh" })).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Open" }));
+    expect(api.resolveEntityHrefById).toHaveBeenCalledWith("retained-entity", { hideNsfw: true });
+    expect(api.goto).toHaveBeenCalledWith("/movies/retained-entity");
   });
 });

@@ -57,10 +57,13 @@ public sealed class WantedEntityWriterTests {
         Assert.Equal(1, await db.Entities.AsNoTracking().CountAsync());
     }
 
-    [Fact]
-    public async Task EnsurePromotesAFilelessProviderEntityToWantedWhenItIsRequested() {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task EnsurePromotesAFilelessProviderEntityToWantedWhenItIsRequested(bool archived) {
         await using var db = CreateContext();
         var entityId = AddEntity(db, EntityKind.Book.ToCode(), "Elantris", isWanted: false);
+        (await db.Entities.FindAsync(entityId))!.IsLibraryArchived = archived;
         AddExternalId(db, entityId, "openlibrary", "W1");
         await db.SaveChangesAsync();
 
@@ -74,6 +77,7 @@ public sealed class WantedEntityWriterTests {
 
         Assert.False(result.Created);
         Assert.False(result.HasRequestedRendition);
+        Assert.False((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == entityId)).IsLibraryArchived);
         Assert.True(await db.Entities.AsNoTracking()
             .Where(row => row.Id == entityId)
             .Select(row => row.IsWanted)

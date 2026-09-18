@@ -581,7 +581,8 @@
 
 {#snippet externalLibraryContent()}
   {#if externalLibraryProvenance}
-    <EntityExternalLibrary origin={externalLibraryProvenance} sourceLink={externalLibraryLink} />
+    <EntityExternalLibrary origin={externalLibraryProvenance} sourceLink={externalLibraryLink}
+      hasSourceMedia={card.entity.hasSourceMedia === true} />
   {/if}
 {/snippet}
 

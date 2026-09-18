@@ -206,6 +206,37 @@ public sealed partial class ManagedTrackingPostgresTests {
     }
 
     [Fact]
+    public async Task ConfirmedRemovalArchivesFilelessWantedEntityAndRetainsIdentityAndOwnerFence() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var fixture = await SeedWantedAsync(db);
+        var requests = Requests(db);
+        var accepted = await requests.CreateAsync(fixture.Operation, fixture.Plan, default);
+        await requests.AcceptHoldingAsync(accepted, fixture.Fixture.Snapshot, default);
+        var tracking = Store(db);
+        var work = (await tracking.FindAsync(accepted.Operation.State.OperationId, default))!;
+
+        await tracking.ConfirmRemovalAsync(work, "Confirmed removed", default);
+
+        var request = (await requests.FindAsync(accepted.Operation.State.OperationId, default))!;
+        Assert.Equal(ManagedRequestPhase.RemoteRemoved, request.Operation.State.Phase);
+        Assert.Equal("1", request.Operation.State.RemoteId);
+        var holding = (await tracking.FindAsync(accepted.Operation.State.OperationId, default))!.Tracking;
+        Assert.Equal(ManagedTrackingStatus.Removed, holding.Status);
+        Assert.Equal("Confirmed removed", holding.Problem);
+        var entity = await db.Entities.AsNoTracking().SingleAsync(row => row.Id == fixture.Fixture.EntityId);
+        Assert.False(entity.IsWanted);
+        Assert.True(entity.IsLibraryArchived);
+        Assert.Empty(await db.EntityFiles.AsNoTracking().ToArrayAsync());
+        Assert.Null(Assert.Single(await db.FulfillmentReservations.AsNoTracking().ToArrayAsync()).ReleasedAt);
+
+        var removed = (await tracking.FindAsync(accepted.Operation.State.OperationId, default))!;
+        Assert.Equal(ManagedTrackingStatus.Removed, removed.Tracking.Status);
+        Assert.Equal(ManagedTrackingStatus.ReleasePending,
+            (await Releases(db).BeginAsync(removed.Tracking.ConnectionId, removed.Tracking.Id, ReleaseIntent(removed), default)).Status);
+    }
+
+    [Fact]
     public async Task ReplayedWantedIntentHasOneOwnerAndQueueRunAndRejectsChangedSettings() {
         await using var database = await PostgresTestDatabase.CreateAsync();
         await using var first = database.CreateContext();
@@ -380,6 +411,31 @@ public sealed partial class ManagedTrackingPostgresTests {
         await store.QueueDueAsync(default);
         Assert.Single(await db.JobRuns.ToArrayAsync());
         Assert.Equal(ManagedRequestPhase.CreationUncertain, (await store.FindAsync(fixture.Operation.State.OperationId, default))!.Operation.State.Phase);
+    }
+
+    [Fact]
+    public async Task ReviewedAwaitingFilesRequestIsReobservedWithoutRetryingUncertainCreation() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var fixture = await SeedWantedAsync(db);
+        var store = Requests(db);
+        var accepted = await store.CreateAsync(fixture.Operation, fixture.Plan, default);
+        await store.AcceptHoldingAsync(accepted, fixture.Fixture.Snapshot, default);
+        var waiting = (await store.FindAsync(accepted.Operation.State.OperationId, default))!;
+        var revision = waiting.Operation.State.Revision;
+        waiting.Operation.RequireReview();
+        await store.SaveAsync(waiting.Operation, revision, "Legacy untyped manager error", false, default);
+        await db.JobGraphs.ExecuteDeleteAsync();
+        await db.ManagedRequests.Where(row => row.Id == accepted.Operation.State.OperationId)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(row => row.NextCheckAt, (DateTimeOffset?)null)
+                .SetProperty(row => row.UpdatedAt, DateTimeOffset.UtcNow.AddMinutes(-2)));
+
+        await store.QueueDueAsync(default);
+
+        Assert.Single(await db.JobRuns.ToArrayAsync());
+        Assert.Equal(ManagedRequestPhase.AwaitingFiles,
+            (await store.FindAsync(accepted.Operation.State.OperationId, default))!.Operation.State.Phase);
     }
 
     private EfManagedRequestStore Requests(PrismediaDbContext db) => new(db,

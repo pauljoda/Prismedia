@@ -225,7 +225,8 @@ public sealed class EfConsumptionStatisticsService(
 
     private IQueryable<Persistence.Entities.EntityRow> VisibleEntities(bool hideNsfw, bool enforceLibraryVisibility) {
         var all = db.Entities.AsNoTracking();
-        var entities = EntityCatalogQueryPolicy.Apply(all, all, EntityCatalogSurface.Statistics);
+        // Removal from the current library must not erase the viewer's historical activity totals.
+        var entities = EntityCatalogQueryPolicy.Apply(all, all, EntityCatalogSurface.Statistics, includeArchived: true);
         if (enforceLibraryVisibility) {
             entities = _libraryVisibility.ApplyCurrentUserVisibility(entities);
         }

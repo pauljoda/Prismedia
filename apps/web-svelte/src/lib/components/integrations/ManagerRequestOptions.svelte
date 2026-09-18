@@ -307,6 +307,7 @@
       [MANAGED_REQUEST_PHASE.rejected]: "Needs attention",
       [MANAGED_REQUEST_PHASE.cancelled]: "Cancelled",
       [MANAGED_REQUEST_PHASE.ownershipReleased]: "Ownership released",
+      [MANAGED_REQUEST_PHASE.remoteRemoved]: "Removed from source",
     }[item.requestPhase];
   }
 </script>

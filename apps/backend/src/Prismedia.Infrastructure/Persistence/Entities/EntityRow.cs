@@ -28,6 +28,9 @@ public sealed class EntityRow {
     /// </summary>
     public bool IsWanted { get; set; }
 
+    /// <summary>Retained metadata and history omitted from normal library catalogs until explicitly requested or sourced again.</summary>
+    public bool IsLibraryArchived { get; set; }
+
     /// <summary>
     /// Durable destructive operation that currently owns this Entity subtree. Explicit monitoring,
     /// request, and provider-materialization mutations must reject the target and its descendants while

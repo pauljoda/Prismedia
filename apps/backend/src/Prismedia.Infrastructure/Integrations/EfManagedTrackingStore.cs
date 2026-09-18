@@ -93,7 +93,7 @@ public sealed partial class EfManagedTrackingStore(PrismediaDbContext db, IExter
         foreach (var row in due) {
             await using var transaction = await db.Database.BeginTransactionAsync(token);
             await PublishAsync(row, token);
-            row.NextCheckAt = now.AddMinutes(5);
+            row.NextCheckAt = now.AddMinutes(1);
             await db.SaveChangesAsync(token);
             await transaction.CommitAsync(token);
         }

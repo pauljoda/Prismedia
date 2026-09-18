@@ -14,6 +14,7 @@ export const ManagedTrackingStatus = {
   tracking: 'tracking',
   'needs-review': 'needs-review',
   stale: 'stale',
+  removed: 'removed',
   'release-pending': 'release-pending',
   released: 'released',
 } as const;

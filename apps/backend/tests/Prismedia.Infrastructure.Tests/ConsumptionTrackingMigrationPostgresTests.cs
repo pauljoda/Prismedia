@@ -25,7 +25,7 @@ public sealed class ConsumptionTrackingMigrationPostgresTests {
         var skippedEventId = Guid.NewGuid();
         var progressAt = DateTimeOffset.Parse("2026-07-30T02:03:04Z");
         var lastActiveAt = progressAt.AddHours(1);
-        await AddCurrentUserModelCompatibilityAsync(database);
+        await AddCurrentModelCompatibilityAsync(database);
         await SeedUserAndEntitiesAsync(database, userId, bookId, chapterId);
 
         await using (var connection = await database.OpenConnectionAsync()) {
@@ -88,7 +88,7 @@ public sealed class ConsumptionTrackingMigrationPostgresTests {
         var userId = Guid.NewGuid();
         var entityId = Guid.NewGuid();
         var now = DateTimeOffset.Parse("2026-08-02T12:00:00Z");
-        await AddCurrentUserModelCompatibilityAsync(database);
+        await AddCurrentModelCompatibilityAsync(database);
         await SeedUserAndEntitiesAsync(database, userId, entityId);
 
         await using (var seed = database.CreateContext()) {
@@ -141,10 +141,13 @@ public sealed class ConsumptionTrackingMigrationPostgresTests {
             CreatedAt = occurredAt
         };
 
-    private static async Task AddCurrentUserModelCompatibilityAsync(PostgresTestDatabase database) {
+    private static async Task AddCurrentModelCompatibilityAsync(PostgresTestDatabase database) {
         await using var connection = await database.OpenConnectionAsync();
         await using var command = new NpgsqlCommand(
-            "ALTER TABLE users ADD COLUMN can_request_content boolean NOT NULL DEFAULT false",
+            """
+            ALTER TABLE users ADD COLUMN can_request_content boolean NOT NULL DEFAULT false;
+            ALTER TABLE entities ADD COLUMN is_library_archived boolean NOT NULL DEFAULT false;
+            """,
             connection);
         await command.ExecuteNonQueryAsync();
     }

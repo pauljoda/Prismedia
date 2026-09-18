@@ -48,6 +48,8 @@ describe("request activity presentation", () => {
     expect(managedTrackingActivityGroup(holding({ status: MANAGED_TRACKING_STATUS.released, problem: "Old warning" }))).toBe(REQUEST_ACTIVITY_GROUP.recent);
     expect(transferActivityGroup(transfer({ phase: INTEGRATION_TRANSFER_PHASE.cancelled, lastError: "Old warning" }))).toBe(REQUEST_ACTIVITY_GROUP.recent);
     expect(managedTrackingActivityGroup(holding())).toBe(REQUEST_ACTIVITY_GROUP.following);
+    expect(managedRequestActivityGroup(request({ phase: MANAGED_REQUEST_PHASE.remoteRemoved, problem: "Gone" }))).toBe(REQUEST_ACTIVITY_GROUP.recent);
+    expect(managedTrackingActivityGroup(holding({ status: MANAGED_TRACKING_STATUS.removed, problem: "Gone" }))).toBe(REQUEST_ACTIVITY_GROUP.recent);
   });
 
   it("removes a manager request once its tracked holding represents the same operation", () => {

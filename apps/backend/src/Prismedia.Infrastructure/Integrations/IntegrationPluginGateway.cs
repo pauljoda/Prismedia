@@ -60,8 +60,16 @@ public sealed partial class IntegrationPluginGateway(PrismediaDbContext db, Plug
             if (response is null || response.Protocol != IntegrationProtocol.Name
                 || response.ProtocolVersion != IntegrationProtocol.CurrentVersion || response.InvocationId != invocationId)
                 throw new IntegrationInvocationException("The integration plugin returned an incompatible or uncorrelated response.");
-            if (!response.Ok || response.Result is null) throw new IntegrationInvocationException(
-                PluginProcessTransport.RedactError(response.Error, connection.Auth.Values) ?? "The integration plugin did not return a result.");
+            if (!response.Ok || response.Result is null) {
+                var code = operation == IntegrationOperation.GetLibraryItem
+                    && response.ErrorCode is { } errorCode
+                    && errorCode.TryDecodeAs<IntegrationErrorCode>(out var decoded)
+                        ? decoded
+                        : (IntegrationErrorCode?)null;
+                throw new IntegrationInvocationException(
+                    PluginProcessTransport.RedactError(response.Error, connection.Auth.Values) ?? "The integration plugin did not return a result.",
+                    code);
+            }
             return response.Result;
         } catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) {
             throw new IntegrationInvocationException("The integration plugin timed out.");

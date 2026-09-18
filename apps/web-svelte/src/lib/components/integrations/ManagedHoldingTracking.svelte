@@ -47,6 +47,7 @@
     [MANAGED_TRACKING_STATUS.stale]: "Connection unavailable",
     [MANAGED_TRACKING_STATUS.releasePending]: "Stopping management",
     [MANAGED_TRACKING_STATUS.released]: "Tracking stopped",
+    [MANAGED_TRACKING_STATUS.removed]: "Removed from source",
   };
   $effect(() => {
     const selectedConnectionId = connectionId;
@@ -162,6 +163,11 @@
         ? `${targetCount} previously linked ${targetCount === 1 ? "item remains" : "items remain"} in Prismedia. Files and history are retained.`
         : "Tracking has stopped. Files, Prismedia items, and history are retained.";
     }
+    if (holding.status === MANAGED_TRACKING_STATUS.removed) {
+      return availableCount > 0
+        ? `${availableCount} linked ${availableCount === 1 ? "file remains" : "files remain"} available in Prismedia. Metadata and history are retained.`
+        : "Metadata and history are retained; no local files remain.";
+    }
     if (holding.status === MANAGED_TRACKING_STATUS.releasePending) return "File tracking is paused while Prismedia verifies the stop request.";
     if (holding.status === MANAGED_TRACKING_STATUS.pending) return "Prismedia is verifying the reviewed matches.";
     if (holding.status === MANAGED_TRACKING_STATUS.waitingForFiles) {
@@ -186,7 +192,9 @@
   <section class={compact ? "min-w-0 space-y-3" : "w-full max-w-3xl space-y-5"} aria-label={item ? "Items in Prismedia" : "Followed library items"}>
     {#if item}
       <p class="text-sm leading-relaxed text-text-muted">
-        {#if primaryHolding?.status === MANAGED_TRACKING_STATUS.tracking || primaryHolding?.status === MANAGED_TRACKING_STATUS.waitingForFiles}
+        {#if primaryHolding?.status === MANAGED_TRACKING_STATUS.removed}
+          This title was removed from {connectionName}. Prismedia retains its metadata, links, and history.
+        {:else if primaryHolding?.status === MANAGED_TRACKING_STATUS.tracking || primaryHolding?.status === MANAGED_TRACKING_STATUS.waitingForFiles}
           Prismedia reads {connectionName}'s files in place and follows file changes automatically.
         {:else if hasCurrentHolding}
           Prismedia links this title to existing library items without copying or moving {connectionName}'s files.
@@ -229,15 +237,17 @@
             </div>
           {/if}
           <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
-            {#if holding.status !== MANAGED_TRACKING_STATUS.released}
+            {#if holding.status !== MANAGED_TRACKING_STATUS.released && holding.status !== MANAGED_TRACKING_STATUS.removed}
               <Button variant="ghost" size="sm" disabled={busy} onclick={() => void refresh(holding.id)}>Check now</Button>
             {/if}
             {#if holding.lastCheckedAt}<span class="text-xs text-text-muted">Last checked {new Date(holding.lastCheckedAt).toLocaleString()}</span>{/if}
           </div>
           {#if showControls}
             <div class="flex min-w-0 flex-wrap items-start gap-2">
-              <ManagedHoldingControls {connectionId} {connectionName} holdingId={holding.id} canPreview={canControl && (holding.status === MANAGED_TRACKING_STATUS.tracking || holding.status === MANAGED_TRACKING_STATUS.waitingForFiles)} />
-              {#if canRelease && (holding.status === MANAGED_TRACKING_STATUS.tracking || holding.status === MANAGED_TRACKING_STATUS.waitingForFiles)}
+              {#if holding.status !== MANAGED_TRACKING_STATUS.removed}
+                <ManagedHoldingControls {connectionId} {connectionName} holdingId={holding.id} canPreview={canControl && (holding.status === MANAGED_TRACKING_STATUS.tracking || holding.status === MANAGED_TRACKING_STATUS.waitingForFiles)} />
+              {/if}
+              {#if canRelease && (holding.status === MANAGED_TRACKING_STATUS.tracking || holding.status === MANAGED_TRACKING_STATUS.waitingForFiles || holding.status === MANAGED_TRACKING_STATUS.removed)}
                 <ManagedHoldingRelease {connectionId} {connectionName} holdingId={holding.id} onaccepted={saved => { loadSequence += 1; holdings = holdings.map(item => item.id === saved.id ? saved : item); }} />
               {/if}
             </div>

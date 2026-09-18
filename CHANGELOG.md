@@ -109,6 +109,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- External library tracking checks for changes every minute. Open external Entity pages refresh availability and request progress automatically without reloading unchanged artwork or playback.
+
 - External requests now load provider choices alongside metadata and submit in one step, then open the normal entity page. The External library tab shows provider progress in place of native acquisition controls.
 
 - Connected titles show their linked Prismedia items and file availability in an In Prismedia tab, with settings, action history, and stopping management in focused dialogs.
@@ -212,6 +214,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Audio-track detail and saved-queue payloads no longer duplicate embedded artist and album fields outside the Entity's `embedded-audio-metadata` capability.
 
 ### Fixed
+
+- Titles confirmed removed from Radarr or Sonarr leave normal library lists when no playable files remain, while metadata and watch history are retained. Connection failures do not count as removal.
+- Plugin updates can proceed while accepted manager requests only wait for files, without releasing their ownership. Active or uncertain changes still block updates.
 
 - Request reviews now recognize existing requests and linked library items before submission, with a direct path to their library page and current progress.
 

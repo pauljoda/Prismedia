@@ -81,6 +81,45 @@ public sealed partial class ManagedTrackingPostgresTests : IDisposable {
     }
 
     [Fact]
+    public async Task ConfirmedHoldingRemovalKeepsReadableFilesAndArchivesOnlyAfterBytesDisappear() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var fixture = await SeedAsync(db);
+        var store = Store(db);
+        var work = await AdoptAsync(store, fixture);
+
+        await store.ConfirmRemovalAsync(work, "Removed upstream", default);
+
+        var entity = await db.Entities.AsNoTracking().SingleAsync(row => row.Id == fixture.EntityId);
+        Assert.False(entity.IsLibraryArchived);
+        Assert.Equal(EntityFileRole.Source, (await db.EntityFiles.AsNoTracking().SingleAsync()).Role);
+        work = (await store.FindAsync(work.Tracking.Id, default))!;
+        File.Move(fixture.Path, fixture.Path + ".offline");
+
+        await store.ConfirmRemovalAsync(work, "Still removed upstream", default);
+
+        entity = await db.Entities.AsNoTracking().SingleAsync(row => row.Id == fixture.EntityId);
+        Assert.True(entity.IsLibraryArchived);
+        Assert.Equal(EntityFileRole.UnavailableSource, (await db.EntityFiles.AsNoTracking().SingleAsync()).Role);
+        Assert.Single(await db.ManagedSourceBindings.AsNoTracking().ToArrayAsync());
+        Assert.Null(Assert.Single(await db.FulfillmentReservations.AsNoTracking().ToArrayAsync()).ReleasedAt);
+
+        work = (await store.FindAsync(work.Tracking.Id, default))!;
+        File.Move(fixture.Path + ".offline", fixture.Path);
+        await store.ConfirmRemovalAsync(work, "Still removed with restored bytes", default);
+        entity = await db.Entities.AsNoTracking().SingleAsync(row => row.Id == fixture.EntityId);
+        Assert.False(entity.IsLibraryArchived);
+        Assert.Equal(EntityFileRole.Source, (await db.EntityFiles.AsNoTracking().SingleAsync()).Role);
+
+        work = (await store.FindAsync(work.Tracking.Id, default))!;
+        await store.RecordReappearanceAsync(work.Tracking.Id, work.Tracking.Revision,
+            "Remote identity reappeared", default);
+        var reviewed = (await store.FindAsync(work.Tracking.Id, default))!.Tracking;
+        Assert.Equal(ManagedTrackingStatus.Removed, reviewed.Status);
+        Assert.Equal("Remote identity reappeared", reviewed.Problem);
+    }
+
+    [Fact]
     public async Task ConcurrentReplaysReturnTheSameAcceptedIntentAndSingleOwnershipReservation() {
         await using var database = await PostgresTestDatabase.CreateAsync();
         await using var first = database.CreateContext();

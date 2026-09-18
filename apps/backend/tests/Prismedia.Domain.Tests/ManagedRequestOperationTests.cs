@@ -78,4 +78,22 @@ public sealed class ManagedRequestOperationTests {
         Assert.Equal(ManagedRequestPhase.AwaitingFiles, operation.State.Phase);
         Assert.Throws<InvalidOperationException>(operation.BeginCreation);
     }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public void ConfirmedRemoteRemovalRetainsIdentityAndOwnerFenceForExplicitRelease(bool completed) {
+        var operation = Create();
+        operation.AcceptHolding("42");
+        if (completed) operation.ConfirmFiles();
+
+        operation.ConfirmRemoteRemoval();
+
+        Assert.Equal(ManagedRequestPhase.RemoteRemoved, operation.State.Phase);
+        Assert.Equal("42", operation.State.RemoteId);
+        Assert.True(operation.IsActive);
+        Assert.False(operation.CanCancel);
+        operation.ReleaseOwnership();
+        Assert.Equal(ManagedRequestPhase.OwnershipReleased, operation.State.Phase);
+    }
 }

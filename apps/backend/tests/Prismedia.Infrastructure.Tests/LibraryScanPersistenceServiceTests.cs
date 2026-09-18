@@ -55,6 +55,11 @@ public sealed class LibraryScanPersistenceServiceTests {
         var missing = await db.EntityFiles.SingleAsync(file => file.Id == sourceFileId);
         Assert.Equal(EntityFileRole.UnavailableSource, missing.Role);
 
+        // A confirmed manager removal can archive this retained identity independently of scanning.
+        var retained = await db.Entities.SingleAsync(entity => entity.Id == videoId);
+        retained.IsLibraryArchived = true;
+        await db.SaveChangesAsync();
+
         await File.WriteAllBytesAsync(sourcePath, [4, 5, 6, 7]);
         var restoredIds = await service.UpsertVideosBatchAsync([
             new VideoUpsertItem(sourcePath, "missing", rootId, false, PlayableVideoScanPlacement.Standalone)
@@ -63,6 +68,8 @@ public sealed class LibraryScanPersistenceServiceTests {
         var restored = await db.EntityFiles.SingleAsync(file => file.Id == sourceFileId);
         Assert.Equal(EntityFileRole.Source, restored.Role);
         Assert.Equal(4, restored.SizeBytes);
+        Assert.False(retained.IsLibraryArchived);
+        Assert.Single(await db.EntityConsumptionEvents.ToArrayAsync());
         Assert.Empty(await db.ManagedHoldings.ToArrayAsync());
         Assert.Empty(await db.ManagedSourceBindings.ToArrayAsync());
         Assert.Empty(await db.FulfillmentReservations.ToArrayAsync());

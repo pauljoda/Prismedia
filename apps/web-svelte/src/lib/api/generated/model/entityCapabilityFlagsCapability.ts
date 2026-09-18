@@ -16,4 +16,5 @@ export interface EntityCapabilityFlagsCapability {
   isOrganized: boolean | null;
   /** @nullable */
   isWanted?: boolean | null;
+  isLibraryArchived?: boolean;
 }

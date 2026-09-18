@@ -12,10 +12,20 @@ using Prismedia.Infrastructure.Acquisition;
 namespace Prismedia.Infrastructure.Integrations;
 
 public sealed partial class EfManagedTrackingStore {
+    private static readonly TimeSpan TrackingInterval = TimeSpan.FromMinutes(1);
+
     /// <inheritdoc />
     public async Task ApplyAsync(ManagedTrackingWork work, ManagedTrackingObservation observation,
         IReadOnlyList<ManagedFileBinding>? adoption, IReadOnlyList<ManagedSourceChange> changes, CancellationToken token) {
         var ids = (adoption ?? work.Tracking.Bindings).SelectMany(file => file.Entities).Select(owner => owner.EntityId).Distinct().ToArray();
+        var requestEntityId = await db.ManagedRequests.AsNoTracking()
+            .Where(request => request.Id == work.Tracking.Id)
+            .Select(request => (Guid?)request.EntityId)
+            .SingleOrDefaultAsync(token);
+        var restoredEntityIds = ids.Append(requestEntityId ?? Guid.Empty)
+            .Where(id => id != Guid.Empty)
+            .Distinct()
+            .ToArray();
         await using var transaction = await db.Database.BeginTransactionAsync(token);
         if (!await lifecycle.ExecuteManyAsync(ids, async leaseToken => {
             var row = await RequireRevisionAsync(work.Tracking.Id, work.Tracking.Revision, leaseToken);
@@ -46,10 +56,191 @@ public sealed partial class EfManagedTrackingStore {
                 foreach (var change in changes) await ApplyChangeAsync(row.Id, change, leaseToken);
             }
             row.Revision++; row.Status = ManagedTrackingStatus.Tracking; row.Problem = null;
-            row.LastCheckedAt = DateTimeOffset.UtcNow; row.NextCheckAt = row.LastCheckedAt.Value.AddMinutes(5);
+            row.LastCheckedAt = DateTimeOffset.UtcNow; row.NextCheckAt = row.LastCheckedAt.Value.Add(TrackingInterval);
             await db.SaveChangesAsync(leaseToken);
         }, token)) throw new EntityLifecycleMutationConflictException(ids.FirstOrDefault());
+        if (restoredEntityIds.Length > 0) {
+            await db.Entities.Where(entity => restoredEntityIds.Contains(entity.Id) && entity.IsLibraryArchived)
+                .ExecuteUpdateAsync(set => set.SetProperty(entity => entity.IsLibraryArchived, false), token);
+        }
         await transaction.CommitAsync(token);
+    }
+
+    /// <inheritdoc />
+    public async Task ConfirmRemovalAsync(ManagedTrackingWork work, string problem, CancellationToken token) {
+        var targetIds = work.Tracking.Targets.Select(target => target.EntityId).Distinct().ToArray();
+        if (targetIds.Length == 0) throw new ArgumentException("The retained holding has no target identities.");
+        var requestEntityId = await db.ManagedRequests.AsNoTracking()
+            .Where(request => request.Id == work.Tracking.Id)
+            .Select(request => (Guid?)request.EntityId)
+            .SingleOrDefaultAsync(token);
+        var lifecycleIds = requestEntityId is { } rootId
+            ? targetIds.Append(rootId).Distinct().ToArray()
+            : targetIds;
+        var safeProblem = problem[..Math.Min(4096, problem.Length)];
+        await using var transaction = await db.Database.BeginTransactionAsync(token);
+        if (!await lifecycle.ExecuteManyAsync(lifecycleIds, async leaseToken => {
+            var requestRow = await db.ManagedRequests
+                .FromSqlInterpolated($"SELECT * FROM managed_requests WHERE id = {work.Tracking.Id} FOR UPDATE")
+                .AsNoTracking()
+                .SingleOrDefaultAsync(leaseToken);
+            var row = await RequireRevisionAsync(work.Tracking.Id, work.Tracking.Revision, leaseToken);
+            var now = DateTimeOffset.UtcNow;
+
+            if (requestRow is not null) {
+                var requestState = JsonSerializer.Deserialize<ManagedRequestState>(requestRow.StateJson, Json)
+                    ?? throw new InvalidDataException("Invalid managed request state.");
+                if (requestState.Revision != requestRow.Revision || requestState.Phase != requestRow.Phase
+                    || requestState.OperationId != row.Id || requestState.ConnectionId != row.ConnectionId
+                    || requestState.RemoteId != row.RemoteId)
+                    throw new ConnectionConflictException();
+                var operation = new ManagedRequestOperation(requestState);
+                operation.ConfirmRemoteRemoval();
+                var stateJson = JsonSerializer.Serialize(operation.State, Json);
+                if (await db.ManagedRequests.Where(request => request.Id == requestRow.Id && request.Revision == requestRow.Revision)
+                    .ExecuteUpdateAsync(set => set
+                        .SetProperty(request => request.StateJson, stateJson)
+                        .SetProperty(request => request.Phase, operation.State.Phase)
+                        .SetProperty(request => request.Revision, operation.State.Revision)
+                        .SetProperty(request => request.UpdatedAt, now)
+                        .SetProperty(request => request.NextCheckAt, now.Add(TrackingInterval))
+                        .SetProperty(request => request.Problem, safeProblem), leaseToken) != 1)
+                    throw new ConnectionConflictException();
+            }
+
+            var bindings = await db.ManagedSourceBindings
+                .Where(binding => binding.HoldingId == row.Id)
+                .ToArrayAsync(leaseToken);
+            var sourceIds = bindings.Select(binding => binding.SourceFileId).Distinct().ToArray();
+            var sources = await db.EntityFiles.Where(source => sourceIds.Contains(source.Id)).ToArrayAsync(leaseToken);
+            var restored = new HashSet<Guid>();
+            foreach (var binding in bindings) {
+                var readable = StillReadable(binding);
+                binding.IsAvailable = readable;
+                var source = sources.SingleOrDefault(file => file.Id == binding.SourceFileId && file.EntityId == binding.EntityId);
+                if (source is null || source.Role is not (EntityFileRole.Source or EntityFileRole.UnavailableSource))
+                    throw new ArgumentException("An established local source changed ownership. Review this association.");
+                if (readable && source.Role == EntityFileRole.UnavailableSource) restored.Add(source.EntityId);
+                source.Role = readable ? EntityFileRole.Source : EntityFileRole.UnavailableSource;
+            }
+
+            var terminalAcquisitionStatuses = new[] {
+                AcquisitionStatus.Imported,
+                AcquisitionStatus.Cancelled,
+                AcquisitionStatus.Failed
+            };
+            var entities = await db.Entities.Where(entity => lifecycleIds.Contains(entity.Id)).ToArrayAsync(leaseToken);
+            var archiveTargetIds = new HashSet<Guid>();
+            foreach (var entity in entities.Where(entity => targetIds.Contains(entity.Id))) {
+                var hasPlayableSource = sources.Any(file => file.EntityId == entity.Id && file.Role == EntityFileRole.Source)
+                    || await db.EntityFiles.AnyAsync(file => file.EntityId == entity.Id
+                        && file.Role == EntityFileRole.Source && !sourceIds.Contains(file.Id), leaseToken);
+                var hasCurrentOwner = await db.FulfillmentReservations.AnyAsync(owner => owner.EntityId == entity.Id
+                    && owner.OwnerId == row.Id && owner.ReleasedAt == null, leaseToken);
+                var hasOtherOwner = await db.FulfillmentReservations.AnyAsync(owner => owner.EntityId == entity.Id
+                    && owner.OwnerId != row.Id && owner.ReleasedAt == null, leaseToken);
+                var hasNativeOwner = await db.Monitors.AnyAsync(monitor => monitor.EntityId == entity.Id, leaseToken)
+                    || await db.Acquisitions.AnyAsync(acquisition => acquisition.EntityId == entity.Id
+                        && !terminalAcquisitionStatuses.Contains(acquisition.Status), leaseToken);
+                if (hasPlayableSource) {
+                    entity.IsLibraryArchived = false;
+                    entity.UpdatedAt = now;
+                    continue;
+                }
+                if (!hasCurrentOwner || hasOtherOwner || hasNativeOwner) continue;
+                entity.IsWanted = false;
+                entity.IsLibraryArchived = true;
+                entity.UpdatedAt = now;
+                archiveTargetIds.Add(entity.Id);
+            }
+            if (requestEntityId is { } requestRootId && !targetIds.Contains(requestRootId)) {
+                var root = entities.Single(entity => entity.Id == requestRootId);
+                if (archiveTargetIds.Count == targetIds.Length
+                    && !await HasRetainedLibraryPresenceAsync(requestRootId, row.Id, sourceIds, sources, terminalAcquisitionStatuses, leaseToken)) {
+                    root.IsWanted = false;
+                    root.IsLibraryArchived = true;
+                    root.UpdatedAt = now;
+                } else if (await HasPlayableSourceInTreeAsync(requestRootId, sourceIds, sources, leaseToken)) {
+                    root.IsLibraryArchived = false;
+                    root.UpdatedAt = now;
+                }
+            }
+
+            row.Revision++;
+            row.Status = ManagedTrackingStatus.Removed;
+            row.Problem = safeProblem;
+            row.LastCheckedAt = now;
+            row.NextCheckAt = now.Add(TrackingInterval);
+            await db.SaveChangesAsync(leaseToken);
+            foreach (var entity in entities.Where(entity => restored.Contains(entity.Id)))
+                await queue.EnqueueAsync(EnqueueJobRequest.ForEntity(JobType.RefreshEntity,
+                    EntityKindRegistry.Require(entity.KindCode), entity.Id.ToString(), entity.Title), leaseToken);
+        }, token)) throw new EntityLifecycleMutationConflictException(lifecycleIds[0]);
+        await transaction.CommitAsync(token);
+    }
+
+    private async Task<bool> HasRetainedLibraryPresenceAsync(
+        Guid rootEntityId,
+        Guid removedOwnerId,
+        IReadOnlyCollection<Guid> reconciledSourceIds,
+        IReadOnlyCollection<EntityFileRow> reconciledSources,
+        IReadOnlyCollection<AcquisitionStatus> terminalAcquisitionStatuses,
+        CancellationToken token) {
+        var treeIds = new HashSet<Guid> { rootEntityId };
+        var frontier = new[] { rootEntityId };
+        while (frontier.Length > 0) {
+            var children = await db.Entities.AsNoTracking()
+                .Where(entity => entity.ParentEntityId != null && frontier.Contains(entity.ParentEntityId.Value))
+                .Select(entity => entity.Id)
+                .ToArrayAsync(token);
+            frontier = children.Where(treeIds.Add).ToArray();
+        }
+
+        var entityIds = treeIds.ToArray();
+        if (await HasPlayableSourceAsync(entityIds, reconciledSourceIds, reconciledSources, token)) {
+            return true;
+        }
+
+        if (await db.FulfillmentReservations.AsNoTracking().AnyAsync(owner => entityIds.Contains(owner.EntityId)
+            && owner.OwnerId != removedOwnerId && owner.ReleasedAt == null, token)) {
+            return true;
+        }
+
+        return await db.Monitors.AsNoTracking().AnyAsync(monitor =>
+                monitor.EntityId != null && entityIds.Contains(monitor.EntityId.Value)
+                || monitor.AcquisitionId != null && db.Acquisitions.Any(acquisition => acquisition.Id == monitor.AcquisitionId
+                    && acquisition.EntityId != null && entityIds.Contains(acquisition.EntityId.Value)), token)
+            || await db.Acquisitions.AsNoTracking().AnyAsync(acquisition => acquisition.EntityId != null
+                && entityIds.Contains(acquisition.EntityId.Value)
+                && !terminalAcquisitionStatuses.Contains(acquisition.Status), token);
+    }
+
+    private async Task<bool> HasPlayableSourceInTreeAsync(
+        Guid rootEntityId,
+        IReadOnlyCollection<Guid> reconciledSourceIds,
+        IReadOnlyCollection<EntityFileRow> reconciledSources,
+        CancellationToken token) {
+        var treeIds = new HashSet<Guid> { rootEntityId };
+        var frontier = new[] { rootEntityId };
+        while (frontier.Length > 0) {
+            var children = await db.Entities.AsNoTracking()
+                .Where(entity => entity.ParentEntityId != null && frontier.Contains(entity.ParentEntityId.Value))
+                .Select(entity => entity.Id)
+                .ToArrayAsync(token);
+            frontier = children.Where(treeIds.Add).ToArray();
+        }
+        return await HasPlayableSourceAsync(treeIds.ToArray(), reconciledSourceIds, reconciledSources, token);
+    }
+
+    private async Task<bool> HasPlayableSourceAsync(
+        IReadOnlyCollection<Guid> entityIds,
+        IReadOnlyCollection<Guid> reconciledSourceIds,
+        IReadOnlyCollection<EntityFileRow> reconciledSources,
+        CancellationToken token) {
+        var ids = entityIds.ToHashSet();
+        return reconciledSources.Any(source => ids.Contains(source.EntityId) && source.Role == EntityFileRole.Source)
+            || await db.EntityFiles.AsNoTracking().AnyAsync(source => entityIds.Contains(source.EntityId)
+                && source.Role == EntityFileRole.Source && !reconciledSourceIds.Contains(source.Id), token);
     }
 
     private async Task ApplyChangeAsync(Guid holdingId, ManagedSourceChange change, CancellationToken token) {
@@ -91,7 +282,15 @@ public sealed partial class EfManagedTrackingStore {
         db.ChangeTracker.Clear();
         await using var transaction = await db.Database.BeginTransactionAsync(token);
         var bindings = await db.ManagedSourceBindings.Where(binding => binding.HoldingId == id).ToArrayAsync(token);
-        if (!await lifecycle.ExecuteManyAsync(bindings.Select(binding => binding.EntityId).ToArray(), async leaseToken => {
+        var ownerIds = bindings.Select(binding => binding.EntityId).Distinct().ToArray();
+        if (ownerIds.Length == 0) {
+            var targetJson = await db.ManagedHoldings.AsNoTracking().Where(row => row.Id == id)
+                .Select(row => row.TargetsJson).SingleAsync(token);
+            ownerIds = (JsonSerializer.Deserialize<ManagedTargetBinding[]>(targetJson, Json)
+                ?? throw new InvalidDataException("Invalid managed target bindings."))
+                .Select(target => target.EntityId).Distinct().ToArray();
+        }
+        if (!await lifecycle.ExecuteManyAsync(ownerIds, async leaseToken => {
             var row = await db.ManagedHoldings.SingleAsync(row => row.Id == id, leaseToken);
             if (row.Revision != revision) return;
             if (bindings.Length > 0) {
@@ -105,9 +304,38 @@ public sealed partial class EfManagedTrackingStore {
                 }
             }
             row.Revision++; row.Status = status; row.Problem = problem[..Math.Min(4096, problem.Length)];
-            row.LastCheckedAt = DateTimeOffset.UtcNow; row.NextCheckAt = row.LastCheckedAt.Value.AddMinutes(5);
+            row.LastCheckedAt = DateTimeOffset.UtcNow; row.NextCheckAt = row.LastCheckedAt.Value.Add(TrackingInterval);
             await db.SaveChangesAsync(leaseToken);
-        }, token)) throw new EntityLifecycleMutationConflictException(bindings.First().EntityId);
+        }, token)) throw new EntityLifecycleMutationConflictException(ownerIds.FirstOrDefault());
+        await transaction.CommitAsync(token);
+    }
+
+    /// <inheritdoc />
+    public async Task RecordReappearanceAsync(Guid id, long revision, string problem, CancellationToken token) {
+        var safeProblem = problem[..Math.Min(4096, problem.Length)];
+        await using var transaction = await db.Database.BeginTransactionAsync(token);
+        var bindings = await db.ManagedSourceBindings.AsNoTracking()
+            .Where(binding => binding.HoldingId == id)
+            .ToArrayAsync(token);
+        var targetIds = await db.ManagedHoldings.AsNoTracking().Where(row => row.Id == id)
+            .Select(row => row.TargetsJson).SingleAsync(token);
+        var retainedTargets = JsonSerializer.Deserialize<ManagedTargetBinding[]>(targetIds, Json)
+            ?? throw new InvalidDataException("Invalid managed target bindings.");
+        var ownerIds = retainedTargets.Select(target => target.EntityId)
+            .Concat(bindings.Select(binding => binding.EntityId)).Distinct().ToArray();
+        if (!await lifecycle.ExecuteManyAsync(ownerIds, async leaseToken => {
+            var row = await db.ManagedHoldings.SingleAsync(row => row.Id == id, leaseToken);
+            if (row.Revision != revision) return;
+            row.Revision++;
+            // A reappearing remote ID is evidence for review, not evidence that the prior confirmed
+            // removal has been reversed. Keep the terminal marker so release remains available and
+            // no later refresh can silently re-adopt files or manager controls.
+            row.Status = ManagedTrackingStatus.Removed;
+            row.Problem = safeProblem;
+            row.LastCheckedAt = DateTimeOffset.UtcNow;
+            row.NextCheckAt = row.LastCheckedAt.Value.Add(TrackingInterval);
+            await db.SaveChangesAsync(leaseToken);
+        }, token)) throw new EntityLifecycleMutationConflictException(ownerIds.FirstOrDefault());
         await transaction.CommitAsync(token);
     }
 

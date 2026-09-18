@@ -1,19 +1,50 @@
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 using Prismedia.Application.Plugins;
 using Prismedia.Domain.Entities;
+using Prismedia.Domain.Integrations;
+using Prismedia.Infrastructure.Processes;
 
 namespace Prismedia.Infrastructure.Plugins;
 
 public sealed partial class PluginCatalogService {
-    private async Task RequireNoUnfinishedWorkAsync(string pluginId, CancellationToken token) {
+    private async Task RequireNoUnfinishedWorkAsync(string pluginId, bool allowAcceptedHoldingObservation,
+        CancellationToken token) {
         var connections = _db.IntegrationConnections.Where(row => row.PluginId == pluginId).Select(row => row.Id);
-        if (await _db.IntegrationTransfers.AnyAsync(row => connections.Contains(row.ConnectionId)
+        var blocked = await _db.IntegrationTransfers.AnyAsync(row => connections.Contains(row.ConnectionId)
                 && row.Phase != IntegrationTransferPhase.Completed && row.Phase != IntegrationTransferPhase.Cancelled && row.Phase != IntegrationTransferPhase.Failed, token)
             || await _db.ManagedControls.AnyAsync(row => connections.Contains(row.ConnectionId) && row.ActiveHoldingId != null, token)
             || await _db.ManagedRequests.AnyAsync(row => connections.Contains(row.ConnectionId)
-                && (row.Phase == ManagedRequestPhase.PendingCreation || row.Phase == ManagedRequestPhase.CreationUncertain || row.Phase == ManagedRequestPhase.AwaitingFiles), token)
+                && (row.Phase == ManagedRequestPhase.PendingCreation
+                    || row.Phase == ManagedRequestPhase.CreationUncertain), token)
             || await _db.ManagedHoldings.AnyAsync(row => connections.Contains(row.ConnectionId)
-                && (row.Status == ManagedTrackingStatus.Pending || row.Status == ManagedTrackingStatus.ReleasePending), token))
+                && (row.Status == ManagedTrackingStatus.Pending || row.Status == ManagedTrackingStatus.ReleasePending), token);
+        if (!blocked) {
+            var observations = await _db.ManagedRequests.AsNoTracking()
+                .Where(row => connections.Contains(row.ConnectionId) && row.Phase == ManagedRequestPhase.AwaitingFiles)
+                .ToArrayAsync(token);
+            if (observations.Length > 0) {
+                var ids = observations.Select(row => row.Id).ToArray();
+                var holdings = await _db.ManagedHoldings.AsNoTracking()
+                    .Where(row => ids.Contains(row.Id))
+                    .ToDictionaryAsync(row => row.Id, token);
+                blocked = !allowAcceptedHoldingObservation || observations.Any(request => {
+                    var state = JsonSerializer.Deserialize<ManagedRequestState>(
+                        request.StateJson, PluginProcessTransport.JsonOptions);
+                    return state is null
+                        || state.OperationId != request.Id
+                        || state.ConnectionId != request.ConnectionId
+                        || state.Revision != request.Revision
+                        || state.Phase != ManagedRequestPhase.AwaitingFiles
+                        || string.IsNullOrWhiteSpace(state.RemoteId)
+                        || !holdings.TryGetValue(request.Id, out var holding)
+                        || holding.ConnectionId != request.ConnectionId
+                        || holding.Status != ManagedTrackingStatus.WaitingForFiles
+                        || holding.RemoteId != state.RemoteId;
+                });
+            }
+        }
+        if (blocked)
             throw new PluginInUseException("This plugin has unfinished transfers, manager requests, or library actions. Finish or resolve that work before changing its installed version.");
     }
 

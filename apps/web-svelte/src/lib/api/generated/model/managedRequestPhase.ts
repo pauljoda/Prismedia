@@ -12,6 +12,7 @@ export const ManagedRequestPhase = {
   'pending-creation': 'pending-creation',
   'creation-uncertain': 'creation-uncertain',
   'awaiting-files': 'awaiting-files',
+  'remote-removed': 'remote-removed',
   completed: 'completed',
   rejected: 'rejected',
   cancelled: 'cancelled',

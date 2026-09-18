@@ -48,6 +48,42 @@ public sealed class IntegrationGatewayTests : IDisposable {
     }
 
     [Fact]
+    public async Task ManagedItemAbsenceRemainsTypedOnlyAtTheLibraryItemBoundary() {
+        var executor = new ProbeExecutor(false, false, fail: true,
+            errorCode: IntegrationErrorCode.ManagedItemNotFound.ToCode());
+        await using var db = CreateContext();
+        var options = new PluginCatalogOptions([], _root, "3.8.0");
+        var gateway = new IntegrationPluginGateway(db,
+            new PluginCatalogService(ProviderCredentialTestStore.Create(db), db, options),
+            new PluginProcessTransport(executor, options));
+
+        var error = await Assert.ThrowsAsync<IntegrationInvocationException>(() => gateway.InvokeAsync<ConnectionProbeInput, ConnectionProbeResult>(
+            Descriptor(), IntegrationOperation.GetLibraryItem,
+            new(Guid.NewGuid(), "http://catalog.test", null, new Dictionary<string, string>(),
+                new Dictionary<string, string> { [CredentialKey] = Credential }), new(), default));
+
+        Assert.Equal(IntegrationErrorCode.ManagedItemNotFound, error.Code);
+    }
+
+    [Fact]
+    public async Task ManagedItemAbsenceCodeFromAnotherOperationRemainsAnUntypedFailure() {
+        var executor = new ProbeExecutor(false, false, fail: true,
+            errorCode: IntegrationErrorCode.ManagedItemNotFound.ToCode());
+        await using var db = CreateContext();
+        var options = new PluginCatalogOptions([], _root, "3.8.0");
+        var gateway = new IntegrationPluginGateway(db,
+            new PluginCatalogService(ProviderCredentialTestStore.Create(db), db, options),
+            new PluginProcessTransport(executor, options));
+
+        var error = await Assert.ThrowsAsync<IntegrationInvocationException>(() => gateway.InvokeAsync<ConnectionProbeInput, ConnectionProbeResult>(
+            Descriptor(), IntegrationOperation.Probe,
+            new(Guid.NewGuid(), "http://catalog.test", null, new Dictionary<string, string>(),
+                new Dictionary<string, string> { [CredentialKey] = Credential }), new(), default));
+
+        Assert.Null(error.Code);
+    }
+
+    [Fact]
     public async Task InvocationRechecksCurrentManifestBeforePassingCredentialsToTheProcess() {
         var executor = new ProbeExecutor(false, false);
         await using var db = CreateContext();
@@ -79,7 +115,7 @@ public sealed class IntegrationGatewayTests : IDisposable {
         .UseInMemoryDatabase(Guid.NewGuid().ToString()).Options);
     public void Dispose() { if (Directory.Exists(_root)) Directory.Delete(_root, true); }
 
-    private sealed class ProbeExecutor(bool wrongInvocation, bool wrongVersion, bool fail = false) : ProcessExecutor {
+    private sealed class ProbeExecutor(bool wrongInvocation, bool wrongVersion, bool fail = false, string? errorCode = null) : ProcessExecutor {
         public string? ReceivedCredential { get; private set; }
         public IReadOnlyDictionary<string, string>? ReceivedAuth { get; private set; }
         public string? RequestPath { get; private set; }
@@ -92,7 +128,8 @@ public sealed class IntegrationGatewayTests : IDisposable {
             ReceivedCredential = request.Connection.Auth.GetValueOrDefault(CredentialKey);
             var response = new IntegrationPluginResponse<ConnectionProbeResult>(IntegrationProtocol.Name,
                 wrongVersion ? 999 : IntegrationProtocol.CurrentVersion, wrongInvocation ? Guid.NewGuid() : request.InvocationId,
-                !fail, fail ? null : new("fixture-installation", "Fixture", "1.0.0", []), fail ? $"Credential rejected: {ReceivedCredential}" : null);
+                !fail, fail ? null : new("fixture-installation", "Fixture", "1.0.0", []), fail ? $"Credential rejected: {ReceivedCredential}" : null,
+                errorCode);
             return new(0, JsonSerializer.Serialize(response, PluginProcessTransport.JsonOptions), string.Empty);
         }
     }

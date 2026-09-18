@@ -6,7 +6,7 @@ namespace Prismedia.Application.Integrations;
 /// <summary>Runs one bounded fulfillment observation, preserving durable fences before manager effects.</summary>
 public sealed class ManagedRequestProcessor(IManagedRequestStore store, IntegrationConnectionAccess access,
     IIntegrationManagerCreationGateway creation, ManagedLibraryService library,
-    IManagedControlStore controlStore, ManagedControlService controls) {
+    IManagedControlStore controlStore, ManagedControlService controls, IManagedTrackingStore tracking) {
     /// <summary>Consumes pending or stopped request work; completed requests delegate later refreshes to established holding tracking.</summary>
     public async Task<bool> ProcessAsync(Guid id, CancellationToken token) {
         var work = await store.FindAsync(id, token);
@@ -20,6 +20,17 @@ public sealed class ManagedRequestProcessor(IManagedRequestStore store, Integrat
             var state = work.Operation.State;
             var snapshot = await library.GetAsync(state.ConnectionId,
                 new(work.Plan.Creation.Work.EntityKind, state.RemoteId!, work.Plan.Creation.Work.ExternalIds), token);
+            if (state.Phase == ManagedRequestPhase.RemoteRemoved) {
+                var revision = work.Operation.State.Revision;
+                work.Operation.RequireReview();
+                await store.SaveAsync(work.Operation, revision,
+                    "The removed remote identity exists again. Review it before restoring external fulfillment.", false, token);
+                return true;
+            }
+            // Legacy reviewed rows are re-observed only so a typed, provider-confirmed absence can
+            // transition them to RemoteRemoved. A successful read must not replay controls or import
+            // files that the prior review fence deliberately stopped.
+            if (state.ReviewRequired) return true;
             await store.ValidateHoldingAsync(work, snapshot, token);
             await EnsureControlsAsync(work, token);
             var materialized = await store.MaterializeAsync(work, snapshot, token);
@@ -28,6 +39,23 @@ public sealed class ManagedRequestProcessor(IManagedRequestStore store, Integrat
                 work.Operation.ContinueWaiting();
                 await store.SaveAsync(work.Operation, revision, materialized.WaitingReason, false, token);
             }
+        } catch (IntegrationInvocationException error) when (error.Code == IntegrationErrorCode.ManagedItemNotFound) {
+            var holding = await tracking.FindAsync(id, token);
+            if (holding is null) {
+                var revision = work.Operation.State.Revision;
+                work.Operation.RequireReview();
+                await store.SaveAsync(work.Operation, revision,
+                    "The manager confirmed removal, but the retained holding association is missing. Review this request.", false, token);
+            } else {
+                await tracking.ConfirmRemovalAsync(holding,
+                    "The connected manager no longer contains this holding. Local metadata and history were retained.", token);
+            }
+        } catch (Exception error) when (work.Operation.State.Phase == ManagedRequestPhase.RemoteRemoved
+            && error is IntegrationInvocationException or ConnectionNotFoundException
+                or ConnectionSecretUnavailableException or ConnectionCapabilityUnavailableException) {
+            if (await tracking.FindAsync(id, token) is { } holding)
+                await tracking.RecordProblemAsync(id, holding.Tracking.Revision, ManagedTrackingStatus.Removed,
+                    "The connection could not be verified. The last confirmed removal and local data were retained.", token);
         } catch (Exception error) when (error is IntegrationInvocationException or ConnectionNotFoundException
             or ConnectionSecretUnavailableException or ConnectionCapabilityUnavailableException or ArgumentException or ManagedControlConflictException) {
             var revision = work.Operation.State.Revision;

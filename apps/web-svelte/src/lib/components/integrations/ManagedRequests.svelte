@@ -50,6 +50,7 @@
     [MANAGED_REQUEST_PHASE.rejected]: "Creation refused",
     [MANAGED_REQUEST_PHASE.cancelled]: "Cancelled",
     [MANAGED_REQUEST_PHASE.ownershipReleased]: "No longer managed",
+    [MANAGED_REQUEST_PHASE.remoteRemoved]: "Removed from source",
   };
   const activePhases = new Set<ManagedRequestResponse["phase"]>([MANAGED_REQUEST_PHASE.pendingCreation, MANAGED_REQUEST_PHASE.creationUncertain, MANAGED_REQUEST_PHASE.awaitingFiles]);
   const retainedOwnerPhases = new Set<ManagedRequestResponse["phase"]>([
@@ -203,7 +204,7 @@
           {#if activePhases.has(request.phase)}<Button variant="outline" size="sm" disabled={busy} onclick={() => void refresh(request)}>Refresh request</Button>{/if}
           {#if request.canCancel}<Button variant="outline" size="sm" disabled={busy} onclick={() => void cancel(request)}>Cancel request</Button>{/if}
         </div>
-        {#if request.remoteId}<ManagedHoldingControls connectionId={connection.id} connectionName={connection.name} holdingId={request.id} canPreview={canRequest && request.phase !== MANAGED_REQUEST_PHASE.ownershipReleased} />{/if}
+        {#if request.remoteId && request.phase !== MANAGED_REQUEST_PHASE.remoteRemoved}<ManagedHoldingControls connectionId={connection.id} connectionName={connection.name} holdingId={request.id} canPreview={canRequest && request.phase !== MANAGED_REQUEST_PHASE.ownershipReleased} />{/if}
       </article>
     {/each}
   </Panel>

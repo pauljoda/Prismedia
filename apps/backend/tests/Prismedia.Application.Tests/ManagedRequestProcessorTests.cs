@@ -183,12 +183,42 @@ public sealed class ManagedRequestProcessorTests {
         Assert.Equal(0, fixture.Writes);
     }
 
-    private sealed class Fixture : IManagedRequestStore, IIntegrationManagerCreationGateway, IIntegrationConnectionStore, IIntegrationPluginGateway, IIntegrationManagerGateway {
+    [Fact]
+    public async Task TypedMissingHoldingConfirmsRemovalWithoutRepeatingCreationOrMatchingDisplayText() {
+        var fixture = new Fixture { Exists = true };
+        await fixture.Run();
+        fixture.HoldingRemoved = true;
+
+        await fixture.Run();
+
+        Assert.True(fixture.ConfirmedRemoval);
+        Assert.Equal(ManagedRequestPhase.RemoteRemoved, fixture.Saved.Operation.State.Phase);
+        Assert.Equal(0, fixture.Writes);
+    }
+
+    [Fact]
+    public async Task ReviewedAwaitingFilesObservationDoesNotReplayControlsOrClearReview() {
+        var fixture = new Fixture { Exists = true };
+        await fixture.Run();
+        fixture.Saved.Operation.RequireReview();
+        var revision = fixture.Saved.Operation.State.Revision;
+
+        await fixture.Run();
+
+        Assert.Equal(revision, fixture.Saved.Operation.State.Revision);
+        Assert.True(fixture.Saved.Operation.State.ReviewRequired);
+        Assert.False(fixture.HoldingValidated);
+        Assert.Equal(0, fixture.Writes);
+    }
+
+    private sealed class Fixture : IManagedRequestStore, IManagedTrackingStore, IIntegrationManagerCreationGateway, IIntegrationConnectionStore, IIntegrationPluginGateway, IIntegrationManagerGateway {
         private const string PluginId = "fixture-manager";
         internal StoredManagedRequest Saved;
         internal PluginManifest Manifest;
         private readonly IntegrationConnection connection;
-        internal bool LoseResponse, Exists, CancelAtFence, Reject, MalformedResult, WrongIdentity, InvalidBoundary;
+        internal bool LoseResponse, Exists, CancelAtFence, Reject, MalformedResult, WrongIdentity, InvalidBoundary, HoldingRemoved;
+        internal bool ConfirmedRemoval;
+        internal bool HoldingValidated;
         internal int Writes;
         internal Fixture() {
             IntegrationSupport[] support = [new(PluginCapability.ExternalManager, [IntegrationOperation.LookupManaged, IntegrationOperation.EnsureManaged], [EntityKind.Movie]),
@@ -203,7 +233,7 @@ public sealed class ManagedRequestProcessorTests {
             Saved = new(operation, new(request, new(operation.State.OperationId, work, "1", "1", "/movies"), "Film", ManagedRequestIdentity.Fingerprint(request)), DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null);
         }
         internal async Task Run() => await new ManagedRequestProcessor(this, new(this, this), this,
-            new(new(this, this), this), null!, null!).ProcessAsync(Saved.Operation.State.OperationId, default);
+            new(new(this, this), this), null!, null!, this).ProcessAsync(Saved.Operation.State.OperationId, default);
         private ManagedItemSnapshot Holding() => new(new("1", EntityKind.Movie, "Film", 2024, Saved.Plan.Creation.Work.ExternalIds, false, "1", 0), "/movies/film", [], DateTimeOffset.UtcNow);
         public Task<ManagedLookupResult> LookupAsync(string pluginId, IntegrationConnectionContext context, ManagedLookupInput input, CancellationToken token) =>
             Task.FromResult(new ManagedLookupResult(new(EntityKind.Movie, "Film", 2024, WrongIdentity ? new Dictionary<string,string> { [ExternalIdProviders.Tmdb] = "999" } : input.ExternalIds), Exists ? Holding() : null));
@@ -228,13 +258,34 @@ public sealed class ManagedRequestProcessorTests {
         public Task<IReadOnlyList<StoredManagedRequest>> ListAsync(Guid connectionId, CancellationToken token) => throw new NotImplementedException();
         public Task<StoredManagedRequest> CreateAsync(ManagedRequestOperation operation, ManagedRequestPlan plan, CancellationToken token) => throw new NotImplementedException();
         public Task<ManagedRequestMaterialization> MaterializeAsync(StoredManagedRequest work, ManagedItemSnapshot snapshot, CancellationToken token) => throw new NotImplementedException();
-        public Task ValidateHoldingAsync(StoredManagedRequest work, ManagedItemSnapshot snapshot, CancellationToken token) =>
-            InvalidBoundary ? throw new ArgumentException("Holding moved outside the mapped library") : Task.CompletedTask;
+        public Task ValidateHoldingAsync(StoredManagedRequest work, ManagedItemSnapshot snapshot, CancellationToken token) {
+            HoldingValidated = true;
+            return InvalidBoundary ? throw new ArgumentException("Holding moved outside the mapped library") : Task.CompletedTask;
+        }
         public Task<ManagedLibraryPage> SearchLibraryAsync(string pluginId, IntegrationConnectionContext connection, ManagedLibraryQuery input, CancellationToken token) => throw new NotImplementedException();
-        public Task<ManagedItemSnapshot> GetLibraryItemAsync(string pluginId, IntegrationConnectionContext connection, ManagedItemInput input, CancellationToken token) => Task.FromResult(Holding());
+        public Task<ManagedItemSnapshot> GetLibraryItemAsync(string pluginId, IntegrationConnectionContext connection, ManagedItemInput input, CancellationToken token) =>
+            HoldingRemoved
+                ? Task.FromException<ManagedItemSnapshot>(new IntegrationInvocationException(
+                    "Provider display text may change.", IntegrationErrorCode.ManagedItemNotFound))
+                : Task.FromResult(Holding());
         public Task<ManagerOptions> GetOptionsAsync(string pluginId, IntegrationConnectionContext connection, ManagerOptionsInput input, CancellationToken token) => throw new NotImplementedException();
         public Task QueueAsync(Guid id, CancellationToken token) => throw new NotImplementedException();
         public Task QueueDueAsync(CancellationToken token) => throw new NotImplementedException();
+        Task<ManagedTrackingWork?> IManagedTrackingStore.FindAsync(Guid id, CancellationToken token) =>
+            Task.FromResult<ManagedTrackingWork?>(new(new(id, connection.State.Id, Saved.Operation.State.LibraryRootId,
+                new(EntityKind.Movie, "1", Saved.Plan.Creation.Work.ExternalIds), "Film", ManagedTrackingStatus.WaitingForFiles,
+                Saved.Operation.State.Revision, DateTimeOffset.UtcNow, null, [],
+                [new(new("1", EntityKind.Movie, null, null, null), Saved.Operation.State.EntityId)]), []));
+        Task<IReadOnlyList<ManagedTrackingResponse>> IManagedTrackingStore.ListAsync(Guid connectionId, CancellationToken token) => throw new NotImplementedException();
+        Task<ManagedTrackingObservation> IManagedTrackingStore.ObserveAsync(Guid connectionId, ManagedItemSnapshot snapshot, CancellationToken token) => throw new NotImplementedException();
+        Task<ManagedTrackingResponse> IManagedTrackingStore.CreateAsync(Guid connectionId, TrackManagedHoldingRequest request, string title, CancellationToken token) => throw new NotImplementedException();
+        Task IManagedTrackingStore.ApplyAsync(ManagedTrackingWork work, ManagedTrackingObservation observation, IReadOnlyList<ManagedFileBinding>? adoption, IReadOnlyList<ManagedSourceChange> changes, CancellationToken token) => throw new NotImplementedException();
+        Task IManagedTrackingStore.ConfirmRemovalAsync(ManagedTrackingWork work, string problem, CancellationToken token) {
+            Saved.Operation.ConfirmRemoteRemoval(); ConfirmedRemoval = true; return Task.CompletedTask;
+        }
+        Task IManagedTrackingStore.RecordProblemAsync(Guid id, long revision, ManagedTrackingStatus status, string problem, CancellationToken token) => Task.CompletedTask;
+        Task IManagedTrackingStore.QueueAsync(Guid connectionId, Guid id, CancellationToken token) => throw new NotImplementedException();
+        Task IManagedTrackingStore.QueueDueAsync(CancellationToken token) => throw new NotImplementedException();
         Task<StoredIntegrationConnection?> IIntegrationConnectionStore.FindAsync(Guid id, CancellationToken token) => Task.FromResult<StoredIntegrationConnection?>(new(connection, []));
         public Task<IReadOnlyDictionary<string,string>> ReadSecretsAsync(Guid id, IReadOnlyCollection<string> credentialKeys, CancellationToken token) => Task.FromResult<IReadOnlyDictionary<string,string>>(new Dictionary<string,string>());
         public Task<PluginManifest?> FindAsync(string id, CancellationToken token) => Task.FromResult<PluginManifest?>(Manifest);

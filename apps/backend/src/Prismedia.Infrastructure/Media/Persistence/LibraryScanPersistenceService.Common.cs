@@ -172,9 +172,23 @@ public sealed partial class LibraryScanPersistenceService {
         // as owned merely because its structural folder was discovered.
         if (role == EntityFileRole.Source) {
             entity ??= await _db.Entities.FirstOrDefaultAsync(row => row.Id == entityId, cancellationToken);
-            if (entity is not null && entity.IsWanted) {
-                entity.IsWanted = false;
-                entity.UpdatedAt = now;
+            if (entity is not null) {
+                if (entity.IsWanted) {
+                    entity.IsWanted = false;
+                    entity.UpdatedAt = now;
+                }
+                // A verified returning source restores its retained metadata and containing titles.
+                var restored = new HashSet<Guid>();
+                for (var current = entity; current is not null && restored.Add(current.Id);) {
+                    if (current.IsLibraryArchived) {
+                        current.IsLibraryArchived = false;
+                        current.UpdatedAt = now;
+                    }
+                    current = current.ParentEntityId is { } parentId
+                        ? _db.Entities.Local.FirstOrDefault(row => row.Id == parentId)
+                            ?? await _db.Entities.FirstOrDefaultAsync(row => row.Id == parentId, cancellationToken)
+                        : null;
+                }
             }
         }
     }

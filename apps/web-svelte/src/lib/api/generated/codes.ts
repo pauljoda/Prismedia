@@ -1039,6 +1039,13 @@ export const INTEGRATION_ARTIFACT_ROLE = {
 
 export type IntegrationArtifactRoleCode = (typeof INTEGRATION_ARTIFACT_ROLE)[keyof typeof INTEGRATION_ARTIFACT_ROLE];
 
+// source: enum IntegrationErrorCode
+export const INTEGRATION_ERROR_CODE = {
+  managedItemNotFound: "managed-item-not-found",
+} as const;
+
+export type IntegrationErrorCodeCode = (typeof INTEGRATION_ERROR_CODE)[keyof typeof INTEGRATION_ERROR_CODE];
+
 // source: enum IntegrationOperation
 export const INTEGRATION_OPERATION = {
   probe: "probe",
@@ -1263,6 +1270,7 @@ export const MANAGED_REQUEST_PHASE = {
   pendingCreation: "pending-creation",
   creationUncertain: "creation-uncertain",
   awaitingFiles: "awaiting-files",
+  remoteRemoved: "remote-removed",
   completed: "completed",
   rejected: "rejected",
   cancelled: "cancelled",
@@ -1278,6 +1286,7 @@ export const MANAGED_TRACKING_STATUS = {
   tracking: "tracking",
   needsReview: "needs-review",
   stale: "stale",
+  removed: "removed",
   releasePending: "release-pending",
   released: "released",
 } as const;

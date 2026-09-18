@@ -40,7 +40,8 @@ public sealed record IntegrationPluginRequest<TInput>(
 
 /// <summary>Typed result correlated with the exact invocation. Failures must not masquerade as empty success.</summary>
 public sealed record IntegrationPluginResponse<TOutput>(
-    string Protocol, int ProtocolVersion, Guid InvocationId, bool Ok, TOutput? Result, string? Error);
+    string Protocol, int ProtocolVersion, Guid InvocationId, bool Ok, TOutput? Result, string? Error,
+    string? ErrorCode = null);
 
 /// <summary>A connection probe has no operation-specific inputs.</summary>
 public sealed record ConnectionProbeInput;

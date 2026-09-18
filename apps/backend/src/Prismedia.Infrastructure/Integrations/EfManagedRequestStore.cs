@@ -283,12 +283,21 @@ public sealed partial class EfManagedRequestStore(PrismediaDbContext db, IExtern
     /// <inheritdoc />
     public async Task QueueDueAsync(CancellationToken token) {
         var now = DateTimeOffset.UtcNow;
-        var due = await db.ManagedRequests.AsNoTracking().Where(row => row.NextCheckAt <= now)
+        var retryReviewedAfter = now.AddMinutes(-1);
+        var due = await db.ManagedRequests.AsNoTracking()
+            .Where(row => row.NextCheckAt <= now
+                || row.Phase == ManagedRequestPhase.AwaitingFiles
+                    && row.NextCheckAt == null
+                    && row.UpdatedAt <= retryReviewedAfter)
             .Join(db.IntegrationConnections.Where(connection => connection.Enabled), row => row.ConnectionId, connection => connection.Id, (row, _) => row)
             .OrderBy(row => row.NextCheckAt).Take(25).ToArrayAsync(token);
         foreach (var row in due) {
             await using var transaction = await db.Database.BeginTransactionAsync(token);
-            if (await db.ManagedRequests.Where(item => item.Id == row.Id && item.Revision == row.Revision && item.NextCheckAt <= now)
+            if (await db.ManagedRequests.Where(item => item.Id == row.Id && item.Revision == row.Revision
+                    && (item.NextCheckAt <= now
+                        || item.Phase == ManagedRequestPhase.AwaitingFiles
+                            && item.NextCheckAt == null
+                            && item.UpdatedAt <= retryReviewedAfter))
                 .ExecuteUpdateAsync(set => set.SetProperty(item => item.NextCheckAt, now.AddSeconds(30)), token) == 1) await PublishAsync(row, token);
             await transaction.CommitAsync(token);
         }

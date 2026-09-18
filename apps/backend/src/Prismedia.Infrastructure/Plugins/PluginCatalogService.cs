@@ -231,7 +231,7 @@ public sealed partial class PluginCatalogService : IPluginCatalogService {
             await _db.Entry(config).ReloadAsync(cancellationToken);
             if (ReadInstalledSettings(config) is { Version: not null } previous
                 && (previous.Version != descriptor.Manifest.Version || previous.ManifestPath != descriptor.ManifestPath || previous.EntryPath != descriptor.EntryPath)) {
-                await RequireNoUnfinishedWorkAsync(providerId, cancellationToken);
+                await RequireNoUnfinishedWorkAsync(providerId, allowAcceptedHoldingObservation: true, cancellationToken);
                 await InvalidateConnectionProbesAsync(providerId, cancellationToken);
             }
         }
@@ -309,7 +309,7 @@ public sealed partial class PluginCatalogService : IPluginCatalogService {
             return false;
         }
 
-        await RequireNoUnfinishedWorkAsync(providerId, cancellationToken);
+        await RequireNoUnfinishedWorkAsync(providerId, allowAcceptedHoldingObservation: false, cancellationToken);
         var connections = _db.IntegrationConnections.Where(row => row.PluginId == providerId);
         if (await connections.AnyAsync(row => row.Enabled, cancellationToken)
             || await _db.ExternalLibraryMounts.AnyAsync(mount => connections.Select(row => row.Id).Contains(mount.ConnectionId), cancellationToken))

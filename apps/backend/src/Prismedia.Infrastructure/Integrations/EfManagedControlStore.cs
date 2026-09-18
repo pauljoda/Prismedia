@@ -17,7 +17,8 @@ public sealed class EfManagedControlStore(PrismediaDbContext db, IManagedTrackin
     /// <inheritdoc />
     public async Task<OwnedManagedControlScope> RequireScopeAsync(Guid connectionId, Guid holdingId, CancellationToken token) {
         var holding = (await tracking.FindAsync(holdingId, token))?.Tracking;
-        if (holding is null || holding.ConnectionId != connectionId || holding.Status is not (ManagedTrackingStatus.Tracking or ManagedTrackingStatus.WaitingForFiles)
+        if (holding is null || holding.ConnectionId != connectionId || holding.Status is not (ManagedTrackingStatus.Tracking
+                or ManagedTrackingStatus.WaitingForFiles or ManagedTrackingStatus.Removed)
             || holding.Targets.Count == 0)
             throw new ManagedControlConflictException("Refresh and verify this holding's tracked associations before changing its manager settings.");
         var entityIds = holding.Targets.Select(binding => binding.EntityId).Distinct().ToArray();
@@ -38,7 +39,9 @@ public sealed class EfManagedControlStore(PrismediaDbContext db, IManagedTrackin
             || holding.Status == ManagedTrackingStatus.Tracking && !sourceTargets.SequenceEqual(retainedTargets))
             throw new ManagedControlConflictException("The holding's source associations no longer match its retained target identities.");
         var reserved = await db.FulfillmentReservations.AsNoTracking().Where(row => row.OwnerId == holdingId
-            && (row.OwnerKind == FulfillmentOwnerKind.ExternalManager || holding.Status == ManagedTrackingStatus.Tracking && row.OwnerKind == FulfillmentOwnerKind.ConnectedLibrary)
+            && (row.OwnerKind == FulfillmentOwnerKind.ExternalManager
+                || (holding.Status == ManagedTrackingStatus.Tracking || holding.Status == ManagedTrackingStatus.Removed)
+                    && row.OwnerKind == FulfillmentOwnerKind.ConnectedLibrary)
             && row.ConnectionId == connectionId && row.ReleasedAt == null
             && entityIds.Contains(row.EntityId)).Select(row => row.EntityId).Distinct().CountAsync(token);
         if (reserved != entityIds.Length || !await db.ExternalLibraryMounts.AnyAsync(row => row.ConnectionId == connectionId

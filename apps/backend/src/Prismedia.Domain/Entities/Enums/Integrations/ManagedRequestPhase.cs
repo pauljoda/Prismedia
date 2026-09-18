@@ -8,6 +8,8 @@ public enum ManagedRequestPhase {
     [Code("creation-uncertain")] CreationUncertain,
     /// <summary>A remote holding exists; its requested files have not yet been bound locally.</summary>
     [Code("awaiting-files")] AwaitingFiles,
+    /// <summary>The manager definitively no longer contains the accepted holding; ownership remains fenced for explicit release.</summary>
+    [Code("remote-removed")] RemoteRemoved,
     /// <summary>The exact requested local identities own verified mapped files.</summary>
     [Code("completed")] Completed,
     /// <summary>The creation was definitely rejected; ownership remains until explicitly cancelled.</summary>

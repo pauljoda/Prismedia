@@ -140,7 +140,7 @@ public sealed partial class EfManagedRequestStore {
                 throw new ArgumentException("The final file changed during import verification. Refresh its evidence.");
             var now = DateTimeOffset.UtcNow; var sourceId = Guid.NewGuid();
             var entity = await db.Entities.SingleAsync(row => row.Id == state.EntityId, ct);
-            entity.IsWanted = false; entity.UpdatedAt = now;
+            entity.IsWanted = false; entity.IsLibraryArchived = false; entity.UpdatedAt = now;
             if (await db.LibraryRoots.Where(root => root.Id == state.LibraryRootId).Select(root => root.IsNsfw).SingleAsync(ct)) entity.IsNsfw = true;
             if (!await db.EntityLibraryRoots.AnyAsync(root => root.EntityId == state.EntityId && root.LibraryRootId == state.LibraryRootId, ct))
                 db.EntityLibraryRoots.Add(new() { EntityId = state.EntityId, LibraryRootId = state.LibraryRootId });
@@ -150,7 +150,7 @@ public sealed partial class EfManagedRequestStore {
                 Kind = EntityKind.Movie, EntityId = state.EntityId, SourceFileId = sourceId, RemoteFileId = file.RemoteId,
                 LocalPath = path, SizeBytes = file.SizeBytes, WrittenAt = written, IsAvailable = true });
             holding.SelectionsJson = JsonSerializer.Serialize(new[] { new ManagedBindingSelection(state.RemoteId!, state.EntityId, sourceId) }, Json);
-            holding.Status = ManagedTrackingStatus.Tracking; holding.Revision++; holding.LastCheckedAt = now; holding.NextCheckAt = now.AddMinutes(5); holding.Problem = null;
+            holding.Status = ManagedTrackingStatus.Tracking; holding.Revision++; holding.LastCheckedAt = now; holding.NextCheckAt = now.AddMinutes(1); holding.Problem = null;
             var operation = new ManagedRequestOperation(current.Operation.State); operation.ConfirmFiles();
             await db.SaveChangesAsync(ct);
             await UpdateAsync(operation, state.Revision, null, ct);
@@ -293,6 +293,7 @@ public sealed partial class EfManagedRequestStore {
                     var sourceId = Guid.NewGuid();
                     var entity = await db.Entities.SingleAsync(row => row.Id == target.EntityId, ct);
                     entity.IsWanted = false;
+                    entity.IsLibraryArchived = false;
                     entity.UpdatedAt = now;
                     if (await db.LibraryRoots.Where(root => root.Id == state.LibraryRootId)
                         .Select(root => root.IsNsfw).SingleAsync(ct)) entity.IsNsfw = true;
@@ -340,10 +341,12 @@ public sealed partial class EfManagedRequestStore {
                 .ToArray();
             holding.SelectionsJson = JsonSerializer.Serialize(allBindings.Select(binding =>
                 new ManagedBindingSelection(binding.RemoteTargetId, binding.EntityId, binding.SourceFileId)), Json);
+            var requestRoot = await db.Entities.SingleAsync(entity => entity.Id == state.EntityId, ct);
+            requestRoot.IsLibraryArchived = false;
             holding.Status = completed ? ManagedTrackingStatus.Tracking : ManagedTrackingStatus.WaitingForFiles;
             holding.Revision++;
             holding.LastCheckedAt = now;
-            holding.NextCheckAt = now.AddMinutes(5);
+            holding.NextCheckAt = now.AddMinutes(1);
             holding.Problem = null;
             if (completed) {
                 var operation = new ManagedRequestOperation(current.Operation.State);

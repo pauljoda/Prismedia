@@ -124,7 +124,7 @@ public sealed partial class EfEntityReadService {
         bool enforceLibraryVisibility,
         bool hideNsfw) {
         var childQuery = _db.Entities.AsNoTracking()
-            .Where(entity => entity.ParentEntityId != null &&
+            .Where(entity => !entity.IsLibraryArchived && entity.ParentEntityId != null &&
                 visibleParentIds.Contains(entity.ParentEntityId.Value));
         childQuery = ApplyCollectionVisibility(childQuery);
         if (enforceLibraryVisibility) {

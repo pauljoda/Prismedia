@@ -11,7 +11,8 @@ public sealed class ManagedRequestOperation(ManagedRequestState state) {
     /// <summary>Immutable progress saved at every external boundary using revision comparison.</summary>
     public ManagedRequestState State { get; private set; } = state;
     /// <summary>Whether a future observation may advance fulfillment.</summary>
-    public bool IsActive => State.Phase is ManagedRequestPhase.PendingCreation or ManagedRequestPhase.CreationUncertain or ManagedRequestPhase.AwaitingFiles;
+    public bool IsActive => State.Phase is ManagedRequestPhase.PendingCreation or ManagedRequestPhase.CreationUncertain
+        or ManagedRequestPhase.AwaitingFiles or ManagedRequestPhase.RemoteRemoved;
     /// <summary>Cancellation is safe only before dispatch or after a definite creation refusal.</summary>
     public bool CanCancel => State.Phase is ManagedRequestPhase.PendingCreation or ManagedRequestPhase.Rejected;
     /// <summary>Accepts a stable wanted identity and mapped root before any remote side effect.</summary>
@@ -38,8 +39,15 @@ public sealed class ManagedRequestOperation(ManagedRequestState state) {
     }
     /// <summary>Stops fulfillment only after the associated holding has completed its explicit handoff.</summary>
     public void ReleaseOwnership() {
-        if (State.Phase is not (ManagedRequestPhase.AwaitingFiles or ManagedRequestPhase.Completed) || State.RemoteId is null) throw Invalid();
+        if (State.Phase is not (ManagedRequestPhase.AwaitingFiles or ManagedRequestPhase.RemoteRemoved or ManagedRequestPhase.Completed)
+            || State.RemoteId is null) throw Invalid();
         Change(State with { Phase = ManagedRequestPhase.OwnershipReleased, ReviewRequired = false });
+    }
+    /// <summary>Records provider-confirmed absence without releasing fulfillment ownership or erasing the pinned remote identity.</summary>
+    public void ConfirmRemoteRemoval() {
+        if (State.Phase is not (ManagedRequestPhase.AwaitingFiles or ManagedRequestPhase.RemoteRemoved or ManagedRequestPhase.Completed)
+            || State.RemoteId is null) throw Invalid();
+        Change(State with { Phase = ManagedRequestPhase.RemoteRemoved, ReviewRequired = false });
     }
     /// <summary>A fresh valid observation may keep waiting for bytes without changing the accepted remote identity.</summary>
     public void ContinueWaiting() {

@@ -31,7 +31,8 @@ export function transferActivityGroup(transfer: IntegrationTransferResponse): Re
 
 /** Places manager delegation records by intervention, ongoing work, or retained history. */
 export function managedRequestActivityGroup(request: ManagedRequestResponse): RequestActivityGroup {
-  if (request.phase === MANAGED_REQUEST_PHASE.completed || request.phase === MANAGED_REQUEST_PHASE.cancelled || request.phase === MANAGED_REQUEST_PHASE.ownershipReleased) {
+  if (request.phase === MANAGED_REQUEST_PHASE.completed || request.phase === MANAGED_REQUEST_PHASE.cancelled
+    || request.phase === MANAGED_REQUEST_PHASE.ownershipReleased || request.phase === MANAGED_REQUEST_PHASE.remoteRemoved) {
     return REQUEST_ACTIVITY_GROUP.recent;
   }
   if (request.reviewRequired || request.problem || request.phase === MANAGED_REQUEST_PHASE.creationUncertain || request.phase === MANAGED_REQUEST_PHASE.rejected) {
@@ -42,7 +43,9 @@ export function managedRequestActivityGroup(request: ManagedRequestResponse): Re
 
 /** Places tracked holdings without confusing remote monitoring with local file availability. */
 export function managedTrackingActivityGroup(holding: ManagedTrackingResponse): RequestActivityGroup {
-  if (holding.status === MANAGED_TRACKING_STATUS.released) return REQUEST_ACTIVITY_GROUP.recent;
+  if (holding.status === MANAGED_TRACKING_STATUS.released || holding.status === MANAGED_TRACKING_STATUS.removed) {
+    return REQUEST_ACTIVITY_GROUP.recent;
+  }
   if (holding.problem || holding.status === MANAGED_TRACKING_STATUS.needsReview || holding.status === MANAGED_TRACKING_STATUS.stale) {
     return REQUEST_ACTIVITY_GROUP.attention;
   }

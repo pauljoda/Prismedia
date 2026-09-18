@@ -28,7 +28,8 @@ internal sealed class FlagsCapabilityProjector : EntityCapabilityProjector<Flags
             context.Entity.IsFavorite,
             context.Entity.IsNsfw,
             context.Entity.IsOrganized,
-            context.Entity.IsWanted);
+            context.Entity.IsWanted,
+            context.Entity.IsLibraryArchived);
 }
 
 [EntityCapabilityProjector(30)]

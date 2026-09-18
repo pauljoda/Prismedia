@@ -168,6 +168,37 @@ describe("Managed holding tracking", () => {
     expect(api.saveManagedTracking).not.toHaveBeenCalled();
   });
 
+  it("presents source removal as retained history without active tracking controls", async () => {
+    api.fetchManagedTracking.mockResolvedValue([{
+      ...tracked,
+      status: MANAGED_TRACKING_STATUS.removed,
+      bindings: [{
+        remoteFileId: "remote-file",
+        localPath: "/library/film.mkv",
+        sizeBytes: 10,
+        writtenAt: "2026-09-18T12:00:00Z",
+        isAvailable: true,
+        entities: [],
+      }],
+    }]);
+    render(ManagedHoldingTracking, {
+      connectionId: "connection",
+      connectionName: "Radarr",
+      item,
+      showControls: true,
+      canControl: true,
+      canRelease: true,
+    });
+
+    await screen.findByText("Removed from source");
+    expect(screen.getByText("This title was removed from Radarr. Prismedia retains its metadata, links, and history.")).toBeInTheDocument();
+    expect(screen.getByText("1 linked file remains available in Prismedia. Metadata and history are retained.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Check now" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Radarr settings and activity" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Stop managing this title with Radarr" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Find matching items" })).not.toBeInTheDocument();
+  });
+
   it("deduplicates retained episode targets and gives them a useful local label", async () => {
     const episodeTarget = {
       target: { remoteTargetId: "episode-1", kind: ENTITY_KIND.videoEpisode, seasonNumber: 2, episodeNumber: 1, absoluteNumber: 9 },

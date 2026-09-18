@@ -23,8 +23,13 @@ public interface IManagedTrackingStore {
     /// <summary>Revalidates observed bytes and commits a domain decision under source-owner lifecycle leases.</summary>
     Task ApplyAsync(ManagedTrackingWork work, ManagedTrackingObservation observation, IReadOnlyList<ManagedFileBinding>? adoption,
         IReadOnlyList<ManagedSourceChange> changes, CancellationToken token);
+    /// <summary>Atomically records provider-confirmed removal while retaining local identities, readable files, and the fulfillment fence.</summary>
+    Task ConfirmRemovalAsync(ManagedTrackingWork work, string problem, CancellationToken token);
     /// <summary>Retains failure evidence and withdraws unverified source availability without deleting identities.</summary>
     Task RecordProblemAsync(Guid id, long revision, ManagedTrackingStatus status, string problem, CancellationToken token);
+    /// <summary>Requires review when a removed remote identity reappears without withdrawing still-readable local bytes.</summary>
+    Task RecordReappearanceAsync(Guid id, long revision, string problem, CancellationToken token) =>
+        RecordProblemAsync(id, revision, ManagedTrackingStatus.NeedsReview, problem, token);
     /// <summary>Publishes an explicit finite refresh for a holding owned by this connection.</summary>
     Task QueueAsync(Guid connectionId, Guid id, CancellationToken token);
     /// <summary>Recovers due observations independently of transient queue history.</summary>

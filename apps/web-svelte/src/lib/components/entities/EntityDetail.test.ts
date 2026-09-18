@@ -4,7 +4,7 @@ import { createRawSnippet } from "svelte";
 import * as navigation from "$app/navigation";
 import type { BeforeNavigate } from "@sveltejs/kit";
 import { describe, expect, it, vi } from "vitest";
-import { ACQUISITION_STATUS, CAPABILITY_KIND, ENTITY_KIND, EXTERNAL_ID_PROVIDER, FINGERPRINT_ALGORITHM, MANAGED_TRACKING_STATUS, REQUEST_MEDIA_KIND } from "$lib/api/generated/codes";
+import { ACQUISITION_STATUS, CAPABILITY_KIND, ENTITY_KIND, EXTERNAL_ID_PROVIDER, FINGERPRINT_ALGORITHM, MANAGED_REQUEST_PHASE, MANAGED_TRACKING_STATUS, REQUEST_MEDIA_KIND } from "$lib/api/generated/codes";
 import type { EntityDetailCard, EntityDetailCardFull } from "$lib/entities/entity-detail";
 import type { EntityDetailSection } from "./EntityDetail.svelte";
 import EntityDetail from "./EntityDetail.test-harness.svelte";
@@ -123,6 +123,29 @@ describe("EntityDetail", () => {
     expect(url.pathname).toBe("/request");
     expect(url.searchParams.get("connection")).toBe("connection-one");
     expect(url.searchParams.get("kind")).toBe(REQUEST_MEDIA_KIND.movie);
+  });
+
+  it("presents a removed external title as retained history without promising future files", async () => {
+    const card = buildCard();
+    card.entity.kind = ENTITY_KIND.movie;
+    card.entity.hasSourceMedia = false;
+    card.externalLibraryProvenance = {
+      ...externalLibraryProvenance(),
+      holding: { ...externalLibraryProvenance().holding!, status: MANAGED_TRACKING_STATUS.removed },
+      request: {
+        requestId: "request-one",
+        phase: MANAGED_REQUEST_PHASE.remoteRemoved,
+        updatedAt: "2026-09-18T12:00:00Z",
+        problem: null,
+      },
+    };
+    render(EntityDetail, { card });
+
+    await fireEvent.click(screen.getByRole("tab", { name: "External library" }));
+
+    expect(screen.getByText("Removed from source")).toBeInTheDocument();
+    expect(screen.getByText("This title was removed from Radarr. Prismedia retained its metadata and request history.")).toBeInTheDocument();
+    expect(screen.queryByText(/When its files are ready/)).not.toBeInTheDocument();
   });
 
   it("keeps external-library origin independent from metadata-provider identity", () => {

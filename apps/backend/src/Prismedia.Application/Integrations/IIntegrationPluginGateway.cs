@@ -1,5 +1,6 @@
 using Prismedia.Contracts.Integrations;
 using Prismedia.Contracts.Plugins;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Integrations;
 
@@ -12,4 +13,7 @@ public interface IIntegrationPluginGateway {
 }
 
 /// <summary>A trusted plugin failed its operation or returned an invalid response.</summary>
-public sealed class IntegrationInvocationException(string message) : Exception(message);
+public sealed class IntegrationInvocationException(string message, IntegrationErrorCode? code = null) : Exception(message) {
+    /// <summary>Machine-readable provider failure when the plugin established one recognized fact.</summary>
+    public IntegrationErrorCode? Code { get; } = code;
+}

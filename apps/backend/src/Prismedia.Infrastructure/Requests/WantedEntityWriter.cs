@@ -91,6 +91,10 @@ public sealed partial class WantedEntityWriter(
                     // A title-matched entity (e.g. a scanned author/artist folder with no provider ids yet)
                     // gains the provider id so every later lookup resolves it id-first.
                     await StampExternalIdAsync(current.Id, identity, leaseCancellationToken);
+                    if (current.IsLibraryArchived) {
+                        current.IsLibraryArchived = false;
+                        current.UpdatedAt = now;
+                    }
 
                     // Provider hydration can materialize a fileless Entity before an acquisition is
                     // selected. Reusing that shell for a request must promote it to Wanted so both the
@@ -369,6 +373,11 @@ public sealed partial class WantedEntityWriter(
                     }
 
                     var hasFile = sourceBackedIds.Contains(item.Entity.Id);
+                    if (item.Entity.IsLibraryArchived) {
+                        item.Entity.IsLibraryArchived = false;
+                        item.Entity.UpdatedAt = now;
+                        promotedWantedEntity = true;
+                    }
                     var hasRequestedRendition = item.Request.Kind == EntityKind.Book
                         ? await HasRequestedRenditionAsync(
                             item.Entity.Id,

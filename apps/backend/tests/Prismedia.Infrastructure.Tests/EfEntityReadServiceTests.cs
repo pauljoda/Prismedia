@@ -1813,6 +1813,27 @@ public sealed class EfEntityReadServiceTests {
     }
 
     [Fact]
+    public async Task RetainedRemovedEpisodesDoNotAppearInNormalChildLists() {
+        await using var db = CreateContext();
+        var parentId = Guid.NewGuid();
+        var archivedId = Guid.NewGuid();
+        var visibleId = Guid.NewGuid();
+        db.Entities.AddRange(
+            new EntityRow { Id = parentId, KindCode = EntityKind.VideoSeason.ToCode(), Title = "Season" },
+            new EntityRow { Id = archivedId, KindCode = EntityKind.VideoEpisode.ToCode(), Title = "Retained episode", ParentEntityId = parentId, IsLibraryArchived = true },
+            new EntityRow { Id = visibleId, KindCode = EntityKind.VideoEpisode.ToCode(), Title = "Available episode", ParentEntityId = parentId });
+        await db.SaveChangesAsync();
+
+        var service = CreateService(db);
+        var children = await service.GetChildrenAsync([parentId], false, default);
+        var references = await service.GetChildReferencesAsync([parentId], false, default);
+
+        Assert.Equal(visibleId, Assert.Single(Assert.Single(children.Groups).Items).Id);
+        Assert.Equal(visibleId, Assert.Single(Assert.Single(references.Groups).Items).Id);
+        Assert.NotNull(await db.Entities.FindAsync(archivedId));
+    }
+
+    [Fact]
     public async Task GetChildrenAsyncBatchesParentsWithStableOrderingAndVisibility() {
         await using var db = CreateContext();
         var now = DateTimeOffset.UtcNow;
