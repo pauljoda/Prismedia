@@ -106,17 +106,25 @@ public sealed class EfSettingsPersistence : ISettingsPersistence {
     }
 
     public async Task<IReadOnlyList<LibraryRoot>> ListLibraryRootsAsync(CancellationToken cancellationToken) {
-        return await _db.LibraryRoots
-            .AsNoTracking()
-            .OrderBy(root => root.Label)
-            .ThenBy(root => root.Path)
-            .Select(root => ToContract(root, _db.ExternalLibraryMounts.Any(mount => mount.LibraryRootId == root.Id)))
-            .ToArrayAsync(cancellationToken);
+        var rows = await (from root in _db.LibraryRoots.AsNoTracking()
+                          join mount in _db.ExternalLibraryMounts.AsNoTracking() on root.Id equals mount.LibraryRootId into mounts
+                          from mount in mounts.DefaultIfEmpty()
+                          join connection in _db.IntegrationConnections.AsNoTracking() on mount.ConnectionId equals connection.Id into connections
+                          from connection in connections.DefaultIfEmpty()
+                          orderby root.Label, root.Path
+                          select new { Root = root, Mount = mount, Connection = connection }).ToArrayAsync(cancellationToken);
+        return rows.Select(row => ToContract(row.Root, row.Mount is not null, ToOrigin(row.Mount, row.Connection))).ToArray();
     }
 
     public async Task<LibraryRoot?> GetLibraryRootAsync(Guid id, CancellationToken cancellationToken) {
-        var row = await _db.LibraryRoots.AsNoTracking().FirstOrDefaultAsync(root => root.Id == id, cancellationToken);
-        return row is null ? null : ToContract(row, await IsReadOnlyAsync(id, cancellationToken));
+        var result = await (from root in _db.LibraryRoots.AsNoTracking()
+                            join mount in _db.ExternalLibraryMounts.AsNoTracking() on root.Id equals mount.LibraryRootId into mounts
+                            from mount in mounts.DefaultIfEmpty()
+                            join connection in _db.IntegrationConnections.AsNoTracking() on mount.ConnectionId equals connection.Id into connections
+                            from connection in connections.DefaultIfEmpty()
+                            where root.Id == id
+                            select new { Root = root, Mount = mount, Connection = connection }).FirstOrDefaultAsync(cancellationToken);
+        return result is null ? null : ToContract(result.Root, result.Mount is not null, ToOrigin(result.Mount, result.Connection));
     }
 
     public async Task<LibraryRoot> AddLibraryRootAsync(LibraryRoot state, CancellationToken cancellationToken) {
@@ -289,7 +297,11 @@ public sealed class EfSettingsPersistence : ISettingsPersistence {
             throw new ReadOnlyLibraryException("This path overlaps an externally managed library. Use its existing read-only root.");
     }
 
-    private static LibraryRoot ToContract(LibraryRootRow row, bool isReadOnly) =>
+    private static ExternalLibraryOrigin? ToOrigin(ExternalLibraryMountRow? mount, IntegrationConnectionRow? connection) =>
+        mount is null || connection is null ? null : new(connection.Id, connection.Name, connection.PluginId,
+            mount.RemoteRootId, mount.RemotePath, connection.BaseUrl);
+
+    private static LibraryRoot ToContract(LibraryRootRow row, bool isReadOnly, ExternalLibraryOrigin? externalOrigin = null) =>
         new(
             row.Id,
             row.Path,
@@ -305,5 +317,5 @@ public sealed class EfSettingsPersistence : ISettingsPersistence {
             row.CreatedAt,
             row.UpdatedAt,
             row.AutoIdentify,
-            row.CreatedByUserId, IsReadOnly: isReadOnly);
+            row.CreatedByUserId, IsReadOnly: isReadOnly, ExternalOrigin: externalOrigin);
 }

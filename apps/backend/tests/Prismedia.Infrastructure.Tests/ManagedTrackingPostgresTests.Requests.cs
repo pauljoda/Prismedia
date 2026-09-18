@@ -49,6 +49,13 @@ public sealed partial class ManagedTrackingPostgresTests {
             .ToArrayAsync();
         Assert.Equal(fixture.EpisodeIds.Order().ToArray(), owners.Select(owner => owner.EntityId).ToArray());
         Assert.All(owners, owner => Assert.Equal(FulfillmentOwnerKind.ExternalManager, owner.OwnerKind));
+        var rootedIds = await db.EntityLibraryRoots.AsNoTracking()
+            .Select(root => root.EntityId)
+            .OrderBy(id => id)
+            .ToArrayAsync();
+        Assert.Equal(
+            fixture.EpisodeIds.Append(fixture.Operation.State.EntityId).Order().ToArray(),
+            rootedIds);
 
         await store.AcceptHoldingAsync(
             accepted,
@@ -180,6 +187,17 @@ public sealed partial class ManagedTrackingPostgresTests {
         var owner = Assert.Single(await db.FulfillmentReservations.ToArrayAsync());
         Assert.Equal(FulfillmentOwnerKind.ExternalManager, owner.OwnerKind);
         Assert.Equal(fixture.Fixture.EntityId, owner.EntityId);
+        var rooted = Assert.Single(await db.EntityLibraryRoots.ToArrayAsync());
+        Assert.Equal(fixture.Fixture.EntityId, rooted.EntityId);
+        Assert.Equal(fixture.Fixture.RootId, rooted.LibraryRootId);
+        var rollup = await db.EntityRollups.AsNoTracking()
+            .SingleAsync(row => row.EntityId == fixture.Fixture.EntityId);
+        Assert.Equal(fixture.Fixture.RootId, rollup.EffectiveLibraryRootId);
+        var visibility = new EfEntityLibraryVisibilityFilter(db, TestUserContext.Member());
+        Assert.True(await visibility.RequiresCurrentUserVisibilityAsync(default));
+        Assert.Empty(await visibility.ApplyCurrentUserVisibility(db.Entities.AsNoTracking())
+            .Where(entity => entity.Id == fixture.Fixture.EntityId)
+            .ToArrayAsync());
         Assert.Single(await db.JobRuns.ToArrayAsync());
         Assert.Empty(await db.ManagedHoldings.ToArrayAsync());
         Assert.Equal(accepted.Operation.State.OperationId, Assert.Single(await new LibraryScanPersistenceService(db).ListManagedHoldingsForRootAsync(fixture.Fixture.RootId, default)));
@@ -203,19 +221,50 @@ public sealed partial class ManagedTrackingPostgresTests {
     }
 
     [Fact]
-    public async Task WantedQueueFailureRollsBackIntentAndFulfillmentOwner() {
+    public async Task AtomicReviewedRequestQueueFailureRollsBackIntentOwnershipAndRootBinding() {
         await using var database = await PostgresTestDatabase.CreateAsync();
         await using (var db = database.CreateContext()) {
             var fixture = await SeedWantedAsync(db);
+            var connectionRevision = await db.IntegrationConnections
+                .Where(connection => connection.Id == fixture.Fixture.ConnectionId)
+                .Select(connection => connection.Revision)
+                .SingleAsync();
             await db.Database.ExecuteSqlRawAsync("""
                 CREATE FUNCTION reject_request_queue() RETURNS trigger LANGUAGE plpgsql AS $$
                 BEGIN RAISE EXCEPTION 'Simulated request publication failure'; END $$;
                 CREATE TRIGGER reject_request_queue BEFORE INSERT ON job_runs FOR EACH ROW EXECUTE FUNCTION reject_request_queue();
                 """);
-            await Assert.ThrowsAnyAsync<Exception>(() => Requests(db).CreateAsync(fixture.Operation, fixture.Plan, default));
+            var scope = new EfReviewedManagedRequestCommitScope(db);
+            await Assert.ThrowsAnyAsync<Exception>(() => scope.ExecuteAsync(
+                fixture.Fixture.ConnectionId,
+                connectionRevision,
+                token => Requests(db).CreateAsync(fixture.Operation, fixture.Plan, token),
+                default));
         }
         await using var check = database.CreateContext();
         Assert.Empty(await check.ManagedRequests.ToArrayAsync()); Assert.Empty(await check.FulfillmentReservations.ToArrayAsync()); Assert.Empty(await check.JobRuns.ToArrayAsync());
+        Assert.Empty(await check.EntityLibraryRoots.ToArrayAsync());
+    }
+
+    [Fact]
+    public async Task ReviewedCommitScopeRevisionFenceRunsBeforeLocalMutation() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var fixture = await SeedWantedAsync(db);
+        var invoked = false;
+
+        await Assert.ThrowsAsync<ConnectionConflictException>(() =>
+            new EfReviewedManagedRequestCommitScope(db).ExecuteAsync(
+                fixture.Fixture.ConnectionId,
+                expectedConnectionRevision: long.MaxValue,
+                _ => {
+                    invoked = true;
+                    return Task.FromResult(true);
+                },
+                default));
+
+        Assert.False(invoked);
+        Assert.Empty(await db.ManagedRequests.AsNoTracking().ToArrayAsync());
     }
 
     [Fact]

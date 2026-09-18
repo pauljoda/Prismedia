@@ -74,7 +74,14 @@ public sealed class ExternalLibraryMountTests : IDisposable {
         Assert.Equal(entityId, Assert.Single(await db.Entities.ToArrayAsync()).Id);
         Assert.Equal(fileId, Assert.Single(await db.EntityFiles.ToArrayAsync()).Id);
         Assert.Equal(rootId, Assert.Single(await db.EntityLibraryRoots.ToArrayAsync()).LibraryRootId);
-        Assert.True(Assert.Single(await new EfSettingsPersistence(db).ListLibraryRootsAsync(default)).IsReadOnly);
+        var projectedRoot = Assert.Single(await new EfSettingsPersistence(db).ListLibraryRootsAsync(default));
+        Assert.True(projectedRoot.IsReadOnly);
+        Assert.Equal(connectionId, projectedRoot.ExternalOrigin?.ConnectionId);
+        Assert.Equal("Fixture", projectedRoot.ExternalOrigin?.ConnectionName);
+        Assert.Equal("fixture", projectedRoot.ExternalOrigin?.PluginId);
+        Assert.Equal("1", projectedRoot.ExternalOrigin?.RemoteLibraryId);
+        Assert.Equal("/movies", projectedRoot.ExternalOrigin?.RemotePath);
+        Assert.Equal("http://manager.test/", projectedRoot.ExternalOrigin?.ManagementUrl);
         var evidence = Assert.Single(await store.InspectAsync(connectionId,
             [new("file-1", "/movies/film.mkv", 3, null, [new("movie-1", EntityKind.Movie, "Film")])], default));
         Assert.Equal(rootId, evidence.LibraryRootId); Assert.Equal(Path.Combine(mount.LocalPath, "film.mkv"), evidence.LocalPath);

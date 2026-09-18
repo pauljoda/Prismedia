@@ -11,9 +11,11 @@
   } from "$lib/api/generated/codes";
   import type { EntityMetadataProposal } from "$lib/api/identify-types";
   import { ApiError } from "$lib/api/orval-fetch";
-  import { commitReviewedRequest, fetchRequestReview, prepareManagedMovie, prepareManagedSeries, reviewRequest } from "$lib/api/requests";
+  import { commitReviewedRequest, fetchRequestReview, reviewRequest } from "$lib/api/requests";
+  import { saveReviewedManagedRequest, type ManagedRequestChoice } from "$lib/api/reviewed-managed-requests";
+  import { ManagedRequestRejectedError } from "$lib/api/managed-requests";
   import ManagerRequestOptions from "$lib/components/integrations/ManagerRequestOptions.svelte";
-  import { prepareManagerTitle, reviewManagerTitle } from "$lib/api/managed-discovery";
+  import { reviewManagerTitle } from "$lib/api/managed-discovery";
   import { fetchConnections } from "$lib/api/connections";
   import RequestTargetOptions from "$lib/components/acquisitions/RequestTargetOptions.svelte";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
@@ -52,7 +54,7 @@
     selectedProposalImageUrl,
     tagRelationshipForTitle,
   } from "$lib/components/identify/identify-review-helpers";
-  import type { ConnectionResponse, RequestReviewResponse, ReviewedRequestCommitRequest } from "$lib/api/generated/model";
+  import type { CommitReviewedManagedRequestInput, ConnectionResponse, RequestReviewResponse, ReviewedRequestCommitRequest } from "$lib/api/generated/model";
   import { useSession } from "$lib/stores/session.svelte";
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
 
@@ -85,7 +87,9 @@
   let loading = $state(true);
   let submitting = $state(false);
   let managerSelected = $state(false);
-  let managerMetadataSaved = $state(false);
+  let managerRefreshToken = $state(0);
+  let managerChoice = $state<ManagedRequestChoice | null>(null);
+  let pendingManagerCommit = $state<{ connectionId: string; input: CommitReviewedManagedRequestInput } | null>(null);
   let managerConnection = $state<ConnectionResponse | null>(null);
   let managerRevision = $state<number | string | null>(null);
   let error = $state<string | null>(null);
@@ -218,7 +222,8 @@
     targetLibraryRootId = null;
     profileId = null;
     managerSelected = Boolean(input.connectionId);
-    managerMetadataSaved = false;
+    managerChoice = null;
+    pendingManagerCommit = null;
     managerConnection = null;
     managerRevision = null;
 
@@ -275,6 +280,7 @@
   }
 
   function applyPreset(value: string) {
+    if (submitting || pendingManagerCommit) return;
     if (value === MONITOR_PRESET_CUSTOM || !selection) return;
     chosenPreset = value as MonitorPresetCode;
     selectionCustomized = false;
@@ -292,6 +298,7 @@
   }
 
   function toggleProposal(proposalId: string, selected: boolean) {
+    if (submitting || pendingManagerCommit) return;
     if (!selection?.selectableIds.includes(proposalId)) return;
     selectionCustomized = true;
     selectedProposalIds = selected
@@ -338,6 +345,7 @@
   }
 
   function setMetadataField(field: string, selected: boolean) {
+    if (submitting || pendingManagerCommit) return;
     if (!activeProposal) return;
     selectedFieldsByProposal = {
       ...selectedFieldsByProposal,
@@ -346,6 +354,7 @@
   }
 
   function setAllMetadataFields(selected: boolean) {
+    if (submitting || pendingManagerCommit) return;
     if (!activeProposal) return;
     selectedFieldsByProposal = {
       ...selectedFieldsByProposal,
@@ -359,6 +368,7 @@
   }
 
   function setMetadataImage(kind: string, url: string | null) {
+    if (submitting || pendingManagerCommit) return;
     if (!activeProposal) return;
     selectedImagesByProposal = {
       ...selectedImagesByProposal,
@@ -367,6 +377,7 @@
   }
 
   function setMetadataTag(tag: string, selected: boolean) {
+    if (submitting || pendingManagerCommit) return;
     if (!activeProposal) return;
     selectedTagsByProposal = {
       ...selectedTagsByProposal,
@@ -379,6 +390,7 @@
   }
 
   function setMetadataProposal(result: EntityMetadataProposal, selected: boolean) {
+    if (submitting || pendingManagerCommit) return;
     selectedCascade = { ...selectedCascade, [result.proposalId]: selected };
     if (result.targetKind === ENTITY_KIND.tag) setMetadataTag(proposalTitle(result), selected);
   }
@@ -388,6 +400,7 @@
   }
 
   function setActiveProposalSelected(proposalId: string, selected: boolean) {
+    if (submitting || pendingManagerCommit) return;
     if (!activeProposal || !proposal) return;
     if (activeProposal.proposalId === proposal.proposalId) {
       toggleProposal(proposalId, selected);
@@ -423,19 +436,13 @@
     };
   }
 
-  async function prepareForManager() {
-    if (enrichmentRunning) throw new Error("Wait for metadata identification to finish");
-    const key = loadedKey;
-    const payload = reviewedCommitPayload();
-    if (connectionQuery && (!managerConnection || managerRevision === null)) throw new Error("Reload this source review before continuing");
-    const prepared = managerConnection && managerRevision !== null
-      ? await prepareManagerTitle(managerConnection.id, { connectionRevision: managerRevision, request: payload })
-      : review?.entityKind === ENTITY_KIND.videoSeries
-      ? await prepareManagedSeries(withFiniteEpisodeSelection(payload))
-      : await prepareManagedMovie(payload);
-    if (key === loadedKey) managerMetadataSaved = true;
-    return prepared;
-  }
+  const managerReviewPayload = $derived.by(() => {
+    if (!review || !proposal || !selection || enrichmentRunning || !hasRequestIntent) return null;
+    try {
+      const payload = reviewedCommitPayload();
+      return review.entityKind === ENTITY_KIND.videoSeries ? withFiniteEpisodeSelection(payload) : payload;
+    } catch { return null; }
+  });
 
   function withFiniteEpisodeSelection(payload: ReviewedRequestCommitRequest): ReviewedRequestCommitRequest {
     const episodeIds: string[] = [];
@@ -449,7 +456,8 @@
   }
 
   async function requestSelection() {
-    if (enrichmentRunning || !review || !proposal || !selection || !kindInfo?.committable) return;
+    if (submitting || enrichmentRunning || !review || !proposal || !selection || !kindInfo?.committable) return;
+    if (managerSelected && !managerChoice && !pendingManagerCommit) return;
     const selectedIds = selection.mode === REQUEST_REVIEW_SELECTION.directChildren
       ? selectedProposalIds.filter((id) => selection.selectableIds.includes(id))
       : selection.initialRootSelection;
@@ -464,6 +472,27 @@
     error = null;
     reviewChanged = false;
     try {
+      if (managerSelected || pendingManagerCommit) {
+        if (!pendingManagerCommit && managerChoice) {
+          pendingManagerCommit = {
+            connectionId: managerChoice.connectionId,
+            input: {
+              operationId: crypto.randomUUID(),
+              expectedConnectionRevision: managerChoice.review.connectionRevision,
+              libraryRootId: managerChoice.review.mount.libraryRootId,
+              profileId: managerChoice.profileId,
+              monitored: managerChoice.monitored,
+              search: managerChoice.search,
+              request: managerChoice.review.request,
+              managerDiscoveryRevision: managerChoice.review.managerDiscoveryRevision,
+            },
+          };
+        }
+        if (!pendingManagerCommit) return;
+        const result = await saveReviewedManagedRequest(pendingManagerCommit.connectionId, pendingManagerCommit.input);
+        await goto(resolve((resolveEntityHref(review.entityKind, result.entityId) ?? "/request") as "/"));
+        return;
+      }
       const response = await commitReviewedRequest(reviewedCommitPayload(), nsfw.mode !== "show");
 
       const requested = response.items.filter((item) => item.outcome === REQUEST_COMMIT_OUTCOME.requested);
@@ -488,7 +517,12 @@
         : null;
       await goto(resolve((singleHref ?? "/request") as "/"));
     } catch (err) {
-      if (err instanceof ApiError && err.problemCode === PROBLEM_CODE.requestProposalChanged) {
+      if (err instanceof ManagedRequestRejectedError) {
+        pendingManagerCommit = null;
+        managerChoice = null;
+        managerRefreshToken++;
+      }
+      if ((err instanceof ApiError || err instanceof ManagedRequestRejectedError) && err.problemCode === PROBLEM_CODE.requestProposalChanged) {
         reviewChanged = true;
         error = "This proposal changed after you reviewed it. Reload the review and confirm your selection again.";
       } else {
@@ -555,7 +589,7 @@
   {:else if error && !review}
     <div class="surface-panel p-6 text-[0.82rem] leading-relaxed text-error-text">{error}</div>
   {:else if review && proposal && selection}
-    {#if !managerMetadataSaved && proposalPath.length > 1 && activeParent}
+    {#if proposalPath.length > 1 && activeParent}
       <Button
         type="button"
         variant="secondary"
@@ -569,13 +603,11 @@
       </Button>
     {/if}
 
-    {@render requestOptions(true)}
-
-    {#if !managerMetadataSaved}
+    <div class="min-w-0 space-y-4">
     <MetadataProposalReview
       proposal={activeProposal ?? proposal}
       title={activeTitle}
-      subtitle={`${review.externalIdentity.namespace}:${review.externalIdentity.value}`}
+      subtitle={review ? `${review.externalIdentity.namespace}:${review.externalIdentity.value}` : null}
       kindLabel={(activeProposal ?? proposal).targetKind}
       posterUrl={activePosterUrl}
       imageShape={activeImageShape}
@@ -592,8 +624,10 @@
       imageSelectionsForProposal={(proposalId) => selectedImagesByProposal[proposalId]}
       onActivate={openProposal}
       statusLabel={identifyingStatus}
-    />
-
+      sidebar={requestOptions}
+      disabled={submitting || !!pendingManagerCommit}
+    >
+      {#snippet structure()}
     <ProposalReviewSummary
       proposal={activeProposal ?? proposal}
       selectedIds={activeSelectedProposalIds}
@@ -601,17 +635,17 @@
       onSelectedChange={setActiveProposalSelected}
       onActivate={openProposal}
       childrenTitle={activeChildrenTitle}
-      subtitle={`${review.externalIdentity.namespace}:${review.externalIdentity.value}`}
+      subtitle={review ? `${review.externalIdentity.namespace}:${review.externalIdentity.value}` : null}
       showOverview={false}
       showRelationships={false}
       statusLabel={identifyingStatus}
     />
-    {/if}
+      {/snippet}
+    </MetadataProposalReview>
+    </div>
 
-    {#if !managerSelected}{@render requestOptions(false)}{/if}
-
-    {#snippet requestOptions(showManagerChoice: boolean)}
-    <section class="space-y-3 rounded-sm border border-border-accent bg-surface-1 p-4" aria-label="Request options">
+    {#snippet requestOptions()}
+    <section class="space-y-3 rounded-sm border border-border-accent bg-surface-1 p-4">
       <div>
         <h3 class="flex items-center gap-1.5 font-mono text-[0.68rem] font-semibold uppercase tracking-[0.04em] text-text-secondary">
           <Send class="h-3.5 w-3.5 text-text-accent" />
@@ -621,7 +655,7 @@
               ? `Request ${childNoun}s`
               : `Request this ${kindInfo?.label.toLowerCase() ?? "item"}`}
         </h3>
-        {#if selectsChildren && !managerMetadataSaved}
+        {#if selectsChildren}
           <p class="mt-1 text-[0.78rem] leading-relaxed text-text-muted">
             {#if managedSeriesSelected}
               Choose seasons and episodes in the metadata review. Only the present selected episodes are sent to the manager; future episodes are not included.
@@ -633,7 +667,7 @@
         {/if}
       </div>
 
-      {#if selectsChildren && !managerMetadataSaved && !managedSeriesSelected}
+      {#if selectsChildren && !managedSeriesSelected}
         <label class="flex max-w-64 flex-col gap-1">
           <span class="font-mono text-[0.66rem] font-semibold uppercase tracking-[0.04em] text-text-secondary">Monitor</span>
           <Select
@@ -641,49 +675,33 @@
             value={presetDisplay}
             size="sm"
             onchange={applyPreset}
+            disabled={submitting || !!pendingManagerCommit}
           />
         </label>
       {/if}
 
-      {#if showManagerChoice && session.isAdmin && review
+      {#if session.isAdmin && review
         && (review.entityKind === ENTITY_KIND.movie && review.externalIdentity.namespace === EXTERNAL_ID_PROVIDER.tmdb
           || review.entityKind === ENTITY_KIND.videoSeries
             && (review.externalIdentity.namespace === EXTERNAL_ID_PROVIDER.tmdb || review.externalIdentity.namespace === EXTERNAL_ID_PROVIDER.tvdb))}
-        <ManagerRequestOptions entityKind={review.entityKind} fixedConnection={managerConnection} disabled={submitting || enrichmentRunning || !hasRequestIntent} onPrepare={prepareForManager} onActiveChanged={active => managerSelected = active} />
+        <ManagerRequestOptions entityKind={review.entityKind} fixedConnection={managerConnection}
+          request={reviewChanged ? null : managerReviewPayload} managerDiscoveryRevision={managerRevision} refreshToken={managerRefreshToken}
+          disabled={submitting || !!pendingManagerCommit || enrichmentRunning || !hasRequestIntent}
+          onChange={(choice, active) => { managerChoice = choice; managerSelected = active; }} />
       {/if}
 
       {#if kindInfo && !managerSelected}
-        <RequestTargetOptions {kindInfo} bind:targetLibraryRootId bind:profileId>
-          {#snippet actions()}
-            <Button
-              type="button"
-              variant="primary"
-              class="shrink-0 gap-2"
-              disabled={submitting || enrichmentRunning || !hasRequestIntent}
-              title={enrichmentRunning
-                ? "Identifying children and relationships"
-                : !hasRequestIntent
-                ? selectsChildren
-                  ? `Select ${childNoun}s to request`
-                  : "This proposal is not requestable"
-                : undefined}
-              onclick={() => void requestSelection()}
-            >
-              {#if submitting}
-                <Loader2 class="h-4 w-4 animate-spin" />
-              {:else}
-                <Send class="h-4 w-4" />
-              {/if}
-              {submitting
-                ? "Requesting…"
-                : selectsChildren
-                  ? selectedProposalIds.length === 0
-                    ? "Request"
-                    : `Request ${selectedProposalIds.length} ${childNoun}${selectedProposalIds.length === 1 ? "" : "s"}`
-                  : "Request"}
-            </Button>
-          {/snippet}
-        </RequestTargetOptions>
+        <RequestTargetOptions {kindInfo} bind:targetLibraryRootId bind:profileId stacked />
+      {/if}
+      <Button type="button" variant="primary" class="w-full gap-2"
+        disabled={submitting || reviewChanged || enrichmentRunning || !hasRequestIntent || (managerSelected && !managerChoice && !pendingManagerCommit)}
+        onclick={() => void requestSelection()}>
+        {#if submitting}<Loader2 class="h-4 w-4 animate-spin" />{:else}<Send class="h-4 w-4" />{/if}
+        {submitting ? "Requesting…" : pendingManagerCommit ? "Retry request" : selectsChildren && selectedProposalIds.length > 0
+          ? `Request ${selectedProposalIds.length} ${childNoun}${selectedProposalIds.length === 1 ? "" : "s"}` : "Request"}
+      </Button>
+      {#if pendingManagerCommit && !submitting}
+        <p class="text-sm text-text-muted">Acceptance could not be confirmed. Retry checks this same request safely.</p>
       {/if}
 
       {#if enrichmentRunning}

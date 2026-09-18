@@ -13,6 +13,46 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EntityExternalLibraryProvenanceTests {
     [Fact]
+    public async Task PendingRequestsExposeProviderOriginOnlyForTheRootAndExactOwnedEpisodes() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var fixture = await AddExternalLibraryAsync(db, enabled: true, ConnectionStatus.Ready);
+        var now = DateTimeOffset.UtcNow;
+        var series = AddEntity(db, EntityKind.VideoSeries, "Requested series", null, now);
+        var episode = AddEntity(db, EntityKind.VideoEpisode, "Requested episode", series.Id, now);
+        var sibling = AddEntity(db, EntityKind.VideoEpisode, "Unrequested episode", series.Id, now);
+        var request = new ManagedRequestRow {
+            Id = Guid.NewGuid(), ConnectionId = fixture.ConnectionId, LibraryRootId = fixture.LibraryRootId,
+            EntityId = series.Id, Phase = ManagedRequestPhase.PendingCreation, Revision = 1,
+            CreatedAt = now, UpdatedAt = now,
+        };
+        db.ManagedRequests.Add(request);
+        var reservation = new FulfillmentReservationRow {
+            Id = Guid.NewGuid(), OwnerId = request.Id, OwnerKind = FulfillmentOwnerKind.ExternalManager,
+            ConnectionId = fixture.ConnectionId, EntityId = episode.Id, CreatedAt = now,
+        };
+        db.FulfillmentReservations.Add(reservation);
+        await db.SaveChangesAsync();
+
+        var reader = new EfEntityExternalLibraryProvenanceReader(db);
+        foreach (var id in new[] { series.Id, episode.Id }) {
+            var origin = await reader.ReadAsync(id, default);
+            Assert.NotNull(origin);
+            Assert.Equal(fixture.LibraryRootId, origin.LibraryRootId);
+            Assert.Equal(request.Id, origin.Request?.RequestId);
+            Assert.Equal(ManagedRequestPhase.PendingCreation, origin.Request?.Phase);
+            Assert.Null(origin.Holding);
+        }
+        Assert.Null(await reader.ReadAsync(sibling.Id, default));
+
+        request.Phase = ManagedRequestPhase.Cancelled;
+        reservation.ReleasedAt = now.AddMinutes(1);
+        await db.SaveChangesAsync();
+        Assert.Null(await reader.ReadAsync(series.Id, default));
+        Assert.Null(await reader.ReadAsync(episode.Id, default));
+    }
+
+    [Fact]
     public async Task ProjectsSavedMappedLibraryThroughNearestEffectiveRootWhileNativeEntitiesRemainNative() {
         await using var database = await PostgresTestDatabase.CreateAsync();
         await using var db = database.CreateContext();

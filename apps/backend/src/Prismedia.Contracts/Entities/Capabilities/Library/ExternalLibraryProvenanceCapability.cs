@@ -12,6 +12,17 @@ public sealed record ExternalManagedHoldingReference(
     ManagedItemInput Item,
     ManagedTrackingStatus Status);
 
+/// <summary>Durable provider fulfillment progress shown before and after files become available.</summary>
+/// <param name="RequestId">Stable request identity, including while remote creation is pending.</param>
+/// <param name="Phase">Saved fulfillment phase; completion requires locally readable files.</param>
+/// <param name="UpdatedAt">Time the saved fulfillment state was last changed.</param>
+/// <param name="Problem">Current user-facing problem or waiting explanation, if any.</param>
+public sealed record ExternalLibraryRequestReference(
+    Guid RequestId,
+    ManagedRequestPhase Phase,
+    DateTimeOffset UpdatedAt,
+    string? Problem);
+
 /// <summary>Saved provenance for an Entity whose effective library root is an external read-only mapping.</summary>
 /// <param name="ConnectionId">Prismedia connection that owns the external-library mapping.</param>
 /// <param name="ConnectionName">User-facing saved connection name.</param>
@@ -19,6 +30,7 @@ public sealed record ExternalManagedHoldingReference(
 /// <param name="LibraryRootId">Mapped Prismedia library identity governing this Entity.</param>
 /// <param name="LibraryLabel">User-facing mapped library name.</param>
 /// <param name="Holding">Exact linked holding when an explicit entity association was retained.</param>
+/// <param name="Request">An accepted external request, also present for fileless wanted entities.</param>
 [CapabilityKind("external-library-provenance")]
 public sealed record ExternalLibraryProvenanceCapability(
     Guid ConnectionId,
@@ -26,4 +38,5 @@ public sealed record ExternalLibraryProvenanceCapability(
     string PluginId,
     Guid LibraryRootId,
     string LibraryLabel,
-    ExternalManagedHoldingReference? Holding = null) : EntityCapability;
+    ExternalManagedHoldingReference? Holding = null,
+    ExternalLibraryRequestReference? Request = null) : EntityCapability;

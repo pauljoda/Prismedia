@@ -1,6 +1,7 @@
 using Prismedia.Application.Entities;
 using Prismedia.Application.Plugins;
 using Prismedia.Contracts.Entities;
+using Prismedia.Contracts.Integrations;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Contracts.Requests;
 using Prismedia.Domain.Entities;
@@ -128,6 +129,39 @@ public sealed class ReviewedWantedSeriesService(
                 item.Selection.AbsoluteNumber,
                 item.Entity.HasFile,
                 item.Selection.Identity)).ToArray());
+    }
+
+    /// <summary>Validates a finite reviewed episode selection and derives exact Sonarr lookup evidence without writing.</summary>
+    internal async Task<ReviewedWantedPlan> ReviewForManagerAsync(
+        ReviewedRequestCommitRequest request,
+        CancellationToken token) {
+        ValidateEnvelope(request);
+        var review = ReviewedRequestProposalValidator.Validate(request, request.Review!, request.Proposal!);
+        var selection = ReadSelection(request, review);
+        await RequireExactRoutesAsync(request.PluginId, selection, token);
+        var rootIds = selection.Series.Proposal.Patch.ExternalIds
+            .Where(pair => pair.Key is ExternalIdProviders.Tvdb or ExternalIdProviders.Tmdb)
+            .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+        if (selection.Series.Identity.Namespace is ExternalIdProviders.Tvdb or ExternalIdProviders.Tmdb)
+            rootIds[selection.Series.Identity.Namespace] = selection.Series.Identity.Value;
+        if (rootIds.Count == 0)
+            throw Invalid("Identify the series with a TVDB or TMDB identity before choosing external fulfillment.");
+        var targets = selection.Episodes.Select(episode => {
+            var ids = episode.Proposal.Patch.ExternalIds
+                .Where(pair => pair.Key == ExternalIdProviders.Tvdb)
+                .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
+            if (episode.Identity.Namespace == ExternalIdProviders.Tvdb)
+                ids[episode.Identity.Namespace] = episode.Identity.Value;
+            if (ids.Count == 0)
+                throw Invalid("Every selected episode needs an exact TVDB identity for external fulfillment.");
+            return new ManagedLookupTarget(
+                EntityKind.VideoEpisode,
+                ids,
+                episode.SeasonNumber,
+                episode.EpisodeNumber,
+                episode.AbsoluteNumber);
+        }).ToArray();
+        return new(selection.Series.Title, new(EntityKind.VideoSeries, rootIds, targets));
     }
 
     private static void ValidateEnvelope(ReviewedRequestCommitRequest request) {

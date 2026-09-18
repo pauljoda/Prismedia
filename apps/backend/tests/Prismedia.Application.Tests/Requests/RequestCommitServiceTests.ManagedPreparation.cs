@@ -1,7 +1,9 @@
 using Prismedia.Application.Entities;
+using Prismedia.Application.Integrations;
 using Prismedia.Application.Plugins;
 using Prismedia.Application.Requests;
 using Prismedia.Contracts.Entities;
+using Prismedia.Contracts.Integrations;
 using Prismedia.Contracts.Requests;
 using Prismedia.Domain.Entities;
 
@@ -106,6 +108,39 @@ public sealed partial class RequestCommitServiceTests {
     }
 
     [Fact]
+    public async Task ReviewingFiniteSeriesForManagerDerivesExactEpisodeScopeWithoutWriting() {
+        var request = ManagedSeriesReview();
+        var writer = new FakeWantedEntityWriter();
+        var service = new ReviewedWantedSeriesService(
+            writer,
+            new FakeSuppressionStore(),
+            new SeriesRouter(),
+            new MovieLease());
+
+        var plan = await service.ReviewForManagerAsync(request, default);
+
+        Assert.Equal("Fixture Series", plan.Title);
+        Assert.Equal(EntityKind.VideoSeries, plan.Work.EntityKind);
+        Assert.Equal("series-7", plan.Work.ExternalIds[ExternalIdProviders.Tmdb]);
+        Assert.Collection(
+            plan.Work.Targets!,
+            special => {
+                Assert.Equal("episode-special", special.ExternalIds[ExternalIdProviders.Tvdb]);
+                Assert.Equal(0, special.SeasonNumber);
+                Assert.Equal(1, special.EpisodeNumber);
+                Assert.Equal(100, special.AbsoluteNumber);
+            },
+            pilot => {
+                Assert.Equal("episode-pilot", pilot.ExternalIds[ExternalIdProviders.Tvdb]);
+                Assert.Equal(1, pilot.SeasonNumber);
+                Assert.Equal(1, pilot.EpisodeNumber);
+                Assert.Null(pilot.AbsoluteNumber);
+            });
+        Assert.Empty(writer.Ensured);
+        Assert.Empty(writer.EnsuredChildren);
+    }
+
+    [Fact]
     public async Task PreparingReviewedMovieSavesSelectedMetadataWithoutStartingAcquisitionOrMonitoring() {
         var request = ManagedMovieReview();
         var writer = new FakeWantedEntityWriter(); var suppression = new FakeSuppressionStore(); var router = new MovieRouter();
@@ -154,6 +189,76 @@ public sealed partial class RequestCommitServiceTests {
         var writer = new FakeWantedEntityWriter();
         await Assert.ThrowsAsync<RequestCommitValidationException>(() => new ReviewedWantedMovieService(writer, new FakeSuppressionStore(), new MovieRouter { Enabled = false }, new MovieLease()).PrepareAsync(ManagedMovieReview(), default));
         Assert.Empty(writer.Ensured);
+    }
+
+    [Fact]
+    public async Task ReviewingManagerOriginMovieDoesNotRequireMetadataPluginRouteOrWrite() {
+        var request = ManagedMovieReview();
+        var writer = new FakeWantedEntityWriter();
+        var service = new ReviewedWantedMovieService(
+            writer,
+            new FakeSuppressionStore(),
+            new MovieRouter { Enabled = false },
+            new MovieLease());
+
+        var plan = await service.ReviewForManagerAsync(request, managerOrigin: true, default);
+
+        Assert.Equal("Metropolis", plan.Title);
+        Assert.Equal("19", plan.Work.ExternalIds[ExternalIdProviders.Tmdb]);
+        Assert.Empty(writer.Ensured);
+        Assert.Empty(writer.DeferredArtworkApplied);
+    }
+
+    [Fact]
+    public void ReviewedManagerReplayFingerprintCoversMetadataSelectionAndProviderIntent() {
+        var connectionId = Guid.NewGuid();
+        var request = ManagedMovieReview();
+        var input = new CommitReviewedManagedRequestInput(
+            Guid.NewGuid(),
+            7,
+            Guid.NewGuid(),
+            "profile-one",
+            Monitored: true,
+            Search: true,
+            request);
+
+        var fingerprint = ReviewedManagedRequestIdentity.Fingerprint(connectionId, input);
+
+        Assert.Equal(fingerprint, ReviewedManagedRequestIdentity.Fingerprint(connectionId, input));
+        Assert.Equal(fingerprint, ReviewedManagedRequestIdentity.Fingerprint(
+            connectionId,
+            input with { ExpectedConnectionRevision = input.ExpectedConnectionRevision + 1 }));
+        Assert.NotEqual(fingerprint, ReviewedManagedRequestIdentity.Fingerprint(
+            connectionId,
+            input with { ProfileId = "profile-two" }));
+        Assert.NotEqual(fingerprint, ReviewedManagedRequestIdentity.Fingerprint(
+            connectionId,
+            input with {
+                Request = request with {
+                    Proposal = request.Proposal! with {
+                        Patch = request.Proposal.Patch with { Title = "Different selected title" }
+                    }
+                }
+            }));
+    }
+
+    [Fact]
+    public void ReviewedManagerCommitRejectsMissingRequestBeforeFingerprinting() {
+        var input = new CommitReviewedManagedRequestInput(
+            Guid.NewGuid(), 7, Guid.NewGuid(), "profile-one", true, true, null!);
+
+        Assert.Throws<RequestCommitValidationException>(() =>
+            ReviewedManagedRequestService.ValidateCommitInput(input));
+    }
+
+    [Fact]
+    public void ReviewedManagerCommitRejectsMissingProposalSelectionBeforeFingerprinting() {
+        var input = new CommitReviewedManagedRequestInput(
+            Guid.NewGuid(), 7, Guid.NewGuid(), "profile-one", true, true,
+            ManagedMovieReview() with { SelectedProposalIds = null! });
+
+        Assert.Throws<RequestCommitValidationException>(() =>
+            ReviewedManagedRequestService.ValidateCommitInput(input));
     }
 
     private static ReviewedRequestCommitRequest ManagedMovieReview() {

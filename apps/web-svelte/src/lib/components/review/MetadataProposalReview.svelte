@@ -45,6 +45,9 @@
     onActivate?: ((proposal: EntityMetadataProposal) => void) | null;
     statusLabel?: (proposal: EntityMetadataProposal) => string | null;
     structure?: Snippet;
+    /** Shared request controls beside the metadata review, stacked first on small screens. */
+    sidebar?: Snippet;
+    disabled?: boolean;
   }
 
   let {
@@ -69,6 +72,8 @@
     onActivate = null,
     statusLabel = () => null,
     structure,
+    sidebar,
+    disabled = false,
   }: Props = $props();
 
   const relationships = $derived(relationshipProposals(proposal));
@@ -96,6 +101,11 @@
   showReason
 />
 
+<div class={sidebar ? "grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_20rem]" : "contents"}>
+  {#if sidebar}
+    <aside class="min-w-0 xl:col-start-2 xl:row-start-1 xl:sticky xl:top-4" aria-label="Request options">{@render sidebar()}</aside>
+  {/if}
+  <fieldset {disabled} class={sidebar ? "min-w-0 space-y-4 border-0 p-0 xl:col-start-1 xl:row-start-1" : "contents"}>
 <ProposalFieldReviewSection
   {proposal}
   {selectedFields}
@@ -274,6 +284,8 @@
 {/if}
 
 {@render structure?.()}
+  </fieldset>
+</div>
 
 <style>
   .identify-thumbnail-grid {

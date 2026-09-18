@@ -66,6 +66,9 @@ public static class ConnectionEndpoints {
         group.MapPost("/{id:guid}/library/item", async (Guid id, ManagedItemInput request, ManagedLibraryService service, CancellationToken cancellationToken) =>
             Results.Ok(await service.GetAsync(id, request, cancellationToken)))
             .WithName("GetConnectedLibraryItem").Produces<ManagedItemSnapshot>().Produces<ApiProblem>(400);
+        group.MapGet("/libraries", async (ProviderLibraryService service, CancellationToken cancellationToken) =>
+            Results.Ok(await service.ListAsync(cancellationToken)))
+            .WithName("ListProviderLibraries").Produces<IReadOnlyList<ProviderLibraryConnection>>();
         group.MapPost("/{id:guid}/manager/options", async (Guid id, ManagerOptionsInput request, ManagedLibraryService service, CancellationToken cancellationToken) =>
             Results.Ok(await service.OptionsAsync(id, request, cancellationToken)))
             .WithName("GetManagerOptions").Produces<ManagerOptions>().Produces<ApiProblem>(400);

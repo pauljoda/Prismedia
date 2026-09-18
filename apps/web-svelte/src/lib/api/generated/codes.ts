@@ -1065,6 +1065,7 @@ export const INTEGRATION_OPERATION = {
   inspectManagedRelease: "inspect-managed-release",
   searchLibrary: "search-library",
   getLibraryItem: "get-library-item",
+  listLibraries: "list-libraries",
   requestSource: "request-source",
   observeSource: "observe-source",
 } as const;

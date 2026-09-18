@@ -3,6 +3,7 @@ import { ManagerActionRejectedError, saveControlAction } from "./managed-control
 import { ManagedRequestRejectedError, saveManagedRequest } from "./managed-requests";
 import { ManagedReleaseRejectedError, saveOwnershipRelease } from "./managed-release";
 import type { CreateManagedControlRequest, CreateManagedRequestInput, ReleaseManagedHoldingRequest } from "./generated/model";
+import { PROBLEM_CODE } from "./generated/codes";
 
 describe("Durable manager acceptance failures", () => {
   afterEach(() => vi.unstubAllGlobals());
@@ -19,5 +20,15 @@ describe("Durable manager acceptance failures", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("Response interrupted", { status: 500 })));
     try { await submit(); throw new Error("Expected failure"); }
     catch (error) { expect(error).not.toBeInstanceOf(rejected); expect(error).toHaveProperty("status", 500); }
+  });
+  it("preserves the typed problem code on a definite managed-request refusal", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      code: PROBLEM_CODE.requestProposalChanged,
+      message: "Review changed",
+    }), { status: 409, headers: { "content-type": "application/json" } })));
+
+    await expect(saveManagedRequest("connection", {} as CreateManagedRequestInput)).rejects.toMatchObject({
+      problemCode: PROBLEM_CODE.requestProposalChanged,
+    });
   });
 });

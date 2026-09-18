@@ -98,6 +98,10 @@ public enum IntegrationOperation {
     [Code("get-library-item")]
     GetLibraryItem,
 
+    /// <summary>List the external application's independently managed libraries.</summary>
+    [Code("list-libraries")]
+    ListLibraries,
+
     /// <summary>Idempotently request preparation of one exact source selection; never expands its scope.</summary>
     [Code("request-source")]
     RequestSource,

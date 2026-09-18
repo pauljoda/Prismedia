@@ -5,6 +5,7 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { EntityCapabilityExternalLibraryProvenanceCapabilityKind } from './entityCapabilityExternalLibraryProvenanceCapabilityKind';
+import type { ExternalLibraryRequestReference } from './externalLibraryRequestReference';
 import type { ExternalManagedHoldingReference } from './externalManagedHoldingReference';
 
 export interface EntityCapabilityExternalLibraryProvenanceCapability {
@@ -15,4 +16,5 @@ export interface EntityCapabilityExternalLibraryProvenanceCapability {
   libraryRootId: string;
   libraryLabel: string;
   holding?: null | ExternalManagedHoldingReference;
+  request?: null | ExternalLibraryRequestReference;
 }

@@ -1,4 +1,5 @@
 using Prismedia.Application.Integrations;
+using Prismedia.Application.Requests;
 using Prismedia.Contracts.Integrations;
 using Prismedia.Contracts.System;
 
@@ -12,6 +13,26 @@ public static class ManagedRequestEndpoints {
         group.MapPost("/preview", async (Guid id, PreviewManagedRequestInput request, ManagedRequestService service, CancellationToken token) =>
             Results.Ok(await service.PreviewAsync(id, request, token)))
             .WithName("PreviewManagedRequest").Produces<ManagedRequestPreview>().Produces<ApiProblem>(400);
+        group.MapPost("/review", async (Guid id, ReviewManagedRequestInput request, ReviewedManagedRequestService service, CancellationToken token) => {
+            try { return Results.Ok(await service.ReviewAsync(id, request, token)); }
+            catch (RequestProposalChangedException error) {
+                return Results.Conflict(new ApiProblem(ApiProblemCodes.RequestProposalChanged, error.Message));
+            }
+            catch (RequestCommitValidationException error) {
+                return Results.BadRequest(new ApiProblem(ApiProblemCodes.RequestInvalid, error.Message));
+            }
+        }).WithName("ReviewManagedRequest").Produces<ReviewedManagedRequest>().Produces<ApiProblem>(400).Produces<ApiProblem>(409);
+        group.MapPost("/commit-reviewed", async (Guid id, CommitReviewedManagedRequestInput request,
+            ReviewedManagedRequestService service, CancellationToken token) => {
+            try { return Results.Accepted(value: await service.CommitAsync(id, request, token)); }
+            catch (RequestProposalChangedException error) {
+                return Results.Conflict(new ApiProblem(ApiProblemCodes.RequestProposalChanged, error.Message));
+            }
+            catch (RequestCommitValidationException error) {
+                return Results.BadRequest(new ApiProblem(ApiProblemCodes.RequestInvalid, error.Message));
+            }
+        }).WithName("CommitReviewedManagedRequest").Produces<ReviewedManagedRequestCommitResponse>(202)
+            .Produces<ApiProblem>(400).Produces<ApiProblem>(409);
         group.MapGet("/", async (Guid id, ManagedRequestService service, CancellationToken token) =>
             Results.Ok(await service.ListAsync(id, token)))
             .WithName("ListManagedRequests").Produces<IReadOnlyList<ManagedRequestResponse>>();

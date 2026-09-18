@@ -15,6 +15,8 @@ public sealed class EfEntityExternalLibraryProvenanceReader(PrismediaDbContext d
     : IEntityExternalLibraryProvenanceReader {
     private static readonly JsonSerializerOptions Json = PluginProcessTransport.JsonOptions;
 
+    private sealed record LibraryOrigin(Guid ConnectionId, string Name, string PluginId, Guid LibraryRootId, string LibraryLabel);
+
     /// <inheritdoc />
     public async Task<ExternalLibraryProvenanceCapability?> ReadAsync(Guid entityId, CancellationToken cancellationToken) {
         var source = await (
@@ -24,14 +26,38 @@ public sealed class EfEntityExternalLibraryProvenanceReader(PrismediaDbContext d
             join root in db.LibraryRoots.AsNoTracking() on mount.LibraryRootId equals root.Id
             join connection in db.IntegrationConnections.AsNoTracking() on mount.ConnectionId equals connection.Id
             where rollup.EntityId == entityId
-            select new {
-                ConnectionId = connection.Id,
-                connection.Name,
-                connection.PluginId,
-                LibraryRootId = root.Id,
-                LibraryLabel = root.Label,
-            }).SingleOrDefaultAsync(cancellationToken);
+            select new LibraryOrigin(connection.Id, connection.Name, connection.PluginId, root.Id, root.Label))
+            .SingleOrDefaultAsync(cancellationToken);
+
+        // Requests own a library boundary before a file scan can give the Entity an effective root.
+        // Episode ownership is exact: an unrequested sibling never inherits another episode's request.
+        var requests = db.ManagedRequests.AsNoTracking()
+            .Where(row => row.Phase != ManagedRequestPhase.Cancelled && row.Phase != ManagedRequestPhase.OwnershipReleased)
+            .Where(row => row.EntityId == entityId || db.FulfillmentReservations.Any(owner =>
+                owner.EntityId == entityId && owner.OwnerId == row.Id
+                && owner.ConnectionId == row.ConnectionId && owner.OwnerKind == FulfillmentOwnerKind.ExternalManager
+                && owner.ReleasedAt == null));
+        if (source is null) {
+            var hasLibrary = await db.EntityRollups.AsNoTracking()
+                .AnyAsync(row => row.EntityId == entityId && row.EffectiveLibraryRootId != null, cancellationToken);
+            if (hasLibrary) return null;
+            source = await (
+                from request in requests
+                join mount in db.ExternalLibraryMounts.AsNoTracking()
+                    on new { request.ConnectionId, request.LibraryRootId } equals new { mount.ConnectionId, mount.LibraryRootId }
+                join root in db.LibraryRoots.AsNoTracking() on mount.LibraryRootId equals root.Id
+                join connection in db.IntegrationConnections.AsNoTracking() on mount.ConnectionId equals connection.Id
+                orderby request.UpdatedAt descending, request.Id
+                select new LibraryOrigin(connection.Id, connection.Name, connection.PluginId, root.Id, root.Label))
+                .FirstOrDefaultAsync(cancellationToken);
+        }
         if (source is null) return null;
+
+        var requestReference = await requests
+            .Where(row => row.ConnectionId == source.ConnectionId && row.LibraryRootId == source.LibraryRootId)
+            .OrderByDescending(row => row.UpdatedAt).ThenBy(row => row.Id)
+            .Select(row => new ExternalLibraryRequestReference(row.Id, row.Phase, row.UpdatedAt, row.Problem))
+            .FirstOrDefaultAsync(cancellationToken);
 
         var exactTarget = JsonSerializer.Serialize(new[] { new { EntityId = entityId } }, Json);
         var holding = await db.ManagedHoldings.AsNoTracking()
@@ -75,6 +101,7 @@ public sealed class EfEntityExternalLibraryProvenanceReader(PrismediaDbContext d
             source.PluginId,
             source.LibraryRootId,
             source.LibraryLabel,
-            reference);
+            reference,
+            requestReference);
     }
 }

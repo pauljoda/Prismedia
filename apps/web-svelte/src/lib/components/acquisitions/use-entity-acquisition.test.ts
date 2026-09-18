@@ -4,11 +4,18 @@ import {
   ACQUISITION_STATUS,
   CAPABILITY_KIND,
   ENTITY_KIND,
+  MANAGED_REQUEST_PHASE,
   MONITOR_PRESET,
   MONITOR_STATUS,
   THUMBNAIL_HOVER_KIND,
 } from "$lib/api/generated/codes";
-import type { AcquisitionDetail, AcquisitionStatus, EntityKind } from "$lib/api/generated/model";
+import type {
+  AcquisitionDetail,
+  AcquisitionStatus,
+  EntityCapability,
+  EntityKind,
+  ExternalLibraryRequestReference,
+} from "$lib/api/generated/model";
 import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
 import Harness from "./use-entity-acquisition.test-harness.svelte";
 
@@ -17,11 +24,16 @@ const mocks = vi.hoisted(() => ({
   fetchAcquisitionForEntity: vi.fn(),
   fetchAcquisitionSummariesForEntity: vi.fn(),
   fetchEntityMonitor: vi.fn(),
+  fetchEntity: vi.fn(),
   fetchMonitorEligibility: vi.fn(),
   resumeMonitor: vi.fn(),
   startEntityMonitor: vi.fn(),
   stopMonitor: vi.fn(),
   syncContainerRequest: vi.fn(),
+}));
+
+vi.mock("$lib/api/entities", () => ({
+  fetchEntity: mocks.fetchEntity,
 }));
 
 vi.mock("$lib/api/acquisitions", () => ({
@@ -83,6 +95,59 @@ describe("useEntityAcquisition", () => {
       expect(mocks.fetchAcquisitionForEntity).toHaveBeenCalledOnce();
       expect(screen.getByTestId("visible")).toHaveTextContent("yes");
     });
+  });
+
+  it("suppresses native acquisition loading and controls for an externally managed entity", async () => {
+    vi.useFakeTimers();
+
+    render(Harness, {
+      entityId: "movie-1",
+      capabilities: [
+        { kind: CAPABILITY_KIND.fileManagement, canDeleteFiles: true },
+        externalLibraryCapability(),
+      ],
+    });
+
+    await vi.advanceTimersByTimeAsync(60_000);
+
+    expect(screen.getByTestId("visible")).toHaveTextContent("no");
+    expect(mocks.fetchAcquisitionForEntity).not.toHaveBeenCalled();
+    expect(mocks.fetchAcquisitionSummariesForEntity).not.toHaveBeenCalled();
+    expect(mocks.fetchEntityMonitor).not.toHaveBeenCalled();
+    expect(mocks.fetchMonitorEligibility).not.toHaveBeenCalled();
+    expect(mocks.fetchEntity).not.toHaveBeenCalled();
+  });
+
+  it("reloads the entity when an active external request projection changes", async () => {
+    vi.useFakeTimers();
+    const onStatusChanged = vi.fn(async () => {});
+    const capability = externalLibraryCapability({
+      requestId: "request-1",
+      phase: MANAGED_REQUEST_PHASE.pendingCreation,
+      updatedAt: "2026-09-18T12:00:00Z",
+      problem: null,
+    });
+    mocks.fetchEntity.mockResolvedValue({
+      capabilities: [externalLibraryCapability({
+        requestId: "request-1",
+        phase: MANAGED_REQUEST_PHASE.awaitingFiles,
+        updatedAt: "2026-09-18T12:00:05Z",
+        problem: null,
+      })],
+    });
+
+    render(Harness, {
+      entityId: "movie-1",
+      capabilities: [capability],
+      onStatusChanged,
+    });
+
+    await vi.advanceTimersByTimeAsync(5_000);
+
+    expect(mocks.fetchEntity).toHaveBeenCalledWith("movie-1");
+    expect(onStatusChanged).toHaveBeenCalledOnce();
+    expect(mocks.fetchAcquisitionForEntity).not.toHaveBeenCalled();
+    expect(mocks.fetchAcquisitionSummariesForEntity).not.toHaveBeenCalled();
   });
 
   it("refreshes only acquisition state after searching an existing entity", async () => {
@@ -534,6 +599,21 @@ function wantedChild(id: string, kind: EntityKind, parentEntityId: string): Enti
     cover: null,
     hover: { kind: THUMBNAIL_HOVER_KIND.none },
     wantedStatus: null,
+  };
+}
+
+function externalLibraryCapability(
+  request: ExternalLibraryRequestReference | null = null,
+): EntityCapability {
+  return {
+    kind: CAPABILITY_KIND.externalLibraryProvenance,
+    connectionId: "connection-1",
+    connectionName: "Radarr",
+    pluginId: "radarr",
+    libraryRootId: "library-1",
+    libraryLabel: "Movies",
+    holding: null,
+    request,
   };
 }
 

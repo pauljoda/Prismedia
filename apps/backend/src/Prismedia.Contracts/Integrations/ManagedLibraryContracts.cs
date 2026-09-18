@@ -24,6 +24,22 @@ public sealed record ManagedLibraryPresentation(
     string? ContentRating = null);
 /// <summary>Bounded observed holdings with adapter-owned pagination.</summary>
 public sealed record ManagedLibraryPage(IReadOnlyList<ManagedLibraryItem> Items, string? NextCursor = null);
+/// <summary>A provider-owned library that can be attached to one ordinary Prismedia library root.</summary>
+public sealed record ProviderLibraryDescriptor(
+    string RemoteId,
+    string Label,
+    string RemotePath,
+    IReadOnlyList<EntityKind> EntityKinds,
+    string? ManagementUrl = null);
+/// <summary>The complete bounded set of libraries exposed by one connected application.</summary>
+public sealed record ProviderLibraryCatalog(IReadOnlyList<ProviderLibraryDescriptor> Libraries);
+/// <summary>A connected application's provider libraries and any isolated discovery failure.</summary>
+public sealed record ProviderLibraryConnection(
+    Guid ConnectionId,
+    string ConnectionName,
+    string PluginId,
+    IReadOnlyList<ProviderLibraryDescriptor> Libraries,
+    string? Error = null);
 /// <summary>Addresses a holding and pins known external identities to detect a reused remote numeric ID.</summary>
 public sealed record ManagedItemInput(EntityKind EntityKind, string RemoteId, IReadOnlyDictionary<string, string> ExpectedExternalIds);
 /// <summary>One content target covered by an externally managed file. IssueLabel preserves comic designations such as ½ and 12.5 independently of television numbering.</summary>

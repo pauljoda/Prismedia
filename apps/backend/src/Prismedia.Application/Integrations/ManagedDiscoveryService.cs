@@ -50,6 +50,27 @@ public sealed class ManagedDiscoveryService(
         return new(connection.Connection.State.Revision, review, metadata);
     }
 
+    /// <summary>Refreshes and fences one manager-origin review while preserving the user's filtered proposal.</summary>
+    internal async Task<(long Revision, ReviewedRequestCommitRequest Request)> CanonicalizeAsync(
+        Guid connectionId,
+        long expectedRevision,
+        ReviewedRequestCommitRequest request,
+        CancellationToken token) {
+        if (request is null) throw new RequestCommitValidationException("Submit the reviewed manager movie.");
+        var (connection, review, _) = await ResolveReviewAsync(
+            connectionId,
+            EntityKind.Movie,
+            request.RootExternalIdentity,
+            token);
+        if (connection.Connection.State.Revision != expectedRevision)
+            throw new ConnectionConflictException("The selected manager connection changed. Review the movie again.");
+        if (!string.Equals(request.PluginId, connection.Manifest.Id, StringComparison.OrdinalIgnoreCase))
+            throw new RequestCommitValidationException("The reviewed movie belongs to another manager connection.");
+        if (!string.Equals(request.ProposalRevision, review.Revision, StringComparison.Ordinal))
+            throw new RequestProposalChangedException();
+        return (connection.Connection.State.Revision, request with { Review = review });
+    }
+
     /// <summary>Creates or enriches a wanted movie only after refreshing the exact connection-scoped review.</summary>
     public async Task<PreparedWantedMovieResponse> PrepareAsync(
         Guid connectionId,

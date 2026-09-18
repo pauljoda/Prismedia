@@ -50,6 +50,7 @@
   } from "$lib/entities/entity-thumbnail";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
   import MetadataCard from "$lib/components/MetadataCard.svelte";
+  import EntityExternalLibrary from "$lib/components/integrations/EntityExternalLibrary.svelte";
   import MetadataCardGrid from "$lib/components/MetadataCardGrid.svelte";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import EntityDateEditRequest from "./EntityDateEditRequest.svelte";
@@ -195,7 +196,8 @@
   const availableSections = $derived([...sections, ...coreSections]);
   const cardFull = $derived(card as EntityDetailCard & Partial<EntityDetailCardFull>);
   const visibleActionButtons = $derived.by(() => actionButtons.filter((action) => !action.hidden));
-  const routeTabs = $derived.by(() => tabs.filter(tabHasContent));
+  const routeTabs = $derived.by(() => tabs.filter(tab => tabHasContent(tab)
+    && (!externalLibraryProvenance || tab.id !== "acquisition")));
   const visibleTabs = $derived.by((): EntityDetailTab[] => {
     if (!externalLibraryProvenance) return routeTabs;
 
@@ -579,28 +581,7 @@
 
 {#snippet externalLibraryContent()}
   {#if externalLibraryProvenance}
-    <div class="external-library-content w-full max-w-xl">
-      <MetadataCard title={externalLibraryProvenance.connectionName} icon={HardDrive} wide>
-        <div class="space-y-3 break-words">
-          <div>
-            <p class="text-xs text-text-muted">Library</p>
-            <p class="text-sm font-medium text-text-primary">{externalLibraryProvenance.libraryLabel}</p>
-          </div>
-          <p class="text-sm leading-relaxed text-text-secondary">
-            Files stay managed by {externalLibraryProvenance.connectionName}. Prismedia reads them in place.
-          </p>
-          {#if externalLibraryLink}
-            <a
-              class={buttonVariants({ variant: "ghost", size: "sm" })}
-              href={externalLibraryLink.href}
-              aria-label={externalLibraryLink.ariaLabel}
-            >
-              {externalLibraryLink.label}<ArrowUpRight aria-hidden="true" />
-            </a>
-          {/if}
-        </div>
-      </MetadataCard>
-    </div>
+    <EntityExternalLibrary origin={externalLibraryProvenance} sourceLink={externalLibraryLink} />
   {/if}
 {/snippet}
 
@@ -861,11 +842,6 @@
 
   .entity-detail > * {
     min-width: 0;
-  }
-
-  .external-library-content :global([data-slot="card-title"]) {
-    min-width: 0;
-    overflow-wrap: anywhere;
   }
 
   /* ── Hero ────────────────────────────────────────────────── */

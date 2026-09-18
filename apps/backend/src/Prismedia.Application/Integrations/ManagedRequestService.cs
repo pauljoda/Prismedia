@@ -46,8 +46,63 @@ public sealed class ManagedRequestService(IManagedRequestStore store, Integratio
             await access.RequireAsync(connectionId, PluginCapability.ExternalManager, operation, preview.Work.EntityKind, token);
         if (input.Search) await access.RequireAsync(connectionId, PluginCapability.ExternalManager, IntegrationOperation.RequestManaged, preview.Work.EntityKind, token);
         await access.RequireAsync(connectionId, PluginCapability.ConnectedLibrary, IntegrationOperation.GetLibraryItem, preview.Work.EntityKind, token);
+        return await AcceptAsync(connectionId, input, preview, reviewedCommitFingerprint: null,
+            expectedConnectionRevision: null, token);
+    }
+
+    /// <summary>Returns a previously accepted reviewed commit without requiring current provider availability.</summary>
+    internal async Task<ManagedRequestResponse?> FindReviewedAsync(
+        Guid connectionId,
+        Guid operationId,
+        string reviewedCommitFingerprint,
+        CancellationToken token) {
+        if (await store.FindAsync(operationId, token) is not { } existing) return null;
+        if (existing.Operation.State.ConnectionId != connectionId
+            || !string.Equals(existing.Plan.ReviewedCommitFingerprint, reviewedCommitFingerprint, StringComparison.Ordinal))
+            throw new ManagedRequestConflictException("This operation ID already accepted a different managed request.");
+        return Map(existing);
+    }
+
+    /// <summary>Accepts an already preflighted request using only server-derived local entity identities.</summary>
+    internal async Task<ManagedRequestResponse> AcceptAsync(
+        Guid connectionId,
+        CreateManagedRequestInput input,
+        ManagedRequestPreview preview,
+        string? reviewedCommitFingerprint,
+        long? expectedConnectionRevision,
+        CancellationToken token) {
+        Validate(input);
+        var fingerprint = ManagedRequestIdentity.Fingerprint(input);
+        if (await store.FindAsync(input.OperationId, token) is { } existing) {
+            if (existing.Operation.State.ConnectionId != connectionId || existing.Plan.Fingerprint != fingerprint
+                || reviewedCommitFingerprint is not null
+                    && !string.Equals(existing.Plan.ReviewedCommitFingerprint, reviewedCommitFingerprint, StringComparison.Ordinal))
+                throw new ManagedRequestConflictException("This operation ID already accepted a different managed request.");
+            return Map(existing);
+        }
+        var target = await store.RequireTargetAsync(
+            connectionId,
+            input.EntityId,
+            input.LibraryRootId,
+            input.TargetEntityIds,
+            token);
+        if (!ManagedRequestIdentity.SameWork(target.Work, input.ReviewedWork)
+            || target.Mount.Id != preview.Mount.Id
+            || target.Mount.RemoteRootId != preview.Mount.RemoteRootId
+            || target.Mount.RemotePath != preview.Mount.RemotePath)
+            throw new ManagedRequestConflictException("The wanted identity or mapped library changed after review.");
+        if (!preview.Options.Profiles.Any(profile => profile.Id == input.ProfileId))
+            throw new ArgumentException("Choose an existing external profile.");
+        if (preview.Existing is { } holding && holding.Item.ProfileId != input.ProfileId)
+            throw new ManagedRequestConflictException("This work already exists with another profile. Review and use its current profile before changing it through linked controls.");
         var action = ManagedRequestOperation.Create(input.OperationId, connectionId, input.EntityId, input.LibraryRootId);
-        var plan = new ManagedRequestPlan(input, new(input.OperationId, preview.Work, input.ProfileId, preview.Mount.RemoteRootId, preview.Mount.RemotePath), preview.Title, fingerprint);
+        var plan = new ManagedRequestPlan(
+            input,
+            new(input.OperationId, target.Work, input.ProfileId, target.Mount.RemoteRootId, target.Mount.RemotePath),
+            target.Title,
+            fingerprint,
+            reviewedCommitFingerprint,
+            expectedConnectionRevision);
         return Map(await store.CreateAsync(action, plan, token));
     }
     /// <summary>Lists durable intent independently of current connection health.</summary>

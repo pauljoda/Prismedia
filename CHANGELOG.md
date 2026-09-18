@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Provider libraries can be discovered and linked from Settings → Libraries, including multiple folders per connection, with shared visibility, scanning, and playback controls.
+
 - Radarr connections can search new movies directly, show their artwork and metadata for review, and submit requests through the selected instance without a separate metadata-provider key.
 - Plugins can supply packaged icons, shown consistently in plugin listings, connections, and Request source choices. Maintained community plugins include their own logos, and Request source cards summarize supported actions and media types.
 
@@ -104,6 +106,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - TV downloads held for manual import now open an expected-episode review: Prismedia prefills unambiguous matches, lets each episode choose a downloaded video, supports one video satisfying several episodes, and keeps the complete payload in a collapsed audit list. Potentially dangerous companion files are blocked from selection while verified media remains mappable behind an explicit safety confirmation. A held release can also be rejected to remove its download data, blocklist it, and immediately search again.
 
 ### Changed
+
+- External requests now load provider choices alongside metadata and submit in one step, then open the normal entity page. The External library tab shows provider progress in place of native acquisition controls.
 
 - Connected titles show their linked Prismedia items and file availability in an In Prismedia tab, with settings, action history, and stopping management in focused dialogs.
 

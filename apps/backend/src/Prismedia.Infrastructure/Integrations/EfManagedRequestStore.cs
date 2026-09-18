@@ -180,8 +180,16 @@ public sealed partial class EfManagedRequestStore(PrismediaDbContext db, IExtern
             || plan.Request.EntityId != state.EntityId || plan.Request.LibraryRootId != state.LibraryRootId || plan.Creation.OperationId != state.OperationId
             || plan.Creation.ProfileId != plan.Request.ProfileId || !ManagedRequestIdentity.SameWork(plan.Creation.Work, plan.Request.ReviewedWork)
             || plan.Fingerprint != ManagedRequestIdentity.Fingerprint(plan.Request)) throw new ArgumentException("Invalid managed request intent.");
-        await using var transaction = await db.Database.BeginTransactionAsync(token);
+        await using var transaction = db.Database.IsRelational() && db.Database.CurrentTransaction is null
+            ? await db.Database.BeginTransactionAsync(token)
+            : null;
         await PluginLifecycleLease.LockConnectionAsync(db, state.ConnectionId, token, requireReady: true);
+        if (plan.ExpectedConnectionRevision is { } expectedRevision
+            && await db.IntegrationConnections
+                .Where(connection => connection.Id == state.ConnectionId)
+                .Select(connection => connection.Revision)
+                .SingleAsync(token) != expectedRevision)
+            throw new ManagedRequestConflictException("The selected manager connection changed. Review its options again.");
         var now = DateTimeOffset.UtcNow;
         var row = new ManagedRequestRow { Id = state.OperationId, ConnectionId = state.ConnectionId, EntityId = state.EntityId,
             LibraryRootId = state.LibraryRootId, Revision = state.Revision, Phase = state.Phase, StateJson = JsonSerializer.Serialize(state, Json),
@@ -223,16 +231,29 @@ public sealed partial class EfManagedRequestStore(PrismediaDbContext db, IExtern
                         null,
                         ct);
                 }
+                var visibleEntityIds = targetIds.Append(row.EntityId).Distinct().ToArray();
+                var rootedEntityIds = await db.EntityLibraryRoots
+                    .Where(root => visibleEntityIds.Contains(root.EntityId))
+                    .Select(root => root.EntityId)
+                    .ToHashSetAsync(ct);
+                foreach (var visibleEntityId in visibleEntityIds.Where(id => !rootedEntityIds.Contains(id))) {
+                    db.EntityLibraryRoots.Add(new() {
+                        EntityId = visibleEntityId,
+                        LibraryRootId = row.LibraryRootId
+                    });
+                }
                 await db.SaveChangesAsync(ct);
                 await PublishAsync(row, ct);
             }, token)) throw new EntityLifecycleMutationConflictException(state.EntityId);
-            await transaction.CommitAsync(token);
+            if (transaction is not null) await transaction.CommitAsync(token);
         } catch (DbUpdateException error) when (error.InnerException is PostgresException { SqlState: PostgresErrorCodes.UniqueViolation }) {
-            await transaction.RollbackAsync(token); db.ChangeTracker.Clear();
+            if (transaction is null)
+                throw new ManagedRequestConflictException("This request conflicts with an existing managed operation.");
+            if (transaction is not null) await transaction.RollbackAsync(token); db.ChangeTracker.Clear();
             if (await FindAsync(row.Id, token) is { } accepted) return Same(accepted, operation, plan);
             throw new ManagedRequestConflictException("This request conflicts with an existing managed operation.");
         } catch (Exception error) when (FulfillmentOwnershipViolation.IsConflict(error)) {
-            await transaction.RollbackAsync(token); db.ChangeTracker.Clear(); throw new FulfillmentOwnershipConflictException(error);
+            if (transaction is not null) await transaction.RollbackAsync(token); db.ChangeTracker.Clear(); throw new FulfillmentOwnershipConflictException(error);
         }
         return Map(row);
     }

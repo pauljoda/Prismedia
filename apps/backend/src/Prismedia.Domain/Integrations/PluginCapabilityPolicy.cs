@@ -13,7 +13,8 @@ public static class PluginCapabilityPolicy {
             or IntegrationOperation.AuthorizeArtifact or IntegrationOperation.RenewRetention or IntegrationOperation.Acknowledge,
         PluginCapability.ExternalManager => operation is IntegrationOperation.DiscoverManaged or IntegrationOperation.LookupManaged or IntegrationOperation.ManagerOptions or IntegrationOperation.EnsureManaged
             or IntegrationOperation.RequestManaged or IntegrationOperation.ConfigureManaged or IntegrationOperation.ReconcileManaged or IntegrationOperation.InspectManagedRelease,
-        PluginCapability.ConnectedLibrary => operation is IntegrationOperation.SearchLibrary or IntegrationOperation.GetLibraryItem,
+        PluginCapability.ConnectedLibrary => operation is IntegrationOperation.SearchLibrary or IntegrationOperation.GetLibraryItem
+            or IntegrationOperation.ListLibraries,
         _ => false
     };
 }

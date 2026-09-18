@@ -16,6 +16,7 @@
     ToggleRight,
     Trash2,
     UsersRound,
+    ExternalLink,
   } from "@lucide/svelte";
   import { TextInput,  Button, Panel, StatusLed, cn  } from "@prismedia/ui-svelte";
   import {
@@ -33,6 +34,9 @@
   import LibraryAccessDialog from "./LibraryAccessDialog.svelte";
   import { entityTerms } from "$lib/terminology";
   import ToggleCard from "./ToggleCard.svelte";
+  import PluginIcon from "$lib/components/plugins/PluginIcon.svelte";
+  import { getGetPluginIconUrl } from "$lib/api/generated/prismedia";
+  import ProviderLibraryDialog from "./ProviderLibraryDialog.svelte";
 
   interface Props {
     roots: LibraryRoot[];
@@ -179,16 +183,19 @@
         </p>
       </div>
     </div>
-    <Button
-      type="button"
-      variant="secondary"
-      size="sm"
-      onclick={() => void openBrowser(browser?.path)}
-      class="no-lift gap-1.5 px-3 py-1.5 text-xs"
-    >
-      <Plus class="h-3.5 w-3.5" />
-      Browse Folder
-    </Button>
+    <div class="flex flex-wrap items-center gap-2">
+      {#if session.isAdmin}<ProviderLibraryDialog {roots} onComplete={onRootsChanged} {onError} {onMessage} />{/if}
+      <Button
+        type="button"
+        variant="secondary"
+        size="sm"
+        onclick={() => void openBrowser(browser?.path)}
+        class="no-lift gap-1.5 px-3 py-1.5 text-xs"
+      >
+        <Plus class="h-3.5 w-3.5" />
+        Browse Folder
+      </Button>
+    </div>
   </div>
 
   {#if browserVisible}
@@ -379,11 +386,20 @@
               <div
                 class={cn("led mt-1.5 flex-shrink-0", root.enabled ? "led-active" : "led-idle")}
               ></div>
+              {#if root.externalOrigin}<PluginIcon name={root.externalOrigin.connectionName} iconUrl={getGetPluginIconUrl(root.externalOrigin.pluginId)} class="mt-0.5 size-6 shrink-0" />{/if}
               <div class="min-w-0">
                 <h3 class="text-[0.85rem] font-semibold text-text-primary truncate">
                   {root.label}
                 </h3>
-                {#if root.isReadOnly}<p class="mt-1 text-xs text-text-muted">Externally managed · files are read-only</p>{/if}
+                {#if root.externalOrigin}
+                  <p class="mt-1 text-xs text-text-muted">
+                    Managed by {root.externalOrigin.connectionName} · files are read-only ·
+                    <a class="inline-flex items-center gap-1 text-text-accent hover:underline" href={root.externalOrigin.managementUrl} target="_blank" rel="noreferrer">
+                      Open provider <ExternalLink class="size-3" />
+                    </a>
+                  </p>
+                  <p class="mt-1 break-all text-mono-sm text-text-disabled">Provider path: {root.externalOrigin.remotePath}</p>
+                {:else if root.isReadOnly}<p class="mt-1 text-xs text-text-muted">Externally managed · files are read-only</p>{/if}
                 <p
                   class="mt-1.5 truncate text-mono-sm text-text-disabled bg-surface-1/50 rounded-xs border border-border-subtle px-2 py-0.5 inline-block max-w-full shadow-sm"
                 >

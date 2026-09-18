@@ -79,6 +79,26 @@ describe("EntityDetail", () => {
     expect(screen.getByText("Additional metadata")).toBeInTheDocument();
   });
 
+  it("removes a route-provided Acquisition tab for an externally managed entity", () => {
+    const card = buildCard();
+    card.description = "Externally managed movie";
+    card.externalLibraryProvenance = externalLibraryProvenance();
+
+    render(EntityDetail, {
+      props: {
+        card,
+        tabs: [{ id: "acquisition", label: "Acquisition", sections: ["description"] }],
+      },
+    });
+
+    expect(screen.queryByRole("tab", { name: "Acquisition" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent?.trim())).toEqual([
+      "Details",
+      "External library",
+    ]);
+    expect(screen.getByText("Externally managed movie")).toBeInTheDocument();
+  });
+
   it("links administrators to the exact identity-pinned connected holding", async () => {
     const card = buildCard();
     card.externalLibraryProvenance = externalLibraryProvenance();

@@ -2,6 +2,7 @@ using System.Globalization;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Plugins;
 using Prismedia.Contracts.Entities;
+using Prismedia.Contracts.Integrations;
 using Prismedia.Contracts.Requests;
 using Prismedia.Domain.Entities;
 
@@ -12,8 +13,7 @@ public sealed class ReviewedWantedMovieService(IWantedEntityWriter wanted, IWant
     IPluginIdentityRouter routes, IEntityLifecycleMutationLease lifecycle) {
     /// <summary>Reuses exact movie identity, applies reviewed metadata, and never creates an acquisition, monitor, or manager action.</summary>
     public async Task<PreparedWantedMovieResponse> PrepareAsync(ReviewedRequestCommitRequest request, CancellationToken token) {
-        Validate(request);
-        var review = ReviewedRequestProposalValidator.Validate(request, request.Review!, request.Proposal!);
+        var review = Validate(request);
         var exactRoutes = (await routes.ResolveAsync(EntityKind.Movie.ToCode(), IdentifyAction.LookupId, [review.ExternalIdentity], token))
             .Where(route => route.Identity == review.ExternalIdentity && string.Equals(route.PluginId, review.PluginId, StringComparison.OrdinalIgnoreCase)).ToArray();
         if (exactRoutes.Length != 1) throw Invalid("The exact metadata plugin route is unavailable. Review this movie again through an enabled plugin.");
@@ -26,9 +26,38 @@ public sealed class ReviewedWantedMovieService(IWantedEntityWriter wanted, IWant
         RequestReviewResponse canonicalReview,
         CancellationToken token) {
         request = request with { Review = canonicalReview };
-        Validate(request);
-        var review = ReviewedRequestProposalValidator.Validate(request, canonicalReview, request.Proposal!);
+        var review = Validate(request);
         return await MaterializeAsync(request, review, route: null, token);
+    }
+
+    /// <summary>Validates a complete movie review and derives manager lookup evidence without writing.</summary>
+    internal async Task<ReviewedWantedPlan> ReviewForManagerAsync(
+        ReviewedRequestCommitRequest request,
+        bool managerOrigin,
+        CancellationToken token) {
+        var review = Validate(request);
+        var selection = ReviewedRequestSelectionResolver.Resolve(
+            RequestKindRegistry.Find(RequestMediaKind.Movie)!,
+            review,
+            request.SelectedProposalIds,
+            null);
+        if (!selection.SelectRoot || selection.Nodes.Count != 0) throw Invalid("Select the reviewed movie itself.");
+        if (!managerOrigin) {
+            var exactRoutes = (await routes.ResolveAsync(
+                    EntityKind.Movie.ToCode(),
+                    IdentifyAction.LookupId,
+                    [review.ExternalIdentity],
+                    token))
+                .Where(route => route.Identity == review.ExternalIdentity
+                    && string.Equals(route.PluginId, review.PluginId, StringComparison.OrdinalIgnoreCase))
+                .ToArray();
+            if (exactRoutes.Length != 1)
+                throw Invalid("The exact metadata plugin route is unavailable. Review this movie again through an enabled plugin.");
+        }
+        var title = review.Proposal.Patch.Title ?? review.ExternalIdentity.Value;
+        if (string.IsNullOrWhiteSpace(title) || title.Length > 512) throw Invalid("The reviewed movie needs a valid title.");
+        return new(title.Trim(), new(EntityKind.Movie,
+            new Dictionary<string, string> { [ExternalIdProviders.Tmdb] = review.ExternalIdentity.Value }));
     }
 
     private async Task<PreparedWantedMovieResponse> MaterializeAsync(
@@ -51,7 +80,7 @@ public sealed class ReviewedWantedMovieService(IWantedEntityWriter wanted, IWant
         return new(entity.EntityId, title, false);
     }
 
-    private static void Validate(ReviewedRequestCommitRequest request) {
+    private static RequestReviewResponse Validate(ReviewedRequestCommitRequest request) {
         if (request.Kind != RequestMediaKind.Movie || request.RootExternalIdentity?.Namespace != ExternalIdProviders.Tmdb
             || !int.TryParse(request.RootExternalIdentity.Value, NumberStyles.None, CultureInfo.InvariantCulture, out var id) || id <= 0
             || id.ToString(CultureInfo.InvariantCulture) != request.RootExternalIdentity.Value
@@ -61,6 +90,7 @@ public sealed class ReviewedWantedMovieService(IWantedEntityWriter wanted, IWant
             || request.Review.Proposal.Patch.ExternalIds.GetValueOrDefault(ExternalIdProviders.Tmdb) != request.RootExternalIdentity.Value
             || request.ProposalRevision != request.Review.Revision || RequestProposalRevision.Compute(request.Review.Proposal) != request.Review.Revision)
             throw Invalid("Submit the complete reviewed movie and its exact TMDB identity before choosing external fulfillment.");
+        return ReviewedRequestProposalValidator.Validate(request, request.Review!, request.Proposal!);
     }
     private static RequestCommitValidationException Invalid(string message) => new(message);
 }

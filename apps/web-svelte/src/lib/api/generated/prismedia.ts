@@ -55,6 +55,7 @@ import type {
   CollectionWriteRequest,
   CommitEntityRequestParams,
   CommitRequestParams,
+  CommitReviewedManagedRequestInput,
   CommitReviewedRequestParams,
   ConnectionResponse,
   ConsumptionEventCreateRequest,
@@ -251,6 +252,7 @@ import type {
   PreviewCollectionRulesParams,
   PreviewManagedRequestInput,
   ProblemDetails,
+  ProviderLibraryConnection,
   RatingUpdateRequest,
   ReleaseCalendarEvent,
   ReleaseManagedHoldingRequest,
@@ -270,7 +272,10 @@ import type {
   RescanFileRootParams,
   ResolveIdentifyQueueCandidateParams,
   ReviewEntityRequestParams,
+  ReviewManagedRequestInput,
   ReviewRequestParams,
+  ReviewedManagedRequest,
+  ReviewedManagedRequestCommitResponse,
   ReviewedRequestCommitRequest,
   SaveIdentifyQueueProposalRequest,
   SearchIdentifyQueueItemParams,
@@ -9537,6 +9542,100 @@ export const previewManagedRequest = async (id: string,
 
 
 
+export type reviewManagedRequestResponse200 = {
+  data: ReviewedManagedRequest
+  status: 200
+}
+
+export type reviewManagedRequestResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type reviewManagedRequestResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type reviewManagedRequestResponseSuccess = (reviewManagedRequestResponse200) & {
+  headers: Headers;
+};
+export type reviewManagedRequestResponseError = (reviewManagedRequestResponse400 | reviewManagedRequestResponse409) & {
+  headers: Headers;
+};
+
+export type reviewManagedRequestResponse = (reviewManagedRequestResponseSuccess | reviewManagedRequestResponseError)
+
+export const getReviewManagedRequestUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/manager/requests/review`
+}
+
+export const reviewManagedRequest = async (id: string,
+    reviewManagedRequestInput: ReviewManagedRequestInput, options?: RequestInit): Promise<reviewManagedRequestResponse> => {
+
+  return orvalFetch<reviewManagedRequestResponse>(getReviewManagedRequestUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      reviewManagedRequestInput,)
+  }
+);}
+
+
+
+export type commitReviewedManagedRequestResponse202 = {
+  data: ReviewedManagedRequestCommitResponse
+  status: 202
+}
+
+export type commitReviewedManagedRequestResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type commitReviewedManagedRequestResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type commitReviewedManagedRequestResponseSuccess = (commitReviewedManagedRequestResponse202) & {
+  headers: Headers;
+};
+export type commitReviewedManagedRequestResponseError = (commitReviewedManagedRequestResponse400 | commitReviewedManagedRequestResponse409) & {
+  headers: Headers;
+};
+
+export type commitReviewedManagedRequestResponse = (commitReviewedManagedRequestResponseSuccess | commitReviewedManagedRequestResponseError)
+
+export const getCommitReviewedManagedRequestUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/manager/requests/commit-reviewed`
+}
+
+export const commitReviewedManagedRequest = async (id: string,
+    commitReviewedManagedRequestInput: CommitReviewedManagedRequestInput, options?: RequestInit): Promise<commitReviewedManagedRequestResponse> => {
+
+  return orvalFetch<commitReviewedManagedRequestResponse>(getCommitReviewedManagedRequestUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      commitReviewedManagedRequestInput,)
+  }
+);}
+
+
+
 export type listManagedRequestsResponse200 = {
   data: ManagedRequestResponse[]
   status: 200
@@ -10388,6 +10487,39 @@ export const getConnectedLibraryItem = async (id: string,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       managedItemInput,)
+  }
+);}
+
+
+
+export type listProviderLibrariesResponse200 = {
+  data: ProviderLibraryConnection[]
+  status: 200
+}
+
+export type listProviderLibrariesResponseSuccess = (listProviderLibrariesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listProviderLibrariesResponse = (listProviderLibrariesResponseSuccess)
+
+export const getListProviderLibrariesUrl = () => {
+
+
+
+
+  return `/api/connections/libraries`
+}
+
+export const listProviderLibraries = async ( options?: RequestInit): Promise<listProviderLibrariesResponse> => {
+
+  return orvalFetch<listProviderLibrariesResponse>(getListProviderLibrariesUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
   }
 );}
 

@@ -102,10 +102,12 @@ public static class DependencyInjection {
         services.AddScoped<IIntegrationSourceAcquisitionGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
         services.AddScoped<IIntegrationTransferGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
         services.AddScoped<IIntegrationManagerGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
+        services.AddScoped<IIntegrationLibraryGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
         services.AddScoped<IIntegrationManagerControlGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
         services.AddScoped<IIntegrationManagerReleaseGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
         services.AddScoped<IIntegrationManagerCreationGateway>(provider => provider.GetRequiredService<IntegrationPluginGateway>());
         services.AddScoped<ManagedLibraryService>();
+        services.AddScoped<ProviderLibraryService>();
         services.AddScoped<ManagedDiscoveryService>();
         services.AddScoped<IManagedTrackingStore, EfManagedTrackingStore>();
         services.AddScoped<IFulfillmentReservationStore, EfFulfillmentReservationStore>();
@@ -116,7 +118,9 @@ public static class DependencyInjection {
         services.AddScoped<IManagedReleaseStore, EfManagedReleaseStore>();
         services.AddScoped<ManagedReleaseService>();
         services.AddScoped<IManagedRequestStore, EfManagedRequestStore>();
+        services.AddScoped<IReviewedManagedRequestCommitScope, EfReviewedManagedRequestCommitScope>();
         services.AddScoped<ManagedRequestService>();
+        services.AddScoped<ReviewedManagedRequestService>();
         services.AddScoped<ManagedRequestProcessor>();
         services.AddSingleton(new ExternalLibraryStorageOptions(dataDir, cacheDir));
         services.AddScoped<IExternalLibraryMountStore, EfExternalLibraryMountStore>();

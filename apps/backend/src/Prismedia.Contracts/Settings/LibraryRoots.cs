@@ -1,5 +1,14 @@
 namespace Prismedia.Contracts.Settings;
 
+/// <summary>Provider ownership projected from an immutable external library mount.</summary>
+public sealed record ExternalLibraryOrigin(
+    Guid ConnectionId,
+    string ConnectionName,
+    string PluginId,
+    string RemoteLibraryId,
+    string RemotePath,
+    string ManagementUrl);
+
 /// <summary>
 /// API-facing watched media root.
 /// </summary>
@@ -25,7 +34,8 @@ public sealed record LibraryRoot(
     bool AutoIdentify = true,
     Guid? CreatedByUserId = null,
     IReadOnlyList<Guid>? AccessUserIds = null,
-    bool IsReadOnly = false);
+    bool IsReadOnly = false,
+    ExternalLibraryOrigin? ExternalOrigin = null);
 
 /// <summary>
 /// Member-facing summary of a library root the caller can access. Deliberately omits

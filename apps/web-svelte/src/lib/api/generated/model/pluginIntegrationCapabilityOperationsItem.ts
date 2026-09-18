@@ -33,6 +33,7 @@ export const PluginIntegrationCapabilityOperationsItem = {
   'inspect-managed-release': 'inspect-managed-release',
   'search-library': 'search-library',
   'get-library-item': 'get-library-item',
+  'list-libraries': 'list-libraries',
   'request-source': 'request-source',
   'observe-source': 'observe-source',
 } as const;

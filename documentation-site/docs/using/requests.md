@@ -84,7 +84,12 @@ relationships, and structural children the plugin supplied. Container results ex
 requestable children, so you can choose seasons, books, or albums instead of accepting an opaque
 all-or-nothing request.
 
-Before committing, choose a compatible library root and acquisition profile. Container requests use the
+Before committing, choose a compatible library root and acquisition profile. These choices appear beside
+the metadata review. Administrators can choose a compatible external provider under **Fulfillment**; its
+own library and quality options appear in that same pane. Choosing **Request** saves the reviewed
+selection and opens the normal Entity page.
+
+Prismedia-managed container requests use the
 same medium-neutral policies everywhere: **All current and future**, **Missing now**, **Future only**, or
 **Manual selection**. The shared child picker applies them to seasons, books, albums, and future Entity
 hierarchies; the selected policy also controls whether newly discovered direct children begin acquisition.
@@ -109,6 +114,8 @@ Requesting content creates real fileless Entities immediately:
 
 The Entity's normal detail page is the management surface after commit. Its Acquisition section shows
 monitoring, release search, active transfer/import state, retry controls, and file-management actions.
+Externally managed items use the **External library** tab instead: it identifies the provider and
+shows request progress while that application manages acquisition and file organization.
 
 ## Request workspace
 

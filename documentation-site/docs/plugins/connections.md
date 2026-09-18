@@ -63,7 +63,7 @@ an installation ID, a changed ID blocks negotiated access and requires a new con
 | Acquisition source | Resolve a selection into an acquisition offer. |
 | Transfer executor | Submit and reconcile transfers, inspect durable jobs, and retrieve retained output manifests. |
 | External manager | Delegate scoped monitoring, acquisition, and file organization. |
-| Connected library | Search and inspect externally owned holdings. |
+| Connected library | Expose library folders, search holdings, and inspect externally owned files. |
 
 An integration declares only the operations it implements. Metadata search results
 are not automatically downloadable items. A manager's completed command is not proof
@@ -472,17 +472,30 @@ should omit query strings.
 
 ### Map local files
 
-Open a connection's library-folder settings and choose **Map library folder**.
-Select the external root and the corresponding folder visible to the Prismedia server:
+Open **Settings → Libraries → Add provider library**. The picker discovers libraries
+from compatible connections, including multiple folders from one application.
+Choose the provider library and the corresponding folder visible to the Prismedia server:
 
 - **Use existing library** links a compatible Prismedia library. Its files, library
   entries, access permissions, and scanning settings stay in place. The library becomes
   read-only to Prismedia. Finish or cancel native acquisitions and remove unfinished
   native monitors targeting that library before linking it.
-- **Add a library folder** registers a folder that is not already a Prismedia library.
+- **Add mounted folder** registers a folder that is not already a Prismedia library.
   Use a dedicated folder outside existing libraries, download areas, and application data.
   This creates a library with scanning and automatic identification paused; enable
   scanning in **Settings → Libraries** when ready.
+
+Provider libraries use the same library records, visibility grants, NSFW settings,
+scan controls, and playback paths as local libraries. Their rows identify the provider
+and link to its management interface. Saved libraries remain available in Settings
+when a provider cannot be reached.
+
+Plugins expose this through `connected-library` → `list-libraries`. The operation
+returns `libraries`, each with a stable `remoteId`, `label`, absolute `remotePath`,
+supported `entityKinds`, and an optional HTTP(S) `managementUrl`. Library discovery
+does not require external-manager acquisition capabilities. The host revalidates the
+chosen ID, path, and kind before linking it; a remote path alone never grants local
+filesystem access.
 
 Neither choice copies or moves files. Mappings cannot overlap other libraries or download areas.
 A read-only container bind mount adds an operating-system boundary to Prismedia's
@@ -608,20 +621,22 @@ or configure a replacement owner as part of release.
 
 In **Request → Browse**, choose your Radarr connection and use **Find new titles**.
 Searches go through that Radarr instance's movie catalog and include its posters
-and descriptions. Choose a result to review the metadata, then save the reviewed
-movie and confirm the mapped library, quality profile, monitoring, and search
-settings. The request stays with the selected Radarr connection. A separate TMDB
+and descriptions. The metadata review loads the provider pane alongside the proposal.
+Choose its mapped library, quality profile, monitoring, and search settings, then
+choose **Request** once. The request stays with the selected Radarr connection. A separate TMDB
 plugin key is not needed for this path. **In your library** shows titles already
 managed by that instance.
 
 Plugins opt into this discovery surface with the external-manager
 `discover-managed` operation. The connection-scoped `/manager/discovery/search`
 endpoint returns normalized candidates and canonical identities. Exact review uses
-`/manager/discovery/review`; `/manager/discovery/prepare` refreshes the identity and
-validates both the connection revision and the reviewed metadata before saving a
-wanted movie. Search and review do not add movies or start downloads. Preparation
-does not start acquisition; the existing durable manager-request workflow handles
-the explicit submission. A changed source or proposal requires another review.
+`/manager/discovery/review`. Provider choices load through
+`/manager/requests/review`, which validates the reviewed identity and connection
+without saving metadata or starting acquisition. `/manager/requests/commit-reviewed`
+accepts the chosen metadata, normal wanted entities, library membership, exclusive
+fulfillment ownership, and initial background work in one local transaction.
+The client retains one operation ID through a lost response; retrying checks that
+same accepted request. A changed source or proposal requires another review.
 
 Radarr plugin 1.2.0 or later supports exact movie lookup and initial creation. Test
 the Connection again after upgrading. In **Connected libraries**, choose **Request
@@ -654,27 +669,24 @@ claim a content hash. The established holding tracker handles later replacements
 and missing files. **Imported into Prismedia** records that import occurred; current
 availability is shown by the tracked holding separately.
 
-Administrators can also begin in **Request → Browse**. On a movie review with an
-exact TMDB identity, choose a tested manager under **Acquisition owner**, then
-**Save metadata and review manager request**. This saves the selected metadata as a
-wanted movie without a native acquisition or monitor. The next form reviews the
-external library, profile, monitoring, and search choices. Leaving before submitting
-that form keeps the wanted movie available for later selection; it does not start
-external fulfillment. An already-owned movie instead links to its existing library
-record and uses the existing-file matching workflow.
+Administrators can also start with a metadata plugin. On a movie review with an
+exact TMDB identity, choose a compatible connection under **Fulfillment**. Its
+provider options appear in the same review pane; **Request** performs the same
+single acceptance step. Leaving the review does not create a wanted item.
 
-The metadata preparation validates the complete reviewed proposal and the exact
-enabled metadata-plugin identity route. Accepted metadata and external fulfillment
-are separate decisions. Once metadata is saved, this screen shows the manager request;
-subsequent metadata changes belong to the saved library item's review tools.
+After acceptance, Prismedia opens the normal Entity detail page. Its **External
+library** tab shows the provider, library, and request progress immediately, including
+while waiting for files. The native Acquisition tab is omitted for externally managed
+items. Completed files attach to these same entities; the provider continues managing
+them. Already-owned selections open the existing entity without another request.
 
 ### Request selected episodes through Sonarr
 
 Begin in **Request → Browse**, identify a series, and review its seasons and episodes.
 Choose the exact episodes to request, including specials when needed, then choose
-a compatible Sonarr connection under **Acquisition owner**. Saving the metadata creates
-wanted library items without starting a native download. Review the selected episodes,
-mapped video library, and external profile before submitting the manager request.
+a compatible Sonarr connection under **Fulfillment**. Its library and quality profile
+load in the same review. Choose **Request** once to create the wanted items and submit
+the exact selection, then follow progress on the normal Entity page.
 Episodes already in your library are excluded from the new request.
 
 The request pins an exact TVDB or TMDB series identity and a finite list of episodes.

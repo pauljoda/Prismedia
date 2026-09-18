@@ -1,5 +1,5 @@
-import { getConnectedLibraryItem, getManagerOptions, searchConnectedLibrary, listExternalLibraryMounts, createExternalLibraryMount, attachExistingExternalLibraryMount, inspectExternalLibraryAccess } from "$lib/api/generated/prismedia";
-import type { ManagedItemInput, ManagedItemSnapshot, ManagedLibraryPage, ManagedLibraryQuery, ManagerOptions, EntityKind, ExternalLibraryMount, CreateExternalLibraryMountRequest, AttachExistingExternalLibraryMountRequest, MappedLibrarySnapshot } from "$lib/api/generated/model";
+import { getConnectedLibraryItem, getManagerOptions, searchConnectedLibrary, listExternalLibraryMounts, createExternalLibraryMount, attachExistingExternalLibraryMount, inspectExternalLibraryAccess, listProviderLibraries } from "$lib/api/generated/prismedia";
+import type { ManagedItemInput, ManagedItemSnapshot, ManagedLibraryPage, ManagedLibraryQuery, ManagerOptions, EntityKind, ExternalLibraryMount, CreateExternalLibraryMountRequest, AttachExistingExternalLibraryMountRequest, MappedLibrarySnapshot, ProviderLibraryConnection } from "$lib/api/generated/model";
 import { unwrapGenerated } from "$lib/api/generated-response";
 import { listManagedTracking, previewManagedTracking, trackManagedHolding, refreshManagedHolding } from "$lib/api/generated/prismedia";
 import type { ManagedTrackingResponse, ManagedTrackingPreview, TrackManagedHoldingRequest } from "$lib/api/generated/model";
@@ -13,6 +13,9 @@ export const fetchManagedItem = (connectionId: string, input: ManagedItemInput):
 /** Keeps external profile and root identities intact. */
 export const fetchManagerOptions = (connectionId: string, entityKind: EntityKind): Promise<ManagerOptions> =>
   getManagerOptions(connectionId, { entityKind }).then(response => unwrapGenerated(response, "Could not read manager profiles and roots"));
+/** Discovers provider-owned libraries across configured connected-library instances. */
+export const fetchProviderLibraries = (): Promise<ProviderLibraryConnection[]> =>
+  listProviderLibraries().then(response => unwrapGenerated(response, "Could not discover provider libraries"));
 
 /** Reads retained mappings even while the connected application is offline. */
 export const fetchLibraryMounts = (connectionId: string): Promise<ExternalLibraryMount[]> =>

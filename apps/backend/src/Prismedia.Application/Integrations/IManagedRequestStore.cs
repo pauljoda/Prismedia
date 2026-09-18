@@ -9,7 +9,8 @@ public sealed record ManagedRequestEntityTarget(Guid EntityId, ManagedLookupTarg
 public sealed record ManagedRequestTarget(Guid EntityId, string Title, ManagedLookupInput Work,
     ExternalLibraryMount Mount, IReadOnlyList<ManagedRequestEntityTarget>? Targets = null);
 /// <summary>Immutable creation and fulfillment intent; credentials remain on the connection.</summary>
-public sealed record ManagedRequestPlan(CreateManagedRequestInput Request, EnsureManagedInput Creation, string Title, string Fingerprint);
+public sealed record ManagedRequestPlan(CreateManagedRequestInput Request, EnsureManagedInput Creation, string Title,
+    string Fingerprint, string? ReviewedCommitFingerprint = null, long? ExpectedConnectionRevision = null);
 /// <summary>Request journal independent of transient jobs and manager queue history.</summary>
 public sealed record StoredManagedRequest(ManagedRequestOperation Operation, ManagedRequestPlan Plan,
     DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, string? Problem);

@@ -1,106 +1,377 @@
 <script lang="ts">
   import { onMount, untrack } from "svelte";
-  import { Alert, Button, Disclosure, Select, buttonVariants } from "@prismedia/ui-svelte";
-  import { CONNECTION_STATUS, ENTITY_KIND, INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
-  import type { ConnectionResponse, EntityKind, PreparedWantedMovieResponse, PreparedWantedSeriesResponse } from "$lib/api/generated/model";
+  import { Loader2 } from "@lucide/svelte";
+  import { Alert, Button, Checkbox, Select } from "@prismedia/ui-svelte";
+  import {
+    CONNECTION_STATUS,
+    ENTITY_KIND,
+    INTEGRATION_OPERATION,
+    PLUGIN_CAPABILITY,
+  } from "$lib/api/generated/codes";
+  import { getGetPluginIconUrl } from "$lib/api/generated/prismedia";
+  import type {
+    ConnectionResponse,
+    EntityKind,
+    ExternalLibraryMount,
+    LibraryRootSummary,
+    ReviewedManagedRequest,
+    ReviewedRequestCommitRequest,
+  } from "$lib/api/generated/model";
   import { fetchConnections } from "$lib/api/connections";
-  import { resolveEntityHref } from "$lib/entities/entity-codes";
-  import ManagedRequests from "./ManagedRequests.svelte";
+  import { fetchLibraryMounts } from "$lib/api/managed-libraries";
+  import {
+    fetchReviewedManagedRequest,
+    type ManagedRequestChoice,
+  } from "$lib/api/reviewed-managed-requests";
+  import { fetchAccessibleLibraryRoots } from "$lib/api/settings";
+  import PluginIcon from "$lib/components/plugins/PluginIcon.svelte";
 
-  let { entityKind, disabled = false, fixedConnection = null, onPrepare, onActiveChanged }: {
+  interface Props {
     entityKind: EntityKind;
-    disabled?: boolean;
-    /** A manager discovery review can only be fulfilled through its originating connection. */
+    /** Manager-origin reviews can only be fulfilled through the originating connection. */
     fixedConnection?: ConnectionResponse | null;
-    onPrepare: () => Promise<PreparedWantedMovieResponse | PreparedWantedSeriesResponse>;
-    onActiveChanged: (active: boolean) => void;
-  } = $props();
+    request: ReviewedRequestCommitRequest | null;
+    managerDiscoveryRevision?: number | string | null;
+    /** Forces a fresh read-only preflight after the server definitely rejects a commit. */
+    refreshToken?: number;
+    disabled?: boolean;
+    onChange: (value: ManagedRequestChoice | null, active: boolean) => void;
+  }
+
+  let {
+    entityKind,
+    fixedConnection = null,
+    request,
+    managerDiscoveryRevision = null,
+    refreshToken = 0,
+    disabled = false,
+    onChange,
+  }: Props = $props();
+
   let connections = $state<ConnectionResponse[]>([]);
   let connectionId = $state(untrack(() => fixedConnection?.id ?? ""));
-  let prepared = $state<PreparedWantedMovieResponse | PreparedWantedSeriesResponse | null>(null);
-  let busy = $state(false);
+  let mounts = $state<ExternalLibraryMount[]>([]);
+  let roots = $state<LibraryRootSummary[]>([]);
+  let review = $state<ReviewedManagedRequest | null>(null);
+  let libraryRootId = $state("");
+  let profileId = $state("");
+  let monitored = $state(false);
+  let search = $state(true);
+  let loadingConnections = $state(untrack(() => !fixedConnection));
+  let loadingReview = $state(false);
+  let mounted = $state(false);
   let error = $state<string | null>(null);
-  const connection = $derived(connections.find(item => item.id === connectionId));
+  let retryRevision = $state(0);
+  let sequence = 0;
+
+  const active = $derived(Boolean(connectionId));
+  const connection = $derived(
+    fixedConnection?.id === connectionId
+      ? fixedConnection
+      : connections.find((candidate) => candidate.id === connectionId) ?? null,
+  );
   const isSeries = $derived(entityKind === ENTITY_KIND.videoSeries);
-  const preparedEntityId = $derived(prepared
-    ? "seriesEntityId" in prepared ? prepared.seriesEntityId : prepared.entityId
-    : null);
-  const preparedEpisodes = $derived(prepared && "episodes" in prepared ? prepared.episodes : []);
-  const requestableEpisodes = $derived(preparedEpisodes.filter(episode => !episode.hasFile));
-  const ownedEpisodeCount = $derived(preparedEpisodes.length - requestableEpisodes.length);
-  let alive = true;
+  const requestKey = $derived(request ? JSON.stringify(request) : "");
+  const mappedLibraries = $derived(
+    mounts.filter((mount) => roots.length === 0 || roots.some((root) => root.id === mount.libraryRootId)),
+  );
+  const libraryOptions = $derived(mappedLibraries.map((mount) => ({
+    value: mount.libraryRootId,
+    label: roots.find((root) => root.id === mount.libraryRootId)?.label ?? mount.label,
+    annotation: mount.remotePath,
+  })));
+  const profileOptions = $derived(review?.options.profiles.map((profile) => ({
+    value: profile.id,
+    label: profile.label,
+  })) ?? []);
+
   onMount(() => {
+    mounted = true;
     if (fixedConnection) {
       connections = [fixedConnection];
       connectionId = fixedConnection.id;
-      onActiveChanged(true);
-      return () => { alive = false; };
+      onChange(null, true);
+    } else {
+      void loadConnections();
     }
-    void fetchConnections().then(items => {
-      if (!alive) return;
-      connections = items.filter(item => item.enabled && item.status === CONNECTION_STATUS.ready && item.effectiveCapabilities.some(capability =>
-        capability.kind === PLUGIN_CAPABILITY.externalManager && capability.entityKinds.includes(entityKind)
-        && capability.operations.includes(INTEGRATION_OPERATION.lookupManaged) && capability.operations.includes(INTEGRATION_OPERATION.ensureManaged)));
-    }).catch(cause => { if (alive) error = cause instanceof Error ? cause.message : "Could not load manager connections"; });
-    return () => { alive = false; };
+    return () => {
+      mounted = false;
+      sequence++;
+    };
   });
-  async function prepare() {
-    if (!connection || disabled || busy) return;
-    busy = true; error = null;
-    try { const result = await onPrepare(); if (alive) prepared = result; }
-    catch (cause) { if (alive) error = cause instanceof Error ? cause.message : `Could not save the reviewed ${isSeries ? "series selection" : "movie"}`; }
-    finally { if (alive) busy = false; }
+
+  $effect(() => {
+    if (!mounted) return;
+    const selectedConnectionId = connectionId;
+    const payload = request;
+    const revision = managerDiscoveryRevision;
+    requestKey;
+    libraryRootId;
+    retryRevision;
+    refreshToken;
+    if (!selectedConnectionId || !payload) {
+      sequence++;
+      review = null;
+      loadingReview = false;
+      onChange(null, Boolean(selectedConnectionId));
+      return;
+    }
+    const current = ++sequence;
+    loadingReview = true;
+    error = null;
+    onChange(null, true);
+    const timer = window.setTimeout(() => {
+      void loadReview(current, selectedConnectionId, payload, revision);
+    }, 240);
+    return () => window.clearTimeout(timer);
+  });
+
+  async function loadConnections() {
+    loadingConnections = true;
+    error = null;
+    try {
+      const result = await fetchConnections();
+      if (!mounted) return;
+      connections = result.filter((candidate) => supportsReviewedRequest(candidate, entityKind));
+    } catch (cause) {
+      if (mounted) error = message(cause, "Could not load manager connections");
+    } finally {
+      if (mounted) loadingConnections = false;
+    }
   }
-  function episodeLabel(season: number | string, episode: number | string) {
-    return `S${String(season).padStart(2, "0")}E${String(episode).padStart(2, "0")}`;
+
+  async function loadReview(
+    current: number,
+    selectedConnectionId: string,
+    payload: ReviewedRequestCommitRequest,
+    revision: number | string | null,
+  ) {
+    const previousReview = review;
+    const previousWork = previousReview ? workKey(previousReview) : null;
+    try {
+      const [result, nextMounts, nextRoots] = await Promise.all([
+        fetchReviewedManagedRequest(selectedConnectionId, {
+          libraryRootId: libraryRootId || null,
+          request: payload,
+          managerDiscoveryRevision: revision,
+        }),
+        fetchLibraryMounts(selectedConnectionId),
+        fetchAccessibleLibraryRoots(),
+      ]);
+      if (!mounted || current !== sequence) return;
+      const sameWork = previousWork === workKey(result);
+      mounts = nextMounts;
+      roots = nextRoots;
+      review = result;
+      libraryRootId = result.mount.libraryRootId;
+
+      const existingProfile = result.existing?.item.profileId ?? "";
+      const validExistingProfile = result.options.profiles.some((profile) => profile.id === existingProfile);
+      const retainedProfile = sameWork && result.options.profiles.some((profile) => profile.id === profileId)
+        ? profileId
+        : "";
+      profileId = result.existing
+        ? validExistingProfile ? existingProfile : ""
+        : retainedProfile || result.options.profiles[0]?.id || "";
+      if (!sameWork) {
+        monitored = result.existing?.item.monitored ?? false;
+        search = true;
+      }
+      if (isSeries) {
+        monitored = false;
+        search = true;
+      }
+      loadingReview = false;
+      publishChoice();
+    } catch (cause) {
+      if (!mounted || current !== sequence) return;
+      review = null;
+      error = message(cause, "Could not review the manager request");
+      onChange(null, true);
+    } finally {
+      if (mounted && current === sequence) loadingReview = false;
+    }
+  }
+
+  function selectConnection(value: string) {
+    sequence++;
+    connectionId = value;
+    review = null;
+    mounts = [];
+    roots = [];
+    libraryRootId = "";
+    profileId = "";
+    error = null;
+    onChange(null, Boolean(value));
+  }
+
+  function selectLibrary(value: string) {
+    if (value === libraryRootId) return;
+    sequence++;
+    libraryRootId = value;
+    loadingReview = true;
+    error = null;
+    onChange(null, true);
+  }
+
+  function selectProfile(value: string) {
+    profileId = value;
+    publishChoice();
+  }
+
+  function publishChoice() {
+    if (!connectionId || !review || !profileId || loadingReview || error) {
+      onChange(null, Boolean(connectionId));
+      return;
+    }
+    onChange({ connectionId, review, profileId, monitored, search }, true);
+  }
+
+  function supportsReviewedRequest(candidate: ConnectionResponse, kind: EntityKind): boolean {
+    if (!candidate.enabled || candidate.status !== CONNECTION_STATUS.ready) return false;
+    const manager = candidate.effectiveCapabilities.find((capability) =>
+      capability.kind === PLUGIN_CAPABILITY.externalManager && capability.entityKinds.includes(kind));
+    const library = candidate.effectiveCapabilities.find((capability) =>
+      capability.kind === PLUGIN_CAPABILITY.connectedLibrary && capability.entityKinds.includes(kind));
+    return Boolean(manager
+      && [
+        INTEGRATION_OPERATION.lookupManaged,
+        INTEGRATION_OPERATION.ensureManaged,
+        INTEGRATION_OPERATION.requestManaged,
+        INTEGRATION_OPERATION.reconcileManaged,
+        INTEGRATION_OPERATION.configureManaged,
+      ].every((operation) => manager.operations.includes(operation))
+      && library?.operations.includes(INTEGRATION_OPERATION.getLibraryItem)
+      && library.operations.includes(INTEGRATION_OPERATION.listLibraries));
+  }
+
+  function workKey(value: ReviewedManagedRequest): string {
+    return JSON.stringify(value.work);
+  }
+
+  function message(cause: unknown, fallback: string): string {
+    return cause instanceof Error ? cause.message : fallback;
   }
 </script>
 
-{#if connections.length || error}
-  <div class="space-y-3">
-    {#if error}<Alert.Root variant="destructive"><Alert.Description>{error}</Alert.Description></Alert.Root>{/if}
-    {#if fixedConnection}
-      <p class="text-sm font-semibold">Request through {fixedConnection.name}</p>
-    {:else if connections.length}
-      <Select ariaLabel="Acquisition owner" value={connectionId} disabled={disabled || busy || !!prepared}
-        options={[{ value: "", label: "Prismedia downloads" }, ...connections.map(item => ({ value: item.id, label: item.name }))]}
-        onchange={value => { connectionId = value; error = null; onActiveChanged(!!value); }} />
-    {/if}
-    {#if connection}
-      {#if !prepared}
-        <p class="text-sm text-text-muted">{isSeries
-          ? `Save the exact selected episodes, then review ${connection.name}'s library and quality settings. Only those episodes are searched after review.`
-          : `Save the reviewed metadata as a wanted movie, then review ${connection.name}'s library, quality, monitoring, and search settings. Acquisition starts after that review.`}</p>
-        <Button variant="primary" disabled={disabled || busy} onclick={prepare}>{busy ? "Saving metadata…" : "Save metadata and review manager request"}</Button>
-      {:else if !isSeries && "hasFile" in prepared && prepared.hasFile}
-        <p class="text-sm text-text-muted">This movie already has a library source. Use connected-library matching to link existing files.</p>
-        <a class={buttonVariants({ variant: "secondary", size: "sm" })} href={resolveEntityHref(ENTITY_KIND.movie, prepared.entityId) ?? "/request"}>Open in library</a>
-      {:else if isSeries && requestableEpisodes.length === 0}
-        <p class="text-sm text-text-muted">All {preparedEpisodes.length} selected episode{preparedEpisodes.length === 1 ? " is" : "s are"} already in the library. No manager request is needed.</p>
-        <a class={buttonVariants({ variant: "secondary", size: "sm" })} href={resolveEntityHref(entityKind, preparedEntityId!) ?? "/request"}>Open in library</a>
-      {:else}
-        <p class="text-sm text-text-muted">{isSeries
-          ? `${requestableEpisodes.length} selected episode${requestableEpisodes.length === 1 ? "" : "s"} will be sent to the manager${ownedEpisodeCount ? `; ${ownedEpisodeCount} already-owned episode${ownedEpisodeCount === 1 ? " is" : "s are"} omitted` : ""}.`
-          : "Metadata saved. This movie stays wanted if you leave before submitting the manager request."}</p>
-        {#if isSeries}
-          <Disclosure title="Episodes sent to manager" count={requestableEpisodes.length} open={requestableEpisodes.length <= 5}>
-            <ul class="space-y-1.5">
-              {#each requestableEpisodes as episode (episode.entityId)}
-                <li class="flex min-w-0 gap-2 text-sm">
-                  <span class="shrink-0 font-mono text-xs text-text-muted">{episodeLabel(episode.seasonNumber, episode.episodeNumber)}</span>
-                  <span class="min-w-0 truncate">{episode.title}</span>
-                </li>
-              {/each}
-            </ul>
-          </Disclosure>
+<div class="space-y-3">
+  {#if !fixedConnection}
+    <label class="block max-w-md space-y-1.5">
+      <span class="text-sm font-medium text-text-secondary">Fulfillment</span>
+      <Select
+        ariaLabel="Acquisition owner"
+        value={connectionId}
+        disabled={disabled || loadingConnections}
+        placeholder={loadingConnections ? "Loading connections…" : "Choose fulfillment"}
+        options={[
+          { value: "", label: "Prismedia downloads" },
+          ...connections.map((item) => ({ value: item.id, label: item.name })),
+        ]}
+        onchange={selectConnection}
+      >
+        {#snippet optionLeading(option)}
+          {#if option.value}
+            {@const optionConnection = connections.find((item) => item.id === option.value)}
+            <PluginIcon
+              name={option.label}
+              iconUrl={optionConnection ? getGetPluginIconUrl(optionConnection.pluginId) : null}
+              class="size-5"
+            />
+          {/if}
+        {/snippet}
+      </Select>
+    </label>
+  {:else}
+    <div class="flex items-center gap-2.5">
+      <PluginIcon name={fixedConnection.name} iconUrl={getGetPluginIconUrl(fixedConnection.pluginId)} class="size-8" />
+      <div class="min-w-0">
+        <p class="truncate text-sm font-medium text-text-primary">{fixedConnection.name}</p>
+      </div>
+    </div>
+  {/if}
+
+  {#if error}
+    <Alert.Root variant="destructive">
+      <Alert.Description>
+        {error}
+        {#if mounts.length === 0 || error.toLowerCase().includes("map")}
+          <a class="ml-1 font-medium underline underline-offset-2" href="/settings/libraries">Open Settings → Libraries</a>
         {/if}
-        <ManagedRequests
-          {connection}
-          {entityKind}
-          initialEntity={{ id: preparedEntityId!, title: prepared.title, thumbnailUrl: null }}
-          initialTargetEntityIds={requestableEpisodes.map(episode => episode.entityId)}
+        {#if active && request}
+          <Button class="ml-2" type="button" variant="link" size="sm" disabled={disabled} onclick={() => retryRevision++}>Try again</Button>
+        {/if}
+      </Alert.Description>
+    </Alert.Root>
+  {/if}
+
+  {#if active && loadingReview}
+    <div class="flex items-center gap-2 py-1 text-sm text-text-muted" role="status">
+      <Loader2 class="size-4 animate-spin" />
+      Reviewing manager options…
+    </div>
+  {:else if connection && review}
+    <div class="grid gap-3">
+      <label class="space-y-1.5">
+        <span class="text-sm font-medium text-text-secondary">Library</span>
+        <Select
+          ariaLabel="Manager library"
+          value={libraryRootId}
+          options={libraryOptions}
+          disabled={disabled || Boolean(review.existing) || mappedLibraries.length <= 1}
+          onchange={selectLibrary}
         />
-      {/if}
+      </label>
+      <label class="space-y-1.5">
+        <span class="text-sm font-medium text-text-secondary">Quality profile</span>
+        <Select
+          ariaLabel="Manager quality profile"
+          value={profileId}
+          options={profileOptions}
+          disabled={disabled || Boolean(review.existing)}
+          onchange={selectProfile}
+        />
+      </label>
+    </div>
+
+    {#if isSeries}
+      <p class="text-sm leading-relaxed text-text-muted">
+        {review.work.targets?.length ?? 0} selected episode{review.work.targets?.length === 1 ? "" : "s"} will be searched now; broad series monitoring stays off.
+      </p>
+    {:else}
+      <div class="flex flex-wrap gap-x-6 gap-y-2">
+        <label class="flex items-center gap-2 text-sm text-text-secondary">
+          <Checkbox
+            aria-label={`Monitor in ${connection.name}`}
+            checked={monitored}
+            disabled={disabled}
+            onchange={(value) => { monitored = value; publishChoice(); }}
+          />
+          Monitor in {connection.name}
+        </label>
+        <label class="flex items-center gap-2 text-sm text-text-secondary">
+          <Checkbox
+            aria-label="Search now"
+            checked={search}
+            disabled={disabled}
+            onchange={(value) => { search = value; publishChoice(); }}
+          />
+          Search now
+        </label>
+      </div>
     {/if}
-  </div>
-{/if}
+
+    {#if review.existing}
+      <p class="text-xs leading-relaxed text-text-muted">
+        This title already exists in {connection.name}; its current library and quality profile are retained.
+      </p>
+    {/if}
+    {#if profileOptions.length === 0 || (review.existing && !profileId)}
+      <p class="text-sm leading-relaxed text-text-muted">
+        {review.existing
+          ? "The title's current quality profile is no longer available."
+          : "No quality profile is available from this manager."}
+        <a class="ml-1 font-medium underline underline-offset-2" href="/settings/connections">Check connection settings</a>
+      </p>
+    {/if}
+  {/if}
+</div>
