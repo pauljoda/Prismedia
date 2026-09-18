@@ -248,6 +248,31 @@ public sealed partial class ManagedTrackingPostgresTests {
                 new Dictionary<string, string> { [ExternalIdProviders.Tvdb] = "103" }, 1, 3)],
             default);
 
+        var trackingStore = Store(db);
+        var awaitingExpansion = (await trackingStore.FindAsync(accepted.Operation.State.OperationId, default))!;
+        var scopedSnapshot = ManagedTrackingService.ScopeToEstablishedTargets(
+            awaitingExpansion.Tracking.Targets,
+            awaitingExpansion.Tracking.Bindings,
+            fixture.CompleteSnapshot);
+        var ordinaryObservation = await trackingStore.ObserveAsync(fixture.ConnectionId, scopedSnapshot, default);
+        var ordinaryPlan = ManagedSourceReconciliation.Plan(
+            awaitingExpansion.Tracking.Bindings,
+            ordinaryObservation.Files);
+        Assert.Null(ordinaryPlan.ReviewReason);
+        await trackingStore.ApplyAsync(
+            awaitingExpansion,
+            ordinaryObservation,
+            adoption: null,
+            ordinaryPlan.Changes,
+            default);
+        awaitingExpansion = (await trackingStore.FindAsync(accepted.Operation.State.OperationId, default))!;
+        Assert.Equal(ManagedTrackingStatus.WaitingForFiles, awaitingExpansion.Tracking.Status);
+        Assert.Equal("103", Assert.Single((await Controls(db).RequireScopeAsync(
+            fixture.ConnectionId,
+            awaitingExpansion.Tracking.Id,
+            [episodeId],
+            default)).Scope.Targets).RemoteId);
+
         var laterPath = Path.Combine(workspace, "series", "later.mkv");
         await File.WriteAllBytesAsync(laterPath, [8, 9, 10, 11, 12]);
         var laterSnapshot = fixture.EmptySnapshot with {

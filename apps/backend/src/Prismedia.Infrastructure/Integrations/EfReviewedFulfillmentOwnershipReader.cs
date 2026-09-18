@@ -135,47 +135,62 @@ public sealed class EfReviewedFulfillmentOwnershipReader(
         var requested = targets
             .Select(target => new RequestedTarget(
                 target,
-                target.ExternalIds.Select(identity => new ExternalIdentity(identity.Key, identity.Value)).ToHashSet()))
+                target.ExternalIds.Select(identity => new ExternalIdentity(
+                    identity.Key.Trim().ToLowerInvariant(), identity.Value.Trim())).ToHashSet()))
             .ToArray();
-        var namespaces = requested.SelectMany(target => target.Identities)
-            .Select(identity => identity.Namespace).Distinct().ToArray();
-        var values = requested.SelectMany(target => target.Identities)
-            .Select(identity => identity.Value).Distinct().ToArray();
-        var identityRows = await db.EntityExternalIds.AsNoTracking()
-            .Where(row => namespaces.Contains(row.Provider.Trim().ToLower()) && values.Contains(row.Value.Trim()))
-            .ToArrayAsync(cancellationToken);
-        var candidateIds = identityRows.Select(row => row.EntityId).Distinct().ToArray();
-        if (candidateIds.Length == 0) return [];
-        var candidateKinds = await db.Entities.AsNoTracking()
-            .Where(row => candidateIds.Contains(row.Id))
-            .ToDictionaryAsync(row => row.Id, row => row.KindCode, cancellationToken);
-        var descendants = (await db.Database.SqlQuery<Guid>($$"""
-                WITH RECURSIVE ancestry AS (
-                    SELECT entity.id AS leaf_id, entity.id, entity.parent_entity_id
-                    FROM entities entity WHERE entity.id = ANY({{candidateIds}})
+        var candidateIds = await db.Database.SqlQuery<Guid>($$"""
+                WITH RECURSIVE descendants AS (
+                    SELECT entity.id, entity.parent_entity_id
+                    FROM entities entity WHERE entity.parent_entity_id = {{rootId}}
                     UNION ALL
-                    SELECT ancestry.leaf_id, parent.id, parent.parent_entity_id
-                    FROM entities parent JOIN ancestry ON parent.id = ancestry.parent_entity_id
+                    SELECT child.id, child.parent_entity_id
+                    FROM entities child JOIN descendants parent ON child.parent_entity_id = parent.id
                 )
-                SELECT DISTINCT leaf_id AS "Value" FROM ancestry WHERE id = {{rootId}}
+                SELECT DISTINCT id AS "Value" FROM descendants
                 """)
-            .ToArrayAsync(cancellationToken)).ToHashSet();
+            .ToArrayAsync(cancellationToken);
+        if (candidateIds.Length == 0) return [];
+        var kindCodes = requested.Select(target => target.Target.EntityKind.ToCode()).Distinct().ToArray();
+        var candidates = await db.Entities.AsNoTracking()
+            .Where(row => candidateIds.Contains(row.Id) && kindCodes.Contains(row.KindCode))
+            .Select(row => new { row.Id, row.KindCode, row.ParentEntityId })
+            .ToArrayAsync(cancellationToken);
+        if (candidates.Length == 0) return [];
+        candidateIds = candidates.Select(candidate => candidate.Id).ToArray();
+        var namespaces = requested.SelectMany(target => target.Identities)
+            .Select(identity => identity.Namespace.Trim().ToLower()).Distinct().ToArray();
+        var values = requested.SelectMany(target => target.Identities)
+            .Select(identity => identity.Value.Trim()).Distinct().ToArray();
+        var identityRows = await db.EntityExternalIds.AsNoTracking()
+            .Where(row => candidateIds.Contains(row.EntityId)
+                && namespaces.Contains(row.Provider.Trim().ToLower()) && values.Contains(row.Value.Trim()))
+            .ToArrayAsync(cancellationToken);
+        var positionIds = candidateIds.Concat(candidates
+            .Where(candidate => candidate.ParentEntityId is not null)
+            .Select(candidate => candidate.ParentEntityId!.Value)).Distinct().ToArray();
+        var positions = (await db.EntityPositions.AsNoTracking()
+                .Where(row => positionIds.Contains(row.EntityId))
+                .ToArrayAsync(cancellationToken))
+            .GroupBy(row => row.EntityId)
+            .ToDictionary(group => group.Key,
+                group => group.ToDictionary(row => row.Code, row => row.Value, StringComparer.Ordinal));
 
         var scopes = new List<(Guid EntityId, EntityKind Kind)>();
         foreach (var target in requested) {
             var kindCode = target.Target.EntityKind.ToCode();
-            var matches = identityRows
-                .Select(row => new {
-                    row.EntityId,
-                    Identity = new ExternalIdentity(row.Provider, row.Value)
-                })
-                .Where(row => descendants.Contains(row.EntityId)
-                    && candidateKinds.GetValueOrDefault(row.EntityId) == kindCode
-                    && target.Identities.Contains(row.Identity))
-                .GroupBy(row => row.EntityId)
-                .Select(group => new ExternalIdentityMatch(
-                    group.Key,
-                    group.Select(row => row.Identity).Distinct().ToArray()))
+            var hasCoordinates = target.Target.SeasonNumber is not null && target.Target.EpisodeNumber is not null
+                || target.Target.AbsoluteNumber is not null;
+            if (target.Identities.Count == 0 && !hasCoordinates) continue;
+            var matches = candidates
+                .Where(candidate => candidate.KindCode == kindCode && CoordinatesMatch(target.Target, candidate.Id,
+                    candidate.ParentEntityId, positions))
+                .Select(candidate => new ExternalIdentityMatch(
+                    candidate.Id,
+                    identityRows.Where(row => row.EntityId == candidate.Id)
+                        .Select(row => new ExternalIdentity(row.Provider.Trim().ToLower(), row.Value.Trim()))
+                        .Where(target.Identities.Contains)
+                        .Distinct().ToArray()))
+                .Where(match => target.Identities.Count == 0 || match.MatchedIdentities.Count != 0)
                 .ToArray();
             var resolution = new ExternalIdentityResolution(matches);
             if (resolution.Status == ExternalIdentityResolutionStatus.Ambiguous)
@@ -183,6 +198,25 @@ public sealed class EfReviewedFulfillmentOwnershipReader(
             if (resolution.EntityId is { } targetId) scopes.Add((targetId, target.Target.EntityKind));
         }
         return scopes.Distinct().ToArray();
+    }
+
+    private static bool CoordinatesMatch(
+        ManagedLookupTarget target,
+        Guid candidateId,
+        Guid? parentId,
+        IReadOnlyDictionary<Guid, Dictionary<string, int>> positions) {
+        var own = positions.GetValueOrDefault(candidateId) ?? [];
+        var parent = parentId is { } id
+            ? positions.GetValueOrDefault(id) ?? []
+            : [];
+        var season = own.GetValueOrDefault(
+            EntityPositionCodes.Season,
+            parent.GetValueOrDefault(EntityPositionCodes.Season, -1));
+        var episode = own.GetValueOrDefault(EntityPositionCodes.Episode, -1);
+        var absolute = own.GetValueOrDefault(EntityPositionCodes.AbsoluteEpisode, -1);
+        return (target.SeasonNumber is null || target.SeasonNumber == season)
+            && (target.EpisodeNumber is null || target.EpisodeNumber == episode)
+            && (target.AbsoluteNumber is null || target.AbsoluteNumber == absolute);
     }
 
     private async Task<HashSet<Guid>> NativeScopeIdsAsync(

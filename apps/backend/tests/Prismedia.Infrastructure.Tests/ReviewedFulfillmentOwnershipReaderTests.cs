@@ -54,14 +54,17 @@ public sealed class ReviewedFulfillmentOwnershipReaderTests {
         AddIdentity(db, series.Id, ExternalIdProviders.Tvdb, "42");
         AddIdentity(db, first.Id, ExternalIdProviders.Tvdb, "101");
         AddIdentity(db, second.Id, ExternalIdProviders.Tvdb, "102");
+        AddPosition(db, season.Id, EntityPositionCodes.Season, 1);
+        AddPosition(db, first.Id, EntityPositionCodes.Episode, 1);
+        AddPosition(db, second.Id, EntityPositionCodes.Episode, 2);
         var connection = AddConnection(db, "Sonarr");
         var request = AddRequest(db, connection.Id, series.Id, ManagedRequestPhase.Rejected);
         db.FulfillmentReservations.Add(Reservation(request.Id, connection.Id, first.Id));
         await db.SaveChangesAsync();
         var reader = Reader(db);
 
-        var disjoint = await reader.ListAsync(SeriesWork("42", "102"), default);
-        var overlapping = await reader.ListAsync(SeriesWork("42", "101", "102"), default);
+        var disjoint = await reader.ListAsync(SeriesWork("42", ("102", 2)), default);
+        var overlapping = await reader.ListAsync(SeriesWork("42", ("101", 1), ("102", 2)), default);
 
         Assert.Empty(disjoint);
         var ownership = Assert.Single(overlapping);
@@ -80,7 +83,7 @@ public sealed class ReviewedFulfillmentOwnershipReaderTests {
         });
         await db.SaveChangesAsync();
 
-        var partiallyAvailable = Assert.Single(await reader.ListAsync(SeriesWork("42", "101", "102"), default));
+        var partiallyAvailable = Assert.Single(await reader.ListAsync(SeriesWork("42", ("101", 1), ("102", 2)), default));
         Assert.Equal(new[] { first.Id, second.Id }.Order(), partiallyAvailable.TargetEntityIds!.Order());
         Assert.False(partiallyAvailable.HasLocalSource);
     }
@@ -94,12 +97,14 @@ public sealed class ReviewedFulfillmentOwnershipReaderTests {
         var episode = AddEntity(db, EntityKind.VideoEpisode, "Episode", season.Id);
         AddIdentity(db, series.Id, ExternalIdProviders.Tvdb, "42");
         AddIdentity(db, episode.Id, ExternalIdProviders.Tvdb, "101");
+        AddPosition(db, season.Id, EntityPositionCodes.Season, 1);
+        AddPosition(db, episode.Id, EntityPositionCodes.Episode, 1);
         db.Monitors.Add(new() {
             Id = Guid.NewGuid(), EntityId = series.Id, Kind = EntityKind.VideoSeries, Status = MonitorStatus.Active
         });
         await db.SaveChangesAsync();
 
-        var ownership = Assert.Single(await Reader(db).ListAsync(SeriesWork("42", "101"), default));
+        var ownership = Assert.Single(await Reader(db).ListAsync(SeriesWork("42", ("101", 1)), default));
 
         Assert.Equal(series.Id, ownership.EntityId);
         Assert.Equal([episode.Id], ownership.TargetEntityIds);
@@ -127,17 +132,82 @@ public sealed class ReviewedFulfillmentOwnershipReaderTests {
             default));
     }
 
-    private static ManagedLookupInput SeriesWork(string seriesId, params string[] episodeIds) =>
+    [Fact]
+    public async Task CoordinateOnlySeriesReviewFindsOwnedEpisodeWithinExactParentAndIgnoresOptionalAbsoluteNumber() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var series = AddEntity(db, EntityKind.VideoSeries, "Owned series");
+        var season = AddEntity(db, EntityKind.VideoSeason, "Season 1", series.Id);
+        var episode = AddEntity(db, EntityKind.VideoEpisode, "Episode 3", season.Id);
+        AddIdentity(db, series.Id, ExternalIdProviders.Tvdb, "42");
+        AddPosition(db, season.Id, EntityPositionCodes.Season, 1);
+        AddPosition(db, episode.Id, EntityPositionCodes.Episode, 3);
+        AddPosition(db, episode.Id, EntityPositionCodes.AbsoluteEpisode, 3);
+
+        var otherSeries = AddEntity(db, EntityKind.VideoSeries, "Other series");
+        var otherSeason = AddEntity(db, EntityKind.VideoSeason, "Season 1", otherSeries.Id);
+        var otherEpisode = AddEntity(db, EntityKind.VideoEpisode, "Other episode 3", otherSeason.Id);
+        AddIdentity(db, otherSeries.Id, ExternalIdProviders.Tvdb, "99");
+        AddPosition(db, otherSeason.Id, EntityPositionCodes.Season, 1);
+        AddPosition(db, otherEpisode.Id, EntityPositionCodes.Episode, 3);
+
+        var connection = AddConnection(db, "Sonarr");
+        var request = AddRequest(db, connection.Id, series.Id, ManagedRequestPhase.Completed);
+        var unrelatedRequest = AddRequest(db, connection.Id, otherSeries.Id, ManagedRequestPhase.Completed);
+        db.FulfillmentReservations.AddRange(
+            Reservation(request.Id, connection.Id, episode.Id),
+            Reservation(unrelatedRequest.Id, connection.Id, otherEpisode.Id));
+        db.EntityFiles.Add(new EntityFileRow {
+            Id = Guid.NewGuid(), EntityId = episode.Id, Role = EntityFileRole.Source,
+            Path = "/media/series/episode-3.mkv", CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+
+        var ownership = Assert.Single(await Reader(db).ListAsync(new(
+            EntityKind.VideoSeries,
+            new Dictionary<string, string> { [ExternalIdProviders.Tvdb] = "42" },
+            [new(EntityKind.VideoEpisode, new Dictionary<string, string>(),
+                SeasonNumber: 1, EpisodeNumber: 3, AbsoluteNumber: null)]), default));
+
+        Assert.Equal(series.Id, ownership.EntityId);
+        Assert.Equal([episode.Id], ownership.TargetEntityIds);
+        Assert.Equal(request.Id, ownership.RequestId);
+        Assert.True(ownership.HasLocalSource);
+    }
+
+    [Fact]
+    public async Task DuplicateCoordinatesWithinTheReviewedSeriesRemainAmbiguous() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var series = AddEntity(db, EntityKind.VideoSeries, "Ambiguous series");
+        var season = AddEntity(db, EntityKind.VideoSeason, "Season 1", series.Id);
+        AddIdentity(db, series.Id, ExternalIdProviders.Tvdb, "42");
+        AddPosition(db, season.Id, EntityPositionCodes.Season, 1);
+        foreach (var title in new[] { "First episode 3", "Second episode 3" }) {
+            var episode = AddEntity(db, EntityKind.VideoEpisode, title, season.Id);
+            AddPosition(db, episode.Id, EntityPositionCodes.Episode, 3);
+        }
+        await db.SaveChangesAsync();
+
+        await Assert.ThrowsAsync<Prismedia.Application.Entities.ExternalIdentityAmbiguityException>(() =>
+            Reader(db).ListAsync(new(
+                EntityKind.VideoSeries,
+                new Dictionary<string, string> { [ExternalIdProviders.Tvdb] = "42" },
+                [new(EntityKind.VideoEpisode, new Dictionary<string, string>(), 1, 3)]), default));
+    }
+
+    private static ManagedLookupInput SeriesWork(string seriesId, params (string Id, int Episode)[] episodes) =>
         new(EntityKind.VideoSeries,
             new Dictionary<string, string> {
                 [ExternalIdProviders.Tvdb] = seriesId,
                 [ExternalIdProviders.Tmdb] = "999"
             },
-            episodeIds.Select((id, index) => new ManagedLookupTarget(
+            episodes.Select(episode => new ManagedLookupTarget(
                 EntityKind.VideoEpisode,
-                new Dictionary<string, string> { [ExternalIdProviders.Tvdb] = id },
+                new Dictionary<string, string> { [ExternalIdProviders.Tvdb] = episode.Id },
                 SeasonNumber: 1,
-                EpisodeNumber: index + 1)).ToArray());
+                EpisodeNumber: episode.Episode)).ToArray());
 
     private static EntityRow AddEntity(
         PrismediaDbContext db,
@@ -161,6 +231,14 @@ public sealed class ReviewedFulfillmentOwnershipReaderTests {
         string value) =>
         db.EntityExternalIds.Add(new() {
             Id = Guid.NewGuid(), EntityId = entityId, Provider = provider, Value = value
+        });
+
+    private static void AddPosition(
+        PrismediaDbContext db,
+        Guid entityId,
+        string code,
+        int value) => db.EntityPositions.Add(new() {
+            EntityId = entityId, Code = code, Value = value
         });
 
     private static IntegrationConnectionRow AddConnection(PrismediaDbContext db, string name) {

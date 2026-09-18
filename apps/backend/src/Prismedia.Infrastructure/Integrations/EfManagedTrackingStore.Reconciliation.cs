@@ -55,7 +55,31 @@ public sealed partial class EfManagedTrackingStore {
             } else {
                 foreach (var change in changes) await ApplyChangeAsync(row.Id, change, leaseToken);
             }
-            row.Revision++; row.Status = ManagedTrackingStatus.Tracking; row.Problem = null;
+            var retainedTargets = JsonSerializer.Deserialize<ManagedTargetBinding[]>(row.TargetsJson, Json)!
+                .OrderBy(binding => binding.Target.RemoteTargetId, StringComparer.Ordinal)
+                .ToArray();
+            var persistedAssociations = await db.ManagedSourceBindings.AsNoTracking()
+                .Where(binding => binding.HoldingId == row.Id)
+                .ToArrayAsync(leaseToken);
+            var persistedAssociationIds = persistedAssociations.Select(binding => binding.Id).ToHashSet();
+            var associatedTargets = persistedAssociations
+                .Concat(db.ManagedSourceBindings.Local.Where(binding => binding.HoldingId == row.Id
+                    && !persistedAssociationIds.Contains(binding.Id)))
+                .Select(binding => new ManagedTargetBinding(
+                    new(binding.RemoteTargetId, binding.Kind, binding.SeasonNumber,
+                        binding.EpisodeNumber, binding.AbsoluteNumber),
+                    binding.EntityId))
+                .OrderBy(binding => binding.Target.RemoteTargetId, StringComparer.Ordinal)
+                .ToArray();
+            if (retainedTargets.Select(binding => binding.Target.RemoteTargetId).Distinct(StringComparer.Ordinal).Count() != retainedTargets.Length
+                || associatedTargets.Select(binding => binding.Target.RemoteTargetId).Distinct(StringComparer.Ordinal).Count() != associatedTargets.Length
+                || associatedTargets.Any(binding => !retainedTargets.Contains(binding)))
+                throw new ArgumentException("The holding's source associations no longer match its retained target identities.");
+            row.Revision++;
+            row.Status = associatedTargets.Length == retainedTargets.Length
+                ? ManagedTrackingStatus.Tracking
+                : ManagedTrackingStatus.WaitingForFiles;
+            row.Problem = null;
             row.LastCheckedAt = DateTimeOffset.UtcNow; row.NextCheckAt = row.LastCheckedAt.Value.Add(TrackingInterval);
             await db.SaveChangesAsync(leaseToken);
         }, token)) throw new EntityLifecycleMutationConflictException(ids.FirstOrDefault());

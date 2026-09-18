@@ -166,6 +166,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Sonarr request reviews recognize episodes already managed through a connection, and adding selected episodes keeps tracking stable while their files are still pending.
+
 - Adaptive video playback uses the HLS player in Chromium even when the browser advertises incomplete native support; Safari keeps native HLS playback.
 
 - Selected-episode requests stay linked when Sonarr also contains episodes outside that request; shared files and changed identities still receive a separate review.
