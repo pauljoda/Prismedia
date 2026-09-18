@@ -66,7 +66,7 @@ public sealed partial class EfManagedRequestStore {
         ManagedItemSnapshot snapshot,
         IReadOnlyList<ManagedResolvedTarget>? resolvedTargets) {
         if (target.Targets is not { Count: > 0 }) {
-            return [new(new(snapshot.Item.RemoteId, EntityKind.Movie, null, null, null), target.EntityId)];
+            return [new(new(snapshot.Item.RemoteId, snapshot.Item.EntityKind, null, null, null), target.EntityId)];
         }
 
         var requested = target.Work.Targets ?? [];
@@ -125,7 +125,7 @@ public sealed partial class EfManagedRequestStore {
                 throw new ArgumentException("The final file's mapped path changed before import.");
             var holding = (await db.ManagedHoldings.FromSqlInterpolated($"SELECT * FROM managed_holdings WHERE id = {state.OperationId} FOR UPDATE").ToArrayAsync(ct)).Single();
             var pinned = JsonSerializer.Deserialize<ManagedTargetBinding[]>(holding.TargetsJson, Json)!;
-            var expectedTarget = new ManagedTargetBinding(new(state.RemoteId!, EntityKind.Movie, null, null, null), state.EntityId);
+            var expectedTarget = new ManagedTargetBinding(new(state.RemoteId!, snapshot.Item.EntityKind, null, null, null), state.EntityId);
             if (holding.Status != ManagedTrackingStatus.WaitingForFiles || pinned.Length != 1 || pinned[0] != expectedTarget
                 || await db.ManagedSourceBindings.AnyAsync(binding => binding.HoldingId == holding.Id, ct))
                 throw new ArgumentException("The accepted wanted target changed before file materialization.");
@@ -147,14 +147,14 @@ public sealed partial class EfManagedRequestStore {
             db.EntityFiles.Add(new() { Id = sourceId, EntityId = state.EntityId, Role = EntityFileRole.Source, Path = path,
                 SizeBytes = file.SizeBytes, CreatedAt = now, UpdatedAt = now });
             db.ManagedSourceBindings.Add(new() { Id = Guid.NewGuid(), HoldingId = holding.Id, RemoteTargetId = state.RemoteId!,
-                Kind = EntityKind.Movie, EntityId = state.EntityId, SourceFileId = sourceId, RemoteFileId = file.RemoteId,
+                Kind = expectedTarget.Target.Kind, EntityId = state.EntityId, SourceFileId = sourceId, RemoteFileId = file.RemoteId,
                 LocalPath = path, SizeBytes = file.SizeBytes, WrittenAt = written, IsAvailable = true });
             holding.SelectionsJson = JsonSerializer.Serialize(new[] { new ManagedBindingSelection(state.RemoteId!, state.EntityId, sourceId) }, Json);
             holding.Status = ManagedTrackingStatus.Tracking; holding.Revision++; holding.LastCheckedAt = now; holding.NextCheckAt = now.AddMinutes(1); holding.Problem = null;
             var operation = new ManagedRequestOperation(current.Operation.State); operation.ConfirmFiles();
             await db.SaveChangesAsync(ct);
             await UpdateAsync(operation, state.Revision, null, ct);
-            await queue.EnqueueAsync(EnqueueJobRequest.ForEntity(JobType.RefreshEntity, EntityKind.Movie, state.EntityId.ToString(), current.Plan.Title), ct);
+            await queue.EnqueueAsync(EnqueueJobRequest.ForEntity(JobType.RefreshEntity, expectedTarget.Target.Kind, state.EntityId.ToString(), current.Plan.Title), ct);
         }, token)) throw new EntityLifecycleMutationConflictException(state.EntityId);
         await transaction.CommitAsync(token);
         return new(true);

@@ -162,6 +162,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Scan cleanup checks external-library retention only for deletion candidates, avoiding unrelated library trees during small scans.
+
 - Removed Radarr and Sonarr titles can complete an explicit ownership handoff after fresh removal and activity checks, while retaining their metadata and history.
 
 - Titles confirmed removed from Radarr or Sonarr leave normal library lists when no playable files remain, while metadata and watch history are retained. Connection failures do not count as removal.
