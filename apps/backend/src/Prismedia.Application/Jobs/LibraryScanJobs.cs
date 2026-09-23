@@ -46,6 +46,16 @@ public static class LibraryScanJobs {
             cancellationToken);
     }
 
+    /// <summary>Queues an explicit full catalog reconciliation for a root, including unchanged files.</summary>
+    public static async Task<int> QueueReconcileScansForRootAsync(
+        IJobQueueService queue,
+        Guid rootId,
+        string rootLabel,
+        LibraryScanSelection selection,
+        CancellationToken cancellationToken) => await QueueRootJobsAsync(
+            queue, rootId, rootLabel, selection, changesOnly: false, cancellationToken,
+            forceReconcile: true);
+
     /// <summary>
     /// Enqueues deep integrity scans for one root: a full reconciliation plus the library-wide
     /// orphan and outside-root cleanups that ordinary scans skip. Scheduled on the integrity
@@ -140,7 +150,8 @@ public static class LibraryScanJobs {
         LibraryScanSelection selection,
         bool changesOnly,
         CancellationToken cancellationToken,
-        bool deep = false) {
+        bool deep = false,
+        bool forceReconcile = false) {
         await queue.DeclareResourceAsync(
             JobResourceKeys.LibraryScan,
             maxConcurrency: 1,
@@ -148,7 +159,7 @@ public static class LibraryScanJobs {
             cancellationToken);
 
         var targetId = rootId.ToString();
-        var payloadJson = new ScanRootPayload(rootId, changesOnly, deep).ToJson();
+        var payloadJson = new ScanRootPayload(rootId, changesOnly, deep, forceReconcile).ToJson();
         var queued = 0;
         foreach (var type in ScanJobTypesFor(selection)) {
             if (await queue.HasPendingAsync(type, targetId, cancellationToken)) {

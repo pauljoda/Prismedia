@@ -3037,6 +3037,29 @@ public sealed class ScanJobHandlerTests {
     }
 
     [Fact]
+    public async Task ExplicitReconcileRebuildsUnchangedCatalogRows() {
+        var root = new LibraryRootData(
+            Guid.Parse("11111111-1111-1111-1111-111111111111"),
+            "/media/videos", "Videos",
+            Enabled: true, Recursive: true,
+            ScanVideos: true, ScanImages: false, ScanAudio: false, ScanBooks: false, IsNsfw: false);
+        var persistence = new FakeScanPersistence([root]);
+        var snapshots = new FakeScanSnapshotStore();
+        var handler = new RecordingScanHandler(persistence, snapshots,
+            new RecordingFileDiscovery(["/media/videos/a.mkv"]));
+        var normal = SingleRootScanJob(root);
+
+        await handler.HandleAsync(new JobContext(normal, new NoopJobQueue()), CancellationToken.None);
+        var explicitRescan = normal with {
+            PayloadJson = new ScanRootPayload(root.Id, ForceReconcile: true).ToJson()
+        };
+        await handler.HandleAsync(new JobContext(explicitRescan, new NoopJobQueue()), CancellationToken.None);
+
+        Assert.Equal([root.Id, root.Id], handler.ScannedRootIds);
+        Assert.Equal(1, snapshots.ApplyCount);
+    }
+
+    [Fact]
     public async Task SnapshotRescansWhenAFileIsAdded() {
         var root = new LibraryRootData(
             Guid.Parse("11111111-1111-1111-1111-111111111111"),

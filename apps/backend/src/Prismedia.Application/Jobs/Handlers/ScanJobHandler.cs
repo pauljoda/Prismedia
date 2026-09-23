@@ -73,7 +73,7 @@ public abstract class ScanJobHandler(
                     // scanning the remaining roots, and fail the job at the end.
                     try {
                         using (timer.Phase("root-scan")) {
-                            await ScanRootWithSnapshotAsync(context, currentRoot, changesOnly: false, cancellationToken);
+                            await ScanRootWithSnapshotAsync(context, currentRoot, changesOnly: false, forceReconcile: false, cancellationToken);
                         }
                         using (timer.Phase("root-last-scanned")) {
                             await roots.UpdateRootLastScannedAsync(currentRoot.Id, cancellationToken);
@@ -111,7 +111,7 @@ public abstract class ScanJobHandler(
             scannedRoots = 1;
             runLibraryWideCleanup = payload.Deep;
             using (timer.Phase("root-scan")) {
-                await ScanRootWithSnapshotAsync(context, root, payload.ChangesOnly, cancellationToken);
+                await ScanRootWithSnapshotAsync(context, root, payload.ChangesOnly, payload.ForceReconcile, cancellationToken);
             }
             using (timer.Phase("root-last-scanned")) {
                 await roots.UpdateRootLastScannedAsync(root.Id, cancellationToken);
@@ -158,6 +158,7 @@ public abstract class ScanJobHandler(
         JobContext context,
         LibraryRootData root,
         bool changesOnly,
+        bool forceReconcile,
         CancellationToken cancellationToken) {
         var timer = new JobPhaseTimer();
         var mode = "full";
@@ -240,7 +241,7 @@ public abstract class ScanJobHandler(
             // structure, and assets this scan would produce are already persisted. The first scan (no
             // snapshot) and any add/remove/change fall through to the full scan, which always sees the
             // whole file set and therefore keeps folder-context classification correct.
-            if (previous.Count > 0 && !delta.HasChanges) {
+            if (previous.Count > 0 && !delta.HasChanges && !forceReconcile) {
                 mode = changesOnly ? "changes-noop" : "unchanged";
                 logger.LogInformation(
                     "{JobType}: no file changes in {Label} ({Count} files), skipping detailed scan",
@@ -258,7 +259,9 @@ public abstract class ScanJobHandler(
                 return;
             }
 
-            mode = previous.Count == 0
+            mode = forceReconcile
+                ? "forced-full"
+                : previous.Count == 0
                 ? "full-no-snapshot"
                 : changesOnly
                     ? "surgical-change-intake"
@@ -290,7 +293,7 @@ public abstract class ScanJobHandler(
 
             ScanRootOutcome detailedOutcome;
             using (timer.Phase("detailed-reconcile")) {
-                detailedOutcome = previous.Count == 0
+                detailedOutcome = previous.Count == 0 || forceReconcile
                     ? await ScanRootCoreAsync(context, root, cancellationToken)
                     : await ScanRootDeltaAsync(
                         context,

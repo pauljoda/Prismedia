@@ -187,6 +187,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Explicit root rescans from Files now refresh catalog details for unchanged files, including corrected comic issue numbers.
+
 - Rescanning a library folder from Files no longer loses the selected folder while its contents refresh.
 
 - Soulseek searches now use the peer results collected when slskd's response window ends in a timed-out state, instead of discarding them as a failed search.
