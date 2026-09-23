@@ -28,8 +28,8 @@ public sealed record ManagedConfigurationChange(string? ProfileId = null, bool? 
 /// OperationId belongs to Prismedia's durable intent; it does not imply upstream idempotency support.
 /// </summary>
 public sealed record ConfigureManagedInput(Guid OperationId, ManagedControlScope Scope, string ExpectedPath,
-    string ExpectedProfileId, IReadOnlyDictionary<string, bool> ExpectedMonitoring, ManagedConfigurationChange Changes);
+    string? ExpectedProfileId, IReadOnlyDictionary<string, bool> ExpectedMonitoring, ManagedConfigurationChange Changes);
 /// <summary>Requests one search using the reviewed profile, path and finite scope; no implicit monitoring changes.</summary>
-public sealed record RequestManagedInput(Guid OperationId, ManagedControlScope Scope, string ExpectedPath, string ExpectedProfileId);
+public sealed record RequestManagedInput(Guid OperationId, ManagedControlScope Scope, string ExpectedPath, string? ExpectedProfileId);
 /// <summary>Verified mutation outcome. Uncertain execution must fail the invocation instead of claiming rejection.</summary>
 public sealed record ManagedMutationResult(ManagedMutationOutcome Outcome, ManagedCommandSnapshot? Command = null, string? Problem = null);

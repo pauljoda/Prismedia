@@ -6,8 +6,9 @@ import { acceptManagedIntent } from "$lib/api/managed-acceptance";
 /** The server definitely refused acceptance, so the draft may safely be edited. */
 export class ManagerActionRejectedError extends Error {}
 /** Reads fresh configuration for exactly the saved local associations. */
-export const fetchControlPreview = (connectionId: string, holdingId: string): Promise<ManagedControlPreview> =>
-  previewManagedControls(connectionId, holdingId).then(response => unwrapGenerated(response, "Could not read manager settings"));
+export const fetchControlPreview = (connectionId: string, holdingId: string, targetEntityId?: string): Promise<ManagedControlPreview> =>
+  previewManagedControls(connectionId, holdingId, targetEntityId ? { targetEntityId } : undefined)
+    .then(response => unwrapGenerated(response, "Could not read manager settings"));
 /** Reads retained intent independently of upstream availability. */
 export const fetchControlActions = (connectionId: string, holdingId: string): Promise<ManagedControlActionResponse[]> =>
   listManagedControls(connectionId, holdingId).then(response => unwrapGenerated(response, "Could not read manager actions"));

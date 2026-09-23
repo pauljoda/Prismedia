@@ -252,6 +252,7 @@ import type {
   PreparedWantedMovieResponse,
   PreparedWantedSeriesResponse,
   PreviewCollectionRulesParams,
+  PreviewManagedControlsParams,
   PreviewManagedRequestInput,
   ProblemDetails,
   ProviderLibraryConnection,
@@ -9262,18 +9263,27 @@ export type previewManagedControlsResponseError = (previewManagedControlsRespons
 export type previewManagedControlsResponse = (previewManagedControlsResponseSuccess | previewManagedControlsResponseError)
 
 export const getPreviewManagedControlsUrl = (id: string,
-    holdingId: string,) => {
+    holdingId: string,
+    params?: PreviewManagedControlsParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/connections/${id}/library/tracking/${holdingId}/controls/preview`
+  return stringifiedParams.length > 0 ? `/api/connections/${id}/library/tracking/${holdingId}/controls/preview?${stringifiedParams}` : `/api/connections/${id}/library/tracking/${holdingId}/controls/preview`
 }
 
 export const previewManagedControls = async (id: string,
-    holdingId: string, options?: RequestInit): Promise<previewManagedControlsResponse> => {
+    holdingId: string,
+    params?: PreviewManagedControlsParams, options?: RequestInit): Promise<previewManagedControlsResponse> => {
 
-  return orvalFetch<previewManagedControlsResponse>(getPreviewManagedControlsUrl(id,holdingId),
+  return orvalFetch<previewManagedControlsResponse>(getPreviewManagedControlsUrl(id,holdingId,params),
   {
     ...options,
     method: 'GET'

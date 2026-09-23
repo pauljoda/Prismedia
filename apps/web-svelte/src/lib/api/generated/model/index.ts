@@ -559,6 +559,7 @@ export * from './preparedWantedSeriesResponse';
 export * from './prepareFileArchiveParams';
 export * from './prepareManagedDiscoveryRequest';
 export * from './previewCollectionRulesParams';
+export * from './previewManagedControlsParams';
 export * from './previewManagedRequestInput';
 export * from './problemDetails';
 export * from './progressUnit';

@@ -65,7 +65,8 @@ public sealed class ManagedControlProcessor(IManagedControlStore store, Integrat
             }
             if (action.State.Phase == ManagedControlPhase.PendingSearch) {
                 var profile = request.Changes.ProfileId ?? request.ExpectedProfileId;
-                if (!observed.Capabilities.CanSearch || observed.Item.ProfileId != profile) {
+                if (!observed.Capabilities.CanSearch || observed.Item.ProfileId != profile
+                    || observed.Item.EntityKind != EntityKind.ComicSeries && string.IsNullOrWhiteSpace(profile)) {
                     action.Reject(); await SaveAsync("Search was not sent because the reviewed profile or search capability changed."); return;
                 }
                 connection = await AuthorizeAsync(IntegrationOperation.RequestManaged);

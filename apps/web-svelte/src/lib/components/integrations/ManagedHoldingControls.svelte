@@ -13,11 +13,15 @@
     holdingId,
     canPreview,
     connectionName = "Connected app",
+    targetEntityId,
+    targetLabel,
   }: {
     connectionId: string;
     holdingId: string;
     canPreview: boolean;
     connectionName?: string;
+    targetEntityId?: string;
+    targetLabel?: string;
   } = $props();
   let dialogOpen = $state(false);
   let actions = $state<ManagedControlActionResponse[]>([]);
@@ -106,7 +110,7 @@
     const sequence = ++inspectSequence;
     busy = true; error = null;
     try {
-      const result = await fetchControlPreview(connectionId, holdingId);
+      const result = await fetchControlPreview(connectionId, holdingId, targetEntityId);
       if (!alive || sequence !== inspectSequence || !dialogOpen) return;
       preview = result; profileId = result.state.item.profileId ?? "";
       monitored = result.state.targets.every(target => target.monitored); monitoringChanged = false; search = false;
@@ -118,8 +122,9 @@
     if (!pending && (!preview || !changed)) return;
     if (!pending && preview) pending = {
       operationId, scopeFingerprint: preview.scopeFingerprint, expectedPath: preview.state.path,
-      expectedProfileId: preview.state.item.profileId!, expectedMonitoring: Object.fromEntries(preview.state.targets.map(target => [target.target.remoteId, target.monitored])),
+      expectedProfileId: preview.state.item.profileId, expectedMonitoring: Object.fromEntries(preview.state.targets.map(target => [target.target.remoteId, target.monitored])),
       changes: { profileId: profileId !== (preview.state.item.profileId ?? "") ? profileId : null, monitored: monitoringChanged ? monitored : null }, search,
+      targetEntityId: targetEntityId ?? null,
     };
     busy = true; error = null; loadSequence++;
     try {
@@ -179,16 +184,16 @@
 {/snippet}
 
 <div class="min-w-0">
-  <Button variant="outline" size="sm" aria-label={`${connectionName} settings and activity`} onclick={() => setDialogOpen(true)}>
-    <Settings2 />Settings & activity
+  <Button variant="outline" size="sm" aria-label={targetLabel ? `${targetLabel} settings and activity in ${connectionName}` : `${connectionName} settings and activity`} onclick={() => setDialogOpen(true)}>
+    <Settings2 />{targetLabel ? "Manage issue" : "Settings & activity"}
   </Button>
 </div>
 
 <DialogBase.Root open={dialogOpen} onOpenChange={setDialogOpen}>
   <DialogBase.Content class="max-h-[85dvh] overflow-y-auto sm:max-w-2xl">
     <DialogBase.Header>
-      <DialogBase.Title>Settings & activity · {connectionName}</DialogBase.Title>
-      <DialogBase.Description>Change monitoring, profile, or request a search for this linked title. Search completion does not confirm a download or readable file.</DialogBase.Description>
+      <DialogBase.Title>{targetLabel ? `${targetLabel} · ${connectionName}` : `Settings & activity · ${connectionName}`}</DialogBase.Title>
+      <DialogBase.Description>Change monitoring or request a search for {targetLabel ?? "this linked title"}. Search completion does not confirm a download or readable file. Activity includes the whole linked title.</DialogBase.Description>
     </DialogBase.Header>
     <div class="space-y-4">
     {#if error}<Alert.Root variant="destructive"><Alert.Description>{error}</Alert.Description></Alert.Root>{/if}
@@ -208,11 +213,13 @@
           <h3 class="text-sm font-semibold">Manager settings</h3>
           <p class="mt-1 text-xs text-text-muted">Applies to {preview.state.targets.length} linked {preview.state.targets.length === 1 ? "item" : "items"} in {connectionName}.</p>
         </div>
-        <FormField label="Profile" htmlFor="manager-profile">
-          <Select id="manager-profile" ariaLabel="Manager profile" value={profileId} options={preview.options.profiles.map(profile => ({ value: profile.id, label: profile.label }))}
-            onchange={value => profileId = value} disabled={busy || !!pending || !preview.state.capabilities.canChangeProfile} />
-        </FormField>
-        {#if !preview.state.capabilities.canChangeProfile}<p class="text-xs text-text-muted">Change this profile in the connected app.</p>{/if}
+        {#if preview.state.item.profileId !== null || preview.options.profiles.length > 0}
+          <FormField label="Profile" htmlFor="manager-profile">
+            <Select id="manager-profile" ariaLabel="Manager profile" value={profileId} options={preview.options.profiles.map(profile => ({ value: profile.id, label: profile.label }))}
+              onchange={value => profileId = value} disabled={busy || !!pending || !preview.state.capabilities.canChangeProfile} />
+          </FormField>
+          {#if !preview.state.capabilities.canChangeProfile}<p class="text-xs text-text-muted">Change this profile in the connected app.</p>{/if}
+        {/if}
         <div class="space-y-1">
           <label class="flex items-center justify-between gap-3 text-sm">Monitoring
             <Toggle ariaLabel="Monitoring" checked={monitored} onchange={value => { monitored = value; monitoringChanged = true; }} disabled={busy || !!pending || !preview.state.capabilities.canChangeMonitoring} />

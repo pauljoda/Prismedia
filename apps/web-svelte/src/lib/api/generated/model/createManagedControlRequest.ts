@@ -11,8 +11,11 @@ export interface CreateManagedControlRequest {
   operationId: string;
   scopeFingerprint: string;
   expectedPath: string;
-  expectedProfileId: string;
+  /** @nullable */
+  expectedProfileId: string | null;
   expectedMonitoring: CreateManagedControlRequestExpectedMonitoring;
   changes: ManagedConfigurationChange;
   search: boolean;
+  /** @nullable */
+  targetEntityId?: string | null;
 }

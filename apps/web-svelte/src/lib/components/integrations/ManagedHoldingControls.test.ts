@@ -87,4 +87,24 @@ describe("Manager controls", () => {
     expect(screen.getByRole("button", { name: "Manager profile" })).toBeDisabled();
     expect(screen.getByRole("checkbox", { name: "Search now" })).toBeEnabled();
   });
+  it("submits one profileless comic issue from its scoped preview", async () => {
+    api.fetchControlPreview.mockResolvedValue({ ...preview, state: { ...preview.state,
+      item: { ...preview.state.item, entityKind: ENTITY_KIND.comicSeries, profileId: null },
+      targets: [{ target: { remoteId: "1", entityKind: ENTITY_KIND.comicInstallment, issueLabel: "½" }, monitored: false }],
+      capabilities: { canSearch: true, canChangeProfile: false, canChangeMonitoring: true, monitoringUnavailableReason: null },
+    }, options: { profiles: [], roots: [] } });
+    render(ManagedHoldingControls, { connectionId: "connection", holdingId: "holding", canPreview: true,
+      connectionName: "Kapowarr", targetEntityId: "issue-entity", targetLabel: "Issue #½" });
+    await fireEvent.click(screen.getByRole("button", { name: "Issue #½ settings and activity in Kapowarr" }));
+    await screen.findByRole("switch", { name: "Monitoring" });
+    expect(api.fetchControlPreview).toHaveBeenCalledWith("connection", "holding", "issue-entity");
+    expect(screen.queryByRole("button", { name: "Manager profile" })).not.toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("switch", { name: "Monitoring" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Apply changes" }));
+    await waitFor(() => expect(api.saveControlAction).toHaveBeenCalled());
+    expect(api.saveControlAction.mock.calls[0][2]).toEqual(expect.objectContaining({
+      targetEntityId: "issue-entity", expectedProfileId: null, expectedMonitoring: { "1": false },
+      changes: { profileId: null, monitored: true }, search: false,
+    }));
+  });
 });

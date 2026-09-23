@@ -12,6 +12,9 @@ public sealed class ManagedControlService(IManagedControlStore store, Integratio
         var owned = await store.RequireScopeAsync(connectionId, holdingId, token);
         return await PreviewAsync(connectionId, owned, token);
     }
+    /// <summary>Reads one linked issue without granting control over its sibling targets.</summary>
+    public Task<ManagedControlPreview> PreviewAsync(Guid connectionId, Guid holdingId, Guid entityId, CancellationToken token) =>
+        PreviewAsync(connectionId, holdingId, [entityId], token);
     internal async Task<ManagedControlPreview> PreviewAsync(Guid connectionId, Guid holdingId,
         IReadOnlyList<Guid> entityIds, CancellationToken token) {
         var owned = await store.RequireScopeAsync(connectionId, holdingId, entityIds, token);
@@ -25,7 +28,8 @@ public sealed class ManagedControlService(IManagedControlStore store, Integratio
     }
     /// <summary>Accepts one reviewed action and durable queue intent before any remote mutation.</summary>
     public async Task<ManagedControlActionResponse> CreateAsync(Guid connectionId, Guid holdingId, CreateManagedControlRequest request, CancellationToken token) {
-        return await CreateAsync(connectionId, holdingId, request, null, token);
+        return await CreateAsync(connectionId, holdingId, request,
+            request.TargetEntityId is { } entityId ? [entityId] : null, token);
     }
     internal async Task<ManagedControlActionResponse> CreateAsync(Guid connectionId, Guid holdingId,
         CreateManagedControlRequest request, IReadOnlyList<Guid>? scopeEntityIds, CancellationToken token) {
@@ -39,7 +43,10 @@ public sealed class ManagedControlService(IManagedControlStore store, Integratio
         var owned = scopeEntityIds is null
             ? await store.RequireScopeAsync(connectionId, holdingId, token)
             : await store.RequireScopeAsync(connectionId, holdingId, scopeEntityIds, token);
-        if (owned.Fingerprint != request.ScopeFingerprint || !owned.Scope.Targets.Select(target => target.RemoteId).ToHashSet(StringComparer.Ordinal).SetEquals(request.ExpectedMonitoring.Keys))
+        if (owned.Fingerprint != request.ScopeFingerprint || !owned.Scope.Targets.Select(target => target.RemoteId).ToHashSet(StringComparer.Ordinal).SetEquals(request.ExpectedMonitoring.Keys)
+            || owned.Scope.Item.EntityKind == EntityKind.ComicSeries && (owned.Scope.Targets.Count != 1 || request.TargetEntityId is null
+                || request.ExpectedProfileId is not null || request.Changes.ProfileId is not null)
+            || owned.Scope.Item.EntityKind != EntityKind.ComicSeries && string.IsNullOrWhiteSpace(request.ExpectedProfileId))
             throw new ManagedControlConflictException("The reviewed target scope changed. Refresh the manager controls.");
         await access.RequireAsync(connectionId, PluginCapability.ExternalManager, IntegrationOperation.ReconcileManaged, owned.Scope.Item.EntityKind, token);
         var configure = request.Changes.ProfileId is not null || request.Changes.Monitored is not null;
@@ -81,7 +88,8 @@ public sealed class ManagedControlService(IManagedControlStore store, Integratio
     private static void Validate(CreateManagedControlRequest request) {
         if (request.OperationId == Guid.Empty || request.ScopeFingerprint is not { Length: 64 } || !request.ScopeFingerprint.All(Uri.IsHexDigit)
             || string.IsNullOrWhiteSpace(request.ExpectedPath) || request.ExpectedPath.Length > 8192
-            || string.IsNullOrWhiteSpace(request.ExpectedProfileId) || request.ExpectedProfileId.Length > 512
+            || request.ExpectedProfileId is { Length: > 512 }
+            || request.TargetEntityId == Guid.Empty
             || request.ExpectedMonitoring is not { Count: > 0 and <= 10000 } || request.ExpectedMonitoring.Keys.Any(key => string.IsNullOrWhiteSpace(key) || key.Length > 512)
             || request.Changes is null || request.Changes.ProfileId is { } profile && (string.IsNullOrWhiteSpace(profile) || profile.Length > 512)
             || request.Changes.ProfileId is null && request.Changes.Monitored is null && !request.Search)

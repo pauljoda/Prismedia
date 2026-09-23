@@ -6,7 +6,8 @@ namespace Prismedia.Contracts.Integrations;
 public sealed record ManagedControlPreview(string ScopeFingerprint, ManagedControlState State, ManagerOptions Options);
 /// <summary>Explicit changes based on a reviewed snapshot. Omitted fields remain unchanged.</summary>
 public sealed record CreateManagedControlRequest(Guid OperationId, string ScopeFingerprint, string ExpectedPath,
-    string ExpectedProfileId, IReadOnlyDictionary<string, bool> ExpectedMonitoring, ManagedConfigurationChange Changes, bool Search);
+    string? ExpectedProfileId, IReadOnlyDictionary<string, bool> ExpectedMonitoring, ManagedConfigurationChange Changes, bool Search,
+    Guid? TargetEntityId = null);
 /// <summary>Optimistic concurrency for local cancellation, observation, or acknowledgement of uncertainty.</summary>
 public sealed record ManagedControlRevisionRequest(long ExpectedRevision);
 /// <summary>Retained control progress. Completion describes settings or search execution, never file availability.</summary>

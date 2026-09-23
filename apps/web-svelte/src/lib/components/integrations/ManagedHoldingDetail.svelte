@@ -436,7 +436,7 @@
 {#snippet libraryContent()}
   {#key detail.item.remoteId}
     <ManagedHoldingTracking connectionId={connection.id} connectionName={connection.name} item={detail.item}
-      showControls={showControls && detail.item.entityKind !== ENTITY_KIND.comicSeries} {canControl} {canRelease} />
+      {showControls} {canControl} {canRelease} />
   {/key}
 {/snippet}
 

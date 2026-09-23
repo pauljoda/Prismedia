@@ -66,6 +66,16 @@ public sealed class ManagedControlProcessorTests {
         Assert.True(fixture.Saved.Operation.State.ConfigurationConfirmed);
         Assert.Equal(ManagedControlPhase.Rejected, fixture.Saved.Operation.State.Phase); Assert.Equal(0, fixture.SearchCalls);
     }
+    [Fact] public async Task Profileless_comic_search_keeps_its_exact_issue_and_unverified_outcome() {
+        var fixture = new Fixture(false, true, comic: true);
+        await fixture.Run();
+        Assert.Equal(1, fixture.SearchCalls);
+        fixture.Observed = fixture.Observed with { Command = fixture.Observed.Command! with { Status = ManagedCommandStatus.Unknown } };
+        await fixture.Run();
+        Assert.Equal(1, fixture.SearchCalls);
+        Assert.True(fixture.Saved.Operation.State.ReviewRequired);
+        Assert.Equal(ManagedControlPhase.AwaitingCommand, fixture.Saved.Operation.State.Phase);
+    }
     [Theory] [InlineData(true)] [InlineData(false)]
     public async Task Revoked_capability_or_changed_target_prevents_writes(bool revoke) {
         var fixture = new Fixture(true, true);
@@ -84,19 +94,25 @@ public sealed class ManagedControlProcessorTests {
         private readonly IntegrationConnection connection;
         internal bool LoseConfigureResponse, LoseSearchResponse, CancelAtFence;
         internal int ConfigureCalls, SearchCalls;
-        internal Fixture(bool configure, bool search) {
+        internal Fixture(bool configure, bool search, bool comic = false) {
             IntegrationSupport[] support = [new(PluginCapability.ExternalManager,
-                [IntegrationOperation.ReconcileManaged, IntegrationOperation.ConfigureManaged, IntegrationOperation.RequestManaged], [EntityKind.Movie])];
+                [IntegrationOperation.ReconcileManaged, IntegrationOperation.ConfigureManaged, IntegrationOperation.RequestManaged],
+                [comic ? EntityKind.ComicSeries : EntityKind.Movie])];
             connection = IntegrationConnection.Create(PluginId, "Manager", "https://manager.test", true, [PluginCapability.ExternalManager], new Dictionary<string, string>());
             connection.RecordProbe(null, support, null, DateTimeOffset.UtcNow, false);
             Manifest = new(2, [], PluginId, "Manager", "1.0.0", "dotnet-process", "plugin.dll", new("2.0.0", null, "3.8.0", null), [], false, [],
                 Integration: new(1, support.Select(value => new PluginIntegrationCapability(value.Kind, value.Operations, value.EntityKinds)).ToArray(), []));
             var action = ManagedControlOperation.Create(Guid.NewGuid(), connection.State.Id, Guid.NewGuid(), configure, search);
-            var scope = new ManagedControlScope(new(EntityKind.Movie, "1", new Dictionary<string, string> { [ExternalIdProviders.Tmdb] = "42" }), [new("1", EntityKind.Movie)]);
-            var request = new CreateManagedControlRequest(action.State.OperationId, new string('a', 64), "/movies/film", "1",
-                new Dictionary<string, bool> { ["1"] = false }, new(Monitored: configure ? true : null), search);
+            var kind = comic ? EntityKind.ComicSeries : EntityKind.Movie;
+            var path = comic ? "/comics/run" : "/movies/film";
+            var scope = new ManagedControlScope(new(kind, "1", new Dictionary<string, string> {
+                [comic ? ExternalIdProviders.ComicVine : ExternalIdProviders.Tmdb] = "42" }),
+                [new("1", comic ? EntityKind.ComicInstallment : EntityKind.Movie, IssueLabel: comic ? "½" : null)]);
+            var request = new CreateManagedControlRequest(action.State.OperationId, new string('a', 64), path, comic ? null : "1",
+                new Dictionary<string, bool> { ["1"] = false }, new(Monitored: configure ? true : null), search,
+                comic ? Guid.NewGuid() : null);
             Saved = new(action, new(scope, request, ManagedControlIdentity.RequestFingerprint(request)), DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null);
-            Observed = new(new("1", EntityKind.Movie, "Film", 2024, scope.Item.ExpectedExternalIds, false, "1", 0), "/movies/film",
+            Observed = new(new("1", kind, "Film", 2024, scope.Item.ExpectedExternalIds, false, comic ? null : "1", 0), path,
                 [new(scope.Targets[0], false)], new(true, true, true));
         }
         internal Task Run() => new ManagedControlProcessor(this, new(this, this), this).ProcessAsync(Saved.Operation.State.OperationId, default);
@@ -121,6 +137,8 @@ public sealed class ManagedControlProcessorTests {
         }
         public Task<ManagedMutationResult> RequestAsync(string pluginId, IntegrationConnectionContext context, RequestManagedInput input, CancellationToken token) {
             Assert.Equal(ManagedControlPhase.SearchUncertain, Saved.Operation.State.Phase); SearchCalls++;
+            Assert.Equal(Saved.Plan.Scope.Targets, input.Scope.Targets);
+            Assert.Equal(Saved.Plan.Request.ExpectedProfileId, input.ExpectedProfileId);
             if (LoseSearchResponse) throw new IntegrationInvocationException("response lost");
             var command = new ManagedCommandSnapshot(new("12", DateTimeOffset.Parse("2026-09-16T20:00:00.1234567Z")), ManagedCommandStatus.Pending);
             Observed = Observed with { Command = command with { Status = ManagedCommandStatus.Completed } };

@@ -16,8 +16,9 @@ public static class ManagedControlEndpoints {
             Results.Accepted(value: await service.BeginAsync(id, holdingId, request, token)))
             .WithName("ReleaseManagedHolding").Produces<ManagedTrackingResponse>(202).Produces<ApiProblem>(400).Produces<ApiProblem>(409);
         var group = connections.MapGroup("/{id:guid}/library/tracking/{holdingId:guid}/controls");
-        group.MapGet("/preview", async (Guid id, Guid holdingId, ManagedControlService service, CancellationToken token) =>
-            Results.Ok(await service.PreviewAsync(id, holdingId, token)))
+        group.MapGet("/preview", async (Guid id, Guid holdingId, Guid? targetEntityId, ManagedControlService service, CancellationToken token) =>
+            Results.Ok(targetEntityId is { } entityId ? await service.PreviewAsync(id, holdingId, entityId, token)
+                : await service.PreviewAsync(id, holdingId, token)))
             .WithName("PreviewManagedControls").Produces<ManagedControlPreview>().Produces<ApiProblem>(400).Produces<ApiProblem>(409);
         group.MapGet("/", async (Guid id, Guid holdingId, ManagedControlService service, CancellationToken token) =>
             Results.Ok(await service.ListAsync(id, holdingId, token)))

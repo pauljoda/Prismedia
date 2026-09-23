@@ -225,6 +225,10 @@
               <Button disabled={openingEntityId !== null} size="sm" onclick={() => void openEntity(target.entityId)}>
                 {usesTitle ? "Open in Prismedia" : `Open ${targetLabel(target, holding.title)}`}{#if !usesTitle}<span class="sr-only"> in Prismedia</span>{/if}<ArrowUpRight aria-hidden="true" />
               </Button>
+              {#if showControls && holding.item.entityKind === ENTITY_KIND.comicSeries && holding.status !== MANAGED_TRACKING_STATUS.removed}
+                <ManagedHoldingControls {connectionId} {connectionName} holdingId={holding.id} targetEntityId={target.entityId}
+                  targetLabel={targetLabel(target, holding.title)} canPreview={canControl && (holding.status === MANAGED_TRACKING_STATUS.tracking || holding.status === MANAGED_TRACKING_STATUS.waitingForFiles)} />
+              {/if}
             </div>
           {:else if targets.length > 1}
             <div class="max-h-72 space-y-1 overflow-y-auto pr-1" aria-label="Linked Prismedia items">
@@ -234,6 +238,10 @@
                   <Button variant="ghost" size="sm" disabled={openingEntityId !== null} onclick={() => void openEntity(target.entityId)}>
                     Open<span class="sr-only"> {targetLabel(target, holding.title)} in Prismedia</span><ArrowUpRight aria-hidden="true" />
                   </Button>
+                  {#if showControls && holding.item.entityKind === ENTITY_KIND.comicSeries && holding.status !== MANAGED_TRACKING_STATUS.removed}
+                    <ManagedHoldingControls {connectionId} {connectionName} holdingId={holding.id} targetEntityId={target.entityId}
+                      targetLabel={targetLabel(target, holding.title)} canPreview={canControl && (holding.status === MANAGED_TRACKING_STATUS.tracking || holding.status === MANAGED_TRACKING_STATUS.waitingForFiles)} />
+                  {/if}
                 </div>
               {/each}
             </div>
@@ -246,7 +254,7 @@
           </div>
           {#if showControls}
             <div class="flex min-w-0 flex-wrap items-start gap-2">
-              {#if holding.status !== MANAGED_TRACKING_STATUS.removed}
+              {#if holding.status !== MANAGED_TRACKING_STATUS.removed && holding.item.entityKind !== ENTITY_KIND.comicSeries}
                 <ManagedHoldingControls {connectionId} {connectionName} holdingId={holding.id} canPreview={canControl && (holding.status === MANAGED_TRACKING_STATUS.tracking || holding.status === MANAGED_TRACKING_STATUS.waitingForFiles)} />
               {/if}
               {#if canRelease && (holding.status === MANAGED_TRACKING_STATUS.tracking || holding.status === MANAGED_TRACKING_STATUS.waitingForFiles || holding.status === MANAGED_TRACKING_STATUS.removed)}
