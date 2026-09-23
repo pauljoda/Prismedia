@@ -182,6 +182,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Connected audiobook requests pause for review when the mapped Book folder contains audio parts the manager did not report, instead of treating one reported file as the complete audiobook.
+
 - Soulseek book and comic searches now wait longer for a queued slskd search to finish before reporting a timeout.
 
 - Comic and book imports now identify unreadable downloaded media in Request Activity, so an invalid publication can be distinguished from a connection or destination failure without exposing private paths.

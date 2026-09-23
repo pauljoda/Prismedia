@@ -67,18 +67,20 @@ public sealed partial class EfManagedRequestStore {
                 || JsonSerializer.Deserialize<ManagedTargetBinding[]>(holding.TargetsJson, Json) is not { Length: 0 }
                 || await db.ManagedSourceBindings.AnyAsync(binding => binding.HoldingId == holding.Id, ct))
                 throw new ArgumentException("The Book request's retained file scope changed before materialization.");
+            var library = await db.LibraryRoots.Where(root => root.Id == state.LibraryRootId)
+                .Select(root => new { root.Path, root.IsNsfw }).SingleAsync(ct);
+            if (rendition == BookRendition.Audiobook)
+                RequireCompleteAudiobookFolder(path, library.Path, ct);
             await using var bytes = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, true);
             if (bytes.Length != file.SizeBytes || WrittenAt(path) != written)
                 throw new ArgumentException("The Book file changed during import verification. Refresh its evidence.");
 
             var now = DateTimeOffset.UtcNow;
-            var isNsfw = await db.LibraryRoots.Where(root => root.Id == state.LibraryRootId)
-                .Select(root => root.IsNsfw).SingleAsync(ct);
             var book = await db.Entities.SingleAsync(row => row.Id == state.EntityId, ct);
             book.IsWanted = false;
             book.IsLibraryArchived = false;
             book.UpdatedAt = now;
-            if (isNsfw) book.IsNsfw = true;
+            if (library.IsNsfw) book.IsNsfw = true;
             var bookRoot = await db.EntityLibraryRoots.SingleOrDefaultAsync(row => row.EntityId == book.Id, ct);
             if (bookRoot is null)
                 db.EntityLibraryRoots.Add(new() { EntityId = book.Id, LibraryRootId = state.LibraryRootId });
@@ -150,5 +152,29 @@ public sealed partial class EfManagedRequestStore {
         }, token)) throw new EntityLifecycleMutationConflictException(state.EntityId);
         await transaction.CommitAsync(token);
         return new(true);
+    }
+
+    private static void RequireCompleteAudiobookFolder(string path, string libraryPath, CancellationToken token) {
+        var folder = Path.GetDirectoryName(path)
+            ?? throw new ArgumentException("The audiobook file has no mapped parent folder.");
+        // A file directly in the watched root is its own scanner group. In a subfolder, the
+        // scanner treats every audio part as one Book; a one-file manager report cannot claim it.
+        if (FileSystemPathComparison.Equals(folder, libraryPath)) return;
+        try {
+            var options = new EnumerationOptions {
+                RecurseSubdirectories = true,
+                IgnoreInaccessible = false,
+                AttributesToSkip = FileAttributes.ReparsePoint
+            };
+            foreach (var candidate in Directory.EnumerateFiles(folder, "*", options)) {
+                token.ThrowIfCancellationRequested();
+                if (!FileSystemPathComparison.Equals(candidate, path)
+                    && SupportedExtensions.Audiobook.Contains(Path.GetExtension(candidate)))
+                    throw new ArgumentException(
+                        "The manager reported one audiobook file, but its mapped book folder contains other audio files. Review every part before completing this request.");
+            }
+        } catch (Exception error) when (error is IOException or UnauthorizedAccessException) {
+            throw new ArgumentException("The mapped audiobook folder could not be inspected. Review its files before completing this request.", error);
+        }
     }
 }

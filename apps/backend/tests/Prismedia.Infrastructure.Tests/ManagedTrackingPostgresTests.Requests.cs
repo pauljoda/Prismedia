@@ -16,13 +16,14 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed partial class ManagedTrackingPostgresTests {
     [Theory]
-    [InlineData(false, false, false)]
-    [InlineData(true, false, false)]
-    [InlineData(false, true, false)]
-    [InlineData(true, true, false)]
-    [InlineData(false, true, true)]
+    [InlineData(false, false, false, false)]
+    [InlineData(true, false, false, false)]
+    [InlineData(false, true, false, false)]
+    [InlineData(true, true, false, false)]
+    [InlineData(false, true, true, false)]
+    [InlineData(false, false, false, true)]
     public async Task BookManagerAdoptsOnlyUnclaimedScannedRenditions(bool audioFirst,
-        bool scannerFirst, bool protectScannedEbook) {
+        bool scannerFirst, bool protectScannedEbook, bool unreportedAudioPart) {
         await using var database = await PostgresTestDatabase.CreateAsync();
         await using var db = database.CreateContext();
         var connectionId = Guid.NewGuid();
@@ -86,11 +87,15 @@ public sealed partial class ManagedTrackingPostgresTests {
         Assert.NotEqual(ebookScope.Fingerprint, audioScope.Fingerprint);
 
         var ebookPath = Path.Combine(workspace, "ebooks", "example.epub");
-        var audioPath = Path.Combine(workspace, "audio", "example.m4b");
+        var audioPath = unreportedAudioPart
+            ? Path.Combine(workspace, "audio", "example", "example.m4b")
+            : Path.Combine(workspace, "audio", "example.m4b");
         Directory.CreateDirectory(Path.GetDirectoryName(ebookPath)!);
         Directory.CreateDirectory(Path.GetDirectoryName(audioPath)!);
         await File.WriteAllBytesAsync(ebookPath, [1, 2, 3]);
         await File.WriteAllBytesAsync(audioPath, [4, 5, 6, 7]);
+        if (unreportedAudioPart)
+            await File.WriteAllBytesAsync(Path.Combine(Path.GetDirectoryName(audioPath)!, "part-two.mp3"), [8, 9, 10]);
         var scanner = new LibraryScanPersistenceService(db);
         Guid? scannedEbookId = null;
         if (scannerFirst) {
@@ -114,8 +119,18 @@ public sealed partial class ManagedTrackingPostgresTests {
                 [new("OL123W", EntityKind.Book, "Example")])], DateTimeOffset.UtcNow);
         var audioSnapshot = new ManagedItemSnapshot(
             new("OL123W", EntityKind.Book, "Example", null, identities, true, null, 1),
-            "/audio/Example", [new("audio-file", "/audio/example.m4b", 4, null,
+            "/audio/Example", [new("audio-file", unreportedAudioPart ? "/audio/example/example.m4b" : "/audio/example.m4b", 4, null,
                 [new("OL123W:audio-1", EntityKind.AudioTrack, "Example")])], DateTimeOffset.UtcNow);
+        if (unreportedAudioPart) {
+            var error = await Assert.ThrowsAsync<ArgumentException>(() =>
+                store.MaterializeAsync(audio, audioSnapshot, default));
+            Assert.Contains("other audio files", error.Message, StringComparison.Ordinal);
+            Assert.Empty(await db.EntityFiles.AsNoTracking().ToArrayAsync());
+            Assert.True((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == bookId)).IsWanted);
+            Assert.Equal(ManagedRequestPhase.AwaitingFiles,
+                (await store.FindAsync(audio.Operation.State.OperationId, default))!.Operation.State.Phase);
+            return;
+        }
         if (protectScannedEbook) {
             var error = await Assert.ThrowsAsync<ArgumentException>(() =>
                 store.MaterializeAsync(ebook, ebookSnapshot, default));
