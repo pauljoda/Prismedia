@@ -22,7 +22,7 @@ public sealed record ManagedResolvedTarget(string RemoteId, EntityKind EntityKin
 public sealed record ManagedLookupResult(ManagedCandidate Candidate, ManagedItemSnapshot? Existing,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ManagedResolvedTarget>? Targets = null);
 /// <summary>Initial creation is unmonitored and does not search. Existing holdings retain all settings.</summary>
-public sealed record EnsureManagedInput(Guid OperationId, ManagedLookupInput Work, string ProfileId, string RootId, string ExpectedRootPath);
+public sealed record EnsureManagedInput(Guid OperationId, ManagedLookupInput Work, string? ProfileId, string RootId, string ExpectedRootPath);
 /// <summary>Only definite outcomes may be returned; lost responses must leave the host's creation intent uncertain.</summary>
 public sealed record EnsureManagedResult(ManagedMutationOutcome Outcome, ManagedItemSnapshot? Holding = null,
     bool Created = false, string? Problem = null,

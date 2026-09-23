@@ -32,6 +32,24 @@ public sealed class ManagedRequestProcessorTests {
     }
 
     [Fact]
+    public void ComicRequestRequiresOneLabeledIssueAndNoProfile() {
+        var work = new ManagedLookupInput(EntityKind.ComicSeries,
+            new Dictionary<string, string> { [ExternalIdProviders.ComicVine] = "4050-1" },
+            [new(EntityKind.ComicInstallment,
+                new Dictionary<string, string> { [ExternalIdProviders.ComicVine] = "4000-2" }, IssueLabel: "½")]);
+        var request = new CreateManagedRequestInput(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(), work,
+            null, Monitored: true, Search: true, [Guid.NewGuid()]);
+        ManagedRequestService.Validate(request);
+        Assert.True(ManagedRequestProcessor.InitialConfiguration(request).Monitored);
+        Assert.Throws<ArgumentException>(() => ManagedRequestService.Validate(request with { ProfileId = "profile" }));
+        Assert.Throws<ArgumentException>(() => ManagedRequestService.Validate(request with { Search = false }));
+        Assert.Throws<ArgumentException>(() => ManagedRequestService.Validate(request with { TargetEntityIds = [] }));
+        Assert.Throws<ArgumentException>(() => ManagedRequestService.Validate(request with {
+            ReviewedWork = work with { Targets = [work.Targets![0] with { IssueLabel = null }] }
+        }));
+    }
+
+    [Fact]
     public void MovieFingerprintRemainsCompatibleWithArchivedContractBeforeFiniteTargets() {
         const string archivedJson = """{"OperationId":"11111111-1111-1111-1111-111111111111","EntityId":"22222222-2222-2222-2222-222222222222","LibraryRootId":"33333333-3333-3333-3333-333333333333","ReviewedWork":{"EntityKind":15,"ExternalIds":{"tmdb":"42"}},"ProfileId":"1","Monitored":true,"Search":true}""";
         const string archivedFingerprint = "11c79bfde3e2129600000e151f40128ad0dc6369aa7c3cbd0b9b45edf9ec63a8";
@@ -104,6 +122,15 @@ public sealed class ManagedRequestProcessorTests {
             new Dictionary<string, string> { [ExternalIdProviders.ComicVine] = "4000-7" }, IssueLabel: "½");
 
         ManagedCreationEvidence.ValidateTargets(work, [resolved]);
+        var snapshot = new ManagedItemSnapshot(
+            new("run", EntityKind.ComicSeries, "Run", 2024, work.ExternalIds, false, null, 0),
+            "/comics/run", [], DateTimeOffset.UtcNow,
+            [new("17", "½", "Half issue", false, resolved.ExternalIds)]);
+        ManagedCreationEvidence.ValidateComicTargets(work, snapshot, [resolved]);
+        Assert.Throws<IntegrationInvocationException>(() => ManagedCreationEvidence.ValidateComicTargets(work,
+            snapshot with { ComicIssues = [snapshot.ComicIssues![0] with { IssueLabel = "0.5" }] }, [resolved]));
+        Assert.Throws<IntegrationInvocationException>(() => ManagedCreationEvidence.ValidateComicTargets(work,
+            snapshot with { ComicIssues = null }, [resolved]));
         Assert.False(ManagedRequestIdentity.SameWork(work, work with { Targets = [work.Targets![0] with { IssueLabel = "0.5" }] }));
         Assert.Throws<IntegrationInvocationException>(() => ManagedCreationEvidence.ValidateTargets(work,
             [resolved with { IssueLabel = "0.5" }]));
@@ -168,6 +195,25 @@ public sealed class ManagedRequestProcessorTests {
         Assert.Equal(0, fixture.Writes);
         Assert.Equal(ManagedRequestPhase.PendingCreation, fixture.Saved.Operation.State.Phase);
         Assert.True(fixture.Saved.Operation.State.ReviewRequired);
+    }
+    [Fact]
+    public async Task MissingComicRunNeverTriggersCreationMutation() {
+        var fixture = new Fixture();
+        var work = new ManagedLookupInput(EntityKind.ComicSeries,
+            new Dictionary<string, string> { [ExternalIdProviders.ComicVine] = "4050-1" },
+            [new(EntityKind.ComicInstallment,
+                new Dictionary<string, string> { [ExternalIdProviders.ComicVine] = "4000-2" }, IssueLabel: "½")]);
+        var request = fixture.Saved.Plan.Request with { ReviewedWork = work, ProfileId = null,
+            TargetEntityIds = [Guid.NewGuid()] };
+        fixture.Saved = fixture.Saved with { Plan = fixture.Saved.Plan with {
+            Request = request,
+            Creation = fixture.Saved.Plan.Creation with { Work = work, ProfileId = null },
+            Fingerprint = ManagedRequestIdentity.Fingerprint(request)
+        } };
+        await fixture.Run();
+        Assert.Equal(0, fixture.Writes);
+        Assert.True(fixture.Saved.Operation.State.ReviewRequired);
+        Assert.Equal(ManagedRequestPhase.PendingCreation, fixture.Saved.Operation.State.Phase);
     }
     [Fact]
     public async Task CancellationWinningTheFencePreventsCreation() {
@@ -296,7 +342,7 @@ public sealed class ManagedRequestProcessorTests {
         internal bool Materialized;
         internal int Writes;
         internal Fixture() {
-            IntegrationSupport[] support = [new(PluginCapability.ExternalManager, [IntegrationOperation.LookupManaged, IntegrationOperation.EnsureManaged], [EntityKind.Movie]),
+            IntegrationSupport[] support = [new(PluginCapability.ExternalManager, [IntegrationOperation.LookupManaged, IntegrationOperation.EnsureManaged], [EntityKind.Movie, EntityKind.ComicSeries]),
                 new(PluginCapability.ConnectedLibrary, [IntegrationOperation.GetLibraryItem], [EntityKind.Movie])];
             connection = IntegrationConnection.Create(PluginId, "Manager", "https://manager.test", true, [PluginCapability.ExternalManager, PluginCapability.ConnectedLibrary], new Dictionary<string,string>());
             connection.RecordProbe(null, support, null, DateTimeOffset.UtcNow, false);
@@ -309,9 +355,11 @@ public sealed class ManagedRequestProcessorTests {
         }
         internal async Task Run() => await new ManagedRequestProcessor(this, new(this, this), this,
             new(new(this, this), this), this, null!, this).ProcessAsync(Saved.Operation.State.OperationId, default);
-        private ManagedItemSnapshot Holding() => new(new("1", EntityKind.Movie, "Film", 2024, Saved.Plan.Creation.Work.ExternalIds, false, "1", 0), "/movies/film", [], DateTimeOffset.UtcNow);
+        private ManagedItemSnapshot Holding() => new(new("1", Saved.Plan.Creation.Work.EntityKind, "Film", 2024,
+            Saved.Plan.Creation.Work.ExternalIds, false, Saved.Plan.Creation.ProfileId, 0), "/movies/film", [], DateTimeOffset.UtcNow);
         public Task<ManagedLookupResult> LookupAsync(string pluginId, IntegrationConnectionContext context, ManagedLookupInput input, CancellationToken token) =>
-            Task.FromResult(new ManagedLookupResult(new(EntityKind.Movie, "Film", 2024, WrongIdentity ? new Dictionary<string,string> { [ExternalIdProviders.Tmdb] = "999" } : input.ExternalIds), Exists ? Holding() : null));
+            Task.FromResult(new ManagedLookupResult(new(input.EntityKind, "Film", 2024,
+                WrongIdentity ? new Dictionary<string,string> { [ExternalIdProviders.Tmdb] = "999" } : input.ExternalIds), Exists ? Holding() : null));
         public Task<EnsureManagedResult> EnsureAsync(string pluginId, IntegrationConnectionContext context, EnsureManagedInput input, CancellationToken token) {
             Assert.Equal(ManagedRequestPhase.CreationUncertain, Saved.Operation.State.Phase); Writes++;
             if (Reject) return Task.FromResult(new EnsureManagedResult(ManagedMutationOutcome.Rejected));

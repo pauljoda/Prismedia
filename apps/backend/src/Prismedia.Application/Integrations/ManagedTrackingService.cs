@@ -52,6 +52,8 @@ public sealed class ManagedTrackingService(
     public async Task ReconcileAsync(Guid id, CancellationToken token) {
         var work = await store.FindAsync(id, token) ?? throw new ArgumentException("This tracked holding no longer exists.");
         if (work.Tracking.Status is ManagedTrackingStatus.ReleasePending or ManagedTrackingStatus.Released) return;
+        if (work.Tracking.Status == ManagedTrackingStatus.WaitingForFiles && work.Tracking.Bindings.Count == 0)
+            return;
         try {
             var remote = await library.GetAsync(work.Tracking.ConnectionId, work.Tracking.Item, token);
             if (work.Tracking.Status == ManagedTrackingStatus.Removed) {
@@ -59,9 +61,12 @@ public sealed class ManagedTrackingService(
                     "The removed remote identity exists again. Review it before restoring this association.", token);
                 return;
             }
+            var boundEntityIds = work.Tracking.Bindings.SelectMany(file => file.Entities)
+                .Select(binding => binding.EntityId).ToHashSet();
             var scopedRemote = work.Tracking.Bindings.Count == 0
                 ? remote
-                : ScopeToEstablishedTargets(work.Tracking.Targets, work.Tracking.Bindings, remote);
+                : ScopeToEstablishedTargets(work.Tracking.Targets.Where(target => boundEntityIds.Contains(target.EntityId)).ToArray(),
+                    work.Tracking.Bindings, remote);
             var observation = await store.ObserveAsync(work.Tracking.ConnectionId, scopedRemote, token);
             if (scopedRemote.Files.Count > 0 && observation.LibraryRootId != work.Tracking.LibraryRootId)
                 throw new ArgumentException("The holding moved outside its established mapping. Review its library boundary.");

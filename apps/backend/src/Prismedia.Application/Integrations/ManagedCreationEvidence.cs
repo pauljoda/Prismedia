@@ -18,6 +18,7 @@ public static class ManagedCreationEvidence {
         if (result!.Existing is { } existing) {
             ValidateHolding(work, existing);
             ValidateTargets(work, result.Targets);
+            ValidateComicTargets(work, existing, result.Targets);
         } else if (result.Targets is { Count: > 0 }) {
             ValidateTargets(work, result.Targets);
         }
@@ -79,5 +80,17 @@ public static class ManagedCreationEvidence {
             }
             remaining.Remove(matches[0]);
         }
+    }
+
+    /// <summary>Requires resolved comic targets to appear in the same observed issue catalog.</summary>
+    public static void ValidateComicTargets(ManagedLookupInput work, ManagedItemSnapshot snapshot,
+        IReadOnlyList<ManagedResolvedTarget>? resolvedTargets) {
+        if (work.EntityKind != EntityKind.ComicSeries) return;
+        if (snapshot.ComicIssues is null || resolvedTargets is null
+            || resolvedTargets.Any(target => snapshot.ComicIssues.Count(issue =>
+                issue.RemoteId == target.RemoteId
+                && issue.IssueLabel == target.IssueLabel
+                && target.ExternalIds.All(pair => issue.ExternalIds?.GetValueOrDefault(pair.Key) == pair.Value)) != 1))
+            throw new IntegrationInvocationException("The manager did not confirm every selected comic issue in its current catalog.");
     }
 }

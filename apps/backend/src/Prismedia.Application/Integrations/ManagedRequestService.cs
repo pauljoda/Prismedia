@@ -6,7 +6,7 @@ namespace Prismedia.Application.Integrations;
 
 /// <summary>Accepts explicit finite wanted-work fulfillment through a chosen external manager and mapped library.</summary>
 public sealed class ManagedRequestService(IManagedRequestStore store, IntegrationConnectionAccess access,
-    IIntegrationManagerCreationGateway gateway, ManagedLibraryService library) {
+    IIntegrationManagerCreationGateway gateway, ManagedLibraryService library, IManagedTrackingStore tracking) {
     /// <summary>Shows exact identity and existing remote settings without taking ownership or creating a holding.</summary>
     public async Task<ManagedRequestPreview> PreviewAsync(Guid connectionId, PreviewManagedRequestInput input, CancellationToken token) {
         var target = await store.RequireTargetAsync(
@@ -39,11 +39,16 @@ public sealed class ManagedRequestService(IManagedRequestStore store, Integratio
             token);
         if (!ManagedRequestIdentity.SameWork(preview.Work, input.ReviewedWork))
             throw new ManagedRequestConflictException("The wanted item's metadata identity changed. Review the request again.");
-        if (!preview.Options.Profiles.Any(profile => profile.Id == input.ProfileId)) throw new ArgumentException("Choose an existing external profile.");
+        if (preview.Work.EntityKind != EntityKind.ComicSeries
+            && !preview.Options.Profiles.Any(profile => profile.Id == input.ProfileId)) throw new ArgumentException("Choose an existing external profile.");
+        if (preview.Work.EntityKind == EntityKind.ComicSeries && preview.Existing is null)
+            throw new ManagedRequestConflictException("This comic issue must already exist in the connected run. Refresh its metadata before requesting it.");
         if (preview.Existing is { } holding && holding.Item.ProfileId != input.ProfileId)
             throw new ManagedRequestConflictException("This work already exists with another profile. Review and use its current profile before changing it through linked controls.");
-        foreach (var operation in new[] { IntegrationOperation.EnsureManaged, IntegrationOperation.ReconcileManaged, IntegrationOperation.ConfigureManaged })
+        foreach (var operation in new[] { IntegrationOperation.ReconcileManaged, IntegrationOperation.ConfigureManaged })
             await access.RequireAsync(connectionId, PluginCapability.ExternalManager, operation, preview.Work.EntityKind, token);
+        if (preview.Work.EntityKind != EntityKind.ComicSeries)
+            await access.RequireAsync(connectionId, PluginCapability.ExternalManager, IntegrationOperation.EnsureManaged, preview.Work.EntityKind, token);
         if (input.Search) await access.RequireAsync(connectionId, PluginCapability.ExternalManager, IntegrationOperation.RequestManaged, preview.Work.EntityKind, token);
         await access.RequireAsync(connectionId, PluginCapability.ConnectedLibrary, IntegrationOperation.GetLibraryItem, preview.Work.EntityKind, token);
         return await AcceptAsync(connectionId, input, preview, reviewedCommitFingerprint: null,
@@ -92,10 +97,15 @@ public sealed class ManagedRequestService(IManagedRequestStore store, Integratio
             || target.Mount.RemoteRootId != preview.Mount.RemoteRootId
             || target.Mount.RemotePath != preview.Mount.RemotePath)
             throw new ManagedRequestConflictException("The wanted identity or mapped library changed after review.");
-        if (!preview.Options.Profiles.Any(profile => profile.Id == input.ProfileId))
+        if (preview.Work.EntityKind != EntityKind.ComicSeries
+            && !preview.Options.Profiles.Any(profile => profile.Id == input.ProfileId))
             throw new ArgumentException("Choose an existing external profile.");
+        if (preview.Work.EntityKind == EntityKind.ComicSeries && preview.Existing is null)
+            throw new ManagedRequestConflictException("This comic issue must already exist in the connected run. Refresh its metadata before requesting it.");
         if (preview.Existing is { } holding && holding.Item.ProfileId != input.ProfileId)
             throw new ManagedRequestConflictException("This work already exists with another profile. Review and use its current profile before changing it through linked controls.");
+        if (preview.Work.EntityKind == EntityKind.ComicSeries && preview.Existing is { } comic)
+            existingHoldingId = await ExistingComicHoldingAsync(connectionId, input.LibraryRootId, comic, token);
         var action = ManagedRequestOperation.Create(input.OperationId, connectionId, input.EntityId, input.LibraryRootId);
         var plan = new ManagedRequestPlan(
             input,
@@ -106,6 +116,19 @@ public sealed class ManagedRequestService(IManagedRequestStore store, Integratio
             expectedConnectionRevision,
             existingHoldingId);
         return Map(await store.CreateAsync(action, plan, token));
+    }
+    private async Task<Guid?> ExistingComicHoldingAsync(Guid connectionId, Guid libraryRootId,
+        ManagedItemSnapshot snapshot, CancellationToken token) {
+        var matches = (await tracking.ListAsync(connectionId, token)).Where(holding =>
+            holding.LibraryRootId == libraryRootId
+            && holding.Item.EntityKind == EntityKind.ComicSeries
+            && holding.Item.RemoteId == snapshot.Item.RemoteId
+            && holding.Item.ExpectedExternalIds.All(pair => snapshot.Item.ExternalIds.GetValueOrDefault(pair.Key) == pair.Value)
+            && holding.Status is ManagedTrackingStatus.Tracking or ManagedTrackingStatus.WaitingForFiles
+            && holding.ReleasedAt is null).ToArray();
+        if (matches.Length > 1)
+            throw new ManagedRequestConflictException("More than one linked holding matches this comic run. Review its associations first.");
+        return matches.SingleOrDefault()?.Id;
     }
     /// <summary>Lists durable intent independently of current connection health.</summary>
     public async Task<IReadOnlyList<ManagedRequestResponse>> ListAsync(Guid connectionId, CancellationToken token) =>
@@ -130,10 +153,12 @@ public sealed class ManagedRequestService(IManagedRequestStore store, Integratio
     }
     internal static void Validate(CreateManagedRequestInput input) {
         if (input.OperationId == Guid.Empty || input.EntityId == Guid.Empty || input.LibraryRootId == Guid.Empty
-            || input.ReviewedWork is not { EntityKind: EntityKind.Movie or EntityKind.VideoSeries, ExternalIds.Count: > 0 and <= 64 }
+            || input.ReviewedWork is not { EntityKind: EntityKind.Movie or EntityKind.VideoSeries or EntityKind.ComicSeries, ExternalIds.Count: > 0 and <= 64 }
             || input.ReviewedWork.ExternalIds.Any(pair => string.IsNullOrWhiteSpace(pair.Key) || pair.Key.Length > 128
                 || string.IsNullOrWhiteSpace(pair.Value) || pair.Value.Length > 2048)
-            || string.IsNullOrWhiteSpace(input.ProfileId) || input.ProfileId.Length > 512
+            || input.ReviewedWork.EntityKind != EntityKind.ComicSeries
+                && (string.IsNullOrWhiteSpace(input.ProfileId) || input.ProfileId.Length > 512)
+            || input.ReviewedWork.EntityKind == EntityKind.ComicSeries && input.ProfileId is not null
             || input.ReviewedWork.EntityKind == EntityKind.Movie
                 && ((input.TargetEntityIds?.Count ?? 0) != 0 || (input.ReviewedWork.Targets?.Count ?? 0) != 0)
             || input.ReviewedWork.EntityKind == EntityKind.VideoSeries
@@ -143,8 +168,14 @@ public sealed class ManagedRequestService(IManagedRequestStore store, Integratio
                     || input.ReviewedWork.Targets is not { Count: > 0 }
                     || input.ReviewedWork.Targets.Count != input.TargetEntityIds.Count
                     || input.Monitored
+                    || !input.Search)
+            || input.ReviewedWork.EntityKind == EntityKind.ComicSeries
+                && (input.TargetEntityIds is not { Count: 1 } || input.TargetEntityIds[0] == Guid.Empty
+                    || input.ReviewedWork.Targets is not { Count: 1 }
+                    || input.ReviewedWork.Targets[0].EntityKind != EntityKind.ComicInstallment
+                    || string.IsNullOrWhiteSpace(input.ReviewedWork.Targets[0].IssueLabel)
                     || !input.Search))
-            throw new ArgumentException("Select a reviewed wanted movie or finite series episode set, mapped root, and external profile.");
+            throw new ArgumentException("Select reviewed wanted work, its exact target, and a mapped external library.");
     }
     private static ManagedRequestResponse Map(StoredManagedRequest work) {
         var state = work.Operation.State;

@@ -33,6 +33,7 @@ public sealed partial class EfManagedRequestStore {
         IReadOnlyList<ManagedResolvedTarget>? resolvedTargets, CancellationToken token) {
         ManagedCreationEvidence.ValidateHolding(work.Plan.Creation.Work, snapshot);
         ManagedCreationEvidence.ValidateTargets(work.Plan.Creation.Work, resolvedTargets);
+        ManagedCreationEvidence.ValidateComicTargets(work.Plan.Creation.Work, snapshot, resolvedTargets);
         var state = work.Operation.State;
         if (snapshot.Item.ProfileId != work.Plan.Creation.ProfileId)
             throw new ArgumentException("The existing or created holding has a different profile. Review it before delegating fulfillment.");
@@ -118,7 +119,7 @@ public sealed partial class EfManagedRequestStore {
 
     /// <inheritdoc />
     public async Task<ManagedRequestMaterialization> MaterializeAsync(StoredManagedRequest work, ManagedItemSnapshot snapshot, CancellationToken token) {
-        if (work.Plan.Creation.Work.EntityKind == EntityKind.VideoSeries) {
+        if (work.Plan.Creation.Work.EntityKind is EntityKind.VideoSeries or EntityKind.ComicSeries) {
             return await MaterializeEpisodesAsync(work, snapshot, token);
         }
         return await MaterializeMovieAsync(work, snapshot, token);
@@ -192,8 +193,10 @@ public sealed partial class EfManagedRequestStore {
         CancellationToken token) {
         ManagedCreationEvidence.ValidateHolding(work.Plan.Creation.Work, snapshot);
         var state = work.Operation.State;
+        var isComic = work.Plan.Creation.Work.EntityKind == EntityKind.ComicSeries;
+        var expectedKind = isComic ? EntityKind.ComicInstallment : EntityKind.VideoEpisode;
         if (state.Phase != ManagedRequestPhase.AwaitingFiles || snapshot.Item.RemoteId != state.RemoteId)
-            throw new ArgumentException("The episode file evidence does not belong to this accepted holding.");
+            throw new ArgumentException("The selected target file evidence does not belong to this accepted holding.");
 
         var holdingId = work.Plan.ExistingHoldingId ?? state.OperationId;
         var holdingRow = await db.ManagedHoldings.AsNoTracking()
@@ -203,10 +206,10 @@ public sealed partial class EfManagedRequestStore {
         var requestedEntityIds = (work.Plan.Request.TargetEntityIds ?? []).ToHashSet();
         var pinned = union.Where(binding => requestedEntityIds.Contains(binding.EntityId)).ToArray();
         if (pinned.Length == 0
-            || pinned.Any(binding => binding.Target.Kind != EntityKind.VideoEpisode)
+            || pinned.Any(binding => binding.Target.Kind != expectedKind)
             || pinned.Select(binding => binding.Target.RemoteTargetId).Distinct(StringComparer.Ordinal).Count() != pinned.Length
             || pinned.Select(binding => binding.EntityId).Distinct().Count() != pinned.Length)
-            throw new ArgumentException("The accepted episode targets are incomplete or ambiguous.");
+            throw new ArgumentException("The accepted targets are incomplete or ambiguous.");
         var pinnedByRemoteId = pinned.ToDictionary(
             binding => binding.Target.RemoteTargetId,
             StringComparer.Ordinal);
@@ -220,7 +223,7 @@ public sealed partial class EfManagedRequestStore {
             if (selected.Length == 0) continue;
             if (selected.Length != file.Targets.Count)
                 throw new ArgumentException(
-                    "A manager file mixes selected and unselected episodes. Review its shared coverage before importing it.");
+                    "A manager file mixes selected and unselected targets. Review its shared coverage before importing it.");
             foreach (var target in selected) {
                 var expected = pinnedByRemoteId[target.RemoteId].Target;
                 var observed = new ManagedTargetIdentity(
@@ -228,10 +231,11 @@ public sealed partial class EfManagedRequestStore {
                     target.EntityKind,
                     target.SeasonNumber,
                     target.EpisodeNumber,
-                    target.AbsoluteNumber);
+                    target.AbsoluteNumber,
+                    target.IssueLabel);
                 if (observed != expected || !observedTargetIds.Add(target.RemoteId))
                     throw new ArgumentException(
-                        "The manager returned changed or duplicate evidence for a selected episode.");
+                        "The manager returned changed or duplicate evidence for a selected target.");
             }
             relevantFiles.Add(file);
         }
@@ -244,34 +248,34 @@ public sealed partial class EfManagedRequestStore {
             .Select(binding => binding.RemoteTargetId)
             .ToHashSet(StringComparer.Ordinal);
         if (fulfilledIds.Count == pinned.Length)
-            throw new ArgumentException("All selected episodes were already materialized.");
+            throw new ArgumentException("All selected targets were already materialized.");
         if (relevantFiles.Count == 0)
-            return new(false, "Waiting for the manager to import selected episode files.");
+            return new(false, "Waiting for the manager to import selected target files.");
 
         var mappedFiles = await mounts.InspectAsync(state.ConnectionId, relevantFiles, token);
         if (mappedFiles.Count != relevantFiles.Count)
-            throw new ArgumentException("The mapped episode evidence is incomplete.");
+            throw new ArgumentException("The mapped target evidence is incomplete.");
         var candidates = new List<(ManagedLibraryFile Remote, MappedLibraryFile Mapped, string Path, DateTimeOffset Written)>();
         for (var index = 0; index < relevantFiles.Count; index++) {
             var remote = relevantFiles[index];
             var mapped = mappedFiles[index];
             if (!string.Equals(mapped.RemoteId, remote.RemoteId, StringComparison.Ordinal))
-                throw new ArgumentException("The mapped episode evidence changed order or identity.");
+                throw new ArgumentException("The mapped target evidence changed order or identity.");
             if (remote.Targets.Any(target => fulfilledIds.Contains(target.RemoteId))) {
                 if (remote.Targets.Any(target => !fulfilledIds.Contains(target.RemoteId)))
                     throw new ArgumentException(
-                        "A manager file changed shared episode coverage after partial materialization.");
+                        "A manager file changed shared target coverage after partial materialization.");
                 continue;
             }
             if (mapped.LibraryRootId != state.LibraryRootId || mapped.LocalPath is null)
-                throw new ArgumentException("A selected episode file is outside this request's mapped library.");
+                throw new ArgumentException("A selected target file is outside this request's mapped library.");
             if (!mapped.IsReadable || !mapped.SizeMatches) continue;
-            if (!SupportedExtensions.Video.Contains(Path.GetExtension(mapped.LocalPath)))
-                throw new ArgumentException("A selected episode file is not a supported video source.");
+            if (!(isComic ? SupportedExtensions.ComicArchive : SupportedExtensions.Video).Contains(Path.GetExtension(mapped.LocalPath)))
+                throw new ArgumentException("A selected target file has an unsupported format.");
             candidates.Add((remote, mapped, mapped.LocalPath, WrittenAt(mapped.LocalPath)));
         }
         if (candidates.Count == 0)
-            return new(false, "The manager reports selected episode files, but Prismedia cannot yet read their expected bytes.");
+            return new(false, "The manager reports selected target files, but Prismedia cannot yet read their expected bytes.");
 
         var lifecycleIds = pinned.Select(binding => binding.EntityId).Append(state.EntityId).ToArray();
         var completed = false;
@@ -287,7 +291,7 @@ public sealed partial class EfManagedRequestStore {
             if (holding.Status != ManagedTrackingStatus.WaitingForFiles
                 || !currentPinned.OrderBy(binding => binding.Target.RemoteTargetId, StringComparer.Ordinal)
                     .SequenceEqual(pinned.OrderBy(binding => binding.Target.RemoteTargetId, StringComparer.Ordinal)))
-                throw new ArgumentException("The accepted episode targets changed before file materialization.");
+                throw new ArgumentException("The accepted targets changed before file materialization.");
 
             var storedBindings = await db.ManagedSourceBindings
                 .Where(binding => binding.HoldingId == holding.Id)
@@ -303,7 +307,7 @@ public sealed partial class EfManagedRequestStore {
             if (possiblePathOwners.Any(existingPath => candidates.Any(candidate =>
                     FileSystemPathComparison.Equals(candidate.Path, existingPath))))
                 throw new ArgumentException(
-                    "A selected episode source already belongs to another local item. Review its existing identity instead of duplicating it.");
+                    "A selected target source already belongs to another local item. Review its existing identity instead of duplicating it.");
 
             var now = DateTimeOffset.UtcNow;
             var importedEntityIds = new HashSet<Guid>();
@@ -317,7 +321,7 @@ public sealed partial class EfManagedRequestStore {
                     true);
                 if (bytes.Length != candidate.Remote.SizeBytes || WrittenAt(candidate.Path) != candidate.Written)
                     throw new ArgumentException(
-                        "A selected episode file changed during import verification. Refresh its evidence.");
+                        "A selected target file changed during import verification. Refresh its evidence.");
                 foreach (var remoteTarget in candidate.Remote.Targets) {
                     if (storedTargetIds.Contains(remoteTarget.RemoteId)) continue;
                     var target = pinnedByRemoteId[remoteTarget.RemoteId];
@@ -351,6 +355,7 @@ public sealed partial class EfManagedRequestStore {
                         SeasonNumber = target.Target.SeasonNumber,
                         EpisodeNumber = target.Target.EpisodeNumber,
                         AbsoluteNumber = target.Target.AbsoluteNumber,
+                        IssueLabel = target.Target.IssueLabel,
                         EntityId = target.EntityId,
                         SourceFileId = sourceId,
                         RemoteFileId = candidate.Remote.RemoteId,
@@ -390,7 +395,7 @@ public sealed partial class EfManagedRequestStore {
             foreach (var entityId in importedEntityIds) {
                 await queue.EnqueueAsync(EnqueueJobRequest.ForEntity(
                     JobType.RefreshEntity,
-                    EntityKind.VideoEpisode,
+                    expectedKind,
                     entityId.ToString(),
                     boundary.Title), ct);
             }
@@ -398,7 +403,7 @@ public sealed partial class EfManagedRequestStore {
         await transaction.CommitAsync(token);
         return completed
             ? new(true)
-            : new(false, "Waiting for the remaining selected episode files.");
+            : new(false, "Waiting for the remaining selected target files.");
     }
 
     private static DateTimeOffset WrittenAt(string path) {

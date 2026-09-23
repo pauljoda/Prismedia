@@ -11,7 +11,8 @@ export interface CreateManagedRequestInput {
   entityId: string;
   libraryRootId: string;
   reviewedWork: ManagedLookupInput;
-  profileId: string;
+  /** @nullable */
+  profileId: string | null;
   monitored: boolean;
   search: boolean;
   /** @nullable */

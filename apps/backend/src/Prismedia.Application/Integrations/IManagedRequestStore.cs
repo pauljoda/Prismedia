@@ -20,7 +20,7 @@ public sealed record ManagedRequestMaterialization(bool Imported, string? Waitin
 
 /// <summary>Atomic request ownership, revision fences, and exact wanted-identity materialization.</summary>
 public interface IManagedRequestStore {
-    /// <summary>Requires fileless wanted work with an exact identity and a mapped enabled video library.</summary>
+    /// <summary>Requires fileless wanted work with an exact identity and a mapped enabled library.</summary>
     Task<ManagedRequestTarget> RequireTargetAsync(
         Guid connectionId,
         Guid entityId,

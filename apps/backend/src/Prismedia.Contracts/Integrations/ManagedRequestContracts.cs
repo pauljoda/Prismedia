@@ -13,7 +13,7 @@ public sealed record ManagedRequestPreview(Guid EntityId, string Title, ManagedL
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<Guid>? TargetEntityIds = null);
 /// <summary>Explicit fulfillment intent. Profile applies to initial creation; existing holdings must already use that reviewed profile.</summary>
 public sealed record CreateManagedRequestInput(Guid OperationId, Guid EntityId, Guid LibraryRootId,
-    ManagedLookupInput ReviewedWork, string ProfileId, bool Monitored, bool Search,
+    ManagedLookupInput ReviewedWork, string? ProfileId, bool Monitored, bool Search,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<Guid>? TargetEntityIds = null);
 /// <summary>Durable request progress; completion requires local files, independently of manager search progress.</summary>
 public sealed record ManagedRequestResponse(Guid Id, Guid ConnectionId, Guid EntityId, Guid LibraryRootId,
