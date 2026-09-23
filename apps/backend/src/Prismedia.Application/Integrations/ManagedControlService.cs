@@ -47,7 +47,12 @@ public sealed class ManagedControlService(IManagedControlStore store, Integratio
         if (owned.Fingerprint != request.ScopeFingerprint || !owned.Scope.Targets.Select(target => target.RemoteId).ToHashSet(StringComparer.Ordinal).SetEquals(request.ExpectedMonitoring.Keys)
             || owned.Scope.Item.EntityKind == EntityKind.ComicSeries && (owned.Scope.Targets.Count != 1 || request.TargetEntityId is null
                 || request.ExpectedProfileId is not null || request.Changes.ProfileId is not null)
-            || owned.Scope.Item.EntityKind != EntityKind.ComicSeries && string.IsNullOrWhiteSpace(request.ExpectedProfileId))
+            || owned.Scope.Item.EntityKind is not (EntityKind.ComicSeries or EntityKind.Book)
+                && string.IsNullOrWhiteSpace(request.ExpectedProfileId)
+            || owned.Scope.Item.EntityKind == EntityKind.Book
+                && (request.ExpectedProfileId is not null || request.Changes.ProfileId is not null
+                    || request.TargetEntityId is not null || request.ExpectedMonitoring.Count != 0)
+            || owned.Scope.Item.EntityKind != EntityKind.Book && request.ExpectedMonitoring.Count == 0)
             throw new ManagedControlConflictException("The reviewed target scope changed. Refresh the manager controls.");
         await access.RequireAsync(connectionId, PluginCapability.ExternalManager, IntegrationOperation.ReconcileManaged, owned.Scope.Item.EntityKind, token);
         var configure = request.Changes.ProfileId is not null || request.Changes.Monitored is not null;
@@ -91,7 +96,7 @@ public sealed class ManagedControlService(IManagedControlStore store, Integratio
             || string.IsNullOrWhiteSpace(request.ExpectedPath) || request.ExpectedPath.Length > 8192
             || request.ExpectedProfileId is { Length: > 512 }
             || request.TargetEntityId == Guid.Empty
-            || request.ExpectedMonitoring is not { Count: > 0 and <= 10000 } || request.ExpectedMonitoring.Keys.Any(key => string.IsNullOrWhiteSpace(key) || key.Length > 512)
+            || request.ExpectedMonitoring is not { Count: <= 10000 } || request.ExpectedMonitoring.Keys.Any(key => string.IsNullOrWhiteSpace(key) || key.Length > 512)
             || request.Changes is null || request.Changes.ProfileId is { } profile && (string.IsNullOrWhiteSpace(profile) || profile.Length > 512)
             || request.Changes.ProfileId is null && request.Changes.Monitored is null && !request.Search)
             throw new ArgumentException("Choose an explicit setting change or search from a fresh manager preview.");
@@ -112,7 +117,8 @@ public static class ManagedControlValidation {
         if (state?.Item is null || state.Capabilities is null || state.Item.EntityKind != scope.Item.EntityKind || state.Item.RemoteId != scope.Item.RemoteId
             || state.Item.ExternalIds is null || scope.Item.ExpectedExternalIds.Any(pair => !state.Item.ExternalIds.TryGetValue(pair.Key, out var value) || value != pair.Value)
             || string.IsNullOrWhiteSpace(state.Path) || state.Path.Length > 8192
-            || scope.Item.EntityKind != EntityKind.ComicSeries && string.IsNullOrWhiteSpace(state.Item.ProfileId)
+            || scope.Item.EntityKind is not (EntityKind.ComicSeries or EntityKind.Book)
+                && string.IsNullOrWhiteSpace(state.Item.ProfileId)
             || state.Targets is null || state.Targets.Count != scope.Targets.Count || state.Targets.Any(target => target?.Target is null)
             || !scope.Targets.OrderBy(target => target.RemoteId, StringComparer.Ordinal).SequenceEqual(state.Targets.Select(target => target.Target).OrderBy(target => target.RemoteId, StringComparer.Ordinal)))
             throw new IntegrationInvocationException("The manager returned a changed identity or incomplete configuration for the reviewed scope.");

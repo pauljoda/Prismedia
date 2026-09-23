@@ -75,10 +75,13 @@ public sealed partial class EfManagedRequestStore {
                 holding.Problem = null;
             } else {
                 if (await db.ManagedHoldings.AnyAsync(holding => holding.Id == state.OperationId
-                    || holding.ConnectionId == state.ConnectionId && holding.Kind == snapshot.Item.EntityKind && holding.RemoteId == snapshot.Item.RemoteId && holding.ReleasedAt == null, ct))
+                    || holding.ConnectionId == state.ConnectionId && holding.Kind == snapshot.Item.EntityKind
+                        && holding.RemoteId == snapshot.Item.RemoteId && holding.BookRendition == item.BookRendition
+                        && holding.ReleasedAt == null, ct))
                     throw new ArgumentException("This remote holding is already associated with another local intent. Review the existing association.");
                 db.ManagedHoldings.Add(new() { Id = state.OperationId, ConnectionId = state.ConnectionId, LibraryRootId = state.LibraryRootId,
-                    Kind = item.EntityKind, RemoteId = item.RemoteId, Title = current.Plan.Title, ItemJson = JsonSerializer.Serialize(item, Json),
+                    Kind = item.EntityKind, BookRendition = item.BookRendition, RemoteId = item.RemoteId,
+                    Title = current.Plan.Title, ItemJson = JsonSerializer.Serialize(item, Json),
                     TargetsJson = JsonSerializer.Serialize(bindings, Json), Status = ManagedTrackingStatus.WaitingForFiles,
                     Revision = 1, LastCheckedAt = now, NextCheckAt = now.AddMinutes(5) });
             }
@@ -92,6 +95,7 @@ public sealed partial class EfManagedRequestStore {
         ManagedRequestTarget target,
         ManagedItemSnapshot snapshot,
         IReadOnlyList<ManagedResolvedTarget>? resolvedTargets) {
+        if (target.Work.EntityKind == EntityKind.Book) return [];
         if (target.Targets is not { Count: > 0 }) {
             return [new(new(snapshot.Item.RemoteId, snapshot.Item.EntityKind, null, null, null), target.EntityId)];
         }

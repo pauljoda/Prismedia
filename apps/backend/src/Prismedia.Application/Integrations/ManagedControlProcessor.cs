@@ -42,7 +42,9 @@ public sealed class ManagedControlProcessor(IManagedControlStore store, Integrat
             if (observed.Path != request.ExpectedPath) throw new ManagedControlConflictException("The manager folder changed since review. No additional mutation was sent.");
             if (action.State.Phase is ManagedControlPhase.PendingConfiguration or ManagedControlPhase.ConfigurationUncertain) {
                 var desired = (request.Changes.ProfileId is null || observed.Item.ProfileId == request.Changes.ProfileId)
-                    && (request.Changes.Monitored is null || observed.Targets.All(target => target.Monitored == request.Changes.Monitored));
+                    && (request.Changes.Monitored is null || (plan.Scope.Item.EntityKind == EntityKind.Book
+                        ? observed.Item.Monitored == request.Changes.Monitored
+                        : observed.Targets.All(target => target.Monitored == request.Changes.Monitored)));
                 if (desired) { action.ConfirmConfiguration(); await SaveAsync(); return; }
                 if (action.State.Phase == ManagedControlPhase.ConfigurationUncertain) {
                     action.RequireReview();
@@ -66,7 +68,8 @@ public sealed class ManagedControlProcessor(IManagedControlStore store, Integrat
             if (action.State.Phase == ManagedControlPhase.PendingSearch) {
                 var profile = request.Changes.ProfileId ?? request.ExpectedProfileId;
                 if (!observed.Capabilities.CanSearch || observed.Item.ProfileId != profile
-                    || observed.Item.EntityKind != EntityKind.ComicSeries && string.IsNullOrWhiteSpace(profile)) {
+                    || observed.Item.EntityKind is not (EntityKind.ComicSeries or EntityKind.Book)
+                        && string.IsNullOrWhiteSpace(profile)) {
                     action.Reject(); await SaveAsync("Search was not sent because the reviewed profile or search capability changed."); return;
                 }
                 connection = await AuthorizeAsync(IntegrationOperation.RequestManaged);

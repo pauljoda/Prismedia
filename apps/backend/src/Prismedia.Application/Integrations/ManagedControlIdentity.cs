@@ -2,6 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using Prismedia.Contracts.Integrations;
+using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Integrations;
 
@@ -13,6 +14,13 @@ public static class ManagedControlIdentity {
     }
     /// <summary>Builds an identity for an exact local target subset while retaining the parent holding boundary.</summary>
     public static OwnedManagedControlScope From(ManagedTrackingResponse holding, IReadOnlyCollection<Guid>? entityIds) {
+        var item = holding.Item with { ExpectedExternalIds = holding.Item.ExpectedExternalIds.OrderBy(pair => pair.Key, StringComparer.Ordinal).ToDictionary() };
+        if (item.EntityKind == EntityKind.Book) {
+            if (entityIds is not null || holding.BookWorkId is null || item.BookRendition is null)
+                throw new ManagedControlConflictException("A Book manager action requires one owned work and rendition.");
+            return new(new(item, []), Hash(new { holding.Id, holding.ConnectionId,
+                holding.LibraryRootId, holding.BookWorkId, Item = item }));
+        }
         var selected = entityIds is null ? null : entityIds.ToHashSet();
         var bindings = holding.Targets
             .Where(item => selected is null || selected.Contains(item.EntityId))
@@ -21,7 +29,6 @@ public static class ManagedControlIdentity {
             && (bindings.Select(binding => binding.EntityId).Distinct().Count() != selected.Count
                 || bindings.Any(binding => !selected.Contains(binding.EntityId))))
             throw new ManagedControlConflictException("The reviewed append scope no longer belongs to this holding.");
-        var item = holding.Item with { ExpectedExternalIds = holding.Item.ExpectedExternalIds.OrderBy(pair => pair.Key, StringComparer.Ordinal).ToDictionary() };
         var targets = bindings.Select(binding => new ManagedControlTarget(binding.Target.RemoteTargetId, binding.Target.Kind,
             binding.Target.SeasonNumber, binding.Target.EpisodeNumber, binding.Target.AbsoluteNumber, binding.Target.IssueLabel)).ToArray();
         return new(new(item, targets), Hash(new { holding.Id, holding.ConnectionId, holding.LibraryRootId, Item = item,

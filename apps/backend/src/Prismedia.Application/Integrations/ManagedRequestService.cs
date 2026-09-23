@@ -40,7 +40,7 @@ public sealed class ManagedRequestService(IManagedRequestStore store, Integratio
             token);
         if (!ManagedRequestIdentity.SameWork(preview.Work, input.ReviewedWork))
             throw new ManagedRequestConflictException("The wanted item's metadata identity changed. Review the request again.");
-        if (preview.Work.EntityKind != EntityKind.ComicSeries
+        if (preview.Work.EntityKind is not (EntityKind.ComicSeries or EntityKind.Book)
             && !preview.Options.Profiles.Any(profile => profile.Id == input.ProfileId)) throw new ArgumentException("Choose an existing external profile.");
         if (preview.Work.EntityKind == EntityKind.ComicSeries && preview.Existing is null)
             throw new ManagedRequestConflictException("This comic issue must already exist in the connected run. Refresh its metadata before requesting it.");
@@ -99,7 +99,7 @@ public sealed class ManagedRequestService(IManagedRequestStore store, Integratio
             || target.Mount.RemoteRootId != preview.Mount.RemoteRootId
             || target.Mount.RemotePath != preview.Mount.RemotePath)
             throw new ManagedRequestConflictException("The wanted identity or mapped library changed after review.");
-        if (preview.Work.EntityKind != EntityKind.ComicSeries
+        if (preview.Work.EntityKind is not (EntityKind.ComicSeries or EntityKind.Book)
             && !preview.Options.Profiles.Any(profile => profile.Id == input.ProfileId))
             throw new ArgumentException("Choose an existing external profile.");
         if (preview.Work.EntityKind == EntityKind.ComicSeries && preview.Existing is null)
@@ -155,14 +155,19 @@ public sealed class ManagedRequestService(IManagedRequestStore store, Integratio
     }
     internal static void Validate(CreateManagedRequestInput input) {
         if (input.OperationId == Guid.Empty || input.EntityId == Guid.Empty || input.LibraryRootId == Guid.Empty
-            || input.ReviewedWork is not { EntityKind: EntityKind.Movie or EntityKind.VideoSeries or EntityKind.ComicSeries, ExternalIds.Count: > 0 and <= 64 }
+            || input.ReviewedWork is not { EntityKind: EntityKind.Movie or EntityKind.VideoSeries or EntityKind.ComicSeries or EntityKind.Book, ExternalIds.Count: > 0 and <= 64 }
             || input.ReviewedWork.ExternalIds.Any(pair => string.IsNullOrWhiteSpace(pair.Key) || pair.Key.Length > 128
                 || string.IsNullOrWhiteSpace(pair.Value) || pair.Value.Length > 2048)
-            || input.ReviewedWork.EntityKind != EntityKind.ComicSeries
+            || input.ReviewedWork.EntityKind is not (EntityKind.ComicSeries or EntityKind.Book)
                 && (string.IsNullOrWhiteSpace(input.ProfileId) || input.ProfileId.Length > 512)
-            || input.ReviewedWork.EntityKind == EntityKind.ComicSeries && input.ProfileId is not null
+            || input.ReviewedWork.EntityKind is EntityKind.ComicSeries or EntityKind.Book && input.ProfileId is not null
+            || (input.ReviewedWork.EntityKind == EntityKind.Book) != (input.ReviewedWork.BookRendition is not null)
+            || input.ReviewedWork.BookRendition is not null && !Enum.IsDefined(input.ReviewedWork.BookRendition.Value)
             || input.ReviewedWork.EntityKind == EntityKind.Movie
                 && ((input.TargetEntityIds?.Count ?? 0) != 0 || (input.ReviewedWork.Targets?.Count ?? 0) != 0)
+            || input.ReviewedWork.EntityKind == EntityKind.Book
+                && ((input.TargetEntityIds?.Count ?? 0) != 0 || (input.ReviewedWork.Targets?.Count ?? 0) != 0
+                    || !input.Monitored)
             || input.ReviewedWork.EntityKind == EntityKind.VideoSeries
                 && (input.TargetEntityIds is not { Count: > 0 }
                     || input.TargetEntityIds.Any(id => id == Guid.Empty)

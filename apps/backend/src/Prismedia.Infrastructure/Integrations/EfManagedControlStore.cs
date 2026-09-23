@@ -33,7 +33,7 @@ public sealed class EfManagedControlStore(PrismediaDbContext db, IManagedTrackin
         var holding = (await tracking.FindAsync(holdingId, token))?.Tracking;
         if (holding is null || holding.ConnectionId != connectionId || holding.Status is not (ManagedTrackingStatus.Tracking
                 or ManagedTrackingStatus.WaitingForFiles or ManagedTrackingStatus.Removed)
-            || holding.Targets.Count == 0)
+            || holding.Item.EntityKind != EntityKind.Book && holding.Targets.Count == 0)
             throw new ManagedControlConflictException("Refresh and verify this holding's tracked associations before changing its manager settings.");
         var entityIds = holding.Targets.Select(binding => binding.EntityId).Distinct().ToArray();
         var sourceTargets = holding.Bindings.SelectMany(file => file.Entities)
@@ -54,7 +54,9 @@ public sealed class EfManagedControlStore(PrismediaDbContext db, IManagedTrackin
             throw new ManagedControlConflictException("The holding's source associations no longer match its retained target identities.");
         var linkedEntityIds = holding.Bindings.SelectMany(file => file.Entities)
             .Select(binding => binding.EntityId).Distinct().ToArray();
-        var reservationIds = await new ManagedReservationScopeResolver(db).ResolveAsync(entityIds, holding.Item, token);
+        var reservationIds = holding.Item.EntityKind == EntityKind.Book && entityIds.Length == 0
+            && holding.BookWorkId is { } workId ? [workId]
+            : await new ManagedReservationScopeResolver(db).ResolveAsync(entityIds, holding.Item, token);
         var reserved = await db.FulfillmentReservations.AsNoTracking().Where(row => row.OwnerId == holdingId
             && (row.OwnerKind == FulfillmentOwnerKind.ExternalManager
                 || row.OwnerKind == FulfillmentOwnerKind.ConnectedLibrary)

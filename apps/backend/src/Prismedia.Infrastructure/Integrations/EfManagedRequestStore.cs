@@ -367,7 +367,7 @@ public sealed partial class EfManagedRequestStore(PrismediaDbContext db, IExtern
                         FulfillmentOwnerKind.ExternalManager,
                         row.ConnectionId,
                         targetId,
-                        null,
+                        plan.Request.ReviewedWork.BookRendition,
                         ct);
                 }
                 var visibleEntityIds = targetIds.Append(row.EntityId).Distinct().ToArray();
@@ -472,6 +472,7 @@ public sealed partial class EfManagedRequestStore(PrismediaDbContext db, IExtern
                     && owner.OwnerKind == FulfillmentOwnerKind.ExternalManager
                     && owner.ConnectionId == state.ConnectionId
                     && owner.ReleasedAt == null
+                    && owner.BookRendition == plan.Request.ReviewedWork.BookRendition
                     && expectedOwners.Contains(owner.EntityId))
                 .Select(owner => owner.EntityId)
                 .Distinct()

@@ -61,6 +61,12 @@ public sealed class ManagedRequestProcessorTests {
         var request = new CreateManagedRequestInput(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
             ebook, null, Monitored: true, Search: true);
 
+        ManagedRequestService.Validate(request);
+        Assert.Throws<ArgumentException>(() => ManagedRequestService.Validate(request with { ProfileId = "profile" }));
+        Assert.Throws<ArgumentException>(() => ManagedRequestService.Validate(request with { Monitored = false }));
+        Assert.Throws<ArgumentException>(() => ManagedRequestService.Validate(request with {
+            ReviewedWork = ebook with { BookRendition = null }
+        }));
         Assert.False(ManagedRequestIdentity.SameWork(ebook, audio));
         Assert.NotEqual(ManagedRequestIdentity.Fingerprint(request),
             ManagedRequestIdentity.Fingerprint(request with { ReviewedWork = audio }));

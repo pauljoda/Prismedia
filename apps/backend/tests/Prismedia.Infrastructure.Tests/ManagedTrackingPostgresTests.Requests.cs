@@ -16,6 +16,71 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed partial class ManagedTrackingPostgresTests {
     [Fact]
+    public async Task OneBookAcceptsIndependentEbookAndAudiobookManagerOwnership() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var connectionId = Guid.NewGuid();
+        var bookId = Guid.NewGuid();
+        var ebookRootId = Guid.NewGuid();
+        var audioRootId = Guid.NewGuid();
+        var identities = new Dictionary<string, string> { [ExternalIdProviders.OpenLibraryWork] = "OL123W" };
+        db.IntegrationConnections.Add(new() { Id = connectionId, PluginId = "fixture", Name = "Fixture",
+            BaseUrl = "http://manager.test/", Enabled = true, Status = ConnectionStatus.Ready, Revision = 1 });
+        db.LibraryRoots.AddRange(
+            new() { Id = ebookRootId, Path = Path.Combine(workspace, "ebooks"), Label = "Ebooks", Enabled = true, ScanBooks = true },
+            new() { Id = audioRootId, Path = Path.Combine(workspace, "audio"), Label = "Audio", Enabled = true, ScanBooks = true });
+        db.ExternalLibraryMounts.AddRange(
+            new() { Id = Guid.NewGuid(), ConnectionId = connectionId, LibraryRootId = ebookRootId,
+                RemoteRootId = "ebooks", RemotePath = "/ebooks", LocalPath = Path.Combine(workspace, "ebooks") },
+            new() { Id = Guid.NewGuid(), ConnectionId = connectionId, LibraryRootId = audioRootId,
+                RemoteRootId = "audio", RemotePath = "/audio", LocalPath = Path.Combine(workspace, "audio") });
+        db.Entities.Add(new() { Id = bookId, KindCode = EntityKind.Book.ToCode(), Title = "Example", IsWanted = true });
+        db.EntityExternalIds.Add(new() { Id = Guid.NewGuid(), EntityId = bookId,
+            Provider = ExternalIdProviders.OpenLibraryWork, Value = identities[ExternalIdProviders.OpenLibraryWork] });
+        await db.SaveChangesAsync();
+
+        var store = Requests(db);
+        async Task<StoredManagedRequest> Accept(Guid rootId, BookRendition rendition, string remoteRoot) {
+            var target = await store.RequireTargetAsync(connectionId, bookId, rootId, null, rendition, default);
+            var operation = ManagedRequestOperation.Create(Guid.NewGuid(), connectionId, bookId, rootId);
+            var request = new CreateManagedRequestInput(operation.State.OperationId, bookId, rootId,
+                target.Work, null, Monitored: true, Search: false);
+            ManagedRequestService.Validate(request);
+            var plan = new ManagedRequestPlan(request,
+                new(operation.State.OperationId, target.Work, null, remoteRoot, "/" + remoteRoot),
+                target.Title, ManagedRequestIdentity.Fingerprint(request));
+            var saved = await store.CreateAsync(operation, plan, default);
+            Assert.Equal(saved.Operation.State.OperationId,
+                (await store.CreateAsync(operation, plan, default)).Operation.State.OperationId);
+            var snapshot = new ManagedItemSnapshot(
+                new("OL123W", EntityKind.Book, "Example", null, identities, true, null, 0),
+                "/" + remoteRoot + "/Example", [], DateTimeOffset.UtcNow);
+            await store.AcceptHoldingAsync(saved, snapshot, default);
+            return (await store.FindAsync(saved.Operation.State.OperationId, default))!;
+        }
+
+        var ebook = await Accept(ebookRootId, BookRendition.Ebook, "ebooks");
+        var audio = await Accept(audioRootId, BookRendition.Audiobook, "audio");
+
+        Assert.Equal(ManagedRequestPhase.AwaitingFiles, ebook.Operation.State.Phase);
+        Assert.Equal(ManagedRequestPhase.AwaitingFiles, audio.Operation.State.Phase);
+        var reservations = await db.FulfillmentReservations.AsNoTracking().ToArrayAsync();
+        Assert.Equal([BookRendition.Ebook, BookRendition.Audiobook], reservations.Select(row => row.BookRendition).Order().ToArray());
+        Assert.All(reservations, row => Assert.Equal(bookId, row.EntityId));
+        var holdings = await db.ManagedHoldings.AsNoTracking().ToArrayAsync();
+        Assert.Equal([BookRendition.Ebook, BookRendition.Audiobook], holdings.Select(row => row.BookRendition).Order().ToArray());
+        Assert.All(holdings, row => Assert.Equal("OL123W", row.RemoteId));
+        Assert.All(holdings, row => Assert.Equal(ManagedTrackingStatus.WaitingForFiles, row.Status));
+        var ebookScope = await Controls(db).RequireScopeAsync(connectionId, ebook.Operation.State.OperationId, default);
+        var audioScope = await Controls(db).RequireScopeAsync(connectionId, audio.Operation.State.OperationId, default);
+        Assert.Empty(ebookScope.Scope.Targets);
+        Assert.Empty(audioScope.Scope.Targets);
+        Assert.Equal(BookRendition.Ebook, ebookScope.Scope.Item.BookRendition);
+        Assert.Equal(BookRendition.Audiobook, audioScope.Scope.Item.BookRendition);
+        Assert.NotEqual(ebookScope.Fingerprint, audioScope.Fingerprint);
+    }
+
+    [Fact]
     public async Task BookManagerTargetKeepsTheMissingAudiobookSeparateFromAnExistingEbook() {
         await using var database = await PostgresTestDatabase.CreateAsync();
         await using var db = database.CreateContext();

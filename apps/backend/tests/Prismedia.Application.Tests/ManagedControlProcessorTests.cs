@@ -76,6 +76,18 @@ public sealed class ManagedControlProcessorTests {
         Assert.True(fixture.Saved.Operation.State.ReviewRequired);
         Assert.Equal(ManagedControlPhase.AwaitingCommand, fixture.Saved.Operation.State.Phase);
     }
+    [Fact] public async Task Book_monitoring_uses_the_selected_rendition_without_a_file_target_or_profile() {
+        var fixture = new Fixture(true, true, book: true);
+
+        await fixture.Run(); await fixture.Run(); await fixture.Run();
+
+        Assert.Equal(1, fixture.ConfigureCalls);
+        Assert.Equal(1, fixture.SearchCalls);
+        Assert.True(fixture.Observed.Item.Monitored);
+        Assert.Empty(fixture.Saved.Plan.Scope.Targets);
+        Assert.Equal(BookRendition.Audiobook, fixture.Saved.Plan.Scope.Item.BookRendition);
+        Assert.Equal(ManagedControlPhase.Completed, fixture.Saved.Operation.State.Phase);
+    }
     [Theory] [InlineData(true)] [InlineData(false)]
     public async Task Revoked_capability_or_changed_target_prevents_writes(bool revoke) {
         var fixture = new Fixture(true, true);
@@ -94,26 +106,30 @@ public sealed class ManagedControlProcessorTests {
         private readonly IntegrationConnection connection;
         internal bool LoseConfigureResponse, LoseSearchResponse, CancelAtFence;
         internal int ConfigureCalls, SearchCalls;
-        internal Fixture(bool configure, bool search, bool comic = false) {
+        internal Fixture(bool configure, bool search, bool comic = false, bool book = false) {
+            var kind = comic ? EntityKind.ComicSeries : book ? EntityKind.Book : EntityKind.Movie;
             IntegrationSupport[] support = [new(PluginCapability.ExternalManager,
                 [IntegrationOperation.ReconcileManaged, IntegrationOperation.ConfigureManaged, IntegrationOperation.RequestManaged],
-                [comic ? EntityKind.ComicSeries : EntityKind.Movie])];
+                [kind])];
             connection = IntegrationConnection.Create(PluginId, "Manager", "https://manager.test", true, [PluginCapability.ExternalManager], new Dictionary<string, string>());
             connection.RecordProbe(null, support, null, DateTimeOffset.UtcNow, false);
             Manifest = new(2, [], PluginId, "Manager", "1.0.0", "dotnet-process", "plugin.dll", new("2.0.0", null, "3.8.0", null), [], false, [],
                 Integration: new(1, support.Select(value => new PluginIntegrationCapability(value.Kind, value.Operations, value.EntityKinds)).ToArray(), []));
             var action = ManagedControlOperation.Create(Guid.NewGuid(), connection.State.Id, Guid.NewGuid(), configure, search);
-            var kind = comic ? EntityKind.ComicSeries : EntityKind.Movie;
-            var path = comic ? "/comics/run" : "/movies/film";
+            var path = comic ? "/comics/run" : book ? "/audio/book" : "/movies/film";
             var scope = new ManagedControlScope(new(kind, "1", new Dictionary<string, string> {
-                [comic ? ExternalIdProviders.ComicVine : ExternalIdProviders.Tmdb] = "42" }),
-                [new("1", comic ? EntityKind.ComicInstallment : EntityKind.Movie, IssueLabel: comic ? "½" : null)]);
-            var request = new CreateManagedControlRequest(action.State.OperationId, new string('a', 64), path, comic ? null : "1",
-                new Dictionary<string, bool> { ["1"] = false }, new(Monitored: configure ? true : null), search,
+                [comic ? ExternalIdProviders.ComicVine : book ? ExternalIdProviders.OpenLibraryWork : ExternalIdProviders.Tmdb] = "42" },
+                book ? BookRendition.Audiobook : null),
+                book ? [] : [new("1", comic ? EntityKind.ComicInstallment : EntityKind.Movie, IssueLabel: comic ? "½" : null)]);
+            var request = new CreateManagedControlRequest(action.State.OperationId, new string('a', 64), path,
+                comic || book ? null : "1",
+                book ? new Dictionary<string, bool>() : new Dictionary<string, bool> { ["1"] = false },
+                new(Monitored: configure ? true : null), search,
                 comic ? Guid.NewGuid() : null);
             Saved = new(action, new(scope, request, ManagedControlIdentity.RequestFingerprint(request)), DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, null);
-            Observed = new(new("1", kind, "Film", 2024, scope.Item.ExpectedExternalIds, false, comic ? null : "1", 0), path,
-                [new(scope.Targets[0], false)], new(true, true, true));
+            Observed = new(new("1", kind, "Film", 2024, scope.Item.ExpectedExternalIds, false,
+                comic || book ? null : "1", 0), path,
+                book ? [] : [new(scope.Targets[0], false)], new(true, true, true));
         }
         internal Task Run() => new ManagedControlProcessor(this, new(this, this), this).ProcessAsync(Saved.Operation.State.OperationId, default);
         public Task<StoredManagedControl?> FindAsync(Guid id, CancellationToken token) => Task.FromResult<StoredManagedControl?>(Saved with { Operation = new(Saved.Operation.State) });
@@ -131,7 +147,9 @@ public sealed class ManagedControlProcessorTests {
         public Task<ManagedControlState> ReconcileAsync(string pluginId, IntegrationConnectionContext context, ReconcileManagedInput input, CancellationToken token) => Task.FromResult(Observed);
         public Task<ManagedMutationResult> ConfigureAsync(string pluginId, IntegrationConnectionContext context, ConfigureManagedInput input, CancellationToken token) {
             Assert.Equal(ManagedControlPhase.ConfigurationUncertain, Saved.Operation.State.Phase); ConfigureCalls++;
-            Observed = Observed with { Targets = [new(Observed.Targets[0].Target, true)] };
+            Observed = Saved.Plan.Scope.Item.EntityKind == EntityKind.Book
+                ? Observed with { Item = Observed.Item with { Monitored = true } }
+                : Observed with { Targets = [new(Observed.Targets[0].Target, true)] };
             if (LoseConfigureResponse) throw new IntegrationInvocationException("response lost");
             return Task.FromResult(new ManagedMutationResult(ManagedMutationOutcome.Applied));
         }
