@@ -191,6 +191,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Acquisition searches now say when an indexer was skipped by its hourly query limit instead of reporting it as a failed connection.
+
 - Soulseek queues now retry a transient peer-wait timeout once after checking that slskd did not already enqueue the selected files.
 
 - Soulseek publication searches now have enough transport time to collect results when slskd finishes its peer window late.

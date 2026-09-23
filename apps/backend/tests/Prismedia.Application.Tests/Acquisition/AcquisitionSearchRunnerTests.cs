@@ -12,6 +12,29 @@ namespace Prismedia.Application.Tests.Acquisition;
 /// dropping the blocklist argument back to its default.
 /// </summary>
 public sealed class AcquisitionSearchRunnerTests {
+    [Fact]
+    public async Task QueryLimitedIndexerIsReportedAsSkippedWithoutAHealthFailure() {
+        var id = Guid.NewGuid();
+        var window = new IndexerQueryWindow();
+        Assert.True(window.TryRecordQuery(id, 1));
+        var client = new FakeIndexerSearchClient([]);
+        var statuses = new FakeIndexerStatusStore();
+        var runner = new AcquisitionSearchRunner(
+            new FakeIndexerConfigStore(Config(id, IndexerKind.Prowlarr, "Limited", priority: 25) with { QueryLimitPerHour = 1 }),
+            new FakeClientFactory(client), new FakeProfileStore(), new FakeBlocklistStore("unrelated"),
+            new FakeDownloadClientConfigStore(DownloadProtocol.Torrent), statuses, window,
+            Policies(new BookAcquisitionPolicyModule()), Settings());
+
+        var outcome = await runner.RunAsync(
+            new AcquisitionSearchInput(Guid.NewGuid(), "Book", "Author", EntityKind.Book),
+            CancellationToken.None,
+            customQuery: "Book");
+
+        Assert.True(Assert.Single(outcome.Errors).WasSkipped);
+        Assert.Empty(statuses.Failures);
+        Assert.Empty(client.Queries);
+    }
+
     [Theory]
     [InlineData(BookRendition.Ebook)]
     [InlineData(BookRendition.Audiobook)]

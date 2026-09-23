@@ -1,9 +1,22 @@
+using Prismedia.Application.Acquisition;
 using Prismedia.Application.Jobs.Handlers;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Tests.Acquisition;
 
 public sealed class AcquisitionSearchGateTests {
+    [Fact]
+    public void SearchSummaryDistinguishesFailedAndQueryLimitedSources() {
+        var outcome = new AcquisitionSearchOutcome([], [
+            new IndexerSearchError(Guid.NewGuid(), "Unreachable", "connection refused"),
+            new IndexerSearchError(Guid.NewGuid(), "Limited", "hourly query limit", WasSkipped: true)
+        ]);
+
+        Assert.Equal(
+            "0 acceptable of 0 release(s). 1 indexer(s) failed: Unreachable. 1 indexer(s) skipped by their query limits: Limited.",
+            AcquisitionSearchJobHandler.BuildMessage(outcome));
+    }
+
     [Theory]
     [InlineData(AcquisitionStatus.Pending)]
     [InlineData(AcquisitionStatus.WaitingForRelease)]

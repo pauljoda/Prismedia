@@ -229,14 +229,21 @@ public sealed class AcquisitionSearchJobHandler(
         }
     }
 
-    private static string? BuildMessage(AcquisitionSearchOutcome outcome) {
+    internal static string BuildMessage(AcquisitionSearchOutcome outcome) {
         var accepted = outcome.Candidates.Count(candidate => candidate.Accepted);
         var summary = $"{accepted} acceptable of {outcome.Candidates.Count} release(s).";
         if (outcome.Errors.Count == 0) {
             return summary;
         }
 
-        var failed = string.Join(", ", outcome.Errors.Select(error => error.IndexerName));
-        return $"{summary} {outcome.Errors.Count} indexer(s) failed: {failed}.";
+        var failed = outcome.Errors.Where(error => !error.WasSkipped).ToArray();
+        var skipped = outcome.Errors.Where(error => error.WasSkipped).ToArray();
+        if (failed.Length > 0) {
+            summary += $" {failed.Length} indexer(s) failed: {string.Join(", ", failed.Select(error => error.IndexerName))}.";
+        }
+        if (skipped.Length > 0) {
+            summary += $" {skipped.Length} indexer(s) skipped by their query limits: {string.Join(", ", skipped.Select(error => error.IndexerName))}.";
+        }
+        return summary;
     }
 }

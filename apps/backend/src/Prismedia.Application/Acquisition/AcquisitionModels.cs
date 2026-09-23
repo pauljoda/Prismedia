@@ -246,8 +246,8 @@ public sealed record IndexerQuery(
 /// <summary>Result of probing an indexer connection.</summary>
 public sealed record IndexerConnectionTest(bool Connected, string? Message);
 
-/// <summary>An indexer that failed during a search; surfaced in the acquisition status so partial results stay transparent.</summary>
-public sealed record IndexerSearchError(Guid IndexerId, string IndexerName, string Message);
+/// <summary>An indexer that failed or was skipped during a search; surfaced so partial results stay transparent.</summary>
+public sealed record IndexerSearchError(Guid IndexerId, string IndexerName, string Message, bool WasSkipped = false);
 
 /// <summary>Metadata captured when an acquisition is created, retained for the identify-hint handoff at import.</summary>
 /// <param name="Kind">The media kind being acquired (book, movie, …); drives per-kind release scoring and import.</param>

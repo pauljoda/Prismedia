@@ -92,7 +92,7 @@ public sealed class AcquisitionSearchRunner(
                     if (search.Error is not null) {
                         errors.TryAdd(
                             search.Config.Id,
-                            new IndexerSearchError(search.Config.Id, search.Config.DisplayName, search.Error));
+                            new IndexerSearchError(search.Config.Id, search.Config.DisplayName, search.Error, search.RateLimited));
                         // A real failure is not repeated for every broader query in the same operation.
                         // Rate-limit exhaustion likewise cannot recover inside this query ladder.
                         failedIndexers.Add(search.Config.Id);
