@@ -15,7 +15,8 @@ namespace Prismedia.Infrastructure.Media.Books;
 internal sealed class EfBookChapterMappingService(
     PrismediaDbContext db,
     IEntityVisibilityChecker visibility,
-    IBookChapterMapService chapterMap) : IBookChapterMappingService {
+    IBookChapterMapService chapterMap,
+    IBookContentsService contents) : IBookChapterMappingService {
     private const int MaximumReadableChapterKeyLength = 2048;
 
     /// <inheritdoc />
@@ -44,6 +45,20 @@ internal sealed class EfBookChapterMappingService(
                 BookChapterMappingSaveStatus.Invalid,
                 null,
                 normalized.Error);
+        }
+
+        if (normalized.Mappings.Count > 0) {
+            var availableContents = await contents.GetAsync(bookId, cancellationToken);
+            var readableKeys = availableContents?.Items
+                .Select(item => item.Id)
+                .ToHashSet(StringComparer.Ordinal);
+            if (readableKeys is null || normalized.Mappings.Any(mapping =>
+                    !readableKeys.Contains(mapping.ReadableChapterKey))) {
+                return new BookChapterMappingSaveResult(
+                    BookChapterMappingSaveStatus.Invalid,
+                    null,
+                    "Every mapped readable chapter must belong to the Book's current contents.");
+            }
         }
 
         var trackIds = normalized.Mappings.Select(mapping => mapping.AudioTrackId).Distinct().ToArray();

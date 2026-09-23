@@ -122,6 +122,33 @@ public sealed class EfBookChapterMappingServiceTests {
     }
 
     [Fact]
+    public async Task RejectsChaptersMissingFromCurrentReadableContentsWithoutReplacingSavedPairs() {
+        await using var db = CreateContext();
+        var bookId = AddEntity(db, EntityKind.Book, "Book");
+        var trackId = AddEntity(db, EntityKind.AudioTrack, "Part 1", bookId, 0);
+        AddSource(db, trackId);
+        await db.SaveChangesAsync();
+        var service = CreateService(db, new VisibleEntityScope());
+
+        var saved = await service.ReplaceAsync(
+            bookId,
+            new ReplaceBookChapterMappingsRequest([
+                new BookChapterAudioMapping("Text/prologue.xhtml", trackId)
+            ]),
+            CancellationToken.None);
+        var rejected = await service.ReplaceAsync(
+            bookId,
+            new ReplaceBookChapterMappingsRequest([
+                new BookChapterAudioMapping("Text/removed.xhtml", trackId)
+            ]),
+            CancellationToken.None);
+
+        Assert.Equal(BookChapterMappingSaveStatus.Saved, saved.Status);
+        Assert.Equal(BookChapterMappingSaveStatus.Invalid, rejected.Status);
+        Assert.Equal("Text/prologue.xhtml", Assert.Single(db.BookChapterAudioMappings).ReadableChapterKey);
+    }
+
+    [Fact]
     public async Task HiddenOrNonBookEntitiesBehaveAsMissing() {
         await using var db = CreateContext();
         var videoId = AddEntity(db, EntityKind.Video, "Video");
@@ -147,7 +174,23 @@ public sealed class EfBookChapterMappingServiceTests {
     private static EfBookChapterMappingService CreateService(
         PrismediaDbContext db,
         IEntityVisibilityChecker visibility) =>
-        new(db, visibility, new EfBookChapterMapService(db, new EpubBookContentsCache()));
+        new(db, visibility, new EfBookChapterMapService(db, new EpubBookContentsCache()),
+            new StaticBookContentsService());
+
+    private sealed class StaticBookContentsService : IBookContentsService {
+        private static readonly BookContentsResponse Contents = new([
+            Entry("Text/prologue.xhtml", 0),
+            Entry("Text/chapter-01.xhtml", 1),
+            Entry("opening", 2),
+            Entry("chapter-1", 3)
+        ]);
+
+        public Task<BookContentsResponse?> GetAsync(Guid bookId, CancellationToken cancellationToken) =>
+            Task.FromResult<BookContentsResponse?>(Contents);
+
+        private static BookContentsEntry Entry(string key, int order) =>
+            new(key, key, key, 0, order, null, null, null);
+    }
 
     private static Guid AddEntity(
         PrismediaDbContext db,
