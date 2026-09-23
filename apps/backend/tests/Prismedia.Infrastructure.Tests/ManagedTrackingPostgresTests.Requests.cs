@@ -133,6 +133,18 @@ public sealed partial class ManagedTrackingPostgresTests {
             audioRootId, bookId, 0, null, 0, false, default));
         Assert.Equal(2, await db.EntityFiles.AsNoTracking().CountAsync());
         Assert.Equal(2, await db.ManagedSourceBindings.AsNoTracking().CountAsync());
+
+        var tracking = Store(db);
+        foreach (var (request, snapshot) in new[] { (ebook, ebookSnapshot), (audio, audioSnapshot) }) {
+            var retained = (await tracking.FindAsync(request.Operation.State.OperationId, default))!;
+            Assert.Equal(bookId, retained.Tracking.BookWorkId);
+            var observed = await tracking.ObserveAsync(connectionId, snapshot, default);
+            var changes = ManagedSourceReconciliation.Plan(retained.Tracking.Bindings, observed.Files);
+            Assert.Null(changes.ReviewReason);
+            await tracking.ApplyAsync(retained, observed, null, changes.Changes, default);
+        }
+        Assert.Equal(2, await db.ManagedHoldings.AsNoTracking()
+            .CountAsync(row => row.Status == ManagedTrackingStatus.Tracking));
     }
 
     [Fact]
