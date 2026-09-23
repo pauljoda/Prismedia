@@ -101,6 +101,7 @@
     showHero = true,
     showFlagActions = true,
     tabs = [],
+    allowExternalAcquisitionTab = false,
     standaloneMetadataSectionIds = DEFAULT_STANDALONE_METADATA_SECTION_IDS,
     onMetadataSave,
     onImageAssetUpload,
@@ -197,7 +198,7 @@
   const cardFull = $derived(card as EntityDetailCard & Partial<EntityDetailCardFull>);
   const visibleActionButtons = $derived.by(() => actionButtons.filter((action) => !action.hidden));
   const routeTabs = $derived.by(() => tabs.filter(tab => tabHasContent(tab)
-    && (!externalLibraryProvenance || tab.id !== "acquisition")));
+    && (!externalLibraryProvenance || allowExternalAcquisitionTab || tab.id !== "acquisition")));
   const visibleTabs = $derived.by((): EntityDetailTab[] => {
     if (!externalLibraryProvenance) return routeTabs;
 

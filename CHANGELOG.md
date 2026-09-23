@@ -62,6 +62,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Connected Book pages show ebook and audiobook availability together in Acquisition, including separate actions for a missing rendition.
 - Connected Book holdings can now track ebook and audiobook files under the same work with separate mapped libraries and ownership, including file changes and independent release.
 
 - Book chapter alignment now shows total automatic and manual coverage for readable and audio chapters, and marks chapters without a match clearly.

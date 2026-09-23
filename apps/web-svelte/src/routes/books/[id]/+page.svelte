@@ -1060,6 +1060,7 @@
       {peopleLabel}
       posterSize="large"
       tabs={detailTabs}
+      allowExternalAcquisitionTab={true}
       sections={detailSections}
       actionButtons={heroActions}
       onArtworkPaletteChange={(palette) => (artworkPalette = palette)}
@@ -1105,15 +1106,17 @@
             />
           {/key}
         {:else if section.id === "acquisition"}
-          <EntityAcquisitionCard
-            {acq}
-            entity={book}
-            {fileManagement}
-            showEntityRequestControls={false}
-            showAcquisitionPanel={false}
-            onCancelled={handleAcquisitionCancelled}
-            onImported={() => detail.reload({ showLoading: false })}
-          />
+          {#if !card.externalLibraryProvenance}
+            <EntityAcquisitionCard
+              {acq}
+              entity={book}
+              {fileManagement}
+              showEntityRequestControls={false}
+              showAcquisitionPanel={false}
+              onCancelled={handleAcquisitionCancelled}
+              onImported={() => detail.reload({ showLoading: false })}
+            />
+          {/if}
           <BookRenditionAcquisitionCard
             ownership={{
               ebook: hasReadableContent,

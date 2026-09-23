@@ -99,6 +99,27 @@ describe("EntityDetail", () => {
     expect(screen.getByText("Externally managed movie")).toBeInTheDocument();
   });
 
+  it("keeps a Book's format-specific Acquisition tab beside its external library", async () => {
+    const card = buildCard();
+    card.description = "Book format status";
+    card.externalLibraryProvenance = externalLibraryProvenance();
+
+    render(EntityDetail, {
+      props: {
+        card,
+        allowExternalAcquisitionTab: true,
+        tabs: [{ id: "acquisition", label: "Acquisition", sections: ["description"] }],
+      },
+    });
+
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent?.trim())).toEqual([
+      "Acquisition",
+      "External library",
+    ]);
+    await fireEvent.click(screen.getByRole("tab", { name: "Acquisition" }));
+    expect(screen.getByRole("tabpanel", { name: "Acquisition" })).toBeInTheDocument();
+  });
+
   it("links administrators to the exact identity-pinned connected holding", async () => {
     const card = buildCard();
     card.externalLibraryProvenance = externalLibraryProvenance();

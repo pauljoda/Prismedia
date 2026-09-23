@@ -72,6 +72,8 @@ export interface EntityDetailProps {
    */
   showFlagActions?: boolean;
   tabs?: EntityDetailTab[];
+  /** Keep a route's format-specific acquisition tab beside external library ownership. */
+  allowExternalAcquisitionTab?: boolean;
   /** Built-in lower metadata sections used when this route does not provide tabs. */
   standaloneMetadataSectionIds?: string[];
   onMetadataSave?: (request: EntityMetadataUpdateRequest) => void | Promise<void>;
