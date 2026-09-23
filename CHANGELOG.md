@@ -57,6 +57,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Request and connected-source administration can render as focused content inside the iOS app, using its native navigation while staying current with the web interface.
+
 - External library setup distinguishes provider paths from folders readable by the Prismedia server, with shared-storage guidance for separate hosts and read-only mounts.
 
 - Request Activity loads a paged server feed, prioritizes problems and active requests, and shows retained history even when a source is offline.
