@@ -449,6 +449,7 @@ export * from './loginRequest';
 export * from './loginResponse';
 export * from './managedBindingSelection';
 export * from './managedComicIssue';
+export * from './managedComicIssueExternalIds';
 export * from './managedCommandReference';
 export * from './managedCommandSnapshot';
 export * from './managedCommandStatus';

@@ -4,10 +4,13 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { ManagedComicIssueExternalIds } from './managedComicIssueExternalIds';
 
 export interface ManagedComicIssue {
   remoteId: string;
   issueLabel: string;
   title: string;
   monitored: boolean;
+  /** @nullable */
+  externalIds?: ManagedComicIssueExternalIds;
 }

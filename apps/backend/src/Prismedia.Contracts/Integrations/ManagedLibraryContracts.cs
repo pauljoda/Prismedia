@@ -49,7 +49,8 @@ public sealed record ManagedFileTarget(string RemoteId, EntityKind EntityKind, s
 public sealed record ManagedLibraryFile(string RemoteId, string Path, long SizeBytes, DateTimeOffset? AddedAt,
     IReadOnlyList<ManagedFileTarget> Targets);
 /// <summary>One issue in a connected comic run, including issues with no final file yet.</summary>
-public sealed record ManagedComicIssue(string RemoteId, string IssueLabel, string Title, bool Monitored);
+public sealed record ManagedComicIssue(string RemoteId, string IssueLabel, string Title, bool Monitored,
+    IReadOnlyDictionary<string, string>? ExternalIds = null);
 /// <summary>Current remote item and exact file associations; an empty file list is not inferred from a completed command.</summary>
 /// <param name="ComicIssues">Complete issue list when the connected comic manager supports it; null for older adapters and other media.</param>
 public sealed record ManagedItemSnapshot(ManagedLibraryItem Item, string Path, IReadOnlyList<ManagedLibraryFile> Files, DateTimeOffset ObservedAt,

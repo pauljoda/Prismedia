@@ -1,4 +1,5 @@
 using Prismedia.Contracts.Integrations;
+using Prismedia.Contracts.Entities;
 using Prismedia.Domain.Entities;
 
 namespace Prismedia.Application.Integrations;
@@ -60,9 +61,13 @@ public sealed class ManagedLibraryService(IntegrationConnectionAccess access, II
                 || !Text(target.IssueLabel, 128) || target.SeasonNumber is not null || target.EpisodeNumber is not null || target.AbsoluteNumber is not null)) throw Invalid();
         if (snapshot.ComicIssues is { } issues) {
             if (input.EntityKind != EntityKind.ComicSeries || issues.Count > 10000
-                || issues.Any(issue => issue is null || !Text(issue.RemoteId, 512) || !Text(issue.IssueLabel, 128) || !Text(issue.Title, 512))
+                || issues.Any(issue => issue is null || !Text(issue.RemoteId, 512) || !Text(issue.IssueLabel, 128) || !Text(issue.Title, 512)
+                    || issue.ExternalIds is not null && !Identities(issue.ExternalIds))
                 || issues.Select(issue => issue.RemoteId).Distinct(StringComparer.Ordinal).Count() != issues.Count)
                 throw Invalid();
+            var comicVineIds = issues.Select(issue => issue.ExternalIds?.GetValueOrDefault(ExternalIdProviders.ComicVine))
+                .OfType<string>().ToArray();
+            if (comicVineIds.Distinct(StringComparer.Ordinal).Count() != comicVineIds.Length) throw Invalid();
             var issueById = issues.ToDictionary(issue => issue.RemoteId, StringComparer.Ordinal);
             if (targets.Any(target => !issueById.TryGetValue(target.RemoteId, out var issue)
                 || target.IssueLabel != issue.IssueLabel || target.Title != issue.Title)) throw Invalid();

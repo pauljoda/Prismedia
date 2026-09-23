@@ -65,6 +65,28 @@ public sealed class ManagedLibraryServiceTests {
     }
 
     [Fact]
+    public void ComicIssueIdentitiesMustBeValidAndUniqueWhenProvided() {
+        var item = new ManagedLibraryItem("run", EntityKind.ComicSeries, "Comics", 2026,
+            new Dictionary<string, string> { [FixtureProvider] = "fixture-run" }, false, null, 0);
+        var input = new ManagedItemInput(item.EntityKind, item.RemoteId, item.ExternalIds);
+        var issues = new[] {
+            new ManagedComicIssue("one", "½", "Half", false,
+                new Dictionary<string, string> { [ExternalIdProviders.ComicVine] = "4000-1001" }),
+            new ManagedComicIssue("two", "12.5", "Interlude", false,
+                new Dictionary<string, string> { [ExternalIdProviders.ComicVine] = "4000-1002" })
+        };
+        var snapshot = new ManagedItemSnapshot(item, "/comics/run", [], DateTimeOffset.UtcNow, issues);
+        ManagedLibraryService.ValidateSnapshot(input, snapshot);
+        ManagedLibraryService.ValidateSnapshot(input, snapshot with { ComicIssues = [issues[0] with { ExternalIds = null }, issues[1]] });
+        foreach (var invalid in new[] {
+            issues[1] with { ExternalIds = issues[0].ExternalIds },
+            issues[1] with { ExternalIds = new Dictionary<string, string> { [ExternalIdProviders.ComicVine] = "" } },
+            issues[1] with { ExternalIds = new Dictionary<string, string>() }
+        }) Assert.Throws<IntegrationInvocationException>(() => ManagedLibraryService.ValidateSnapshot(input,
+            snapshot with { ComicIssues = [issues[0], invalid] }));
+    }
+
+    [Fact]
     public async Task ReadHoldingPinsIdentityAndReturnsRemoteEvidenceWithoutImporting() {
         var fixture = new Fixture();
         var page = await fixture.Service.SearchAsync(fixture.Connection.State.Id, new(EntityKind.Movie), default);
