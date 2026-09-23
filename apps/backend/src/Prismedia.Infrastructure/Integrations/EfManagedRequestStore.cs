@@ -29,10 +29,15 @@ public sealed partial class EfManagedRequestStore(PrismediaDbContext db, IExtern
 
     public Task<ManagedRequestTarget> RequireTargetAsync(Guid connectionId, Guid entityId, Guid libraryRootId,
         IReadOnlyList<Guid>? targetEntityIds, CancellationToken token) =>
-        RequireTargetCoreAsync(connectionId, entityId, libraryRootId, targetEntityIds, ownerId: null, token);
+        RequireTargetAsync(connectionId, entityId, libraryRootId, targetEntityIds, bookRendition: null, token);
+
+    public Task<ManagedRequestTarget> RequireTargetAsync(Guid connectionId, Guid entityId, Guid libraryRootId,
+        IReadOnlyList<Guid>? targetEntityIds, BookRendition? bookRendition, CancellationToken token) =>
+        RequireTargetCoreAsync(connectionId, entityId, libraryRootId, targetEntityIds, bookRendition, ownerId: null, token);
 
     private async Task<ManagedRequestTarget> RequireTargetCoreAsync(Guid connectionId, Guid entityId,
-        Guid libraryRootId, IReadOnlyList<Guid>? targetEntityIds, Guid? ownerId, CancellationToken token) {
+        Guid libraryRootId, IReadOnlyList<Guid>? targetEntityIds, BookRendition? bookRendition,
+        Guid? ownerId, CancellationToken token) {
         var requestedTargetIds = targetEntityIds ?? [];
         if (requestedTargetIds.Any(id => id == Guid.Empty)
             || requestedTargetIds.Distinct().Count() != requestedTargetIds.Count)
@@ -42,15 +47,23 @@ public sealed partial class EfManagedRequestStore(PrismediaDbContext db, IExtern
         var movieCode = EntityKind.Movie.ToCode();
         var seriesCode = EntityKind.VideoSeries.ToCode();
         var comicCode = EntityKind.ComicSeries.ToCode();
-        if (entity.KindCode != movieCode && entity.KindCode != seriesCode && entity.KindCode != comicCode)
-            throw new ArgumentException("Choose a wanted movie, video series, or comic series.");
+        var bookCode = EntityKind.Book.ToCode();
+        if (entity.KindCode != movieCode && entity.KindCode != seriesCode && entity.KindCode != comicCode
+            && entity.KindCode != bookCode)
+            throw new ArgumentException("Choose a wanted movie, video series, comic series, or Book.");
+        if ((entity.KindCode == bookCode) != (bookRendition is not null)
+            || bookRendition is not null && !Enum.IsDefined(bookRendition.Value))
+            throw new ArgumentException("Choose one exact rendition for a Book request.");
         var mount = (await mounts.ListAsync(connectionId, token)).SingleOrDefault(item => item.LibraryRootId == libraryRootId)
             ?? throw new ArgumentException("Choose a library mapped to this connection.");
         if (!await db.LibraryRoots.AnyAsync(root => root.Id == libraryRootId && root.Enabled
-                && (entity.KindCode == comicCode ? root.ScanBooks : root.ScanVideos), token)
-            || await db.EntityLibraryRoots.AnyAsync(root => (root.EntityId == entityId || requestedTargetIds.Contains(root.EntityId))
+                && (entity.KindCode == comicCode || entity.KindCode == bookCode ? root.ScanBooks : root.ScanVideos), token)
+            || entity.KindCode != bookCode && await db.EntityLibraryRoots.AnyAsync(root => (root.EntityId == entityId || requestedTargetIds.Contains(root.EntityId))
                 && root.LibraryRootId != libraryRootId, token))
             throw new ArgumentException("Enable the mapped library and resolve any previous library association first.");
+        if (entity.KindCode == bookCode)
+            return await RequireBookTargetAsync(entity, mount, connectionId, requestedTargetIds,
+                bookRendition!.Value, ownerId, token);
         if (entity.KindCode == comicCode)
             return await RequireComicIssueTargetAsync(entity, mount, connectionId, requestedTargetIds, ownerId, token);
         if (entity.KindCode == movieCode) {
@@ -164,6 +177,29 @@ public sealed partial class EfManagedRequestStore(PrismediaDbContext db, IExtern
             new(EntityKind.VideoSeries, seriesIdentities, targets.Select(target => target.Target).ToArray()),
             mount,
             targets);
+    }
+
+    private async Task<ManagedRequestTarget> RequireBookTargetAsync(EntityRow book, ExternalLibraryMount mount,
+        Guid connectionId, IReadOnlyList<Guid> requestedTargetIds, BookRendition rendition, Guid? ownerId,
+        CancellationToken token) {
+        if (requestedTargetIds.Count != 0)
+            throw new ArgumentException("Request one Book rendition through its work, without child targets.");
+        var ownReservation = ownerId is { } owner && await db.FulfillmentReservations.AsNoTracking().AnyAsync(row =>
+            row.OwnerId == owner && row.OwnerKind == FulfillmentOwnerKind.ExternalManager
+            && row.ConnectionId == connectionId && row.EntityId == book.Id
+            && row.BookRendition == rendition && row.ReleasedAt == null, token);
+        var sourceIds = rendition == BookRendition.Ebook ? new[] { book.Id }
+            : await db.Entities.AsNoTracking().Where(row => row.ParentEntityId == book.Id
+                && row.KindCode == EntityKind.AudioTrack.ToCode()).Select(row => row.Id).ToArrayAsync(token);
+        if (await HasSourceAsync(sourceIds, token) && !ownReservation)
+            throw new ArgumentException("This Book rendition already has a retained source. Link it through connected-library tracking.");
+        var workIds = await db.EntityExternalIds.AsNoTracking().Where(row => row.EntityId == book.Id
+            && row.Provider == ExternalIdProviders.OpenLibraryWork).Select(row => row.Value).Distinct().ToArrayAsync(token);
+        if (workIds.Length != 1 || string.IsNullOrWhiteSpace(workIds[0]))
+            throw new ArgumentException("Identify this Book with one exact Open Library work before manager fulfillment.");
+        return new(book.Id, book.Title, new(EntityKind.Book,
+            new Dictionary<string, string> { [ExternalIdProviders.OpenLibraryWork] = workIds[0] },
+            BookRendition: rendition), mount);
     }
 
     private async Task<ManagedRequestTarget> RequireComicIssueTargetAsync(EntityRow series, ExternalLibraryMount mount,
@@ -422,6 +458,7 @@ public sealed partial class EfManagedRequestStore(PrismediaDbContext db, IExtern
             state.EntityId,
             state.LibraryRootId,
             plan.Request.TargetEntityIds,
+            plan.Request.ReviewedWork.BookRendition,
             requireOwner ? OwnerId(plan, state) : null,
             token);
         if (!ManagedRequestIdentity.SameWork(target.Work, plan.Creation.Work) || target.Mount.RemoteRootId != plan.Creation.RootId

@@ -46,7 +46,8 @@ public sealed partial class EfManagedRequestStore {
                 throw new ArgumentException("The manager holding is outside this request's mapped root. Existing holdings are never moved implicitly.");
             var operation = new ManagedRequestOperation(current.Operation.State);
             operation.AcceptHolding(snapshot.Item.RemoteId);
-            var item = new ManagedItemInput(snapshot.Item.EntityKind, snapshot.Item.RemoteId, current.Plan.Creation.Work.ExternalIds);
+            var item = new ManagedItemInput(snapshot.Item.EntityKind, snapshot.Item.RemoteId,
+                current.Plan.Creation.Work.ExternalIds, current.Plan.Creation.Work.BookRendition);
             var bindings = ResolveBindings(target, snapshot, resolvedTargets);
             var now = DateTimeOffset.UtcNow;
             if (current.Plan.ExistingHoldingId is { } existingHoldingId) {

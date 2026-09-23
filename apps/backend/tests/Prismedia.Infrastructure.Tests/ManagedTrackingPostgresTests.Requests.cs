@@ -16,6 +16,41 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed partial class ManagedTrackingPostgresTests {
     [Fact]
+    public async Task BookManagerTargetKeepsTheMissingAudiobookSeparateFromAnExistingEbook() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var connectionId = Guid.NewGuid();
+        var rootId = Guid.NewGuid();
+        var ebookRootId = Guid.NewGuid();
+        var bookId = Guid.NewGuid();
+        db.IntegrationConnections.Add(new() { Id = connectionId, PluginId = "fixture", Name = "Fixture",
+            BaseUrl = "http://manager.test/", Enabled = true, Status = ConnectionStatus.Ready, Revision = 1 });
+        db.LibraryRoots.Add(new() { Id = rootId, Path = workspace, Label = "Books", Enabled = true, ScanBooks = true });
+        db.LibraryRoots.Add(new() { Id = ebookRootId, Path = Path.Combine(workspace, "ebooks"),
+            Label = "Ebooks", Enabled = true, ScanBooks = true });
+        db.ExternalLibraryMounts.Add(new() { Id = Guid.NewGuid(), ConnectionId = connectionId,
+            LibraryRootId = rootId, RemoteRootId = "audio", RemotePath = "/audio", LocalPath = workspace });
+        db.Entities.Add(new() { Id = bookId, KindCode = EntityKind.Book.ToCode(), Title = "Example" });
+        db.EntityLibraryRoots.Add(new() { EntityId = bookId, LibraryRootId = ebookRootId });
+        db.EntityExternalIds.Add(new() { Id = Guid.NewGuid(), EntityId = bookId,
+            Provider = ExternalIdProviders.OpenLibraryWork, Value = "OL123W" });
+        db.EntityFiles.Add(new() { Id = Guid.NewGuid(), EntityId = bookId,
+            Path = Path.Combine(workspace, "example.epub"), Role = EntityFileRole.Source, SizeBytes = 3 });
+        await db.SaveChangesAsync();
+
+        var store = Requests(db);
+        var audio = await store.RequireTargetAsync(connectionId, bookId, rootId, null,
+            BookRendition.Audiobook, default);
+
+        Assert.Equal(BookRendition.Audiobook, audio.Work.BookRendition);
+        Assert.Equal("OL123W", audio.Work.ExternalIds[ExternalIdProviders.OpenLibraryWork]);
+        await Assert.ThrowsAsync<ArgumentException>(() => store.RequireTargetAsync(connectionId, bookId,
+            rootId, null, BookRendition.Ebook, default));
+        await Assert.ThrowsAsync<ArgumentException>(() => store.RequireTargetAsync(connectionId, bookId,
+            rootId, null, null, default));
+    }
+
+    [Fact]
     public async Task FiniteSeriesRequiresASonarrLookupIdentityBeforeManagerPreview() {
         await using var database = await PostgresTestDatabase.CreateAsync();
         await using var db = database.CreateContext();

@@ -22,7 +22,8 @@ public sealed class ManagedRequestProcessor(IManagedRequestStore store, Integrat
             ManagedItemSnapshot snapshot;
             try {
                 snapshot = await library.GetAsync(state.ConnectionId,
-                    new(work.Plan.Creation.Work.EntityKind, state.RemoteId!, work.Plan.Creation.Work.ExternalIds), token);
+                    new(work.Plan.Creation.Work.EntityKind, state.RemoteId!, work.Plan.Creation.Work.ExternalIds,
+                        work.Plan.Creation.Work.BookRendition), token);
             } catch (IntegrationInvocationException error) when (state.Phase == ManagedRequestPhase.AwaitingFiles
                 && error.Code != IntegrationErrorCode.ManagedItemNotFound) {
                 var revision = work.Operation.State.Revision;

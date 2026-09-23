@@ -5,6 +5,7 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { EntityKind } from './entityKind';
+import type { ManagedLookupInputBookRendition } from './managedLookupInputBookRendition';
 import type { ManagedLookupInputExternalIds } from './managedLookupInputExternalIds';
 import type { ManagedLookupTarget } from './managedLookupTarget';
 
@@ -13,4 +14,5 @@ export interface ManagedLookupInput {
   externalIds: ManagedLookupInputExternalIds;
   /** @nullable */
   targets?: ManagedLookupTarget[] | null;
+  bookRendition?: ManagedLookupInputBookRendition;
 }

@@ -28,4 +28,7 @@ public static class ExternalIdProviders {
 
     /// <summary>Comic Vine comics database.</summary>
     public const string ComicVine = "comicvine";
+
+    /// <summary>Open Library's stable work identity, distinct from edition identities.</summary>
+    public const string OpenLibraryWork = "openlibrarywork";
 }

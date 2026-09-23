@@ -26,7 +26,8 @@ public static class ManagedCreationEvidence {
     /// <summary>Requires an exact pinned work and the connected-library evidence contract.</summary>
     public static void ValidateHolding(ManagedLookupInput work, ManagedItemSnapshot holding) {
         if (holding?.Item is null) throw new IntegrationInvocationException("The manager did not confirm a holding.");
-        ManagedLibraryService.ValidateSnapshot(new(work.EntityKind, holding.Item.RemoteId, work.ExternalIds), holding);
+        ManagedLibraryService.ValidateSnapshot(new(work.EntityKind, holding.Item.RemoteId,
+            work.ExternalIds, work.BookRendition), holding);
     }
     /// <summary>Only an applied holding or a definite rejection is a valid creation result; all other replies are uncertain.</summary>
     public static void ValidateResult(ManagedLookupInput work, EnsureManagedResult result) {

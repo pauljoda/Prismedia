@@ -1739,6 +1739,7 @@ export const EXTERNAL_ID_PROVIDER = {
   comicVine: "comicvine",
   imdb: "imdb",
   musicBrainz: "musicbrainz",
+  openLibraryWork: "openlibrarywork",
   stash: "stash",
   tmdb: "tmdb",
   tvdb: "tvdb",

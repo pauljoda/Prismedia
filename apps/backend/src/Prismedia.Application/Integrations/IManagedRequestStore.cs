@@ -36,6 +36,10 @@ public interface IManagedRequestStore {
     Task<ManagedRequestTarget> RequireTargetAsync(Guid connectionId, Guid entityId, Guid libraryRootId,
         IReadOnlyList<Guid>? targetEntityIds, CancellationToken token) =>
         RequireTargetAsync(connectionId, entityId, libraryRootId, token);
+    /// <summary>Requires one exact Book rendition when the managed work is a Book.</summary>
+    Task<ManagedRequestTarget> RequireTargetAsync(Guid connectionId, Guid entityId, Guid libraryRootId,
+        IReadOnlyList<Guid>? targetEntityIds, BookRendition? bookRendition, CancellationToken token) =>
+        RequireTargetAsync(connectionId, entityId, libraryRootId, targetEntityIds, token);
     /// <summary>Loads retained intent without contacting the manager.</summary>
     Task<StoredManagedRequest?> FindAsync(Guid id, CancellationToken token);
     /// <summary>Lists recent requests for one connection.</summary>

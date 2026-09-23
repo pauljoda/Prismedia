@@ -24,7 +24,8 @@ public sealed class ManagedControlService(IManagedControlStore store, Integratio
         var connection = await access.RequireAsync(connectionId, PluginCapability.ExternalManager, IntegrationOperation.ReconcileManaged, owned.Scope.Item.EntityKind, token);
         var state = await gateway.ReconcileAsync(connection.Manifest.Id, connection.Context, new(owned.Scope), token);
         ManagedControlValidation.Validate(owned.Scope, state);
-        return new(owned.Fingerprint, state, await library.OptionsAsync(connectionId, new(owned.Scope.Item.EntityKind), token));
+        return new(owned.Fingerprint, state, await library.OptionsAsync(connectionId,
+            new(owned.Scope.Item.EntityKind, owned.Scope.Item.BookRendition), token));
     }
     /// <summary>Accepts one reviewed action and durable queue intent before any remote mutation.</summary>
     public async Task<ManagedControlActionResponse> CreateAsync(Guid connectionId, Guid holdingId, CreateManagedControlRequest request, CancellationToken token) {

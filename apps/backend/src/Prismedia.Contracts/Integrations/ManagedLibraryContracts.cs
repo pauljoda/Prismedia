@@ -1,4 +1,5 @@
 using Prismedia.Domain.Entities;
+using System.Text.Json.Serialization;
 
 namespace Prismedia.Contracts.Integrations;
 
@@ -57,7 +58,8 @@ public sealed record ManagedComicIssue(string RemoteId, string IssueLabel, strin
 public sealed record ManagedItemSnapshot(ManagedLibraryItem Item, string Path, IReadOnlyList<ManagedLibraryFile> Files, DateTimeOffset ObservedAt,
     IReadOnlyList<ManagedComicIssue>? ComicIssues = null);
 /// <summary>Requests the connected application's own profile and root choices for this kind.</summary>
-public sealed record ManagerOptionsInput(EntityKind EntityKind);
+public sealed record ManagerOptionsInput(EntityKind EntityKind,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BookRendition? BookRendition = null);
 /// <summary>An opaque external profile or policy ID and its display name.</summary>
 public sealed record ManagerChoice(string Id, string Label);
 /// <summary>An existing external root; its path is not a Prismedia destination.</summary>

@@ -6,7 +6,8 @@ namespace Prismedia.Contracts.Integrations;
 
 /// <summary>Previews an existing wanted identity and a configured read-only external library boundary.</summary>
 public sealed record PreviewManagedRequestInput(Guid EntityId, Guid LibraryRootId,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<Guid>? TargetEntityIds = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<Guid>? TargetEntityIds = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BookRendition? BookRendition = null);
 /// <summary>Exact reviewed work, mapped root, remote choices, and any existing external holding.</summary>
 public sealed record ManagedRequestPreview(Guid EntityId, string Title, ManagedLookupInput Work,
     ExternalLibraryMount Mount, ManagerOptions Options, ManagedItemSnapshot? Existing,

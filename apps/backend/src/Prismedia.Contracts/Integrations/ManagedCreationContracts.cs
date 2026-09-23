@@ -9,7 +9,8 @@ public sealed record ManagedLookupTarget(EntityKind EntityKind, IReadOnlyDiction
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? IssueLabel = null);
 /// <summary>Exact metadata identities, independent of an external application's local item IDs.</summary>
 public sealed record ManagedLookupInput(EntityKind EntityKind, IReadOnlyDictionary<string, string> ExternalIds,
-    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ManagedLookupTarget>? Targets = null);
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ManagedLookupTarget>? Targets = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] BookRendition? BookRendition = null);
 /// <summary>A work confirmed by the manager's metadata source; it is not evidence of owned files.</summary>
 public sealed record ManagedCandidate(EntityKind EntityKind, string Title, int? Year,
     IReadOnlyDictionary<string, string> ExternalIds, ManagedDiscoveryMetadata? Metadata = null);

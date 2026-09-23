@@ -83,6 +83,10 @@ public sealed class ManagedLibraryService(IntegrationConnectionAccess access, II
 
     /// <summary>Reads existing profiles and folders without persisting defaults or issuing remote commands.</summary>
     public async Task<ManagerOptions> OptionsAsync(Guid connectionId, ManagerOptionsInput input, CancellationToken cancellationToken) {
+        if (!Enum.IsDefined(input.EntityKind)
+            || (input.EntityKind == EntityKind.Book) != (input.BookRendition is not null)
+            || input.BookRendition is not null && !Enum.IsDefined(input.BookRendition.Value))
+            throw new ArgumentException("Choose one exact rendition for Book manager options.");
         var authorized = await access.RequireAsync(connectionId, PluginCapability.ExternalManager, IntegrationOperation.ManagerOptions, input.EntityKind, cancellationToken);
         var options = await gateway.GetOptionsAsync(authorized.Manifest.Id, authorized.Context, input, cancellationToken);
         if (options.Profiles is null || options.Roots is null || options.Profiles.Count > 1000 || options.Roots.Count > 1000

@@ -14,11 +14,12 @@ public sealed class ManagedRequestService(IManagedRequestStore store, Integratio
             input.EntityId,
             input.LibraryRootId,
             input.TargetEntityIds,
+            input.BookRendition,
             token);
         var connection = await access.RequireAsync(connectionId, PluginCapability.ExternalManager, IntegrationOperation.LookupManaged, target.Work.EntityKind, token);
         var lookup = await gateway.LookupAsync(connection.Manifest.Id, connection.Context, target.Work, token);
         ManagedCreationEvidence.ValidateLookup(target.Work, lookup);
-        var options = await library.OptionsAsync(connectionId, new(target.Work.EntityKind), token);
+        var options = await library.OptionsAsync(connectionId, new(target.Work.EntityKind, target.Work.BookRendition), token);
         if (!options.Roots.Any(root => root.Id == target.Mount.RemoteRootId && root.Path == target.Mount.RemotePath && root.Accessible != false))
             throw new ArgumentException("The mapped external root changed or became inaccessible. Review its connection before requesting this work.");
         return new(target.EntityId, target.Title, target.Work, target.Mount, options, lookup.Existing,
@@ -35,7 +36,7 @@ public sealed class ManagedRequestService(IManagedRequestStore store, Integratio
         }
         var preview = await PreviewAsync(
             connectionId,
-            new(input.EntityId, input.LibraryRootId, input.TargetEntityIds),
+            new(input.EntityId, input.LibraryRootId, input.TargetEntityIds, input.ReviewedWork.BookRendition),
             token);
         if (!ManagedRequestIdentity.SameWork(preview.Work, input.ReviewedWork))
             throw new ManagedRequestConflictException("The wanted item's metadata identity changed. Review the request again.");
@@ -91,6 +92,7 @@ public sealed class ManagedRequestService(IManagedRequestStore store, Integratio
             input.EntityId,
             input.LibraryRootId,
             input.TargetEntityIds,
+            input.ReviewedWork.BookRendition,
             token);
         if (!ManagedRequestIdentity.SameWork(target.Work, input.ReviewedWork)
             || target.Mount.Id != preview.Mount.Id

@@ -5,7 +5,9 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { EntityKind } from './entityKind';
+import type { ManagerOptionsInputBookRendition } from './managerOptionsInputBookRendition';
 
 export interface ManagerOptionsInput {
   entityKind: EntityKind;
+  bookRendition?: ManagerOptionsInputBookRendition;
 }

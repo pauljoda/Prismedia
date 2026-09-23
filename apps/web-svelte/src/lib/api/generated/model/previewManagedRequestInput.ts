@@ -4,10 +4,12 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { PreviewManagedRequestInputBookRendition } from './previewManagedRequestInputBookRendition';
 
 export interface PreviewManagedRequestInput {
   entityId: string;
   libraryRootId: string;
   /** @nullable */
   targetEntityIds?: string[] | null;
+  bookRendition?: PreviewManagedRequestInputBookRendition;
 }
