@@ -128,6 +128,7 @@
   let relationshipTags = $state<EntityDetailTag[]>([]);
   let bookRenditionAcquisitions = $state.raw<AcquisitionDetail[]>([]);
   let bookRenditionMonitors = $state.raw<MonitorView[]>([]);
+  let acceptedManagerRenditions = $state<{ bookId: string; renditions: BookRenditionCode[] }>({ bookId: "", renditions: [] });
   let epubContents = $state.raw<EpubContentsEntry[]>([]);
   let artworkPalette = $state.raw<ArtworkPalette | null>(null);
   let chapterMappings = $state.raw<BookChapterAudioMapping[]>([]);
@@ -1128,6 +1129,7 @@
             acquisitions={bookRenditionAcquisitions}
             monitors={bookRenditionMonitors}
             managedRenditions={card.externalLibraryProvenance?.bookRenditions ?? []}
+            pendingManagerRenditions={acceptedManagerRenditions.bookId === book.id ? acceptedManagerRenditions.renditions : []}
             onRequest={requestBookRendition}
             onRequestBoth={requestBothBookRenditions}
             onToggleMonitor={toggleBookRenditionMonitor}
@@ -1138,6 +1140,11 @@
               hasEbook={hasReadableContent} hasAudiobook={audiobookTracks.length > 0}
               acquisitions={bookRenditionAcquisitions} monitors={bookRenditionMonitors}
               managedRenditions={card.externalLibraryProvenance?.bookRenditions ?? []}
+              onAccepted={rendition => {
+                const existing = acceptedManagerRenditions.bookId === book.id ? acceptedManagerRenditions.renditions : [];
+                if (!existing.includes(rendition))
+                  acceptedManagerRenditions = { bookId: book.id, renditions: [...existing, rendition] };
+              }}
               onChanged={() => detail.reload({ showLoading: false })} />
           {/if}
         {/if}

@@ -85,8 +85,9 @@ describe("Book manager request", () => {
 
   it("previews and accepts ebook and audiobook as separate exact manager intents", async () => {
     const onChanged = vi.fn();
+    const onAccepted = vi.fn();
     render(BookManagerRequest, { bookId: "book", title: "Frankenstein", hasEbook: false, hasAudiobook: false,
-      acquisitions: [], monitors: [], managedRenditions: [], onChanged });
+      acquisitions: [], monitors: [], managedRenditions: [], onAccepted, onChanged });
     await fireEvent.click(await screen.findByRole("checkbox", { name: "Ebook" }));
     await fireEvent.click(screen.getByRole("checkbox", { name: "Audiobook" }));
     await screen.findByRole("combobox", { name: "Ebook mapped library" });
@@ -111,16 +112,18 @@ describe("Book manager request", () => {
       ["audio-root", BOOK_RENDITION.audiobook, null, true],
     ]);
     expect(intents[0].operationId).not.toBe(intents[1].operationId);
+    expect(onAccepted.mock.calls.map(call => call[0])).toEqual([BOOK_RENDITION.ebook, BOOK_RENDITION.audiobook]);
     expect(onChanged).toHaveBeenCalledOnce();
   });
 
   it("retries the same audiobook operation after an uncertain response without repeating the accepted ebook", async () => {
     const onChanged = vi.fn();
+    const onAccepted = vi.fn();
     api.saveManagedRequest.mockResolvedValueOnce(response(BOOK_RENDITION.ebook))
       .mockRejectedValueOnce(new Error("Response interrupted"))
       .mockResolvedValueOnce(response(BOOK_RENDITION.audiobook));
     render(BookManagerRequest, { bookId: "book", title: "Frankenstein", hasEbook: false, hasAudiobook: false,
-      acquisitions: [], monitors: [], managedRenditions: [], onChanged });
+      acquisitions: [], monitors: [], managedRenditions: [], onAccepted, onChanged });
     await fireEvent.click(await screen.findByRole("checkbox", { name: "Ebook" }));
     await fireEvent.click(screen.getByRole("checkbox", { name: "Audiobook" }));
     await screen.findByRole("combobox", { name: "Ebook mapped library" });
@@ -131,11 +134,13 @@ describe("Book manager request", () => {
     await waitFor(() => expect(api.fetchManagedRequestPreview).toHaveBeenCalledTimes(2));
     await fireEvent.click(await screen.findByRole("button", { name: "Request both formats" }));
     await screen.findByText(/Audiobook: Response interrupted/);
+    expect(onAccepted).toHaveBeenCalledExactlyOnceWith(BOOK_RENDITION.ebook);
     expect(onChanged).not.toHaveBeenCalled();
     await fireEvent.click(screen.getByRole("button", { name: "Retry same request" }));
     await waitFor(() => expect(api.saveManagedRequest).toHaveBeenCalledTimes(3));
     expect(api.saveManagedRequest.mock.calls[2][1]).toEqual(api.saveManagedRequest.mock.calls[1][1]);
     expect(api.saveManagedRequest.mock.calls[0][1].operationId).not.toBe(api.saveManagedRequest.mock.calls[2][1].operationId);
     expect(onChanged).toHaveBeenCalledOnce();
+    expect(onAccepted.mock.calls.map(call => call[0])).toEqual([BOOK_RENDITION.ebook, BOOK_RENDITION.audiobook]);
   });
 });

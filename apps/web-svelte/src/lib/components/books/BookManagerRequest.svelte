@@ -34,6 +34,7 @@
     acquisitions,
     monitors,
     managedRenditions,
+    onAccepted,
     onChanged,
   }: {
     bookId: string;
@@ -43,6 +44,7 @@
     acquisitions: readonly AcquisitionDetail[];
     monitors: readonly MonitorView[];
     managedRenditions: readonly ExternalBookRenditionProvenance[];
+    onAccepted?: (rendition: BookRenditionCode) => void;
     onChanged?: () => void | Promise<void>;
   } = $props();
 
@@ -181,6 +183,7 @@
         if (!alive) return;
         accepted = { ...accepted, [rendition]: result };
         pending = { ...pending, [rendition]: undefined };
+        onAccepted?.(rendition);
         changed = true;
       } catch (cause) {
         if (!alive) return;

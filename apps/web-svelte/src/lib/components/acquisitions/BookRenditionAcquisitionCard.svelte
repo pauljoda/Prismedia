@@ -18,6 +18,7 @@
     acquisitions,
     monitors,
     managedRenditions = [],
+    pendingManagerRenditions = [],
     onRequest,
     onRequestBoth,
     onToggleMonitor,
@@ -27,6 +28,7 @@
     acquisitions: readonly AcquisitionDetail[];
     monitors: readonly MonitorView[];
     managedRenditions?: readonly ExternalBookRenditionProvenance[];
+    pendingManagerRenditions?: readonly BookRenditionCode[];
     onRequest: (rendition: BookRenditionCode) => void | Promise<void>;
     onRequestBoth?: () => void | Promise<void>;
     onToggleMonitor?: (monitor: MonitorView) => void | Promise<void>;
@@ -42,6 +44,11 @@
 
   function renditionLabel(rendition: BookRenditionCode): string {
     return rendition === BOOK_RENDITION.audiobook ? "Audiobook" : "Ebook";
+  }
+
+  function managedOrPending(rendition: BookRenditionCode): boolean {
+    return Boolean(bookRenditionManagerOwner(rendition, managedRenditions))
+      || pendingManagerRenditions.includes(rendition);
   }
 
   function monitorStatusLine(monitor: MonitorView): string {
@@ -101,7 +108,7 @@
 
 <Item.Group class="gap-4">
   {#if onRequestBoth && rows.length === 2 && rows.every(row =>
-    bookRenditionCanRequest(row) && !bookRenditionManagerOwner(row.rendition, managedRenditions))}
+    bookRenditionCanRequest(row) && !managedOrPending(row.rendition))}
     <div class="flex flex-col gap-2">
       <Button type="button" variant="primary" disabled={requesting !== null || requestingBoth}
         onclick={() => void requestBoth()}>
@@ -125,8 +132,10 @@
           <Item.Title role="heading" aria-level={3}>{label}</Item.Title>
           {#if row.owned}
             <Item.Description>In library</Item.Description>
-          {:else if managerOwner}
-            <Item.Description>{managerOwner.connectionName} is managing this {label.toLowerCase()}.</Item.Description>
+          {:else if managerOwner || pendingManagerRenditions.includes(row.rendition)}
+            <Item.Description>{managerOwner
+              ? `${managerOwner.connectionName} is managing this ${label.toLowerCase()}.`
+              : `Connected manager request accepted for this ${label.toLowerCase()}.`}</Item.Description>
           {:else if row.acquisition}
             <div><Badge variant={status.tone === "failed" ? "error" : status.tone === "attention" ? "warning" : "default"}>{status.label}</Badge></div>
           {:else if row.monitor}
@@ -139,7 +148,7 @@
           {/if}
         </Item.Content>
         <Item.Actions class="flex-wrap @max-[32rem]:w-full @max-[32rem]:[&>button]:flex-1">
-          {#if bookRenditionCanRequest(row) && !managerOwner}
+          {#if bookRenditionCanRequest(row) && !managedOrPending(row.rendition)}
             <Button
               type="button"
               variant="secondary"

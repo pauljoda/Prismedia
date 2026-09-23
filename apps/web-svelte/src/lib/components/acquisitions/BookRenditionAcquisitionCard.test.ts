@@ -120,6 +120,18 @@ describe("BookRenditionAcquisitionCard", () => {
     });
     expect(screen.getByRole("button", { name: "Request audiobook" })).toBeInTheDocument();
   });
+
+  it("holds a newly accepted manager format while its linked holding is still processing", () => {
+    render(BookRenditionAcquisitionCard, {
+      ownership: { ebook: false, audiobook: false }, acquisitions: [], monitors: [],
+      pendingManagerRenditions: [BOOK_RENDITION.ebook, BOOK_RENDITION.audiobook],
+      onRequest: vi.fn(), onRequestBoth: vi.fn(),
+    });
+    expect(screen.getAllByText(/Connected manager request accepted/)).toHaveLength(2);
+    expect(screen.queryByRole("button", { name: "Request ebook" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Request audiobook" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Request ebook and audiobook" })).not.toBeInTheDocument();
+  });
 });
 
 function managerRendition(status: ExternalBookRenditionProvenance["holding"]["status"]): ExternalBookRenditionProvenance {
