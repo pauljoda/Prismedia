@@ -62,6 +62,17 @@ public sealed partial class EfManagedTrackingStore(PrismediaDbContext db, IExter
                 var checkedOwners = await new ManagedReservationScopeResolver(db).ResolveAsync(sourceEntityIds, item, leaseToken);
                 if (!checkedOwners.SequenceEqual(ownerIds))
                     throw new ArgumentException("The selected book work changed during ownership review.");
+                if (item.EntityKind == EntityKind.Book) {
+                    var siblingWorkIds = await db.ManagedHoldings.AsNoTracking()
+                        .Where(holding => holding.ConnectionId == connectionId && holding.Kind == EntityKind.Book
+                            && holding.RemoteId == item.RemoteId && holding.BookRendition != item.BookRendition
+                            && holding.Status != ManagedTrackingStatus.Released)
+                        .Join(db.FulfillmentReservations.AsNoTracking().Where(owner => owner.ReleasedAt == null),
+                            holding => holding.Id, owner => owner.OwnerId, (_, owner) => owner.EntityId)
+                        .Distinct().ToArrayAsync(leaseToken);
+                    if (siblingWorkIds.Any(id => id != checkedOwners[0]))
+                        throw new ArgumentException("The ebook and audiobook are scanned as separate Book works. Linking this format would leave them disconnected.");
+                }
                 db.ManagedHoldings.Add(row);
                 foreach (var ownerId in checkedOwners)
                     await new EfFulfillmentReservationStore(db).ReserveAsync(row.Id, FulfillmentOwnerKind.ConnectedLibrary,

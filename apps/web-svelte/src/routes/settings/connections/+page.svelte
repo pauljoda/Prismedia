@@ -294,6 +294,10 @@
                   <Button variant="secondary" size="sm" onclick={() => openMappings(connection)} disabled={saving || !!testingId || editorOpen}>
                     <FolderCog />Manage library folders
                   </Button>
+                {:else if supportsLibraryMappings(connection)}
+                  <a class={buttonVariants({ variant: "secondary", size: "sm" })} href={`/settings/${SETTING_SECTION.libraries}`}>
+                    <FolderCog />Map library folders
+                  </a>
                 {/if}
                 <Button variant="ghost" size="sm" onclick={(event) => openEditor(connection, event.currentTarget as HTMLElement)} disabled={saving || editorOpen || !!testingId || !plugin?.enabled}>Edit</Button>
                 <Button variant="ghost" size="sm" onclick={() => deleteTarget = connection} disabled={saving || editorOpen || !!testingId}>Remove</Button>

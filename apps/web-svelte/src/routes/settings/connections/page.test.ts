@@ -47,6 +47,15 @@ const managerPlugin: PluginProvider = {
     operations: [INTEGRATION_OPERATION.managerOptions], entityKinds: [ENTITY_KIND.book] }] },
 };
 
+const libraryPlugin: PluginProvider = {
+  ...catalogPlugin,
+  id: "library-fixture",
+  name: "Connected book library",
+  integration: { protocolVersion: 1, settings: [], capabilities: [{ kind: PLUGIN_CAPABILITY.connectedLibrary,
+    operations: [INTEGRATION_OPERATION.searchLibrary, INTEGRATION_OPERATION.getLibraryItem, INTEGRATION_OPERATION.listLibraries],
+    entityKinds: [ENTITY_KIND.book] }] },
+};
+
 function connection(plugin: PluginProvider, overrides: Partial<ConnectionResponse> = {}): ConnectionResponse {
   return {
     id: `${plugin.id}-connection`, pluginId: plugin.id, name: "My connection", baseUrl: "http://connection.test", enabled: true,
@@ -203,6 +212,16 @@ describe("Settings connections", () => {
 
     await waitFor(() => expect(screen.getByText("1 library folder linked")).toBeInTheDocument());
     expect(mocks.fetchLibraryMounts).toHaveBeenCalledTimes(3);
+  });
+
+  it("links connected-library-only sources to provider folder mapping", async () => {
+    const current = connection(libraryPlugin, { status: CONNECTION_STATUS.ready });
+    setup(libraryPlugin, current);
+
+    render(Page);
+    await screen.findByRole("article", { name: current.name });
+    expect(screen.getByRole("link", { name: "Map library folders" })).toHaveAttribute("href", "/settings/libraries");
+    expect(screen.queryByRole("button", { name: "Manage library folders" })).not.toBeInTheDocument();
   });
 
   it("does not offer Request browsing for an inspect-only catalog capability", async () => {

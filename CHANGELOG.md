@@ -12,7 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
-- LazyLibrarian can expose existing ebook and single-file audiobook holdings as two linked views of one Book, with separate mapped roots and read-only file checks. Multi-file audio remains in LazyLibrarian until its individual tracks can be verified.
+- LazyLibrarian can expose existing ebook and single-file audiobook holdings as separate renditions of one remote work, with distinct mapped roots and read-only file checks. Multi-file audio remains in LazyLibrarian until its individual tracks can be verified.
 - Books now keep precise reading and listening positions separately, so audiobook playback preserves the saved ebook location and each format can resume at its own position.
 - Book requests can choose ebook, audiobook, or both in one review, with a destination and profile for each format. A partial failure reports the format that needs a retry while keeping the successful request attached to the same Book.
 - Plugins can provide metadata, discovery, acquisition, downloads, and external-library capabilities independently. Connections support multiple instances with separate credentials, health checks, and packaged provider logos.
@@ -178,6 +178,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Connected-library-only Book sources now lead to provider-folder mapping, and linking a second rendition stops if its scanned Book record differs from the first.
 - Saving audiobook chapter alignment now rejects chapter targets that are absent from the Book's current readable contents, while preserving existing choices after an invalid save.
 
 - Continuing a book in reading and listening mode now explains when the saved readable chapter has no matching audio, and offers an explicit start at the first paired chapter.

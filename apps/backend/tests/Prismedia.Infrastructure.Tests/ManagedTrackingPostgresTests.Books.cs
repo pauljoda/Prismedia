@@ -9,6 +9,44 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed partial class ManagedTrackingPostgresTests {
     [Fact]
+    public async Task OneRemoteBookCannotLinkRenditionsToDifferentLocalWorks() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var connectionId = Guid.NewGuid();
+        var rootId = Guid.NewGuid();
+        var ebookId = Guid.NewGuid();
+        var audioBookId = Guid.NewGuid();
+        var trackId = Guid.NewGuid();
+        var ebookFileId = Guid.NewGuid();
+        var audioFileId = Guid.NewGuid();
+        db.IntegrationConnections.Add(new() { Id = connectionId, PluginId = "fixture", Name = "Fixture",
+            BaseUrl = "http://manager.test/", Enabled = true, Status = ConnectionStatus.Ready, Revision = 1 });
+        db.LibraryRoots.Add(new() { Id = rootId, Path = workspace, Label = "Books", Enabled = true, ScanBooks = true });
+        db.ExternalLibraryMounts.Add(new() { Id = Guid.NewGuid(), ConnectionId = connectionId, LibraryRootId = rootId,
+            RemoteRootId = "books", RemotePath = "/books", LocalPath = workspace });
+        db.Entities.AddRange(
+            new() { Id = ebookId, KindCode = EntityKind.Book.ToCode(), Title = "Example" },
+            new() { Id = audioBookId, KindCode = EntityKind.Book.ToCode(), Title = "Example" },
+            new() { Id = trackId, ParentEntityId = audioBookId, KindCode = EntityKind.AudioTrack.ToCode(), Title = "Example" });
+        db.EntityFiles.AddRange(
+            new() { Id = ebookFileId, EntityId = ebookId, Path = Path.Combine(workspace, "example.epub"), SizeBytes = 3 },
+            new() { Id = audioFileId, EntityId = trackId, Path = Path.Combine(workspace, "example.m4b"), SizeBytes = 3 });
+        await db.SaveChangesAsync();
+
+        var ids = new Dictionary<string, string> { ["fixture-book"] = "work-1" };
+        var ebook = new ManagedItemInput(EntityKind.Book, "work-1", ids, BookRendition.Ebook);
+        var store = Store(db);
+        await store.CreateAsync(connectionId, new(Guid.NewGuid(), rootId, ebook,
+            [new("work-1", ebookId, ebookFileId)]), "Example", default);
+
+        var audio = ebook with { BookRendition = BookRendition.Audiobook };
+        var error = await Assert.ThrowsAsync<ArgumentException>(() => store.CreateAsync(connectionId,
+            new(Guid.NewGuid(), rootId, audio, [new("track-1", trackId, audioFileId)]), "Example", default));
+        Assert.Contains("separate Book works", error.Message);
+        Assert.Single(await db.ManagedHoldings.AsNoTracking().ToArrayAsync());
+    }
+
+    [Fact]
     public async Task OneBookCanHaveIndependentConnectedEbookAndAudiobookOwners() {
         await using var database = await PostgresTestDatabase.CreateAsync();
         await using var db = database.CreateContext();
