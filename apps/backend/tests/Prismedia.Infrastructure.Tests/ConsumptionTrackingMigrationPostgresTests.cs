@@ -8,6 +8,7 @@ namespace Prismedia.Infrastructure.Tests;
 /// <summary>
 /// Verifies the 3.0 consumption upgrade against PostgreSQL so legacy progress, counters, event
 /// history, and active-time totals remain durable while newly introduced access facts stay exact.
+/// Fixtures and projections use only columns present at each historical migration boundary.
 /// </summary>
 public sealed class ConsumptionTrackingMigrationPostgresTests {
     private const string PreviousMigration = "20260731235116_AddUserEntityProgressUpdatedAt";
@@ -42,8 +43,28 @@ public sealed class ConsumptionTrackingMigrationPostgresTests {
         await database.MigrateAsync(MigrationUnderTest);
 
         await using var verification = database.CreateContext();
-        var state = await verification.UserEntityStates.SingleAsync(row =>
-            row.UserId == userId && row.EntityId == bookId);
+        var state = await verification.UserEntityStates
+            .Where(row => row.UserId == userId && row.EntityId == bookId)
+            .Select(row => new {
+                row.IsFavorite,
+                row.RatingValue,
+                row.CompletionCount,
+                row.SkipCount,
+                row.AccessCount,
+                row.LastAccessedAt,
+                row.ActiveSeconds,
+                row.ResumeSeconds,
+                row.LastActiveAt,
+                row.ProgressCurrentEntityId,
+                row.ProgressUnit,
+                row.ProgressIndex,
+                row.ProgressTotal,
+                row.ProgressMode,
+                row.ProgressLocation,
+                row.ProgressUpdatedAt,
+                row.ProgressConsumedCount
+            })
+            .SingleAsync();
         Assert.True(state.IsFavorite);
         Assert.Equal(4, state.RatingValue);
         Assert.Equal(7, state.CompletionCount);
@@ -89,16 +110,27 @@ public sealed class ConsumptionTrackingMigrationPostgresTests {
         var now = DateTimeOffset.Parse("2026-08-02T12:00:00Z");
         await SeedUserAndEntitiesAsync(database, userId, entityId);
 
+        await using (var connection = await database.OpenConnectionAsync()) {
+            await using var stateInsert = new NpgsqlCommand(
+                """
+                INSERT INTO user_entity_states (
+                    user_id, entity_id, is_favorite, access_count, completion_count, skip_count,
+                    active_seconds, resume_seconds, last_accessed_at, progress_unit,
+                    progress_index, progress_total, updated_at)
+                VALUES (
+                    @user_id, @entity_id, FALSE, 9, 7, 2,
+                    0, 0, @last_accessed_at, @progress_unit, 0, 0, @updated_at)
+                """,
+                connection);
+            stateInsert.Parameters.AddWithValue("user_id", userId);
+            stateInsert.Parameters.AddWithValue("entity_id", entityId);
+            stateInsert.Parameters.AddWithValue("last_accessed_at", now.AddDays(-10));
+            stateInsert.Parameters.AddWithValue("progress_unit", ProgressUnit.Item.ToCode());
+            stateInsert.Parameters.AddWithValue("updated_at", now);
+            await stateInsert.ExecuteNonQueryAsync();
+        }
+
         await using (var seed = database.CreateContext()) {
-            seed.UserEntityStates.Add(new UserEntityStateRow {
-                UserId = userId,
-                EntityId = entityId,
-                AccessCount = 9,
-                CompletionCount = 7,
-                SkipCount = 2,
-                LastAccessedAt = now.AddDays(-10),
-                UpdatedAt = now
-            });
             seed.EntityConsumptionEvents.AddRange(
                 Access(entityId, userId, "session-1", now.AddMinutes(-2)),
                 Access(entityId, userId, "session-2", now.AddMinutes(-1)),
@@ -116,8 +148,15 @@ public sealed class ConsumptionTrackingMigrationPostgresTests {
         await database.MigrateAsync(MigrationUnderTest);
 
         await using var verification = database.CreateContext();
-        var state = await verification.UserEntityStates.SingleAsync(row =>
-            row.UserId == userId && row.EntityId == entityId);
+        var state = await verification.UserEntityStates
+            .Where(row => row.UserId == userId && row.EntityId == entityId)
+            .Select(row => new {
+                row.AccessCount,
+                row.LastAccessedAt,
+                row.CompletionCount,
+                row.SkipCount
+            })
+            .SingleAsync();
         Assert.Equal(2, state.AccessCount);
         Assert.Equal(now.AddMinutes(-1), state.LastAccessedAt);
         Assert.Equal(7, state.CompletionCount);
