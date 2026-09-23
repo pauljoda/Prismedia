@@ -53,6 +53,20 @@ public sealed class ManagedRequestProcessorTests {
     }
 
     [Fact]
+    public void BookRequestIdentitySeparatesEbookAndAudiobookIntent() {
+        var ebook = new ManagedLookupInput(EntityKind.Book,
+            new Dictionary<string, string> { [ExternalIdProviders.OpenLibraryWork] = "OL123W" },
+            BookRendition: BookRendition.Ebook);
+        var audio = ebook with { BookRendition = BookRendition.Audiobook };
+        var request = new CreateManagedRequestInput(Guid.NewGuid(), Guid.NewGuid(), Guid.NewGuid(),
+            ebook, null, Monitored: true, Search: true);
+
+        Assert.False(ManagedRequestIdentity.SameWork(ebook, audio));
+        Assert.NotEqual(ManagedRequestIdentity.Fingerprint(request),
+            ManagedRequestIdentity.Fingerprint(request with { ReviewedWork = audio }));
+    }
+
+    [Fact]
     public void MovieFingerprintRemainsCompatibleWithArchivedContractBeforeFiniteTargets() {
         const string archivedJson = """{"OperationId":"11111111-1111-1111-1111-111111111111","EntityId":"22222222-2222-2222-2222-222222222222","LibraryRootId":"33333333-3333-3333-3333-333333333333","ReviewedWork":{"EntityKind":15,"ExternalIds":{"tmdb":"42"}},"ProfileId":"1","Monitored":true,"Search":true}""";
         const string archivedFingerprint = "11c79bfde3e2129600000e151f40128ad0dc6369aa7c3cbd0b9b45edf9ec63a8";
