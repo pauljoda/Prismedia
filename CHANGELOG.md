@@ -191,6 +191,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Soulseek queues now retry a transient peer-wait timeout once after checking that slskd did not already enqueue the selected files.
+
 - Soulseek publication searches now have enough transport time to collect results when slskd finishes its peer window late.
 
 - A Book now hides competing local request actions as soon as a connected manager accepts a format, while its external library status is still processing.
