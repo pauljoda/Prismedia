@@ -15,6 +15,7 @@
     connectionName = "Connected app",
     targetEntityId,
     targetLabel,
+    controlLabel,
   }: {
     connectionId: string;
     holdingId: string;
@@ -22,6 +23,7 @@
     connectionName?: string;
     targetEntityId?: string;
     targetLabel?: string;
+    controlLabel?: string;
   } = $props();
   let dialogOpen = $state(false);
   let actions = $state<ManagedControlActionResponse[]>([]);
@@ -184,7 +186,7 @@
 {/snippet}
 
 <div class="min-w-0">
-  <Button variant="outline" size="sm" aria-label={targetLabel ? `${targetLabel} settings and activity in ${connectionName}` : `${connectionName} settings and activity`} onclick={() => setDialogOpen(true)}>
+  <Button variant="outline" size="sm" aria-label={controlLabel ?? (targetLabel ? `${targetLabel} settings and activity in ${connectionName}` : `${connectionName} settings and activity`)} onclick={() => setDialogOpen(true)}>
     <Settings2 />{targetLabel ? "Manage issue" : "Settings & activity"}
   </Button>
 </div>

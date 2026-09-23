@@ -4,7 +4,7 @@ import { createRawSnippet } from "svelte";
 import * as navigation from "$app/navigation";
 import type { BeforeNavigate } from "@sveltejs/kit";
 import { describe, expect, it, vi } from "vitest";
-import { ACQUISITION_STATUS, CAPABILITY_KIND, ENTITY_KIND, EXTERNAL_ID_PROVIDER, FINGERPRINT_ALGORITHM, MANAGED_REQUEST_PHASE, MANAGED_TRACKING_STATUS, REQUEST_MEDIA_KIND } from "$lib/api/generated/codes";
+import { ACQUISITION_STATUS, BOOK_RENDITION, CAPABILITY_KIND, ENTITY_KIND, EXTERNAL_ID_PROVIDER, FINGERPRINT_ALGORITHM, MANAGED_REQUEST_PHASE, MANAGED_TRACKING_STATUS, REQUEST_MEDIA_KIND } from "$lib/api/generated/codes";
 import type { EntityDetailCard, EntityDetailCardFull } from "$lib/entities/entity-detail";
 import type { EntityDetailSection } from "./EntityDetail.svelte";
 import EntityDetail from "./EntityDetail.test-harness.svelte";
@@ -118,6 +118,58 @@ describe("EntityDetail", () => {
     ]);
     await fireEvent.click(screen.getByRole("tab", { name: "Acquisition" }));
     expect(screen.getByRole("tabpanel", { name: "Acquisition" })).toBeInTheDocument();
+  });
+
+  it("shows separate linked Book rendition controls across mapped roots", async () => {
+    const card = buildCard();
+    card.entity.kind = ENTITY_KIND.book;
+    card.externalLibraryProvenance = {
+      ...externalLibraryProvenance(),
+      bookRenditions: ([
+        [BOOK_RENDITION.ebook, "ebook-holding", "Ebook root"],
+        [BOOK_RENDITION.audiobook, "audio-holding", "Audio root"],
+      ] as const).map(([rendition, holdingId, libraryLabel]) => ({
+        rendition,
+        connectionId: "connection-one",
+        connectionName: "LazyLibrarian",
+        pluginId: "lazylibrarian",
+        libraryRootId: `${holdingId}-root`,
+        libraryLabel,
+        holding: {
+          holdingId,
+          item: {
+            entityKind: ENTITY_KIND.book,
+            remoteId: "OL123W",
+            expectedExternalIds: { [EXTERNAL_ID_PROVIDER.openLibraryWork]: "OL123W" },
+            bookRendition: rendition,
+          },
+          status: MANAGED_TRACKING_STATUS.tracking,
+        },
+        request: {
+          requestId: holdingId,
+          phase: MANAGED_REQUEST_PHASE.completed,
+          updatedAt: "2026-09-23T12:00:00Z",
+          problem: null,
+        },
+      })),
+    };
+    render(EntityDetail, { card, admin: true });
+
+    await fireEvent.click(screen.getByRole("tab", { name: "External library" }));
+
+    const panel = screen.getByRole("tabpanel", { name: "External library" });
+    expect(within(panel).getByRole("heading", { name: "Ebook" })).toBeInTheDocument();
+    expect(within(panel).getByRole("heading", { name: "Audiobook" })).toBeInTheDocument();
+    expect(within(panel).getByText("Ebook root")).toBeInTheDocument();
+    expect(within(panel).getByText("Audio root")).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: "Ebook settings and activity in LazyLibrarian" })).toBeInTheDocument();
+    expect(within(panel).getByRole("button", { name: "Audiobook settings and activity in LazyLibrarian" })).toBeInTheDocument();
+    const ebookLink = within(panel).getByRole("link", { name: "Open ebook connected title" });
+    const audioLink = within(panel).getByRole("link", { name: "Open audiobook connected title" });
+    expect(new URL(ebookLink.getAttribute("href")!, "http://localhost").searchParams.get("rendition"))
+      .toBe(BOOK_RENDITION.ebook);
+    expect(new URL(audioLink.getAttribute("href")!, "http://localhost").searchParams.get("rendition"))
+      .toBe(BOOK_RENDITION.audiobook);
   });
 
   it("links administrators to the exact identity-pinned connected holding", async () => {

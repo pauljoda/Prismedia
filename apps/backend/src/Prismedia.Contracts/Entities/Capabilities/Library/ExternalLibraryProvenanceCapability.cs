@@ -23,6 +23,25 @@ public sealed record ExternalLibraryRequestReference(
     DateTimeOffset UpdatedAt,
     string? Problem);
 
+/// <summary>One rendition of a Book managed through an exact saved external holding.</summary>
+/// <param name="Rendition">The ebook or audiobook scope owned by this holding.</param>
+/// <param name="ConnectionId">Connection that owns the remote work.</param>
+/// <param name="ConnectionName">Saved user-facing connection name.</param>
+/// <param name="PluginId">Installed provider identity used for its icon.</param>
+/// <param name="LibraryRootId">Mapped Prismedia library for this rendition.</param>
+/// <param name="LibraryLabel">Saved mapped-library label.</param>
+/// <param name="Holding">Exact linked holding and identity pin.</param>
+/// <param name="Request">The request that accepted this rendition.</param>
+public sealed record ExternalBookRenditionProvenance(
+    BookRendition Rendition,
+    Guid ConnectionId,
+    string ConnectionName,
+    string PluginId,
+    Guid LibraryRootId,
+    string LibraryLabel,
+    ExternalManagedHoldingReference Holding,
+    ExternalLibraryRequestReference Request);
+
 /// <summary>Saved provenance for an Entity whose effective library root is an external read-only mapping.</summary>
 /// <param name="ConnectionId">Prismedia connection that owns the external-library mapping.</param>
 /// <param name="ConnectionName">User-facing saved connection name.</param>
@@ -31,6 +50,7 @@ public sealed record ExternalLibraryRequestReference(
 /// <param name="LibraryLabel">User-facing mapped library name.</param>
 /// <param name="Holding">Exact linked holding when an explicit entity association was retained.</param>
 /// <param name="Request">An accepted external request, also present for fileless wanted entities.</param>
+/// <param name="BookRenditions">All exact managed rendition holdings of a Book, including separate mapped roots.</param>
 [CapabilityKind("external-library-provenance")]
 public sealed record ExternalLibraryProvenanceCapability(
     Guid ConnectionId,
@@ -39,4 +59,5 @@ public sealed record ExternalLibraryProvenanceCapability(
     Guid LibraryRootId,
     string LibraryLabel,
     ExternalManagedHoldingReference? Holding = null,
-    ExternalLibraryRequestReference? Request = null) : EntityCapability;
+    ExternalLibraryRequestReference? Request = null,
+    IReadOnlyList<ExternalBookRenditionProvenance>? BookRenditions = null) : EntityCapability;

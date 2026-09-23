@@ -40,7 +40,10 @@ public sealed class EfEntityExternalLibraryProvenanceReader(PrismediaDbContext d
         if (source is null) {
             var hasLibrary = await db.EntityRollups.AsNoTracking()
                 .AnyAsync(row => row.EntityId == entityId && row.EffectiveLibraryRootId != null, cancellationToken);
-            if (hasLibrary) return null;
+            var hasExactBookRequest = await requests.AnyAsync(row => db.ManagedHoldings.Any(holding =>
+                holding.Id == row.Id && holding.Kind == EntityKind.Book
+                && holding.BookRendition != null), cancellationToken);
+            if (hasLibrary && !hasExactBookRequest) return null;
             source = await (
                 from request in requests
                 join mount in db.ExternalLibraryMounts.AsNoTracking()
@@ -102,6 +105,52 @@ public sealed class EfEntityExternalLibraryProvenanceReader(PrismediaDbContext d
             source.LibraryRootId,
             source.LibraryLabel,
             reference,
-            requestReference);
+            requestReference,
+            await ReadBookRenditionsAsync(entityId, cancellationToken));
+    }
+
+    private async Task<IReadOnlyList<ExternalBookRenditionProvenance>> ReadBookRenditionsAsync(
+        Guid entityId, CancellationToken token) {
+        var rows = await (
+            from request in db.ManagedRequests.AsNoTracking()
+            join holding in db.ManagedHoldings.AsNoTracking() on request.Id equals holding.Id
+            join root in db.LibraryRoots.AsNoTracking() on holding.LibraryRootId equals root.Id
+            join connection in db.IntegrationConnections.AsNoTracking() on holding.ConnectionId equals connection.Id
+            where request.EntityId == entityId && holding.Kind == EntityKind.Book
+                && holding.BookRendition != null
+            select new {
+                Rendition = holding.BookRendition,
+                ConnectionId = connection.Id,
+                ConnectionName = connection.Name,
+                connection.PluginId,
+                LibraryRootId = root.Id,
+                LibraryLabel = root.Label,
+                HoldingId = holding.Id,
+                holding.ItemJson,
+                holding.Kind,
+                holding.RemoteId,
+                holding.Status,
+                RequestId = request.Id,
+                request.Phase,
+                request.UpdatedAt,
+                request.Problem,
+            }).ToArrayAsync(token);
+        var result = new List<ExternalBookRenditionProvenance>(rows.Length);
+        foreach (var row in rows) {
+            try {
+                var item = JsonSerializer.Deserialize<ManagedItemInput>(row.ItemJson, Json);
+                if (row.Rendition is not { } rendition || !ManagedLibraryService.IsValidInput(item)
+                    || item!.EntityKind != row.Kind || item.RemoteId != row.RemoteId
+                    || item.BookRendition != rendition) continue;
+                result.Add(new(rendition, row.ConnectionId, row.ConnectionName, row.PluginId,
+                    row.LibraryRootId, row.LibraryLabel,
+                    new(row.HoldingId, item, row.Status),
+                    new(row.RequestId, row.Phase, row.UpdatedAt, row.Problem)));
+            } catch (JsonException) {
+                // A corrupt holding cannot supply an exact Book rendition link.
+            }
+        }
+        return result.OrderBy(row => row.Rendition).ThenBy(row => row.ConnectionName, StringComparer.Ordinal)
+            .ThenBy(row => row.Holding.HoldingId).ToArray();
     }
 }

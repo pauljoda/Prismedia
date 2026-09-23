@@ -7,6 +7,7 @@
   import PluginIcon from "$lib/components/plugins/PluginIcon.svelte";
   import ManagedHoldingControls from "./ManagedHoldingControls.svelte";
   import ManagedHoldingRelease from "./ManagedHoldingRelease.svelte";
+  import BookExternalLibraryRenditions from "./BookExternalLibraryRenditions.svelte";
   import { useSession } from "$lib/stores/session.svelte";
 
   let { origin, sourceLink, hasSourceMedia = false }: {
@@ -31,6 +32,9 @@
   const waiting = $derived(origin.request && !removed && origin.request.phase !== MANAGED_REQUEST_PHASE.completed);
 </script>
 
+{#if origin.bookRenditions?.length}
+  <BookExternalLibraryRenditions renditions={origin.bookRenditions} />
+{:else}
 <Panel class="w-full max-w-2xl space-y-5 p-5">
   <header class="flex flex-wrap items-center gap-3">
     <PluginIcon name={origin.connectionName} iconUrl={getGetPluginIconUrl(origin.pluginId)} class="size-9" />
@@ -73,3 +77,4 @@
     </div>
   {/if}
 </Panel>
+{/if}

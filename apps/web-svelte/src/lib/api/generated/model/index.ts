@@ -308,6 +308,7 @@ export * from './entityThumbnailMeta';
 export * from './entityUrl';
 export * from './excludeFileParams';
 export * from './executorInspectionResponse';
+export * from './externalBookRenditionProvenance';
 export * from './externalIdentity';
 export * from './externalIdentityRetirement';
 export * from './externalLibraryMount';

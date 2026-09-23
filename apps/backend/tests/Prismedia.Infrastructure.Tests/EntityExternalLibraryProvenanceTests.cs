@@ -162,6 +162,72 @@ public sealed class EntityExternalLibraryProvenanceTests {
         Assert.Null(result.Holding);
     }
 
+    [Fact]
+    public async Task BookProjectsBothExactRenditionHoldingsAcrossMappedRoots() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var fixture = await AddExternalLibraryAsync(db, enabled: true, ConnectionStatus.Ready);
+        var now = DateTimeOffset.UtcNow;
+        var audioRootId = Guid.NewGuid();
+        db.LibraryRoots.Add(new LibraryRootRow {
+            Id = audioRootId, Path = $"/media/audio-{Guid.NewGuid():N}", Label = "External audio",
+            Enabled = true, CreatedAt = now, UpdatedAt = now
+        });
+        db.ExternalLibraryMounts.Add(new ExternalLibraryMountRow {
+            Id = Guid.NewGuid(), ConnectionId = fixture.ConnectionId, LibraryRootId = audioRootId,
+            RemoteRootId = "audio", RemotePath = "/remote/audio", LocalPath = "/media/audio", CreatedAt = now
+        });
+        var book = AddEntity(db, EntityKind.Book, "One work", null, now);
+        db.EntityLibraryRoots.Add(new EntityLibraryRootRow {
+            EntityId = book.Id, LibraryRootId = fixture.LibraryRootId
+        });
+        var identities = new Dictionary<string, string> { [ExternalIdProviders.OpenLibraryWork] = "OL123W" };
+        foreach (var (rendition, rootId) in new[] {
+            (BookRendition.Ebook, fixture.LibraryRootId),
+            (BookRendition.Audiobook, audioRootId)
+        }) {
+            var id = Guid.NewGuid();
+            var item = new ManagedItemInput(EntityKind.Book, "OL123W", identities, rendition);
+            db.ManagedRequests.Add(new ManagedRequestRow {
+                Id = id, ConnectionId = fixture.ConnectionId, LibraryRootId = rootId,
+                EntityId = book.Id, Phase = ManagedRequestPhase.Completed, Revision = 1,
+                CreatedAt = now, UpdatedAt = now
+            });
+            db.ManagedHoldings.Add(new ManagedHoldingRow {
+                Id = id, ConnectionId = fixture.ConnectionId, LibraryRootId = rootId,
+                Kind = EntityKind.Book, BookRendition = rendition, RemoteId = item.RemoteId,
+                Title = book.Title, ItemJson = JsonSerializer.Serialize(item, PluginProcessTransport.JsonOptions),
+                Status = ManagedTrackingStatus.Tracking, Revision = 1,
+                LastCheckedAt = now, NextCheckAt = now
+            });
+        }
+        await db.SaveChangesAsync();
+
+        var origin = await new EfEntityExternalLibraryProvenanceReader(db).ReadAsync(book.Id, default);
+
+        Assert.NotNull(origin);
+        var links = Assert.IsAssignableFrom<IReadOnlyList<ExternalBookRenditionProvenance>>(origin.BookRenditions);
+        Assert.Equal([BookRendition.Ebook, BookRendition.Audiobook], links.Select(link => link.Rendition).ToArray());
+        Assert.Equal([fixture.LibraryRootId, audioRootId], links.Select(link => link.LibraryRootId).ToArray());
+        Assert.All(links, link => {
+            Assert.Equal("OL123W", link.Holding.Item.ExpectedExternalIds[ExternalIdProviders.OpenLibraryWork]);
+            Assert.Equal(link.Rendition, link.Holding.Item.BookRendition);
+            Assert.Equal(ManagedRequestPhase.Completed, link.Request.Phase);
+        });
+
+        var nativeRootId = Guid.NewGuid();
+        db.LibraryRoots.Add(new LibraryRootRow {
+            Id = nativeRootId, Path = $"/media/native-{Guid.NewGuid():N}", Label = "Native ebook",
+            Enabled = true, CreatedAt = now, UpdatedAt = now
+        });
+        (await db.EntityLibraryRoots.SingleAsync(row => row.EntityId == book.Id)).LibraryRootId = nativeRootId;
+        await db.SaveChangesAsync();
+
+        var mixedOrigin = await new EfEntityExternalLibraryProvenanceReader(db).ReadAsync(book.Id, default);
+        Assert.NotNull(mixedOrigin);
+        Assert.Equal(2, mixedOrigin.BookRenditions?.Count);
+    }
+
     private static EntityRow AddEntity(PrismediaDbContext db, EntityKind kind, string title, Guid? parentId, DateTimeOffset now) {
         var row = new EntityRow {
             Id = Guid.NewGuid(), KindCode = kind.ToCode(), Title = title, ParentEntityId = parentId,
