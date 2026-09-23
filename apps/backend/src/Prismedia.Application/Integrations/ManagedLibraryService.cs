@@ -58,6 +58,15 @@ public sealed class ManagedLibraryService(IntegrationConnectionAccess access, II
                 || target.SeasonNumber is null || target.EpisodeNumber is null)
             || input.EntityKind == EntityKind.ComicSeries && targets.Any(target => target.EntityKind != EntityKind.ComicInstallment
                 || !Text(target.IssueLabel, 128) || target.SeasonNumber is not null || target.EpisodeNumber is not null || target.AbsoluteNumber is not null)) throw Invalid();
+        if (snapshot.ComicIssues is { } issues) {
+            if (input.EntityKind != EntityKind.ComicSeries || issues.Count > 10000
+                || issues.Any(issue => issue is null || !Text(issue.RemoteId, 512) || !Text(issue.IssueLabel, 128) || !Text(issue.Title, 512))
+                || issues.Select(issue => issue.RemoteId).Distinct(StringComparer.Ordinal).Count() != issues.Count)
+                throw Invalid();
+            var issueById = issues.ToDictionary(issue => issue.RemoteId, StringComparer.Ordinal);
+            if (targets.Any(target => !issueById.TryGetValue(target.RemoteId, out var issue)
+                || target.IssueLabel != issue.IssueLabel || target.Title != issue.Title)) throw Invalid();
+        }
     }
 
     /// <summary>Reads existing profiles and folders without persisting defaults or issuing remote commands.</summary>

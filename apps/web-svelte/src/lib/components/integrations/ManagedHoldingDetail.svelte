@@ -9,6 +9,7 @@
     FolderOpen,
     HardDrive,
     Link2,
+    ListOrdered,
     LoaderCircle,
     Server,
   } from "@lucide/svelte";
@@ -38,6 +39,7 @@
   const FILE_PAGE_SIZE = 50;
   const overviewSectionId = "connected-overview";
   const filesSectionId = "connected-files";
+  const issuesSectionId = "connected-issues";
   const librarySectionId = "connected-library";
 
   let {
@@ -65,6 +67,7 @@
   } = $props();
 
   let visibleFiles = $state(INITIAL_FILE_LIMIT);
+  let visibleIssues = $state(INITIAL_FILE_LIMIT);
   let mappingOpen = $state(false);
   const kindLabel = $derived(displayNameForEntityKind(detail.item.entityKind));
   const isTrackable = $derived(
@@ -79,6 +82,18 @@
   const runtimeLabel = $derived(formatRuntimeMinutes(presentation?.runtimeMinutes));
   const visibleReportedFiles = $derived(detail.files.slice(0, visibleFiles));
   const remainingFileCount = $derived(Math.max(0, detail.files.length - visibleFiles));
+  const comicIssues = $derived(detail.comicIssues ?? []);
+  const visibleReportedIssues = $derived(comicIssues.slice(0, visibleIssues));
+  const remainingIssueCount = $derived(Math.max(0, comicIssues.length - visibleIssues));
+  const fileCountByIssue = $derived.by(() => {
+    const counts = new Map<string, number>();
+    for (const file of detail.files) {
+      for (const target of file.targets) {
+        counts.set(target.remoteId, (counts.get(target.remoteId) ?? 0) + 1);
+      }
+    }
+    return counts;
+  });
   const verifiedFileCount = $derived(
     localFiles === null
       ? 0
@@ -211,10 +226,14 @@
   const sections: EntityDetailSection[] = [
     { id: overviewSectionId },
     { id: filesSectionId },
+    { id: issuesSectionId },
     { id: librarySectionId },
   ];
   const tabs = $derived.by((): EntityDetailTab[] => [
     { id: "overview", label: "Overview", icon: Server, sections: ["description", "tags", overviewSectionId] },
+    ...(detail.item.entityKind === ENTITY_KIND.comicSeries && detail.comicIssues != null
+      ? [{ id: "issues", label: "Issues", count: comicIssues.length, icon: ListOrdered, sections: [issuesSectionId] }]
+      : []),
     { id: "files", label: "Files", count: detail.files.length, icon: FileText, sections: [filesSectionId] },
     ...(isTrackable
       ? [{ id: "library", label: "In Prismedia", icon: Link2, sections: [librarySectionId] }]
@@ -239,6 +258,7 @@
   $effect(() => {
     detail.item.remoteId;
     visibleFiles = INITIAL_FILE_LIMIT;
+    visibleIssues = INITIAL_FILE_LIMIT;
   });
 
   function fileName(file: ManagedLibraryFile): string {
@@ -318,11 +338,45 @@
       ...(runtimeLabel ? [{ label: "Runtime", value: runtimeLabel }] : []),
       ...(presentation?.contentRating ? [{ label: "Content rating", value: presentation.contentRating }] : []),
       { label: "Files reported", value: String(detail.files.length) },
+      ...(detail.comicIssues != null ? [{ label: "Issues reported", value: String(comicIssues.length) }] : []),
       { label: "Observed", value: observedAt(detail.observedAt) },
     ]} />
     <MetadataCard title="Source folder" icon={FolderOpen} wide stacked monospace rows={[
       { label: `${connection.name} folder`, value: detail.path },
     ]} />
+  </div>
+{/snippet}
+
+{#snippet issuesContent()}
+  <div class="space-y-3">
+    <p class="text-sm text-text-muted">
+      Issues reported by {connection.name}, including those without a final file. Monitoring is shown as it currently stands in the connected app.
+    </p>
+    {#if comicIssues.length}
+      <div class="grid gap-3">
+        {#each visibleReportedIssues as issue (issue.remoteId)}
+          {@const fileCount = fileCountByIssue.get(issue.remoteId) ?? 0}
+          <Panel class="min-w-0 p-4">
+            <div class="flex min-w-0 flex-wrap items-center justify-between gap-3">
+              <div class="min-w-0">
+                <h3 class="text-sm font-medium text-text-primary">#{issue.issueLabel} · {issue.title}</h3>
+                <p class="mt-1 text-xs text-text-muted">{fileCount === 0 ? "No final file reported" : `${fileCount} final ${fileCount === 1 ? "file" : "files"} reported`}</p>
+              </div>
+              <Badge variant={issue.monitored && detail.item.monitored ? "success" : "outline"}>
+                {issue.monitored ? detail.item.monitored ? "Monitored" : "Run monitoring off" : "Not monitored"}
+              </Badge>
+            </div>
+          </Panel>
+        {/each}
+      </div>
+      {#if remainingIssueCount > 0}
+        <Button variant="secondary" onclick={() => visibleIssues += FILE_PAGE_SIZE}>
+          Show {Math.min(FILE_PAGE_SIZE, remainingIssueCount)} more issues
+        </Button>
+      {/if}
+    {:else}
+      <Panel class="p-6 text-center text-sm text-text-muted">No issues reported for this run.</Panel>
+    {/if}
   </div>
 {/snippet}
 
@@ -389,6 +443,8 @@
     {@render overviewContent()}
   {:else if section.id === filesSectionId}
     {@render filesContent()}
+  {:else if section.id === issuesSectionId}
+    {@render issuesContent()}
   {:else if section.id === librarySectionId}
     {@render libraryContent()}
   {/if}

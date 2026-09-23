@@ -26,4 +26,6 @@ export interface ManagedLocalSource {
      * @pattern ^-?(?:0|[1-9]\d*)$
      */
   absoluteNumber: number | string | null;
+  /** @nullable */
+  issueLabel?: string | null;
 }

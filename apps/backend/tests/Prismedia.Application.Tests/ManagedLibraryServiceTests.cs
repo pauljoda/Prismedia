@@ -45,6 +45,26 @@ public sealed class ManagedLibraryServiceTests {
     }
 
     [Fact]
+    public void ComicIssueCatalogIncludesMissingIssuesAndMustAgreeWithFileEvidence() {
+        var item = new ManagedLibraryItem("run", EntityKind.ComicSeries, "Comics", 2026,
+            new Dictionary<string, string> { [FixtureProvider] = "fixture-run" }, false, null, 1);
+        var input = new ManagedItemInput(item.EntityKind, item.RemoteId, item.ExternalIds);
+        var snapshot = new ManagedItemSnapshot(item, "/comics/run", [new("file", "/comics/run/half.cbz", 128, null,
+            [new("half", EntityKind.ComicInstallment, "Half issue", IssueLabel: "½")])], DateTimeOffset.UtcNow,
+            [new("half", "½", "Half issue", true), new("missing", "12.5", "Interlude", false)]);
+
+        ManagedLibraryService.ValidateSnapshot(input, snapshot);
+        var issues = snapshot.ComicIssues!;
+        Assert.Equal(2, issues.Count);
+        foreach (var invalid in new[] {
+            snapshot with { ComicIssues = [issues[0], issues[0]] },
+            snapshot with { ComicIssues = [issues[0] with { IssueLabel = "1" }, issues[1]] },
+            snapshot with { ComicIssues = [issues[1]] },
+            snapshot with { ComicIssues = [issues[0] with { Title = "Changed" }, issues[1]] }
+        }) Assert.Throws<IntegrationInvocationException>(() => ManagedLibraryService.ValidateSnapshot(input, invalid));
+    }
+
+    [Fact]
     public async Task ReadHoldingPinsIdentityAndReturnsRemoteEvidenceWithoutImporting() {
         var fixture = new Fixture();
         var page = await fixture.Service.SearchAsync(fixture.Connection.State.Id, new(EntityKind.Movie), default);

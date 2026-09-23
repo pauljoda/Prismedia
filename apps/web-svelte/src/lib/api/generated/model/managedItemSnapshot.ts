@@ -4,6 +4,7 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { ManagedComicIssue } from './managedComicIssue';
 import type { ManagedLibraryFile } from './managedLibraryFile';
 import type { ManagedLibraryItem } from './managedLibraryItem';
 
@@ -12,4 +13,6 @@ export interface ManagedItemSnapshot {
   path: string;
   files: ManagedLibraryFile[];
   observedAt: string;
+  /** @nullable */
+  comicIssues?: ManagedComicIssue[] | null;
 }

@@ -48,8 +48,12 @@ public sealed record ManagedFileTarget(string RemoteId, EntityKind EntityKind, s
 /// <summary>Remote file evidence. Paths belong to the connected server and require an explicit local mapping before access.</summary>
 public sealed record ManagedLibraryFile(string RemoteId, string Path, long SizeBytes, DateTimeOffset? AddedAt,
     IReadOnlyList<ManagedFileTarget> Targets);
+/// <summary>One issue in a connected comic run, including issues with no final file yet.</summary>
+public sealed record ManagedComicIssue(string RemoteId, string IssueLabel, string Title, bool Monitored);
 /// <summary>Current remote item and exact file associations; an empty file list is not inferred from a completed command.</summary>
-public sealed record ManagedItemSnapshot(ManagedLibraryItem Item, string Path, IReadOnlyList<ManagedLibraryFile> Files, DateTimeOffset ObservedAt);
+/// <param name="ComicIssues">Complete issue list when the connected comic manager supports it; null for older adapters and other media.</param>
+public sealed record ManagedItemSnapshot(ManagedLibraryItem Item, string Path, IReadOnlyList<ManagedLibraryFile> Files, DateTimeOffset ObservedAt,
+    IReadOnlyList<ManagedComicIssue>? ComicIssues = null);
 /// <summary>Requests the connected application's own profile and root choices for this kind.</summary>
 public sealed record ManagerOptionsInput(EntityKind EntityKind);
 /// <summary>An opaque external profile or policy ID and its display name.</summary>
