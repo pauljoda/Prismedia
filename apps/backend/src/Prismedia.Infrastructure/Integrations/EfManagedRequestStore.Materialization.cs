@@ -86,7 +86,7 @@ public sealed partial class EfManagedRequestStore {
         await transaction.CommitAsync(token);
     }
 
-    private static IReadOnlyList<ManagedTargetBinding> ResolveBindings(
+    internal static IReadOnlyList<ManagedTargetBinding> ResolveBindings(
         ManagedRequestTarget target,
         ManagedItemSnapshot snapshot,
         IReadOnlyList<ManagedResolvedTarget>? resolvedTargets) {
@@ -104,12 +104,13 @@ public sealed partial class EfManagedRequestStore {
                 candidate.EntityKind == request.EntityKind
                 && candidate.SeasonNumber == request.SeasonNumber
                 && candidate.EpisodeNumber == request.EpisodeNumber
+                && candidate.IssueLabel == request.IssueLabel
                 && (candidate.AbsoluteNumber is null
                     || request.AbsoluteNumber is null
                     || candidate.AbsoluteNumber == request.AbsoluteNumber)
                 && request.ExternalIds.All(pair => candidate.ExternalIds.GetValueOrDefault(pair.Key) == pair.Value));
             bindings.Add(new(
-                new(remote.RemoteId, remote.EntityKind, remote.SeasonNumber, remote.EpisodeNumber, remote.AbsoluteNumber),
+                new(remote.RemoteId, remote.EntityKind, remote.SeasonNumber, remote.EpisodeNumber, remote.AbsoluteNumber, remote.IssueLabel),
                 local.EntityId));
         }
         return bindings;
