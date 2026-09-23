@@ -23,7 +23,7 @@ public static class ManagedControlIdentity {
             throw new ManagedControlConflictException("The reviewed append scope no longer belongs to this holding.");
         var item = holding.Item with { ExpectedExternalIds = holding.Item.ExpectedExternalIds.OrderBy(pair => pair.Key, StringComparer.Ordinal).ToDictionary() };
         var targets = bindings.Select(binding => new ManagedControlTarget(binding.Target.RemoteTargetId, binding.Target.Kind,
-            binding.Target.SeasonNumber, binding.Target.EpisodeNumber, binding.Target.AbsoluteNumber)).ToArray();
+            binding.Target.SeasonNumber, binding.Target.EpisodeNumber, binding.Target.AbsoluteNumber, binding.Target.IssueLabel)).ToArray();
         return new(new(item, targets), Hash(new { holding.Id, holding.ConnectionId, holding.LibraryRootId, Item = item,
             Bindings = bindings.Select(binding => new { binding.Target, binding.EntityId }) }));
     }

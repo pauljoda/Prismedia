@@ -102,7 +102,8 @@ public static class ManagedControlValidation {
     public static void Validate(ManagedControlScope scope, ManagedControlState state) {
         if (state?.Item is null || state.Capabilities is null || state.Item.EntityKind != scope.Item.EntityKind || state.Item.RemoteId != scope.Item.RemoteId
             || state.Item.ExternalIds is null || scope.Item.ExpectedExternalIds.Any(pair => !state.Item.ExternalIds.TryGetValue(pair.Key, out var value) || value != pair.Value)
-            || string.IsNullOrWhiteSpace(state.Path) || state.Path.Length > 8192 || string.IsNullOrWhiteSpace(state.Item.ProfileId)
+            || string.IsNullOrWhiteSpace(state.Path) || state.Path.Length > 8192
+            || scope.Item.EntityKind != EntityKind.ComicSeries && string.IsNullOrWhiteSpace(state.Item.ProfileId)
             || state.Targets is null || state.Targets.Count != scope.Targets.Count || state.Targets.Any(target => target?.Target is null)
             || !scope.Targets.OrderBy(target => target.RemoteId, StringComparer.Ordinal).SequenceEqual(state.Targets.Select(target => target.Target).OrderBy(target => target.RemoteId, StringComparer.Ordinal)))
             throw new IntegrationInvocationException("The manager returned a changed identity or incomplete configuration for the reviewed scope.");

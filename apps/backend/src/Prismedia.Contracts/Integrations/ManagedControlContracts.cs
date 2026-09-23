@@ -4,7 +4,7 @@ namespace Prismedia.Contracts.Integrations;
 
 /// <summary>One exact remote target in a reviewed scope; titles do not establish its identity.</summary>
 public sealed record ManagedControlTarget(string RemoteId, EntityKind EntityKind,
-    int? SeasonNumber = null, int? EpisodeNumber = null, int? AbsoluteNumber = null);
+    int? SeasonNumber = null, int? EpisodeNumber = null, int? AbsoluteNumber = null, string? IssueLabel = null);
 /// <summary>A pinned work and finite content targets; a series ID alone does not authorize every episode.</summary>
 public sealed record ManagedControlScope(ManagedItemInput Item, IReadOnlyList<ManagedControlTarget> Targets);
 /// <summary>The manager's current monitoring flag for one selected target.</summary>
