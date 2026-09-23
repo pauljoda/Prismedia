@@ -313,6 +313,11 @@
   const combinedResumePlan = $derived(
     resolveBookCombinedResume(chapterRows, bookReadingPosition),
   );
+  const combinedStartPlan = $derived(resolveBookCombinedResume(chapterRows));
+  const unpairedReadingChapter = $derived(bookReadingPosition !== null && combinedResumePlan === null);
+  const combinedStartTitle = $derived(
+    chapterRows.find((row) => row.id === combinedStartPlan?.rowId)?.title ?? "the first paired chapter",
+  );
   const hasCombinedContent = $derived(chapterRows.some((row) => row.readTarget && row.audioTrack));
   const canMapBookChapters = $derived(readableChapters.length > 0 && audiobookTracks.length > 0);
   const fallbackBookPalette = entityAccentForKind(ENTITY_KIND.book);
@@ -824,7 +829,8 @@
   }
 
   function continueCombined() {
-    if (combinedResumePlan) openCombinedLaunch(combinedResumePlan);
+    const plan = combinedResumePlan ?? (unpairedReadingChapter ? combinedStartPlan : null);
+    if (plan) openCombinedLaunch(plan);
   }
 
   function listenToBook(options: { startOver?: boolean } = {}) {
@@ -1098,6 +1104,10 @@
         activityLabel={bookActivityLabel}
         primaryColor={chapterPalette.primary}
         secondaryColor={chapterPalette.secondary}
+        combinedActionLabel={unpairedReadingChapter ? "Start both at first paired chapter" : null}
+        combinedExplanation={unpairedReadingChapter
+          ? `Your current chapter has no paired audio. Starting both begins at ${combinedStartTitle}.`
+          : null}
         onRead={continueReading}
         onListen={() => listenToBook()}
         onCombined={continueCombined}

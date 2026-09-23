@@ -128,6 +128,16 @@ describe("unified book progress", () => {
     })).toMatchObject({ rowId: "chapter-2", source: "progress" });
   });
 
+  it("does not jump from an unmatched readable chapter to the first audio chapter", () => {
+    const unmatched = { ...epubRow(), id: "front-matter", audioTrack: null };
+    const matched = { ...epubRow(), id: "chapter-1" };
+    expect(resolveBookCombinedResume([unmatched, matched], {
+      ...reading,
+      rowId: "front-matter",
+    })).toBeNull();
+    expect(resolveBookCombinedResume([unmatched, matched], null)?.rowId).toBe("chapter-1");
+  });
+
   it("builds chapter-scoped EPUB mappings and converts listening into the shared CFI fraction", () => {
     const mapping = expectSingle(buildBookProgressMappings(
       "book-1",

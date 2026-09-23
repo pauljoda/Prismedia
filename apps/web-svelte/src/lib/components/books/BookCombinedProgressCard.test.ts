@@ -29,4 +29,20 @@ describe("BookCombinedProgressCard", () => {
     expect(onListen).toHaveBeenCalledOnce();
     expect(onCombined).toHaveBeenCalledOnce();
   });
+
+  it("names the explicit start point when the current chapter has no audio", async () => {
+    const onCombined = vi.fn();
+    render(BookCombinedProgressCard, {
+      progressPercent: 5,
+      combinedActionLabel: "Start both at first paired chapter",
+      combinedExplanation: "Your current chapter has no paired audio. Starting both begins at Epigraphs.",
+      onRead: vi.fn(),
+      onListen: vi.fn(),
+      onCombined,
+    });
+
+    expect(screen.getByText(/current chapter has no paired audio/)).toBeInTheDocument();
+    await fireEvent.click(screen.getByRole("button", { name: "Start both at first paired chapter" }));
+    expect(onCombined).toHaveBeenCalledOnce();
+  });
 });

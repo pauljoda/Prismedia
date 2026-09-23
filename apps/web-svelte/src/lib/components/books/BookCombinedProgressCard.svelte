@@ -9,6 +9,8 @@
     activityLabel?: string | null;
     primaryColor?: string;
     secondaryColor?: string;
+    combinedActionLabel?: string | null;
+    combinedExplanation?: string | null;
     onRead: () => void;
     onListen: () => void;
     onCombined: () => void;
@@ -21,6 +23,8 @@
     activityLabel = null,
     primaryColor = "var(--color-accent-400)",
     secondaryColor = "var(--color-accent-200)",
+    combinedActionLabel = null,
+    combinedExplanation = null,
     onRead,
     onListen,
     onCombined,
@@ -40,9 +44,7 @@
     <div class="combined-copy">
       <p class="kicker">One position · two formats</p>
       <h2 id="combined-progress-title">Continue your book</h2>
-      <p class="explanation">
-        Reading and listening share this position. Either one moves it forward.
-      </p>
+      <p class="explanation">{combinedExplanation ?? "Reading and listening share this position. Either one moves it forward."}</p>
     </div>
 
     <div class="progress-summary" aria-label="Book progress">
@@ -67,7 +69,7 @@
       </Button>
       <Button variant="primary" size="sm" class="combined-button gap-1.5" onclick={onCombined}>
         <Layers2 class="h-3.5 w-3.5" />
-        {actionPrefix} both
+        {combinedActionLabel ?? `${actionPrefix} both`}
       </Button>
     </div>
   </Panel>

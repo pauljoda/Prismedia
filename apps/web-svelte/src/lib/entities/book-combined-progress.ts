@@ -169,9 +169,9 @@ export function resolveBookCombinedResume(
   const matchedRows = rows.filter((row) => row.readTarget && row.audioTrack);
   if (matchedRows.length === 0) return null;
   const row = position
-    ? matchedRows.find((candidate) => candidate.id === position.rowId) ?? matchedRows[0]!
-    : matchedRows[0]!;
-  return resolveChapterCombinedLaunch(row, position?.rowId === row.id ? position : null);
+    ? matchedRows.find((candidate) => candidate.id === position.rowId)
+    : matchedRows[0];
+  return row ? resolveChapterCombinedLaunch(row, position) : null;
 }
 
 /**

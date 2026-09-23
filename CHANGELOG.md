@@ -166,6 +166,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Continuing a book in reading and listening mode now explains when the saved readable chapter has no matching audio, and offers an explicit start at the first paired chapter.
+
 - Applying a reviewed Identify match no longer fails with a "400 Bad Request" when Prismedia is reached over a plain `http://` address on your network, such as `http://192.168.1.10:8008`. Identify apply, its live progress readout, and opening the comic reader all work on those addresses again; previously they only worked over HTTPS or from `localhost`.
 
 - Sonarr request reviews recognize episodes already managed through a connection, and adding selected episodes keeps tracking stable while their files are still pending.
