@@ -41,7 +41,7 @@ public sealed class SourceTransferProcessor(IIntegrationTransferStore store, Cat
                 var origin = IntegrationDeliveryOriginPolicy.RequireAllowedOrigin(connection.Manifest.Integration, connection.Context.BaseUrl, resolved.Delivery);
                 artifact = await bytes.TransferAsync(new(operationId, source.OfferId, origin,
                     resolved.Delivery, work.Plan.EntityKind == EntityKind.Image ? IntegrationMediaFormats.MaximumImageBytes : MaximumPublicationBytes), cancellationToken);
-                await verifier.VerifyAsync(artifact, work.Plan.EntityKind, cancellationToken);
+                await VerifyPublicationAsync(artifact, work.Plan.EntityKind, cancellationToken);
                 transfer.AcceptSourceArtifact(new(artifact.ArtifactId, source.Selection.ItemId, artifact.FileName,
                     resolved.Offer.MediaType ?? "application/octet-stream", artifact.SizeBytes, artifact.Sha256, IntegrationArtifactRole.Content));
                 await store.SaveAsync(transfer, revision, null, cancellationToken);
@@ -54,7 +54,7 @@ public sealed class SourceTransferProcessor(IIntegrationTransferStore store, Cat
                     expected.SizeBytes, expected.Sha256, cancellationToken)
                     ?? await placement.ReadPlacedAsync(operationId, work.Plan, root, expected, cancellationToken)
                     ?? throw new InvalidDataException("Verified staging and the exact placed publication are missing.");
-                await verifier.VerifyAsync(artifact, work.Plan.EntityKind, cancellationToken);
+                await VerifyPublicationAsync(artifact, work.Plan.EntityKind, cancellationToken);
             } else throw new InvalidOperationException("This publication cannot advance from its current phase.");
 
             await context.ReportProgressAsync(70, "Importing verified publication", cancellationToken);
@@ -68,9 +68,22 @@ public sealed class SourceTransferProcessor(IIntegrationTransferStore store, Cat
             await store.SaveAsync(transfer, revision, null, cancellationToken);
         } catch (Exception error) when (error is not OperationCanceledException && error is not IntegrationTransferConflictException) {
             // Provider URLs, filesystem paths, and credentials must not enter public queue errors.
-            var message = "Publication transfer could not finish. Verified files and accepted intent are retained; check the connection and destination, then retry.";
+            var message = error is UnreadablePublicationException invalid
+                ? invalid.Message
+                : "Publication transfer could not finish. Verified files and accepted intent are retained; check the connection and destination, then retry.";
             await store.RecordErrorAsync(operationId, revision, message, cancellationToken);
             throw new IntegrationInvocationException(message);
         }
     }
+
+    private async Task VerifyPublicationAsync(VerifiedIntegrationArtifact artifact, EntityKind kind, CancellationToken cancellationToken) {
+        try { await verifier.VerifyAsync(artifact, kind, cancellationToken); }
+        catch (InvalidDataException) {
+            throw new UnreadablePublicationException(kind == EntityKind.ComicInstallment
+                ? "The selected comic archive has no readable pages or could not be verified. Check the source file before retrying."
+                : "The selected publication could not be verified as readable media. Check the source file before retrying.");
+        }
+    }
+
+    private sealed class UnreadablePublicationException(string message) : Exception(message);
 }

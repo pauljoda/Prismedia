@@ -75,6 +75,19 @@ public sealed class SourceTransferProcessorTests {
         Assert.Equal(1, fixture.Materializations);
     }
 
+    [Fact]
+    public async Task UnreadableComicIsNotPlacedAndReportsASafeMediaError() {
+        var fixture = new Fixture(pendingDownload: true, kind: EntityKind.ComicInstallment) { VerificationFailure = true };
+
+        var error = await Assert.ThrowsAsync<IntegrationInvocationException>(() => fixture.RunAsync());
+
+        Assert.Contains("comic archive", error.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("Private source path", error.Message, StringComparison.Ordinal);
+        Assert.Equal(error.Message, fixture.Error);
+        Assert.Equal(0, fixture.Placements);
+        Assert.Equal(IntegrationTransferPhase.Transferring, fixture.State.Phase);
+    }
+
     private sealed class Fixture : IIntegrationTransferStore, IIntegrationArtifactTransfer, IIntegrationMediaVerifier,
         IIntegrationImportPlacement, IImportedEntityMaterializer {
         private static readonly string Hash = new('a', 64);
@@ -83,6 +96,7 @@ public sealed class SourceTransferProcessorTests {
         internal bool FailCompletionSaveOnce { get; set; }
         internal bool MissingStaging { get; set; }
         internal bool PlacedRecoveryAvailable { get; set; }
+        internal bool VerificationFailure { get; set; }
         internal int LocalReads { get; private set; }
         internal int PlacedReads { get; private set; }
         internal int Materializations { get; private set; }
@@ -101,8 +115,9 @@ public sealed class SourceTransferProcessorTests {
         internal Fixture(bool pendingDownload = false, EntityKind kind = EntityKind.Book) {
             this.pendingDownload = pendingDownload;
             this.kind = kind;
-            fileName = kind == EntityKind.Image ? "image.jpg" : "book.epub";
-            root = new(Guid.NewGuid(), Path.GetTempPath(), "Library", true, false, false, kind == EntityKind.Image, false, kind == EntityKind.Book, false, false);
+            fileName = kind switch { EntityKind.Image => "image.jpg", EntityKind.ComicInstallment => "comic.cbz", _ => "book.epub" };
+            root = new(Guid.NewGuid(), Path.GetTempPath(), "Library", true, false, false, kind == EntityKind.Image, false,
+                kind is EntityKind.Book or EntityKind.ComicInstallment, false, false);
             var supports = new IntegrationSupport[] { new(PluginCapability.AcquisitionSource, [IntegrationOperation.Resolve], [kind]) };
             connection = IntegrationConnection.Create("test-catalog", "Catalog", "https://catalog.test", true, [PluginCapability.AcquisitionSource], new Dictionary<string, string>());
             connection.RecordProbe(null, supports, null, DateTimeOffset.UtcNow, false);
@@ -164,7 +179,8 @@ public sealed class SourceTransferProcessorTests {
             LocalReads++;
             return Task.FromResult<VerifiedIntegrationArtifact?>(MissingStaging ? null : new(artifactId, Path.Combine(root.Path, "staged.epub"), sizeBytes, sha256, fileName));
         }
-        public Task VerifyAsync(VerifiedIntegrationArtifact artifact, EntityKind kind, CancellationToken cancellationToken) => Task.CompletedTask;
+        public Task VerifyAsync(VerifiedIntegrationArtifact artifact, EntityKind kind, CancellationToken cancellationToken) =>
+            VerificationFailure ? throw new InvalidDataException("Private source path must not reach Activity.") : Task.CompletedTask;
         public Task<string> PlaceAsync(Guid operationId, IntegrationTransferPlan plan, LibraryRootData root, VerifiedIntegrationArtifact artifact, CancellationToken cancellationToken) {
             Placements++; return Task.FromResult(Path.Combine(root.Path, "placed.epub"));
         }

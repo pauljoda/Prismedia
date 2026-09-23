@@ -179,6 +179,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Comic and book imports now identify unreadable downloaded media in Request Activity, so an invalid publication can be distinguished from a connection or destination failure without exposing private paths.
+
 - Connected-library-only Book sources now lead to provider-folder mapping, and linking a second rendition stops if its scanned Book record differs from the first.
 - Saving audiobook chapter alignment now rejects chapter targets that are absent from the Book's current readable contents, while preserving existing choices after an invalid save.
 
