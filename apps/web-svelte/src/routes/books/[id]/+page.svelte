@@ -1127,6 +1127,7 @@
             }}
             acquisitions={bookRenditionAcquisitions}
             monitors={bookRenditionMonitors}
+            managedRenditions={card.externalLibraryProvenance?.bookRenditions ?? []}
             onRequest={requestBookRendition}
             onRequestBoth={requestBothBookRenditions}
             onToggleMonitor={toggleBookRenditionMonitor}

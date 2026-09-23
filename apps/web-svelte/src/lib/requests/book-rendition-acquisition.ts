@@ -1,9 +1,10 @@
 import {
   ACQUISITION_STATUS,
   BOOK_RENDITION,
+  MANAGED_TRACKING_STATUS,
   type BookRenditionCode,
 } from "$lib/api/generated/codes";
-import type { AcquisitionDetail, MonitorView } from "$lib/api/generated/model";
+import type { AcquisitionDetail, ExternalBookRenditionProvenance, MonitorView } from "$lib/api/generated/model";
 
 export interface BookRenditionOwnership {
   ebook: boolean;
@@ -46,6 +47,15 @@ export function bookRenditionCanRequest(row: BookRenditionRow): boolean {
   if (!row.acquisition) return row.monitor === null;
   return row.acquisition.summary.status === ACQUISITION_STATUS.cancelled
     || row.acquisition.summary.status === ACQUISITION_STATUS.imported;
+}
+
+/** Finds the connected manager still holding fulfillment for one Book format. */
+export function bookRenditionManagerOwner(
+  rendition: BookRenditionCode,
+  renditions: readonly ExternalBookRenditionProvenance[],
+): ExternalBookRenditionProvenance | null {
+  return renditions.find(link => link.rendition === rendition
+    && link.holding.status !== MANAGED_TRACKING_STATUS.released) ?? null;
 }
 
 function newestByRendition<T extends AcquisitionDetail | MonitorView>(

@@ -2,11 +2,12 @@
   import { BookOpen, Headphones, Search } from "@lucide/svelte";
   import { Alert, Badge, Button, Item } from "@prismedia/ui-svelte";
   import { BOOK_RENDITION, MONITOR_STATUS, type BookRenditionCode } from "$lib/api/generated/codes";
-  import type { AcquisitionDetail, MonitorView } from "$lib/api/generated/model";
+  import type { AcquisitionDetail, ExternalBookRenditionProvenance, MonitorView } from "$lib/api/generated/model";
   import AcquisitionPanel from "$lib/components/acquisitions/AcquisitionPanel.svelte";
   import { acquisitionStatusDisplay } from "$lib/requests/acquisition-status-display";
   import {
     bookRenditionCanRequest,
+    bookRenditionManagerOwner,
     bookRenditionRows,
     type BookRenditionOwnership,
   } from "$lib/requests/book-rendition-acquisition";
@@ -16,6 +17,7 @@
     ownership,
     acquisitions,
     monitors,
+    managedRenditions = [],
     onRequest,
     onRequestBoth,
     onToggleMonitor,
@@ -24,6 +26,7 @@
     ownership: BookRenditionOwnership;
     acquisitions: readonly AcquisitionDetail[];
     monitors: readonly MonitorView[];
+    managedRenditions?: readonly ExternalBookRenditionProvenance[];
     onRequest: (rendition: BookRenditionCode) => void | Promise<void>;
     onRequestBoth?: () => void | Promise<void>;
     onToggleMonitor?: (monitor: MonitorView) => void | Promise<void>;
@@ -97,7 +100,8 @@
 </script>
 
 <Item.Group class="gap-4">
-  {#if onRequestBoth && rows.length === 2 && rows.every(bookRenditionCanRequest)}
+  {#if onRequestBoth && rows.length === 2 && rows.every(row =>
+    bookRenditionCanRequest(row) && !bookRenditionManagerOwner(row.rendition, managedRenditions))}
     <div class="flex flex-col gap-2">
       <Button type="button" variant="primary" disabled={requesting !== null || requestingBoth}
         onclick={() => void requestBoth()}>
@@ -111,6 +115,7 @@
   {/if}
   {#each rows as row (row.rendition)}
     {@const label = renditionLabel(row.rendition)}
+    {@const managerOwner = bookRenditionManagerOwner(row.rendition, managedRenditions)}
     {@const status = acquisitionStatusDisplay(row.acquisition?.summary.status)}
     {@const RenditionIcon = row.rendition === BOOK_RENDITION.audiobook ? Headphones : BookOpen}
     <section class="flex min-w-0 flex-col gap-4" aria-label={`${label} acquisition`}>
@@ -120,6 +125,8 @@
           <Item.Title role="heading" aria-level={3}>{label}</Item.Title>
           {#if row.owned}
             <Item.Description>In library</Item.Description>
+          {:else if managerOwner}
+            <Item.Description>{managerOwner.connectionName} is managing this {label.toLowerCase()}.</Item.Description>
           {:else if row.acquisition}
             <div><Badge variant={status.tone === "failed" ? "error" : status.tone === "attention" ? "warning" : "default"}>{status.label}</Badge></div>
           {:else if row.monitor}
@@ -132,7 +139,7 @@
           {/if}
         </Item.Content>
         <Item.Actions class="flex-wrap @max-[32rem]:w-full @max-[32rem]:[&>button]:flex-1">
-          {#if bookRenditionCanRequest(row)}
+          {#if bookRenditionCanRequest(row) && !managerOwner}
             <Button
               type="button"
               variant="secondary"

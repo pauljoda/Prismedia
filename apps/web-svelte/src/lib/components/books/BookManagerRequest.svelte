@@ -27,7 +27,7 @@
     saveManagedRequest,
   } from "$lib/api/managed-requests";
   import { createUuid } from "$lib/utils/uuid";
-  import { bookRenditionCanRequest, bookRenditionRows } from "$lib/requests/book-rendition-acquisition";
+  import { bookRenditionCanRequest, bookRenditionManagerOwner, bookRenditionRows } from "$lib/requests/book-rendition-acquisition";
 
   let {
     bookId,
@@ -70,7 +70,7 @@
     ebook: hasEbook,
     audiobook: hasAudiobook,
   }).filter(row => bookRenditionCanRequest(row)
-    && !managedRenditions.some(link => link.rendition === row.rendition))
+    && !bookRenditionManagerOwner(row.rendition, managedRenditions))
     .map(row => row.rendition));
   const selectedConnection = $derived(connections.find(connection => connection.id === connectionId) ?? null);
   const reviewed = $derived(selected.length > 0 && selected.every(rendition =>

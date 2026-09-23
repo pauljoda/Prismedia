@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { ACQUISITION_STATUS, BOOK_RENDITION, ENTITY_KIND, MONITOR_STATUS } from "$lib/api/generated/codes";
-import type { AcquisitionDetail, MonitorView } from "$lib/api/generated/model";
+import { ACQUISITION_STATUS, BOOK_RENDITION, ENTITY_KIND, MANAGED_REQUEST_PHASE, MANAGED_TRACKING_STATUS, MONITOR_STATUS } from "$lib/api/generated/codes";
+import type { AcquisitionDetail, ExternalBookRenditionProvenance, MonitorView } from "$lib/api/generated/model";
 import BookRenditionAcquisitionCard from "./BookRenditionAcquisitionCard.svelte";
 
 vi.mock("$lib/components/acquisitions/AcquisitionPanel.svelte", async () => ({
@@ -104,7 +104,37 @@ describe("BookRenditionAcquisitionCard", () => {
 
     expect(onRequest).toHaveBeenCalledWith(BOOK_RENDITION.audiobook);
   });
+
+  it("shows manager ownership without offering a competing native request, then reopens after release", () => {
+    const linked = managerRendition(MANAGED_TRACKING_STATUS.waitingForFiles);
+    const view = render(BookRenditionAcquisitionCard, {
+      ownership: { ebook: true, audiobook: false }, acquisitions: [], monitors: [],
+      managedRenditions: [linked], onRequest: vi.fn(),
+    });
+    expect(screen.getByText("LazyLibrarian is managing this audiobook.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Request audiobook" })).not.toBeInTheDocument();
+
+    view.rerender({
+      ownership: { ebook: true, audiobook: false }, acquisitions: [], monitors: [],
+      managedRenditions: [managerRendition(MANAGED_TRACKING_STATUS.released)], onRequest: vi.fn(),
+    });
+    expect(screen.getByRole("button", { name: "Request audiobook" })).toBeInTheDocument();
+  });
 });
+
+function managerRendition(status: ExternalBookRenditionProvenance["holding"]["status"]): ExternalBookRenditionProvenance {
+  return {
+    rendition: BOOK_RENDITION.audiobook,
+    connectionId: "connection", connectionName: "LazyLibrarian", pluginId: "lazylibrarian",
+    libraryRootId: "audio-root", libraryLabel: "Audiobooks",
+    holding: { holdingId: "holding", status, item: {
+      entityKind: ENTITY_KIND.book, remoteId: "OL257943W", expectedExternalIds: { openlibrarywork: "OL257943W" },
+      bookRendition: BOOK_RENDITION.audiobook,
+    } },
+    request: { requestId: "request", phase: MANAGED_REQUEST_PHASE.awaitingFiles,
+      updatedAt: "2026-09-23T12:00:00Z", problem: null },
+  };
+}
 
 function acquisition(
   id: string,
