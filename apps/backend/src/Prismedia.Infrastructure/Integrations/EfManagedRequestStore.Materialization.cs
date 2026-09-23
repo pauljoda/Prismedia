@@ -124,6 +124,8 @@ public sealed partial class EfManagedRequestStore {
 
     /// <inheritdoc />
     public async Task<ManagedRequestMaterialization> MaterializeAsync(StoredManagedRequest work, ManagedItemSnapshot snapshot, CancellationToken token) {
+        if (work.Plan.Creation.Work.EntityKind == EntityKind.Book)
+            return await MaterializeBookAsync(work, snapshot, token);
         if (work.Plan.Creation.Work.EntityKind is EntityKind.VideoSeries or EntityKind.ComicSeries) {
             return await MaterializeEpisodesAsync(work, snapshot, token);
         }

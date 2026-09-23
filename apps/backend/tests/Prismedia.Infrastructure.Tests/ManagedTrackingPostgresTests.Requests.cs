@@ -15,8 +15,10 @@ using Prismedia.Infrastructure.Settings;
 namespace Prismedia.Infrastructure.Tests;
 
 public sealed partial class ManagedTrackingPostgresTests {
-    [Fact]
-    public async Task OneBookAcceptsIndependentEbookAndAudiobookManagerOwnership() {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OneBookAcceptsIndependentEbookAndAudiobookManagerOwnership(bool audioFirst) {
         await using var database = await PostgresTestDatabase.CreateAsync();
         await using var db = database.CreateContext();
         var connectionId = Guid.NewGuid();
@@ -78,6 +80,59 @@ public sealed partial class ManagedTrackingPostgresTests {
         Assert.Equal(BookRendition.Ebook, ebookScope.Scope.Item.BookRendition);
         Assert.Equal(BookRendition.Audiobook, audioScope.Scope.Item.BookRendition);
         Assert.NotEqual(ebookScope.Fingerprint, audioScope.Fingerprint);
+
+        var ebookPath = Path.Combine(workspace, "ebooks", "example.epub");
+        var audioPath = Path.Combine(workspace, "audio", "example.m4b");
+        Directory.CreateDirectory(Path.GetDirectoryName(ebookPath)!);
+        Directory.CreateDirectory(Path.GetDirectoryName(audioPath)!);
+        await File.WriteAllBytesAsync(ebookPath, [1, 2, 3]);
+        await File.WriteAllBytesAsync(audioPath, [4, 5, 6, 7]);
+        var ebookSnapshot = new ManagedItemSnapshot(
+            new("OL123W", EntityKind.Book, "Example", null, identities, true, null, 1),
+            "/ebooks/Example", [new("ebook-file", "/ebooks/example.epub", 3, null,
+                [new("OL123W", EntityKind.Book, "Example")])], DateTimeOffset.UtcNow);
+        var audioSnapshot = new ManagedItemSnapshot(
+            new("OL123W", EntityKind.Book, "Example", null, identities, true, null, 1),
+            "/audio/Example", [new("audio-file", "/audio/example.m4b", 4, null,
+                [new("OL123W:audio-1", EntityKind.AudioTrack, "Example")])], DateTimeOffset.UtcNow);
+        Assert.False((await store.MaterializeAsync(ebook, new ManagedItemSnapshot(
+            ebookSnapshot.Item, ebookSnapshot.Path, [], DateTimeOffset.UtcNow), default)).Imported);
+        await Assert.ThrowsAsync<IntegrationInvocationException>(() => store.MaterializeAsync(ebook, audioSnapshot, default));
+        if (audioFirst) {
+            Assert.True((await store.MaterializeAsync(audio, audioSnapshot, default)).Imported);
+            Assert.True((await store.MaterializeAsync(ebook, ebookSnapshot, default)).Imported);
+        } else {
+            Assert.True((await store.MaterializeAsync(ebook, ebookSnapshot, default)).Imported);
+            Assert.True((await store.MaterializeAsync(audio, audioSnapshot, default)).Imported);
+        }
+
+        Assert.Equal(2, await db.ManagedSourceBindings.AsNoTracking().CountAsync());
+        var sourceFiles = await db.EntityFiles.AsNoTracking().OrderBy(row => row.Path).ToArrayAsync();
+        Assert.Equal(2, sourceFiles.Length);
+        var track = Assert.Single(await db.Entities.AsNoTracking()
+            .Where(row => row.KindCode == EntityKind.AudioTrack.ToCode()).ToArrayAsync());
+        Assert.Equal(bookId, track.ParentEntityId);
+        Assert.Equal(bookId, sourceFiles.Single(row => row.Path == ebookPath).EntityId);
+        Assert.Equal(track.Id, sourceFiles.Single(row => row.Path == audioPath).EntityId);
+        Assert.Equal(BookFormat.Epub, (await db.BookDetails.AsNoTracking().SingleAsync(row => row.EntityId == bookId)).Format);
+        Assert.Equal(ebookRootId, (await db.EntityLibraryRoots.AsNoTracking()
+            .SingleAsync(row => row.EntityId == bookId)).LibraryRootId);
+        Assert.Equal(audioRootId, (await db.EntityLibraryRoots.AsNoTracking()
+            .SingleAsync(row => row.EntityId == track.Id)).LibraryRootId);
+        Assert.All(await db.ManagedHoldings.AsNoTracking().ToArrayAsync(),
+            row => Assert.Equal(ManagedTrackingStatus.Tracking, row.Status));
+        Assert.Equal(2, await db.ManagedRequests.AsNoTracking().CountAsync(row => row.Phase == ManagedRequestPhase.Completed));
+        Assert.Equal(2, await db.JobRuns.AsNoTracking().CountAsync(row => row.Type == JobType.ScanBook));
+
+        var scanner = new LibraryScanPersistenceService(db);
+        Assert.Equal(bookId, await scanner.UpsertSingleFileBookAsync(ebookPath, "Ebook scan title",
+            ebookRootId, false, BookType.Novel, BookFormat.Epub, "application/epub+zip", null, null, default));
+        Assert.Equal(bookId, await scanner.UpsertAudiobookBookAsync(audioPath, "Audio scan title",
+            audioRootId, false, BookType.Novel, BookFormat.Audio, default));
+        Assert.Equal(track.Id, await scanner.UpsertAudioTrackAsync(audioPath, "Audio track title",
+            audioRootId, bookId, 0, null, 0, false, default));
+        Assert.Equal(2, await db.EntityFiles.AsNoTracking().CountAsync());
+        Assert.Equal(2, await db.ManagedSourceBindings.AsNoTracking().CountAsync());
     }
 
     [Fact]
