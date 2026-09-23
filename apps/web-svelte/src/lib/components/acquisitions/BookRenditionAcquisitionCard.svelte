@@ -17,6 +17,7 @@
     acquisitions,
     monitors,
     onRequest,
+    onRequestBoth,
     onToggleMonitor,
     onChanged,
   }: {
@@ -24,12 +25,15 @@
     acquisitions: readonly AcquisitionDetail[];
     monitors: readonly MonitorView[];
     onRequest: (rendition: BookRenditionCode) => void | Promise<void>;
+    onRequestBoth?: () => void | Promise<void>;
     onToggleMonitor?: (monitor: MonitorView) => void | Promise<void>;
     onChanged?: () => void | Promise<void>;
   } = $props();
 
   const rows = $derived(bookRenditionRows(acquisitions, monitors, ownership));
   let requesting = $state<BookRenditionCode | null>(null);
+  let requestingBoth = $state(false);
+  let bothError = $state<string | null>(null);
   let monitorBusyId = $state<string | null>(null);
   let requestError = $state<{ rendition: BookRenditionCode; message: string } | null>(null);
 
@@ -45,7 +49,7 @@
   }
 
   async function requestMissing(rendition: BookRenditionCode) {
-    if (requesting) return;
+    if (requesting || requestingBoth) return;
     requesting = rendition;
     requestError = null;
     try {
@@ -57,6 +61,19 @@
       };
     } finally {
       requesting = null;
+    }
+  }
+
+  async function requestBoth() {
+    if (!onRequestBoth || requesting || requestingBoth) return;
+    requestingBoth = true;
+    bothError = null;
+    try {
+      await onRequestBoth();
+    } catch (reason) {
+      bothError = reason instanceof Error ? reason.message : "Failed to request both formats";
+    } finally {
+      requestingBoth = false;
     }
   }
 
@@ -80,6 +97,18 @@
 </script>
 
 <Item.Group class="gap-4">
+  {#if onRequestBoth && rows.length === 2 && rows.every(bookRenditionCanRequest)}
+    <div class="flex flex-col gap-2">
+      <Button type="button" variant="primary" disabled={requesting !== null || requestingBoth}
+        onclick={() => void requestBoth()}>
+        <Search data-icon="inline-start" />
+        {requestingBoth ? "Requesting both…" : "Request ebook and audiobook"}
+      </Button>
+      {#if bothError}
+        <Alert.Root variant="destructive"><Alert.Description>{bothError}</Alert.Description></Alert.Root>
+      {/if}
+    </div>
+  {/if}
   {#each rows as row (row.rendition)}
     {@const label = renditionLabel(row.rendition)}
     {@const status = acquisitionStatusDisplay(row.acquisition?.summary.status)}
@@ -107,7 +136,7 @@
             <Button
               type="button"
               variant="secondary"
-              disabled={requesting !== null}
+              disabled={requesting !== null || requestingBoth}
               onclick={() => void requestMissing(row.rendition)}
             >
               <Search data-icon="inline-start" />

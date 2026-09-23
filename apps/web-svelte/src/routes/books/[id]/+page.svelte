@@ -2,6 +2,7 @@
   import { Badge as UiBadge } from "@prismedia/ui-svelte";
   import {
     BOOK_FORMAT,
+    BOOK_RENDITION,
     CAPABILITY_KIND,
     PROGRESS_UNIT,
     READER_MODE,
@@ -23,7 +24,7 @@
     fetchAcquisitionSummariesForEntity,
   } from "$lib/api/acquisitions";
   import { fetchEntityMonitors, resumeMonitor, stopMonitor } from "$lib/api/monitors";
-  import { commitEntityRequest } from "$lib/api/requests";
+  import { commitBookRenditionsRequest, commitEntityRequest } from "$lib/api/requests";
   import { updateEntityProgress } from "$lib/api/consumption";
   import type {
     AcquisitionDetail,
@@ -597,6 +598,21 @@
     await refreshBookAcquisitionState().catch(() => {});
   }
 
+  async function requestBothBookRenditions(): Promise<void> {
+    if (!book) return;
+    const response = await commitBookRenditionsRequest(book.id, [
+      { rendition: BOOK_RENDITION.ebook },
+      { rendition: BOOK_RENDITION.audiobook },
+    ]);
+    await refreshBookAcquisitionState().catch(() => {});
+    const failures = response.bookRenditions?.filter((result) => result.error) ?? [];
+    if (failures.length > 0) {
+      throw new Error(failures.map((result) =>
+        `${result.rendition === BOOK_RENDITION.audiobook ? "Audiobook" : "Ebook"}: ${result.error}`,
+      ).join(" "));
+    }
+  }
+
   async function toggleBookRenditionMonitor(monitor: MonitorView): Promise<void> {
     if (monitorIsActive(monitor)) {
       const outcome = await stopMonitor(monitor.id);
@@ -1089,6 +1105,7 @@
             acquisitions={bookRenditionAcquisitions}
             monitors={bookRenditionMonitors}
             onRequest={requestBookRendition}
+            onRequestBoth={requestBothBookRenditions}
             onToggleMonitor={toggleBookRenditionMonitor}
             onChanged={handleBookAcquisitionChanged}
           />

@@ -1,5 +1,6 @@
 import type { BookRenditionCode, RequestMediaKindCode } from "$lib/api/generated/codes";
 import {
+  commitBookRenditionsRequest as commitBookRenditionsRequestRequest,
   commitEntityRequest as commitEntityRequestRequest,
   commitReviewedRequest as commitReviewedRequestRequest,
   prepareManagedMovie as prepareManagedMovieRequest,
@@ -13,6 +14,7 @@ import {
   syncContainerRequest as syncContainerRequestRequest,
 } from "$lib/api/generated/prismedia";
 import type {
+  BookRenditionRequestChoice,
   ExternalIdentity,
   MissingChildrenCommitResponse,
   RequestCommitResponse,
@@ -114,6 +116,17 @@ export async function commitEntityRequest(
   return unwrapGenerated(
     await commitEntityRequestRequest({ entityId, bookRendition }),
     "Failed to search for a release",
+  );
+}
+
+/** Requests both Book formats in one submission with an independent outcome for each. */
+export async function commitBookRenditionsRequest(
+  entityId: string,
+  renditions: BookRenditionRequestChoice[],
+): Promise<RequestCommitResponse> {
+  return unwrapGenerated(
+    await commitBookRenditionsRequestRequest({ entityId, renditions }),
+    "Failed to request Book formats",
   );
 }
 

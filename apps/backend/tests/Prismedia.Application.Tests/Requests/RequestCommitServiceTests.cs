@@ -838,6 +838,57 @@ public sealed partial class RequestCommitServiceTests {
     }
 
     [Fact]
+    public async Task OneBookSubmissionKeepsRenditionTargetingAndPartialOutcomesSeparate() {
+        var proposal = Leaf(EntityKind.Book, "Example Book", "W1");
+        var (service, writer, acquisitions, _) = ServiceWithMonitors(proposal);
+        var bookId = FakeWantedEntityWriter.EntityIdFor("W1");
+        writer.Container = new MonitorableEntity(
+            bookId, EntityKind.Book, "Example Book", [new ExternalIdentity(Provider, "W1")],
+            HasSourceFile: true, HasEbookSource: true, HasAudiobookSource: false);
+        writer.ExistingWithFile.Add("W1");
+        writer.OwnedRenditions.Add(("W1", BookRendition.Ebook));
+        var ebookRoot = Guid.NewGuid();
+        var audiobookRoot = Guid.NewGuid();
+
+        var response = await service.RequestBookRenditionsAsync(
+            new RequestBookRenditionsCommitRequest(bookId, [
+                new BookRenditionRequestChoice(BookRendition.Ebook, ebookRoot),
+                new BookRenditionRequestChoice(BookRendition.Audiobook, audiobookRoot)
+            ]), hideNsfw: false, CancellationToken.None);
+
+        Assert.Equal(bookId, Assert.Single(response!.BookRenditions!, result =>
+            result.Rendition == BookRendition.Audiobook).Item!.EntityId);
+        Assert.Equal(RequestCommitOutcome.AlreadyOwned, response.BookRenditions![0].Item!.Outcome);
+        Assert.Equal(RequestCommitOutcome.Requested, response.BookRenditions[1].Item!.Outcome);
+        Assert.Equal(audiobookRoot, Assert.Single(acquisitions.Created).TargetLibraryRootId);
+        Assert.Equal(BookRendition.Audiobook, acquisitions.Created[0].BookRendition);
+    }
+
+    [Fact]
+    public async Task BookSubmissionRetainsSuccessfulEbookWhenAudiobookAcquisitionFails() {
+        var proposal = Leaf(EntityKind.Book, "Example Book", "W1");
+        var (service, writer, acquisitions, _) = ServiceWithMonitors(proposal);
+        var bookId = FakeWantedEntityWriter.EntityIdFor("W1");
+        writer.Container = new MonitorableEntity(
+            bookId, EntityKind.Book, "Example Book", [new ExternalIdentity(Provider, "W1")],
+            HasEbookSource: false, HasAudiobookSource: false);
+        acquisitions.FailRendition = BookRendition.Audiobook;
+
+        var response = await service.RequestBookRenditionsAsync(
+            new RequestBookRenditionsCommitRequest(bookId, [
+                new BookRenditionRequestChoice(BookRendition.Ebook),
+                new BookRenditionRequestChoice(BookRendition.Audiobook)
+            ]), hideNsfw: false, CancellationToken.None);
+
+        Assert.Equal(RequestCommitOutcome.Requested, response!.BookRenditions![0].Item!.Outcome);
+        Assert.Null(response.BookRenditions[0].Error);
+        Assert.Null(response.BookRenditions[1].Item);
+        Assert.NotNull(response.BookRenditions[1].Error);
+        Assert.Single(acquisitions.Created);
+        Assert.Equal(BookRendition.Ebook, acquisitions.Created[0].BookRendition);
+    }
+
+    [Fact]
     public async Task RequestEntityUsesThePersistedPluginIdentityRouteWithoutSubstitution() {
         var identity = new ExternalIdentity(Provider, "W1");
         var source = new FakeProposalSource(Leaf(EntityKind.Book, "The Martian", identity.Value));
@@ -1497,6 +1548,37 @@ public sealed partial class RequestCommitServiceTests {
         Assert.Equal(RequestCommitOutcome.Requested, Assert.Single(response!.Items).Outcome);
         Assert.Equal("The Matrix", Assert.Single(writer.Applied).Proposal.Patch.Title);
         Assert.Single(acquisitions.Created);
+    }
+
+    [Fact]
+    public async Task ReviewedBookRequestsBothRenditionsAgainstOneWorkWithoutAnotherProviderReview() {
+        var identity = new ExternalIdentity(Provider, "W1");
+        var proposal = Node("book:W1", "books-metadata", EntityKind.Book, "Example Book", identity);
+        var review = Review("books-metadata", RequestMediaKind.Book, identity, proposal,
+            [Target(proposal, RequestMediaKind.Book, identity)]);
+        var reviews = new FakeReviewSource(_ => throw new InvalidOperationException("Provider review must not run."));
+        var (service, writer, acquisitions, _, _) = ReviewedService(proposal, reviews);
+        var bookId = FakeWantedEntityWriter.EntityIdFor(identity.Value);
+        writer.Container = new MonitorableEntity(bookId, EntityKind.Book, "Example Book", [identity],
+            HasEbookSource: false, HasAudiobookSource: false);
+
+        var result = await service.CommitReviewedAsync(new ReviewedRequestCommitRequest(
+            RequestMediaKind.Book, review.PluginId, identity, review.Revision,
+            [proposal.ProposalId], Review: review, Proposal: proposal,
+            SelectedFields: ["title"], SelectedImages: new Dictionary<string, string?>(),
+            BookRenditions: [
+                new BookRenditionRequestChoice(BookRendition.Ebook),
+                new BookRenditionRequestChoice(BookRendition.Audiobook)
+            ]), hideNsfw: false, CancellationToken.None);
+
+        Assert.Empty(reviews.ReviewCalls);
+        var outcomes = Assert.IsAssignableFrom<IReadOnlyList<BookRenditionCommitResult>>(result!.BookRenditions);
+        Assert.Equal([BookRendition.Ebook, BookRendition.Audiobook],
+            outcomes.Select(outcome => outcome.Rendition));
+        Assert.True(outcomes[1].Item is not null, outcomes[1].Error);
+        Assert.All(outcomes, outcome => Assert.Equal(bookId, outcome.Item!.EntityId));
+        Assert.Equal([BookRendition.Ebook, BookRendition.Audiobook],
+            acquisitions.Created.Select(created => created.BookRendition));
     }
 
     [Theory]
@@ -3109,6 +3191,7 @@ public sealed partial class RequestCommitServiceTests {
 
     private sealed class FakeAcquisitionRequestService : IAcquisitionRequestService {
         public List<AcquisitionCreateRequest> Created { get; } = [];
+        public BookRendition? FailRendition { get; set; }
         public List<AcquisitionCreateRequest> CreatedWithinEntityLifecycle { get; } = [];
         public List<Guid> CreatedIds { get; } = [];
         public HashSet<Guid> EntitiesWithAcquisitions { get; } = [];
@@ -3129,6 +3212,9 @@ public sealed partial class RequestCommitServiceTests {
         }
 
         private Task<AcquisitionSummary> CreateAsync(AcquisitionCreateRequest request) {
+            if (FailRendition is not null && request.BookRendition == FailRendition) {
+                throw new InvalidOperationException("The selected acquisition source is unavailable.");
+            }
             Created.Add(request);
             var now = DateTimeOffset.UtcNow;
             var id = Guid.NewGuid();

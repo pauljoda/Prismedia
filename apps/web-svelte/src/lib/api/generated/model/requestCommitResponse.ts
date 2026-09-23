@@ -4,6 +4,7 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { BookRenditionCommitResult } from './bookRenditionCommitResult';
 import type { RequestCommitItem } from './requestCommitItem';
 
 export interface RequestCommitResponse {
@@ -12,4 +13,6 @@ export interface RequestCommitResponse {
   items: RequestCommitItem[];
   /** @nullable */
   jobGraphIds?: string[] | null;
+  /** @nullable */
+  bookRenditions?: BookRenditionCommitResult[] | null;
 }

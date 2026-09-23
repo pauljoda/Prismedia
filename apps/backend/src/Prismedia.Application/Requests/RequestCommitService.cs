@@ -4,6 +4,7 @@ using Prismedia.Contracts.Acquisition;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Contracts.Requests;
 using Prismedia.Domain.Entities;
+using Microsoft.Extensions.Logging;
 
 namespace Prismedia.Application.Requests;
 
@@ -320,7 +321,8 @@ public sealed partial class RequestCommitService(
     IEntityGiveUpService entityGiveUp,
     IRequestAcquisitionFanoutScheduler? fanout = null,
     IAcquisitionReleaseTimingService? releaseTiming = null,
-    RequestTargetResolver? targetResolver = null) :
+    RequestTargetResolver? targetResolver = null,
+    ILogger<RequestCommitService>? logger = null) :
     IMonitoredEntityRecovery,
     IRequestChildHydrator,
     IRequestGraphAcquisitionStarter,
@@ -366,6 +368,9 @@ public sealed partial class RequestCommitService(
         ReviewedRequestCommitRequest request,
         bool hideNsfw,
         CancellationToken cancellationToken) {
+        if (request.BookRenditions is not null) {
+            return await CommitReviewedBookRenditionsAsync(request, hideNsfw, cancellationToken);
+        }
         var descriptor = RequestKindRegistry.Find(request.Kind);
         if (descriptor is not { Committable: true }) {
             throw new RequestCommitValidationException("This kind can't be requested yet.");

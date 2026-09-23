@@ -222,6 +222,30 @@ public static class RequestEndpoints {
             .Produces<ApiProblem>(StatusCodes.Status404NotFound)
             .Produces<ApiProblem>(StatusCodes.Status409Conflict);
 
+        group.MapPost("/commit-book-renditions", async (
+            RequestBookRenditionsCommitRequest request,
+            bool? hideNsfw,
+            HttpContext httpContext,
+            RequestCommitService commits,
+            CancellationToken cancellationToken) => {
+                try {
+                    var response = await commits.RequestBookRenditionsAsync(
+                        request,
+                        NsfwVisibility.ShouldHide(hideNsfw, httpContext),
+                        cancellationToken);
+                    return response is null
+                        ? Results.NotFound(new ApiProblem(ApiProblemCodes.NotFound, "The Book was not found."))
+                        : Results.Ok(response);
+                } catch (RequestCommitValidationException ex) {
+                    return Results.BadRequest(new ApiProblem(ApiProblemCodes.RequestInvalid, ex.Message));
+                }
+            })
+            .WithName("CommitBookRenditionsRequest")
+            .WithSummary("Requests selected ebook and audiobook renditions of one Book with separate outcomes.")
+            .Produces<RequestCommitResponse>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest)
+            .Produces<ApiProblem>(StatusCodes.Status404NotFound);
+
         group.MapPost("/commit-missing-children", async (
             MissingChildrenCommitRequest request,
             RequestCommitService commits,

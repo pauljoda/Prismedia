@@ -199,7 +199,8 @@ public sealed record ReviewedRequestCommitRequest(
     RequestReviewResponse? Review = null,
     EntityMetadataProposal? Proposal = null,
     IReadOnlyList<string>? SelectedFields = null,
-    IReadOnlyDictionary<string, string?>? SelectedImages = null);
+    IReadOnlyDictionary<string, string?>? SelectedImages = null,
+    IReadOnlyList<BookRenditionRequestChoice>? BookRenditions = null);
 
 /// <summary>Per-item outcome of a request commit, linking the created wanted entity and its acquisition.</summary>
 /// <param name="ExternalId">Provider-qualified id of the item this outcome describes.</param>
@@ -220,7 +221,28 @@ public sealed record RequestCommitItem(
 public sealed record RequestCommitResponse(
     Guid? ContainerEntityId,
     IReadOnlyList<RequestCommitItem> Items,
-    IReadOnlyList<Guid>? JobGraphIds = null);
+    IReadOnlyList<Guid>? JobGraphIds = null,
+    IReadOnlyList<BookRenditionCommitResult>? BookRenditions = null);
+
+/// <summary>One independently targeted format in a single Book request.</summary>
+/// <param name="Rendition">The ebook or audiobook format to acquire.</param>
+/// <param name="TargetLibraryRootId">Optional destination for this format.</param>
+/// <param name="ProfileId">Optional acquisition profile for this format.</param>
+public sealed record BookRenditionRequestChoice(
+    BookRendition Rendition,
+    Guid? TargetLibraryRootId = null,
+    Guid? ProfileId = null);
+
+/// <summary>Outcome of one requested Book format; failures do not hide a successful sibling.</summary>
+public sealed record BookRenditionCommitResult(
+    BookRendition Rendition,
+    RequestCommitItem? Item,
+    string? Error = null);
+
+/// <summary>Requests one or both formats of an existing canonical Book in one submission.</summary>
+public sealed record RequestBookRenditionsCommitRequest(
+    Guid EntityId,
+    IReadOnlyList<BookRenditionRequestChoice> Renditions);
 
 /// <summary>
 /// Requests an existing library entity by id — a wanted placeholder's "Search for release". The server

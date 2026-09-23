@@ -2,13 +2,14 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { BOOK_RENDITION } from "$lib/api/generated/codes";
 
 const generated = vi.hoisted(() => ({
+  commitBookRenditionsRequest: vi.fn(),
   commitEntityRequest: vi.fn(),
   removeWanted: vi.fn(),
 }));
 
 vi.mock("$lib/api/generated/prismedia", () => generated);
 
-import { commitEntityRequest, removeWantedEntities } from "./requests";
+import { commitBookRenditionsRequest, commitEntityRequest, removeWantedEntities } from "./requests";
 
 describe("request API", () => {
   beforeEach(() => {
@@ -39,6 +40,22 @@ describe("request API", () => {
     expect(generated.commitEntityRequest).toHaveBeenCalledWith({
       entityId: "book-1",
       bookRendition: BOOK_RENDITION.audiobook,
+    });
+  });
+
+  it("passes both Book formats through one typed request", async () => {
+    const result = { items: [], bookRenditions: [] };
+    generated.commitBookRenditionsRequest.mockResolvedValue({ status: 200, data: result });
+    await expect(commitBookRenditionsRequest("book-1", [
+      { rendition: BOOK_RENDITION.ebook },
+      { rendition: BOOK_RENDITION.audiobook },
+    ])).resolves.toEqual(result);
+    expect(generated.commitBookRenditionsRequest).toHaveBeenCalledWith({
+      entityId: "book-1",
+      renditions: [
+        { rendition: BOOK_RENDITION.ebook },
+        { rendition: BOOK_RENDITION.audiobook },
+      ],
     });
   });
 

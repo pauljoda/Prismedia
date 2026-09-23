@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Book requests can choose ebook, audiobook, or both in one review, with a destination and profile for each format. A partial failure reports the format that needs a retry while keeping the successful request attached to the same Book.
 - Plugins can provide metadata, discovery, acquisition, downloads, and external-library capabilities independently. Connections support multiple instances with separate credentials, health checks, and packaged provider logos.
 - Request combines visual discovery, connected collections, metadata review, and provider choices. Radarr and Sonarr can search new titles directly; reviewed movie and selected-episode requests can delegate acquisition and open the normal Prismedia entity page. Already-followed series can request additional selected episodes while retaining their existing library links.
 - Provider folders appear in Settings → Libraries and can attach to existing Prismedia libraries. External files stay in place and read-only to Prismedia, with shared visibility, playback, and watch history across renames, missing files, and upgrades.

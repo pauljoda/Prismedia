@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "$app/state";
 import {
+  BOOK_RENDITION,
   ENTITY_KIND,
   EXTERNAL_ID_PROVIDER,
   FULFILLMENT_OWNER_KIND,
@@ -767,7 +768,7 @@ describe("reviewed request route", () => {
     expect(mocks.goto).toHaveBeenCalledWith("/movies/movie-entity");
   });
 
-  it("commits audiobook intent with Book targets and lands on the Book entity", async () => {
+  it("commits both Book formats from one review and lands on the shared Book", async () => {
     const review = audiobookReview();
     setRoute(
       REQUEST_MEDIA_KIND.audiobook,
@@ -779,13 +780,24 @@ describe("reviewed request route", () => {
     mocks.fetchAcquisitionProfiles.mockResolvedValue([bookProfile()]);
     mocks.commitReviewedRequest.mockResolvedValue({
       containerEntityId: null,
-      items: [{
+      items: [BOOK_RENDITION.ebook, BOOK_RENDITION.audiobook].map((rendition) => ({
         externalId: review.externalIdentity.value,
         title: "Project Hail Mary",
         outcome: REQUEST_COMMIT_OUTCOME.requested,
         entityId: "book-entity",
-        acquisitionId: "acquisition-audiobook",
-      }],
+        acquisitionId: `acquisition-${rendition}`,
+      })),
+      bookRenditions: [BOOK_RENDITION.ebook, BOOK_RENDITION.audiobook].map((rendition) => ({
+        rendition,
+        item: {
+          externalId: review.externalIdentity.value,
+          title: "Project Hail Mary",
+          outcome: REQUEST_COMMIT_OUTCOME.requested,
+          entityId: "book-entity",
+          acquisitionId: `acquisition-${rendition}`,
+        },
+        error: null,
+      })),
     });
 
     render(Page);
@@ -797,7 +809,8 @@ describe("reviewed request route", () => {
       externalIdentity: review.externalIdentity,
       hideNsfw: true,
     });
-    await fireEvent.click(screen.getAllByRole("button", { name: "Request" })[0]);
+    await fireEvent.click(screen.getByRole("checkbox", { name: "Ebook" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Request both formats" }));
 
     await waitFor(() => {
       expect(mocks.commitReviewedRequest).toHaveBeenCalledWith(expect.objectContaining({
@@ -806,8 +819,10 @@ describe("reviewed request route", () => {
         rootExternalIdentity: review.externalIdentity,
         proposalRevision: "audiobook-revision",
         selectedProposalIds: ["audiobook-root"],
-        targetLibraryRootId: "root-books",
-        profileId: "profile-book",
+        bookRenditions: [
+          { rendition: BOOK_RENDITION.ebook, targetLibraryRootId: "root-books", profileId: "profile-book" },
+          { rendition: BOOK_RENDITION.audiobook, targetLibraryRootId: "root-books", profileId: "profile-book" },
+        ],
         review,
         proposal: expect.objectContaining({ proposalId: "audiobook-root" }),
       }), true);

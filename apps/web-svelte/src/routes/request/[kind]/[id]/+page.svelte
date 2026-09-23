@@ -3,9 +3,10 @@
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
   import { ChevronLeft, Clock3, ExternalLink, Loader2, RefreshCw, Send } from "@lucide/svelte";
-  import { Button, Select } from "@prismedia/ui-svelte";
-  import { ENTITY_KIND, EXTERNAL_ID_PROVIDER, PROBLEM_CODE, REQUEST_COMMIT_OUTCOME, REQUEST_REVIEW_SELECTION } from "$lib/api/generated/codes";
+  import { Button, Checkbox, Select } from "@prismedia/ui-svelte";
+  import { BOOK_RENDITION, ENTITY_KIND, EXTERNAL_ID_PROVIDER, PROBLEM_CODE, REQUEST_COMMIT_OUTCOME, REQUEST_MEDIA_KIND, REQUEST_REVIEW_SELECTION } from "$lib/api/generated/codes";
   import type {
+    BookRenditionCode,
     MonitorPresetCode,
     RequestMediaKindCode,
   } from "$lib/api/generated/codes";
@@ -84,6 +85,12 @@
   let selectedProposalIds = $state<string[]>([]);
   let targetLibraryRootId = $state<string | null>(null);
   let profileId = $state<string | null>(null);
+  let selectedBookRenditions = $state<BookRenditionCode[]>([]);
+  let ebookTargetLibraryRootId = $state<string | null>(null);
+  let ebookProfileId = $state<string | null>(null);
+  let audiobookTargetLibraryRootId = $state<string | null>(null);
+  let audiobookProfileId = $state<string | null>(null);
+  let bookResultHref = $state<string | null>(null);
   let chosenPreset = $state<MonitorPresetCode>(DEFAULT_MONITOR_PRESET);
   let selectionCustomized = $state(false);
   let loading = $state(true);
@@ -155,6 +162,11 @@
   });
   const selection = $derived(review ? deriveRequestReviewSelection(review) : null);
   const kindInfo = $derived(review ? requestKindInfo(review.kind) : null);
+  const ebookKindInfo = requestKindInfo(REQUEST_MEDIA_KIND.book);
+  const audiobookKindInfo = requestKindInfo(REQUEST_MEDIA_KIND.audiobook);
+  const canChooseBookRenditions = $derived(
+    review?.entityKind === ENTITY_KIND.book && selection?.mode === REQUEST_REVIEW_SELECTION.root,
+  );
   const childNoun = $derived(kindInfo?.childNoun ?? "item");
   const childrenTitle = $derived(`${capitalize(childNoun)}s`);
   const selectsChildren = $derived(selection?.mode === REQUEST_REVIEW_SELECTION.directChildren);
@@ -232,6 +244,12 @@
     chosenPreset = DEFAULT_MONITOR_PRESET;
     targetLibraryRootId = null;
     profileId = null;
+    selectedBookRenditions = [];
+    ebookTargetLibraryRootId = null;
+    ebookProfileId = null;
+    audiobookTargetLibraryRootId = null;
+    audiobookProfileId = null;
+    bookResultHref = null;
     managerSelected = Boolean(input.connectionId);
     managerChoice = null;
     managerOwnership = null;
@@ -267,6 +285,10 @@
 
       const nextSelection = deriveRequestReviewSelection(response);
       review = response;
+      if (response.entityKind === ENTITY_KIND.book) {
+        selectedBookRenditions = [response.kind === REQUEST_MEDIA_KIND.audiobook
+          ? BOOK_RENDITION.audiobook : BOOK_RENDITION.ebook];
+      }
       const rootProposal = response.proposal as EntityMetadataProposal;
       mergeMetadataSelection(rootProposal, null);
       proposalPath = [rootProposal.proposalId];
@@ -444,8 +466,22 @@
       proposalRevision: review.revision, selectedProposalIds: selectedIds, targetLibraryRootId, profileId, review,
       proposal: reviewedPayload.proposal as RequestReviewResponse["proposal"],
       selectedFields: reviewedPayload.selectedFields, selectedImages: reviewedPayload.selectedImages,
+      ...(canChooseBookRenditions ? { bookRenditions: selectedBookRenditions.map((rendition) => ({
+        rendition,
+        targetLibraryRootId: rendition === BOOK_RENDITION.ebook ? ebookTargetLibraryRootId : audiobookTargetLibraryRootId,
+        profileId: rendition === BOOK_RENDITION.ebook ? ebookProfileId : audiobookProfileId,
+      })) } : {}),
       ...(selection.mode === REQUEST_REVIEW_SELECTION.directChildren ? { preset: chosenPreset } : {}),
     };
+  }
+
+  function setBookRendition(rendition: BookRenditionCode, selected: boolean) {
+    if (!selected && selectedBookRenditions.length === 1) return;
+    selectedBookRenditions = selected
+      ? [BOOK_RENDITION.ebook, BOOK_RENDITION.audiobook].filter(
+          (candidate) => candidate === rendition || selectedBookRenditions.includes(candidate),
+        )
+      : selectedBookRenditions.filter((candidate) => candidate !== rendition);
   }
 
   const managerReviewPayload = $derived.by(() => {
@@ -512,6 +548,29 @@
         return;
       }
       const response = await commitReviewedRequest(reviewedCommitPayload(), nsfw.mode !== "show");
+
+      if (canChooseBookRenditions && !response.bookRenditions) {
+        const bookId = response.items.find((item) => item.entityId)?.entityId;
+        bookResultHref = bookId ? resolveEntityHref(ENTITY_KIND.book, bookId) ?? null : null;
+        error = "The server did not confirm both format outcomes. One format may have started; review the Book before retrying.";
+        return;
+      }
+
+      if (canChooseBookRenditions && response.bookRenditions) {
+        const bookId = response.bookRenditions.find((result) => result.item?.entityId)?.item?.entityId;
+        bookResultHref = bookId ? resolveEntityHref(ENTITY_KIND.book, bookId) ?? null : null;
+        const failures = response.bookRenditions.filter((result) => result.error);
+        if (failures.length > 0) {
+          error = failures.map((result) =>
+            `${result.rendition === BOOK_RENDITION.audiobook ? "Audiobook" : "Ebook"}: ${result.error}`,
+          ).join(" ");
+          return;
+        }
+        if (bookResultHref) {
+          await goto(resolve(bookResultHref as "/"));
+          return;
+        }
+      }
 
       const requested = response.items.filter((item) => item.outcome === REQUEST_COMMIT_OUTCOME.requested);
       if (response.containerEntityId) {
@@ -723,7 +782,31 @@
           }} />
       {/if}
 
-      {#if kindInfo && !managerSelected}
+      {#if canChooseBookRenditions && !managerSelected}
+        <div class="space-y-2" aria-label="Book formats to request">
+          <p class="font-mono text-[0.66rem] font-semibold uppercase tracking-[0.04em] text-text-secondary">Formats</p>
+          <label class="flex items-center gap-2 text-sm text-text-secondary">
+            <Checkbox checked={selectedBookRenditions.includes(BOOK_RENDITION.ebook)}
+              disabled={submitting} onchange={(checked) => setBookRendition(BOOK_RENDITION.ebook, checked)} />
+            Ebook
+          </label>
+          <label class="flex items-center gap-2 text-sm text-text-secondary">
+            <Checkbox checked={selectedBookRenditions.includes(BOOK_RENDITION.audiobook)}
+              disabled={submitting} onchange={(checked) => setBookRendition(BOOK_RENDITION.audiobook, checked)} />
+            Audiobook
+          </label>
+        </div>
+        {#if selectedBookRenditions.includes(BOOK_RENDITION.ebook) && ebookKindInfo}
+          <div class="space-y-2"><p class="text-xs text-text-muted">Ebook destination and profile</p>
+            <RequestTargetOptions kindInfo={ebookKindInfo} bind:targetLibraryRootId={ebookTargetLibraryRootId} bind:profileId={ebookProfileId} stacked />
+          </div>
+        {/if}
+        {#if selectedBookRenditions.includes(BOOK_RENDITION.audiobook) && audiobookKindInfo}
+          <div class="space-y-2"><p class="text-xs text-text-muted">Audiobook destination and profile</p>
+            <RequestTargetOptions kindInfo={audiobookKindInfo} bind:targetLibraryRootId={audiobookTargetLibraryRootId} bind:profileId={audiobookProfileId} stacked />
+          </div>
+        {/if}
+      {:else if kindInfo && !managerSelected}
         <RequestTargetOptions {kindInfo} bind:targetLibraryRootId bind:profileId stacked />
       {/if}
       <Button type="button" variant="primary" class="w-full gap-2"
@@ -731,7 +814,7 @@
         onclick={() => void requestSelection()}>
         {#if submitting}<Loader2 class="h-4 w-4 animate-spin" />{:else if managerOwnership && !pendingManagerCommit}<ExternalLink class="h-4 w-4" />{:else}<Send class="h-4 w-4" />{/if}
         {submitting ? (managerOwnership && !pendingManagerCommit ? "Opening…" : "Requesting…") : pendingManagerCommit ? "Retry request" : managerOwnership ? "Open in library" : managedSeriesSelected && managedSeriesTargetCount > 0
-          ? `Request ${managedSeriesTargetCount}${managerChoice?.review.expansion ? " more" : ""} episode${managedSeriesTargetCount === 1 ? "" : "s"}` : managedSeriesSelected ? "Request selected episodes" : selectsChildren && selectedProposalIds.length > 0
+          ? `Request ${managedSeriesTargetCount}${managerChoice?.review.expansion ? " more" : ""} episode${managedSeriesTargetCount === 1 ? "" : "s"}` : canChooseBookRenditions ? `Request ${selectedBookRenditions.length === 2 ? "both formats" : selectedBookRenditions[0] === BOOK_RENDITION.audiobook ? "audiobook" : "ebook"}` : managedSeriesSelected ? "Request selected episodes" : selectsChildren && selectedProposalIds.length > 0
             ? `Request ${selectedProposalIds.length} ${childNoun}${selectedProposalIds.length === 1 ? "" : "s"}` : "Request"}
       </Button>
       {#if pendingManagerCommit && !submitting}
@@ -755,6 +838,9 @@
             </Button>
           {/if}
         </div>
+      {/if}
+      {#if bookResultHref}
+        <a href={resolve(bookResultHref as "/")} class="text-sm text-text-primary underline">Open book and review each format</a>
       {/if}
     </section>
     {/snippet}

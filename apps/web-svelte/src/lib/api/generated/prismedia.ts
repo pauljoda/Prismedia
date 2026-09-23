@@ -53,6 +53,7 @@ import type {
   CollectionRulePreviewRequest,
   CollectionRulePreviewResponse,
   CollectionWriteRequest,
+  CommitBookRenditionsRequestParams,
   CommitEntityRequestParams,
   CommitRequestParams,
   CommitReviewedManagedRequestInput,
@@ -263,6 +264,7 @@ import type {
   RenameFileParams,
   ReplaceBookChapterMappingsRequest,
   RequestActivityPage,
+  RequestBookRenditionsCommitRequest,
   RequestCommitRequest,
   RequestCommitResponse,
   RequestEntityCommitRequest,
@@ -12391,6 +12393,63 @@ export const commitEntityRequest = async (requestEntityCommitRequest: RequestEnt
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       requestEntityCommitRequest,)
+  }
+);}
+
+
+
+export type commitBookRenditionsRequestResponse200 = {
+  data: RequestCommitResponse
+  status: 200
+}
+
+export type commitBookRenditionsRequestResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type commitBookRenditionsRequestResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type commitBookRenditionsRequestResponseSuccess = (commitBookRenditionsRequestResponse200) & {
+  headers: Headers;
+};
+export type commitBookRenditionsRequestResponseError = (commitBookRenditionsRequestResponse400 | commitBookRenditionsRequestResponse404) & {
+  headers: Headers;
+};
+
+export type commitBookRenditionsRequestResponse = (commitBookRenditionsRequestResponseSuccess | commitBookRenditionsRequestResponseError)
+
+export const getCommitBookRenditionsRequestUrl = (params?: CommitBookRenditionsRequestParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/requests/commit-book-renditions?${stringifiedParams}` : `/api/requests/commit-book-renditions`
+}
+
+/**
+ * @summary Requests selected ebook and audiobook renditions of one Book with separate outcomes.
+ */
+export const commitBookRenditionsRequest = async (requestBookRenditionsCommitRequest: RequestBookRenditionsCommitRequest,
+    params?: CommitBookRenditionsRequestParams, options?: RequestInit): Promise<commitBookRenditionsRequestResponse> => {
+
+  return orvalFetch<commitBookRenditionsRequestResponse>(getCommitBookRenditionsRequestUrl(params),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      requestBookRenditionsCommitRequest,)
   }
 );}
 
