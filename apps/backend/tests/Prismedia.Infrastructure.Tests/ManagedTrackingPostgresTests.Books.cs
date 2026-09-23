@@ -3,6 +3,7 @@ using Prismedia.Application.Integrations;
 using Prismedia.Contracts.Integrations;
 using Prismedia.Domain.Entities;
 using Prismedia.Domain.Integrations;
+using Prismedia.Infrastructure.Media.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 
 namespace Prismedia.Infrastructure.Tests;
@@ -101,6 +102,15 @@ public sealed partial class ManagedTrackingPostgresTests {
         Assert.Equal(BookFormat.Epub, (await db.BookDetails.AsNoTracking().SingleAsync(row => row.EntityId == canonicalId)).Format);
         Assert.Equal(canonicalId, (await db.EntitySources.AsNoTracking().SingleAsync(row => row.Code == EntitySourceCode.Folder.ToCode())).EntityId);
         Assert.Equal(2, await db.FulfillmentReservations.AsNoTracking().CountAsync(row => row.EntityId == canonicalId));
+
+        var scanner = new LibraryScanPersistenceService(db);
+        Assert.Equal(canonicalId, await scanner.UpsertSingleFileBookAsync(ebookPath, "Readable title", rootId,
+            false, BookType.Novel, BookFormat.Epub, "application/epub+zip", null, null, default));
+        Assert.Equal(canonicalId, await scanner.UpsertAudiobookBookAsync(audioFolder.FullName, "Audio folder title", rootId,
+            false, BookType.Novel, BookFormat.Audio, default));
+        Assert.Equal("Readable title", (await db.Entities.AsNoTracking().SingleAsync(row => row.Id == canonicalId)).Title);
+        Assert.Equal(BookFormat.Epub, (await db.BookDetails.AsNoTracking().SingleAsync(row => row.EntityId == canonicalId)).Format);
+        Assert.Equal(canonicalId, (await db.Entities.AsNoTracking().SingleAsync(row => row.Id == trackId)).ParentEntityId);
     }
 
     [Fact]
