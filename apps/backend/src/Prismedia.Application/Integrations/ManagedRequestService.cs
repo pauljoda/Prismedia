@@ -48,7 +48,7 @@ public sealed class ManagedRequestService(IManagedRequestStore store, Integratio
             throw new ManagedRequestConflictException("This work already exists with another profile. Review and use its current profile before changing it through linked controls.");
         foreach (var operation in new[] { IntegrationOperation.ReconcileManaged, IntegrationOperation.ConfigureManaged })
             await access.RequireAsync(connectionId, PluginCapability.ExternalManager, operation, preview.Work.EntityKind, token);
-        if (preview.Work.EntityKind != EntityKind.ComicSeries)
+        if (preview.Existing is null && preview.Work.EntityKind != EntityKind.ComicSeries)
             await access.RequireAsync(connectionId, PluginCapability.ExternalManager, IntegrationOperation.EnsureManaged, preview.Work.EntityKind, token);
         if (input.Search) await access.RequireAsync(connectionId, PluginCapability.ExternalManager, IntegrationOperation.RequestManaged, preview.Work.EntityKind, token);
         await access.RequireAsync(connectionId, PluginCapability.ConnectedLibrary, IntegrationOperation.GetLibraryItem, preview.Work.EntityKind, token);
