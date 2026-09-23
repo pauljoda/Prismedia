@@ -82,6 +82,7 @@
   import type { ArtworkPalette } from "$lib/entities/artwork-palette";
   import {
     buildBookChapterRows,
+    bookChapterRowOwnsAudioTime,
     type BookChapterRow,
     type ReadableBookChapter,
   } from "$lib/entities/book-chapter-list";
@@ -260,7 +261,7 @@
   );
   const chapterRows = $derived(baseChapterRows.map((row) => ({
     ...row,
-    isCurrentAudio: rowOwnsAudioTime(
+    isCurrentAudio: bookChapterRowOwnsAudioTime(
       row,
       currentAudiobookTrackId,
       isCurrentAudiobook ? playback.currentTime : savedAudiobookResume?.trackOffsetSeconds ?? null,
@@ -745,19 +746,6 @@
     playback.play(audiobookTracks, trackId, context, { shuffle: false, startSeconds });
   }
 
-  function rowOwnsAudioTime(
-    row: BookChapterRow,
-    trackId: string | null,
-    seconds: number | null,
-  ): boolean {
-    if (!row.audioTrack || row.audioTrack.id !== trackId) return false;
-    if (!row.audioMarkerId) return true;
-    if (seconds === null || !Number.isFinite(seconds)) return false;
-    const start = Number(row.audioStartSeconds ?? 0);
-    const end = row.audioEndSeconds == null ? Number.POSITIVE_INFINITY : Number(row.audioEndSeconds);
-    return seconds >= start && seconds < end;
-  }
-
   function openChapterRow(row: BookChapterRow) {
     if (!book || !row.readTarget) return;
     const target = row.readTarget;
@@ -818,7 +806,7 @@
     const track = row.audioTrack;
     if (!track) return;
     if (isCurrentAudiobook && playback.currentTrack?.id === track.id) {
-      if (rowOwnsAudioTime(row, track.id, playback.currentTime)) {
+      if (bookChapterRowOwnsAudioTime(row, track.id, playback.currentTime)) {
         playback.toggle();
         return;
       }
@@ -827,7 +815,7 @@
       return;
     }
     const savedStartSeconds = currentAudiobookTrackId === track.id && savedAudiobookResume?.trackId === track.id &&
-        rowOwnsAudioTime(row, savedAudiobookResume.trackId, savedAudiobookResume.trackOffsetSeconds)
+        bookChapterRowOwnsAudioTime(row, savedAudiobookResume.trackId, savedAudiobookResume.trackOffsetSeconds)
       ? savedAudiobookResume.trackOffsetSeconds
       : Number(row.audioStartSeconds ?? 0);
     playAudiobookTrack(track.id, savedStartSeconds);

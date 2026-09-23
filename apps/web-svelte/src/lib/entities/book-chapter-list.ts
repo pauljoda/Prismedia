@@ -103,16 +103,50 @@ export function bookAudioChapterCandidates(
   );
 }
 
+function audioWindowContains(
+  audioTrackId: string,
+  audioMarkerId: string | null | undefined,
+  startSeconds: number | null | undefined,
+  endSeconds: number | null | undefined,
+  trackId: string | null | undefined,
+  seconds: number | null | undefined,
+): boolean {
+  if (audioTrackId !== trackId) return false;
+  if (!audioMarkerId) return true;
+  if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) return false;
+  return seconds >= Number(startSeconds ?? 0) &&
+    (endSeconds === null || endSeconds === undefined || seconds < Number(endSeconds));
+}
+
+/** Checks whether a physical audiobook position belongs to this whole-track or embedded-chapter row. */
+export function bookChapterRowOwnsAudioTime(
+  row: BookChapterRow,
+  trackId: string | null | undefined,
+  seconds: number | null | undefined,
+): boolean {
+  return !!row.audioTrack && audioWindowContains(
+    row.audioTrack.id,
+    row.audioMarkerId,
+    row.audioStartSeconds,
+    row.audioEndSeconds,
+    trackId,
+    seconds,
+  );
+}
+
 function isCurrentAudioCandidate(
   candidate: BookAudioChapterCandidate,
   trackId: string | null | undefined,
   seconds: number | null | undefined,
 ): boolean {
-  if (candidate.track.id !== trackId) return false;
-  if (candidate.markerId === null) return true;
-  if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) return false;
-  return seconds >= candidate.startSeconds &&
-    (candidate.endSeconds === null || seconds < candidate.endSeconds);
+  return audioWindowContains(
+    candidate.track.id,
+    candidate.markerId,
+    candidate.startSeconds,
+    candidate.endSeconds,
+    trackId,
+    seconds,
+  );
 }
 
 /**

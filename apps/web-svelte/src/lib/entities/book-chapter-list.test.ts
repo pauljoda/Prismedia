@@ -3,6 +3,7 @@ import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
 import type { BookAudioChapter } from "$lib/api/generated/model";
 import {
   buildBookChapterRows,
+  bookChapterRowOwnsAudioTime,
   sequentialBookChapterMappings,
   type ReadableBookChapter,
 } from "./book-chapter-list";
@@ -186,6 +187,10 @@ describe("book chapter list", () => {
       ["audio-1", "marker-1", 0, 12.5, false],
       ["audio-1", "marker-2", 12.5, 180, true],
     ]);
+    expect(rows.map((row) => bookChapterRowOwnsAudioTime(row, "audio-1", 12.5)))
+      .toEqual([false, true]);
+    expect(rows.map((row) => bookChapterRowOwnsAudioTime(row, "other-track", 20)))
+      .toEqual([false, false]);
   });
 
   it("shows embedded chapters for an audio-only book without duplicating the whole file", () => {
