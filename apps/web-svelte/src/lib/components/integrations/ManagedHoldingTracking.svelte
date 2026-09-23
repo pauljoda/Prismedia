@@ -3,7 +3,7 @@
   import { onMount, untrack } from "svelte";
   import { ArrowUpRight } from "@lucide/svelte";
   import { Alert, Badge, Button } from "@prismedia/ui-svelte";
-  import { ENTITY_KIND, MANAGED_TRACKING_STATUS } from "$lib/api/generated/codes";
+  import { BOOK_RENDITION, ENTITY_KIND, MANAGED_TRACKING_STATUS } from "$lib/api/generated/codes";
   import type { BookRenditionCode } from "$lib/api/generated/codes";
   import type { ManagedLibraryItem, ManagedTrackingPreview, ManagedTrackingResponse } from "$lib/api/generated/model";
   import { fetchManagedTracking, previewTracking, saveManagedTracking, refreshTracking } from "$lib/api/managed-libraries";
@@ -43,6 +43,21 @@
   });
   const hasCurrentHolding = $derived(visible.some(holding => holding.status !== MANAGED_TRACKING_STATUS.released));
   const primaryHolding = $derived(presentedHoldings[0] ?? null);
+  const siblingBookHolding = $derived(item?.entityKind === ENTITY_KIND.book && bookRendition
+    ? holdings.find(holding => holding.item.entityKind === ENTITY_KIND.book
+      && holding.item.bookRendition !== bookRendition
+      && holding.status === MANAGED_TRACKING_STATUS.tracking
+      && isTrackedManagedItem(holding.item, item)) ?? null : null);
+  const previewBookWorkId = $derived.by(() => {
+    const currentPreview = preview;
+    if (!currentPreview || item?.entityKind !== ENTITY_KIND.book || !bookRendition) return null;
+    const workIds = new Set(currentPreview.sources.filter(source => currentPreview.selections.some(selection =>
+      selection.entityId === source.entityId && selection.sourceFileId === source.sourceFileId))
+      .map(source => bookRendition === BOOK_RENDITION.audiobook ? source.parentEntityId : source.entityId));
+    return workIds.size === 1 ? [...workIds][0] ?? null : null;
+  });
+  const combinesBookWorks = $derived(!!siblingBookHolding?.bookWorkId && !!previewBookWorkId
+    && siblingBookHolding.bookWorkId !== previewBookWorkId);
   const statusLabels: Record<ManagedTrackingResponse["status"], string> = {
     [MANAGED_TRACKING_STATUS.pending]: "Link pending",
     [MANAGED_TRACKING_STATUS.waitingForFiles]: "Waiting for files",
@@ -111,7 +126,8 @@
     try {
       const saved = await saveManagedTracking(connectionId, { operationId, libraryRootId: selectedPreview.libraryRootId,
         item: { entityKind: selectedItem.entityKind, remoteId: selectedItem.remoteId, expectedExternalIds: selectedItem.externalIds,
-          ...(bookRendition ? { bookRendition } : {}) }, selections: selectedPreview.selections });
+          ...(bookRendition ? { bookRendition } : {}) }, selections: selectedPreview.selections,
+        ...(combinesBookWorks ? { combineBookWorks: true } : {}) });
       if (active && scope === trackingScope) { holdings = [...holdings.filter(holding => holding.id !== saved.id), saved]; preview = null; }
     } catch (cause) { if (active && scope === trackingScope) error = cause instanceof Error ? cause.message : "Could not link this holding"; }
     finally { if (active && scope === trackingScope) busy = false; }
@@ -294,7 +310,10 @@
               {#each [...new Set(preview.sources.map(source => source.localPath))] as path (path)}<p class="break-all font-mono text-xs text-text-muted">{path}</p>{/each}
             </div>
             <p class="text-xs text-text-muted">Review these matches before Prismedia starts following file changes from {connectionName}. This mapped library will use reviewed holdings for future scans; other unscanned titles and new episode coverage still require review.</p>
-            <Button variant="secondary" disabled={busy} onclick={link}>Link matching items</Button>
+            {#if combinesBookWorks}
+              <Alert.Root><Alert.Description>The ebook and audiobook were scanned as separate Book records. Prismedia will combine their files under the Book already linked to {connectionName}, then link this format. Books with reading history, chapters, or other ownership need separate review.</Alert.Description></Alert.Root>
+            {/if}
+            <Button variant="secondary" disabled={busy} onclick={link}>{combinesBookWorks ? "Combine formats and link" : "Link matching items"}</Button>
           </div>
         {/if}
       {/if}

@@ -12,4 +12,5 @@ export interface TrackManagedHoldingRequest {
   libraryRootId: string;
   item: ManagedItemInput;
   selections: ManagedBindingSelection[];
+  combineBookWorks?: boolean;
 }

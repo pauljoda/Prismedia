@@ -8,8 +8,10 @@ using Prismedia.Infrastructure.Persistence.Entities;
 namespace Prismedia.Infrastructure.Tests;
 
 public sealed partial class ManagedTrackingPostgresTests {
-    [Fact]
-    public async Task OneRemoteBookCannotLinkRenditionsToDifferentLocalWorks() {
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task OneRemoteBookCombinesReviewedRenditionsWithoutLosingTheEbookWork(bool audioFirst) {
         await using var database = await PostgresTestDatabase.CreateAsync();
         await using var db = database.CreateContext();
         var connectionId = Guid.NewGuid();
@@ -19,6 +21,11 @@ public sealed partial class ManagedTrackingPostgresTests {
         var trackId = Guid.NewGuid();
         var ebookFileId = Guid.NewGuid();
         var audioFileId = Guid.NewGuid();
+        var audioFolder = Directory.CreateDirectory(Path.Combine(workspace, "audio"));
+        var ebookPath = Path.Combine(workspace, "example.epub");
+        var audioPath = Path.Combine(audioFolder.FullName, "example.m4b");
+        await File.WriteAllBytesAsync(ebookPath, [1, 2, 3]);
+        await File.WriteAllBytesAsync(audioPath, [4, 5, 6]);
         db.IntegrationConnections.Add(new() { Id = connectionId, PluginId = "fixture", Name = "Fixture",
             BaseUrl = "http://manager.test/", Enabled = true, Status = ConnectionStatus.Ready, Revision = 1 });
         db.LibraryRoots.Add(new() { Id = rootId, Path = workspace, Label = "Books", Enabled = true, ScanBooks = true });
@@ -28,22 +35,72 @@ public sealed partial class ManagedTrackingPostgresTests {
             new() { Id = ebookId, KindCode = EntityKind.Book.ToCode(), Title = "Example" },
             new() { Id = audioBookId, KindCode = EntityKind.Book.ToCode(), Title = "Example" },
             new() { Id = trackId, ParentEntityId = audioBookId, KindCode = EntityKind.AudioTrack.ToCode(), Title = "Example" });
+        db.BookDetails.AddRange(
+            new() { EntityId = ebookId, Format = BookFormat.Epub },
+            new() { EntityId = audioBookId, Format = BookFormat.Audio });
+        db.EntitySources.Add(new() { EntityId = audioBookId, Code = EntitySourceCode.Folder.ToCode(),
+            Value = audioFolder.FullName, UpdatedAt = DateTimeOffset.UtcNow });
         db.EntityFiles.AddRange(
-            new() { Id = ebookFileId, EntityId = ebookId, Path = Path.Combine(workspace, "example.epub"), SizeBytes = 3 },
-            new() { Id = audioFileId, EntityId = trackId, Path = Path.Combine(workspace, "example.m4b"), SizeBytes = 3 });
+            new() { Id = ebookFileId, EntityId = ebookId, Path = ebookPath, SizeBytes = 3 },
+            new() { Id = audioFileId, EntityId = trackId, Path = audioPath, SizeBytes = 3 });
         await db.SaveChangesAsync();
 
         var ids = new Dictionary<string, string> { ["fixture-book"] = "work-1" };
         var ebook = new ManagedItemInput(EntityKind.Book, "work-1", ids, BookRendition.Ebook);
-        var store = Store(db);
-        await store.CreateAsync(connectionId, new(Guid.NewGuid(), rootId, ebook,
-            [new("work-1", ebookId, ebookFileId)]), "Example", default);
-
         var audio = ebook with { BookRendition = BookRendition.Audiobook };
+        var store = Store(db);
+        var item = new ManagedLibraryItem("work-1", EntityKind.Book, "Example", null, ids, false, null, 1);
+        var ebookSnapshot = new ManagedItemSnapshot(
+            item, "/books",
+            [new("ebook-file", "/books/example.epub", 3, null,
+                [new("work-1", EntityKind.Book, "Example")])], DateTimeOffset.UtcNow);
+        var audioSnapshot = new ManagedItemSnapshot(
+            item, "/books/audio",
+            [new("audio-file", "/books/audio/example.m4b", 3, null,
+                [new("track-1", EntityKind.AudioTrack, "Example")])], DateTimeOffset.UtcNow);
+        var ebookSelection = new ManagedBindingSelection("work-1", ebookId, ebookFileId);
+        var audioSelection = new ManagedBindingSelection("track-1", trackId, audioFileId);
+        var firstItem = audioFirst ? audio : ebook;
+        var firstSnapshot = audioFirst ? audioSnapshot : ebookSnapshot;
+        var firstSelection = audioFirst ? audioSelection : ebookSelection;
+        var acceptedFirst = await store.CreateAsync(connectionId,
+            new(Guid.NewGuid(), rootId, firstItem, [firstSelection]), "Example", default);
+        var firstWork = (await store.FindAsync(acceptedFirst.Id, default))!;
+        var firstObservation = await store.ObserveAsync(connectionId, firstSnapshot, default);
+        var firstPlan = ManagedSourceAdoption.Plan(firstObservation.Files, firstWork.Selections, firstObservation.Sources);
+        Assert.Null(firstPlan.ReviewReason);
+        await store.ApplyAsync(firstWork, firstObservation, firstPlan.Bindings, [], default);
+
+        var secondItem = audioFirst ? ebook : audio;
+        var secondSelection = audioFirst ? ebookSelection : audioSelection;
         var error = await Assert.ThrowsAsync<ArgumentException>(() => store.CreateAsync(connectionId,
-            new(Guid.NewGuid(), rootId, audio, [new("track-1", trackId, audioFileId)]), "Example", default));
+            new(Guid.NewGuid(), rootId, secondItem, [secondSelection]), "Example", default));
         Assert.Contains("separate Book works", error.Message);
         Assert.Single(await db.ManagedHoldings.AsNoTracking().ToArrayAsync());
+
+        var unexpectedFile = new EntityFileRow { Id = Guid.NewGuid(), EntityId = audioFirst ? ebookId : audioBookId,
+            Path = Path.Combine(workspace, "unreviewed.bin"), Role = EntityFileRole.Cover, SizeBytes = 1 };
+        db.EntityFiles.Add(unexpectedFile);
+        await db.SaveChangesAsync();
+        await Assert.ThrowsAsync<ArgumentException>(() => store.CreateAsync(connectionId,
+            new(Guid.NewGuid(), rootId, secondItem, [secondSelection], CombineBookWorks: true), "Example", default));
+        db.EntityFiles.Remove(unexpectedFile);
+        await db.SaveChangesAsync();
+
+        var reviewedRequest = new TrackManagedHoldingRequest(Guid.NewGuid(), rootId, secondItem,
+            [secondSelection], CombineBookWorks: true);
+        var acceptedSecond = await store.CreateAsync(connectionId, reviewedRequest, "Example", default);
+        Assert.Equal(acceptedSecond.Id, (await store.CreateAsync(connectionId, reviewedRequest, "Example", default)).Id);
+        var canonicalId = audioFirst ? audioBookId : ebookId;
+        var archivedId = audioFirst ? ebookId : audioBookId;
+        Assert.Equal(canonicalId, acceptedSecond.BookWorkId);
+        Assert.Equal(canonicalId, (await store.FindAsync(acceptedFirst.Id, default))!.Tracking.BookWorkId);
+        Assert.Equal(canonicalId, (await db.Entities.AsNoTracking().SingleAsync(row => row.Id == trackId)).ParentEntityId);
+        Assert.Equal(canonicalId, (await db.EntityFiles.AsNoTracking().SingleAsync(row => row.Id == ebookFileId)).EntityId);
+        Assert.True((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == archivedId)).IsLibraryArchived);
+        Assert.Equal(BookFormat.Epub, (await db.BookDetails.AsNoTracking().SingleAsync(row => row.EntityId == canonicalId)).Format);
+        Assert.Equal(canonicalId, (await db.EntitySources.AsNoTracking().SingleAsync(row => row.Code == EntitySourceCode.Folder.ToCode())).EntityId);
+        Assert.Equal(2, await db.FulfillmentReservations.AsNoTracking().CountAsync(row => row.EntityId == canonicalId));
     }
 
     [Fact]

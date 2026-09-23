@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { ENTITY_KIND, MANAGED_TRACKING_STATUS } from "$lib/api/generated/codes";
+import { BOOK_RENDITION, ENTITY_KIND, MANAGED_TRACKING_STATUS } from "$lib/api/generated/codes";
 import ManagedHoldingTracking from "./ManagedHoldingTracking.svelte";
 
 const api = vi.hoisted(() => ({ fetchManagedTracking: vi.fn(), previewTracking: vi.fn(), saveManagedTracking: vi.fn(), refreshTracking: vi.fn(), resolveEntityHrefById: vi.fn(), goto: vi.fn() }));
@@ -112,6 +112,22 @@ describe("Managed holding tracking", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Link matching items" }));
     await screen.findByText("Link pending");
     expect(api.saveManagedTracking).toHaveBeenCalledWith("connection", expect.objectContaining({ libraryRootId: "mapped-root", selections: [selection], item: tracked.item }));
+  });
+
+  it("requires an explicit combine action when the other Book format has a different work", async () => {
+    const bookItem = { ...item, entityKind: ENTITY_KIND.book, externalIds: { openLibrary: "work-1" } };
+    api.fetchManagedTracking.mockResolvedValue([{ ...tracked, status: MANAGED_TRACKING_STATUS.tracking,
+      item: { entityKind: ENTITY_KIND.book, remoteId: item.remoteId,
+        expectedExternalIds: bookItem.externalIds, bookRendition: BOOK_RENDITION.ebook }, bookWorkId: "ebook-work" }]);
+    api.previewTracking.mockResolvedValue({ ...preview, selections: [{ ...selection, entityId: "audio-track" }],
+      sources: [{ ...preview.sources[0], entityId: "audio-track", kind: ENTITY_KIND.audioTrack,
+        parentEntityId: "audio-work" }] });
+    render(ManagedHoldingTracking, { connectionId: "connection", item: bookItem,
+      bookRendition: BOOK_RENDITION.audiobook });
+    await fireEvent.click(await screen.findByRole("button", { name: "Find matching items" }));
+    await screen.findByText(/scanned as separate Book records/);
+    await fireEvent.click(screen.getByRole("button", { name: "Combine formats and link" }));
+    expect(api.saveManagedTracking).toHaveBeenCalledWith("connection", expect.objectContaining({ combineBookWorks: true }));
   });
 
   it("keeps ambiguous or unscanned coverage out of the linking action", async () => {

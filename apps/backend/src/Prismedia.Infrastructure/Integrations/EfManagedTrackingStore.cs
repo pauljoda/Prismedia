@@ -40,6 +40,11 @@ public sealed partial class EfManagedTrackingStore(PrismediaDbContext db, IExter
         var itemJson = JsonSerializer.Serialize(item, Json);
         var selections = request.Selections.OrderBy(selection => selection.RemoteTargetId, StringComparer.Ordinal).ToArray();
         if (await FindAsync(request.OperationId, token) is { } existing) {
+            if (request.CombineBookWorks && item.BookRendition == BookRendition.Ebook && selections.Length == 1) {
+                var currentFileOwner = await db.EntityFiles.AsNoTracking().Where(file => file.Id == selections[0].SourceFileId)
+                    .Select(file => (Guid?)file.EntityId).SingleOrDefaultAsync(token);
+                if (currentFileOwner is { } workId) selections[0] = selections[0] with { EntityId = workId };
+            }
             if (existing.Tracking.ConnectionId != connectionId || existing.Tracking.LibraryRootId != request.LibraryRootId
                 || JsonSerializer.Serialize(existing.Tracking.Item with { ExpectedExternalIds = existing.Tracking.Item.ExpectedExternalIds.OrderBy(pair => pair.Key, StringComparer.Ordinal).ToDictionary() }, Json) != itemJson
                 || !existing.Selections.SequenceEqual(selections)) throw new ArgumentException("This operation ID already accepted different associations.");
@@ -54,24 +59,43 @@ public sealed partial class EfManagedTrackingStore(PrismediaDbContext db, IExter
         var ownerIds = await new ManagedReservationScopeResolver(db).ResolveAsync(sourceEntityIds, item, token);
         await using var transaction = await db.Database.BeginTransactionAsync(token);
         await PluginLifecycleLease.LockConnectionAsync(db, connectionId, token, requireReady: true);
+        var sibling = await FindSiblingBookAsync(connectionId, item, token);
+        var audioBookId = sibling is null || sibling.WorkId == ownerIds[0] ? (Guid?)null
+            : item.BookRendition == BookRendition.Audiobook ? ownerIds[0] : sibling.WorkId;
+        var audioChildIds = audioBookId is { } donorId
+            ? await AudioChildIdsAsync(donorId, token) : [];
         var row = new ManagedHoldingRow { Id = request.OperationId, ConnectionId = connectionId, LibraryRootId = request.LibraryRootId,
             Kind = item.EntityKind, BookRendition = item.BookRendition, RemoteId = item.RemoteId, Title = title, ItemJson = itemJson,
             SelectionsJson = JsonSerializer.Serialize(selections, Json), Revision = 1, Status = ManagedTrackingStatus.Pending, NextCheckAt = DateTimeOffset.UtcNow };
         try {
-            if (!await lifecycle.ExecuteManyAsync(sourceEntityIds.Concat(ownerIds).Distinct().ToArray(), async leaseToken => {
+            var leaseIds = sourceEntityIds.Concat(ownerIds).Concat(audioChildIds)
+                .Concat(sibling is null ? [] : [sibling.WorkId]).Distinct().ToArray();
+            if (!await lifecycle.ExecuteManyAsync(leaseIds, async leaseToken => {
                 var checkedOwners = await new ManagedReservationScopeResolver(db).ResolveAsync(sourceEntityIds, item, leaseToken);
                 if (!checkedOwners.SequenceEqual(ownerIds))
                     throw new ArgumentException("The selected book work changed during ownership review.");
-                if (item.EntityKind == EntityKind.Book) {
-                    var siblingWorkIds = await db.ManagedHoldings.AsNoTracking()
-                        .Where(holding => holding.ConnectionId == connectionId && holding.Kind == EntityKind.Book
-                            && holding.RemoteId == item.RemoteId && holding.BookRendition != item.BookRendition
-                            && holding.Status != ManagedTrackingStatus.Released)
-                        .Join(db.FulfillmentReservations.AsNoTracking().Where(owner => owner.ReleasedAt == null),
-                            holding => holding.Id, owner => owner.OwnerId, (_, owner) => owner.EntityId)
-                        .Distinct().ToArrayAsync(leaseToken);
-                    if (siblingWorkIds.Any(id => id != checkedOwners[0]))
-                        throw new ArgumentException("The ebook and audiobook are scanned as separate Book works. Linking this format would leave them disconnected.");
+                var currentSibling = await FindSiblingBookAsync(connectionId, item, leaseToken);
+                if (currentSibling != sibling) throw new ArgumentException("The sibling Book holding changed during review.");
+                if (currentSibling is not null) {
+                    VerifySiblingIdentity(item, currentSibling);
+                    if (currentSibling.WorkId != checkedOwners[0]) {
+                        if (!request.CombineBookWorks)
+                            throw new ArgumentException("The ebook and audiobook are scanned as separate Book works. Linking this format would leave them disconnected.");
+                        var canonicalWorkId = currentSibling.WorkId;
+                        if (item.BookRendition == BookRendition.Audiobook)
+                            await CombineAudioIntoEbookAsync(canonicalWorkId, checkedOwners[0], audioChildIds,
+                                sourceEntityIds, leaseToken);
+                        else {
+                            await CombineEbookIntoAudioAsync(canonicalWorkId, checkedOwners[0], sourceEntityIds, leaseToken);
+                            selections = selections.Select(selection => selection with { EntityId = canonicalWorkId }).ToArray();
+                            sourceEntityIds = [canonicalWorkId];
+                            row.SelectionsJson = JsonSerializer.Serialize(selections, Json);
+                        }
+                        checkedOwners = item.BookRendition == BookRendition.Ebook
+                            ? [canonicalWorkId]
+                            : await new ManagedReservationScopeResolver(db).ResolveAsync(sourceEntityIds, item, leaseToken);
+                        if (checkedOwners.Length != 1 || checkedOwners[0] != canonicalWorkId) throw BookMergeReview();
+                    }
                 }
                 db.ManagedHoldings.Add(row);
                 foreach (var ownerId in checkedOwners)

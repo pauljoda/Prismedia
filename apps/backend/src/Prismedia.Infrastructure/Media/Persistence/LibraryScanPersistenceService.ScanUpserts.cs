@@ -440,22 +440,28 @@ public sealed partial class LibraryScanPersistenceService {
         CancellationToken cancellationToken) {
         var existing = await FindEntityByFolderSourcePathAsync(EntityKind.Book.ToCode(), folderPath, cancellationToken);
         if (existing is not null) {
+            var detail = await _db.BookDetails.FindAsync([existing.Id], cancellationToken);
+            var hasReadableRendition = detail?.Format is BookFormat.Epub or BookFormat.Pdf;
             var tracked = await _db.Entities.FindAsync([existing.Id], cancellationToken);
             if (tracked is not null) {
-                tracked.Title = title;
-                tracked.ParentEntityId = null;
-                tracked.SortOrder = null;
+                if (!hasReadableRendition) {
+                    tracked.Title = title;
+                    tracked.ParentEntityId = null;
+                    tracked.SortOrder = null;
+                }
                 tracked.UpdatedAt = DateTimeOffset.UtcNow;
                 if (isNsfw) tracked.IsNsfw = true;
             }
-            var detail = await _db.BookDetails.FindAsync([existing.Id], cancellationToken);
             if (detail is not null) {
-                detail.BookType = bookType;
-                detail.Format = format;
+                if (!hasReadableRendition) {
+                    detail.BookType = bookType;
+                    detail.Format = format;
+                }
             } else {
                 _db.BookDetails.Add(new BookDetailRow { EntityId = existing.Id, BookType = bookType, Format = format });
             }
-            await SetEntityLibraryRootAsync(existing.Id, libraryRootId, cancellationToken);
+            if (!hasReadableRendition)
+                await SetEntityLibraryRootAsync(existing.Id, libraryRootId, cancellationToken);
             await SaveChangesWithLifecycleAsync(cancellationToken);
             return existing.Id;
         }
