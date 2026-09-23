@@ -93,4 +93,26 @@ public sealed class ManagedSourceReconciliationTests {
         Assert.NotNull(result.ReviewReason);
         Assert.Empty(result.Changes);
     }
+
+    [Fact]
+    public void ChangedComicIssueIdAtTheSameLabelRequiresReview() {
+        var issue = new ManagedTargetIdentity("issue-1", EntityKind.ComicInstallment, null, null, null, "12.5");
+        var result = ManagedSourceReconciliation.Plan([Binding(issue)],
+            [Observed(issue with { RemoteTargetId = "issue-2" })]);
+
+        Assert.NotNull(result.ReviewReason);
+        Assert.Empty(result.Changes);
+    }
+
+    [Fact]
+    public void AnotherComicIssueDoesNotExpandTheTrackedScope() {
+        var issue = new ManagedTargetIdentity("issue-1", EntityKind.ComicInstallment, null, null, null, "12.5");
+        var other = issue with { RemoteTargetId = "issue-2", IssueLabel = "13" };
+        var result = ManagedSourceReconciliation.Plan([Binding(issue)], [Observed(issue), Observed(other) with {
+            RemoteFileId = "other-file", LocalPath = "/library/other.cbz"
+        }]);
+
+        Assert.Null(result.ReviewReason);
+        Assert.Single(result.Changes);
+    }
 }

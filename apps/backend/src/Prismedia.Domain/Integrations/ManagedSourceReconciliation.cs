@@ -82,6 +82,8 @@ public static class ManagedSourceReconciliation {
 
     private static bool PlausiblySameCoordinates(ManagedTargetIdentity saved, ManagedTargetIdentity candidate) {
         if (saved.Kind != candidate.Kind) return false;
+        if (saved.Kind == EntityKind.ComicInstallment)
+            return !string.IsNullOrWhiteSpace(saved.IssueLabel) && saved.IssueLabel == candidate.IssueLabel;
         if (saved.Kind != EntityKind.VideoEpisode) return false;
         return saved.SeasonNumber is not null && saved.EpisodeNumber is not null
                 && saved.SeasonNumber == candidate.SeasonNumber && saved.EpisodeNumber == candidate.EpisodeNumber
