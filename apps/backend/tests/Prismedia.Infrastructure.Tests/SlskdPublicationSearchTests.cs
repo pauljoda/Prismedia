@@ -72,6 +72,16 @@ public sealed class SlskdPublicationSearchTests {
         Assert.Equal(100, release.SizeBytes);
     }
 
+    [Fact]
+    public async Task TimedOutPeerWindowStillReturnsCollectedPublicationResults() {
+        using var http = new HttpClient(new Fixture([("Books/Author/One.epub", 100)], SoulseekProtocol.SearchTimedOutState));
+        var releases = await new SlskdIndexerClient(http).SearchAsync(
+            new(Guid.NewGuid(), IndexerKind.Slskd, "http://slskd.test", "fixture-key", []),
+            new IndexerQuery("Author One", [], EntityKind.Book) { BookRendition = BookRendition.Ebook }, default);
+
+        Assert.Equal("Books/Author/One.epub", Assert.Single(Assert.Single(releases).KnownFileNames!));
+    }
+
     private static async Task<IReadOnlyList<IndexerRelease>> Search(EntityKind kind, BookRendition? rendition,
         params (string Path, long Size)[] files) {
         using var http = new HttpClient(new Fixture(files));
@@ -80,11 +90,12 @@ public sealed class SlskdPublicationSearchTests {
             new IndexerQuery("Author One", [], kind) { BookRendition = rendition }, default);
     }
 
-    private sealed class Fixture((string Path, long Size)[] files) : HttpMessageHandler {
+    private sealed class Fixture((string Path, long Size)[] files, string finalState = SoulseekProtocol.SearchCompletedState) : HttpMessageHandler {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken token) {
             object body = request.RequestUri!.AbsolutePath.EndsWith("/responses", StringComparison.Ordinal)
                 ? new[] { new { username = "fixture-peer", files = files.Select(file => new { filename = file.Path, size = file.Size }) } }
-                : new { state = SoulseekProtocol.SearchCompletedState };
+                : new { state = request.Method == HttpMethod.Post && finalState == SoulseekProtocol.SearchTimedOutState
+                    ? SoulseekProtocol.SearchInProgressState : finalState };
             return Task.FromResult(new HttpResponseMessage(HttpStatusCode.OK) {
                 Content = new StringContent(JsonSerializer.Serialize(body), System.Text.Encoding.UTF8, "application/json")
             });

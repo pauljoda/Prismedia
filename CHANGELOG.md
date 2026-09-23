@@ -182,6 +182,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Soulseek searches now use the peer results collected when slskd's response window ends in a timed-out state, instead of discarding them as a failed search.
+
 - Connected audiobook requests pause for review when the mapped Book folder contains audio parts the manager did not report, instead of treating one reported file as the complete audiobook.
 
 - Soulseek book and comic searches now wait longer for a queued slskd search to finish before reporting a timeout.

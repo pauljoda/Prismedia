@@ -19,7 +19,9 @@ public static class SoulseekProtocol {
     public const string DownloadBatchesPath = "/api/v0/transfers/downloads/batches";
     public const string DownloadsPath = "/api/v0/transfers/downloads";
     public const string ServerPath = "/api/v0/server";
+    public const string SearchInProgressState = "InProgress";
     public const string SearchCompletedState = "Completed";
+    public const string SearchTimedOutState = "TimedOut";
     public const string TransferCompletedState = "Completed";
     public const string TransferSucceededState = "Succeeded";
     public const string NormalizedFailedState = "Failed";
@@ -164,13 +166,13 @@ public sealed partial class SlskdIndexerClient(
         CancellationToken cancellationToken) {
         var state = initialState;
         for (var attempt = 0; attempt < SearchCompletionPollAttempts; attempt++) {
-            if (HasState(state, SoulseekProtocol.SearchCompletedState)) return;
+            if (SearchHasFinished(state)) return;
 
             using var request = Request(connection, HttpMethod.Get, $"{SoulseekProtocol.SearchesPath}/{searchId}");
             using var response = await http.SendAsync(request, cancellationToken);
             await EnsureSuccessAsync(response, "read Soulseek search state", cancellationToken);
             state = (await response.Content.ReadFromJsonAsync<SlskdSearchState>(SoulseekLocator.JsonOptions, cancellationToken))?.State;
-            if (HasState(state, SoulseekProtocol.SearchCompletedState)) return;
+            if (SearchHasFinished(state)) return;
             await Task.Delay(SearchCompletionPollInterval, cancellationToken);
         }
 
@@ -262,6 +264,8 @@ public sealed partial class SlskdIndexerClient(
     private static string Normalize(string value) => NonWordRegex().Replace(value.ToLowerInvariant(), " ").Trim();
     private static bool HasState(string? value, string state) => value?.Split(',', StringSplitOptions.TrimEntries)
         .Contains(state, StringComparer.OrdinalIgnoreCase) == true;
+    private static bool SearchHasFinished(string? state) =>
+        HasState(state, SoulseekProtocol.SearchCompletedState) || HasState(state, SoulseekProtocol.SearchTimedOutState);
 
     private static HttpRequestMessage Request(IndexerConnection connection, HttpMethod method, string path) {
         var request = new HttpRequestMessage(method, connection.BaseUrl.TrimEnd('/') + path);
