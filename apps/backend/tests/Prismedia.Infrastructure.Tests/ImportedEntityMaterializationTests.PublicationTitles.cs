@@ -5,6 +5,8 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Prismedia.Application.Jobs;
 using Prismedia.Application.Jobs.Handlers.Scan;
 using Prismedia.Application.Jobs.Ports;
+using Prismedia.Application.Integrations;
+using Prismedia.Contracts.Integrations;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Integrations;
 using Prismedia.Infrastructure.Media.Persistence;
@@ -47,6 +49,11 @@ public sealed partial class ImportedEntityMaterializationTests {
         await using var db = CreateContext();
         var root = new RootPersistence(fixture.Directory, scanBooks: true);
         fixture.Work = fixture.Work with { Plan = fixture.Work.Plan with { LibraryRootId = root.Root.Id } };
+        if (kind == EntityKind.ComicInstallment) {
+            var source = new SourceTransferPlan(new("issue", "https://catalog.test/issue", kind), "cbz",
+                new(fixture.Work.Plan.Title, null, [], new Dictionary<string, string>(), IssueLabel: "5"));
+            fixture.Work = fixture.Work with { Plan = fixture.Work.Plan with { Source = source } };
+        }
         AddLibraryRoot(db, root.Root); await db.SaveChangesAsync();
         var persistence = new LibraryScanPersistenceService(db);
         var titles = new ImportedPublicationTitleResolver(fixture);
@@ -60,6 +67,9 @@ public sealed partial class ImportedEntityMaterializationTests {
         var owner = Assert.Single(result.Entities);
         var before = await db.Entities.AsNoTracking().SingleAsync(entity => entity.Id == owner.Id);
         Assert.Equal(fixture.Work.Plan.Title, before.Title);
+        if (kind == EntityKind.ComicInstallment)
+            Assert.Equal((5, "5"), await db.EntityPositions.Where(row => row.EntityId == owner.Id && row.Code == EntityPositionCodes.Chapter)
+                .Select(row => new ValueTuple<int, string?>(row.Value, row.Label)).SingleAsync());
         var fileIds = await db.EntityFiles.Select(file => file.Id).ToArrayAsync();
         var job = new JobRunSnapshot(Guid.NewGuid(), policy.ScanJobType, JobRunStatus.Running, 0, null,
             JsonSerializer.Serialize(new { libraryRootId = root.Root.Id }), null, null, null, DateTimeOffset.UtcNow, null, null);
@@ -67,6 +77,9 @@ public sealed partial class ImportedEntityMaterializationTests {
         else await comic.HandleAsync(new(job, queue), default);
         var after = await db.Entities.AsNoTracking().SingleAsync(entity => entity.Id == owner.Id);
         Assert.Equal(fixture.Work.Plan.Title, after.Title);
+        if (kind == EntityKind.ComicInstallment)
+            Assert.Equal((5, "5"), await db.EntityPositions.Where(row => row.EntityId == owner.Id && row.Code == EntityPositionCodes.Chapter)
+                .Select(row => new ValueTuple<int, string?>(row.Value, row.Label)).SingleAsync());
         Assert.Equal(before.ParentEntityId, after.ParentEntityId);
         Assert.Equal(fileIds.Order(), (await db.EntityFiles.Select(file => file.Id).ToArrayAsync()).Order());
         Assert.DoesNotContain(await db.Entities.Select(entity => entity.Title).ToArrayAsync(), title => title?.Contains(operationId.ToString("N")) == true);

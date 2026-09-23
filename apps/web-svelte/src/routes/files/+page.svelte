@@ -184,15 +184,16 @@
   }
 
   async function refreshSelected(): Promise<void> {
-    if (!selectedMeta) return;
-    const target = selectedMeta.kind === "directory" ? selectedMeta : directoryTarget(selectedMeta);
+    const selected = selectedMeta;
+    if (!selected) return;
+    const target = selected.kind === "directory" ? selected : directoryTarget(selected);
     if (target) {
       const nextLoaded = new Set(loadedKeys);
       nextLoaded.delete(loadedKey(target));
       loadedKeys = nextLoaded;
       await loadChildren(target);
     }
-    await loadDetail(selectedMeta);
+    await loadDetail(selected);
   }
 
   function createFolder(meta: FileTreeNodeMeta): void {
@@ -295,10 +296,11 @@
   }
 
   async function rescan(meta: FileTreeNodeMeta): Promise<void> {
+    const linkedEntities = detail?.linkedEntities ?? [];
     await apiRescanFileRoot({ rootId: meta.rootId, path: meta.path || null });
-    if (detail?.linkedEntities?.length) {
+    if (linkedEntities.length) {
       await Promise.allSettled(
-        detail.linkedEntities.map((linked) => refreshEntity(linked.entityId)),
+        linkedEntities.map((linked) => refreshEntity(linked.entityId)),
       );
     }
     await refreshSelected();

@@ -41,6 +41,19 @@ public sealed class IntegrationManifestTests : IDisposable {
         Assert.False(PluginCompatibilityResolver.IsCompatible(manifest, new Version(3, 8, 0)));
     }
 
+    [Theory]
+    [InlineData("[\"archive.org\"]", true)]
+    [InlineData("[\"com\"]", false)]
+    [InlineData("[\"archive.org\",\"ARCHIVE.ORG\"]", false)]
+    [InlineData("[\"archive.org/path\"]", false)]
+    [InlineData("[\"127.0.0.1\"]", false)]
+    public void AnonymousArtifactHostSuffixesRequireValidDeclaredAcquisition(string suffixes, bool expected) {
+        var json = ManifestJson.Replace("catalog-discovery", "acquisition-source").Replace("search", "resolve")
+            .Replace("\"settings\": []", "\"settings\": [], \"anonymousArtifactHostSuffixes\": " + suffixes);
+        var manifest = JsonSerializer.Deserialize<PluginManifest>(json, Wire)!;
+        Assert.Equal(expected, PluginCompatibilityResolver.IsCompatible(manifest, new Version(3, 8, 0)));
+    }
+
     private readonly string _root = Path.Combine(Path.GetTempPath(), $"prismedia-integration-manifest-{Guid.NewGuid():N}");
     private static readonly JsonSerializerOptions Wire = new(JsonSerializerDefaults.Web) {
         Converters = { new CodecJsonConverterFactory() }

@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Internet Archive comic connections can browse and search explicitly public-domain-labeled items, review original CBZ files, and import a selected issue with source and license details retained.
+
 - LazyLibrarian can expose existing ebook and audiobook holdings as separate renditions of one remote work, with distinct mapped roots and read-only file checks. In a mapped Book folder, every audio part must be accounted for before a request completes.
 - Books already catalogued in LazyLibrarian can now be reviewed for ebook or audiobook management independently. Each rendition can change monitoring and request a search, while final files attach to the same Prismedia Book when they arrive.
 - When a connected ebook and audiobook scan into separate local Books, a reviewed link can combine simple, untouched records under the already linked Book. Prismedia keeps the first accepted ownership and asks for separate review when either record has additional activity or files.
@@ -62,6 +64,9 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Installed plugins now appear in compact full-width rows, with capabilities grouped beneath each plugin's name and actions.
+- Administration pages embedded in the iOS app now let the native background show through around their content.
+- Imported comic issues retain the source's issue number when the archive has no embedded ComicInfo number.
 - Connected Book pages show ebook and audiobook availability together in Acquisition, including separate actions for a missing rendition.
 - The External library tab now shows each connected Book rendition's mapped library and its own manager controls, even when another rendition lives in a native library.
 - Connected Book holdings can now track ebook and audiobook files under the same work with separate mapped libraries and ownership, including file changes and independent release.
@@ -181,6 +186,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Audio-track detail and saved-queue payloads no longer duplicate embedded artist and album fields outside the Entity's `embedded-audio-metadata` capability.
 
 ### Fixed
+
+- Rescanning a library folder from Files no longer loses the selected folder while its contents refresh.
 
 - Soulseek searches now use the peer results collected when slskd's response window ends in a timed-out state, instead of discarding them as a failed search.
 

@@ -137,11 +137,7 @@
       </p>
     </div>
   {:else}
-    <!--
-      Each card's own content is narrow, so a single full-width column leaves most of the row
-      empty. Two columns on a wide viewport halves the list height without shrinking anything.
-    -->
-    <div class="plugin-grid">
+    <div class="plugin-list">
       {#each filteredProviders as plugin (plugin.id)}
         {@const authExpanded = authExpandedFor === `prismedia:${plugin.id}`}
         {@const hasAuth = plugin.supports.length > 0 && plugin.auth.length > 0}
@@ -149,9 +145,9 @@
           class={"surface-card no-lift transition-opacity duration-fast " +
             (plugin.installed && plugin.enabled ? "" : "opacity-80")}
         >
-          <div class="p-4">
-            <div class="flex flex-wrap items-start justify-between gap-3">
-              <PluginIcon name={plugin.name} iconUrl={plugin.iconUrl} class="size-11" />
+          <div class="plugin-row">
+            <div class="plugin-heading">
+              <PluginIcon name={plugin.name} iconUrl={plugin.iconUrl} class="size-11 shrink-0" />
               <div class="min-w-0 flex-1">
                 <div class="flex items-center gap-2.5 flex-wrap">
                   <p class="text-sm font-semibold">{plugin.name}</p>
@@ -176,13 +172,8 @@
                 <p class="text-mono-sm text-text-disabled mt-0.5">
                   {plugin.id} · v{plugin.version}
                 </p>
-                <PluginCapabilityChips
-                  capabilities={capabilitiesByPlugin.get(plugin.id) ?? []}
-                  class="mt-2"
-                />
-                <PluginIntegrationCapabilities integration={plugin.integration} />
               </div>
-              <div class="flex items-center gap-2 shrink-0">
+              <div class="plugin-actions">
                 {#if plugin.installed && plugin.updateAvailable}
                   <Button
                     type="button"
@@ -249,6 +240,10 @@
                 {/if}
               </div>
             </div>
+            <div class="plugin-details">
+              <PluginCapabilityChips capabilities={capabilitiesByPlugin.get(plugin.id) ?? []} />
+              <PluginIntegrationCapabilities integration={plugin.integration} />
+            </div>
           </div>
 
           {#if authExpanded}
@@ -273,16 +268,49 @@
 </section>
 
 <style>
-  .plugin-grid {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr);
+  .plugin-list {
+    display: flex;
+    flex-direction: column;
     gap: 0.35rem;
-    align-items: start;
   }
 
-  @media (min-width: 80rem) {
-    .plugin-grid {
-      grid-template-columns: repeat(2, minmax(0, 1fr));
+  .plugin-row {
+    padding: 0.85rem 1rem;
+  }
+
+  .plugin-heading {
+    display: flex;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+  }
+
+  .plugin-actions {
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.25rem;
+    margin-left: auto;
+  }
+
+  .plugin-details {
+    display: flex;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 0.25rem 0.75rem;
+    margin-top: 0.5rem;
+    margin-left: 3.5rem;
+  }
+
+  .plugin-details :global([aria-label="Integration capabilities"]) {
+    margin-top: 0;
+  }
+
+  @media (max-width: 40rem) {
+    .plugin-actions,
+    .plugin-details {
+      width: 100%;
+      margin-left: 0;
     }
   }
 </style>

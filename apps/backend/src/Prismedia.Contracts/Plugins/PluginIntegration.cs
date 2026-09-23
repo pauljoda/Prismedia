@@ -7,11 +7,13 @@ namespace Prismedia.Contracts.Plugins;
 /// <param name="Capabilities">Optional responsibilities and their supported operations and entity kinds.</param>
 /// <param name="Settings">Nonsecret connection settings. Credentials use the manifest Auth schema.</param>
 /// <param name="AnonymousArtifactOrigins">Optional HTTPS origins from which acquisition sources may retrieve files without headers or cookies. Executor artifacts remain scoped to their connection.</param>
+/// <param name="AnonymousArtifactHostSuffixes">Optional HTTPS subdomains of the configured catalog host that may serve anonymous artifacts. The resolved file host becomes the single pinned transfer origin.</param>
 public sealed record PluginIntegrationDefinition(
     int ProtocolVersion,
     IReadOnlyList<PluginIntegrationCapability> Capabilities,
     IReadOnlyList<PluginSearchField> Settings,
-    IReadOnlyList<string>? AnonymousArtifactOrigins = null);
+    IReadOnlyList<string>? AnonymousArtifactOrigins = null,
+    IReadOnlyList<string>? AnonymousArtifactHostSuffixes = null);
 
 /// <summary>Declared or negotiated support for a single connected-application responsibility.</summary>
 public sealed record PluginIntegrationCapability(

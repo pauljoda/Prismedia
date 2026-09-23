@@ -15,6 +15,16 @@ public sealed class ImportedPublicationTitleResolver(IIntegrationTransferStore t
             return await ResolveGalleryAsync(libraryRootId, sourcePath, null, cancellationToken);
         if (kind == EntityKind.Image && await ResolveGalleryAsync(libraryRootId, Path.GetDirectoryName(sourcePath)!, sourcePath, cancellationToken) is { } memberTitle)
             return memberTitle;
+        return (await ResolveFileAsync(libraryRootId, kind, sourcePath, cancellationToken))?.Plan.Title;
+    }
+
+    /// <inheritdoc />
+    public async Task<ImportedComicPublication?> ResolveComicAsync(Guid libraryRootId, string sourcePath, CancellationToken cancellationToken) {
+        var work = await ResolveFileAsync(libraryRootId, EntityKind.ComicInstallment, sourcePath, cancellationToken);
+        return work is null ? null : new(work.Plan.Title, work.Plan.Source?.Publication?.IssueLabel);
+    }
+
+    private async Task<StoredIntegrationTransfer?> ResolveFileAsync(Guid libraryRootId, EntityKind kind, string sourcePath, CancellationToken cancellationToken) {
         if (IntegrationPublicationNames.CandidateOperation(sourcePath) is not { } id) return null;
         var work = await transfers.FindAsync(id, cancellationToken);
         if (work is null || work.Plan.LibraryRootId != libraryRootId || work.Plan.EntityKind != kind
@@ -26,7 +36,7 @@ public sealed class ImportedPublicationTitleResolver(IIntegrationTransferStore t
                 IntegrationPublicationNames.FileName(id, work.Plan.Title, artifact.Id, artifact.RelativePath)))).ToArray();
         if (candidates.Length != 1) return null;
         var accepted = candidates[0];
-        return await MatchesAsync(fullPath, accepted, cancellationToken) ? work.Plan.Title : null;
+        return await MatchesAsync(fullPath, accepted, cancellationToken) ? work : null;
     }
 
     private async Task<string?> ResolveGalleryAsync(Guid libraryRootId, string folder, string? memberPath, CancellationToken token) {

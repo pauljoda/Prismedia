@@ -184,8 +184,8 @@ public sealed class ScanComicJobHandler(
             var metadata = comicInfoReader is null
                 ? null
                 : await comicInfoReader.ReadAsync(archivePath, cancellationToken);
-            var acceptedTitle = FirstNonEmpty(metadata?.Title) is null && importedTitles is not null
-                ? await importedTitles.ResolveAsync(root.Id, EntityKind.ComicInstallment, archivePath, cancellationToken) : null;
+            var acceptedPublication = importedTitles is null ? null
+                : await importedTitles.ResolveComicAsync(root.Id, archivePath, cancellationToken);
             items.Add(ComicArchiveItem.From(
                 root.Path,
                 archivePath,
@@ -193,7 +193,7 @@ public sealed class ScanComicJobHandler(
                 members,
                 metadata,
                 source.Provenance,
-                acceptedTitle));
+                acceptedPublication));
         }
 
         var validArchivePaths = items
@@ -563,12 +563,12 @@ public sealed class ScanComicJobHandler(
             IReadOnlyList<string> pageMembers,
             ComicInfoMetadata? metadata,
             ComicSourceProvenance? sourceProvenance,
-            string? acceptedTitle = null) {
+            ImportedComicPublication? acceptedPublication = null) {
             var relativePath = Path.GetRelativePath(rootPath, classificationPath);
             var segments = relativePath.Split(
                 [Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar],
                 StringSplitOptions.RemoveEmptyEntries);
-            var fallbackTitle = acceptedTitle ?? Path.GetFileNameWithoutExtension(classificationPath);
+            var fallbackTitle = acceptedPublication?.Title ?? Path.GetFileNameWithoutExtension(classificationPath);
             var installmentTitle = FirstNonEmpty(metadata?.Title, fallbackTitle)!;
             var seriesFolderPath = segments.Length > 1
                 ? Path.Combine(rootPath, segments[0])
@@ -596,7 +596,7 @@ public sealed class ScanComicJobHandler(
             var volumeTitle = metadata?.Volume is >= 0
                 ? $"Volume {metadata.Volume.Value}"
                 : volumeFolderTitle;
-            var positionLabel = FirstNonEmpty(metadata?.Number);
+            var positionLabel = FirstNonEmpty(metadata?.Number, acceptedPublication?.IssueLabel);
 
             return new ComicArchiveItem(
                 archivePath,

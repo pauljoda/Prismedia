@@ -1,5 +1,7 @@
 using System.Security.Cryptography;
 using Prismedia.Application.Integrations;
+using Prismedia.Application.Jobs.Ports;
+using Prismedia.Contracts.Integrations;
 using Prismedia.Domain.Entities;
 using Prismedia.Domain.Integrations;
 using Prismedia.Infrastructure.Integrations;
@@ -7,6 +9,17 @@ using Prismedia.Infrastructure.Integrations;
 namespace Prismedia.Infrastructure.Tests;
 
 public sealed class ImportedPublicationTitleResolverTests {
+    [Fact] public async Task RecoversAcceptedComicIssueOnlyFromExactVerifiedArchive() {
+        using var fixture = await ImportedTitleFixture.CreateAsync(EntityKind.ComicInstallment);
+        var source = new SourceTransferPlan(new("issue", "https://catalog.test/issue", EntityKind.ComicInstallment), "cbz",
+            new("Atomic Attack No. 5", null, [], new Dictionary<string, string>(), IssueLabel: "5"));
+        fixture.Work = fixture.Work with { Plan = fixture.Work.Plan with { Source = source } };
+        var resolver = new ImportedPublicationTitleResolver(fixture);
+        Assert.Equal(new ImportedComicPublication(fixture.Work.Plan.Title, "5"),
+            await resolver.ResolveComicAsync(fixture.Work.Plan.LibraryRootId, fixture.Path, default));
+        await File.WriteAllTextAsync(fixture.Path, "changed!");
+        Assert.Null(await resolver.ResolveComicAsync(fixture.Work.Plan.LibraryRootId, fixture.Path, default));
+    }
     [Fact] public async Task RecoversTheFullAcceptedTitleFromExactVerifiedPlacementOnEveryScan() {
         using var fixture = await ImportedTitleFixture.CreateAsync();
         var resolver = new ImportedPublicationTitleResolver(fixture);

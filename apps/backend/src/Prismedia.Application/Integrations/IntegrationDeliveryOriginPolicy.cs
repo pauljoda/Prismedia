@@ -1,3 +1,4 @@
+using System.Net;
 using Prismedia.Contracts.Integrations;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
@@ -8,12 +9,18 @@ namespace Prismedia.Application.Integrations;
 public static class IntegrationDeliveryOriginPolicy {
     /// <summary>Checks the bounded manifest declaration without granting authority from a source response.</summary>
     public static bool HasValidDeclaration(PluginIntegrationDefinition definition) {
-        if (definition.AnonymousArtifactOrigins is not { Count: > 0 } origins) return true;
-        if (origins.Count > 8 || definition.Capabilities?.Any(capability => capability?.Kind == PluginCapability.AcquisitionSource
+        var origins = definition.AnonymousArtifactOrigins ?? [];
+        var suffixes = definition.AnonymousArtifactHostSuffixes ?? [];
+        if (origins.Count == 0 && suffixes.Count == 0) return true;
+        if (origins.Count + suffixes.Count > 8 || definition.Capabilities?.Any(capability => capability?.Kind == PluginCapability.AcquisitionSource
                 && capability.Operations?.Contains(IntegrationOperation.Resolve) == true) != true) return false;
         var identities = new HashSet<string>(StringComparer.Ordinal);
         foreach (var value in origins) {
             if (!TryOrigin(value, out var origin) || !identities.Add(OriginKey(origin))) return false;
+        }
+        var hosts = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var value in suffixes) {
+            if (!TryHostSuffix(value) || !hosts.Add(value)) return false;
         }
         return true;
     }
@@ -23,10 +30,26 @@ public static class IntegrationDeliveryOriginPolicy {
         if (!TryAddress(baseUrl, out var connection) || !TryAddress(delivery.Url, out var target)
             || delivery.Headers is null) throw Rejected();
         if (OriginKey(connection) == OriginKey(target)) return connection.GetLeftPart(UriPartial.Authority);
-        if (definition is null || !HasValidDeclaration(definition) || delivery.Headers.Count != 0
-            || definition.AnonymousArtifactOrigins?.Any(value => TryOrigin(value, out var origin)
-                && OriginKey(origin) == OriginKey(target)) != true) throw Rejected();
+        if (definition is null || !HasValidDeclaration(definition) || delivery.Headers.Count != 0) throw Rejected();
+        var exact = definition.AnonymousArtifactOrigins?.Any(value => TryOrigin(value, out var origin)
+            && OriginKey(origin) == OriginKey(target)) == true;
+        var catalogSubdomain = connection.Scheme == Uri.UriSchemeHttps && connection.IsDefaultPort
+            && target.Scheme == Uri.UriSchemeHttps && target.IsDefaultPort
+            && definition.AnonymousArtifactHostSuffixes?.Any(suffix =>
+                connection.IdnHost.Equals(suffix, StringComparison.OrdinalIgnoreCase)
+                && target.IdnHost.EndsWith("." + suffix, StringComparison.OrdinalIgnoreCase)) == true;
+        if (!exact && !catalogSubdomain) throw Rejected();
         return target.GetLeftPart(UriPartial.Authority);
+    }
+
+    private static bool TryHostSuffix(string? value) {
+        if (string.IsNullOrWhiteSpace(value) || value.Length > 253 || value != value.Trim()
+            || value.Contains(':') || value.Contains('/') || value.Contains('\\')
+            || IPAddress.TryParse(value, out _)) return false;
+        var labels = value.Split('.');
+        return labels.Length >= 2 && labels.All(label => label.Length is > 0 and <= 63
+            && char.IsAsciiLetterOrDigit(label[0]) && char.IsAsciiLetterOrDigit(label[^1])
+            && label.All(character => char.IsAsciiLetterOrDigit(character) || character == '-'));
     }
 
     private static bool TryOrigin(string? value, out Uri origin) {

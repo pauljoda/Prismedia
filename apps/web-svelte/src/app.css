@@ -250,6 +250,12 @@
     background-attachment: fixed;
   }
 
+  /* The iOS administration WebView supplies the page atmosphere behind embedded content. */
+  html:has([data-native-content]),
+  body:has([data-native-content]) {
+    background: transparent;
+  }
+
   /*
    * iOS Safari zooms the viewport when a focused text input has a computed font-size < 16px — but that
    * only happens on touch. The floor is therefore scoped to coarse pointers (below); on desktop, text

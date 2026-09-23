@@ -293,7 +293,7 @@
 {:else if embeddedShell}
   <main
     bind:this={mainScroller}
-    class="h-dvh overflow-y-auto bg-background p-4 sm:p-6"
+    class="h-dvh overflow-y-auto p-4 sm:p-6"
     data-native-content
   >
     {@render pageContent()}

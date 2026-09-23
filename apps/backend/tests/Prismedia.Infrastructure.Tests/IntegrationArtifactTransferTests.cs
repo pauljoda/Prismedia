@@ -54,6 +54,34 @@ public sealed class IntegrationArtifactTransferTests : IDisposable {
         Assert.Equal(1, calls);
     }
 
+    [Fact]
+    public async Task DeclaredCatalogSubdomainPinsOneAnonymousFileHost() {
+        var declaration = new PluginIntegrationDefinition(1,
+            [new(PluginCapability.AcquisitionSource, [IntegrationOperation.Resolve], [EntityKind.ComicInstallment])], [],
+            AnonymousArtifactHostSuffixes: ["archive.org"]);
+        var delivery = Request.Delivery with { Url = "https://dn123.eu.archive.org/comic.cbz", Headers = new Dictionary<string, string>(), SuggestedFileName = "comic.cbz" };
+        var origin = IntegrationDeliveryOriginPolicy.RequireAllowedOrigin(declaration, "https://archive.org", delivery);
+        Assert.Equal("https://dn123.eu.archive.org", origin);
+        foreach (var address in new[] {
+            "https://evilarchive.org/comic.cbz", "https://archive.org.evil.test/comic.cbz",
+            "http://dn123.eu.archive.org/comic.cbz", "https://dn123.eu.archive.org:8443/comic.cbz"
+        }) Assert.Throws<IntegrationInvocationException>(() => IntegrationDeliveryOriginPolicy.RequireAllowedOrigin(
+            declaration, "https://archive.org", delivery with { Url = address }));
+        Assert.Throws<IntegrationInvocationException>(() => IntegrationDeliveryOriginPolicy.RequireAllowedOrigin(
+            declaration, "https://other.test", delivery));
+        Assert.Throws<IntegrationInvocationException>(() => IntegrationDeliveryOriginPolicy.RequireAllowedOrigin(
+            declaration, "https://archive.org", delivery with { Headers = new Dictionary<string, string> { ["Authorization"] = "secret" } }));
+
+        using var client = new HttpClient(new Handler(request => {
+            Assert.Equal("dn123.eu.archive.org", request.RequestUri!.Host);
+            Assert.Null(request.Headers.Authorization);
+            return Ok(Bytes);
+        }));
+        var result = await new HttpIntegrationArtifactTransfer(new(root), client).TransferAsync(
+            Request with { AllowedOrigin = origin, Delivery = delivery with { ByteSize = Bytes.Length, Sha256 = Hash } }, default);
+        Assert.Equal(Hash, result.Sha256);
+    }
+
     private readonly string root = Path.Combine(Path.GetTempPath(), "prismedia-artifacts-" + Guid.NewGuid().ToString("N"));
     private static readonly byte[] Bytes = "verified publication bytes"u8.ToArray();
     private static string Hash => Convert.ToHexStringLower(SHA256.HashData(Bytes));
