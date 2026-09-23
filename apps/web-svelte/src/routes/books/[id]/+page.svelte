@@ -71,6 +71,8 @@
   import BookCombinedProgressCard from "$lib/components/books/BookCombinedProgressCard.svelte";
   import BookChapterList from "$lib/components/books/BookChapterList.svelte";
   import BookChapterMappingEditor from "$lib/components/books/BookChapterMappingEditor.svelte";
+  import BookManagerRequest from "$lib/components/books/BookManagerRequest.svelte";
+  import { useSession } from "$lib/stores/session.svelte";
   import { useIdentifyDetailAction } from "$lib/components/identify/use-identify-detail-action.svelte";
   import { isHiddenEntityNotFoundError } from "$lib/nsfw/hidden-entity";
   import type { AppBreadcrumb } from "$lib/stores/app-chrome.svelte";
@@ -105,6 +107,7 @@
   import { monitorIsActive } from "$lib/requests/monitor-status";
 
   const playback = useAudioPlayback()!;
+  const session = useSession();
   interface ChapterDetail {
     thumbnail: EntityThumbnail;
     summary: BookReaderChapter;
@@ -1129,6 +1132,13 @@
             onToggleMonitor={toggleBookRenditionMonitor}
             onChanged={handleBookAcquisitionChanged}
           />
+          {#if session.isAdmin && (!hasReadableContent || audiobookTracks.length === 0)}
+            <BookManagerRequest bookId={book.id} title={book.title}
+              hasEbook={hasReadableContent} hasAudiobook={audiobookTracks.length > 0}
+              acquisitions={bookRenditionAcquisitions} monitors={bookRenditionMonitors}
+              managedRenditions={card.externalLibraryProvenance?.bookRenditions ?? []}
+              onChanged={() => detail.reload({ showLoading: false })} />
+          {/if}
         {/if}
       {/snippet}
       </EntityDetail>

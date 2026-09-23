@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Existing Books can request a missing ebook or audiobook through a connected Book manager after reviewing its exact work and mapped library. A paired request keeps separate format intents and safely retries an uncertain result.
+
 - Internet Archive comic connections can browse and search explicitly public-domain-labeled items, review original CBZ files, and import a selected issue with source and license details retained.
 
 - LazyLibrarian can expose existing ebook and audiobook holdings as separate renditions of one remote work, with distinct mapped roots and read-only file checks. In a mapped Book folder, every audio part must be accounted for before a request completes.
