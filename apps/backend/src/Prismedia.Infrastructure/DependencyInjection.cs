@@ -583,7 +583,9 @@ public static class DependencyInjection {
         services.AddScoped<IIndexerSearchClient>(provider => provider.GetRequiredService<NewznabIndexerClient>());
         services.AddSingleton<SlskdSearchConcurrencyGate>();
         services.AddScoped(provider => new SlskdIndexerClient(
-            new HttpClient { Timeout = TimeSpan.FromSeconds(30) },
+            // A slskd response can outlive its peer search window while the daemon collects results.
+            // Keep the transport deadline beyond the adapter's completion poll so it can read TimedOut responses.
+            new HttpClient { Timeout = TimeSpan.FromSeconds(90) },
             provider.GetRequiredService<SlskdSearchConcurrencyGate>()));
         services.AddScoped<IIndexerSearchClient>(provider => provider.GetRequiredService<SlskdIndexerClient>());
         services.AddScoped<IIndexerSearchClientFactory, IndexerSearchClientFactory>();
