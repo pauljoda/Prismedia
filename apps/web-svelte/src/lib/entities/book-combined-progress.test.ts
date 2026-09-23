@@ -200,6 +200,8 @@ describe("unified book progress", () => {
       .toEqual({ trackId: "audio-1", trackOffsetSeconds: 925.25 });
     expect(exactBookListeningResume(progress, ["replacement-track"]))
       .toBeNull();
+    expect(exactBookListeningResume({ ...progress, completedAt: "2026-09-22T01:00:00Z" }, ["audio-1"]))
+      .toBeNull();
   });
 
   it("maps audio to a page only within the matched readable chapter", () => {

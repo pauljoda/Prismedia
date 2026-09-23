@@ -72,7 +72,7 @@ export function exactBookListeningResume(
   availableTrackIds: readonly string[],
 ): BookAudioResumePoint | null {
   const listening = progress?.listening;
-  if (!listening || !availableTrackIds.includes(listening.trackEntityId)) return null;
+  if (progress?.completedAt || !listening || !availableTrackIds.includes(listening.trackEntityId)) return null;
   const offset = Number(listening.offsetSeconds);
   if (!Number.isFinite(offset) || offset < 0) return null;
   return { trackId: listening.trackEntityId, trackOffsetSeconds: offset };
