@@ -50,6 +50,7 @@ public sealed partial class EfManagedTrackingStore {
                     db.ManagedSourceBindings.Add(new() { Id = Guid.NewGuid(), HoldingId = row.Id, EntityId = owner.EntityId,
                         SourceFileId = owner.SourceFileId, RemoteTargetId = owner.Target.RemoteTargetId, Kind = owner.Target.Kind,
                         SeasonNumber = owner.Target.SeasonNumber, EpisodeNumber = owner.Target.EpisodeNumber, AbsoluteNumber = owner.Target.AbsoluteNumber,
+                        IssueLabel = owner.Target.IssueLabel,
                         RemoteFileId = file.RemoteFileId, LocalPath = file.LocalPath, SizeBytes = file.SizeBytes, WrittenAt = file.WrittenAt, IsAvailable = true });
                 }
             } else {
@@ -67,7 +68,7 @@ public sealed partial class EfManagedTrackingStore {
                     && !persistedAssociationIds.Contains(binding.Id)))
                 .Select(binding => new ManagedTargetBinding(
                     new(binding.RemoteTargetId, binding.Kind, binding.SeasonNumber,
-                        binding.EpisodeNumber, binding.AbsoluteNumber),
+                        binding.EpisodeNumber, binding.AbsoluteNumber, binding.IssueLabel),
                     binding.EntityId))
                 .OrderBy(binding => binding.Target.RemoteTargetId, StringComparer.Ordinal)
                 .ToArray();
@@ -315,8 +316,13 @@ public sealed partial class EfManagedTrackingStore {
         // boundary invalidates technical data and generated assets for every retained owner together.
         foreach (var source in sources) source.Role = EntityFileRole.Source;
         await db.SaveChangesAsync(token);
-        var changed = await videos.RebindPlayableVideoSourceAsync(change.Previous.LocalPath,
-            change.Current?.LocalPath ?? change.Previous.LocalPath, token);
+        var comic = change.Previous.Entities.All(owner => owner.Target.Kind == EntityKind.ComicInstallment);
+        if (!comic && change.Previous.Entities.Any(owner => owner.Target.Kind == EntityKind.ComicInstallment))
+            throw new ArgumentException("A comic source shares bytes with another media kind. Review its ownership before rebinding.");
+        var replacementPath = change.Current?.LocalPath ?? change.Previous.LocalPath;
+        var changed = comic
+            ? await videos.RebindConnectedComicSourceAsync(change.Previous.LocalPath, replacementPath, token)
+            : await videos.RebindPlayableVideoSourceAsync(change.Previous.LocalPath, replacementPath, token);
         if (!changed.ToHashSet().SetEquals(ownerIds)) throw new ArgumentException("The established source coverage changed during reconciliation.");
         var bindings = await db.ManagedSourceBindings.Where(binding => binding.HoldingId == holdingId && fileIds.Contains(binding.SourceFileId)).ToArrayAsync(token);
         foreach (var binding in bindings) {

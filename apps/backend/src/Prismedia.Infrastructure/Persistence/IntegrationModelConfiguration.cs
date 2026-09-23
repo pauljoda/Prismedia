@@ -103,6 +103,7 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.SeasonNumber).HasColumnName("season_number");
             entity.Property(row => row.EpisodeNumber).HasColumnName("episode_number");
             entity.Property(row => row.AbsoluteNumber).HasColumnName("absolute_number");
+            entity.Property(row => row.IssueLabel).HasColumnName("issue_label").HasMaxLength(128);
             entity.Property(row => row.EntityId).HasColumnName("entity_id");
             entity.Property(row => row.SourceFileId).HasColumnName("source_file_id");
             entity.Property(row => row.RemoteFileId).HasColumnName("remote_file_id").HasMaxLength(512);

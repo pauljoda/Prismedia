@@ -226,7 +226,7 @@ describe("Managed holding detail", () => {
     expect(screen.queryByText("Files readable by Prismedia")).not.toBeInTheDocument();
   });
 
-  it("preserves exact comic issue labels and omits unsupported library tracking", async () => {
+  it("preserves exact comic issue labels and offers reviewed library tracking", async () => {
     const comicDetail: ManagedItemSnapshot = {
       ...snapshot,
       item: { ...snapshot.item, entityKind: ENTITY_KIND.comicSeries, profileId: null },
@@ -240,7 +240,7 @@ describe("Managed holding detail", () => {
     };
     render(ManagedHoldingDetail, { connection, detail: comicDetail });
 
-    expect(screen.queryByRole("tab", { name: "In Prismedia" })).not.toBeInTheDocument();
+    expect(screen.getByRole("tab", { name: "In Prismedia" })).toBeInTheDocument();
     await fireEvent.click(screen.getByRole("tab", { name: /Files/ }));
     expect(screen.getByText("#½: Special")).toBeInTheDocument();
     expect(screen.getByText("#12.5: Interlude")).toBeInTheDocument();

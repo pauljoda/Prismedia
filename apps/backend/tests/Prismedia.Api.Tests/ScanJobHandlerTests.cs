@@ -30,6 +30,26 @@ public sealed class ScanJobHandlerTests {
     }
 
     [Fact]
+    public async Task TrackedComicRootDelegatesBeforeArchiveDiscovery() {
+        var root = new LibraryRootData(Guid.NewGuid(), "/media/comics", "Comics", true, true,
+            ScanVideos: false, ScanImages: false, ScanAudio: false, ScanBooks: true, IsNsfw: false);
+        var holding = Guid.NewGuid();
+        var persistence = new FakeScanPersistence([root]) { ManagedComicHoldings = [holding] };
+        var queue = new RecordingJobQueue();
+        var handler = new ScanComicJobHandler(NullLogger<ScanComicJobHandler>.Instance,
+            new RecordingFileDiscovery(["/media/comics/renamed.cbz"]), persistence, persistence,
+            new RecordingPageManifestStore(), persistence);
+
+        await handler.HandleAsync(new JobContext(SingleRootScanJob(root) with { Type = JobType.ScanComic }, queue), default);
+
+        Assert.Empty(persistence.UpsertedComicInstallments);
+        var reconcile = Assert.Single(queue.Enqueued);
+        Assert.Equal(JobType.ManagedLibraryReconcile, reconcile.Type);
+        Assert.Equal(holding.ToString(), reconcile.TargetEntityId);
+        Assert.Equal(JobResourceKeys.LibraryScan, reconcile.ResourceKey);
+    }
+
+    [Fact]
     public async Task VideoScanDefersPendingReplacementWithoutHidingUnrelatedFiles() {
         var root = new LibraryRootData(Guid.NewGuid(), "/media/videos", "Videos", true, true,
             ScanVideos: true, ScanImages: false, ScanAudio: false, ScanBooks: false, IsNsfw: false);
@@ -3475,6 +3495,8 @@ public sealed class ScanJobHandlerTests {
     private sealed class FakeScanPersistence(IReadOnlyList<LibraryRootData> roots) : ILibraryScanRootPersistence, IVideoScanPersistence, IDownstreamNeedsPersistence, IImageGalleryScanPersistence, IAudioScanPersistence, IBookScanPersistence, IComicScanPersistence {
         public IReadOnlyList<Guid> ManagedHoldings { get; init; } = [];
         public Task<IReadOnlyList<Guid>> ListManagedHoldingsForRootAsync(Guid rootId, CancellationToken token) => Task.FromResult(ManagedHoldings);
+        public IReadOnlyList<Guid> ManagedComicHoldings { get; init; } = [];
+        public Task<IReadOnlyList<Guid>> ListManagedComicHoldingsForRootAsync(Guid rootId, CancellationToken token) => Task.FromResult(ManagedComicHoldings);
         public IReadOnlyList<string> PendingReplacementPaths { get; set; } = [];
         public Task<IReadOnlyList<string>> ListPendingVideoReplacementPathsAsync(CancellationToken cancellationToken) =>
             Task.FromResult(PendingReplacementPaths);

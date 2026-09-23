@@ -38,7 +38,7 @@ export const previewTracking = (connectionId: string, item: ManagedItemInput): P
   previewManagedTracking(connectionId, item).then(response => unwrapGenerated(response, "Could not match existing library items"));
 /** Persists the reviewed intent before any reconciliation occurs. */
 export const saveManagedTracking = (connectionId: string, request: TrackManagedHoldingRequest): Promise<ManagedTrackingResponse> =>
-  trackManagedHolding(connectionId, request).then(response => unwrapGenerated(response, "Could not link this holding"));
+  trackManagedHolding(connectionId, request).then(response => unwrapGenerated(response, "Could not link this holding", [202]));
 /** Queues a finite identity-preserving refresh. */
 export const refreshTracking = (connectionId: string, holdingId: string) =>
-  refreshManagedHolding(connectionId, holdingId).then(response => unwrapGenerated(response, "Could not refresh this holding"));
+  refreshManagedHolding(connectionId, holdingId).then(response => unwrapGenerated(response, "Could not refresh this holding", [202]));

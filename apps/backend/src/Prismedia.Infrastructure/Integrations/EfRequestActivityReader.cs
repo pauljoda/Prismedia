@@ -237,7 +237,7 @@ public sealed class EfRequestActivityReader(
                 var file = group.First();
                 return new ManagedFileBinding(file.RemoteFileId, file.LocalPath, file.SizeBytes, file.WrittenAt,
                     file.IsAvailable, group.Select(binding => new ManagedEntityBinding(
-                        new(binding.RemoteTargetId, binding.Kind, binding.SeasonNumber, binding.EpisodeNumber, binding.AbsoluteNumber),
+                        new(binding.RemoteTargetId, binding.Kind, binding.SeasonNumber, binding.EpisodeNumber, binding.AbsoluteNumber, binding.IssueLabel),
                         binding.EntityId, binding.SourceFileId)).ToArray());
             }).ToArray();
         var holdingResponse = new ManagedTrackingResponse(

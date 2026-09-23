@@ -47,7 +47,8 @@ public sealed partial class EfManagedTrackingStore(PrismediaDbContext db, IExter
         }
         if (!await db.ExternalLibraryMounts.AnyAsync(mount => mount.ConnectionId == connectionId && mount.LibraryRootId == request.LibraryRootId, token))
             throw new ArgumentException("Choose a library mapped to this connection.");
-        if (item.EntityKind is not (EntityKind.Movie or EntityKind.VideoSeries)) throw new ArgumentException("Tracking currently supports movie and television holdings.");
+        if (item.EntityKind is not (EntityKind.Movie or EntityKind.VideoSeries or EntityKind.ComicSeries))
+            throw new ArgumentException("Tracking currently supports movie, television, and comic series holdings.");
         await using var transaction = await db.Database.BeginTransactionAsync(token);
         await PluginLifecycleLease.LockConnectionAsync(db, connectionId, token, requireReady: true);
         var row = new ManagedHoldingRow { Id = request.OperationId, ConnectionId = connectionId, LibraryRootId = request.LibraryRootId,
@@ -112,7 +113,7 @@ public sealed partial class EfManagedTrackingStore(PrismediaDbContext db, IExter
             var file = group.First();
             return new ManagedFileBinding(file.RemoteFileId, file.LocalPath, file.SizeBytes, file.WrittenAt, file.IsAvailable,
                 group.Select(binding => new ManagedEntityBinding(new(binding.RemoteTargetId, binding.Kind, binding.SeasonNumber,
-                    binding.EpisodeNumber, binding.AbsoluteNumber), binding.EntityId, binding.SourceFileId)).ToArray());
+                    binding.EpisodeNumber, binding.AbsoluteNumber, binding.IssueLabel), binding.EntityId, binding.SourceFileId)).ToArray());
         }).ToArray();
         return new(row.Id, row.ConnectionId, row.LibraryRootId, JsonSerializer.Deserialize<ManagedItemInput>(row.ItemJson, Json)!,
             row.Title, row.Status, row.Revision, row.LastCheckedAt, row.Problem, files,

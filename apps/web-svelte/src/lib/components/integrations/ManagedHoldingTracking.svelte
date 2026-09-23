@@ -143,6 +143,7 @@
     ])).values()];
   }
   function targetLabel(target: ManagedTrackingResponse["targets"][number], fallbackTitle: string): string {
+    if (target.target.kind === ENTITY_KIND.comicInstallment && target.target.issueLabel) return `Issue #${target.target.issueLabel}`;
     if (target.target.kind === ENTITY_KIND.videoEpisode) {
       if (target.target.seasonNumber != null && target.target.episodeNumber != null) {
         return `S${target.target.seasonNumber} E${target.target.episodeNumber}`;
@@ -272,7 +273,7 @@
           <div class="space-y-2">
             <p class="text-sm">{preview.selections.length} existing {preview.selections.length === 1 ? "item matches" : "items match"} the reported files and numbering.</p>
             <div class="max-h-48 space-y-1 overflow-y-auto">
-              {#each [...new Set(preview.sources.map(source => source.localPath))] as path}<p class="break-all font-mono text-xs text-text-muted">{path}</p>{/each}
+              {#each [...new Set(preview.sources.map(source => source.localPath))] as path (path)}<p class="break-all font-mono text-xs text-text-muted">{path}</p>{/each}
             </div>
             <p class="text-xs text-text-muted">Review these matches before Prismedia starts following file changes from {connectionName}. This mapped library will use reviewed holdings for future scans; other unscanned titles and new episode coverage still require review.</p>
             <Button variant="secondary" disabled={busy} onclick={link}>Link matching items</Button>

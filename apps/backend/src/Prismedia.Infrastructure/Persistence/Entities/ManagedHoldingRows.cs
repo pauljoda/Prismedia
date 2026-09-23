@@ -42,6 +42,7 @@ public sealed class ManagedSourceBindingRow {
     public int? SeasonNumber { get; set; }
     public int? EpisodeNumber { get; set; }
     public int? AbsoluteNumber { get; set; }
+    public string? IssueLabel { get; set; }
     public Guid EntityId { get; set; }
     public Guid SourceFileId { get; set; }
     public string RemoteFileId { get; set; } = string.Empty;

@@ -42,6 +42,16 @@ public sealed class ScanComicJobHandler(
     protected override bool IsEligibleRoot(LibraryRootData root) => root.ScanBooks;
 
     /// <inheritdoc />
+    protected override async Task<bool> DelegateRootReconciliationAsync(JobContext context, LibraryRootData root, CancellationToken token) {
+        var holdings = await comics.ListManagedComicHoldingsForRootAsync(root.Id, token);
+        if (holdings.Count == 0) return false;
+        foreach (var id in holdings) await context.EnqueueIfNeededAsync(new EnqueueJobRequest(JobType.ManagedLibraryReconcile,
+            TargetEntityKind: JobTargetKinds.ManagedHolding, TargetEntityId: id.ToString(), TargetLabel: root.Label,
+            ResourceKey: JobResourceKeys.LibraryScan), token);
+        return true;
+    }
+
+    /// <inheritdoc />
     protected override IReadOnlyList<MediaCategory> ScanCategories => [MediaCategory.ComicArchive];
 
     /// <inheritdoc />

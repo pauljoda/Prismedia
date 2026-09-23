@@ -95,6 +95,12 @@ public interface IVideoScanPersistence {
         string replacementPath,
         CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<Guid>>([]);
 
+    /// <summary>Rebinds an exclusively owned comic installment source while invalidating bytes-derived reader assets.</summary>
+    Task<IReadOnlyList<Guid>> RebindConnectedComicSourceAsync(
+        string previousPath,
+        string replacementPath,
+        CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<Guid>>([]);
+
     /// <summary>
     /// Paths reserved by unfinished video replacements. Discovery must defer them until recovery
     /// commits their existing owner; a path alone cannot prove that installation succeeded.
@@ -340,6 +346,10 @@ public sealed record ComicSourceProvenance(string OriginFolderPath, string Origi
 /// are structural catalog entities and never masquerade as readable source files.
 /// </summary>
 public interface IComicScanPersistence {
+    /// <summary>Connected comic holdings whose mapped root is reconciled by its manager before path discovery.</summary>
+    Task<IReadOnlyList<Guid>> ListManagedComicHoldingsForRootAsync(Guid rootId, CancellationToken token) =>
+        Task.FromResult<IReadOnlyList<Guid>>([]);
+
     /// <summary>Upserts one comic title/run, using a real grouping folder when one exists.</summary>
     Task<Guid> UpsertComicSeriesAsync(
         string? folderPath,

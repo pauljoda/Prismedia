@@ -218,6 +218,22 @@ describe("Managed holding tracking", () => {
     expect(screen.getByRole("button", { name: "Open S2 E1 in Prismedia" })).toBeInTheDocument();
     expect(screen.getByText(/previously linked item remains.*files and history are retained/i)).toBeInTheDocument();
   });
+
+  it("names linked fractional comic issues by their exact labels", async () => {
+    const comicItem = { ...item, entityKind: ENTITY_KIND.comicSeries, externalIds: { comicvine: "4050-42" } };
+    api.fetchManagedTracking.mockResolvedValue([{
+      ...tracked,
+      status: MANAGED_TRACKING_STATUS.tracking,
+      item: { ...tracked.item, entityKind: ENTITY_KIND.comicSeries, expectedExternalIds: comicItem.externalIds },
+      targets: [{ target: { remoteTargetId: "19", kind: ENTITY_KIND.comicInstallment,
+        seasonNumber: null, episodeNumber: null, absoluteNumber: null, issueLabel: "12.5" }, entityId: "comic-local" }],
+    }]);
+    render(ManagedHoldingTracking, { connectionId: "connection", connectionName: "Kapowarr", item: comicItem });
+
+    await screen.findByText("Issue #12.5");
+    expect(screen.getByRole("button", { name: "Open Issue #12.5 in Prismedia" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Kapowarr settings and activity" })).not.toBeInTheDocument();
+  });
 });
 
 function deferred<T>() {

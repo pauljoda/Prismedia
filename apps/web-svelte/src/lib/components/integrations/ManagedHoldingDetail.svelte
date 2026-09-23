@@ -71,7 +71,8 @@
   let mappingOpen = $state(false);
   const kindLabel = $derived(displayNameForEntityKind(detail.item.entityKind));
   const isTrackable = $derived(
-    detail.item.entityKind === ENTITY_KIND.movie || detail.item.entityKind === ENTITY_KIND.videoSeries,
+    detail.item.entityKind === ENTITY_KIND.movie || detail.item.entityKind === ENTITY_KIND.videoSeries
+      || detail.item.entityKind === ENTITY_KIND.comicSeries,
   );
   const profile = $derived(
     detail.item.profileId
@@ -434,7 +435,8 @@
 
 {#snippet libraryContent()}
   {#key detail.item.remoteId}
-    <ManagedHoldingTracking connectionId={connection.id} connectionName={connection.name} item={detail.item} {showControls} {canControl} {canRelease} />
+    <ManagedHoldingTracking connectionId={connection.id} connectionName={connection.name} item={detail.item}
+      showControls={showControls && detail.item.entityKind !== ENTITY_KIND.comicSeries} {canControl} {canRelease} />
   {/key}
 {/snippet}
 

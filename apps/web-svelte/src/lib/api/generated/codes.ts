@@ -1736,6 +1736,7 @@ export type CapabilityKindCode = (typeof CAPABILITY_KIND)[keyof typeof CAPABILIT
 // source: registry ExternalIdProviders
 export const EXTERNAL_ID_PROVIDER = {
   aniDb: "anidb",
+  comicVine: "comicvine",
   imdb: "imdb",
   musicBrainz: "musicbrainz",
   stash: "stash",

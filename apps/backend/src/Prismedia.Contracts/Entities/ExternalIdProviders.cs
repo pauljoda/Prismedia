@@ -25,4 +25,7 @@ public static class ExternalIdProviders {
 
     /// <summary>MusicBrainz music database.</summary>
     public const string MusicBrainz = "musicbrainz";
+
+    /// <summary>Comic Vine comics database.</summary>
+    public const string ComicVine = "comicvine";
 }
