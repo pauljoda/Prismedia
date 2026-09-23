@@ -38,8 +38,23 @@ public sealed partial class EfManagedRequestStore {
         if (!(rendition == BookRendition.Ebook ? SupportedExtensions.Book : SupportedExtensions.Audiobook).Contains(extension))
             throw new ArgumentException("The manager's Book file has an unsupported rendition format.");
         var written = WrittenAt(path);
+        var existingPaths = await db.EntityFiles.AsNoTracking()
+            .Where(source => source.Role == EntityFileRole.Source || source.Role == EntityFileRole.UnavailableSource)
+            .Where(source => source.Path.Length == path.Length)
+            .Select(source => new { source.Id, source.EntityId, source.Path })
+            .ToArrayAsync(token);
+        var existingSources = existingPaths.Where(source => FileSystemPathComparison.Equals(path, source.Path)).ToArray();
+        if (existingSources.Length > 1)
+            throw new ArgumentException("Several local items claim this Book file. Review their associations.");
+        var lifecycleIds = new List<Guid> { state.EntityId };
+        if (existingSources is [{ } existingSource]) {
+            lifecycleIds.Add(existingSource.EntityId);
+            var parentId = await db.Entities.AsNoTracking().Where(row => row.Id == existingSource.EntityId)
+                .Select(row => row.ParentEntityId).SingleOrDefaultAsync(token);
+            if (parentId is { } parent) lifecycleIds.Add(parent);
+        }
         await using var transaction = await db.Database.BeginTransactionAsync(token);
-        if (!await lifecycle.ExecuteAsync(state.EntityId, async ct => {
+        if (!await lifecycle.ExecuteManyAsync(lifecycleIds, async ct => {
             var current = await LockAsync(state.OperationId, state.Revision, ct);
             var boundary = await RequireBoundaryAsync(current.Operation, current.Plan, true, ct);
             var expectedPath = ExternalLibraryPaths.Resolve(boundary.Mount.RemotePath, boundary.Mount.LocalPath, file.Path);
@@ -52,12 +67,6 @@ public sealed partial class EfManagedRequestStore {
                 || JsonSerializer.Deserialize<ManagedTargetBinding[]>(holding.TargetsJson, Json) is not { Length: 0 }
                 || await db.ManagedSourceBindings.AnyAsync(binding => binding.HoldingId == holding.Id, ct))
                 throw new ArgumentException("The Book request's retained file scope changed before materialization.");
-            var paths = await db.EntityFiles.AsNoTracking()
-                .Where(source => source.Role == EntityFileRole.Source || source.Role == EntityFileRole.UnavailableSource)
-                .Where(source => source.Path.Length == path.Length)
-                .Select(source => source.Path).ToArrayAsync(ct);
-            if (paths.Any(other => FileSystemPathComparison.Equals(path, other)))
-                throw new ArgumentException("This Book file already belongs to another local item. Review its existing association.");
             await using var bytes = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, true);
             if (bytes.Length != file.SizeBytes || WrittenAt(path) != written)
                 throw new ArgumentException("The Book file changed during import verification. Refresh its evidence.");
@@ -84,8 +93,10 @@ public sealed partial class EfManagedRequestStore {
             if (detail is null) db.BookDetails.Add(new() { EntityId = book.Id, BookType = BookType.Novel, Format = format });
             else if (rendition == BookRendition.Ebook) detail.Format = format;
 
-            var sourceEntityId = book.Id;
-            if (rendition == BookRendition.Audiobook) {
+            var adopted = await AdoptScannedBookSourceAsync(book, path, file.SizeBytes, rendition,
+                state.LibraryRootId, boundary.Mount.LocalPath, now, ct);
+            var sourceEntityId = adopted?.EntityId ?? book.Id;
+            if (rendition == BookRendition.Audiobook && adopted is null) {
                 var folder = Path.GetDirectoryName(path)
                     ?? throw new ArgumentException("The audiobook file has no mapped parent folder.");
                 var groupPath = FileSystemPathComparison.Equals(folder, boundary.Mount.LocalPath) ? path : folder;
@@ -105,15 +116,16 @@ public sealed partial class EfManagedRequestStore {
                 db.EntityLibraryRoots.Add(new() { EntityId = sourceEntityId, LibraryRootId = state.LibraryRootId });
             }
 
-            var sourceId = Guid.NewGuid();
+            var sourceId = adopted?.SourceFileId ?? Guid.NewGuid();
             var mime = extension.ToLowerInvariant() switch {
                 ".epub" => MediaContentTypes.Epub,
                 ".pdf" => MediaContentTypes.Pdf,
                 ".mp3" => MediaContentTypes.AudioMpeg,
                 _ => MediaContentTypes.AudioMp4
             };
-            db.EntityFiles.Add(new() { Id = sourceId, EntityId = sourceEntityId, Role = EntityFileRole.Source,
-                Path = path, MimeType = mime, SizeBytes = file.SizeBytes, CreatedAt = now, UpdatedAt = now });
+            if (adopted is null)
+                db.EntityFiles.Add(new() { Id = sourceId, EntityId = sourceEntityId, Role = EntityFileRole.Source,
+                    Path = path, MimeType = mime, SizeBytes = file.SizeBytes, CreatedAt = now, UpdatedAt = now });
             var identity = new ManagedTargetIdentity(remoteTarget.RemoteId, remoteTarget.EntityKind,
                 remoteTarget.SeasonNumber, remoteTarget.EpisodeNumber, remoteTarget.AbsoluteNumber, remoteTarget.IssueLabel);
             db.ManagedSourceBindings.Add(new() { Id = Guid.NewGuid(), HoldingId = holding.Id,

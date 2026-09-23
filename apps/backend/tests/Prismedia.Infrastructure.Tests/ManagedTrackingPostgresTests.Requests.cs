@@ -16,9 +16,13 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed partial class ManagedTrackingPostgresTests {
     [Theory]
-    [InlineData(false)]
-    [InlineData(true)]
-    public async Task OneBookAcceptsIndependentEbookAndAudiobookManagerOwnership(bool audioFirst) {
+    [InlineData(false, false, false)]
+    [InlineData(true, false, false)]
+    [InlineData(false, true, false)]
+    [InlineData(true, true, false)]
+    [InlineData(false, true, true)]
+    public async Task BookManagerAdoptsOnlyUnclaimedScannedRenditions(bool audioFirst,
+        bool scannerFirst, bool protectScannedEbook) {
         await using var database = await PostgresTestDatabase.CreateAsync();
         await using var db = database.CreateContext();
         var connectionId = Guid.NewGuid();
@@ -87,6 +91,23 @@ public sealed partial class ManagedTrackingPostgresTests {
         Directory.CreateDirectory(Path.GetDirectoryName(audioPath)!);
         await File.WriteAllBytesAsync(ebookPath, [1, 2, 3]);
         await File.WriteAllBytesAsync(audioPath, [4, 5, 6, 7]);
+        var scanner = new LibraryScanPersistenceService(db);
+        Guid? scannedEbookId = null;
+        if (scannerFirst) {
+            var scannedEbook = await scanner.UpsertSingleFileBookAsync(ebookPath, "Scanned ebook",
+                ebookRootId, false, BookType.Novel, BookFormat.Epub, "application/epub+zip", null, null, default);
+            scannedEbookId = scannedEbook;
+            var scannedAudio = await scanner.UpsertAudiobookBookAsync(audioPath, "Scanned audio",
+                audioRootId, false, BookType.Novel, BookFormat.Audio, default);
+            await scanner.UpsertAudioTrackAsync(audioPath, "Scanned track", audioRootId,
+                scannedAudio, 0, null, 0, false, default);
+            Assert.NotEqual(bookId, scannedEbook);
+            Assert.NotEqual(bookId, scannedAudio);
+            if (protectScannedEbook) {
+                (await db.Entities.SingleAsync(row => row.Id == scannedEbook)).IsOrganized = true;
+                await db.SaveChangesAsync();
+            }
+        }
         var ebookSnapshot = new ManagedItemSnapshot(
             new("OL123W", EntityKind.Book, "Example", null, identities, true, null, 1),
             "/ebooks/Example", [new("ebook-file", "/ebooks/example.epub", 3, null,
@@ -95,6 +116,17 @@ public sealed partial class ManagedTrackingPostgresTests {
             new("OL123W", EntityKind.Book, "Example", null, identities, true, null, 1),
             "/audio/Example", [new("audio-file", "/audio/example.m4b", 4, null,
                 [new("OL123W:audio-1", EntityKind.AudioTrack, "Example")])], DateTimeOffset.UtcNow);
+        if (protectScannedEbook) {
+            var error = await Assert.ThrowsAsync<ArgumentException>(() =>
+                store.MaterializeAsync(ebook, ebookSnapshot, default));
+            Assert.Contains("Review that association", error.Message, StringComparison.Ordinal);
+            Assert.True((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == scannedEbookId)).IsOrganized);
+            Assert.False((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == scannedEbookId)).IsLibraryArchived);
+            Assert.Equal(scannedEbookId, (await db.EntityFiles.AsNoTracking()
+                .SingleAsync(row => row.Path == ebookPath)).EntityId);
+            Assert.Empty(await db.ManagedSourceBindings.AsNoTracking().ToArrayAsync());
+            return;
+        }
         Assert.False((await store.MaterializeAsync(ebook, new ManagedItemSnapshot(
             ebookSnapshot.Item, ebookSnapshot.Path, [], DateTimeOffset.UtcNow), default)).Imported);
         await Assert.ThrowsAsync<IntegrationInvocationException>(() => store.MaterializeAsync(ebook, audioSnapshot, default));
@@ -124,7 +156,6 @@ public sealed partial class ManagedTrackingPostgresTests {
         Assert.Equal(2, await db.ManagedRequests.AsNoTracking().CountAsync(row => row.Phase == ManagedRequestPhase.Completed));
         Assert.Equal(2, await db.JobRuns.AsNoTracking().CountAsync(row => row.Type == JobType.ScanBook));
 
-        var scanner = new LibraryScanPersistenceService(db);
         Assert.Equal(bookId, await scanner.UpsertSingleFileBookAsync(ebookPath, "Ebook scan title",
             ebookRootId, false, BookType.Novel, BookFormat.Epub, "application/epub+zip", null, null, default));
         Assert.Equal(bookId, await scanner.UpsertAudiobookBookAsync(audioPath, "Audio scan title",
