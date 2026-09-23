@@ -105,7 +105,8 @@ public sealed partial class SlskdIndexerClient(
     HttpClient http,
     SlskdSearchConcurrencyGate? concurrency = null) : IIndexerSearchClient {
     private const int SoulseekSearchTimeoutMilliseconds = 10_000;
-    private const int SearchCompletionPollAttempts = 60;
+    // A queued search can remain in progress after its 10-second peer-response window ends.
+    private const int SearchCompletionPollAttempts = 120;
     private static readonly TimeSpan SearchCompletionPollInterval = TimeSpan.FromMilliseconds(250);
     private static readonly IReadOnlySet<string> AudioExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase) {
         ".mp3", ".flac", ".wav", ".ogg", ".aac", ".m4a", ".m4b", ".wma", ".opus",
