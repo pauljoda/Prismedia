@@ -4,6 +4,7 @@
   import { ArrowUpRight } from "@lucide/svelte";
   import { Alert, Badge, Button } from "@prismedia/ui-svelte";
   import { ENTITY_KIND, MANAGED_TRACKING_STATUS } from "$lib/api/generated/codes";
+  import type { BookRenditionCode } from "$lib/api/generated/codes";
   import type { ManagedLibraryItem, ManagedTrackingPreview, ManagedTrackingResponse } from "$lib/api/generated/model";
   import { fetchManagedTracking, previewTracking, saveManagedTracking, refreshTracking } from "$lib/api/managed-libraries";
   import { displayNameForEntityKind } from "$lib/entities/entity-codes";
@@ -14,7 +15,7 @@
   import ManagedHoldingRelease from "./ManagedHoldingRelease.svelte";
 
   import { createUuid } from "$lib/utils/uuid";
-  let { connectionId, connectionName = "Connected app", item = null, showControls = false, canControl = false, canRelease = false, compact = false, onLoaded }: { connectionId: string; connectionName?: string; item?: ManagedLibraryItem | null; showControls?: boolean; canControl?: boolean; canRelease?: boolean; compact?: boolean; onLoaded?: (holdings: ManagedTrackingResponse[]) => void } = $props();
+  let { connectionId, connectionName = "Connected app", item = null, bookRendition = null, showControls = false, canControl = false, canRelease = false, compact = false, onLoaded }: { connectionId: string; connectionName?: string; item?: ManagedLibraryItem | null; bookRendition?: BookRenditionCode | null; showControls?: boolean; canControl?: boolean; canRelease?: boolean; compact?: boolean; onLoaded?: (holdings: ManagedTrackingResponse[]) => void } = $props();
   const nsfw = useNsfw();
   let expandedId = $state<string | null>(null);
   let holdings = $state<ManagedTrackingResponse[]>([]);
@@ -30,9 +31,11 @@
     connectionId,
     item?.entityKind ?? null,
     item?.remoteId ?? null,
+    bookRendition,
     Object.entries(item?.externalIds ?? {}).sort(([left], [right]) => left.localeCompare(right)),
   ]));
-  const visible = $derived(holdings.filter(holding => !item || isTrackedManagedItem(holding.item, item)));
+  const visible = $derived(holdings.filter(holding => (!item || isTrackedManagedItem(holding.item, item))
+    && (bookRendition === null || holding.item.bookRendition === bookRendition)));
   const presentedHoldings = $derived.by(() => {
     if (!item) return visible;
     const current = visible.find(holding => holding.status !== MANAGED_TRACKING_STATUS.released);
@@ -92,7 +95,8 @@
     loadSequence += 1;
     busy = true; error = null; preview = null;
     try {
-      const result = await previewTracking(connectionId, { entityKind: selectedItem.entityKind, remoteId: selectedItem.remoteId, expectedExternalIds: selectedItem.externalIds });
+      const result = await previewTracking(connectionId, { entityKind: selectedItem.entityKind, remoteId: selectedItem.remoteId,
+        expectedExternalIds: selectedItem.externalIds, ...(bookRendition ? { bookRendition } : {}) });
       if (active && scope === trackingScope) { preview = result; operationId = createUuid(); }
     } catch (cause) { if (active && scope === trackingScope) error = cause instanceof Error ? cause.message : "Could not match existing items"; }
     finally { if (active && scope === trackingScope) busy = false; }
@@ -106,7 +110,8 @@
     busy = true; error = null;
     try {
       const saved = await saveManagedTracking(connectionId, { operationId, libraryRootId: selectedPreview.libraryRootId,
-        item: { entityKind: selectedItem.entityKind, remoteId: selectedItem.remoteId, expectedExternalIds: selectedItem.externalIds }, selections: selectedPreview.selections });
+        item: { entityKind: selectedItem.entityKind, remoteId: selectedItem.remoteId, expectedExternalIds: selectedItem.externalIds,
+          ...(bookRendition ? { bookRendition } : {}) }, selections: selectedPreview.selections });
       if (active && scope === trackingScope) { holdings = [...holdings.filter(holding => holding.id !== saved.id), saved]; preview = null; }
     } catch (cause) { if (active && scope === trackingScope) error = cause instanceof Error ? cause.message : "Could not link this holding"; }
     finally { if (active && scope === trackingScope) busy = false; }
@@ -143,6 +148,8 @@
     ])).values()];
   }
   function targetLabel(target: ManagedTrackingResponse["targets"][number], fallbackTitle: string): string {
+    if (target.target.kind === ENTITY_KIND.book) return "Ebook";
+    if (target.target.kind === ENTITY_KIND.audioTrack) return "Audiobook";
     if (target.target.kind === ENTITY_KIND.comicInstallment && target.target.issueLabel) return `Issue #${target.target.issueLabel}`;
     if (target.target.kind === ENTITY_KIND.videoEpisode) {
       if (target.target.seasonNumber != null && target.target.episodeNumber != null) {
@@ -152,6 +159,9 @@
     }
     if (target.target.kind === ENTITY_KIND.movie || target.target.kind === ENTITY_KIND.videoSeries) return fallbackTitle;
     return displayNameForEntityKind(target.target.kind);
+  }
+  function targetPageId(holding: ManagedTrackingResponse, entityId: string): string {
+    return holding.item.entityKind === ENTITY_KIND.book ? holding.bookWorkId ?? entityId : entityId;
   }
   function statusVariant(status: ManagedTrackingResponse["status"]): "default" | "success" | "warning" {
     if (status === MANAGED_TRACKING_STATUS.needsReview || status === MANAGED_TRACKING_STATUS.stale) return "warning";
@@ -222,7 +232,7 @@
             {@const usesTitle = target.target.kind === ENTITY_KIND.movie || target.target.kind === ENTITY_KIND.videoSeries}
             <div class="flex min-w-0 flex-wrap items-center gap-3">
               {#if !usesTitle}<span class="break-words text-sm text-text-primary">{targetLabel(target, holding.title)}</span>{/if}
-              <Button disabled={openingEntityId !== null} size="sm" onclick={() => void openEntity(target.entityId)}>
+              <Button disabled={openingEntityId !== null} size="sm" onclick={() => void openEntity(targetPageId(holding, target.entityId))}>
                 {usesTitle ? "Open in Prismedia" : `Open ${targetLabel(target, holding.title)}`}{#if !usesTitle}<span class="sr-only"> in Prismedia</span>{/if}<ArrowUpRight aria-hidden="true" />
               </Button>
               {#if showControls && holding.item.entityKind === ENTITY_KIND.comicSeries && holding.status !== MANAGED_TRACKING_STATUS.removed}
@@ -235,7 +245,7 @@
               {#each targets as target (`${target.target.kind}:${target.entityId}`)}
                 <div class="flex min-w-0 items-center justify-between gap-3 border-b border-border-subtle py-2 last:border-b-0">
                   <span class="min-w-0 break-words text-sm text-text-primary">{targetLabel(target, holding.title)}</span>
-                  <Button variant="ghost" size="sm" disabled={openingEntityId !== null} onclick={() => void openEntity(target.entityId)}>
+                  <Button variant="ghost" size="sm" disabled={openingEntityId !== null} onclick={() => void openEntity(targetPageId(holding, target.entityId))}>
                     Open<span class="sr-only"> {targetLabel(target, holding.title)} in Prismedia</span><ArrowUpRight aria-hidden="true" />
                   </Button>
                   {#if showControls && holding.item.entityKind === ENTITY_KIND.comicSeries && holding.status !== MANAGED_TRACKING_STATUS.removed}

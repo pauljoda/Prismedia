@@ -81,6 +81,8 @@ public sealed partial class ManagedTrackingPostgresTests {
         File.Move(audioPath, movedAudioPath);
         var movedAudio = audio with { Files = [audio.Files[0] with { Path = "/audio/renamed.m4b" }] };
         var audioHolding = (await store.FindAsync(audioHoldingId, default))!;
+        Assert.Equal(bookId, audioHolding.Tracking.BookWorkId);
+        Assert.Equal(bookId, (await store.FindAsync(ebookHoldingId, default))!.Tracking.BookWorkId);
         var movedObservation = await store.ObserveAsync(connectionId, movedAudio, default);
         var movedPlan = ManagedSourceReconciliation.Plan(audioHolding.Tracking.Bindings, movedObservation.Files);
         Assert.Null(movedPlan.ReviewReason);

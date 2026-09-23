@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ENTITY_KIND } from "$lib/api/generated/codes";
+import { BOOK_RENDITION, ENTITY_KIND } from "$lib/api/generated/codes";
 import {
   managedHoldingHref,
   managedHoldingInputHref,
@@ -39,6 +39,16 @@ describe("managed holding route", () => {
 
     expect(url.pathname).toBe("/request/source/source%2Fid/movie/movie%3Apart%2F1");
     expect(parseManagedHoldingIdentities(url.searchParams.get("identities"))).toEqual({ alpha: "Value:01" });
+  });
+
+  it("retains a connected Book holding's selected rendition", () => {
+    const href = managedHoldingInputHref("source", {
+      entityKind: ENTITY_KIND.book,
+      remoteId: "work-1",
+      expectedExternalIds: { openlibrarywork: "OL1W" },
+      bookRendition: BOOK_RENDITION.audiobook,
+    });
+    expect(new URL(href, "http://localhost").searchParams.get("rendition")).toBe(BOOK_RENDITION.audiobook);
   });
 
   it.each([

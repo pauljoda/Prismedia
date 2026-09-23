@@ -15,6 +15,7 @@
   } from "@lucide/svelte";
   import { Badge, Button, DialogBase, Panel } from "@prismedia/ui-svelte";
   import { ENTITY_KIND, EXTERNAL_ID_PROVIDER, INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
+  import type { BookRenditionCode } from "$lib/api/generated/codes";
   import type {
     ConnectionResponse,
     ManagedItemSnapshot,
@@ -54,6 +55,7 @@
     showControls = false,
     canControl = false,
     canRelease = false,
+    bookRendition = null,
     onRecheckAvailability,
   }: {
     connection: ConnectionResponse;
@@ -65,6 +67,7 @@
     showControls?: boolean;
     canControl?: boolean;
     canRelease?: boolean;
+    bookRendition?: BookRenditionCode | null;
     onRecheckAvailability?: () => void;
   } = $props();
 
@@ -75,7 +78,7 @@
   const kindLabel = $derived(displayNameForEntityKind(detail.item.entityKind));
   const isTrackable = $derived(
     detail.item.entityKind === ENTITY_KIND.movie || detail.item.entityKind === ENTITY_KIND.videoSeries
-      || detail.item.entityKind === ENTITY_KIND.comicSeries,
+      || detail.item.entityKind === ENTITY_KIND.comicSeries || detail.item.entityKind === ENTITY_KIND.book,
   );
   const profile = $derived(
     detail.item.profileId
@@ -447,7 +450,7 @@
 
 {#snippet libraryContent()}
   {#key detail.item.remoteId}
-    <ManagedHoldingTracking connectionId={connection.id} connectionName={connection.name} item={detail.item}
+    <ManagedHoldingTracking connectionId={connection.id} connectionName={connection.name} item={detail.item} {bookRendition}
       {showControls} {canControl} {canRelease} />
   {/key}
 {/snippet}

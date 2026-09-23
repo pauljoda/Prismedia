@@ -15,4 +15,4 @@ public sealed record ManagedTrackingPreview(Guid? LibraryRootId, IReadOnlyList<M
 public sealed record ManagedTrackingResponse(Guid Id, Guid ConnectionId, Guid LibraryRootId, ManagedItemInput Item,
     string Title, ManagedTrackingStatus Status, long Revision, DateTimeOffset? LastCheckedAt, string? Problem,
     IReadOnlyList<ManagedFileBinding> Bindings, IReadOnlyList<ManagedTargetBinding> Targets,
-    Guid? ReleaseOperationId = null, DateTimeOffset? ReleasedAt = null);
+    Guid? ReleaseOperationId = null, DateTimeOffset? ReleasedAt = null, Guid? BookWorkId = null);

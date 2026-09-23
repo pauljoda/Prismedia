@@ -1,9 +1,10 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import { goto } from "$app/navigation";
   import { untrack } from "svelte";
   import { ArrowLeft, CircleAlert, Library, RefreshCw, ShieldAlert } from "@lucide/svelte";
-  import { Alert, Button, buttonVariants } from "@prismedia/ui-svelte";
-  import { INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
+  import { Alert, Button, Select, buttonVariants } from "@prismedia/ui-svelte";
+  import { BOOK_RENDITION, ENTITY_KIND, INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
   import type {
     ConnectionResponse,
     ManagedItemInput,
@@ -36,6 +37,8 @@
   const appChrome = useAppChrome();
   const session = useSession();
   const connectionId = $derived(page.params.connectionId ?? "");
+  const bookRendition = $derived(page.url.searchParams.get("rendition") === BOOK_RENDITION.audiobook
+    ? BOOK_RENDITION.audiobook : BOOK_RENDITION.ebook);
   const sourceHref = $derived(managedHoldingSourceHref(connectionId, page.params.entityKind ?? ""));
   const routeRequest = $derived.by((): HoldingRouteRequest => {
     const kind = page.params.entityKind ?? "";
@@ -43,10 +46,11 @@
     const rawIdentities = page.url.searchParams.get("identities");
     const expectedExternalIds = parseManagedHoldingIdentities(rawIdentities);
     const input = remoteId && expectedExternalIds && isEntityKindCode(kind)
-      ? { entityKind: kind, remoteId, expectedExternalIds }
+      ? { entityKind: kind, remoteId, expectedExternalIds,
+          ...(kind === ENTITY_KIND.book ? { bookRendition } : {}) }
       : null;
     return {
-      key: `${connectionId}\u0000${kind}\u0000${remoteId}\u0000${rawIdentities ?? ""}`,
+      key: `${connectionId}\u0000${kind}\u0000${remoteId}\u0000${rawIdentities ?? ""}\u0000${kind === ENTITY_KIND.book ? bookRendition : ""}`,
       connectionId,
       input,
     };
@@ -190,6 +194,13 @@
       if (current === checkSequence && request.key === routeRequest.key) checking = false;
     }
   }
+
+  function selectBookRendition(value: string) {
+    const next = new URL(page.url);
+    next.searchParams.set("rendition", value === BOOK_RENDITION.audiobook
+      ? BOOK_RENDITION.audiobook : BOOK_RENDITION.ebook);
+    void goto(next.pathname + next.search, { noScroll: true, keepFocus: true });
+  }
 </script>
 
 <svelte:head><title>{detail?.item.title ?? "Connected title"} · Request · Prismedia</title></svelte:head>
@@ -213,6 +224,15 @@
       {/if}
     </div>
 
+    {#if routeRequest.input?.entityKind === ENTITY_KIND.book}
+      <div class="max-w-xs">
+        <Select ariaLabel="Book format" value={bookRendition}
+          options={[{ value: BOOK_RENDITION.ebook, label: "Ebook" },
+            { value: BOOK_RENDITION.audiobook, label: "Audiobook" }]}
+          onchange={selectBookRendition} />
+      </div>
+    {/if}
+
     {#if loadError}
       <Alert.Root variant="destructive"><CircleAlert /><Alert.Description>{loadError}</Alert.Description></Alert.Root>
     {/if}
@@ -230,6 +250,7 @@
           {showControls}
           {canControl}
           {canRelease}
+          bookRendition={routeRequest.input?.entityKind === ENTITY_KIND.book ? bookRendition : null}
           onRecheckAvailability={() => void inspectAvailability(routeRequest, connection!)}
         />
       {/key}

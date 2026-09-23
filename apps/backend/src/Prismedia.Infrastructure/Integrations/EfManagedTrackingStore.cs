@@ -114,6 +114,11 @@ public sealed partial class EfManagedTrackingStore(PrismediaDbContext db, IExter
     }
 
     private async Task<ManagedTrackingResponse> MapAsync(ManagedHoldingRow row, CancellationToken token) {
+        var bookWorkId = row.Kind == EntityKind.Book
+            ? await db.FulfillmentReservations.AsNoTracking().Where(owner => owner.OwnerId == row.Id
+                    && owner.BookRendition == row.BookRendition)
+                .Select(owner => (Guid?)owner.EntityId).SingleOrDefaultAsync(token)
+            : null;
         var saved = await db.ManagedSourceBindings.AsNoTracking().Where(binding => binding.HoldingId == row.Id).ToArrayAsync(token);
         var files = saved.GroupBy(binding => binding.RemoteFileId, StringComparer.Ordinal).Select(group => {
             var file = group.First();
@@ -123,6 +128,6 @@ public sealed partial class EfManagedTrackingStore(PrismediaDbContext db, IExter
         }).ToArray();
         return new(row.Id, row.ConnectionId, row.LibraryRootId, JsonSerializer.Deserialize<ManagedItemInput>(row.ItemJson, Json)!,
             row.Title, row.Status, row.Revision, row.LastCheckedAt, row.Problem, files,
-            JsonSerializer.Deserialize<ManagedTargetBinding[]>(row.TargetsJson, Json)!, row.ReleaseOperationId, row.ReleasedAt);
+            JsonSerializer.Deserialize<ManagedTargetBinding[]>(row.TargetsJson, Json)!, row.ReleaseOperationId, row.ReleasedAt, bookWorkId);
     }
 }

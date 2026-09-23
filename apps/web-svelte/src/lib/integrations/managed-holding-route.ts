@@ -16,7 +16,11 @@ export function managedHoldingHref(connectionId: string, item: ManagedLibraryIte
 
 /** Builds the same exact holding address from an identity pin saved with a library Entity. */
 export function managedHoldingInputHref(connectionId: string, item: ManagedItemInput): string {
-  return managedHoldingIdentityHref(connectionId, item.entityKind, item.remoteId, item.expectedExternalIds);
+  const href = managedHoldingIdentityHref(connectionId, item.entityKind, item.remoteId, item.expectedExternalIds);
+  if (!item.bookRendition) return href;
+  const url = new URL(href, "http://localhost");
+  url.searchParams.set("rendition", item.bookRendition);
+  return url.pathname + url.search;
 }
 
 function managedHoldingIdentityHref(

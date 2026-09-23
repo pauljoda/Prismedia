@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/sv
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "$app/state";
 import {
+  BOOK_RENDITION,
   CONNECTION_STATUS,
   ENTITY_KIND,
   INTEGRATION_OPERATION,
@@ -139,6 +140,26 @@ describe("connected source title route", () => {
       { label: "Radarr", href: "/request?connection=connection-one&kind=movie" },
       { label: "Arrival" },
     ]);
+  });
+
+  it("loads a connected Book's selected audiobook without splitting its work identity", async () => {
+    page.params = { connectionId: "connection-one", entityKind: ENTITY_KIND.book, remoteId: "OL1W" };
+    page.url = new URL("http://localhost/request/source/connection-one/book/OL1W?identities=%7B%22openlibrarywork%22%3A%22OL1W%22%7D&rendition=audiobook") as typeof page.url;
+    mocks.fetchConnections.mockResolvedValue([{ ...connection, effectiveCapabilities: [
+      { kind: PLUGIN_CAPABILITY.connectedLibrary, operations: [INTEGRATION_OPERATION.getLibraryItem], entityKinds: [ENTITY_KIND.book] },
+    ] }]);
+    mocks.fetchManagedItem.mockResolvedValue({ ...snapshot, item: { ...snapshot.item, entityKind: ENTITY_KIND.book,
+      remoteId: "OL1W", externalIds: { openlibrarywork: "OL1W" } }, files: [] });
+
+    render(Page);
+
+    await waitFor(() => expect(mocks.fetchManagedItem).toHaveBeenCalledWith("connection-one", {
+      entityKind: ENTITY_KIND.book,
+      remoteId: "OL1W",
+      expectedExternalIds: { openlibrarywork: "OL1W" },
+      bookRendition: BOOK_RENDITION.audiobook,
+    }));
+    expect(screen.getByRole("button", { name: "Book format" })).toHaveTextContent("Audiobook");
   });
 
   it("does not call administrator APIs for a non-administrator", async () => {

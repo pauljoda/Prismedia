@@ -28,4 +28,6 @@ export interface ManagedTrackingResponse {
   releaseOperationId?: string | null;
   /** @nullable */
   releasedAt?: string | null;
+  /** @nullable */
+  bookWorkId?: string | null;
 }
