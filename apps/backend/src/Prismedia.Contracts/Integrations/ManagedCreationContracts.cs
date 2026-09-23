@@ -5,7 +5,8 @@ namespace Prismedia.Contracts.Integrations;
 
 /// <summary>One finite child target requested beneath a managed container, before remote IDs are resolved.</summary>
 public sealed record ManagedLookupTarget(EntityKind EntityKind, IReadOnlyDictionary<string, string> ExternalIds,
-    int? SeasonNumber = null, int? EpisodeNumber = null, int? AbsoluteNumber = null);
+    int? SeasonNumber = null, int? EpisodeNumber = null, int? AbsoluteNumber = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? IssueLabel = null);
 /// <summary>Exact metadata identities, independent of an external application's local item IDs.</summary>
 public sealed record ManagedLookupInput(EntityKind EntityKind, IReadOnlyDictionary<string, string> ExternalIds,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ManagedLookupTarget>? Targets = null);
@@ -15,7 +16,8 @@ public sealed record ManagedCandidate(EntityKind EntityKind, string Title, int? 
 /// <summary>One manager-resolved stable child identity corresponding to an exact requested target.</summary>
 public sealed record ManagedResolvedTarget(string RemoteId, EntityKind EntityKind,
     IReadOnlyDictionary<string, string> ExternalIds, int? SeasonNumber = null, int? EpisodeNumber = null,
-    int? AbsoluteNumber = null);
+    int? AbsoluteNumber = null,
+    [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? IssueLabel = null);
 /// <summary>Read-only lookup can reconcile an uncertain creation without repeating its mutation.</summary>
 public sealed record ManagedLookupResult(ManagedCandidate Candidate, ManagedItemSnapshot? Existing,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] IReadOnlyList<ManagedResolvedTarget>? Targets = null);

@@ -48,7 +48,15 @@ public static class ManagedCreationEvidence {
             return;
         }
         if (resolved.Count != requested.Count
+            || requested.Any(target => target.EntityKind == EntityKind.ComicInstallment
+                ? string.IsNullOrWhiteSpace(target.IssueLabel) || target.IssueLabel.Length > 128
+                    || target.SeasonNumber is not null || target.EpisodeNumber is not null || target.AbsoluteNumber is not null
+                : target.IssueLabel is not null)
             || resolved.Any(target => string.IsNullOrWhiteSpace(target.RemoteId) || target.RemoteId.Length > 512)
+            || resolved.Any(target => target.EntityKind == EntityKind.ComicInstallment
+                ? string.IsNullOrWhiteSpace(target.IssueLabel) || target.IssueLabel.Length > 128
+                    || target.SeasonNumber is not null || target.EpisodeNumber is not null || target.AbsoluteNumber is not null
+                : target.IssueLabel is not null)
             || resolved.Select(target => target.RemoteId).Distinct(StringComparer.Ordinal).Count() != resolved.Count) {
             throw new IntegrationInvocationException("The manager did not resolve every requested child target exactly once.");
         }
@@ -59,6 +67,7 @@ public static class ManagedCreationEvidence {
                 candidate.EntityKind == target.EntityKind
                 && candidate.SeasonNumber == target.SeasonNumber
                 && candidate.EpisodeNumber == target.EpisodeNumber
+                && candidate.IssueLabel == target.IssueLabel
                 && (candidate.AbsoluteNumber is null
                     || target.AbsoluteNumber is null
                     || candidate.AbsoluteNumber == target.AbsoluteNumber)

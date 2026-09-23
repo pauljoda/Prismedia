@@ -26,6 +26,7 @@ public static class ManagedRequestIdentity {
             .ThenBy(target => target.SeasonNumber)
             .ThenBy(target => target.EpisodeNumber)
             .ThenBy(target => target.AbsoluteNumber)
+            .ThenBy(target => target.IssueLabel, StringComparer.Ordinal)
             .ThenBy(target => string.Join('\n', target.ExternalIds.Select(pair => $"{pair.Key}={pair.Value}")), StringComparer.Ordinal)
             .ToArray()
     };

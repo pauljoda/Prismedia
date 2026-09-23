@@ -94,6 +94,25 @@ public sealed class ManagedRequestProcessorTests {
             ManagedCreationEvidence.ValidateTargets(work, [resolved[0] with { EpisodeNumber = 2 }]));
     }
 
+    [Fact]
+    public void ComicTargetEvidencePinsFractionalIssueLabelsWithoutChangingMovieFingerprints() {
+        var work = new ManagedLookupInput(EntityKind.ComicSeries,
+            new Dictionary<string, string> { [ExternalIdProviders.ComicVine] = "4050-42" },
+            [new(EntityKind.ComicInstallment,
+                new Dictionary<string, string> { [ExternalIdProviders.ComicVine] = "4000-7" }, IssueLabel: "½")]);
+        var resolved = new ManagedResolvedTarget("17", EntityKind.ComicInstallment,
+            new Dictionary<string, string> { [ExternalIdProviders.ComicVine] = "4000-7" }, IssueLabel: "½");
+
+        ManagedCreationEvidence.ValidateTargets(work, [resolved]);
+        Assert.False(ManagedRequestIdentity.SameWork(work, work with { Targets = [work.Targets![0] with { IssueLabel = "0.5" }] }));
+        Assert.Throws<IntegrationInvocationException>(() => ManagedCreationEvidence.ValidateTargets(work,
+            [resolved with { IssueLabel = "0.5" }]));
+        Assert.Throws<IntegrationInvocationException>(() => ManagedCreationEvidence.ValidateTargets(work,
+            [resolved with { IssueLabel = null }]));
+        Assert.Throws<IntegrationInvocationException>(() => ManagedCreationEvidence.ValidateTargets(
+            work with { Targets = [work.Targets![0] with { IssueLabel = null }] }, [resolved]));
+    }
+
     private static ManagedLookupInput SeriesWork() => new(
         EntityKind.VideoSeries,
         new Dictionary<string, string> { [ExternalIdProviders.Tvdb] = "42" },
