@@ -12,7 +12,7 @@
   } from "$lib/api/generated/codes";
   import type { EntityMetadataProposal } from "$lib/api/identify-types";
   import { ApiError } from "$lib/api/orval-fetch";
-  import { commitReviewedRequest, fetchRequestReview, reviewRequest } from "$lib/api/requests";
+  import { commitReviewedRequest, fetchRequestReview, prepareManagedBook, reviewRequest } from "$lib/api/requests";
   import { saveReviewedManagedRequest, type ManagedRequestChoice } from "$lib/api/reviewed-managed-requests";
   import { ManagedRequestRejectedError } from "$lib/api/managed-requests";
   import ManagerRequestOptions from "$lib/components/integrations/ManagerRequestOptions.svelte";
@@ -61,6 +61,7 @@
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
 
   import { createUuid } from "$lib/utils/uuid";
+  import { supportsBookManager } from "$lib/requests/book-manager-connection";
   interface ReviewLoadInput {
     kind: RequestMediaKindCode;
     pluginId: string | null;
@@ -91,6 +92,8 @@
   let audiobookTargetLibraryRootId = $state<string | null>(null);
   let audiobookProfileId = $state<string | null>(null);
   let bookResultHref = $state<string | null>(null);
+  let bookManagerAvailable = $state(false);
+  let bookManagerSelected = $state(false);
   let chosenPreset = $state<MonitorPresetCode>(DEFAULT_MONITOR_PRESET);
   let selectionCustomized = $state(false);
   let loading = $state(true);
@@ -250,6 +253,8 @@
     audiobookTargetLibraryRootId = null;
     audiobookProfileId = null;
     bookResultHref = null;
+    bookManagerAvailable = false;
+    bookManagerSelected = false;
     managerSelected = Boolean(input.connectionId);
     managerChoice = null;
     managerOwnership = null;
@@ -288,6 +293,12 @@
       if (response.entityKind === ENTITY_KIND.book) {
         selectedBookRenditions = [response.kind === REQUEST_MEDIA_KIND.audiobook
           ? BOOK_RENDITION.audiobook : BOOK_RENDITION.ebook];
+        if (session.isAdmin && response.proposal.patch?.externalIds?.[EXTERNAL_ID_PROVIDER.openLibraryWork]) {
+          void fetchConnections().then(connections => {
+            if (key !== loadedKey) return;
+            bookManagerAvailable = connections.some(supportsBookManager);
+          }).catch(() => { if (key === loadedKey) bookManagerAvailable = false; });
+        }
       }
       const rootProposal = response.proposal as EntityMetadataProposal;
       mergeMetadataSelection(rootProposal, null);
@@ -547,6 +558,11 @@
         }
         return;
       }
+      if (bookManagerSelected && bookManagerAvailable && canChooseBookRenditions) {
+        const prepared = await prepareManagedBook({ ...reviewedCommitPayload(), bookRenditions: null });
+        await goto(resolve(`/books/${prepared.entityId}` as "/"));
+        return;
+      }
       const response = await commitReviewedRequest(reviewedCommitPayload(), nsfw.mode !== "show");
 
       if (canChooseBookRenditions && !response.bookRenditions) {
@@ -782,7 +798,18 @@
           }} />
       {/if}
 
-      {#if canChooseBookRenditions && !managerSelected}
+      {#if canChooseBookRenditions && bookManagerAvailable && !managerSelected}
+        <label class="flex items-center gap-2 text-sm text-text-secondary">
+          <Checkbox checked={bookManagerSelected} disabled={submitting}
+            onchange={checked => bookManagerSelected = checked} />
+          Use a connected Book manager
+        </label>
+        {#if bookManagerSelected}
+          <p class="text-sm text-text-muted">Save this reviewed Book, then choose ebook, audiobook, or both and their mapped libraries on its Acquisition tab.</p>
+        {/if}
+      {/if}
+
+      {#if canChooseBookRenditions && !managerSelected && !bookManagerSelected}
         <div class="space-y-2" aria-label="Book formats to request">
           <p class="font-mono text-[0.66rem] font-semibold uppercase tracking-[0.04em] text-text-secondary">Formats</p>
           <label class="flex items-center gap-2 text-sm text-text-secondary">
@@ -806,14 +833,14 @@
             <RequestTargetOptions kindInfo={audiobookKindInfo} bind:targetLibraryRootId={audiobookTargetLibraryRootId} bind:profileId={audiobookProfileId} stacked />
           </div>
         {/if}
-      {:else if kindInfo && !managerSelected}
+      {:else if kindInfo && !managerSelected && !bookManagerSelected}
         <RequestTargetOptions {kindInfo} bind:targetLibraryRootId bind:profileId stacked />
       {/if}
       <Button type="button" variant="primary" class="w-full gap-2"
         disabled={submitting || reviewChanged || enrichmentRunning || !hasRequestIntent || (managerSelected && !managerChoice && !pendingManagerCommit && !managerOwnership)}
         onclick={() => void requestSelection()}>
         {#if submitting}<Loader2 class="h-4 w-4 animate-spin" />{:else if managerOwnership && !pendingManagerCommit}<ExternalLink class="h-4 w-4" />{:else}<Send class="h-4 w-4" />{/if}
-        {submitting ? (managerOwnership && !pendingManagerCommit ? "Opening…" : "Requesting…") : pendingManagerCommit ? "Retry request" : managerOwnership ? "Open in library" : managedSeriesSelected && managedSeriesTargetCount > 0
+        {submitting ? (managerOwnership && !pendingManagerCommit ? "Opening…" : "Requesting…") : bookManagerSelected ? "Continue to Book manager" : pendingManagerCommit ? "Retry request" : managerOwnership ? "Open in library" : managedSeriesSelected && managedSeriesTargetCount > 0
           ? `Request ${managedSeriesTargetCount}${managerChoice?.review.expansion ? " more" : ""} episode${managedSeriesTargetCount === 1 ? "" : "s"}` : canChooseBookRenditions ? `Request ${selectedBookRenditions.length === 2 ? "both formats" : selectedBookRenditions[0] === BOOK_RENDITION.audiobook ? "audiobook" : "ebook"}` : managedSeriesSelected ? "Request selected episodes" : selectsChildren && selectedProposalIds.length > 0
             ? `Request ${selectedProposalIds.length} ${childNoun}${selectedProposalIds.length === 1 ? "" : "s"}` : "Request"}
       </Button>

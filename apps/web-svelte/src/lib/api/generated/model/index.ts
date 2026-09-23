@@ -560,6 +560,7 @@ export * from './pluginProvider';
 export * from './pluginSearchDefinition';
 export * from './pluginSearchField';
 export * from './pluginSearchFieldType';
+export * from './preparedWantedBookResponse';
 export * from './preparedWantedEpisode';
 export * from './preparedWantedMovieResponse';
 export * from './preparedWantedSeriesResponse';

@@ -14,4 +14,6 @@ export interface PluginIntegrationDefinition {
   settings: PluginSearchField[];
   /** @nullable */
   anonymousArtifactOrigins?: string[] | null;
+  /** @nullable */
+  anonymousArtifactHostSuffixes?: string[] | null;
 }

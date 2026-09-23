@@ -54,6 +54,7 @@ public static class DependencyInjection {
         services.AddScoped<IRequestAcquisitionFanoutScheduler, RequestAcquisitionFanoutScheduler>();
         services.AddScoped<RequestCommitService>();
         services.AddScoped<ReviewedWantedMovieService>();
+        services.AddScoped<ReviewedWantedBookService>();
         services.AddScoped<ReviewedWantedSeriesService>();
         services.AddScoped<IMonitoredEntityRecovery>(sp => sp.GetRequiredService<RequestCommitService>());
         services.AddScoped<IRequestChildHydrator>(sp => sp.GetRequiredService<RequestCommitService>());

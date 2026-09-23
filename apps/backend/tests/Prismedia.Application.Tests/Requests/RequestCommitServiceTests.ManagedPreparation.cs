@@ -157,6 +157,41 @@ public sealed partial class RequestCommitServiceTests {
     }
 
     [Fact]
+    public async Task PreparingReviewedBookKeepsOneWorkIdentityAndCreatesNoAcquisition() {
+        var request = ManagedBookReview();
+        var writer = new FakeWantedEntityWriter();
+        var suppression = new FakeSuppressionStore();
+        var service = new ReviewedWantedBookService(writer, suppression, new BookRouter(), new MovieLease());
+
+        var first = await service.PrepareAsync(request, default);
+        var replay = await service.PrepareAsync(request, default);
+
+        Assert.Equal(first.EntityId, replay.EntityId);
+        Assert.False(first.HasFile);
+        Assert.All(writer.Ensured, call => {
+            Assert.Equal(EntityKind.Book, call.Kind);
+            Assert.Equal(ExternalIdProviders.OpenLibraryWork, call.IdentityNamespace);
+            Assert.Equal("OL43053199W", call.ItemId);
+        });
+        Assert.Equal(2, writer.DeferredArtworkApplied.Count);
+        Assert.Contains("openlibrarywork:OL43053199W", suppression.Cleared);
+    }
+
+    [Fact]
+    public async Task BookPreparationRejectsMissingWorkIdentityBeforeWriting() {
+        var request = ManagedBookReview();
+        var writer = new FakeWantedEntityWriter();
+        var proposal = request.Proposal! with {
+            Patch = request.Proposal!.Patch! with { ExternalIds = new Dictionary<string, string>() }
+        };
+
+        await Assert.ThrowsAsync<RequestCommitValidationException>(() =>
+            new ReviewedWantedBookService(writer, new FakeSuppressionStore(), new BookRouter(), new MovieLease())
+                .PrepareAsync(request with { Proposal = proposal }, default));
+        Assert.Empty(writer.Ensured);
+    }
+
+    [Fact]
     public async Task PreparingAnOwnedMovieReturnsItsExistingIdentityWithoutReplacingMetadata() {
         var request = ManagedMovieReview(); var writer = new FakeWantedEntityWriter(); writer.ExistingWithFile.Add("19");
         var result = await new ReviewedWantedMovieService(writer, new FakeSuppressionStore(), new MovieRouter(), new MovieLease()).PrepareAsync(request, default);
@@ -269,6 +304,16 @@ public sealed partial class RequestCommitServiceTests {
             Review: review, Proposal: proposal, SelectedFields: [MetadataPatchField.Title.ToCode(), MetadataPatchField.ExternalIds.ToCode()]);
     }
 
+    private static ReviewedRequestCommitRequest ManagedBookReview() {
+        var identity = new ExternalIdentity(ExternalIdProviders.OpenLibraryWork, "OL43053199W");
+        var proposal = Node("book:OL43053199W", "fixture-books", EntityKind.Book, "A Tale of Two Cities", identity);
+        var review = Review(proposal.Provider, RequestMediaKind.Book, identity, proposal,
+            [Target(proposal, RequestMediaKind.Book, identity)]);
+        return new(RequestMediaKind.Book, proposal.Provider, identity, review.Revision, [proposal.ProposalId],
+            Review: review, Proposal: proposal,
+            SelectedFields: [MetadataPatchField.Title.ToCode(), MetadataPatchField.ExternalIds.ToCode()]);
+    }
+
     private static ReviewedRequestCommitRequest ManagedSeriesReview(bool duplicateCoordinates = false) {
         const string pluginId = "fixture-series";
         var seriesIdentity = new ExternalIdentity("tmdb", "series-7");
@@ -367,6 +412,14 @@ public sealed partial class RequestCommitServiceTests {
         public Task<IReadOnlyList<PluginIdentityRoute>> ResolveAsync(string kind, IdentifyAction action, IReadOnlyList<ExternalIdentity> identities, CancellationToken token) {
             Calls++; Assert.Equal(EntityKind.Movie.ToCode(), kind); Assert.Equal(IdentifyAction.LookupId, action);
             return Task.FromResult<IReadOnlyList<PluginIdentityRoute>>(Enabled ? [new("fixture-movies", identities.Single())] : []);
+        }
+    }
+    private sealed class BookRouter : IPluginIdentityRouter {
+        public Task<IReadOnlyList<PluginIdentityRoute>> ResolveAsync(string kind, IdentifyAction action,
+            IReadOnlyList<ExternalIdentity> identities, CancellationToken token) {
+            Assert.Equal(EntityKind.Book.ToCode(), kind);
+            Assert.Equal(IdentifyAction.LookupId, action);
+            return Task.FromResult<IReadOnlyList<PluginIdentityRoute>>([new("fixture-books", identities.Single())]);
         }
     }
     private sealed class MovieLease : IEntityLifecycleMutationLease {

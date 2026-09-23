@@ -3,10 +3,6 @@
   import { Alert, Button, Checkbox, Panel, Select } from "@prismedia/ui-svelte";
   import {
     BOOK_RENDITION,
-    CONNECTION_STATUS,
-    ENTITY_KIND,
-    INTEGRATION_OPERATION,
-    PLUGIN_CAPABILITY,
     type BookRenditionCode,
   } from "$lib/api/generated/codes";
   import type {
@@ -27,6 +23,7 @@
     saveManagedRequest,
   } from "$lib/api/managed-requests";
   import { createUuid } from "$lib/utils/uuid";
+  import { supportsBookManager } from "$lib/requests/book-manager-connection";
   import { bookRenditionCanRequest, bookRenditionManagerOwner, bookRenditionRows } from "$lib/requests/book-rendition-acquisition";
 
   let {
@@ -83,19 +80,6 @@
     void loadConnections();
     return () => { alive = false; loadSequence++; };
   });
-
-  function supportsBookManager(connection: ConnectionResponse): boolean {
-    if (!connection.enabled || connection.status !== CONNECTION_STATUS.ready) return false;
-    const manager = connection.effectiveCapabilities.find(capability =>
-      capability.kind === PLUGIN_CAPABILITY.externalManager && capability.entityKinds.includes(ENTITY_KIND.book));
-    const library = connection.effectiveCapabilities.find(capability =>
-      capability.kind === PLUGIN_CAPABILITY.connectedLibrary && capability.entityKinds.includes(ENTITY_KIND.book));
-    return Boolean(manager && library
-      && [INTEGRATION_OPERATION.lookupManaged, INTEGRATION_OPERATION.reconcileManaged,
-        INTEGRATION_OPERATION.configureManaged].every(operation => manager.operations.includes(operation))
-      && library.operations.includes(INTEGRATION_OPERATION.getLibraryItem)
-      && library.operations.includes(INTEGRATION_OPERATION.listLibraries));
-  }
 
   async function loadConnections() {
     try {

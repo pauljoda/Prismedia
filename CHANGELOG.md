@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- A reviewed Book can be saved with its Open Library work identity, then requested as an ebook, audiobook, or both through a connected Book manager from the Book's Acquisition tab.
+
 - Existing Books can request a missing ebook or audiobook through a connected Book manager after reviewing its exact work and mapped library. A paired request keeps separate format intents and safely retries an uncertain result.
 
 - Internet Archive comic connections can browse and search explicitly public-domain-labeled items, review original CBZ files, and import a selected issue with source and license details retained.

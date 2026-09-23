@@ -251,6 +251,7 @@ import type {
   PluginProvider,
   PrepareFileArchiveParams,
   PrepareManagedDiscoveryRequest,
+  PreparedWantedBookResponse,
   PreparedWantedMovieResponse,
   PreparedWantedSeriesResponse,
   PreviewCollectionRulesParams,
@@ -12384,6 +12385,55 @@ export const getPrepareManagedMovieUrl = () => {
 export const prepareManagedMovie = async (reviewedRequestCommitRequest: ReviewedRequestCommitRequest, options?: RequestInit): Promise<prepareManagedMovieResponse> => {
 
   return orvalFetch<prepareManagedMovieResponse>(getPrepareManagedMovieUrl(),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      reviewedRequestCommitRequest,)
+  }
+);}
+
+
+
+export type prepareManagedBookResponse200 = {
+  data: PreparedWantedBookResponse
+  status: 200
+}
+
+export type prepareManagedBookResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type prepareManagedBookResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type prepareManagedBookResponseSuccess = (prepareManagedBookResponse200) & {
+  headers: Headers;
+};
+export type prepareManagedBookResponseError = (prepareManagedBookResponse400 | prepareManagedBookResponse409) & {
+  headers: Headers;
+};
+
+export type prepareManagedBookResponse = (prepareManagedBookResponseSuccess | prepareManagedBookResponseError)
+
+export const getPrepareManagedBookUrl = () => {
+
+
+
+
+  return `/api/requests/prepare-managed-book`
+}
+
+/**
+ * @summary Saves one reviewed Book work before a rendition-specific connected-manager choice.
+ */
+export const prepareManagedBook = async (reviewedRequestCommitRequest: ReviewedRequestCommitRequest, options?: RequestInit): Promise<prepareManagedBookResponse> => {
+
+  return orvalFetch<prepareManagedBookResponse>(getPrepareManagedBookUrl(),
   {
     ...options,
     method: 'POST',

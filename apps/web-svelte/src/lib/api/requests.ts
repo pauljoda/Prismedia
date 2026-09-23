@@ -4,6 +4,7 @@ import {
   commitEntityRequest as commitEntityRequestRequest,
   commitReviewedRequest as commitReviewedRequestRequest,
   prepareManagedMovie as prepareManagedMovieRequest,
+  prepareManagedBook as prepareManagedBookRequest,
   prepareManagedSeries as prepareManagedSeriesRequest,
   getRequestReview,
   commitMissingChildrenRequest,
@@ -22,6 +23,7 @@ import type {
   RequestSearchResponse,
   ReviewedRequestCommitRequest,
   PreparedWantedMovieResponse,
+  PreparedWantedBookResponse,
   PreparedWantedSeriesResponse,
   WantedRemovalResponse,
 } from "$lib/api/generated/model";
@@ -98,6 +100,11 @@ export async function commitReviewedRequest(
 /** Saves reviewed metadata without acquisition, before explicit external-manager configuration. */
 export async function prepareManagedMovie(request: ReviewedRequestCommitRequest): Promise<PreparedWantedMovieResponse> {
   return unwrapGenerated(await prepareManagedMovieRequest(request), "Could not save the reviewed movie");
+}
+
+/** Saves one reviewed Book work so its missing formats can be requested through a connected manager. */
+export async function prepareManagedBook(request: ReviewedRequestCommitRequest): Promise<PreparedWantedBookResponse> {
+  return unwrapGenerated(await prepareManagedBookRequest(request), "Could not save the reviewed Book");
 }
 
 /** Saves a finite reviewed episode selection without acquisition or broad series monitoring. */
