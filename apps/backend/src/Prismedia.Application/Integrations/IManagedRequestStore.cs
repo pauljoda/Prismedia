@@ -1,4 +1,5 @@
 using Prismedia.Contracts.Integrations;
+using Prismedia.Domain.Entities;
 using Prismedia.Domain.Integrations;
 
 namespace Prismedia.Application.Integrations;
@@ -11,7 +12,12 @@ public sealed record ManagedRequestTarget(Guid EntityId, string Title, ManagedLo
 /// <summary>Immutable creation and fulfillment intent; credentials remain on the connection.</summary>
 public sealed record ManagedRequestPlan(CreateManagedRequestInput Request, EnsureManagedInput Creation, string Title,
     string Fingerprint, string? ReviewedCommitFingerprint = null, long? ExpectedConnectionRevision = null,
-    Guid? ExistingHoldingId = null);
+    Guid? ExistingHoldingId = null) {
+    /// <summary>Names finite comic work by its exact issue while retaining the run title.</summary>
+    public string DisplayTitle() => Request.ReviewedWork is { EntityKind: EntityKind.ComicSeries, Targets: [{ IssueLabel: { } label }] }
+        ? $"{Title} · #{label}"
+        : Title;
+}
 /// <summary>Request journal independent of transient jobs and manager queue history.</summary>
 public sealed record StoredManagedRequest(ManagedRequestOperation Operation, ManagedRequestPlan Plan,
     DateTimeOffset CreatedAt, DateTimeOffset UpdatedAt, string? Problem);

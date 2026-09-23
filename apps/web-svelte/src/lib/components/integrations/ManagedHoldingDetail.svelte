@@ -14,10 +14,11 @@
     Server,
   } from "@lucide/svelte";
   import { Badge, Button, DialogBase, Panel } from "@prismedia/ui-svelte";
-  import { ENTITY_KIND, INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
+  import { ENTITY_KIND, EXTERNAL_ID_PROVIDER, INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
   import type {
     ConnectionResponse,
     ManagedItemSnapshot,
+    ManagedComicIssue,
     ManagedLibraryFile,
     ManagerOptions,
     MappedLibraryFile,
@@ -33,6 +34,7 @@
   import { entityReferenceToThumbnailCard } from "$lib/entities/entity-thumbnail";
   import { formatBytes } from "$lib/utils/format";
   import ExternalLibraryMappings from "./ExternalLibraryMappings.svelte";
+  import ManagedComicIssueRequest from "./ManagedComicIssueRequest.svelte";
   import ManagedHoldingTracking from "./ManagedHoldingTracking.svelte";
 
   const INITIAL_FILE_LIMIT = 50;
@@ -69,6 +71,7 @@
   let visibleFiles = $state(INITIAL_FILE_LIMIT);
   let visibleIssues = $state(INITIAL_FILE_LIMIT);
   let mappingOpen = $state(false);
+  let requestedIssue = $state<ManagedComicIssue | null>(null);
   const kindLabel = $derived(displayNameForEntityKind(detail.item.entityKind));
   const isTrackable = $derived(
     detail.item.entityKind === ENTITY_KIND.movie || detail.item.entityKind === ENTITY_KIND.videoSeries
@@ -120,6 +123,12 @@
   const canConfigureMapping = $derived(connection.effectiveCapabilities.some((capability) =>
     capability.kind === PLUGIN_CAPABILITY.externalManager
       && capability.operations.includes(INTEGRATION_OPERATION.managerOptions),
+  ));
+  const canRequestComicIssue = $derived(connection.effectiveCapabilities.some((capability) =>
+    capability.kind === PLUGIN_CAPABILITY.externalManager
+      && [INTEGRATION_OPERATION.lookupManaged, INTEGRATION_OPERATION.reconcileManaged,
+        INTEGRATION_OPERATION.configureManaged, INTEGRATION_OPERATION.requestManaged]
+        .every(operation => capability.operations.includes(operation)),
   ));
   const localSummary = $derived.by(() => {
     if (detail.files.length === 0) {
@@ -366,6 +375,9 @@
               <Badge variant={issue.monitored && detail.item.monitored ? "success" : "outline"}>
                 {issue.monitored ? detail.item.monitored ? "Monitored" : "Run monitoring off" : "Not monitored"}
               </Badge>
+              {#if fileCount === 0 && canRequestComicIssue && issue.externalIds?.[EXTERNAL_ID_PROVIDER.comicVine]}
+                <Button size="sm" variant="secondary" onclick={() => requestedIssue = issue}>Request issue</Button>
+              {/if}
             </div>
           </Panel>
         {/each}
@@ -474,6 +486,17 @@
     <DialogBase.Footer><Button variant="outline" onclick={() => setMappingOpen(false)}>Done</Button></DialogBase.Footer>
   </DialogBase.Content>
 </DialogBase.Root>
+
+{#if requestedIssue}
+  <ManagedComicIssueRequest
+    connectionId={connection.id}
+    connectionName={connection.name}
+    item={{ entityKind: detail.item.entityKind, remoteId: detail.item.remoteId,
+      expectedExternalIds: detail.item.externalIds }}
+    issue={requestedIssue}
+    onclose={() => requestedIssue = null}
+  />
+{/if}
 
 <style>
   .holding-overview-grid {

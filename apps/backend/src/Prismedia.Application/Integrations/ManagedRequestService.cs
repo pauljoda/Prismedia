@@ -177,9 +177,9 @@ public sealed class ManagedRequestService(IManagedRequestStore store, Integratio
                     || !input.Search))
             throw new ArgumentException("Select reviewed wanted work, its exact target, and a mapped external library.");
     }
-    private static ManagedRequestResponse Map(StoredManagedRequest work) {
+    internal static ManagedRequestResponse Map(StoredManagedRequest work) {
         var state = work.Operation.State;
-        return new(state.OperationId, state.ConnectionId, state.EntityId, state.LibraryRootId, work.Plan.Title, state.Phase,
+        return new(state.OperationId, state.ConnectionId, state.EntityId, state.LibraryRootId, work.Plan.DisplayTitle(), state.Phase,
             state.Revision, state.RemoteId, work.Plan.Request.Monitored, work.Plan.Request.Search, state.ReviewRequired,
             work.Operation.CanCancel, work.CreatedAt, work.UpdatedAt, work.Problem,
             work.Plan.ExistingHoldingId ?? state.OperationId,

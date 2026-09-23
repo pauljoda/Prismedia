@@ -13,6 +13,15 @@ public static class ManagedRequestEndpoints {
         group.MapPost("/preview", async (Guid id, PreviewManagedRequestInput request, ManagedRequestService service, CancellationToken token) =>
             Results.Ok(await service.PreviewAsync(id, request, token)))
             .WithName("PreviewManagedRequest").Produces<ManagedRequestPreview>().Produces<ApiProblem>(400);
+        group.MapPost("/comic-issue/review", async (Guid id, ReviewManagedComicIssueInput request,
+            ReviewedManagedComicIssueService service, CancellationToken token) =>
+            Results.Ok(await service.ReviewAsync(id, request, token)))
+            .WithName("ReviewManagedComicIssue").Produces<ReviewedManagedComicIssue>().Produces<ApiProblem>(400);
+        group.MapPost("/comic-issue/commit", async (Guid id, CommitManagedComicIssueInput request,
+            ReviewedManagedComicIssueService service, CancellationToken token) =>
+            Results.Accepted(value: await service.CommitAsync(id, request, token)))
+            .WithName("CommitManagedComicIssue").Produces<CommitManagedComicIssueResponse>(202)
+            .Produces<ApiProblem>(400).Produces<ApiProblem>(409);
         group.MapPost("/review", async (Guid id, ReviewManagedRequestInput request, ReviewedManagedRequestService service, CancellationToken token) => {
             try { return Results.Ok(await service.ReviewAsync(id, request, token)); }
             catch (RequestProposalChangedException error) {

@@ -6,6 +6,7 @@ using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Plugins;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Entities;
+using Prismedia.Infrastructure.Integrations;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 using Prismedia.Infrastructure.Plugins;
@@ -19,6 +20,46 @@ namespace Prismedia.Infrastructure.Tests.Requests;
 /// delete (including pruning an author placeholder that lost its last wanted book).
 /// </summary>
 public sealed class WantedEntityWriterTests {
+    [Fact]
+    public async Task ManagedComicIssueWriterKeepsExactLabelAndReusesTheWantedWork() {
+        await using var db = CreateContext();
+        var writer = new EfManagedComicIssueWriter(Writer(db), db);
+        var series = new ExternalIdentity(ExternalIdProviders.ComicVine, "4050-1");
+        var issue = new ExternalIdentity(ExternalIdProviders.ComicVine, "4000-2");
+
+        var first = await writer.EnsureAsync(series, "Run", issue, "Half issue", "½", default);
+        var replay = await writer.EnsureAsync(series, "Run", issue, "Half issue", "½", default);
+
+        Assert.Equal(first, replay);
+        Assert.False(first.HasFile);
+        Assert.Equal(first.SeriesEntityId,
+            (await db.Entities.AsNoTracking().SingleAsync(row => row.Id == first.IssueEntityId)).ParentEntityId);
+        Assert.Equal("½", Assert.Single(await db.EntityPositions.AsNoTracking().ToArrayAsync()).Label);
+        Assert.Equal(ComicInstallmentKind.Issue,
+            (await db.ComicInstallmentDetails.AsNoTracking().SingleAsync(row => row.EntityId == first.IssueEntityId)).InstallmentKind);
+        await Assert.ThrowsAsync<ArgumentException>(() => writer.EnsureAsync(
+            series, "Run", issue, "Half issue", "0.5", default));
+    }
+
+    [Fact]
+    public async Task ManagedComicIssueWriterCompletesAnExistingFilelessShell() {
+        await using var db = CreateContext();
+        var seriesId = AddEntity(db, EntityKind.ComicSeries.ToCode(), "Run", isWanted: true);
+        var issueId = AddEntity(db, EntityKind.ComicInstallment.ToCode(), "Issue 13", isWanted: true,
+            parentEntityId: seriesId);
+        AddExternalId(db, seriesId, ExternalIdProviders.ComicVine, "4050-1");
+        AddExternalId(db, issueId, ExternalIdProviders.ComicVine, "4000-13");
+        await db.SaveChangesAsync();
+
+        var result = await new EfManagedComicIssueWriter(Writer(db), db).EnsureAsync(
+            new(ExternalIdProviders.ComicVine, "4050-1"), "Run",
+            new(ExternalIdProviders.ComicVine, "4000-13"), "Issue 13", "13", default);
+
+        Assert.Equal((seriesId, issueId, false), result);
+        Assert.Equal(ComicInstallmentKind.Issue,
+            (await db.ComicInstallmentDetails.AsNoTracking().SingleAsync(row => row.EntityId == issueId)).InstallmentKind);
+    }
+
     [Fact]
     public async Task EnsureCreatesAWantedBookSkeletonWithProviderIdAndRootlessDetail() {
         await using var db = CreateContext();

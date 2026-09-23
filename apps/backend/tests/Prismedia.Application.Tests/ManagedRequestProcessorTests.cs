@@ -47,6 +47,9 @@ public sealed class ManagedRequestProcessorTests {
         Assert.Throws<ArgumentException>(() => ManagedRequestService.Validate(request with {
             ReviewedWork = work with { Targets = [work.Targets![0] with { IssueLabel = null }] }
         }));
+        var plan = new ManagedRequestPlan(request,
+            new(request.OperationId, work, null, "1", "/comics"), "Fixture Run", "fingerprint");
+        Assert.Equal("Fixture Run · #½", plan.DisplayTitle());
     }
 
     [Fact]

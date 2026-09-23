@@ -120,9 +120,11 @@ public static class DependencyInjection {
         services.AddScoped<IManagedReleaseStore, EfManagedReleaseStore>();
         services.AddScoped<ManagedReleaseService>();
         services.AddScoped<IManagedRequestStore, EfManagedRequestStore>();
+        services.AddScoped<IManagedComicIssueWriter, EfManagedComicIssueWriter>();
         services.AddScoped<IReviewedManagedRequestCommitScope, EfReviewedManagedRequestCommitScope>();
         services.AddScoped<ManagedRequestService>();
         services.AddScoped<ReviewedManagedRequestService>();
+        services.AddScoped<ReviewedManagedComicIssueService>();
         services.AddScoped<ManagedRequestProcessor>();
         services.AddSingleton(new ExternalLibraryStorageOptions(dataDir, cacheDir));
         services.AddScoped<IExternalLibraryMountStore, EfExternalLibraryMountStore>();

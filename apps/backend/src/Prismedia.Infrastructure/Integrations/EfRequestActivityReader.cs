@@ -222,7 +222,7 @@ public sealed class EfRequestActivityReader(
             var work = new StoredManagedRequest(
                 new ManagedRequestOperation(state), plan, request.CreatedAt, request.UpdatedAt, request.Problem);
             var requestResponse = new ManagedRequestResponse(
-                state.OperationId, state.ConnectionId, state.EntityId, state.LibraryRootId, plan.Title, state.Phase,
+                state.OperationId, state.ConnectionId, state.EntityId, state.LibraryRootId, plan.DisplayTitle(), state.Phase,
                 state.Revision, state.RemoteId, plan.Request.Monitored, plan.Request.Search, state.ReviewRequired,
                 work.Operation.CanCancel, request.CreatedAt, request.UpdatedAt, request.Problem,
                 plan.ExistingHoldingId ?? state.OperationId,
