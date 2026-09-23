@@ -12,6 +12,9 @@ namespace Prismedia.Infrastructure.Acquisition;
 
 /// <summary>EF-backed store for acquisition records and their scored release candidates.</summary>
 public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisitionHistoryStore history, ILogger<EfAcquisitionStore> logger) : IAcquisitionStore {
+    private static bool UsesFormalWorkTitles(EntityKind kind) =>
+        MediaQualityLadder.IsVideoKind(kind) || kind is EntityKind.Book or EntityKind.ComicVolume or EntityKind.ComicInstallment;
+
     /// <inheritdoc />
     public Task<Guid?> GetJobGraphIdAsync(Guid id, CancellationToken cancellationToken) =>
         db.Acquisitions.AsNoTracking()
@@ -162,15 +165,16 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         // movie's release year — which is what scene naming appends to disambiguate same-name works,
         // so the search gates compare against that instead.
         var contextEntityId = await ResolveContextEntityIdAsync(row.EntityId, row.UpgradeOfAcquisitionId, row.Kind, cancellationToken);
-        var work = contextEntityId is { } entityId && MediaQualityLadder.IsVideoKind(row.Kind)
+        var work = contextEntityId is { } entityId && UsesFormalWorkTitles(row.Kind)
             ? await new EfAcquisitionWorkContext(db).ReadIdentityAsync(entityId, cancellationToken)
-            : (Year: (int?)null, Titles: (IReadOnlyList<string>)Array.Empty<string>());
-        var year = work.Year ?? row.Year;
+            : (Year: (int?)null, Title: (string?)null, Titles: (IReadOnlyList<string>)Array.Empty<string>());
+        var year = MediaQualityLadder.IsVideoKind(row.Kind) ? work.Year ?? row.Year : row.Year;
         var positions = await new EfAcquisitionWorkContext(db).ReadPositionsAsync(contextEntityId, row.Kind, cancellationToken);
 
         return new AcquisitionSearchInput(
             row.Id, row.Title, row.Author, row.Kind, row.EntityId, year, row.ProfileId,
-            row.Series, positions.Season ?? row.SeasonNumber, positions.Episode ?? row.EpisodeNumber,
+            row.Kind is EntityKind.ComicVolume or EntityKind.ComicInstallment ? work.Title ?? row.Series : row.Series,
+            positions.Season ?? row.SeasonNumber, positions.Episode ?? row.EpisodeNumber,
             positions.Volume ?? row.VolumeNumber, row.BookRendition, positions.AbsoluteEpisode) {
             InstallmentLabel = await new EfAcquisitionWorkContext(db).ReadInstallmentLabelAsync(contextEntityId, row.Kind, cancellationToken),
             AlternativeWorkTitles = work.Titles,
@@ -1236,11 +1240,13 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
 
         var contextEntityId = await ResolveContextEntityIdAsync(row.EntityId, row.UpgradeOfAcquisitionId, row.Kind, cancellationToken);
         var positions = await new EfAcquisitionWorkContext(db).ReadPositionsAsync(contextEntityId, row.Kind, cancellationToken);
-        var work = contextEntityId is { } entityId && MediaQualityLadder.IsVideoKind(row.Kind)
+        var work = contextEntityId is { } entityId && UsesFormalWorkTitles(row.Kind)
             ? await new EfAcquisitionWorkContext(db).ReadIdentityAsync(entityId, cancellationToken)
-            : (Year: (int?)null, Titles: (IReadOnlyList<string>)Array.Empty<string>());
+            : (Year: (int?)null, Title: (string?)null, Titles: (IReadOnlyList<string>)Array.Empty<string>());
         var context = new AcquisitionImportContext(
-            row.Id, row.Title, row.Author, row.Series, row.Year, row.PosterUrl, externalIdentity,
+            row.Id, row.Title, row.Author,
+            row.Kind is EntityKind.ComicVolume or EntityKind.ComicInstallment ? work.Title ?? row.Series : row.Series,
+            row.Year, row.PosterUrl, externalIdentity,
             row.ProfileId, transfer?.ContentPath, transfer?.ClientItemId, transfer?.DownloadClientConfigId, row.Kind,
             row.Description, row.TargetLibraryRootId, positions.Season ?? row.SeasonNumber,
             positions.Episode ?? row.EpisodeNumber, row.EntityId, row.FinalSourcePath,

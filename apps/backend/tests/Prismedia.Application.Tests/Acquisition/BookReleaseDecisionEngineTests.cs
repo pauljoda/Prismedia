@@ -29,6 +29,20 @@ public sealed class BookReleaseDecisionEngineTests {
     }
 
     [Fact]
+    public void FormalBookTitleStillRequiresTheCorrectAuthor() {
+        var rules = BookAcquisitionRules.Default with {
+            TargetTitle = "Original Title",
+            TargetAlternativeTitles = ["Translated Title"],
+            TargetAuthor = "Ada Writer"
+        };
+
+        Assert.True(Engine.Evaluate(One(Release("Ada Writer - Translated Title EPUB")), rules)[0].Accepted);
+        var wrongAuthor = Engine.Evaluate(One(Release("Other Writer - Translated Title EPUB")), rules)[0];
+        Assert.False(wrongAuthor.Accepted);
+        Assert.Contains(ReleaseRejectionReason.TitleMismatch, wrongAuthor.Rejections);
+    }
+
+    [Fact]
     public void RejectsReleaseWithNoLinkAndNoInfoPage() {
         var linkless = new IndexerRelease("Some Book (epub)", 5_000_000, 5, 1, DownloadProtocol.Torrent, null, null, null, null, null, null);
 

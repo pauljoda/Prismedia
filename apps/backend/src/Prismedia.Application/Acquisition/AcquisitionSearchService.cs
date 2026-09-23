@@ -110,17 +110,18 @@ public sealed class AcquisitionSearchRunner(
             bool HasAccepted() => engine.Evaluate(
                 releases.Where(candidate => protocols.Contains(candidate.Release.Protocol)).ToArray(), rules, blocklisted)
                 .Select(ApplyCoverage).Any(candidate => candidate.Accepted);
-            var accentInputs = AcquisitionWorkTitles.AccentFallbackQueryInputs(input);
-            var accentQueries = accentInputs.SelectMany(policy.BuildQueries)
+            var alternativeInputs = AcquisitionWorkTitles.AccentFallbackQueryInputs(input)
+                .Concat(AcquisitionWorkTitles.BookFormalFallbackQueryInputs(input)).ToArray();
+            var alternativeQueries = alternativeInputs.SelectMany(policy.BuildQueries)
                 .Distinct(StringComparer.OrdinalIgnoreCase).Except(queries, StringComparer.OrdinalIgnoreCase).ToArray();
             var hasAccepted = HasAccepted();
-            if (!hasAccepted && accentQueries.Length > 0) {
-                await SearchQueriesAsync(accentQueries);
+            if (!hasAccepted && alternativeQueries.Length > 0) {
+                await SearchQueriesAsync(alternativeQueries);
                 hasAccepted = HasAccepted();
             }
-            var fallbackQueries = queryInputs.Concat(accentInputs).SelectMany(policy.BuildFallbackQueries)
+            var fallbackQueries = queryInputs.Concat(alternativeInputs).SelectMany(policy.BuildFallbackQueries)
                 .Distinct(StringComparer.OrdinalIgnoreCase)
-                .Except(queries.Concat(accentQueries), StringComparer.OrdinalIgnoreCase)
+                .Except(queries.Concat(alternativeQueries), StringComparer.OrdinalIgnoreCase)
                 .ToArray();
             if (!hasAccepted && fallbackQueries.Length > 0) {
                 await SearchQueriesAsync(fallbackQueries);

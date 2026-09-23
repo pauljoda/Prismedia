@@ -61,8 +61,9 @@ public sealed class EfManualAcquisitionStore(
             kind,
             cancellationToken);
         var work = MediaQualityLadder.IsVideoKind(kind)
+            || kind is EntityKind.Book or EntityKind.ComicVolume or EntityKind.ComicInstallment
             ? await new EfAcquisitionWorkContext(db).ReadIdentityAsync(entityId, cancellationToken)
-            : (Year: (int?)null, Titles: (IReadOnlyList<string>)Array.Empty<string>());
+            : (Year: (int?)null, Title: (string?)null, Titles: (IReadOnlyList<string>)Array.Empty<string>());
         var input = new AcquisitionSearchInput(
             Guid.Empty,
             entity.Title,
@@ -71,7 +72,7 @@ public sealed class EfManualAcquisitionStore(
             entityId,
             Year: work.Year,
             ProfileId: kind == EntityKind.VideoEpisode ? await ResolveEpisodeProfileAsync(entityId, cancellationToken) : null,
-            Series: series,
+            Series: kind is EntityKind.ComicVolume or EntityKind.ComicInstallment ? work.Title ?? series : series,
             SeasonNumber: seasonNumber,
             EpisodeNumber: episodeNumber,
             BookRendition: kind == EntityKind.Book ? BookRendition.Ebook : null,

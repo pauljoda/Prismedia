@@ -50,6 +50,23 @@ public sealed class ComicInstallmentSpecificationTests {
         Assert.Contains(ReleaseRejectionReason.WrongInstallment, result.Rejections);
     }
 
+    [Theory]
+    [InlineData("Another Run Chapter 83 Digital CBZ")]
+    [InlineData("Chapter 83 Digital CBZ")]
+    public void ExactIssueNumberDoesNotReplaceTheComicRunIdentity(string releaseTitle) {
+        var result = Evaluate(releaseTitle, "Chapter 83");
+
+        Assert.False(result.Accepted);
+        Assert.Contains(ReleaseRejectionReason.TitleMismatch, result.Rejections);
+    }
+
+    [Fact]
+    public void FormalRunNameCanIdentifyTheSameExactIssue() {
+        var result = Evaluate("Romanized Run Chapter 83 Digital CBZ", "Chapter 83", ["Romanized Run"]);
+
+        Assert.True(result.Accepted);
+    }
+
     [Fact]
     public void ComicAcquisitionAcceptsOnlyImageArchives() {
         var result = Evaluate("Witch Hat Atelier Chapter 83 EPUB", "Chapter 83");
@@ -58,7 +75,8 @@ public sealed class ComicInstallmentSpecificationTests {
         Assert.Contains(ReleaseRejectionReason.UnsupportedFormat, result.Rejections);
     }
 
-    private static ScoredRelease Evaluate(string releaseTitle, string installmentTitle) {
+    private static ScoredRelease Evaluate(string releaseTitle, string installmentTitle,
+        IReadOnlyList<string>? alternativeRunNames = null) {
         var release = new IndexerRelease(
             releaseTitle,
             10_000_000,
@@ -73,7 +91,9 @@ public sealed class ComicInstallmentSpecificationTests {
             null);
         var rules = BookAcquisitionRules.Default with {
             Kind = EntityKind.ComicInstallment,
-            TargetTitle = installmentTitle
+            TargetTitle = installmentTitle,
+            TargetSeriesTitle = "Witch Hat Atelier",
+            TargetAlternativeTitles = alternativeRunNames ?? []
         };
 
         return Assert.Single(Engine.Evaluate([(release, null, "Indexer")], rules));

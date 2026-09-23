@@ -58,7 +58,16 @@ public sealed class BookTitleIdentitySpecification : IReleaseSpecification {
             return Reason;
         }
 
-        if (ReleaseTitleIdentity.ContainsRun(release.Title, rules.TargetTitle)) {
+        if (rules.Kind is (EntityKind.ComicVolume or EntityKind.ComicInstallment) &&
+            (string.IsNullOrWhiteSpace(rules.TargetSeriesTitle) ||
+             (!ReleaseTitleIdentity.ContainsRun(release.Title, rules.TargetSeriesTitle) &&
+              !rules.TargetAlternativeTitles.Any(title => ReleaseTitleIdentity.ContainsRun(release.Title, title))))) {
+            return Reason;
+        }
+
+        if (ReleaseTitleIdentity.ContainsRun(release.Title, rules.TargetTitle) ||
+            rules.Kind == EntityKind.Book &&
+            rules.TargetAlternativeTitles.Any(title => ReleaseTitleIdentity.ContainsRun(release.Title, title))) {
             return null;
         }
 

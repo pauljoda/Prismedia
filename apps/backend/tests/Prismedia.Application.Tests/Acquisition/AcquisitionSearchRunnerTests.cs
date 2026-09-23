@@ -81,6 +81,33 @@ public sealed class AcquisitionSearchRunnerTests {
         Assert.Equal(custom ? ["chosen query"] : primaryQueries.Concat(aliasQueries).Distinct().ToArray(), client.Queries);
     }
 
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task FormalBookNameIsSearchedOnlyWhenTheCanonicalNameHasNoAcceptedRelease(bool primaryAccepted) {
+        var input = new AcquisitionSearchInput(Guid.NewGuid(), "Original Title", "Ada Writer", EntityKind.Book,
+            BookRendition: BookRendition.Ebook) { AlternativeWorkTitles = ["Translated Title"] };
+        var policy = new BookAcquisitionPolicyModule();
+        var primaryQueries = policy.BuildQueries(input);
+        var alternativeQueries = policy.BuildQueries(input with { Title = "Translated Title" });
+        var primary = new IndexerRelease("Ada Writer Original Title EPUB", 5_000_000, 10, 2,
+            DownloadProtocol.Torrent, "https://download.test/primary", null, "primary", null, null, null);
+        var alternative = primary with { Title = "Ada Writer Translated Title EPUB", InfoHash = "alternative" };
+        var results = primaryQueries.ToDictionary(query => query,
+            _ => (IReadOnlyList<IndexerRelease>)(primaryAccepted ? [primary] : []));
+        foreach (var query in alternativeQueries) results[query] = [alternative];
+        var client = new QueryAwareIndexerSearchClient(results);
+        var runner = new AcquisitionSearchRunner(new FakeIndexerConfigStore(), new FakeClientFactory(client),
+            new FakeProfileStore(), new FakeBlocklistStore("unrelated"),
+            new FakeDownloadClientConfigStore(DownloadProtocol.Torrent), new FakeIndexerStatusStore(),
+            new IndexerQueryWindow(), Policies(policy), Settings());
+
+        var outcome = await runner.RunAsync(input, default);
+
+        Assert.Single(outcome.Candidates, candidate => candidate.Accepted);
+        Assert.Equal(primaryAccepted ? primaryQueries : primaryQueries.Concat(alternativeQueries).ToArray(), client.Queries);
+    }
+
     [Fact]
     public async Task ObservedSeasonCoverageFiltersAutomaticSearchAndReopensWhenUpgradesAreEnabled() {
         var root = Directory.CreateTempSubdirectory("prismedia-search-coverage-");

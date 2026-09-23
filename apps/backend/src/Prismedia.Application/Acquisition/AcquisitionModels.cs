@@ -160,6 +160,9 @@ public sealed record BookAcquisitionRules(
     /// </summary>
     public string? TargetTitle { get; init; }
 
+    /// <summary>The comic run that owns a requested volume or issue, independent of its unit label.</summary>
+    public string? TargetSeriesTitle { get; init; }
+
     /// <summary>
     /// The provider-authored title of the sought TV episode, set independently from
     /// <see cref="TargetTitle"/> (which remains the series identity). This title admits marker-less

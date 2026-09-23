@@ -58,6 +58,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Book and comic searches now try verified alternate work names when the main name finds no usable release. Automatic comic issue matches also verify the series name before accepting an exact issue number.
+
 - Request and connected-source administration can render as focused content inside the iOS app, using its native navigation while staying current with the web interface.
 
 - External library setup distinguishes provider paths from folders readable by the Prismedia server, with shared-storage guidance for separate hosts and read-only mounts.
