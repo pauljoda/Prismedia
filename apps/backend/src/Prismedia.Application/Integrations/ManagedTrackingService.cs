@@ -19,7 +19,9 @@ public sealed class ManagedTrackingService(
         var selections = observation.Files.SelectMany(file => file.Targets.Select(target => {
             var owners = observation.Sources.Where(owner => owner.LocalPath == file.LocalPath && owner.Kind == target.Kind
                 && owner.SeasonNumber == target.SeasonNumber && owner.EpisodeNumber == target.EpisodeNumber
-                && (target.AbsoluteNumber is null || owner.AbsoluteNumber == target.AbsoluteNumber)).ToArray();
+                && (target.AbsoluteNumber is null || owner.AbsoluteNumber == target.AbsoluteNumber)
+                && (target.Kind != EntityKind.ComicInstallment ||
+                    !string.IsNullOrWhiteSpace(target.IssueLabel) && owner.IssueLabel == target.IssueLabel)).ToArray();
             return owners.Length == 1 ? new ManagedBindingSelection(target.RemoteTargetId, owners[0].EntityId, owners[0].SourceFileId) : null;
         })).OfType<ManagedBindingSelection>().ToArray();
         var plan = ManagedSourceAdoption.Plan(observation.Files, selections, observation.Sources);
@@ -121,7 +123,8 @@ public sealed class ManagedTrackingService(
                         target.EntityKind,
                         target.SeasonNumber,
                         target.EpisodeNumber,
-                        target.AbsoluteNumber)).ToArray())).ToArray()
+                        target.AbsoluteNumber,
+                        target.IssueLabel)).ToArray())).ToArray()
         };
     }
 }

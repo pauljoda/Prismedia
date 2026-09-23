@@ -17,7 +17,7 @@ public sealed partial class EfManagedTrackingStore {
             var writtenAt = readable ? WrittenAt(local.LocalPath!) : DateTimeOffset.MinValue;
             return new ManagedObservedFile(file.RemoteId, local.LocalPath ?? string.Empty, file.SizeBytes, writtenAt, readable,
                 file.Targets.Select(target => new ManagedTargetIdentity(target.RemoteId, target.EntityKind,
-                    target.SeasonNumber, target.EpisodeNumber, target.AbsoluteNumber)).ToArray());
+                    target.SeasonNumber, target.EpisodeNumber, target.AbsoluteNumber, target.IssueLabel)).ToArray());
         }).ToArray();
         return new(roots.Length == 1 ? roots[0] : null, observed, await SourcesAsync(observed.Select(file => file.LocalPath).ToArray(), token));
     }
@@ -32,8 +32,9 @@ public sealed partial class EfManagedTrackingStore {
         return owners.Select(owner => {
             int? Own(string code) => positions.FirstOrDefault(position => position.EntityId == owner.EntityId && position.Code == code)?.Value;
             var season = Own(EntityPositionCodes.Season) ?? positions.FirstOrDefault(position => position.EntityId == owner.ParentEntityId && position.Code == EntityPositionCodes.Season)?.Value;
+            var issueLabel = positions.FirstOrDefault(position => position.EntityId == owner.EntityId && position.Code == EntityPositionCodes.Chapter)?.Label;
             return new ManagedLocalSource(owner.EntityId, owner.Id, owner.Path, EntityKindRegistry.Require(owner.KindCode),
-                season, Own(EntityPositionCodes.Episode), Own(EntityPositionCodes.AbsoluteEpisode));
+                season, Own(EntityPositionCodes.Episode), Own(EntityPositionCodes.AbsoluteEpisode), issueLabel);
         }).ToArray();
     }
 

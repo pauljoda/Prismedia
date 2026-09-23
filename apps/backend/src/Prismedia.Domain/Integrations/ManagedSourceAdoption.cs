@@ -7,7 +7,7 @@ public sealed record ManagedBindingSelection(string RemoteTargetId, Guid EntityI
 
 /// <summary>Local source ownership and numbering observed independently of the connected application.</summary>
 public sealed record ManagedLocalSource(Guid EntityId, Guid SourceFileId, string LocalPath, EntityKind Kind,
-    int? SeasonNumber, int? EpisodeNumber, int? AbsoluteNumber);
+    int? SeasonNumber, int? EpisodeNumber, int? AbsoluteNumber, string? IssueLabel = null);
 
 /// <summary>Exact source bindings, or one reason that the complete selection needs review.</summary>
 public sealed record ManagedSourceAdoptionPlan(IReadOnlyList<ManagedFileBinding> Bindings, string? ReviewReason);
@@ -38,8 +38,10 @@ public static class ManagedSourceAdoption {
                 if (matches.Length != 1) return Review("A selected local source changed. Refresh the file matches before linking.");
                 var owner = matches[0];
                 if (owner.Kind != target.Kind || owner.SeasonNumber != target.SeasonNumber || owner.EpisodeNumber != target.EpisodeNumber
-                    || target.AbsoluteNumber is not null && owner.AbsoluteNumber != target.AbsoluteNumber)
-                    return Review("The selected local entity's kind or episode numbering differs from the remote target.");
+                    || target.AbsoluteNumber is not null && owner.AbsoluteNumber != target.AbsoluteNumber
+                    || target.Kind == EntityKind.ComicInstallment &&
+                       (string.IsNullOrWhiteSpace(target.IssueLabel) || owner.IssueLabel != target.IssueLabel))
+                    return Review("The selected local entity's kind, episode numbering, or comic issue label differs from the remote target.");
                 entities.Add(new(target, owner.EntityId, owner.SourceFileId));
             }
             bindings.Add(new(file.RemoteFileId, file.LocalPath, file.SizeBytes, file.WrittenAt, true, entities));

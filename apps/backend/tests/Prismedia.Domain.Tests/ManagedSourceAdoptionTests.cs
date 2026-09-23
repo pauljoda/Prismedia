@@ -26,6 +26,21 @@ public sealed class ManagedSourceAdoptionTests {
         Assert.Empty(result.Bindings);
     }
 
+    [Theory]
+    [InlineData("12.5", "12.5", true)]
+    [InlineData("12.5", "12", false)]
+    [InlineData("12.5", null, false)]
+    [InlineData(null, "12.5", false)]
+    public void ComicIssueAssociationRequiresTheExactDesignation(string? remoteLabel, string? localLabel, bool accepted) {
+        var target = new ManagedTargetIdentity("issue-1", EntityKind.ComicInstallment, null, null, null, remoteLabel);
+        var owner = new ManagedLocalSource(Entity, File, "/library/episode.mkv", EntityKind.ComicInstallment,
+            null, null, null, localLabel);
+
+        var plan = ManagedSourceAdoption.Plan([Observed(target)], [new("issue-1", Entity, File)], [owner]);
+
+        Assert.Equal(accepted, plan.ReviewReason is null);
+    }
+
     [Fact]
     public void EverySharedFileOwnerMustBeSelectedWithExactCoverage() {
         var owner2 = Owner() with { EntityId = Guid.NewGuid(), SourceFileId = Guid.NewGuid(), EpisodeNumber = 2 };
