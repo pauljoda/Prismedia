@@ -187,6 +187,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Tab rows in Identify and shared page sections now scroll sideways without their own vertical movement on mobile.
+
 - Explicit root rescans from Files now refresh catalog details for unchanged files, including corrected comic issue numbers.
 
 - Rescanning a library folder from Files no longer loses the selected folder while its contents refresh.

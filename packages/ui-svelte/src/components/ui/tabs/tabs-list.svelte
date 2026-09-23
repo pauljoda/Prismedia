@@ -1,7 +1,7 @@
 <script lang="ts" module>
 	import { cva, type VariantProps } from "class-variance-authority";
 
-	export const tabsListVariants = cva("group/tabs-list inline-flex min-h-11 w-fit items-center justify-center rounded-md p-1 text-muted-foreground group-data-[orientation=vertical]/tabs:h-fit group-data-[orientation=vertical]/tabs:flex-col", {
+	export const tabsListVariants = cva("group/tabs-list inline-flex min-h-11 w-fit max-w-full items-center justify-center overflow-x-auto overflow-y-hidden overscroll-y-none touch-pan-x rounded-md p-1 text-muted-foreground group-data-[orientation=vertical]/tabs:h-fit group-data-[orientation=vertical]/tabs:flex-col group-data-[orientation=vertical]/tabs:overflow-visible group-data-[orientation=vertical]/tabs:touch-auto", {
 		variants: {
 			variant: {
 				default: "cn-tabs-list-variant-default bg-muted",

@@ -75,7 +75,7 @@
 
   <!-- ── Tab strip (dashboard + per-kind tabs) ── -->
   {#if store.view.kind === "dashboard" || store.view.kind === "kind-tab"}
-    <nav class="mt-4 flex items-stretch overflow-hidden rounded-sm border border-border-subtle bg-gradient-to-b from-surface-2 to-surface-1">
+    <nav class="mt-4 flex items-stretch overflow-hidden touch-pan-x rounded-sm border border-border-subtle bg-gradient-to-b from-surface-2 to-surface-1">
       <Button
         type="button"
         variant="ghost"
@@ -93,7 +93,7 @@
         Dashboard
       </Button>
 
-      <div class="flex flex-1 items-stretch overflow-x-auto">
+      <div class="scrollbar-hidden flex min-w-0 flex-1 items-stretch overflow-x-auto overflow-y-hidden overscroll-y-none">
         {#each store.supportedKinds as kindInfo (kindInfo.kind)}
           {@const isActive = store.view.kind === "kind-tab" && store.view.entityKind === kindInfo.kind}
           {@const KindIcon = entityKindIcon(kindInfo.kind)}
