@@ -20,7 +20,8 @@ public sealed partial class EntityCapabilityService {
         string? location,
         double? activitySeconds,
         ConsumptionActivityKind? activityKind,
-        CancellationToken cancellationToken) {
+        CancellationToken cancellationToken,
+        BookListeningPositionRequest? listening = null) {
         return await UpdateProgressAsync(
             id,
             currentEntityId,
@@ -34,7 +35,8 @@ public sealed partial class EntityCapabilityService {
             activitySeconds,
             activityKind,
             utcOffsetMinutes: null,
-            cancellationToken);
+            cancellationToken,
+            listening);
     }
 
     /// <summary>Updates the last-active cursor and independent consumed-unit coverage.</summary>
@@ -51,7 +53,8 @@ public sealed partial class EntityCapabilityService {
         double? activitySeconds,
         ConsumptionActivityKind? activityKind,
         int? utcOffsetMinutes,
-        CancellationToken cancellationToken) {
+        CancellationToken cancellationToken,
+        BookListeningPositionRequest? listening = null) {
         var ownerId = await UpdateProgressOwnerAsync(
             id,
             currentEntityId,
@@ -65,7 +68,8 @@ public sealed partial class EntityCapabilityService {
             activitySeconds,
             activityKind,
             utcOffsetMinutes,
-            cancellationToken);
+            cancellationToken,
+            listening);
         return ownerId is { } updatedOwnerId
             ? await _entityReads.GetAsync(updatedOwnerId, hideNsfw: false, cancellationToken)
             : null;
@@ -88,7 +92,8 @@ public sealed partial class EntityCapabilityService {
         double? activitySeconds,
         ConsumptionActivityKind? activityKind,
         int? utcOffsetMinutes,
-        CancellationToken cancellationToken) =>
+        CancellationToken cancellationToken,
+        BookListeningPositionRequest? listening = null) =>
         await UpdateProgressOwnerAsync(
             id,
             currentEntityId,
@@ -102,5 +107,6 @@ public sealed partial class EntityCapabilityService {
             activitySeconds,
             activityKind,
             utcOffsetMinutes,
-            cancellationToken) is not null;
+            cancellationToken,
+            listening) is not null;
 }

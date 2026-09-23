@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { PROGRESS_UNIT } from "$lib/api/generated/codes";
 import type { PlaybackProgressMapping } from "$lib/api/generated/model";
-import { resolvePlaybackProgressMappingForTime } from "./audio-progress-mapping";
+import { audioProgressUpdateForItem, resolvePlaybackProgressMappingForTime } from "./audio-progress-mapping";
 
 function mapping(start: number, end: number): PlaybackProgressMapping {
   return {
@@ -25,5 +25,16 @@ describe("audio progress mapping", () => {
     expect(resolvePlaybackProgressMappingForTime([first, second], "audio-1", 50)).toBe(first);
     expect(resolvePlaybackProgressMappingForTime([first, second], "audio-1", 100)).toBe(second);
     expect(resolvePlaybackProgressMappingForTime([first, second], "audio-1", 150)).toBe(second);
+  });
+
+  it("retains the physical track, marker, and exact offset in a Book heartbeat", () => {
+    const chapter = { ...mapping(100, 200), audioMarkerId: "marker-2" };
+    const update = audioProgressUpdateForItem(chapter, 125.5, 240, null, false);
+
+    expect(update.listening).toEqual({
+      trackEntityId: "audio-1",
+      markerId: "marker-2",
+      offsetSeconds: 125.5,
+    });
   });
 });

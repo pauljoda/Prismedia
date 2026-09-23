@@ -12,6 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Books now keep precise reading and listening positions separately, so audiobook playback preserves the saved ebook location and each format can resume at its own position.
 - Book requests can choose ebook, audiobook, or both in one review, with a destination and profile for each format. A partial failure reports the format that needs a retry while keeping the successful request attached to the same Book.
 - Plugins can provide metadata, discovery, acquisition, downloads, and external-library capabilities independently. Connections support multiple instances with separate credentials, health checks, and packaged provider logos.
 - Request combines visual discovery, connected collections, metadata review, and provider choices. Radarr and Sonarr can search new titles directly; reviewed movie and selected-episode requests can delegate acquisition and open the normal Prismedia entity page. Already-followed series can request additional selected episodes while retaining their existing library links.

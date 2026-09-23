@@ -12,6 +12,7 @@ export interface AudioProgressUpdate {
   completed: boolean | null;
   activitySeconds: number | null;
   activityKind: typeof CONSUMPTION_ACTIVITY_KIND.listening | undefined;
+  listening?: { trackEntityId: string; markerId: string | null; offsetSeconds: number };
 }
 
 function clampFraction(value: number): number {
@@ -79,6 +80,13 @@ export function audioProgressUpdateForItem(
     activitySeconds,
     activityKind: activitySeconds && activitySeconds > 0
       ? CONSUMPTION_ACTIVITY_KIND.listening
+      : undefined,
+    listening: mapping.audioMarkerId !== undefined
+      ? {
+          trackEntityId: mapping.itemId,
+          markerId: mapping.audioMarkerId ?? null,
+          offsetSeconds: Math.max(0, offsetSeconds),
+        }
       : undefined,
   };
 }

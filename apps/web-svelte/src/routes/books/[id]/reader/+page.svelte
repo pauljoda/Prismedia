@@ -147,32 +147,34 @@
 
   function loadEpubState(nextBook: EntityCardFull, nextContext: BookReaderRouteContext) {
     const progress = getCapability(nextBook.capabilities, CAPABILITY_KIND.progress);
+    const reading = progress?.reading ?? progress;
     const resume = nextContext.command !== "start-over" && !progress?.completedAt;
     const launchLocation = webEpubLaunchLocation(nextContext.location);
     const launchFraction = launchLocation ? null : nextContext.fraction ?? null;
-    const persistedLocation = resume ? exactWebEpubResumeLocation(progress?.location) : null;
+    const persistedLocation = resume ? exactWebEpubResumeLocation(reading?.location) : null;
     surface = "epub";
     epubLocation = launchLocation ?? (launchFraction === null ? persistedLocation : null);
     epubInitialFraction = launchFraction
       ?? (epubLocation
         ? null
-        : resume && Number(progress?.total ?? 0) > 0
-          ? Number(progress?.index ?? 0) / Number(progress?.total ?? 0)
+        : resume && Number(reading?.total ?? 0) > 0
+          ? Number(reading?.index ?? 0) / Number(reading?.total ?? 0)
           : null);
-    epubFlow = progress?.mode === READER_MODE.scrolled ? "scrolled" : "paginated";
+    epubFlow = reading?.mode === READER_MODE.scrolled ? "scrolled" : "paginated";
     epubFlowMode = epubFlow;
     epubSaveLocation = epubLocation;
     epubSaveFraction = launchFraction
-      ?? (launchLocation ? 0 : resume ? Number(progress?.index ?? 0) / 10_000 : 0);
+      ?? (launchLocation ? 0 : resume ? Number(reading?.index ?? 0) / 10_000 : 0);
   }
 
   function loadPdfState(nextBook: EntityCardFull, nextContext: BookReaderRouteContext) {
     const progress = getCapability(nextBook.capabilities, CAPABILITY_KIND.progress);
+    const reading = progress?.reading ?? progress;
     const resume = nextContext.command !== "start-over" && !progress?.completedAt;
     surface = "pdf";
-    pdfInitialPage = resume ? Math.max(0, Number(progress?.index ?? 0)) : 0;
+    pdfInitialPage = resume ? Math.max(0, Number(reading?.index ?? 0)) : 0;
     pdfLastPage = pdfInitialPage;
-    pdfLastCount = Math.max(0, Number(progress?.total ?? 0));
+    pdfLastCount = Math.max(0, Number(reading?.total ?? 0));
   }
 
   function handleEpubLocation(location: { cfi: string | null; fraction: number; label: string | null }) {

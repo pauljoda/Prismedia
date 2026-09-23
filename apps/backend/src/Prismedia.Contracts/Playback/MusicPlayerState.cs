@@ -15,6 +15,7 @@ namespace Prismedia.Contracts.Playback;
 /// <param name="ResourceLocation">Optional portable resource location advanced within the item.</param>
 /// <param name="SourceStartSeconds">Optional start of this mapping inside a shared physical audio item.</param>
 /// <param name="SourceEndSeconds">Optional end of this mapping inside a shared physical audio item.</param>
+/// <param name="AudioMarkerId">Optional embedded chapter marker that identifies this physical window.</param>
 public sealed record PlaybackProgressMapping(
     Guid ItemId,
     Guid CurrentEntityId,
@@ -25,7 +26,8 @@ public sealed record PlaybackProgressMapping(
     ReaderMode? Mode,
     string? ResourceLocation = null,
     double? SourceStartSeconds = null,
-    double? SourceEndSeconds = null);
+    double? SourceEndSeconds = null,
+    Guid? AudioMarkerId = null);
 
 /// <summary>
 /// Compact, exact queue item consumed by every shared audio-player client. This is a

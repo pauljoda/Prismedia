@@ -26,7 +26,8 @@ internal static class EntityProgressEndpoint {
                         request.ActivitySeconds,
                         request.ActivityKind,
                         request.UtcOffsetMinutes,
-                        cancellationToken);
+                        cancellationToken,
+                        request.Listening);
                     return updated
                         ? Results.NoContent()
                         : EntityEndpointResults.ToResult(id, card: null);
@@ -45,7 +46,8 @@ internal static class EntityProgressEndpoint {
                     request.ActivitySeconds,
                     request.ActivityKind,
                     request.UtcOffsetMinutes,
-                    cancellationToken));
+                    cancellationToken,
+                    request.Listening));
             })
             .WithName("UpdateEntityProgress")
             .WithSummary("Update Entity Progress.")

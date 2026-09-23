@@ -66,6 +66,18 @@ export function bookProgressCursor(
   };
 }
 
+/** Resumes the saved physical audiobook position before trying an approximate chapter mapping. */
+export function exactBookListeningResume(
+  progress: EntityCapabilityProgressCapability | null | undefined,
+  availableTrackIds: readonly string[],
+): BookAudioResumePoint | null {
+  const listening = progress?.listening;
+  if (!listening || !availableTrackIds.includes(listening.trackEntityId)) return null;
+  const offset = Number(listening.offsetSeconds);
+  if (!Number.isFinite(offset) || offset < 0) return null;
+  return { trackId: listening.trackEntityId, trackOffsetSeconds: offset };
+}
+
 const COMBINED_AUDIO_RUNWAY_SECONDS = 5;
 const EPUB_PROGRESS_TOTAL = 10_000;
 
@@ -200,6 +212,7 @@ export function buildBookProgressMappings(
         endIndex: startIndex + duration,
         total,
         mode: null,
+        audioMarkerId: row.audioMarkerId ?? null,
         ...sourceWindow(row),
       } satisfies BookProgressTrackMapping;
       startIndex += duration;
@@ -221,6 +234,7 @@ export function buildBookProgressMappings(
         endIndex: Math.round(range.end * EPUB_PROGRESS_TOTAL),
         total: EPUB_PROGRESS_TOTAL,
         mode,
+        audioMarkerId: row.audioMarkerId ?? null,
         ...sourceWindow(row),
       }];
     }
@@ -235,6 +249,7 @@ export function buildBookProgressMappings(
       endIndex: pageCount - 1,
       total: pageCount,
       mode,
+      audioMarkerId: row.audioMarkerId ?? null,
       ...sourceWindow(row),
     }];
   });

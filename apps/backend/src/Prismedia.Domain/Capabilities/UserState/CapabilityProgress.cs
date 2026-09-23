@@ -18,7 +18,9 @@ public sealed class CapabilityProgress : EntityCapability {
         DateTimeOffset? completedAt = null,
         DateTimeOffset? updatedAt = null,
         string? location = null,
-        int consumedCount = 0) {
+        int consumedCount = 0,
+        BookReadingCheckpoint? reading = null,
+        BookListeningCheckpoint? listening = null) {
         CurrentEntityId = currentEntityId;
         Unit = unit;
         Index = index;
@@ -27,6 +29,8 @@ public sealed class CapabilityProgress : EntityCapability {
         CompletedAt = completedAt;
         UpdatedAt = updatedAt;
         Location = location;
+        Reading = reading;
+        Listening = listening;
         ConsumedCount = completedAt is not null && total > 0
             ? total
             : consumedCount > 0
@@ -57,6 +61,26 @@ public sealed class CapabilityProgress : EntityCapability {
     /// progress such as comic page indexes where <see cref="Index"/> fully describes position.
     /// </summary>
     public string? Location { get; private set; }
+
+    /// <summary>Last exact readable position, independent of the work's last-used cursor.</summary>
+    public BookReadingCheckpoint? Reading { get; private set; }
+
+    /// <summary>Last exact audiobook position, independent of the work's last-used cursor.</summary>
+    public BookListeningCheckpoint? Listening { get; private set; }
+
+    /// <summary>Retains an accepted reading signal without replacing the listening checkpoint.</summary>
+    public bool RecordReading(BookReadingCheckpoint checkpoint) {
+        if (Reading is not null && checkpoint.UpdatedAt < Reading.UpdatedAt) return false;
+        Reading = checkpoint;
+        return true;
+    }
+
+    /// <summary>Retains an accepted listening signal without replacing the reading checkpoint.</summary>
+    public bool RecordListening(BookListeningCheckpoint checkpoint) {
+        if (Listening is not null && checkpoint.UpdatedAt < Listening.UpdatedAt) return false;
+        Listening = checkpoint;
+        return true;
+    }
 
     /// <summary>
     /// Moves the cursor only when this is not an older reading-progress signal.

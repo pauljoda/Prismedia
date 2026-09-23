@@ -12,6 +12,66 @@ public sealed class EntityCapabilityServiceProgressTests {
     private static readonly Guid ChapterOneId = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly Guid ChapterTwoId = Guid.Parse("33333333-3333-3333-3333-333333333333");
     private static readonly Guid OtherBookId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+    private static readonly Guid AudioTrackId = Guid.Parse("55555555-5555-5555-5555-555555555555");
+
+    [Fact]
+    public async Task BookKeepsIndependentExactReadingAndListeningPositions() {
+        var earlier = DateTimeOffset.UtcNow.AddMinutes(-5);
+        var repository = new FakeEntityWriteRepository(new CapabilityProgress(
+            currentEntityId: BookId,
+            unit: ProgressUnit.Cfi,
+            index: 2300,
+            total: 10000,
+            mode: ReaderMode.Paged,
+            updatedAt: earlier,
+            location: "epubcfi(/6/12!/4/2)",
+            reading: new BookReadingCheckpoint(
+                BookId, ProgressUnit.Cfi, 2300, 10000, ReaderMode.Paged,
+                "epubcfi(/6/12!/4/2)", earlier)));
+        var service = new EntityCapabilityService(repository, new CanonicalEntityReadStub(), new TestProgressTopologyResolver());
+        var markerId = Guid.NewGuid();
+
+        await service.UpdateProgressAsync(
+            BookId, BookId, ProgressUnit.Cfi, 2500, 10000, ReaderMode.Paged,
+            completed: null, reset: false, location: "/OPS/chapter-2.xhtml",
+            activitySeconds: 15, activityKind: ConsumptionActivityKind.Listening,
+            CancellationToken.None,
+            listening: new BookListeningPositionRequest(AudioTrackId, markerId, 112.5));
+
+        var afterListening = Assert.IsType<Book>(repository.SavedEntity).Progress!;
+        Assert.Equal("epubcfi(/6/12!/4/2)", afterListening.Reading?.Location);
+        Assert.Equal(AudioTrackId, afterListening.Listening?.TrackEntityId);
+        Assert.Equal(markerId, afterListening.Listening?.MarkerId);
+        Assert.Equal(112.5, afterListening.Listening?.OffsetSeconds);
+
+        await service.UpdateProgressAsync(
+            BookId, BookId, ProgressUnit.Cfi, 2600, 10000, ReaderMode.Scrolled,
+            completed: null, reset: false, location: "epubcfi(/6/14!/4/2)",
+            activitySeconds: null, activityKind: ConsumptionActivityKind.Reading,
+            CancellationToken.None);
+
+        var afterReading = Assert.IsType<Book>(repository.SavedEntity).Progress!;
+        Assert.Equal("epubcfi(/6/14!/4/2)", afterReading.Reading?.Location);
+        Assert.Equal(112.5, afterReading.Listening?.OffsetSeconds);
+        Assert.Equal(AudioTrackId, afterReading.Listening?.TrackEntityId);
+    }
+
+    [Fact]
+    public async Task BookRejectsListeningCheckpointFromAnotherTrack() {
+        var repository = new FakeEntityWriteRepository(new CapabilityProgress());
+        var service = new EntityCapabilityService(repository, new CanonicalEntityReadStub(), new TestProgressTopologyResolver());
+
+        var result = await service.UpdateProgressAsync(
+            BookId, BookId, ProgressUnit.Cfi, 1, 10000, ReaderMode.Paged,
+            completed: null, reset: false, location: null,
+            activitySeconds: null, activityKind: ConsumptionActivityKind.Listening,
+            CancellationToken.None,
+            listening: new BookListeningPositionRequest(Guid.NewGuid(), null, 10));
+
+        Assert.Null(result);
+        Assert.Null(repository.SavedEntity);
+        Assert.Null(repository.Book.Progress?.Listening);
+    }
 
     [Fact]
     public async Task BookProgressCanMoveForwardFromEarlierChapter() {
@@ -453,6 +513,7 @@ public sealed class EntityCapabilityServiceProgressTests {
     private sealed class FakeEntityWriteRepository : IEntityWriteRepository {
         private readonly BookChapter _chapterOne = new(ChapterOneId, "Chapter 1", parentEntityId: BookId, sortOrder: 0);
         private readonly BookChapter _chapterTwo = new(ChapterTwoId, "Chapter 2", parentEntityId: BookId, sortOrder: 1);
+        private readonly AudioTrack _audioTrack = new(AudioTrackId, "Part 1", null, null);
 
         public FakeEntityWriteRepository(CapabilityProgress progress) {
             Book = new Book(
@@ -460,6 +521,7 @@ public sealed class EntityCapabilityServiceProgressTests {
                 "Book",
                 BookType.Novel,
                 capabilities: [progress]);
+            Book.AddChild(_audioTrack);
         }
 
         public Book Book { get; }
@@ -487,7 +549,8 @@ public sealed class EntityCapabilityServiceProgressTests {
             id == BookId ? Book :
             id == OtherBookId ? OtherBook :
             id == ChapterOneId ? _chapterOne :
-            id == ChapterTwoId ? _chapterTwo : null;
+            id == ChapterTwoId ? _chapterTwo :
+            id == AudioTrackId ? _audioTrack : null;
     }
 
     private sealed class SingleEntityWriteRepository(Entity entity) : IEntityWriteRepository {

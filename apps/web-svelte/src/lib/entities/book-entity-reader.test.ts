@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { EntityCard, EntityThumbnail } from "$lib/api/generated/model";
-import { ENTITY_STAT_CODE } from "$lib/api/generated/codes";
+import { CAPABILITY_KIND, ENTITY_STAT_CODE, PROGRESS_UNIT, READER_MODE } from "$lib/api/generated/codes";
 import {
   bookEntityProgressDisplay,
   orderedBookChildren,
@@ -44,6 +44,36 @@ function entity(overrides: Partial<EntityCard>): EntityCard {
 }
 
 describe("book entity reader helpers", () => {
+  it("keeps the exact EPUB cursor after listening moves the work position", () => {
+    const display = singleFileBookProgressDisplay(entity({
+      capabilities: [{
+        kind: CAPABILITY_KIND.progress,
+        currentEntityId: "book-1",
+        unit: PROGRESS_UNIT.cfi,
+        index: 6000,
+        total: 10000,
+        mode: READER_MODE.paged,
+        location: "/OPS/chapter-6.xhtml",
+        completedAt: null,
+        updatedAt: "2026-09-22T11:00:00Z",
+        reading: {
+          currentEntityId: "book-1",
+          unit: PROGRESS_UNIT.cfi,
+          index: 2300,
+          total: 10000,
+          mode: READER_MODE.paged,
+          location: "epubcfi(/6/12!/4/2)",
+          updatedAt: "2026-09-22T10:00:00Z",
+        },
+      }],
+    }));
+
+    expect(display).toMatchObject({
+      index: 2300,
+      location: "epubcfi(/6/12!/4/2)",
+    });
+  });
+
   it("orders child thumbnails by structural sort order", () => {
     const source = entity({
       childrenByKind: [

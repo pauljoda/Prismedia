@@ -445,7 +445,8 @@ public sealed partial class EntityCapabilityService {
         double? activitySeconds,
         ConsumptionActivityKind? activityKind,
         int? utcOffsetMinutes,
-        CancellationToken cancellationToken) {
+        CancellationToken cancellationToken,
+        BookListeningPositionRequest? listening) {
         // A reader heartbeat is one action even if it races another client. Keep its timestamp
         // stable while every retry reloads topology and latest-cursor state from the database.
         var occurredAt = _timeProvider.GetUtcNow();
@@ -464,7 +465,8 @@ public sealed partial class EntityCapabilityService {
                 activityKind,
                 utcOffsetMinutes,
                 occurredAt,
-                attemptCancellationToken),
+                attemptCancellationToken,
+                listening),
             cancellationToken);
     }
 
@@ -482,7 +484,8 @@ public sealed partial class EntityCapabilityService {
         ConsumptionActivityKind? activityKind,
         int? utcOffsetMinutes,
         DateTimeOffset occurredAt,
-        CancellationToken cancellationToken) {
+        CancellationToken cancellationToken,
+        BookListeningPositionRequest? listening) {
         // Progress ownership is derived from the requested entity only. A cursor is data within
         // that owner tree; it must never be allowed to redirect this mutation to another work.
         if (_visibility is not null &&
@@ -521,6 +524,18 @@ public sealed partial class EntityCapabilityService {
 
         if (!entity.Definition.SupportsDefaultCapability<CapabilityProgress>()) {
             return null;
+        }
+
+        if (listening is not null) {
+            if (entity.Kind != EntityKind.Book ||
+                !double.IsFinite(listening.OffsetSeconds) || listening.OffsetSeconds < 0 ||
+                _visibility is not null && !await _visibility.IsVisibleAsync(listening.TrackEntityId, cancellationToken)) {
+                return null;
+            }
+            var track = await _entities.FindShallowAsync(listening.TrackEntityId, cancellationToken);
+            if (track?.Kind != EntityKind.AudioTrack || track.ParentEntityId != entity.Id) {
+                return null;
+            }
         }
 
         var progress = GetOrAddDefaultCapability<CapabilityProgress>(entity)!;
@@ -565,6 +580,30 @@ public sealed partial class EntityCapabilityService {
                 ? consumedTotal
                 : Math.Max(progress.ConsumedCount, consumedTotal > 0 ? consumedIndex + 1 : 0);
 
+        var retainedCheckpoint = false;
+        if (entity.Kind == EntityKind.Book) {
+            if (listening is not null) {
+                retainedCheckpoint = progress.RecordListening(new BookListeningCheckpoint(
+                    listening.TrackEntityId,
+                    listening.MarkerId,
+                    listening.OffsetSeconds,
+                    targetCursorId,
+                    unit,
+                    normalizedIndex,
+                    normalizedTotal,
+                    occurredAt));
+            } else if (activityKind != ConsumptionActivityKind.Listening) {
+                retainedCheckpoint = progress.RecordReading(new BookReadingCheckpoint(
+                    targetCursorId,
+                    unit,
+                    normalizedIndex,
+                    normalizedTotal,
+                    mode,
+                    normalizedLocation,
+                    occurredAt));
+            }
+        }
+
         // Explicit start-over resets coverage; ordinary progress always follows the most recent
         // accepted cursor even when it moved backward.
         if (reset) {
@@ -577,7 +616,7 @@ public sealed partial class EntityCapabilityService {
                     mode,
                     occurredAt,
                     normalizedLocation,
-                    consumedCount: 0) || hasActivity) {
+                    consumedCount: 0) || retainedCheckpoint || hasActivity) {
                 await SaveProgressStateAsync(entity, cancellationToken);
             }
             return entity.Id;
@@ -593,7 +632,7 @@ public sealed partial class EntityCapabilityService {
                 normalizedLocation,
                 completed: completed == true,
                 consumedCount: consumedCount)) {
-            if (hasActivity) {
+            if (retainedCheckpoint || hasActivity) {
                 await SaveProgressStateAsync(entity, cancellationToken);
             }
             return entity.Id;

@@ -1,10 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { PROGRESS_UNIT, READER_MODE } from "$lib/api/generated/codes";
+import { CAPABILITY_KIND, CONSUMPTION_ACTIVITY_KIND, PROGRESS_UNIT, READER_MODE } from "$lib/api/generated/codes";
 import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
 import type { BookChapterRow } from "$lib/entities/book-chapter-list";
 import {
   buildBookProgressMappings,
   bookProgressUpdateForAudio,
+  exactBookListeningResume,
   legacyBookProgressPromotion,
   resolveBookAudioResume,
   resolveBookCombinedResume,
@@ -153,6 +154,7 @@ describe("unified book progress", () => {
       endIndex: 4000,
       total: 10000,
       mode: READER_MODE.paged,
+      audioMarkerId: null,
     });
     expect(bookProgressUpdateForAudio(mapping, 900, 1200, 15, false)).toEqual({
       currentEntityId: "book-1",
@@ -163,8 +165,41 @@ describe("unified book progress", () => {
       location: null,
       completed: null,
       activitySeconds: 15,
-      activityKind: "listening",
+      activityKind: CONSUMPTION_ACTIVITY_KIND.listening,
+      listening: {
+        trackEntityId: "audio-1",
+        markerId: null,
+        offsetSeconds: 900,
+      },
     });
+  });
+
+  it("uses an exact saved track time before a mapped chapter approximation", () => {
+    const progress = {
+      kind: CAPABILITY_KIND.progress,
+      currentEntityId: "book-1",
+      unit: PROGRESS_UNIT.cfi,
+      index: 3000,
+      total: 10000,
+      mode: READER_MODE.paged,
+      completedAt: null,
+      updatedAt: null,
+      listening: {
+        trackEntityId: "audio-1",
+        markerId: "marker-2",
+        offsetSeconds: 925.25,
+        currentEntityId: "book-1",
+        unit: PROGRESS_UNIT.cfi,
+        index: 3100,
+        total: 10000,
+        updatedAt: "2026-09-22T00:00:00Z",
+      },
+    };
+
+    expect(exactBookListeningResume(progress, ["audio-1"]))
+      .toEqual({ trackId: "audio-1", trackOffsetSeconds: 925.25 });
+    expect(exactBookListeningResume(progress, ["replacement-track"]))
+      .toBeNull();
   });
 
   it("maps audio to a page only within the matched readable chapter", () => {
@@ -205,6 +240,7 @@ describe("unified book progress", () => {
         endIndex: 1200,
         total: 1200,
         mode: null,
+        audioMarkerId: null,
       });
   });
 

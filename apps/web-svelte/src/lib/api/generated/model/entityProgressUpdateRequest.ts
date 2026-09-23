@@ -4,6 +4,7 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { BookListeningPositionRequest } from './bookListeningPositionRequest';
 import type { EntityProgressUpdateRequestActivityKind } from './entityProgressUpdateRequestActivityKind';
 import type { ProgressUnit } from './progressUnit';
 import type { ReaderMode } from './readerMode';
@@ -32,4 +33,5 @@ export interface EntityProgressUpdateRequest {
      * @pattern ^-?(?:0|[1-9]\d*)$
      */
   utcOffsetMinutes?: number | string | null;
+  listening?: null | BookListeningPositionRequest;
 }

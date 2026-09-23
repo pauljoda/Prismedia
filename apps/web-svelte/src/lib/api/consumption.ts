@@ -58,6 +58,7 @@ export async function updateEntityProgress(
     activitySeconds?: number | null;
     activityKind?: ConsumptionActivityKindCode;
     utcOffsetMinutes?: number | null;
+    listening?: EntityProgressUpdateRequest["listening"];
   },
   options?: RequestOptions,
 ): Promise<void> {
@@ -76,6 +77,7 @@ export async function updateEntityProgress(
         activitySeconds: payload.activitySeconds ?? null,
         activityKind: payload.activityKind,
         utcOffsetMinutes: payload.utcOffsetMinutes ?? localUtcOffsetMinutes(),
+        listening: payload.listening ?? null,
       } as EntityProgressUpdateRequest,
       {
         ...requestInit(options),

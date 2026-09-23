@@ -39,6 +39,21 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.ProgressCompletedAt).HasColumnName("progress_completed_at");
             entity.Property(row => row.ProgressUpdatedAt).HasColumnName("progress_updated_at");
             entity.Property(row => row.ProgressConsumedCount).HasColumnName("progress_consumed_count");
+            entity.Property(row => row.ReadingCurrentEntityId).HasColumnName("reading_current_entity_id");
+            entity.Property(row => row.ReadingUnit).HasColumnName("reading_unit").HasMaxLength(64);
+            entity.Property(row => row.ReadingIndex).HasColumnName("reading_index");
+            entity.Property(row => row.ReadingTotal).HasColumnName("reading_total");
+            entity.Property(row => row.ReadingMode).HasColumnName("reading_mode").HasMaxLength(64);
+            entity.Property(row => row.ReadingLocation).HasColumnName("reading_location");
+            entity.Property(row => row.ReadingUpdatedAt).HasColumnName("reading_updated_at");
+            entity.Property(row => row.ListeningTrackEntityId).HasColumnName("listening_track_entity_id");
+            entity.Property(row => row.ListeningMarkerId).HasColumnName("listening_marker_id");
+            entity.Property(row => row.ListeningOffsetSeconds).HasColumnName("listening_offset_seconds");
+            entity.Property(row => row.ListeningCurrentEntityId).HasColumnName("listening_current_entity_id");
+            entity.Property(row => row.ListeningUnit).HasColumnName("listening_unit").HasMaxLength(64);
+            entity.Property(row => row.ListeningIndex).HasColumnName("listening_index");
+            entity.Property(row => row.ListeningTotal).HasColumnName("listening_total");
+            entity.Property(row => row.ListeningUpdatedAt).HasColumnName("listening_updated_at");
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
             // Resume shelves: one user's consumption ordered by the latest real activity.
             entity.HasIndex(row => new { row.UserId, row.LastActiveAt })
@@ -50,6 +65,9 @@ internal static partial class PrismediaModelConfiguration {
             entity.HasOne<EntityRow>().WithMany().HasForeignKey(row => row.EntityId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<EntityRow>().WithMany().HasForeignKey(row => row.ProgressCurrentEntityId).OnDelete(DeleteBehavior.SetNull);
             entity.ToTable(table => table.HasCheckConstraint("ck_user_entity_states_progress_bounds", "progress_index >= 0 AND progress_total >= 0"));
+            entity.ToTable(table => table.HasCheckConstraint(
+                "ck_user_entity_states_book_checkpoint_bounds",
+                "(reading_index IS NULL OR reading_index >= 0) AND (reading_total IS NULL OR reading_total >= 0) AND (listening_index IS NULL OR listening_index >= 0) AND (listening_total IS NULL OR listening_total >= 0) AND (listening_offset_seconds IS NULL OR listening_offset_seconds >= 0)"));
         });
 
         modelBuilder.Entity<EntityConsumptionEventRow>(entity => {

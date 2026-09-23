@@ -325,7 +325,28 @@ internal sealed class ProgressCapabilityProjector : EntityCapabilityProjector<Pr
                 ConsumedTotal: progress.Total,
                 ConsumedPercent: progress.Total > 0
                     ? Math.Clamp(progress.ConsumedCount / (double)progress.Total, 0, 1)
-                    : 0)
+                    : 0,
+                Reading: progress.Reading is { } reading
+                    ? new BookReadingProgress(
+                        reading.CurrentEntityId,
+                        reading.Unit,
+                        reading.Index,
+                        reading.Total,
+                        reading.Mode,
+                        reading.Location,
+                        reading.UpdatedAt)
+                    : null,
+                Listening: progress.Listening is { } listening
+                    ? new BookListeningProgress(
+                        listening.TrackEntityId,
+                        listening.MarkerId,
+                        listening.OffsetSeconds,
+                        listening.CurrentEntityId,
+                        listening.Unit,
+                        listening.Index,
+                        listening.Total,
+                        listening.UpdatedAt)
+                    : null)
             : null;
 }
 

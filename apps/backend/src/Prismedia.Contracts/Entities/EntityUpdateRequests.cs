@@ -60,6 +60,7 @@ public sealed record ConsumptionEventCreateRequest(
 /// <param name="ActivitySeconds">Optional active time since the client's preceding heartbeat.</param>
 /// <param name="ActivityKind">Viewing, listening, or reading mode for <paramref name="ActivitySeconds"/>.</param>
 /// <param name="UtcOffsetMinutes">Client wall-clock offset used to choose the daily activity bucket.</param>
+/// <param name="Listening">Exact physical audiobook position when this Book update came from playback.</param>
 public sealed record EntityProgressUpdateRequest(
     Guid CurrentEntityId,
     ProgressUnit Unit,
@@ -71,7 +72,8 @@ public sealed record EntityProgressUpdateRequest(
     string? Location = null,
     double? ActivitySeconds = null,
     ConsumptionActivityKind? ActivityKind = null,
-    int? UtcOffsetMinutes = null);
+    int? UtcOffsetMinutes = null,
+    BookListeningPositionRequest? Listening = null);
 
 /// <summary>
 /// Request body for creating or updating a timeline marker.

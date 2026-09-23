@@ -17,4 +17,6 @@ public sealed record ProgressCapability(
     string? Location = null,
     int ConsumedCount = 0,
     int? ConsumedTotal = null,
-    double ConsumedPercent = 0) : EntityCapability;
+    double ConsumedPercent = 0,
+    BookReadingProgress? Reading = null,
+    BookListeningProgress? Listening = null) : EntityCapability;

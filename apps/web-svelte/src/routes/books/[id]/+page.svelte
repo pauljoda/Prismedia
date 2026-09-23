@@ -4,6 +4,7 @@
     BOOK_FORMAT,
     BOOK_RENDITION,
     CAPABILITY_KIND,
+    CONSUMPTION_ACTIVITY_KIND,
     PROGRESS_UNIT,
     READER_MODE,
     type BookRenditionCode,
@@ -85,6 +86,7 @@
   import {
     buildBookProgressMappings,
     bookProgressCursor,
+    exactBookListeningResume,
     epubChapterFraction,
     resolveBookAudioResume,
     resolveBookCombinedResume,
@@ -153,11 +155,12 @@
   const currentEpubChapterId = $derived.by((): string | null => {
     if (!book || bookMetadata?.format !== BOOK_FORMAT.epub || epubContents.length === 0) return null;
     const progress = getCapability(book.capabilities, CAPABILITY_KIND.progress);
-    const currentLocation = progress?.completedAt ? null : progress?.location;
-    const progressTotal = numberValue(progress?.total) ?? 0;
+    const reading = progress?.reading ?? progress;
+    const currentLocation = progress?.completedAt ? null : reading?.location;
+    const progressTotal = numberValue(reading?.total) ?? 0;
     const currentFraction = progress?.completedAt || progressTotal <= 0
       ? null
-      : (numberValue(progress?.index) ?? 0) / progressTotal;
+      : (numberValue(reading?.index) ?? 0) / progressTotal;
     return resolveCurrentContentsEntry(epubContents, currentLocation, currentFraction)?.id ?? null;
   });
   const bookType = $derived(bookMetadata?.bookType ?? null);
@@ -169,8 +172,9 @@
     !!book && hasReadableBookFile(book.capabilities),
   );
   const singleFileProgress = $derived(book && isSingleFileBook ? getCapability(book.capabilities, CAPABILITY_KIND.progress) : null);
+  const singleFileReading = $derived(singleFileProgress?.reading ?? singleFileProgress);
   // Started once a position has been saved (EPUB and PDF both set currentEntityId to the book id).
-  const singleFileInProgress = $derived(!!singleFileProgress?.currentEntityId && !singleFileProgress?.completedAt);
+  const singleFileInProgress = $derived(!!singleFileReading?.currentEntityId && !singleFileProgress?.completedAt);
   // Single-file books have no chapter entities, so they need their own progress-panel display.
   const singleFileProgressDisplay = $derived(isSingleFileBook ? singleFileBookProgressDisplay(book) : null);
   const peopleLabel = "People";
@@ -233,7 +237,7 @@
   const bookProgressMappings = $derived(buildBookProgressMappings(
     book?.id ?? "",
     baseChapterRows,
-    bookProgress?.mode ?? READER_MODE.paged,
+    bookProgress?.reading?.mode ?? bookProgress?.mode ?? READER_MODE.paged,
   ));
   useLegacyBookProgressMigration(
     () => book,
@@ -241,11 +245,10 @@
     () => bookProgressMappings,
     () => detail.reload({ showLoading: false }),
   );
-  const savedAudiobookResume = $derived(resolveBookAudioResume(
-    baseChapterRows,
-    bookProgressMappings,
-    bookProgressCursor(bookProgress),
-  ));
+  const savedAudiobookResume = $derived(
+    exactBookListeningResume(bookProgress, audiobookTracks.map((track) => track.id))
+      ?? resolveBookAudioResume(baseChapterRows, bookProgressMappings, bookProgressCursor(bookProgress)),
+  );
   const currentAudiobookTrackId = $derived(
     isCurrentAudiobook
       ? playback.currentTrack?.id ?? savedAudiobookResume?.trackId ?? null
@@ -878,6 +881,14 @@
         mode: bookProgress.mode,
         location: bookProgress.location,
         completed: listened,
+        activityKind: CONSUMPTION_ACTIVITY_KIND.listening,
+        listening: bookProgress.listening
+          ? {
+              trackEntityId: bookProgress.listening.trackEntityId,
+              markerId: bookProgress.listening.markerId ?? null,
+              offsetSeconds: Number(bookProgress.listening.offsetSeconds),
+            }
+          : undefined,
       });
       await detail.reload({ showLoading: false });
     } finally {
@@ -901,6 +912,12 @@
         mode: firstMapping.mode,
         location: null,
         reset: true,
+        activityKind: CONSUMPTION_ACTIVITY_KIND.listening,
+        listening: {
+          trackEntityId: firstTrack.id,
+          markerId: firstMapping.audioMarkerId ?? null,
+          offsetSeconds: 0,
+        },
       });
       listenToBook({ startOver: true });
       await detail.reload({ showLoading: false });

@@ -28,7 +28,9 @@ internal static class UserEntityStateColumns {
         row.ProgressLocation is not null ||
         row.ProgressCompletedAt is not null ||
         row.ProgressUpdatedAt is not null ||
-        row.ProgressConsumedCount > 0;
+        row.ProgressConsumedCount > 0 ||
+        row.ReadingUpdatedAt is not null ||
+        row.ListeningUpdatedAt is not null;
 
     /// <summary>
     /// Finds the state row through EF's identity map. Hydration deliberately keeps this row
