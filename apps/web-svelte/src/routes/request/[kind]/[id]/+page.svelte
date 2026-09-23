@@ -12,10 +12,11 @@
   } from "$lib/api/generated/codes";
   import type { EntityMetadataProposal } from "$lib/api/identify-types";
   import { ApiError } from "$lib/api/orval-fetch";
-  import { commitReviewedRequest, fetchRequestReview, prepareManagedBook, reviewRequest } from "$lib/api/requests";
+  import { commitReviewedRequest, fetchRequestReview, reviewRequest } from "$lib/api/requests";
   import { saveReviewedManagedRequest, type ManagedRequestChoice } from "$lib/api/reviewed-managed-requests";
   import { ManagedRequestRejectedError } from "$lib/api/managed-requests";
   import ManagerRequestOptions from "$lib/components/integrations/ManagerRequestOptions.svelte";
+  import BookManagerRequest from "$lib/components/books/BookManagerRequest.svelte";
   import type { ManagedRequestOwnership } from "$lib/components/integrations/ManagerRequestOptions.svelte";
   import { reviewManagerTitle } from "$lib/api/managed-discovery";
   import { fetchConnections } from "$lib/api/connections";
@@ -558,11 +559,6 @@
         }
         return;
       }
-      if (bookManagerSelected && bookManagerAvailable && canChooseBookRenditions) {
-        const prepared = await prepareManagedBook({ ...reviewedCommitPayload(), bookRenditions: null });
-        await goto(resolve(`/books/${prepared.entityId}` as "/"));
-        return;
-      }
       const response = await commitReviewedRequest(reviewedCommitPayload(), nsfw.mode !== "show");
 
       if (canChooseBookRenditions && !response.bookRenditions) {
@@ -805,7 +801,12 @@
           Use a connected Book manager
         </label>
         {#if bookManagerSelected}
-          <p class="text-sm text-text-muted">Save this reviewed Book, then choose ebook, audiobook, or both and their mapped libraries on its Acquisition tab.</p>
+          {#if managerReviewPayload}
+            <BookManagerRequest request={{ ...managerReviewPayload, bookRenditions: null }}
+              title={activeTitle} hasEbook={false} hasAudiobook={false}
+              acquisitions={[]} monitors={[]} managedRenditions={[]}
+              onCompleted={id => goto(resolve(`/books/${id}` as "/"))} />
+          {/if}
         {/if}
       {/if}
 
@@ -836,14 +837,16 @@
       {:else if kindInfo && !managerSelected && !bookManagerSelected}
         <RequestTargetOptions {kindInfo} bind:targetLibraryRootId bind:profileId stacked />
       {/if}
-      <Button type="button" variant="primary" class="w-full gap-2"
-        disabled={submitting || reviewChanged || enrichmentRunning || !hasRequestIntent || (managerSelected && !managerChoice && !pendingManagerCommit && !managerOwnership)}
-        onclick={() => void requestSelection()}>
-        {#if submitting}<Loader2 class="h-4 w-4 animate-spin" />{:else if managerOwnership && !pendingManagerCommit}<ExternalLink class="h-4 w-4" />{:else}<Send class="h-4 w-4" />{/if}
-        {submitting ? (managerOwnership && !pendingManagerCommit ? "Opening…" : "Requesting…") : bookManagerSelected ? "Continue to Book manager" : pendingManagerCommit ? "Retry request" : managerOwnership ? "Open in library" : managedSeriesSelected && managedSeriesTargetCount > 0
-          ? `Request ${managedSeriesTargetCount}${managerChoice?.review.expansion ? " more" : ""} episode${managedSeriesTargetCount === 1 ? "" : "s"}` : canChooseBookRenditions ? `Request ${selectedBookRenditions.length === 2 ? "both formats" : selectedBookRenditions[0] === BOOK_RENDITION.audiobook ? "audiobook" : "ebook"}` : managedSeriesSelected ? "Request selected episodes" : selectsChildren && selectedProposalIds.length > 0
-            ? `Request ${selectedProposalIds.length} ${childNoun}${selectedProposalIds.length === 1 ? "" : "s"}` : "Request"}
-      </Button>
+      {#if !bookManagerSelected}
+        <Button type="button" variant="primary" class="w-full gap-2"
+          disabled={submitting || reviewChanged || enrichmentRunning || !hasRequestIntent || (managerSelected && !managerChoice && !pendingManagerCommit && !managerOwnership)}
+          onclick={() => void requestSelection()}>
+          {#if submitting}<Loader2 class="h-4 w-4 animate-spin" />{:else if managerOwnership && !pendingManagerCommit}<ExternalLink class="h-4 w-4" />{:else}<Send class="h-4 w-4" />{/if}
+          {submitting ? (managerOwnership && !pendingManagerCommit ? "Opening…" : "Requesting…") : pendingManagerCommit ? "Retry request" : managerOwnership ? "Open in library" : managedSeriesSelected && managedSeriesTargetCount > 0
+            ? `Request ${managedSeriesTargetCount}${managerChoice?.review.expansion ? " more" : ""} episode${managedSeriesTargetCount === 1 ? "" : "s"}` : canChooseBookRenditions ? `Request ${selectedBookRenditions.length === 2 ? "both formats" : selectedBookRenditions[0] === BOOK_RENDITION.audiobook ? "audiobook" : "ebook"}` : managedSeriesSelected ? "Request selected episodes" : selectsChildren && selectedProposalIds.length > 0
+              ? `Request ${selectedProposalIds.length} ${childNoun}${selectedProposalIds.length === 1 ? "" : "s"}` : "Request"}
+        </Button>
+      {/if}
       {#if pendingManagerCommit && !submitting}
         <p class="text-sm text-text-muted">Acceptance could not be confirmed. Retry checks this same request safely.</p>
       {/if}

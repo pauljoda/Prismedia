@@ -8,21 +8,23 @@ import {
   MANAGED_REQUEST_PHASE,
   PLUGIN_CAPABILITY,
 } from "$lib/api/generated/codes";
-import type { ConnectionResponse, ManagedRequestPreview, ManagedRequestResponse } from "$lib/api/generated/model";
+import type { CommitManagedBookRequestInput, ConnectionResponse, ManagedRequestResponse, ReviewManagedBookRequestInput, ReviewedManagedBookRendition } from "$lib/api/generated/model";
 import BookManagerRequest from "./BookManagerRequest.svelte";
 
 const api = vi.hoisted(() => ({
   fetchConnections: vi.fn(),
   fetchLibraryMounts: vi.fn(),
-  fetchManagedRequestPreview: vi.fn(),
-  saveManagedRequest: vi.fn(),
+  reviewManagedBook: vi.fn(),
+  saveManagedBook: vi.fn(),
 }));
 vi.mock("$lib/api/connections", () => ({ fetchConnections: api.fetchConnections }));
 vi.mock("$lib/api/managed-libraries", () => ({ fetchLibraryMounts: api.fetchLibraryMounts }));
 vi.mock("$lib/api/managed-requests", () => ({
-  fetchManagedRequestPreview: api.fetchManagedRequestPreview,
-  saveManagedRequest: api.saveManagedRequest,
   ManagedRequestRejectedError: class extends Error {},
+}));
+vi.mock("$lib/api/managed-book-requests", () => ({
+  reviewManagedBook: api.reviewManagedBook,
+  saveManagedBook: api.saveManagedBook,
 }));
 vi.mock("@prismedia/ui-svelte", async (original) => ({
   ...await original<typeof import("@prismedia/ui-svelte")>(),
@@ -48,9 +50,9 @@ const ebookMount = { id: "ebook-mount", connectionId: connection.id, libraryRoot
   remotePath: "/books", localPath: "/mapped/books", label: "Ebooks" };
 const audioMount = { id: "audio-mount", connectionId: connection.id, libraryRootId: "audio-root", remoteRootId: "audio",
   remotePath: "/audio", localPath: "/mapped/audio", label: "Audiobooks" };
-function preview(rendition: typeof BOOK_RENDITION[keyof typeof BOOK_RENDITION]): ManagedRequestPreview {
+function preview(rendition: typeof BOOK_RENDITION[keyof typeof BOOK_RENDITION]): ReviewedManagedBookRendition {
   return {
-    entityId: "book", title: "Frankenstein",
+    rendition,
     work: { entityKind: ENTITY_KIND.book, externalIds: { openlibrarywork: "OL450063W" }, bookRendition: rendition },
     mount: rendition === BOOK_RENDITION.ebook ? ebookMount : audioMount,
     options: { profiles: [], roots: [] }, existing: null,
@@ -79,11 +81,18 @@ describe("Book manager request", () => {
     vi.resetAllMocks();
     api.fetchConnections.mockResolvedValue([connection]);
     api.fetchLibraryMounts.mockResolvedValue([ebookMount, audioMount]);
-    api.fetchManagedRequestPreview.mockImplementation(async (_connectionId, input) => preview(input.bookRendition));
-    api.saveManagedRequest.mockImplementation(async (_connectionId, input) => response(input.reviewedWork.bookRendition));
+    api.reviewManagedBook.mockImplementation(async (_connectionId: string, input: ReviewManagedBookRequestInput) => ({
+      connectionRevision: 1, title: "Frankenstein",
+      renditions: input.renditions.map(choice => preview(choice.rendition)),
+    }));
+    api.saveManagedBook.mockImplementation(async (_connectionId: string, input: CommitManagedBookRequestInput) => ({
+      entityId: "book", renditions: input.renditions.map(choice => ({
+        rendition: choice.rendition, request: response(choice.rendition), error: null,
+      })),
+    }));
   });
 
-  it("previews and accepts ebook and audiobook as separate exact manager intents", async () => {
+  it("reviews and accepts both exact formats with one stable manager submission", async () => {
     const onChanged = vi.fn();
     const onAccepted = vi.fn();
     render(BookManagerRequest, { bookId: "book", title: "Frankenstein", hasEbook: false, hasAudiobook: false,
@@ -97,31 +106,38 @@ describe("Book manager request", () => {
     expect(screen.getByRole("combobox", { name: "Audiobook mapped library" })).toHaveValue("audio-root");
     expect(screen.getByRole("button", { name: "Review manager request" })).toBeEnabled();
     await fireEvent.click(screen.getByRole("button", { name: "Review manager request" }));
-    await waitFor(() => expect(api.fetchManagedRequestPreview).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(api.reviewManagedBook).toHaveBeenCalledTimes(1));
     await screen.findByRole("button", { name: "Request both formats" });
-    expect(api.fetchManagedRequestPreview.mock.calls.map(call => call[1])).toEqual([
-      { entityId: "book", libraryRootId: "ebook-root", bookRendition: BOOK_RENDITION.ebook },
-      { entityId: "book", libraryRootId: "audio-root", bookRendition: BOOK_RENDITION.audiobook },
-    ]);
+    expect(api.reviewManagedBook.mock.calls[0][1]).toEqual({
+      entityId: "book", request: null, renditions: [
+        { rendition: BOOK_RENDITION.ebook, libraryRootId: "ebook-root", search: false },
+        { rendition: BOOK_RENDITION.audiobook, libraryRootId: "audio-root", search: false },
+      ],
+    });
 
     await fireEvent.click(screen.getByRole("button", { name: "Request both formats" }));
-    await waitFor(() => expect(api.saveManagedRequest).toHaveBeenCalledTimes(2));
-    const intents = api.saveManagedRequest.mock.calls.map(call => call[1]);
-    expect(intents.map(intent => [intent.libraryRootId, intent.reviewedWork.bookRendition, intent.profileId, intent.monitored])).toEqual([
-      ["ebook-root", BOOK_RENDITION.ebook, null, true],
-      ["audio-root", BOOK_RENDITION.audiobook, null, true],
-    ]);
-    expect(intents[0].operationId).not.toBe(intents[1].operationId);
+    await waitFor(() => expect(api.saveManagedBook).toHaveBeenCalledTimes(1));
+    expect(api.saveManagedBook.mock.calls[0][1]).toEqual(expect.objectContaining({
+      entityId: "book", request: null, expectedConnectionRevision: 1,
+      renditions: [
+        { rendition: BOOK_RENDITION.ebook, libraryRootId: "ebook-root", search: false },
+        { rendition: BOOK_RENDITION.audiobook, libraryRootId: "audio-root", search: false },
+      ],
+    }));
     expect(onAccepted.mock.calls.map(call => call[0])).toEqual([BOOK_RENDITION.ebook, BOOK_RENDITION.audiobook]);
     expect(onChanged).toHaveBeenCalledOnce();
   });
 
-  it("retries the same audiobook operation after an uncertain response without repeating the accepted ebook", async () => {
+  it("reviews the remaining format again after a partial failure", async () => {
     const onChanged = vi.fn();
     const onAccepted = vi.fn();
-    api.saveManagedRequest.mockResolvedValueOnce(response(BOOK_RENDITION.ebook))
-      .mockRejectedValueOnce(new Error("Response interrupted"))
-      .mockResolvedValueOnce(response(BOOK_RENDITION.audiobook));
+    api.saveManagedBook.mockResolvedValueOnce({ entityId: "book", renditions: [
+      { rendition: BOOK_RENDITION.ebook, request: response(BOOK_RENDITION.ebook), error: null },
+      { rendition: BOOK_RENDITION.audiobook, request: null, error: "Review and retry" },
+    ] }).mockResolvedValueOnce({ entityId: "book", renditions: [
+      { rendition: BOOK_RENDITION.ebook, request: response(BOOK_RENDITION.ebook), error: null },
+      { rendition: BOOK_RENDITION.audiobook, request: response(BOOK_RENDITION.audiobook), error: null },
+    ] });
     render(BookManagerRequest, { bookId: "book", title: "Frankenstein", hasEbook: false, hasAudiobook: false,
       acquisitions: [], monitors: [], managedRenditions: [], onAccepted, onChanged });
     await fireEvent.click(await screen.findByRole("checkbox", { name: "Ebook" }));
@@ -131,16 +147,54 @@ describe("Book manager request", () => {
     await chooseRoot("Audiobook", "Audiobooks");
     expect(screen.getByRole("button", { name: "Review manager request" })).toBeEnabled();
     await fireEvent.click(screen.getByRole("button", { name: "Review manager request" }));
-    await waitFor(() => expect(api.fetchManagedRequestPreview).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(api.reviewManagedBook).toHaveBeenCalledTimes(1));
     await fireEvent.click(await screen.findByRole("button", { name: "Request both formats" }));
-    await screen.findByText(/Audiobook: Response interrupted/);
+    await screen.findByText(/Audiobook: Review and retry/);
     expect(onAccepted).toHaveBeenCalledExactlyOnceWith(BOOK_RENDITION.ebook);
     expect(onChanged).not.toHaveBeenCalled();
-    await fireEvent.click(screen.getByRole("button", { name: "Retry same request" }));
-    await waitFor(() => expect(api.saveManagedRequest).toHaveBeenCalledTimes(3));
-    expect(api.saveManagedRequest.mock.calls[2][1]).toEqual(api.saveManagedRequest.mock.calls[1][1]);
-    expect(api.saveManagedRequest.mock.calls[0][1].operationId).not.toBe(api.saveManagedRequest.mock.calls[2][1].operationId);
+    expect(screen.getByRole("combobox", { name: "Ebook mapped library" })).toBeDisabled();
+    expect(screen.getByRole("combobox", { name: "Audiobook mapped library" })).toBeEnabled();
+    await fireEvent.click(screen.getByRole("button", { name: "Review manager request" }));
+    await waitFor(() => expect(api.reviewManagedBook).toHaveBeenCalledTimes(2));
+    await fireEvent.click(screen.getByRole("button", { name: "Request both formats" }));
+    await waitFor(() => expect(api.saveManagedBook).toHaveBeenCalledTimes(2));
+    expect(api.saveManagedBook.mock.calls[1][1].operationId)
+      .not.toEqual(api.saveManagedBook.mock.calls[0][1].operationId);
     expect(onChanged).toHaveBeenCalledOnce();
     expect(onAccepted.mock.calls.map(call => call[0])).toEqual([BOOK_RENDITION.ebook, BOOK_RENDITION.audiobook]);
+  });
+
+  it("retries the same operation when acceptance cannot be confirmed", async () => {
+    api.saveManagedBook.mockRejectedValueOnce(new Error("Could not confirm acceptance"));
+    render(BookManagerRequest, { bookId: "book", title: "Frankenstein", hasEbook: false, hasAudiobook: false,
+      acquisitions: [], monitors: [], managedRenditions: [] });
+    await fireEvent.click(await screen.findByRole("checkbox", { name: "Ebook" }));
+    await screen.findByRole("combobox", { name: "Ebook mapped library" });
+    await chooseRoot("Ebook", "Ebooks");
+    await fireEvent.click(screen.getByRole("button", { name: "Review manager request" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Request ebook" }));
+    await screen.findByText("Could not confirm acceptance");
+    await fireEvent.click(screen.getByRole("button", { name: "Retry same request" }));
+    await waitFor(() => expect(api.saveManagedBook).toHaveBeenCalledTimes(2));
+    expect(api.saveManagedBook.mock.calls[1][1]).toEqual(api.saveManagedBook.mock.calls[0][1]);
+  });
+
+  it("submits fresh reviewed metadata and the selected manager format together", async () => {
+    const onCompleted = vi.fn();
+    const request = { kind: "book", pluginId: "open-library", bookRenditions: null } as never;
+    render(BookManagerRequest, { request, title: "Frankenstein", hasEbook: false, hasAudiobook: false,
+      acquisitions: [], monitors: [], managedRenditions: [], onCompleted });
+    await fireEvent.click(await screen.findByRole("checkbox", { name: "Ebook" }));
+    await screen.findByRole("combobox", { name: "Ebook mapped library" });
+    await chooseRoot("Ebook", "Ebooks");
+    await fireEvent.click(screen.getByRole("button", { name: "Review manager request" }));
+    await waitFor(() => expect(api.reviewManagedBook).toHaveBeenCalledWith(connection.id, {
+      entityId: null, request,
+      renditions: [{ rendition: BOOK_RENDITION.ebook, libraryRootId: "ebook-root", search: false }],
+    }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Request ebook" }));
+    await waitFor(() => expect(api.saveManagedBook).toHaveBeenCalledWith(connection.id,
+      expect.objectContaining({ entityId: null, request })));
+    expect(onCompleted).toHaveBeenCalledExactlyOnceWith("book");
   });
 });

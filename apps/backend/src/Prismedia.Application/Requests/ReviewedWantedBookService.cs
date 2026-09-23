@@ -43,6 +43,16 @@ public sealed class ReviewedWantedBookService(
         return new(book.EntityId, title.Trim(), false);
     }
 
+    /// <summary>Validates one reviewed Book without writing it, for connected-manager preflight.</summary>
+    public static (string WorkId, string Title) ReviewWork(ReviewedRequestCommitRequest request) {
+        var review = Validate(request);
+        var workId = review.Proposal.Patch!.ExternalIds[ExternalIdProviders.OpenLibraryWork];
+        var title = review.Proposal.Patch.Title ?? review.ExternalIdentity.Value;
+        if (string.IsNullOrWhiteSpace(title) || title.Length > 512)
+            throw new RequestCommitValidationException("The reviewed Book needs a valid title.");
+        return (workId, title.Trim());
+    }
+
     private static RequestReviewResponse Validate(ReviewedRequestCommitRequest request) {
         if (request.Kind is not (RequestMediaKind.Book or RequestMediaKind.Audiobook)
             || string.IsNullOrWhiteSpace(request.PluginId)

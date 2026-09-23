@@ -7,27 +7,26 @@
   } from "$lib/api/generated/codes";
   import type {
     ConnectionResponse,
-    CreateManagedRequestInput,
     AcquisitionDetail,
     ExternalLibraryMount,
     ExternalBookRenditionProvenance,
-    ManagedRequestPreview,
     ManagedRequestResponse,
     MonitorView,
+    ReviewedManagedBookRendition,
+    ReviewedRequestCommitRequest,
+    CommitManagedBookRequestInput,
   } from "$lib/api/generated/model";
   import { fetchConnections } from "$lib/api/connections";
   import { fetchLibraryMounts } from "$lib/api/managed-libraries";
-  import {
-    fetchManagedRequestPreview,
-    ManagedRequestRejectedError,
-    saveManagedRequest,
-  } from "$lib/api/managed-requests";
+  import { ManagedRequestRejectedError } from "$lib/api/managed-requests";
+  import { reviewManagedBook, saveManagedBook } from "$lib/api/managed-book-requests";
   import { createUuid } from "$lib/utils/uuid";
   import { supportsBookManager } from "$lib/requests/book-manager-connection";
   import { bookRenditionCanRequest, bookRenditionManagerOwner, bookRenditionRows } from "$lib/requests/book-rendition-acquisition";
 
   let {
-    bookId,
+    bookId = null,
+    request = null,
     title,
     hasEbook,
     hasAudiobook,
@@ -36,8 +35,10 @@
     managedRenditions,
     onAccepted,
     onChanged,
+    onCompleted,
   }: {
-    bookId: string;
+    bookId?: string | null;
+    request?: ReviewedRequestCommitRequest | null;
     title: string;
     hasEbook: boolean;
     hasAudiobook: boolean;
@@ -46,6 +47,7 @@
     managedRenditions: readonly ExternalBookRenditionProvenance[];
     onAccepted?: (rendition: BookRenditionCode) => void;
     onChanged?: () => void | Promise<void>;
+    onCompleted?: (bookId: string) => void | Promise<void>;
   } = $props();
 
   const renditions = [BOOK_RENDITION.ebook, BOOK_RENDITION.audiobook] as const;
@@ -54,8 +56,10 @@
   let mounts = $state<ExternalLibraryMount[]>([]);
   let selected = $state<BookRenditionCode[]>([]);
   let rootIds = $state<Partial<Record<BookRenditionCode, string>>>({});
-  let previews = $state<Partial<Record<BookRenditionCode, ManagedRequestPreview>>>({});
-  let pending = $state<Partial<Record<BookRenditionCode, CreateManagedRequestInput>>>({});
+  let previews = $state<Partial<Record<BookRenditionCode, ReviewedManagedBookRendition>>>({});
+  let reviewRevision = $state<number | string | null>(null);
+  let reviewedRequestJson = $state("");
+  let pendingCommit = $state<CommitManagedBookRequestInput | null>(null);
   let accepted = $state<Partial<Record<BookRenditionCode, ManagedRequestResponse>>>({});
   let search = $state(false);
   let loading = $state(true);
@@ -65,18 +69,18 @@
   let alive = true;
   let loadSequence = 0;
 
-  const available = $derived(bookRenditionRows(acquisitions, monitors, {
+  const available = $derived(request ? [...renditions] : bookRenditionRows(acquisitions, monitors, {
     ebook: hasEbook,
     audiobook: hasAudiobook,
   }).filter(row => bookRenditionCanRequest(row)
     && !bookRenditionManagerOwner(row.rendition, managedRenditions))
     .map(row => row.rendition));
   const selectedConnection = $derived(connections.find(connection => connection.id === connectionId) ?? null);
-  const reviewed = $derived(selected.length > 0 && selected.every(rendition =>
-    Boolean(accepted[rendition] || previews[rendition])));
+  const reviewed = $derived(pendingCommit !== null ||
+    (reviewedRequestJson === JSON.stringify(request) && selected.length > 0
+      && selected.every(rendition => Boolean(accepted[rendition] || previews[rendition]))));
   const hasAccepted = $derived(Object.values(accepted).some(Boolean));
-  const canSubmit = $derived(reviewed && selected.every(rendition =>
-    Boolean(pending[rendition] || previews[rendition])));
+  const canSubmit = $derived(reviewed && reviewRevision !== null);
 
   onMount(() => {
     void loadConnections();
@@ -114,10 +118,10 @@
   }
 
   function invalidateReview() {
-    if (hasAccepted) return;
+    if (pendingCommit) return;
     previews = {};
-    pending = {};
-    accepted = {};
+    reviewRevision = null;
+    reviewedRequestJson = "";
     error = null;
     needsReview = false;
   }
@@ -136,22 +140,19 @@
     if (!connectionId || selected.length === 0 || selected.some(rendition => !rootIds[rendition])) return;
     busy = true;
     error = null;
-    const previousPreviews = previews;
     previews = {};
     try {
-      const results: Partial<Record<BookRenditionCode, ManagedRequestPreview>> = {};
-      for (const rendition of selected) {
-        if (accepted[rendition]) {
-          results[rendition] = previousPreviews[rendition];
-          continue;
-        }
-        results[rendition] = await fetchManagedRequestPreview(connectionId, {
-          entityId: bookId,
-          libraryRootId: rootIds[rendition]!,
-          bookRendition: rendition,
-        });
+      const response = await reviewManagedBook(connectionId, {
+        entityId: bookId,
+        request,
+        renditions: selected.map(rendition => ({ rendition, libraryRootId: rootIds[rendition]!, search })),
+      });
+      if (alive) {
+        previews = Object.fromEntries(response.renditions.map(item => [item.rendition, item]));
+        reviewRevision = response.connectionRevision;
+        reviewedRequestJson = JSON.stringify(request);
+        needsReview = false;
       }
-      if (alive) { previews = results; needsReview = false; }
     } catch (cause) {
       if (alive) error = message(cause);
     } finally {
@@ -163,41 +164,43 @@
     if (!connectionId || !canSubmit || needsReview) return;
     busy = true;
     error = null;
-    let changed = false;
-    for (const rendition of selected) {
-      if (accepted[rendition]) continue;
-      const preview = previews[rendition];
-      if (!preview) continue;
-      const intent = pending[rendition] ?? {
-        operationId: createUuid(),
-        entityId: bookId,
-        libraryRootId: preview.mount.libraryRootId,
-        reviewedWork: preview.work,
-        profileId: null,
-        monitored: true,
-        search,
-      };
-      pending = { ...pending, [rendition]: intent };
-      try {
-        const result = await saveManagedRequest(connectionId, intent);
-        if (!alive) return;
-        accepted = { ...accepted, [rendition]: result };
-        pending = { ...pending, [rendition]: undefined };
-        onAccepted?.(rendition);
-        changed = true;
-      } catch (cause) {
-        if (!alive) return;
-        if (cause instanceof ManagedRequestRejectedError) {
-          pending = { ...pending, [rendition]: undefined };
-          needsReview = true;
+    const intent = pendingCommit ?? {
+      operationId: createUuid(),
+      expectedConnectionRevision: reviewRevision!,
+      entityId: bookId,
+      request,
+      renditions: selected.map(rendition => ({ rendition, libraryRootId: rootIds[rendition]!, search })),
+    };
+    pendingCommit = intent;
+    try {
+      const result = await saveManagedBook(connectionId, intent);
+      if (!alive) return;
+      const nextAccepted = { ...accepted };
+      for (const outcome of result.renditions) {
+        if (outcome.request) {
+          nextAccepted[outcome.rendition] = outcome.request;
+          if (!accepted[outcome.rendition]) onAccepted?.(outcome.rendition);
         }
-        error = `${label(rendition)}: ${message(cause)}${changed ? " The other format was accepted." : ""}`;
-        break;
       }
-    }
-    if (alive) {
-      busy = false;
-      if (changed && selected.every(rendition => Boolean(accepted[rendition]))) await onChanged?.();
+      accepted = nextAccepted;
+      error = result.renditions.filter(outcome => outcome.error)
+        .map(outcome => `${label(outcome.rendition)}: ${outcome.error}`).join(" ") || null;
+      pendingCommit = null;
+      if (error) {
+        needsReview = true;
+      } else {
+        await onChanged?.();
+        await onCompleted?.(result.entityId);
+      }
+    } catch (cause) {
+      if (!alive) return;
+      if (cause instanceof ManagedRequestRejectedError) {
+        pendingCommit = null;
+        needsReview = true;
+      }
+      error = message(cause);
+    } finally {
+      if (alive) busy = false;
     }
   }
 
@@ -221,19 +224,19 @@
     {#if connections.length > 0}
       <Select ariaLabel="Book manager" value={connectionId}
         options={[{ value: "", label: "Choose a book manager" }, ...connections.map(connection => ({ value: connection.id, label: connection.name }))]}
-        disabled={busy || hasAccepted || Object.values(pending).some(Boolean)} onchange={value => void selectConnection(value)} />
+        disabled={busy || hasAccepted || pendingCommit !== null} onchange={value => void selectConnection(value)} />
       {#if selectedConnection && mounts.length > 0}
         {#each available as rendition (rendition)}
           <div class="space-y-2 rounded-sm border border-border-subtle p-3">
             <label class="flex items-center gap-2 text-sm">
-              <Checkbox checked={selected.includes(rendition)} disabled={busy || hasAccepted}
+              <Checkbox checked={selected.includes(rendition)} disabled={busy || Boolean(accepted[rendition]) || pendingCommit !== null}
                 onchange={enabled => toggleRendition(rendition, enabled)} />
               {label(rendition)}
             </label>
             {#if selected.includes(rendition)}
               <Select ariaLabel={`${label(rendition)} mapped library`} value={rootIds[rendition] ?? ""}
                 options={[{ value: "", label: "Choose mapped library" }, ...mounts.map(mount => ({ value: mount.libraryRootId, label: mount.label }))]}
-                disabled={busy || hasAccepted} onchange={value => setRoot(rendition, value)} />
+                disabled={busy || Boolean(accepted[rendition]) || pendingCommit !== null} onchange={value => setRoot(rendition, value)} />
               {#if previews[rendition]}
                 <p class="text-xs text-text-muted">{previews[rendition].existing
                   ? "This work already exists in the manager. Its location will be retained."
@@ -251,7 +254,7 @@
             onclick={() => void review()}>Review manager request</Button>
         {:else if selected.some(rendition => !accepted[rendition])}
           <Button variant="primary" disabled={busy} onclick={() => void submit()}>
-            {Object.values(pending).some(Boolean) ? "Retry same request" : selected.length === 2 ? "Request both formats" : `Request ${label(selected[0]).toLowerCase()}`}
+            {pendingCommit ? "Retry same request" : selected.length === 2 ? "Request both formats" : `Request ${label(selected[0]).toLowerCase()}`}
           </Button>
         {/if}
       {:else if selectedConnection && !loading}

@@ -178,6 +178,30 @@ public sealed partial class RequestCommitServiceTests {
     }
 
     [Fact]
+    public void ConnectedBookReviewUsesTheExactReviewedWorkWithoutWriting() {
+        var (workId, title) = ReviewedWantedBookService.ReviewWork(ManagedBookReview());
+        Assert.Equal("OL43053199W", workId);
+        Assert.Equal("A Tale of Two Cities", title);
+    }
+
+    [Fact]
+    public void ConnectedBookBatchRequiresOneWorkAndUniqueMappedFormats() {
+        var book = ManagedBookReview();
+        var root = Guid.NewGuid();
+        var ebook = new ManagedBookRenditionChoice(BookRendition.Ebook, root, Search: false);
+        var audio = new ManagedBookRenditionChoice(BookRendition.Audiobook, Guid.NewGuid(), Search: true);
+
+        ReviewedManagedBookRequestService.Validate(null, book, [ebook, audio]);
+        ReviewedManagedBookRequestService.Validate(Guid.NewGuid(), null, [ebook]);
+        Assert.Throws<ArgumentException>(() =>
+            ReviewedManagedBookRequestService.Validate(Guid.NewGuid(), book, [ebook]));
+        Assert.Throws<ArgumentException>(() =>
+            ReviewedManagedBookRequestService.Validate(null, book, [ebook, ebook]));
+        Assert.Throws<ArgumentException>(() =>
+            ReviewedManagedBookRequestService.Validate(null, book, [ebook with { LibraryRootId = Guid.Empty }]));
+    }
+
+    [Fact]
     public async Task BookPreparationRejectsMissingWorkIdentityBeforeWriting() {
         var request = ManagedBookReview();
         var writer = new FakeWantedEntityWriter();

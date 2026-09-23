@@ -55,6 +55,8 @@ import type {
   CollectionWriteRequest,
   CommitBookRenditionsRequestParams,
   CommitEntityRequestParams,
+  CommitManagedBookRequestInput,
+  CommitManagedBookRequestResponse,
   CommitManagedComicIssueInput,
   CommitManagedComicIssueResponse,
   CommitRequestParams,
@@ -280,9 +282,11 @@ import type {
   RescanFileRootParams,
   ResolveIdentifyQueueCandidateParams,
   ReviewEntityRequestParams,
+  ReviewManagedBookRequestInput,
   ReviewManagedComicIssueInput,
   ReviewManagedRequestInput,
   ReviewRequestParams,
+  ReviewedManagedBookRequest,
   ReviewedManagedComicIssue,
   ReviewedManagedRequest,
   ReviewedManagedRequestCommitResponse,
@@ -9556,6 +9560,100 @@ export const previewManagedRequest = async (id: string,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       previewManagedRequestInput,)
+  }
+);}
+
+
+
+export type reviewManagedBookRequestResponse200 = {
+  data: ReviewedManagedBookRequest
+  status: 200
+}
+
+export type reviewManagedBookRequestResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type reviewManagedBookRequestResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type reviewManagedBookRequestResponseSuccess = (reviewManagedBookRequestResponse200) & {
+  headers: Headers;
+};
+export type reviewManagedBookRequestResponseError = (reviewManagedBookRequestResponse400 | reviewManagedBookRequestResponse409) & {
+  headers: Headers;
+};
+
+export type reviewManagedBookRequestResponse = (reviewManagedBookRequestResponseSuccess | reviewManagedBookRequestResponseError)
+
+export const getReviewManagedBookRequestUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/manager/requests/book/review`
+}
+
+export const reviewManagedBookRequest = async (id: string,
+    reviewManagedBookRequestInput: ReviewManagedBookRequestInput, options?: RequestInit): Promise<reviewManagedBookRequestResponse> => {
+
+  return orvalFetch<reviewManagedBookRequestResponse>(getReviewManagedBookRequestUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      reviewManagedBookRequestInput,)
+  }
+);}
+
+
+
+export type commitManagedBookRequestResponse202 = {
+  data: CommitManagedBookRequestResponse
+  status: 202
+}
+
+export type commitManagedBookRequestResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type commitManagedBookRequestResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type commitManagedBookRequestResponseSuccess = (commitManagedBookRequestResponse202) & {
+  headers: Headers;
+};
+export type commitManagedBookRequestResponseError = (commitManagedBookRequestResponse400 | commitManagedBookRequestResponse409) & {
+  headers: Headers;
+};
+
+export type commitManagedBookRequestResponse = (commitManagedBookRequestResponseSuccess | commitManagedBookRequestResponseError)
+
+export const getCommitManagedBookRequestUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/manager/requests/book/commit`
+}
+
+export const commitManagedBookRequest = async (id: string,
+    commitManagedBookRequestInput: CommitManagedBookRequestInput, options?: RequestInit): Promise<commitManagedBookRequestResponse> => {
+
+  return orvalFetch<commitManagedBookRequestResponse>(getCommitManagedBookRequestUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      commitManagedBookRequestInput,)
   }
 );}
 

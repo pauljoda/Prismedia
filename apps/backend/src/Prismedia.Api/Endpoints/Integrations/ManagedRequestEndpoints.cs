@@ -13,6 +13,30 @@ public static class ManagedRequestEndpoints {
         group.MapPost("/preview", async (Guid id, PreviewManagedRequestInput request, ManagedRequestService service, CancellationToken token) =>
             Results.Ok(await service.PreviewAsync(id, request, token)))
             .WithName("PreviewManagedRequest").Produces<ManagedRequestPreview>().Produces<ApiProblem>(400);
+        group.MapPost("/book/review", async (Guid id, ReviewManagedBookRequestInput request,
+            ReviewedManagedBookRequestService service, CancellationToken token) => {
+            try { return Results.Ok(await service.ReviewAsync(id, request, token)); }
+            catch (RequestProposalChangedException error) {
+                return Results.Conflict(new ApiProblem(ApiProblemCodes.RequestProposalChanged, error.Message));
+            }
+            catch (RequestCommitValidationException error) {
+                return Results.BadRequest(new ApiProblem(ApiProblemCodes.RequestInvalid, error.Message));
+            }
+        })
+            .WithName("ReviewManagedBookRequest").Produces<ReviewedManagedBookRequest>()
+            .Produces<ApiProblem>(400).Produces<ApiProblem>(409);
+        group.MapPost("/book/commit", async (Guid id, CommitManagedBookRequestInput request,
+            ReviewedManagedBookRequestService service, CancellationToken token) => {
+            try { return Results.Accepted(value: await service.CommitAsync(id, request, token)); }
+            catch (RequestProposalChangedException error) {
+                return Results.Conflict(new ApiProblem(ApiProblemCodes.RequestProposalChanged, error.Message));
+            }
+            catch (RequestCommitValidationException error) {
+                return Results.BadRequest(new ApiProblem(ApiProblemCodes.RequestInvalid, error.Message));
+            }
+        })
+            .WithName("CommitManagedBookRequest").Produces<CommitManagedBookRequestResponse>(202)
+            .Produces<ApiProblem>(400).Produces<ApiProblem>(409);
         group.MapPost("/comic-issue/review", async (Guid id, ReviewManagedComicIssueInput request,
             ReviewedManagedComicIssueService service, CancellationToken token) =>
             Results.Ok(await service.ReviewAsync(id, request, token)))

@@ -35,7 +35,7 @@ const mocks = vi.hoisted(() => ({
   reviewRequest: vi.fn(),
   reviewManagerTitle: vi.fn(), prepareManagerTitle: vi.fn(),
   fetchReviewedManagedRequest: vi.fn(), saveReviewedManagedRequest: vi.fn(),
-  prepareManagedBook: vi.fn(), prepareManagedMovie: vi.fn(), prepareManagedSeries: vi.fn(), fetchConnections: vi.fn(), fetchManagedRequests: vi.fn(), fetchLibraryMounts: vi.fn(), isAdmin: false,
+  prepareManagedMovie: vi.fn(), prepareManagedSeries: vi.fn(), fetchConnections: vi.fn(), fetchManagedRequests: vi.fn(), fetchLibraryMounts: vi.fn(), isAdmin: false,
 }));
 
 vi.mock("$lib/api/requests", () => ({
@@ -43,7 +43,6 @@ vi.mock("$lib/api/requests", () => ({
   fetchRequestReview: mocks.fetchRequestReview,
   reviewRequest: mocks.reviewRequest,
   prepareManagedMovie: mocks.prepareManagedMovie,
-  prepareManagedBook: mocks.prepareManagedBook,
   prepareManagedSeries: mocks.prepareManagedSeries,
 }));
 vi.mock("$lib/api/connections", () => ({ fetchConnections: mocks.fetchConnections }));
@@ -831,7 +830,7 @@ describe("reviewed request route", () => {
     expect(mocks.goto).toHaveBeenCalledWith("/books/book-entity");
   });
 
-  it("saves an exact reviewed Book for its connected manager without starting native acquisition", async () => {
+  it("keeps reviewed Book manager controls in the same Request flow", async () => {
     mocks.isAdmin = true;
     const review = audiobookReview();
     review.proposal.patch!.externalIds[EXTERNAL_ID_PROVIDER.openLibraryWork] = "OL43053199W";
@@ -846,20 +845,15 @@ describe("reviewed request route", () => {
           operations: [INTEGRATION_OPERATION.getLibraryItem, INTEGRATION_OPERATION.listLibraries] },
       ],
     }]);
-    mocks.prepareManagedBook.mockResolvedValue({ entityId: "wanted-book", title: "Project Hail Mary", hasFile: false });
     setRoute(REQUEST_MEDIA_KIND.audiobook, review.externalIdentity.value,
       `plugin=${review.pluginId}&namespace=${review.externalIdentity.namespace}`);
 
     render(Page);
 
     await fireEvent.click(await screen.findByRole("checkbox", { name: "Use a connected Book manager" }));
-    expect(screen.queryByRole("checkbox", { name: "Ebook" })).not.toBeInTheDocument();
-    await fireEvent.click(screen.getByRole("button", { name: "Continue to Book manager" }));
-    await waitFor(() => expect(mocks.goto).toHaveBeenCalledWith("/books/wanted-book"));
-    expect(mocks.prepareManagedBook).toHaveBeenCalledWith(expect.objectContaining({
-      kind: REQUEST_MEDIA_KIND.audiobook, review,
-      selectedProposalIds: ["audiobook-root"], bookRenditions: null,
-    }));
+    expect(screen.getByRole("checkbox", { name: "Ebook" })).toBeInTheDocument();
+    expect(await screen.findByText("Request through a connected book manager")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Continue to Book manager" })).not.toBeInTheDocument();
     expect(mocks.commitReviewedRequest).not.toHaveBeenCalled();
   });
 
