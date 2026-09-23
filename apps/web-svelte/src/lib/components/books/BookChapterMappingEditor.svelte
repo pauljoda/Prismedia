@@ -63,7 +63,13 @@
   });
   const draftSignature = $derived(mappingSignature(draft));
   const dirty = $derived(draftSignature !== sourceSignature);
-  const mappedCount = $derived(draft.length);
+  const alignedReadableCount = $derived(new Set(mappings.map((mapping) => mapping.readableChapterKey)).size);
+  const alignedAudioCount = $derived(orderedAudioChapters.filter((chapter) =>
+    mappings.some((mapping) => mappingKey(mapping) === chapter.key),
+  ).length);
+  const manualCount = $derived(mappings.filter((mapping) =>
+    mapping.origin !== BOOK_CHAPTER_MAPPING_ORIGIN.auto,
+  ).length);
   const displayedError = $derived(actionError ?? loadError);
 
   // Only manual rows are editable; automatic rows are server-owned and refill after every save.
@@ -198,10 +204,15 @@
         Prismedia uses embedded M4B chapters when present and whole files otherwise. Choose where
         the first audio chapter begins, then adjust any association before saving.
       </p>
+      <p class="mapping-coverage">
+        {alignedReadableCount} of {orderedReadable.length} readable chapters aligned ·
+        {alignedAudioCount} of {orderedAudioChapters.length} audio chapters aligned ·
+        {manualCount} manual {manualCount === 1 ? "override" : "overrides"}
+      </p>
     </div>
-    <div class="mapping-count" aria-label={`${mappedCount} explicit mappings`}>
-      <strong>{mappedCount}</strong>
-      <span>mapped</span>
+    <div class="mapping-count" aria-label={`${alignedAudioCount} of ${orderedAudioChapters.length} audio chapters aligned`}>
+      <strong>{alignedAudioCount}/{orderedAudioChapters.length}</strong>
+      <span>aligned</span>
     </div>
   </div>
 
@@ -245,7 +256,11 @@
             {#if audioChapter.endSeconds !== null}
               – {formatDuration(audioChapter.endSeconds) ?? "0:00"}
             {/if}
-            · {mappingByAudioChapter.has(audioChapter.key) ? "Explicit mapping" : "Automatic title matching"}
+            · {mappingByAudioChapter.has(audioChapter.key)
+              ? "Manual override"
+              : automaticTitleByAudioChapter.has(audioChapter.key)
+                ? "Automatic match"
+                : "Unmatched"}
           </span>
         </div>
         <Select
@@ -327,6 +342,13 @@
     font-size: 0.86rem;
     line-height: 1.55;
     color: var(--color-text-secondary);
+  }
+
+  .mapping-coverage {
+    margin: 0.6rem 0 0;
+    color: var(--color-text-muted);
+    font-size: 0.76rem;
+    line-height: 1.5;
   }
 
   .mapping-count {
