@@ -56,4 +56,24 @@ public sealed class ManagedSourceAdoptionTests {
         Assert.NotNull(ManagedSourceAdoption.Plan([Observed(Episode) with { IsReadable = false }], [new("7", Entity, File)], [Owner()]).ReviewReason);
         Assert.NotNull(ManagedSourceAdoption.Plan([Observed(Episode), Observed(Episode)], [new("7", Entity, File)], [Owner()]).ReviewReason);
     }
+
+    [Fact]
+    public void AudiobookTracksMustResolveToOneBookParent() {
+        var bookId = Guid.NewGuid();
+        var first = new ManagedLocalSource(Guid.NewGuid(), Guid.NewGuid(), "/library/part-1.m4b",
+            EntityKind.AudioTrack, null, null, null, ParentEntityId: bookId);
+        var second = first with { EntityId = Guid.NewGuid(), SourceFileId = Guid.NewGuid(), LocalPath = "/library/part-2.m4b" };
+        var files = new[] {
+            new ManagedObservedFile("file-1", first.LocalPath, 100, DateTimeOffset.UtcNow, true,
+                [new("track-1", EntityKind.AudioTrack, null, null, null)]),
+            new ManagedObservedFile("file-2", second.LocalPath, 100, DateTimeOffset.UtcNow, true,
+                [new("track-2", EntityKind.AudioTrack, null, null, null)])
+        };
+        var selected = new[] { new ManagedBindingSelection("track-1", first.EntityId, first.SourceFileId),
+            new ManagedBindingSelection("track-2", second.EntityId, second.SourceFileId) };
+
+        Assert.Null(ManagedSourceAdoption.Plan(files, selected, [first, second]).ReviewReason);
+        Assert.NotNull(ManagedSourceAdoption.Plan(files, selected,
+            [first, second with { ParentEntityId = Guid.NewGuid() }]).ReviewReason);
+    }
 }

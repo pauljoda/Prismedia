@@ -7,7 +7,7 @@ public sealed record ManagedBindingSelection(string RemoteTargetId, Guid EntityI
 
 /// <summary>Local source ownership and numbering observed independently of the connected application.</summary>
 public sealed record ManagedLocalSource(Guid EntityId, Guid SourceFileId, string LocalPath, EntityKind Kind,
-    int? SeasonNumber, int? EpisodeNumber, int? AbsoluteNumber, string? IssueLabel = null);
+    int? SeasonNumber, int? EpisodeNumber, int? AbsoluteNumber, string? IssueLabel = null, Guid? ParentEntityId = null);
 
 /// <summary>Exact source bindings, or one reason that the complete selection needs review.</summary>
 public sealed record ManagedSourceAdoptionPlan(IReadOnlyList<ManagedFileBinding> Bindings, string? ReviewReason);
@@ -45,6 +45,16 @@ public static class ManagedSourceAdoption {
                 entities.Add(new(target, owner.EntityId, owner.SourceFileId));
             }
             bindings.Add(new(file.RemoteFileId, file.LocalPath, file.SizeBytes, file.WrittenAt, true, entities));
+        }
+        if (targets.Any(target => target.Kind is EntityKind.Book or EntityKind.AudioTrack)) {
+            var allEbook = targets.All(target => target.Kind == EntityKind.Book) && targets.Length == 1;
+            var allAudio = targets.All(target => target.Kind == EntityKind.AudioTrack);
+            var parents = bindings.SelectMany(file => file.Entities)
+                .Select(binding => local.Single(owner => owner.EntityId == binding.EntityId
+                    && owner.SourceFileId == binding.SourceFileId).ParentEntityId)
+                .Distinct().ToArray();
+            if (!allEbook && (!allAudio || parents.Length != 1 || parents[0] is null))
+                return Review("Select one book work and one rendition's exact source files.");
         }
         return new(bindings, null);
     }

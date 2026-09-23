@@ -5,10 +5,12 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { EntityKind } from './entityKind';
+import type { ManagedItemInputBookRendition } from './managedItemInputBookRendition';
 import type { ManagedItemInputExpectedExternalIds } from './managedItemInputExpectedExternalIds';
 
 export interface ManagedItemInput {
   entityKind: EntityKind;
   remoteId: string;
   expectedExternalIds: ManagedItemInputExpectedExternalIds;
+  bookRendition?: ManagedItemInputBookRendition;
 }

@@ -71,6 +71,7 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.ConnectionId).HasColumnName("connection_id");
             entity.Property(row => row.LibraryRootId).HasColumnName("library_root_id");
             entity.Property(row => row.Kind).HasColumnName("kind").HasMaxLength(64).HasConversion(value => value.ToCode(), value => EntityKindRegistry.Require(value));
+            entity.Property(row => row.BookRendition).HasColumnName("book_rendition").HasMaxLength(32).HasConversion(value => value.HasValue ? value.Value.ToCode() : null, value => value == null ? null : value.DecodeAs<BookRendition>());
             entity.Property(row => row.RemoteId).HasColumnName("remote_id").HasMaxLength(512);
             entity.Property(row => row.Title).HasColumnName("title").HasMaxLength(512);
             entity.Property(row => row.ItemJson).HasColumnName("item").HasColumnType("jsonb");
@@ -90,7 +91,7 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.Problem).HasColumnName("problem").HasMaxLength(4096);
             entity.HasOne<IntegrationConnectionRow>().WithMany().HasForeignKey(row => row.ConnectionId).OnDelete(DeleteBehavior.Restrict);
             entity.HasOne<LibraryRootRow>().WithMany().HasForeignKey(row => row.LibraryRootId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasIndex(row => new { row.ConnectionId, row.Kind, row.RemoteId }).IsUnique().HasFilter("released_at IS NULL");
+            entity.HasIndex(row => new { row.ConnectionId, row.Kind, row.RemoteId, row.BookRendition }).IsUnique().AreNullsDistinct(false).HasFilter("released_at IS NULL");
             entity.HasIndex(row => row.NextCheckAt);
         });
         modelBuilder.Entity<ManagedSourceBindingRow>(entity => {

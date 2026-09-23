@@ -101,6 +101,12 @@ public interface IVideoScanPersistence {
         string replacementPath,
         CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<Guid>>([]);
 
+    /// <summary>Rebinds an exact Book or AudioTrack source and invalidates its byte-derived assets.</summary>
+    Task<IReadOnlyList<Guid>> RebindConnectedBookSourceAsync(
+        string previousPath,
+        string replacementPath,
+        CancellationToken cancellationToken) => Task.FromResult<IReadOnlyList<Guid>>([]);
+
     /// <summary>
     /// Paths reserved by unfinished video replacements. Discovery must defer them until recovery
     /// commits their existing owner; a path alone cannot prove that installation succeeded.

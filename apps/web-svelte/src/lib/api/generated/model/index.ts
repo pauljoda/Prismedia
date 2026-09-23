@@ -474,6 +474,7 @@ export * from './managedEntityBinding';
 export * from './managedFileBinding';
 export * from './managedFileTarget';
 export * from './managedItemInput';
+export * from './managedItemInputBookRendition';
 export * from './managedItemInputExpectedExternalIds';
 export * from './managedItemSnapshot';
 export * from './managedLibraryFile';

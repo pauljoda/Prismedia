@@ -4,6 +4,7 @@ using Prismedia.Application.Entities;
 using Prismedia.Application.Files;
 using Prismedia.Application.Integrations;
 using Prismedia.Application.Jobs;
+using Prismedia.Contracts.Integrations;
 using Prismedia.Domain.Entities;
 using Prismedia.Domain.Integrations;
 using Prismedia.Infrastructure.Persistence.Entities;
@@ -18,6 +19,7 @@ public sealed partial class EfManagedTrackingStore {
     public async Task ApplyAsync(ManagedTrackingWork work, ManagedTrackingObservation observation,
         IReadOnlyList<ManagedFileBinding>? adoption, IReadOnlyList<ManagedSourceChange> changes, CancellationToken token) {
         var ids = (adoption ?? work.Tracking.Bindings).SelectMany(file => file.Entities).Select(owner => owner.EntityId).Distinct().ToArray();
+        var reservationIds = ids.Length == 0 ? [] : await new ManagedReservationScopeResolver(db).ResolveAsync(ids, work.Tracking.Item, token);
         var requestEntityId = await db.ManagedRequests.AsNoTracking()
             .Where(request => request.Id == work.Tracking.Id)
             .Select(request => (Guid?)request.EntityId)
@@ -27,7 +29,10 @@ public sealed partial class EfManagedTrackingStore {
             .Distinct()
             .ToArray();
         await using var transaction = await db.Database.BeginTransactionAsync(token);
-        if (!await lifecycle.ExecuteManyAsync(ids, async leaseToken => {
+        if (!await lifecycle.ExecuteManyAsync(ids.Concat(reservationIds).Distinct().ToArray(), async leaseToken => {
+            if (ids.Length > 0 && !reservationIds.ToHashSet().SetEquals(
+                    await new ManagedReservationScopeResolver(db).ResolveAsync(ids, work.Tracking.Item, leaseToken)))
+                throw new ArgumentException("The selected book work changed during reconciliation.");
             var row = await RequireRevisionAsync(work.Tracking.Id, work.Tracking.Revision, leaseToken);
             var mount = await db.ExternalLibraryMounts.AsNoTracking().SingleAsync(mount => mount.ConnectionId == row.ConnectionId && mount.LibraryRootId == row.LibraryRootId, leaseToken);
             foreach (var file in observation.Files) {
@@ -42,10 +47,14 @@ public sealed partial class EfManagedTrackingStore {
                 if (checkedPlan.ReviewReason is not null) throw new ArgumentException(checkedPlan.ReviewReason);
                 row.TargetsJson = JsonSerializer.Serialize(checkedPlan.Bindings.SelectMany(file => file.Entities)
                     .Select(owner => new ManagedTargetBinding(owner.Target, owner.EntityId)).ToArray(), Json);
-                await RequireUnownedAsync(ids, work.Tracking.Item.EntityKind, work.Tracking.Item.ExpectedExternalIds, leaseToken);
-                foreach (var id in ids)
+                var checkedOwners = await new ManagedReservationScopeResolver(db).ResolveAsync(ids, work.Tracking.Item, leaseToken);
+                if (!checkedOwners.SequenceEqual(reservationIds))
+                    throw new ArgumentException("The selected book work changed during source adoption.");
+                await RequireUnownedAsync(ids, work.Tracking.Item.EntityKind, work.Tracking.Item.BookRendition,
+                    work.Tracking.Item.ExpectedExternalIds, leaseToken);
+                foreach (var id in checkedOwners)
                     await new EfFulfillmentReservationStore(db).ReserveAsync(row.Id, FulfillmentOwnerKind.ConnectedLibrary,
-                        row.ConnectionId, id, null, leaseToken);
+                        row.ConnectionId, id, work.Tracking.Item.BookRendition, leaseToken);
                 foreach (var file in checkedPlan.Bindings) foreach (var owner in file.Entities) {
                     db.ManagedSourceBindings.Add(new() { Id = Guid.NewGuid(), HoldingId = row.Id, EntityId = owner.EntityId,
                         SourceFileId = owner.SourceFileId, RemoteTargetId = owner.Target.RemoteTargetId, Kind = owner.Target.Kind,
@@ -95,16 +104,19 @@ public sealed partial class EfManagedTrackingStore {
     public async Task ConfirmRemovalAsync(ManagedTrackingWork work, string problem, CancellationToken token) {
         var targetIds = work.Tracking.Targets.Select(target => target.EntityId).Distinct().ToArray();
         if (targetIds.Length == 0) throw new ArgumentException("The retained holding has no target identities.");
+        var reservationIds = await new ManagedReservationScopeResolver(db).ResolveAsync(targetIds, work.Tracking.Item, token);
         var requestEntityId = await db.ManagedRequests.AsNoTracking()
             .Where(request => request.Id == work.Tracking.Id)
             .Select(request => (Guid?)request.EntityId)
             .SingleOrDefaultAsync(token);
-        var lifecycleIds = requestEntityId is { } rootId
-            ? targetIds.Append(rootId).Distinct().ToArray()
-            : targetIds;
+        var lifecycleIds = targetIds.Concat(reservationIds)
+            .Concat(requestEntityId is { } rootId ? [rootId] : []).Distinct().ToArray();
         var safeProblem = problem[..Math.Min(4096, problem.Length)];
         await using var transaction = await db.Database.BeginTransactionAsync(token);
         if (!await lifecycle.ExecuteManyAsync(lifecycleIds, async leaseToken => {
+            if (!reservationIds.ToHashSet().SetEquals(
+                    await new ManagedReservationScopeResolver(db).ResolveAsync(targetIds, work.Tracking.Item, leaseToken)))
+                throw new ArgumentException("The selected book work changed during removal review.");
             var requestRow = await db.ManagedRequests
                 .FromSqlInterpolated($"SELECT * FROM managed_requests WHERE id = {work.Tracking.Id} FOR UPDATE")
                 .AsNoTracking()
@@ -192,8 +204,10 @@ public sealed partial class EfManagedTrackingStore {
                 var hasPlayableSource = sources.Any(file => file.EntityId == entity.Id && file.Role == EntityFileRole.Source)
                     || await db.EntityFiles.AnyAsync(file => file.EntityId == entity.Id
                         && file.Role == EntityFileRole.Source && !sourceIds.Contains(file.Id), leaseToken);
-                var hasCurrentOwner = await db.FulfillmentReservations.AnyAsync(owner => owner.EntityId == entity.Id
-                    && owner.OwnerId == row.Id && owner.ReleasedAt == null, leaseToken);
+                var ownerEntityId = work.Tracking.Item.EntityKind == EntityKind.Book ? reservationIds[0] : entity.Id;
+                var hasCurrentOwner = await db.FulfillmentReservations.AnyAsync(owner => owner.EntityId == ownerEntityId
+                    && owner.OwnerId == row.Id && owner.BookRendition == work.Tracking.Item.BookRendition
+                    && owner.ReleasedAt == null, leaseToken);
                 var hasOtherOwner = await db.FulfillmentReservations.AnyAsync(owner => owner.EntityId == entity.Id
                     && owner.OwnerId != row.Id && owner.ReleasedAt == null, leaseToken);
                 var hasNativeOwner = await db.Monitors.AnyAsync(monitor => monitor.EntityId == entity.Id, leaseToken)
@@ -210,7 +224,9 @@ public sealed partial class EfManagedTrackingStore {
                 entity.UpdatedAt = now;
                 archiveTargetIds.Add(entity.Id);
             }
-            if (requestEntityId is { } requestRootId && !targetIds.Contains(requestRootId)) {
+            var parentRootId = requestEntityId ?? (work.Tracking.Item.BookRendition == BookRendition.Audiobook
+                ? reservationIds[0] : (Guid?)null);
+            if (parentRootId is { } requestRootId && !targetIds.Contains(requestRootId)) {
                 var root = entities.Single(entity => entity.Id == requestRootId);
                 if (archiveTargetIds.Count == targetIds.Length
                     && !await HasRetainedLibraryPresenceAsync(requestRootId, row.Id, sourceIds, sources, terminalAcquisitionStatuses, leaseToken)) {
@@ -319,9 +335,14 @@ public sealed partial class EfManagedTrackingStore {
         var comic = change.Previous.Entities.All(owner => owner.Target.Kind == EntityKind.ComicInstallment);
         if (!comic && change.Previous.Entities.Any(owner => owner.Target.Kind == EntityKind.ComicInstallment))
             throw new ArgumentException("A comic source shares bytes with another media kind. Review its ownership before rebinding.");
+        var book = change.Previous.Entities.All(owner => owner.Target.Kind is EntityKind.Book or EntityKind.AudioTrack);
+        if (!book && change.Previous.Entities.Any(owner => owner.Target.Kind is EntityKind.Book or EntityKind.AudioTrack))
+            throw new ArgumentException("A book source shares bytes with another media kind. Review its ownership before rebinding.");
         var replacementPath = change.Current?.LocalPath ?? change.Previous.LocalPath;
         var changed = comic
             ? await videos.RebindConnectedComicSourceAsync(change.Previous.LocalPath, replacementPath, token)
+            : book
+            ? await videos.RebindConnectedBookSourceAsync(change.Previous.LocalPath, replacementPath, token)
             : await videos.RebindPlayableVideoSourceAsync(change.Previous.LocalPath, replacementPath, token);
         if (!changed.ToHashSet().SetEquals(ownerIds)) throw new ArgumentException("The established source coverage changed during reconciliation.");
         var bindings = await db.ManagedSourceBindings.Where(binding => binding.HoldingId == holdingId && fileIds.Contains(binding.SourceFileId)).ToArrayAsync(token);
@@ -352,7 +373,16 @@ public sealed partial class EfManagedTrackingStore {
                 ?? throw new InvalidDataException("Invalid managed target bindings."))
                 .Select(target => target.EntityId).Distinct().ToArray();
         }
-        if (!await lifecycle.ExecuteManyAsync(ownerIds, async leaseToken => {
+        var itemJson = await db.ManagedHoldings.AsNoTracking().Where(row => row.Id == id)
+            .Select(row => row.ItemJson).SingleAsync(token);
+        var item = JsonSerializer.Deserialize<ManagedItemInput>(itemJson, Json)
+            ?? throw new InvalidDataException("Invalid managed holding identity.");
+        var reservationIds = ownerIds.Length == 0 ? [] : await new ManagedReservationScopeResolver(db).ResolveAsync(ownerIds, item, token);
+        var lifecycleIds = ownerIds.Concat(reservationIds).Distinct().ToArray();
+        if (!await lifecycle.ExecuteManyAsync(lifecycleIds, async leaseToken => {
+            if (ownerIds.Length > 0 && !reservationIds.ToHashSet().SetEquals(
+                    await new ManagedReservationScopeResolver(db).ResolveAsync(ownerIds, item, leaseToken)))
+                throw new ArgumentException("The selected book work changed during tracking review.");
             var row = await db.ManagedHoldings.SingleAsync(row => row.Id == id, leaseToken);
             if (row.Revision != revision) return;
             if (bindings.Length > 0) {
@@ -368,7 +398,7 @@ public sealed partial class EfManagedTrackingStore {
             row.Revision++; row.Status = status; row.Problem = problem[..Math.Min(4096, problem.Length)];
             row.LastCheckedAt = DateTimeOffset.UtcNow; row.NextCheckAt = row.LastCheckedAt.Value.Add(TrackingInterval);
             await db.SaveChangesAsync(leaseToken);
-        }, token)) throw new EntityLifecycleMutationConflictException(ownerIds.FirstOrDefault());
+        }, token)) throw new EntityLifecycleMutationConflictException(lifecycleIds.FirstOrDefault());
         await transaction.CommitAsync(token);
     }
 
@@ -385,7 +415,16 @@ public sealed partial class EfManagedTrackingStore {
             ?? throw new InvalidDataException("Invalid managed target bindings.");
         var ownerIds = retainedTargets.Select(target => target.EntityId)
             .Concat(bindings.Select(binding => binding.EntityId)).Distinct().ToArray();
-        if (!await lifecycle.ExecuteManyAsync(ownerIds, async leaseToken => {
+        var itemJson = await db.ManagedHoldings.AsNoTracking().Where(row => row.Id == id)
+            .Select(row => row.ItemJson).SingleAsync(token);
+        var item = JsonSerializer.Deserialize<ManagedItemInput>(itemJson, Json)
+            ?? throw new InvalidDataException("Invalid managed holding identity.");
+        var reservationIds = ownerIds.Length == 0 ? [] : await new ManagedReservationScopeResolver(db).ResolveAsync(ownerIds, item, token);
+        var lifecycleIds = ownerIds.Concat(reservationIds).Distinct().ToArray();
+        if (!await lifecycle.ExecuteManyAsync(lifecycleIds, async leaseToken => {
+            if (ownerIds.Length > 0 && !reservationIds.ToHashSet().SetEquals(
+                    await new ManagedReservationScopeResolver(db).ResolveAsync(ownerIds, item, leaseToken)))
+                throw new ArgumentException("The selected book work changed during reappearance review.");
             var row = await db.ManagedHoldings.SingleAsync(row => row.Id == id, leaseToken);
             if (row.Revision != revision) return;
             row.Revision++;
@@ -397,7 +436,7 @@ public sealed partial class EfManagedTrackingStore {
             row.LastCheckedAt = DateTimeOffset.UtcNow;
             row.NextCheckAt = row.LastCheckedAt.Value.Add(TrackingInterval);
             await db.SaveChangesAsync(leaseToken);
-        }, token)) throw new EntityLifecycleMutationConflictException(ownerIds.FirstOrDefault());
+        }, token)) throw new EntityLifecycleMutationConflictException(lifecycleIds.FirstOrDefault());
         await transaction.CommitAsync(token);
     }
 
@@ -414,7 +453,8 @@ public sealed partial class EfManagedTrackingStore {
         } catch (ArgumentException) { return false; }
     }
 
-    private async Task RequireUnownedAsync(Guid[] ids, EntityKind holdingKind, IReadOnlyDictionary<string, string> expectedIdentities, CancellationToken token) {
+    private async Task RequireUnownedAsync(Guid[] ids, EntityKind holdingKind, BookRendition? rendition,
+        IReadOnlyDictionary<string, string> expectedIdentities, CancellationToken token) {
         if (await db.ManagedSourceBindings.AnyAsync(binding => ids.Contains(binding.EntityId), token))
             throw new ArgumentException("One of these local entities is already linked to a connected holding.");
         var all = ids.ToHashSet(); var frontier = ids;
@@ -430,6 +470,18 @@ public sealed partial class EfManagedTrackingStore {
             && db.Entities.Any(entity => entity.Id == identity.EntityId && entity.KindCode == holdingKindCode)).ToArrayAsync(token);
         if (localIds.Any(identity => expectedIdentities.TryGetValue(identity.Provider, out var expected) && identity.Value != expected))
             throw new ArgumentException("The selected local scope has conflicting provider identities. Review its metadata before linking.");
+        if (holdingKind == EntityKind.Book) {
+            if (rendition is null || await db.Monitors.AnyAsync(monitor => monitor.EntityId != null
+                    && scope.Contains(monitor.EntityId.Value) && monitor.Kind == EntityKind.Book
+                    && (monitor.BookRendition ?? BookRendition.Ebook) == rendition, token)
+                || await db.Acquisitions.AnyAsync(acquisition => acquisition.EntityId != null
+                    && scope.Contains(acquisition.EntityId.Value) && acquisition.Kind == EntityKind.Book
+                    && (acquisition.BookRendition ?? BookRendition.Ebook) == rendition
+                    && acquisition.Status != AcquisitionStatus.Imported && acquisition.Status != AcquisitionStatus.Cancelled
+                    && acquisition.Status != AcquisitionStatus.Failed, token))
+                throw new ArgumentException("This book rendition has a native acquisition owner. Resolve it before linking a manager.");
+            return;
+        }
         if (await db.Monitors.AnyAsync(monitor => monitor.EntityId != null && scope.Contains(monitor.EntityId.Value), token)
             || await db.Acquisitions.AnyAsync(acquisition => acquisition.EntityId != null && scope.Contains(acquisition.EntityId.Value)
                 && acquisition.Status != AcquisitionStatus.Imported && acquisition.Status != AcquisitionStatus.Cancelled && acquisition.Status != AcquisitionStatus.Failed, token))

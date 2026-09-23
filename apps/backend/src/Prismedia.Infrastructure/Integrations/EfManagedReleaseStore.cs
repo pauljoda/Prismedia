@@ -80,7 +80,7 @@ public sealed class EfManagedReleaseStore(PrismediaDbContext db, IManagedTrackin
             var current = (await FindAsync(row.Id, ct))!;
             ManagedReleaseService.ValidateEvidence(current, evidence);
             await RequireSettledControlsAsync(row.Id, ct);
-            var entityIds = current.Holding.Targets.Select(target => target.EntityId).Distinct().ToArray();
+            var entityIds = await ReservationIdsAsync(current.Holding, ct);
             var owners = db.FulfillmentReservations.Where(owner => owner.OwnerId == row.Id && owner.ConnectionId == row.ConnectionId
                 && owner.ReleasedAt == null && (owner.OwnerKind == FulfillmentOwnerKind.ConnectedLibrary || owner.OwnerKind == FulfillmentOwnerKind.ExternalManager));
             if (!(await owners.Select(owner => owner.EntityId).Distinct().ToArrayAsync(ct)).ToHashSet().SetEquals(entityIds)) throw Conflict();
@@ -115,9 +115,16 @@ public sealed class EfManagedReleaseStore(PrismediaDbContext db, IManagedTrackin
         return holding;
     }
     private async Task WithOwnersAsync(ManagedTrackingResponse holding, Func<CancellationToken, Task> action, CancellationToken token) {
-        var ids = holding.Targets.Select(target => target.EntityId).Distinct().ToArray();
-        if (!await lifecycle.ExecuteManyAsync(ids, action, token)) throw new EntityLifecycleMutationConflictException(ids.FirstOrDefault());
+        var reservationIds = await ReservationIdsAsync(holding, token);
+        var ids = holding.Targets.Select(target => target.EntityId).Concat(reservationIds).Distinct().ToArray();
+        if (!await lifecycle.ExecuteManyAsync(ids, async leaseToken => {
+            if (!reservationIds.ToHashSet().SetEquals(await ReservationIdsAsync(holding, leaseToken))) throw Conflict();
+            await action(leaseToken);
+        }, token)) throw new EntityLifecycleMutationConflictException(ids.FirstOrDefault());
     }
+    private Task<Guid[]> ReservationIdsAsync(ManagedTrackingResponse holding, CancellationToken token) =>
+        new ManagedReservationScopeResolver(db).ResolveAsync(
+            holding.Targets.Select(target => target.EntityId).ToArray(), holding.Item, token);
     private async Task<ManagedHoldingRow> LockAsync(Guid holdingId, CancellationToken token) {
         // Match materialization's lock order after the entity lifecycle lease: request, then holding.
         var original = (await db.ManagedRequests

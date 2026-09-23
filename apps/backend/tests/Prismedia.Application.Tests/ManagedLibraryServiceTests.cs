@@ -13,6 +13,34 @@ public sealed class ManagedLibraryServiceTests {
     private const string CurrentCredentialKey = "current-token";
     private const string RetiredCredentialKey = "retired-token";
 
+    [Fact]
+    public void BookHoldingReferencesRequireOneExactRendition() {
+        var ids = new Dictionary<string, string> { [FixtureProvider] = "OL450063W" };
+        Assert.True(ManagedLibraryService.IsValidInput(new(EntityKind.Book, "OL450063W", ids, BookRendition.Ebook)));
+        Assert.True(ManagedLibraryService.IsValidInput(new(EntityKind.Book, "OL450063W", ids, BookRendition.Audiobook)));
+        Assert.False(ManagedLibraryService.IsValidInput(new(EntityKind.Book, "OL450063W", ids)));
+        Assert.False(ManagedLibraryService.IsValidInput(new(EntityKind.Movie, "movie-1", ids, BookRendition.Ebook)));
+    }
+
+    [Fact]
+    public void BookFileEvidenceCannotCrossRenditionScopes() {
+        var ids = new Dictionary<string, string> { [FixtureProvider] = "work-1" };
+        var item = new ManagedLibraryItem("work-1", EntityKind.Book, "Example", null, ids, false, null, 1);
+        var ebook = new ManagedItemInput(EntityKind.Book, item.RemoteId, ids, BookRendition.Ebook);
+        var audiobook = ebook with { BookRendition = BookRendition.Audiobook };
+        var bookFile = new ManagedLibraryFile("ebook-file", "/books/example.epub", 100, null,
+            [new("work-1", EntityKind.Book, "Example")]);
+        var audioFile = new ManagedLibraryFile("audio-file", "/audio/example.m4b", 100, null,
+            [new("track-1", EntityKind.AudioTrack, "Example")]);
+
+        ManagedLibraryService.ValidateSnapshot(ebook, new(item, "/books", [bookFile], DateTimeOffset.UtcNow));
+        ManagedLibraryService.ValidateSnapshot(audiobook, new(item, "/audio", [audioFile], DateTimeOffset.UtcNow));
+        Assert.Throws<IntegrationInvocationException>(() => ManagedLibraryService.ValidateSnapshot(ebook,
+            new(item, "/books", [audioFile], DateTimeOffset.UtcNow)));
+        Assert.Throws<IntegrationInvocationException>(() => ManagedLibraryService.ValidateSnapshot(audiobook,
+            new(item, "/audio", [bookFile], DateTimeOffset.UtcNow)));
+    }
+
     [Theory]
     [InlineData(false)]
     [InlineData(true)]

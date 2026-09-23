@@ -54,13 +54,19 @@ public sealed class EfManagedControlStore(PrismediaDbContext db, IManagedTrackin
             throw new ManagedControlConflictException("The holding's source associations no longer match its retained target identities.");
         var linkedEntityIds = holding.Bindings.SelectMany(file => file.Entities)
             .Select(binding => binding.EntityId).Distinct().ToArray();
+        var reservationIds = await new ManagedReservationScopeResolver(db).ResolveAsync(entityIds, holding.Item, token);
         var reserved = await db.FulfillmentReservations.AsNoTracking().Where(row => row.OwnerId == holdingId
             && (row.OwnerKind == FulfillmentOwnerKind.ExternalManager
-                || row.OwnerKind == FulfillmentOwnerKind.ConnectedLibrary
-                    && linkedEntityIds.Contains(row.EntityId))
-            && row.ConnectionId == connectionId && row.ReleasedAt == null
-            && entityIds.Contains(row.EntityId)).Select(row => row.EntityId).Distinct().CountAsync(token);
-        if (reserved != entityIds.Length || !await db.ExternalLibraryMounts.AnyAsync(row => row.ConnectionId == connectionId
+                || row.OwnerKind == FulfillmentOwnerKind.ConnectedLibrary)
+            && row.ConnectionId == connectionId && row.ReleasedAt == null)
+            .Select(row => new { row.EntityId, row.BookRendition, row.OwnerKind }).ToArrayAsync(token);
+        if (!reserved.Where(row => row.BookRendition == holding.Item.BookRendition
+                && (row.OwnerKind == FulfillmentOwnerKind.ExternalManager
+                    || holding.Item.EntityKind == EntityKind.Book && linkedEntityIds.Length > 0
+                    || linkedEntityIds.Contains(row.EntityId))).Select(row => row.EntityId)
+                .ToHashSet().SetEquals(reservationIds)
+            || linkedEntityIds.Except(entityIds).Any()
+            || !await db.ExternalLibraryMounts.AnyAsync(row => row.ConnectionId == connectionId
             && row.LibraryRootId == holding.LibraryRootId, token))
             throw new ManagedControlConflictException("The holding no longer has its reviewed library mapping and fulfillment ownership.");
         return holding;

@@ -28,4 +28,6 @@ export interface ManagedLocalSource {
   absoluteNumber: number | string | null;
   /** @nullable */
   issueLabel?: string | null;
+  /** @nullable */
+  parentEntityId?: string | null;
 }

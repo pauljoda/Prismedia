@@ -73,6 +73,13 @@ public sealed partial class LibraryScanPersistenceService {
         CancellationToken cancellationToken) =>
         RebindSourceAsync(previousPath, replacementPath, [EntityKind.ComicInstallment.ToCode()], cancellationToken);
 
+    public Task<IReadOnlyList<Guid>> RebindConnectedBookSourceAsync(
+        string previousPath,
+        string replacementPath,
+        CancellationToken cancellationToken) =>
+        RebindSourceAsync(previousPath, replacementPath,
+            [EntityKind.Book.ToCode(), EntityKind.AudioTrack.ToCode()], cancellationToken);
+
     private async Task<IReadOnlyList<Guid>> RebindSourceAsync(
         string previousPath,
         string replacementPath,

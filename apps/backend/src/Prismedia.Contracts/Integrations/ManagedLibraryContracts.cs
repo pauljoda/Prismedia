@@ -41,7 +41,8 @@ public sealed record ProviderLibraryConnection(
     IReadOnlyList<ProviderLibraryDescriptor> Libraries,
     string? Error = null);
 /// <summary>Addresses a holding and pins known external identities to detect a reused remote numeric ID.</summary>
-public sealed record ManagedItemInput(EntityKind EntityKind, string RemoteId, IReadOnlyDictionary<string, string> ExpectedExternalIds);
+public sealed record ManagedItemInput(EntityKind EntityKind, string RemoteId, IReadOnlyDictionary<string, string> ExpectedExternalIds,
+    BookRendition? BookRendition = null);
 /// <summary>One content target covered by an externally managed file. IssueLabel preserves comic designations such as ½ and 12.5 independently of television numbering.</summary>
 public sealed record ManagedFileTarget(string RemoteId, EntityKind EntityKind, string Title,
     int? SeasonNumber = null, int? EpisodeNumber = null, int? AbsoluteNumber = null, string? IssueLabel = null);

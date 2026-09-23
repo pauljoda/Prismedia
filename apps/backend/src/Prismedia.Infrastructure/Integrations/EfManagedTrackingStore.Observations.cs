@@ -34,7 +34,7 @@ public sealed partial class EfManagedTrackingStore {
             var season = Own(EntityPositionCodes.Season) ?? positions.FirstOrDefault(position => position.EntityId == owner.ParentEntityId && position.Code == EntityPositionCodes.Season)?.Value;
             var issueLabel = positions.FirstOrDefault(position => position.EntityId == owner.EntityId && position.Code == EntityPositionCodes.Chapter)?.Label;
             return new ManagedLocalSource(owner.EntityId, owner.Id, owner.Path, EntityKindRegistry.Require(owner.KindCode),
-                season, Own(EntityPositionCodes.Episode), Own(EntityPositionCodes.AbsoluteEpisode), issueLabel);
+                season, Own(EntityPositionCodes.Episode), Own(EntityPositionCodes.AbsoluteEpisode), issueLabel, owner.ParentEntityId);
         }).ToArray();
     }
 

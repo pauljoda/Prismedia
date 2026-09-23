@@ -47,19 +47,25 @@ public sealed partial class EfManagedTrackingStore(PrismediaDbContext db, IExter
         }
         if (!await db.ExternalLibraryMounts.AnyAsync(mount => mount.ConnectionId == connectionId && mount.LibraryRootId == request.LibraryRootId, token))
             throw new ArgumentException("Choose a library mapped to this connection.");
-        if (item.EntityKind is not (EntityKind.Movie or EntityKind.VideoSeries or EntityKind.ComicSeries))
-            throw new ArgumentException("Tracking currently supports movie, television, and comic series holdings.");
+        if (item.EntityKind is not (EntityKind.Movie or EntityKind.VideoSeries or EntityKind.ComicSeries or EntityKind.Book)
+            || (item.EntityKind == EntityKind.Book) != (item.BookRendition is not null))
+            throw new ArgumentException("Choose a supported holding and one rendition for a Book work.");
+        var sourceEntityIds = selections.Select(selection => selection.EntityId).Distinct().ToArray();
+        var ownerIds = await new ManagedReservationScopeResolver(db).ResolveAsync(sourceEntityIds, item, token);
         await using var transaction = await db.Database.BeginTransactionAsync(token);
         await PluginLifecycleLease.LockConnectionAsync(db, connectionId, token, requireReady: true);
         var row = new ManagedHoldingRow { Id = request.OperationId, ConnectionId = connectionId, LibraryRootId = request.LibraryRootId,
-            Kind = item.EntityKind, RemoteId = item.RemoteId, Title = title, ItemJson = itemJson,
+            Kind = item.EntityKind, BookRendition = item.BookRendition, RemoteId = item.RemoteId, Title = title, ItemJson = itemJson,
             SelectionsJson = JsonSerializer.Serialize(selections, Json), Revision = 1, Status = ManagedTrackingStatus.Pending, NextCheckAt = DateTimeOffset.UtcNow };
         try {
-            if (!await lifecycle.ExecuteManyAsync(selections.Select(selection => selection.EntityId).ToArray(), async leaseToken => {
+            if (!await lifecycle.ExecuteManyAsync(sourceEntityIds.Concat(ownerIds).Distinct().ToArray(), async leaseToken => {
+                var checkedOwners = await new ManagedReservationScopeResolver(db).ResolveAsync(sourceEntityIds, item, leaseToken);
+                if (!checkedOwners.SequenceEqual(ownerIds))
+                    throw new ArgumentException("The selected book work changed during ownership review.");
                 db.ManagedHoldings.Add(row);
-                foreach (var selection in selections)
+                foreach (var ownerId in checkedOwners)
                     await new EfFulfillmentReservationStore(db).ReserveAsync(row.Id, FulfillmentOwnerKind.ConnectedLibrary,
-                        connectionId, selection.EntityId, null, leaseToken);
+                        connectionId, ownerId, item.BookRendition, leaseToken);
                 await db.SaveChangesAsync(leaseToken);
                 await PublishAsync(row, leaseToken);
             }, token)) throw new ArgumentException("The selected items are changing. Refresh their associations before linking.");

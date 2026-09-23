@@ -8,6 +8,8 @@ public sealed class ManagedHoldingRow {
     public Guid ConnectionId { get; set; }
     public Guid LibraryRootId { get; set; }
     public EntityKind Kind { get; set; }
+    /// <summary>Book holdings have separate ebook and audiobook ownership; other kinds use null.</summary>
+    public BookRendition? BookRendition { get; set; }
     public string RemoteId { get; set; } = string.Empty;
     public string Title { get; set; } = string.Empty;
     public string ItemJson { get; set; } = "{}";
