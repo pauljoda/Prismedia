@@ -31,7 +31,11 @@ public sealed record ConnectionProbeResult(
 /// <summary>Configured context sent only to the trusted plugin process, never to browser clients.</summary>
 public sealed record IntegrationConnectionContext(
     Guid Id, string BaseUrl, string? ExpectedInstanceId,
-    IReadOnlyDictionary<string, string> Settings, IReadOnlyDictionary<string, string> Auth);
+    IReadOnlyDictionary<string, string> Settings, IReadOnlyDictionary<string, string> Auth,
+    IReadOnlyList<IntegrationLibraryMount>? LibraryMounts = null);
+
+/// <summary>A reviewed remote-to-local library boundary supplied to a trusted plugin for exact file inventory.</summary>
+public sealed record IntegrationLibraryMount(string RemoteRootId, string RemotePath, string LocalPath);
 
 /// <summary>Typed independently versioned request envelope for a short integration operation.</summary>
 public sealed record IntegrationPluginRequest<TInput>(

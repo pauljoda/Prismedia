@@ -46,6 +46,15 @@ public sealed partial class IntegrationPluginGateway(PrismediaDbContext db, Plug
     internal async Task<TOutput> InvokeAsync<TInput, TOutput>(PluginDescriptor descriptor, IntegrationOperation operation,
         IntegrationConnectionContext connection, TInput input, CancellationToken cancellationToken) where TOutput : class {
         connection = connection with { Auth = IntegrationCredentialScope.ForManifest(descriptor.Manifest, connection.Auth) };
+        if (operation is IntegrationOperation.GetLibraryItem or IntegrationOperation.LookupManaged
+            or IntegrationOperation.ReconcileManaged or IntegrationOperation.ConfigureManaged
+            or IntegrationOperation.RequestManaged) {
+            var mounts = await db.ExternalLibraryMounts.AsNoTracking()
+                .Where(mount => mount.ConnectionId == connection.Id)
+                .Select(mount => new IntegrationLibraryMount(mount.RemoteRootId, mount.RemotePath, mount.LocalPath))
+                .ToArrayAsync(cancellationToken);
+            connection = connection with { LibraryMounts = mounts };
+        }
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(PluginProcessTransport.MaximumInvocationDuration);
         var invocationId = Guid.NewGuid();

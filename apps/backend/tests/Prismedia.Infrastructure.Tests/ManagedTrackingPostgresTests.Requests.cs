@@ -124,7 +124,7 @@ public sealed partial class ManagedTrackingPostgresTests {
         if (unreportedAudioPart) {
             var error = await Assert.ThrowsAsync<ArgumentException>(() =>
                 store.MaterializeAsync(audio, audioSnapshot, default));
-            Assert.Contains("other audio files", error.Message, StringComparison.Ordinal);
+            Assert.Contains("omitted audio files", error.Message, StringComparison.Ordinal);
             Assert.Empty(await db.EntityFiles.AsNoTracking().ToArrayAsync());
             Assert.True((await db.Entities.AsNoTracking().SingleAsync(row => row.Id == bookId)).IsWanted);
             Assert.Equal(ManagedRequestPhase.AwaitingFiles,
@@ -191,6 +191,83 @@ public sealed partial class ManagedTrackingPostgresTests {
         }
         Assert.Equal(2, await db.ManagedHoldings.AsNoTracking()
             .CountAsync(row => row.Status == ManagedTrackingStatus.Tracking));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task BookManagerMaterializesAndReconcilesEveryReportedAudiobookPart(bool scannerFirst) {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var connectionId = Guid.NewGuid();
+        var rootId = Guid.NewGuid();
+        var bookId = Guid.NewGuid();
+        var root = Path.Combine(workspace, "audio-parts");
+        var folder = Path.Combine(root, "Example");
+        Directory.CreateDirectory(folder);
+        var firstPath = Path.Combine(folder, "part-one.m4b");
+        var secondPath = Path.Combine(folder, "part-two.mp3");
+        await File.WriteAllBytesAsync(firstPath, [1, 2, 3, 4]);
+        await File.WriteAllBytesAsync(secondPath, [5, 6, 7]);
+        db.IntegrationConnections.Add(new() { Id = connectionId, PluginId = "fixture", Name = "Fixture",
+            BaseUrl = "http://manager.test/", Enabled = true, Status = ConnectionStatus.Ready, Revision = 1 });
+        db.LibraryRoots.Add(new() { Id = rootId, Path = root, Label = "Audio", Enabled = true, ScanBooks = true });
+        db.ExternalLibraryMounts.Add(new() { Id = Guid.NewGuid(), ConnectionId = connectionId,
+            LibraryRootId = rootId, RemoteRootId = "audio", RemotePath = "/audio", LocalPath = root });
+        db.Entities.Add(new() { Id = bookId, KindCode = EntityKind.Book.ToCode(), Title = "Example", IsWanted = true });
+        db.EntityExternalIds.Add(new() { Id = Guid.NewGuid(), EntityId = bookId,
+            Provider = ExternalIdProviders.OpenLibraryWork, Value = "OL123W" });
+        await db.SaveChangesAsync();
+
+        Guid[] scannedTrackIds = [];
+        if (scannerFirst) {
+            var scanner = new LibraryScanPersistenceService(db);
+            var donorId = await scanner.UpsertAudiobookBookAsync(folder, "Scanned audio",
+                rootId, false, BookType.Novel, BookFormat.Audio, default);
+            scannedTrackIds = [
+                await scanner.UpsertAudioTrackAsync(firstPath, "Scanned part one", rootId,
+                    donorId, 0, null, 0, false, default),
+                await scanner.UpsertAudioTrackAsync(secondPath, "Scanned part two", rootId,
+                    donorId, 1, null, 0, false, default)
+            ];
+        }
+
+        var store = Requests(db);
+        var target = await store.RequireTargetAsync(connectionId, bookId, rootId, null, BookRendition.Audiobook, default);
+        var operation = ManagedRequestOperation.Create(Guid.NewGuid(), connectionId, bookId, rootId);
+        var request = new CreateManagedRequestInput(operation.State.OperationId, bookId, rootId,
+            target.Work, null, Monitored: true, Search: false);
+        var plan = new ManagedRequestPlan(request,
+            new(operation.State.OperationId, target.Work, null, "audio", "/audio"),
+            target.Title, ManagedRequestIdentity.Fingerprint(request));
+        var saved = await store.CreateAsync(operation, plan, default);
+        var identities = new Dictionary<string, string> { [ExternalIdProviders.OpenLibraryWork] = "OL123W" };
+        await store.AcceptHoldingAsync(saved, new(new("OL123W", EntityKind.Book, "Example", null,
+            identities, true, null, 0), "/audio/Example", [], DateTimeOffset.UtcNow), default);
+        saved = (await store.FindAsync(saved.Operation.State.OperationId, default))!;
+        var snapshot = new ManagedItemSnapshot(new("OL123W", EntityKind.Book, "Example", null,
+            identities, true, null, 2), "/audio/Example", [
+            new("audio-file-1", "/audio/Example/part-one.m4b", 4, null,
+                [new("OL123W:audio-1", EntityKind.AudioTrack, "Part One")]),
+            new("audio-file-2", "/audio/Example/part-two.mp3", 3, null,
+                [new("OL123W:audio-2", EntityKind.AudioTrack, "Part Two")])
+        ], DateTimeOffset.UtcNow);
+
+        Assert.True((await store.MaterializeAsync(saved, snapshot, default)).Imported);
+        var tracks = await db.Entities.AsNoTracking().Where(row => row.ParentEntityId == bookId)
+            .OrderBy(row => row.SortOrder).ToArrayAsync();
+        Assert.Equal(2, tracks.Length);
+        if (scannerFirst) Assert.Equal(scannedTrackIds, tracks.Select(row => row.Id).ToArray());
+        else Assert.Equal(["Part One", "Part Two"], tracks.Select(row => row.Title).ToArray());
+        Assert.Equal(2, await db.ManagedSourceBindings.AsNoTracking().CountAsync());
+        Assert.Equal(2, await db.EntityFiles.AsNoTracking().CountAsync());
+        var retained = (await Store(db).FindAsync(operation.State.OperationId, default))!;
+        var observed = await Store(db).ObserveAsync(connectionId, snapshot, default);
+        var changes = ManagedSourceReconciliation.Plan(retained.Tracking.Bindings, observed.Files);
+        Assert.Null(changes.ReviewReason);
+        await Store(db).ApplyAsync(retained, observed, null, changes.Changes, default);
+        Assert.Equal(ManagedTrackingStatus.Tracking,
+            (await db.ManagedHoldings.AsNoTracking().SingleAsync()).Status);
     }
 
     [Fact]

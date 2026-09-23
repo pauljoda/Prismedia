@@ -11,7 +11,7 @@ public sealed partial class EfManagedRequestStore {
 
     private async Task<ScannedBookSource?> AdoptScannedBookSourceAsync(EntityRow book, string path,
         long sizeBytes, BookRendition rendition, Guid libraryRootId, string localRoot,
-        DateTimeOffset now, CancellationToken token) {
+        IReadOnlyList<string> expectedPaths, DateTimeOffset now, CancellationToken token) {
         var candidates = await db.EntityFiles
             .Where(source => source.Role == EntityFileRole.Source || source.Role == EntityFileRole.UnavailableSource)
             .Where(source => source.Path.Length == path.Length)
@@ -49,20 +49,29 @@ public sealed partial class EfManagedRequestStore {
             throw ScannedBookReview();
         if (parentId != book.Id) {
             var donor = await db.Entities.SingleAsync(entity => entity.Id == parentId, token);
+            var children = await db.Entities.Where(entity => entity.ParentEntityId == donor.Id).ToArrayAsync(token);
+            var childIds = children.Select(entity => entity.Id).ToArray();
+            var donorFiles = await db.EntityFiles.Where(file => childIds.Contains(file.EntityId)).ToArrayAsync(token);
             if (source.Source != FileSourceKind.Scan.ToCode()
                 || donor.KindCode != EntityKind.Book.ToCode()
                 || await db.BookDetails.Where(detail => detail.EntityId == donor.Id)
                     .Select(detail => detail.Format).SingleOrDefaultAsync(token) != BookFormat.Audio
-                || await db.Entities.AnyAsync(entity => entity.ParentEntityId == donor.Id
-                    && entity.Id != owner.Id, token)
+                || children.Length != expectedPaths.Count
+                || children.Any(entity => entity.KindCode != EntityKind.AudioTrack.ToCode() || entity.IsOrganized)
+                || donorFiles.Length != children.Length
+                || donorFiles.Any(file => file.Role != EntityFileRole.Source
+                    || file.Source != FileSourceKind.Scan.ToCode()
+                    || !expectedPaths.Any(expected => FileSystemPathComparison.Equals(expected, file.Path)))
                 || await db.EntityFiles.AnyAsync(file => file.EntityId == donor.Id
                     && file.Role == EntityFileRole.Source, token)) throw ScannedBookReview();
             await RequireUnclaimedScannedBookAsync(donor, book.Id, token);
-            if (owner.IsOrganized || await db.UserEntityStates.AnyAsync(state => state.EntityId == owner.Id, token)
-                || await db.EntityConsumptionEvents.AnyAsync(entry => entry.EntityId == owner.Id, token)
-                || await db.Acquisitions.AnyAsync(acquisition => acquisition.EntityId == owner.Id, token)
-                || await db.Monitors.AnyAsync(monitor => monitor.EntityId == owner.Id, token)
-                || await db.FulfillmentReservations.AnyAsync(reservation => reservation.EntityId == owner.Id
+            if (await db.UserEntityStates.AnyAsync(state => childIds.Contains(state.EntityId), token)
+                || await db.EntityConsumptionEvents.AnyAsync(entry => childIds.Contains(entry.EntityId), token)
+                || await db.Acquisitions.AnyAsync(acquisition => acquisition.EntityId.HasValue
+                    && childIds.Contains(acquisition.EntityId.Value), token)
+                || await db.Monitors.AnyAsync(monitor => monitor.EntityId.HasValue
+                    && childIds.Contains(monitor.EntityId.Value), token)
+                || await db.FulfillmentReservations.AnyAsync(reservation => childIds.Contains(reservation.EntityId)
                     && reservation.ReleasedAt == null, token)) throw ScannedBookReview();
             var folderCode = EntitySourceCode.Folder.ToCode();
             var donorFolder = await db.EntitySources.SingleOrDefaultAsync(row =>
@@ -79,8 +88,10 @@ public sealed partial class EfManagedRequestStore {
                 EntityId = book.Id, Code = folderCode, Value = expectedGroup, UpdatedAt = now
             });
             db.EntitySources.Remove(donorFolder);
-            owner.ParentEntityId = book.Id;
-            owner.UpdatedAt = now;
+            foreach (var child in children) {
+                child.ParentEntityId = book.Id;
+                child.UpdatedAt = now;
+            }
             donor.IsLibraryArchived = true;
             donor.UpdatedAt = now;
         }

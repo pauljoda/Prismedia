@@ -12,7 +12,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
-- LazyLibrarian can expose existing ebook and single-file audiobook holdings as separate renditions of one remote work, with distinct mapped roots and read-only file checks. Multi-file audio remains in LazyLibrarian until its individual tracks can be verified.
+- LazyLibrarian can expose existing ebook and audiobook holdings as separate renditions of one remote work, with distinct mapped roots and read-only file checks. In a mapped Book folder, every audio part must be accounted for before a request completes.
 - Books already catalogued in LazyLibrarian can now be reviewed for ebook or audiobook management independently. Each rendition can change monitoring and request a search, while final files attach to the same Prismedia Book when they arrive.
 - When a connected ebook and audiobook scan into separate local Books, a reviewed link can combine simple, untouched records under the already linked Book. Prismedia keeps the first accepted ownership and asks for separate review when either record has additional activity or files.
 - Books now keep precise reading and listening positions separately, so audiobook playback preserves the saved ebook location and each format can resume at its own position.
