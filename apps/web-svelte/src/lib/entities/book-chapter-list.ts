@@ -1,14 +1,21 @@
 import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
-import type {
-  AlignmentMatchStateCode,
-  BookChapterMappingOriginCode,
+import {
+  ALIGNMENT_GAP_REASON,
+  BOOK_CHAPTER_MAPPING_ORIGIN,
+  BOOK_LINK_STATE,
+  CONSUMPTION_MODALITY,
+  type AlignmentGapReasonCode,
+  type AlignmentMatchStateCode,
+  type BookChapterMappingOriginCode,
 } from "$lib/api/generated/codes";
 import type {
+  AlignedTarget,
   AudioChapterWindow,
   BookAlignmentResponse,
   BookAlignmentRow,
   BookChapterAudioMapping,
   ReadableChapterWindow,
+  ReadingTarget,
 } from "$lib/api/generated/model";
 
 export type BookReadTarget =
@@ -208,8 +215,10 @@ export function bookChapterRowOwnsAudioTime(
 }
 
 /**
- * Creates the editable one-to-one map produced by the "Mark first chapter" workflow: audio windows in
- * playback order pair with readable chapters in display order, starting at the marked chapter.
+ * Proposes the one-to-one map of the editor's "fill in order from here" step: audio windows in
+ * playback order pair with readable chapters in display order, starting at the chosen chapter. The
+ * proposal is shown pair by pair for review before it is used, and every row it produces remembers
+ * that it was filled in order (never saved as a hand-picked pair).
  */
 export function sequentialBookChapterMappings(
   readableWindows: readonly ReadableChapterWindow[],
@@ -224,6 +233,87 @@ export function sequentialBookChapterMappings(
     .map(({ window }, index) => ({
       readableChapterKey: readableWindows[firstIndex + index].chapterKey,
       audioTrackId: window.trackEntityId,
+      origin: BOOK_CHAPTER_MAPPING_ORIGIN.ordered,
       ...(window.markerId ? { audioMarkerId: window.markerId } : {}),
     }));
+}
+
+/** Reading and listening progress of a Book that keeps them separate, ready to present. */
+export interface BookSeparateProgress {
+  /** Whole percent (0..100) of the readable rendition before the reading position. */
+  readingPercent: number;
+  /** Whole percent (0..100) of the audio listened before the listening position. */
+  listeningPercent: number;
+  /** One-line reason the formats are not linked. */
+  reason: string;
+}
+
+/** Explains why the server could not line a position up with the other format. */
+export function alignmentGapExplanation(target: AlignedTarget): string | null {
+  const title = target.gapChapterTitle ? `“${target.gapChapterTitle}”` : "This chapter";
+  switch (target.gap) {
+    case ALIGNMENT_GAP_REASON.readableChapterUnpaired:
+      return `${title} has no matching audiobook chapter.`;
+    case ALIGNMENT_GAP_REASON.audioChapterUnpaired:
+      return `${title} has no matching ebook chapter.`;
+    case ALIGNMENT_GAP_REASON.readableChaptersUnavailable:
+      return "This ebook has no chapter list to line up with the audiobook.";
+    case ALIGNMENT_GAP_REASON.positionOutsideChapters:
+      return "Your position is outside the chapters that line up.";
+    default:
+      // The remaining reasons say why the whole Book keeps reading and listening separate.
+      return target.gap ? bookSeparateReasonText(target.gap) : null;
+  }
+}
+
+/** Short label for an exact reading position: its page, or its share of the whole book. */
+export function readingPositionLabel(target: ReadingTarget | null): string | null {
+  if (!target) return null;
+  const total = numberValue(target.total) ?? 0;
+  const pageIndex = numberValue(target.pageIndex);
+  if (pageIndex !== null && total > 0) return `Page ${Math.min(pageIndex + 1, total)} of ${total}`;
+  if (total <= 0) return null;
+  return `${Math.round(((numberValue(target.index) ?? 0) / total) * 100)}% of book`;
+}
+
+/** One-line explanation of why a Book keeps reading and listening separate. */
+export function bookSeparateReasonText(reason: AlignmentGapReasonCode | null | undefined): string {
+  switch (reason) {
+    case ALIGNMENT_GAP_REASON.audioUnstructured:
+      return "This audiobook has no chapter markers, so reading and listening are tracked separately.";
+    case ALIGNMENT_GAP_REASON.audioInParts:
+      return "This audiobook is split into parts rather than chapters, so reading and listening are tracked separately.";
+    case ALIGNMENT_GAP_REASON.readableChaptersUnavailable:
+      return "This ebook has no chapter list to line up with the audiobook, so reading and listening are tracked separately.";
+    case ALIGNMENT_GAP_REASON.noExactPairs:
+      return "No chapters are paired exactly yet, so reading and listening are tracked separately. Pair chapters in Chapter Mapping to link them.";
+    default:
+      return "Reading and listening are tracked separately.";
+  }
+}
+
+function wholePercent(value: number | string | null | undefined): number {
+  const fraction = numberValue(value);
+  return fraction === null ? 0 : Math.round(Math.max(0, Math.min(1, fraction)) * 100);
+}
+
+/**
+ * The server's Separate decision for a Book that has both formats, or null when the Book is Linked
+ * (one shared progress and switching) or has only one format. Older servers without a link decision
+ * read as Linked.
+ */
+export function bookSeparateProgress(
+  alignment: BookAlignmentResponse | null | undefined,
+): BookSeparateProgress | null {
+  const link = alignment?.link;
+  if (!link || link.state !== BOOK_LINK_STATE.separate) return null;
+  const modalities = alignment.modalities ?? [];
+  if (!modalities.includes(CONSUMPTION_MODALITY.reading) || !modalities.includes(CONSUMPTION_MODALITY.listening)) {
+    return null;
+  }
+  return {
+    readingPercent: wholePercent(link.readingPercent),
+    listeningPercent: wholePercent(link.listeningPercent),
+    reason: bookSeparateReasonText(link.reason),
+  };
 }

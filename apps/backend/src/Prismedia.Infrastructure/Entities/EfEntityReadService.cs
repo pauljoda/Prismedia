@@ -932,6 +932,17 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         }
 
         var checkpoints = await EnrichCheckpointsAsync(card.Id, progress.Checkpoints ?? [], hideNsfw, cancellationToken);
+        // A Book that keeps reading and listening Separate also carries each format's own progress.
+        if (card.Kind == EntityKind.Book) {
+            progress = progress with {
+                Separate = (await Media.Books.SeparateBookProgressReader.LoadAsync(
+                        _db,
+                        CurrentUserId,
+                        [card.Id],
+                        cancellationToken))
+                    .GetValueOrDefault(card.Id)
+            };
+        }
         if (progress.CurrentEntityId is not { } currentEntityId) {
             return ReplaceProgress(card, progress with { Checkpoints = checkpoints });
         }

@@ -62,6 +62,8 @@ public sealed class BookAlignmentService {
         var available = work.Definition.Engagement.Modalities
             .Where(modality => modality.AddressesByOffset ? alignment.HasAudio : alignment.HasReadableRendition)
             .ToArray();
+        var reading = work.Progress?.CheckpointFor(ConsumptionModality.Reading);
+        var listening = work.Progress?.CheckpointFor(ConsumptionModality.Listening);
         return new BookAlignmentResponse(
             available.Select(modality => modality.Modality).ToArray(),
             ConsumptionModalityDefinition.ReadablePositionTotal,
@@ -75,7 +77,13 @@ public sealed class BookAlignmentService {
                     row.Audio))
                 .ToArray(),
             alignment.Coverage,
-            available.Length > 0 ? Resume(alignment, work.Progress) : null);
+            available.Length > 0 ? Resume(alignment, work.Progress) : null,
+            new BookLinkProjection(
+                alignment.Link.State,
+                alignment.Link.Reason,
+                alignment.Audio.Structure?.Structure,
+                reading is null ? null : alignment.ReadingFraction(reading),
+                listening is null ? null : alignment.ListeningFraction(listening)));
     }
 
     /// <summary>

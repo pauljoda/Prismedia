@@ -12,6 +12,7 @@
     alignmentChapterMappings,
     alignmentReadableWindows,
     audioWindowKey,
+    bookSeparateProgress,
     sequentialBookChapterMappings,
   } from "$lib/entities/book-chapter-list";
   import { BOOK_CHAPTER_MAPPING_ORIGIN } from "$lib/api/generated/codes";
@@ -35,6 +36,8 @@
   }: Props = $props();
 
   let draft = $state.raw<BookChapterAudioMapping[]>([]);
+  // An in-order fill waiting for review: nothing enters the draft until every pair has been seen.
+  let proposedFill = $state.raw<BookChapterAudioMapping[] | null>(null);
   let sourceSignature = $state("");
   let firstReadableChapterKey = $state("");
   let loadedResetKey = $state<string | null>(null);
@@ -44,6 +47,7 @@
 
   const rows = $derived(alignment?.rows ?? []);
   const coverage = $derived(alignment?.coverage ?? null);
+  const separateReason = $derived(bookSeparateProgress(alignment)?.reason ?? null);
   const readableWindows = $derived(alignmentReadableWindows(alignment));
   const audioWindows = $derived(alignmentAudioWindows(alignment, audioTracks));
   const audioNumberByKey = $derived(new Map(audioWindows.map((entry, index) => [entry.key, index + 1])));
@@ -53,8 +57,10 @@
     annotation: `Chapter ${index + 1}`,
   })));
   const readableTitleByKey = $derived(new Map(readableWindows.map((chapter) => [chapter.chapterKey, chapter.title])));
+  const audioTitleByKey = $derived(new Map(audioWindows.map((entry) => [entry.key, entry.window.title])));
   const persistedMappings = $derived(alignmentChapterMappings(alignment));
-  // Only manual rows are editable; automatic rows are server-owned and refill after every save.
+  // Only confirmed rows (hand-picked or filled in order) are editable; automatic rows are
+  // server-owned and refill after every save.
   const manualMappings = $derived(
     persistedMappings.filter((mapping) => mapping.origin !== BOOK_CHAPTER_MAPPING_ORIGIN.auto),
   );
@@ -79,6 +85,7 @@
     loadedResetKey = resetKey;
     sourceSignature = nextSignature;
     draft = manualMappings.map((mapping) => ({ ...mapping }));
+    proposedFill = null;
     firstReadableChapterKey = initialFirstChapterKey();
     saved = false;
     actionError = null;
@@ -91,7 +98,7 @@
           || (a.audioMarkerId ?? "").localeCompare(b.audioMarkerId ?? "")
           || a.readableChapterKey.localeCompare(b.readableChapterKey),
       )
-      .map((mapping) => `${mappingKey(mapping)}:${mapping.readableChapterKey}`)
+      .map((mapping) => `${mappingKey(mapping)}:${mapping.readableChapterKey}:${mapping.origin ?? BOOK_CHAPTER_MAPPING_ORIGIN.manual}`)
       .join("|");
   }
 
@@ -122,8 +129,14 @@
   }
 
   function statusFor(audioKey: string): { label: string; manual: boolean } {
-    if (mappingByAudioKey.has(audioKey)) return { label: "Manual", manual: true };
-    if (automaticTitleByAudioKey.has(audioKey)) return { label: "Automatic", manual: false };
+    const confirmed = mappingByAudioKey.get(audioKey);
+    if (confirmed) {
+      return {
+        label: confirmed.origin === BOOK_CHAPTER_MAPPING_ORIGIN.ordered ? "Filled in order" : "Manual",
+        manual: true,
+      };
+    }
+    if (automaticTitleByAudioKey.has(audioKey)) return { label: "Exact title", manual: false };
     return { label: "Unmatched", manual: false };
   }
 
@@ -146,20 +159,30 @@
       draft = [...draft, {
         audioTrackId: window.trackEntityId,
         readableChapterKey,
+        origin: BOOK_CHAPTER_MAPPING_ORIGIN.manual,
         ...(window.markerId ? { audioMarkerId: window.markerId } : {}),
       }];
     }
   }
 
-  function markFirstChapter(): void {
+  /** Proposes pairs in playback order from the chosen chapter; they are reviewed before use. */
+  function proposeFillInOrder(): void {
     if (!firstReadableChapterKey) return;
-    draft = sequentialBookChapterMappings(readableWindows, audioWindows, firstReadableChapterKey);
+    proposedFill = sequentialBookChapterMappings(readableWindows, audioWindows, firstReadableChapterKey);
     saved = false;
     actionError = null;
   }
 
+  /** Uses the reviewed in-order pairs as the draft; each keeps its "filled in order" origin. */
+  function acceptFillInOrder(): void {
+    if (!proposedFill) return;
+    draft = proposedFill;
+    proposedFill = null;
+  }
+
   function clearOverrides(): void {
     draft = [];
+    proposedFill = null;
     saved = false;
     actionError = null;
   }
@@ -190,16 +213,20 @@
       <p class="eyebrow">Audiobook alignment</p>
       <h2 id="chapter-mapping-heading">Map audio chapters to readable chapters</h2>
       <p class="mapping-intro">
-        Prismedia uses embedded M4B chapters when present and whole files otherwise. Choose where
-        the first audio chapter begins, then adjust any association before saving. Rows follow the
-        book, so unmatched audio appears where it happens.
+        Prismedia uses embedded M4B chapters when present and whole files otherwise, and pairs them
+        automatically only when titles match exactly. Pick pairs yourself, or fill in order from a
+        chapter and review every pair before saving. Rows follow the book, so unmatched audio
+        appears where it happens.
       </p>
       {#if coverage}
         <p class="mapping-coverage">
           {coverage.pairedCount} of {coverage.readableCount} readable chapters aligned ·
           {coverage.pairedCount} of {coverage.audioWindowCount} audio chapters aligned ·
-          {coverage.manualCount} manual · {coverage.automaticCount} automatic
+          {coverage.manualCount} confirmed · {coverage.automaticCount} exact title
         </p>
+      {/if}
+      {#if separateReason}
+        <p class="mapping-coverage">{separateReason}</p>
       {/if}
     </div>
     <div
@@ -233,12 +260,42 @@
       variant="primary"
       size="lg"
       disabled={saving || !firstReadableChapterKey || audioWindows.length === 0}
-      onclick={markFirstChapter}
+      onclick={proposeFillInOrder}
     >
       <ArrowDownToLine class="h-4 w-4" />
-      Mark first chapter
+      Fill in order from here
     </Button>
   </div>
+
+  {#if proposedFill}
+    <div class="fill-review" role="region" aria-labelledby="fill-review-heading">
+      <div class="fill-review-header">
+        <div>
+          <h3 id="fill-review-heading">Review {proposedFill.length} pairs filled in order</h3>
+          <p>
+            Each audio chapter is paired with the next readable chapter. Check every pair: saved
+            pairs link reading and listening exactly as listed.
+          </p>
+        </div>
+        <div class="fill-review-actions">
+          <Button variant="ghost" onclick={() => (proposedFill = null)}>Discard</Button>
+          <Button variant="primary" disabled={proposedFill.length === 0} onclick={acceptFillInOrder}>
+            <Check class="h-4 w-4" />
+            Use these pairs
+          </Button>
+        </div>
+      </div>
+      <ol class="fill-review-list" aria-label="Pairs filled in order">
+        {#each proposedFill as pair (mappingKey(pair))}
+          <li>
+            <span class="pair-audio">{audioTitleByKey.get(mappingKey(pair)) ?? "Audio chapter"}</span>
+            <span class="pair-arrow" aria-hidden="true">→</span>
+            <span class="pair-readable">{readableTitleByKey.get(pair.readableChapterKey) ?? pair.readableChapterKey}</span>
+          </li>
+        {/each}
+      </ol>
+    </div>
+  {/if}
 
   <div class="mapping-list" aria-label="Chapter alignment">
     {#each rows as row (row.rowId)}
@@ -431,6 +488,77 @@
     min-width: 0;
   }
 
+  .fill-review {
+    display: grid;
+    gap: 0.75rem;
+    padding: 1rem;
+    border: 1px solid var(--color-border-default);
+    border-radius: var(--radius-lg);
+    background: var(--color-surface-1);
+  }
+
+  .fill-review-header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 1rem;
+  }
+
+  .fill-review-header h3 {
+    margin: 0;
+    font-family: var(--font-heading);
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--color-text-primary);
+  }
+
+  .fill-review-header p {
+    max-width: 40rem;
+    margin: 0.3rem 0 0;
+    font-size: 0.78rem;
+    line-height: 1.5;
+    color: var(--color-text-secondary);
+  }
+
+  .fill-review-actions {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 0.5rem;
+  }
+
+  .fill-review-list {
+    display: grid;
+    max-height: 22rem;
+    margin: 0;
+    padding: 0;
+    overflow-y: auto;
+    list-style: none;
+    border-top: 1px solid var(--color-border-subtle);
+  }
+
+  .fill-review-list li {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+    gap: 0.6rem;
+    align-items: center;
+    padding: 0.45rem 0.1rem;
+    border-bottom: 1px solid var(--color-border-subtle);
+    font-size: 0.78rem;
+  }
+
+  .pair-audio,
+  .pair-readable {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    color: var(--color-text-primary);
+  }
+
+  .pair-arrow {
+    font-family: var(--font-mono);
+    color: var(--color-text-muted);
+  }
+
   .mapping-list {
     overflow: hidden;
     border: 1px solid var(--color-border-subtle);
@@ -520,6 +648,10 @@
 
     .first-chapter-card {
       grid-template-columns: 1fr;
+    }
+
+    .fill-review-header {
+      flex-direction: column;
     }
 
     .mapping-row {

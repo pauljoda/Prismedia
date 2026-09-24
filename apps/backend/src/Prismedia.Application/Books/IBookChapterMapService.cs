@@ -46,4 +46,27 @@ public interface IBookChapterMapService {
     Task<IReadOnlyList<StaleBookChapterMap>> ListStaleForRootAsync(
         string rootPath,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Finds every Book whose persisted automatic chapter map was computed by an older matcher
+    /// version. Their automatic pairs are not exact evidence until the map is recomputed, so the
+    /// startup backfill refreshes them once. The query reads signatures only and parses nothing.
+    /// </summary>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>Books whose automatic map predates the current matcher, with titles for job labels.</returns>
+    Task<IReadOnlyList<StaleBookChapterMap>> ListOutdatedMatcherMapsAsync(CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Finds audiobook tracks owned by a Book whose file was probed before the probe recorded the
+    /// exact facts the chapter map depends on (title and track-number tags, and which embedded chapters
+    /// are untitled). The startup backfill probes each once more.
+    /// </summary>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    /// <returns>The tracks, with titles for job labels.</returns>
+    Task<IReadOnlyList<AudiobookTrackAwaitingProbe>> ListTracksAwaitingProbeFactsAsync(CancellationToken cancellationToken);
 }
+
+/// <summary>One probed audiobook track whose file facts predate the current probe.</summary>
+/// <param name="TrackId">Identifier of the audio-track Entity.</param>
+/// <param name="Title">The track's display title, for job labels.</param>
+public sealed record AudiobookTrackAwaitingProbe(Guid TrackId, string Title);

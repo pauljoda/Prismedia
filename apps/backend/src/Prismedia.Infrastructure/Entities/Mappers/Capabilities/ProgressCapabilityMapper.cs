@@ -72,26 +72,35 @@ internal sealed class ProgressCapabilityMapper(PrismediaDbContext db, ICurrentUs
         IReadOnlyList<UserProgressCheckpointRow> rows) {
         var checkpoints = new List<ProgressCheckpoint>(rows.Count);
         foreach (var row in rows) {
-            if (entity.Definition.Engagement.ModalityFor(row.Modality) is not { } definition) {
-                continue;
-            }
-
-            try {
-                checkpoints.Add(definition.Checkpoint(
-                    row.PositionEntityId,
-                    row.Unit,
-                    row.Index,
-                    row.Total,
-                    row.UpdatedAt,
-                    row.OffsetSeconds,
-                    row.MarkerId,
-                    row.Mode,
-                    row.Location));
-            } catch (ArgumentException) {
-                // Legacy or hand-edited rows that break the modality rules are skipped, not fatal.
+            if (entity.Definition.Engagement.ModalityFor(row.Modality) is { } definition &&
+                DecodeCheckpoint(definition, row) is { } checkpoint) {
+                checkpoints.Add(checkpoint);
             }
         }
         return checkpoints;
+    }
+
+    /// <summary>
+    /// Rebuilds one stored checkpoint row through its modality's validating factory, or returns null
+    /// for a legacy or hand-edited row that breaks the modality rules.
+    /// </summary>
+    internal static ProgressCheckpoint? DecodeCheckpoint(
+        ConsumptionModalityDefinition definition,
+        UserProgressCheckpointRow row) {
+        try {
+            return definition.Checkpoint(
+                row.PositionEntityId,
+                row.Unit,
+                row.Index,
+                row.Total,
+                row.UpdatedAt,
+                row.OffsetSeconds,
+                row.MarkerId,
+                row.Mode,
+                row.Location);
+        } catch (ArgumentException) {
+            return null;
+        }
     }
 
     #endregion

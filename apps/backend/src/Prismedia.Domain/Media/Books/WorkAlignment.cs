@@ -5,20 +5,28 @@ namespace Prismedia.Domain.Media.Books;
 /// <summary>
 /// The alignment between a work's readable chapters and its audio chapter windows, built from the
 /// persisted chapter pairings. It orders the rows so gaps show where they happen, measures coverage,
-/// locates exact reading and listening checkpoints, and derives resume, switch, and combined
-/// destinations by carrying the relative position inside a paired chapter across to the other side.
-/// It never falls back to another chapter: a position that cannot be aligned reports a gap.
+/// decides whether reading and listening are Linked or Separate, locates exact reading and listening
+/// checkpoints, and derives resume, switch, and combined destinations. A Linked work carries the
+/// relative position inside a paired chapter across to the other side; a Separate work never converts
+/// one format's position into the other and reports the reason instead. It never falls back to another
+/// chapter: a position that cannot be aligned reports a gap.
 /// </summary>
 public sealed partial class WorkAlignment {
     #region Variables
 
-    private readonly IReadOnlyList<AudioTrackSpan> _tracks;
+    private readonly IReadOnlyList<ReadableChapterWindow> _readableChapters;
 
     /// <summary>Alignment rows in display order.</summary>
     public IReadOnlyList<AlignedChapter> Rows { get; }
 
     /// <summary>How much of the readable and audio content is paired.</summary>
     public BookAlignmentCoverage Coverage { get; }
+
+    /// <summary>The work's audio rendition: playable tracks in playback order and their structure.</summary>
+    public AudiobookRendition Audio { get; }
+
+    /// <summary>Whether reading and listening are Linked, and why not when they are Separate.</summary>
+    public BookLink Link { get; }
 
     /// <summary>Work Entity addressed by whole-work positions.</summary>
     public Guid WorkId { get; }
@@ -27,7 +35,13 @@ public sealed partial class WorkAlignment {
     public bool HasReadableRendition { get; }
 
     /// <summary>Whether the work has playable audio tracks.</summary>
-    public bool HasAudio => _tracks.Count > 0;
+    public bool HasAudio => Audio.HasAudio;
+
+    /// <summary>
+    /// Whether the work has both formats but keeps them Separate, so listening must never move the
+    /// shared reading cursor, its consumed coverage, or anything else that reads as reading progress.
+    /// </summary>
+    public bool KeepsProgressSeparate => !Link.IsLinked && HasReadableRendition && HasAudio;
 
     #endregion
 
@@ -37,24 +51,24 @@ public sealed partial class WorkAlignment {
     /// <param name="workId">Work Entity addressed by whole-work positions.</param>
     /// <param name="hasReadableRendition">Whether the work has a readable rendition.</param>
     /// <param name="readableChapters">Readable chapters in display order.</param>
-    /// <param name="tracks">Playable audio tracks in playback order.</param>
-    /// <param name="audioWindows">Audio chapter windows in playback order.</param>
+    /// <param name="audio">The work's audio rendition.</param>
     /// <param name="pairings">
-    /// Persisted chapter pairings. Manual pairs win; pairs naming a missing chapter or window, or an
-    /// already paired side, are ignored.
+    /// Persisted chapter pairings from exact evidence. Confirmed pairs win over automatic ones; pairs
+    /// naming a missing chapter or window, or an already paired side, are ignored.
     /// </param>
     public WorkAlignment(
         Guid workId,
         bool hasReadableRendition,
         IReadOnlyList<ReadableChapterWindow> readableChapters,
-        IReadOnlyList<AudioTrackSpan> tracks,
-        IReadOnlyList<AudioChapterWindow> audioWindows,
+        AudiobookRendition audio,
         IReadOnlyList<ChapterPairing> pairings) {
         WorkId = workId;
         HasReadableRendition = hasReadableRendition || readableChapters.Count > 0;
-        _tracks = tracks;
-        Rows = BuildRows(readableChapters, audioWindows, pairings);
-        Coverage = MeasureCoverage(readableChapters, audioWindows.Count);
+        _readableChapters = readableChapters;
+        Audio = audio;
+        Rows = BuildRows(readableChapters, audio.Windows, pairings);
+        Coverage = MeasureCoverage(readableChapters, audio.Windows.Count);
+        Link = BookLink.Decide(audio.Structure, readableChapters.Count > 0, Rows.Any(row => row.IsPaired));
     }
 
     #endregion
@@ -71,8 +85,8 @@ public sealed partial class WorkAlignment {
             .GroupBy(entry => (entry.Window.TrackEntityId, entry.Window.MarkerId))
             .ToDictionary(group => group.Key, group => group.First().Index);
 
-        // Origins are declared manual-first, so user-chosen pairs claim their chapters before the
-        // matcher's automatic pairs.
+        // Origins are declared confirmed-first, so person-confirmed pairs claim their chapters before
+        // the matcher's automatic pairs.
         var pairByKey = new Dictionary<string, (int AudioIndex, BookChapterMappingOrigin Origin)>(StringComparer.Ordinal);
         var pairedAudio = new SortedSet<int>();
         foreach (var pairing in pairings.OrderBy(pairing => pairing.Origin)) {
@@ -160,20 +174,20 @@ public sealed partial class WorkAlignment {
         IReadOnlyList<ReadableChapterWindow> readableChapters,
         int audioWindowCount) {
         var paired = Rows.Where(row => row.IsPaired).ToArray();
-        var manual = paired.Count(row => row.Provenance == BookChapterMappingOrigin.Manual);
+        var automatic = paired.Count(row => row.Provenance == BookChapterMappingOrigin.Auto);
         return new BookAlignmentCoverage(
             readableChapters.Count,
             audioWindowCount,
             paired.Length,
-            manual,
-            paired.Length - manual,
+            paired.Length - automatic,
+            automatic,
             Rows.Count(row => row.MatchState == AlignmentMatchState.ReadableOnly),
             Rows.Count(row => row.MatchState == AlignmentMatchState.AudioOnly),
             PairedReadableFraction(readableChapters, paired),
             paired
                 .Where(row => row.Audio!.IsWindowed())
                 .Sum(row => row.Audio!.EndSeconds!.Value - row.Audio.StartSeconds),
-            _tracks.Sum(track => track.KnownDuration() ?? 0));
+            Audio.TotalKnownSeconds);
     }
 
     /// <summary>

@@ -12,8 +12,8 @@ using Prismedia.Infrastructure.Persistence;
 namespace Prismedia.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(PrismediaDbContext))]
-    [Migration("20260924205122_TempAudiobookReleaseShape")]
-    partial class TempAudiobookReleaseShape
+    [Migration("20260924212605_AddAudiobookStructureEvidence")]
+    partial class AddAudiobookStructureEvidence
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -553,6 +553,14 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .HasColumnType("text")
                         .HasColumnName("embedded_artist");
 
+                    b.Property<string>("EmbeddedTitle")
+                        .HasColumnType("text")
+                        .HasColumnName("embedded_title");
+
+                    b.Property<int?>("EmbeddedTrackNumber")
+                        .HasColumnType("integer")
+                        .HasColumnName("embedded_track_number");
+
                     b.Property<string>("SectionLabel")
                         .HasColumnType("text")
                         .HasColumnName("section_label");
@@ -562,6 +570,10 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasDefaultValue(0)
                         .HasColumnName("section_order");
+
+                    b.Property<DateTimeOffset?>("TagsRecordedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("tags_recorded_at");
 
                     b.HasKey("EntityId");
 
@@ -2168,6 +2180,10 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .IsRequired()
                         .HasColumnType("text")
                         .HasColumnName("title");
+
+                    b.Property<bool>("Untitled")
+                        .HasColumnType("boolean")
+                        .HasColumnName("untitled");
 
                     b.Property<DateTimeOffset>("UpdatedAt")
                         .HasColumnType("timestamp with time zone")

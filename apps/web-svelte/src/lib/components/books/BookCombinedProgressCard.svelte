@@ -1,8 +1,14 @@
 <script lang="ts">
   import { ArrowRightLeft, BookOpen, Headphones, Layers2 } from "@lucide/svelte";
-  import { Button, Panel, Progress } from "@prismedia/ui-svelte";
+  import { Button, Meter, Panel, Progress } from "@prismedia/ui-svelte";
+  import type { BookSeparateProgress } from "$lib/entities/book-chapter-list";
 
   interface Props {
+    /**
+     * Reading and listening of a Book that keeps them separate. When present the card shows two
+     * meters and the reason, and offers only each format's own exact resume; nothing switches.
+     */
+    separate?: BookSeparateProgress | null;
     progressPercent: number;
     progressLabel?: string | null;
     activityLabel?: string | null;
@@ -25,11 +31,12 @@
     switchNote?: string | null;
     onRead: () => void;
     onListen: () => void;
-    onCombined: () => void;
+    onCombined?: () => void;
     onSwitch?: () => void;
   }
 
   let {
+    separate = null,
     progressPercent,
     progressLabel = null,
     activityLabel = null,
@@ -62,23 +69,35 @@
 >
   <Panel variant="panel" class="combined-progress-card">
     <div class="combined-copy">
-      <p class="kicker">Exact positions · aligned chapters</p>
+      <p class="kicker">{separate ? "Exact positions · tracked separately" : "Exact positions · aligned chapters"}</p>
       <h2 id="combined-progress-title">Continue your book</h2>
       <p class="explanation">
-        {explanation ?? "Reading and listening each resume exactly where you left them. Switching lines up the matching chapter."}
+        {separate?.reason
+          ?? explanation
+          ?? "Reading and listening each resume exactly where you left them. Switching lines up the matching chapter."}
       </p>
     </div>
 
-    <div class="progress-summary" aria-label="Book progress">
-      <div class="progress-heading">
-        <Layers2 class="h-4 w-4" />
-        <span>{progressLabel ?? `${Math.round(percent)}%`}</span>
+    {#if separate}
+      <div class="progress-summary separate-summary" aria-label="Book progress by format">
+        <Meter class="separate-meter reading-meter" value={separate.readingPercent} label="Reading" showValue />
+        <Meter class="separate-meter listening-meter" value={separate.listeningPercent} label="Listening" showValue />
+        {#if activityLabel}
+          <span class="activity-label">{activityLabel}</span>
+        {/if}
       </div>
-      <Progress value={percent} aria-label="Book progress" class="h-[3px]" style="--progress-fill: linear-gradient(90deg, var(--reading-accent), var(--listening-accent))" />
-      {#if activityLabel}
-        <span class="activity-label">{activityLabel}</span>
-      {/if}
-    </div>
+    {:else}
+      <div class="progress-summary" aria-label="Book progress">
+        <div class="progress-heading">
+          <Layers2 class="h-4 w-4" />
+          <span>{progressLabel ?? `${Math.round(percent)}%`}</span>
+        </div>
+        <Progress value={percent} aria-label="Book progress" class="h-[3px]" style="--progress-fill: linear-gradient(90deg, var(--reading-accent), var(--listening-accent))" />
+        {#if activityLabel}
+          <span class="activity-label">{activityLabel}</span>
+        {/if}
+      </div>
+    {/if}
 
     <div class="combined-actions">
       <Button variant="secondary" size="sm" class="read-button gap-1.5" onclick={onRead}>
@@ -89,19 +108,21 @@
         <Headphones class="h-3.5 w-3.5" />
         {listenLabel}
       </Button>
-      <Button
-        variant="primary"
-        size="sm"
-        class="combined-button gap-1.5"
-        disabled={combinedDisabled}
-        onclick={onCombined}
-      >
-        <Layers2 class="h-3.5 w-3.5" />
-        {combinedLabel}
-      </Button>
+      {#if !separate && onCombined}
+        <Button
+          variant="primary"
+          size="sm"
+          class="combined-button gap-1.5"
+          disabled={combinedDisabled}
+          onclick={onCombined}
+        >
+          <Layers2 class="h-3.5 w-3.5" />
+          {combinedLabel}
+        </Button>
+      {/if}
     </div>
 
-    {#if notes.length > 0 || switchLabel || switchNote}
+    {#if !separate && (notes.length > 0 || switchLabel || switchNote)}
       <div class="combined-notes" aria-live="polite">
         {#each notes as note (note)}
           <span class="note">{note}</span>
@@ -170,6 +191,9 @@
     line-height: 1.45;
   }
   .progress-summary { display: grid; gap: 0.55rem; }
+  /* Each format's meter keeps its own paint, so the two progresses never read as one number. */
+  :global(.separate-meter.reading-meter) { --progress-fill: var(--reading-accent); }
+  :global(.separate-meter.listening-meter) { --progress-fill: var(--listening-accent); }
   .progress-heading {
     display: flex;
     align-items: center;

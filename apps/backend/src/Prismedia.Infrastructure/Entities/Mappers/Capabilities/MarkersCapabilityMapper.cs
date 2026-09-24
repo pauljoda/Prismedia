@@ -41,6 +41,10 @@ internal sealed class MarkersCapabilityMapper(PrismediaDbContext db) :
 
         foreach (var marker in markers.Items) {
             if (byId.TryGetValue(marker.Id, out var row)) {
+                // A person naming a chapter gives it a real title; the untitled placeholder is gone.
+                if (!string.Equals(row.Title, marker.Title, StringComparison.Ordinal)) {
+                    row.Untitled = false;
+                }
                 row.Title = marker.Title;
                 row.Seconds = marker.Seconds;
                 row.EndSeconds = marker.EndSeconds;

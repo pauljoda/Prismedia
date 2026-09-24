@@ -13,9 +13,10 @@ public sealed partial class EntityCapabilityService {
     /// Applies one progress report to the work that owns <paramref name="id"/>. Reading and legacy
     /// reports move the shared cursor and, for kinds that declare modalities, record the reading
     /// checkpoint. Listening reports record the exact track position and place the cursor through the
-    /// work's alignment: the aligned readable cursor inside a paired chapter, whole-work seconds for a
-    /// work without a readable rendition, and no move at all for unpaired audio. Completion and
-    /// start-over apply either way.
+    /// work's alignment: the aligned readable cursor inside a paired chapter of a Linked work,
+    /// whole-work seconds for a work without a readable rendition, and no move at all for a Separate
+    /// work or unpaired audio. Completion and start-over apply either way, but never change a Separate
+    /// work's reading coverage.
     /// </summary>
     /// <param name="id">Requested Entity; its declared progress topology selects the owning work.</param>
     /// <param name="report">The report to apply.</param>
@@ -354,11 +355,15 @@ public sealed partial class EntityCapabilityService {
         }
 
         // Unpaired audio leaves the cursor alone so it keeps one unit, but completion and start-over
-        // still apply to the work.
+        // still apply to the work. A Separate work's consumed coverage is reading progress, so
+        // listening start-over and completion leave it untouched.
         var changed = recorded || hasActivity;
+        var keepsReadingCoverage = alignment?.KeepsProgressSeparate == true;
         if (report.Reset) {
-            changed |= progress.TryResetCoverage(occurredAt);
-        } else if (report.Completed == true && progress.TryMarkCompleted(occurredAt)) {
+            changed |= keepsReadingCoverage
+                ? progress.TryMarkIncomplete(occurredAt)
+                : progress.TryResetCoverage(occurredAt);
+        } else if (report.Completed == true && progress.TryMarkCompleted(occurredAt, raisesCoverage: !keepsReadingCoverage)) {
             await StageCompletionAsync(entity, occurredAt, cancellationToken);
             changed = true;
         }

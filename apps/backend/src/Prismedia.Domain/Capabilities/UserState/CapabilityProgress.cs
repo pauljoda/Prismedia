@@ -208,15 +208,23 @@ public sealed class CapabilityProgress : EntityCapability {
     /// Marks the work finished without moving the cursor, for a completing signal whose position
     /// does not place the cursor (for example audio outside any paired chapter).
     /// </summary>
+    /// <param name="updatedAt">Server time at which the completing signal was accepted.</param>
+    /// <param name="raisesCoverage">
+    /// Whether completion also fills the cursor's consumed coverage. A work that keeps reading and
+    /// listening separate passes <see langword="false"/> for a listening completion, because its
+    /// coverage measures reading alone.
+    /// </param>
     /// <returns><see langword="true"/> when completion was recorded.</returns>
-    public bool TryMarkCompleted(DateTimeOffset updatedAt) {
+    public bool TryMarkCompleted(DateTimeOffset updatedAt, bool raisesCoverage = true) {
         if (!AcceptsProgressSignal(updatedAt)) {
             return false;
         }
 
         CompletedAt = updatedAt;
         UpdatedAt = updatedAt;
-        ConsumedCount = Math.Max(ConsumedCount, Math.Max(0, Total));
+        if (raisesCoverage) {
+            ConsumedCount = Math.Max(ConsumedCount, Math.Max(0, Total));
+        }
         return true;
     }
 

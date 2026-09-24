@@ -42,11 +42,17 @@ public sealed record AudioProbeData(
     IReadOnlyList<AudioChapterProbeData>? Chapters = null);
 
 /// <summary>One ordered embedded chapter window parsed from an audiobook container.</summary>
+/// <param name="Index">Chapter index reported by the container.</param>
+/// <param name="Title">Declared title, or a display placeholder when <paramref name="Untitled"/>.</param>
+/// <param name="StartSeconds">Chapter start.</param>
+/// <param name="EndSeconds">Chapter end.</param>
+/// <param name="Untitled">Whether the container declared no title, so the title never proves chapter identity.</param>
 public sealed record AudioChapterProbeData(
     int Index,
     string Title,
     double StartSeconds,
-    double EndSeconds);
+    double EndSeconds,
+    bool Untitled = false);
 
 public sealed record ImageProbeData(int Width, int Height, string? Codec);
 

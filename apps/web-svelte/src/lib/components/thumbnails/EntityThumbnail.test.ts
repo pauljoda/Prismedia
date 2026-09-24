@@ -326,6 +326,22 @@ describe("EntityThumbnail", () => {
     expect(container.textContent).toContain("Character Ronnie");
   });
 
+  it("draws two thin meters for a book that keeps reading and listening separate", () => {
+    const separate = render(EntityThumbnail, {
+      props: { card: { ...galleryCard(), progress: 0.25, separateProgress: true, listeningProgress: 0.6 } },
+    });
+    const meters = separate.getByTestId("separate-progress-meters");
+    const fills = [...meters.querySelectorAll<HTMLElement>(".progress-meter-fill")].map((fill) => fill.style.width);
+
+    expect(fills).toEqual(["25%", "60%"]);
+    expect(meters.textContent).toContain("Read 25 percent, listened 60 percent");
+    separate.unmount();
+
+    const linked = render(EntityThumbnail, { props: { card: { ...galleryCard(), progress: 0.25 } } });
+    expect(linked.queryByTestId("separate-progress-meters")).toBeNull();
+    expect(linked.container.querySelectorAll(".progress-meter-fill")).toHaveLength(1);
+  });
+
   it("shows a skeleton while async cover images are loading", async () => {
     const { container } = render(EntityThumbnail, {
       props: {

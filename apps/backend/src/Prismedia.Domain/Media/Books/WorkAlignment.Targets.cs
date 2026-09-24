@@ -57,7 +57,8 @@ public sealed partial class WorkAlignment {
     /// <summary>
     /// Destination on the other side of the alignment for <paramref name="source"/>: the same relative
     /// position inside the paired chapter (with the listening runway), the chapter start when either
-    /// window is unwindowed, or a gap. Only the derived side is returned.
+    /// window is unwindowed, or a gap. A Separate work never switches and reports its link reason,
+    /// still naming the row that holds the source position. Only the derived side is returned.
     /// </summary>
     /// <param name="source">Resumable checkpoint to switch from, or null when there is none.</param>
     /// <param name="readerMode">Reader layout to open aligned reading positions with.</param>
@@ -67,6 +68,9 @@ public sealed partial class WorkAlignment {
         }
 
         var anchor = Locate(source);
+        if (Link.Reason is { } separateReason) {
+            return Gap(anchor.Row?.RowId, separateReason, null);
+        }
         if (anchor.Row is not { } row) {
             return Gap(null, anchor.Gap ?? AlignmentGapReason.PositionOutsideChapters, anchor.GapChapterTitle);
         }
@@ -103,8 +107,15 @@ public sealed partial class WorkAlignment {
             : aligned with { Reading = ExactReading(anchor) };
     }
 
-    /// <summary>Both sides at the start of the first paired chapter, or a gap when nothing is paired.</summary>
+    /// <summary>
+    /// Both sides at the start of the first paired chapter, or a gap when the work is Separate or
+    /// nothing is paired.
+    /// </summary>
     public AlignedTarget FreshStart(ReaderMode? readerMode) {
+        if (Link.Reason is { } separateReason) {
+            return Gap(null, separateReason, null);
+        }
+
         var first = Rows.FirstOrDefault(row => row.IsPaired);
         if (first is null) {
             var firstReadable = Rows.FirstOrDefault(row => row.Readable is not null);
@@ -133,8 +144,9 @@ public sealed partial class WorkAlignment {
     /// <summary>
     /// Where a listening checkpoint places the work's shared cursor: whole-work seconds for a work
     /// without a readable rendition, the aligned readable cursor inside a paired chapter with known
-    /// readable bounds, or nothing (leave the cursor alone) for unpaired or unlocatable audio, so the
-    /// cursor keeps one unit for thumbnails and in-progress filters.
+    /// readable bounds of a Linked work, or nothing (leave the cursor alone) for a Separate work and for
+    /// unpaired or unlocatable audio, so the cursor keeps one unit for thumbnails and in-progress
+    /// filters and listening never becomes reading progress.
     /// </summary>
     /// <exception cref="ArgumentException">The checkpoint is not offset-addressed.</exception>
     public WorkCursorPlacement? PlaceCursor(ProgressCheckpoint listening) {
@@ -144,6 +156,9 @@ public sealed partial class WorkAlignment {
 
         if (!HasReadableRendition) {
             return CumulativePlacement(listening);
+        }
+        if (!Link.IsLinked) {
+            return null;
         }
 
         var anchor = LocateListening(listening);
@@ -156,21 +171,12 @@ public sealed partial class WorkAlignment {
     }
 
     private WorkCursorPlacement? CumulativePlacement(ProgressCheckpoint listening) {
-        var elapsed = 0d;
-        var found = false;
-        foreach (var track in _tracks) {
-            if (track.TrackEntityId == listening.PositionEntityId) {
-                found = true;
-                break;
-            }
-            elapsed += track.KnownDuration() ?? 0;
-        }
-        if (!found) {
+        if (Audio.ElapsedSeconds(listening) is not { } elapsed) {
             return null;
         }
 
-        var index = (int)Math.Min(int.MaxValue - 1, Math.Floor(elapsed + (listening.OffsetSeconds ?? listening.Index)));
-        var total = (int)Math.Min(int.MaxValue - 1, Math.Ceiling(_tracks.Sum(track => track.KnownDuration() ?? 0)));
+        var index = (int)Math.Min(int.MaxValue - 1, Math.Floor(elapsed));
+        var total = (int)Math.Min(int.MaxValue - 1, Math.Ceiling(Audio.TotalKnownSeconds));
         return new WorkCursorPlacement(WorkId, listening.Unit, index, Math.Max(index, total));
     }
 
@@ -231,7 +237,7 @@ public sealed partial class WorkAlignment {
         var holder = listening.MarkerId is { } markerId
             ? trackRows.FirstOrDefault(row => row.Audio!.MarkerId == markerId)
             : null;
-        var duration = _tracks.FirstOrDefault(track => track.TrackEntityId == listening.PositionEntityId)?.KnownDuration();
+        var duration = Audio.Tracks.FirstOrDefault(track => track.TrackEntityId == listening.PositionEntityId)?.KnownDuration();
         if (holder is null && duration is { } knownDuration && offset >= knownDuration) {
             holder = trackRows.MaxBy(row => row.Audio!.StartSeconds);
         }

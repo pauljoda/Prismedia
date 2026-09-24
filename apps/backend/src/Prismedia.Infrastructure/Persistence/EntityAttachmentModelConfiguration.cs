@@ -15,6 +15,7 @@ internal static class EntityAttachmentModelConfiguration {
             entity.Property(row => row.Seconds).HasColumnName("seconds");
             entity.Property(row => row.EndSeconds).HasColumnName("end_seconds");
             entity.Property(row => row.SourceIndex).HasColumnName("source_index");
+            entity.Property(row => row.Untitled).HasColumnName("untitled");
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
             entity.HasIndex(row => new { row.EntityId, row.Seconds });

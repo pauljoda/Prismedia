@@ -121,9 +121,22 @@ public sealed record EntityThumbnail(
     /// <summary>
     /// Fraction watched (videos) or read (books) in the range 0..1 for a thumbnail progress
     /// meter, or <c>null</c> when the entity has no meaningful progress to show. A completed
-    /// item reads 1.0.
+    /// item reads 1.0. For a Book with <see cref="ProgressSeparate"/> this is reading progress alone.
     /// </summary>
     public double? Progress { get; init; }
+
+    /// <summary>
+    /// True for an unfinished Book that keeps reading and listening Separate (its audio has no exact
+    /// chapter pairing). Grids then draw two meters: <see cref="Progress"/> for reading and
+    /// <see cref="ListeningProgress"/> for listening. False everywhere else, where one meter applies.
+    /// </summary>
+    public bool ProgressSeparate { get; init; }
+
+    /// <summary>
+    /// Fraction (0..1) of the known audio listened, for a Book with <see cref="ProgressSeparate"/>;
+    /// <c>null</c> otherwise or before any listening.
+    /// </summary>
+    public double? ListeningProgress { get; init; }
 
     /// <summary>
     /// Exact saved playback position in seconds for resumable video thumbnails. Movie

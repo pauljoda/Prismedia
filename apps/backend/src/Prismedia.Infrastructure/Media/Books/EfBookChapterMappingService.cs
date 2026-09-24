@@ -56,14 +56,14 @@ internal sealed class EfBookChapterMappingService(
                 .Select(item => item.Id)
                 .ToHashSet(StringComparer.Ordinal);
             if (readableKeys is null || normalized.Mappings.Any(mapping =>
-                    !readableKeys.Contains(mapping.ReadableChapterKey))) {
+                    !readableKeys.Contains(mapping.Pair.ReadableChapterKey))) {
                 return new BookChapterMappingSaveResult(
                     BookChapterMappingSaveStatus.Invalid,
                     "Every mapped readable chapter must belong to the Book's current contents.");
             }
         }
 
-        var trackIds = normalized.Mappings.Select(mapping => mapping.AudioTrackId).Distinct().ToArray();
+        var trackIds = normalized.Mappings.Select(mapping => mapping.Pair.AudioTrackId).Distinct().ToArray();
         var validTrackCount = await db.Entities
             .AsNoTracking()
             .CountAsync(row =>
@@ -81,12 +81,12 @@ internal sealed class EfBookChapterMappingService(
                 "Every mapped audiobook file must be a playable source owned directly by this Book.");
         }
 
-        var audioChapters = await BookAudioChapterProjection.LoadAsync(db, bookId, cancellationToken);
-        var availableAudioChapterIds = audioChapters.Windows
+        var audio = await BookAudioChapterProjection.LoadAsync(db, bookId, cancellationToken);
+        var availableAudioChapterIds = audio.Windows
             .Select(window => (window.TrackEntityId, window.MarkerId))
             .ToHashSet();
         if (normalized.Mappings.Any(mapping =>
-                !availableAudioChapterIds.Contains((mapping.AudioTrackId, mapping.AudioMarkerId)))) {
+                !availableAudioChapterIds.Contains((mapping.Pair.AudioTrackId, mapping.Pair.AudioMarkerId)))) {
             return new BookChapterMappingSaveResult(
                 BookChapterMappingSaveStatus.Invalid,
                 "Every mapped audiobook chapter must identify an available whole file or embedded chapter.");
@@ -109,10 +109,10 @@ internal sealed class EfBookChapterMappingService(
                 new BookChapterAudioMappingRow {
                     Id = Guid.NewGuid(),
                     BookId = bookId,
-                    ReadableChapterKey = mapping.ReadableChapterKey,
-                    AudioTrackEntityId = mapping.AudioTrackId,
-                    AudioMarkerId = mapping.AudioMarkerId,
-                    Origin = BookChapterMappingOrigin.Manual,
+                    ReadableChapterKey = mapping.Pair.ReadableChapterKey,
+                    AudioTrackEntityId = mapping.Pair.AudioTrackId,
+                    AudioMarkerId = mapping.Pair.AudioMarkerId,
+                    Origin = mapping.Origin,
                     UpdatedAt = now
                 }));
             await db.SaveChangesAsync(cancellationToken);
@@ -156,7 +156,8 @@ internal sealed class EfBookChapterMappingService(
                 row.Origin
             })
             .ToArrayAsync(cancellationToken);
-        var audioChapters = (await BookAudioChapterProjection.LoadAsync(db, bookId, cancellationToken)).Matchable;
+        var audioChapters = BookAudioChapterProjection.Matchable(
+            await BookAudioChapterProjection.LoadAsync(db, bookId, cancellationToken));
         return new BookChapterMappingsResponse(
             rows.Select(row => new BookChapterAudioMapping(
                     row.ReadableChapterKey,
@@ -177,15 +178,27 @@ internal sealed class EfBookChapterMappingService(
 
     #region Actions - Validation
 
+    /// <summary>
+    /// Validates a save request: one-to-one keys, and a person-confirmed origin on every row
+    /// (<c>manual</c> when omitted, or <c>ordered</c> for a reviewed in-order fill). Automatic rows are
+    /// server-owned and are never accepted from a client.
+    /// </summary>
     private static NormalizedMappings Normalize(IReadOnlyList<BookChapterAudioMapping>? mappings) {
         if (mappings is null) {
             return new NormalizedMappings([], "A chapter mapping list is required.");
         }
 
-        var normalized = new List<BookChapterAudioMapping>(mappings.Count);
+        var normalized = new List<ConfirmedMapping>(mappings.Count);
         var chapterKeys = new HashSet<string>(StringComparer.Ordinal);
         var audioChapterIds = new HashSet<(Guid AudioTrackId, Guid? AudioMarkerId)>();
         foreach (var mapping in mappings) {
+            var origin = BookChapterMappingOrigin.Manual;
+            if (mapping.Origin is { } code &&
+                (!code.TryDecodeAs(out origin) || origin == BookChapterMappingOrigin.Auto)) {
+                return new NormalizedMappings(
+                    [],
+                    $"Saved chapter pairs must be '{BookChapterMappingOrigin.Manual.ToCode()}' or '{BookChapterMappingOrigin.Ordered.ToCode()}'; received '{code}'.");
+            }
             var chapterKey = mapping.ReadableChapterKey?.Trim() ?? string.Empty;
             if (chapterKey.Length == 0 || chapterKey.Length > MaximumReadableChapterKeyLength) {
                 return new NormalizedMappings(
@@ -202,17 +215,22 @@ internal sealed class EfBookChapterMappingService(
                 return new NormalizedMappings([], "An audiobook chapter can map to only one readable chapter.");
             }
 
-            normalized.Add(new BookChapterAudioMapping(
-                chapterKey,
-                mapping.AudioTrackId,
-                AudioMarkerId: mapping.AudioMarkerId));
+            normalized.Add(new ConfirmedMapping(
+                new BookChapterAudioMapping(
+                    chapterKey,
+                    mapping.AudioTrackId,
+                    AudioMarkerId: mapping.AudioMarkerId),
+                origin));
         }
 
         return new NormalizedMappings(normalized, null);
     }
 
+    /// <summary>One validated saved pair and how the person confirmed it.</summary>
+    private sealed record ConfirmedMapping(BookChapterAudioMapping Pair, BookChapterMappingOrigin Origin);
+
     private sealed record NormalizedMappings(
-        IReadOnlyList<BookChapterAudioMapping> Mappings,
+        IReadOnlyList<ConfirmedMapping> Mappings,
         string? Error);
 
     #endregion

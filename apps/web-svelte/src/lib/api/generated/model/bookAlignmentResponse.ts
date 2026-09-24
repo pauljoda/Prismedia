@@ -7,6 +7,7 @@
 import type { BookAlignmentCoverage } from './bookAlignmentCoverage';
 import type { BookAlignmentResponseModalitiesItem } from './bookAlignmentResponseModalitiesItem';
 import type { BookAlignmentRow } from './bookAlignmentRow';
+import type { BookLinkProjection } from './bookLinkProjection';
 import type { BookResumeProjection } from './bookResumeProjection';
 
 export interface BookAlignmentResponse {
@@ -16,4 +17,5 @@ export interface BookAlignmentResponse {
   rows: BookAlignmentRow[];
   coverage: BookAlignmentCoverage;
   resume: null | BookResumeProjection;
+  link: BookLinkProjection;
 }

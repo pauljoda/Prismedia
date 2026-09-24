@@ -14,4 +14,8 @@ export const AlignmentGapReason = {
   readable_chapter_unpaired: 'readable_chapter_unpaired',
   audio_chapter_unpaired: 'audio_chapter_unpaired',
   position_outside_chapters: 'position_outside_chapters',
+  audio_unavailable: 'audio_unavailable',
+  audio_unstructured: 'audio_unstructured',
+  audio_in_parts: 'audio_in_parts',
+  no_exact_pairs: 'no_exact_pairs',
 } as const;

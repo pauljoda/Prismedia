@@ -2,7 +2,6 @@
   import { Badge as UiBadge } from "@prismedia/ui-svelte";
   import {
     ALIGNMENT_BASIS,
-    ALIGNMENT_GAP_REASON,
     BOOK_RENDITION,
     CAPABILITY_KIND,
     CONSUMPTION_MODALITY,
@@ -85,9 +84,12 @@
   import { entityAccentForKind } from "$lib/entities/entity-accent";
   import type { ArtworkPalette } from "$lib/entities/artwork-palette";
   import {
+    alignmentGapExplanation,
     bookChapterRowOwnsAudioTime,
     bookChapterRowsFromAlignment,
+    bookSeparateProgress,
     readableChaptersFromAlignment,
+    readingPositionLabel,
     type BookChapterRow,
   } from "$lib/entities/book-chapter-list";
   import { formatActiveDuration } from "$lib/stats/consumption-stats";
@@ -176,6 +178,9 @@
   // Alignment, pairing, and every resume destination are server-owned. The page only presents them
   // and opens the targets they name.
   const resume = $derived(alignment?.resume ?? null);
+  // A Separate Book (no exact chapter link between its formats) shows two progresses and never
+  // offers to switch between them; a Linked Book keeps one progress and the switching actions.
+  const separateProgress = $derived(bookSeparateProgress(alignment));
   const readableChapters = $derived(readableChaptersFromAlignment(alignment));
   const readingRowId = $derived(resume?.exactReading ? resume.switchToListening.rowId : null);
   const listeningRowId = $derived(resume?.exactListening ? resume.switchToReading.rowId : null);
@@ -240,7 +245,7 @@
   const combinedAction = $derived.by(() => {
     const combined = resume?.combined;
     if (!combined || combined.gap) {
-      return { label: "Read & listen", disabled: true, explanation: combined ? gapExplanation(combined) : null };
+      return { label: "Read & listen", disabled: true, explanation: combined ? alignmentGapExplanation(combined) : null };
     }
     if (combined.basis === ALIGNMENT_BASIS.freshStart) {
       return { label: "Start both", disabled: false, explanation: null };
@@ -257,13 +262,18 @@
     if (!resume?.exactReading || !resume.exactListening) return null;
     const fromListening = resume.lastModality === CONSUMPTION_MODALITY.listening;
     const target = fromListening ? resume.switchToReading : resume.switchToListening;
-    if (target.gap) return { label: null, note: gapExplanation(target) };
+    if (target.gap) return { label: null, note: alignmentGapExplanation(target) };
     const approximate = target.approximate ? " ≈" : "";
     return fromListening
       ? { label: `Read from your listening spot${approximate}`, note: null }
       : { label: `Listen from your reading spot${approximate}`, note: null };
   });
-  const hasCombinedContent = $derived(chapterRows.some((row) => row.readTarget && row.audioTrack));
+  const hasCombinedContent = $derived(
+    separateProgress !== null || chapterRows.some((row) => row.readTarget && row.audioTrack),
+  );
+  const listeningStarted = $derived(
+    separateProgress ? separateProgress.listeningPercent > 0 || savedAudiobookResume !== null : canonicalPercent > 0,
+  );
   const canMapBookChapters = $derived(readableChapters.length > 0 && audiobookTracks.length > 0);
   const audioPartCount = $derived(Number(alignment?.coverage.audioWindowCount ?? 0) || audiobookTracks.length);
   const fallbackBookPalette = entityAccentForKind(ENTITY_KIND.book);
@@ -332,7 +342,7 @@
         id: "listen-book",
         label: isCurrentAudiobook && playback.playing
           ? "Pause"
-          : canonicalPercent > 0 && !canonicalCompleted
+          : listeningStarted && !canonicalCompleted
             ? "Continue listening"
             : canonicalCompleted
               ? "Listen again"
@@ -703,31 +713,6 @@
     return target && !target.gap ? target : null;
   }
 
-  function gapExplanation(target: AlignedTarget): string | null {
-    const title = target.gapChapterTitle ? `“${target.gapChapterTitle}”` : "This chapter";
-    switch (target.gap) {
-      case ALIGNMENT_GAP_REASON.readableChapterUnpaired:
-        return `${title} has no matching audiobook chapter.`;
-      case ALIGNMENT_GAP_REASON.audioChapterUnpaired:
-        return `${title} has no matching ebook chapter.`;
-      case ALIGNMENT_GAP_REASON.readableChaptersUnavailable:
-        return "This ebook has no chapter list to line up with the audiobook.";
-      case ALIGNMENT_GAP_REASON.positionOutsideChapters:
-        return "Your position is outside the chapters that line up.";
-      default:
-        return null;
-    }
-  }
-
-  function readingPositionLabel(target: ReadingTarget | null): string | null {
-    if (!target) return null;
-    const total = numberValue(target.total) ?? 0;
-    const pageIndex = numberValue(target.pageIndex);
-    if (pageIndex !== null && total > 0) return `Page ${Math.min(pageIndex + 1, total)} of ${total}`;
-    if (total <= 0) return null;
-    return `${Math.round(((numberValue(target.index) ?? 0) / total) * 100)}% of book`;
-  }
-
   /**
    * Opens a server reading target. Exact single-file positions resume through the reader's own
    * exact checkpoint; aligned EPUB positions open by chapter location at a chapter start and by
@@ -1083,7 +1068,14 @@
       {/snippet}
 
       {#snippet heroBadges()}
-        {#if canonicalPercent > 0}
+        {#if separateProgress}
+          {#if separateProgress.readingPercent > 0}
+            <UiBadge variant="outline">Read {separateProgress.readingPercent}%</UiBadge>
+          {/if}
+          {#if separateProgress.listeningPercent > 0}
+            <UiBadge variant="outline">Listened {separateProgress.listeningPercent}%</UiBadge>
+          {/if}
+        {:else if canonicalPercent > 0}
           <UiBadge variant="outline">Progress {canonicalPercent}%</UiBadge>
         {/if}
       {/snippet}
@@ -1143,6 +1135,7 @@
 
     {#if hasCombinedContent}
       <BookCombinedProgressCard
+        separate={separateProgress}
         progressPercent={canonicalPercent}
         progressLabel={canonicalPositionLabel}
         activityLabel={bookActivityLabel}
@@ -1224,7 +1217,7 @@
         listeningProgressLabel={chapterListeningProgressLabel}
         onRead={openChapterRow}
         onListen={listenToChapter}
-        onCombined={openCombinedChapter}
+        onCombined={separateProgress ? undefined : openCombinedChapter}
       />
     {/if}
 

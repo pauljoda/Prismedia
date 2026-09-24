@@ -9,6 +9,7 @@ import type { EntityCapabilityProgressCapabilityLastModality } from './entityCap
 import type { ModalityProgress } from './modalityProgress';
 import type { ProgressUnit } from './progressUnit';
 import type { ReaderMode } from './readerMode';
+import type { SeparateProgress } from './separateProgress';
 
 export interface EntityCapabilityProgressCapability {
   kind: EntityCapabilityProgressCapabilityKind;
@@ -48,4 +49,5 @@ export interface EntityCapabilityProgressCapability {
   lastModality?: EntityCapabilityProgressCapabilityLastModality;
   /** @nullable */
   checkpoints?: ModalityProgress[] | null;
+  separate?: null | SeparateProgress;
 }
