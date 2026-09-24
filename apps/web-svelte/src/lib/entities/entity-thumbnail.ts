@@ -111,6 +111,13 @@ export interface EntityThumbnailCard {
   /** Fraction watched/read in 0..1 for the thumbnail progress meter, when meaningful. */
   progress?: number | null;
   /**
+   * True for a Book that keeps reading and listening separate: the thumbnail draws two thin meters,
+   * `progress` for reading and `listeningProgress` for listening, instead of one.
+   */
+  separateProgress?: boolean;
+  /** Fraction (0..1) of the audio listened, for a Book with `separateProgress`. */
+  listeningProgress?: number | null;
+  /**
    * For a wanted placeholder, its latest acquisition status code (an AcquisitionStatus value), so the
    * thumbnail's wanted badge shows what the item is doing. Null/undefined when not wanted or unknown.
    */

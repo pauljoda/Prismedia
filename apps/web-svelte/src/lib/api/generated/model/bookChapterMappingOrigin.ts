@@ -10,5 +10,6 @@ export type BookChapterMappingOrigin = typeof BookChapterMappingOrigin[keyof typ
 
 export const BookChapterMappingOrigin = {
   manual: 'manual',
+  ordered: 'ordered',
   auto: 'auto',
 } as const;

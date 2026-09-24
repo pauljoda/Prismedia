@@ -11,7 +11,15 @@
     showWantedBadge: boolean;
     showBadges?: boolean;
   } = $props();
-  const progressPercent = $derived(card.progress != null && card.progress > 0 ? Math.min(100, Math.max(0, card.progress * 100)) : null);
+
+  function meterPercent(fraction: number | null | undefined): number | null {
+    return fraction != null && fraction > 0 ? Math.min(100, Math.max(0, fraction * 100)) : null;
+  }
+
+  const progressPercent = $derived(meterPercent(card.progress));
+  // A Book that keeps reading and listening separate draws both, never one merged number.
+  const listeningPercent = $derived(card.separateProgress ? meterPercent(card.listeningProgress) : null);
+  const showsSeparateMeters = $derived(Boolean(card.separateProgress) && (progressPercent != null || listeningPercent != null));
   function stopSelectionActivation(event: Event) { event.stopPropagation(); }
 </script>
 
@@ -21,11 +29,22 @@
   </span>
 {/if}
 {#if showBadges}<EntityThumbnailBadges {card} {selectable} {showWantedBadge} />{/if}
-{#if progressPercent != null}<div class="progress-meter" aria-hidden="true"><span class="progress-meter-fill" style:width={`${progressPercent}%`}></span></div>{/if}
+{#if showsSeparateMeters}
+  <div class="progress-meter is-separate" data-testid="separate-progress-meters" title={`Read ${Math.round(progressPercent ?? 0)}% · Listened ${Math.round(listeningPercent ?? 0)}%`}>
+    <span class="progress-meter-track reading" aria-hidden="true"><span class="progress-meter-fill" style:width={`${progressPercent ?? 0}%`}></span></span>
+    <span class="progress-meter-track listening" aria-hidden="true"><span class="progress-meter-fill" style:width={`${listeningPercent ?? 0}%`}></span></span>
+    <span class="sr-only">Read {Math.round(progressPercent ?? 0)} percent, listened {Math.round(listeningPercent ?? 0)} percent</span>
+  </div>
+{:else if progressPercent != null}
+  <div class="progress-meter" aria-hidden="true"><span class="progress-meter-fill" style:width={`${progressPercent}%`}></span></div>
+{/if}
 
 <style>
   .progress-meter { position: absolute; inset: auto 0 0; z-index: 4; height: 3px; background: rgb(0 0 0 / 0.45); }
   .progress-meter-fill { display: block; height: 100%; background: color-mix(in srgb, var(--entity-accent) 80%, #c7c9cc); }
+  .progress-meter.is-separate { display: grid; gap: 1px; height: auto; background: transparent; }
+  .progress-meter-track { display: block; height: 2px; background: rgb(0 0 0 / 0.45); }
+  .progress-meter-track.listening .progress-meter-fill { background: color-mix(in srgb, var(--entity-accent) 35%, #c7c9cc); }
   .selection { position: absolute; z-index: 6; top: calc(var(--spacing) * 2); left: calc(var(--spacing) * 2); width: var(--spacing-control-xs); height: var(--spacing-control-xs); border-radius: var(--radius-xs); background: var(--color-surface-1); opacity: 0; pointer-events: none; transition: opacity 120ms ease; }
   :global(.entity-thumbnail:is(:hover, :focus-within)) .selection, :global(.entity-thumbnail.is-select-mode) .selection, :global(.entity-thumbnail.is-selected) .selection, .selection:focus-within { opacity: 1; pointer-events: auto; }
   :global(.entity-thumbnail.is-list) .selection { opacity: 1; pointer-events: auto; }

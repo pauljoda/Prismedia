@@ -11,7 +11,8 @@
     listeningProgressLabel?: string | null;
     onRead: (row: BookChapterRow) => void;
     onListen: (row: BookChapterRow) => void;
-    onCombined: (row: BookChapterRow) => void;
+    /** Opens both formats of a paired chapter together; omitted when the Book keeps them separate. */
+    onCombined?: (row: BookChapterRow) => void;
   }
 
   let {
@@ -104,7 +105,7 @@
                 <Headphones class="h-4 w-4" />
               </Button>
             {/if}
-            {#if row.readTarget && row.audioTrack}
+            {#if onCombined && row.readTarget && row.audioTrack}
               <Button
                 variant="ghost"
                 size="icon"

@@ -409,6 +409,10 @@ export const ALIGNMENT_GAP_REASON = {
   readableChapterUnpaired: "readable_chapter_unpaired",
   audioChapterUnpaired: "audio_chapter_unpaired",
   positionOutsideChapters: "position_outside_chapters",
+  audioUnavailable: "audio_unavailable",
+  audioUnstructured: "audio_unstructured",
+  audioInParts: "audio_in_parts",
+  noExactPairs: "no_exact_pairs",
 } as const;
 
 export type AlignmentGapReasonCode = (typeof ALIGNMENT_GAP_REASON)[keyof typeof ALIGNMENT_GAP_REASON];
@@ -456,6 +460,16 @@ export const AUDIO_QUALITY = {
 
 export type AudioQualityCode = (typeof AUDIO_QUALITY)[keyof typeof AUDIO_QUALITY];
 
+// source: enum AudiobookStructure
+export const AUDIOBOOK_STRUCTURE = {
+  chaptered: "chaptered",
+  filePerChapter: "file_per_chapter",
+  parts: "parts",
+  unstructured: "unstructured",
+} as const;
+
+export type AudiobookStructureCode = (typeof AUDIOBOOK_STRUCTURE)[keyof typeof AUDIOBOOK_STRUCTURE];
+
 // source: enum AutoIdentifySelectorKind
 export const AUTO_IDENTIFY_SELECTOR_KIND = {
   video: "video",
@@ -483,6 +497,7 @@ export type BlocklistReasonCode = (typeof BLOCKLIST_REASON)[keyof typeof BLOCKLI
 // source: enum BookChapterMappingOrigin
 export const BOOK_CHAPTER_MAPPING_ORIGIN = {
   manual: "manual",
+  ordered: "ordered",
   auto: "auto",
 } as const;
 
@@ -506,6 +521,14 @@ export const BOOK_FORMAT_TIER = {
 } as const;
 
 export type BookFormatTierCode = (typeof BOOK_FORMAT_TIER)[keyof typeof BOOK_FORMAT_TIER];
+
+// source: enum BookLinkState
+export const BOOK_LINK_STATE = {
+  linked: "linked",
+  separate: "separate",
+} as const;
+
+export type BookLinkStateCode = (typeof BOOK_LINK_STATE)[keyof typeof BOOK_LINK_STATE];
 
 // source: enum BookRendition
 export const BOOK_RENDITION = {
