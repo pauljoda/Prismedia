@@ -13,7 +13,13 @@ namespace Prismedia.Infrastructure.Integrations;
 
 /// <summary>Persists connection aggregates and encrypts credentials in the same optimistic transaction.</summary>
 public sealed class EfIntegrationConnectionStore(PrismediaDbContext db, ConnectionSecretProtector secrets) : IIntegrationConnectionStore {
+    #region Static Variables
+
     private static readonly JsonSerializerOptions Json = PluginProcessTransport.JsonOptions;
+
+    #endregion
+
+    #region Actions - Queries
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<StoredIntegrationConnection>> ListAsync(CancellationToken cancellationToken) =>
@@ -21,7 +27,23 @@ public sealed class EfIntegrationConnectionStore(PrismediaDbContext db, Connecti
 
     /// <inheritdoc />
     public async Task<StoredIntegrationConnection?> FindAsync(Guid id, CancellationToken cancellationToken) =>
-        await db.IntegrationConnections.AsNoTracking().SingleOrDefaultAsync(row => row.Id == id, cancellationToken) is { } row ? Map(row) : null;
+        await db.IntegrationConnections.AsNoTracking().SingleOrDefaultAsync(row => row.Id == id, cancellationToken) is { } row
+            ? Map(row)
+            : null;
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyDictionary<string, string>> ReadSecretsAsync(Guid id, IReadOnlyCollection<string> credentialKeys,
+        CancellationToken cancellationToken) {
+        var row = await db.IntegrationConnections.AsNoTracking().SingleOrDefaultAsync(row => row.Id == id, cancellationToken)
+            ?? throw new ConnectionNotFoundException();
+        var allowed = credentialKeys.ToHashSet(StringComparer.Ordinal);
+        return Read<Dictionary<string, string>>(row.ProtectedSecretsJson).Where(pair => allowed.Contains(pair.Key))
+            .ToDictionary(pair => pair.Key, pair => secrets.Unprotect(id, pair.Key, pair.Value), StringComparer.Ordinal);
+    }
+
+    #endregion
+
+    #region Actions - Persistence
 
     /// <inheritdoc />
     public async Task SaveAsync(IntegrationConnection connection, long? expectedRevision,
@@ -31,24 +53,41 @@ public sealed class EfIntegrationConnectionStore(PrismediaDbContext db, Connecti
         await using var rootBoundary = await LibraryRootConfigurationLease.AcquireAsync(db, cancellationToken);
         var row = await db.IntegrationConnections.SingleOrDefaultAsync(row => row.Id == state.Id, cancellationToken);
         if (state.Enabled && (row is null || !row.Enabled)
-            && !await db.ProviderConfigs.AnyAsync(provider => provider.ProviderCode == state.PluginId && provider.Enabled, cancellationToken))
+            && !await db.ProviderConfigs.AnyAsync(provider => provider.ProviderCode == state.PluginId && provider.Enabled,
+                cancellationToken)) {
             throw new ConnectionConflictException();
+        }
+
         if (expectedRevision is null) {
-            if (row is not null || state.Revision != 1) throw new ConnectionConflictException();
+            if (row is not null || state.Revision != 1) {
+                throw new ConnectionConflictException();
+            }
+
             row = new IntegrationConnectionRow { Id = state.Id, PluginId = state.PluginId };
             db.IntegrationConnections.Add(row);
-        } else if (row is null) throw new ConnectionNotFoundException();
-        else if (row.Revision != expectedRevision || state.Revision != expectedRevision + 1) throw new ConnectionConflictException();
+        } else if (row is null) {
+            throw new ConnectionNotFoundException();
+        } else if (row.Revision != expectedRevision || state.Revision != expectedRevision + 1) {
+            throw new ConnectionConflictException();
+        }
 
         if (expectedRevision is not null && (row.BaseUrl != state.BaseUrl
-            || !Read<Dictionary<string, string>>(row.SettingsJson).OrderBy(pair => pair.Key).SequenceEqual(state.Settings.OrderBy(pair => pair.Key)))
-            && await db.ExternalLibraryMounts.AnyAsync(mount => mount.ConnectionId == state.Id, cancellationToken))
-            throw new ArgumentException("This connection owns mapped library roots. Create a separate connection for another address or source configuration.");
+            || !Read<Dictionary<string, string>>(row.SettingsJson).OrderBy(pair => pair.Key)
+                .SequenceEqual(state.Settings.OrderBy(pair => pair.Key)))
+            && await db.ExternalLibraryMounts.AnyAsync(mount => mount.ConnectionId == state.Id, cancellationToken)) {
+            throw new ArgumentException(
+                "This connection owns mapped library roots. Create a separate connection for another address or source configuration.");
+        }
+
         var protectedValues = Read<Dictionary<string, string>>(row.ProtectedSecretsJson);
         foreach (var (key, value) in secretChanges) {
-            if (string.IsNullOrEmpty(value)) protectedValues.Remove(key);
-            else protectedValues[key] = secrets.Protect(state.Id, key, value);
+            if (string.IsNullOrEmpty(value)) {
+                protectedValues.Remove(key);
+            } else {
+                protectedValues[key] = secrets.Protect(state.Id, key, value);
+            }
         }
+
         row.Name = state.Name;
         row.BaseUrl = state.BaseUrl;
         row.Enabled = state.Enabled;
@@ -62,32 +101,44 @@ public sealed class EfIntegrationConnectionStore(PrismediaDbContext db, Connecti
         row.HasPersistentRemoteIdentity = state.HasPersistentRemoteIdentity;
         row.LastCheckedAt = state.LastCheckedAt;
         row.LastError = state.LastError;
-        try { await db.SaveChangesAsync(cancellationToken); }
-        catch (DbUpdateConcurrencyException) { throw new ConnectionConflictException(); }
-        if (transaction is not null) await transaction.CommitAsync(cancellationToken);
-    }
+        try {
+            await db.SaveChangesAsync(cancellationToken);
+        } catch (DbUpdateConcurrencyException) {
+            throw new ConnectionConflictException();
+        }
 
-    /// <inheritdoc />
-    public async Task<IReadOnlyDictionary<string, string>> ReadSecretsAsync(Guid id, IReadOnlyCollection<string> credentialKeys, CancellationToken cancellationToken) {
-        var row = await db.IntegrationConnections.AsNoTracking().SingleOrDefaultAsync(row => row.Id == id, cancellationToken)
-            ?? throw new ConnectionNotFoundException();
-        var allowed = credentialKeys.ToHashSet(StringComparer.Ordinal);
-        return Read<Dictionary<string, string>>(row.ProtectedSecretsJson).Where(pair => allowed.Contains(pair.Key)).ToDictionary(pair => pair.Key,
-            pair => secrets.Unprotect(id, pair.Key, pair.Value), StringComparer.Ordinal);
+        if (transaction is not null) {
+            await transaction.CommitAsync(cancellationToken);
+        }
     }
 
     /// <inheritdoc />
     public async Task DeleteAsync(Guid id, long expectedRevision, CancellationToken cancellationToken) {
         var row = await db.IntegrationConnections.SingleOrDefaultAsync(row => row.Id == id, cancellationToken)
             ?? throw new ConnectionNotFoundException();
-        if (row.Revision != expectedRevision) throw new ConnectionConflictException();
+        if (row.Revision != expectedRevision) {
+            throw new ConnectionConflictException();
+        }
+
         if (await db.IntegrationTransfers.AsNoTracking().AnyAsync(transfer => transfer.ConnectionId == id, cancellationToken)
-            || await db.ExternalLibraryMounts.AnyAsync(mount => mount.ConnectionId == id, cancellationToken)) throw new ConnectionInUseException();
+            || await db.ExternalLibraryMounts.AnyAsync(mount => mount.ConnectionId == id, cancellationToken)) {
+            throw new ConnectionInUseException();
+        }
+
         db.IntegrationConnections.Remove(row);
-        try { await db.SaveChangesAsync(cancellationToken); }
-        catch (DbUpdateConcurrencyException) { throw new ConnectionConflictException(); }
-        catch (DbUpdateException error) when (error.InnerException is PostgresException { SqlState: PostgresErrorCodes.ForeignKeyViolation }) { throw new ConnectionInUseException(); }
+        try {
+            await db.SaveChangesAsync(cancellationToken);
+        } catch (DbUpdateConcurrencyException) {
+            throw new ConnectionConflictException();
+        } catch (DbUpdateException error)
+            when (error.InnerException is PostgresException { SqlState: PostgresErrorCodes.ForeignKeyViolation }) {
+            throw new ConnectionInUseException();
+        }
     }
+
+    #endregion
+
+    #region Actions - Mapping
 
     private static T Read<T>(string json) where T : notnull => JsonSerializer.Deserialize<T>(json, Json)
         ?? throw new InvalidDataException("Stored connection configuration is invalid.");
@@ -98,4 +149,6 @@ public sealed class EfIntegrationConnectionStore(PrismediaDbContext db, Connecti
         row.Revision, row.Status, row.RemoteInstanceId, Read<IntegrationSupport[]>(row.EffectiveCapabilitiesJson),
         row.LastCheckedAt, row.LastError, row.HasPersistentRemoteIdentity)),
         Read<Dictionary<string, string>>(row.ProtectedSecretsJson).Keys.Order(StringComparer.Ordinal).ToArray());
+
+    #endregion
 }

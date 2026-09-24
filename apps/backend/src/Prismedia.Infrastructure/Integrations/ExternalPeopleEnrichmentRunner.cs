@@ -19,7 +19,13 @@ internal sealed class ExternalPeopleEnrichmentRunner(
     IPluginRequestProposalSource proposals,
     IExternalPeopleCreditsApplier creditsApplier,
     TimeProvider timeProvider) : IExternalPeopleEnrichmentRunner {
+    #region Static Variables
+
     private const int MaximumCredits = 1000;
+
+    #endregion
+
+    #region Actions - Enrichment
 
     public async Task<ExternalPeopleEnrichmentResult> RunAsync(
         Guid holdingId,
@@ -27,8 +33,8 @@ internal sealed class ExternalPeopleEnrichmentRunner(
         string fingerprint,
         CancellationToken cancellationToken) {
         var plan = await plans.ResolveAsync(holdingId, cancellationToken);
-        if (plan is null || plan.EntityId != entityId ||
-            !string.Equals(plan.Fingerprint, fingerprint, StringComparison.Ordinal)) {
+        if (plan is null || plan.EntityId != entityId
+            || !string.Equals(plan.Fingerprint, fingerprint, StringComparison.Ordinal)) {
             return new(false, null, "People metadata configuration changed; a fresh lookup will be scheduled");
         }
 
@@ -46,6 +52,7 @@ internal sealed class ExternalPeopleEnrichmentRunner(
                         await RecordAttemptAsync(holdingId, fingerprint, completed: true, cancellationToken);
                         return new(true, proposal.Provider, $"Applied exact people metadata from {proposal.Provider}");
                     }
+
                     if (applyResult is ExternalPeopleCreditsApplyResult.ExistingCredits
                         or ExternalPeopleCreditsApplyResult.ProtectedByUser) {
                         await RecordAttemptAsync(holdingId, fingerprint, completed: true, cancellationToken);
@@ -79,6 +86,7 @@ internal sealed class ExternalPeopleEnrichmentRunner(
                             await RecordAttemptAsync(holdingId, fingerprint, completed: true, cancellationToken);
                             return new(true, proposal.Provider, $"Applied exact people metadata from {proposal.Provider}");
                         }
+
                         if (applyResult is ExternalPeopleCreditsApplyResult.ExistingCredits
                             or ExternalPeopleCreditsApplyResult.ProtectedByUser) {
                             await RecordAttemptAsync(holdingId, fingerprint, completed: true, cancellationToken);
@@ -107,6 +115,10 @@ internal sealed class ExternalPeopleEnrichmentRunner(
         CancellationToken cancellationToken) =>
         RecordAttemptAsync(holdingId, fingerprint, completed: false, cancellationToken);
 
+    #endregion
+
+    #region Actions - Proposals
+
     private async Task<EntityMetadataProposal?> ResolveManagerProposalAsync(
         ExternalPeopleEnrichmentPlan plan,
         CancellationToken cancellationToken) {
@@ -122,6 +134,7 @@ internal sealed class ExternalPeopleEnrichmentRunner(
         if (credits is not { Count: > 0 }) {
             return null;
         }
+
         ValidateCredits(credits);
         return ManagedMetadataProposalFactory.Create(
             manager.Connection.State.Id,
@@ -153,8 +166,13 @@ internal sealed class ExternalPeopleEnrichmentRunner(
         if (result == ExternalPeopleCreditsApplyResult.LifecycleConflict) {
             throw new EntityLifecycleMutationConflictException(plan.EntityId);
         }
+
         return result;
     }
+
+    #endregion
+
+    #region Actions - Persistence
 
     private async Task RecordAttemptAsync(
         Guid holdingId,
@@ -167,12 +185,18 @@ internal sealed class ExternalPeopleEnrichmentRunner(
         if (holding is null) {
             return;
         }
+
         holding.PeopleEnrichmentFingerprint = fingerprint;
         if (completed) {
             holding.PeopleEnrichmentCompletedAt = now;
         }
+
         await db.SaveChangesAsync(cancellationToken);
     }
+
+    #endregion
+
+    #region Actions - Queries
 
     private Task<bool> HasCreditsAsync(Guid entityId, CancellationToken cancellationToken) {
         var relationshipCodes = new[] {
@@ -184,25 +208,30 @@ internal sealed class ExternalPeopleEnrichmentRunner(
             cancellationToken);
     }
 
+    #endregion
+
+    #region Actions - Validation
+
     private static void ValidateCredits(IReadOnlyList<ManagedPersonCredit> credits) {
         if (credits.Count > MaximumCredits || credits.Any(credit =>
-                credit is null ||
-                string.IsNullOrWhiteSpace(credit.Name) ||
-                credit.Name.Length > 512 ||
-                credit.Name.Any(char.IsControl) ||
-                !Enum.IsDefined(credit.Role) ||
-                credit.Character is { } character && (string.IsNullOrWhiteSpace(character)
-                    || character.Length > 512 || character.Any(char.IsControl)) ||
-                credit.SortOrder is < 0 or > 1_000_000 ||
-                credit.ExternalIds is { Count: > 8 } ||
-                credit.ExternalIds?.Any(pair => string.IsNullOrWhiteSpace(pair.Key)
+                credit is null
+                || string.IsNullOrWhiteSpace(credit.Name)
+                || credit.Name.Length > 512
+                || credit.Name.Any(char.IsControl)
+                || !Enum.IsDefined(credit.Role)
+                || credit.Character is { } character && (string.IsNullOrWhiteSpace(character)
+                    || character.Length > 512 || character.Any(char.IsControl))
+                || credit.SortOrder is < 0 or > 1_000_000
+                || credit.ExternalIds is { Count: > 8 }
+                || credit.ExternalIds?.Any(pair => string.IsNullOrWhiteSpace(pair.Key)
                     || pair.Key.Length > 128 || string.IsNullOrWhiteSpace(pair.Value)
-                    || pair.Value.Length > 2048) == true ||
-                credit.ExternalIds?.ContainsKey(ExternalIdProviders.Tmdb) == true
-                    && !CanonicalTmdbPersonId(credit.ExternalIds[ExternalIdProviders.Tmdb]) ||
-                credit.ProfileUrl is { } profileUrl && !SafeImageUrl(profileUrl))) {
+                    || pair.Value.Length > 2048) == true
+                || credit.ExternalIds?.ContainsKey(ExternalIdProviders.Tmdb) == true
+                    && !CanonicalTmdbPersonId(credit.ExternalIds[ExternalIdProviders.Tmdb])
+                || credit.ProfileUrl is { } profileUrl && !SafeImageUrl(profileUrl))) {
             throw new IntegrationInvocationException("The manager returned invalid or oversized people metadata.");
         }
+
         try {
             _ = credits.SelectMany(credit => (credit.ExternalIds ?? new Dictionary<string, string>())
                 .Select(pair => new ExternalIdentity(pair.Key, pair.Value))).ToArray();
@@ -225,4 +254,6 @@ internal sealed class ExternalPeopleEnrichmentRunner(
         && uri.UserInfo.Length == 0
         && uri.Fragment.Length == 0
         && !uri.IsLoopback;
+
+    #endregion
 }

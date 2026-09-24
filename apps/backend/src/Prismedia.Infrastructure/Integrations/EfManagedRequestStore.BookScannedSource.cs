@@ -6,8 +6,9 @@ using Prismedia.Infrastructure.Persistence.Entities;
 
 namespace Prismedia.Infrastructure.Integrations;
 
+/// <summary>Adopts Book files the library scanner already recorded, but only when no other ownership or activity claims them.</summary>
 public sealed partial class EfManagedRequestStore {
-    private sealed record ScannedBookSource(Guid SourceFileId, Guid EntityId);
+    #region Actions - Scanned Source Adoption
 
     private async Task<ScannedBookSource?> AdoptScannedBookSourceAsync(EntityRow book, string path,
         long sizeBytes, BookRendition rendition, Guid libraryRootId, string localRoot,
@@ -17,11 +18,16 @@ public sealed partial class EfManagedRequestStore {
             .Where(source => source.Path.Length == path.Length)
             .ToArrayAsync(token);
         var matches = candidates.Where(source => FileSystemPathComparison.Equals(source.Path, path)).ToArray();
-        if (matches.Length == 0) return null;
+        if (matches.Length == 0) {
+            return null;
+        }
+
         if (matches is not [{ Role: EntityFileRole.Source } source]
             || source.SizeBytes is { } size && size != sizeBytes
-            || await db.ManagedSourceBindings.AnyAsync(binding => binding.SourceFileId == source.Id, token))
+            || await db.ManagedSourceBindings.AnyAsync(binding => binding.SourceFileId == source.Id, token)) {
             throw ScannedBookReview();
+        }
+
         var owner = await db.Entities.SingleAsync(entity => entity.Id == source.EntityId, token);
         if (rendition == BookRendition.Ebook) {
             if (owner.Id != book.Id) {
@@ -32,12 +38,16 @@ public sealed partial class EfManagedRequestStore {
                         && file.Id != source.Id && file.Role == EntityFileRole.Source, token)
                     || await db.BookDetails.Where(detail => detail.EntityId == owner.Id)
                         .Select(detail => detail.Format).SingleOrDefaultAsync(token) is not
-                            (BookFormat.Epub or BookFormat.Pdf)) throw ScannedBookReview();
+                            (BookFormat.Epub or BookFormat.Pdf)) {
+                    throw ScannedBookReview();
+                }
+
                 await RequireUnclaimedScannedBookAsync(owner, book.Id, token);
                 source.EntityId = book.Id;
                 owner.IsLibraryArchived = true;
                 owner.UpdatedAt = now;
             }
+
             source.SizeBytes = sizeBytes;
             source.UpdatedAt = now;
             return new(source.Id, book.Id);
@@ -45,8 +55,10 @@ public sealed partial class EfManagedRequestStore {
 
         if (owner.KindCode != EntityKind.AudioTrack.ToCode() || owner.ParentEntityId is not { } parentId
             || await db.EntityFiles.AnyAsync(file => file.EntityId == owner.Id
-                && file.Id != source.Id && file.Role == EntityFileRole.Source, token))
+                && file.Id != source.Id && file.Role == EntityFileRole.Source, token)) {
             throw ScannedBookReview();
+        }
+
         if (parentId != book.Id) {
             var donor = await db.Entities.SingleAsync(entity => entity.Id == parentId, token);
             var children = await db.Entities.Where(entity => entity.ParentEntityId == donor.Id).ToArrayAsync(token);
@@ -63,7 +75,10 @@ public sealed partial class EfManagedRequestStore {
                     || file.Source != FileSourceKind.Scan.ToCode()
                     || !expectedPaths.Any(expected => FileSystemPathComparison.Equals(expected, file.Path)))
                 || await db.EntityFiles.AnyAsync(file => file.EntityId == donor.Id
-                    && file.Role == EntityFileRole.Source, token)) throw ScannedBookReview();
+                    && file.Role == EntityFileRole.Source, token)) {
+                throw ScannedBookReview();
+            }
+
             await RequireUnclaimedScannedBookAsync(donor, book.Id, token);
             if (await db.UserEntityStates.AnyAsync(state => childIds.Contains(state.EntityId), token)
                 || await db.EntityConsumptionEvents.AnyAsync(entry => childIds.Contains(entry.EntityId), token)
@@ -72,36 +87,56 @@ public sealed partial class EfManagedRequestStore {
                 || await db.Monitors.AnyAsync(monitor => monitor.EntityId.HasValue
                     && childIds.Contains(monitor.EntityId.Value), token)
                 || await db.FulfillmentReservations.AnyAsync(reservation => childIds.Contains(reservation.EntityId)
-                    && reservation.ReleasedAt == null, token)) throw ScannedBookReview();
+                    && reservation.ReleasedAt == null, token)) {
+                throw ScannedBookReview();
+            }
+
             var folderCode = EntitySourceCode.Folder.ToCode();
             var donorFolder = await db.EntitySources.SingleOrDefaultAsync(row =>
                 row.EntityId == donor.Id && row.Code == folderCode, token);
             var folder = Path.GetDirectoryName(path) ?? throw ScannedBookReview();
             var expectedGroup = FileSystemPathComparison.Equals(folder, localRoot) ? path : folder;
-            if (donorFolder is null || !FileSystemPathComparison.Equals(donorFolder.Value, expectedGroup))
+            if (donorFolder is null || !FileSystemPathComparison.Equals(donorFolder.Value, expectedGroup)) {
                 throw ScannedBookReview();
+            }
+
             var existingFolder = await db.EntitySources.SingleOrDefaultAsync(row =>
                 row.EntityId == book.Id && row.Code == folderCode, token);
-            if (existingFolder is not null && !FileSystemPathComparison.Equals(existingFolder.Value, expectedGroup))
+            if (existingFolder is not null && !FileSystemPathComparison.Equals(existingFolder.Value, expectedGroup)) {
                 throw ScannedBookReview();
-            if (existingFolder is null) db.EntitySources.Add(new() {
-                EntityId = book.Id, Code = folderCode, Value = expectedGroup, UpdatedAt = now
-            });
+            }
+
+            if (existingFolder is null) {
+                db.EntitySources.Add(new() {
+                    EntityId = book.Id, Code = folderCode, Value = expectedGroup, UpdatedAt = now
+                });
+            }
+
             db.EntitySources.Remove(donorFolder);
             foreach (var child in children) {
                 child.ParentEntityId = book.Id;
                 child.UpdatedAt = now;
             }
+
             donor.IsLibraryArchived = true;
             donor.UpdatedAt = now;
         }
+
         var root = await db.EntityLibraryRoots.SingleOrDefaultAsync(row => row.EntityId == owner.Id, token);
-        if (root is null) db.EntityLibraryRoots.Add(new() { EntityId = owner.Id, LibraryRootId = libraryRootId });
-        else root.LibraryRootId = libraryRootId;
+        if (root is null) {
+            db.EntityLibraryRoots.Add(new() { EntityId = owner.Id, LibraryRootId = libraryRootId });
+        } else {
+            root.LibraryRootId = libraryRootId;
+        }
+
         source.SizeBytes = sizeBytes;
         source.UpdatedAt = now;
         return new(source.Id, owner.Id);
     }
+
+    #endregion
+
+    #region Actions - Ownership Review
 
     private async Task RequireUnclaimedScannedBookAsync(EntityRow donor, Guid targetBookId,
         CancellationToken token) {
@@ -118,9 +153,15 @@ public sealed partial class EfManagedRequestStore {
             || await db.Monitors.AnyAsync(monitor => monitor.EntityId == donor.Id, token)
             || await db.BookChapterAudioMappings.AnyAsync(mapping => mapping.BookId == donor.Id, token)
             || await db.FulfillmentReservations.AnyAsync(reservation => reservation.EntityId == donor.Id
-                && reservation.ReleasedAt == null, token)) throw ScannedBookReview();
+                && reservation.ReleasedAt == null, token)) {
+            throw ScannedBookReview();
+        }
     }
 
     private static ArgumentException ScannedBookReview() => new(
         "The scanner already attached this Book file to a record with additional ownership or activity. Review that association before materialization.");
+
+    #endregion
+
+    private sealed record ScannedBookSource(Guid SourceFileId, Guid EntityId);
 }

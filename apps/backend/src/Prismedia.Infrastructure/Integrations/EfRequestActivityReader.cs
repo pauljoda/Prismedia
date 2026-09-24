@@ -16,16 +16,31 @@ public sealed class EfRequestActivityReader(
     PrismediaDbContext db,
     TransferPlanProtector transferPlans,
     TimeProvider timeProvider) : IRequestActivityReader {
+    #region Static Variables
+
     private const int DefaultLimit = 50;
+
     private const int MaximumLimit = 100;
+
     private const int TransferRank = 0;
+
     private const int RequestRank = 1;
+
     private const int HoldingRank = 2;
+
     private const int AttentionGroupRank = 0;
+
     private const int ProgressGroupRank = 1;
+
     private const int FollowingGroupRank = 2;
+
     private const int RecentGroupRank = 3;
+
     private static readonly JsonSerializerOptions Json = PluginProcessTransport.JsonOptions;
+
+    #endregion
+
+    #region Actions - Queries
 
     /// <inheritdoc />
     public async Task<RequestActivityPage> ListAsync(
@@ -64,6 +79,10 @@ public sealed class EfRequestActivityReader(
             : null;
         return new(mapped, sources, nextCursor, timeProvider.GetUtcNow());
     }
+
+    #endregion
+
+    #region Actions - Candidates
 
     private IQueryable<TimedTransfer> TransferCandidates(
         Guid? connectionId,
@@ -158,6 +177,10 @@ public sealed class EfRequestActivityReader(
         return query.Take(limit);
     }
 
+    #endregion
+
+    #region Actions - Mapping
+
     private async Task<IReadOnlyList<RequestActivityItem>> MapAsync(
         IReadOnlyList<Candidate> candidates,
         bool hideNsfw,
@@ -170,7 +193,9 @@ public sealed class EfRequestActivityReader(
                 .Where(binding => holdingIds.Contains(binding.HoldingId))
                 .ToArrayAsync(cancellationToken);
         var mapped = candidates.Select(candidate => Map(candidate, bindings)).ToArray();
-        if (!hideNsfw) return mapped;
+        if (!hideNsfw) {
+            return mapped;
+        }
 
         var libraryRootIds = mapped.Select(item => item.Transfer?.LibraryRootId
                 ?? item.Request?.LibraryRootId
@@ -219,6 +244,7 @@ public sealed class EfRequestActivityReader(
                 state.SourceProgress, state.SourceProblem);
             return new(transfer.Id, transfer.ConnectionId, candidate.OccurredAt, Transfer: transferResponse);
         }
+
         if (candidate.RequestRow is { } request) {
             var state = JsonSerializer.Deserialize<ManagedRequestState>(request.StateJson, Json)
                 ?? throw new InvalidDataException("Stored managed request state is invalid.");
@@ -234,6 +260,7 @@ public sealed class EfRequestActivityReader(
                 plan.Request.TargetEntityIds);
             return new(request.Id, request.ConnectionId, candidate.OccurredAt, Request: requestResponse);
         }
+
         var holding = candidate.HoldingRow
             ?? throw new InvalidDataException("Activity candidate has no retained payload.");
         var holdingBindings = bindings.Where(binding => binding.HoldingId == holding.Id)
@@ -242,7 +269,8 @@ public sealed class EfRequestActivityReader(
                 var file = group.First();
                 return new ManagedFileBinding(file.RemoteFileId, file.LocalPath, file.SizeBytes, file.WrittenAt,
                     file.IsAvailable, group.Select(binding => new ManagedEntityBinding(
-                        new(binding.RemoteTargetId, binding.Kind, binding.SeasonNumber, binding.EpisodeNumber, binding.AbsoluteNumber, binding.IssueLabel),
+                        new(binding.RemoteTargetId, binding.Kind, binding.SeasonNumber, binding.EpisodeNumber, binding.AbsoluteNumber,
+                            binding.IssueLabel),
                         binding.EntityId, binding.SourceFileId)).ToArray());
             }).ToArray();
         var holdingResponse = new ManagedTrackingResponse(
@@ -255,6 +283,10 @@ public sealed class EfRequestActivityReader(
             holding.ReleaseOperationId, holding.ReleasedAt);
         return new(holding.Id, holding.ConnectionId, candidate.OccurredAt, Holding: holdingResponse);
     }
+
+    #endregion
+
+    #region Actions - Source Health
 
     private async Task<IReadOnlyList<RequestActivitySource>> SourceHealthAsync(
         Guid? connectionId,
@@ -275,8 +307,12 @@ public sealed class EfRequestActivityReader(
                 connection.LastError))
             .ToArrayAsync(cancellationToken);
 
+    #endregion
+
     private sealed record TimedTransfer(IntegrationTransferRow Row, DateTimeOffset OccurredAt, DateTimeOffset SortAt, int GroupRank);
+
     private sealed record TimedRequest(ManagedRequestRow Row, DateTimeOffset OccurredAt, DateTimeOffset SortAt, int GroupRank);
+
     private sealed record TimedHolding(ManagedHoldingRow Row, DateTimeOffset OccurredAt, DateTimeOffset SortAt, int GroupRank);
 
     private sealed record Candidate(
@@ -288,23 +324,37 @@ public sealed class EfRequestActivityReader(
         IntegrationTransferRow? TransferRow,
         ManagedRequestRow? RequestRow,
         ManagedHoldingRow? HoldingRow) {
+        #region Actions - Factories
+
         public static Candidate Transfer(TimedTransfer candidate) =>
             new(candidate.Row.Id, TransferRank, candidate.GroupRank, candidate.OccurredAt, candidate.SortAt, candidate.Row, null, null);
+
         public static Candidate Request(TimedRequest candidate) =>
             new(candidate.Row.Id, RequestRank, candidate.GroupRank, candidate.OccurredAt, candidate.SortAt, null, candidate.Row, null);
+
         public static Candidate Holding(TimedHolding candidate) =>
             new(candidate.Row.Id, HoldingRank, candidate.GroupRank, candidate.OccurredAt, candidate.SortAt, null, null, candidate.Row);
+
+        #endregion
     }
 
     private sealed record ActivityCursor(DateTimeOffset SortAt, int GroupRank, int TypeRank, Guid Id) {
+        #region Actions - Encoding
+
         public static string Encode(DateTimeOffset sortAt, int groupRank, int typeRank, Guid id, Guid? connectionId, bool hideNsfw) {
             var value = $"{sortAt.UtcTicks}:{groupRank}:{typeRank}:{id:N}:{connectionId?.ToString("N") ?? "-"}:{(hideNsfw ? 1 : 0)}";
             return Convert.ToBase64String(Encoding.UTF8.GetBytes(value)).TrimEnd('=').Replace('+', '-').Replace('/', '_');
         }
 
         public static ActivityCursor? Decode(string? value, Guid? connectionId, bool hideNsfw) {
-            if (string.IsNullOrWhiteSpace(value)) return null;
-            if (value.Length > 256) throw new ArgumentException("The activity cursor is invalid.");
+            if (string.IsNullOrWhiteSpace(value)) {
+                return null;
+            }
+
+            if (value.Length > 256) {
+                throw new ArgumentException("The activity cursor is invalid.");
+            }
+
             try {
                 var encoded = value.Replace('-', '+').Replace('_', '/');
                 encoded = encoded.PadRight(encoded.Length + (4 - encoded.Length % 4) % 4, '=');
@@ -314,11 +364,16 @@ public sealed class EfRequestActivityReader(
                     || !int.TryParse(parts[2], out var typeRank) || typeRank is < TransferRank or > HoldingRank
                     || !Guid.TryParseExact(parts[3], "N", out var id)
                     || parts[4] != (connectionId?.ToString("N") ?? "-")
-                    || parts[5] != (hideNsfw ? "1" : "0")) throw new FormatException();
+                    || parts[5] != (hideNsfw ? "1" : "0")) {
+                    throw new FormatException();
+                }
+
                 return new(new DateTimeOffset(ticks, TimeSpan.Zero), groupRank, typeRank, id);
             } catch (Exception error) when (error is FormatException or ArgumentOutOfRangeException) {
                 throw new ArgumentException("The activity cursor is invalid.");
             }
         }
+
+        #endregion
     }
 }
