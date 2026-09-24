@@ -32,7 +32,8 @@ public sealed record MediaResolutionManifestEntry(string Code, int MinimumWidth,
 /// <summary>Library-root scan requirement for files of one Entity kind.</summary>
 /// <param name="Capability">Library-root capability code; it matches the library-root property name.</param>
 /// <param name="RequiresRecursiveRoot">Whether the root must also scan recursively.</param>
-public sealed record EntityKindLibraryRootManifestEntry(string Capability, bool RequiresRecursiveRoot);
+/// <param name="AcceptsIntegrationImport">Whether connected sources and executors may deliver files of this kind into the root.</param>
+public sealed record EntityKindLibraryRootManifestEntry(string Capability, bool RequiresRecursiveRoot, bool AcceptsIntegrationImport);
 
 /// <summary>Cross-client navigation metadata owned by an Entity-kind definition.</summary>
 /// <param name="CanonicalBrowseKind">Entity kind represented by the canonical list destination.</param>
@@ -237,7 +238,8 @@ public sealed record CodesManifest(
                 definition => definition.Code,
                 definition => new EntityKindLibraryRootManifestEntry(
                     definition.LibraryRootCapability!.Value.ToCode(),
-                    (definition as IIntegrationImportKindDefinition)?.IntegrationImport.RequiresRecursiveRoot ?? false),
+                    (definition as IIntegrationImportKindDefinition)?.IntegrationImport.RequiresRecursiveRoot ?? false,
+                    IntegrationImportPolicy.Supports(definition.Kind)),
                 StringComparer.Ordinal);
 
     private static IReadOnlyDictionary<string, IReadOnlyDictionary<string, IReadOnlyDictionary<string, bool>>> BuildClosedSetFacts() =>

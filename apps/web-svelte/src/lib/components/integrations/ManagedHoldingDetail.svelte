@@ -14,7 +14,7 @@
     Server,
   } from "@lucide/svelte";
   import { Badge, Button, DialogBase, Panel } from "@prismedia/ui-svelte";
-  import { ENTITY_KIND, EXTERNAL_ID_PROVIDER, INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
+  import { ENTITY_KIND, EXTERNAL_ID_PROVIDER } from "$lib/api/generated/codes";
   import type { BookRenditionCode } from "$lib/api/generated/codes";
   import type {
     ConnectionResponse,
@@ -32,6 +32,7 @@
   } from "$lib/components/entities/EntityDetail.svelte";
   import type { EntityDetailCard } from "$lib/entities/entity-detail";
   import { displayNameForEntityKind } from "$lib/entities/entity-codes";
+  import { connectionSupports } from "$lib/integrations/connection-features";
   import { entityReferenceToThumbnailCard } from "$lib/entities/entity-thumbnail";
   import { formatBytes } from "$lib/utils/format";
   import ExternalLibraryMappings from "./ExternalLibraryMappings.svelte";
@@ -123,16 +124,8 @@
   const hasRelevantEvidence = $derived(
     localFiles !== null && detail.files.some((file) => localFiles?.some((candidate) => candidate.remoteId === file.remoteId)),
   );
-  const canConfigureMapping = $derived(connection.effectiveCapabilities.some((capability) =>
-    capability.kind === PLUGIN_CAPABILITY.externalManager
-      && capability.operations.includes(INTEGRATION_OPERATION.managerOptions),
-  ));
-  const canRequestComicIssue = $derived(connection.effectiveCapabilities.some((capability) =>
-    capability.kind === PLUGIN_CAPABILITY.externalManager
-      && [INTEGRATION_OPERATION.lookupManaged, INTEGRATION_OPERATION.reconcileManaged,
-        INTEGRATION_OPERATION.configureManaged, INTEGRATION_OPERATION.requestManaged]
-        .every(operation => capability.operations.includes(operation)),
-  ));
+  const canConfigureMapping = $derived(connectionSupports(connection, "managerOptions"));
+  const canRequestComicIssue = $derived(connectionSupports(connection, "existingHoldingRequest", ENTITY_KIND.comicSeries));
   const localSummary = $derived.by(() => {
     if (detail.files.length === 0) {
       return {

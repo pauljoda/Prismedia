@@ -5,12 +5,13 @@
   import { page } from "$app/state";
   import { Library, Search } from "@lucide/svelte";
   import { Alert, Button, DialogBase, Panel, Tabs, TextInput } from "@prismedia/ui-svelte";
-  import { CONNECTION_STATUS, ENTITY_KIND, INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
+  import { CONNECTION_STATUS, ENTITY_KIND } from "$lib/api/generated/codes";
   import type { ConnectionResponse, EntityKind, ManagedDiscoverySearchResponse, ManagedDiscoverySearchResult } from "$lib/api/generated/model";
   import { searchManagerTitles } from "$lib/api/managed-discovery";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import DiscoveryResults from "$lib/components/requests/DiscoveryResults.svelte";
   import { entityReferenceToThumbnailCard } from "$lib/entities/entity-thumbnail";
+  import { connectionFeatureKinds, connectionSupports } from "$lib/integrations/connection-features";
   import { requestKindForEntityKind } from "$lib/requests/request-helpers";
   import ConnectedLibraryBrowser from "./ConnectedLibraryBrowser.svelte";
   import ExternalLibraryMappings from "./ExternalLibraryMappings.svelte";
@@ -24,13 +25,9 @@
   const findTab = "Find new titles";
   const libraryTab = "In your library";
   let tab = $state(findTab);
-  const support = $derived(connection.effectiveCapabilities.find(capability =>
-    capability.kind === PLUGIN_CAPABILITY.externalManager
-    && capability.operations.includes(INTEGRATION_OPERATION.discoverManaged)));
-  const kind = $derived(support?.entityKinds.find(value => value === initialEntityKind) ?? support?.entityKinds[0]);
-  const canBrowseLibrary = $derived(connection.enabledCapabilities.includes(PLUGIN_CAPABILITY.connectedLibrary)
-    && connection.effectiveCapabilities.some(capability => capability.kind === PLUGIN_CAPABILITY.connectedLibrary
-      && capability.operations.includes(INTEGRATION_OPERATION.searchLibrary)));
+  const discoveryKinds = $derived(connectionFeatureKinds(connection, "managerDiscovery"));
+  const kind = $derived(discoveryKinds.find(value => value === initialEntityKind) ?? discoveryKinds[0]);
+  const canBrowseLibrary = $derived(connectionSupports(connection, "libraryBrowse"));
   let query = $state(untrack(() => page.url.searchParams.get("managerQuery") ?? ""));
   let searchedQuery = $state("");
   let results = $state<ManagedDiscoverySearchResponse | null>(null);

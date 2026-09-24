@@ -2168,37 +2168,45 @@ export type IdentifyContainerEntityKindCode = (typeof ENTITY_KINDS_ENUMERATING_I
 export const ENTITY_KIND_LIBRARY_ROOTS = {
   "audio-library": {
     "capability": "scanAudio",
-    "requiresRecursiveRoot": false
+    "requiresRecursiveRoot": false,
+    "acceptsIntegrationImport": false
   },
   "book": {
     "capability": "scanBooks",
-    "requiresRecursiveRoot": false
+    "requiresRecursiveRoot": false,
+    "acceptsIntegrationImport": true
   },
   "comic-installment": {
     "capability": "scanBooks",
-    "requiresRecursiveRoot": false
+    "requiresRecursiveRoot": false,
+    "acceptsIntegrationImport": true
   },
   "comic-series": {
     "capability": "scanBooks",
-    "requiresRecursiveRoot": false
+    "requiresRecursiveRoot": false,
+    "acceptsIntegrationImport": false
   },
   "gallery": {
     "capability": "scanImages",
-    "requiresRecursiveRoot": true
+    "requiresRecursiveRoot": true,
+    "acceptsIntegrationImport": true
   },
   "image": {
     "capability": "scanImages",
-    "requiresRecursiveRoot": false
+    "requiresRecursiveRoot": false,
+    "acceptsIntegrationImport": true
   },
   "movie": {
     "capability": "scanVideos",
-    "requiresRecursiveRoot": false
+    "requiresRecursiveRoot": false,
+    "acceptsIntegrationImport": false
   },
   "video-series": {
     "capability": "scanVideos",
-    "requiresRecursiveRoot": false
+    "requiresRecursiveRoot": false,
+    "acceptsIntegrationImport": false
   }
-} as const satisfies Partial<Record<EntityKindCode, { capability: LibraryRootMediaCapabilityCode; requiresRecursiveRoot: boolean }>>;
+} as const satisfies Partial<Record<EntityKindCode, { capability: LibraryRootMediaCapabilityCode; requiresRecursiveRoot: boolean; acceptsIntegrationImport: boolean }>>;
 
 // source: IntegrationTransferPhaseDefinition
 export const INTEGRATION_TRANSFER_PHASE_FACTS = {

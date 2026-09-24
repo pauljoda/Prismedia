@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ENTITY_KIND, INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
+import { CONNECTION_STATUS, ENTITY_KIND, INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
 import type { ConnectionResponse, LibraryRoot } from "$lib/api/generated/model";
 import { executorKinds } from "./executor-options";
 import { integrationImportRoots } from "./import-options";
@@ -19,7 +19,8 @@ describe("executor destinations", () => {
     expect(integrationImportRoots(roots.map(root => ({ ...root, recursive: false })), ENTITY_KIND.gallery)).toEqual([]);
   });
   it("offers only kinds that can both be inspected and submitted", () => {
-    const connection = { effectiveCapabilities: [
+    const connection = { enabled: true, status: CONNECTION_STATUS.ready,
+      enabledCapabilities: [PLUGIN_CAPABILITY.catalogDiscovery, PLUGIN_CAPABILITY.transferExecutor], effectiveCapabilities: [
       { kind: PLUGIN_CAPABILITY.catalogDiscovery, operations: [INTEGRATION_OPERATION.inspect], entityKinds: [ENTITY_KIND.image, ENTITY_KIND.book, ENTITY_KIND.gallery] },
       { kind: PLUGIN_CAPABILITY.transferExecutor, operations: [INTEGRATION_OPERATION.submit], entityKinds: [ENTITY_KIND.image, ENTITY_KIND.gallery] },
     ] } as ConnectionResponse;

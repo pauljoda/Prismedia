@@ -4,18 +4,19 @@
   import { resolve } from "$app/paths";
   import { ArrowLeft, ArrowRight, Library, RefreshCw, Search } from "@lucide/svelte";
   import { Alert, Button, DialogBase, Panel, Select, TextInput } from "@prismedia/ui-svelte";
-  import { CONNECTION_STATUS, INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
+  import { CONNECTION_STATUS } from "$lib/api/generated/codes";
   import type { ConnectionResponse, EntityKind, ManagedLibraryItem, ManagedLibraryPage } from "$lib/api/generated/model";
   import { fetchManagedLibrary } from "$lib/api/managed-libraries";
   import ExternalLibraryMappings from "./ExternalLibraryMappings.svelte";
   import DiscoveryResults from "$lib/components/requests/DiscoveryResults.svelte";
   import { entityReferenceToThumbnailCard } from "$lib/entities/entity-thumbnail";
   import { getEntityKindLabel } from "$lib/entities/entity-grid";
+  import { connectionFeatureKinds, connectionSupports } from "$lib/integrations/connection-features";
   import { managedHoldingHref } from "$lib/integrations/managed-holding-route";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
 
   let { connection, initialEntityKind = null }: { connection: ConnectionResponse; initialEntityKind?: EntityKind | null } = $props();
-  const support = $derived(connection.effectiveCapabilities.find(item => item.kind === PLUGIN_CAPABILITY.connectedLibrary));
+  const libraryKinds = $derived(connectionFeatureKinds(connection, "libraryBrowse"));
   let kind = $state<EntityKind | undefined>();
   let query = $state("");
   let activeQuery = $state<string | null>(null);
@@ -38,7 +39,7 @@
     });
   });
   function preferredKind(requested = initialEntityKind) {
-    return support?.entityKinds.find(item => item === requested) ?? support?.entityKinds[0];
+    return libraryKinds.find(item => item === requested) ?? libraryKinds[0];
   }
   async function search(cursor: string | null = null) {
     if (!kind) return;
@@ -64,14 +65,14 @@
 {/if}
 <div class="flex flex-wrap items-center justify-between gap-3">
   <p class="text-sm text-text-muted">Browse titles already in {connection.name}. Open a title to view its files and library access.</p>
-  {#if connection.effectiveCapabilities.some(capability => capability.kind === PLUGIN_CAPABILITY.externalManager && capability.operations.includes(INTEGRATION_OPERATION.managerOptions))}
+  {#if connectionSupports(connection, "managerOptions")}
     <Button variant="ghost" size="sm" onclick={() => settingsOpen = true}>Library settings</Button>
   {/if}
 </div>
 <Panel class="flex min-w-0 flex-col gap-3 p-4">
-  {#if (support?.entityKinds.length ?? 0) > 1}
-    <Select ariaLabel="Library media type" value={kind} options={(support?.entityKinds ?? []).map(value => ({ value, label: getEntityKindLabel(value) }))}
-      onchange={value => { kind = support?.entityKinds.find(item => item === value); results = null; history = []; void search(); }} disabled={loading} />
+  {#if libraryKinds.length > 1}
+    <Select ariaLabel="Library media type" value={kind} options={libraryKinds.map(value => ({ value, label: getEntityKindLabel(value) }))}
+      onchange={value => { kind = libraryKinds.find(item => item === value); results = null; history = []; void search(); }} disabled={loading} />
   {/if}
   <form class="flex min-w-0 gap-2" onsubmit={event => { event.preventDefault(); void search(); }}>
     <TextInput aria-label="Search connected library" placeholder={`Search ${connection.name}…`} bind:value={query} maxlength={512} class="min-w-0 flex-1" disabled={loading} />

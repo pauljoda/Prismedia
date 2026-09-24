@@ -41,7 +41,7 @@ describe("request source compatibility", () => {
     });
     expect(requestSourceMode(connection, ENTITY_KIND.movie)).toBe(PLUGIN_CAPABILITY.externalManager);
     expect(canDiscoverManagerTitles(connection, ENTITY_KIND.book)).toBe(false);
-    connection.enabledCapabilities = [PLUGIN_CAPABILITY.connectedLibrary];
+    connection.effectiveCapabilities = connection.effectiveCapabilities.filter(capability => capability.kind === PLUGIN_CAPABILITY.connectedLibrary);
     expect(requestSourceMode(connection, ENTITY_KIND.movie)).toBe(PLUGIN_CAPABILITY.connectedLibrary);
     expect(canDiscoverManagerTitles(connection, ENTITY_KIND.movie)).toBe(false);
   });

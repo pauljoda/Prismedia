@@ -3,8 +3,8 @@
   import { goto } from "$app/navigation";
   import { Activity, AlertTriangle, ArrowUpRight, CheckCircle2, History, RefreshCw, RotateCcw, X } from "@lucide/svelte";
   import { Alert, Badge, Button, Panel, Select, buttonVariants } from "@prismedia/ui-svelte";
-  import { INTEGRATION_OPERATION, INTEGRATION_TRANSFER_MODE, INTEGRATION_TRANSFER_PHASE, MANAGED_REQUEST_PHASE, MANAGED_TRACKING_STATUS, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
-  import type { ConnectionResponse, IntegrationTransferResponse, ManagedRequestResponse, ManagedTrackingResponse, PluginIntegrationCapabilityOperationsItem, RequestActivityItem as RequestActivityRecord, RequestActivitySource } from "$lib/api/generated/model";
+  import { INTEGRATION_TRANSFER_MODE, INTEGRATION_TRANSFER_PHASE, MANAGED_REQUEST_PHASE, MANAGED_TRACKING_STATUS } from "$lib/api/generated/codes";
+  import type { ConnectionResponse, IntegrationTransferResponse, ManagedRequestResponse, ManagedTrackingResponse, RequestActivityItem as RequestActivityRecord, RequestActivitySource } from "$lib/api/generated/model";
   import { cancelPublicationTransfer, retryPublicationTransfer } from "$lib/api/integration-transfers";
   import { fetchEntityThumbnails } from "$lib/api/entities";
   import { refreshTracking } from "$lib/api/managed-libraries";
@@ -22,6 +22,7 @@
   import { formatRelativeTime } from "$lib/utils/format";
 
   import { isManagedHoldingEstablished, isManagedRequestInFlight, managedRequestPhaseLabels, managedTrackingStatusLabels } from "$lib/integrations/managed-labels";
+  import { connectionSupports } from "$lib/integrations/connection-features";
   const ITEM = { transfer: "transfer", request: "request", holding: "holding" } as const;
   const PAGE_SIZE = 50;
   const RECENT_PREVIEW_COUNT = 6;
@@ -180,12 +181,8 @@
     loading = true;
     void load(true);
   }
-  function hasManagerOperation(connection: ConnectionResponse, operation: PluginIntegrationCapabilityOperationsItem) {
-    return connection.enabled && connection.enabledCapabilities.includes(PLUGIN_CAPABILITY.externalManager)
-      && connection.effectiveCapabilities.some(item => item.kind === PLUGIN_CAPABILITY.externalManager && item.operations.includes(operation));
-  }
-  function canControl(connection: ConnectionResponse) { return hasManagerOperation(connection, INTEGRATION_OPERATION.reconcileManaged); }
-  function canRelease(connection: ConnectionResponse) { return hasManagerOperation(connection, INTEGRATION_OPERATION.inspectManagedRelease); }
+  function canControl(connection: ConnectionResponse) { return connectionSupports(connection, "managerControls"); }
+  function canRelease(connection: ConnectionResponse) { return connectionSupports(connection, "holdingRelease"); }
   function message(cause: unknown, fallback: string) { return cause instanceof Error ? cause.message : fallback; }
 
   const requestLabels = managedRequestPhaseLabels;

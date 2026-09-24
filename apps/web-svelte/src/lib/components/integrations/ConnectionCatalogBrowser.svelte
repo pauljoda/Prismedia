@@ -4,13 +4,14 @@
 
   import { ArrowLeft, ArrowRight, BookOpen, Download, FolderOpen, Search } from "@lucide/svelte";
   import { Alert, Badge, Button, DialogBase, Panel, Select, TextInput } from "@prismedia/ui-svelte";
-  import { ACQUISITION_ACCESS_KIND, INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
+  import { ACQUISITION_ACCESS_KIND } from "$lib/api/generated/codes";
   import type { CatalogOffer, ConnectionResponse, DiscoveryItemResponse, DiscoveryPageResponse, EntityKind, LibraryRoot } from "$lib/api/generated/model";
 
   import { acquirePublication, requestSourcePublication } from "$lib/api/integration-transfers";
   import { fetchLibraryRoots } from "$lib/api/settings";
 
   import SourceAttribution from "$lib/components/integrations/SourceAttribution.svelte";
+  import { connectionFeatureKinds, connectionSupports } from "$lib/integrations/connection-features";
   import { integrationImportRoots } from "$lib/integrations/import-options";
 
   import DiscoveryResults from "$lib/components/requests/DiscoveryResults.svelte";
@@ -42,16 +43,15 @@
   let requestSequence = 0;
   let initialized = $state(false);
 
-  const support = $derived(connection?.effectiveCapabilities.find(item => item.kind === PLUGIN_CAPABILITY.catalogDiscovery));
-  const canSearch = $derived((support?.operations.includes(INTEGRATION_OPERATION.search) ?? false) && catalog?.canSearch !== false);
-  const canBrowse = $derived(support?.operations.includes(INTEGRATION_OPERATION.browse) ?? false);
-  const acquisition = $derived(connection.effectiveCapabilities.find(item => item.kind === PLUGIN_CAPABILITY.acquisitionSource));
+  const catalogKinds = $derived(connectionFeatureKinds(connection, "catalogDiscovery"));
+  const canSearch = $derived(connectionSupports(connection, "catalogSearch", kind) && catalog?.canSearch !== false);
+  const canBrowse = $derived(connectionSupports(connection, "catalogBrowse", kind));
   const destinations = $derived(integrationImportRoots(roots, kind));
 
   function canAcquire(item: DiscoveryItemResponse, offer: CatalogOffer) {
-    if (!acquisition?.entityKinds.includes(item.entityKind) || !acquisition.operations.includes(INTEGRATION_OPERATION.resolve)) return false;
+    if (!connectionSupports(connection, "sourceImport", item.entityKind)) return false;
     return canImportPublication(item.entityKind, offer) || canRequestPublication(item.entityKind, offer)
-      && acquisition.operations.includes(INTEGRATION_OPERATION.requestSource) && acquisition.operations.includes(INTEGRATION_OPERATION.observeSource);
+      && connectionSupports(connection, "sourceRequest", item.entityKind);
   }
 
   onMount(() => { void initialize(); return () => { requestSequence++; }; });
@@ -89,11 +89,11 @@
     finally { loading = false; initialized = true; }
   }
   function preferredKind(requested = initialEntityKind) {
-    return support?.entityKinds.find(item => item === requested) ?? support?.entityKinds[0];
+    return catalogKinds.find(item => item === requested) ?? catalogKinds[0];
   }
   async function chooseKind(value: string) {
     requestSequence++; loading = false; query = ""; activeQuery = null;
-    kind = support?.entityKinds.find(item => item === value); history = []; container = null; catalog = null;
+    kind = catalogKinds.find(item => item === value); history = []; container = null; catalog = null;
     chooseDestination();
     if (canBrowse) await browse();
   }
@@ -122,8 +122,8 @@
 </script>
 <div class="space-y-5">
   <Panel class="space-y-3 p-4">
-    {#if (support?.entityKinds.length ?? 0) > 1}
-      <Select ariaLabel="Media type" value={kind} options={(support?.entityKinds ?? []).map(value => ({ value, label: getEntityKindLabel(value) }))}
+    {#if catalogKinds.length > 1}
+      <Select ariaLabel="Media type" value={kind} options={catalogKinds.map(value => ({ value, label: getEntityKindLabel(value) }))}
         onchange={value => void chooseKind(value)} disabled={loading} />
     {/if}
     {#if canSearch}

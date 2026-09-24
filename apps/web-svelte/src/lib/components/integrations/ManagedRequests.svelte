@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { Alert, Badge, Button, Checkbox, Panel, Select } from "@prismedia/ui-svelte";
-  import { CONNECTION_STATUS, ENTITY_KIND, INTEGRATION_OPERATION, MANAGED_REQUEST_PHASE, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
+  import { ENTITY_KIND, MANAGED_REQUEST_PHASE } from "$lib/api/generated/codes";
   import type { ConnectionResponse, CreateManagedRequestInput, EntityKind, ExternalLibraryMount, ManagedRequestPreview, ManagedRequestResponse } from "$lib/api/generated/model";
   import { fetchEntities } from "$lib/api/entities";
   import { fetchLibraryMounts } from "$lib/api/managed-libraries";
@@ -9,6 +9,7 @@
   import EntityPicker, { type EntityPickerItem } from "$lib/components/forms/EntityPicker.svelte";
   import ManagedHoldingControls from "./ManagedHoldingControls.svelte";
 
+  import { connectionSupports } from "$lib/integrations/connection-features";
   import { createUuid } from "$lib/utils/uuid";
   import { isManagedRequestInFlight, managedRequestHoldsFulfillment, managedRequestPhaseLabels } from "$lib/integrations/managed-labels";
   let {
@@ -26,9 +27,7 @@
   } = $props();
   const isSeries = $derived(entityKind === ENTITY_KIND.videoSeries);
   const entityLabel = $derived(isSeries ? "series" : "movie");
-  const canRequest = $derived(connection.enabled && connection.status === CONNECTION_STATUS.ready && connection.effectiveCapabilities.some(capability =>
-    capability.kind === PLUGIN_CAPABILITY.externalManager && capability.entityKinds.includes(entityKind)
-    && capability.operations.includes(INTEGRATION_OPERATION.lookupManaged) && capability.operations.includes(INTEGRATION_OPERATION.ensureManaged)));
+  const canRequest = $derived(connectionSupports(connection, "managedRequest", entityKind));
   let requests = $state<ManagedRequestResponse[]>([]);
   const visibleRequests = $derived(requests.filter(request => !excludeIds.includes(request.id) && (!initialEntity || request.entityId === initialEntity.id)));
   let mounts = $state<ExternalLibraryMount[]>([]);

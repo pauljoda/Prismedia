@@ -3,12 +3,9 @@
   import { CircleCheck, Clock3, Loader2 } from "@lucide/svelte";
   import { Alert, Button, Checkbox, Select } from "@prismedia/ui-svelte";
   import {
-    CONNECTION_STATUS,
     ENTITY_KIND,
     FULFILLMENT_OWNER_KIND,
-    INTEGRATION_OPERATION,
     MANAGED_REQUEST_PHASE,
-    PLUGIN_CAPABILITY,
   } from "$lib/api/generated/codes";
   import { getGetPluginIconUrl } from "$lib/api/generated/prismedia";
   import type {
@@ -28,6 +25,7 @@
   } from "$lib/api/reviewed-managed-requests";
   import { fetchAccessibleLibraryRoots } from "$lib/api/settings";
   import PluginIcon from "$lib/components/plugins/PluginIcon.svelte";
+  import { connectionSupports } from "$lib/integrations/connection-features";
 
   import { managedRequestPhaseLabels } from "$lib/integrations/managed-labels";
   export interface ManagedRequestOwnership {
@@ -259,21 +257,7 @@
   }
 
   function supportsReviewedRequest(candidate: ConnectionResponse, kind: EntityKind): boolean {
-    if (!candidate.enabled || candidate.status !== CONNECTION_STATUS.ready) return false;
-    const manager = candidate.effectiveCapabilities.find((capability) =>
-      capability.kind === PLUGIN_CAPABILITY.externalManager && capability.entityKinds.includes(kind));
-    const library = candidate.effectiveCapabilities.find((capability) =>
-      capability.kind === PLUGIN_CAPABILITY.connectedLibrary && capability.entityKinds.includes(kind));
-    return Boolean(manager
-      && [
-        INTEGRATION_OPERATION.lookupManaged,
-        INTEGRATION_OPERATION.ensureManaged,
-        INTEGRATION_OPERATION.requestManaged,
-        INTEGRATION_OPERATION.reconcileManaged,
-        INTEGRATION_OPERATION.configureManaged,
-      ].every((operation) => manager.operations.includes(operation))
-      && library?.operations.includes(INTEGRATION_OPERATION.getLibraryItem)
-      && library.operations.includes(INTEGRATION_OPERATION.listLibraries));
+    return connectionSupports(candidate, "reviewedManagedRequest", kind);
   }
 
   function workKey(value: ReviewedManagedRequest): string {

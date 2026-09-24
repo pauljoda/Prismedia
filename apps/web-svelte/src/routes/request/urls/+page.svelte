@@ -3,7 +3,6 @@
   import { page } from "$app/state";
   import { Download, Link, Search, ShieldUser } from "@lucide/svelte";
   import { Alert, Button, Panel, Select, TextInput, buttonVariants } from "@prismedia/ui-svelte";
-  import { CONNECTION_STATUS, INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
   import type { ConnectionResponse, EntityKind, ExecutorInspectionResponse, IntegrationTransferResponse, LibraryRoot } from "$lib/api/generated/model";
   import { executorKinds } from "$lib/integrations/executor-options";
   import { integrationImportRoots } from "$lib/integrations/import-options";
@@ -51,9 +50,7 @@
   async function initialize() {
     try {
       const [available, libraries] = await Promise.all([fetchConnections(), fetchLibraryRoots()]);
-      connections = available.filter(item => item.status === CONNECTION_STATUS.ready && item.hasPersistentRemoteIdentity
-        && item.effectiveCapabilities.some(capability => capability.kind === PLUGIN_CAPABILITY.catalogDiscovery && capability.operations.includes(INTEGRATION_OPERATION.inspect))
-        && item.effectiveCapabilities.some(capability => capability.kind === PLUGIN_CAPABILITY.transferExecutor));
+      connections = available.filter(item => item.hasPersistentRemoteIdentity && executorKinds(item).length > 0);
       roots = libraries;
       rootId = "";
       const requested = page.url.searchParams.get("connection");

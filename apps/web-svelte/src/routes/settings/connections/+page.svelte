@@ -11,6 +11,7 @@
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import ConfirmDialog from "$lib/components/entities/ConfirmDialog.svelte";
   import { capabilityLabels, connectionStatusLabels } from "$lib/integrations/connection-labels";
+  import { connectionFeatureKinds } from "$lib/integrations/connection-features";
   import { canBrowseRequestSource } from "$lib/requests/request-source-compatibility";
   import { SETTING_SECTION, settingsSectionById } from "$lib/settings/settings-section-catalog";
   import { useSession } from "$lib/stores/session.svelte";
@@ -71,8 +72,7 @@
     return connection.effectiveCapabilities.some(item => item.kind === PLUGIN_CAPABILITY.connectedLibrary || item.kind === PLUGIN_CAPABILITY.externalManager);
   }
   function mappingKind(connection: ConnectionResponse): EntityKind | undefined {
-    return connection.effectiveCapabilities.find(item => item.kind === PLUGIN_CAPABILITY.externalManager
-      && item.operations.includes(INTEGRATION_OPERATION.managerOptions))?.entityKinds[0];
+    return connectionFeatureKinds(connection, "managerOptions")[0];
   }
   function capabilityPurpose(connection: ConnectionResponse, capability: PluginCapabilityCode): string {
     const operations = connection.effectiveCapabilities

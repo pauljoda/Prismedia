@@ -388,7 +388,7 @@ async function main() {
   if (!manifest.entityKindLibraryRoots) throw new Error("Manifest is missing entity kind library roots");
   sections.push(
     `// source: EntityKindDefinition.LibraryRootCapability\n` +
-    `export const ENTITY_KIND_LIBRARY_ROOTS = ${JSON.stringify(manifest.entityKindLibraryRoots, null, 2)} as const satisfies Partial<Record<EntityKindCode, { capability: LibraryRootMediaCapabilityCode; requiresRecursiveRoot: boolean }>>;\n`,
+    `export const ENTITY_KIND_LIBRARY_ROOTS = ${JSON.stringify(manifest.entityKindLibraryRoots, null, 2)} as const satisfies Partial<Record<EntityKindCode, { capability: LibraryRootMediaCapabilityCode; requiresRecursiveRoot: boolean; acceptsIntegrationImport: boolean }>>;\n`,
   );
 
   // Behavior facts declared by backend closed-set definitions. Clients read these instead of

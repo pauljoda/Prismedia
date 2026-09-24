@@ -193,7 +193,7 @@ describe("Settings connections", () => {
   });
 
   it("refreshes retained folder counts after closing the mapping dialog", async () => {
-    const current = connection(managerPlugin, { id: "manager-connection", name: "My manager" });
+    const current = connection(managerPlugin, { id: "manager-connection", name: "My manager", status: CONNECTION_STATUS.ready });
     const mount: ExternalLibraryMount = {
       id: "mount-1", connectionId: current.id, libraryRootId: "library-1", remoteRootId: "remote-1",
       remotePath: "/books", localPath: "/media/books", label: "Books",

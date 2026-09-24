@@ -4,7 +4,7 @@
   import { untrack } from "svelte";
   import { ArrowLeft, CircleAlert, Library, RefreshCw, ShieldAlert } from "@lucide/svelte";
   import { Alert, Button, Select, buttonVariants } from "@prismedia/ui-svelte";
-  import { BOOK_RENDITION, ENTITY_KIND, INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
+  import { BOOK_RENDITION, ENTITY_KIND, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
   import type {
     ConnectionResponse,
     ManagedItemInput,
@@ -21,6 +21,7 @@
     inspectLocalLibraryAccess,
   } from "$lib/api/managed-libraries";
   import { isEntityKindCode } from "$lib/entities/entity-codes";
+  import { connectionSupports } from "$lib/integrations/connection-features";
   import {
     managedHoldingSourceHref,
     parseManagedHoldingIdentities,
@@ -69,14 +70,8 @@
   let loadedKey: string | null = null;
 
   const showControls = $derived(connection?.enabledCapabilities.includes(PLUGIN_CAPABILITY.externalManager) ?? false);
-  const canControl = $derived(connection?.effectiveCapabilities.some((capability) =>
-    capability.kind === PLUGIN_CAPABILITY.externalManager
-      && capability.operations.includes(INTEGRATION_OPERATION.reconcileManaged),
-  ) ?? false);
-  const canRelease = $derived(connection?.effectiveCapabilities.some((capability) =>
-    capability.kind === PLUGIN_CAPABILITY.externalManager
-      && capability.operations.includes(INTEGRATION_OPERATION.inspectManagedRelease),
-  ) ?? false);
+  const canControl = $derived(connectionSupports(connection, "managerControls", routeRequest.input?.entityKind));
+  const canRelease = $derived(connectionSupports(connection, "holdingRelease", routeRequest.input?.entityKind));
 
   $effect(() => {
     const request = routeRequest;
@@ -144,10 +139,7 @@
       if (!selectedConnection) throw new Error("This connected source is no longer available.");
       connection = selectedConnection;
 
-      const supportsOptions = selectedConnection.effectiveCapabilities.some((capability) =>
-        capability.kind === PLUGIN_CAPABILITY.externalManager
-          && capability.operations.includes(INTEGRATION_OPERATION.managerOptions),
-      );
+      const supportsOptions = connectionSupports(selectedConnection, "managerOptions", request.input.entityKind);
       const snapshotPromise = fetchManagedItem(selectedConnection.id, request.input);
       const optionsPromise = supportsOptions
         ? fetchManagerOptions(selectedConnection.id, request.input.entityKind).catch(() => null)

@@ -18,8 +18,10 @@ const connection: ConnectionResponse = {
   settings: {}, configuredSecretKeys: [], revision: 1, status: CONNECTION_STATUS.ready,
   remoteInstanceId: null, hasPersistentRemoteIdentity: false, lastCheckedAt: null, lastError: null,
   effectiveCapabilities: [
-    { kind: PLUGIN_CAPABILITY.externalManager, entityKinds: [ENTITY_KIND.movie], operations: [INTEGRATION_OPERATION.discoverManaged] },
-    { kind: PLUGIN_CAPABILITY.connectedLibrary, entityKinds: [ENTITY_KIND.movie], operations: [INTEGRATION_OPERATION.searchLibrary] },
+    { kind: PLUGIN_CAPABILITY.externalManager, entityKinds: [ENTITY_KIND.movie],
+      operations: [INTEGRATION_OPERATION.discoverManaged, INTEGRATION_OPERATION.lookupManaged, INTEGRATION_OPERATION.ensureManaged] },
+    { kind: PLUGIN_CAPABILITY.connectedLibrary, entityKinds: [ENTITY_KIND.movie],
+      operations: [INTEGRATION_OPERATION.searchLibrary, INTEGRATION_OPERATION.getLibraryItem] },
   ],
 };
 
