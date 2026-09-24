@@ -180,7 +180,10 @@
       persistMusicPlayerState();
       return;
     }
-    persistMusicPlayerProgress();
+    // Progress is saved as the listening checkpoint. A restored player that has not moved since its
+    // last save must not re-send its old position, or it would overwrite newer progress from another
+    // device whenever this page hides.
+    persistMusicPlayerTimeIfChanged();
   }
 
   function persistMusicPlayerTimeIfChanged() {

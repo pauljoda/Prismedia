@@ -196,7 +196,11 @@ export class AudioPlaybackStore {
       ? Math.max(0, Math.min(requestedStart, maxDuration || Number.POSITIVE_INFINITY))
       : 0;
     this.duration = currentTrack?.duration ?? 0;
-    if (currentTrack) this.#controller?.playTrack(currentTrack);
+    if (!currentTrack) return;
+    this.#controller?.playTrack(currentTrack);
+    // An explicit start is a destination. A track that is already loaded keeps its element time
+    // unless the player is told to move, so seek there too.
+    if (options?.startSeconds !== undefined) this.#controller?.seek(this.currentTime);
   }
 
   /**

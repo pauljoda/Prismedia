@@ -766,7 +766,10 @@
 
     const handleTimeUpdate = () => {
       if (!timelineDraggingRef) playback.currentTime = audio.currentTime;
-      saveMappedProgress({ completed: false, periodic: true });
+      // Only playback advances the listening checkpoint. Loading or restoring a paused player seeks
+      // to its saved spot and fires timeupdate; saving then would overwrite newer progress recorded
+      // on another device. Seeks and pauses save explicitly.
+      if (!audio.paused) saveMappedProgress({ completed: false, periodic: true });
       setMediaSessionPosition(audio.duration, audio.currentTime, audio.playbackRate);
     };
     const handleDurationChange = () => {

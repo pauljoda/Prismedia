@@ -187,7 +187,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
-- Audio longer than an hour, such as a single-file audiobook, now resumes at its saved position and shows its full length in the player instead of being cut off at the minute-and-second reading of its hour-and-minute label.
+- Audio longer than an hour, such as a single-file audiobook, now resumes at its saved position and shows its full length in the player instead of being cut off at the minute-and-second reading of its hour-and-minute label. Opening or reloading a page with a paused player no longer overwrites a newer listening position saved on another device.
 - Acquisition searches now say when an indexer was skipped by its hourly query limit instead of reporting it as a failed connection.
 
 - Soulseek searches keep the peer results slskd collected when its response window ends in a timed-out state instead of reporting a failed search, and queueing retries a transient peer-wait timeout once after confirming slskd did not already queue the files.
