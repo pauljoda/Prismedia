@@ -7,8 +7,8 @@ import type {
   AudioChapterWindow,
   BookAlignmentResponse,
   BookAlignmentRow,
-  BookAudioChapter,
   BookChapterAudioMapping,
+  ReadableChapterWindow,
 } from "$lib/api/generated/model";
 
 export type BookReadTarget =
@@ -47,13 +47,10 @@ export interface BookChapterRow {
   isCurrentAudio: boolean;
 }
 
-export interface BookAudioChapterCandidate {
+/** One audio chapter window of the alignment with its stable editor key. */
+export interface BookAudioWindowEntry {
   key: string;
-  track: AudioTrackListItemDto;
-  markerId: string | null;
-  title: string;
-  startSeconds: number;
-  endSeconds: number | null;
+  window: AudioChapterWindow;
 }
 
 interface BookChapterRowsOptions {
@@ -74,7 +71,8 @@ function numberValue(value: number | string | null | undefined): number | null {
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function candidateKey(trackId: string, markerId: string | null | undefined): string {
+/** Stable key of one whole-track or embedded-marker audio window. */
+export function audioWindowKey(trackId: string, markerId: string | null | undefined): string {
   return `${trackId}:${markerId ?? "whole"}`;
 }
 
@@ -167,20 +165,28 @@ export function alignmentChapterMappings(
       : []);
 }
 
-/** Every audio chapter window of the alignment. */
-export function alignmentAudioChapters(
+/** Readable chapter windows of the alignment, in display order. */
+export function alignmentReadableWindows(
   alignment: BookAlignmentResponse | null | undefined,
-): BookAudioChapter[] {
-  return (alignment?.rows ?? []).flatMap((row) =>
-    row.audio
-      ? [{
-          audioTrackId: row.audio.trackEntityId,
-          audioMarkerId: row.audio.markerId ?? null,
-          title: row.audio.title,
-          startSeconds: row.audio.startSeconds,
-          endSeconds: row.audio.endSeconds ?? null,
-        }]
-      : []);
+): ReadableChapterWindow[] {
+  return (alignment?.rows ?? []).flatMap((row) => row.readable ? [row.readable] : []);
+}
+
+/** Audio chapter windows of the alignment in playback order: track order, then start time. */
+export function alignmentAudioWindows(
+  alignment: BookAlignmentResponse | null | undefined,
+  audioTracks: readonly AudioTrackListItemDto[],
+): BookAudioWindowEntry[] {
+  const trackOrder = new Map([...audioTracks]
+    .sort((a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title) || a.id.localeCompare(b.id))
+    .map((track, index) => [track.id, index]));
+  return (alignment?.rows ?? [])
+    .flatMap((row) => row.audio ? [row.audio] : [])
+    .sort((a, b) =>
+      (trackOrder.get(a.trackEntityId) ?? Number.MAX_SAFE_INTEGER)
+        - (trackOrder.get(b.trackEntityId) ?? Number.MAX_SAFE_INTEGER)
+        || (numberValue(a.startSeconds) ?? 0) - (numberValue(b.startSeconds) ?? 0))
+    .map((window) => ({ key: audioWindowKey(window.trackEntityId, window.markerId), window }));
 }
 
 /** Checks whether a physical audiobook position belongs to this row's audio window. */
@@ -201,65 +207,23 @@ export function bookChapterRowOwnsAudioTime(
   );
 }
 
-/** Expands each physical audiobook file into its addressable whole-track or embedded chapters. */
-export function bookAudioChapterCandidates(
-  audioTracks: readonly AudioTrackListItemDto[],
-  audioChapters: readonly BookAudioChapter[] = [],
-): BookAudioChapterCandidate[] {
-  const tracks = [...audioTracks].sort(
-    (a, b) => a.sortOrder - b.sortOrder || a.title.localeCompare(b.title) || a.id.localeCompare(b.id),
-  );
-  const trackById = new Map(tracks.map((track) => [track.id, track]));
-  if (audioChapters.length === 0) {
-    return tracks.map((track) => ({
-      key: candidateKey(track.id, null),
-      track,
-      markerId: null,
-      title: track.title,
-      startSeconds: 0,
-      endSeconds: numberValue(track.duration),
-    }));
-  }
-
-  return audioChapters.flatMap((chapter) => {
-    const track = trackById.get(chapter.audioTrackId);
-    if (!track) return [];
-    const startSeconds = numberValue(chapter.startSeconds) ?? 0;
-    return [{
-      key: candidateKey(track.id, chapter.audioMarkerId),
-      track,
-      markerId: chapter.audioMarkerId,
-      title: chapter.title,
-      startSeconds,
-      endSeconds: numberValue(chapter.endSeconds),
-    }];
-  }).sort((a, b) =>
-    a.track.sortOrder - b.track.sortOrder
-      || a.startSeconds - b.startSeconds
-      || a.title.localeCompare(b.title)
-      || a.key.localeCompare(b.key)
-  );
-}
-
-/** Creates the editable one-to-one map produced by the "Mark first chapter" workflow. */
+/**
+ * Creates the editable one-to-one map produced by the "Mark first chapter" workflow: audio windows in
+ * playback order pair with readable chapters in display order, starting at the marked chapter.
+ */
 export function sequentialBookChapterMappings(
-  readableChapters: readonly ReadableBookChapter[],
-  audioTracks: readonly AudioTrackListItemDto[],
+  readableWindows: readonly ReadableChapterWindow[],
+  audioWindows: readonly BookAudioWindowEntry[],
   firstReadableChapterKey: string,
-  audioChapters: readonly BookAudioChapter[] = [],
 ): BookChapterAudioMapping[] {
-  const readable = [...readableChapters].sort(
-    (a, b) => a.order - b.order || a.title.localeCompare(b.title) || a.id.localeCompare(b.id),
-  );
-  const candidates = bookAudioChapterCandidates(audioTracks, audioChapters);
-  const firstIndex = readable.findIndex((chapter) => chapter.id === firstReadableChapterKey);
+  const firstIndex = readableWindows.findIndex((chapter) => chapter.chapterKey === firstReadableChapterKey);
   if (firstIndex < 0) return [];
 
-  return candidates
-    .slice(0, Math.max(0, readable.length - firstIndex))
-    .map((candidate, index) => ({
-      readableChapterKey: readable[firstIndex + index].id,
-      audioTrackId: candidate.track.id,
-      ...(candidate.markerId ? { audioMarkerId: candidate.markerId } : {}),
+  return audioWindows
+    .slice(0, Math.max(0, readableWindows.length - firstIndex))
+    .map(({ window }, index) => ({
+      readableChapterKey: readableWindows[firstIndex + index].chapterKey,
+      audioTrackId: window.trackEntityId,
+      ...(window.markerId ? { audioMarkerId: window.markerId } : {}),
     }));
 }

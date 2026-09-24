@@ -1,33 +1,35 @@
 <script lang="ts">
   import { ArrowDownToLine, Check, FileAudio, Link2Off } from "@lucide/svelte";
-  import { Button, Select, type SelectOption } from "@prismedia/ui-svelte";
-  import type { BookAudioChapter, BookChapterAudioMapping } from "$lib/api/generated/model";
+  import { Badge, Button, Select, type SelectOption } from "@prismedia/ui-svelte";
+  import type {
+    AudioChapterWindow,
+    BookAlignmentResponse,
+    BookChapterAudioMapping,
+  } from "$lib/api/generated/model";
   import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
   import {
-    bookAudioChapterCandidates,
+    alignmentAudioWindows,
+    alignmentChapterMappings,
+    alignmentReadableWindows,
+    audioWindowKey,
     sequentialBookChapterMappings,
-    type BookAudioChapterCandidate,
-    type ReadableBookChapter,
   } from "$lib/entities/book-chapter-list";
   import { BOOK_CHAPTER_MAPPING_ORIGIN } from "$lib/api/generated/codes";
   import { formatDuration } from "$lib/utils/format";
 
   interface Props {
     resetKey: string;
-    readableChapters: readonly ReadableBookChapter[];
+    /** Server alignment: rows in display order, provenance, and coverage. */
+    alignment: BookAlignmentResponse | null;
     audioTracks: readonly AudioTrackListItemDto[];
-    audioChapters: readonly BookAudioChapter[];
-    mappings: readonly BookChapterAudioMapping[];
     loadError?: string | null;
-    onSave: (mappings: readonly BookChapterAudioMapping[]) => Promise<readonly BookChapterAudioMapping[]>;
+    onSave: (mappings: readonly BookChapterAudioMapping[]) => Promise<BookAlignmentResponse>;
   }
 
   let {
     resetKey,
-    readableChapters,
+    alignment,
     audioTracks,
-    audioChapters,
-    mappings,
     loadError = null,
     onSave,
   }: Props = $props();
@@ -40,42 +42,34 @@
   let actionError = $state<string | null>(null);
   let saved = $state(false);
 
-  const orderedReadable = $derived([...readableChapters].sort(
-    (a, b) => a.order - b.order || a.title.localeCompare(b.title) || a.id.localeCompare(b.id),
-  ));
-  const orderedAudioChapters = $derived(bookAudioChapterCandidates(audioTracks, audioChapters));
-  const readableOptions = $derived<SelectOption[]>(orderedReadable.map((chapter, index) => ({
-    value: chapter.id,
+  const rows = $derived(alignment?.rows ?? []);
+  const coverage = $derived(alignment?.coverage ?? null);
+  const readableWindows = $derived(alignmentReadableWindows(alignment));
+  const audioWindows = $derived(alignmentAudioWindows(alignment, audioTracks));
+  const audioNumberByKey = $derived(new Map(audioWindows.map((entry, index) => [entry.key, index + 1])));
+  const readableOptions = $derived<SelectOption[]>(readableWindows.map((chapter, index) => ({
+    value: chapter.chapterKey,
     label: chapter.title,
     annotation: `Chapter ${index + 1}`,
   })));
-  const mappingByAudioChapter = $derived(new Map(draft.map((mapping) => [mappingKey(mapping), mapping])));
-  // Automatic matches are computed and persisted server-side; here they only annotate the
-  // "no explicit mapping" option so the user can see what the matcher already chose.
-  const automaticTitleByAudioChapter = $derived.by(() => {
-    const titleByKey = new Map(readableChapters.map((chapter) => [chapter.id, chapter.title]));
-    return new Map(mappings
-      .filter((mapping) => mapping.origin === BOOK_CHAPTER_MAPPING_ORIGIN.auto)
-      .flatMap((mapping) => {
-        const title = titleByKey.get(mapping.readableChapterKey);
-        return title ? [[mappingKey(mapping), title] as const] : [];
-      }));
-  });
-  const draftSignature = $derived(mappingSignature(draft));
-  const dirty = $derived(draftSignature !== sourceSignature);
-  const alignedReadableCount = $derived(new Set(mappings.map((mapping) => mapping.readableChapterKey)).size);
-  const alignedAudioCount = $derived(orderedAudioChapters.filter((chapter) =>
-    mappings.some((mapping) => mappingKey(mapping) === chapter.key),
-  ).length);
-  const manualCount = $derived(mappings.filter((mapping) =>
-    mapping.origin !== BOOK_CHAPTER_MAPPING_ORIGIN.auto,
-  ).length);
-  const displayedError = $derived(actionError ?? loadError);
-
+  const readableTitleByKey = $derived(new Map(readableWindows.map((chapter) => [chapter.chapterKey, chapter.title])));
+  const persistedMappings = $derived(alignmentChapterMappings(alignment));
   // Only manual rows are editable; automatic rows are server-owned and refill after every save.
   const manualMappings = $derived(
-    mappings.filter((mapping) => mapping.origin !== BOOK_CHAPTER_MAPPING_ORIGIN.auto),
+    persistedMappings.filter((mapping) => mapping.origin !== BOOK_CHAPTER_MAPPING_ORIGIN.auto),
   );
+  // Automatic matches only annotate the "no explicit mapping" option so the user can see what the
+  // server's matcher already chose.
+  const automaticTitleByAudioKey = $derived(new Map(persistedMappings
+    .filter((mapping) => mapping.origin === BOOK_CHAPTER_MAPPING_ORIGIN.auto)
+    .flatMap((mapping) => {
+      const title = readableTitleByKey.get(mapping.readableChapterKey);
+      return title ? [[mappingKey(mapping), title] as const] : [];
+    })));
+  const mappingByAudioKey = $derived(new Map(draft.map((mapping) => [mappingKey(mapping), mapping])));
+  const draftSignature = $derived(mappingSignature(draft));
+  const dirty = $derived(draftSignature !== sourceSignature);
+  const displayedError = $derived(actionError ?? loadError);
 
   // The editor stays mounted while its parent route changes data. Reset only for a new Book or a
   // genuinely new persisted map; local draft changes remain untouched until save or clear.
@@ -85,12 +79,7 @@
     loadedResetKey = resetKey;
     sourceSignature = nextSignature;
     draft = manualMappings.map((mapping) => ({ ...mapping }));
-    firstReadableChapterKey = initialFirstChapterKey(
-      readableChapters,
-      audioTracks,
-      audioChapters,
-      manualMappings,
-    );
+    firstReadableChapterKey = initialFirstChapterKey();
     saved = false;
     actionError = null;
   });
@@ -107,29 +96,22 @@
   }
 
   function mappingKey(mapping: Pick<BookChapterAudioMapping, "audioTrackId" | "audioMarkerId">): string {
-    return `${mapping.audioTrackId}:${mapping.audioMarkerId ?? "whole"}`;
+    return audioWindowKey(mapping.audioTrackId, mapping.audioMarkerId);
   }
 
-  function initialFirstChapterKey(
-    chapters: readonly ReadableBookChapter[],
-    tracks: readonly AudioTrackListItemDto[],
-    availableAudioChapters: readonly BookAudioChapter[],
-    existingMappings: readonly BookChapterAudioMapping[],
-  ): string {
-    const firstAudioChapter = bookAudioChapterCandidates(tracks, availableAudioChapters)[0];
-    const mappedChapterKey = existingMappings.find((mapping) =>
-      mappingKey(mapping) === firstAudioChapter?.key,
-    )?.readableChapterKey;
-    if (mappedChapterKey && chapters.some((chapter) => chapter.id === mappedChapterKey)) {
-      return mappedChapterKey;
-    }
-    return [...chapters]
-      .sort((a, b) => a.order - b.order || a.title.localeCompare(b.title) || a.id.localeCompare(b.id))[0]
-      ?.id ?? "";
+  function windowKey(window: AudioChapterWindow): string {
+    return audioWindowKey(window.trackEntityId, window.markerId);
   }
 
-  function selectionOptions(audioChapterKey: string): SelectOption[] {
-    const automaticTitle = automaticTitleByAudioChapter.get(audioChapterKey);
+  function initialFirstChapterKey(): string {
+    const firstAudioKey = audioWindows[0]?.key;
+    const mapped = persistedMappings.find((mapping) => mappingKey(mapping) === firstAudioKey)?.readableChapterKey;
+    if (mapped && readableTitleByKey.has(mapped)) return mapped;
+    return readableWindows[0]?.chapterKey ?? "";
+  }
+
+  function selectionOptions(audioKey: string): SelectOption[] {
+    const automaticTitle = automaticTitleByAudioKey.get(audioKey);
     return [
       {
         value: "",
@@ -139,33 +121,39 @@
     ];
   }
 
-  function updateAudioChapterMapping(
-    audioChapter: BookAudioChapterCandidate,
-    readableChapterKey: string,
-  ): void {
+  function statusFor(audioKey: string): { label: string; manual: boolean } {
+    if (mappingByAudioKey.has(audioKey)) return { label: "Manual", manual: true };
+    if (automaticTitleByAudioKey.has(audioKey)) return { label: "Automatic", manual: false };
+    return { label: "Unmatched", manual: false };
+  }
+
+  function windowRange(window: AudioChapterWindow): string {
+    const start = formatDuration(Number(window.startSeconds)) ?? "0:00";
+    if (window.endSeconds == null) return start;
+    const end = formatDuration(Number(window.endSeconds)) ?? "0:00";
+    return `${start} – ${window.endInferred ? "≈" : ""}${end}`;
+  }
+
+  function updateAudioChapterMapping(window: AudioChapterWindow, readableChapterKey: string): void {
+    const key = windowKey(window);
     saved = false;
     actionError = null;
     draft = draft.filter((mapping) =>
-      mappingKey(mapping) !== audioChapter.key &&
+      mappingKey(mapping) !== key &&
       (!readableChapterKey || mapping.readableChapterKey !== readableChapterKey),
     );
     if (readableChapterKey) {
       draft = [...draft, {
-        audioTrackId: audioChapter.track.id,
+        audioTrackId: window.trackEntityId,
         readableChapterKey,
-        ...(audioChapter.markerId ? { audioMarkerId: audioChapter.markerId } : {}),
+        ...(window.markerId ? { audioMarkerId: window.markerId } : {}),
       }];
     }
   }
 
   function markFirstChapter(): void {
     if (!firstReadableChapterKey) return;
-    draft = sequentialBookChapterMappings(
-      readableChapters,
-      audioTracks,
-      firstReadableChapterKey,
-      audioChapters,
-    );
+    draft = sequentialBookChapterMappings(readableWindows, audioWindows, firstReadableChapterKey);
     saved = false;
     actionError = null;
   }
@@ -182,8 +170,9 @@
     actionError = null;
     saved = false;
     try {
-      const persisted = await onSave(draft);
-      const manual = persisted.filter((mapping) => mapping.origin !== BOOK_CHAPTER_MAPPING_ORIGIN.auto);
+      const refreshed = await onSave(draft);
+      const manual = alignmentChapterMappings(refreshed)
+        .filter((mapping) => mapping.origin !== BOOK_CHAPTER_MAPPING_ORIGIN.auto);
       draft = manual.map((mapping) => ({ ...mapping }));
       sourceSignature = mappingSignature(manual);
       saved = true;
@@ -202,16 +191,22 @@
       <h2 id="chapter-mapping-heading">Map audio chapters to readable chapters</h2>
       <p class="mapping-intro">
         Prismedia uses embedded M4B chapters when present and whole files otherwise. Choose where
-        the first audio chapter begins, then adjust any association before saving.
+        the first audio chapter begins, then adjust any association before saving. Rows follow the
+        book, so unmatched audio appears where it happens.
       </p>
-      <p class="mapping-coverage">
-        {alignedReadableCount} of {orderedReadable.length} readable chapters aligned ·
-        {alignedAudioCount} of {orderedAudioChapters.length} audio chapters aligned ·
-        {manualCount} manual {manualCount === 1 ? "override" : "overrides"}
-      </p>
+      {#if coverage}
+        <p class="mapping-coverage">
+          {coverage.pairedCount} of {coverage.readableCount} readable chapters aligned ·
+          {coverage.pairedCount} of {coverage.audioWindowCount} audio chapters aligned ·
+          {coverage.manualCount} manual · {coverage.automaticCount} automatic
+        </p>
+      {/if}
     </div>
-    <div class="mapping-count" aria-label={`${alignedAudioCount} of ${orderedAudioChapters.length} audio chapters aligned`}>
-      <strong>{alignedAudioCount}/{orderedAudioChapters.length}</strong>
+    <div
+      class="mapping-count"
+      aria-label={`${coverage?.pairedCount ?? 0} of ${coverage?.audioWindowCount ?? 0} audio chapters aligned`}
+    >
+      <strong>{coverage?.pairedCount ?? 0}/{coverage?.audioWindowCount ?? 0}</strong>
       <span>aligned</span>
     </div>
   </div>
@@ -221,7 +216,7 @@
       <span class="file-icon"><FileAudio class="h-5 w-5" /></span>
       <div>
         <span class="field-label">First audio chapter</span>
-        <strong>{orderedAudioChapters[0]?.title ?? "No audio chapters"}</strong>
+        <strong>{audioWindows[0]?.window.title ?? "No audio chapters"}</strong>
       </div>
     </div>
     <div class="first-chapter-control">
@@ -230,14 +225,14 @@
         value={firstReadableChapterKey}
         options={readableOptions}
         ariaLabel="Readable chapter for the first audio chapter"
-        disabled={saving || orderedReadable.length === 0}
+        disabled={saving || readableWindows.length === 0}
         onchange={(value) => (firstReadableChapterKey = value)}
       />
     </div>
     <Button
       variant="primary"
       size="lg"
-      disabled={saving || !firstReadableChapterKey || orderedAudioChapters.length === 0}
+      disabled={saving || !firstReadableChapterKey || audioWindows.length === 0}
       onclick={markFirstChapter}
     >
       <ArrowDownToLine class="h-4 w-4" />
@@ -245,32 +240,43 @@
     </Button>
   </div>
 
-  <div class="mapping-list" aria-label="Audiobook chapter overrides">
-    {#each orderedAudioChapters as audioChapter, index (audioChapter.key)}
-      <div class="mapping-row">
-        <span class="track-number">{String(index + 1).padStart(2, "0")}</span>
-        <div class="track-title">
-          <strong>{audioChapter.title}</strong>
-          <span>
-            {formatDuration(audioChapter.startSeconds) ?? "0:00"}
-            {#if audioChapter.endSeconds !== null}
-              – {formatDuration(audioChapter.endSeconds) ?? "0:00"}
-            {/if}
-            · {mappingByAudioChapter.has(audioChapter.key)
-              ? "Manual override"
-              : automaticTitleByAudioChapter.has(audioChapter.key)
-                ? "Automatic match"
-                : "Unmatched"}
-          </span>
+  <div class="mapping-list" aria-label="Chapter alignment">
+    {#each rows as row (row.rowId)}
+      {#if row.audio}
+        {@const audio = row.audio}
+        {@const key = windowKey(audio)}
+        {@const status = statusFor(key)}
+        <div class="mapping-row">
+          <span class="track-number">{String(audioNumberByKey.get(key) ?? 0).padStart(2, "0")}</span>
+          <div class="track-title">
+            <strong>{audio.title}</strong>
+            <span>
+              {windowRange(audio)}
+              {#if row.readable}
+                · with {row.readable.title}
+              {/if}
+            </span>
+          </div>
+          <div class="mapping-choice">
+            <Badge variant={status.manual ? "accent" : "outline"}>{status.label}</Badge>
+            <Select
+              value={mappingByAudioKey.get(key)?.readableChapterKey ?? ""}
+              options={selectionOptions(key)}
+              ariaLabel={`Readable chapter for ${audio.title}`}
+              disabled={saving}
+              onchange={(value) => updateAudioChapterMapping(audio, value)}
+            />
+          </div>
         </div>
-        <Select
-          value={mappingByAudioChapter.get(audioChapter.key)?.readableChapterKey ?? ""}
-          options={selectionOptions(audioChapter.key)}
-          ariaLabel={`Readable chapter for ${audioChapter.title}`}
-          disabled={saving}
-          onchange={(value) => updateAudioChapterMapping(audioChapter, value)}
-        />
-      </div>
+      {:else if row.readable}
+        <div class="mapping-row readable-only">
+          <span class="track-number">··</span>
+          <div class="track-title">
+            <strong>{row.readable.title}</strong>
+            <span>No matching audio chapter</span>
+          </div>
+        </div>
+      {/if}
     {/each}
   </div>
 
@@ -445,6 +451,23 @@
     border-bottom: 0;
   }
 
+  .mapping-row.readable-only {
+    min-height: 2.75rem;
+    opacity: 0.72;
+  }
+
+  .mapping-choice {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    min-width: 0;
+  }
+
+  .mapping-choice :global(.relative) {
+    flex: 1 1 auto;
+    min-width: 0;
+  }
+
   .track-number {
     font-family: var(--font-mono);
     font-size: 0.72rem;
@@ -503,7 +526,7 @@
       grid-template-columns: 2rem minmax(0, 1fr);
     }
 
-    .mapping-row :global(.relative) {
+    .mapping-choice {
       grid-column: 1 / -1;
     }
 

@@ -85,8 +85,6 @@
   import { entityAccentForKind } from "$lib/entities/entity-accent";
   import type { ArtworkPalette } from "$lib/entities/artwork-palette";
   import {
-    alignmentAudioChapters,
-    alignmentChapterMappings,
     bookChapterRowOwnsAudioTime,
     bookChapterRowsFromAlignment,
     readableChaptersFromAlignment,
@@ -267,8 +265,7 @@
   });
   const hasCombinedContent = $derived(chapterRows.some((row) => row.readTarget && row.audioTrack));
   const canMapBookChapters = $derived(readableChapters.length > 0 && audiobookTracks.length > 0);
-  const chapterMappings = $derived(alignmentChapterMappings(alignment));
-  const audioChapters = $derived(alignmentAudioChapters(alignment));
+  const audioPartCount = $derived(Number(alignment?.coverage.audioWindowCount ?? 0) || audiobookTracks.length);
   const fallbackBookPalette = entityAccentForKind(ENTITY_KIND.book);
   const chapterPalette = $derived(artworkPalette ?? {
     primary: fallbackBookPalette.primary,
@@ -482,11 +479,12 @@
 
   async function saveChapterMappingDraft(
     mappings: readonly BookChapterAudioMapping[],
-  ): Promise<readonly BookChapterAudioMapping[]> {
-    if (!book) return [];
-    alignment = await saveBookChapterMappings(book.id, mappings);
+  ): Promise<BookAlignmentResponse> {
+    if (!book) throw new Error("The book is not loaded.");
+    const refreshed = await saveBookChapterMappings(book.id, mappings);
+    alignment = refreshed;
     chapterMappingLoadError = null;
-    return alignmentChapterMappings(alignment);
+    return refreshed;
   }
 
   /**
@@ -1077,10 +1075,8 @@
           {#key book.id}
             <BookChapterMappingEditor
               resetKey={book.id}
-              {readableChapters}
+              {alignment}
               audioTracks={audiobookTracks}
-              {audioChapters}
-              mappings={chapterMappings}
               loadError={chapterMappingLoadError}
               onSave={saveChapterMappingDraft}
             />
@@ -1190,7 +1186,7 @@
           completed={canonicalCompleted}
           percent={canonicalPercent}
           positionLabel={canonicalPositionLabel}
-          countLabel={`${audioChapters.length || audiobookTracks.length} part${(audioChapters.length || audiobookTracks.length) === 1 ? "" : "s"}`}
+          countLabel={`${audioPartCount} part${audioPartCount === 1 ? "" : "s"}`}
           canResume={!canonicalCompleted && canonicalPercent > 0}
           canStartOver={canonicalCompleted || canonicalPercent > 0}
           busy={listeningBusy}
