@@ -59,6 +59,7 @@
   import AcquisitionProfileRules from "./AcquisitionProfileRules.svelte";
   import AcquisitionLanguageOrder from "./AcquisitionLanguageOrder.svelte";
   import AcquisitionRuleFields from "./AcquisitionRuleFields.svelte";
+  import { presetsForProfileKind } from "./acquisition-rule-editor";
   import AcquisitionReleaseTimingFields from "$lib/components/settings/AcquisitionReleaseTimingFields.svelte";
   import { availableDownloadProtocols } from "$lib/components/settings/acquisition-protocol-preference";
   import { profileSupportsReleaseDate, releaseTimingLabel } from "$lib/components/settings/acquisition-profile-release-timing";
@@ -810,7 +811,7 @@
               <label class="space-y-1"><span class="text-label text-text-muted">Name</span>
                 <TextInput size="sm" value={formatForm.name} oninput={(e) => formatForm && (formatForm.name = e.currentTarget.value)} placeholder="Remux Tier" /></label>
             </div>
-            <AcquisitionRuleFields bind:form={formatForm} presets={rulePresets} editing={!!formatForm.id} />
+            <AcquisitionRuleFields bind:form={formatForm} presets={presetsForProfileKind(rulePresets, formatForm.kind)} editing={!!formatForm.id} />
             <div class="flex justify-end gap-1.5">
               <Button size="sm" variant="ghost" onclick={() => (formatForm = null)} disabled={busy}>Cancel</Button>
               <Button size="sm" variant="primary" onclick={saveFormat} disabled={busy || !formatForm.name || formatForm.conditions.some((c) => !c.value)}>Save</Button>

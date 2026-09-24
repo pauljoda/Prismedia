@@ -4,6 +4,7 @@
   import type { AcquisitionRulePresetView, BookAcquisitionProfileSaveRequest, CustomFormatSaveRequest, CustomFormatView } from "$lib/api/generated/model";
   import { saveCustomFormat } from "$lib/api/acquisitions";
   import AcquisitionRuleFields from "./AcquisitionRuleFields.svelte";
+  import { presetsForProfileKind } from "./acquisition-rule-editor";
 
   interface Props {
     profileForm: BookAcquisitionProfileSaveRequest;
@@ -70,7 +71,7 @@
       <label class="block space-y-1"><span class="text-label text-text-secondary">Rule name</span>
         <TextInput size="sm" value={profileRuleForm.name} oninput={(event) => profileRuleForm && (profileRuleForm.name = event.currentTarget.value)} /></label>
       {#key profileRuleForm.id}
-        <AcquisitionRuleFields bind:form={profileRuleForm} presets={rulePresets} editing={!!profileRuleForm.id} onpreset={(preset) => (profileRuleScore = Number(preset.suggestedScore))} />
+        <AcquisitionRuleFields bind:form={profileRuleForm} presets={presetsForProfileKind(rulePresets, profileForm.kind)} editing={!!profileRuleForm.id} onpreset={(preset) => (profileRuleScore = Number(preset.suggestedScore))} />
       {/key}
       <label class="block space-y-1"><span class="text-label text-text-secondary">Score in this profile</span>
         <TextInput size="sm" type="number" value={String(profileRuleScore)} oninput={(event) => (profileRuleScore = Number(event.currentTarget.value) || 0)} /></label>

@@ -422,11 +422,13 @@ public sealed record BookAcquisitionProfileSaveRequest(
     bool AllowFormatChange = true);
 
 /// <summary>An editable starter custom format; saving uses the same contract and matching rules as advanced formats.</summary>
+/// <param name="ProfileKinds">The acquisition profile kinds this starter rule fits; editors offer it only for those profiles.</param>
 public sealed record AcquisitionRulePresetView(
     string Name,
     string Description,
     int SuggestedScore,
     IReadOnlyList<CustomFormatConditionView> Conditions,
+    IReadOnlyList<EntityKind> ProfileKinds,
     string? AudioLanguage = null);
 
 /// <summary>One condition of a custom format for the API surface (see the application <c>CustomFormatCondition</c>).</summary>

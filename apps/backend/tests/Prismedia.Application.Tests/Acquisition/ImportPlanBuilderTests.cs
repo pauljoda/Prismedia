@@ -18,16 +18,61 @@ public sealed class ImportPlanBuilderTests {
     }
 
     [Fact]
-    public void AudiobookRenditionImportsAllOrderedAudioParts() {
+    public void AudiobookRenditionImportsEveryPartInNaturalOrder() {
         var plan = ImportPlanBuilder.Plan(
-            ["Disc 02.mp3", "Book.epub", "Disc 01.m4b"],
+            ["Book/10 - Chapter 10.mp3", "Book/cover.jpg", "Book/2 - Chapter 2.mp3", "Book/1 - Chapter 1.mp3", "Book.epub"],
             Context(),
             Template,
             BookRendition.Audiobook);
 
         Assert.False(plan.Blocked);
-        Assert.Equal(["Disc 01.m4b", "Disc 02.mp3"], plan.Items.Select(item => item.SourceRelativePath).ToArray());
-        Assert.All(plan.Items, item => Assert.Contains("Andy Weir/Project Hail Mary (2021)", item.TargetRelativePath));
+        Assert.Equal(
+            ["Book/1 - Chapter 1.mp3", "Book/2 - Chapter 2.mp3", "Book/10 - Chapter 10.mp3"],
+            plan.Items.Select(item => item.SourceRelativePath).ToArray());
+        Assert.Equal(
+            "Andy Weir/Project Hail Mary (2021)/10 - Chapter 10.mp3",
+            plan.Items[^1].TargetRelativePath);
+    }
+
+    [Fact]
+    public void AudiobookDownloadThatMixesFormatsImportsOnlyTheM4bSet() {
+        var plan = ImportPlanBuilder.Plan(
+            ["Book/MP3/01.mp3", "Book/MP3/02.mp3", "Book/Project Hail Mary.m4b"],
+            Context(),
+            Template,
+            BookRendition.Audiobook);
+
+        var item = Assert.Single(plan.Items);
+        Assert.Equal("Book/Project Hail Mary.m4b", item.SourceRelativePath);
+        Assert.Equal("Andy Weir/Project Hail Mary (2021)/Project Hail Mary.m4b", item.TargetRelativePath);
+    }
+
+    [Fact]
+    public void AudiobookDiscFoldersKeepDiscThenTrackOrderWithoutCollisions() {
+        var plan = ImportPlanBuilder.Plan(
+            ["Book/CD2/01.mp3", "Book/CD10/01.mp3", "Book/CD1/02.mp3", "Book/CD1/01.mp3", "Book/CD2/02.mp3"],
+            Context(),
+            Template,
+            BookRendition.Audiobook);
+
+        Assert.Equal(
+            [
+                "Andy Weir/Project Hail Mary (2021)/Disc 01 - 01.mp3",
+                "Andy Weir/Project Hail Mary (2021)/Disc 01 - 02.mp3",
+                "Andy Weir/Project Hail Mary (2021)/Disc 02 - 01.mp3",
+                "Andy Weir/Project Hail Mary (2021)/Disc 02 - 02.mp3",
+                "Andy Weir/Project Hail Mary (2021)/Disc 10 - 01.mp3"
+            ],
+            plan.Items.Select(item => item.TargetRelativePath).ToArray());
+        Assert.Equal("Book/CD10/01.mp3", plan.Items[^1].SourceRelativePath);
+    }
+
+    [Fact]
+    public void AudiobookDownloadWithOnlyUnimportableAudioIsBlocked() {
+        var plan = ImportPlanBuilder.Plan(["Book/01.flac", "Book/02.flac"], Context(), Template, BookRendition.Audiobook);
+
+        Assert.True(plan.Blocked);
+        Assert.Equal(ImportBlockReason.NoSupportedPayload, plan.BlockReason);
     }
 
     [Fact]

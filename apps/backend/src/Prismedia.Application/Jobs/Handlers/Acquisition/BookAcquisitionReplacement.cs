@@ -46,6 +46,28 @@ public sealed partial class BookAcquisitionImportEngine {
                 ?? throw new InvalidOperationException("A fresh audiobook replacement requires its payload path."),
             stagedItems.Select(item => (item, IsMedia: true)).ToArray(),
             mover);
+        // An automatic upgrade was chosen for the chapter structure its title or file names promised; the
+        // downloaded files must deliver it before the owned audiobook is touched. A reviewed pick is the
+        // user's call.
+        var selected = await acquisitions.GetSelectedReleaseAsync(import.Id, cancellationToken);
+        var incomingShape = PlacedAudiobookShape(units.Select(unit => (unit.SourceRelativePath, unit.SourceAbsolutePath)));
+        if (selected?.ManualPick != true
+            && target.ParentAudiobookShape is { } ownedShape
+            && !incomingShape.Upgrades(ownedShape)) {
+            logger.LogInformation(
+                "Audiobook upgrade {Id} delivered {Incoming}, which does not improve the owned {Owned}; keeping the owned audiobook.",
+                import.Id, incomingShape.Code, ownedShape.Code);
+            if (blocklist is null) {
+                await Fail(import.Id, "The downloaded audiobook has no better chapter structure than the one you already have.", cancellationToken);
+                return;
+            }
+
+            await MergedImportExecution.FailNothingUsableAsync(
+                acquisitions, blocklist, history, torrents, logger, import, selected,
+                hasFormatChange: false, formatChangeMessage: string.Empty, cancellationToken);
+            return;
+        }
+
         var checkpoint = new ImportPlacementCheckpoint(
             import.Kind,
             root.Id,
@@ -119,12 +141,14 @@ public sealed partial class BookAcquisitionImportEngine {
             : SupportedAudiobookPaths(ownedFolder);
         PublishAudiobookReplacement(ownedFolder, stageFolder, backupFolder, checkpoint);
 
-        var finalPaths = checkpoint.Units
-            .Where(unit => unit.IsMedia)
+        var mediaUnits = checkpoint.Units.Where(unit => unit.IsMedia).ToArray();
+        var finalPaths = mediaUnits
             .Select(unit => Path.GetFullPath(Path.Combine(
                 ownedFolder,
                 Path.GetRelativePath(stageFolder, unit.TargetAbsolutePath))))
             .ToArray();
+        var replacementShape = PlacedAudiobookShape(
+            mediaUnits.Zip(finalPaths, (unit, path) => (unit.SourceRelativePath, path)));
         var finalPathSet = finalPaths.ToHashSet(FileSystemPathComparison.Comparer);
         var removedPaths = previousAudioPaths
             .Where(path => !finalPathSet.Contains(path))
@@ -167,7 +191,7 @@ public sealed partial class BookAcquisitionImportEngine {
                     RemovedSourcePaths: removedPaths),
                 cancellationToken);
 
-            await acquisitions.UpdateOwnedQualityAsync(parentId, ownedQuality, cancellationToken);
+            await acquisitions.UpdateOwnedQualityAsync(parentId, ownedQuality, cancellationToken, replacementShape);
             await history.SafeAddAsync(
                 logger,
                 new AcquisitionHistoryEntry(

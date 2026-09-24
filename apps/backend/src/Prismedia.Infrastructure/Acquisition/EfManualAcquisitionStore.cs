@@ -145,6 +145,7 @@ public sealed class EfManualAcquisitionStore(
                 OwnedMediaQuality = target.OwnedQuality.MediaQualityCode,
                 OwnedMediaRevision = target.OwnedQuality.MediaRevision,
                 OwnedFormatScore = target.OwnedQuality.FormatScore,
+                AudiobookShape = target.OwnedQuality.AudiobookShape,
                 UpgradeQualityCaptured = true,
                 SelectedReleaseJson = JsonSerializer.Serialize(new SelectedRelease(
                     Path.GetFileName(sourcePath!),
@@ -383,7 +384,9 @@ public sealed class EfManualAcquisitionStore(
             : new UpgradeOwnedQuality(
                 new BookQualityRank(parent.OwnedSourceTier, parent.OwnedFormatTier),
                 null,
-                FormatScore: parent.OwnedFormatScore);
+                FormatScore: parent.OwnedFormatScore) {
+                AudiobookShape = parent.BookRendition == BookRendition.Audiobook ? parent.AudiobookShape : null
+            };
 
     private static bool TryDecodeReplaceableKind(string code, out EntityKind kind) {
         if (EntityKindRegistry.TryDescribe(code, out var definition) &&

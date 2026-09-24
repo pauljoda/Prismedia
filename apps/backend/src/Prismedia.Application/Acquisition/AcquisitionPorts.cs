@@ -365,43 +365,6 @@ public sealed record StampedHintOwner(Guid TopLevelEntityId, string TopLevelKind
 public sealed record WantedAudioTrackReconciliation(Guid EntityId, bool NeedsWaveformRegeneration);
 
 /// <summary>
-/// One season's owned episode files, independent of structural folder provenance. A null folder means
-/// new episodes use the configured season template; existing files retain their exact paths and coverage.
-/// </summary>
-public sealed record TvSeasonDiskLayout(
-    Guid SeasonEntityId,
-    string? FolderPath,
-    IReadOnlyDictionary<int, string> EpisodeFileByNumber) {
-    /// <summary>Duplicate seasons or unnumbered owned files prevent a safe interpretation of this season's coverage.</summary>
-    public bool HasUnresolvedOwnership { get; init; }
-
-    /// <summary>Episode numbers with competing entities or sources, excluded from the unambiguous owned-file map.</summary>
-    public IReadOnlySet<int> AmbiguousEpisodeNumbers { get; init; } = new HashSet<int>();
-}
-
-/// <summary>An existing on-disk series' folder layout: the series folder and its seasons keyed by season number.</summary>
-public sealed record TvSeriesDiskLayout(
-    Guid SeriesEntityId,
-    string SeriesFolderPath,
-    IReadOnlyDictionary<int, TvSeasonDiskLayout> Seasons) {
-    /// <summary>Physical paths with unresolved ownership, including owners outside the unambiguous episode map.</summary>
-    public IReadOnlySet<string> UnresolvedSourcePaths { get; init; } = new HashSet<string>();
-}
-
-/// <summary>An existing on-disk movie: its folder and the owned video file when one exists.</summary>
-public sealed record MovieDiskTarget(Guid MovieEntityId, string FolderPath, string? OwnedSourceFilePath);
-
-/// <summary>
-/// An existing on-disk album target: the album folder when the album owns one, the artist folder when
-/// only the grouping exists on disk, and the album's already-owned files (relative to the album folder).
-/// </summary>
-public sealed record AlbumDiskTarget(
-    Guid AlbumEntityId,
-    string? AlbumFolderPath,
-    string? ArtistFolderPath,
-    IReadOnlySet<string> ExistingRelativeFiles);
-
-/// <summary>
 /// Resolves where an acquisition's linked library entity already lives on disk, so an import merges
 /// into the existing folder tree instead of minting a template-derived duplicate. Every method accepts
 /// the entity at any granularity the acquisition may link (an episode, a season, or the series itself;
@@ -606,8 +569,18 @@ public interface IAcquisitionStore : IAcquisitionLifecycleStore {
     /// <summary>Assembles everything the upgrade-replace job needs from a downloaded upgrade child, or null when it is not a resolvable upgrade child.</summary>
     Task<UpgradeReplaceTarget?> GetUpgradeReplaceTargetAsync(Guid childId, CancellationToken cancellationToken);
 
-    /// <summary>Updates an acquisition's owned book quality (e.g. after a successful upgrade swap) without changing its status.</summary>
-    Task UpdateOwnedQualityAsync(Guid acquisitionId, BookQualityRank ownedQuality, CancellationToken cancellationToken);
+    /// <summary>
+    /// Updates an acquisition's owned book quality (e.g. after a successful upgrade swap) without changing its
+    /// status. <paramref name="audiobookShape"/>, when given, replaces the owned audiobook's recorded layout.
+    /// </summary>
+    Task UpdateOwnedQualityAsync(Guid acquisitionId, BookQualityRank ownedQuality, CancellationToken cancellationToken,
+        AudiobookReleaseShape? audiobookShape = null);
+
+    /// <summary>
+    /// Records the audiobook layout observed in an in-flight download's file list. Ignored once the
+    /// acquisition is imported (its shape is then the owned shape) or being stopped.
+    /// </summary>
+    Task RecordAudiobookShapeAsync(Guid acquisitionId, AudiobookReleaseShape shape, CancellationToken cancellationToken);
 
     /// <summary>
     /// Updates an acquisition's owned media-quality ladder code, revision, and custom-format score (after a
@@ -665,8 +638,10 @@ public interface IAcquisitionStore : IAcquisitionLifecycleStore {
     /// <paramref name="ownedFormatScore"/> is the total custom-format score of the same selected release
     /// (computed against the profile's formats), stored for every kind so the upgrade loop's same-quality
     /// format-score cutoff can advance (defaults to 0).
+    /// <paramref name="audiobookShape"/> is the layout of the audiobook files actually imported, recorded in the
+    /// same commit as the owned shape the upgrade loop compares against; null for every other import.
     /// </summary>
-    Task MarkImportedWithQualityAsync(Guid id, BookQualityRank ownedQuality, string? message, CancellationToken cancellationToken, string? ownedMediaQuality = null, int ownedMediaRevision = 1, int ownedFormatScore = 0);
+    Task MarkImportedWithQualityAsync(Guid id, BookQualityRank ownedQuality, string? message, CancellationToken cancellationToken, string? ownedMediaQuality = null, int ownedMediaRevision = 1, int ownedFormatScore = 0, AudiobookReleaseShape? audiobookShape = null);
 
     /// <summary>
     /// Replaces the candidate set and publishes <see cref="AcquisitionStatus.AwaitingSelection"/> in one

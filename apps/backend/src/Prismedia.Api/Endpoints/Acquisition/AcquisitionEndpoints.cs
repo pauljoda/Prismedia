@@ -528,10 +528,14 @@ public static class AcquisitionEndpoints {
             .Produces(StatusCodes.Status204NoContent)
             .Produces<ApiProblem>(StatusCodes.Status404NotFound);
 
-        group.MapGet("/rule-presets", () => AcquisitionRulePresets.List())
+        group.MapGet("/rule-presets", (string? kind = null) =>
+                TryResolveKind(kind, out var profileKind, out var error)
+                    ? Results.Ok(AcquisitionRulePresets.List(profileKind))
+                    : error)
             .WithName("ListAcquisitionRulePresets")
-            .WithSummary("Lists editable starter rules for common audio language and format preferences.")
-            .Produces<IReadOnlyList<AcquisitionRulePresetView>>();
+            .WithSummary("Lists editable starter rules for common language, format, and audiobook preferences, optionally only those that fit the profile governing one kind.")
+            .Produces<IReadOnlyList<AcquisitionRulePresetView>>()
+            .Produces<ApiProblem>(StatusCodes.Status400BadRequest);
 
         group.MapGet("/custom-formats", (
             ICustomFormatStore customFormats,
@@ -840,7 +844,7 @@ public static class AcquisitionEndpoints {
     }
 
     /// <summary>
-    /// Resolves an optional media-kind query value for the Wanted lists: a blank/absent value means "all
+    /// Resolves an optional media-kind query value for kind-filtered lists: a blank/absent value means "all
     /// kinds" (out null, success), a recognized code resolves to its <see cref="EntityKind"/>, and any other
     /// value fails with a 400 so a typo does not silently list everything.
     /// </summary>

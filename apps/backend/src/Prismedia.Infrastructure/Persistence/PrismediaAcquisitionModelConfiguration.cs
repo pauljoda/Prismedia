@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Acquisition;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence.Entities;
 
@@ -271,6 +272,10 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.OwnedMediaQuality).HasColumnName("owned_media_quality").HasMaxLength(64);
             entity.Property(row => row.OwnedMediaRevision).HasColumnName("owned_media_revision").HasDefaultValue(1);
             entity.Property(row => row.OwnedFormatScore).HasColumnName("owned_format_score").HasDefaultValue(0);
+            entity.Property(row => row.AudiobookShape)
+                .HasColumnName("audiobook_shape")
+                .HasMaxLength(32)
+                .HasConversion(value => value!.Code, value => AudiobookReleaseShape.Parse(value));
             entity.Property(row => row.UpgradeOfAcquisitionId).HasColumnName("upgrade_of_acquisition_id");
             entity.Property(row => row.RecoveryOfAcquisitionId).HasColumnName("recovery_of_acquisition_id");
             entity.Property(row => row.UpgradeQualityCaptured).HasColumnName("upgrade_quality_captured").HasDefaultValue(false);

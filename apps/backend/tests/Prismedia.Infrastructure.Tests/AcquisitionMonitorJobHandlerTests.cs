@@ -47,6 +47,72 @@ public sealed class AcquisitionMonitorJobHandlerTests {
         else Assert.Empty(queue.Enqueued);
     }
 
+    [Theory]
+    [InlineData("Book/Book.m4b", "single-m4b", 1)]
+    [InlineData("Book/Book.flac", "unimportable", 0)]
+    public async Task AudiobookMetadataHoldRecordsTheShapeAndRejectsUnimportableAudio(string file, string shape, int expectedStarts) {
+        await using var db = CreateContext();
+        var id = await SeedDownloadingAsync(db, DateTimeOffset.UtcNow);
+        var acquisition = await db.Acquisitions.SingleAsync(row => row.Id == id);
+        acquisition.Kind = EntityKind.Book;
+        acquisition.BookRendition = BookRendition.Audiobook;
+        await db.SaveChangesAsync();
+        var status = new DownloadItemStatus("hashX", "Book", 0, "stoppedDL", false, "/save", "/save/Book",
+            AwaitingPayloadAdmission: true);
+        var starts = 0;
+        var queue = new RecordingJobQueue();
+
+        await RunAsync(db, queue, [status], status, id,
+            files: [new(file, 400_000_000, 0), new("Book/cover.jpg", 10_000, 0)],
+            onRelease: () => starts++);
+
+        Assert.Equal(expectedStarts, starts);
+        Assert.Equal(shape, (await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == id)).AudiobookShape?.Code);
+        if (expectedStarts == 0) {
+            var job = Assert.Single(queue.Enqueued);
+            Assert.Equal(JobType.AcquisitionFailedHandle, job.Type);
+            Assert.Equal(BlocklistReason.NoImportableFiles, AcquisitionFailedPayload.Parse(job.PayloadJson!).Reason);
+        } else {
+            Assert.Empty(queue.Enqueued);
+        }
+    }
+
+    [Theory]
+    [InlineData(new[] { "Book/Book.m4b" }, 1)]
+    [InlineData(new[] { "Book/Book-Part01.mp3", "Book/Book-Part02.mp3" }, 0)]
+    public async Task AudiobookUpgradeHoldRequiresBetterChapterStructureThanTheOwnedCopy(string[] files, int expectedStarts) {
+        await using var db = CreateContext();
+        var id = await SeedDownloadingAsync(db, DateTimeOffset.UtcNow);
+        var parentId = Guid.NewGuid();
+        var now = DateTimeOffset.UtcNow;
+        db.Acquisitions.Add(new AcquisitionRow {
+            Id = parentId, Kind = EntityKind.Book, BookRendition = BookRendition.Audiobook, Status = AcquisitionStatus.Imported,
+            Title = "Book", AudiobookShape = AudiobookReleaseShape.PartFiles, UpgradeQualityCaptured = true,
+            ExternalIdsJson = "{}", SourceUrlsJson = "[]", CreatedAt = now, UpdatedAt = now
+        });
+        var child = await db.Acquisitions.SingleAsync(row => row.Id == id);
+        child.Kind = EntityKind.Book;
+        child.BookRendition = BookRendition.Audiobook;
+        child.UpgradeOfAcquisitionId = parentId;
+        await db.SaveChangesAsync();
+        var status = new DownloadItemStatus("hashX", "Book", 0, "stoppedDL", false, "/save", "/save/Book",
+            AwaitingPayloadAdmission: true);
+        var starts = 0;
+        var queue = new RecordingJobQueue();
+
+        await RunAsync(db, queue, [status], status, id,
+            files: files.Select(file => new DownloadItemFile(file, 60_000_000, 0)).ToArray(),
+            onRelease: () => starts++);
+
+        Assert.Equal(expectedStarts, starts);
+        if (expectedStarts == 0) {
+            var job = Assert.Single(queue.Enqueued);
+            Assert.Equal(BlocklistReason.NotAnUpgrade, AcquisitionFailedPayload.Parse(job.PayloadJson!).Reason);
+        } else {
+            Assert.Empty(queue.Enqueued);
+        }
+    }
+
     [Fact]
     public async Task UnreadableStoppedMetadataEventuallyUsesStallRecovery() {
         await using var db = CreateContext();

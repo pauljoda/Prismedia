@@ -27,7 +27,8 @@ public static class AcquisitionRuleContext {
         return owned is null ? rules : rules with {
             IsUpgradeSearch = true, OwnedQuality = owned.BookRank ?? default, OwnedMediaQuality = owned.MediaQualityCode,
             OwnedMediaRevision = owned.MediaRevision, OwnedFormatScore = owned.FormatScore, OwnedHasSubtitles = owned.HasSubtitles,
-            OwnedVideoResolutionTier = owned.VideoResolutionTier, OwnedVideoSourceShared = owned.VideoSourceShared
+            OwnedVideoResolutionTier = owned.VideoResolutionTier, OwnedVideoSourceShared = owned.VideoSourceShared,
+            OwnedAudiobookShape = owned.AudiobookShape
         };
     }
 }

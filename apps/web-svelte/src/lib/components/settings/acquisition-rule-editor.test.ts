@@ -1,5 +1,22 @@
 import { describe, expect, it } from "vitest";
-import { literalTitleCondition } from "./acquisition-rule-editor";
+import { ENTITY_KIND } from "$lib/api/generated/codes";
+import type { AcquisitionRulePresetView } from "$lib/api/generated/model";
+import { literalTitleCondition, presetsForProfileKind } from "./acquisition-rule-editor";
+
+describe("Starter rules", () => {
+  it("offers each profile only the presets that fit its kind", () => {
+    const preset = (name: string, profileKinds: AcquisitionRulePresetView["profileKinds"]): AcquisitionRulePresetView =>
+      ({ name, description: name, suggestedScore: 100, conditions: [], profileKinds });
+    const presets = [
+      preset("English audio", [ENTITY_KIND.book, ENTITY_KIND.movie]),
+      preset("H.265 / HEVC", [ENTITY_KIND.movie]),
+      preset("M4B audiobook", [ENTITY_KIND.book]),
+    ];
+
+    expect(presetsForProfileKind(presets, ENTITY_KIND.book).map((item) => item.name)).toEqual(["English audio", "M4B audiobook"]);
+    expect(presetsForProfileKind(presets, ENTITY_KIND.movie).map((item) => item.name)).toEqual(["English audio", "H.265 / HEVC"]);
+  });
+});
 
 describe("Basic title rules", () => {
   it("keeps regex characters literal while accepting release separators", () => {

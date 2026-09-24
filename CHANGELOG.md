@@ -60,6 +60,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 - Soulseek searches through slskd support EPUB/PDF books, CBZ/ZIP comics, and ordered audiobook files, with each publication format selectable separately. Book and comic searches wait for slskd to finish a queued or late peer window, and slash-separated peer paths keep author and work boundaries so valid matches are not rejected.
 
+- Audiobook searches prefer releases with exact chapter structure: a single M4B ranks first, then one file per chapter, then releases whose layout is unknown, then part splits, and finally one long MP3. Releases that offer only audio Prismedia cannot import, such as FLAC, Opus, or AAX, are skipped instead of failing after download, and an automatic qBittorrent download whose file list holds no importable audio moves on to another release before its audio transfers. A download that mixes formats imports one coherent set (M4B before MP3), and multi-disc downloads keep disc then track order instead of interleaving same-named tracks. An audiobook imported as part files or one long MP3 is kept and, when its profile upgrades automatically, stays eligible for a chaptered upgrade; the replacement must show better chapter structure in its files before it replaces the owned audiobook.
+
 - Monitored movies and TV units can look for better matches while keeping unattended automatic import holds available for review. Recovery compares episode coverage and profile quality, backs off from hours to weekly searches, and only cleans up superseded downloads after a replacement finishes importing. Unresolved foreign-season extras remain available for review.
 
 - A security policy and private vulnerability reporting guide explain how to report issues and how fixes are coordinated.
@@ -70,7 +72,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 - Replace or upload individual TV episodes, including older files imported through season packs. Replacement searches use current episode numbering and monitor preferences; files shared by multiple episodes require coverage-aware review.
 
-- Acquisition profiles now offer an ordered audio-language picker and editable starter rules for common languages, codecs, HDR, source formats, and lossless audio. Basic and Advanced edit the same reusable custom formats, with scores set per profile.
+- Acquisition profiles now offer an ordered audio-language picker and editable starter rules for common languages, codecs, HDR, source formats, lossless audio, and M4B or chapterized audiobooks. Each profile type offers only the starter rules that apply to it, so Book profiles no longer list video codecs. Basic and Advanced edit the same reusable custom formats, with scores set per profile.
 
 - Movie and TV acquisition can search verified original, translated, and romanized titles from the selected metadata provider. Those names share strict identity checks and quality ranking through download validation, import, and coverage recovery.
 

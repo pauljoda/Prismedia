@@ -653,7 +653,10 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         // Current source-linked dimensions below supplement that recorded quality without rewriting it.
         var parent = await db.Acquisitions.AsNoTracking()
             .Where(row => row.Id == id)
-            .Select(row => new { row.Kind, row.EntityId, row.OwnedSourceTier, row.OwnedFormatTier, row.OwnedMediaQuality, row.OwnedMediaRevision, row.OwnedFormatScore })
+            .Select(row => new {
+                row.Kind, row.EntityId, row.OwnedSourceTier, row.OwnedFormatTier, row.OwnedMediaQuality, row.OwnedMediaRevision,
+                row.OwnedFormatScore, row.BookRendition, row.AudiobookShape
+            })
             .FirstOrDefaultAsync(cancellationToken);
         if (parent is null) {
             return null;
@@ -669,7 +672,9 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
                 VideoSourceShared = MediaQualityLadder.IsVideoKind(parent.Kind) && parent.EntityId is { } sharedOwner
                     && await OwnedVideoEvidence.IsSharedAsync(db, sharedOwner, cancellationToken)
             }
-            : new UpgradeOwnedQuality(new BookQualityRank(parent.OwnedSourceTier, parent.OwnedFormatTier), null, FormatScore: parent.OwnedFormatScore);
+            : new UpgradeOwnedQuality(new BookQualityRank(parent.OwnedSourceTier, parent.OwnedFormatTier), null, FormatScore: parent.OwnedFormatScore) {
+                AudiobookShape = parent.BookRendition == BookRendition.Audiobook ? parent.AudiobookShape : null
+            };
     }
 
     public async Task<UpgradeReplaceTarget?> GetUpgradeReplaceTargetAsync(Guid childId, CancellationToken cancellationToken) {
@@ -723,7 +728,8 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
                 && await OwnedVideoEvidence.IsSharedAsync(db, sharedOwner, cancellationToken),
             InstalledUpgradePath = installedPath,
             InstalledUpgradeSourceCurrent = installedPath is not null && installedSources.Length == 1
-                && FileSystemPathComparison.Equals(installedSources[0], installedPath)
+                && FileSystemPathComparison.Equals(installedSources[0], installedPath),
+            ParentAudiobookShape = parent.BookRendition == BookRendition.Audiobook ? parent.AudiobookShape : null
         };
     }
 
@@ -757,7 +763,8 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         }
     }
 
-    public async Task UpdateOwnedQualityAsync(Guid acquisitionId, BookQualityRank ownedQuality, CancellationToken cancellationToken) {
+    public async Task UpdateOwnedQualityAsync(Guid acquisitionId, BookQualityRank ownedQuality, CancellationToken cancellationToken,
+        AudiobookReleaseShape? audiobookShape = null) {
         var row = await db.Acquisitions.FirstOrDefaultAsync(row => row.Id == acquisitionId, cancellationToken);
         if (row is null || row.Status == AcquisitionStatus.Stopping) {
             return;
@@ -765,6 +772,20 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
 
         row.OwnedSourceTier = ownedQuality.Source;
         row.OwnedFormatTier = ownedQuality.Format;
+        if (audiobookShape is not null) {
+            row.AudiobookShape = audiobookShape;
+        }
+        row.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task RecordAudiobookShapeAsync(Guid acquisitionId, AudiobookReleaseShape shape, CancellationToken cancellationToken) {
+        var row = await db.Acquisitions.FirstOrDefaultAsync(row => row.Id == acquisitionId, cancellationToken);
+        if (row is null || row.Status is AcquisitionStatus.Imported or AcquisitionStatus.Stopping || row.AudiobookShape == shape) {
+            return;
+        }
+
+        row.AudiobookShape = shape;
         row.UpdatedAt = DateTimeOffset.UtcNow;
         await db.SaveChangesAsync(cancellationToken);
     }
@@ -782,7 +803,7 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task MarkImportedWithQualityAsync(Guid id, BookQualityRank ownedQuality, string? message, CancellationToken cancellationToken, string? ownedMediaQuality = null, int ownedMediaRevision = 1, int ownedFormatScore = 0) {
+    public async Task MarkImportedWithQualityAsync(Guid id, BookQualityRank ownedQuality, string? message, CancellationToken cancellationToken, string? ownedMediaQuality = null, int ownedMediaRevision = 1, int ownedFormatScore = 0, AudiobookReleaseShape? audiobookShape = null) {
         var row = await db.Acquisitions.FirstOrDefaultAsync(row => row.Id == id, cancellationToken);
         if (row is null || row.Status == AcquisitionStatus.Stopping) {
             return;
@@ -830,6 +851,10 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         }
 
         row.OwnedFormatScore = ownedFormatScore;
+        if (audiobookShape is not null) {
+            row.AudiobookShape = audiobookShape;
+        }
+
         row.UpgradeQualityCaptured = true;
         row.ImportCheckpointJson = null;
         row.ImportClaimJobId = null;
