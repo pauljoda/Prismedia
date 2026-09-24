@@ -1,6 +1,7 @@
 using Prismedia.Domain.Acquisition;
 using Prismedia.Domain.Entities;
 using Prismedia.Domain.Integrations;
+using Prismedia.Domain.Media.Books;
 
 namespace Prismedia.Domain.Tests;
 
@@ -21,6 +22,7 @@ public sealed class ClosedSetDefinitionTests {
         AssertComplete(PluginCapabilityDefinition.All.Select(definition => definition.Capability));
         AssertComplete(ManagedTrackingStatusDefinition.All.Select(definition => definition.Status));
         AssertComplete(AcquisitionStatusDefinition.All.Select(definition => definition.Status));
+        AssertComplete(AudiobookStructureDefinition.All.Select(definition => definition.Structure));
     }
 
     [Fact]

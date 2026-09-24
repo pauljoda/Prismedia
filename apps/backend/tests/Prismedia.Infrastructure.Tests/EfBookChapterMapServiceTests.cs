@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Application.Books;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Media.Books;
 using Prismedia.Infrastructure.Persistence;
@@ -8,12 +9,14 @@ namespace Prismedia.Infrastructure.Tests;
 
 public sealed class EfBookChapterMapServiceTests {
     [Fact]
-    public async Task PersistsAutomaticTitleMatchesForChapterEntityBooks() {
+    public async Task PersistsAutomaticMatchesFromTitleTagsButNeverFromFileNames() {
         await using var db = CreateContext();
         var bookId = AddEntity(db, EntityKind.Book, "Book");
-        var chapterId = AddEntity(db, EntityKind.BookChapter, "Prologue", bookId, 0);
-        var trackId = AddEntity(db, EntityKind.AudioTrack, "00 - Prologue", bookId, 0);
-        AddSource(db, trackId);
+        var prologueId = AddEntity(db, EntityKind.BookChapter, "Prologue", bookId, 0);
+        AddEntity(db, EntityKind.BookChapter, "Epilogue", bookId, 1);
+        // The first file's tag names its chapter; the second is titled only by its file name.
+        var taggedTrack = AddTrack(db, bookId, "00 - Intro", 0, titleTag: "Prologue");
+        AddTrack(db, bookId, "Epilogue", 1);
         await db.SaveChangesAsync();
         var service = new EfBookChapterMapService(db, new EpubBookContentsCache());
 
@@ -22,9 +25,10 @@ public sealed class EfBookChapterMapServiceTests {
 
         Assert.True(result.AutoMappingsReplaced);
         var row = Assert.Single(db.BookChapterAudioMappings);
-        Assert.Equal(chapterId.ToString("D"), row.ReadableChapterKey);
-        Assert.Equal(trackId, row.AudioTrackEntityId);
+        Assert.Equal(prologueId.ToString("D"), row.ReadableChapterKey);
+        Assert.Equal(taggedTrack, row.AudioTrackEntityId);
         Assert.Equal(BookChapterMappingOrigin.Auto, row.Origin);
+        Assert.True(BookChapterMatcher.IsCurrentSignature(db.BookContentStates.Single().MappingSignature));
     }
 
     [Fact]
@@ -32,8 +36,8 @@ public sealed class EfBookChapterMapServiceTests {
         await using var db = CreateContext();
         var bookId = AddEntity(db, EntityKind.Book, "Book");
         AddEntity(db, EntityKind.BookChapter, "Prologue", bookId, 0);
-        var trackId = AddEntity(db, EntityKind.AudioTrack, "Prologue", bookId, 0);
-        AddSource(db, trackId);
+        var trackId = AddTrack(db, bookId, "Book", 0);
+        AddMarker(db, trackId, "Prologue", 0, 60);
         await db.SaveChangesAsync();
         var service = new EfBookChapterMapService(db, new EpubBookContentsCache());
 
@@ -47,32 +51,49 @@ public sealed class EfBookChapterMapServiceTests {
     }
 
     [Fact]
-    public async Task ManualRowsSurviveRefreshAndPinTheirTrack() {
+    public async Task ConfirmedRowsSurviveRefreshAndPinTheirTrack() {
         await using var db = CreateContext();
         var bookId = AddEntity(db, EntityKind.Book, "Book");
         var prologueId = AddEntity(db, EntityKind.BookChapter, "Prologue", bookId, 0);
         var chapterOneId = AddEntity(db, EntityKind.BookChapter, "Chapter 1", bookId, 1);
-        var trackId = AddEntity(db, EntityKind.AudioTrack, "Prologue", bookId, 0);
-        AddSource(db, trackId);
-        db.BookChapterAudioMappings.Add(new BookChapterAudioMappingRow {
-            Id = Guid.NewGuid(),
-            BookId = bookId,
-            ReadableChapterKey = chapterOneId.ToString("D"),
-            AudioTrackEntityId = trackId,
-            Origin = BookChapterMappingOrigin.Manual,
-            UpdatedAt = DateTimeOffset.UtcNow
-        });
+        var chapterTwoId = AddEntity(db, EntityKind.BookChapter, "Chapter 2", bookId, 2);
+        var firstTrack = AddTrack(db, bookId, "01", 0, titleTag: "Prologue");
+        var secondTrack = AddTrack(db, bookId, "02", 1, titleTag: "Chapter 2");
+        AddConfirmed(db, bookId, chapterOneId, firstTrack, BookChapterMappingOrigin.Manual);
+        AddConfirmed(db, bookId, chapterTwoId, secondTrack, BookChapterMappingOrigin.Ordered);
         await db.SaveChangesAsync();
         var service = new EfBookChapterMapService(db, new EpubBookContentsCache());
 
         await service.RefreshAsync(bookId, CancellationToken.None);
 
-        // The manual pair consumed the only track, so no auto row may appear even though the
-        // track title exactly matches the prologue chapter.
-        var row = Assert.Single(db.BookChapterAudioMappings);
-        Assert.Equal(BookChapterMappingOrigin.Manual, row.Origin);
-        Assert.Equal(chapterOneId.ToString("D"), row.ReadableChapterKey);
-        Assert.NotEqual(prologueId.ToString("D"), row.ReadableChapterKey);
+        // The confirmed pairs consumed both tracks, so no auto row may appear even though the first
+        // track's title tag exactly matches the prologue chapter.
+        var rows = await db.BookChapterAudioMappings.ToArrayAsync();
+        Assert.Equal(2, rows.Length);
+        Assert.DoesNotContain(rows, row => row.Origin == BookChapterMappingOrigin.Auto);
+        Assert.DoesNotContain(rows, row => row.ReadableChapterKey == prologueId.ToString("D"));
+    }
+
+    [Fact]
+    public async Task PartSplitsAndSingleChapterlessFilesAreNeverPairedAutomatically() {
+        await using var db = CreateContext();
+        var bookId = AddEntity(db, EntityKind.Book, "Book");
+        AddEntity(db, EntityKind.BookChapter, "Prologue", bookId, 0);
+        AddEntity(db, EntityKind.BookChapter, "Epilogue", bookId, 1);
+        AddTrack(db, bookId, "Book Part 1", 0, titleTag: "Prologue");
+        await db.SaveChangesAsync();
+        var service = new EfBookChapterMapService(db, new EpubBookContentsCache());
+
+        // One chapterless file: no boundary to pair, whatever its tag says.
+        await service.RefreshAsync(bookId, CancellationToken.None);
+        Assert.Empty(db.BookChapterAudioMappings);
+
+        // Two files named as parts: still no chapter boundaries.
+        AddTrack(db, bookId, "Book Part 2", 1, titleTag: "Epilogue");
+        await db.SaveChangesAsync();
+        Assert.True(await service.IsRefreshNeededAsync(bookId, CancellationToken.None));
+        await service.RefreshAsync(bookId, CancellationToken.None);
+        Assert.Empty(db.BookChapterAudioMappings);
     }
 
     [Fact]
@@ -81,15 +102,13 @@ public sealed class EfBookChapterMapServiceTests {
         var bookId = AddEntity(db, EntityKind.Book, "Book");
         AddEntity(db, EntityKind.BookChapter, "Prologue", bookId, 0);
         AddEntity(db, EntityKind.BookChapter, "Epilogue", bookId, 1);
-        var firstTrack = AddEntity(db, EntityKind.AudioTrack, "Prologue", bookId, 0);
-        AddSource(db, firstTrack);
+        AddTrack(db, bookId, "01", 0, titleTag: "Prologue");
         await db.SaveChangesAsync();
         var service = new EfBookChapterMapService(db, new EpubBookContentsCache());
         await service.RefreshAsync(bookId, CancellationToken.None);
-        Assert.Single(db.BookChapterAudioMappings);
+        Assert.Empty(db.BookChapterAudioMappings);
 
-        var secondTrack = AddEntity(db, EntityKind.AudioTrack, "Epilogue", bookId, 1);
-        AddSource(db, secondTrack);
+        AddTrack(db, bookId, "02", 1, titleTag: "Epilogue");
         await db.SaveChangesAsync();
 
         Assert.True(await service.IsRefreshNeededAsync(bookId, CancellationToken.None));
@@ -99,13 +118,45 @@ public sealed class EfBookChapterMapServiceTests {
     }
 
     [Fact]
+    public async Task MapsBuiltByAnOlderMatcherAreListedAndRecomputedOnce() {
+        await using var db = CreateContext();
+        var bookId = AddEntity(db, EntityKind.Book, "Book");
+        var chapterId = AddEntity(db, EntityKind.BookChapter, "Prologue", bookId, 0);
+        var trackId = AddTrack(db, bookId, "Whole Book", 0);
+        // Written by the old matcher: a positional guess, under an unversioned signature.
+        db.BookContentStates.Add(new BookContentStateRow {
+            BookId = bookId,
+            MappingSignature = "0123456789abcdef0123456789abcdef",
+            RefreshedAt = DateTimeOffset.UtcNow
+        });
+        db.BookChapterAudioMappings.Add(new BookChapterAudioMappingRow {
+            Id = Guid.NewGuid(),
+            BookId = bookId,
+            ReadableChapterKey = chapterId.ToString("D"),
+            AudioTrackEntityId = trackId,
+            Origin = BookChapterMappingOrigin.Auto,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        await db.SaveChangesAsync();
+        var service = new EfBookChapterMapService(db, new EpubBookContentsCache());
+
+        Assert.Equal(bookId, Assert.Single(await service.ListOutdatedMatcherMapsAsync(CancellationToken.None)).BookId);
+        Assert.True(await service.IsRefreshNeededAsync(bookId, CancellationToken.None));
+
+        var result = await service.RefreshAsync(bookId, CancellationToken.None);
+
+        Assert.True(result.AutoMappingsReplaced);
+        Assert.Empty(db.BookChapterAudioMappings);
+        Assert.Empty(await service.ListOutdatedMatcherMapsAsync(CancellationToken.None));
+    }
+
+    [Fact]
     public async Task PersistsMultipleEmbeddedChapterMatchesForOnePhysicalTrack() {
         await using var db = CreateContext();
         var bookId = AddEntity(db, EntityKind.Book, "Book");
         var openingId = AddEntity(db, EntityKind.BookChapter, "Opening Credits", bookId, 0);
         var chapterId = AddEntity(db, EntityKind.BookChapter, "Chapter One", bookId, 1);
-        var trackId = AddEntity(db, EntityKind.AudioTrack, "Whole Book", bookId, 0);
-        AddSource(db, trackId);
+        var trackId = AddTrack(db, bookId, "Whole Book", 0);
         var openingMarkerId = AddMarker(db, trackId, "Opening Credits", 0, 12.5);
         var chapterMarkerId = AddMarker(db, trackId, "Chapter One", 12.5, 180);
         await db.SaveChangesAsync();
@@ -122,15 +173,28 @@ public sealed class EfBookChapterMapServiceTests {
     }
 
     [Fact]
+    public async Task UntitledEmbeddedChaptersNeverMatchTheirPlaceholder() {
+        await using var db = CreateContext();
+        var bookId = AddEntity(db, EntityKind.Book, "Book");
+        AddEntity(db, EntityKind.BookChapter, "Chapter 1", bookId, 0);
+        var trackId = AddTrack(db, bookId, "Whole Book", 0);
+        AddMarker(db, trackId, "Chapter 1", 0, 60, untitled: true);
+        await db.SaveChangesAsync();
+        var service = new EfBookChapterMapService(db, new EpubBookContentsCache());
+
+        await service.RefreshAsync(bookId, CancellationToken.None);
+
+        Assert.Empty(db.BookChapterAudioMappings);
+    }
+
+    [Fact]
     public async Task ListsOnlyStaleBooksUnderTheGivenRoot() {
         await using var db = CreateContext();
         var insideId = AddEntity(db, EntityKind.Book, "Inside");
         AddEntity(db, EntityKind.BookChapter, "Prologue", insideId, 0);
-        var insideTrack = AddEntity(db, EntityKind.AudioTrack, "Prologue", insideId, 0);
-        AddSource(db, insideTrack, "/library/books/inside/prologue.mp3");
+        AddTrack(db, insideId, "Prologue", 0, path: "/library/books/inside/prologue.mp3");
         var outsideId = AddEntity(db, EntityKind.Book, "Outside");
-        var outsideTrack = AddEntity(db, EntityKind.AudioTrack, "Elsewhere", outsideId, 0);
-        AddSource(db, outsideTrack, "/other-root/elsewhere.mp3");
+        AddTrack(db, outsideId, "Elsewhere", 0, path: "/other-root/elsewhere.mp3");
         await db.SaveChangesAsync();
         var service = new EfBookChapterMapService(db, new EpubBookContentsCache());
 
@@ -175,23 +239,53 @@ public sealed class EfBookChapterMapServiceTests {
         return id;
     }
 
-    private static void AddSource(PrismediaDbContext db, Guid entityId, string? path = null) {
+    /// <summary>A playable audiobook file titled by its name, with an optional embedded title tag.</summary>
+    private static Guid AddTrack(
+        PrismediaDbContext db,
+        Guid bookId,
+        string fileStem,
+        int sortOrder,
+        string? titleTag = null,
+        string? path = null) {
+        var id = AddEntity(db, EntityKind.AudioTrack, fileStem, bookId, sortOrder);
         db.EntityFiles.Add(new EntityFileRow {
             Id = Guid.NewGuid(),
-            EntityId = entityId,
+            EntityId = id,
             Role = EntityFileRole.Source,
-            Path = path ?? $"/media/{entityId:N}.mp3",
+            Path = path ?? $"/media/{bookId:N}/{fileStem}.mp3",
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
         });
+        db.AudioTrackDetails.Add(new AudioTrackDetailRow {
+            EntityId = id,
+            EmbeddedTitle = titleTag,
+            TagsRecordedAt = DateTimeOffset.UtcNow
+        });
+        return id;
     }
+
+    private static void AddConfirmed(
+        PrismediaDbContext db,
+        Guid bookId,
+        Guid chapterId,
+        Guid trackId,
+        BookChapterMappingOrigin origin) =>
+        db.BookChapterAudioMappings.Add(new BookChapterAudioMappingRow {
+            Id = Guid.NewGuid(),
+            BookId = bookId,
+            ReadableChapterKey = chapterId.ToString("D"),
+            AudioTrackEntityId = trackId,
+            Origin = origin,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
 
     private static Guid AddMarker(
         PrismediaDbContext db,
         Guid entityId,
         string title,
         double seconds,
-        double endSeconds) {
+        double endSeconds,
+        bool untitled = false) {
         var id = Guid.NewGuid();
         db.EntityMarkers.Add(new EntityMarkerRow {
             Id = id,
@@ -201,6 +295,7 @@ public sealed class EfBookChapterMapServiceTests {
             EndSeconds = endSeconds,
             // Container-imported chapters are the only markers that split a track into chapters.
             SourceIndex = db.EntityMarkers.Local.Count(marker => marker.EntityId == entityId),
+            Untitled = untitled,
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
         });

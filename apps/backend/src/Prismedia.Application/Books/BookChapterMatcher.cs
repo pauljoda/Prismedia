@@ -1,26 +1,31 @@
 using System.Globalization;
 using System.Text;
-using System.Text.RegularExpressions;
 
 namespace Prismedia.Application.Books;
 
 /// <summary>One readable chapter offered to the automatic matcher.</summary>
 /// <param name="Key">Stable chapter key (EPUB navigation target or chapter entity id).</param>
-/// <param name="Title">Human-readable chapter title used for normalized-title matching.</param>
+/// <param name="Title">Human-readable chapter title used for exact-title matching.</param>
 /// <param name="Order">Zero-based display order.</param>
 public sealed record MatchableReadableChapter(string Key, string Title, int Order);
 
-/// <summary>One audiobook track offered to the automatic matcher.</summary>
-/// <param name="Id">Audio track entity identifier.</param>
-/// <param name="Title">Track title used for normalized-title matching.</param>
-/// <param name="SortOrder">The track's structural sort order under its Book.</param>
-public sealed record MatchableAudioTrack(Guid Id, string Title, int SortOrder);
-
 /// <summary>One addressable audiobook chapter backed by a whole track or embedded marker.</summary>
+/// <param name="AudioTrackId">Physical playable audio track.</param>
+/// <param name="AudioMarkerId">Embedded marker, or null for the whole track.</param>
+/// <param name="Title">Chapter label shown to listeners (a file name or placeholder when nothing better exists).</param>
+/// <param name="IdentifyingTitle">
+/// The title that can prove which chapter this is: an embedded chapter's own title or a whole file's
+/// title tag. Null for untitled chapters and file-name titles, which never match.
+/// </param>
+/// <param name="TrackSortOrder">Zero-based playback position of the track in the Book.</param>
+/// <param name="MarkerOrder">Zero-based position of the window inside its track.</param>
+/// <param name="StartSeconds">Window start inside the track.</param>
+/// <param name="EndSeconds">Window end inside the track, when known.</param>
 public sealed record MatchableAudioChapter(
     Guid AudioTrackId,
     Guid? AudioMarkerId,
     string Title,
+    string? IdentifyingTitle,
     int TrackSortOrder,
     int MarkerOrder,
     double StartSeconds,
@@ -35,169 +40,162 @@ public sealed record MatchedBookAudioChapter(
     double? EndSeconds);
 
 /// <summary>
-/// Server-side port of the reference client's chapter matcher. Manual pairs always win; remaining
-/// chapters match a track only through normalized-title equality. Numbers and sort order never
-/// determine chapter identity, so an unmatched title deliberately stays unmatched.
+/// Derives automatic readable-to-audio chapter pairs from exact evidence only. Person-confirmed pairs
+/// (hand-picked or reviewed in-order fills) always win. Remaining chapters pair only when their titles
+/// are equal after case, accent, punctuation, and whitespace normalisation with every number kept, when
+/// that title is unique on both sides, and when the pair keeps reading order on both sides. Nothing is
+/// ever paired by position, file name, or an invented placeholder title.
 /// </summary>
-public static partial class BookChapterMatcher {
-    [GeneratedRegex(@"^\s*(?:chapter|ch\.?|track|part)\s*[ivxlcdm]+\s*(?:[.\-–—:_]|\s)+", RegexOptions.IgnoreCase)]
-    private static partial Regex RomanNumberedPrefix();
-
-    [GeneratedRegex(@"^\s*(?:chapter|ch\.?|track|part)\s*0*\d+\s*(?:[.\-–—:_]|\s)*", RegexOptions.IgnoreCase)]
-    private static partial Regex ArabicNumberedPrefix();
-
-    [GeneratedRegex(@"^\s*0*\d+\s*(?:[.\-–—:_]|\s)+")]
-    private static partial Regex BareNumberPrefix();
-
-    [GeneratedRegex("[^a-z0-9]+")]
-    private static partial Regex NonAlphanumericRuns();
+public static class BookChapterMatcher {
+    #region Static Variables
 
     /// <summary>
-    /// Stable comparison key for common EPUB/audio chapter labels: diacritics stripped, common
-    /// "Chapter/Track/Part N" prefixes removed, punctuation collapsed to single spaces.
+    /// Version of the pairing rules. It is stamped into every persisted mapping signature, so raising it
+    /// makes every Book's automatic pairs recompute once and marks older automatic pairs as untrusted
+    /// until they do.
+    /// </summary>
+    public const int Version = 2;
+
+    private static readonly string SignaturePrefix = $"m{Version}:";
+
+    #endregion
+
+    #region Actions - Titles
+
+    /// <summary>
+    /// Comparison key for a chapter title: compatibility-decomposed, accents removed, lower-cased, with
+    /// every run of characters that are not letters or digits collapsed to one space. Numbers and words
+    /// are kept exactly, so "Chapter 3" matches "chapter 3" but never "Track 17" or "Chapter 4".
     /// </summary>
     public static string MatchKey(string value) {
         var decomposed = value.Normalize(NormalizationForm.FormKD);
         var builder = new StringBuilder(decomposed.Length);
-        foreach (var ch in decomposed) {
-            if (CharUnicodeInfo.GetUnicodeCategory(ch) != UnicodeCategory.NonSpacingMark) {
-                builder.Append(ch);
+        var separated = false;
+        foreach (var character in decomposed) {
+            if (CharUnicodeInfo.GetUnicodeCategory(character) == UnicodeCategory.NonSpacingMark) {
+                continue;
             }
+            if (!char.IsLetterOrDigit(character)) {
+                separated = true;
+                continue;
+            }
+            if (separated && builder.Length > 0) {
+                builder.Append(' ');
+            }
+            separated = false;
+            builder.Append(char.ToLowerInvariant(character));
         }
-
-        var normalized = builder.ToString().ToLowerInvariant();
-        normalized = RomanNumberedPrefix().Replace(normalized, string.Empty, 1);
-        normalized = ArabicNumberedPrefix().Replace(normalized, string.Empty, 1);
-        normalized = BareNumberPrefix().Replace(normalized, string.Empty, 1);
-        return NonAlphanumericRuns().Replace(normalized, " ").Trim();
+        return builder.ToString();
     }
 
-    /// <summary>
-    /// Computes the automatic chapter-to-track pairs left open by the manual map. Both sides are
-    /// ordered exactly like the reference client (order, then title, then id) so the first
-    /// unconsumed title match is deterministic.
-    /// </summary>
-    /// <param name="readableChapters">Every readable chapter of the book.</param>
-    /// <param name="audioTracks">Every playable audiobook track owned by the book.</param>
-    /// <param name="manualMappings">User-curated pairs; their chapters and tracks are consumed first.</param>
-    /// <returns>Automatic (chapter key, track id) pairs, excluding everything manually claimed.</returns>
-    public static IReadOnlyList<(string ChapterKey, Guid AudioTrackId)> ComputeAutoPairs(
-        IReadOnlyList<MatchableReadableChapter> readableChapters,
-        IReadOnlyList<MatchableAudioTrack> audioTracks,
-        IReadOnlyList<(string ChapterKey, Guid AudioTrackId)> manualMappings) {
-        return ComputeAutoChapterPairs(
-                readableChapters,
-                audioTracks.Select(track => new MatchableAudioChapter(
-                    track.Id,
-                    null,
-                    track.Title,
-                    track.SortOrder,
-                    0,
-                    0,
-                    null)).ToArray(),
-                manualMappings.Select(mapping => (mapping.ChapterKey, mapping.AudioTrackId, (Guid?)null)).ToArray())
-            .Select(pair => (pair.ChapterKey, pair.AudioTrackId))
-            .ToArray();
-    }
+    #endregion
+
+    #region Actions - Pairing
 
     /// <summary>
-    /// Computes automatic readable-to-audio chapter pairs. Exact normalized titles win. When the
-    /// source provides a complete embedded marker set with exactly one marker per readable chapter,
-    /// remaining unmatched markers may align by ordinal; ordinary audio files are never guessed.
+    /// Computes the automatic readable-to-audio chapter pairs left open by the confirmed map.
     /// </summary>
+    /// <param name="readableChapters">Every readable chapter of the Book.</param>
+    /// <param name="audioChapters">Every addressable audio chapter of the Book.</param>
+    /// <param name="confirmedMappings">Person-confirmed pairs; their chapters are consumed first.</param>
+    /// <returns>
+    /// Automatic pairs in reading order: exact unique titles on both sides that cross no other pair.
+    /// </returns>
     public static IReadOnlyList<MatchedBookAudioChapter> ComputeAutoChapterPairs(
         IReadOnlyList<MatchableReadableChapter> readableChapters,
         IReadOnlyList<MatchableAudioChapter> audioChapters,
-        IReadOnlyList<(string ChapterKey, Guid AudioTrackId, Guid? AudioMarkerId)> manualMappings) {
+        IReadOnlyList<(string ChapterKey, Guid AudioTrackId, Guid? AudioMarkerId)> confirmedMappings) {
         var readable = readableChapters
             .OrderBy(chapter => chapter.Order)
             .ThenBy(chapter => chapter.Title, StringComparer.Ordinal)
             .ThenBy(chapter => chapter.Key, StringComparer.Ordinal)
             .ToArray();
-        var chapters = audioChapters
+        var audio = audioChapters
             .OrderBy(chapter => chapter.TrackSortOrder)
             .ThenBy(chapter => chapter.MarkerOrder)
-            .ThenBy(chapter => chapter.Title, StringComparer.Ordinal)
+            .ThenBy(chapter => chapter.StartSeconds)
             .ThenBy(chapter => chapter.AudioTrackId)
             .ThenBy(chapter => chapter.AudioMarkerId)
             .ToArray();
+        var readableIndexByKey = readable
+            .Select((chapter, index) => (chapter.Key, Index: index))
+            .GroupBy(entry => entry.Key, StringComparer.Ordinal)
+            .ToDictionary(group => group.Key, group => group.First().Index, StringComparer.Ordinal);
+        var audioIndexById = audio
+            .Select((chapter, index) => ((chapter.AudioTrackId, chapter.AudioMarkerId), Index: index))
+            .GroupBy(entry => entry.Item1)
+            .ToDictionary(group => group.Key, group => group.First().Index);
 
-        var readableKeys = readable.Select(chapter => chapter.Key).ToHashSet(StringComparer.Ordinal);
-        var consumedChapterKeys = new HashSet<string>(StringComparer.Ordinal);
-        var consumedAudioChapters = new HashSet<(Guid TrackId, Guid? MarkerId)>();
-        var audioChapterIds = chapters
-            .Select(chapter => (chapter.AudioTrackId, chapter.AudioMarkerId))
-            .ToHashSet();
-        foreach (var (chapterKey, trackId, markerId) in manualMappings) {
-            var audioChapterId = (trackId, markerId);
-            if (!readableKeys.Contains(chapterKey) || !audioChapterIds.Contains(audioChapterId)) {
+        var confirmed = new List<(int Readable, int Audio)>();
+        var consumedReadable = new HashSet<int>();
+        var consumedAudio = new HashSet<int>();
+        foreach (var (chapterKey, trackId, markerId) in confirmedMappings) {
+            if (!readableIndexByKey.TryGetValue(chapterKey, out var readableIndex) ||
+                !audioIndexById.TryGetValue((trackId, markerId), out var audioIndex) ||
+                !consumedReadable.Add(readableIndex)) {
                 continue;
             }
-            if (consumedChapterKeys.Contains(chapterKey) || consumedAudioChapters.Contains(audioChapterId)) {
+            if (!consumedAudio.Add(audioIndex)) {
+                consumedReadable.Remove(readableIndex);
                 continue;
             }
-
-            consumedChapterKeys.Add(chapterKey);
-            consumedAudioChapters.Add(audioChapterId);
+            confirmed.Add((readableIndex, audioIndex));
         }
 
-        var audioKeys = chapters.Select(chapter => MatchKey(chapter.Title)).ToArray();
-        var pairs = new List<MatchedBookAudioChapter>();
-        foreach (var chapter in readable) {
-            if (consumedChapterKeys.Contains(chapter.Key)) {
-                continue;
-            }
-
-            var key = MatchKey(chapter.Title);
-            if (key.Length == 0) {
-                continue;
-            }
-
-            for (var index = 0; index < chapters.Length; index++) {
-                var audioChapter = chapters[index];
-                var audioChapterId = (audioChapter.AudioTrackId, audioChapter.AudioMarkerId);
-                if (consumedAudioChapters.Contains(audioChapterId) ||
-                    !string.Equals(audioKeys[index], key, StringComparison.Ordinal)) {
-                    continue;
-                }
-
-                consumedAudioChapters.Add(audioChapterId);
-                consumedChapterKeys.Add(chapter.Key);
-                pairs.Add(new MatchedBookAudioChapter(
-                    chapter.Key,
-                    audioChapter.AudioTrackId,
-                    audioChapter.AudioMarkerId,
-                    audioChapter.StartSeconds,
-                    audioChapter.EndSeconds));
-                break;
+        var readableKeys = readable.Select(chapter => MatchKey(chapter.Title)).ToArray();
+        var audioKeys = audio.Select(chapter => chapter.IdentifyingTitle is { } title ? MatchKey(title) : string.Empty).ToArray();
+        var uniqueAudioIndexByKey = UniqueIndexByKey(audioKeys);
+        var uniqueReadableKeys = UniqueIndexByKey(readableKeys);
+        var candidates = new List<(int Readable, int Audio)>();
+        foreach (var (key, readableIndex) in uniqueReadableKeys) {
+            if (!consumedReadable.Contains(readableIndex) &&
+                uniqueAudioIndexByKey.TryGetValue(key, out var audioIndex) &&
+                !consumedAudio.Contains(audioIndex)) {
+                candidates.Add((readableIndex, audioIndex));
             }
         }
 
-        var isCompleteEmbeddedChapterSet = chapters.Length == readable.Length &&
-            chapters.All(chapter => chapter.AudioMarkerId is not null);
-        if (isCompleteEmbeddedChapterSet) {
-            var unmatchedReadable = readable
-                .Where(chapter => !consumedChapterKeys.Contains(chapter.Key))
-                .ToArray();
-            var unmatchedAudio = chapters
-                .Where(chapter => !consumedAudioChapters.Contains((chapter.AudioTrackId, chapter.AudioMarkerId)))
-                .ToArray();
-            if (unmatchedReadable.Length == unmatchedAudio.Length) {
-                for (var index = 0; index < unmatchedReadable.Length; index++) {
-                    var readableChapter = unmatchedReadable[index];
-                    var audioChapter = unmatchedAudio[index];
-                    pairs.Add(new MatchedBookAudioChapter(
-                        readableChapter.Key,
-                        audioChapter.AudioTrackId,
-                        audioChapter.AudioMarkerId,
-                        audioChapter.StartSeconds,
-                        audioChapter.EndSeconds));
-                }
-            }
-        }
-
-        return pairs
-            .OrderBy(pair => Array.FindIndex(readable, chapter => chapter.Key == pair.ChapterKey))
+        var every = confirmed.Concat(candidates).ToArray();
+        return candidates
+            .Where(candidate => !every.Any(other => Crosses(candidate, other)))
+            .OrderBy(candidate => candidate.Readable)
+            .Select(candidate => new MatchedBookAudioChapter(
+                readable[candidate.Readable].Key,
+                audio[candidate.Audio].AudioTrackId,
+                audio[candidate.Audio].AudioMarkerId,
+                audio[candidate.Audio].StartSeconds,
+                audio[candidate.Audio].EndSeconds))
             .ToArray();
     }
+
+    /// <summary>Non-empty keys that occur exactly once, with the index of that occurrence.</summary>
+    private static Dictionary<string, int> UniqueIndexByKey(IReadOnlyList<string> keys) =>
+        keys
+            .Select((key, index) => (Key: key, Index: index))
+            .Where(entry => entry.Key.Length > 0)
+            .GroupBy(entry => entry.Key, StringComparer.Ordinal)
+            .Where(group => group.Count() == 1)
+            .ToDictionary(group => group.Key, group => group.Single().Index, StringComparer.Ordinal);
+
+    /// <summary>Whether two pairs disagree about order: one is earlier on one side and later on the other.</summary>
+    private static bool Crosses((int Readable, int Audio) pair, (int Readable, int Audio) other) =>
+        (pair.Readable < other.Readable && pair.Audio > other.Audio) ||
+        (pair.Readable > other.Readable && pair.Audio < other.Audio);
+
+    #endregion
+
+    #region Actions - Signatures
+
+    /// <summary>Stamps the current matcher <see cref="Version"/> onto a mapping-input hash.</summary>
+    /// <param name="inputHash">Hash of every input the automatic pairs depend on.</param>
+    public static string StampSignature(string inputHash) => SignaturePrefix + inputHash;
+
+    /// <summary>
+    /// Whether a persisted mapping signature was produced by the current matcher, so the automatic pairs
+    /// stored beside it are exact evidence. Older signatures mean the pairs predate these rules.
+    /// </summary>
+    public static bool IsCurrentSignature(string? signature) =>
+        signature?.StartsWith(SignaturePrefix, StringComparison.Ordinal) == true;
+
+    #endregion
 }

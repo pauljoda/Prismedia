@@ -64,10 +64,15 @@ public sealed class ProbeAudioJobHandler(
                 IsForced: false)],
             cancellationToken);
 
-        var trackNumber = ParseTrackNumber(probe.TrackNumber);
-        if (probe.Artist is not null || probe.Album is not null || trackNumber is not null) {
-            await Persistence.UpsertAudioTrackTagsAsync(entityId, probe.Artist, probe.Album, trackNumber, cancellationToken);
-        }
+        // Tags are recorded on every probe, including their absence: the audiobook chapter map and track
+        // order treat the title and track-number tags as facts and must never keep a stale one.
+        await Persistence.UpsertAudioTrackTagsAsync(
+            entityId,
+            probe.Artist,
+            probe.Album,
+            probe.Title,
+            ParseTrackNumber(probe.TrackNumber),
+            cancellationToken);
 
         await Persistence.ReplaceEmbeddedAudioChaptersAsync(
             entityId,

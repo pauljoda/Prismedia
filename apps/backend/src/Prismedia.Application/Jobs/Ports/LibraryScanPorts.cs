@@ -237,6 +237,14 @@ public interface IAudioScanPersistence {
         IReadOnlyList<AudioTrackUpsertItem> items, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Persists a Book's audiobook playback order as its tracks' sort order, from the one audiobook
+    /// track-order rule over every playable track's source path and recorded track-number tag.
+    /// </summary>
+    /// <param name="bookId">Identifier of the Book that owns the tracks.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    Task ApplyAudiobookTrackOrderAsync(Guid bookId, CancellationToken cancellationToken) => Task.CompletedTask;
+
+    /// <summary>
     /// Lists existing audio tracks under a library root without re-running discovery/upsert. Used by
     /// unchanged scans to recover downstream work such as cancelled waveform jobs.
     /// </summary>
@@ -502,7 +510,18 @@ public interface IMediaProcessingStatePersistence {
         CancellationToken cancellationToken) =>
         throw new NotSupportedException("Managed subtitle reconciliation is not implemented.");
 
-    Task UpsertAudioTrackTagsAsync(Guid entityId, string? artist, string? album, int? trackNumber, CancellationToken cancellationToken);
+    /// <summary>
+    /// Records a probed audio file's embedded tags. Title and track number are stored exactly as the
+    /// file states them (including their absence) with the time they were recorded; a track owned by a
+    /// Book then has its Book's playback order reapplied.
+    /// </summary>
+    Task UpsertAudioTrackTagsAsync(
+        Guid entityId,
+        string? artist,
+        string? album,
+        string? title,
+        int? trackNumber,
+        CancellationToken cancellationToken);
 
     /// <summary>
     /// Replaces the ordered chapter windows discovered inside one audio source. Implementations

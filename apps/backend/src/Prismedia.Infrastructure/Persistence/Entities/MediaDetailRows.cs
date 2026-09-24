@@ -72,4 +72,16 @@ public sealed class AudioTrackDetailRow {
 
     /// <summary>Zero-based ordinal of the track's section within the album.</summary>
     public int SectionOrder { get; set; }
+
+    /// <summary>Embedded title tag of the file, when the container declares one.</summary>
+    public string? EmbeddedTitle { get; set; }
+
+    /// <summary>Embedded track-number tag of the file, when the container declares a usable one.</summary>
+    public int? EmbeddedTrackNumber { get; set; }
+
+    /// <summary>
+    /// When the probe last recorded the file's tags and which embedded chapters are untitled. Null for a
+    /// track probed before those facts were recorded; the startup backfill probes it once more.
+    /// </summary>
+    public DateTimeOffset? TagsRecordedAt { get; set; }
 }

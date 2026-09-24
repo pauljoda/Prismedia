@@ -40,7 +40,11 @@ public sealed class BookContentStateRow {
     /// <summary>Identity of the readable source file the persisted chapters were projected from.</summary>
     public string? SourceSignature { get; set; }
 
-    /// <summary>Hash of every mapping input: chapter keys/titles, track ids/titles, manual pairs.</summary>
+    /// <summary>
+    /// Matcher-version-stamped hash of every mapping input: audio structure, chapter keys/titles, audio
+    /// windows with their identifying titles, and confirmed pairs. Automatic pairs count as exact
+    /// evidence only while this carries the current matcher version.
+    /// </summary>
     public string? MappingSignature { get; set; }
 
     public DateTimeOffset RefreshedAt { get; set; }

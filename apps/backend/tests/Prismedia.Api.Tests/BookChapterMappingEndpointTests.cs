@@ -20,6 +20,7 @@ public sealed class BookChapterMappingEndpointTests {
     private static readonly Guid HiddenBookId = Guid.Parse("22222222-2222-2222-2222-222222222222");
     private static readonly Guid VideoId = Guid.Parse("33333333-3333-3333-3333-333333333333");
     private static readonly Guid TrackId = Guid.Parse("44444444-4444-4444-4444-444444444444");
+    private static readonly Guid MarkerId = Guid.Parse("55555555-5555-5555-5555-555555555555");
 
     [Fact]
     public async Task AlignmentIsBookOnlyAndSavingMappingsReturnsIt() {
@@ -48,6 +49,9 @@ public sealed class BookChapterMappingEndpointTests {
         Assert.Equal(TrackId, row.GetProperty("audio").GetProperty("trackEntityId").GetGuid());
         var combined = saved.RootElement.GetProperty("resume").GetProperty("combined");
         Assert.Equal(AlignmentBasis.FreshStart.ToCode(), combined.GetProperty("basis").GetString());
+        var link = saved.RootElement.GetProperty("link");
+        Assert.Equal(BookLinkState.Linked.ToCode(), link.GetProperty("state").GetString());
+        Assert.Equal(AudiobookStructure.Chaptered.ToCode(), link.GetProperty("audioStructure").GetString());
         Assert.Equal("Text/chapter-01.xhtml", Assert.Single(mappings.LastRequest!.Mappings).ReadableChapterKey);
     }
 
@@ -109,9 +113,10 @@ public sealed class BookChapterMappingEndpointTests {
                 workId,
                 hasReadableRendition: true,
                 [new ReadableChapterWindow("Text/chapter-01.xhtml", "Chapter One", 0, "Text/chapter-01.xhtml", null, 0, 0.5, null)],
-                [new AudioTrackSpan(TrackId, "Part 1", 600)],
-                [new AudioChapterWindow(TrackId, null, "Part 1", 0, 600, EndInferred: false)],
-                [new ChapterPairing("Text/chapter-01.xhtml", TrackId, null, BookChapterMappingOrigin.Manual)]));
+                new AudiobookRendition([
+                    new AudioTrackSpan(TrackId, "Book", 600, [new SourceChapterMarker(MarkerId, "Chapter One", 0, 600)])
+                ]),
+                [new ChapterPairing("Text/chapter-01.xhtml", TrackId, MarkerId, BookChapterMappingOrigin.Manual)]));
     }
 
     private sealed class FakeVisibilityChecker : IEntityVisibilityChecker {

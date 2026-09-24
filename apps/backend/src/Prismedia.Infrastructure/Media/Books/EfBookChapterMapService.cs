@@ -3,6 +3,7 @@ using System.Text;
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Books;
 using Prismedia.Domain.Entities;
+using Prismedia.Domain.Media.Books;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 
@@ -11,8 +12,10 @@ namespace Prismedia.Infrastructure.Media.Books;
 /// <summary>
 /// Maintains the scan-owned book projections: the persisted readable chapter list (EPUB table of
 /// contents) and the automatic audiobook chapter map. Both are guarded by signatures on
-/// <c>book_content_states</c> so refresh passes no-op when nothing relevant changed, and manual
-/// mapping rows are treated as immovable input, never output.
+/// <c>book_content_states</c> so refresh passes no-op when nothing relevant changed, and
+/// person-confirmed (manual and in-order) mapping rows are treated as immovable input, never output.
+/// Automatic pairs come only from <see cref="BookChapterMatcher"/>'s exact rules and only for audio
+/// whose structure has exact chapter boundaries.
 /// </summary>
 internal sealed class EfBookChapterMapService(
     PrismediaDbContext db,
@@ -89,14 +92,18 @@ internal sealed class EfBookChapterMapService(
         var mappingSignature = MappingSignatureFor(inputs);
         var autoReplaced = false;
         if (!string.Equals(mappingSignature, state?.MappingSignature, StringComparison.Ordinal)) {
-            var autoPairs = BookChapterMatcher.ComputeAutoChapterPairs(
-                inputs.ReadableChapters,
-                inputs.AudioChapters,
-                inputs.ManualPairs);
-            // Dangling manual rows (their chapter key vanished with a replaced EPUB) still pin
+            // Only audio with exact chapter boundaries is ever paired automatically: part splits and
+            // single chapterless files have no boundary a readable chapter could line up with.
+            var autoPairs = inputs.Structure?.HasExactChapterBoundaries == true
+                ? BookChapterMatcher.ComputeAutoChapterPairs(
+                    inputs.ReadableChapters,
+                    inputs.AudioChapters,
+                    inputs.ConfirmedPairs)
+                : [];
+            // Dangling confirmed rows (their chapter key vanished with a replaced EPUB) still pin
             // their track and key so the unique indexes can never collide with an auto row.
-            var blockedKeys = inputs.AllManualChapterKeys.ToHashSet(StringComparer.Ordinal);
-            var blockedAudioChapters = inputs.AllManualAudioChapterIds.ToHashSet();
+            var blockedKeys = inputs.AllConfirmedChapterKeys.ToHashSet(StringComparer.Ordinal);
+            var blockedAudioChapters = inputs.AllConfirmedAudioChapterIds.ToHashSet();
             var nextAuto = autoPairs
                 .Where(pair => !blockedKeys.Contains(pair.ChapterKey) &&
                     !blockedAudioChapters.Contains((pair.AudioTrackId, pair.AudioMarkerId)))
@@ -154,6 +161,42 @@ internal sealed class EfBookChapterMapService(
         }
 
         return stale;
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<StaleBookChapterMap>> ListOutdatedMatcherMapsAsync(CancellationToken cancellationToken) {
+        var bookKind = EntityKind.Book.ToCode();
+        var mapped = await db.BookContentStates.AsNoTracking()
+            .Where(state => state.MappingSignature != null)
+            .Join(
+                db.Entities.AsNoTracking().Where(book => book.KindCode == bookKind && !book.IsWanted),
+                state => state.BookId,
+                book => book.Id,
+                (state, book) => new { book.Id, book.Title, state.MappingSignature })
+            .ToArrayAsync(cancellationToken);
+        return mapped
+            .Where(book => !BookChapterMatcher.IsCurrentSignature(book.MappingSignature))
+            .Select(book => new StaleBookChapterMap(book.Id, book.Title))
+            .ToArray();
+    }
+
+    /// <inheritdoc />
+    public async Task<IReadOnlyList<AudiobookTrackAwaitingProbe>> ListTracksAwaitingProbeFactsAsync(
+        CancellationToken cancellationToken) {
+        var bookKind = EntityKind.Book.ToCode();
+        var trackKind = EntityKind.AudioTrack.ToCode();
+        return await db.AudioTrackDetails.AsNoTracking()
+            .Where(detail => detail.TagsRecordedAt == null &&
+                db.EntityTechnical.Any(technical => technical.EntityId == detail.EntityId && technical.ProbeFailedAt == null))
+            .Join(
+                db.Entities.AsNoTracking().Where(track => track.KindCode == trackKind && !track.IsWanted),
+                detail => detail.EntityId,
+                track => track.Id,
+                (detail, track) => track)
+            .Where(track => db.Entities.Any(book => book.Id == track.ParentEntityId && book.KindCode == bookKind) &&
+                db.EntityFiles.Any(file => file.EntityId == track.Id && file.Role == EntityFileRole.Source))
+            .Select(track => new AudiobookTrackAwaitingProbe(track.Id, track.Title))
+            .ToArrayAsync(cancellationToken);
     }
 
     #endregion
@@ -223,9 +266,10 @@ internal sealed class EfBookChapterMapService(
     private sealed record MappingInputs(
         IReadOnlyList<MatchableReadableChapter> ReadableChapters,
         IReadOnlyList<MatchableAudioChapter> AudioChapters,
-        IReadOnlyList<(string ChapterKey, Guid AudioTrackId, Guid? AudioMarkerId)> ManualPairs,
-        IReadOnlyList<string> AllManualChapterKeys,
-        IReadOnlyList<(Guid AudioTrackId, Guid? AudioMarkerId)> AllManualAudioChapterIds);
+        AudiobookStructureDefinition? Structure,
+        IReadOnlyList<(string ChapterKey, Guid AudioTrackId, Guid? AudioMarkerId)> ConfirmedPairs,
+        IReadOnlyList<string> AllConfirmedChapterKeys,
+        IReadOnlyList<(Guid AudioTrackId, Guid? AudioMarkerId)> AllConfirmedAudioChapterIds);
 
     private async Task<MappingInputs> LoadMappingInputsAsync(
         Guid bookId,
@@ -252,27 +296,35 @@ internal sealed class EfBookChapterMapService(
                 .ToArray();
         }
 
-        var audioChapters = (await BookAudioChapterProjection.LoadAsync(db, bookId, cancellationToken)).Matchable;
+        var audio = await BookAudioChapterProjection.LoadAsync(db, bookId, cancellationToken);
 
-        var manualRows = await db.BookChapterAudioMappings.AsNoTracking()
-            .Where(row => row.BookId == bookId && row.Origin == BookChapterMappingOrigin.Manual)
+        // Hand-picked and reviewed in-order rows are both person-confirmed: they are immovable input
+        // for the automatic pass, never output.
+        var confirmedRows = await db.BookChapterAudioMappings.AsNoTracking()
+            .Where(row => row.BookId == bookId && row.Origin != BookChapterMappingOrigin.Auto)
             .OrderBy(row => row.ReadableChapterKey)
             .Select(row => new { row.ReadableChapterKey, row.AudioTrackEntityId, row.AudioMarkerId })
             .ToArrayAsync(cancellationToken);
-        var manualPairs = manualRows
+        var confirmedPairs = confirmedRows
             .Select(row => (row.ReadableChapterKey, row.AudioTrackEntityId, row.AudioMarkerId))
             .ToArray();
 
         return new MappingInputs(
             readable,
-            audioChapters,
-            manualPairs,
-            manualRows.Select(row => row.ReadableChapterKey).ToArray(),
-            manualRows.Select(row => (row.AudioTrackEntityId, row.AudioMarkerId)).ToArray());
+            BookAudioChapterProjection.Matchable(audio),
+            audio.Structure,
+            confirmedPairs,
+            confirmedRows.Select(row => row.ReadableChapterKey).ToArray(),
+            confirmedRows.Select(row => (row.AudioTrackEntityId, row.AudioMarkerId)).ToArray());
     }
 
+    /// <summary>
+    /// Hash of every input the automatic pairs depend on, stamped with the matcher version so a rules
+    /// change recomputes every Book once and marks older automatic pairs as untrusted until it does.
+    /// </summary>
     private static string MappingSignatureFor(MappingInputs inputs) {
         var builder = new StringBuilder();
+        builder.Append("s|").Append(inputs.Structure?.Structure.ToCode() ?? "none").Append('\n');
         foreach (var chapter in inputs.ReadableChapters) {
             builder.Append("r|").Append(chapter.Key).Append('|').Append(chapter.Title).Append('\n');
         }
@@ -282,15 +334,15 @@ internal sealed class EfBookChapterMapService(
             builder.Append("a|").Append(chapter.AudioTrackId.ToString("D")).Append('|')
                 .Append(chapter.AudioMarkerId?.ToString("D") ?? "whole").Append('|')
                 .Append(chapter.TrackSortOrder).Append('|').Append(chapter.MarkerOrder).Append('|')
-                .Append(chapter.Title).Append('|').Append(chapter.StartSeconds).Append('|')
-                .Append(chapter.EndSeconds).Append('\n');
+                .Append(chapter.Title).Append('|').Append(chapter.IdentifyingTitle ?? "\u0000").Append('|')
+                .Append(chapter.StartSeconds).Append('|').Append(chapter.EndSeconds).Append('\n');
         }
-        foreach (var (chapterKey, trackId, markerId) in inputs.ManualPairs) {
+        foreach (var (chapterKey, trackId, markerId) in inputs.ConfirmedPairs) {
             builder.Append("m|").Append(chapterKey).Append('|').Append(trackId.ToString("D")).Append('|')
                 .Append(markerId?.ToString("D") ?? "whole").Append('\n');
         }
 
-        return ShortHash(builder.ToString());
+        return BookChapterMatcher.StampSignature(ShortHash(builder.ToString()));
     }
 
     private static string ShortHash(string value) =>

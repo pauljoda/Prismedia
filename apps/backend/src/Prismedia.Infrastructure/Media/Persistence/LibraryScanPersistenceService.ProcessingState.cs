@@ -4,6 +4,7 @@ using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Settings;
 using Prismedia.Contracts.Media;
 using Prismedia.Domain.Entities;
+using Prismedia.Domain.Media.Books;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 using Prismedia.Infrastructure.Settings;
@@ -252,6 +253,7 @@ public sealed partial class LibraryScanPersistenceService {
                 marker.Title = chapter.Title;
                 marker.Seconds = chapter.StartSeconds;
                 marker.EndSeconds = chapter.EndSeconds;
+                marker.Untitled = chapter.Untitled;
                 marker.UpdatedAt = now;
                 continue;
             }
@@ -263,6 +265,7 @@ public sealed partial class LibraryScanPersistenceService {
                 Seconds = chapter.StartSeconds,
                 EndSeconds = chapter.EndSeconds,
                 SourceIndex = chapter.Index,
+                Untitled = chapter.Untitled,
                 CreatedAt = now,
                 UpdatedAt = now
             });
@@ -445,19 +448,41 @@ public sealed partial class LibraryScanPersistenceService {
     private static bool IsLowerHexCharacter(char value) =>
         value is >= '0' and <= '9' or >= 'a' and <= 'f';
 
-    public async Task UpsertAudioTrackTagsAsync(Guid entityId, string? artist, string? album, int? trackNumber, CancellationToken cancellationToken) {
+    public async Task UpsertAudioTrackTagsAsync(
+        Guid entityId,
+        string? artist,
+        string? album,
+        string? title,
+        int? trackNumber,
+        CancellationToken cancellationToken) {
         var detail = await _db.AudioTrackDetails.FindAsync([entityId], cancellationToken);
         if (detail is null) return;
 
         if (artist is not null) detail.EmbeddedArtist = artist;
         if (album is not null) detail.EmbeddedAlbum = album;
+        // Title and track-number tags are recorded exactly as the file states them now, including
+        // their absence, because the audiobook chapter map and track order read them as facts.
+        detail.EmbeddedTitle = string.IsNullOrWhiteSpace(title) ? null : title.Trim();
+        detail.EmbeddedTrackNumber = trackNumber is > 0 ? trackNumber : null;
+        detail.TagsRecordedAt = DateTimeOffset.UtcNow;
+
+        var entity = await _db.Entities.FindAsync([entityId], cancellationToken);
+        if (entity?.ParentEntityId is { } parentId &&
+            await _db.Entities.AsNoTracking().AnyAsync(
+                parent => parent.Id == parentId && parent.KindCode == EntityKind.Book.ToCode(),
+                cancellationToken)) {
+            // An audiobook's order is decided by one rule over all of its tracks, never by one
+            // track's tag alone.
+            await SaveChangesWithLifecycleAsync(cancellationToken);
+            await ApplyAudiobookTrackOrderAsync(parentId, cancellationToken);
+            return;
+        }
 
         // Use the embedded track-number tag to set the album-global sort order, so identify can match
         // the track to its release track by position even when the filename is messy or unsorted. Only
         // for single-disc albums (one section), where the track number maps 1:1 to album-global order;
         // multi-disc albums keep their scanned order to avoid cross-disc position collisions.
         if (trackNumber is > 0 and var number) {
-            var entity = await _db.Entities.FindAsync([entityId], cancellationToken);
             if (entity?.ParentEntityId is { } albumId) {
                 var sectionCount = await _db.AudioTrackDetails.AsNoTracking()
                     .Where(d => _db.Entities.Any(e => e.Id == d.EntityId && e.ParentEntityId == albumId))
@@ -467,6 +492,53 @@ public sealed partial class LibraryScanPersistenceService {
                 if (sectionCount <= 1) {
                     entity.SortOrder = number - 1;
                 }
+            }
+        }
+
+        await SaveChangesWithLifecycleAsync(cancellationToken);
+    }
+
+    /// <summary>
+    /// Persists an audiobook's playback order as its tracks' sort order, using the one audiobook
+    /// track-order rule (<see cref="AudiobookRendition.InPlaybackOrder{TTrack}"/>) over every playable
+    /// track's source path and recorded track-number tag. Scans and probes both call this, so the
+    /// stored order never flips between file-name order and tag order.
+    /// </summary>
+    /// <param name="bookId">Identifier of the Book that owns the tracks.</param>
+    /// <param name="cancellationToken">Token to cancel the operation.</param>
+    public async Task ApplyAudiobookTrackOrderAsync(Guid bookId, CancellationToken cancellationToken) {
+        var trackKind = EntityKind.AudioTrack.ToCode();
+        var sources = await _db.Entities.AsNoTracking()
+            .Where(track => track.ParentEntityId == bookId && track.KindCode == trackKind)
+            .Join(
+                _db.EntityFiles.AsNoTracking().Where(file => file.Role == EntityFileRole.Source),
+                track => track.Id,
+                file => file.EntityId,
+                (track, file) => new { track.Id, file.Path })
+            .ToArrayAsync(cancellationToken);
+        if (sources.Length == 0) {
+            return;
+        }
+
+        var trackIds = sources.Select(source => source.Id).Distinct().ToArray();
+        var trackNumbers = await _db.AudioTrackDetails.AsNoTracking()
+            .Where(detail => trackIds.Contains(detail.EntityId))
+            .ToDictionaryAsync(detail => detail.EntityId, detail => detail.EmbeddedTrackNumber, cancellationToken);
+        var ordered = AudiobookRendition.InPlaybackOrder(
+            sources
+                .GroupBy(source => source.Id)
+                .Select(group => (Id: group.Key, Path: group.Select(source => source.Path).Min(StringComparer.Ordinal)!))
+                .OrderBy(track => track.Id),
+            track => track.Path,
+            track => trackNumbers.GetValueOrDefault(track.Id));
+        var tracked = await _db.Entities
+            .Where(track => trackIds.Contains(track.Id))
+            .ToDictionaryAsync(track => track.Id, cancellationToken);
+        var now = DateTimeOffset.UtcNow;
+        for (var index = 0; index < ordered.Count; index++) {
+            if (tracked.TryGetValue(ordered[index].Id, out var track) && track.SortOrder != index) {
+                track.SortOrder = index;
+                track.UpdatedAt = now;
             }
         }
 

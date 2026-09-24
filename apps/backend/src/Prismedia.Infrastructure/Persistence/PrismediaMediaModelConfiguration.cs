@@ -182,6 +182,9 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.EmbeddedAlbum).HasColumnName("embedded_album");
             entity.Property(row => row.SectionLabel).HasColumnName("section_label");
             entity.Property(row => row.SectionOrder).HasColumnName("section_order").HasDefaultValue(0);
+            entity.Property(row => row.EmbeddedTitle).HasColumnName("embedded_title");
+            entity.Property(row => row.EmbeddedTrackNumber).HasColumnName("embedded_track_number");
+            entity.Property(row => row.TagsRecordedAt).HasColumnName("tags_recorded_at");
             entity.HasOne<EntityRow>().WithOne().HasForeignKey<AudioTrackDetailRow>(row => row.EntityId).OnDelete(DeleteBehavior.Cascade);
         });
     }

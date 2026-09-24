@@ -17,6 +17,12 @@ public sealed class EntityMarkerRow {
     /// </summary>
     public int? SourceIndex { get; set; }
 
+    /// <summary>
+    /// Whether the media container declared no title for this source chapter, so <see cref="Title"/> is
+    /// a display placeholder that must never prove chapter identity.
+    /// </summary>
+    public bool Untitled { get; set; }
+
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }

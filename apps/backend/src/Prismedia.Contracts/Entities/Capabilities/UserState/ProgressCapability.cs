@@ -21,6 +21,11 @@ namespace Prismedia.Contracts.Entities;
 /// <param name="ConsumedPercent">Consumed share (0..1).</param>
 /// <param name="LastModality">Modality of the newest checkpoint.</param>
 /// <param name="Checkpoints">Exact per-modality positions, one per recorded modality.</param>
+/// <param name="Separate">
+/// Reading and listening progress of a Book that keeps them Separate, while it is unfinished. Present
+/// only then: clients draw two meters from it instead of the single cursor-based progress, which for
+/// such a Book measures reading alone.
+/// </param>
 [CapabilityKind("progress")]
 public sealed record ProgressCapability(
     Guid? CurrentEntityId,
@@ -37,4 +42,5 @@ public sealed record ProgressCapability(
     int? ConsumedTotal = null,
     double ConsumedPercent = 0,
     ConsumptionModality? LastModality = null,
-    IReadOnlyList<ModalityProgress>? Checkpoints = null) : EntityCapability;
+    IReadOnlyList<ModalityProgress>? Checkpoints = null,
+    SeparateProgress? Separate = null) : EntityCapability;

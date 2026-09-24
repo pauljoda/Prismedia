@@ -5,6 +5,7 @@ using Prismedia.Application.Files;
 using Prismedia.Application.Jobs.Ports;
 using Prismedia.Application.Jobs.Scanning;
 using Prismedia.Domain.Entities;
+using Prismedia.Domain.Media;
 
 namespace Prismedia.Application.Jobs.Handlers.Scan;
 
@@ -391,6 +392,9 @@ public sealed class ScanBookJobHandler(
                     root.IsNsfw))
                 .ToArray();
             var trackIds = await audio.UpsertAudioTracksBatchAsync(tracks, cancellationToken);
+            // The scan knows file names; recorded track-number tags may override them. One rule over
+            // every track decides the order, so scan and probe never flip it back and forth.
+            await audio.ApplyAudiobookTrackOrderAsync(bookId, cancellationToken);
             if (acquisitionId is not null && acquisitionHints is not null) {
                 await acquisitionHints.ApplyAsync(bookId, sourcePath, cancellationToken);
             }
@@ -625,45 +629,4 @@ public sealed class ScanBookJobHandler(
         values.Select(value => value?.Trim()).FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
 
     private sealed record ReadableBookSource(string SourcePath, Guid EntityId);
-
-    private sealed class NaturalPathComparer : IComparer<string> {
-        public static readonly NaturalPathComparer Instance = new();
-
-        public int Compare(string? x, string? y) {
-            if (ReferenceEquals(x, y)) return 0;
-            if (x is null) return -1;
-            if (y is null) return 1;
-
-            var ix = 0;
-            var iy = 0;
-            while (ix < x.Length && iy < y.Length) {
-                if (char.IsDigit(x[ix]) && char.IsDigit(y[iy])) {
-                    var numberCompare = CompareNumber(x, ref ix, y, ref iy);
-                    if (numberCompare != 0) return numberCompare;
-                    continue;
-                }
-
-                var charCompare = char.ToUpperInvariant(x[ix]).CompareTo(char.ToUpperInvariant(y[iy]));
-                if (charCompare != 0) return charCompare;
-                ix++;
-                iy++;
-            }
-
-            return x.Length.CompareTo(y.Length);
-        }
-
-        private static int CompareNumber(string x, ref int ix, string y, ref int iy) {
-            var startX = ix;
-            var startY = iy;
-            while (ix < x.Length && char.IsDigit(x[ix])) ix++;
-            while (iy < y.Length && char.IsDigit(y[iy])) iy++;
-
-            var spanX = x.AsSpan(startX, ix - startX).TrimStart('0');
-            var spanY = y.AsSpan(startY, iy - startY).TrimStart('0');
-            if (spanX.Length != spanY.Length) return spanX.Length.CompareTo(spanY.Length);
-
-            var digitCompare = spanX.CompareTo(spanY, StringComparison.Ordinal);
-            return digitCompare != 0 ? digitCompare : (ix - startX).CompareTo(iy - startY);
-        }
-    }
 }
