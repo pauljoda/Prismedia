@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Domain.Acquisition;
 using System.Text.Json;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Files;
@@ -192,11 +193,7 @@ public sealed partial class EfManagedTrackingStore {
                 source.Role = readable ? EntityFileRole.Source : EntityFileRole.UnavailableSource;
             }
 
-            var terminalAcquisitionStatuses = new[] {
-                AcquisitionStatus.Imported,
-                AcquisitionStatus.Cancelled,
-                AcquisitionStatus.Failed
-            };
+            var owningStatuses = AcquisitionStatusDefinition.OwningFulfillment;
             var entities = await db.Entities.Where(entity => lifecycleIds.Contains(entity.Id)).ToArrayAsync(leaseToken);
             var archiveTargetIds = new HashSet<Guid>();
             foreach (var entity in entities.Where(entity => targetIds.Contains(entity.Id))) {
@@ -211,7 +208,7 @@ public sealed partial class EfManagedTrackingStore {
                     && owner.OwnerId != row.Id && owner.ReleasedAt == null, leaseToken);
                 var hasNativeOwner = await db.Monitors.AnyAsync(monitor => monitor.EntityId == entity.Id, leaseToken)
                     || await db.Acquisitions.AnyAsync(acquisition => acquisition.EntityId == entity.Id
-                        && !terminalAcquisitionStatuses.Contains(acquisition.Status), leaseToken);
+                        && owningStatuses.Contains(acquisition.Status), leaseToken);
                 if (hasPlayableSource) {
                     entity.IsLibraryArchived = false;
                     entity.UpdatedAt = now;
@@ -228,7 +225,7 @@ public sealed partial class EfManagedTrackingStore {
             if (parentRootId is { } requestRootId && !targetIds.Contains(requestRootId)) {
                 var root = entities.Single(entity => entity.Id == requestRootId);
                 if (archiveTargetIds.Count == targetIds.Length
-                    && !await HasRetainedLibraryPresenceAsync(requestRootId, row.Id, sourceIds, sources, terminalAcquisitionStatuses, leaseToken)) {
+                    && !await HasRetainedLibraryPresenceAsync(requestRootId, row.Id, sourceIds, sources, owningStatuses, leaseToken)) {
                     root.IsWanted = false;
                     root.IsLibraryArchived = true;
                     root.UpdatedAt = now;
@@ -256,7 +253,7 @@ public sealed partial class EfManagedTrackingStore {
         Guid removedOwnerId,
         IReadOnlyCollection<Guid> reconciledSourceIds,
         IReadOnlyCollection<EntityFileRow> reconciledSources,
-        IReadOnlyCollection<AcquisitionStatus> terminalAcquisitionStatuses,
+        IReadOnlyCollection<AcquisitionStatus> owningStatuses,
         CancellationToken token) {
         var treeIds = new HashSet<Guid> { rootEntityId };
         var frontier = new[] { rootEntityId };
@@ -284,7 +281,7 @@ public sealed partial class EfManagedTrackingStore {
                     && acquisition.EntityId != null && entityIds.Contains(acquisition.EntityId.Value)), token)
             || await db.Acquisitions.AsNoTracking().AnyAsync(acquisition => acquisition.EntityId != null
                 && entityIds.Contains(acquisition.EntityId.Value)
-                && !terminalAcquisitionStatuses.Contains(acquisition.Status), token);
+                && owningStatuses.Contains(acquisition.Status), token);
     }
 
     private async Task<bool> HasPlayableSourceInTreeAsync(
@@ -462,6 +459,7 @@ public sealed partial class EfManagedTrackingStore {
             frontier = parents.Where(all.Add).ToArray();
         }
         var scope = all.ToArray();
+        var owning = AcquisitionStatusDefinition.OwningFulfillment;
         // A series and its episodes can use the same namespace with different IDs. Compare the
         // holding's pinned identity only to local entities representing that same kind of work.
         var holdingKindCode = holdingKind.ToCode();
@@ -476,14 +474,13 @@ public sealed partial class EfManagedTrackingStore {
                 || await db.Acquisitions.AnyAsync(acquisition => acquisition.EntityId != null
                     && scope.Contains(acquisition.EntityId.Value) && acquisition.Kind == EntityKind.Book
                     && (acquisition.BookRendition ?? BookRendition.Ebook) == rendition
-                    && acquisition.Status != AcquisitionStatus.Imported && acquisition.Status != AcquisitionStatus.Cancelled
-                    && acquisition.Status != AcquisitionStatus.Failed, token))
+                    && owning.Contains(acquisition.Status), token))
                 throw new ArgumentException("This book rendition has a native acquisition owner. Resolve it before linking a manager.");
             return;
         }
         if (await db.Monitors.AnyAsync(monitor => monitor.EntityId != null && scope.Contains(monitor.EntityId.Value), token)
             || await db.Acquisitions.AnyAsync(acquisition => acquisition.EntityId != null && scope.Contains(acquisition.EntityId.Value)
-                && acquisition.Status != AcquisitionStatus.Imported && acquisition.Status != AcquisitionStatus.Cancelled && acquisition.Status != AcquisitionStatus.Failed, token))
+                && owning.Contains(acquisition.Status), token))
             throw new ArgumentException("This scope has a native monitoring or acquisition owner. Resolve its ownership before linking a manager.");
     }
 }

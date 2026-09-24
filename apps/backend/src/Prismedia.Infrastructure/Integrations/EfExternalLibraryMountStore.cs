@@ -3,6 +3,7 @@ using Prismedia.Application.Files;
 using Prismedia.Application.Integrations;
 using Prismedia.Application.Settings;
 using Prismedia.Contracts.Integrations;
+using Prismedia.Domain.Acquisition;
 using Prismedia.Domain.Entities;
 using Prismedia.Domain.Integrations;
 using Prismedia.Infrastructure.Acquisition;
@@ -174,8 +175,8 @@ public sealed class EfExternalLibraryMountStore(PrismediaDbContext db, ExternalL
     }
 
     private async Task RequireNoNativeWorkAsync(Guid rootId, CancellationToken token) {
-        var terminal = new[] { AcquisitionStatus.Imported, AcquisitionStatus.Cancelled, AcquisitionStatus.Failed };
-        if (await db.Acquisitions.AnyAsync(acquisition => acquisition.TargetLibraryRootId == rootId && !terminal.Contains(acquisition.Status), token))
+        var owning = AcquisitionStatusDefinition.OwningFulfillment;
+        if (await db.Acquisitions.AnyAsync(acquisition => acquisition.TargetLibraryRootId == rootId && owning.Contains(acquisition.Status), token))
             throw new ArgumentException("The selected library has an active native acquisition. Finish or cancel it before attaching an external manager.");
         if (await db.Monitors.AnyAsync(monitor => monitor.TargetLibraryRootId == rootId && monitor.Status != MonitorStatus.Fulfilled, token))
             throw new ArgumentException("The selected library has a native monitor that can still acquire files. Remove it before attaching an external manager.");

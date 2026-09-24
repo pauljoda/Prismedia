@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Integrations;
 using Prismedia.Contracts.Integrations;
+using Prismedia.Domain.Acquisition;
 using Prismedia.Domain.Entities;
 using Prismedia.Domain.Integrations;
 using Prismedia.Infrastructure.Persistence;
@@ -225,14 +226,13 @@ public sealed class EfReviewedFulfillmentOwnershipReader(
         CancellationToken cancellationToken) {
         var scopeIds = scopes.Select(scope => scope.EntityId).ToArray();
         var scopeKinds = scopes.Select(scope => scope.Kind.ToCode()).ToArray();
-        var imported = AcquisitionStatus.Imported.ToCode();
-        var cancelled = AcquisitionStatus.Cancelled.ToCode();
+        var owning = AcquisitionStatusDefinition.OwningFulfillment.Select(status => status.ToCode()).ToArray();
         return (await db.Database.SqlQuery<Guid>($$"""
                 SELECT DISTINCT target.entity_id AS "Value"
                 FROM unnest({{scopeIds}}, {{scopeKinds}}) AS target(entity_id, kind_code)
                 WHERE EXISTS (
                     SELECT 1 FROM acquisitions acquisition
-                    WHERE acquisition.status NOT IN ({{imported}}, {{cancelled}})
+                    WHERE acquisition.status = ANY({{owning}})
                       AND (
                         (acquisition.entity_id IS NOT NULL
                           AND prismedia_fulfillment_overlap(acquisition.entity_id, target.entity_id))
@@ -249,7 +249,7 @@ public sealed class EfReviewedFulfillmentOwnershipReader(
                     WHERE (monitor.entity_id IS NOT NULL
                             AND prismedia_fulfillment_overlap(monitor.entity_id, target.entity_id))
                        OR (acquisition.id IS NOT NULL
-                           AND acquisition.status NOT IN ({{imported}}, {{cancelled}})
+                           AND acquisition.status = ANY({{owning}})
                            AND ((acquisition.entity_id IS NOT NULL
                                   AND prismedia_fulfillment_overlap(acquisition.entity_id, target.entity_id))
                              OR (acquisition.kind = target.kind_code
