@@ -22,13 +22,6 @@ public sealed partial class EfManagedRequestStore {
     }
 
     /// <inheritdoc />
-    public Task AcceptHoldingAsync(
-        StoredManagedRequest work,
-        ManagedItemSnapshot snapshot,
-        CancellationToken token) =>
-        AcceptHoldingAsync(work, snapshot, resolvedTargets: null, token);
-
-    /// <inheritdoc />
     public async Task AcceptHoldingAsync(StoredManagedRequest work, ManagedItemSnapshot snapshot,
         IReadOnlyList<ManagedResolvedTarget>? resolvedTargets, CancellationToken token) {
         ManagedCreationEvidence.ValidateHolding(work.Plan.Creation.Work, snapshot);

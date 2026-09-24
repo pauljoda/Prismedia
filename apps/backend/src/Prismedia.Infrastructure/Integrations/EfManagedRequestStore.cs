@@ -24,15 +24,9 @@ public sealed partial class EfManagedRequestStore(PrismediaDbContext db, IExtern
         Guid connectionId,
         Guid entityId,
         Guid libraryRootId,
+        IReadOnlyList<Guid>? targetEntityIds,
+        BookRendition? bookRendition,
         CancellationToken token) =>
-        RequireTargetAsync(connectionId, entityId, libraryRootId, targetEntityIds: null, token);
-
-    public Task<ManagedRequestTarget> RequireTargetAsync(Guid connectionId, Guid entityId, Guid libraryRootId,
-        IReadOnlyList<Guid>? targetEntityIds, CancellationToken token) =>
-        RequireTargetAsync(connectionId, entityId, libraryRootId, targetEntityIds, bookRendition: null, token);
-
-    public Task<ManagedRequestTarget> RequireTargetAsync(Guid connectionId, Guid entityId, Guid libraryRootId,
-        IReadOnlyList<Guid>? targetEntityIds, BookRendition? bookRendition, CancellationToken token) =>
         RequireTargetCoreAsync(connectionId, entityId, libraryRootId, targetEntityIds, bookRendition, ownerId: null, token);
 
     private async Task<ManagedRequestTarget> RequireTargetCoreAsync(Guid connectionId, Guid entityId,

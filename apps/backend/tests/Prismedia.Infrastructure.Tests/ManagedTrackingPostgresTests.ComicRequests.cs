@@ -51,7 +51,7 @@ public sealed partial class ManagedTrackingPostgresTests {
             Assert.Single(await db.FulfillmentReservations.AsNoTracking().ToArrayAsync()).OwnerKind);
 
         var store = Requests(db);
-        var target = await store.RequireTargetAsync(fixture.ConnectionId, seriesId, fixture.RootId, [missingId], default);
+        var target = await store.RequireTargetAsync(fixture.ConnectionId, seriesId, fixture.RootId, [missingId], null, default);
         var operation = ManagedRequestOperation.Create(Guid.NewGuid(), fixture.ConnectionId, seriesId, fixture.RootId);
         var request = new CreateManagedRequestInput(operation.State.OperationId, seriesId, fixture.RootId,
             target.Work, null, Monitored: true, Search: true, TargetEntityIds: [missingId]);
@@ -106,7 +106,7 @@ public sealed partial class ManagedTrackingPostgresTests {
         await db.SaveChangesAsync();
 
         var store = Requests(db);
-        var target = await store.RequireTargetAsync(connectionId, seriesId, rootId, [issueId], default);
+        var target = await store.RequireTargetAsync(connectionId, seriesId, rootId, [issueId], null, default);
         Assert.Equal("½", Assert.Single(target.Work.Targets!).IssueLabel);
         var operation = ManagedRequestOperation.Create(Guid.NewGuid(), connectionId, seriesId, rootId);
         var request = new CreateManagedRequestInput(operation.State.OperationId, seriesId, rootId,
@@ -146,7 +146,7 @@ public sealed partial class ManagedTrackingPostgresTests {
         db.EntityPositions.Add(new EntityPositionRow { EntityId = siblingId,
             Code = EntityPositionCodes.Chapter, Value = 12, Label = "12.5" });
         await db.SaveChangesAsync();
-        var siblingTarget = await store.RequireTargetAsync(connectionId, seriesId, rootId, [siblingId], default);
+        var siblingTarget = await store.RequireTargetAsync(connectionId, seriesId, rootId, [siblingId], null, default);
         var siblingOperation = ManagedRequestOperation.Create(Guid.NewGuid(), connectionId, seriesId, rootId);
         var siblingRequest = new CreateManagedRequestInput(siblingOperation.State.OperationId, seriesId, rootId,
             siblingTarget.Work, null, Monitored: true, Search: true, TargetEntityIds: [siblingId]);

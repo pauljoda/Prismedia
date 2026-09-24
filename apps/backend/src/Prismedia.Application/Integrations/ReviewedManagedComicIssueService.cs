@@ -97,7 +97,7 @@ public sealed class ReviewedManagedComicIssueService(
             if (prepared.HasFile)
                 throw new ManagedRequestConflictException("This issue already has a local source. Open the existing issue instead.");
             var target = await store.RequireTargetAsync(connectionId, prepared.SeriesEntityId,
-                input.LibraryRootId, [prepared.IssueEntityId], ct);
+                input.LibraryRootId, [prepared.IssueEntityId], bookRendition: null, ct);
             if (!ManagedRequestIdentity.SameWork(target.Work, review.Work))
                 throw new ManagedRequestConflictException("The wanted issue identity changed during review.");
             var create = new CreateManagedRequestInput(input.OperationId, prepared.SeriesEntityId,

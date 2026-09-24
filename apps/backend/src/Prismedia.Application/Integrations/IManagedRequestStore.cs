@@ -26,20 +26,22 @@ public sealed record ManagedRequestMaterialization(bool Imported, string? Waitin
 
 /// <summary>Atomic request ownership, revision fences, and exact wanted-identity materialization.</summary>
 public interface IManagedRequestStore {
-    /// <summary>Requires fileless wanted work with an exact identity and a mapped enabled library.</summary>
+    /// <summary>
+    /// Requires fileless wanted work with an exact identity and a mapped enabled library.
+    /// </summary>
+    /// <param name="connectionId">Connection that will own fulfillment.</param>
+    /// <param name="entityId">Wanted work or container that receives the request.</param>
+    /// <param name="libraryRootId">Mapped external library that will receive files.</param>
+    /// <param name="targetEntityIds">Finite child scope for a container, or null for the whole work.</param>
+    /// <param name="bookRendition">Exact Book rendition, required for a Book and null for other kinds.</param>
+    /// <param name="token">Cancellation token.</param>
     Task<ManagedRequestTarget> RequireTargetAsync(
         Guid connectionId,
         Guid entityId,
         Guid libraryRootId,
+        IReadOnlyList<Guid>? targetEntityIds,
+        BookRendition? bookRendition,
         CancellationToken token);
-    /// <summary>Requires a finite child scope when the managed work is a container.</summary>
-    Task<ManagedRequestTarget> RequireTargetAsync(Guid connectionId, Guid entityId, Guid libraryRootId,
-        IReadOnlyList<Guid>? targetEntityIds, CancellationToken token) =>
-        RequireTargetAsync(connectionId, entityId, libraryRootId, token);
-    /// <summary>Requires one exact Book rendition when the managed work is a Book.</summary>
-    Task<ManagedRequestTarget> RequireTargetAsync(Guid connectionId, Guid entityId, Guid libraryRootId,
-        IReadOnlyList<Guid>? targetEntityIds, BookRendition? bookRendition, CancellationToken token) =>
-        RequireTargetAsync(connectionId, entityId, libraryRootId, targetEntityIds, token);
     /// <summary>Loads retained intent without contacting the manager.</summary>
     Task<StoredManagedRequest?> FindAsync(Guid id, CancellationToken token);
     /// <summary>Lists recent requests for one connection.</summary>
@@ -48,12 +50,15 @@ public interface IManagedRequestStore {
     Task<StoredManagedRequest> CreateAsync(ManagedRequestOperation operation, ManagedRequestPlan plan, CancellationToken token);
     /// <summary>Saves one revision and revalidates local scope before dispatch; safe cancellation releases its owner atomically.</summary>
     Task SaveAsync(ManagedRequestOperation operation, long expectedRevision, string? problem, bool beforeDispatch, CancellationToken token);
-    /// <summary>Accepts a pinned holding and its stable wanted targets in the same transaction as request progress.</summary>
-    Task AcceptHoldingAsync(StoredManagedRequest work, ManagedItemSnapshot snapshot, CancellationToken token);
-    /// <summary>Accepts a holding only after every finite child target has one resolved remote identity.</summary>
-    Task AcceptHoldingAsync(StoredManagedRequest work, ManagedItemSnapshot snapshot,
-        IReadOnlyList<ManagedResolvedTarget>? resolvedTargets, CancellationToken token) =>
-        AcceptHoldingAsync(work, snapshot, token);
+    /// <summary>
+    /// Accepts a pinned holding and its stable wanted targets in the same transaction as request progress.
+    /// A finite child scope is accepted only when every target has one resolved remote identity.
+    /// </summary>
+    Task AcceptHoldingAsync(
+        StoredManagedRequest work,
+        ManagedItemSnapshot snapshot,
+        IReadOnlyList<ManagedResolvedTarget>? resolvedTargets,
+        CancellationToken token);
     /// <summary>Rechecks pinned identity, ownership, and mapped path before dispatching initial fulfillment controls.</summary>
     Task ValidateHoldingAsync(StoredManagedRequest work, ManagedItemSnapshot snapshot, CancellationToken token);
     /// <summary>Attaches only verified mapped files to the retained wanted identities, then enables ordinary managed tracking.</summary>

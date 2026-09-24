@@ -19,7 +19,7 @@ public sealed partial class ManagedTrackingPostgresTests {
         await using var db = database.CreateContext();
         var fixture = await SeedWantedAsync(db); var requests = Requests(db);
         var accepted = await requests.CreateAsync(fixture.Operation, fixture.Plan, default);
-        await requests.AcceptHoldingAsync(accepted, fixture.Fixture.Snapshot with { Files = [] }, default);
+        await requests.AcceptHoldingAsync(accepted, fixture.Fixture.Snapshot with { Files = [] }, null, default);
         var previous = (await requests.FindAsync(accepted.Operation.State.OperationId, default))!;
         if (imported) await requests.MaterializeAsync(previous, fixture.Fixture.Snapshot, default);
         var holding = (await Store(db).FindAsync(accepted.Operation.State.OperationId, default))!;

@@ -139,6 +139,7 @@ public sealed class ReviewedManagedRequestService(
                     entityId,
                     input.LibraryRootId,
                     targetEntityIds,
+                    bookRendition: null,
                     ct);
                 var create = new CreateManagedRequestInput(
                     input.OperationId,

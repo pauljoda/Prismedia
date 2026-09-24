@@ -62,7 +62,7 @@ public sealed partial class ManagedTrackingPostgresTests {
             var snapshot = new ManagedItemSnapshot(
                 new("OL123W", EntityKind.Book, "Example", null, identities, true, null, 0),
                 "/" + remoteRoot + "/Example", [], DateTimeOffset.UtcNow);
-            await store.AcceptHoldingAsync(saved, snapshot, default);
+            await store.AcceptHoldingAsync(saved, snapshot, null, default);
             return (await store.FindAsync(saved.Operation.State.OperationId, default))!;
         }
 
@@ -243,7 +243,7 @@ public sealed partial class ManagedTrackingPostgresTests {
         var saved = await store.CreateAsync(operation, plan, default);
         var identities = new Dictionary<string, string> { [ExternalIdProviders.OpenLibraryWork] = "OL123W" };
         await store.AcceptHoldingAsync(saved, new(new("OL123W", EntityKind.Book, "Example", null,
-            identities, true, null, 0), "/audio/Example", [], DateTimeOffset.UtcNow), default);
+            identities, true, null, 0), "/audio/Example", [], DateTimeOffset.UtcNow), null, default);
         saved = (await store.FindAsync(saved.Operation.State.OperationId, default))!;
         var snapshot = new ManagedItemSnapshot(new("OL123W", EntityKind.Book, "Example", null,
             identities, true, null, 2), "/audio/Example", [
@@ -320,7 +320,7 @@ public sealed partial class ManagedTrackingPostgresTests {
             fixture.ConnectionId,
             fixture.Operation.State.EntityId,
             fixture.Operation.State.LibraryRootId,
-            fixture.EpisodeIds,
+            fixture.EpisodeIds, null,
             default));
 
         Assert.Contains("TVDB or TMDB", error.Message, StringComparison.Ordinal);
@@ -438,7 +438,7 @@ public sealed partial class ManagedTrackingPostgresTests {
             fixture.ConnectionId,
             seriesId,
             fixture.Operation.State.LibraryRootId,
-            [episodeId],
+            [episodeId], null,
             default);
         var operation = ManagedRequestOperation.Create(
             Guid.NewGuid(),
@@ -496,7 +496,7 @@ public sealed partial class ManagedTrackingPostgresTests {
         await db.SaveChangesAsync();
         var disjointTarget = await store.RequireTargetAsync(
             fixture.ConnectionId, seriesId, fixture.Operation.State.LibraryRootId,
-            [disjointEpisodeId], default);
+            [disjointEpisodeId], null, default);
         var disjointOperation = ManagedRequestOperation.Create(Guid.NewGuid(), fixture.ConnectionId,
             seriesId, fixture.Operation.State.LibraryRootId);
         var disjointRequest = request with {
@@ -657,7 +657,7 @@ public sealed partial class ManagedTrackingPostgresTests {
             fixture.ConnectionId,
             fixture.Operation.State.EntityId,
             fixture.Operation.State.LibraryRootId,
-            [episodeId],
+            [episodeId], null,
             default);
         var operation = ManagedRequestOperation.Create(
             Guid.NewGuid(),
@@ -723,7 +723,7 @@ public sealed partial class ManagedTrackingPostgresTests {
         var fixture = await SeedWantedAsync(db);
         var requests = Requests(db);
         var accepted = await requests.CreateAsync(fixture.Operation, fixture.Plan, default);
-        await requests.AcceptHoldingAsync(accepted, fixture.Fixture.Snapshot, default);
+        await requests.AcceptHoldingAsync(accepted, fixture.Fixture.Snapshot, null, default);
         var tracking = Store(db);
         var work = (await tracking.FindAsync(accepted.Operation.State.OperationId, default))!;
 
@@ -832,7 +832,7 @@ public sealed partial class ManagedTrackingPostgresTests {
         await using var db = database.CreateContext();
         var fixture = await SeedWantedAsync(db); var store = Requests(db);
         var accepted = await store.CreateAsync(fixture.Operation, fixture.Plan, default);
-        await store.AcceptHoldingAsync(accepted, fixture.Fixture.Snapshot with { Files = [] }, default);
+        await store.AcceptHoldingAsync(accepted, fixture.Fixture.Snapshot with { Files = [] }, null, default);
         var holding = (await Store(db).FindAsync(accepted.Operation.State.OperationId, default))!.Tracking;
         Assert.Equal(ManagedTrackingStatus.WaitingForFiles, holding.Status);
         Assert.Empty(holding.Bindings); Assert.Empty(await db.EntityFiles.ToArrayAsync());
@@ -848,7 +848,7 @@ public sealed partial class ManagedTrackingPostgresTests {
         await using var db = database.CreateContext();
         var fixture = await SeedWantedAsync(db); var store = Requests(db);
         var accepted = await store.CreateAsync(fixture.Operation, fixture.Plan, default);
-        await store.AcceptHoldingAsync(accepted, fixture.Fixture.Snapshot with { Files = [] }, default);
+        await store.AcceptHoldingAsync(accepted, fixture.Fixture.Snapshot with { Files = [] }, null, default);
         var pending = (await store.FindAsync(accepted.Operation.State.OperationId, default))!;
         var tracking = (await Store(db).FindAsync(accepted.Operation.State.OperationId, default))!;
         var (action, plan) = ControlIntent(tracking);
@@ -873,7 +873,7 @@ public sealed partial class ManagedTrackingPostgresTests {
         await using var db = database.CreateContext();
         var fixture = await SeedWantedAsync(db); var store = Requests(db);
         var accepted = await store.CreateAsync(fixture.Operation, fixture.Plan, default);
-        await store.AcceptHoldingAsync(accepted, fixture.Fixture.Snapshot with { Files = [] }, default);
+        await store.AcceptHoldingAsync(accepted, fixture.Fixture.Snapshot with { Files = [] }, null, default);
         if (missing) File.Delete(fixture.Fixture.Path); else await File.WriteAllBytesAsync(fixture.Fixture.Path, [1]);
         var pending = (await store.FindAsync(accepted.Operation.State.OperationId, default))!;
         var result = await store.MaterializeAsync(pending, fixture.Fixture.Snapshot, default);
@@ -887,7 +887,7 @@ public sealed partial class ManagedTrackingPostgresTests {
         await using var db = database.CreateContext();
         var fixture = await SeedWantedAsync(db); var store = Requests(db);
         var accepted = await store.CreateAsync(fixture.Operation, fixture.Plan, default);
-        await Assert.ThrowsAsync<ArgumentException>(() => store.AcceptHoldingAsync(accepted, fixture.Fixture.Snapshot with { Path = "/other/movie" }, default));
+        await Assert.ThrowsAsync<ArgumentException>(() => store.AcceptHoldingAsync(accepted, fixture.Fixture.Snapshot with { Path = "/other/movie" }, null, default));
         Assert.Empty(await db.ManagedHoldings.ToArrayAsync());
         Assert.Equal(ManagedRequestPhase.PendingCreation, (await store.FindAsync(accepted.Operation.State.OperationId, default))!.Operation.State.Phase);
     }
@@ -898,7 +898,7 @@ public sealed partial class ManagedTrackingPostgresTests {
         await using var db = database.CreateContext();
         var fixture = await SeedWantedAsync(db); var store = Requests(db);
         var accepted = await store.CreateAsync(fixture.Operation, fixture.Plan, default);
-        await store.AcceptHoldingAsync(accepted, fixture.Fixture.Snapshot with { Files = [] }, default);
+        await store.AcceptHoldingAsync(accepted, fixture.Fixture.Snapshot with { Files = [] }, null, default);
         var waiting = (await store.FindAsync(accepted.Operation.State.OperationId, default))!;
         await store.ValidateHoldingAsync(waiting, fixture.Fixture.Snapshot, default);
         await Assert.ThrowsAsync<ArgumentException>(() => store.ValidateHoldingAsync(waiting,
@@ -931,7 +931,7 @@ public sealed partial class ManagedTrackingPostgresTests {
         var fixture = await SeedWantedAsync(db);
         var store = Requests(db);
         var accepted = await store.CreateAsync(fixture.Operation, fixture.Plan, default);
-        await store.AcceptHoldingAsync(accepted, fixture.Fixture.Snapshot, default);
+        await store.AcceptHoldingAsync(accepted, fixture.Fixture.Snapshot, null, default);
         var waiting = (await store.FindAsync(accepted.Operation.State.OperationId, default))!;
         var revision = waiting.Operation.State.Revision;
         waiting.Operation.RequireReview();
@@ -1032,7 +1032,7 @@ public sealed partial class ManagedTrackingPostgresTests {
         await db.SaveChangesAsync();
 
         var targetIds = new[] { specialId, pilotId, secondId };
-        var target = await Requests(db).RequireTargetAsync(connectionId, seriesId, rootId, targetIds, default);
+        var target = await Requests(db).RequireTargetAsync(connectionId, seriesId, rootId, targetIds, null, default);
         var operation = ManagedRequestOperation.Create(Guid.NewGuid(), connectionId, seriesId, rootId);
         var request = new CreateManagedRequestInput(
             operation.State.OperationId,

@@ -241,8 +241,12 @@ public sealed class ManagedRequestProcessorTests {
     [Fact]
     public async Task CancellationWinningTheFencePreventsCreation() {
         var fixture = new Fixture { CancelAtFence = true };
-        await Assert.ThrowsAsync<ManagedRequestConflictException>(fixture.Run);
-        Assert.Equal(0, fixture.Writes); Assert.Equal(ManagedRequestPhase.Cancelled, fixture.Saved.Operation.State.Phase);
+
+        await fixture.Run();
+
+        Assert.Equal(0, fixture.Writes);
+        Assert.Equal(ManagedRequestPhase.Cancelled, fixture.Saved.Operation.State.Phase);
+        Assert.False(fixture.Saved.Operation.State.ReviewRequired);
     }
     [Fact]
     public async Task DefiniteRejectionRetainsRequestAndAllowsSafeCancellation() {
@@ -313,6 +317,18 @@ public sealed class ManagedRequestProcessorTests {
     }
 
     [Fact]
+    public async Task ChangedBoundaryAtDispatchFenceRequiresReviewWithoutCreation() {
+        var fixture = new Fixture { BoundaryChangedAtFence = true };
+
+        await fixture.Run();
+
+        Assert.Equal(ManagedRequestPhase.PendingCreation, fixture.Saved.Operation.State.Phase);
+        Assert.True(fixture.Saved.Operation.State.ReviewRequired);
+        Assert.Equal("The accepted wanted identity or library boundary changed.", fixture.Saved.Problem);
+        Assert.Equal(0, fixture.Writes);
+    }
+
+    [Fact]
     public async Task TemporarilyUnavailableConnectionKeepsAwaitingFilesRetryable() {
         var fixture = new Fixture { Exists = true };
         await fixture.Run();
@@ -359,7 +375,7 @@ public sealed class ManagedRequestProcessorTests {
         internal PluginManifest Manifest;
         private readonly IntegrationConnection connection;
         internal bool LoseResponse, Exists, CancelAtFence, Reject, MalformedResult, WrongIdentity, InvalidBoundary, HoldingRemoved,
-            FailObservationOnce;
+            FailObservationOnce, BoundaryChangedAtFence;
         internal bool ConfirmedRemoval;
         internal bool HoldingValidated;
         internal bool Materialized;
@@ -393,14 +409,18 @@ public sealed class ManagedRequestProcessorTests {
         public Task<StoredManagedRequest?> FindAsync(Guid id, CancellationToken token) => Task.FromResult<StoredManagedRequest?>(Saved with { Operation = new(Saved.Operation.State) });
         public Task SaveAsync(ManagedRequestOperation operation, long expectedRevision, string? problem, bool beforeDispatch, CancellationToken token) {
             if (beforeDispatch && CancelAtFence) Saved.Operation.Cancel();
+            if (beforeDispatch && BoundaryChangedAtFence)
+                throw new ManagedRequestConflictException("The accepted wanted identity or library boundary changed.");
             if (Saved.Operation.State.Revision != expectedRevision) throw new ManagedRequestConflictException("stale");
             Saved = Saved with { Operation = new(operation.State), Problem = problem }; return Task.CompletedTask;
         }
-        public Task AcceptHoldingAsync(StoredManagedRequest work, ManagedItemSnapshot snapshot, CancellationToken token) {
+        public Task AcceptHoldingAsync(StoredManagedRequest work, ManagedItemSnapshot snapshot,
+            IReadOnlyList<ManagedResolvedTarget>? resolvedTargets, CancellationToken token) {
             Assert.Equal(Saved.Operation.State.Revision, work.Operation.State.Revision);
             Saved.Operation.AcceptHolding(snapshot.Item.RemoteId); return Task.CompletedTask;
         }
-        public Task<ManagedRequestTarget> RequireTargetAsync(Guid connectionId, Guid entityId, Guid libraryRootId, CancellationToken token) => throw new NotImplementedException();
+        public Task<ManagedRequestTarget> RequireTargetAsync(Guid connectionId, Guid entityId, Guid libraryRootId,
+            IReadOnlyList<Guid>? targetEntityIds, BookRendition? bookRendition, CancellationToken token) => throw new NotImplementedException();
         public Task<IReadOnlyList<StoredManagedRequest>> ListAsync(Guid connectionId, CancellationToken token) => throw new NotImplementedException();
         public Task<StoredManagedRequest> CreateAsync(ManagedRequestOperation operation, ManagedRequestPlan plan, CancellationToken token) => throw new NotImplementedException();
         public Task<ManagedRequestMaterialization> MaterializeAsync(StoredManagedRequest work, ManagedItemSnapshot snapshot, CancellationToken token) {

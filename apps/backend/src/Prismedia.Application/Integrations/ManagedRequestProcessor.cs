@@ -74,12 +74,31 @@ public sealed class ManagedRequestProcessor(IManagedRequestStore store, Integrat
             work.Operation.RecordRetryableObservation();
             await store.SaveAsync(work.Operation, revision, error.Message, false, token);
         } catch (Exception error) when (error is IntegrationInvocationException or ConnectionNotFoundException
-            or ConnectionSecretUnavailableException or ConnectionCapabilityUnavailableException or ArgumentException or ManagedControlConflictException) {
-            var revision = work.Operation.State.Revision;
-            work.Operation.RequireReview();
-            await store.SaveAsync(work.Operation, revision, error.Message, false, token);
+            or ConnectionSecretUnavailableException or ConnectionCapabilityUnavailableException or ArgumentException
+            or ManagedControlConflictException or ManagedRequestConflictException) {
+            await RequireReviewAsync(id, error.Message, token);
         }
         return true;
+    }
+
+    /// <summary>
+    /// Fences the persisted request for review. The loaded work may carry an in-memory transition whose
+    /// save was refused, such as the pre-dispatch boundary check, so the fence is applied to a fresh copy.
+    /// A request that another actor already stopped or fenced keeps its newer state.
+    /// </summary>
+    private async Task RequireReviewAsync(Guid id, string problem, CancellationToken token) {
+        var current = await store.FindAsync(id, token);
+        if (current is null || !current.Operation.IsActive || current.Operation.State.ReviewRequired) {
+            return;
+        }
+
+        var revision = current.Operation.State.Revision;
+        current.Operation.RequireReview();
+        try {
+            await store.SaveAsync(current.Operation, revision, problem, false, token);
+        } catch (ManagedRequestConflictException) {
+            // Newer persisted progress owns the result.
+        }
     }
 
     private async Task ResolveCreationAsync(StoredManagedRequest work, CancellationToken token) {
