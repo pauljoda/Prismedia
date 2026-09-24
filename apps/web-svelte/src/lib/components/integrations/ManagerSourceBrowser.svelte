@@ -91,7 +91,9 @@
   </Tabs.List>
   <Tabs.Content value={findTab} class="space-y-5 pt-5">
     <div class="flex flex-wrap items-center justify-between gap-3">
-      <p class="text-sm text-text-muted">Search {connection.name}, review a title, then let it find and organize your files.</p>
+      <p class="text-sm text-text-muted">{kind === ENTITY_KIND.comicSeries
+        ? `Search ${connection.name}, add a reviewed run to your mapped library, then choose an issue to request.`
+        : `Search ${connection.name}, review a title, then let it find and organize your files.`}</p>
       <Button variant="ghost" size="sm" onclick={() => settingsOpen = true}>Library settings</Button>
     </div>
     {#if connection.status !== CONNECTION_STATUS.ready}
