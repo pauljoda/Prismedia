@@ -310,6 +310,9 @@ internal sealed class SourceCapabilityProjector : EntityCapabilityProjector<Sour
 
 [EntityCapabilityProjector(190)]
 internal sealed class ProgressCapabilityProjector : EntityCapabilityProjector<ProgressCapability> {
+    #region Actions - Projection
+
+    /// <summary>Projects the main cursor plus each modality's exact checkpoint in modality order.</summary>
     public override ProgressCapability? Project(EntityCapabilityProjectionContext context) =>
         context.Entity.Progress is { } progress
             ? new ProgressCapability(
@@ -343,6 +346,8 @@ internal sealed class ProgressCapabilityProjector : EntityCapabilityProjector<Pr
                         checkpoint.UpdatedAt))
                     .ToArray())
             : null;
+
+    #endregion
 }
 
 [EntityCapabilityProjector(200)]

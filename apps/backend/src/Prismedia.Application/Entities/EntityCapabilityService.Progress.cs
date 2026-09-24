@@ -2,6 +2,7 @@ using Prismedia.Application.Playback;
 using Prismedia.Contracts.Entities;
 using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
+using Prismedia.Domain.Media.Books;
 
 namespace Prismedia.Application.Entities;
 
@@ -369,7 +370,7 @@ public sealed partial class EntityCapabilityService {
 
     private async Task<CursorMove?> ResolvePlacementAsync(
         Entity entity,
-        Domain.Media.Books.WorkCursorPlacement placement,
+        WorkCursorPlacement placement,
         CancellationToken cancellationToken) {
         var resolved = await _progressTopology.ResolveCursorAsync(entity.Id, placement.CurrentEntityId, cancellationToken);
         if (resolved is null) {

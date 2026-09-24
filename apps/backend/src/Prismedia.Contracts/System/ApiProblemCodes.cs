@@ -7,6 +7,8 @@ namespace Prismedia.Contracts.System;
 /// constants instead of bare string literals.
 /// </summary>
 public static class ApiProblemCodes {
+    #region Static Variables
+
     /// <summary>A metadata plugin failed to answer, rather than confirming that no matching work exists.</summary>
     public const string PluginProviderUnavailable = "plugin_provider_unavailable";
     public const string ManagedControlConflict = "managed_control_conflict";
@@ -281,4 +283,6 @@ public static class ApiProblemCodes {
 
     /// <summary>Problem code <c>video_trickplay_tile_not_found</c>.</summary>
     public const string VideoTrickplayTileNotFound = "video_trickplay_tile_not_found";
+
+    #endregion
 }
