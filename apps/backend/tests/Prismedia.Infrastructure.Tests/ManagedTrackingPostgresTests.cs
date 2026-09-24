@@ -194,7 +194,7 @@ public sealed partial class ManagedTrackingPostgresTests : IDisposable {
         await using var database = await PostgresTestDatabase.CreateAsync();
         await using var db = database.CreateContext();
         var fixture = await SeedAsync(db); var store = Store(db); var work = await AdoptAsync(store, fixture);
-        await store.RecordProblemAsync(work.Tracking.Id, work.Tracking.Revision, ManagedTrackingStatus.NeedsReview, "Coverage changed", default);
+        await store.RequireReviewAsync(work.Tracking.Id, work.Tracking.Revision, "Coverage changed", default);
         Assert.False((await db.EntityAvailability.AsNoTracking().SingleAsync()).HasSourceMedia);
         Assert.False(Assert.Single((await store.FindAsync(work.Tracking.Id, default))!.Tracking.Bindings).IsAvailable);
         var observation = await store.ObserveAsync(fixture.ConnectionId, fixture.Snapshot, default);

@@ -55,13 +55,18 @@ public sealed class EfManagedReleaseStore(PrismediaDbContext db, IManagedTrackin
             if (owned.Fingerprint != request.ScopeFingerprint) throw Conflict();
             await RequireSettledControlsAsync(holdingId, ct);
             await PauseRequestsAsync(row, false, ct);
-            var now = DateTimeOffset.UtcNow;
             var serialized = JsonSerializer.Serialize(request, Json);
+            var releasing = row.ToDomain();
+            releasing.BeginRelease(request.OperationId, DateTimeOffset.UtcNow);
+            var next = releasing.State;
             await db.ManagedHoldings.Where(value => value.Id == holdingId && value.Revision == row.Revision)
-                .ExecuteUpdateAsync(set => set.SetProperty(value => value.ReleaseOperationId, request.OperationId)
-                    .SetProperty(value => value.ReleaseRequestJson, serialized).SetProperty(value => value.Status, ManagedTrackingStatus.ReleasePending)
-                    .SetProperty(value => value.Revision, row.Revision + 1).SetProperty(value => value.Problem, (string?)null)
-                    .SetProperty(value => value.NextCheckAt, now), ct);
+                .ExecuteUpdateAsync(set => set
+                    .SetProperty(value => value.ReleaseOperationId, next.ReleaseOperationId)
+                    .SetProperty(value => value.ReleaseRequestJson, serialized)
+                    .SetProperty(value => value.Status, next.Status)
+                    .SetProperty(value => value.Revision, next.Revision)
+                    .SetProperty(value => value.Problem, next.Problem)
+                    .SetProperty(value => value.NextCheckAt, next.NextCheckAt), ct);
             await tracking.QueueAsync(connectionId, holdingId, ct);
         }, token);
         await transaction.CommitAsync(token);
@@ -87,25 +92,43 @@ public sealed class EfManagedReleaseStore(PrismediaDbContext db, IManagedTrackin
             await PauseRequestsAsync(row, true, ct);
             var now = DateTimeOffset.UtcNow;
             var archived = JsonSerializer.Serialize(current.Holding.Bindings, Json);
+            var released = row.ToDomain();
+            released.CompleteRelease(now);
+            var next = released.State;
             await db.ManagedSourceBindings.Where(binding => binding.HoldingId == row.Id).ExecuteDeleteAsync(ct);
             await owners.ExecuteUpdateAsync(set => set.SetProperty(owner => owner.ReleasedAt, now), ct);
             await db.ManagedHoldings.Where(value => value.Id == row.Id && value.Revision == row.Revision)
-                .ExecuteUpdateAsync(set => set.SetProperty(value => value.Status, ManagedTrackingStatus.Released)
-                    .SetProperty(value => value.Revision, row.Revision + 1).SetProperty(value => value.ReleasedAt, now)
-                    .SetProperty(value => value.ReleasedBindingsJson, archived).SetProperty(value => value.LastCheckedAt, now)
-                    .SetProperty(value => value.Problem, (string?)null), ct);
+                .ExecuteUpdateAsync(set => set
+                    .SetProperty(value => value.Status, next.Status)
+                    .SetProperty(value => value.Revision, next.Revision)
+                    .SetProperty(value => value.ReleasedAt, next.ReleasedAt)
+                    .SetProperty(value => value.ReleasedBindingsJson, archived)
+                    .SetProperty(value => value.LastCheckedAt, next.LastCheckedAt)
+                    .SetProperty(value => value.Problem, next.Problem), ct);
         }, token);
         await transaction.CommitAsync(token);
     }
 
     /// <inheritdoc />
     public async Task RecordProblemAsync(ManagedReleaseWork work, string problem, CancellationToken token) {
-        var now = DateTimeOffset.UtcNow;
-        var safe = problem[..Math.Min(problem.Length, 4096)];
-        if (await db.ManagedHoldings.Where(row => row.Id == work.Holding.Id && row.Revision == work.Holding.Revision
-                && row.Status == ManagedTrackingStatus.ReleasePending && row.ReleaseOperationId == work.Request.OperationId)
-            .ExecuteUpdateAsync(set => set.SetProperty(row => row.Problem, safe).SetProperty(row => row.Revision, work.Holding.Revision + 1)
-                .SetProperty(row => row.LastCheckedAt, now).SetProperty(row => row.NextCheckAt, now.AddMinutes(5)), token) != 1) throw Conflict();
+        var row = await db.ManagedHoldings.AsNoTracking().SingleOrDefaultAsync(value => value.Id == work.Holding.Id, token);
+        if (row is null || row.Revision != work.Holding.Revision || row.Status != ManagedTrackingStatus.ReleasePending
+            || row.ReleaseOperationId != work.Request.OperationId) {
+            throw Conflict();
+        }
+
+        var holding = row.ToDomain();
+        holding.RecordReleaseProblem(problem, DateTimeOffset.UtcNow);
+        var next = holding.State;
+        if (await db.ManagedHoldings.Where(value => value.Id == work.Holding.Id && value.Revision == work.Holding.Revision
+                && value.Status == ManagedTrackingStatus.ReleasePending && value.ReleaseOperationId == work.Request.OperationId)
+            .ExecuteUpdateAsync(set => set
+                .SetProperty(value => value.Problem, next.Problem)
+                .SetProperty(value => value.Revision, next.Revision)
+                .SetProperty(value => value.LastCheckedAt, next.LastCheckedAt)
+                .SetProperty(value => value.NextCheckAt, next.NextCheckAt), token) != 1) {
+            throw Conflict();
+        }
     }
 
     private async Task<ManagedTrackingResponse> RequireHoldingAsync(Guid connectionId, Guid id, CancellationToken token) {

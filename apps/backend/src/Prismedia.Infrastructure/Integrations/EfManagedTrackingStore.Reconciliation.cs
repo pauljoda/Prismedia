@@ -86,12 +86,9 @@ public sealed partial class EfManagedTrackingStore {
                 || associatedTargets.Select(binding => binding.Target.RemoteTargetId).Distinct(StringComparer.Ordinal).Count() != associatedTargets.Length
                 || associatedTargets.Any(binding => !retainedTargets.Contains(binding)))
                 throw new ArgumentException("The holding's source associations no longer match its retained target identities.");
-            row.Revision++;
-            row.Status = associatedTargets.Length == retainedTargets.Length
-                ? ManagedTrackingStatus.Tracking
-                : ManagedTrackingStatus.WaitingForFiles;
-            row.Problem = null;
-            row.LastCheckedAt = DateTimeOffset.UtcNow; row.NextCheckAt = row.LastCheckedAt.Value.Add(TrackingInterval);
+            var holding = row.ToDomain();
+            holding.Reconcile(associatedTargets.Length == retainedTargets.Length, DateTimeOffset.UtcNow);
+            row.Apply(holding);
             await db.SaveChangesAsync(leaseToken);
         }, token)) throw new EntityLifecycleMutationConflictException(ids.FirstOrDefault());
         if (restoredEntityIds.Length > 0) {
@@ -235,11 +232,9 @@ public sealed partial class EfManagedTrackingStore {
                 }
             }
 
-            row.Revision++;
-            row.Status = ManagedTrackingStatus.Removed;
-            row.Problem = safeProblem;
-            row.LastCheckedAt = now;
-            row.NextCheckAt = now.Add(TrackingInterval);
+            var holding = row.ToDomain();
+            holding.ConfirmRemoval(problem, now);
+            row.Apply(holding);
             await db.SaveChangesAsync(leaseToken);
             foreach (var entity in entities.Where(entity => restored.Contains(entity.Id)))
                 await queue.EnqueueAsync(EnqueueJobRequest.ForEntity(JobType.RefreshEntity,
@@ -356,7 +351,15 @@ public sealed partial class EfManagedTrackingStore {
     }
 
     /// <inheritdoc />
-    public async Task RecordProblemAsync(Guid id, long revision, ManagedTrackingStatus status, string problem, CancellationToken token) {
+    public Task RequireReviewAsync(Guid id, long revision, string problem, CancellationToken token) =>
+        RecordProblemAsync(id, revision, withdrawReadable: true, holding => holding.RequireReview(problem, DateTimeOffset.UtcNow), token);
+
+    /// <inheritdoc />
+    public Task RecordUnverifiableAsync(Guid id, long revision, CancellationToken token) =>
+        RecordProblemAsync(id, revision, withdrawReadable: false, holding => holding.RecordUnverifiable(DateTimeOffset.UtcNow), token);
+
+    private async Task RecordProblemAsync(Guid id, long revision, bool withdrawReadable, Action<ManagedHolding> transition,
+        CancellationToken token) {
         // Rollback of a failed mutation must not leave tracked writes that a status save can accidentally commit.
         db.ChangeTracker.Clear();
         await using var transaction = await db.Database.BeginTransactionAsync(token);
@@ -385,14 +388,15 @@ public sealed partial class EfManagedTrackingStore {
                 var fileIds = bindings.Select(binding => binding.SourceFileId).ToArray();
                 var sources = await db.EntityFiles.Where(file => fileIds.Contains(file.Id)).ToArrayAsync(leaseToken);
                 foreach (var binding in bindings) {
-                    if (status != ManagedTrackingStatus.NeedsReview && StillReadable(binding)) continue;
+                    if (!withdrawReadable && StillReadable(binding)) continue;
                     binding.IsAvailable = false;
                     var source = sources.SingleOrDefault(file => file.Id == binding.SourceFileId && file.EntityId == binding.EntityId);
                     if (source?.Role == EntityFileRole.Source) source.Role = EntityFileRole.UnavailableSource;
                 }
             }
-            row.Revision++; row.Status = status; row.Problem = problem[..Math.Min(4096, problem.Length)];
-            row.LastCheckedAt = DateTimeOffset.UtcNow; row.NextCheckAt = row.LastCheckedAt.Value.Add(TrackingInterval);
+            var holding = row.ToDomain();
+            transition(holding);
+            row.Apply(holding);
             await db.SaveChangesAsync(leaseToken);
         }, token)) throw new EntityLifecycleMutationConflictException(lifecycleIds.FirstOrDefault());
         await transaction.CommitAsync(token);
@@ -400,7 +404,6 @@ public sealed partial class EfManagedTrackingStore {
 
     /// <inheritdoc />
     public async Task RecordReappearanceAsync(Guid id, long revision, string problem, CancellationToken token) {
-        var safeProblem = problem[..Math.Min(4096, problem.Length)];
         await using var transaction = await db.Database.BeginTransactionAsync(token);
         var bindings = await db.ManagedSourceBindings.AsNoTracking()
             .Where(binding => binding.HoldingId == id)
@@ -423,14 +426,9 @@ public sealed partial class EfManagedTrackingStore {
                 throw new ArgumentException("The selected book work changed during reappearance review.");
             var row = await db.ManagedHoldings.SingleAsync(row => row.Id == id, leaseToken);
             if (row.Revision != revision) return;
-            row.Revision++;
-            // A reappearing remote ID is evidence for review, not evidence that the prior confirmed
-            // removal has been reversed. Keep the terminal marker so release remains available and
-            // no later refresh can silently re-adopt files or manager controls.
-            row.Status = ManagedTrackingStatus.Removed;
-            row.Problem = safeProblem;
-            row.LastCheckedAt = DateTimeOffset.UtcNow;
-            row.NextCheckAt = row.LastCheckedAt.Value.Add(TrackingInterval);
+            var holding = row.ToDomain();
+            holding.RecordReappearance(problem, DateTimeOffset.UtcNow);
+            row.Apply(holding);
             await db.SaveChangesAsync(leaseToken);
         }, token)) throw new EntityLifecycleMutationConflictException(lifecycleIds.FirstOrDefault());
         await transaction.CommitAsync(token);

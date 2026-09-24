@@ -86,12 +86,7 @@ public sealed class ManagedTrackingService(
                 } catch (ArgumentException error) {
                     var current = await store.FindAsync(id, token);
                     if (current is not null) {
-                        await store.RecordProblemAsync(
-                            id,
-                            current.Tracking.Revision,
-                            ManagedTrackingStatus.NeedsReview,
-                            error.Message,
-                            token);
+                        await store.RequireReviewAsync(id, current.Tracking.Revision, error.Message, token);
                     }
                 }
             }
@@ -99,13 +94,9 @@ public sealed class ManagedTrackingService(
             await store.ConfirmRemovalAsync(work,
                 "The connected manager no longer contains this holding. Local files, metadata, and history were retained.", token);
         } catch (Exception error) when (error is IntegrationInvocationException or ConnectionNotFoundException or ConnectionSecretUnavailableException or ConnectionCapabilityUnavailableException) {
-            var unverified = status.KeepsStatusWhenUnverifiable ? status.Status : ManagedTrackingStatus.Stale;
-            var problem = status.KeepsStatusWhenUnverifiable
-                ? "The connection could not be verified. The last confirmed removal and local data were retained."
-                : "The connection could not be verified. Previous bindings are retained; no alternate acquisition was started.";
-            await store.RecordProblemAsync(id, work.Tracking.Revision, unverified, problem, token);
+            await store.RecordUnverifiableAsync(id, work.Tracking.Revision, token);
         } catch (ArgumentException error) {
-            await store.RecordProblemAsync(id, work.Tracking.Revision, ManagedTrackingStatus.NeedsReview, error.Message, token);
+            await store.RequireReviewAsync(id, work.Tracking.Revision, error.Message, token);
         }
     }
 

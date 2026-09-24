@@ -168,7 +168,9 @@ public sealed class ManagedReleaseServiceTests {
         Task IManagedTrackingStore.ApplyAsync(ManagedTrackingWork work, ManagedTrackingObservation observation,
             IReadOnlyList<ManagedFileBinding>? adoption, IReadOnlyList<ManagedSourceChange> changes, CancellationToken token) => throw new NotImplementedException();
         Task IManagedTrackingStore.ConfirmRemovalAsync(ManagedTrackingWork work, string problem, CancellationToken token) => throw new NotImplementedException();
-        Task IManagedTrackingStore.RecordProblemAsync(Guid id, long revision, ManagedTrackingStatus status, string problem, CancellationToken token) => throw new NotImplementedException();
+        Task IManagedTrackingStore.RequireReviewAsync(Guid id, long revision, string problem, CancellationToken token) => throw new NotImplementedException();
+        Task IManagedTrackingStore.RecordUnverifiableAsync(Guid id, long revision, CancellationToken token) => throw new NotImplementedException();
+        Task IManagedTrackingStore.RecordReappearanceAsync(Guid id, long revision, string problem, CancellationToken token) => throw new NotImplementedException();
         Task IManagedTrackingStore.QueueAsync(Guid connectionId, Guid id, CancellationToken token) => throw new NotImplementedException();
         Task IManagedTrackingStore.QueueDueAsync(CancellationToken token) => throw new NotImplementedException();
         Task<OwnedManagedControlScope> IManagedControlStore.RequireScopeAsync(Guid connectionId, Guid holdingId, CancellationToken token) {

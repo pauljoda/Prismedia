@@ -61,22 +61,28 @@ public sealed partial class EfManagedRequestStore {
                     throw new ManagedRequestConflictException("The retained series target scope changed before expansion.");
                 holding.TargetsJson = JsonSerializer.Serialize(retained.Concat(bindings)
                     .OrderBy(binding => binding.Target.RemoteTargetId, StringComparer.Ordinal), Json);
-                holding.Status = ManagedTrackingStatus.WaitingForFiles;
-                holding.Revision++;
-                holding.LastCheckedAt = now;
-                holding.NextCheckAt = now.AddMinutes(5);
-                holding.Problem = null;
+                var holdingLifecycle = holding.ToDomain();
+                holdingLifecycle.WaitForFiles(now);
+                holding.Apply(holdingLifecycle);
             } else {
                 if (await db.ManagedHoldings.AnyAsync(holding => holding.Id == state.OperationId
                     || holding.ConnectionId == state.ConnectionId && holding.Kind == snapshot.Item.EntityKind
                         && holding.RemoteId == snapshot.Item.RemoteId && holding.BookRendition == item.BookRendition
                         && holding.ReleasedAt == null, ct))
                     throw new ArgumentException("This remote holding is already associated with another local intent. Review the existing association.");
-                db.ManagedHoldings.Add(new() { Id = state.OperationId, ConnectionId = state.ConnectionId, LibraryRootId = state.LibraryRootId,
-                    Kind = item.EntityKind, BookRendition = item.BookRendition, RemoteId = item.RemoteId,
-                    Title = current.Plan.Title, ItemJson = JsonSerializer.Serialize(item, Json),
-                    TargetsJson = JsonSerializer.Serialize(bindings, Json), Status = ManagedTrackingStatus.WaitingForFiles,
-                    Revision = 1, LastCheckedAt = now, NextCheckAt = now.AddMinutes(5) });
+                var created = new ManagedHoldingRow {
+                    Id = state.OperationId,
+                    ConnectionId = state.ConnectionId,
+                    LibraryRootId = state.LibraryRootId,
+                    Kind = item.EntityKind,
+                    BookRendition = item.BookRendition,
+                    RemoteId = item.RemoteId,
+                    Title = current.Plan.Title,
+                    ItemJson = JsonSerializer.Serialize(item, Json),
+                    TargetsJson = JsonSerializer.Serialize(bindings, Json)
+                };
+                created.Apply(ManagedHolding.AwaitFiles(created.Id, now));
+                db.ManagedHoldings.Add(created);
             }
             await db.SaveChangesAsync(ct);
             await UpdateAsync(operation, state.Revision, null, ct);
@@ -177,8 +183,11 @@ public sealed partial class EfManagedRequestStore {
                 Kind = expectedTarget.Target.Kind, EntityId = state.EntityId, SourceFileId = sourceId, RemoteFileId = file.RemoteId,
                 LocalPath = path, SizeBytes = file.SizeBytes, WrittenAt = written, IsAvailable = true });
             holding.SelectionsJson = JsonSerializer.Serialize(new[] { new ManagedBindingSelection(state.RemoteId!, state.EntityId, sourceId) }, Json);
-            holding.Status = ManagedTrackingStatus.Tracking; holding.Revision++; holding.LastCheckedAt = now; holding.NextCheckAt = now.AddMinutes(1); holding.Problem = null;
-            var operation = new ManagedRequestOperation(current.Operation.State); operation.ConfirmFiles();
+            var holdingLifecycle = holding.ToDomain();
+            holdingLifecycle.Reconcile(everyTargetBound: true, now);
+            holding.Apply(holdingLifecycle);
+            var operation = new ManagedRequestOperation(current.Operation.State);
+            operation.ConfirmFiles();
             await db.SaveChangesAsync(ct);
             await UpdateAsync(operation, state.Revision, null, ct);
             await queue.EnqueueAsync(EnqueueJobRequest.ForEntity(JobType.RefreshEntity, expectedTarget.Target.Kind, state.EntityId.ToString(), current.Plan.Title), ct);
@@ -379,13 +388,9 @@ public sealed partial class EfManagedRequestStore {
                 new ManagedBindingSelection(binding.RemoteTargetId, binding.EntityId, binding.SourceFileId)), Json);
             var requestRoot = await db.Entities.SingleAsync(entity => entity.Id == state.EntityId, ct);
             requestRoot.IsLibraryArchived = false;
-            holding.Status = completed && allBindings.Length == currentUnion.Length
-                ? ManagedTrackingStatus.Tracking
-                : ManagedTrackingStatus.WaitingForFiles;
-            holding.Revision++;
-            holding.LastCheckedAt = now;
-            holding.NextCheckAt = now.AddMinutes(1);
-            holding.Problem = null;
+            var holdingLifecycle = holding.ToDomain();
+            holdingLifecycle.Reconcile(completed && allBindings.Length == currentUnion.Length, now);
+            holding.Apply(holdingLifecycle);
             if (completed) {
                 var operation = new ManagedRequestOperation(current.Operation.State);
                 operation.ConfirmFiles();

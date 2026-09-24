@@ -64,9 +64,18 @@ public sealed partial class EfManagedTrackingStore(PrismediaDbContext db, IExter
             : item.BookRendition == BookRendition.Audiobook ? ownerIds[0] : sibling.WorkId;
         var audioChildIds = audioBookId is { } donorId
             ? await AudioChildIdsAsync(donorId, token) : [];
-        var row = new ManagedHoldingRow { Id = request.OperationId, ConnectionId = connectionId, LibraryRootId = request.LibraryRootId,
-            Kind = item.EntityKind, BookRendition = item.BookRendition, RemoteId = item.RemoteId, Title = title, ItemJson = itemJson,
-            SelectionsJson = JsonSerializer.Serialize(selections, Json), Revision = 1, Status = ManagedTrackingStatus.Pending, NextCheckAt = DateTimeOffset.UtcNow };
+        var row = new ManagedHoldingRow {
+            Id = request.OperationId,
+            ConnectionId = connectionId,
+            LibraryRootId = request.LibraryRootId,
+            Kind = item.EntityKind,
+            BookRendition = item.BookRendition,
+            RemoteId = item.RemoteId,
+            Title = title,
+            ItemJson = itemJson,
+            SelectionsJson = JsonSerializer.Serialize(selections, Json)
+        };
+        row.Apply(ManagedHolding.Accept(row.Id, DateTimeOffset.UtcNow));
         try {
             var leaseIds = sourceEntityIds.Concat(ownerIds).Concat(audioChildIds)
                 .Concat(sibling is null ? [] : [sibling.WorkId]).Distinct().ToArray();
@@ -128,14 +137,16 @@ public sealed partial class EfManagedTrackingStore(PrismediaDbContext db, IExter
     /// <inheritdoc />
     public async Task QueueDueAsync(CancellationToken token) {
         var now = DateTimeOffset.UtcNow;
-        var due = await db.ManagedHoldings.Where(row => row.NextCheckAt <= now && row.Status != ManagedTrackingStatus.NeedsReview && row.Status != ManagedTrackingStatus.WaitingForFiles
-                && row.Status != ManagedTrackingStatus.Released)
+        var observed = ManagedTrackingStatusDefinition.Observed;
+        var due = await db.ManagedHoldings.Where(row => row.NextCheckAt <= now && observed.Contains(row.Status))
             .Join(db.IntegrationConnections.Where(connection => connection.Enabled), row => row.ConnectionId, connection => connection.Id, (row, _) => row)
             .OrderBy(row => row.NextCheckAt).Take(25).ToArrayAsync(token);
         foreach (var row in due) {
             await using var transaction = await db.Database.BeginTransactionAsync(token);
             await PublishAsync(row, token);
-            row.NextCheckAt = now.AddMinutes(1);
+            var holding = row.ToDomain();
+            holding.ScheduleNextObservation(now);
+            row.Apply(holding);
             await db.SaveChangesAsync(token);
             await transaction.CommitAsync(token);
         }

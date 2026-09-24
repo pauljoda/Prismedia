@@ -1,4 +1,5 @@
 using Prismedia.Domain.Entities;
+using Prismedia.Domain.Integrations;
 
 namespace Prismedia.Infrastructure.Persistence.Entities;
 
@@ -33,6 +34,27 @@ public sealed class ManagedHoldingRow {
     public DateTimeOffset? ReleasedAt { get; set; }
     /// <summary>Historical file associations retained after active bindings have been removed.</summary>
     public string ReleasedBindingsJson { get; set; } = "[]";
+
+    /// <summary>Rehydrates the lifecycle the domain decides; identity, targets, and files stay on this row.</summary>
+    public ManagedHolding ToDomain() =>
+        new(new(Id, Status, Revision, LastCheckedAt, NextCheckAt, Problem, ReleaseOperationId, ReleasedAt));
+
+    /// <summary>Writes a lifecycle decided by <see cref="ManagedHolding"/>.</summary>
+    /// <exception cref="ArgumentException">The lifecycle belongs to another holding.</exception>
+    public void Apply(ManagedHolding holding) {
+        var state = holding.State;
+        if (state.Id != Id) {
+            throw new ArgumentException("The holding lifecycle belongs to another holding.", nameof(holding));
+        }
+
+        Status = state.Status;
+        Revision = state.Revision;
+        LastCheckedAt = state.LastCheckedAt;
+        NextCheckAt = state.NextCheckAt;
+        Problem = state.Problem;
+        ReleaseOperationId = state.ReleaseOperationId;
+        ReleasedAt = state.ReleasedAt;
+    }
 }
 
 /// <summary>One stable external target attached to an existing local entity and its retained file row.</summary>

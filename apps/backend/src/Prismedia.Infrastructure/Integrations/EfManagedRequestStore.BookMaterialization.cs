@@ -158,11 +158,9 @@ public sealed partial class EfManagedRequestStore {
             }
             holding.TargetsJson = JsonSerializer.Serialize(targets, Json);
             holding.SelectionsJson = JsonSerializer.Serialize(selections, Json);
-            holding.Status = ManagedTrackingStatus.Tracking;
-            holding.Revision++;
-            holding.LastCheckedAt = now;
-            holding.NextCheckAt = now.AddMinutes(1);
-            holding.Problem = null;
+            var holdingLifecycle = holding.ToDomain();
+            holdingLifecycle.Reconcile(everyTargetBound: true, now);
+            holding.Apply(holdingLifecycle);
             var operation = new ManagedRequestOperation(current.Operation.State);
             operation.ConfirmFiles();
             await db.SaveChangesAsync(ct);

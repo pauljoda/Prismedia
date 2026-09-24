@@ -478,7 +478,9 @@ public sealed class ManagedRequestProcessorTests {
         Task IManagedTrackingStore.ConfirmRemovalAsync(ManagedTrackingWork work, string problem, CancellationToken token) {
             Saved.Operation.ConfirmRemoteRemoval(); ConfirmedRemoval = true; return Task.CompletedTask;
         }
-        Task IManagedTrackingStore.RecordProblemAsync(Guid id, long revision, ManagedTrackingStatus status, string problem, CancellationToken token) => Task.CompletedTask;
+        Task IManagedTrackingStore.RequireReviewAsync(Guid id, long revision, string problem, CancellationToken token) => Task.CompletedTask;
+        Task IManagedTrackingStore.RecordUnverifiableAsync(Guid id, long revision, CancellationToken token) => Task.CompletedTask;
+        Task IManagedTrackingStore.RecordReappearanceAsync(Guid id, long revision, string problem, CancellationToken token) => Task.CompletedTask;
         Task IManagedTrackingStore.QueueAsync(Guid connectionId, Guid id, CancellationToken token) => throw new NotImplementedException();
         Task IManagedTrackingStore.QueueDueAsync(CancellationToken token) => throw new NotImplementedException();
         Task<StoredIntegrationConnection?> IIntegrationConnectionStore.FindAsync(Guid id, CancellationToken token) => Task.FromResult<StoredIntegrationConnection?>(new(connection, []));

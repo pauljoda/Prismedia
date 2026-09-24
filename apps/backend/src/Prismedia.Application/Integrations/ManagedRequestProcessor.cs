@@ -65,8 +65,7 @@ public sealed class ManagedRequestProcessor(IManagedRequestStore store, Integrat
             && error is IntegrationInvocationException or ConnectionNotFoundException
                 or ConnectionSecretUnavailableException or ConnectionCapabilityUnavailableException) {
             if (await tracking.FindAsync(holdingId, token) is { } holding)
-                await tracking.RecordProblemAsync(holdingId, holding.Tracking.Revision, ManagedTrackingStatus.Removed,
-                    "The connection could not be verified. The last confirmed removal and local data were retained.", token);
+                await tracking.RecordUnverifiableAsync(holdingId, holding.Tracking.Revision, token);
         } catch (Exception error) when (work.Operation.State.Phase == ManagedRequestPhase.AwaitingFiles
             && error is ConnectionNotFoundException or ConnectionSecretUnavailableException
                 or ConnectionCapabilityUnavailableException) {
