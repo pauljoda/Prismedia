@@ -18,6 +18,7 @@ import { useAppChrome, type AppBreadcrumb } from "$lib/stores/app-chrome.svelte"
 import { fetchEntity } from "$lib/api/entities";
 import { CAPABILITY_KIND } from "$lib/api/generated/codes";
 import type { EntityCapability } from "$lib/api/generated/model";
+import { isManagedRequestInFlight } from "$lib/integrations/managed-labels";
 import { onMount, untrack } from "svelte";
 import type { EntityDetailPageLoadState } from "./EntityDetailPageState.svelte";
 
@@ -49,7 +50,10 @@ export interface EntityDetailPageOptions<T extends EntityDetailPageEntity> {
   loadKey: () => string;
   mutations?: Partial<EntityDetailPageMutations>;
   reloadOnNsfwChange?: boolean;
-  /** Injectable read-only probe settings; production uses the shared Entity endpoint every 15 seconds. */
+  /**
+   * Injectable read-only probe settings. Production uses the shared Entity endpoint every 15 seconds,
+   * and every 5 seconds while a connected manager request is still being created or awaiting files.
+   */
   freshness?: {
     intervalMs?: number;
     probe?: (entityId: string, context: EntityDetailPageLoadContext) => Promise<EntityDetailPageEntity>;
@@ -68,6 +72,7 @@ const defaultMutations: EntityDetailPageMutations = {
 };
 
 const DEFAULT_FRESHNESS_INTERVAL_MS = 15_000;
+const ACTIVE_REQUEST_FRESHNESS_INTERVAL_MS = 5_000;
 const freshnessCapabilityKinds = new Set<string>([
   CAPABILITY_KIND.externalLibraryProvenance,
   CAPABILITY_KIND.files,
@@ -124,6 +129,12 @@ function stableFreshnessValue(value: unknown): unknown {
 
 function hasExternalLibrary(entity: EntityDetailPageEntity): boolean {
   return entity.capabilities.some((capability) => capability.kind === CAPABILITY_KIND.externalLibraryProvenance);
+}
+
+/** A connected manager request on this Entity can still advance, so its detail is probed faster. */
+function awaitsManagedRequest(entity: EntityDetailPageEntity): boolean {
+  return entity.capabilities.some((capability) => capability.kind === CAPABILITY_KIND.externalLibraryProvenance
+    && capability.request != null && isManagedRequestInFlight(capability.request.phase));
 }
 
 /**
@@ -276,6 +287,8 @@ export function useEntityDetailPage<T extends EntityDetailPageEntity>(
 
   onMount(() => {
     const intervalMs = options.freshness?.intervalMs ?? DEFAULT_FRESHNESS_INTERVAL_MS;
+    const activeIntervalMs = Math.min(intervalMs, ACTIVE_REQUEST_FRESHNESS_INTERVAL_MS);
+    let lastProbeAt = Date.now();
     const probe = options.freshness?.probe
       ?? ((entityId: string, context: EntityDetailPageLoadContext) => fetchEntity(entityId, {
         hideNsfw: context.nsfwMode !== "show",
@@ -288,6 +301,7 @@ export function useEntityDetailPage<T extends EntityDetailPageEntity>(
     const checkFreshness = async () => {
       const current = controller.entity;
       if (!current || reloading || controller.reloading || document.visibilityState !== "visible" || !hasExternalLibrary(current)) return;
+      lastProbeAt = Date.now();
       const sequence = ++probeSequence;
       probeAbortController?.abort();
       const abortController = new AbortController();
@@ -321,7 +335,13 @@ export function useEntityDetailPage<T extends EntityDetailPageEntity>(
       probeAbortController?.abort();
       probeAbortController = null;
     };
-    const timer = window.setInterval(() => void checkFreshness(), intervalMs);
+    // Ticks at the faster rate; an Entity without an in-flight manager request is probed only once its
+    // ordinary interval has elapsed since the last probe.
+    const timer = window.setInterval(() => {
+      const current = controller.entity;
+      const dueMs = current && awaitsManagedRequest(current) ? activeIntervalMs : intervalMs;
+      if (Date.now() - lastProbeAt >= dueMs) void checkFreshness();
+    }, activeIntervalMs);
     window.addEventListener("focus", onFocus);
     document.addEventListener("visibilitychange", onVisibilityChange);
     return () => {

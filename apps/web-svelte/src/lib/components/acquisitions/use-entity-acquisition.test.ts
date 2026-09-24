@@ -153,36 +153,26 @@ describe("useEntityAcquisition", () => {
     expect(mocks.commitEntityRequest).not.toHaveBeenCalled();
   });
 
-  it("reloads the entity when an active external request projection changes", async () => {
+  it("leaves an active external request to the detail page's freshness probe", async () => {
     vi.useFakeTimers();
     const onStatusChanged = vi.fn(async () => {});
-    const capability = externalLibraryCapability({
-      requestId: "request-1",
-      phase: MANAGED_REQUEST_PHASE.pendingCreation,
-      updatedAt: "2026-09-18T12:00:00Z",
-      problem: null,
-    });
-    mocks.fetchEntity.mockResolvedValue({
-      capabilities: [externalLibraryCapability({
-        requestId: "request-1",
-        phase: MANAGED_REQUEST_PHASE.awaitingFiles,
-        updatedAt: "2026-09-18T12:00:05Z",
-        problem: null,
-      })],
-    });
-
     render(Harness, {
       entityId: "movie-1",
-      capabilities: [capability],
+      capabilities: [externalLibraryCapability({
+        requestId: "request-1",
+        phase: MANAGED_REQUEST_PHASE.pendingCreation,
+        updatedAt: "2026-09-18T12:00:00Z",
+        problem: null,
+      })],
       onStatusChanged,
     });
 
-    await vi.advanceTimersByTimeAsync(5_000);
+    await vi.advanceTimersByTimeAsync(15_000);
 
-    expect(mocks.fetchEntity).toHaveBeenCalledWith("movie-1");
-    expect(onStatusChanged).toHaveBeenCalledOnce();
+    expect(mocks.fetchEntity).not.toHaveBeenCalled();
     expect(mocks.fetchAcquisitionForEntity).not.toHaveBeenCalled();
     expect(mocks.fetchAcquisitionSummariesForEntity).not.toHaveBeenCalled();
+    expect(onStatusChanged).not.toHaveBeenCalled();
   });
 
   it("refreshes only acquisition state after searching an existing entity", async () => {

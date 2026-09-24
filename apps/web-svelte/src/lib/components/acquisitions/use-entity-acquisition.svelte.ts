@@ -5,7 +5,6 @@ import type {
   MonitorView,
 } from "$lib/api/generated/model";
 import { canDeleteEntityFiles, firstExternalIdentity, getCapability, isWanted } from "$lib/api/capabilities";
-import { fetchEntity } from "$lib/api/entities";
 import {
   fetchAcquisitionForEntity,
   fetchAcquisitionSummariesForEntity,
@@ -21,7 +20,7 @@ import { commitEntityRequest, requestMissingChildren, syncContainerRequest } fro
 import type { EntityThumbnailCard } from "$lib/entities/entity-thumbnail";
 import { acquisitionStatusShouldPoll } from "$lib/requests/acquisition-status";
 import { acquisitionStatusDisplay } from "$lib/requests/acquisition-status-display";
-import { ACQUISITION_STATUS, CAPABILITY_KIND, MANAGED_REQUEST_PHASE } from "$lib/api/generated/codes";
+import { ACQUISITION_STATUS, CAPABILITY_KIND } from "$lib/api/generated/codes";
 import {
   monitorHasUnknownStatus,
   monitorIsActive,
@@ -296,32 +295,8 @@ export function useEntityAcquisition(options: UseEntityAcquisitionOptions): Enti
     return () => clearInterval(timer);
   });
 
-  // Provider fulfillment lives on the same Entity document. Its progress replaces native
-  // acquisition controls, and completing it refreshes this page into ordinary playback.
-  $effect(() => {
-    const id = options.entityId();
-    const request = externalLibrary?.request;
-    if (!id || !request || ![
-      MANAGED_REQUEST_PHASE.pendingCreation,
-      MANAGED_REQUEST_PHASE.creationUncertain,
-      MANAGED_REQUEST_PHASE.awaitingFiles,
-    ].some(phase => phase === request.phase)) return;
-    const previous = JSON.stringify(request);
-    let alive = true;
-    let busy = false;
-    const timer = setInterval(async () => {
-      if (busy) return;
-      busy = true;
-      try {
-        const next = await fetchEntity(id);
-        const nextRequest = getCapability(next.capabilities, CAPABILITY_KIND.externalLibraryProvenance)?.request;
-        if (alive && JSON.stringify(nextRequest) !== previous) await options.onStatusChanged?.();
-      } catch {
-        // Keep the last observed state through temporary provider or network failures.
-      } finally { busy = false; }
-    }, 5000);
-    return () => { alive = false; clearInterval(timer); };
-  });
+  // Provider fulfillment lives on the same Entity document. The detail page's freshness probe
+  // (useEntityDetailPage) follows an in-flight manager request and reloads the page when it advances.
 
   /** The shared Entity-level monitor control: not monitored → start; paused → resume; active → stop. */
   async function toggleMonitor(targeting: EntityMonitorTargeting = {}): Promise<void> {

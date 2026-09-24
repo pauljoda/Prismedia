@@ -391,8 +391,16 @@
     return tabs;
   });
 
+  // The shared acquisition controller already polls the Book's latest acquisition and reloads this
+  // page when its lifecycle changes, so its fresher row replaces ours and this poll covers only the
+  // other rendition's active acquisition.
+  const liveRenditionAcquisitions = $derived(bookRenditionAcquisitions.map((item) =>
+    item.summary.id === acq.acquisition?.summary.id ? acq.acquisition ?? item : item));
+
   $effect(() => {
-    if (!bookRenditionAcquisitions.some((item) => acquisitionStatusShouldPoll(item.summary.status))) return;
+    const watched = acq.acquisition?.summary.id;
+    if (!bookRenditionAcquisitions.some((item) =>
+      item.summary.id !== watched && acquisitionStatusShouldPoll(item.summary.status))) return;
     const timer = setInterval(() => void pollBookAcquisitionState().catch(() => {}), 5000);
     return () => clearInterval(timer);
   });
@@ -1105,7 +1113,7 @@
               ebook: hasReadableContent,
               audiobook: audiobookTracks.length > 0,
             }}
-            acquisitions={bookRenditionAcquisitions}
+            acquisitions={liveRenditionAcquisitions}
             monitors={bookRenditionMonitors}
             managedRenditions={card.externalLibraryProvenance?.bookRenditions ?? []}
             pendingManagerRenditions={acceptedManagerRenditions.bookId === book.id ? acceptedManagerRenditions.renditions : []}
@@ -1117,7 +1125,7 @@
           {#if session.isAdmin && (!hasReadableContent || audiobookTracks.length === 0)}
             <BookManagerRequest bookId={book.id} title={book.title}
               hasEbook={hasReadableContent} hasAudiobook={audiobookTracks.length > 0}
-              acquisitions={bookRenditionAcquisitions} monitors={bookRenditionMonitors}
+              acquisitions={liveRenditionAcquisitions} monitors={bookRenditionMonitors}
               managedRenditions={card.externalLibraryProvenance?.bookRenditions ?? []}
               onAccepted={rendition => {
                 const existing = acceptedManagerRenditions.bookId === book.id ? acceptedManagerRenditions.renditions : [];

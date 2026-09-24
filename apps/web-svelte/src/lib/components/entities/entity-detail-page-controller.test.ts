@@ -147,6 +147,32 @@ describe("useEntityDetailPage", () => {
     await waitFor(() => expect(load).toHaveBeenCalledTimes(2));
   });
 
+  it("probes an in-flight manager request every 5 seconds and settled external state every 15", async () => {
+    vi.useFakeTimers();
+    try {
+      const settled = externalEntity(MANAGED_REQUEST_PHASE.completed);
+      const settledProbe = vi.fn().mockResolvedValue(settled);
+      const settledView = render(EntityDetailPageControllerHarness, {
+        props: { load: vi.fn().mockResolvedValue(settled), freshnessProbe: settledProbe },
+      });
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(settledProbe).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(settledProbe).toHaveBeenCalledOnce();
+      settledView.unmount();
+
+      const inFlight = externalEntity(MANAGED_REQUEST_PHASE.awaitingFiles);
+      const inFlightProbe = vi.fn().mockResolvedValue(inFlight);
+      render(EntityDetailPageControllerHarness, {
+        props: { load: vi.fn().mockResolvedValue(inFlight), freshnessProbe: inFlightProbe },
+      });
+      await vi.advanceTimersByTimeAsync(5_000);
+      expect(inFlightProbe).toHaveBeenCalledOnce();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("keeps the hydrated route when a freshness probe fails", async () => {
     const load = vi.fn().mockResolvedValue(externalEntity());
     const probe = vi.fn().mockRejectedValue(new Error("Connection unavailable"));
