@@ -8,7 +8,13 @@ public sealed class ProviderLibraryService(
     IIntegrationConnectionStore connections,
     IntegrationConnectionAccess access,
     IIntegrationLibraryGateway gateway) {
+    #region Static Variables
+
     private const int MaximumLibrariesPerConnection = 1000;
+
+    #endregion
+
+    #region Actions - Queries
 
     /// <summary>Lists provider libraries for every configured connected-library instance.</summary>
     public async Task<IReadOnlyList<ProviderLibraryConnection>> ListAsync(CancellationToken cancellationToken) {
@@ -28,6 +34,7 @@ public sealed class ProviderLibraryService(
                 results.Add(new(connection.Id, connection.Name, connection.PluginId, [], error.Message));
             }
         }
+
         return results;
     }
 
@@ -51,11 +58,17 @@ public sealed class ProviderLibraryService(
                 .SelectMany(capability => capability.EntityKinds))
             .ToHashSet();
 
+    #endregion
+
+    #region Actions - Validation
+
     private static IReadOnlyList<ProviderLibraryDescriptor> Validate(
         ProviderLibraryCatalog? catalog,
         IReadOnlySet<EntityKind> supportedKinds) {
-        if (catalog?.Libraries is null || catalog.Libraries.Count > MaximumLibrariesPerConnection)
+        if (catalog?.Libraries is null || catalog.Libraries.Count > MaximumLibrariesPerConnection) {
             throw Invalid();
+        }
+
         var ids = new HashSet<string>(StringComparer.Ordinal);
         var paths = new HashSet<string>(StringComparer.Ordinal);
         foreach (var library in catalog.Libraries) {
@@ -64,13 +77,19 @@ public sealed class ProviderLibraryService(
                 || library.EntityKinds is not { Count: > 0 and <= 32 }
                 || library.EntityKinds.Distinct().Count() != library.EntityKinds.Count
                 || library.EntityKinds.Any(kind => !Enum.IsDefined(kind) || !supportedKinds.Contains(kind))
-                || !ManagementUrl(library.ManagementUrl)) throw Invalid();
+                || !ManagementUrl(library.ManagementUrl)) {
+                throw Invalid();
+            }
         }
+
         return catalog.Libraries.ToArray();
     }
 
     private static bool ManagementUrl(string? value) {
-        if (value is null) return true;
+        if (value is null) {
+            return true;
+        }
+
         return value.Length <= 8192 && !value.Any(character => char.IsControl(character) || char.IsWhiteSpace(character))
             && Uri.TryCreate(value, UriKind.Absolute, out var uri)
             && uri.Scheme is "http" or "https" && uri.Host.Length > 0 && uri.UserInfo.Length == 0;
@@ -81,4 +100,6 @@ public sealed class ProviderLibraryService(
 
     private static IntegrationInvocationException Invalid() =>
         new("The connected application returned an invalid or oversized library catalog.");
+
+    #endregion
 }

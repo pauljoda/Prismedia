@@ -4,6 +4,8 @@ namespace Prismedia.Application.Integrations;
 
 /// <summary>Reads one bounded, connection-aware view over retained fulfillment activity.</summary>
 public interface IRequestActivityReader {
+    #region Abstract Methods
+
     /// <summary>
     /// Returns a deterministic keyset page over current retained state without contacting configured integrations.
     /// A fresh first-page read is the refresh boundary when live state changes between page requests.
@@ -19,4 +21,6 @@ public interface IRequestActivityReader {
         int limit,
         bool hideNsfw,
         CancellationToken cancellationToken);
+
+    #endregion
 }

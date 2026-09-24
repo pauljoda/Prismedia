@@ -19,16 +19,22 @@ public sealed class ReviewedManagedRequestService(
     IManagedRequestStore requests,
     ManagedRequestService managedRequests,
     IReviewedManagedRequestCommitScope commitScope) {
+    #region Actions - Review
+
     /// <summary>Loads canonical metadata, current provider choices, and existing holding evidence without writing.</summary>
     public async Task<ReviewedManagedRequest> ReviewAsync(
         Guid connectionId,
         ReviewManagedRequestInput input,
         CancellationToken token) {
-        if (input?.Request is null) throw new RequestCommitValidationException("Submit a complete reviewed request.");
+        if (input?.Request is null) {
+            throw new RequestCommitValidationException("Submit a complete reviewed request.");
+        }
+
         var canonical = input.Request;
         if (input.ManagerDiscoveryRevision is { } discoveryRevision) {
             (_, canonical) = await discovery.CanonicalizeAsync(connectionId, discoveryRevision, canonical, token);
         }
+
         var plan = await Preparer(canonical.Kind).ReviewForManagerAsync(
             canonical,
             managerOrigin: input.ManagerDiscoveryRevision is not null,
@@ -63,47 +69,149 @@ public sealed class ReviewedManagedRequestService(
             expansion);
     }
 
+    private async Task<ManagedRequestExpansion?> ResolveExpansionAsync(
+        Guid connectionId,
+        Guid libraryRootId,
+        ManagedLookupInput work,
+        ManagedItemSnapshot? existing,
+        IReadOnlyList<ReviewedFulfillmentOwnership> existingFulfillments,
+        CancellationToken token) {
+        if (!ManagedFulfillmentPolicy.For(work.EntityKind).AccumulatesTargets) {
+            return null;
+        }
+
+        var holdings = (await tracking.ListAsync(connectionId, token))
+            .Where(holding => holding.Item.EntityKind == work.EntityKind
+                && holding.Status != ManagedTrackingStatus.Released
+                && work.ExternalIds.All(pair =>
+                    holding.Item.ExpectedExternalIds.GetValueOrDefault(pair.Key) == pair.Value))
+            .ToArray();
+        if (holdings.Length == 0) {
+            return null;
+        }
+
+        if (holdings.Length != 1) {
+            return null;
+        }
+
+        var holding = holdings[0];
+        if (!ManagedTrackingStatusDefinition.For(holding.Status).IsEstablished
+            || holding.LibraryRootId != libraryRootId
+            || existing is null || existing.Item.RemoteId != holding.Item.RemoteId) {
+            return null;
+        }
+
+        var ownerRequest = await requests.FindAsync(holding.Id, token);
+        if (ownerRequest is not null && (ownerRequest.Operation.State.ReviewRequired
+            || !ownerRequest.Operation.Phase.ProvidesHolding
+            || ownerRequest.Plan.ExistingHoldingId is not null)) {
+            return null;
+        }
+
+        if (existingFulfillments.Any(owner => owner.OwnerKind != FulfillmentOwnerKind.ExternalManager
+                || owner.ConnectionId != connectionId || owner.RequestId != holding.Id)) {
+            return null;
+        }
+
+        var selectedOwned = existingFulfillments
+            .SelectMany(owner => owner.TargetEntityIds ?? [])
+            .Distinct().Count();
+        var selectedCount = work.Targets?.Count ?? 0;
+        return new(
+            holding.Id,
+            holding.Targets.Select(target => target.EntityId).Distinct().ToArray(),
+            selectedOwned,
+            Math.Max(0, selectedCount - selectedOwned));
+    }
+
+    private static ExternalLibraryMount SelectMount(
+        IReadOnlyList<ExternalLibraryMount> mounts,
+        Guid? requestedRootId,
+        ManagedItemSnapshot? existing) {
+        if (requestedRootId is { } explicitRoot) {
+            return mounts.SingleOrDefault(mount => mount.LibraryRootId == explicitRoot)
+                ?? throw new ArgumentException("Choose an enabled library mapped to an accessible root on this connection.");
+        }
+
+        if (existing is not null) {
+            var containing = mounts
+                .Where(mount => RemoteLibraryPath.Parse(mount.RemotePath).IsAncestorOf(existing.Path))
+                .OrderByDescending(mount => mount.RemotePath.Length)
+                .FirstOrDefault();
+            if (containing is not null) {
+                return containing;
+            }
+        }
+
+        return mounts.FirstOrDefault()
+            ?? throw new ArgumentException("Map an accessible external library in Settings before requesting this work.");
+    }
+
+    #endregion
+
+    #region Actions - Commit
+
     /// <summary>Commits reviewed metadata and durable fulfillment ownership as one local transaction.</summary>
     public async Task<ReviewedManagedRequestCommitResponse> CommitAsync(
         Guid connectionId,
         CommitReviewedManagedRequestInput input,
         CancellationToken token) {
         ValidateCommitInput(input);
-        if (input.OperationId == Guid.Empty)
+        if (input.OperationId == Guid.Empty) {
             throw new ArgumentException("Supply a stable operation ID for this manager request.");
+        }
+
         var reviewedFingerprint = ReviewedManagedRequestIdentity.Fingerprint(connectionId, input);
-        if (await managedRequests.FindReviewedAsync(connectionId, input.OperationId, reviewedFingerprint, token) is { } replay)
+        if (await managedRequests.FindReviewedAsync(connectionId, input.OperationId, reviewedFingerprint, token) is { } replay) {
             return new(replay.EntityId, replay.TargetEntityIds, replay);
+        }
 
         var review = await ReviewAsync(
             connectionId,
             new(input.LibraryRootId, input.Request, input.ManagerDiscoveryRevision),
             token);
-        if (review.ConnectionRevision != input.ExpectedConnectionRevision)
+        if (review.ConnectionRevision != input.ExpectedConnectionRevision) {
             throw new ConnectionConflictException("The selected manager connection changed. Review its options again.");
+        }
+
         var policy = ManagedFulfillmentPolicy.For(review.Work.EntityKind);
-        if (policy.RequiredMonitoring is { } monitoring && input.Monitored != monitoring || policy.RequiresSearch && !input.Search)
+        if (policy.RequiredMonitoring is { } monitoring && input.Monitored != monitoring || policy.RequiresSearch && !input.Search) {
             throw new ArgumentException(policy.AppliesReviewedMonitoring
                 ? "This request must be monitored and search the reviewed work."
                 : "Selected targets are searched without turning on broad monitoring.");
-        if (ExistingSourceResponse(review, policy) is { } owned) return owned;
+        }
+
+        if (ExistingSourceResponse(review, policy) is { } owned) {
+            return owned;
+        }
+
         var expansion = review.Expansion;
-        if (expansion is null && review.ExistingFulfillments.Count != 0)
+        if (expansion is null && review.ExistingFulfillments.Count != 0) {
             throw new FulfillmentOwnershipConflictException();
-        if (!review.Options.Profiles.Any(profile => profile.Id == input.ProfileId))
+        }
+
+        if (!review.Options.Profiles.Any(profile => profile.Id == input.ProfileId)) {
             throw new ArgumentException("Choose an existing external profile.");
-        if (review.Existing is { } existing && existing.Item.ProfileId != input.ProfileId)
+        }
+
+        if (review.Existing is { } existing && existing.Item.ProfileId != input.ProfileId) {
             throw new ManagedRequestConflictException(
                 "This work already exists with another profile. Review and use its current profile before changing it through linked controls.");
+        }
+
         foreach (var operation in new[] {
                      IntegrationOperation.EnsureManaged,
                      IntegrationOperation.ReconcileManaged,
                      IntegrationOperation.ConfigureManaged
-                 })
+                 }) {
             await access.RequireAsync(connectionId, PluginCapability.ExternalManager, operation, review.Work.EntityKind, token);
-        if (input.Search)
+        }
+
+        if (input.Search) {
             await access.RequireAsync(connectionId, PluginCapability.ExternalManager,
                 IntegrationOperation.RequestManaged, review.Work.EntityKind, token);
+        }
+
         await access.RequireAsync(connectionId, PluginCapability.ConnectedLibrary,
             IntegrationOperation.GetLibraryItem, review.Work.EntityKind, token);
 
@@ -163,57 +271,14 @@ public sealed class ReviewedManagedRequestService(
             }, token);
     }
 
-    private IManagedWantedWorkPreparer Preparer(RequestMediaKind kind) =>
-        preparers.SingleOrDefault(preparer => preparer.Kind == kind)
-        ?? throw new RequestCommitValidationException("This kind of reviewed request cannot be fulfilled by a connected manager.");
-
-    private async Task<ManagedRequestExpansion?> ResolveExpansionAsync(
-        Guid connectionId,
-        Guid libraryRootId,
-        ManagedLookupInput work,
-        ManagedItemSnapshot? existing,
-        IReadOnlyList<ReviewedFulfillmentOwnership> existingFulfillments,
-        CancellationToken token) {
-        if (!ManagedFulfillmentPolicy.For(work.EntityKind).AccumulatesTargets) return null;
-        var holdings = (await tracking.ListAsync(connectionId, token))
-            .Where(holding => holding.Item.EntityKind == work.EntityKind
-                && holding.Status != ManagedTrackingStatus.Released
-                && work.ExternalIds.All(pair =>
-                    holding.Item.ExpectedExternalIds.GetValueOrDefault(pair.Key) == pair.Value))
-            .ToArray();
-        if (holdings.Length == 0) {
-            return null;
-        }
-        if (holdings.Length != 1) return null;
-        var holding = holdings[0];
-        if (!ManagedTrackingStatusDefinition.For(holding.Status).IsEstablished
-            || holding.LibraryRootId != libraryRootId
-            || existing is null || existing.Item.RemoteId != holding.Item.RemoteId)
-            return null;
-        var ownerRequest = await requests.FindAsync(holding.Id, token);
-        if (ownerRequest is not null && (ownerRequest.Operation.State.ReviewRequired
-            || !ownerRequest.Operation.Phase.ProvidesHolding
-            || ownerRequest.Plan.ExistingHoldingId is not null))
-            return null;
-        if (existingFulfillments.Any(owner => owner.OwnerKind != FulfillmentOwnerKind.ExternalManager
-                || owner.ConnectionId != connectionId || owner.RequestId != holding.Id))
-            return null;
-        var selectedOwned = existingFulfillments
-            .SelectMany(owner => owner.TargetEntityIds ?? [])
-            .Distinct().Count();
-        var selectedCount = work.Targets?.Count ?? 0;
-        return new(
-            holding.Id,
-            holding.Targets.Select(target => target.EntityId).Distinct().ToArray(),
-            selectedOwned,
-            Math.Max(0, selectedCount - selectedOwned));
-    }
-
     internal static void ValidateCommitInput(CommitReviewedManagedRequestInput? input) {
-        if (input?.Request is null)
+        if (input?.Request is null) {
             throw new RequestCommitValidationException("Submit a complete reviewed request.");
-        if (input.Request.SelectedProposalIds is null)
+        }
+
+        if (input.Request.SelectedProposalIds is null) {
             throw new RequestCommitValidationException("Submit the reviewed proposal selection.");
+        }
     }
 
     /// <summary>
@@ -225,9 +290,14 @@ public sealed class ReviewedManagedRequestService(
         var locallyOwned = review.ExistingFulfillments
             .Where(ownership => ownership.HasLocalSource)
             .ToArray();
-        if (!policy.AccumulatesTargets)
+        if (!policy.AccumulatesTargets) {
             return locallyOwned.Length != 0 ? new(locallyOwned[0].EntityId, TargetEntityIds: null, ManagedRequest: null) : null;
-        if (review.Work.Targets is null) return null;
+        }
+
+        if (review.Work.Targets is null) {
+            return null;
+        }
+
         var targetIds = locallyOwned
             .SelectMany(ownership => ownership.TargetEntityIds ?? [])
             .Distinct()
@@ -237,22 +307,13 @@ public sealed class ReviewedManagedRequestService(
             : null;
     }
 
-    private static ExternalLibraryMount SelectMount(
-        IReadOnlyList<ExternalLibraryMount> mounts,
-        Guid? requestedRootId,
-        ManagedItemSnapshot? existing) {
-        if (requestedRootId is { } explicitRoot) {
-            return mounts.SingleOrDefault(mount => mount.LibraryRootId == explicitRoot)
-                ?? throw new ArgumentException("Choose an enabled library mapped to an accessible root on this connection.");
-        }
-        if (existing is not null) {
-            var containing = mounts
-                .Where(mount => RemoteLibraryPath.Parse(mount.RemotePath).IsAncestorOf(existing.Path))
-                .OrderByDescending(mount => mount.RemotePath.Length)
-                .FirstOrDefault();
-            if (containing is not null) return containing;
-        }
-        return mounts.FirstOrDefault()
-            ?? throw new ArgumentException("Map an accessible external library in Settings before requesting this work.");
-    }
+    #endregion
+
+    #region Actions - Preparation
+
+    private IManagedWantedWorkPreparer Preparer(RequestMediaKind kind) =>
+        preparers.SingleOrDefault(preparer => preparer.Kind == kind)
+        ?? throw new RequestCommitValidationException("This kind of reviewed request cannot be fulfilled by a connected manager.");
+
+    #endregion
 }

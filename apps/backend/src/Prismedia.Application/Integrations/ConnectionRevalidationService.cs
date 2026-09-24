@@ -8,9 +8,21 @@ namespace Prismedia.Application.Integrations;
 public sealed class ConnectionRevalidationService(
     IServiceScopeFactory scopes,
     ILogger<ConnectionRevalidationService> logger) {
+    #region Static Variables
+
     private const int BatchSize = 8;
+
     private const int Parallelism = 2;
+
+    #endregion
+
+    #region Variables
+
     private Guid? lastVisitedId;
+
+    #endregion
+
+    #region Actions - Revalidation
 
     /// <summary>
     /// Tests a bounded batch through the ordinary connection probe workflow. Each probe owns its own
@@ -36,7 +48,9 @@ public sealed class ConnectionRevalidationService(
                 : candidates.Take(BatchSize).ToArray();
         }
 
-        if (pendingIds.Length > 0) lastVisitedId = pendingIds[^1];
+        if (pendingIds.Length > 0) {
+            lastVisitedId = pendingIds[^1];
+        }
 
         var ready = 0;
         var failed = 0;
@@ -50,12 +64,17 @@ public sealed class ConnectionRevalidationService(
                     var store = scope.ServiceProvider.GetRequiredService<IIntegrationConnectionStore>();
                     var current = await store.FindAsync(id, token);
                     if (current is null || !current.Connection.State.Enabled
-                        || current.Connection.State.Status != ConnectionStatus.Unverified)
+                        || current.Connection.State.Status != ConnectionStatus.Unverified) {
                         return;
+                    }
+
                     var result = await scope.ServiceProvider.GetRequiredService<ConnectionService>()
                         .ProbeAsync(id, token);
-                    if (result.Status == ConnectionStatus.Ready) Interlocked.Increment(ref ready);
-                    else Interlocked.Increment(ref failed);
+                    if (result.Status == ConnectionStatus.Ready) {
+                        Interlocked.Increment(ref ready);
+                    } else {
+                        Interlocked.Increment(ref failed);
+                    }
                 } catch (OperationCanceledException) when (token.IsCancellationRequested) {
                     throw;
                 } catch (Exception error) {
@@ -66,7 +85,6 @@ public sealed class ConnectionRevalidationService(
 
         return new(ready, failed, deferred, pendingCount > pendingIds.Length);
     }
-}
 
-/// <summary>Outcome of one bounded automatic connection-revalidation pass.</summary>
-public sealed record ConnectionRevalidationResult(int Ready, int Failed, int Deferred, bool MayHaveMore);
+    #endregion
+}

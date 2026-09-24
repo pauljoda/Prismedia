@@ -20,6 +20,8 @@ public sealed class ReviewedManagedBookRequestService(
     ManagedLibraryService library,
     ExternalLibraryService externalLibraries,
     ILogger<ReviewedManagedBookRequestService> logger) {
+    #region Actions - Review
+
     /// <summary>Checks each rendition's exact work identity and mapped library without persisting intent.</summary>
     public async Task<ReviewedManagedBookRequest> ReviewAsync(Guid connectionId,
         ReviewManagedBookRequestInput input, CancellationToken token) {
@@ -54,18 +56,27 @@ public sealed class ReviewedManagedBookRequestService(
                     preview.Options, preview.Existing));
             }
         }
+
         return new(authorized.Connection.State.Revision, title, reviewed);
     }
+
+    #endregion
+
+    #region Actions - Commit
 
     /// <summary>Ensures one Book, then accepts each format with a stable child operation and separate result.</summary>
     public async Task<CommitManagedBookRequestResponse> CommitAsync(Guid connectionId,
         CommitManagedBookRequestInput input, CancellationToken token) {
-        if (input.OperationId == Guid.Empty)
+        if (input.OperationId == Guid.Empty) {
             throw new ArgumentException("Supply a stable operation ID for this Book request.");
+        }
+
         var review = await ReviewAsync(connectionId,
             new(input.EntityId, input.Request, input.Renditions), token);
-        if (review.ConnectionRevision != input.ExpectedConnectionRevision)
+        if (review.ConnectionRevision != input.ExpectedConnectionRevision) {
             throw new ConnectionConflictException("The Book manager changed. Review its libraries again.");
+        }
+
         var entityId = input.EntityId ?? (await books.PrepareAsync(input.Request!, token)).EntityId;
         var results = new List<ManagedBookRenditionResult>(input.Renditions.Count);
         foreach (var choice in input.Renditions) {
@@ -81,12 +92,15 @@ public sealed class ReviewedManagedBookRequestService(
                     && ManagedRequestIdentity.SameWork(item.Plan.Request.ReviewedWork, renditionReview.Work))
                     .ToArray();
                 if (retained.Length > 0) {
-                    if (retained.Length != 1 || retained[0].Operation.State.LibraryRootId != choice.LibraryRootId)
+                    if (retained.Length != 1 || retained[0].Operation.State.LibraryRootId != choice.LibraryRootId) {
                         throw new ManagedRequestConflictException(
                             "This format already has a manager request in another mapped library.");
+                    }
+
                     results.Add(new(choice.Rendition, ManagedRequestService.Map(retained[0])));
                     continue;
                 }
+
                 var accepted = await commitScope.ExecuteAsync(connectionId,
                     input.ExpectedConnectionRevision,
                     ct => requests.CreateAsync(connectionId, create, ct), token);
@@ -100,23 +114,8 @@ public sealed class ReviewedManagedBookRequestService(
                     "This format was not accepted. Review its manager and mapped library, then retry this request."));
             }
         }
+
         return new(entityId, results);
-    }
-
-    internal static void Validate(Guid? entityId, ReviewedRequestCommitRequest? request,
-        IReadOnlyList<ManagedBookRenditionChoice>? renditions) {
-        if ((entityId is { } id && id != Guid.Empty) == (request is not null)
-            || renditions is null || renditions.Count is < 1 or > 2
-            || renditions.Any(choice => !Enum.IsDefined(choice.Rendition) || choice.LibraryRootId == Guid.Empty)
-            || renditions.Select(choice => choice.Rendition).Distinct().Count() != renditions.Count)
-            throw new ArgumentException("Choose one Book work and each requested format once with a mapped library.");
-        if (request is not null) ReviewedWantedBookService.ReviewWork(request);
-    }
-
-    private static void ValidateRoot(ManagerOptions options, ExternalLibraryMount mount) {
-        if (!options.Roots.Any(root => root.Id == mount.RemoteRootId && root.Path == mount.RemotePath
-            && root.Accessible != false))
-            throw new ArgumentException("The mapped Book library changed or became inaccessible. Review its connection.");
     }
 
     private static Guid OperationId(Guid parent, BookRendition rendition) {
@@ -125,4 +124,31 @@ public sealed class ReviewedManagedBookRequestService(
         seed[16] = checked((byte)rendition);
         return new Guid(SHA256.HashData(seed).AsSpan(0, 16));
     }
+
+    #endregion
+
+    #region Actions - Validation
+
+    internal static void Validate(Guid? entityId, ReviewedRequestCommitRequest? request,
+        IReadOnlyList<ManagedBookRenditionChoice>? renditions) {
+        if ((entityId is { } id && id != Guid.Empty) == (request is not null)
+            || renditions is null || renditions.Count is < 1 or > 2
+            || renditions.Any(choice => !Enum.IsDefined(choice.Rendition) || choice.LibraryRootId == Guid.Empty)
+            || renditions.Select(choice => choice.Rendition).Distinct().Count() != renditions.Count) {
+            throw new ArgumentException("Choose one Book work and each requested format once with a mapped library.");
+        }
+
+        if (request is not null) {
+            ReviewedWantedBookService.ReviewWork(request);
+        }
+    }
+
+    private static void ValidateRoot(ManagerOptions options, ExternalLibraryMount mount) {
+        if (!options.Roots.Any(root => root.Id == mount.RemoteRootId && root.Path == mount.RemotePath
+            && root.Accessible != false)) {
+            throw new ArgumentException("The mapped Book library changed or became inaccessible. Review its connection.");
+        }
+    }
+
+    #endregion
 }

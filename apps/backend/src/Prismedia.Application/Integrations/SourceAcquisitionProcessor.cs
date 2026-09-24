@@ -7,18 +7,28 @@ namespace Prismedia.Application.Integrations;
 /// <summary>Recovers exact source preparation before handing ready content to the direct verified import pipeline.</summary>
 public sealed class SourceAcquisitionProcessor(IIntegrationTransferStore store, IntegrationConnectionAccess access,
     IIntegrationSourceAcquisitionGateway gateway, SourceTransferProcessor sourceTransfers) {
+    #region Actions - Processing
+
     /// <summary>Observes before every idempotent request dispatch and persists every readiness boundary.</summary>
     public async Task ProcessAsync(Guid operationId, JobContext context, CancellationToken cancellationToken) {
         var work = await store.FindAsync(operationId, cancellationToken) ?? throw new IntegrationTransferNotFoundException();
         var transfer = work.Transfer;
-        if (transfer.Phase.IsTerminal) return;
+        if (transfer.Phase.IsTerminal) {
+            return;
+        }
+
         if (!transfer.Mode.PreparesAtSource || work.Plan.Source is not { } source
-            || source.Publication is null || source.Offer is null)
+            || source.Publication is null || source.Offer is null) {
             throw new InvalidOperationException("This processor requires an accepted exact source request.");
+        }
+
         var revision = transfer.State.Revision;
 
         async Task PersistAsync(string? error = null) {
-            if (transfer.State.Revision == revision) return;
+            if (transfer.State.Revision == revision) {
+                return;
+            }
+
             await store.SaveAsync(transfer, revision, error, cancellationToken);
             revision = transfer.State.Revision;
         }
@@ -48,14 +58,22 @@ public sealed class SourceAcquisitionProcessor(IIntegrationTransferStore store, 
                 }
 
                 // Failed source work is source-owned. An explicit retry checks again without claiming to requeue it remotely.
-                if (transfer.State.Phase == IntegrationTransferPhase.NeedsReview) return;
-                if (transfer.State.Phase != IntegrationTransferPhase.Transferring)
-                    throw new JobRetryLaterException("Waiting for the source to prepare the selected publication.", PollDelay(observation.NextPollAfter));
+                if (transfer.State.Phase == IntegrationTransferPhase.NeedsReview) {
+                    return;
+                }
+
+                if (transfer.State.Phase != IntegrationTransferPhase.Transferring) {
+                    throw new JobRetryLaterException("Waiting for the source to prepare the selected publication.",
+                        PollDelay(observation.NextPollAfter));
+                }
             }
-        } catch (JobRetryLaterException) { throw; }
-        catch (OperationCanceledException) { throw; }
-        catch (IntegrationTransferConflictException) { throw; }
-        catch (Exception error) when (error is IntegrationInvocationException or ConnectionNotFoundException
+        } catch (JobRetryLaterException) {
+            throw;
+        } catch (OperationCanceledException) {
+            throw;
+        } catch (IntegrationTransferConflictException) {
+            throw;
+        } catch (Exception error) when (error is IntegrationInvocationException or ConnectionNotFoundException
             or ConnectionSecretUnavailableException or ConnectionCapabilityUnavailableException) {
             const string message = "Source preparation could not be confirmed. The exact accepted request is retained and will be observed again before retrying.";
             await store.RecordErrorAsync(operationId, revision, message, cancellationToken);
@@ -64,8 +82,9 @@ public sealed class SourceAcquisitionProcessor(IIntegrationTransferStore store, 
 
         // Preparation ends at the persisted Ready/Transferring boundary. Resolution, verified byte
         // transfer, and local import own their failures and revision after this delegation begins.
-        if (transfer.Phase.VerifiesBytes)
+        if (transfer.Phase.VerifiesBytes) {
             await sourceTransfers.ProcessAsync(operationId, context, cancellationToken);
+        }
     }
 
     private static Task ReportAsync(Prismedia.Contracts.Integrations.SourceAcquisitionObservation observation,
@@ -79,4 +98,6 @@ public sealed class SourceAcquisitionProcessor(IIntegrationTransferStore store, 
 
     private static TimeSpan PollDelay(DateTimeOffset? nextPollAfter) =>
         TimeSpan.FromSeconds(Math.Clamp((nextPollAfter - DateTimeOffset.UtcNow)?.TotalSeconds ?? 15, 5, 3600));
+
+    #endregion
 }

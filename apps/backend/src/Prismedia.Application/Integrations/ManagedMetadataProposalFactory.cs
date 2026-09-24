@@ -8,7 +8,13 @@ namespace Prismedia.Application.Integrations;
 
 /// <summary>Projects validated manager metadata into Prismedia's provider-neutral proposal shape.</summary>
 public static class ManagedMetadataProposalFactory {
+    #region Static Variables
+
     private const string MatchReason = "Connected catalog";
+
+    #endregion
+
+    #region Actions - Projection
 
     /// <summary>
     /// Builds a root proposal and its distinct people relationships from an exact manager candidate.
@@ -31,9 +37,11 @@ public static class ManagedMetadataProposalFactory {
         if (metadata?.PosterUrl is { } poster) {
             images.Add(new(MediaImageKind.Poster.ToCode(), poster, pluginId, null, null, null, null));
         }
+
         if (metadata?.BackdropUrl is { } backdrop) {
             images.Add(new(MediaImageKind.Backdrop.ToCode(), backdrop, pluginId, null, null, null, null));
         }
+
         var credits = (metadata?.Credits ?? [])
             .Select(credit => new CreditPatch(
                 credit.Name,
@@ -118,8 +126,13 @@ public static class ManagedMetadataProposalFactory {
                 Candidates: [],
                 Relationships: []));
         }
+
         return relationships;
     }
+
+    #endregion
+
+    #region Actions - Identity
 
     private static bool TryCanonicalTmdbPersonId(
         IReadOnlyDictionary<string, string> values,
@@ -131,6 +144,7 @@ public static class ManagedMetadataProposalFactory {
             tmdb = value;
             return true;
         }
+
         tmdb = string.Empty;
         return false;
     }
@@ -143,14 +157,17 @@ public static class ManagedMetadataProposalFactory {
             && CanonicalNumericId(tmdb)) {
             return new(ExternalIdProviders.Tmdb, tmdb);
         }
+
         if (kind == EntityKind.VideoSeries) {
             if (externalIds.TryGetValue(ExternalIdProviders.Tmdb, out tmdb) && CanonicalNumericId(tmdb)) {
                 return new(ExternalIdProviders.Tmdb, tmdb);
             }
+
             if (externalIds.TryGetValue(ExternalIdProviders.Tvdb, out var tvdb) && CanonicalNumericId(tvdb)) {
                 return new(ExternalIdProviders.Tvdb, tvdb);
             }
         }
+
         throw new ArgumentException("The manager candidate has no canonical movie or series identity.");
     }
 
@@ -158,4 +175,6 @@ public static class ManagedMetadataProposalFactory {
         int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out var id)
         && id > 0
         && id.ToString(CultureInfo.InvariantCulture) == value;
+
+    #endregion
 }

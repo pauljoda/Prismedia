@@ -5,11 +5,10 @@ using Prismedia.Domain.Integrations;
 
 namespace Prismedia.Application.Integrations;
 
-/// <summary>Authorized connection context for a specific declared operation, populated only immediately before invocation.</summary>
-public sealed record AuthorizedIntegrationConnection(IntegrationConnection Connection, PluginManifest Manifest, IntegrationConnectionContext Context);
-
 /// <summary>Rechecks current package authority, connection health, and credentials for every non-probe invocation.</summary>
 public sealed class IntegrationConnectionAccess(IIntegrationConnectionStore store, IIntegrationPluginGateway plugins) {
+    #region Actions - Authorization
+
     /// <summary>Loads credentials after verifying an operation that applies to the connection's declared kind set.</summary>
     public async Task<AuthorizedIntegrationConnection> RequireAsync(Guid id, PluginCapability capability,
         IntegrationOperation operation, CancellationToken cancellationToken) {
@@ -20,8 +19,10 @@ public sealed class IntegrationConnectionAccess(IIntegrationConnectionStore stor
             && connection.State.EffectiveCapabilities.Any(support => support.Kind == capability && support.Operations.Contains(operation));
         var packaged = manifest.Integration?.Capabilities.Any(support => support.Kind == capability
             && support.Operations.Contains(operation) && support.EntityKinds.Count > 0) == true;
-        if (!negotiated || !packaged || !PluginCapabilityDefinition.For(capability).Allows(operation))
+        if (!negotiated || !packaged || !PluginCapabilityDefinition.For(capability).Allows(operation)) {
             throw new ConnectionCapabilityUnavailableException();
+        }
+
         var auth = IntegrationCredentialScope.ForManifest(manifest,
             await store.ReadSecretsAsync(id, manifest.Auth.Select(field => field.Key).ToArray(), cancellationToken));
         return new(connection, manifest, new(id, connection.State.BaseUrl,
@@ -36,15 +37,15 @@ public sealed class IntegrationConnectionAccess(IIntegrationConnectionStore stor
             ?? throw new IntegrationInvocationException("The integration plugin is unavailable or disabled.");
         if (!connection.Allows(capability, operation, kind) || !PluginCapabilityDefinition.For(capability).Allows(operation)
             || manifest.Integration?.Capabilities.Any(support => support.Kind == capability
-                && support.Operations.Contains(operation) && support.EntityKinds.Contains(kind)) != true)
+                && support.Operations.Contains(operation) && support.EntityKinds.Contains(kind)) != true) {
             throw new ConnectionCapabilityUnavailableException();
+        }
+
         var auth = IntegrationCredentialScope.ForManifest(manifest,
             await store.ReadSecretsAsync(id, manifest.Auth.Select(field => field.Key).ToArray(), cancellationToken));
         return new(connection, manifest, new(id, connection.State.BaseUrl,
             connection.State.HasPersistentRemoteIdentity ? connection.State.RemoteInstanceId : null, connection.State.Settings, auth));
     }
-}
 
-/// <summary>Current connection configuration has not authorized this operation; retained intent may be retried after configuration recovers.</summary>
-public sealed class ConnectionCapabilityUnavailableException() : ArgumentException(
-    "This connection does not currently support the requested operation. Check its status and enabled capabilities in Settings.");
+    #endregion
+}

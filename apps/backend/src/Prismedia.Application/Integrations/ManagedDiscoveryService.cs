@@ -18,7 +18,14 @@ public sealed class ManagedDiscoveryService(
     IPluginIdentityRouter identityRouter,
     IPluginRequestReviewSource metadataReviews,
     IIdentifyProviderService identifyProviders) {
+    #region Static Variables
+
     private const int MaximumCredits = 1000;
+
+    #endregion
+
+    #region Actions - Discovery
+
     /// <summary>Returns bounded manager candidates with server-selected persistent identities.</summary>
     public async Task<ManagedDiscoverySearchResponse> SearchAsync(
         Guid connectionId,
@@ -32,18 +39,28 @@ public sealed class ManagedDiscoveryService(
             input.EntityKind,
             token);
         var page = await discovery.DiscoverAsync(connection.Manifest.Id, connection.Context, input, token);
-        if (page?.Items is null || page.Items.Count > input.Limit) throw InvalidEvidence();
+        if (page?.Items is null || page.Items.Count > input.Limit) {
+            throw InvalidEvidence();
+        }
 
         var results = new List<ManagedDiscoverySearchResult>(page.Items.Count);
         var identities = new HashSet<ExternalIdentity>();
         foreach (var candidate in page.Items) {
             ValidateCandidate(candidate, input.EntityKind);
             var identity = CanonicalIdentity(candidate.EntityKind, candidate.ExternalIds);
-            if (!identities.Add(identity)) throw InvalidEvidence();
+            if (!identities.Add(identity)) {
+                throw InvalidEvidence();
+            }
+
             results.Add(new(candidate.EntityKind, candidate.Title, candidate.Year, identity, candidate.Metadata));
         }
+
         return new(results);
     }
+
+    #endregion
+
+    #region Actions - Review
 
     /// <summary>Builds the shared metadata review shape from a fresh exact manager lookup.</summary>
     public async Task<ManagedDiscoveryReviewResponse> ReviewAsync(
@@ -60,7 +77,10 @@ public sealed class ManagedDiscoveryService(
         long expectedRevision,
         ReviewedRequestCommitRequest request,
         CancellationToken token) {
-        if (request is null) throw new RequestCommitValidationException("Submit the reviewed manager movie.");
+        if (request is null) {
+            throw new RequestCommitValidationException("Submit the reviewed manager movie.");
+        }
+
         var kind = request.Kind switch {
             RequestMediaKind.Movie => EntityKind.Movie,
             RequestMediaKind.Series => EntityKind.VideoSeries,
@@ -72,16 +92,24 @@ public sealed class ManagedDiscoveryService(
             kind == EntityKind.VideoSeries ? ManagerSeriesIdentity(request) : request.RootExternalIdentity,
             request.PluginId,
             token);
-        if (connection.Connection.State.Revision != expectedRevision)
+        if (connection.Connection.State.Revision != expectedRevision) {
             throw new ConnectionConflictException("The selected manager connection changed. Review the title again.");
+        }
+
         if (kind == EntityKind.Movie
-            && !string.Equals(request.PluginId, connection.Manifest.Id, StringComparison.OrdinalIgnoreCase))
+            && !string.Equals(request.PluginId, connection.Manifest.Id, StringComparison.OrdinalIgnoreCase)) {
             throw new RequestCommitValidationException("The reviewed title belongs to another manager connection.");
-        if (kind == EntityKind.VideoSeries && request.RootExternalIdentity != review.ExternalIdentity)
+        }
+
+        if (kind == EntityKind.VideoSeries && request.RootExternalIdentity != review.ExternalIdentity) {
             throw new RequestCommitValidationException(
                 "The reviewed metadata series no longer matches the exact Sonarr TVDB identity.");
-        if (!string.Equals(request.ProposalRevision, review.Revision, StringComparison.Ordinal))
+        }
+
+        if (!string.Equals(request.ProposalRevision, review.Revision, StringComparison.Ordinal)) {
             throw new RequestProposalChangedException();
+        }
+
         return (connection.Connection.State.Revision, request with { Review = review });
     }
 
@@ -97,26 +125,38 @@ public sealed class ManagedDiscoveryService(
         Guid connectionId,
         PrepareManagedDiscoveryRequest input,
         CancellationToken token) {
-        if (input?.Request is null) throw new RequestCommitValidationException("Submit the reviewed manager movie.");
+        if (input?.Request is null) {
+            throw new RequestCommitValidationException("Submit the reviewed manager movie.");
+        }
+
         var request = input.Request;
         var (connection, review, _) = await ResolveReviewAsync(connectionId, EntityKind.Movie, request.RootExternalIdentity, null, token);
-        if (connection.Connection.State.Revision != input.ConnectionRevision)
+        if (connection.Connection.State.Revision != input.ConnectionRevision) {
             throw new ConnectionConflictException("The selected manager connection changed. Review the movie again.");
-        if (!string.Equals(request.PluginId, connection.Manifest.Id, StringComparison.OrdinalIgnoreCase))
+        }
+
+        if (!string.Equals(request.PluginId, connection.Manifest.Id, StringComparison.OrdinalIgnoreCase)) {
             throw new RequestCommitValidationException("The reviewed movie belongs to another manager connection.");
-        if (!string.Equals(request.ProposalRevision, review.Revision, StringComparison.Ordinal))
+        }
+
+        if (!string.Equals(request.ProposalRevision, review.Revision, StringComparison.Ordinal)) {
             throw new RequestProposalChangedException();
+        }
+
         return await wanted.PrepareFromManagerAsync(request, review, token);
     }
 
-    private async Task<(AuthorizedIntegrationConnection Connection, RequestReviewResponse Review, ManagedDiscoveryMetadata? Metadata)> ResolveReviewAsync(
+    private async Task<(AuthorizedIntegrationConnection Connection, RequestReviewResponse Review,
+        ManagedDiscoveryMetadata? Metadata)> ResolveReviewAsync(
         Guid connectionId,
         EntityKind kind,
         ExternalIdentity identity,
         string? expectedReviewPluginId,
         CancellationToken token) {
-        if (!SupportedDiscoveryIdentity(kind, identity))
+        if (!SupportedDiscoveryIdentity(kind, identity)) {
             throw new ArgumentException("Select a manager-discovered movie or series with its canonical identity.");
+        }
+
         var discoveryConnection = await access.RequireAsync(
             connectionId,
             PluginCapability.ExternalManager,
@@ -129,8 +169,10 @@ public sealed class ManagedDiscoveryService(
             IntegrationOperation.LookupManaged,
             kind,
             token);
-        if (discoveryConnection.Connection.State.Revision != connection.Connection.State.Revision)
+        if (discoveryConnection.Connection.State.Revision != connection.Connection.State.Revision) {
             throw new ConnectionConflictException("The selected manager connection changed. Review the title again.");
+        }
+
         var work = new ManagedLookupInput(kind, new Dictionary<string, string> { [identity.Namespace] = identity.Value });
         var result = await lookup.LookupAsync(connection.Manifest.Id, connection.Context, work, token);
         ManagedCreationEvidence.ValidateLookup(work, result);
@@ -140,6 +182,7 @@ public sealed class ManagedDiscoveryService(
             var seriesReview = await ResolveSeriesReviewAsync(result.Candidate, expectedReviewPluginId, token);
             return (connection, seriesReview, result.Candidate.Metadata);
         }
+
         var proposal = ManagedMetadataProposalFactory.Create(
             connectionId,
             connection.Manifest.Id,
@@ -184,8 +227,11 @@ public sealed class ManagedDiscoveryService(
                 new(RequestMediaKind.Series, route.PluginId, route.Identity),
                 hideNsfw: false,
                 token);
-            if (ValidSeriesReview(review, route, candidate)) return MergeManagerSeriesIdentity(review!, candidate);
+            if (ValidSeriesReview(review, route, candidate)) {
+                return MergeManagerSeriesIdentity(review!, candidate);
+            }
         }
+
         throw new RequestCommitValidationException(
             "No enabled metadata provider can review this manager series with its confirmed TVDB or TMDB identity.");
     }
@@ -196,7 +242,10 @@ public sealed class ManagedDiscoveryService(
         ManagedCandidate candidate) {
         if (review is null || review.Kind != RequestMediaKind.Series || review.EntityKind != EntityKind.VideoSeries
             || review.Proposal.TargetKind != EntityKind.VideoSeries || review.ExternalIdentity != route.Identity
-            || !string.Equals(review.PluginId, route.PluginId, StringComparison.OrdinalIgnoreCase)) return false;
+            || !string.Equals(review.PluginId, route.PluginId, StringComparison.OrdinalIgnoreCase)) {
+            return false;
+        }
+
         return candidate.ExternalIds.GetValueOrDefault(route.Identity.Namespace) == route.Identity.Value
             && review.Proposal.Patch.ExternalIds.GetValueOrDefault(route.Identity.Namespace) == route.Identity.Value;
     }
@@ -207,25 +256,37 @@ public sealed class ManagedDiscoveryService(
         var externalIds = review.Proposal.Patch.ExternalIds.ToDictionary(StringComparer.Ordinal);
         foreach (var pair in candidate.ExternalIds.Where(pair =>
                      pair.Key is ExternalIdProviders.Tvdb or ExternalIdProviders.Tmdb or ExternalIdProviders.Imdb)) {
-            if (externalIds.TryGetValue(pair.Key, out var value) && value != pair.Value) throw InvalidEvidence();
+            if (externalIds.TryGetValue(pair.Key, out var value) && value != pair.Value) {
+                throw InvalidEvidence();
+            }
+
             externalIds[pair.Key] = pair.Value;
         }
+
         var proposal = review.Proposal with {
             Patch = review.Proposal.Patch with { ExternalIds = externalIds }
         };
         return review with { Proposal = proposal, Revision = RequestProposalRevision.Compute(proposal) };
     }
 
+    #endregion
+
+    #region Actions - Validation
+
     private static void ValidateSearch(ManagedDiscoveryQuery input) {
-        if (input is null || input.EntityKind is not (EntityKind.Movie or EntityKind.VideoSeries or EntityKind.ComicSeries) || string.IsNullOrWhiteSpace(input.Query)
-            || input.Query.Length > 512 || input.Query.Any(char.IsControl) || input.Limit is < 1 or > 100)
+        if (input is null || input.EntityKind is not (EntityKind.Movie or EntityKind.VideoSeries or EntityKind.ComicSeries)
+            || string.IsNullOrWhiteSpace(input.Query)
+            || input.Query.Length > 512 || input.Query.Any(char.IsControl) || input.Limit is < 1 or > 100) {
             throw new ArgumentException("Enter a title up to 512 characters and a result limit from 1 to 100.");
+        }
     }
 
     private static void ValidateCandidate(ManagedDiscoveryCandidate candidate, EntityKind kind) {
         if (candidate is null || candidate.EntityKind != kind || !Text(candidate.Title, 512)
-            || candidate.Year is < 0 or > 9999 || !Identities(candidate.ExternalIds) || !ValidMetadata(candidate.Metadata))
+            || candidate.Year is < 0 or > 9999 || !Identities(candidate.ExternalIds) || !ValidMetadata(candidate.Metadata)) {
             throw InvalidEvidence();
+        }
+
         _ = CanonicalIdentity(kind, candidate.ExternalIds);
     }
 
@@ -262,6 +323,7 @@ public sealed class ManagedDiscoveryService(
             tmdb = value;
             return true;
         }
+
         tmdb = string.Empty;
         return false;
     }
@@ -282,17 +344,33 @@ public sealed class ManagedDiscoveryService(
 
     private static bool Identities(IReadOnlyDictionary<string, string>? values) => values is { Count: > 0 and <= 64 }
         && values.All(pair => Text(pair.Key, 128) && Text(pair.Value, 2048));
+
     private static bool OptionalList(IReadOnlyList<string>? values, int count, int length) => values is null
-        || values.Count <= count && values.All(value => Text(value, length)) && values.Distinct(StringComparer.Ordinal).Count() == values.Count;
-    private static bool OptionalDictionary(IReadOnlyDictionary<string, string>? values, int count, int keyLength, int valueLength) => values is null
+        || values.Count <= count && values.All(value => Text(value, length))
+            && values.Distinct(StringComparer.Ordinal).Count() == values.Count;
+
+    private static bool OptionalDictionary(IReadOnlyDictionary<string, string>? values, int count, int keyLength,
+        int valueLength) => values is null
         || values.Count <= count && values.All(pair => Text(pair.Key, keyLength) && Text(pair.Value, valueLength));
+
     private static bool OptionalText(string? value, int limit) => value is null || Text(value, limit);
-    private static bool OptionalBlock(string? value, int limit) => value is null || !string.IsNullOrWhiteSpace(value) && value.Length <= limit
-        && !value.Any(character => char.IsControl(character) && character is not ('\r' or '\n' or '\t'));
-    private static bool Text(string? value, int limit) => !string.IsNullOrWhiteSpace(value) && value.Length <= limit && !value.Any(char.IsControl);
+
+    private static bool OptionalBlock(string? value, int limit) => value is null
+        || !string.IsNullOrWhiteSpace(value) && value.Length <= limit
+        &&!value.Any(character => char.IsControl(character) && character is not ('\r' or '\n' or '\t'));
+
+    private static bool Text(string? value, int limit) =>
+        !string.IsNullOrWhiteSpace(value) && value.Length <= limit && !value.Any(char.IsControl);
+
     private static bool SafeImageUrl(string value) => SafeUrl(value) && !new Uri(value).IsLoopback;
-    private static bool SafeUrl(string value) => value.Length <= 8192 && !value.Any(character => char.IsWhiteSpace(character) || char.IsControl(character) || character == '\\')
+
+    private static bool SafeUrl(string value) => value.Length <= 8192
+        && !value.Any(character => char.IsWhiteSpace(character) || char.IsControl(character) || character == '\\')
         && Uri.TryCreate(value, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https" && uri.Host.Length > 0
         && uri.UserInfo.Length == 0 && uri.Fragment.Length == 0;
-    private static IntegrationInvocationException InvalidEvidence() => new("The manager returned invalid, oversized, or mismatched discovery evidence.");
+
+    private static IntegrationInvocationException InvalidEvidence() =>
+        new("The manager returned invalid, oversized, or mismatched discovery evidence.");
+
+    #endregion
 }
