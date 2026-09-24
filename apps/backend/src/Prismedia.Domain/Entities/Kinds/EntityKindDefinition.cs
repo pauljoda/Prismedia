@@ -213,6 +213,13 @@ public abstract class EntityKindDefinition {
     public virtual JobType? ImportScanJobType => AcquisitionProfile?.ImportScanJobType;
 
     /// <summary>
+    /// Library-root scan capability this kind's own files land in: its acquisition profile's, or its import
+    /// policy's for kinds imported only from connected sources. Null when the kind owns no files of its own.
+    /// </summary>
+    public LibraryRootMediaCapability? LibraryRootCapability =>
+        AcquisitionProfile?.LibraryRootMediaCapability ?? (this as IIntegrationImportKindDefinition)?.IntegrationImport.RootCapability;
+
+    /// <summary>
     /// Search-context contribution made when this kind is encountered as an ancestor of a graph-backed
     /// acquisition. Definitions own the meaning so request traversal never maintains a parallel kind list.
     /// </summary>

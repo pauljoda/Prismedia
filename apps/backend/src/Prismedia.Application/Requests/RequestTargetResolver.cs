@@ -39,7 +39,7 @@ public sealed class RequestTargetResolver(
                 root.Enabled && !root.IsReadOnly &&
                 allowedRootIds.Contains(root.Id) &&
                 (!hideNsfw || !root.IsNsfw) &&
-                Supports(root, profilePolicy.LibraryRootMediaCapability))
+                root.Scans(profilePolicy.LibraryRootMediaCapability))
             .OrderBy(root => root.Label, StringComparer.OrdinalIgnoreCase)
             .ToArray();
 
@@ -68,12 +68,4 @@ public sealed class RequestTargetResolver(
         return new AcquisitionTargeting(chosenRoot.Id, chosenProfile?.Id);
     }
 
-    private static bool Supports(LibraryRoot root, LibraryRootMediaCapability capability) =>
-        capability switch {
-            LibraryRootMediaCapability.ScanBooks => root.ScanBooks,
-            LibraryRootMediaCapability.ScanVideos => root.ScanVideos,
-            LibraryRootMediaCapability.ScanAudio => root.ScanAudio,
-            LibraryRootMediaCapability.ScanImages => root.ScanImages,
-            _ => false
-        };
 }

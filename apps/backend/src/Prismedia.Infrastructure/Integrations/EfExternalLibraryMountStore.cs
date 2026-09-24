@@ -64,11 +64,20 @@ public sealed class EfExternalLibraryMountStore(PrismediaDbContext db, ExternalL
         try { using var entries = Directory.EnumerateFileSystemEntries(local).GetEnumerator(); _ = entries.MoveNext(); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException) { throw new ArgumentException("The local library folder cannot be read."); }
         var now = DateTimeOffset.UtcNow;
-        var root = new LibraryRootRow { Id = Guid.NewGuid(), Path = local, Label = request.Label.Trim(), Enabled = false, Recursive = true,
-            ScanVideos = request.EntityKind is EntityKind.Movie or EntityKind.VideoSeries, ScanBooks = request.EntityKind is EntityKind.Book or EntityKind.ComicSeries,
-            ScanImages = request.EntityKind is EntityKind.Image or EntityKind.Gallery, ScanAudio = request.EntityKind is EntityKind.AudioLibrary,
-            AutoIdentify = false, IsNsfw = request.IsNsfw, CreatedAt = now, UpdatedAt = now };
-        if (!root.ScanVideos && !root.ScanBooks && !root.ScanImages && !root.ScanAudio) throw new ArgumentException("This media kind does not yet support mapped library scans.");
+        var capability = EntityKindRegistry.Describe(request.EntityKind).LibraryRootCapability
+            ?? throw new ArgumentException("This media kind does not yet support mapped library scans.");
+        var root = new LibraryRootRow {
+            Id = Guid.NewGuid(),
+            Path = local,
+            Label = request.Label.Trim(),
+            Enabled = false,
+            Recursive = true,
+            AutoIdentify = false,
+            IsNsfw = request.IsNsfw,
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+        root.ScanOnly(capability);
         var mount = new ExternalLibraryMountRow { Id = Guid.NewGuid(), ConnectionId = connectionId, LibraryRootId = root.Id,
             RemoteRootId = request.RemoteRootId, RemotePath = request.ExpectedRemotePath, LocalPath = local, CreatedAt = now };
         db.LibraryRoots.Add(root); db.ExternalLibraryMounts.Add(mount);
@@ -182,13 +191,8 @@ public sealed class EfExternalLibraryMountStore(PrismediaDbContext db, ExternalL
             throw new ArgumentException("The selected library has a native monitor that can still acquire files. Remove it before attaching an external manager.");
     }
 
-    private static bool Supports(LibraryRootRow root, EntityKind kind) => kind switch {
-        EntityKind.Movie or EntityKind.VideoSeries => root.ScanVideos,
-        EntityKind.Book or EntityKind.ComicSeries => root.ScanBooks,
-        EntityKind.Image or EntityKind.Gallery => root.ScanImages,
-        EntityKind.AudioLibrary => root.ScanAudio,
-        _ => false
-    };
+    private static bool Supports(LibraryRootRow root, EntityKind kind) =>
+        EntityKindRegistry.Describe(kind).LibraryRootCapability is { } capability && root.Supports(capability);
 
     /// <inheritdoc />
     public async Task<IReadOnlyList<MappedLibraryFile>> InspectAsync(Guid connectionId, IReadOnlyList<ManagedLibraryFile> files, CancellationToken token) {

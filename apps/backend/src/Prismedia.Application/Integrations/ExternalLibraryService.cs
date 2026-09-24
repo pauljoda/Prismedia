@@ -68,11 +68,6 @@ public sealed class ExternalLibraryService(
             throw new ArgumentException("The external library changed. Refresh its choices before mapping it.");
     }
 
-    private static bool Supports(Prismedia.Contracts.Settings.LibraryRoot root, EntityKind kind) => kind switch {
-        EntityKind.Movie or EntityKind.VideoSeries => root.ScanVideos,
-        EntityKind.Book or EntityKind.ComicSeries => root.ScanBooks,
-        EntityKind.Image or EntityKind.Gallery => root.ScanImages,
-        EntityKind.AudioLibrary => root.ScanAudio,
-        _ => false
-    };
+    private static bool Supports(Prismedia.Contracts.Settings.LibraryRoot root, EntityKind kind) =>
+        EntityKindRegistry.Describe(kind).LibraryRootCapability is { } capability && root.Scans(capability);
 }
