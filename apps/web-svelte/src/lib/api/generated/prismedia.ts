@@ -31,6 +31,7 @@ import type {
   AudioPlaybackDiagnosticRequest,
   BookAcquisitionProfileSaveRequest,
   BookAcquisitionProfileView,
+  BookAlignmentResponse,
   BookChapterMappingsResponse,
   BookContentsResponse,
   BrowseConnectionRequest,
@@ -3488,6 +3489,11 @@ export type updateEntityProgressResponse204 = {
   status: 204
 }
 
+export type updateEntityProgressResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
 export type updateEntityProgressResponse404 = {
   data: ApiProblem
   status: 404
@@ -3496,7 +3502,7 @@ export type updateEntityProgressResponse404 = {
 export type updateEntityProgressResponseSuccess = (updateEntityProgressResponse200 | updateEntityProgressResponse204) & {
   headers: Headers;
 };
-export type updateEntityProgressResponseError = (updateEntityProgressResponse404) & {
+export type updateEntityProgressResponseError = (updateEntityProgressResponse400 | updateEntityProgressResponse404) & {
   headers: Headers;
 };
 
@@ -4710,7 +4716,7 @@ export const getBookChapterMappings = async (id: string, options?: RequestInit):
 
 
 export type replaceBookChapterMappingsResponse200 = {
-  data: BookChapterMappingsResponse
+  data: BookAlignmentResponse
   status: 200
 }
 
@@ -4742,7 +4748,7 @@ export const getReplaceBookChapterMappingsUrl = (id: string,) => {
 }
 
 /**
- * @summary Replace the Book's explicit audiobook-to-readable-chapter map.
+ * @summary Replace the Book's explicit audiobook-to-readable-chapter map and return the refreshed alignment.
  */
 export const replaceBookChapterMappings = async (id: string,
     replaceBookChapterMappingsRequest: ReplaceBookChapterMappingsRequest, options?: RequestInit): Promise<replaceBookChapterMappingsResponse> => {
@@ -4754,6 +4760,49 @@ export const replaceBookChapterMappings = async (id: string,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       replaceBookChapterMappingsRequest,)
+  }
+);}
+
+
+
+export type getBookAlignmentResponse200 = {
+  data: BookAlignmentResponse
+  status: 200
+}
+
+export type getBookAlignmentResponse404 = {
+  data: ApiProblem
+  status: 404
+}
+
+export type getBookAlignmentResponseSuccess = (getBookAlignmentResponse200) & {
+  headers: Headers;
+};
+export type getBookAlignmentResponseError = (getBookAlignmentResponse404) & {
+  headers: Headers;
+};
+
+export type getBookAlignmentResponse = (getBookAlignmentResponseSuccess | getBookAlignmentResponseError)
+
+export const getGetBookAlignmentUrl = (id: string,) => {
+
+
+
+
+  return `/api/books/${id}/alignment`
+}
+
+/**
+ * @summary Get the Book's reading/listening alignment and the current user's resume targets.
+ */
+export const getBookAlignment = async (id: string, options?: RequestInit): Promise<getBookAlignmentResponse> => {
+
+  return orvalFetch<getBookAlignmentResponse>(getGetBookAlignmentUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
   }
 );}
 

@@ -89,6 +89,7 @@ public static class DependencyInjection {
         RegisterPersistence(services, connectionString);
         services.AddSingleton(new ManagedGeneratedSourceRoot(dataDir));
         RegisterMediaProcessing(services, mediaToolOptions, dataDir, cacheDir);
+        services.AddSingleton(new PrismediaBuildInfo(ResolveCurrentVersion(configuration, pathBase)));
         RegisterPluginsAndIdentify(services, configuration, pathBase, cacheDir);
         services.AddSingleton(new ConnectionSecretProtector(dataDir));
         services.AddSingleton(new ProviderCredentialProtector(dataDir));

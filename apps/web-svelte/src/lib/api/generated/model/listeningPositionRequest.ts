@@ -5,7 +5,7 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export interface BookListeningPositionRequest {
+export interface ListeningPositionRequest {
   trackEntityId: string;
   /** @nullable */
   markerId: string | null;

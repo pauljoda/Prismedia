@@ -4,19 +4,11 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
-import type { ProgressUnit } from './progressUnit';
 
-export interface BookListeningProgress {
+export interface ListeningTarget {
   trackEntityId: string;
   /** @nullable */
   markerId: string | null;
   /** @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$ */
   offsetSeconds: number | string;
-  currentEntityId: string;
-  unit: ProgressUnit;
-  /** @pattern ^-?(?:0|[1-9]\d*)$ */
-  index: number | string;
-  /** @pattern ^-?(?:0|[1-9]\d*)$ */
-  total: number | string;
-  updatedAt: string;
 }

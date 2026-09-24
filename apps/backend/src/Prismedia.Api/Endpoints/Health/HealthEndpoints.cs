@@ -5,12 +5,20 @@ using Prismedia.Contracts.System;
 
 namespace Prismedia.Api.Endpoints;
 
+/// <summary>Readiness routes for the API, the worker, and pending database restores.</summary>
 public static class HealthEndpoints {
+    #region Static Variables
+
     private static readonly TimeSpan WorkerHeartbeatStaleAfter = TimeSpan.FromSeconds(45);
 
+    #endregion
+
+    #region Actions - Routes
+
+    /// <summary>Maps the health routes; <c>/api/health</c> also reports the build version.</summary>
     public static IEndpointRouteBuilder MapHealthEndpoints(this IEndpointRouteBuilder routes) {
-        routes.MapGet("/api/health", () =>
-            Results.Ok(new HealthResponse("ok", "dotnet")))
+        routes.MapGet("/api/health", (PrismediaBuildInfo build) =>
+            Results.Ok(new HealthResponse("ok", "dotnet", build.Version)))
             .WithName("GetHealth")
             .WithSummary("Reports that the Prismedia .NET backend is ready to accept requests.")
             .Produces<HealthResponse>();
@@ -42,4 +50,6 @@ public static class HealthEndpoints {
 
         return routes;
     }
+
+    #endregion
 }

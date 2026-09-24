@@ -326,27 +326,22 @@ internal sealed class ProgressCapabilityProjector : EntityCapabilityProjector<Pr
                 ConsumedPercent: progress.Total > 0
                     ? Math.Clamp(progress.ConsumedCount / (double)progress.Total, 0, 1)
                     : 0,
-                Reading: progress.CheckpointFor(ConsumptionModality.Reading) is { } reading
-                    ? new BookReadingProgress(
-                        reading.PositionEntityId,
-                        reading.Unit,
-                        reading.Index,
-                        reading.Total,
-                        reading.Mode,
-                        reading.Location,
-                        reading.UpdatedAt)
-                    : null,
-                Listening: progress.CheckpointFor(ConsumptionModality.Listening) is { } listening
-                    ? new BookListeningProgress(
-                        listening.PositionEntityId,
-                        listening.MarkerId,
-                        listening.OffsetSeconds ?? 0,
-                        listening.PositionEntityId,
-                        listening.Unit,
-                        listening.Index,
-                        listening.Total,
-                        listening.UpdatedAt)
-                    : null)
+                LastModality: progress.LastModality,
+                Checkpoints: ConsumptionModalityDefinition.All
+                    .Select(definition => progress.CheckpointFor(definition.Modality))
+                    .OfType<ProgressCheckpoint>()
+                    .Select(checkpoint => new ModalityProgress(
+                        checkpoint.Modality,
+                        checkpoint.PositionEntityId,
+                        checkpoint.Unit,
+                        checkpoint.Index,
+                        checkpoint.Total,
+                        checkpoint.OffsetSeconds,
+                        checkpoint.MarkerId,
+                        checkpoint.Mode,
+                        checkpoint.Location,
+                        checkpoint.UpdatedAt))
+                    .ToArray())
             : null;
 }
 

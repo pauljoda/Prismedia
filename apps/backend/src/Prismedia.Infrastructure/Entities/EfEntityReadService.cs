@@ -922,7 +922,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         bool hideNsfw,
         CancellationToken cancellationToken) {
         var progress = card.Capabilities.OfType<ProgressCapability>().FirstOrDefault();
-        if (progress?.CurrentEntityId is not { } currentEntityId) {
+        if (progress is null || progress.CurrentEntityId is null && (progress.Checkpoints ?? []).Count == 0) {
             return card;
         }
 
@@ -931,13 +931,12 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             return RemoveProgress(card);
         }
 
-        var cursorVisible = !hideNsfw || !await IsEntityHiddenAsync(currentEntityId, cancellationToken);
-        if (cursorVisible && await RequiresLibraryVisibilityAsync(cancellationToken)) {
-            cursorVisible = await ApplyEnabledLibraryVisibility(_db.Entities.AsNoTracking())
-                .AnyAsync(entity => entity.Id == currentEntityId, cancellationToken);
+        var checkpoints = await EnrichCheckpointsAsync(card.Id, progress.Checkpoints ?? [], hideNsfw, cancellationToken);
+        if (progress.CurrentEntityId is not { } currentEntityId) {
+            return ReplaceProgress(card, progress with { Checkpoints = checkpoints });
         }
 
-        if (!cursorVisible) {
+        if (!await IsProgressPositionVisibleAsync(currentEntityId, hideNsfw, cancellationToken)) {
             return RemoveProgress(card);
         }
 
@@ -952,24 +951,68 @@ public sealed partial class EfEntityReadService : IEntityReadService {
             progress.Index,
             progress.Total,
             cancellationToken);
-        if (position is null) {
-            return card;
-        }
-
-        return card with {
-            Capabilities = card.Capabilities.Select(capability =>
-                capability is ProgressCapability progressCapability
-                    ? progressCapability with {
-                        WorkIndex = position.Index,
-                        WorkTotal = position.Total,
-                        ConsumedTotal = position.Total,
-                        ConsumedPercent = position.Total > 0
-                            ? Math.Clamp(progressCapability.ConsumedCount / (double)position.Total, 0, 1)
-                            : 0,
-                    }
-                    : capability).ToArray()
-        };
+        return ReplaceProgress(card, position is null
+            ? progress with { Checkpoints = checkpoints }
+            : progress with {
+                WorkIndex = position.Index,
+                WorkTotal = position.Total,
+                ConsumedTotal = position.Total,
+                ConsumedPercent = position.Total > 0
+                    ? Math.Clamp(progress.ConsumedCount / (double)position.Total, 0, 1)
+                    : 0,
+                Checkpoints = checkpoints,
+            });
     }
+
+    /// <summary>
+    /// Keeps only checkpoints whose position the current user may see, and gives chapter-local
+    /// reading positions the same absolute work position the main cursor carries.
+    /// </summary>
+    private async Task<IReadOnlyList<ModalityProgress>> EnrichCheckpointsAsync(
+        Guid ownerId,
+        IReadOnlyList<ModalityProgress> checkpoints,
+        bool hideNsfw,
+        CancellationToken cancellationToken) {
+        var enriched = new List<ModalityProgress>(checkpoints.Count);
+        foreach (var checkpoint in checkpoints) {
+            if (!await IsProgressPositionVisibleAsync(checkpoint.PositionEntityId, hideNsfw, cancellationToken)) {
+                continue;
+            }
+            if (Domain.Capabilities.ConsumptionModalityDefinition.For(checkpoint.Modality).AddressesByOffset) {
+                enriched.Add(checkpoint);
+                continue;
+            }
+
+            var position = await _progressTopology.ResolveWorkPositionAsync(
+                ownerId,
+                checkpoint.PositionEntityId,
+                checkpoint.Index,
+                checkpoint.Total,
+                cancellationToken);
+            enriched.Add(position is null
+                ? checkpoint
+                : checkpoint with { WorkIndex = position.Index, WorkTotal = position.Total });
+        }
+        return enriched;
+    }
+
+    private async Task<bool> IsProgressPositionVisibleAsync(
+        Guid positionEntityId,
+        bool hideNsfw,
+        CancellationToken cancellationToken) {
+        if (hideNsfw && await IsEntityHiddenAsync(positionEntityId, cancellationToken)) {
+            return false;
+        }
+        return !await RequiresLibraryVisibilityAsync(cancellationToken) ||
+            await ApplyEnabledLibraryVisibility(_db.Entities.AsNoTracking())
+                .AnyAsync(entity => entity.Id == positionEntityId, cancellationToken);
+    }
+
+    private static EntityCard ReplaceProgress(EntityCard card, ProgressCapability progress) => card with {
+        Capabilities = card.Capabilities
+            .Select(capability => capability is ProgressCapability ? progress : capability)
+            .ToArray()
+    };
 
     private static EntityCard RemoveProgress(EntityCard card) => card with {
         Capabilities = card.Capabilities.Where(capability => capability is not ProgressCapability).ToArray()
