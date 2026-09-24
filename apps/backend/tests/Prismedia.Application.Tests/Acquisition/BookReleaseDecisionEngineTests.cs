@@ -193,6 +193,32 @@ public sealed class BookReleaseDecisionEngineTests {
             result.Select(candidate => candidate.Release.Title).ToArray());
     }
 
+    [Fact]
+    public void ChapterlessAudiobookUpgradeAcceptsOnlyReleasesExpectedToCarryChapters() {
+        var rules = BookAcquisitionRules.Default with {
+            BookRendition = BookRendition.Audiobook,
+            IsUpgradeSearch = true,
+            OwnedAudiobookShape = AudiobookReleaseShape.PartFiles
+        };
+        var releases = new[] {
+            Release("Some Book M4B"),
+            Release("Some Book chapters") with { KnownFileNames = ["Book/Chapter 01.mp3", "Book/Chapter 02.mp3"] },
+            Release("Some Book MP3"),
+            Release("Some Book parts") with { KnownFileNames = ["Book/Part01.mp3", "Book/Part02.mp3"] },
+            Release("Some Book MP3 single") with { AdvertisedFileCount = 1 }
+        }.Select(release => (release, (Guid?)null, "Test Indexer")).ToArray();
+
+        var result = Engine.Evaluate(releases, rules).ToDictionary(candidate => candidate.Release.Title);
+
+        Assert.True(result["Some Book M4B"].Accepted);
+        Assert.True(result["Some Book chapters"].Accepted);
+        Assert.Equal([ReleaseRejectionReason.NotAnUpgrade], result["Some Book MP3"].Rejections);
+        Assert.Equal([ReleaseRejectionReason.NotAnUpgrade], result["Some Book parts"].Rejections);
+        Assert.Equal(
+            [ReleaseRejectionReason.NotAnUpgrade, ReleaseRejectionReason.FormatDowngrade],
+            result["Some Book MP3 single"].Rejections);
+    }
+
     [Theory]
     [InlineData("Some Book (FLAC)", true)]
     [InlineData("Some Book [AAX]", true)]

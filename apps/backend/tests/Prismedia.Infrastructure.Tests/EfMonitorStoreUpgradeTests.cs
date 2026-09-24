@@ -482,6 +482,70 @@ public sealed class EfMonitorStoreUpgradeTests {
         Assert.Equal(BookRendition.Audiobook, monitor.BookRendition);
     }
 
+    [Theory]
+    [InlineData("part-files", true)]
+    [InlineData("single-large-file", true)]
+    [InlineData("chapter-files", false)]
+    [InlineData("single-m4b", false)]
+    public async Task ImportedAudiobookStaysEligibleForAChapteredUpgradeOnlyWhileChapterless(string ownedShape, bool due) {
+        await using var db = CreateContext();
+        var store = await SeedUpgradeMonitorAsync(
+            db,
+            BookQualityRank.Floor,
+            new BookQualityRank(BookSourceTier.Retail, BookFormatTier.Reflowable),
+            bookRendition: BookRendition.Audiobook);
+        (await db.Acquisitions.SingleAsync()).AudiobookShape = AudiobookReleaseShape.Parse(ownedShape);
+        await db.SaveChangesAsync();
+
+        var dues = await store.ListDueMonitorsAsync(360, CancellationToken.None);
+        var wanted = await store.ListCutoffUnmetAsync(1, 20, EntityKind.Book, CancellationToken.None);
+
+        var monitor = Assert.Single(await store.ListAsync(CancellationToken.None));
+        if (due) {
+            var upgrade = Assert.Single(dues);
+            Assert.True(upgrade.IsUpgrade);
+            Assert.Equal(BookRendition.Audiobook, upgrade.BookRendition);
+            Assert.Equal(MonitorStatus.Active, monitor.Status);
+            var item = Assert.Single(wanted.Items);
+            Assert.Equal(ownedShape, item.OwnedQuality);
+            Assert.Equal(AudiobookReleaseShape.ChapteredFloor.Code, item.CutoffQuality);
+        } else {
+            Assert.Empty(dues);
+            Assert.Empty(wanted.Items);
+            Assert.Equal(MonitorStatus.Fulfilled, monitor.Status);
+        }
+    }
+
+    [Fact]
+    public async Task ChapterlessAudiobookKeepsItsBaselineWhileUpgradesAreOff() {
+        await using var db = CreateContext();
+        var store = await SeedUpgradeMonitorAsync(
+            db,
+            BookQualityRank.Floor,
+            BookQualityRank.Floor,
+            upgradeOn: false,
+            bookRendition: BookRendition.Audiobook);
+        var acquisition = await db.Acquisitions.SingleAsync();
+        acquisition.AudiobookShape = AudiobookReleaseShape.PartFiles;
+        var entityId = Guid.NewGuid();
+        db.Entities.Add(new EntityRow {
+            Id = entityId,
+            KindCode = EntityKind.Book.ToCode(),
+            Title = "Some Book",
+            CreatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow
+        });
+        var monitor = await db.Monitors.SingleAsync();
+        monitor.EntityId = entityId;
+        await db.SaveChangesAsync();
+
+        Assert.Empty(await store.ListDueMonitorsAsync(360, CancellationToken.None));
+
+        var persisted = await db.Monitors.AsNoTracking().SingleAsync();
+        Assert.Equal(MonitorStatus.Active, persisted.Status);
+        Assert.Equal(acquisition.Id, persisted.AcquisitionId);
+    }
+
     [Fact]
     public async Task ImportedBelowCutoffWithUpgradeOnIsDueAsUpgrade() {
         await using var db = CreateContext();

@@ -472,6 +472,75 @@ public sealed partial class ImportedEntityMaterializationTests : IDisposable {
         var finalization = AcquisitionFinalizeJobPayload.Parse(reconciliation.PayloadJson!);
         Assert.Equal(parentId, finalization.UpgradeParentAcquisitionId);
         Assert.Equal(childId, finalization.AcquisitionId);
+        Assert.Same(
+            AudiobookReleaseShape.ChapterFiles,
+            (await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == parentId)).AudiobookShape);
+    }
+
+    [Fact]
+    public async Task AutomaticAudiobookUpgradeWithoutBetterChapterStructureKeepsTheOwnedFiles() {
+        await using var db = CreateContext();
+        var rootPath = Directory.CreateDirectory(Path.Combine(_workRoot, "audiobook-no-upgrade")).FullName;
+        var bookFolder = Directory.CreateDirectory(Path.Combine(rootPath, "Author", "Novel")).FullName;
+        var owned = Path.Combine(bookFolder, "Novel-Part01.mp3");
+        await File.WriteAllTextAsync(owned, "owned-part");
+        var payloadPath = Directory.CreateDirectory(Path.Combine(_workRoot, "audiobook-no-upgrade-download")).FullName;
+        await File.WriteAllTextAsync(Path.Combine(payloadPath, "Novel-Part01.mp3"), "new-part-one");
+        await File.WriteAllTextAsync(Path.Combine(payloadPath, "Novel-Part02.mp3"), "new-part-two");
+        var root = new RootPersistence(rootPath, scanBooks: true);
+        AddLibraryRoot(db, root.Root);
+        var bookId = AddWantedEntity(db, EntityKind.Book, "Novel");
+        var now = DateTimeOffset.UtcNow;
+        var parentId = Guid.NewGuid();
+        var childId = Guid.NewGuid();
+        db.Acquisitions.AddRange(
+            new AcquisitionRow {
+                Id = parentId, EntityId = bookId, Kind = EntityKind.Book, BookRendition = BookRendition.Audiobook,
+                Status = AcquisitionStatus.Imported, Title = "Novel", Author = "Author", FinalSourcePath = bookFolder,
+                AudiobookShape = AudiobookReleaseShape.PartFiles, UpgradeQualityCaptured = true,
+                ExternalIdsJson = "{}", SourceUrlsJson = "[]", CreatedAt = now.AddDays(-1), UpdatedAt = now.AddDays(-1)
+            },
+            new AcquisitionRow {
+                Id = childId, EntityId = bookId, Kind = EntityKind.Book, BookRendition = BookRendition.Audiobook,
+                Status = AcquisitionStatus.Importing, Title = "Novel", Author = "Author", UpgradeOfAcquisitionId = parentId,
+                SelectedReleaseJson = JsonSerializer.Serialize(new SelectedRelease("Author - Novel [M4B]", "Indexer", "release")),
+                ExternalIdsJson = "{}", SourceUrlsJson = "[]", CreatedAt = now, UpdatedAt = now
+            });
+        db.DownloadTransfers.Add(new DownloadTransferRow {
+            Id = Guid.NewGuid(), AcquisitionId = childId, ClientItemId = "release", ContentPath = payloadPath,
+            Progress = 1, CreatedAt = now, UpdatedAt = now
+        });
+        await db.SaveChangesAsync();
+        var store = AcquisitionTestFactory.Store(db);
+        var engine = new BookAcquisitionImportEngine(
+            store,
+            new EfBookAcquisitionProfileStore(db),
+            root,
+            new AcquisitionImportPlanner(),
+            new ImportFileMover(new TestFileMutationGuard()),
+            new FailingMaterializer(),
+            Torrents(store),
+            new EfAcquisitionHistoryStore(db),
+            NullLogger<BookAcquisitionImportEngine>.Instance,
+            new EfAcquisitionBlocklistStore(db));
+        var import = new AcquisitionImportContext(
+            childId, "Novel", "Author", Series: null, Year: null, PosterUrl: null, ExternalIdentity: null, ProfileId: null,
+            ContentPath: payloadPath, ClientItemId: null, DownloadClientConfigId: null, Kind: EntityKind.Book,
+            EntityId: bookId, BookRendition: BookRendition.Audiobook, UpgradeOfAcquisitionId: parentId);
+
+        await engine.ImportAsync(
+            JobContext(db, childId, new MergedImportTestSupport.RecordingJobQueue()), import, CancellationToken.None);
+
+        Assert.Equal(AcquisitionStatus.Failed, await StatusOfAsync(db, childId));
+        Assert.Equal("owned-part", await File.ReadAllTextAsync(owned));
+        Assert.Single(Directory.GetFiles(bookFolder));
+        Assert.Empty(Directory.GetDirectories(Path.GetDirectoryName(bookFolder)!, "*.prismedia-new-*"));
+        Assert.Contains(
+            new SelectedRelease("Author - Novel [M4B]", "Indexer", "release").Identity,
+            await new EfAcquisitionBlocklistStore(db).GetIdentitiesAsync(CancellationToken.None));
+        Assert.Same(
+            AudiobookReleaseShape.PartFiles,
+            (await db.Acquisitions.AsNoTracking().SingleAsync(row => row.Id == parentId)).AudiobookShape);
     }
 
     [Theory]

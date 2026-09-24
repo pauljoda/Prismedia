@@ -115,6 +115,14 @@ public sealed record BookAcquisitionRules(
     /// <summary>The independently acquired book rendition; null outside books and for legacy ad-hoc rules.</summary>
     public BookRendition? BookRendition { get; init; }
 
+    /// <summary>
+    /// The layout of the owned audiobook for an audiobook upgrade search (set per search by the runner from
+    /// the parent's recorded shape, like <see cref="OwnedQuality"/>). When set, an audiobook upgrade is judged
+    /// on structure: a candidate must be expected to carry chapter boundaries and outrank this shape. Null
+    /// keeps the source/format-tier upgrade gates.
+    /// </summary>
+    public AudiobookReleaseShape? OwnedAudiobookShape { get; init; }
+
     /// <summary>Formal names of this exact work, validated against its currently linked provider identity.</summary>
     public IReadOnlyList<string> TargetAlternativeTitles { get; init; } = [];
 
@@ -498,6 +506,9 @@ public sealed record UpgradeOwnedQuality(
 
     /// <summary>True when another entity owns the same physical video source.</summary>
     public bool VideoSourceShared { get; init; }
+
+    /// <summary>The owned audiobook's recorded layout for an audiobook upgrade child; null for every other child.</summary>
+    public AudiobookReleaseShape? AudiobookShape { get; init; }
 }
 
 /// <summary>
@@ -535,6 +546,8 @@ public sealed record UpgradeReplaceTarget(
     public string? InstalledUpgradePath { get; init; }
     /// <summary>The recorded installation still matches the parent's sole current Source binding.</summary>
     public bool InstalledUpgradeSourceCurrent { get; init; }
+    /// <summary>The owned audiobook's recorded layout an automatic audiobook replacement must improve on; null when unknown.</summary>
+    public AudiobookReleaseShape? ParentAudiobookShape { get; init; }
 }
 
 /// <summary>

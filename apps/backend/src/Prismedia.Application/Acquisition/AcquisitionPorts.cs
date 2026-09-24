@@ -606,8 +606,12 @@ public interface IAcquisitionStore : IAcquisitionLifecycleStore {
     /// <summary>Assembles everything the upgrade-replace job needs from a downloaded upgrade child, or null when it is not a resolvable upgrade child.</summary>
     Task<UpgradeReplaceTarget?> GetUpgradeReplaceTargetAsync(Guid childId, CancellationToken cancellationToken);
 
-    /// <summary>Updates an acquisition's owned book quality (e.g. after a successful upgrade swap) without changing its status.</summary>
-    Task UpdateOwnedQualityAsync(Guid acquisitionId, BookQualityRank ownedQuality, CancellationToken cancellationToken);
+    /// <summary>
+    /// Updates an acquisition's owned book quality (e.g. after a successful upgrade swap) without changing its
+    /// status. <paramref name="audiobookShape"/>, when given, replaces the owned audiobook's recorded layout.
+    /// </summary>
+    Task UpdateOwnedQualityAsync(Guid acquisitionId, BookQualityRank ownedQuality, CancellationToken cancellationToken,
+        AudiobookReleaseShape? audiobookShape = null);
 
     /// <summary>
     /// Records the audiobook layout observed in an in-flight download's file list. Ignored once the

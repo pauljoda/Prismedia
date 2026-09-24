@@ -630,7 +630,8 @@ public sealed class AcquisitionMonitorJobHandler(
     /// <summary>
     /// Audiobook payload admission: records the layout the download's file list shows, and turns away a
     /// download with no audio Prismedia can import so recovery can pick another release before any bytes
-    /// arrive. Mixed formats are judged by the set the import would keep.
+    /// arrive. An automatic upgrade must also show better chapter structure than the owned audiobook, since
+    /// its title only suggested one. Mixed formats are judged by the set the import would keep.
     /// </summary>
     private async Task<PayloadInspection> InspectAudiobookPayloadAsync(
         AcquisitionSearchInput input,
@@ -638,11 +639,18 @@ public sealed class AcquisitionMonitorJobHandler(
         CancellationToken cancellationToken) {
         var shape = AudiobookReleaseShape.Resolve(files);
         await acquisitions.RecordAudiobookShapeAsync(input.Id, shape, cancellationToken);
-        return shape.IsAdmissible
-            ? new(Ready: true)
-            : new(
+        if (!shape.IsAdmissible) {
+            return new(
                 "The download contains no audio Prismedia can import (M4B, M4A, or MP3).",
                 Reason: BlocklistReason.NoImportableFiles);
+        }
+
+        var owned = (await acquisitions.GetUpgradeOwnedQualityAsync(input.Id, cancellationToken))?.AudiobookShape;
+        return owned is null || shape.Upgrades(owned)
+            ? new(Ready: true)
+            : new(
+                $"This download ({shape.Label}) has no better chapter structure than the owned audiobook ({owned.Label}).",
+                Reason: BlocklistReason.NotAnUpgrade);
     }
 
     /// <summary>

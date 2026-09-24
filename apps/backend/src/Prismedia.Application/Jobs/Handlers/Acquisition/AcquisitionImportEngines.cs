@@ -210,7 +210,8 @@ public sealed partial class BookAcquisitionImportEngine(
     IImportedEntityMaterializer materializer,
     DownloadClientCleanupService torrents,
     IAcquisitionHistoryStore history,
-    ILogger<BookAcquisitionImportEngine> logger) : IAcquisitionImportEngine {
+    ILogger<BookAcquisitionImportEngine> logger,
+    IAcquisitionBlocklistStore? blocklist = null) : IAcquisitionImportEngine {
 
     public async Task ImportAsync(JobContext context, AcquisitionImportContext import, CancellationToken cancellationToken) {
         var profileKind = AcquisitionProfileKinds.For(import.Kind);

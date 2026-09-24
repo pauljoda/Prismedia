@@ -296,6 +296,8 @@ public sealed class QualityFloorSpecification : IReleaseSpecification {
 /// never affected and a genuinely-unknown owned quality can't silently disable the gate. When the owned source
 /// is unknown (the owned file's provenance could not be parsed), a source-only gain is NOT trusted to authorize
 /// a replacement — only a verifiable format improvement counts — matching the conservative-replace policy.
+/// An audiobook whose owned layout is recorded upgrades on structure instead: the candidate must be expected
+/// to carry chapter boundaries and outrank the owned layout (see <see cref="AudiobookReleaseShape.Upgrades"/>).
 /// </summary>
 public sealed class UpgradeSpecification : IReleaseSpecification {
     public ReleaseRejectionReason Reason => ReleaseRejectionReason.NotAnUpgrade;
@@ -303,6 +305,10 @@ public sealed class UpgradeSpecification : IReleaseSpecification {
     public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) {
         if (!rules.IsUpgradeSearch) {
             return null;
+        }
+
+        if (rules.BookRendition == BookRendition.Audiobook && rules.OwnedAudiobookShape is { } ownedShape) {
+            return AudiobookReleaseShape.Expected(release).Upgrades(ownedShape) ? null : Reason;
         }
 
         var owned = rules.OwnedQuality;
@@ -327,7 +333,8 @@ public sealed class UpgradeSpecification : IReleaseSpecification {
 /// web EPUB) can never replace the owned file. Gated on <see cref="BookAcquisitionRules.IsUpgradeSearch"/>. A
 /// title that names no format makes no downgrade claim, so it passes here and is judged by
 /// <see cref="UpgradeSpecification"/> (which rejects it as <see cref="ReleaseRejectionReason.NotAnUpgrade"/>) —
-/// avoiding a misleading downgrade reason for a format-anonymous title.
+/// avoiding a misleading downgrade reason for a format-anonymous title. For an audiobook with a recorded
+/// layout, a candidate known to be worse structured (for example one long MP3 over part files) is the downgrade.
 /// </summary>
 public sealed class FormatFloorSpecification : IReleaseSpecification {
     public ReleaseRejectionReason Reason => ReleaseRejectionReason.FormatDowngrade;
@@ -335,6 +342,10 @@ public sealed class FormatFloorSpecification : IReleaseSpecification {
     public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) {
         if (!rules.IsUpgradeSearch) {
             return null;
+        }
+
+        if (rules.BookRendition == BookRendition.Audiobook && rules.OwnedAudiobookShape is { } ownedShape) {
+            return AudiobookReleaseShape.Expected(release).Downgrades(ownedShape) ? Reason : null;
         }
 
         var tier = BookFormatDetection.DetectFormatTier(release.Title);
