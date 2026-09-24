@@ -1,5 +1,15 @@
 import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
-import type { BookAudioChapter, BookChapterAudioMapping } from "$lib/api/generated/model";
+import type {
+  AlignmentMatchStateCode,
+  BookChapterMappingOriginCode,
+} from "$lib/api/generated/codes";
+import type {
+  AudioChapterWindow,
+  BookAlignmentResponse,
+  BookAlignmentRow,
+  BookAudioChapter,
+  BookChapterAudioMapping,
+} from "$lib/api/generated/model";
 
 export type BookReadTarget =
   | {
@@ -19,11 +29,14 @@ export interface ReadableBookChapter {
   pageCount?: number | null;
 }
 
+/** Presentation row for one server-projected alignment row. */
 export interface BookChapterRow {
   id: string;
   title: string;
   order: number;
   depth: number;
+  matchState?: AlignmentMatchStateCode;
+  provenance?: BookChapterMappingOriginCode | null;
   readTarget: BookReadTarget | null;
   readPageCount?: number | null;
   audioTrack: AudioTrackListItemDto | null;
@@ -32,16 +45,6 @@ export interface BookChapterRow {
   audioEndSeconds?: number | null;
   isCurrentReading: boolean;
   isCurrentAudio: boolean;
-}
-
-interface BuildBookChapterRowsOptions {
-  readableChapters: readonly ReadableBookChapter[];
-  audioTracks: readonly AudioTrackListItemDto[];
-  audioChapters?: readonly BookAudioChapter[];
-  chapterMappings?: readonly BookChapterAudioMapping[];
-  currentReadableId?: string | null;
-  currentAudioTrackId?: string | null;
-  currentAudioSeconds?: number | null;
 }
 
 export interface BookAudioChapterCandidate {
@@ -53,6 +56,18 @@ export interface BookAudioChapterCandidate {
   endSeconds: number | null;
 }
 
+interface BookChapterRowsOptions {
+  alignment: BookAlignmentResponse | null | undefined;
+  audioTracks: readonly AudioTrackListItemDto[];
+  /** Row holding the resumable reading position, from the server's resume projection. */
+  readingRowId?: string | null;
+  /** Row holding the resumable listening position, used while this Book is not playing. */
+  listeningRowId?: string | null;
+  /** Live player position, when this Book's audio is the current queue. */
+  playingTrackId?: string | null;
+  playingSeconds?: number | null;
+}
+
 function numberValue(value: number | string | null | undefined): number | null {
   if (value === null || value === undefined) return null;
   const parsed = Number(value);
@@ -61,6 +76,129 @@ function numberValue(value: number | string | null | undefined): number | null {
 
 function candidateKey(trackId: string, markerId: string | null | undefined): string {
   return `${trackId}:${markerId ?? "whole"}`;
+}
+
+function readTarget(row: BookAlignmentRow): BookReadTarget | null {
+  const readable = row.readable;
+  if (!readable) return null;
+  if (readable.chapterEntityId) return { kind: "entity-chapter", chapterId: readable.chapterEntityId };
+  return {
+    kind: "epub",
+    location: readable.location ?? readable.chapterKey,
+    startFraction: numberValue(readable.startFraction),
+    endFraction: numberValue(readable.endFraction),
+  };
+}
+
+function windowContains(
+  window: Pick<AudioChapterWindow, "trackEntityId" | "startSeconds" | "endSeconds">,
+  trackId: string | null | undefined,
+  seconds: number | null | undefined,
+): boolean {
+  if (window.trackEntityId !== trackId || seconds === null || seconds === undefined || !Number.isFinite(seconds)) {
+    return false;
+  }
+  const end = numberValue(window.endSeconds);
+  return seconds >= (numberValue(window.startSeconds) ?? 0) && (end === null || seconds < end);
+}
+
+/**
+ * Presents the server's alignment rows in their projected order. The rows, their pairing, and the
+ * rows holding each saved position all come from the server; only the live player highlight is
+ * computed here.
+ */
+export function bookChapterRowsFromAlignment(options: BookChapterRowsOptions): BookChapterRow[] {
+  const trackById = new Map(options.audioTracks.map((track) => [track.id, track]));
+  const playing = options.playingTrackId != null;
+  return (options.alignment?.rows ?? []).map((row) => {
+    const audio = row.audio ?? null;
+    return {
+      id: row.rowId,
+      title: row.readable?.title ?? audio?.title ?? "",
+      order: numberValue(row.order) ?? 0,
+      depth: numberValue(row.readable?.depth) ?? 0,
+      matchState: row.matchState,
+      provenance: row.provenance ?? null,
+      readTarget: readTarget(row),
+      readPageCount: numberValue(row.readable?.pageCount),
+      audioTrack: audio ? trackById.get(audio.trackEntityId) ?? null : null,
+      audioMarkerId: audio?.markerId ?? null,
+      audioStartSeconds: audio ? numberValue(audio.startSeconds) : null,
+      audioEndSeconds: audio ? numberValue(audio.endSeconds) : null,
+      isCurrentReading: options.readingRowId != null && row.rowId === options.readingRowId,
+      isCurrentAudio: playing
+        ? audio !== null && windowContains(audio, options.playingTrackId, options.playingSeconds)
+        : options.listeningRowId != null && row.rowId === options.listeningRowId,
+    };
+  });
+}
+
+/** Readable chapters of the alignment, in display order, as reader launch targets. */
+export function readableChaptersFromAlignment(
+  alignment: BookAlignmentResponse | null | undefined,
+): ReadableBookChapter[] {
+  return (alignment?.rows ?? []).flatMap((row, order) => {
+    const target = readTarget(row);
+    return row.readable && target
+      ? [{
+          id: row.readable.chapterKey,
+          title: row.readable.title,
+          order,
+          depth: numberValue(row.readable.depth) ?? 0,
+          target,
+          pageCount: numberValue(row.readable.pageCount),
+        }]
+      : [];
+  });
+}
+
+/** Paired alignment rows expressed as persisted chapter mappings, with their provenance. */
+export function alignmentChapterMappings(
+  alignment: BookAlignmentResponse | null | undefined,
+): BookChapterAudioMapping[] {
+  return (alignment?.rows ?? []).flatMap((row) =>
+    row.readable && row.audio
+      ? [{
+          readableChapterKey: row.readable.chapterKey,
+          audioTrackId: row.audio.trackEntityId,
+          audioMarkerId: row.audio.markerId ?? null,
+          origin: row.provenance ?? null,
+        }]
+      : []);
+}
+
+/** Every audio chapter window of the alignment. */
+export function alignmentAudioChapters(
+  alignment: BookAlignmentResponse | null | undefined,
+): BookAudioChapter[] {
+  return (alignment?.rows ?? []).flatMap((row) =>
+    row.audio
+      ? [{
+          audioTrackId: row.audio.trackEntityId,
+          audioMarkerId: row.audio.markerId ?? null,
+          title: row.audio.title,
+          startSeconds: row.audio.startSeconds,
+          endSeconds: row.audio.endSeconds ?? null,
+        }]
+      : []);
+}
+
+/** Checks whether a physical audiobook position belongs to this row's audio window. */
+export function bookChapterRowOwnsAudioTime(
+  row: BookChapterRow,
+  trackId: string | null | undefined,
+  seconds: number | null | undefined,
+): boolean {
+  if (!row.audioTrack) return false;
+  return windowContains(
+    {
+      trackEntityId: row.audioTrack.id,
+      startSeconds: row.audioStartSeconds ?? 0,
+      endSeconds: row.audioEndSeconds ?? null,
+    },
+    trackId,
+    seconds,
+  );
 }
 
 /** Expands each physical audiobook file into its addressable whole-track or embedded chapters. */
@@ -101,128 +239,6 @@ export function bookAudioChapterCandidates(
       || a.title.localeCompare(b.title)
       || a.key.localeCompare(b.key)
   );
-}
-
-function audioWindowContains(
-  audioTrackId: string,
-  audioMarkerId: string | null | undefined,
-  startSeconds: number | null | undefined,
-  endSeconds: number | null | undefined,
-  trackId: string | null | undefined,
-  seconds: number | null | undefined,
-): boolean {
-  if (audioTrackId !== trackId) return false;
-  if (!audioMarkerId) return true;
-  if (seconds === null || seconds === undefined || !Number.isFinite(seconds)) return false;
-  return seconds >= Number(startSeconds ?? 0) &&
-    (endSeconds === null || endSeconds === undefined || seconds < Number(endSeconds));
-}
-
-/** Checks whether a physical audiobook position belongs to this whole-track or embedded-chapter row. */
-export function bookChapterRowOwnsAudioTime(
-  row: BookChapterRow,
-  trackId: string | null | undefined,
-  seconds: number | null | undefined,
-): boolean {
-  return !!row.audioTrack && audioWindowContains(
-    row.audioTrack.id,
-    row.audioMarkerId,
-    row.audioStartSeconds,
-    row.audioEndSeconds,
-    trackId,
-    seconds,
-  );
-}
-
-function isCurrentAudioCandidate(
-  candidate: BookAudioChapterCandidate,
-  trackId: string | null | undefined,
-  seconds: number | null | undefined,
-): boolean {
-  return audioWindowContains(
-    candidate.track.id,
-    candidate.markerId,
-    candidate.startSeconds,
-    candidate.endSeconds,
-    trackId,
-    seconds,
-  );
-}
-
-/**
- * Builds one ordered reading/listening surface from the server-persisted chapter map. The map
- * already merges manual choices with the scan-computed automatic title matches, so this function
- * only applies it — no matching runs in the client anymore.
- */
-export function buildBookChapterRows(options: BuildBookChapterRowsOptions): BookChapterRow[] {
-  const readable = [...options.readableChapters].sort(
-    (a, b) => a.order - b.order || a.title.localeCompare(b.title) || a.id.localeCompare(b.id),
-  );
-  const candidates = bookAudioChapterCandidates(options.audioTracks, options.audioChapters);
-  const consumedCandidates = new Set<string>();
-  const matches = new Map<string, BookAudioChapterCandidate>();
-
-  const readableIds = new Set(readable.map((chapter) => chapter.id));
-  const candidateByKey = new Map(candidates.map((candidate) => [candidate.key, candidate]));
-  for (const mapping of options.chapterMappings ?? []) {
-    if (!readableIds.has(mapping.readableChapterKey) || matches.has(mapping.readableChapterKey)) {
-      continue;
-    }
-    const key = candidateKey(mapping.audioTrackId, mapping.audioMarkerId);
-    const candidate = candidateByKey.get(key);
-    if (!candidate || consumedCandidates.has(key)) continue;
-    consumedCandidates.add(key);
-    matches.set(mapping.readableChapterKey, candidate);
-  }
-
-  const rows: BookChapterRow[] = readable.map((chapter) => {
-    const candidate = matches.get(chapter.id);
-    const audioTrack = candidate?.track ?? null;
-    return {
-      id: `read-${chapter.id}-${chapter.order}`,
-      title: chapter.title,
-      order: chapter.order,
-      depth: chapter.depth,
-      readTarget: chapter.target,
-      readPageCount: chapter.pageCount ?? null,
-      audioTrack,
-      audioMarkerId: candidate?.markerId ?? null,
-      audioStartSeconds: candidate?.startSeconds ?? null,
-      audioEndSeconds: candidate?.endSeconds ?? null,
-      isCurrentReading: chapter.id === options.currentReadableId,
-      isCurrentAudio: candidate
-        ? isCurrentAudioCandidate(
-            candidate,
-            options.currentAudioTrackId,
-            options.currentAudioSeconds,
-          )
-        : false,
-    };
-  });
-
-  candidates.forEach((candidate, index) => {
-    if (consumedCandidates.has(candidate.key)) return;
-    rows.push({
-      id: `audio-${candidate.key}`,
-      title: candidate.title,
-      order: readable.length + index,
-      depth: 0,
-      readTarget: null,
-      readPageCount: null,
-      audioTrack: candidate.track,
-      audioMarkerId: candidate.markerId,
-      audioStartSeconds: candidate.startSeconds,
-      audioEndSeconds: candidate.endSeconds,
-      isCurrentReading: false,
-      isCurrentAudio: isCurrentAudioCandidate(
-        candidate,
-        options.currentAudioTrackId,
-        options.currentAudioSeconds,
-      ),
-    });
-  });
-
-  return rows;
 }
 
 /** Creates the editable one-to-one map produced by the "Mark first chapter" workflow. */

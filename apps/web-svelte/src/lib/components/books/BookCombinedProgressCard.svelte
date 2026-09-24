@@ -1,37 +1,57 @@
 <script lang="ts">
-  import { BookOpen, Headphones, Layers2 } from "@lucide/svelte";
+  import { ArrowRightLeft, BookOpen, Headphones, Layers2 } from "@lucide/svelte";
   import { Button, Panel, Progress } from "@prismedia/ui-svelte";
 
   interface Props {
     progressPercent: number;
     progressLabel?: string | null;
-    completed?: boolean;
     activityLabel?: string | null;
     primaryColor?: string;
     secondaryColor?: string;
-    combinedActionLabel?: string | null;
-    combinedExplanation?: string | null;
+    /** Resume label for reading; approximate destinations carry "≈". */
+    readLabel?: string;
+    /** Why the reading destination is where it is, for estimated or fresh positions. */
+    readHint?: string | null;
+    listenLabel?: string;
+    listenHint?: string | null;
+    combinedLabel?: string;
+    /** Disables reading and listening together when the server reports an alignment gap. */
+    combinedDisabled?: boolean;
+    /** Card explanation; gap explanations replace the default copy. */
+    explanation?: string | null;
+    /** Offer to move the older format to the newer one's aligned position. */
+    switchLabel?: string | null;
+    /** Note shown with the switch offer, or alone when the switch is not possible. */
+    switchNote?: string | null;
     onRead: () => void;
     onListen: () => void;
     onCombined: () => void;
+    onSwitch?: () => void;
   }
 
   let {
     progressPercent,
     progressLabel = null,
-    completed = false,
     activityLabel = null,
     primaryColor = "var(--color-accent-400)",
     secondaryColor = "var(--color-accent-200)",
-    combinedActionLabel = null,
-    combinedExplanation = null,
+    readLabel = "Continue reading",
+    readHint = null,
+    listenLabel = "Continue listening",
+    listenHint = null,
+    combinedLabel = "Continue both",
+    combinedDisabled = false,
+    explanation = null,
+    switchLabel = null,
+    switchNote = null,
     onRead,
     onListen,
     onCombined,
+    onSwitch,
   }: Props = $props();
 
   const percent = $derived(Math.max(0, Math.min(100, progressPercent)));
-  const actionPrefix = $derived(completed ? "Start" : percent > 0 ? "Continue" : "Start");
+  const notes = $derived([readHint, listenHint].filter((note): note is string => Boolean(note)));
 </script>
 
 <section
@@ -42,9 +62,11 @@
 >
   <Panel variant="panel" class="combined-progress-card">
     <div class="combined-copy">
-      <p class="kicker">One position · two formats</p>
+      <p class="kicker">Exact positions · aligned chapters</p>
       <h2 id="combined-progress-title">Continue your book</h2>
-      <p class="explanation">{combinedExplanation ?? "Reading and listening share this position. Either one moves it forward."}</p>
+      <p class="explanation">
+        {explanation ?? "Reading and listening each resume exactly where you left them. Switching lines up the matching chapter."}
+      </p>
     </div>
 
     <div class="progress-summary" aria-label="Book progress">
@@ -61,17 +83,40 @@
     <div class="combined-actions">
       <Button variant="secondary" size="sm" class="read-button gap-1.5" onclick={onRead}>
         <BookOpen class="h-3.5 w-3.5" />
-        {actionPrefix} reading
+        {readLabel}
       </Button>
       <Button variant="secondary" size="sm" class="listen-button gap-1.5" onclick={onListen}>
         <Headphones class="h-3.5 w-3.5" />
-        {actionPrefix} listening
+        {listenLabel}
       </Button>
-      <Button variant="primary" size="sm" class="combined-button gap-1.5" onclick={onCombined}>
+      <Button
+        variant="primary"
+        size="sm"
+        class="combined-button gap-1.5"
+        disabled={combinedDisabled}
+        onclick={onCombined}
+      >
         <Layers2 class="h-3.5 w-3.5" />
-        {combinedActionLabel ?? `${actionPrefix} both`}
+        {combinedLabel}
       </Button>
     </div>
+
+    {#if notes.length > 0 || switchLabel || switchNote}
+      <div class="combined-notes" aria-live="polite">
+        {#each notes as note (note)}
+          <span class="note">{note}</span>
+        {/each}
+        {#if switchNote}
+          <span class="note">{switchNote}</span>
+        {/if}
+        {#if switchLabel && onSwitch}
+          <Button variant="ghost" size="sm" class="switch-button gap-1.5" onclick={onSwitch}>
+            <ArrowRightLeft class="h-3.5 w-3.5" />
+            {switchLabel}
+          </Button>
+        {/if}
+      </div>
+    {/if}
   </Panel>
 </section>
 
@@ -150,6 +195,19 @@
   :global(.listen-button:hover), :global(.listen-button:focus-visible) {
     border-color: color-mix(in srgb, var(--listening-accent) 45%, transparent);
   }
+  .combined-notes {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    grid-column: 1 / -1;
+    gap: 0.35rem 0.9rem;
+    color: var(--color-text-muted);
+    font-size: 0.7rem;
+    line-height: 1.4;
+  }
+  :global(.switch-button) {
+    margin-left: auto;
+  }
   :global(.combined-button) {
     border-color: color-mix(in srgb, var(--reading-accent) 30%, var(--listening-accent));
     background: linear-gradient(
@@ -166,6 +224,8 @@
   @media (max-width: 620px) {
     :global(.combined-progress-card) { grid-template-columns: 1fr; padding: 0.9rem 0.85rem 0.85rem 1rem; }
     .combined-actions { grid-column: auto; }
+    .combined-notes { grid-column: auto; }
+    :global(.switch-button) { margin-left: 0; }
     :global(.combined-actions > button) { flex: 1 1 auto; }
   }
 </style>

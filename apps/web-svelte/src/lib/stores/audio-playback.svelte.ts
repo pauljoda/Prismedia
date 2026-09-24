@@ -1,12 +1,12 @@
 import {
   MUSIC_PLAYER_MINI_SIDE,
   MUSIC_PLAYER_REPEAT_MODE,
+  type ConsumptionModalityCode,
   type EntityKindCode,
   type MusicPlayerMiniSideCode,
   type MusicPlayerRepeatModeCode,
 } from "$lib/api/generated/codes";
 import type { AudioTrackListItemDto } from "$lib/entities/media-view-models";
-import type { PlaybackProgressMapping } from "$lib/api/generated/model";
 import { createOptionalContext } from "$lib/utils/context";
 
 export type RepeatMode = MusicPlayerRepeatModeCode;
@@ -26,8 +26,11 @@ export interface PlaybackContext {
   playbackOwnerEntityId?: string | null;
   playbackOwnerTitle?: string | null;
   playbackOwnerEntityKind?: EntityKindCode | null;
-  /** Converts concrete queue items into their owning Entity's canonical progress cursor. */
-  progressMappings?: PlaybackProgressMapping[] | null;
+  /**
+   * Modality the player reports for the owner. When set, every heartbeat posts the exact track
+   * position and the server places the owner's progress cursor.
+   */
+  progressModality?: ConsumptionModalityCode | null;
   /** Capability-projected queue rule: source order is semantic and shuffle is unavailable. */
   preservesQueueOrder?: boolean | null;
   /** Capability-projected transport rule: variable-rate playback may be exposed. */

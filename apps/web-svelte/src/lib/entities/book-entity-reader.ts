@@ -46,7 +46,7 @@ export interface SingleFileBookProgressDisplay {
  *
  * PDF readers save `unit: "page"` with a 0-based page `index` and a page-count `total`,
  * so a "Page N of M" position is meaningful. EPUB readers save `unit: "cfi"` with a
- * 0..`total` reading fraction (total = 10000), so only a percentage is meaningful.
+ * 0..`total` reading fraction over the server's readable position total, so only a percentage is meaningful.
  *
  * Returns null when the book has never been opened (no saved position) or when the
  * progress capability lacks a usable total.
@@ -55,14 +55,13 @@ export function singleFileBookProgressDisplay(
   book: Pick<EntityCard, "capabilities"> | null | undefined,
 ): SingleFileBookProgressDisplay | null {
   const progress = book ? getCapability(book.capabilities, CAPABILITY_KIND.progress) : undefined;
-  const reading = progress?.reading ?? progress;
-  if (!progress || !reading?.currentEntityId) return null;
+  if (!progress?.currentEntityId) return null;
 
-  const total = Math.max(0, numberValue(reading.total) ?? 0);
+  const total = Math.max(0, numberValue(progress.total) ?? 0);
   if (total <= 0) return null;
 
-  const index = Math.max(0, numberValue(reading.index) ?? 0);
-  const isPaged = reading.unit === PROGRESS_UNIT.page;
+  const index = Math.max(0, numberValue(progress.index) ?? 0);
+  const isPaged = progress.unit === PROGRESS_UNIT.page;
   const coverage = numberValue(progress.consumedPercent);
   const rawPercent = coverage != null
     ? Math.round(coverage * 100)
@@ -82,11 +81,11 @@ export function singleFileBookProgressDisplay(
     percent,
     isComplete,
     positionLabel,
-    unit: reading.unit,
+    unit: progress.unit,
     index,
     total,
-    mode: reading.mode ?? (isPaged ? READER_MODE.scrolled : READER_MODE.paged),
-    location: reading.location ?? null,
+    mode: progress.mode ?? (isPaged ? READER_MODE.scrolled : READER_MODE.paged),
+    location: progress.location ?? null,
   };
 }
 
@@ -118,22 +117,17 @@ export function bookEntityProgressDisplay(
   chapters: BookReaderChapter[],
 ): BookEntityProgressDisplay | null {
   const progress = book ? getCapability(book.capabilities, CAPABILITY_KIND.progress) : undefined;
-  const reading = progress?.reading ?? progress;
-  if (!progress || !reading?.currentEntityId) return null;
+  if (!progress?.currentEntityId) return null;
 
-  const chapter = chapters.find((item) => item.id === reading.currentEntityId);
+  const chapter = chapters.find((item) => item.id === progress.currentEntityId);
   if (!chapter) return null;
 
-  const pageCount = Math.max(0, chapter.pageCount || numberValue(reading.total) || 0);
+  const pageCount = Math.max(0, chapter.pageCount || numberValue(progress.total) || 0);
   if (pageCount <= 0) return null;
 
-  const localIndex = Math.max(0, numberValue(reading.index) ?? 0);
-  const workTotal = progress.reading
-    ? chapters.reduce((sum, item) => sum + Math.max(0, item.pageCount), 0)
-    : Math.max(0, numberValue(progress.workTotal) ?? numberValue(reading.total) ?? pageCount);
-  const workIndex = Math.max(0, progress.reading
-    ? (chapter.startIndex ?? 0) + localIndex
-    : numberValue(progress.workIndex) ?? (chapter.startIndex ?? 0) + localIndex);
+  const localIndex = Math.max(0, numberValue(progress.index) ?? 0);
+  const workTotal = Math.max(0, numberValue(progress.workTotal) ?? numberValue(progress.total) ?? pageCount);
+  const workIndex = Math.max(0, numberValue(progress.workIndex) ?? (chapter.startIndex ?? 0) + localIndex);
   const currentPage = Math.min(localIndex + 1, pageCount);
   const workPage = workTotal > 0 ? Math.min(workIndex + 1, workTotal) : currentPage;
   const coverage = numberValue(progress.consumedPercent);
@@ -165,6 +159,6 @@ export function bookEntityProgressDisplay(
     workPageLabel,
     summaryLabel: isComplete ? `Read ${chapterLabel}` : `Reading ${chapterLabel} - ${pageLabel}`,
     detailLabel: isComplete ? "Read" : `${chapterPageLabel} · ${workPageLabel}`,
-    readerMode: reading.mode === READER_MODE.webtoon ? READER_MODE.webtoon : READER_MODE.paged,
+    readerMode: progress.mode === READER_MODE.webtoon ? READER_MODE.webtoon : READER_MODE.paged,
   };
 }

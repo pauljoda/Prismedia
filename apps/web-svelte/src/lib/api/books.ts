@@ -1,9 +1,11 @@
 import {
+  getBookAlignment,
   getBookChapterMappings,
   getBookContents,
   replaceBookChapterMappings,
 } from "$lib/api/generated/prismedia";
 import type {
+  BookAlignmentResponse,
   BookChapterAudioMapping,
   BookChapterMappingsResponse,
   BookContentsResponse,
@@ -30,12 +32,25 @@ export function fetchBookChapterMappings(
   );
 }
 
-/** Replaces the Book's complete persisted audiobook-to-readable-chapter override map. */
+/**
+ * Fetches the server-owned reading/listening alignment: rows in display order, coverage, and the
+ * current user's exact, switch, and combined resume targets.
+ */
+export function fetchBookAlignment(
+  bookId: string,
+  options?: RequestOptions,
+): Promise<BookAlignmentResponse> {
+  return getBookAlignment(bookId, requestInit(options)).then((response) =>
+    unwrapGenerated(response, `Failed to load reading and listening alignment for book ${bookId}`),
+  );
+}
+
+/** Replaces the Book's manual chapter overrides and returns the refreshed alignment. */
 export function saveBookChapterMappings(
   bookId: string,
   mappings: readonly BookChapterAudioMapping[],
   options?: RequestOptions,
-): Promise<BookChapterMappingsResponse> {
+): Promise<BookAlignmentResponse> {
   return replaceBookChapterMappings(
     bookId,
     { mappings: [...mappings] },
