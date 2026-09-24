@@ -4,6 +4,9 @@ name: CI
 # unit tests (including the source-discipline guards), and the backend architecture/
 # identifier-discipline test classes, which run without a database.
 #
+# PostgreSQL-backed persistence tests (ownership guards, migrations, stores) run in their
+# own job against a postgres:16 service.
+#
 # The full gate (`pnpm validate`) additionally regenerates the API client against a
 # running dev API (`pnpm api:check`), builds the docs site, and runs the entire backend
 # test suite; it stays on the manual Validate workflow. Offline codes.ts parity IS
@@ -81,3 +84,41 @@ jobs:
         run: >
           dotnet test apps/backend/Prismedia.slnx
           --filter "FullyQualifiedName~InfrastructureBoundaryTests|FullyQualifiedName~ConstantsDriftGuardTests|FullyQualifiedName~ApiProblemCodeDisciplineTests|FullyQualifiedName~GeneratedCodesParityTests|FullyQualifiedName~CodesManifestContractTests|FullyQualifiedName~CodecCompletenessTests|FullyQualifiedName~CodecRegistryTests"
+
+  backend-postgres:
+    name: Backend PostgreSQL tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: prismedia
+          POSTGRES_PASSWORD: prismedia
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U prismedia"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 12
+    env:
+      # An explicit URL makes an unreachable database fail these tests instead of skipping them.
+      PRISMEDIA_TEST_DATABASE_URL: Host=localhost;Port=5432;Database=postgres;Username=prismedia;Password=prismedia
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore .NET dependencies
+        run: dotnet restore Prismedia.slnx
+        working-directory: apps/backend
+
+      - name: Run PostgreSQL-backed persistence tests
+        run: >
+          dotnet test apps/backend/tests/Prismedia.Infrastructure.Tests/Prismedia.Infrastructure.Tests.csproj
+          --filter "FullyQualifiedName~Postgres"

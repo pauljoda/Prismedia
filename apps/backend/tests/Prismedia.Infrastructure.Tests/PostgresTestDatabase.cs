@@ -104,7 +104,8 @@ internal sealed class PostgresTestDatabase(
     }
 
     private static async Task<string> RequireAdminConnectionStringAsync() {
-        var configured = Environment.GetEnvironmentVariable("PRISMEDIA_TEST_DATABASE_URL")
+        var explicitlyConfigured = Environment.GetEnvironmentVariable("PRISMEDIA_TEST_DATABASE_URL");
+        var configured = explicitlyConfigured
             ?? "Host=localhost;Port=5432;Database=postgres;Username=prismedia;Password=prismedia";
         var adminBuilder = new NpgsqlConnectionStringBuilder(configured) {
             Database = "postgres",
@@ -113,7 +114,8 @@ internal sealed class PostgresTestDatabase(
         try {
             await using var probe = new NpgsqlConnection(adminBuilder.ConnectionString);
             await probe.OpenAsync();
-        } catch (Exception exception) when (exception is NpgsqlException or TimeoutException) {
+        } catch (Exception exception) when (explicitlyConfigured is null && exception is NpgsqlException or TimeoutException) {
+            // Only the implicit local dev database is optional; an explicitly configured one (CI) must be reachable.
             throw SkipException.ForSkip(
                 $"PostgreSQL test requires PRISMEDIA_TEST_DATABASE_URL or the local dev database: {exception.Message}");
         }
