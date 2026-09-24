@@ -392,6 +392,36 @@ export const ACQUISITION_TEARDOWN_INTENT = {
 
 export type AcquisitionTeardownIntentCode = (typeof ACQUISITION_TEARDOWN_INTENT)[keyof typeof ACQUISITION_TEARDOWN_INTENT];
 
+// source: enum AlignmentBasis
+export const ALIGNMENT_BASIS = {
+  exact: "exact",
+  chapterStart: "chapter_start",
+  interpolated: "interpolated",
+  freshStart: "fresh_start",
+} as const;
+
+export type AlignmentBasisCode = (typeof ALIGNMENT_BASIS)[keyof typeof ALIGNMENT_BASIS];
+
+// source: enum AlignmentGapReason
+export const ALIGNMENT_GAP_REASON = {
+  noPosition: "no_position",
+  readableChaptersUnavailable: "readable_chapters_unavailable",
+  readableChapterUnpaired: "readable_chapter_unpaired",
+  audioChapterUnpaired: "audio_chapter_unpaired",
+  positionOutsideChapters: "position_outside_chapters",
+} as const;
+
+export type AlignmentGapReasonCode = (typeof ALIGNMENT_GAP_REASON)[keyof typeof ALIGNMENT_GAP_REASON];
+
+// source: enum AlignmentMatchState
+export const ALIGNMENT_MATCH_STATE = {
+  paired: "paired",
+  readableOnly: "readable_only",
+  audioOnly: "audio_only",
+} as const;
+
+export type AlignmentMatchStateCode = (typeof ALIGNMENT_MATCH_STATE)[keyof typeof ALIGNMENT_MATCH_STATE];
+
 // source: enum AudioPlaybackDiagnosticEvent
 export const AUDIO_PLAYBACK_DIAGNOSTIC_EVENT = {
   playing: "playing",

@@ -1,5 +1,6 @@
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Prismedia.Application.Books;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Audio;
 using Prismedia.Application.Files;
@@ -33,6 +34,7 @@ public static class DependencyInjection {
     public static IServiceCollection AddPrismediaApplication(this IServiceCollection services) {
         services.AddScoped<JobService>();
         services.AddScoped<EntityCapabilityService>();
+        services.AddScoped<BookAlignmentService>();
         services.AddSingleton(TimeProvider.System);
         services.AddScoped<SettingsService>();
         services.AddScoped<IAutomaticSubtitleAcquisitionScheduler, AutomaticSubtitleAcquisitionScheduler>();

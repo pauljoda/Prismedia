@@ -17,6 +17,8 @@ namespace Prismedia.Infrastructure.Media.Books;
 internal sealed class EfBookChapterMapService(
     PrismediaDbContext db,
     EpubBookContentsCache epubCache) : IBookChapterMapService {
+    #region Actions - Refresh
+
     /// <inheritdoc />
     public async Task<bool> IsRefreshNeededAsync(Guid bookId, CancellationToken cancellationToken) {
         var state = await db.BookContentStates.AsNoTracking()
@@ -154,6 +156,10 @@ internal sealed class EfBookChapterMapService(
         return stale;
     }
 
+    #endregion
+
+    #region Actions - Persistence
+
     private async Task<BookContentStateRow> EnsureStateAsync(
         BookContentStateRow? state,
         Guid bookId,
@@ -190,6 +196,10 @@ internal sealed class EfBookChapterMapService(
             EndFraction = entry.EndFraction
         }));
     }
+
+    #endregion
+
+    #region Actions - Signatures
 
     private sealed record EpubSource(FileInfo Info, bool Exists);
 
@@ -242,7 +252,7 @@ internal sealed class EfBookChapterMapService(
                 .ToArray();
         }
 
-        var audioChapters = await BookAudioChapterProjection.LoadAsync(db, bookId, cancellationToken);
+        var audioChapters = (await BookAudioChapterProjection.LoadAsync(db, bookId, cancellationToken)).Matchable;
 
         var manualRows = await db.BookChapterAudioMappings.AsNoTracking()
             .Where(row => row.BookId == bookId && row.Origin == BookChapterMappingOrigin.Manual)
@@ -285,4 +295,6 @@ internal sealed class EfBookChapterMapService(
 
     private static string ShortHash(string value) =>
         Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)))[..32].ToLowerInvariant();
+
+    #endregion
 }

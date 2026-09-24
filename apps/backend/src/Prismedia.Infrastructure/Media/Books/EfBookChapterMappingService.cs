@@ -17,7 +17,13 @@ internal sealed class EfBookChapterMappingService(
     IEntityVisibilityChecker visibility,
     IBookChapterMapService chapterMap,
     IBookContentsService contents) : IBookChapterMappingService {
+    #region Static Variables
+
     private const int MaximumReadableChapterKeyLength = 2048;
+
+    #endregion
+
+    #region Actions - Mappings
 
     /// <inheritdoc />
     public async Task<BookChapterMappingsResponse?> GetAsync(
@@ -36,15 +42,12 @@ internal sealed class EfBookChapterMappingService(
         ReplaceBookChapterMappingsRequest request,
         CancellationToken cancellationToken) {
         if (!await IsVisibleBookAsync(bookId, cancellationToken)) {
-            return new BookChapterMappingSaveResult(BookChapterMappingSaveStatus.NotFound, null, null);
+            return new BookChapterMappingSaveResult(BookChapterMappingSaveStatus.NotFound, null);
         }
 
         var normalized = Normalize(request.Mappings);
         if (normalized.Error is not null) {
-            return new BookChapterMappingSaveResult(
-                BookChapterMappingSaveStatus.Invalid,
-                null,
-                normalized.Error);
+            return new BookChapterMappingSaveResult(BookChapterMappingSaveStatus.Invalid, normalized.Error);
         }
 
         if (normalized.Mappings.Count > 0) {
@@ -56,7 +59,6 @@ internal sealed class EfBookChapterMappingService(
                     !readableKeys.Contains(mapping.ReadableChapterKey))) {
                 return new BookChapterMappingSaveResult(
                     BookChapterMappingSaveStatus.Invalid,
-                    null,
                     "Every mapped readable chapter must belong to the Book's current contents.");
             }
         }
@@ -76,20 +78,18 @@ internal sealed class EfBookChapterMappingService(
         if (validTrackCount != trackIds.Length) {
             return new BookChapterMappingSaveResult(
                 BookChapterMappingSaveStatus.Invalid,
-                null,
                 "Every mapped audiobook file must be a playable source owned directly by this Book.");
         }
 
         var audioChapters = await BookAudioChapterProjection.LoadAsync(db, bookId, cancellationToken);
-        var availableAudioChapterIds = audioChapters
-            .Select(chapter => (chapter.AudioTrackId, chapter.AudioMarkerId))
+        var availableAudioChapterIds = audioChapters.Windows
+            .Select(window => (window.TrackEntityId, window.MarkerId))
             .ToHashSet();
         if (normalized.Mappings.Any(mapping =>
                 !availableAudioChapterIds.Contains((mapping.AudioTrackId, mapping.AudioMarkerId)))) {
             return new BookChapterMappingSaveResult(
                 BookChapterMappingSaveStatus.Invalid,
-                null,
-                "Every mapped audiobook chapter must identify an available whole file or embedded marker.");
+                "Every mapped audiobook chapter must identify an available whole file or embedded chapter.");
         }
 
         IDbContextTransaction? transaction = null;
@@ -127,13 +127,14 @@ internal sealed class EfBookChapterMappingService(
         }
 
         // The saved manual pairs consume readable and audio chapters, so the automatic layer is stale by
-        // definition; refill it inline so the response is the complete merged map.
+        // definition; refill it inline so the caller's next alignment read is the complete merged map.
         await chapterMap.RefreshAsync(bookId, cancellationToken);
-        return new BookChapterMappingSaveResult(
-            BookChapterMappingSaveStatus.Saved,
-            await ReadAsync(bookId, cancellationToken),
-            null);
+        return new BookChapterMappingSaveResult(BookChapterMappingSaveStatus.Saved, null);
     }
+
+    #endregion
+
+    #region Actions - Reads
 
     private async Task<bool> IsVisibleBookAsync(Guid bookId, CancellationToken cancellationToken) =>
         await visibility.IsVisibleAsync(bookId, cancellationToken) &&
@@ -155,7 +156,7 @@ internal sealed class EfBookChapterMappingService(
                 row.Origin
             })
             .ToArrayAsync(cancellationToken);
-        var audioChapters = await BookAudioChapterProjection.LoadAsync(db, bookId, cancellationToken);
+        var audioChapters = (await BookAudioChapterProjection.LoadAsync(db, bookId, cancellationToken)).Matchable;
         return new BookChapterMappingsResponse(
             rows.Select(row => new BookChapterAudioMapping(
                     row.ReadableChapterKey,
@@ -171,6 +172,10 @@ internal sealed class EfBookChapterMappingService(
                     chapter.EndSeconds))
                 .ToArray());
     }
+
+    #endregion
+
+    #region Actions - Validation
 
     private static NormalizedMappings Normalize(IReadOnlyList<BookChapterAudioMapping>? mappings) {
         if (mappings is null) {
@@ -209,4 +214,6 @@ internal sealed class EfBookChapterMappingService(
     private sealed record NormalizedMappings(
         IReadOnlyList<BookChapterAudioMapping> Mappings,
         string? Error);
+
+    #endregion
 }

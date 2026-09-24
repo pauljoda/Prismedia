@@ -235,6 +235,8 @@ public sealed class EfBookChapterMappingServiceTests {
             Title = title,
             Seconds = seconds,
             EndSeconds = endSeconds,
+            // Container-imported chapters are the only markers that split a track into chapters.
+            SourceIndex = db.EntityMarkers.Local.Count(marker => marker.EntityId == entityId),
             CreatedAt = DateTimeOffset.UtcNow,
             UpdatedAt = DateTimeOffset.UtcNow
         });
