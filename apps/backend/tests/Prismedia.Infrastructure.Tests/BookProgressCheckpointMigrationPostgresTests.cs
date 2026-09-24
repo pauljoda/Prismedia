@@ -8,8 +8,8 @@ namespace Prismedia.Infrastructure.Tests;
 /// an EPUB cursor plus the pre-unification absolute audiobook resume time.
 /// </summary>
 public sealed class BookProgressCheckpointMigrationPostgresTests {
-    private const string PreviousMigration = "20260923055537_AddManagedBookRenditionScope";
-    private const string MigrationUnderTest = "20260924171447_AddUserProgressCheckpoints";
+    private const string PreviousMigration = "20260924183143_AddConnectedIntegrations";
+    private const string MigrationUnderTest = "20260924183203_AddUserProgressCheckpoints";
 
     [Fact]
     [Trait("Category", "PostgreSQL")]

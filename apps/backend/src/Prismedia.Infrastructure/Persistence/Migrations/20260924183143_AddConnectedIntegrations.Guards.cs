@@ -3,22 +3,7 @@ using Prismedia.Domain.Entities;
 
 namespace Prismedia.Infrastructure.Persistence.Migrations;
 
-public partial class AddFulfillmentReservations {
-    private static string BackfillOwnership => $$"""
-        WITH accepted_scopes AS (
-            SELECT holding_id, entity_id FROM managed_source_bindings
-            UNION
-            SELECT holding.id, e.id FROM managed_holdings holding
-                CROSS JOIN LATERAL jsonb_array_elements(holding.selections) selection
-                JOIN entities e ON e.id::text = selection ->> 'entityId'
-        )
-        INSERT INTO fulfillment_reservations (id, owner_id, owner_kind, connection_id, entity_id, external_ids, created_at)
-        SELECT gen_random_uuid(), scope.holding_id, '{{FulfillmentOwnerKind.ConnectedLibrary.ToCode()}}', holding.connection_id,
-            scope.entity_id, coalesce((SELECT jsonb_object_agg(lower(provider), value)
-                FROM entity_external_ids WHERE entity_id = scope.entity_id), '{}'::jsonb), now()
-        FROM accepted_scopes scope JOIN managed_holdings holding ON holding.id = scope.holding_id;
-        """;
-
+public partial class AddConnectedIntegrations {
     // Functions are VOLATILE so a statement waiting on the shared transaction lock reads a fresh
     // committed snapshot after the previous owner commits. Queue and network effects occur later.
     private static string OwnershipGuards => $$"""

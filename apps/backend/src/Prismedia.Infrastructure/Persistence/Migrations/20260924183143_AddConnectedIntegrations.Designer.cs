@@ -12,8 +12,8 @@ using Prismedia.Infrastructure.Persistence;
 namespace Prismedia.Infrastructure.Persistence.Migrations
 {
     [DbContext(typeof(PrismediaDbContext))]
-    [Migration("20260923055537_AddManagedBookRenditionScope")]
-    partial class AddManagedBookRenditionScope
+    [Migration("20260924183143_AddConnectedIntegrations")]
+    partial class AddConnectedIntegrations
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -5175,39 +5175,6 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_active_at");
 
-                    b.Property<Guid?>("ListeningCurrentEntityId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("listening_current_entity_id");
-
-                    b.Property<int?>("ListeningIndex")
-                        .HasColumnType("integer")
-                        .HasColumnName("listening_index");
-
-                    b.Property<Guid?>("ListeningMarkerId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("listening_marker_id");
-
-                    b.Property<double?>("ListeningOffsetSeconds")
-                        .HasColumnType("double precision")
-                        .HasColumnName("listening_offset_seconds");
-
-                    b.Property<int?>("ListeningTotal")
-                        .HasColumnType("integer")
-                        .HasColumnName("listening_total");
-
-                    b.Property<Guid?>("ListeningTrackEntityId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("listening_track_entity_id");
-
-                    b.Property<string>("ListeningUnit")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("listening_unit");
-
-                    b.Property<DateTimeOffset?>("ListeningUpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("listening_updated_at");
-
                     b.Property<DateTimeOffset?>("ProgressCompletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("progress_completed_at");
@@ -5251,36 +5218,6 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("rating_value");
 
-                    b.Property<Guid?>("ReadingCurrentEntityId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("reading_current_entity_id");
-
-                    b.Property<int?>("ReadingIndex")
-                        .HasColumnType("integer")
-                        .HasColumnName("reading_index");
-
-                    b.Property<string>("ReadingLocation")
-                        .HasColumnType("text")
-                        .HasColumnName("reading_location");
-
-                    b.Property<string>("ReadingMode")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("reading_mode");
-
-                    b.Property<int?>("ReadingTotal")
-                        .HasColumnType("integer")
-                        .HasColumnName("reading_total");
-
-                    b.Property<string>("ReadingUnit")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("reading_unit");
-
-                    b.Property<DateTimeOffset?>("ReadingUpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("reading_updated_at");
-
                     b.Property<double>("ResumeSeconds")
                         .HasColumnType("double precision")
                         .HasColumnName("resume_seconds");
@@ -5313,8 +5250,6 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
 
                     b.ToTable("user_entity_states", null, t =>
                         {
-                            t.HasCheckConstraint("ck_user_entity_states_book_checkpoint_bounds", "(reading_index IS NULL OR reading_index >= 0) AND (reading_total IS NULL OR reading_total >= 0) AND (listening_index IS NULL OR listening_index >= 0) AND (listening_total IS NULL OR listening_total >= 0) AND (listening_offset_seconds IS NULL OR listening_offset_seconds >= 0)");
-
                             t.HasCheckConstraint("ck_user_entity_states_progress_bounds", "progress_index >= 0 AND progress_total >= 0");
                         });
                 });

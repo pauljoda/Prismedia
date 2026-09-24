@@ -18,26 +18,6 @@ namespace Prismedia.Infrastructure.Tests;
 public sealed partial class ManagedTrackingPostgresTests : IDisposable {
     private readonly string workspace = Directory.CreateTempSubdirectory("prismedia-tracking-").FullName;
 
-    [Theory]
-    [InlineData(true)]
-    [InlineData(false)]
-    public async Task OwnershipMigrationBackfillsAcceptedScopesAndCanBeRolledBack(bool adopted) {
-        await using var database = await PostgresTestDatabase.CreateAsync();
-        await using var db = database.CreateContext();
-        var fixture = await SeedAsync(db);
-        if (adopted) await AdoptAsync(Store(db), fixture);
-        else await Store(db).CreateAsync(fixture.ConnectionId, fixture.Request, "Holding", default);
-        await database.MigrateAsync("20260916203046_AddManagedLibraryTracking");
-        await database.MigrateAsync("20260916205953_AddFulfillmentReservations");
-        db.ChangeTracker.Clear();
-        var owner = Assert.Single(await db.FulfillmentReservations.ToArrayAsync());
-        Assert.Equal(fixture.EntityId, owner.EntityId);
-        Assert.Equal(fixture.Request.OperationId, owner.OwnerId);
-        db.Acquisitions.Add(new() { Id = Guid.NewGuid(), EntityId = fixture.EntityId, Kind = EntityKind.Movie, Status = AcquisitionStatus.Pending });
-        var error = await Assert.ThrowsAsync<DbUpdateException>(() => db.SaveChangesAsync());
-        Assert.True(FulfillmentOwnershipViolation.IsConflict(error));
-    }
-
     [Fact]
     public async Task RenameMissingAndRestoreKeepEntityFileAndUserStateWhileUpdatingAvailability() {
         await using var database = await PostgresTestDatabase.CreateAsync();
