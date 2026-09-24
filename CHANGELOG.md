@@ -72,7 +72,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 - Replace or upload individual TV episodes, including older files imported through season packs. Replacement searches use current episode numbering and monitor preferences; files shared by multiple episodes require coverage-aware review.
 
-- Acquisition profiles now offer an ordered audio-language picker and editable starter rules for common languages, codecs, HDR, source formats, and lossless audio. Basic and Advanced edit the same reusable custom formats, with scores set per profile.
+- Acquisition profiles now offer an ordered audio-language picker and editable starter rules for common languages, codecs, HDR, source formats, lossless audio, and M4B or chapterized audiobooks. Each profile type offers only the starter rules that apply to it, so Book profiles no longer list video codecs. Basic and Advanced edit the same reusable custom formats, with scores set per profile.
 
 - Movie and TV acquisition can search verified original, translated, and romanized titles from the selected metadata provider. Those names share strict identity checks and quality ranking through download validation, import, and coverage recovery.
 

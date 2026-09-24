@@ -10,7 +10,8 @@ it("keeps a Basic-generated rule editable through repeated Advanced switches", a
   const form: CustomFormatSaveRequest = { id: null, kind: ENTITY_KIND.movie, name: "", conditions: [] };
   const onpreset = vi.fn();
   render(AcquisitionRuleFields, { form, presets: [{ name: "English audio", description: "Explicit audio", suggestedScore: 100,
-    conditions: [{ type: CUSTOM_FORMAT_CONDITION_TYPE.language, value: "english", negate: false, required: true }] }], onpreset });
+    conditions: [{ type: CUSTOM_FORMAT_CONDITION_TYPE.language, value: "english", negate: false, required: true }],
+    profileKinds: [ENTITY_KIND.movie] }], onpreset });
   await fireEvent.click(screen.getByRole("button", { name: /^Common preference:/ }));
   await fireEvent.click(screen.getByRole("option", { name: "English audio" }));
   await fireEvent.click(screen.getByRole("button", { name: "Use this preference" }));

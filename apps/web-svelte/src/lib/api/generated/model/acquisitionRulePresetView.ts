@@ -5,6 +5,7 @@
  * OpenAPI spec version: 1.0.0
  */
 import type { CustomFormatConditionView } from './customFormatConditionView';
+import type { EntityKind } from './entityKind';
 
 export interface AcquisitionRulePresetView {
   name: string;
@@ -12,6 +13,7 @@ export interface AcquisitionRulePresetView {
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   suggestedScore: number | string;
   conditions: CustomFormatConditionView[];
+  profileKinds: EntityKind[];
   /** @nullable */
   audioLanguage?: string | null;
 }
