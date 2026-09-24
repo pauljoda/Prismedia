@@ -143,6 +143,7 @@ public sealed class EfManagedControlStore(PrismediaDbContext db, IManagedTrackin
         var now = DateTimeOffset.UtcNow;
         var row = new ManagedControlRow { Id = operation.State.OperationId, ConnectionId = operation.State.ConnectionId,
             HoldingId = operation.State.HoldingId, ActiveHoldingId = operation.State.HoldingId, Revision = 1,
+            Phase = operation.State.Phase,
             StateJson = JsonSerializer.Serialize(operation.State, Json), PlanJson = JsonSerializer.Serialize(plan, Json),
             CreatedAt = now, UpdatedAt = now, NextCheckAt = now.AddSeconds(30) };
         db.ManagedControls.Add(row);
@@ -187,6 +188,7 @@ public sealed class EfManagedControlStore(PrismediaDbContext db, IManagedTrackin
         var safeProblem = problem is { Length: > 4096 } ? problem[..4096] : problem;
         var count = await db.ManagedControls.Where(row => row.Id == operation.State.OperationId && row.Revision == expectedRevision)
             .ExecuteUpdateAsync(set => set.SetProperty(row => row.Revision, operation.State.Revision)
+                .SetProperty(row => row.Phase, operation.State.Phase)
                 .SetProperty(row => row.StateJson, stateJson).SetProperty(row => row.ActiveHoldingId, activeId)
                 .SetProperty(row => row.Problem, safeProblem).SetProperty(row => row.UpdatedAt, now)
                 .SetProperty(row => row.NextCheckAt, next), token);

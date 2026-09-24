@@ -28,6 +28,9 @@ public sealed class ClosedSetDefinitionTests {
         Assert.Contains(AcquisitionStatus.Failed, AcquisitionStatusDefinition.OwningFulfillment);
         Assert.DoesNotContain(AcquisitionStatus.Imported, AcquisitionStatusDefinition.OwningFulfillment);
         Assert.DoesNotContain(AcquisitionStatus.Cancelled, AcquisitionStatusDefinition.OwningFulfillment);
+        Assert.Contains(AcquisitionStatus.Stopping, AcquisitionStatusDefinition.OwningFulfillment);
+        Assert.DoesNotContain(AcquisitionStatus.Stopping, AcquisitionStatusDefinition.ClaimingFulfillment);
+        Assert.Contains(AcquisitionStatus.Failed, AcquisitionStatusDefinition.ClaimingFulfillment);
     }
 
     private static void AssertComplete<TCode>(IEnumerable<TCode> defined)

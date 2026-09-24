@@ -3008,6 +3008,9 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
 
                     NpgsqlIndexBuilderExtensions.AreNullsDistinct(b.HasIndex("OwnerId", "OwnerKind", "EntityId", "BookRendition"), false);
 
+                    b.HasIndex(new[] { "EntityId" }, "IX_fulfillment_reservations_active_entity_id")
+                        .HasFilter("released_at IS NULL");
+
                     b.ToTable("fulfillment_reservations", (string)null);
                 });
 
@@ -3949,6 +3952,12 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("next_check_at");
 
+                    b.Property<string>("Phase")
+                        .IsRequired()
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("phase");
+
                     b.Property<string>("PlanJson")
                         .IsRequired()
                         .HasColumnType("jsonb")
@@ -4150,6 +4159,10 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .HasMaxLength(4096)
                         .HasColumnType("character varying(4096)")
                         .HasColumnName("problem");
+
+                    b.Property<bool>("ReviewRequired")
+                        .HasColumnType("boolean")
+                        .HasColumnName("review_required");
 
                     b.Property<long>("Revision")
                         .IsConcurrencyToken()
@@ -6097,7 +6110,7 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                     b.HasOne("Prismedia.Infrastructure.Persistence.Entities.EntityRow", null)
                         .WithMany()
                         .HasForeignKey("EntityId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });
 
@@ -6281,7 +6294,7 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                     b.HasOne("Prismedia.Infrastructure.Persistence.Entities.EntityRow", null)
                         .WithMany()
                         .HasForeignKey("EntityId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.HasOne("Prismedia.Infrastructure.Persistence.Entities.LibraryRootRow", null)
@@ -6296,7 +6309,7 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                     b.HasOne("Prismedia.Infrastructure.Persistence.Entities.EntityRow", null)
                         .WithMany()
                         .HasForeignKey("EntityId")
-                        .OnDelete(DeleteBehavior.Restrict)
+                        .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.HasOne("Prismedia.Infrastructure.Persistence.Entities.ManagedHoldingRow", null)

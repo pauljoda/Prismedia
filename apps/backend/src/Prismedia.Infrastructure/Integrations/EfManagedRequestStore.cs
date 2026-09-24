@@ -373,7 +373,7 @@ public sealed partial class EfManagedRequestStore(PrismediaDbContext db, IExtern
         var now = DateTimeOffset.UtcNow;
         var row = new ManagedRequestRow { Id = state.OperationId, ConnectionId = state.ConnectionId, EntityId = state.EntityId,
             LibraryRootId = state.LibraryRootId, Revision = state.Revision, Phase = state.Phase,
-            StateJson = JsonSerializer.Serialize(state, Json),
+            ReviewRequired = state.ReviewRequired, StateJson = JsonSerializer.Serialize(state, Json),
             PlanJson = JsonSerializer.Serialize(plan, Json), CreatedAt = now, UpdatedAt = now, NextCheckAt = now.AddSeconds(30) };
         try {
             var targetIds = plan.Request.TargetEntityIds is { Count: > 0 }
@@ -688,6 +688,7 @@ public sealed partial class EfManagedRequestStore(PrismediaDbContext db, IExtern
             && row.ConnectionId == state.ConnectionId
             && row.EntityId == state.EntityId && row.LibraryRootId == state.LibraryRootId)
             .ExecuteUpdateAsync(set => set.SetProperty(row => row.Revision, state.Revision).SetProperty(row => row.Phase, state.Phase)
+                .SetProperty(row => row.ReviewRequired, state.ReviewRequired)
                 .SetProperty(row => row.StateJson, serialized).SetProperty(row => row.UpdatedAt, now)
                 .SetProperty(row => row.Problem, safeProblem)
                 .SetProperty(row => row.NextCheckAt, next), token) != 1) {

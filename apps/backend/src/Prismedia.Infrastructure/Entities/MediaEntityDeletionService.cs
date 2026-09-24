@@ -8,6 +8,7 @@ using Prismedia.Application.Jobs;
 using Prismedia.Application.Requests;
 using Prismedia.Contracts.System;
 using Prismedia.Domain.Entities;
+using Prismedia.Domain.Integrations;
 using Prismedia.Infrastructure.Files;
 using Prismedia.Infrastructure.Acquisition;
 using Prismedia.Infrastructure.Media.Processing;
@@ -136,6 +137,12 @@ public sealed class MediaEntityDeletionService(
                     CompletedPayloadFileSystem.CanonicalPath(root), CompletedPayloadFileSystem.CanonicalPath(source.Path)))))
                 return Conflict("This Entity owns files in an externally managed library. Manage those files in the connected application.");
         }
+        // Active connected ownership must be cancelled or released first; settled request history and
+        // released reservations are removed with the Entity.
+        var activeRequestPhases = ManagedRequestPhaseDefinition.Active;
+        if (await db.FulfillmentReservations.AnyAsync(owner => owner.ReleasedAt == null && ids.Contains(owner.EntityId), cancellationToken)
+            || await db.ManagedRequests.AnyAsync(request => ids.Contains(request.EntityId) && activeRequestPhases.Contains(request.Phase), cancellationToken))
+            return Conflict("A connected application still owns this Entity. Cancel its request or stop managing it before deleting.");
         // Confirmed deletion is the terminal owner of this subtree. Resolve every acquisition and graph
         // before any other preflight so active workers cannot keep creating state while removal proceeds.
         var acquisitionIdsByEntity = new Dictionary<Guid, IReadOnlyList<Guid>>();

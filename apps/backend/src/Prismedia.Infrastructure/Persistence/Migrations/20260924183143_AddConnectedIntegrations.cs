@@ -158,7 +158,7 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         column: x => x.entity_id,
                         principalTable: "entities",
                         principalColumn: "id",
-                        onDelete: ReferentialAction.Restrict);
+                        onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
                         name: "FK_fulfillment_reservations_integration_connections_connection~",
                         column: x => x.connection_id,
@@ -246,6 +246,7 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                     library_root_id = table.Column<Guid>(type: "uuid", nullable: false),
                     revision = table.Column<long>(type: "bigint", nullable: false),
                     phase = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
+                    review_required = table.Column<bool>(type: "boolean", nullable: false),
                     state = table.Column<string>(type: "jsonb", nullable: false),
                     plan = table.Column<string>(type: "jsonb", nullable: false),
                     created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
@@ -261,7 +262,7 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         column: x => x.entity_id,
                         principalTable: "entities",
                         principalColumn: "id",
-                        onDelete: ReferentialAction.Restrict);
+                        onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
                         name: "FK_managed_requests_integration_connections_connection_id",
                         column: x => x.connection_id,
@@ -304,6 +305,7 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                     holding_id = table.Column<Guid>(type: "uuid", nullable: false),
                     active_holding_id = table.Column<Guid>(type: "uuid", nullable: true),
                     revision = table.Column<long>(type: "bigint", nullable: false),
+                    phase = table.Column<string>(type: "character varying(32)", maxLength: 32, nullable: false),
                     state = table.Column<string>(type: "jsonb", nullable: false),
                     plan = table.Column<string>(type: "jsonb", nullable: false),
                     created_at = table.Column<DateTimeOffset>(type: "timestamp with time zone", nullable: false),
@@ -356,7 +358,7 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         column: x => x.entity_id,
                         principalTable: "entities",
                         principalColumn: "id",
-                        onDelete: ReferentialAction.Restrict);
+                        onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
                         name: "FK_managed_source_bindings_entity_files_source_file_id",
                         column: x => x.source_file_id,
@@ -382,6 +384,12 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                 table: "external_library_mounts",
                 column: "library_root_id",
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_fulfillment_reservations_active_entity_id",
+                table: "fulfillment_reservations",
+                column: "entity_id",
+                filter: "released_at IS NULL");
 
             migrationBuilder.CreateIndex(
                 name: "IX_fulfillment_reservations_connection_id",

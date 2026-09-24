@@ -246,6 +246,56 @@ public sealed class FulfillmentOwnershipPostgresTests {
         Assert.Equal(2, owners.Count);
     }
 
+    [Fact]
+    public async Task ExistingClaimsProgressAndWindDownWithoutRecheckingOwnership() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var (connection, movie) = await SeedAsync(db);
+        var claim = Acquisition(movie, AcquisitionStatus.Searching);
+        db.Acquisitions.Add(claim); await db.SaveChangesAsync();
+        // Seed a conflict the guards would refuse, as a race or an older schema could have left behind.
+        await db.Database.ExecuteSqlRawAsync("ALTER TABLE fulfillment_reservations DISABLE TRIGGER fulfillment_reservation_guard");
+        await ReserveAsync(db, connection, movie);
+        await db.Database.ExecuteSqlRawAsync("ALTER TABLE fulfillment_reservations ENABLE TRIGGER fulfillment_reservation_guard");
+
+        await db.Acquisitions.Where(row => row.Id == claim.Id)
+            .ExecuteUpdateAsync(update => update.SetProperty(row => row.Status, AcquisitionStatus.Downloading));
+        await db.Acquisitions.Where(row => row.Id == claim.Id)
+            .ExecuteUpdateAsync(update => update.SetProperty(row => row.Status, AcquisitionStatus.Stopping));
+        await ConflictAsync(() => db.Acquisitions.Where(row => row.Id == claim.Id)
+            .ExecuteUpdateAsync(update => update.SetProperty(row => row.Status, AcquisitionStatus.Pending)));
+
+        db.ChangeTracker.Clear();
+
+        // An identity outside the conflicting lineage is not held hostage by that conflict.
+        var unrelated = Entity(EntityKind.Movie); db.Entities.Add(unrelated); await db.SaveChangesAsync();
+        db.EntityExternalIds.Add(Identity(unrelated.Id, ExternalIdProviders.Tmdb, "999"));
+        await db.SaveChangesAsync();
+        db.EntityExternalIds.Add(Identity(movie, ExternalIdProviders.Imdb, "tt0000001"));
+        await ConflictAsync(() => db.SaveChangesAsync());
+    }
+
+    [Fact]
+    public async Task DeletingAnEntityRemovesItsSettledOwnershipHistory() {
+        await using var database = await PostgresTestDatabase.CreateAsync();
+        await using var db = database.CreateContext();
+        var (connection, movie) = await SeedAsync(db);
+        var root = new LibraryRootRow { Id = Guid.NewGuid(), Path = "/library", Label = "Movies" };
+        db.LibraryRoots.Add(root); await db.SaveChangesAsync();
+        var owner = Guid.NewGuid();
+        await ReserveAsync(db, connection, movie, ownerId: owner);
+        await db.FulfillmentReservations.Where(row => row.OwnerId == owner)
+            .ExecuteUpdateAsync(update => update.SetProperty(row => row.ReleasedAt, DateTimeOffset.UtcNow));
+        db.ManagedRequests.Add(new() { Id = owner, ConnectionId = connection, EntityId = movie, LibraryRootId = root.Id,
+            Revision = 1, Phase = ManagedRequestPhase.Completed, CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow });
+        await db.SaveChangesAsync();
+
+        await db.Entities.Where(row => row.Id == movie).ExecuteDeleteAsync();
+
+        Assert.False(await db.FulfillmentReservations.AnyAsync());
+        Assert.False(await db.ManagedRequests.AnyAsync());
+    }
+
     private static async Task ReserveAsync(PrismediaDbContext db, Guid connection, Guid entity, BookRendition? rendition = null, Guid? ownerId = null) {
         await using var transaction = await db.Database.BeginTransactionAsync();
         await new EfFulfillmentReservationStore(db).ReserveAsync(ownerId ?? Guid.NewGuid(), FulfillmentOwnerKind.ExternalManager,

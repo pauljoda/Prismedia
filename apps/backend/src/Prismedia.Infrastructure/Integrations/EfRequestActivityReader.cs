@@ -112,14 +112,11 @@ public sealed class EfRequestActivityReader(
         ActivityCursor? after,
         int limit,
         bool hideNsfw) {
-        var supportsJsonContainment = db.Database.ProviderName?.Contains("Npgsql", StringComparison.Ordinal) == true;
         var settled = ManagedRequestPhaseDefinition.Settled;
         var needingAttention = ManagedRequestPhaseDefinition.NeedingAttention;
         var query =
             from row in db.ManagedRequests.AsNoTracking()
-            let reviewRequired = supportsJsonContainment
-                ? EF.Functions.JsonContains(row.StateJson, """{"reviewRequired":true}""")
-                : row.StateJson.Contains("\"reviewRequired\":true", StringComparison.Ordinal)
+            let reviewRequired = row.ReviewRequired
             let groupRank = settled.Contains(row.Phase)
                 ? RecentGroupRank
                 : reviewRequired || needingAttention.Contains(row.Phase)
@@ -143,7 +140,6 @@ public sealed class EfRequestActivityReader(
         ActivityCursor? after,
         int limit,
         bool hideNsfw) {
-        var supportsJsonContainment = db.Database.ProviderName?.Contains("Npgsql", StringComparison.Ordinal) == true;
         var settledHoldings = ManagedTrackingStatusDefinition.Settled;
         var attentionHoldings = ManagedTrackingStatusDefinition.NeedingAttention;
         var followedHoldings = ManagedTrackingStatusDefinition.Followed;
@@ -151,9 +147,7 @@ public sealed class EfRequestActivityReader(
             from holding in db.ManagedHoldings.AsNoTracking()
             join request in db.ManagedRequests.AsNoTracking() on holding.Id equals request.Id into matchedRequests
             from request in matchedRequests.DefaultIfEmpty()
-            let requestNeedsReview = request != null && (supportsJsonContainment
-                ? EF.Functions.JsonContains(request.StateJson, """{"reviewRequired":true}""")
-                : request.StateJson.Contains("\"reviewRequired\":true", StringComparison.Ordinal))
+            let requestNeedsReview = request != null && request.ReviewRequired
             let occurredAt = holding.LastCheckedAt ?? holding.ReleasedAt
                 ?? (request == null ? (DateTimeOffset?)null : request.CreatedAt)
                 ?? holding.NextCheckAt

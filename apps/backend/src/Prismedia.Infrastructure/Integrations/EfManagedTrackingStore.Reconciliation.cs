@@ -256,6 +256,7 @@ public sealed partial class EfManagedTrackingStore {
                     .ExecuteUpdateAsync(set => set
                         .SetProperty(request => request.StateJson, stateJson)
                         .SetProperty(request => request.Phase, operation.State.Phase)
+                        .SetProperty(request => request.ReviewRequired, operation.State.ReviewRequired)
                         .SetProperty(request => request.Revision, operation.State.Revision)
                         .SetProperty(request => request.UpdatedAt, now)
                         .SetProperty(request => request.NextCheckAt, now.Add(TrackingInterval))
@@ -264,7 +265,7 @@ public sealed partial class EfManagedTrackingStore {
                 }
 
                 var relatedRows = await db.ManagedRequests
-                    .FromSqlInterpolated($"SELECT * FROM managed_requests WHERE connection_id = {row.ConnectionId} AND entity_id = {requestRow.EntityId} AND id <> {row.Id} FOR UPDATE")
+                    .FromSqlInterpolated($"SELECT * FROM managed_requests WHERE connection_id = {row.ConnectionId} AND entity_id = {requestRow.EntityId} AND id <> {row.Id} ORDER BY id FOR UPDATE")
                     .AsNoTracking().ToArrayAsync(leaseToken);
                 foreach (var related in relatedRows.OrderBy(request => request.Id)) {
                     var plan = JsonSerializer.Deserialize<ManagedRequestPlan>(related.PlanJson, Json);
@@ -292,6 +293,7 @@ public sealed partial class EfManagedTrackingStore {
                         .ExecuteUpdateAsync(set => set
                             .SetProperty(request => request.StateJson, relatedJson)
                             .SetProperty(request => request.Phase, relatedOperation.State.Phase)
+                            .SetProperty(request => request.ReviewRequired, relatedOperation.State.ReviewRequired)
                             .SetProperty(request => request.Revision, relatedOperation.State.Revision)
                             .SetProperty(request => request.UpdatedAt, now)
                             .SetProperty(request => request.NextCheckAt,

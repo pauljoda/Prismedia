@@ -10,6 +10,8 @@ public sealed class ManagedRequestRow {
     public Guid LibraryRootId { get; set; }
     public long Revision { get; set; }
     public ManagedRequestPhase Phase { get; set; }
+    /// <summary>Promoted from the state document so activity queries can filter on it.</summary>
+    public bool ReviewRequired { get; set; }
     public string StateJson { get; set; } = "{}";
     public string PlanJson { get; set; } = "{}";
     public DateTimeOffset CreatedAt { get; set; }

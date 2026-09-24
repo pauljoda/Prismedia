@@ -45,6 +45,31 @@ public sealed class MediaEntityDeletionServiceTests {
     }
 
     [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task ActiveConnectedOwnershipRefusesDeletionBeforeClaimingTheEntity(bool reserved) {
+        await using var db = CreateContext();
+        var root = new FileLibraryRoot(Guid.NewGuid(), "/library/movies", "Movies", true, true, false, false, false, false);
+        var movieId = Guid.NewGuid();
+        db.Entities.Add(NewEntity(movieId, EntityKind.Movie.ToCode(), "Requested movie"));
+        db.EntityFiles.Add(NewSourceFile(movieId, "/library/movies/film.mkv"));
+        if (reserved) {
+            db.FulfillmentReservations.Add(new FulfillmentReservationRow { Id = Guid.NewGuid(), OwnerId = Guid.NewGuid(),
+                OwnerKind = FulfillmentOwnerKind.ExternalManager, ConnectionId = Guid.NewGuid(), EntityId = movieId, CreatedAt = DateTimeOffset.UtcNow });
+        } else {
+            db.ManagedRequests.Add(new ManagedRequestRow { Id = Guid.NewGuid(), ConnectionId = Guid.NewGuid(), EntityId = movieId,
+                LibraryRootId = root.Id, Revision = 1, Phase = ManagedRequestPhase.AwaitingFiles,
+                CreatedAt = DateTimeOffset.UtcNow, UpdatedAt = DateTimeOffset.UtcNow });
+        }
+        await db.SaveChangesAsync();
+        var storage = new RecordingStorage();
+        var result = await CreateDeletionService(db, root, storage).DeleteAsync(movieId, true, default);
+        Assert.Equal(MediaEntityDeleteFailureKind.Conflict, result.FailureKind);
+        Assert.Empty(storage.DeletedPaths);
+        Assert.Null((await db.Entities.FindAsync(movieId))!.LifecycleClaimKind);
+    }
+
+    [Theory]
     [InlineData(EntityKind.Audio, true)]
     [InlineData(EntityKind.BookChapter, false)]
     [InlineData(EntityKind.Collection, false)]

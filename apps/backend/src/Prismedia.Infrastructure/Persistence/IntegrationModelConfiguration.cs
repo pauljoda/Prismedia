@@ -15,6 +15,7 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.LibraryRootId).HasColumnName("library_root_id");
             entity.Property(row => row.Revision).HasColumnName("revision").IsConcurrencyToken();
             entity.Property(row => row.Phase).HasColumnName("phase").HasMaxLength(32).HasConversion(value => value.ToCode(), value => value.DecodeAs<ManagedRequestPhase>());
+            entity.Property(row => row.ReviewRequired).HasColumnName("review_required");
             entity.Property(row => row.StateJson).HasColumnName("state").HasColumnType("jsonb");
             entity.Property(row => row.PlanJson).HasColumnName("plan").HasColumnType("jsonb");
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
@@ -22,7 +23,8 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.NextCheckAt).HasColumnName("next_check_at");
             entity.Property(row => row.Problem).HasColumnName("problem").HasMaxLength(4096);
             entity.HasOne<IntegrationConnectionRow>().WithMany().HasForeignKey(row => row.ConnectionId).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne<EntityRow>().WithMany().HasForeignKey(row => row.EntityId).OnDelete(DeleteBehavior.Restrict);
+            // Hard delete removes a deleted Entity's settled request history; deletion refuses while a request is active.
+            entity.HasOne<EntityRow>().WithMany().HasForeignKey(row => row.EntityId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<LibraryRootRow>().WithMany().HasForeignKey(row => row.LibraryRootId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(row => row.NextCheckAt);
             entity.HasIndex(row => new { row.ConnectionId, row.CreatedAt });
@@ -35,6 +37,7 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.HoldingId).HasColumnName("holding_id");
             entity.Property(row => row.ActiveHoldingId).HasColumnName("active_holding_id");
             entity.Property(row => row.Revision).HasColumnName("revision").IsConcurrencyToken();
+            entity.Property(row => row.Phase).HasColumnName("phase").HasMaxLength(32).HasConversion(value => value.ToCode(), value => value.DecodeAs<ManagedControlPhase>());
             entity.Property(row => row.StateJson).HasColumnName("state").HasColumnType("jsonb");
             entity.Property(row => row.PlanJson).HasColumnName("plan").HasColumnType("jsonb");
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
@@ -59,10 +62,13 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.ExternalIdsJson).HasColumnName("external_ids").HasColumnType("jsonb");
             entity.Property(row => row.CreatedAt).HasColumnName("created_at");
             entity.Property(row => row.ReleasedAt).HasColumnName("released_at");
-            entity.HasOne<EntityRow>().WithMany().HasForeignKey(row => row.EntityId).OnDelete(DeleteBehavior.Restrict);
+            // Hard delete removes released reservations with their Entity; deletion refuses while one is active.
+            entity.HasOne<EntityRow>().WithMany().HasForeignKey(row => row.EntityId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<IntegrationConnectionRow>().WithMany().HasForeignKey(row => row.ConnectionId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(row => new { row.OwnerId, row.OwnerKind, row.EntityId, row.BookRendition }).IsUnique().AreNullsDistinct(false);
             entity.HasIndex(row => row.EntityId);
+            // Ownership guards look only at active reservations; most libraries have none.
+            entity.HasIndex(row => row.EntityId, "IX_fulfillment_reservations_active_entity_id").HasFilter("released_at IS NULL");
         });
         modelBuilder.Entity<ManagedHoldingRow>(entity => {
             entity.ToTable("managed_holdings");
@@ -113,7 +119,8 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.WrittenAt).HasColumnName("written_at");
             entity.Property(row => row.IsAvailable).HasColumnName("is_available");
             entity.HasOne<ManagedHoldingRow>().WithMany().HasForeignKey(row => row.HoldingId).OnDelete(DeleteBehavior.Cascade);
-            entity.HasOne<EntityRow>().WithMany().HasForeignKey(row => row.EntityId).OnDelete(DeleteBehavior.Restrict);
+            // A live binding's Entity sits in an externally managed library, which deletion refuses; a released one goes with it.
+            entity.HasOne<EntityRow>().WithMany().HasForeignKey(row => row.EntityId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<EntityFileRow>().WithMany().HasForeignKey(row => row.SourceFileId).OnDelete(DeleteBehavior.Restrict);
             entity.HasIndex(row => new { row.HoldingId, row.RemoteTargetId }).IsUnique();
             entity.HasIndex(row => row.EntityId).IsUnique();

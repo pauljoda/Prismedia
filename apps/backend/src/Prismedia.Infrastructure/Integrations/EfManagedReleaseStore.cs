@@ -41,9 +41,8 @@ public sealed class EfManagedReleaseStore(PrismediaDbContext db, IManagedTrackin
 
     /// <inheritdoc />
     public async Task RequireSettledControlsAsync(Guid holdingId, CancellationToken token) {
-        var unresolved = JsonSerializer.Serialize(new { Phase = ManagedControlPhase.ClosedUnverified }, Json);
         if (await db.ManagedControls.AnyAsync(row => row.HoldingId == holdingId
-            && (row.ActiveHoldingId != null || EF.Functions.JsonContains(row.StateJson, unresolved)), token)) {
+            && (row.ActiveHoldingId != null || row.Phase == ManagedControlPhase.ClosedUnverified), token)) {
             throw new ManagedControlConflictException(
                 "This holding has an unfinished or unverified manager action. Resolve its outcome before releasing ownership.");
         }
@@ -274,6 +273,7 @@ public sealed class EfManagedReleaseStore(PrismediaDbContext db, IManagedTrackin
             if (await db.ManagedRequests.Where(value => value.Id == row.Id && value.Revision == row.Revision)
                 .ExecuteUpdateAsync(set => set.SetProperty(value => value.StateJson, serialized)
                     .SetProperty(value => value.Phase, operation.State.Phase)
+                    .SetProperty(value => value.ReviewRequired, operation.State.ReviewRequired)
                     .SetProperty(value => value.Revision, operation.State.Revision)
                     .SetProperty(value => value.NextCheckAt, (DateTimeOffset?)null)
                     .SetProperty(value => value.UpdatedAt, DateTimeOffset.UtcNow)

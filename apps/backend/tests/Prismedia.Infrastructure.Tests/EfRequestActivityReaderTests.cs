@@ -231,6 +231,7 @@ public sealed class EfRequestActivityReaderTests : IDisposable {
             LibraryRootId = rootId,
             Revision = state.Revision,
             Phase = state.Phase,
+            ReviewRequired = state.ReviewRequired,
             StateJson = JsonSerializer.Serialize(state, Json),
             PlanJson = JsonSerializer.Serialize(plan, Json),
             CreatedAt = occurredAt,
