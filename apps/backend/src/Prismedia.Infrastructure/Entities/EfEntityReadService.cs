@@ -446,13 +446,18 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         bool descending) {
         var userId = CurrentUserId;
         var states = _db.UserEntityStates.Where(state => state.UserId == userId);
+        // A Book read and listened to separately keeps its listening position only as a checkpoint, so a
+        // checkpoint alone marks an unfinished work as in progress.
+        var checkpoints = _db.UserProgressCheckpoints.Where(checkpoint => checkpoint.UserId == userId);
         states = status == ActivityShelfStatus.Completed
             ? states.Where(state => state.CompletedAt != null || state.ProgressCompletedAt != null)
             : states.Where(state =>
                 state.CompletedAt == null && state.ResumeSeconds > 0 ||
                 state.ProgressCompletedAt == null &&
                 (state.ProgressCurrentEntityId != null || state.ProgressIndex > 0) &&
-                state.ProgressIndex < state.ProgressTotal);
+                state.ProgressIndex < state.ProgressTotal ||
+                state.CompletedAt == null && state.ProgressCompletedAt == null &&
+                checkpoints.Any(checkpoint => checkpoint.EntityId == state.EntityId));
         var keyed =
             from state in states
             join entity in query on state.EntityId equals entity.Id
@@ -552,10 +557,12 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         }
 
         if (engaged is { } wantsEngaged) {
+            var engagedCheckpoints = _db.UserProgressCheckpoints.Where(checkpoint => checkpoint.UserId == userId);
             var engagedStates = states.Where(state =>
                 state.UserId == userId &&
                 (state.CompletedAt != null || state.AccessCount > 0 || state.ResumeSeconds > 0 ||
-                 state.ProgressCompletedAt != null || state.ProgressCurrentEntityId != null || state.ProgressIndex > 0));
+                 state.ProgressCompletedAt != null || state.ProgressCurrentEntityId != null || state.ProgressIndex > 0 ||
+                 engagedCheckpoints.Any(checkpoint => checkpoint.EntityId == state.EntityId)));
             query = wantsEngaged
                 ? query.Join(engagedStates, entity => entity.Id, state => state.EntityId, (entity, _) => entity)
                 : query.Where(entity => !engagedStates.Any(state => state.EntityId == entity.Id));
@@ -597,6 +604,7 @@ public sealed partial class EfEntityReadService : IEntityReadService {
         }
 
         var normalizedStatus = status?.Trim().ToLowerInvariant();
+        var statusCheckpoints = _db.UserProgressCheckpoints.Where(checkpoint => checkpoint.UserId == userId);
         if (string.IsNullOrEmpty(normalizedStatus)) {
             return query;
         }
@@ -613,14 +621,17 @@ public sealed partial class EfEntityReadService : IEntityReadService {
                 query.Where(entity =>
                     !states.Any(state => state.UserId == userId && state.EntityId == entity.Id &&
                         (state.CompletedAt != null || state.AccessCount > 0 || state.ResumeSeconds > 0 ||
-                         state.ProgressCompletedAt != null || state.ProgressCurrentEntityId != null || state.ProgressIndex > 0))),
+                         state.ProgressCompletedAt != null || state.ProgressCurrentEntityId != null || state.ProgressIndex > 0)) &&
+                    !statusCheckpoints.Any(checkpoint => checkpoint.EntityId == entity.Id)),
             "in-progress" or "inprogress" or "in_progress" or "reading" or "watching" =>
                 query.Join(
                     states.Where(state => state.UserId == userId &&
                         (state.CompletedAt == null && state.ResumeSeconds > 0 ||
                          state.ProgressCompletedAt == null &&
                          (state.ProgressCurrentEntityId != null || state.ProgressIndex > 0) &&
-                         state.ProgressIndex < state.ProgressTotal)),
+                         state.ProgressIndex < state.ProgressTotal ||
+                         state.CompletedAt == null && state.ProgressCompletedAt == null &&
+                         statusCheckpoints.Any(checkpoint => checkpoint.EntityId == state.EntityId))),
                     entity => entity.Id,
                     state => state.EntityId,
                     (entity, _) => entity),

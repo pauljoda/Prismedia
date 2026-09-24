@@ -20,6 +20,7 @@ public sealed class EfEntityShelfReadTests {
         var bookId = Guid.NewGuid();
         var olderBookId = Guid.NewGuid();
         var completedBookId = Guid.NewGuid();
+        var listenedBookId = Guid.NewGuid();
         db.Entities.AddRange(new EntityRow {
             Id = bookId,
             KindCode = EntityKind.Book.ToCode(),
@@ -38,11 +39,18 @@ public sealed class EfEntityShelfReadTests {
             Title = "Completed book",
             CreatedAt = now.AddDays(-2),
             UpdatedAt = now,
+        }, new EntityRow {
+            Id = listenedBookId,
+            KindCode = EntityKind.Book.ToCode(),
+            Title = "Separately listened book",
+            CreatedAt = now.AddDays(-3),
+            UpdatedAt = now,
         });
         db.BookDetails.AddRange(
             new BookDetailRow { EntityId = bookId },
             new BookDetailRow { EntityId = olderBookId },
-            new BookDetailRow { EntityId = completedBookId });
+            new BookDetailRow { EntityId = completedBookId },
+            new BookDetailRow { EntityId = listenedBookId });
         db.UserEntityStates.AddRange(new UserEntityStateRow {
             UserId = TestUserContext.UserId,
             EntityId = bookId,
@@ -65,6 +73,23 @@ public sealed class EfEntityShelfReadTests {
             ProgressCompletedAt = now.AddMinutes(1),
             LastActiveAt = now.AddMinutes(1),
             UpdatedAt = now.AddMinutes(1),
+        }, new UserEntityStateRow {
+            // A Separate Book listened to without moving its reading cursor keeps only a checkpoint.
+            UserId = TestUserContext.UserId,
+            EntityId = listenedBookId,
+            LastActiveAt = now.AddHours(-1),
+            UpdatedAt = now.AddHours(-1),
+        });
+        db.UserProgressCheckpoints.Add(new UserProgressCheckpointRow {
+            UserId = TestUserContext.UserId,
+            EntityId = listenedBookId,
+            Modality = ConsumptionModality.Listening,
+            PositionEntityId = listenedBookId,
+            Unit = ProgressUnit.Second,
+            Index = 600,
+            Total = 3600,
+            OffsetSeconds = 600,
+            UpdatedAt = now.AddHours(-1),
         });
         await db.SaveChangesAsync();
 
@@ -91,7 +116,7 @@ public sealed class EfEntityShelfReadTests {
             },
             CancellationToken.None);
 
-        Assert.Equal([bookId, olderBookId], shelf.Items.Select(item => item.Id));
+        Assert.Equal([bookId, listenedBookId, olderBookId], shelf.Items.Select(item => item.Id));
         Assert.Null(shelf.NextCursor);
         Assert.Equal(0, contributor.InvocationCount);
     }
