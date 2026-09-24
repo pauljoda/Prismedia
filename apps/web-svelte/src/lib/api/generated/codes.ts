@@ -2163,3 +2163,433 @@ export const ENTITY_KINDS_ENUMERATING_IDENTIFY_CHILDREN = [
 ] as const;
 
 export type IdentifyContainerEntityKindCode = (typeof ENTITY_KINDS_ENUMERATING_IDENTIFY_CHILDREN)[number];
+
+// source: EntityKindDefinition.LibraryRootCapability
+export const ENTITY_KIND_LIBRARY_ROOTS = {
+  "audio-library": {
+    "capability": "scanAudio",
+    "requiresRecursiveRoot": false
+  },
+  "book": {
+    "capability": "scanBooks",
+    "requiresRecursiveRoot": false
+  },
+  "comic-installment": {
+    "capability": "scanBooks",
+    "requiresRecursiveRoot": false
+  },
+  "comic-series": {
+    "capability": "scanBooks",
+    "requiresRecursiveRoot": false
+  },
+  "gallery": {
+    "capability": "scanImages",
+    "requiresRecursiveRoot": true
+  },
+  "image": {
+    "capability": "scanImages",
+    "requiresRecursiveRoot": false
+  },
+  "movie": {
+    "capability": "scanVideos",
+    "requiresRecursiveRoot": false
+  },
+  "video-series": {
+    "capability": "scanVideos",
+    "requiresRecursiveRoot": false
+  }
+} as const satisfies Partial<Record<EntityKindCode, { capability: LibraryRootMediaCapabilityCode; requiresRecursiveRoot: boolean }>>;
+
+// source: IntegrationTransferPhaseDefinition
+export const INTEGRATION_TRANSFER_PHASE_FACTS = {
+  "pending-submission": {
+    "awaitsManifest": false,
+    "awaitsRemoteExecution": false,
+    "awaitsSourcePreparation": true,
+    "awaitsSubmission": true,
+    "isSettled": false,
+    "isTerminal": false,
+    "needsAttention": false,
+    "passedImportBoundary": false,
+    "retrievesOutputs": false,
+    "verifiesBytes": false
+  },
+  "submission-uncertain": {
+    "awaitsManifest": false,
+    "awaitsRemoteExecution": false,
+    "awaitsSourcePreparation": true,
+    "awaitsSubmission": true,
+    "isSettled": false,
+    "isTerminal": false,
+    "needsAttention": false,
+    "passedImportBoundary": false,
+    "retrievesOutputs": false,
+    "verifiesBytes": false
+  },
+  "awaiting-remote": {
+    "awaitsManifest": false,
+    "awaitsRemoteExecution": true,
+    "awaitsSourcePreparation": true,
+    "awaitsSubmission": false,
+    "isSettled": false,
+    "isTerminal": false,
+    "needsAttention": false,
+    "passedImportBoundary": false,
+    "retrievesOutputs": false,
+    "verifiesBytes": false
+  },
+  "awaiting-artifacts": {
+    "awaitsManifest": true,
+    "awaitsRemoteExecution": false,
+    "awaitsSourcePreparation": false,
+    "awaitsSubmission": false,
+    "isSettled": false,
+    "isTerminal": false,
+    "needsAttention": false,
+    "passedImportBoundary": false,
+    "retrievesOutputs": true,
+    "verifiesBytes": false
+  },
+  "transferring": {
+    "awaitsManifest": false,
+    "awaitsRemoteExecution": false,
+    "awaitsSourcePreparation": false,
+    "awaitsSubmission": false,
+    "isSettled": false,
+    "isTerminal": false,
+    "needsAttention": false,
+    "passedImportBoundary": false,
+    "retrievesOutputs": true,
+    "verifiesBytes": true
+  },
+  "importing": {
+    "awaitsManifest": false,
+    "awaitsRemoteExecution": false,
+    "awaitsSourcePreparation": false,
+    "awaitsSubmission": false,
+    "isSettled": false,
+    "isTerminal": false,
+    "needsAttention": false,
+    "passedImportBoundary": true,
+    "retrievesOutputs": false,
+    "verifiesBytes": true
+  },
+  "awaiting-acknowledgement": {
+    "awaitsManifest": false,
+    "awaitsRemoteExecution": false,
+    "awaitsSourcePreparation": false,
+    "awaitsSubmission": false,
+    "isSettled": false,
+    "isTerminal": false,
+    "needsAttention": false,
+    "passedImportBoundary": true,
+    "retrievesOutputs": false,
+    "verifiesBytes": false
+  },
+  "completed": {
+    "awaitsManifest": false,
+    "awaitsRemoteExecution": false,
+    "awaitsSourcePreparation": false,
+    "awaitsSubmission": false,
+    "isSettled": true,
+    "isTerminal": true,
+    "needsAttention": false,
+    "passedImportBoundary": true,
+    "retrievesOutputs": false,
+    "verifiesBytes": false
+  },
+  "needs-review": {
+    "awaitsManifest": true,
+    "awaitsRemoteExecution": true,
+    "awaitsSourcePreparation": true,
+    "awaitsSubmission": false,
+    "isSettled": false,
+    "isTerminal": false,
+    "needsAttention": true,
+    "passedImportBoundary": false,
+    "retrievesOutputs": false,
+    "verifiesBytes": false
+  },
+  "failed": {
+    "awaitsManifest": false,
+    "awaitsRemoteExecution": false,
+    "awaitsSourcePreparation": false,
+    "awaitsSubmission": false,
+    "isSettled": false,
+    "isTerminal": true,
+    "needsAttention": true,
+    "passedImportBoundary": false,
+    "retrievesOutputs": false,
+    "verifiesBytes": false
+  },
+  "cancelled": {
+    "awaitsManifest": false,
+    "awaitsRemoteExecution": false,
+    "awaitsSourcePreparation": false,
+    "awaitsSubmission": false,
+    "isSettled": true,
+    "isTerminal": true,
+    "needsAttention": false,
+    "passedImportBoundary": false,
+    "retrievesOutputs": false,
+    "verifiesBytes": false
+  }
+} as const satisfies Record<IntegrationTransferPhaseCode, Record<string, boolean>>;
+
+// source: ManagedControlPhaseDefinition
+export const MANAGED_CONTROL_PHASE_FACTS = {
+  "pending-configuration": {
+    "awaitsConfiguration": true,
+    "canBeRejected": true,
+    "canCancel": true,
+    "isActive": true,
+    "isUncertain": false
+  },
+  "configuration-uncertain": {
+    "awaitsConfiguration": true,
+    "canBeRejected": true,
+    "canCancel": false,
+    "isActive": true,
+    "isUncertain": true
+  },
+  "pending-search": {
+    "awaitsConfiguration": false,
+    "canBeRejected": true,
+    "canCancel": true,
+    "isActive": true,
+    "isUncertain": false
+  },
+  "search-uncertain": {
+    "awaitsConfiguration": false,
+    "canBeRejected": true,
+    "canCancel": false,
+    "isActive": true,
+    "isUncertain": true
+  },
+  "awaiting-command": {
+    "awaitsConfiguration": false,
+    "canBeRejected": false,
+    "canCancel": false,
+    "isActive": true,
+    "isUncertain": true
+  },
+  "completed": {
+    "awaitsConfiguration": false,
+    "canBeRejected": false,
+    "canCancel": false,
+    "isActive": false,
+    "isUncertain": false
+  },
+  "rejected": {
+    "awaitsConfiguration": false,
+    "canBeRejected": false,
+    "canCancel": false,
+    "isActive": false,
+    "isUncertain": false
+  },
+  "failed": {
+    "awaitsConfiguration": false,
+    "canBeRejected": false,
+    "canCancel": false,
+    "isActive": false,
+    "isUncertain": false
+  },
+  "cancelled": {
+    "awaitsConfiguration": false,
+    "canBeRejected": false,
+    "canCancel": false,
+    "isActive": false,
+    "isUncertain": false
+  },
+  "closed-unverified": {
+    "awaitsConfiguration": false,
+    "canBeRejected": false,
+    "canCancel": false,
+    "isActive": false,
+    "isUncertain": false
+  }
+} as const satisfies Record<ManagedControlPhaseCode, Record<string, boolean>>;
+
+// source: ManagedRequestPhaseDefinition
+export const MANAGED_REQUEST_PHASE_FACTS = {
+  "pending-creation": {
+    "awaitsFiles": false,
+    "awaitsHolding": true,
+    "canCancel": true,
+    "holdsFulfillment": true,
+    "holdsRemoteIdentity": false,
+    "isActive": true,
+    "isSettled": false,
+    "needsAttention": false,
+    "providesHolding": false
+  },
+  "creation-uncertain": {
+    "awaitsFiles": false,
+    "awaitsHolding": true,
+    "canCancel": false,
+    "holdsFulfillment": true,
+    "holdsRemoteIdentity": false,
+    "isActive": true,
+    "isSettled": false,
+    "needsAttention": true,
+    "providesHolding": false
+  },
+  "awaiting-files": {
+    "awaitsFiles": true,
+    "awaitsHolding": false,
+    "canCancel": false,
+    "holdsFulfillment": true,
+    "holdsRemoteIdentity": true,
+    "isActive": true,
+    "isSettled": false,
+    "needsAttention": false,
+    "providesHolding": true
+  },
+  "remote-removed": {
+    "awaitsFiles": false,
+    "awaitsHolding": false,
+    "canCancel": false,
+    "holdsFulfillment": true,
+    "holdsRemoteIdentity": true,
+    "isActive": true,
+    "isSettled": true,
+    "needsAttention": false,
+    "providesHolding": false
+  },
+  "completed": {
+    "awaitsFiles": false,
+    "awaitsHolding": false,
+    "canCancel": false,
+    "holdsFulfillment": true,
+    "holdsRemoteIdentity": true,
+    "isActive": false,
+    "isSettled": true,
+    "needsAttention": false,
+    "providesHolding": true
+  },
+  "rejected": {
+    "awaitsFiles": false,
+    "awaitsHolding": false,
+    "canCancel": true,
+    "holdsFulfillment": true,
+    "holdsRemoteIdentity": false,
+    "isActive": false,
+    "isSettled": false,
+    "needsAttention": true,
+    "providesHolding": false
+  },
+  "cancelled": {
+    "awaitsFiles": false,
+    "awaitsHolding": false,
+    "canCancel": false,
+    "holdsFulfillment": false,
+    "holdsRemoteIdentity": false,
+    "isActive": false,
+    "isSettled": true,
+    "needsAttention": false,
+    "providesHolding": false
+  },
+  "ownership-released": {
+    "awaitsFiles": false,
+    "awaitsHolding": false,
+    "canCancel": false,
+    "holdsFulfillment": false,
+    "holdsRemoteIdentity": false,
+    "isActive": false,
+    "isSettled": true,
+    "needsAttention": false,
+    "providesHolding": false
+  }
+} as const satisfies Record<ManagedRequestPhaseCode, Record<string, boolean>>;
+
+// source: ManagedTrackingStatusDefinition
+export const MANAGED_TRACKING_STATUS_FACTS = {
+  "pending": {
+    "acceptsControls": false,
+    "blocksPluginChanges": true,
+    "freezesHostActions": false,
+    "isEstablished": false,
+    "isFollowed": false,
+    "isObserved": true,
+    "isSettled": false,
+    "keepsStatusWhenUnverifiable": false,
+    "needsAttention": false
+  },
+  "waiting-for-files": {
+    "acceptsControls": true,
+    "blocksPluginChanges": false,
+    "freezesHostActions": false,
+    "isEstablished": true,
+    "isFollowed": false,
+    "isObserved": false,
+    "isSettled": false,
+    "keepsStatusWhenUnverifiable": false,
+    "needsAttention": false
+  },
+  "tracking": {
+    "acceptsControls": true,
+    "blocksPluginChanges": false,
+    "freezesHostActions": false,
+    "isEstablished": true,
+    "isFollowed": true,
+    "isObserved": true,
+    "isSettled": false,
+    "keepsStatusWhenUnverifiable": false,
+    "needsAttention": false
+  },
+  "needs-review": {
+    "acceptsControls": false,
+    "blocksPluginChanges": false,
+    "freezesHostActions": false,
+    "isEstablished": false,
+    "isFollowed": false,
+    "isObserved": false,
+    "isSettled": false,
+    "keepsStatusWhenUnverifiable": false,
+    "needsAttention": true
+  },
+  "stale": {
+    "acceptsControls": false,
+    "blocksPluginChanges": false,
+    "freezesHostActions": false,
+    "isEstablished": false,
+    "isFollowed": false,
+    "isObserved": true,
+    "isSettled": false,
+    "keepsStatusWhenUnverifiable": false,
+    "needsAttention": true
+  },
+  "removed": {
+    "acceptsControls": true,
+    "blocksPluginChanges": false,
+    "freezesHostActions": false,
+    "isEstablished": false,
+    "isFollowed": false,
+    "isObserved": true,
+    "isSettled": true,
+    "keepsStatusWhenUnverifiable": true,
+    "needsAttention": false
+  },
+  "release-pending": {
+    "acceptsControls": false,
+    "blocksPluginChanges": true,
+    "freezesHostActions": true,
+    "isEstablished": false,
+    "isFollowed": false,
+    "isObserved": true,
+    "isSettled": false,
+    "keepsStatusWhenUnverifiable": false,
+    "needsAttention": false
+  },
+  "released": {
+    "acceptsControls": false,
+    "blocksPluginChanges": false,
+    "freezesHostActions": true,
+    "isEstablished": false,
+    "isFollowed": false,
+    "isObserved": false,
+    "isSettled": true,
+    "keepsStatusWhenUnverifiable": false,
+    "needsAttention": false
+  }
+} as const satisfies Record<ManagedTrackingStatusCode, Record<string, boolean>>;

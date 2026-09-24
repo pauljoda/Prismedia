@@ -3,6 +3,7 @@ using Prismedia.Application.Requests;
 using Prismedia.Application.Settings;
 using Prismedia.Contracts.Entities;
 using Prismedia.Domain.Entities;
+using Prismedia.Domain.Integrations;
 using Prismedia.Domain.Media;
 
 namespace Prismedia.Api.Codegen;
@@ -27,6 +28,11 @@ public sealed record CodeFamilyManifestEntry(string ConstantName, string TypeNam
 /// <param name="MinimumWidth">Inclusive minimum width in pixels.</param>
 /// <param name="MinimumHeight">Inclusive minimum height in pixels.</param>
 public sealed record MediaResolutionManifestEntry(string Code, int MinimumWidth, int MinimumHeight);
+
+/// <summary>Library-root scan requirement for files of one Entity kind.</summary>
+/// <param name="Capability">Library-root capability code; it matches the library-root property name.</param>
+/// <param name="RequiresRecursiveRoot">Whether the root must also scan recursively.</param>
+public sealed record EntityKindLibraryRootManifestEntry(string Capability, bool RequiresRecursiveRoot);
 
 /// <summary>Cross-client navigation metadata owned by an Entity-kind definition.</summary>
 /// <param name="CanonicalBrowseKind">Entity kind represented by the canonical list destination.</param>
@@ -175,6 +181,11 @@ public sealed record RequestKindManifestEntry(
 /// <param name="EntityPositionCodes">Canonical position codes used by labeled metadata entries.</param>
 /// <param name="CollectionRuleTargetKinds">Supported Entity kinds for each collection-rule field.</param>
 /// <param name="MediaResolutionTiers">Source-resolution thresholds in descending priority order.</param>
+/// <param name="EntityKindLibraryRoots">Library-root scan requirement per Entity kind code, for kinds that own files.</param>
+/// <param name="ClosedSetFacts">
+/// Boolean facts each behavior-carrying closed-set member declares on its definition, keyed by enum type name,
+/// then member code, then camel-cased fact name. Clients read these instead of re-listing members.
+/// </param>
 public sealed record CodesManifest(
     IReadOnlyDictionary<string, IReadOnlyList<CodeEntry>> Enums,
     IReadOnlyDictionary<string, CodeFamilyManifestEntry> CodeFamilies,
@@ -188,7 +199,9 @@ public sealed record CodesManifest(
     IReadOnlyList<ConstantEntry> EntityStatCodes,
     IReadOnlyList<ConstantEntry> EntityPositionCodes,
     IReadOnlyDictionary<string, IReadOnlyList<string>> CollectionRuleTargetKinds,
-    IReadOnlyList<MediaResolutionManifestEntry> MediaResolutionTiers) {
+    IReadOnlyList<MediaResolutionManifestEntry> MediaResolutionTiers,
+    IReadOnlyDictionary<string, EntityKindLibraryRootManifestEntry> EntityKindLibraryRoots,
+    IReadOnlyDictionary<string, IReadOnlyDictionary<string, IReadOnlyDictionary<string, bool>>> ClosedSetFacts) {
     /// <summary>Reflects the current backend registries into a fresh manifest.</summary>
     public static CodesManifest Build() {
         var enums = BuildEnums();
@@ -211,7 +224,41 @@ public sealed record CodesManifest(
                 field => (IReadOnlyList<string>)CollectionRuleFieldPolicy.SupportedKinds(field)
                     .Select(kind => kind.ToCode()).Order(StringComparer.Ordinal).ToArray()),
             MediaResolutionPolicy.Tiers.Select(tier => new MediaResolutionManifestEntry(
-                tier.Tier.ToCode(), tier.MinimumWidth, tier.MinimumHeight)).ToArray());
+                tier.Tier.ToCode(), tier.MinimumWidth, tier.MinimumHeight)).ToArray(),
+            BuildEntityKindLibraryRoots(),
+            BuildClosedSetFacts());
+    }
+
+    private static IReadOnlyDictionary<string, EntityKindLibraryRootManifestEntry> BuildEntityKindLibraryRoots() =>
+        EntityKindRegistry.All
+            .Where(definition => definition.LibraryRootCapability is not null)
+            .OrderBy(definition => definition.Code, StringComparer.Ordinal)
+            .ToDictionary(
+                definition => definition.Code,
+                definition => new EntityKindLibraryRootManifestEntry(
+                    definition.LibraryRootCapability!.Value.ToCode(),
+                    (definition as IIntegrationImportKindDefinition)?.IntegrationImport.RequiresRecursiveRoot ?? false),
+                StringComparer.Ordinal);
+
+    private static IReadOnlyDictionary<string, IReadOnlyDictionary<string, IReadOnlyDictionary<string, bool>>> BuildClosedSetFacts() =>
+        new Dictionary<string, IReadOnlyDictionary<string, IReadOnlyDictionary<string, bool>>>(StringComparer.Ordinal) {
+            [nameof(ManagedRequestPhase)] = Facts(ManagedRequestPhaseDefinition.All, definition => definition.Phase.ToCode()),
+            [nameof(ManagedControlPhase)] = Facts(ManagedControlPhaseDefinition.All, definition => definition.Phase.ToCode()),
+            [nameof(ManagedTrackingStatus)] = Facts(ManagedTrackingStatusDefinition.All, definition => definition.Status.ToCode()),
+            [nameof(IntegrationTransferPhase)] = Facts(IntegrationTransferPhaseDefinition.All, definition => definition.Phase.ToCode())
+        };
+
+    /// <summary>Projects every public boolean property of each definition, so new facts reach clients without edits here.</summary>
+    private static IReadOnlyDictionary<string, IReadOnlyDictionary<string, bool>> Facts<TDefinition>(
+        IEnumerable<TDefinition> definitions, Func<TDefinition, string> code) {
+        var properties = typeof(TDefinition).GetProperties(BindingFlags.Public | BindingFlags.Instance)
+            .Where(property => property.PropertyType == typeof(bool))
+            .OrderBy(property => property.Name, StringComparer.Ordinal)
+            .ToArray();
+        return definitions.ToDictionary(code, definition => (IReadOnlyDictionary<string, bool>)properties.ToDictionary(
+            property => char.ToLowerInvariant(property.Name[0]) + property.Name[1..],
+            property => (bool)property.GetValue(definition)!,
+            StringComparer.Ordinal), StringComparer.Ordinal);
     }
 
     private static IReadOnlyDictionary<string, IReadOnlyList<CodeEntry>> BuildEnums() {
