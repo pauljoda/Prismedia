@@ -4,6 +4,7 @@ using Prismedia.Application.Integrations;
 using Prismedia.Application.Settings;
 using Prismedia.Contracts.Integrations;
 using Prismedia.Domain.Entities;
+using Prismedia.Domain.Integrations;
 using Prismedia.Infrastructure.Acquisition;
 using Prismedia.Infrastructure.Files;
 using Prismedia.Infrastructure.Persistence;
@@ -38,7 +39,7 @@ public sealed class EfExternalLibraryMountStore(PrismediaDbContext db, ExternalL
         if (string.IsNullOrWhiteSpace(request.LocalPath) || request.LocalPath.Length > 8192 || request.LocalPath.Any(char.IsControl)
             || !Path.IsPathFullyQualified(request.LocalPath) || !Directory.Exists(request.LocalPath))
             throw new ArgumentException("Choose an existing absolute local folder that Prismedia can read.");
-        _ = ExternalLibraryPaths.NormalizeRemote(request.ExpectedRemotePath);
+        _ = RemoteLibraryPath.Parse(request.ExpectedRemotePath);
         var local = CompletedPayloadFileSystem.CanonicalPath(Path.GetFullPath(request.LocalPath));
         await using var transaction = db.Database.IsRelational() && db.Database.CurrentTransaction is null ? await db.Database.BeginTransactionAsync(token) : null;
         await PluginLifecycleLease.LockConnectionAsync(db, connectionId, token);
@@ -53,12 +54,10 @@ public sealed class EfExternalLibraryMountStore(PrismediaDbContext db, ExternalL
                 throw new ArgumentException("This remote root already has an immutable mapping. Use its existing library.");
             return existing;
         }
-        var remote = ExternalLibraryPaths.NormalizeRemote(request.ExpectedRemotePath);
-        if (configured.Any(mount => {
-            var other = ExternalLibraryPaths.NormalizeRemote(mount.RemotePath);
-            // Conservative comparison prevents ambiguous Windows and network-share mappings on Unix hosts too.
-            return remote.StartsWith(other, StringComparison.OrdinalIgnoreCase) || other.StartsWith(remote, StringComparison.OrdinalIgnoreCase);
-        })) throw new ArgumentException("This remote folder overlaps an existing mapping for this connection.");
+        var remote = RemoteLibraryPath.Parse(request.ExpectedRemotePath);
+        if (configured.Any(mount => remote.Overlaps(RemoteLibraryPath.Parse(mount.RemotePath)))) {
+            throw new ArgumentException("This remote folder overlaps an existing mapping for this connection.");
+        }
         await RequireDedicatedPathAsync(local, token);
         // Listing the folder proves access without creating a sentinel or altering external bytes.
         try { using var entries = Directory.EnumerateFileSystemEntries(local).GetEnumerator(); _ = entries.MoveNext(); }
@@ -90,7 +89,7 @@ public sealed class EfExternalLibraryMountStore(PrismediaDbContext db, ExternalL
             || request.ExpectedLocalPath.Any(char.IsControl) || !Path.IsPathFullyQualified(request.ExpectedLocalPath)
             || !Directory.Exists(request.ExpectedLocalPath))
             throw new ArgumentException("Choose an existing absolute local library folder that Prismedia can read.");
-        var remote = ExternalLibraryPaths.NormalizeRemote(request.ExpectedRemotePath);
+        var remote = RemoteLibraryPath.Parse(request.ExpectedRemotePath);
         var local = CompletedPayloadFileSystem.CanonicalPath(Path.GetFullPath(request.ExpectedLocalPath));
         await using var transaction = db.Database.IsRelational() && db.Database.CurrentTransaction is null ? await db.Database.BeginTransactionAsync(token) : null;
         await PluginLifecycleLease.LockConnectionAsync(db, connectionId, token);
@@ -108,10 +107,9 @@ public sealed class EfExternalLibraryMountStore(PrismediaDbContext db, ExternalL
                 throw new ConnectionConflictException("This remote root already has an immutable mapping. Use its existing library.");
             return new(existing, Created: false);
         }
-        if (configured.Any(mount => {
-            var other = ExternalLibraryPaths.NormalizeRemote(mount.RemotePath);
-            return remote.StartsWith(other, StringComparison.OrdinalIgnoreCase) || other.StartsWith(remote, StringComparison.OrdinalIgnoreCase);
-        })) throw new ArgumentException("This remote folder overlaps an existing mapping for this connection.");
+        if (configured.Any(mount => remote.Overlaps(RemoteLibraryPath.Parse(mount.RemotePath)))) {
+            throw new ArgumentException("This remote folder overlaps an existing mapping for this connection.");
+        }
 
         var root = await db.LibraryRoots.SingleOrDefaultAsync(row => row.Id == request.ExistingLibraryRootId, token)
             ?? throw new ArgumentException("The selected local library no longer exists. Refresh the library choices.");

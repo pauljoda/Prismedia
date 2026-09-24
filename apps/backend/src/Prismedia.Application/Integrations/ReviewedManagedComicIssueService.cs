@@ -53,7 +53,7 @@ public sealed class ReviewedManagedComicIssueService(
             || lookup.Targets is not { Count: 1 } || lookup.Targets[0].RemoteId != issue.RemoteId)
             throw new IntegrationInvocationException("The manager lookup no longer resolves this exact run and issue.");
         var mounts = (await externalLibraries.ListSuitableAsync(connectionId, EntityKind.ComicSeries, token))
-            .Where(mount => Contains(mount.RemotePath, snapshot.Path))
+            .Where(mount => RemoteLibraryPath.Parse(mount.RemotePath).IsAncestorOf(snapshot.Path))
             .OrderByDescending(mount => mount.RemotePath.Length).ToArray();
         if (mounts.Length == 0 || mounts.Length > 1 && mounts[0].RemotePath.Length == mounts[1].RemotePath.Length)
             throw new ArgumentException("Map this comic run to one enabled local library before requesting an issue.");
@@ -109,13 +109,6 @@ public sealed class ReviewedManagedComicIssueService(
                 input.ExpectedConnectionRevision, existingHoldingId: null, ct);
             return new(prepared.SeriesEntityId, prepared.IssueEntityId, accepted);
         }, token);
-    }
-
-    private static bool Contains(string root, string path) {
-        var prefix = root.TrimEnd('/', '\\');
-        return string.Equals(prefix, path.TrimEnd('/', '\\'), StringComparison.Ordinal)
-            || path.StartsWith(prefix + '/', StringComparison.Ordinal)
-            || path.StartsWith(prefix + '\\', StringComparison.Ordinal);
     }
 
     private static string Fingerprint(Guid connectionId, CommitManagedComicIssueInput input) {

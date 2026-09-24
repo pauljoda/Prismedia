@@ -246,19 +246,12 @@ public sealed class ReviewedManagedRequestService(
         }
         if (existing is not null) {
             var containing = mounts
-                .Where(mount => ContainsPath(mount.RemotePath, existing.Path))
+                .Where(mount => RemoteLibraryPath.Parse(mount.RemotePath).IsAncestorOf(existing.Path))
                 .OrderByDescending(mount => mount.RemotePath.Length)
                 .FirstOrDefault();
             if (containing is not null) return containing;
         }
         return mounts.FirstOrDefault()
             ?? throw new ArgumentException("Map an accessible external video library in Settings before requesting this work.");
-    }
-
-    private static bool ContainsPath(string root, string path) {
-        var normalizedRoot = root.TrimEnd('/', '\\');
-        if (string.Equals(normalizedRoot, path.TrimEnd('/', '\\'), StringComparison.OrdinalIgnoreCase)) return true;
-        return path.StartsWith(normalizedRoot + '/', StringComparison.OrdinalIgnoreCase)
-            || path.StartsWith(normalizedRoot + '\\', StringComparison.OrdinalIgnoreCase);
     }
 }

@@ -27,7 +27,7 @@ public sealed class ReviewedManagedComicRunService(
         var mounts = (await externalLibraries.ListSuitableAsync(connectionId, EntityKind.ComicSeries, token))
             .Where(mount => options.Roots.Any(root => root.Id == mount.RemoteRootId
                 && root.Path == mount.RemotePath && root.Accessible != false))
-            .Where(mount => lookup.Existing is null || InsideRoot(mount.RemotePath, lookup.Existing.Path))
+            .Where(mount => lookup.Existing is null || RemoteLibraryPath.Parse(mount.RemotePath).IsAncestorOf(lookup.Existing.Path))
             .OrderBy(mount => mount.Label, StringComparer.OrdinalIgnoreCase).ToArray();
         if (mounts.Length == 0)
             throw new ArgumentException("Map a Kapowarr comic root to an enabled local library before adding this run.");
@@ -61,7 +61,7 @@ public sealed class ReviewedManagedComicRunService(
         if (result.Outcome == ManagedMutationOutcome.Rejected)
             throw new ManagedRequestConflictException(result.Problem ?? "Kapowarr rejected the reviewed run.");
         var holding = result.Holding!;
-        if (holding.Item.Monitored || !InsideRoot(mount.RemotePath, holding.Path))
+        if (holding.Item.Monitored || !RemoteLibraryPath.Parse(mount.RemotePath).IsAncestorOf(holding.Path))
             throw new IntegrationInvocationException("Kapowarr did not confirm the run in the reviewed root with monitoring off.");
         return new(new(EntityKind.ComicSeries, holding.Item.RemoteId, holding.Item.ExternalIds), result.Created);
     }
@@ -76,11 +76,5 @@ public sealed class ReviewedManagedComicRunService(
                 NumberStyles.None, CultureInfo.InvariantCulture, out var id)
             || id <= 0 || ComicVineIdentityFormats.SeriesPrefix + id.ToString(CultureInfo.InvariantCulture) != identity.Value)
             throw new ArgumentException("Choose one exact Comic Vine run from Kapowarr search.");
-    }
-
-    private static bool InsideRoot(string root, string path) {
-        var prefix = root.TrimEnd('/', '\\');
-        return path.StartsWith(prefix + '/', StringComparison.Ordinal)
-            || path.StartsWith(prefix + '\\', StringComparison.Ordinal);
     }
 }
