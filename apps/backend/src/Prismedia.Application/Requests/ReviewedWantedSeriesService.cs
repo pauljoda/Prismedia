@@ -1,4 +1,5 @@
 using Prismedia.Application.Entities;
+using Prismedia.Application.Integrations;
 using Prismedia.Application.Plugins;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Integrations;
@@ -16,7 +17,23 @@ public sealed class ReviewedWantedSeriesService(
     IWantedEntityWriter wanted,
     IWantedSuppressionStore suppressions,
     IPluginIdentityRouter routes,
-    IEntityLifecycleMutationLease lifecycle) {
+    IEntityLifecycleMutationLease lifecycle) : IManagedWantedWorkPreparer {
+    /// <inheritdoc />
+    public RequestMediaKind Kind => RequestMediaKind.Series;
+
+    /// <inheritdoc />
+    public async Task<ManagedWantedWork> PrepareForManagerAsync(ReviewedRequestCommitRequest request, bool managerOrigin,
+        CancellationToken token) {
+        var prepared = await PrepareAsync(request, token);
+        var missing = prepared.Episodes.Where(episode => !episode.HasFile).Select(episode => episode.EntityId).ToArray();
+        return new(prepared.SeriesEntityId, missing, HasEveryFile: missing.Length == 0);
+    }
+
+    /// <inheritdoc />
+    public Task<ReviewedWantedPlan> ReviewForManagerAsync(ReviewedRequestCommitRequest request, bool managerOrigin,
+        CancellationToken token) =>
+        ReviewForManagerAsync(request, token);
+
     /// <summary>
     /// Validates every selected episode and exact plugin route before materializing the series, its
     /// selected seasons, and its selected episodes.
@@ -132,28 +149,29 @@ public sealed class ReviewedWantedSeriesService(
     }
 
     /// <summary>Validates a finite reviewed episode selection and derives exact Sonarr lookup evidence without writing.</summary>
-    internal async Task<ReviewedWantedPlan> ReviewForManagerAsync(
+    private async Task<ReviewedWantedPlan> ReviewForManagerAsync(
         ReviewedRequestCommitRequest request,
         CancellationToken token) {
         ValidateEnvelope(request);
         var review = ReviewedRequestProposalValidator.Validate(request, request.Review!, request.Proposal!);
         var selection = ReadSelection(request, review);
         await RequireExactRoutesAsync(request.PluginId, selection, token);
+        var policy = ManagedFulfillmentPolicy.For(EntityKind.VideoSeries);
         var rootIds = selection.Series.Proposal.Patch.ExternalIds
-            .Where(pair => pair.Key is ExternalIdProviders.Tvdb or ExternalIdProviders.Tmdb)
+            .Where(pair => policy.IdentityProviders.Contains(pair.Key))
             .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
-        if (selection.Series.Identity.Namespace is ExternalIdProviders.Tvdb or ExternalIdProviders.Tmdb)
+        if (policy.IdentityProviders.Contains(selection.Series.Identity.Namespace))
             rootIds[selection.Series.Identity.Namespace] = selection.Series.Identity.Value;
         if (rootIds.Count == 0)
-            throw Invalid("Identify the series with a TVDB or TMDB identity before choosing external fulfillment.");
+            throw Invalid($"Identify the series with {policy.IdentityDescription} before choosing external fulfillment.");
         var targets = selection.Episodes.Select(episode => {
             var ids = episode.Proposal.Patch.ExternalIds
-                .Where(pair => pair.Key == ExternalIdProviders.Tvdb)
+                .Where(pair => policy.TargetIdentityProviders.Contains(pair.Key))
                 .ToDictionary(pair => pair.Key, pair => pair.Value, StringComparer.Ordinal);
-            if (episode.Identity.Namespace == ExternalIdProviders.Tvdb)
+            if (policy.TargetIdentityProviders.Contains(episode.Identity.Namespace))
                 ids[episode.Identity.Namespace] = episode.Identity.Value;
             return new ManagedLookupTarget(
-                EntityKind.VideoEpisode,
+                policy.Target!.Kind,
                 ids,
                 episode.SeasonNumber,
                 episode.EpisodeNumber,

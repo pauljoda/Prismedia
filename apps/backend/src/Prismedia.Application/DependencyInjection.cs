@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Prismedia.Application.Entities;
 using Prismedia.Application.Audio;
 using Prismedia.Application.Files;
+using Prismedia.Application.Integrations;
 using Prismedia.Application.Jobs;
 using Prismedia.Application.Jobs.Handlers;
 using Prismedia.Application.Jobs.Handlers.Identity;
@@ -56,6 +57,8 @@ public static class DependencyInjection {
         services.AddScoped<ReviewedWantedMovieService>();
         services.AddScoped<ReviewedWantedBookService>();
         services.AddScoped<ReviewedWantedSeriesService>();
+        services.AddScoped<IManagedWantedWorkPreparer>(provider => provider.GetRequiredService<ReviewedWantedMovieService>());
+        services.AddScoped<IManagedWantedWorkPreparer>(provider => provider.GetRequiredService<ReviewedWantedSeriesService>());
         services.AddScoped<IMonitoredEntityRecovery>(sp => sp.GetRequiredService<RequestCommitService>());
         services.AddScoped<IRequestChildHydrator>(sp => sp.GetRequiredService<RequestCommitService>());
         services.AddScoped<IRequestGraphAcquisitionStarter>(sp => sp.GetRequiredService<RequestCommitService>());

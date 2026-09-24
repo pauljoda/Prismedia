@@ -1,5 +1,6 @@
 using System.Globalization;
 using Prismedia.Application.Entities;
+using Prismedia.Application.Integrations;
 using Prismedia.Application.Plugins;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Integrations;
@@ -10,7 +11,19 @@ namespace Prismedia.Application.Requests;
 
 /// <summary>Saves a reviewed movie as a wanted library item before a separate external-fulfillment decision.</summary>
 public sealed class ReviewedWantedMovieService(IWantedEntityWriter wanted, IWantedSuppressionStore suppressions,
-    IPluginIdentityRouter routes, IEntityLifecycleMutationLease lifecycle) {
+    IPluginIdentityRouter routes, IEntityLifecycleMutationLease lifecycle) : IManagedWantedWorkPreparer {
+    /// <inheritdoc />
+    public RequestMediaKind Kind => RequestMediaKind.Movie;
+
+    /// <inheritdoc />
+    public async Task<ManagedWantedWork> PrepareForManagerAsync(ReviewedRequestCommitRequest request, bool managerOrigin,
+        CancellationToken token) {
+        var prepared = managerOrigin
+            ? await PrepareFromManagerAsync(request, request.Review!, token)
+            : await PrepareAsync(request, token);
+        return new(prepared.EntityId, MissingTargetEntityIds: null, prepared.HasFile);
+    }
+
     /// <summary>Reuses exact movie identity, applies reviewed metadata, and never creates an acquisition, monitor, or manager action.</summary>
     public async Task<PreparedWantedMovieResponse> PrepareAsync(ReviewedRequestCommitRequest request, CancellationToken token) {
         var review = Validate(request);
@@ -31,7 +44,7 @@ public sealed class ReviewedWantedMovieService(IWantedEntityWriter wanted, IWant
     }
 
     /// <summary>Validates a complete movie review and derives manager lookup evidence without writing.</summary>
-    internal async Task<ReviewedWantedPlan> ReviewForManagerAsync(
+    public async Task<ReviewedWantedPlan> ReviewForManagerAsync(
         ReviewedRequestCommitRequest request,
         bool managerOrigin,
         CancellationToken token) {
@@ -56,8 +69,9 @@ public sealed class ReviewedWantedMovieService(IWantedEntityWriter wanted, IWant
         }
         var title = review.Proposal.Patch.Title ?? review.ExternalIdentity.Value;
         if (string.IsNullOrWhiteSpace(title) || title.Length > 512) throw Invalid("The reviewed movie needs a valid title.");
+        var provider = ManagedFulfillmentPolicy.For(EntityKind.Movie).IdentityProviders[0];
         return new(title.Trim(), new(EntityKind.Movie,
-            new Dictionary<string, string> { [ExternalIdProviders.Tmdb] = review.ExternalIdentity.Value }));
+            new Dictionary<string, string> { [provider] = review.ExternalIdentity.Value }));
     }
 
     private async Task<PreparedWantedMovieResponse> MaterializeAsync(

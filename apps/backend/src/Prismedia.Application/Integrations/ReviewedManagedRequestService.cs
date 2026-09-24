@@ -9,8 +9,7 @@ namespace Prismedia.Application.Integrations;
 /// <summary>Reviews and atomically accepts metadata-led external-manager requests.</summary>
 public sealed class ReviewedManagedRequestService(
     ManagedDiscoveryService discovery,
-    ReviewedWantedMovieService movies,
-    ReviewedWantedSeriesService series,
+    IEnumerable<IManagedWantedWorkPreparer> preparers,
     IntegrationConnectionAccess access,
     IIntegrationManagerCreationGateway gateway,
     ManagedLibraryService library,
@@ -30,15 +29,10 @@ public sealed class ReviewedManagedRequestService(
         if (input.ManagerDiscoveryRevision is { } discoveryRevision) {
             (_, canonical) = await discovery.CanonicalizeAsync(connectionId, discoveryRevision, canonical, token);
         }
-        var plan = canonical.Kind switch {
-            RequestMediaKind.Movie => await movies.ReviewForManagerAsync(
-                canonical,
-                managerOrigin: input.ManagerDiscoveryRevision is not null,
-                token),
-            RequestMediaKind.Series => await series.ReviewForManagerAsync(canonical, token),
-            _ => throw new RequestCommitValidationException(
-                "Choose a reviewed movie or finite series episode selection for external fulfillment.")
-        };
+        var plan = await Preparer(canonical.Kind).ReviewForManagerAsync(
+            canonical,
+            managerOrigin: input.ManagerDiscoveryRevision is not null,
+            token);
 
         var authorized = await access.RequireAsync(
             connectionId,
@@ -77,8 +71,6 @@ public sealed class ReviewedManagedRequestService(
         ValidateCommitInput(input);
         if (input.OperationId == Guid.Empty)
             throw new ArgumentException("Supply a stable operation ID for this manager request.");
-        if (input.Request.Kind == RequestMediaKind.Series && (input.Monitored || !input.Search))
-            throw new ArgumentException("Finite series requests must search only the reviewed episodes without broad monitoring.");
         var reviewedFingerprint = ReviewedManagedRequestIdentity.Fingerprint(connectionId, input);
         if (await managedRequests.FindReviewedAsync(connectionId, input.OperationId, reviewedFingerprint, token) is { } replay)
             return new(replay.EntityId, replay.TargetEntityIds, replay);
@@ -89,7 +81,12 @@ public sealed class ReviewedManagedRequestService(
             token);
         if (review.ConnectionRevision != input.ExpectedConnectionRevision)
             throw new ConnectionConflictException("The selected manager connection changed. Review its options again.");
-        if (ExistingSourceResponse(review) is { } owned) return owned;
+        var policy = ManagedFulfillmentPolicy.For(review.Work.EntityKind);
+        if (policy.RequiredMonitoring is { } monitoring && input.Monitored != monitoring || policy.RequiresSearch && !input.Search)
+            throw new ArgumentException(policy.AppliesReviewedMonitoring
+                ? "This request must be monitored and search the reviewed work."
+                : "Selected targets are searched without turning on broad monitoring.");
+        if (ExistingSourceResponse(review, policy) is { } owned) return owned;
         var expansion = review.Expansion;
         if (expansion is null && review.ExistingFulfillments.Count != 0)
             throw new FulfillmentOwnershipConflictException();
@@ -114,24 +111,19 @@ public sealed class ReviewedManagedRequestService(
             connectionId,
             input.ExpectedConnectionRevision,
             async ct => {
-                Guid entityId;
-                IReadOnlyList<Guid>? targetEntityIds;
-                if (review.Request.Kind == RequestMediaKind.Movie) {
-                    var prepared = input.ManagerDiscoveryRevision is null
-                        ? await movies.PrepareAsync(review.Request, ct)
-                        : await movies.PrepareFromManagerAsync(review.Request, review.Request.Review!, ct);
-                    entityId = prepared.EntityId;
-                    targetEntityIds = null;
-                    if (prepared.HasFile) return new(entityId, targetEntityIds, ManagedRequest: null);
-                } else {
-                    var prepared = await series.PrepareAsync(review.Request, ct);
-                    entityId = prepared.SeriesEntityId;
-                    targetEntityIds = prepared.Episodes.Where(episode => !episode.HasFile).Select(episode => episode.EntityId).ToArray();
-                    if (expansion is { } existingHolding) {
-                        var retained = existingHolding.RetainedTargetEntityIds.ToHashSet();
-                        targetEntityIds = targetEntityIds.Where(id => !retained.Contains(id)).ToArray();
-                    }
-                    if (targetEntityIds.Count == 0) return new(entityId, targetEntityIds, ManagedRequest: null);
+                var prepared = await Preparer(review.Request.Kind).PrepareForManagerAsync(
+                    review.Request,
+                    managerOrigin: input.ManagerDiscoveryRevision is not null,
+                    ct);
+                var entityId = prepared.EntityId;
+                var targetEntityIds = prepared.MissingTargetEntityIds;
+                if (expansion is { } existingHolding && targetEntityIds is not null) {
+                    var retained = existingHolding.RetainedTargetEntityIds.ToHashSet();
+                    targetEntityIds = targetEntityIds.Where(id => !retained.Contains(id)).ToArray();
+                }
+
+                if (prepared.HasEveryFile || targetEntityIds is { Count: 0 }) {
+                    return new(entityId, targetEntityIds, ManagedRequest: null);
                 }
 
                 var target = await requests.RequireTargetAsync(
@@ -147,8 +139,8 @@ public sealed class ReviewedManagedRequestService(
                     input.LibraryRootId,
                     target.Work,
                     input.ProfileId,
-                    target.Work.EntityKind == EntityKind.VideoSeries ? false : input.Monitored,
-                    target.Work.EntityKind == EntityKind.VideoSeries || input.Search,
+                    input.Monitored,
+                    input.Search,
                     targetEntityIds);
                 ManagedRequestService.Validate(create);
                 var preview = new ManagedRequestPreview(
@@ -171,6 +163,10 @@ public sealed class ReviewedManagedRequestService(
             }, token);
     }
 
+    private IManagedWantedWorkPreparer Preparer(RequestMediaKind kind) =>
+        preparers.SingleOrDefault(preparer => preparer.Kind == kind)
+        ?? throw new RequestCommitValidationException("This kind of reviewed request cannot be fulfilled by a connected manager.");
+
     private async Task<ManagedRequestExpansion?> ResolveExpansionAsync(
         Guid connectionId,
         Guid libraryRootId,
@@ -178,9 +174,9 @@ public sealed class ReviewedManagedRequestService(
         ManagedItemSnapshot? existing,
         IReadOnlyList<ReviewedFulfillmentOwnership> existingFulfillments,
         CancellationToken token) {
-        if (work.EntityKind != EntityKind.VideoSeries) return null;
+        if (!ManagedFulfillmentPolicy.For(work.EntityKind).AccumulatesTargets) return null;
         var holdings = (await tracking.ListAsync(connectionId, token))
-            .Where(holding => holding.Item.EntityKind == EntityKind.VideoSeries
+            .Where(holding => holding.Item.EntityKind == work.EntityKind
                 && holding.Status != ManagedTrackingStatus.Released
                 && work.ExternalIds.All(pair =>
                     holding.Item.ExpectedExternalIds.GetValueOrDefault(pair.Key) == pair.Value))
@@ -220,13 +216,18 @@ public sealed class ReviewedManagedRequestService(
             throw new RequestCommitValidationException("Submit the reviewed proposal selection.");
     }
 
-    private static ReviewedManagedRequestCommitResponse? ExistingSourceResponse(ReviewedManagedRequest review) {
+    /// <summary>
+    /// A work requested as a whole is already satisfied by any local source; a work that accumulates targets is
+    /// satisfied only when every reviewed target already has one.
+    /// </summary>
+    private static ReviewedManagedRequestCommitResponse? ExistingSourceResponse(ReviewedManagedRequest review,
+        ManagedFulfillmentPolicy policy) {
         var locallyOwned = review.ExistingFulfillments
             .Where(ownership => ownership.HasLocalSource)
             .ToArray();
-        if (review.Work.EntityKind == EntityKind.Movie && locallyOwned.Length != 0)
-            return new(locallyOwned[0].EntityId, TargetEntityIds: null, ManagedRequest: null);
-        if (review.Work.EntityKind != EntityKind.VideoSeries || review.Work.Targets is null) return null;
+        if (!policy.AccumulatesTargets)
+            return locallyOwned.Length != 0 ? new(locallyOwned[0].EntityId, TargetEntityIds: null, ManagedRequest: null) : null;
+        if (review.Work.Targets is null) return null;
         var targetIds = locallyOwned
             .SelectMany(ownership => ownership.TargetEntityIds ?? [])
             .Distinct()
@@ -252,6 +253,6 @@ public sealed class ReviewedManagedRequestService(
             if (containing is not null) return containing;
         }
         return mounts.FirstOrDefault()
-            ?? throw new ArgumentException("Map an accessible external video library in Settings before requesting this work.");
+            ?? throw new ArgumentException("Map an accessible external library in Settings before requesting this work.");
     }
 }

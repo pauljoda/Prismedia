@@ -117,7 +117,7 @@ public sealed partial class RequestCommitServiceTests {
             new SeriesRouter(),
             new MovieLease());
 
-        var plan = await service.ReviewForManagerAsync(request, default);
+        var plan = await service.ReviewForManagerAsync(request, managerOrigin: false, default);
 
         Assert.Equal("Fixture Series", plan.Title);
         Assert.Equal(EntityKind.VideoSeries, plan.Work.EntityKind);
