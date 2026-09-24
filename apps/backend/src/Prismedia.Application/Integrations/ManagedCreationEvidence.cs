@@ -5,6 +5,8 @@ namespace Prismedia.Application.Integrations;
 
 /// <summary>Host-owned validation of exact managed-work identity and initial creation evidence.</summary>
 public static class ManagedCreationEvidence {
+    #region Actions - Validation
+
     /// <summary>Rejects mismatched metadata and malformed existing holdings before they influence request state.</summary>
     public static void ValidateLookup(ManagedLookupInput work, ManagedLookupResult result) {
         var candidate = result?.Candidate;
@@ -13,8 +15,10 @@ public static class ManagedCreationEvidence {
             || candidate.ExternalIds is not { Count: > 0 and <= 64 }
             || candidate.ExternalIds.Any(pair => string.IsNullOrWhiteSpace(pair.Key) || pair.Key.Length > 128
                 || string.IsNullOrWhiteSpace(pair.Value) || pair.Value.Length > 2048)
-            || work.ExternalIds.Any(pair => candidate.ExternalIds.GetValueOrDefault(pair.Key) != pair.Value))
+            || work.ExternalIds.Any(pair => candidate.ExternalIds.GetValueOrDefault(pair.Key) != pair.Value)) {
             throw new IntegrationInvocationException("The manager returned a different or incomplete metadata identity.");
+        }
+
         if (result!.Existing is { } existing) {
             ValidateHolding(work, existing);
             ValidateTargets(work, result.Targets);
@@ -23,17 +27,28 @@ public static class ManagedCreationEvidence {
             ValidateTargets(work, result.Targets);
         }
     }
+
     /// <summary>Requires an exact pinned work and the connected-library evidence contract.</summary>
     public static void ValidateHolding(ManagedLookupInput work, ManagedItemSnapshot holding) {
-        if (holding?.Item is null) throw new IntegrationInvocationException("The manager did not confirm a holding.");
+        if (holding?.Item is null) {
+            throw new IntegrationInvocationException("The manager did not confirm a holding.");
+        }
+
         ManagedLibraryService.ValidateSnapshot(new(work.EntityKind, holding.Item.RemoteId,
             work.ExternalIds, work.BookRendition), holding);
     }
+
     /// <summary>Only an applied holding or a definite rejection is a valid creation result; all other replies are uncertain.</summary>
     public static void ValidateResult(ManagedLookupInput work, EnsureManagedResult result) {
-        if (result is { Outcome: ManagedMutationOutcome.Rejected, Holding: null, Created: false }) return;
-        if (result is not { Outcome: ManagedMutationOutcome.Applied, Holding: not null })
-            throw new IntegrationInvocationException("The manager did not return a definite creation result. Reconcile its exact identity.");
+        if (result is { Outcome: ManagedMutationOutcome.Rejected, Holding: null, Created: false }) {
+            return;
+        }
+
+        if (result is not { Outcome: ManagedMutationOutcome.Applied, Holding: not null }) {
+            throw new IntegrationInvocationException(
+                "The manager did not return a definite creation result. Reconcile its exact identity.");
+        }
+
         ValidateHolding(work, result.Holding);
         ValidateTargets(work, result.Targets);
     }
@@ -45,10 +60,13 @@ public static class ManagedCreationEvidence {
         var requested = work.Targets ?? [];
         var resolved = resolvedTargets ?? [];
         if (requested.Count == 0) {
-            if (resolved.Count != 0)
+            if (resolved.Count != 0) {
                 throw new IntegrationInvocationException("The manager returned unexpected child targets.");
+            }
+
             return;
         }
+
         if (resolved.Count != requested.Count
             || requested.Any(target => target.EntityKind == EntityKind.ComicInstallment
                 ? string.IsNullOrWhiteSpace(target.IssueLabel) || target.IssueLabel.Length > 128
@@ -79,6 +97,7 @@ public static class ManagedCreationEvidence {
                 throw new IntegrationInvocationException(
                     "The manager returned a different or ambiguous child target identity.");
             }
+
             remaining.Remove(matches[0]);
         }
     }
@@ -86,12 +105,18 @@ public static class ManagedCreationEvidence {
     /// <summary>Requires resolved comic targets to appear in the same observed issue catalog.</summary>
     public static void ValidateComicTargets(ManagedLookupInput work, ManagedItemSnapshot snapshot,
         IReadOnlyList<ManagedResolvedTarget>? resolvedTargets) {
-        if (work.EntityKind != EntityKind.ComicSeries) return;
+        if (work.EntityKind != EntityKind.ComicSeries) {
+            return;
+        }
+
         if (snapshot.ComicIssues is null || resolvedTargets is null
             || resolvedTargets.Any(target => snapshot.ComicIssues.Count(issue =>
                 issue.RemoteId == target.RemoteId
                 && issue.IssueLabel == target.IssueLabel
-                && target.ExternalIds.All(pair => issue.ExternalIds?.GetValueOrDefault(pair.Key) == pair.Value)) != 1))
+                && target.ExternalIds.All(pair => issue.ExternalIds?.GetValueOrDefault(pair.Key) == pair.Value)) != 1)) {
             throw new IntegrationInvocationException("The manager did not confirm every selected comic issue in its current catalog.");
+        }
     }
+
+    #endregion
 }

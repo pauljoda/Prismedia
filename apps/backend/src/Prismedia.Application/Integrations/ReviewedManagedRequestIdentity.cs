@@ -8,6 +8,8 @@ namespace Prismedia.Application.Integrations;
 
 /// <summary>Stable replay identity for the complete reviewed metadata and external fulfillment decision.</summary>
 internal static class ReviewedManagedRequestIdentity {
+    #region Actions - Fingerprints
+
     public static string Fingerprint(Guid connectionId, CommitReviewedManagedRequestInput input) {
         var request = input.Request;
         var value = new {
@@ -28,4 +30,6 @@ internal static class ReviewedManagedRequestIdentity {
         };
         return Convert.ToHexStringLower(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(value))));
     }
+
+    #endregion
 }

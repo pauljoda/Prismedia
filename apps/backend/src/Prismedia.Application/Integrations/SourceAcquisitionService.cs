@@ -12,28 +12,38 @@ namespace Prismedia.Application.Integrations;
 public sealed class SourceAcquisitionService(IIntegrationTransferStore store, IDiscoveryTokenProtector tokens,
     IntegrationConnectionAccess access, IIntegrationSourceAcquisitionGateway gateway,
     ILibraryScanRootPersistence roots, ICurrentUserContext currentUser) {
+    #region Actions - Acquisition
+
     /// <summary>Validates a read-only observation and atomically creates the durable request and its first worker run.</summary>
     public async Task<IntegrationTransferResponse> AcquireAsync(Guid connectionId, AcquireCatalogOfferRequest request,
         CancellationToken cancellationToken) {
         if (request.OperationId == Guid.Empty || request.LibraryRootId == Guid.Empty || string.IsNullOrWhiteSpace(request.SelectionToken)
-            || request.SelectionToken.Length > 32768 || string.IsNullOrWhiteSpace(request.OfferId) || request.OfferId.Length > 2048)
+            || request.SelectionToken.Length > 32768 || string.IsNullOrWhiteSpace(request.OfferId) || request.OfferId.Length > 2048) {
             throw new ArgumentException("Select a publication, request offer, destination library, and stable operation ID.");
+        }
+
         var fingerprint = Fingerprint(new { Mode = IntegrationTransferMode.SourceRequest, connectionId,
             request.SelectionToken, request.OfferId, request.LibraryRootId });
         if (await store.FindAsync(request.OperationId, cancellationToken) is { } previous) {
-            if (previous.Transfer.State.ConnectionId != connectionId || previous.Plan.RequestFingerprint != fingerprint)
+            if (previous.Transfer.State.ConnectionId != connectionId || previous.Plan.RequestFingerprint != fingerprint) {
                 throw new IntegrationTransferConflictException("This operation ID has already accepted a different request.");
+            }
+
             return IntegrationTransferService.ToResponse(previous);
         }
 
         var selection = tokens.ReadSelection(connectionId, request.SelectionToken);
-        if (!IntegrationImportPolicy.Supports(selection.EntityKind) || !IntegrationImportPolicy.For(selection.EntityKind).AcceptsDirectFiles)
+        if (!IntegrationImportPolicy.Supports(selection.EntityKind)
+            || !IntegrationImportPolicy.For(selection.EntityKind).AcceptsDirectFiles) {
             throw new ArgumentException("Source preparation supports only kinds that import as one exact file.");
+        }
+
         var allowedRoots = await currentUser.GetAllowedLibraryRootIdsAsync(cancellationToken);
         var root = await roots.GetLibraryRootAsync(request.LibraryRootId, cancellationToken);
         if (root is null || !root.Accepts(IntegrationImportPolicy.For(selection.EntityKind))
-            || allowedRoots is not null && !allowedRoots.Contains(root.Id))
+            || allowedRoots is not null && !allowedRoots.Contains(root.Id)) {
             throw new ArgumentException("Choose an accessible, enabled library that scans this media type.");
+        }
 
         _ = await access.RequireAsync(connectionId, PluginCapability.AcquisitionSource,
             IntegrationOperation.RequestSource, selection.EntityKind, cancellationToken);
@@ -55,4 +65,6 @@ public sealed class SourceAcquisitionService(IIntegrationTransferStore store, ID
 
     private static string Fingerprint<T>(T value) =>
         Convert.ToHexStringLower(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(value)));
+
+    #endregion
 }

@@ -13,12 +13,15 @@ namespace Prismedia.Infrastructure.Integrations;
 /// <summary>Runs typed integration operations through the existing installed executable package boundary.</summary>
 public sealed partial class IntegrationPluginGateway(PrismediaDbContext db, PluginCatalogService catalog,
     PluginProcessTransport transport) : IIntegrationPluginGateway, IIntegrationDiscoveryGateway, IIntegrationTransferGateway {
+    #region Actions - Catalog Operations
+
     /// <inheritdoc />
     public async Task<PluginManifest?> FindAsync(string pluginId, CancellationToken cancellationToken) =>
         (await FindDescriptorAsync(pluginId, cancellationToken))?.Manifest;
 
     /// <inheritdoc />
-    public async Task<ConnectionProbeResult> ProbeAsync(string pluginId, IntegrationConnectionContext connection, CancellationToken cancellationToken) {
+    public async Task<ConnectionProbeResult> ProbeAsync(string pluginId, IntegrationConnectionContext connection,
+        CancellationToken cancellationToken) {
         var descriptor = await FindDescriptorAsync(pluginId, cancellationToken)
             ?? throw new IntegrationInvocationException("The integration plugin is unavailable or disabled.");
         return await InvokeAsync<ConnectionProbeInput, ConnectionProbeResult>(descriptor, IntegrationOperation.Probe,
@@ -28,7 +31,10 @@ public sealed partial class IntegrationPluginGateway(PrismediaDbContext db, Plug
     /// <inheritdoc />
     public async Task<CatalogPage> DiscoverAsync(string pluginId, IntegrationOperation operation, IntegrationConnectionContext connection,
         IntegrationDiscoveryInput input, CancellationToken cancellationToken) {
-        if (operation is not (IntegrationOperation.Search or IntegrationOperation.Browse)) throw new ArgumentException("Invalid catalog operation.");
+        if (operation is not (IntegrationOperation.Search or IntegrationOperation.Browse)) {
+            throw new ArgumentException("Invalid catalog operation.");
+        }
+
         var descriptor = await FindDescriptorAsync(pluginId, cancellationToken)
             ?? throw new IntegrationInvocationException("The integration plugin is unavailable or disabled.");
         return await InvokeAsync<IntegrationDiscoveryInput, CatalogPage>(descriptor, operation, connection, input, cancellationToken);
@@ -39,8 +45,13 @@ public sealed partial class IntegrationPluginGateway(PrismediaDbContext db, Plug
         ResolveSourceOfferInput input, CancellationToken cancellationToken) {
         var descriptor = await FindDescriptorAsync(pluginId, cancellationToken)
             ?? throw new IntegrationInvocationException("The integration plugin is unavailable or disabled.");
-        return await InvokeAsync<ResolveSourceOfferInput, ResolvedSourceOffer>(descriptor, IntegrationOperation.Resolve, connection, input, cancellationToken);
+        return await InvokeAsync<ResolveSourceOfferInput, ResolvedSourceOffer>(descriptor, IntegrationOperation.Resolve, connection, input,
+            cancellationToken);
     }
+
+    #endregion
+
+    #region Actions - Invocation
 
     /// <summary>Executes one bounded typed call and validates protocol and invocation correlation before returning a result.</summary>
     internal async Task<TOutput> InvokeAsync<TInput, TOutput>(PluginDescriptor descriptor, IntegrationOperation operation,
@@ -55,6 +66,7 @@ public sealed partial class IntegrationPluginGateway(PrismediaDbContext db, Plug
                 .ToArrayAsync(cancellationToken);
             connection = connection with { LibraryMounts = mounts };
         }
+
         using var deadline = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         deadline.CancelAfter(PluginProcessTransport.MaximumInvocationDuration);
         var invocationId = Guid.NewGuid();
@@ -62,13 +74,19 @@ public sealed partial class IntegrationPluginGateway(PrismediaDbContext db, Plug
             invocationId, operation, connection, input);
         try {
             var process = await transport.RunAsync(descriptor, request, deadline.Token);
-            if (process.ExitCode != 0) throw new IntegrationInvocationException(
-                PluginProcessTransport.RedactError(process.StandardError, connection.Auth.Values) is { Length: > 0 } error
-                    ? error : "The integration plugin process failed.");
-            var response = JsonSerializer.Deserialize<IntegrationPluginResponse<TOutput>>(process.StandardOutput, PluginProcessTransport.JsonOptions);
+            if (process.ExitCode != 0) {
+                throw new IntegrationInvocationException(
+                    PluginProcessTransport.RedactError(process.StandardError, connection.Auth.Values) is { Length: > 0 } error
+                        ? error : "The integration plugin process failed.");
+            }
+
+            var response = JsonSerializer.Deserialize<IntegrationPluginResponse<TOutput>>(process.StandardOutput,
+                PluginProcessTransport.JsonOptions);
             if (response is null || response.Protocol != IntegrationProtocol.Name
-                || response.ProtocolVersion != IntegrationProtocol.CurrentVersion || response.InvocationId != invocationId)
+                || response.ProtocolVersion != IntegrationProtocol.CurrentVersion || response.InvocationId != invocationId) {
                 throw new IntegrationInvocationException("The integration plugin returned an incompatible or uncorrelated response.");
+            }
+
             if (!response.Ok || response.Result is null) {
                 var code = operation == IntegrationOperation.GetLibraryItem
                     && response.ErrorCode is { } errorCode
@@ -76,9 +94,11 @@ public sealed partial class IntegrationPluginGateway(PrismediaDbContext db, Plug
                         ? decoded
                         : (IntegrationErrorCode?)null;
                 throw new IntegrationInvocationException(
-                    PluginProcessTransport.RedactError(response.Error, connection.Auth.Values) ?? "The integration plugin did not return a result.",
+                    PluginProcessTransport.RedactError(response.Error, connection.Auth.Values)
+                        ?? "The integration plugin did not return a result.",
                     code);
             }
+
             return response.Result;
         } catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested) {
             throw new IntegrationInvocationException("The integration plugin timed out.");
@@ -91,9 +111,20 @@ public sealed partial class IntegrationPluginGateway(PrismediaDbContext db, Plug
         }
     }
 
+    #endregion
+
+    #region Actions - Lookup
+
     private async Task<PluginDescriptor?> FindDescriptorAsync(string pluginId, CancellationToken cancellationToken) {
-        if (!await db.ProviderConfigs.AsNoTracking().AnyAsync(row => row.ProviderCode == pluginId && row.Enabled, cancellationToken)) return null;
+        if (!await db.ProviderConfigs.AsNoTracking().AnyAsync(row => row.ProviderCode == pluginId && row.Enabled, cancellationToken)) {
+            return null;
+        }
+
         var descriptor = await catalog.FindProviderAsync(pluginId, null, cancellationToken);
-        return descriptor?.Manifest.Integration is not null && descriptor.Manifest.Runtime == DotnetPluginProcessRunner.Code ? descriptor : null;
+        return descriptor?.Manifest.Integration is not null && descriptor.Manifest.Runtime == DotnetPluginProcessRunner.Code
+            ? descriptor
+            : null;
     }
+
+    #endregion
 }

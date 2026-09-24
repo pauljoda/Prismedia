@@ -10,13 +10,16 @@ namespace Prismedia.Infrastructure.Integrations;
 /// filesystem boundary check. Remote paths never fall through as local paths.
 /// </summary>
 internal static class ExternalLibraryPaths {
+    #region Actions - Translation
+
     internal static string? Resolve(string remoteRoot, string localRoot, string remoteFile) {
         var segments = RemoteLibraryPath.Parse(remoteRoot).RelativeSegments(RemoteLibraryPath.Parse(remoteFile));
         if (segments is not { Count: > 0 }) {
             return null;
         }
 
-        if (segments.Any(segment => string.IsNullOrWhiteSpace(segment) || segment.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || segment.Contains(':'))) {
+        if (segments.Any(segment => string.IsNullOrWhiteSpace(segment)
+            || segment.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0 || segment.Contains(':'))) {
             throw new ArgumentException("The remote filename cannot be represented safely on this server.");
         }
 
@@ -28,4 +31,6 @@ internal static class ExternalLibraryPaths {
 
         return local;
     }
+
+    #endregion
 }

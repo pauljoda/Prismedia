@@ -14,9 +14,13 @@ namespace Prismedia.Infrastructure.Integrations;
 /// <summary>Projects saved external-library ownership and exact holding links without contacting connected services.</summary>
 public sealed class EfEntityExternalLibraryProvenanceReader(PrismediaDbContext db)
     : IEntityExternalLibraryProvenanceReader {
+    #region Static Variables
+
     private static readonly JsonSerializerOptions Json = PluginProcessTransport.JsonOptions;
 
-    private sealed record LibraryOrigin(Guid ConnectionId, string Name, string PluginId, Guid LibraryRootId, string LibraryLabel);
+    #endregion
+
+    #region Actions - Queries
 
     /// <inheritdoc />
     public async Task<ExternalLibraryProvenanceCapability?> ReadAsync(Guid entityId, CancellationToken cancellationToken) {
@@ -44,7 +48,10 @@ public sealed class EfEntityExternalLibraryProvenanceReader(PrismediaDbContext d
             var hasExactBookRequest = await requests.AnyAsync(row => db.ManagedHoldings.Any(holding =>
                 holding.Id == row.Id && holding.Kind == EntityKind.Book
                 && holding.BookRendition != null), cancellationToken);
-            if (hasLibrary && !hasExactBookRequest) return null;
+            if (hasLibrary && !hasExactBookRequest) {
+                return null;
+            }
+
             source = await (
                 from request in requests
                 join mount in db.ExternalLibraryMounts.AsNoTracking()
@@ -55,7 +62,10 @@ public sealed class EfEntityExternalLibraryProvenanceReader(PrismediaDbContext d
                 select new LibraryOrigin(connection.Id, connection.Name, connection.PluginId, root.Id, root.Label))
                 .FirstOrDefaultAsync(cancellationToken);
         }
-        if (source is null) return null;
+
+        if (source is null) {
+            return null;
+        }
 
         var requestReference = await requests
             .Where(row => row.ConnectionId == source.ConnectionId && row.LibraryRootId == source.LibraryRootId)
@@ -142,7 +152,10 @@ public sealed class EfEntityExternalLibraryProvenanceReader(PrismediaDbContext d
                 var item = JsonSerializer.Deserialize<ManagedItemInput>(row.ItemJson, Json);
                 if (row.Rendition is not { } rendition || !ManagedLibraryService.IsValidInput(item)
                     || item!.EntityKind != row.Kind || item.RemoteId != row.RemoteId
-                    || item.BookRendition != rendition) continue;
+                    || item.BookRendition != rendition) {
+                    continue;
+                }
+
                 result.Add(new(rendition, row.ConnectionId, row.ConnectionName, row.PluginId,
                     row.LibraryRootId, row.LibraryLabel,
                     new(row.HoldingId, item, row.Status),
@@ -151,7 +164,12 @@ public sealed class EfEntityExternalLibraryProvenanceReader(PrismediaDbContext d
                 // A corrupt holding cannot supply an exact Book rendition link.
             }
         }
+
         return result.OrderBy(row => row.Rendition).ThenBy(row => row.ConnectionName, StringComparer.Ordinal)
             .ThenBy(row => row.Holding.HoldingId).ToArray();
     }
+
+    #endregion
+
+    private sealed record LibraryOrigin(Guid ConnectionId, string Name, string PluginId, Guid LibraryRootId, string LibraryLabel);
 }

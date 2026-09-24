@@ -8,11 +8,15 @@ namespace Prismedia.Infrastructure.Integrations;
 /// <summary>Projects active connected ownership through the same database matcher that guards native writes.</summary>
 public sealed class EfExternalFulfillmentOwnershipReader(PrismediaDbContext db)
     : IExternalFulfillmentOwnershipReader {
+    #region Actions - Queries
+
     /// <inheritdoc />
     public async Task<IReadOnlyDictionary<Guid, ExternalFulfillmentOwnership>> ListAsync(
         IReadOnlyCollection<FulfillmentOwnershipQuery> scopes,
         CancellationToken cancellationToken) {
-        if (scopes.Count == 0) return new Dictionary<Guid, ExternalFulfillmentOwnership>();
+        if (scopes.Count == 0) {
+            return new Dictionary<Guid, ExternalFulfillmentOwnership>();
+        }
 
         var entityIds = scopes.Select(scope => scope.EntityId).ToArray();
         var kindCodes = scopes.Select(scope => scope.Kind.ToCode()).ToArray();
@@ -37,8 +41,15 @@ public sealed class EfExternalFulfillmentOwnershipReader(PrismediaDbContext db)
                 group => new ExternalFulfillmentOwnership(group.First().ConnectionName));
     }
 
+    #endregion
+
     private sealed class OwnershipMatch {
+        #region Variables
+
         public Guid EntityId { get; init; }
+
         public string? ConnectionName { get; init; }
+
+        #endregion
     }
 }

@@ -15,6 +15,8 @@ internal sealed class ExternalPeopleEnrichmentScheduler(
     IEntityLifecycleMutationLease lifecycle,
     IJobQueueService jobs,
     TimeProvider timeProvider) : IExternalPeopleEnrichmentScheduler {
+    #region Actions - Scheduling
+
     public async Task ScheduleAsync(Guid holdingId, CancellationToken cancellationToken) {
         var plan = await plans.ResolveAsync(holdingId, cancellationToken);
         if (plan is null) {
@@ -22,8 +24,8 @@ internal sealed class ExternalPeopleEnrichmentScheduler(
         }
 
         var holding = await db.ManagedHoldings.SingleAsync(row => row.Id == holdingId, cancellationToken);
-        if (holding.PeopleEnrichmentCompletedAt is not null ||
-            string.Equals(holding.PeopleEnrichmentFingerprint, plan.Fingerprint, StringComparison.Ordinal)) {
+        if (holding.PeopleEnrichmentCompletedAt is not null
+            || string.Equals(holding.PeopleEnrichmentFingerprint, plan.Fingerprint, StringComparison.Ordinal)) {
             return;
         }
 
@@ -64,13 +66,15 @@ internal sealed class ExternalPeopleEnrichmentScheduler(
                 parentEntityId: null,
                 leaseToken);
             if (resolution.Matches.Any(match => match.EntityId != plan.EntityId)) {
-                throw new ArgumentException("A pinned manager identity belongs to another local entity. Review duplicate metadata before enrichment.");
+                throw new ArgumentException(
+                    "A pinned manager identity belongs to another local entity. Review duplicate metadata before enrichment.");
             }
 
             var existing = await externalIdentities.ListAsync(plan.EntityId, leaseToken);
             if (existing.Any(saved => plan.Item.ExpectedExternalIds.TryGetValue(saved.Provider, out var expected)
                 && !string.Equals(saved.Value, expected, StringComparison.Ordinal))) {
-                throw new ArgumentException("The local metadata identity conflicts with the connected holding. Review it before enrichment.");
+                throw new ArgumentException(
+                    "The local metadata identity conflicts with the connected holding. Review it before enrichment.");
             }
 
             await externalIdentities.WriteAsync(
@@ -84,6 +88,10 @@ internal sealed class ExternalPeopleEnrichmentScheduler(
         }
     }
 
+    #endregion
+
+    #region Actions - Queries
+
     private Task<bool> HasCreditsAsync(Guid entityId, CancellationToken cancellationToken) {
         var relationshipCodes = new[] {
             RelationshipKind.Cast.ToCode(),
@@ -93,4 +101,6 @@ internal sealed class ExternalPeopleEnrichmentScheduler(
             row => row.EntityId == entityId && relationshipCodes.Contains(row.RelationshipCode),
             cancellationToken);
     }
+
+    #endregion
 }

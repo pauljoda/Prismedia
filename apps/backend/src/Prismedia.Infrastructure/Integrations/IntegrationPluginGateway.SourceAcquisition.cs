@@ -4,7 +4,10 @@ using Prismedia.Domain.Entities;
 
 namespace Prismedia.Infrastructure.Integrations;
 
+/// <summary>Source acquisition observation and requests through an enabled integration plugin.</summary>
 public sealed partial class IntegrationPluginGateway : IIntegrationSourceAcquisitionGateway {
+    #region Actions - Source Acquisition
+
     /// <inheritdoc />
     public async Task<SourceAcquisitionObservation> ObserveSourceAsync(string pluginId, IntegrationConnectionContext connection,
         ObserveSourceInput input, CancellationToken cancellationToken) {
@@ -22,4 +25,6 @@ public sealed partial class IntegrationPluginGateway : IIntegrationSourceAcquisi
         return await InvokeAsync<RequestSourceInput, SourceAcquisitionObservation>(descriptor, IntegrationOperation.RequestSource,
             connection, input, cancellationToken);
     }
+
+    #endregion
 }

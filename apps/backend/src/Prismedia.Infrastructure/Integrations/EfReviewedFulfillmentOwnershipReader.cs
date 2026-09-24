@@ -15,15 +15,21 @@ public sealed class EfReviewedFulfillmentOwnershipReader(
     PrismediaDbContext db,
     IEntityExternalIdentityStore externalIdentities)
     : IReviewedFulfillmentOwnershipReader {
+    #region Actions - Queries
+
     /// <inheritdoc />
     public async Task<IReadOnlyList<ReviewedFulfillmentOwnership>> ListAsync(
         ManagedLookupInput work,
         CancellationToken cancellationToken) {
         var entityId = await ResolveUniqueEntityAsync(work.EntityKind, work.ExternalIds, parentEntityId: null, cancellationToken);
-        if (entityId is null) return [];
+        if (entityId is null) {
+            return [];
+        }
 
         var scopes = await ResolveScopesAsync(entityId.Value, work, cancellationToken);
-        if (scopes.Count == 0) return [];
+        if (scopes.Count == 0) {
+            return [];
+        }
 
         var scopeIds = scopes.Select(scope => scope.EntityId).ToArray();
         var scopeKinds = scopes.Select(scope => scope.Kind.ToCode()).ToArray();
@@ -106,13 +112,22 @@ public sealed class EfReviewedFulfillmentOwnershipReader(
         return projected;
     }
 
+    #endregion
+
+    #region Actions - Scope Resolution
+
     private async Task<IReadOnlyList<(Guid EntityId, EntityKind Kind)>> ResolveScopesAsync(
         Guid entityId,
         ManagedLookupInput work,
         CancellationToken cancellationToken) {
-        if (work.EntityKind != EntityKind.VideoSeries)
+        if (work.EntityKind != EntityKind.VideoSeries) {
             return [(entityId, work.EntityKind)];
-        if (work.Targets is null || work.Targets.Count == 0) return [];
+        }
+
+        if (work.Targets is null || work.Targets.Count == 0) {
+            return [];
+        }
+
         return await ResolveTargetsAsync(entityId, work.Targets, cancellationToken);
     }
 
@@ -121,12 +136,16 @@ public sealed class EfReviewedFulfillmentOwnershipReader(
         IReadOnlyDictionary<string, string> externalIds,
         Guid? parentEntityId,
         CancellationToken cancellationToken) {
-        if (externalIds.Count == 0) return null;
+        if (externalIds.Count == 0) {
+            return null;
+        }
+
         var identities = externalIds.Select(identity => new ExternalIdentity(identity.Key, identity.Value)).ToArray();
         var resolution = await externalIdentities.ResolveAsync(kind, identities, parentEntityId, cancellationToken);
         if (resolution.Status == ExternalIdentityResolutionStatus.Ambiguous) {
             throw new ExternalIdentityAmbiguityException(kind, resolution);
         }
+
         return resolution.EntityId;
     }
 
@@ -151,13 +170,19 @@ public sealed class EfReviewedFulfillmentOwnershipReader(
                 SELECT DISTINCT id AS "Value" FROM descendants
                 """)
             .ToArrayAsync(cancellationToken);
-        if (candidateIds.Length == 0) return [];
+        if (candidateIds.Length == 0) {
+            return [];
+        }
+
         var kindCodes = requested.Select(target => target.Target.EntityKind.ToCode()).Distinct().ToArray();
         var candidates = await db.Entities.AsNoTracking()
             .Where(row => candidateIds.Contains(row.Id) && kindCodes.Contains(row.KindCode))
             .Select(row => new { row.Id, row.KindCode, row.ParentEntityId })
             .ToArrayAsync(cancellationToken);
-        if (candidates.Length == 0) return [];
+        if (candidates.Length == 0) {
+            return [];
+        }
+
         candidateIds = candidates.Select(candidate => candidate.Id).ToArray();
         var namespaces = requested.SelectMany(target => target.Identities)
             .Select(identity => identity.Namespace.Trim().ToLower()).Distinct().ToArray();
@@ -182,7 +207,10 @@ public sealed class EfReviewedFulfillmentOwnershipReader(
             var kindCode = target.Target.EntityKind.ToCode();
             var hasCoordinates = target.Target.SeasonNumber is not null && target.Target.EpisodeNumber is not null
                 || target.Target.AbsoluteNumber is not null;
-            if (target.Identities.Count == 0 && !hasCoordinates) continue;
+            if (target.Identities.Count == 0 && !hasCoordinates) {
+                continue;
+            }
+
             var matches = candidates
                 .Where(candidate => candidate.KindCode == kindCode && CoordinatesMatch(target.Target, candidate.Id,
                     candidate.ParentEntityId, positions))
@@ -195,10 +223,15 @@ public sealed class EfReviewedFulfillmentOwnershipReader(
                 .Where(match => target.Identities.Count == 0 || match.MatchedIdentities.Count != 0)
                 .ToArray();
             var resolution = new ExternalIdentityResolution(matches);
-            if (resolution.Status == ExternalIdentityResolutionStatus.Ambiguous)
+            if (resolution.Status == ExternalIdentityResolutionStatus.Ambiguous) {
                 throw new ExternalIdentityAmbiguityException(target.Target.EntityKind, resolution);
-            if (resolution.EntityId is { } targetId) scopes.Add((targetId, target.Target.EntityKind));
+            }
+
+            if (resolution.EntityId is { } targetId) {
+                scopes.Add((targetId, target.Target.EntityKind));
+            }
         }
+
         return scopes.Distinct().ToArray();
     }
 
@@ -220,6 +253,10 @@ public sealed class EfReviewedFulfillmentOwnershipReader(
             && (target.EpisodeNumber is null || target.EpisodeNumber == episode)
             && (target.AbsoluteNumber is null || target.AbsoluteNumber == absolute);
     }
+
+    #endregion
+
+    #region Actions - Native Ownership
 
     private async Task<HashSet<Guid>> NativeScopeIdsAsync(
         IReadOnlyList<(Guid EntityId, EntityKind Kind)> scopes,
@@ -263,9 +300,16 @@ public sealed class EfReviewedFulfillmentOwnershipReader(
             .ToArrayAsync(cancellationToken)).ToHashSet();
     }
 
+    #endregion
+
     private sealed class OwnershipMatchRow {
+        #region Variables
+
         public Guid ReservationId { get; init; }
+
         public Guid ScopeId { get; init; }
+
+        #endregion
     }
 
     private sealed record RequestedTarget(

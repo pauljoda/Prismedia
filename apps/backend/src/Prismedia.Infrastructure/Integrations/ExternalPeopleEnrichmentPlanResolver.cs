@@ -13,19 +13,6 @@ using Prismedia.Infrastructure.Plugins;
 
 namespace Prismedia.Infrastructure.Integrations;
 
-internal sealed record ExternalPeopleEnrichmentPlan(
-    Guid HoldingId,
-    Guid EntityId,
-    EntityKind EntityKind,
-    ManagedItemInput Item,
-    string Fingerprint,
-    AuthorizedIntegrationConnection? Manager,
-    IReadOnlyList<PluginIdentityRoute> MetadataRoutes);
-
-internal interface IExternalPeopleEnrichmentPlanResolver {
-    Task<ExternalPeopleEnrichmentPlan?> ResolveAsync(Guid holdingId, CancellationToken cancellationToken);
-}
-
 /// <summary>Builds a network-free, exact-identity enrichment plan from current saved configuration.</summary>
 internal sealed class ExternalPeopleEnrichmentPlanResolver(
     PrismediaDbContext db,
@@ -33,7 +20,13 @@ internal sealed class ExternalPeopleEnrichmentPlanResolver(
     IPluginIdentityRouter identityRouter,
     IIdentifyProviderService providers,
     IntegrationConnectionAccess connections) : IExternalPeopleEnrichmentPlanResolver {
+    #region Static Variables
+
     private static readonly JsonSerializerOptions Json = PluginProcessTransport.JsonOptions;
+
+    #endregion
+
+    #region Actions - Planning
 
     public async Task<ExternalPeopleEnrichmentPlan?> ResolveAsync(
         Guid holdingId,
@@ -77,6 +70,7 @@ internal sealed class ExternalPeopleEnrichmentPlanResolver(
         if (manager is not null) {
             sources.Add($"manager:{manager.Manifest.Id}:{manager.Manifest.Version}:{manager.Connection.State.Revision}");
         }
+
         sources.AddRange(routes.Select(route =>
             $"metadata:{route.Provider.Id}:{route.Provider.Version}:{route.ConfigurationRevision}:{route.Route.Identity.Namespace}:{route.Route.Identity.Value}"));
         var identityKey = string.Join('|', identities
@@ -95,6 +89,10 @@ internal sealed class ExternalPeopleEnrichmentPlanResolver(
             manager,
             routes.Select(route => route.Route).ToArray());
     }
+
+    #endregion
+
+    #region Actions - Resolution
 
     private async Task<Guid?> ResolveRootEntityIdAsync(
         Guid holdingId,
@@ -123,24 +121,28 @@ internal sealed class ExternalPeopleEnrichmentPlanResolver(
                     roots.Add(entity.Id);
                     break;
                 }
+
                 if (entity.ParentEntityId is not { } parentId) {
                     throw new ArgumentException("The connected holding does not resolve to one matching local metadata root.");
                 }
+
                 currentId = parentId;
             }
         }
 
         return roots.Count switch {
             1 => roots.Single(),
-            _ => throw new ArgumentException("The connected holding spans multiple local metadata roots. Review its associations before enrichment.")
+            _ => throw new ArgumentException(
+                "The connected holding spans multiple local metadata roots. Review its associations before enrichment.")
         };
     }
 
-    private async Task<IReadOnlyList<(PluginIdentityRoute Route, PluginProvider Provider, long ConfigurationRevision)>> ResolveConfiguredRoutesAsync(
-        EntityKind kind,
-        IReadOnlyList<ExternalIdentity> identities,
-        IReadOnlyList<string> configuredProviders,
-        CancellationToken cancellationToken) {
+    private async Task<IReadOnlyList<(PluginIdentityRoute Route, PluginProvider Provider, long ConfigurationRevision)>>
+        ResolveConfiguredRoutesAsync(
+            EntityKind kind,
+            IReadOnlyList<ExternalIdentity> identities,
+            IReadOnlyList<string> configuredProviders,
+            CancellationToken cancellationToken) {
         var exactRoutes = await identityRouter.ResolveAsync(
             kind.ToCode(),
             IdentifyAction.LookupId,
@@ -163,12 +165,14 @@ internal sealed class ExternalPeopleEnrichmentPlanResolver(
                 || !configurationRevisions.TryGetValue(providerId, out var configurationRevision)) {
                 continue;
             }
+
             result.AddRange(exactRoutes
                 .Where(route => route.PluginId.Equals(providerId, StringComparison.OrdinalIgnoreCase))
                 .OrderBy(route => route.Identity.Namespace, StringComparer.Ordinal)
                 .ThenBy(route => route.Identity.Value, StringComparer.Ordinal)
                 .Select(route => (route, provider, configurationRevision)));
         }
+
         return result;
     }
 
@@ -191,15 +195,22 @@ internal sealed class ExternalPeopleEnrichmentPlanResolver(
         }
     }
 
+    #endregion
+
+    #region Actions - Identities
+
     private static IReadOnlyList<ExternalIdentity> CanonicalIdentities(
         IReadOnlyDictionary<string, string> values) {
         if (values is not { Count: > 0 }) {
             throw new ArgumentException("The connected holding has no pinned metadata identity.");
         }
+
         try {
             return values.Select(pair => new ExternalIdentity(pair.Key, pair.Value)).Distinct().ToArray();
         } catch (ArgumentException exception) {
             throw new ArgumentException("The connected holding has an invalid pinned metadata identity.", exception);
         }
     }
+
+    #endregion
 }

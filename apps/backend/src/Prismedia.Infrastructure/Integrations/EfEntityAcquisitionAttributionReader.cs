@@ -12,6 +12,8 @@ namespace Prismedia.Infrastructure.Integrations;
 /// <summary>Projects accepted source statements from durable import receipts without contacting plugins or upstream services.</summary>
 public sealed class EfEntityAcquisitionAttributionReader(PrismediaDbContext db, TransferPlanProtector protector)
     : IEntityAcquisitionAttributionReader {
+    #region Actions - Queries
+
     /// <inheritdoc />
     public async Task<AcquisitionAttributionCapability?> ReadAsync(Guid entityId, CancellationToken cancellationToken) {
         // Exact JSON containment selects receipts before any private plan is decrypted.
@@ -30,11 +32,18 @@ public sealed class EfEntityAcquisitionAttributionReader(PrismediaDbContext db, 
             try {
                 var plan = JsonSerializer.Deserialize<IntegrationTransferPlan>(
                     protector.Unprotect(row.ConnectionId, row.Id, row.ProtectedPlan), PluginProcessTransport.JsonOptions);
-                if (plan?.Source?.Publication?.Attribution is { } attribution)
+                if (plan?.Source?.Publication?.Attribution is { } attribution) {
                     items.Add(new(row.Id, row.CreatedAt, attribution));
-            } catch (IntegrationTransferPlanUnavailableException) { unavailable = true; }
-            catch (JsonException) { unavailable = true; }
+                }
+            } catch (IntegrationTransferPlanUnavailableException) {
+                unavailable = true;
+            } catch (JsonException) {
+                unavailable = true;
+            }
         }
+
         return items.Count == 0 && !unavailable ? null : new(items, unavailable);
     }
+
+    #endregion
 }
