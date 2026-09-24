@@ -5,10 +5,12 @@ namespace Prismedia.Infrastructure.Entities.Mappers.Capabilities;
 
 /// <summary>
 /// Shared helpers over the wide <see cref="UserEntityStateRow"/>: which column families
-    /// a row actually carries (consumption vs reading progress vs opinion flags), and the
+/// a row actually carries (consumption vs reading progress vs opinion flags), and the
 /// find-or-add upsert both capability mappers use.
 /// </summary>
 internal static class UserEntityStateColumns {
+    #region Actions - Column Families
+
     /// <summary>True when the row records any entity consumption.</summary>
     internal static bool HasConsumption(UserEntityStateRow row) =>
         row.AccessCount > 0 ||
@@ -28,9 +30,11 @@ internal static class UserEntityStateColumns {
         row.ProgressLocation is not null ||
         row.ProgressCompletedAt is not null ||
         row.ProgressUpdatedAt is not null ||
-        row.ProgressConsumedCount > 0 ||
-        row.ReadingUpdatedAt is not null ||
-        row.ListeningUpdatedAt is not null;
+        row.ProgressConsumedCount > 0;
+
+    #endregion
+
+    #region Actions - Rows
 
     /// <summary>
     /// Finds the state row through EF's identity map. Hydration deliberately keeps this row
@@ -66,4 +70,6 @@ internal static class UserEntityStateColumns {
         db.UserEntityStates.Add(row);
         return row;
     }
+
+    #endregion
 }

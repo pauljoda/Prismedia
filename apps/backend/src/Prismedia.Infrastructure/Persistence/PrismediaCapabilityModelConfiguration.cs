@@ -1,10 +1,13 @@
 using Microsoft.EntityFrameworkCore;
+using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
 using Prismedia.Infrastructure.Persistence.Entities;
 
 namespace Prismedia.Infrastructure.Persistence;
 
 internal static partial class PrismediaModelConfiguration {
+    #region Actions - Capability Model
+
     private static void ConfigureEntityCapabilities(ModelBuilder modelBuilder) {
         modelBuilder.Entity<EntityDescriptionRow>(entity => {
             entity.ToTable("entity_descriptions");
@@ -39,21 +42,6 @@ internal static partial class PrismediaModelConfiguration {
             entity.Property(row => row.ProgressCompletedAt).HasColumnName("progress_completed_at");
             entity.Property(row => row.ProgressUpdatedAt).HasColumnName("progress_updated_at");
             entity.Property(row => row.ProgressConsumedCount).HasColumnName("progress_consumed_count");
-            entity.Property(row => row.ReadingCurrentEntityId).HasColumnName("reading_current_entity_id");
-            entity.Property(row => row.ReadingUnit).HasColumnName("reading_unit").HasMaxLength(64);
-            entity.Property(row => row.ReadingIndex).HasColumnName("reading_index");
-            entity.Property(row => row.ReadingTotal).HasColumnName("reading_total");
-            entity.Property(row => row.ReadingMode).HasColumnName("reading_mode").HasMaxLength(64);
-            entity.Property(row => row.ReadingLocation).HasColumnName("reading_location");
-            entity.Property(row => row.ReadingUpdatedAt).HasColumnName("reading_updated_at");
-            entity.Property(row => row.ListeningTrackEntityId).HasColumnName("listening_track_entity_id");
-            entity.Property(row => row.ListeningMarkerId).HasColumnName("listening_marker_id");
-            entity.Property(row => row.ListeningOffsetSeconds).HasColumnName("listening_offset_seconds");
-            entity.Property(row => row.ListeningCurrentEntityId).HasColumnName("listening_current_entity_id");
-            entity.Property(row => row.ListeningUnit).HasColumnName("listening_unit").HasMaxLength(64);
-            entity.Property(row => row.ListeningIndex).HasColumnName("listening_index");
-            entity.Property(row => row.ListeningTotal).HasColumnName("listening_total");
-            entity.Property(row => row.ListeningUpdatedAt).HasColumnName("listening_updated_at");
             entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
             // Resume shelves: one user's consumption ordered by the latest real activity.
             entity.HasIndex(row => new { row.UserId, row.LastActiveAt })
@@ -65,9 +53,56 @@ internal static partial class PrismediaModelConfiguration {
             entity.HasOne<EntityRow>().WithMany().HasForeignKey(row => row.EntityId).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne<EntityRow>().WithMany().HasForeignKey(row => row.ProgressCurrentEntityId).OnDelete(DeleteBehavior.SetNull);
             entity.ToTable(table => table.HasCheckConstraint("ck_user_entity_states_progress_bounds", "progress_index >= 0 AND progress_total >= 0"));
+        });
+
+        modelBuilder.Entity<UserProgressCheckpointRow>(entity => {
+            entity.ToTable("user_progress_checkpoints");
+            entity.HasKey(row => new { row.UserId, row.EntityId, row.Modality });
+            entity.Property(row => row.UserId).HasColumnName("user_id");
+            entity.Property(row => row.EntityId).HasColumnName("entity_id");
+            entity.Property(row => row.Modality)
+                .HasColumnName("modality")
+                .HasMaxLength(32)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<ConsumptionModality>());
+            entity.Property(row => row.PositionEntityId).HasColumnName("position_entity_id");
+            entity.Property(row => row.Unit)
+                .HasColumnName("unit")
+                .HasMaxLength(64)
+                .HasConversion(value => value.ToCode(), value => value.DecodeAs<ProgressUnit>())
+                .IsRequired();
+            entity.Property(row => row.Index).HasColumnName("index");
+            entity.Property(row => row.Total).HasColumnName("total");
+            entity.Property(row => row.OffsetSeconds).HasColumnName("offset_seconds");
+            entity.Property(row => row.MarkerId).HasColumnName("marker_id");
+            entity.Property(row => row.Mode)
+                .HasColumnName("mode")
+                .HasMaxLength(64)
+                .HasConversion(
+                    value => value.HasValue ? value.Value.ToCode() : null,
+                    value => value == null ? null : value.DecodeAs<ReaderMode>());
+            entity.Property(row => row.Location).HasColumnName("location");
+            entity.Property(row => row.UpdatedAt).HasColumnName("updated_at");
+            entity.HasIndex(row => row.PositionEntityId);
+            entity.HasOne<UserEntityStateRow>().WithMany()
+                .HasForeignKey(row => new { row.UserId, row.EntityId })
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<EntityRow>().WithMany()
+                .HasForeignKey(row => row.PositionEntityId)
+                .OnDelete(DeleteBehavior.Cascade);
+            entity.HasOne<EntityMarkerRow>().WithMany()
+                .HasForeignKey(row => row.MarkerId)
+                .OnDelete(DeleteBehavior.SetNull);
             entity.ToTable(table => table.HasCheckConstraint(
-                "ck_user_entity_states_book_checkpoint_bounds",
-                "(reading_index IS NULL OR reading_index >= 0) AND (reading_total IS NULL OR reading_total >= 0) AND (listening_index IS NULL OR listening_index >= 0) AND (listening_total IS NULL OR listening_total >= 0) AND (listening_offset_seconds IS NULL OR listening_offset_seconds >= 0)"));
+                "ck_user_progress_checkpoints_bounds",
+                "\"index\" >= 0 AND total >= 0 AND \"index\" <= total AND (offset_seconds IS NULL OR offset_seconds >= 0)"));
+            // Offset-addressed modalities (listening) always carry an offset; nothing else may, and a
+            // marker only ever qualifies an offset. The codes come from the modality definitions.
+            var offsetModalityCodes = string.Join(", ", ConsumptionModalityDefinition.All
+                .Where(definition => definition.AddressesByOffset)
+                .Select(definition => $"'{definition.Modality.ToCode()}'"));
+            entity.ToTable(table => table.HasCheckConstraint(
+                "ck_user_progress_checkpoints_offset",
+                $"(modality IN ({offsetModalityCodes})) = (offset_seconds IS NOT NULL) AND (marker_id IS NULL OR offset_seconds IS NOT NULL)"));
         });
 
         modelBuilder.Entity<EntityConsumptionEventRow>(entity => {
@@ -230,4 +265,6 @@ internal static partial class PrismediaModelConfiguration {
             entity.HasOne<EntityFileRow>().WithMany().HasForeignKey(row => row.EntityFileId).OnDelete(DeleteBehavior.SetNull);
         });
     }
+
+    #endregion
 }
