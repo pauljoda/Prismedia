@@ -29,6 +29,7 @@
   import { fetchAccessibleLibraryRoots } from "$lib/api/settings";
   import PluginIcon from "$lib/components/plugins/PluginIcon.svelte";
 
+  import { managedRequestPhaseLabels } from "$lib/integrations/managed-labels";
   export interface ManagedRequestOwnership {
     entityId: string;
     partialSelection: boolean;
@@ -300,16 +301,7 @@
 
   function phaseLabel(item: ReviewedFulfillmentOwnership): string | null {
     if (!item.requestPhase) return null;
-    return {
-      [MANAGED_REQUEST_PHASE.pendingCreation]: "Queued",
-      [MANAGED_REQUEST_PHASE.creationUncertain]: "Checking acceptance",
-      [MANAGED_REQUEST_PHASE.awaitingFiles]: "Waiting for files",
-      [MANAGED_REQUEST_PHASE.completed]: "Request complete",
-      [MANAGED_REQUEST_PHASE.rejected]: "Needs attention",
-      [MANAGED_REQUEST_PHASE.cancelled]: "Cancelled",
-      [MANAGED_REQUEST_PHASE.ownershipReleased]: "Ownership released",
-      [MANAGED_REQUEST_PHASE.remoteRemoved]: "Removed from source",
-    }[item.requestPhase];
+    return managedRequestPhaseLabels[item.requestPhase];
   }
 </script>
 

@@ -1,13 +1,13 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { Button, ChoiceGroup, DialogBase, Panel, Select, TextInput, Toggle, type ChoiceOption } from "@prismedia/ui-svelte";
-  import { ENTITY_KIND } from "$lib/api/generated/codes";
   import type { ConnectionResponse, EntityKind, ExternalLibraryMount, LibraryRoot, ManagerOptions } from "$lib/api/generated/model";
   import { attachExistingLibraryMount, fetchLibraryMounts, fetchManagerOptions, saveLibraryMount } from "$lib/api/managed-libraries";
   import { fetchLibraryRoots } from "$lib/api/settings";
   import { SETTING_SECTION } from "$lib/settings/settings-section-catalog";
   import SharedStorageHelp from "./SharedStorageHelp.svelte";
 
+  import { rootScansKind } from "$lib/integrations/import-options";
   const MAPPING_MODE = { newFolder: "new-folder", existingLibrary: "existing-library" } as const;
   type MappingMode = typeof MAPPING_MODE[keyof typeof MAPPING_MODE];
   const mappingModeOptions: ChoiceOption<MappingMode>[] = [
@@ -16,11 +16,7 @@
   ];
 
   function supportsKind(root: LibraryRoot, entityKind: EntityKind | undefined): boolean {
-    if (!entityKind || root.isReadOnly) return false;
-    if (entityKind === ENTITY_KIND.movie || entityKind === ENTITY_KIND.videoSeries) return root.scanVideos;
-    if (entityKind === ENTITY_KIND.book || entityKind === ENTITY_KIND.comicSeries) return root.scanBooks;
-    if (entityKind === ENTITY_KIND.image || entityKind === ENTITY_KIND.gallery) return root.scanImages;
-    return entityKind === ENTITY_KIND.audioLibrary && root.scanAudio;
+    return !root.isReadOnly && rootScansKind(root, entityKind);
   }
 
   let { connection, kind }: { connection: ConnectionResponse; kind: EntityKind | undefined } = $props();

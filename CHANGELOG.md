@@ -68,6 +68,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Connected request and linked-library statuses use the same wording on every page, and a manager's own reason is shown when it refuses a settings change or search.
 - Installed plugins now appear in compact full-width rows, with capabilities grouped beneath each plugin's name and actions.
 - Administration pages embedded in the iOS app now let the native background show through around their content.
 - Imported comic issues retain the source's issue number when the archive has no embedded ComicInfo number.

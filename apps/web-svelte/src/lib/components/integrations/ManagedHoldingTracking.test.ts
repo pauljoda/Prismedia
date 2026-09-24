@@ -110,7 +110,7 @@ describe("Managed holding tracking", () => {
     await screen.findByText("/library/film.mkv");
     expect(api.saveManagedTracking).not.toHaveBeenCalled();
     await fireEvent.click(screen.getByRole("button", { name: "Link matching items" }));
-    await screen.findByText("Link pending");
+    await screen.findByText("Verifying link");
     expect(api.saveManagedTracking).toHaveBeenCalledWith("connection", expect.objectContaining({ libraryRootId: "mapped-root", selections: [selection], item: tracked.item }));
   });
 
@@ -174,7 +174,7 @@ describe("Managed holding tracking", () => {
   it("keeps retained local targets openable after release and requires review before relinking", async () => {
     api.fetchManagedTracking.mockResolvedValue([{ ...tracked, status: MANAGED_TRACKING_STATUS.released }]);
     render(ManagedHoldingTracking, { connectionId: "connection", connectionName: "Radarr", item });
-    await screen.findByText("Tracking stopped");
+    await screen.findByText("No longer managed");
     expect(screen.getByText(/previously linked item remains.*files and history are retained/i)).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Check now" })).not.toBeInTheDocument();
     await fireEvent.click(screen.getByRole("button", { name: "Open in Prismedia" }));

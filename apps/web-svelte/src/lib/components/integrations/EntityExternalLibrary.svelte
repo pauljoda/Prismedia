@@ -10,6 +10,7 @@
   import BookExternalLibraryRenditions from "./BookExternalLibraryRenditions.svelte";
   import { useSession } from "$lib/stores/session.svelte";
 
+  import { managedRequestPhaseLabels } from "$lib/integrations/managed-labels";
   let { origin, sourceLink, hasSourceMedia = false }: {
     origin: EntityCapabilityExternalLibraryProvenanceCapability;
     sourceLink: { href: string; label: string; ariaLabel: string } | null;
@@ -17,16 +18,7 @@
   } = $props();
   const session = useSession();
   let releasedHoldingId = $state<string | null>(null);
-  const phaseLabels = {
-    [MANAGED_REQUEST_PHASE.pendingCreation]: "Request queued",
-    [MANAGED_REQUEST_PHASE.creationUncertain]: "Checking request",
-    [MANAGED_REQUEST_PHASE.awaitingFiles]: "Waiting for files",
-    [MANAGED_REQUEST_PHASE.completed]: "Available in Prismedia",
-    [MANAGED_REQUEST_PHASE.rejected]: "Needs attention",
-    [MANAGED_REQUEST_PHASE.cancelled]: "Cancelled",
-    [MANAGED_REQUEST_PHASE.ownershipReleased]: "No longer managed",
-    [MANAGED_REQUEST_PHASE.remoteRemoved]: "Removed from source",
-  };
+  const phaseLabels = managedRequestPhaseLabels;
   const removed = $derived(origin.request?.phase === MANAGED_REQUEST_PHASE.remoteRemoved
     || origin.holding?.status === MANAGED_TRACKING_STATUS.removed);
   const waiting = $derived(origin.request && !removed && origin.request.phase !== MANAGED_REQUEST_PHASE.completed);

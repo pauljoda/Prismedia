@@ -1,7 +1,7 @@
 <script lang="ts">
   import { ArrowUpRight, BookOpen, FolderOpen, Headphones } from "@lucide/svelte";
   import { Badge, Panel, buttonVariants } from "@prismedia/ui-svelte";
-  import { BOOK_RENDITION, MANAGED_REQUEST_PHASE, MANAGED_TRACKING_STATUS } from "$lib/api/generated/codes";
+  import { BOOK_RENDITION, MANAGED_TRACKING_STATUS } from "$lib/api/generated/codes";
   import type { ExternalBookRenditionProvenance } from "$lib/api/generated/model";
   import { getGetPluginIconUrl } from "$lib/api/generated/prismedia";
   import { managedHoldingInputHref, managedHoldingSourceHref } from "$lib/integrations/managed-holding-route";
@@ -10,6 +10,7 @@
   import ManagedHoldingControls from "./ManagedHoldingControls.svelte";
   import ManagedHoldingRelease from "./ManagedHoldingRelease.svelte";
 
+  import { managedRequestPhaseLabels, managedTrackingStatusLabels } from "$lib/integrations/managed-labels";
   let { renditions }: { renditions: readonly ExternalBookRenditionProvenance[] } = $props();
   const session = useSession();
   let releasedHoldingIds = $state<string[]>([]);
@@ -26,12 +27,10 @@
   }
 
   function stateLabel(row: ExternalBookRenditionProvenance): string {
-    if (row.holding.status === MANAGED_TRACKING_STATUS.removed
-      || row.request.phase === MANAGED_REQUEST_PHASE.remoteRemoved) return "Removed from source";
-    if (row.holding.status === MANAGED_TRACKING_STATUS.released) return "No longer managed";
-    if (row.request.phase === MANAGED_REQUEST_PHASE.completed) return "Available in Prismedia";
-    if (row.request.phase === MANAGED_REQUEST_PHASE.rejected) return "Needs attention";
-    return "Waiting for files";
+    if (row.holding.status === MANAGED_TRACKING_STATUS.removed || row.holding.status === MANAGED_TRACKING_STATUS.released) {
+      return managedTrackingStatusLabels[row.holding.status];
+    }
+    return managedRequestPhaseLabels[row.request.phase];
   }
 </script>
 

@@ -10,6 +10,7 @@
   import ManagedHoldingControls from "./ManagedHoldingControls.svelte";
 
   import { createUuid } from "$lib/utils/uuid";
+  import { isManagedRequestInFlight, managedRequestHoldsFulfillment, managedRequestPhaseLabels } from "$lib/integrations/managed-labels";
   let {
     connection,
     entityKind = ENTITY_KIND.movie,
@@ -43,26 +44,9 @@
   let error = $state<string | null>(null);
   let alive = true;
   let sequence = 0;
-  const phaseLabels = {
-    [MANAGED_REQUEST_PHASE.pendingCreation]: "Request queued",
-    [MANAGED_REQUEST_PHASE.creationUncertain]: "Creation outcome uncertain",
-    [MANAGED_REQUEST_PHASE.awaitingFiles]: "Waiting for files",
-    [MANAGED_REQUEST_PHASE.completed]: "Imported into Prismedia",
-    [MANAGED_REQUEST_PHASE.rejected]: "Creation refused",
-    [MANAGED_REQUEST_PHASE.cancelled]: "Cancelled",
-    [MANAGED_REQUEST_PHASE.ownershipReleased]: "No longer managed",
-    [MANAGED_REQUEST_PHASE.remoteRemoved]: "Removed from source",
-  };
-  const activePhases = new Set<ManagedRequestResponse["phase"]>([MANAGED_REQUEST_PHASE.pendingCreation, MANAGED_REQUEST_PHASE.creationUncertain, MANAGED_REQUEST_PHASE.awaitingFiles]);
-  const retainedOwnerPhases = new Set<ManagedRequestResponse["phase"]>([
-    MANAGED_REQUEST_PHASE.pendingCreation,
-    MANAGED_REQUEST_PHASE.creationUncertain,
-    MANAGED_REQUEST_PHASE.awaitingFiles,
-    MANAGED_REQUEST_PHASE.completed,
-    MANAGED_REQUEST_PHASE.rejected,
-  ]);
+  const phaseLabels = managedRequestPhaseLabels;
   const activeForInitialEntity = $derived(initialEntity
-    ? visibleRequests.filter(request => retainedOwnerPhases.has(request.phase))
+    ? visibleRequests.filter(request => managedRequestHoldsFulfillment(request.phase))
     : []);
   const matchingActiveRequest = $derived(activeForInitialEntity.find(request => sameTargetScope(request.targetEntityIds, initialTargetEntityIds)));
   const conflictingActiveRequest = $derived(activeForInitialEntity.find(request => !sameTargetScope(request.targetEntityIds, initialTargetEntityIds)));
@@ -78,7 +62,7 @@
       const result = await fetchManagedRequests(connection.id);
       if (!alive || current !== sequence) return;
       requests = result;
-      if (initialEntity && result.some(item => item.entityId === initialEntity.id && retainedOwnerPhases.has(item.phase)
+      if (initialEntity && result.some(item => item.entityId === initialEntity.id && managedRequestHoldsFulfillment(item.phase)
         && sameTargetScope(item.targetEntityIds, initialTargetEntityIds))) expanded = false;
       if (pending && result.some(item => item.id === pending?.operationId)) { pending = null; preview = null; selected = []; error = null; if (initialEntity) expanded = false; }
     } catch (cause) { if (alive && current === sequence) error = message(cause); }
@@ -202,7 +186,7 @@
         <Badge>{request.reviewRequired ? "Needs review" : phaseLabels[request.phase]}</Badge>
         {#if request.problem}<p class="break-words text-sm text-text-muted">{request.problem}</p>{/if}
         <div class="flex flex-wrap gap-2">
-          {#if activePhases.has(request.phase)}<Button variant="outline" size="sm" disabled={busy} onclick={() => void refresh(request)}>Refresh request</Button>{/if}
+          {#if isManagedRequestInFlight(request.phase)}<Button variant="outline" size="sm" disabled={busy} onclick={() => void refresh(request)}>Refresh request</Button>{/if}
           {#if request.canCancel}<Button variant="outline" size="sm" disabled={busy} onclick={() => void cancel(request)}>Cancel request</Button>{/if}
         </div>
         {#if request.remoteId && request.phase !== MANAGED_REQUEST_PHASE.remoteRemoved}<ManagedHoldingControls connectionId={connection.id} connectionName={connection.name} holdingId={request.id} canPreview={canRequest && request.phase !== MANAGED_REQUEST_PHASE.ownershipReleased} />{/if}

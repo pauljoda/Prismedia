@@ -3,10 +3,10 @@
   import { Button, ChoiceGroup, DialogBase, Select, TextInput, Toggle, type ChoiceOption } from "@prismedia/ui-svelte";
   import type { EntityKind, LibraryRoot, ProviderLibraryConnection, ProviderLibraryDescriptor } from "$lib/api/generated/model";
   import { attachExistingLibraryMount, fetchProviderLibraries, saveLibraryMount } from "$lib/api/managed-libraries";
-  import { ENTITY_KIND } from "$lib/api/generated/codes";
   import { labelForEntityKind } from "$lib/entities/entity-codes";
   import SharedStorageHelp from "$lib/components/integrations/SharedStorageHelp.svelte";
 
+  import { rootScansKind } from "$lib/integrations/import-options";
   const MODE = { newFolder: "new-folder", existingLibrary: "existing-library" } as const;
   type MappingMode = typeof MODE[keyof typeof MODE];
   type ProviderChoice = { key: string; connection: ProviderLibraryConnection; library: ProviderLibraryDescriptor };
@@ -47,10 +47,7 @@
   const selectedRoot = $derived(compatibleRoots.find(root => root.id === existingLibraryRootId));
 
   function supports(root: LibraryRoot, kind: EntityKind): boolean {
-    if (kind === ENTITY_KIND.movie || kind === ENTITY_KIND.videoSeries) return root.scanVideos;
-    if (kind === ENTITY_KIND.book || kind === ENTITY_KIND.comicSeries) return root.scanBooks;
-    if (kind === ENTITY_KIND.image || kind === ENTITY_KIND.gallery) return root.scanImages;
-    return kind === ENTITY_KIND.audioLibrary && root.scanAudio;
+    return rootScansKind(root, kind);
   }
 
   async function show() {

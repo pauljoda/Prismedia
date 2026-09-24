@@ -15,6 +15,7 @@
   import ManagedHoldingRelease from "./ManagedHoldingRelease.svelte";
 
   import { createUuid } from "$lib/utils/uuid";
+  import { isManagedHoldingEstablished, managedTrackingStatusLabels } from "$lib/integrations/managed-labels";
   let { connectionId, connectionName = "Connected app", item = null, bookRendition = null, showControls = false, canControl = false, canRelease = false, compact = false, onLoaded }: { connectionId: string; connectionName?: string; item?: ManagedLibraryItem | null; bookRendition?: BookRenditionCode | null; showControls?: boolean; canControl?: boolean; canRelease?: boolean; compact?: boolean; onLoaded?: (holdings: ManagedTrackingResponse[]) => void } = $props();
   const nsfw = useNsfw();
   let expandedId = $state<string | null>(null);
@@ -58,16 +59,7 @@
   });
   const combinesBookWorks = $derived(!!siblingBookHolding?.bookWorkId && !!previewBookWorkId
     && siblingBookHolding.bookWorkId !== previewBookWorkId);
-  const statusLabels: Record<ManagedTrackingResponse["status"], string> = {
-    [MANAGED_TRACKING_STATUS.pending]: "Link pending",
-    [MANAGED_TRACKING_STATUS.waitingForFiles]: "Waiting for files",
-    [MANAGED_TRACKING_STATUS.tracking]: "Linked",
-    [MANAGED_TRACKING_STATUS.needsReview]: "Needs attention",
-    [MANAGED_TRACKING_STATUS.stale]: "Connection unavailable",
-    [MANAGED_TRACKING_STATUS.releasePending]: "Stopping management",
-    [MANAGED_TRACKING_STATUS.released]: "Tracking stopped",
-    [MANAGED_TRACKING_STATUS.removed]: "Removed from source",
-  };
+  const statusLabels = managedTrackingStatusLabels;
   $effect(() => {
     const selectedConnectionId = connectionId;
     const scope = trackingScope;
@@ -253,7 +245,7 @@
               </Button>
               {#if showControls && holding.item.entityKind === ENTITY_KIND.comicSeries && holding.status !== MANAGED_TRACKING_STATUS.removed}
                 <ManagedHoldingControls {connectionId} {connectionName} holdingId={holding.id} targetEntityId={target.entityId}
-                  targetLabel={targetLabel(target, holding.title)} canPreview={canControl && (holding.status === MANAGED_TRACKING_STATUS.tracking || holding.status === MANAGED_TRACKING_STATUS.waitingForFiles)} />
+                  targetLabel={targetLabel(target, holding.title)} canPreview={canControl && isManagedHoldingEstablished(holding.status)} />
               {/if}
             </div>
           {:else if targets.length > 1}
@@ -266,7 +258,7 @@
                   </Button>
                   {#if showControls && holding.item.entityKind === ENTITY_KIND.comicSeries && holding.status !== MANAGED_TRACKING_STATUS.removed}
                     <ManagedHoldingControls {connectionId} {connectionName} holdingId={holding.id} targetEntityId={target.entityId}
-                      targetLabel={targetLabel(target, holding.title)} canPreview={canControl && (holding.status === MANAGED_TRACKING_STATUS.tracking || holding.status === MANAGED_TRACKING_STATUS.waitingForFiles)} />
+                      targetLabel={targetLabel(target, holding.title)} canPreview={canControl && isManagedHoldingEstablished(holding.status)} />
                   {/if}
                 </div>
               {/each}
@@ -281,7 +273,7 @@
           {#if showControls}
             <div class="flex min-w-0 flex-wrap items-start gap-2">
               {#if holding.status !== MANAGED_TRACKING_STATUS.removed && holding.item.entityKind !== ENTITY_KIND.comicSeries}
-                <ManagedHoldingControls {connectionId} {connectionName} holdingId={holding.id} canPreview={canControl && (holding.status === MANAGED_TRACKING_STATUS.tracking || holding.status === MANAGED_TRACKING_STATUS.waitingForFiles)} />
+                <ManagedHoldingControls {connectionId} {connectionName} holdingId={holding.id} canPreview={canControl && isManagedHoldingEstablished(holding.status)} />
               {/if}
               {#if canRelease && (holding.status === MANAGED_TRACKING_STATUS.tracking || holding.status === MANAGED_TRACKING_STATUS.waitingForFiles || holding.status === MANAGED_TRACKING_STATUS.removed)}
                 <ManagedHoldingRelease {connectionId} {connectionName} holdingId={holding.id} onaccepted={saved => { loadSequence += 1; holdings = holdings.map(item => item.id === saved.id ? saved : item); }} />

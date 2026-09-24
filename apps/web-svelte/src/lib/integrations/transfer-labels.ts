@@ -1,4 +1,4 @@
-import { INTEGRATION_TRANSFER_MODE, INTEGRATION_TRANSFER_PHASE, SOURCE_ACQUISITION_STATE, type IntegrationTransferModeCode, type IntegrationTransferPhaseCode } from "$lib/api/generated/codes";
+import { INTEGRATION_TRANSFER_MODE, INTEGRATION_TRANSFER_PHASE, INTEGRATION_TRANSFER_PHASE_FACTS, SOURCE_ACQUISITION_STATE, type IntegrationTransferModeCode, type IntegrationTransferPhaseCode } from "$lib/api/generated/codes";
 import type { IntegrationTransferResponse } from "$lib/api/generated/model";
 
 /** Distinguishes remote execution, verified local import, and receipt delivery. */
@@ -18,7 +18,7 @@ export const transferPhaseLabels: Record<IntegrationTransferPhaseCode, string> =
 
 /** Terminal operations cannot be retried into another acquisition. */
 export function isTransferTerminal(phase: IntegrationTransferPhaseCode): boolean {
-  return phase === INTEGRATION_TRANSFER_PHASE.completed || phase === INTEGRATION_TRANSFER_PHASE.failed || phase === INTEGRATION_TRANSFER_PHASE.cancelled;
+  return INTEGRATION_TRANSFER_PHASE_FACTS[phase].isTerminal;
 }
 
 /** Names the action by what Prismedia can actually stop. Source preparation remains owned by its app. */

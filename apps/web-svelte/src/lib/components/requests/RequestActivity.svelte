@@ -21,6 +21,7 @@
   import { managedRequestActivityGroup, managedTrackingActivityGroup, REQUEST_ACTIVITY_GROUP, transferActivityGroup, type RequestActivityGroup } from "$lib/requests/request-activity";
   import { formatRelativeTime } from "$lib/utils/format";
 
+  import { isManagedHoldingEstablished, isManagedRequestInFlight, managedRequestPhaseLabels, managedTrackingStatusLabels } from "$lib/integrations/managed-labels";
   const ITEM = { transfer: "transfer", request: "request", holding: "holding" } as const;
   const PAGE_SIZE = 50;
   const RECENT_PREVIEW_COUNT = 6;
@@ -187,23 +188,8 @@
   function canRelease(connection: ConnectionResponse) { return hasManagerOperation(connection, INTEGRATION_OPERATION.inspectManagedRelease); }
   function message(cause: unknown, fallback: string) { return cause instanceof Error ? cause.message : fallback; }
 
-  const requestLabels: Record<ManagedRequestResponse["phase"], string> = {
-    [MANAGED_REQUEST_PHASE.pendingCreation]: "Request queued", [MANAGED_REQUEST_PHASE.creationUncertain]: "Check creation",
-    [MANAGED_REQUEST_PHASE.awaitingFiles]: "Waiting for files", [MANAGED_REQUEST_PHASE.completed]: "Imported",
-    [MANAGED_REQUEST_PHASE.rejected]: "Request refused", [MANAGED_REQUEST_PHASE.cancelled]: "Cancelled",
-    [MANAGED_REQUEST_PHASE.ownershipReleased]: "Ownership released",
-    [MANAGED_REQUEST_PHASE.remoteRemoved]: "Removed from source",
-  };
-  const holdingLabels: Record<ManagedTrackingResponse["status"], string> = {
-    [MANAGED_TRACKING_STATUS.pending]: "Verifying", [MANAGED_TRACKING_STATUS.waitingForFiles]: "Waiting for files",
-    [MANAGED_TRACKING_STATUS.tracking]: "Following", [MANAGED_TRACKING_STATUS.needsReview]: "Review tracking",
-    [MANAGED_TRACKING_STATUS.stale]: "Source unavailable", [MANAGED_TRACKING_STATUS.releasePending]: "Handoff pending",
-    [MANAGED_TRACKING_STATUS.released]: "Ownership released",
-    [MANAGED_TRACKING_STATUS.removed]: "Removed from source",
-  };
-  const refreshableRequestPhases = new Set<ManagedRequestResponse["phase"]>([
-    MANAGED_REQUEST_PHASE.pendingCreation, MANAGED_REQUEST_PHASE.creationUncertain, MANAGED_REQUEST_PHASE.awaitingFiles,
-  ]);
+  const requestLabels = managedRequestPhaseLabels;
+  const holdingLabels = managedTrackingStatusLabels;
   function localAvailability(holding: ManagedTrackingResponse) {
     if (holding.status === MANAGED_TRACKING_STATUS.released) return "Existing file links and history retained";
     const available = holding.bindings.filter(binding => binding.isAvailable).length;
@@ -254,7 +240,7 @@
           <Button variant="secondary" size="sm" disabled={busyKey !== null || unavailable} title={unavailable ? "Unavailable or hidden by current visibility settings" : undefined} onclick={() => void openEntity(item.key, entityId)}>{unavailable ? "Unavailable" : "Open"}<ArrowUpRight /></Button>
         {/each}
       {:else if item.type === ITEM.request}
-        {#if refreshableRequestPhases.has(item.request.phase)}<Button variant="outline" size="sm" disabled={busyKey !== null} onclick={() => void runAction(item.key, () => refreshRequest(item.connection.id, item.request.id))}><RefreshCw />Refresh</Button>{/if}
+        {#if isManagedRequestInFlight(item.request.phase)}<Button variant="outline" size="sm" disabled={busyKey !== null} onclick={() => void runAction(item.key, () => refreshRequest(item.connection.id, item.request.id))}><RefreshCw />Refresh</Button>{/if}
         {#if item.request.canCancel}<Button variant="ghost" size="sm" disabled={busyKey !== null} onclick={() => void runAction(item.key, () => cancelRequest(item.connection.id, item.request))}><X />Cancel</Button>{/if}
         {#if item.request.remoteId && item.request.phase !== MANAGED_REQUEST_PHASE.remoteRemoved}<Button variant="ghost" size="sm" aria-expanded={expandedKey === item.key} onclick={() => expandedKey = expandedKey === item.key ? null : item.key}>{expandedKey === item.key ? "Hide controls" : "Manage"}</Button>{/if}
       {:else}
@@ -274,8 +260,8 @@
       && item.holding.status !== MANAGED_TRACKING_STATUS.removed}
       <div class="activity-details space-y-3">
         {#if item.holding.lastCheckedAt}<p class="text-xs text-text-muted">Last checked {new Date(item.holding.lastCheckedAt).toLocaleString()}</p>{/if}
-        <ManagedHoldingControls connectionId={item.connection.id} connectionName={item.connection.name} holdingId={item.holding.id} canPreview={canControl(item.connection) && (item.holding.status === MANAGED_TRACKING_STATUS.tracking || item.holding.status === MANAGED_TRACKING_STATUS.waitingForFiles)} />
-        {#if canRelease(item.connection) && (item.holding.status === MANAGED_TRACKING_STATUS.tracking || item.holding.status === MANAGED_TRACKING_STATUS.waitingForFiles)}<ManagedHoldingRelease connectionId={item.connection.id} connectionName={item.connection.name} holdingId={item.holding.id} onaccepted={saved => updateHolding(item.connection.id, saved)} />{/if}
+        <ManagedHoldingControls connectionId={item.connection.id} connectionName={item.connection.name} holdingId={item.holding.id} canPreview={canControl(item.connection) && isManagedHoldingEstablished(item.holding.status)} />
+        {#if canRelease(item.connection) && isManagedHoldingEstablished(item.holding.status)}<ManagedHoldingRelease connectionId={item.connection.id} connectionName={item.connection.name} holdingId={item.holding.id} onaccepted={saved => updateHolding(item.connection.id, saved)} />{/if}
       </div>
     {/if}
   </article>
