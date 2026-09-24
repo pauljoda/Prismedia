@@ -326,9 +326,9 @@ internal sealed class ProgressCapabilityProjector : EntityCapabilityProjector<Pr
                 ConsumedPercent: progress.Total > 0
                     ? Math.Clamp(progress.ConsumedCount / (double)progress.Total, 0, 1)
                     : 0,
-                Reading: progress.Reading is { } reading
+                Reading: progress.CheckpointFor(ConsumptionModality.Reading) is { } reading
                     ? new BookReadingProgress(
-                        reading.CurrentEntityId,
+                        reading.PositionEntityId,
                         reading.Unit,
                         reading.Index,
                         reading.Total,
@@ -336,12 +336,12 @@ internal sealed class ProgressCapabilityProjector : EntityCapabilityProjector<Pr
                         reading.Location,
                         reading.UpdatedAt)
                     : null,
-                Listening: progress.Listening is { } listening
+                Listening: progress.CheckpointFor(ConsumptionModality.Listening) is { } listening
                     ? new BookListeningProgress(
-                        listening.TrackEntityId,
+                        listening.PositionEntityId,
                         listening.MarkerId,
-                        listening.OffsetSeconds,
-                        listening.CurrentEntityId,
+                        listening.OffsetSeconds ?? 0,
+                        listening.PositionEntityId,
                         listening.Unit,
                         listening.Index,
                         listening.Total,

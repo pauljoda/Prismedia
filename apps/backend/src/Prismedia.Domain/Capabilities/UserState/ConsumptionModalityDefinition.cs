@@ -122,4 +122,131 @@ public sealed class ConsumptionModalityDefinition {
     public bool Accepts(ProgressUnit unit) => Units.Contains(unit);
 
     #endregion
+
+    #region Actions - Checkpoints
+
+    /// <summary>
+    /// Creates one validated checkpoint of this modality. Every checkpoint keeps
+    /// <c>0 ≤ index ≤ total</c> in an accepted unit; a <see cref="PositionUnit"/> checkpoint uses
+    /// <see cref="PositionTotal"/>; offset-addressed modalities require a finite, non-negative offset
+    /// whose whole seconds are the index; reader state and markers are accepted only by the
+    /// modalities that carry them.
+    /// </summary>
+    /// <param name="positionEntityId">Entity the position addresses (work, chapter, or track).</param>
+    /// <param name="unit">Unit counted by <paramref name="index"/>.</param>
+    /// <param name="index">Zero-based position within <paramref name="total"/>.</param>
+    /// <param name="total">Unit total addressed by the index.</param>
+    /// <param name="updatedAt">Server time at which the signal was accepted.</param>
+    /// <param name="offsetSeconds">Exact time offset, for offset-addressed modalities.</param>
+    /// <param name="markerId">Embedded chapter marker, for offset-addressed modalities.</param>
+    /// <param name="mode">Reader layout, for reader modalities.</param>
+    /// <param name="location">Opaque format locator, for reader modalities; blank becomes null.</param>
+    /// <returns>The validated checkpoint.</returns>
+    /// <exception cref="ArgumentException">A value violates this modality's rules.</exception>
+    public ProgressCheckpoint Checkpoint(
+        Guid positionEntityId,
+        ProgressUnit unit,
+        int index,
+        int total,
+        DateTimeOffset updatedAt,
+        double? offsetSeconds = null,
+        Guid? markerId = null,
+        ReaderMode? mode = null,
+        string? location = null) {
+        var code = Modality.ToCode();
+        if (positionEntityId == Guid.Empty) {
+            throw new ArgumentException($"A {code} checkpoint requires the Entity its position addresses.", nameof(positionEntityId));
+        }
+        if (!Accepts(unit)) {
+            throw new ArgumentException($"A {code} checkpoint cannot be recorded in '{unit.ToCode()}' units.", nameof(unit));
+        }
+        if (total < 0 || index < 0 || index > total) {
+            throw new ArgumentException(
+                $"A {code} checkpoint index must be between 0 and its total {total}; received {index}.",
+                nameof(index));
+        }
+        if (unit == PositionUnit && total != PositionTotal) {
+            throw new ArgumentException(
+                $"A '{unit.ToCode()}' checkpoint must use the whole-work total {PositionTotal}; received {total}.",
+                nameof(total));
+        }
+
+        if (AddressesByOffset) {
+            if (offsetSeconds is not { } offset || !double.IsFinite(offset) || offset < 0 || offset >= int.MaxValue) {
+                throw new ArgumentException(
+                    $"A {code} checkpoint requires a finite, non-negative offset in seconds.",
+                    nameof(offsetSeconds));
+            }
+            if (index != (int)Math.Floor(offset)) {
+                throw new ArgumentException(
+                    $"A {code} checkpoint index must equal the whole seconds of its offset {offset}; received {index}.",
+                    nameof(index));
+            }
+        } else if (offsetSeconds is not null || markerId is not null) {
+            throw new ArgumentException(
+                $"A {code} checkpoint cannot carry a time offset or chapter marker.",
+                nameof(offsetSeconds));
+        }
+
+        var normalizedLocation = string.IsNullOrWhiteSpace(location) ? null : location.Trim();
+        if (!CarriesReaderState && (mode is not null || normalizedLocation is not null)) {
+            throw new ArgumentException(
+                $"A {code} checkpoint cannot carry a reader mode or locator.",
+                nameof(mode));
+        }
+
+        return new ProgressCheckpoint(
+            Modality,
+            positionEntityId,
+            unit,
+            index,
+            total,
+            offsetSeconds,
+            markerId,
+            mode,
+            normalizedLocation,
+            updatedAt);
+    }
+
+    /// <summary>
+    /// Creates a validated checkpoint at an exact time offset inside <paramref name="positionEntityId"/>.
+    /// The index is the offset's whole seconds and the total covers the Entity's known duration.
+    /// </summary>
+    /// <param name="positionEntityId">Physical Entity the offset is measured in.</param>
+    /// <param name="markerId">Optional embedded chapter marker that identified the position.</param>
+    /// <param name="offsetSeconds">Exact offset from the Entity's beginning.</param>
+    /// <param name="durationSeconds">Known duration of the Entity, when probed.</param>
+    /// <param name="updatedAt">Server time at which the signal was accepted.</param>
+    /// <returns>The validated checkpoint.</returns>
+    /// <exception cref="InvalidOperationException">This modality does not address positions by offset.</exception>
+    /// <exception cref="ArgumentException">The offset is not finite and non-negative.</exception>
+    public ProgressCheckpoint OffsetCheckpoint(
+        Guid positionEntityId,
+        Guid? markerId,
+        double offsetSeconds,
+        double? durationSeconds,
+        DateTimeOffset updatedAt) {
+        var unit = OffsetUnit
+            ?? throw new InvalidOperationException($"The {Modality.ToCode()} modality does not address positions by time offset.");
+        if (!double.IsFinite(offsetSeconds) || offsetSeconds < 0 || offsetSeconds >= int.MaxValue) {
+            throw new ArgumentException(
+                $"A {Modality.ToCode()} checkpoint requires a finite, non-negative offset in seconds.",
+                nameof(offsetSeconds));
+        }
+
+        var index = (int)Math.Floor(offsetSeconds);
+        var knownDuration = durationSeconds is { } duration && double.IsFinite(duration) && duration > 0
+            ? (int)Math.Min(int.MaxValue - 1, Math.Ceiling(duration))
+            : 0;
+        return Checkpoint(
+            positionEntityId,
+            unit,
+            index,
+            Math.Max(index, knownDuration),
+            updatedAt,
+            offsetSeconds: offsetSeconds,
+            markerId: markerId);
+    }
+
+    #endregion
 }

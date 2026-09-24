@@ -39,15 +39,14 @@ internal sealed class ProgressCapabilityMapper(PrismediaDbContext db, ICurrentUs
             row.ProgressUpdatedAt ?? row.UpdatedAt,
             row.ProgressLocation,
             row.ProgressConsumedCount,
-            DecodeReading(row, entity.Kind),
-            DecodeListening(row)));
+            DecodeCheckpoints(row)));
     }
 
     public async Task PersistAsync(Entity entity, CancellationToken cancellationToken) {
         var userId = currentUser.UserId;
         if (userId == Guid.Empty ||
             entity.Progress is not { } progress ||
-            progress.UpdatedAt is null && progress.CurrentEntityId is null && progress.Index == 0 && progress.Total == 0 && progress.Location is null && progress.Reading is null && progress.Listening is null) {
+            progress.UpdatedAt is null && progress.CurrentEntityId is null && progress.Index == 0 && progress.Total == 0 && progress.Location is null && progress.Checkpoints.Count == 0) {
             return;
         }
 
@@ -62,77 +61,52 @@ internal sealed class ProgressCapabilityMapper(PrismediaDbContext db, ICurrentUs
         var now = DateTimeOffset.UtcNow;
         row.ProgressUpdatedAt = progress.UpdatedAt ?? row.ProgressUpdatedAt ?? now;
         row.ProgressConsumedCount = progress.ConsumedCount;
-        row.ReadingCurrentEntityId = progress.Reading?.CurrentEntityId;
-        row.ReadingUnit = progress.Reading?.Unit.ToCode();
-        row.ReadingIndex = progress.Reading?.Index;
-        row.ReadingTotal = progress.Reading?.Total;
-        row.ReadingMode = progress.Reading?.Mode?.ToCode();
-        row.ReadingLocation = progress.Reading?.Location;
-        row.ReadingUpdatedAt = progress.Reading?.UpdatedAt;
-        row.ListeningTrackEntityId = progress.Listening?.TrackEntityId;
-        row.ListeningMarkerId = progress.Listening?.MarkerId;
-        row.ListeningOffsetSeconds = progress.Listening?.OffsetSeconds;
-        row.ListeningCurrentEntityId = progress.Listening?.CurrentEntityId;
-        row.ListeningUnit = progress.Listening?.Unit.ToCode();
-        row.ListeningIndex = progress.Listening?.Index;
-        row.ListeningTotal = progress.Listening?.Total;
-        row.ListeningUpdatedAt = progress.Listening?.UpdatedAt;
+        var reading = progress.CheckpointFor(ConsumptionModality.Reading);
+        row.ReadingCurrentEntityId = reading?.PositionEntityId;
+        row.ReadingUnit = reading?.Unit.ToCode();
+        row.ReadingIndex = reading?.Index;
+        row.ReadingTotal = reading?.Total;
+        row.ReadingMode = reading?.Mode?.ToCode();
+        row.ReadingLocation = reading?.Location;
+        row.ReadingUpdatedAt = reading?.UpdatedAt;
+        var listening = progress.CheckpointFor(ConsumptionModality.Listening);
+        row.ListeningTrackEntityId = listening?.PositionEntityId;
+        row.ListeningMarkerId = listening?.MarkerId;
+        row.ListeningOffsetSeconds = listening?.OffsetSeconds;
+        row.ListeningCurrentEntityId = listening?.PositionEntityId;
+        row.ListeningUnit = listening?.Unit.ToCode();
+        row.ListeningIndex = listening?.Index;
+        row.ListeningTotal = listening?.Total;
+        row.ListeningUpdatedAt = listening?.UpdatedAt;
         row.UpdatedAt = now;
     }
 
-    private static BookReadingCheckpoint? DecodeReading(UserEntityStateRow row, EntityKind kind) {
-        if (row.ReadingCurrentEntityId is { } currentEntityId &&
-            row.ReadingUpdatedAt is { } updatedAt &&
-            row.ReadingIndex is { } index &&
-            row.ReadingTotal is { } total &&
-            row.ReadingUnit is { } unitCode &&
-            unitCode.TryDecodeAs<ProgressUnit>(out var unit)) {
-            return new BookReadingCheckpoint(
-                currentEntityId,
-                unit,
-                index,
-                total,
-                row.ReadingMode is not null && row.ReadingMode.TryDecodeAs<ReaderMode>(out var mode) ? mode : null,
-                row.ReadingLocation,
-                updatedAt);
+    private static IEnumerable<ProgressCheckpoint> DecodeCheckpoints(UserEntityStateRow row) {
+        if (row.ReadingCurrentEntityId is { } readingEntityId &&
+            row.ReadingUpdatedAt is { } readingAt &&
+            row.ReadingIndex is { } readingIndex &&
+            row.ReadingTotal is { } readingTotal &&
+            row.ReadingUnit is { } readingUnitCode &&
+            readingUnitCode.TryDecodeAs<ProgressUnit>(out var readingUnit) &&
+            ConsumptionModalityDefinition.Reading.Accepts(readingUnit)) {
+            yield return ConsumptionModalityDefinition.Reading.Checkpoint(
+                readingEntityId,
+                readingUnit,
+                readingIndex,
+                readingTotal,
+                readingAt,
+                mode: row.ReadingMode is not null && row.ReadingMode.TryDecodeAs<ReaderMode>(out var mode) ? mode : null,
+                location: row.ReadingLocation);
         }
-
-        // Older Book rows contain one cursor. Preserve it as the first readable checkpoint
-        // before a later listening heartbeat replaces the work's last-used cursor.
-        if (kind == EntityKind.Book && row.ListeningUpdatedAt is null &&
-            row.ProgressCurrentEntityId is { } legacyEntityId &&
-            (row.ProgressUpdatedAt ?? row.UpdatedAt) is { } legacyUpdatedAt) {
-            return new BookReadingCheckpoint(
-                legacyEntityId,
-                row.ProgressUnit.TryDecodeAs<ProgressUnit>(out var legacyUnit) ? legacyUnit : ProgressUnit.Item,
-                row.ProgressIndex,
-                row.ProgressTotal,
-                row.ProgressMode is not null && row.ProgressMode.TryDecodeAs<ReaderMode>(out var legacyMode) ? legacyMode : null,
-                row.ProgressLocation,
-                legacyUpdatedAt);
+        if (row.ListeningTrackEntityId is { } trackEntityId &&
+            row.ListeningOffsetSeconds is { } offsetSeconds &&
+            row.ListeningUpdatedAt is { } listeningAt) {
+            yield return ConsumptionModalityDefinition.Listening.OffsetCheckpoint(
+                trackEntityId,
+                row.ListeningMarkerId,
+                offsetSeconds,
+                row.ListeningTotal,
+                listeningAt);
         }
-        return null;
-    }
-
-    private static BookListeningCheckpoint? DecodeListening(UserEntityStateRow row) {
-        if (row.ListeningTrackEntityId is not { } trackEntityId ||
-            row.ListeningCurrentEntityId is not { } currentEntityId ||
-            row.ListeningOffsetSeconds is not { } offsetSeconds ||
-            row.ListeningIndex is not { } index ||
-            row.ListeningTotal is not { } total ||
-            row.ListeningUpdatedAt is not { } updatedAt ||
-            row.ListeningUnit is not { } unitCode ||
-            !unitCode.TryDecodeAs<ProgressUnit>(out var unit)) {
-            return null;
-        }
-        return new BookListeningCheckpoint(
-            trackEntityId,
-            row.ListeningMarkerId,
-            offsetSeconds,
-            currentEntityId,
-            unit,
-            index,
-            total,
-            updatedAt);
     }
 }

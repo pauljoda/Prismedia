@@ -526,14 +526,21 @@ public sealed partial class EntityCapabilityService {
             return null;
         }
 
+        var engagement = entity.Definition.Engagement;
+        var listeningModality = listening is not null
+            ? engagement.Modalities.FirstOrDefault(modality => modality.AddressesByOffset)
+            : null;
+        Entity? listeningTrack = null;
         if (listening is not null) {
-            if (entity.Kind != EntityKind.Book ||
+            if (listeningModality is null ||
+                entity.Definition is not IAudioPlaybackOwnerKindDefinition audioOwner ||
                 !double.IsFinite(listening.OffsetSeconds) || listening.OffsetSeconds < 0 ||
                 _visibility is not null && !await _visibility.IsVisibleAsync(listening.TrackEntityId, cancellationToken)) {
                 return null;
             }
-            var track = await _entities.FindShallowAsync(listening.TrackEntityId, cancellationToken);
-            if (track?.Kind != EntityKind.AudioTrack || track.ParentEntityId != entity.Id) {
+            listeningTrack = await _entities.FindShallowAsync(listening.TrackEntityId, cancellationToken);
+            if (listeningTrack?.Kind != audioOwner.AudioPlaybackPolicy.ItemKind ||
+                listeningTrack.ParentEntityId != entity.Id) {
                 return null;
             }
         }
@@ -581,26 +588,26 @@ public sealed partial class EntityCapabilityService {
                 : Math.Max(progress.ConsumedCount, consumedTotal > 0 ? consumedIndex + 1 : 0);
 
         var retainedCheckpoint = false;
-        if (entity.Kind == EntityKind.Book) {
-            if (listening is not null) {
-                retainedCheckpoint = progress.RecordListening(new BookListeningCheckpoint(
-                    listening.TrackEntityId,
-                    listening.MarkerId,
-                    listening.OffsetSeconds,
+        if (listeningModality is not null && listening is not null && listeningTrack is not null) {
+            retainedCheckpoint = progress.TryRecord(listeningModality.OffsetCheckpoint(
+                listeningTrack.Id,
+                listening.MarkerId,
+                listening.OffsetSeconds,
+                listeningTrack.Technical?.Duration?.TotalSeconds,
+                occurredAt));
+        } else if (engagement.ModalityFor(activityKind ?? engagement.DefaultActivityKind) is { AddressesByOffset: false } readingModality &&
+                   readingModality.Accepts(unit)) {
+            try {
+                retainedCheckpoint = progress.TryRecord(readingModality.Checkpoint(
                     targetCursorId,
                     unit,
                     normalizedIndex,
                     normalizedTotal,
-                    occurredAt));
-            } else if (activityKind != ConsumptionActivityKind.Listening) {
-                retainedCheckpoint = progress.RecordReading(new BookReadingCheckpoint(
-                    targetCursorId,
-                    unit,
-                    normalizedIndex,
-                    normalizedTotal,
-                    mode,
-                    normalizedLocation,
-                    occurredAt));
+                    occurredAt,
+                    mode: mode,
+                    location: normalizedLocation));
+            } catch (ArgumentException) {
+                return null;
             }
         }
 

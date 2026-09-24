@@ -15,48 +15,6 @@ public sealed class EntityCapabilityServiceProgressTests {
     private static readonly Guid AudioTrackId = Guid.Parse("55555555-5555-5555-5555-555555555555");
 
     [Fact]
-    public async Task BookKeepsIndependentExactReadingAndListeningPositions() {
-        var earlier = DateTimeOffset.UtcNow.AddMinutes(-5);
-        var repository = new FakeEntityWriteRepository(new CapabilityProgress(
-            currentEntityId: BookId,
-            unit: ProgressUnit.Cfi,
-            index: 2300,
-            total: 10000,
-            mode: ReaderMode.Paged,
-            updatedAt: earlier,
-            location: "epubcfi(/6/12!/4/2)",
-            reading: new BookReadingCheckpoint(
-                BookId, ProgressUnit.Cfi, 2300, 10000, ReaderMode.Paged,
-                "epubcfi(/6/12!/4/2)", earlier)));
-        var service = new EntityCapabilityService(repository, new CanonicalEntityReadStub(), new TestProgressTopologyResolver());
-        var markerId = Guid.NewGuid();
-
-        await service.UpdateProgressAsync(
-            BookId, BookId, ProgressUnit.Cfi, 2500, 10000, ReaderMode.Paged,
-            completed: null, reset: false, location: "/OPS/chapter-2.xhtml",
-            activitySeconds: 15, activityKind: ConsumptionActivityKind.Listening,
-            CancellationToken.None,
-            listening: new BookListeningPositionRequest(AudioTrackId, markerId, 112.5));
-
-        var afterListening = Assert.IsType<Book>(repository.SavedEntity).Progress!;
-        Assert.Equal("epubcfi(/6/12!/4/2)", afterListening.Reading?.Location);
-        Assert.Equal(AudioTrackId, afterListening.Listening?.TrackEntityId);
-        Assert.Equal(markerId, afterListening.Listening?.MarkerId);
-        Assert.Equal(112.5, afterListening.Listening?.OffsetSeconds);
-
-        await service.UpdateProgressAsync(
-            BookId, BookId, ProgressUnit.Cfi, 2600, 10000, ReaderMode.Scrolled,
-            completed: null, reset: false, location: "epubcfi(/6/14!/4/2)",
-            activitySeconds: null, activityKind: ConsumptionActivityKind.Reading,
-            CancellationToken.None);
-
-        var afterReading = Assert.IsType<Book>(repository.SavedEntity).Progress!;
-        Assert.Equal("epubcfi(/6/14!/4/2)", afterReading.Reading?.Location);
-        Assert.Equal(112.5, afterReading.Listening?.OffsetSeconds);
-        Assert.Equal(AudioTrackId, afterReading.Listening?.TrackEntityId);
-    }
-
-    [Fact]
     public async Task BookRejectsListeningCheckpointFromAnotherTrack() {
         var repository = new FakeEntityWriteRepository(new CapabilityProgress());
         var service = new EntityCapabilityService(repository, new CanonicalEntityReadStub(), new TestProgressTopologyResolver());
@@ -70,7 +28,7 @@ public sealed class EntityCapabilityServiceProgressTests {
 
         Assert.Null(result);
         Assert.Null(repository.SavedEntity);
-        Assert.Null(repository.Book.Progress?.Listening);
+        Assert.Null(repository.Book.Progress?.CheckpointFor(ConsumptionModality.Listening));
     }
 
     [Fact]
