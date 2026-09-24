@@ -153,7 +153,7 @@ async function main() {
     "navigation", "search", "autoIdentifySelector", "identifyPluginFallbackKind", "containableKinds", "mediaQualityFamily",
     "supportsFileDeletion", "supportsAtomicMediaUpgrade", "supportsManualManagement",
     "manualAcquisition",
-    "engagementMode",
+    "engagementMode", "modalities",
     "supportsRequests", "enumeratesIdentifyChildren", "acquisitionProfile",
   ];
   for (const kind of manifest.entityKinds ?? []) {
@@ -209,6 +209,7 @@ async function main() {
     `supportsManualManagement: ${lit(kind.supportsManualManagement)}, ` +
     `manualAcquisition: ${lit(kind.manualAcquisition)}, ` +
     `engagementMode: ${lit(kind.engagementMode)}, ` +
+    `modalities: ${lit(kind.modalities)}, ` +
     `supportsRequests: ${lit(kind.supportsRequests)}, ` +
     `enumeratesIdentifyChildren: ${lit(kind.enumeratesIdentifyChildren)}, ` +
     `acquisitionProfile: ${lit(kind.acquisitionProfile)} },`
@@ -276,6 +277,7 @@ async function main() {
       `  supportsManualManagement: boolean;\n` +
       `  manualAcquisition: EntityManualAcquisitionManifestEntry;\n` +
       `  engagementMode: EntityEngagementModeCode;\n` +
+      `  modalities: readonly ConsumptionModalityCode[];\n` +
       `  supportsRequests: boolean;\n` +
       `  enumeratesIdentifyChildren: boolean;\n` +
       `  acquisitionProfile: AcquisitionProfileManifestEntry | null;\n` +

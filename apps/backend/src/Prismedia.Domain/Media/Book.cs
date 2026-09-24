@@ -28,7 +28,9 @@ public sealed class BookEntityKindDefinition() : EntityKindDefinition<Book>(
     new EntityKindBehavior(
         identification: new(AutoIdentifySelectorKind.Book, enumeratesChildren: true),
         manualAcquisition: EntityManualAcquisitionPolicy.UploadAndReplacement,
-        engagement: new(EntityEngagementMode.Reading),
+        engagement: new(
+            EntityEngagementMode.Reading,
+            modalities: [ConsumptionModalityDefinition.Reading, ConsumptionModalityDefinition.Listening]),
         libraryVisibility: EntityLibraryVisibilityPolicy.DirectRoot,
         supportsFileDeletion: true,
         upgradeMode: EntityUpgradeMode.AtomicBookFile),
@@ -39,6 +41,8 @@ public sealed class BookEntityKindDefinition() : EntityKindDefinition<Book>(
         new CapabilityConsumption()
     ]),
     IAudioPlaybackOwnerKindDefinition {
+    #region Variables
+
     /// <inheritdoc />
     public AudioPlaybackPolicy AudioPlaybackPolicy { get; } = new(
         EntityKind.AudioTrack,
@@ -99,11 +103,17 @@ public sealed class BookEntityKindDefinition() : EntityKindDefinition<Book>(
         AcquisitionCheckpointProtocol.Placement,
         JobType.ScanBook);
 
+    #endregion
+
+    #region Actions - Projection
+
     /// <inheritdoc />
     protected override IReadOnlyList<ContractCapability> ProjectCapabilities(
         Book entity,
         EntityKindProjectionContext context) =>
         [new BookMetadataDocumentCapability(entity.BookType, entity.Format)];
+
+    #endregion
 }
 
 /// <summary>
@@ -111,6 +121,21 @@ public sealed class BookEntityKindDefinition() : EntityKindDefinition<Book>(
 /// that work; serialized comics use their separate series/volume/installment aggregate.
 /// </summary>
 public sealed class Book : Entity<BookEntityKindDefinition> {
+    #region Variables
+
+    /// <summary>Editorial type of the book, such as novel or nonfiction.</summary>
+    public BookType BookType { get; private set; }
+
+    /// <summary>
+    /// Physical format of the book, which selects the reader and detail presentation.
+    /// </summary>
+    public BookFormat Format { get; private set; }
+
+    #endregion
+
+    #region Constructors
+
+    /// <summary>Creates a Book with its editorial type and readable format.</summary>
     public Book(
         Guid id,
         string title,
@@ -124,11 +149,5 @@ public sealed class Book : Entity<BookEntityKindDefinition> {
         Format = format;
     }
 
-    public BookType BookType { get; private set; }
-
-    /// <summary>
-    /// Physical format of the book, which selects the reader and detail presentation.
-    /// </summary>
-    public BookFormat Format { get; private set; }
-
+    #endregion
 }
