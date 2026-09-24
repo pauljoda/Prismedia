@@ -58,6 +58,12 @@ public sealed record EntityThumbnail(
     public string? CoverThumb2xUrl { get; init; }
 
     /// <summary>
+    /// Probed media duration in seconds for playable media, or null when unknown. Players and queues
+    /// read this value; the duration entry in <see cref="Meta"/> is display text only.
+    /// </summary>
+    public double? DurationSeconds { get; init; }
+
+    /// <summary>
     /// Structural parent entity kind code when the thumbnail has a parent. Used by
     /// clients to route child media through richer parent detail surfaces.
     /// </summary>

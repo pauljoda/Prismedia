@@ -859,7 +859,10 @@
 
   function listenToBook(options: { startOver?: boolean } = {}) {
     if (!book || audiobookTracks.length === 0) return;
-    if (!options.startOver && isCurrentAudiobook && !canonicalCompleted) {
+    // Only a playing audiobook is paused in place. A loaded but paused player (including one restored
+    // after a reload) may be behind a newer position recorded on another device, so resume from the
+    // server's exact listening checkpoint instead.
+    if (!options.startOver && isCurrentAudiobook && playback.playing && !canonicalCompleted) {
       playback.toggle();
       return;
     }

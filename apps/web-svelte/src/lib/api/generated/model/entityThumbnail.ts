@@ -43,6 +43,11 @@ export interface EntityThumbnail {
   isOrganized: boolean;
   /** @nullable */
   coverThumb2xUrl?: string | null;
+  /**
+     * @nullable
+     * @pattern ^-?(?:0|[1-9]\d*)(?:\.\d+)?(?:[eE][+-]?\d+)?$
+     */
+  durationSeconds?: number | string | null;
   parentKind?: null | EntityKind;
   /** @nullable */
   subtitle?: string | null;

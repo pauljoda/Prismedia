@@ -317,6 +317,10 @@ public sealed partial class EfEntityReadService {
                 row.IsNsfw,
                 row.IsOrganized) {
                 CoverThumb2xUrl = coverThumb2xUrl,
+                DurationSeconds = thumbnailTechnical?.DurationSeconds is { } durationSeconds
+                    && double.IsFinite(durationSeconds) && durationSeconds > 0
+                        ? durationSeconds
+                        : null,
                 ParentKind = row.ParentEntityId is { } parentId
                     && parentKindByEntity.TryGetValue(parentId, out var parentKindCode)
                     && parentKindCode.TryDecodeAs<EntityKind>(out var parentKind)
