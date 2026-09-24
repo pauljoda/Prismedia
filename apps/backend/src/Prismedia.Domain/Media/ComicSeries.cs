@@ -3,6 +3,7 @@ using Prismedia.Domain.Entities;
 using ContractCapability = Prismedia.Contracts.Entities.EntityCapability;
 using SeriesMetadataDocumentCapability = Prismedia.Contracts.Entities.SeriesMetadataCapability;
 using ThumbnailMetaIcons = Prismedia.Contracts.Entities.EntityThumbnailMetaIcons;
+using ExternalIdProviders = Prismedia.Contracts.Entities.ExternalIdProviders;
 
 namespace Prismedia.Domain.Media;
 
@@ -37,7 +38,22 @@ public sealed class ComicSeriesEntityKindDefinition() : EntityKindDefinition<Com
         new CapabilityStats(),
         new CapabilityProgress(),
         new CapabilityConsumption()
-    ]) {
+    ]),
+    IManagedFulfillmentKindDefinition {
+    /// <inheritdoc />
+    /// <remarks>An issue request never creates its run; the run is added through its own reviewed flow.</remarks>
+    public ManagedFulfillmentPolicy ManagedFulfillment { get; } = new(
+        identityProviders: [ExternalIdProviders.ComicVine],
+        identityDescription: "exact Comic Vine identities",
+        usesProfile: false,
+        target: new(EntityKind.ComicInstallment, ManagedTargetShape.Issue),
+        minimumTargets: 1,
+        maximumTargets: 1,
+        requiresSearch: true,
+        createsHolding: false,
+        selectsControlTarget: true,
+        targetIdentityProviders: [ExternalIdProviders.ComicVine]);
+
     /// <inheritdoc />
     public override EntityProgressTopology ProgressTopology =>
         EntityProgressTopology.OrderedContainer(EntityKind.ComicInstallment);

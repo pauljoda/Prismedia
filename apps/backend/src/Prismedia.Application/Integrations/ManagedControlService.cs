@@ -44,15 +44,15 @@ public sealed class ManagedControlService(IManagedControlStore store, Integratio
         var owned = scopeEntityIds is null
             ? await store.RequireScopeAsync(connectionId, holdingId, token)
             : await store.RequireScopeAsync(connectionId, holdingId, scopeEntityIds, token);
-        if (owned.Fingerprint != request.ScopeFingerprint || !owned.Scope.Targets.Select(target => target.RemoteId).ToHashSet(StringComparer.Ordinal).SetEquals(request.ExpectedMonitoring.Keys)
-            || owned.Scope.Item.EntityKind == EntityKind.ComicSeries && (owned.Scope.Targets.Count != 1 || request.TargetEntityId is null
-                || request.ExpectedProfileId is not null || request.Changes.ProfileId is not null)
-            || owned.Scope.Item.EntityKind is not (EntityKind.ComicSeries or EntityKind.Book)
-                && string.IsNullOrWhiteSpace(request.ExpectedProfileId)
-            || owned.Scope.Item.EntityKind == EntityKind.Book
-                && (request.ExpectedProfileId is not null || request.Changes.ProfileId is not null
-                    || request.TargetEntityId is not null || request.ExpectedMonitoring.Count != 0)
-            || owned.Scope.Item.EntityKind != EntityKind.Book && request.ExpectedMonitoring.Count == 0)
+        var policy = ManagedFulfillmentPolicy.For(owned.Scope.Item.EntityKind);
+        if (owned.Fingerprint != request.ScopeFingerprint
+            || !owned.Scope.Targets.Select(target => target.RemoteId).ToHashSet(StringComparer.Ordinal).SetEquals(request.ExpectedMonitoring.Keys)
+            || policy.UsesProfile != (request.ExpectedProfileId is not null)
+            || policy.UsesProfile && string.IsNullOrWhiteSpace(request.ExpectedProfileId)
+            || !policy.UsesProfile && request.Changes.ProfileId is not null
+            || policy.SelectsControlTarget != (request.TargetEntityId is not null)
+            || policy.SelectsControlTarget && owned.Scope.Targets.Count != 1
+            || policy.MonitorsWholeItem != (request.ExpectedMonitoring.Count == 0))
             throw new ManagedControlConflictException("The reviewed target scope changed. Refresh the manager controls.");
         await access.RequireAsync(connectionId, PluginCapability.ExternalManager, IntegrationOperation.ReconcileManaged, owned.Scope.Item.EntityKind, token);
         var configure = request.Changes.ProfileId is not null || request.Changes.Monitored is not null;
@@ -117,7 +117,7 @@ public static class ManagedControlValidation {
         if (state?.Item is null || state.Capabilities is null || state.Item.EntityKind != scope.Item.EntityKind || state.Item.RemoteId != scope.Item.RemoteId
             || state.Item.ExternalIds is null || scope.Item.ExpectedExternalIds.Any(pair => !state.Item.ExternalIds.TryGetValue(pair.Key, out var value) || value != pair.Value)
             || string.IsNullOrWhiteSpace(state.Path) || state.Path.Length > 8192
-            || scope.Item.EntityKind is not (EntityKind.ComicSeries or EntityKind.Book)
+            || ManagedFulfillmentPolicy.For(scope.Item.EntityKind).UsesProfile
                 && string.IsNullOrWhiteSpace(state.Item.ProfileId)
             || state.Targets is null || state.Targets.Count != scope.Targets.Count || state.Targets.Any(target => target?.Target is null)
             || !scope.Targets.OrderBy(target => target.RemoteId, StringComparer.Ordinal).SequenceEqual(state.Targets.Select(target => target.Target).OrderBy(target => target.RemoteId, StringComparer.Ordinal)))

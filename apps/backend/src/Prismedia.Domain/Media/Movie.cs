@@ -1,5 +1,6 @@
 using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
+using ExternalIdProviders = Prismedia.Contracts.Entities.ExternalIdProviders;
 
 namespace Prismedia.Domain.Media;
 
@@ -31,7 +32,15 @@ public sealed class MovieEntityKindDefinition() : PlayableVideoEntityKindDefinit
         new CapabilityDescription(),
         new CapabilityDates(),
         new CapabilitySource()
-    ]) {
+    ]),
+    IManagedFulfillmentKindDefinition {
+    /// <inheritdoc />
+    public ManagedFulfillmentPolicy ManagedFulfillment { get; } = new(
+        identityProviders: [ExternalIdProviders.Tmdb],
+        identityDescription: "an exact TMDB identity",
+        usesProfile: true,
+        target: new(EntityKind.Movie, ManagedTargetShape.Item));
+
     /// <inheritdoc />
     public override bool OwnsMetadataRelationships => true;
 

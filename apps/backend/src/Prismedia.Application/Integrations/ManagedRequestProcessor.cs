@@ -116,10 +116,10 @@ public sealed class ManagedRequestProcessor(IManagedRequestStore store, Integrat
                 "The reviewed holding is no longer visible. No replacement was created.", false, token);
             return;
         }
-        if (work.Plan.Creation.Work.EntityKind == EntityKind.ComicSeries) {
+        if (!ManagedFulfillmentPolicy.For(work.Plan.Creation.Work.EntityKind).CreatesHolding) {
             work.Operation.RequireReview();
             await store.SaveAsync(work.Operation, state.Revision,
-                "The reviewed comic run or issue is no longer visible. No new run or issue was created.", false, token);
+                "The reviewed holding or target is no longer visible at the manager. Nothing new was created.", false, token);
             return;
         }
         if (state.Phase == ManagedRequestPhase.CreationUncertain) {
@@ -149,8 +149,8 @@ public sealed class ManagedRequestProcessor(IManagedRequestStore store, Integrat
                 throw new ManagedControlConflictException("This request's manager-action identity is already in use.");
             return;
         }
-        var isComic = work.Plan.Creation.Work.EntityKind == EntityKind.ComicSeries;
-        var scopeEntityIds = work.Plan.ExistingHoldingId is null && !isComic ? null : work.Plan.Request.TargetEntityIds;
+        var selectsTarget = ManagedFulfillmentPolicy.For(work.Plan.Creation.Work.EntityKind).SelectsControlTarget;
+        var scopeEntityIds = work.Plan.ExistingHoldingId is null && !selectsTarget ? null : work.Plan.Request.TargetEntityIds;
         var preview = scopeEntityIds is null
             ? await controls.PreviewAsync(state.ConnectionId, holdingId, token)
             : await controls.PreviewAsync(state.ConnectionId, holdingId, scopeEntityIds, token);
@@ -160,7 +160,7 @@ public sealed class ManagedRequestProcessor(IManagedRequestStore store, Integrat
             state.OperationId, preview.ScopeFingerprint, preview.State.Path, preview.State.Item.ProfileId!,
             preview.State.Targets.ToDictionary(target => target.Target.RemoteId, target => target.Monitored),
             InitialConfiguration(work.Plan.Request), work.Plan.Request.Search,
-            isComic ? work.Plan.Request.TargetEntityIds![0] : null);
+            selectsTarget ? work.Plan.Request.TargetEntityIds![0] : null);
         if (scopeEntityIds is null) await controls.CreateAsync(state.ConnectionId, holdingId,
             request, token);
         else await controls.CreateAsync(state.ConnectionId, holdingId,
@@ -168,11 +168,11 @@ public sealed class ManagedRequestProcessor(IManagedRequestStore store, Integrat
     }
 
     /// <summary>
-    /// Finite television fulfillment preserves existing episode monitoring. Comic issues and movies
-    /// apply their reviewed monitoring choice before the exact search.
+    /// Kinds whose requests leave broad monitoring off preserve the manager's existing target monitoring;
+    /// every other kind applies its reviewed monitoring choice before the exact search.
     /// </summary>
     internal static ManagedConfigurationChange InitialConfiguration(CreateManagedRequestInput request) =>
-        request.ReviewedWork.EntityKind == EntityKind.VideoSeries
-            ? new()
-            : new(Monitored: request.Monitored);
+        ManagedFulfillmentPolicy.For(request.ReviewedWork.EntityKind).AppliesReviewedMonitoring
+            ? new(Monitored: request.Monitored)
+            : new();
 }

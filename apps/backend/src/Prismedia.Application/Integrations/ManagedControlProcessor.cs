@@ -141,7 +141,7 @@ public sealed class ManagedControlProcessor(IManagedControlStore store, Integrat
         var plan = stage.Work.Plan;
         var request = plan.Request;
         var profile = request.Changes.ProfileId ?? request.ExpectedProfileId;
-        var profileRequired = observed.Item.EntityKind is not (EntityKind.ComicSeries or EntityKind.Book);
+        var profileRequired = ManagedFulfillmentPolicy.For(observed.Item.EntityKind).UsesProfile;
         if (!observed.Capabilities.CanSearch || observed.Item.ProfileId != profile || profileRequired && string.IsNullOrWhiteSpace(profile)) {
             action.Reject();
             await stage.SaveAsync("Search was not sent because the reviewed profile or search capability changed.");
@@ -172,7 +172,7 @@ public sealed class ManagedControlProcessor(IManagedControlStore store, Integrat
     private static bool IsConfigured(ManagedControlPlan plan, ManagedControlState observed) {
         var changes = plan.Request.Changes;
         var profileApplied = changes.ProfileId is null || observed.Item.ProfileId == changes.ProfileId;
-        var monitoringApplied = changes.Monitored is null || (plan.Scope.Item.EntityKind == EntityKind.Book
+        var monitoringApplied = changes.Monitored is null || (ManagedFulfillmentPolicy.For(plan.Scope.Item.EntityKind).MonitorsWholeItem
             ? observed.Item.Monitored == changes.Monitored
             : observed.Targets.All(target => target.Monitored == changes.Monitored));
         return profileApplied && monitoringApplied;

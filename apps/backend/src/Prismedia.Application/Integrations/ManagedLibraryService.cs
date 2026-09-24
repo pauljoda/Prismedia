@@ -31,10 +31,15 @@ public sealed class ManagedLibraryService(IntegrationConnectionAccess access, II
     /// <summary>Checks whether a saved holding reference contains the complete bounded identity pin required for a safe lookup.</summary>
     public static bool IsValidInput(ManagedItemInput? input) => input is not null
         && Enum.IsDefined(input.EntityKind)
-        && ((input.EntityKind == EntityKind.Book) == (input.BookRendition is not null))
-        && (input.BookRendition is null || Enum.IsDefined(input.BookRendition.Value))
+        && AcceptsRendition(input.EntityKind, input.BookRendition)
         && Text(input.RemoteId, 512)
         && Identities(input.ExpectedExternalIds);
+
+    /// <summary>A rendition is required exactly when the managed kind fulfills renditions independently.</summary>
+    private static bool AcceptsRendition(EntityKind kind, BookRendition? rendition) =>
+        ManagedFulfillmentPolicy.Supports(kind)
+            ? ManagedFulfillmentPolicy.For(kind).AcceptsRendition(rendition)
+            : rendition is null;
 
     /// <summary>Validates exact holding identity and complete finite file evidence before any application use case trusts it.</summary>
     public static void ValidateSnapshot(ManagedItemInput input, ManagedItemSnapshot snapshot) {
@@ -44,30 +49,25 @@ public sealed class ManagedLibraryService(IntegrationConnectionAccess access, II
             || !Text(snapshot.Path, 8192) || snapshot.ObservedAt == default || snapshot.ObservedAt > DateTimeOffset.UtcNow.AddMinutes(5)
             || snapshot.Files is null || snapshot.Files.Count > 10000 || snapshot.Files.Select(file => file?.RemoteId).Distinct().Count() != snapshot.Files.Count)
             throw Invalid();
+        var expected = ManagedFulfillmentPolicy.Supports(input.EntityKind)
+            ? ManagedFulfillmentPolicy.For(input.EntityKind).TargetFor(input.BookRendition)
+            : null;
         foreach (var file in snapshot.Files) {
             if (file is null || !Text(file.RemoteId, 512) || !Text(file.Path, 8192) || file.SizeBytes <= 0
                 || file.Targets is not { Count: > 0 and <= 1000 } || file.Targets.Select(target => target?.RemoteId).Distinct().Count() != file.Targets.Count) throw Invalid();
             foreach (var target in file.Targets) {
                 if (target is null || !Text(target.RemoteId, 512) || !Text(target.Title, 512) || !Enum.IsDefined(target.EntityKind)
                     || target.SeasonNumber < 0 || target.EpisodeNumber < 0 || target.AbsoluteNumber < 0
-                    || target.IssueLabel is not null && (!Text(target.IssueLabel, 128) || target.EntityKind != EntityKind.ComicInstallment)) throw Invalid();
+                    || target.IssueLabel is not null && (!Text(target.IssueLabel, 128) || expected?.Shape.RequiresIssueLabel != true)) throw Invalid();
             }
         }
         var targets = snapshot.Files.SelectMany(file => file.Targets).ToArray();
         if (targets.Select(target => target.RemoteId).Distinct(StringComparer.Ordinal).Count() != targets.Length
-            || input.EntityKind == EntityKind.Movie && targets.Any(target => target.EntityKind != EntityKind.Movie || target.RemoteId != input.RemoteId
-                || target.SeasonNumber is not null || target.EpisodeNumber is not null || target.AbsoluteNumber is not null)
-            || input.EntityKind == EntityKind.VideoSeries && targets.Any(target => target.EntityKind != EntityKind.VideoEpisode
-                || target.SeasonNumber is null || target.EpisodeNumber is null)
-            || input.EntityKind == EntityKind.Book && targets.Any(target =>
-                target.EntityKind != (input.BookRendition == BookRendition.Ebook ? EntityKind.Book : EntityKind.AudioTrack)
-                || input.BookRendition == BookRendition.Ebook && target.RemoteId != input.RemoteId
-                || target.SeasonNumber is not null || target.EpisodeNumber is not null || target.AbsoluteNumber is not null
-                || target.IssueLabel is not null)
-            || input.EntityKind == EntityKind.ComicSeries && targets.Any(target => target.EntityKind != EntityKind.ComicInstallment
-                || !Text(target.IssueLabel, 128) || target.SeasonNumber is not null || target.EpisodeNumber is not null || target.AbsoluteNumber is not null)) throw Invalid();
+            || expected is not null && targets.Any(target => target.EntityKind != expected.Kind
+                || !expected.Shape.Accepts(input.RemoteId, target.RemoteId, target.SeasonNumber, target.EpisodeNumber,
+                    target.AbsoluteNumber, target.IssueLabel))) throw Invalid();
         if (snapshot.ComicIssues is { } issues) {
-            if (input.EntityKind != EntityKind.ComicSeries || issues.Count > 10000
+            if (expected?.Shape != ManagedTargetShape.Issue || issues.Count > 10000
                 || issues.Any(issue => issue is null || !Text(issue.RemoteId, 512) || !Text(issue.IssueLabel, 128) || !Text(issue.Title, 512)
                     || issue.ExternalIds is not null && !Identities(issue.ExternalIds))
                 || issues.Select(issue => issue.RemoteId).Distinct(StringComparer.Ordinal).Count() != issues.Count)
@@ -83,10 +83,8 @@ public sealed class ManagedLibraryService(IntegrationConnectionAccess access, II
 
     /// <summary>Reads existing profiles and folders without persisting defaults or issuing remote commands.</summary>
     public async Task<ManagerOptions> OptionsAsync(Guid connectionId, ManagerOptionsInput input, CancellationToken cancellationToken) {
-        if (!Enum.IsDefined(input.EntityKind)
-            || (input.EntityKind == EntityKind.Book) != (input.BookRendition is not null)
-            || input.BookRendition is not null && !Enum.IsDefined(input.BookRendition.Value))
-            throw new ArgumentException("Choose one exact rendition for Book manager options.");
+        if (!Enum.IsDefined(input.EntityKind) || !AcceptsRendition(input.EntityKind, input.BookRendition))
+            throw new ArgumentException("Choose one exact rendition for this work's manager options.");
         var authorized = await access.RequireAsync(connectionId, PluginCapability.ExternalManager, IntegrationOperation.ManagerOptions, input.EntityKind, cancellationToken);
         var options = await gateway.GetOptionsAsync(authorized.Manifest.Id, authorized.Context, input, cancellationToken);
         if (options.Profiles is null || options.Roots is null || options.Profiles.Count > 1000 || options.Roots.Count > 1000

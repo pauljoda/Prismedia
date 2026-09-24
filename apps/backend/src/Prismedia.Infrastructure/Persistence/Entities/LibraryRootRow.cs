@@ -1,3 +1,5 @@
+using Prismedia.Domain.Entities;
+
 namespace Prismedia.Infrastructure.Persistence.Entities;
 
 public sealed class LibraryRootRow {
@@ -35,4 +37,12 @@ public sealed class LibraryRootRow {
     public DateTimeOffset CreatedAt { get; set; }
 
     public DateTimeOffset UpdatedAt { get; set; }
+
+    /// <summary>Whether this root scans the media a kind's acquisition profile needs.</summary>
+    public bool Supports(LibraryRootMediaCapability capability) => capability switch {
+        LibraryRootMediaCapability.ScanBooks => ScanBooks,
+        LibraryRootMediaCapability.ScanVideos => ScanVideos,
+        LibraryRootMediaCapability.ScanAudio => ScanAudio,
+        _ => false
+    };
 }

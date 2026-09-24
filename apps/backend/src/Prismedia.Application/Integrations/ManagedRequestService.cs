@@ -40,15 +40,11 @@ public sealed class ManagedRequestService(IManagedRequestStore store, Integratio
             token);
         if (!ManagedRequestIdentity.SameWork(preview.Work, input.ReviewedWork))
             throw new ManagedRequestConflictException("The wanted item's metadata identity changed. Review the request again.");
-        if (preview.Work.EntityKind is not (EntityKind.ComicSeries or EntityKind.Book)
-            && !preview.Options.Profiles.Any(profile => profile.Id == input.ProfileId)) throw new ArgumentException("Choose an existing external profile.");
-        if (preview.Work.EntityKind == EntityKind.ComicSeries && preview.Existing is null)
-            throw new ManagedRequestConflictException("This comic issue must already exist in the connected run. Refresh its metadata before requesting it.");
-        if (preview.Existing is { } holding && holding.Item.ProfileId != input.ProfileId)
-            throw new ManagedRequestConflictException("This work already exists with another profile. Review and use its current profile before changing it through linked controls.");
+        var policy = ManagedFulfillmentPolicy.For(preview.Work.EntityKind);
+        RequireReviewedHolding(policy, preview, input);
         foreach (var operation in new[] { IntegrationOperation.ReconcileManaged, IntegrationOperation.ConfigureManaged })
             await access.RequireAsync(connectionId, PluginCapability.ExternalManager, operation, preview.Work.EntityKind, token);
-        if (preview.Existing is null && preview.Work.EntityKind != EntityKind.ComicSeries)
+        if (preview.Existing is null && policy.CreatesHolding)
             await access.RequireAsync(connectionId, PluginCapability.ExternalManager, IntegrationOperation.EnsureManaged, preview.Work.EntityKind, token);
         if (input.Search) await access.RequireAsync(connectionId, PluginCapability.ExternalManager, IntegrationOperation.RequestManaged, preview.Work.EntityKind, token);
         await access.RequireAsync(connectionId, PluginCapability.ConnectedLibrary, IntegrationOperation.GetLibraryItem, preview.Work.EntityKind, token);
@@ -99,15 +95,10 @@ public sealed class ManagedRequestService(IManagedRequestStore store, Integratio
             || target.Mount.RemoteRootId != preview.Mount.RemoteRootId
             || target.Mount.RemotePath != preview.Mount.RemotePath)
             throw new ManagedRequestConflictException("The wanted identity or mapped library changed after review.");
-        if (preview.Work.EntityKind is not (EntityKind.ComicSeries or EntityKind.Book)
-            && !preview.Options.Profiles.Any(profile => profile.Id == input.ProfileId))
-            throw new ArgumentException("Choose an existing external profile.");
-        if (preview.Work.EntityKind == EntityKind.ComicSeries && preview.Existing is null)
-            throw new ManagedRequestConflictException("This comic issue must already exist in the connected run. Refresh its metadata before requesting it.");
-        if (preview.Existing is { } holding && holding.Item.ProfileId != input.ProfileId)
-            throw new ManagedRequestConflictException("This work already exists with another profile. Review and use its current profile before changing it through linked controls.");
-        if (preview.Work.EntityKind == EntityKind.ComicSeries && preview.Existing is { } comic)
-            existingHoldingId = await ExistingComicHoldingAsync(connectionId, input.LibraryRootId, comic, token);
+        var policy = ManagedFulfillmentPolicy.For(preview.Work.EntityKind);
+        RequireReviewedHolding(policy, preview, input);
+        if (!policy.CreatesHolding && preview.Existing is { } linked)
+            existingHoldingId = await ExistingHoldingAsync(connectionId, input.LibraryRootId, linked, token);
         var action = ManagedRequestOperation.Create(input.OperationId, connectionId, input.EntityId, input.LibraryRootId);
         var plan = new ManagedRequestPlan(
             input,
@@ -119,17 +110,39 @@ public sealed class ManagedRequestService(IManagedRequestStore store, Integratio
             existingHoldingId);
         return Map(await store.CreateAsync(action, plan, token));
     }
-    private async Task<Guid?> ExistingComicHoldingAsync(Guid connectionId, Guid libraryRootId,
+    /// <summary>
+    /// Requires an existing manager profile when the kind uses one, an existing remote holding when the kind's
+    /// requests cannot create it, and the holding's current profile when it already exists.
+    /// </summary>
+    private static void RequireReviewedHolding(ManagedFulfillmentPolicy policy, ManagedRequestPreview preview,
+        CreateManagedRequestInput input) {
+        if (policy.UsesProfile && !preview.Options.Profiles.Any(profile => profile.Id == input.ProfileId)) {
+            throw new ArgumentException("Choose an existing external profile.");
+        }
+
+        if (!policy.CreatesHolding && preview.Existing is null) {
+            throw new ManagedRequestConflictException(
+                "The connected manager must already hold this work. Refresh its metadata before requesting it.");
+        }
+
+        if (preview.Existing is { } holding && holding.Item.ProfileId != input.ProfileId) {
+            throw new ManagedRequestConflictException("This work already exists with another profile. "
+                + "Review and use its current profile before changing it through linked controls.");
+        }
+    }
+
+    /// <summary>Finds the one established holding a request that cannot create its holding must extend.</summary>
+    private async Task<Guid?> ExistingHoldingAsync(Guid connectionId, Guid libraryRootId,
         ManagedItemSnapshot snapshot, CancellationToken token) {
         var matches = (await tracking.ListAsync(connectionId, token)).Where(holding =>
             holding.LibraryRootId == libraryRootId
-            && holding.Item.EntityKind == EntityKind.ComicSeries
+            && holding.Item.EntityKind == snapshot.Item.EntityKind
             && holding.Item.RemoteId == snapshot.Item.RemoteId
             && holding.Item.ExpectedExternalIds.All(pair => snapshot.Item.ExternalIds.GetValueOrDefault(pair.Key) == pair.Value)
             && ManagedTrackingStatusDefinition.For(holding.Status).IsEstablished
             && holding.ReleasedAt is null).ToArray();
         if (matches.Length > 1)
-            throw new ManagedRequestConflictException("More than one linked holding matches this comic run. Review its associations first.");
+            throw new ManagedRequestConflictException("More than one linked holding matches this work. Review its associations first.");
         return matches.SingleOrDefault()?.Id;
     }
     /// <summary>Lists durable intent independently of current connection health.</summary>
@@ -153,37 +166,37 @@ public sealed class ManagedRequestService(IManagedRequestStore store, Integratio
         if (work is null || work.Operation.State.ConnectionId != connectionId) throw new ArgumentException("This connection does not own the request.");
         return work;
     }
+    /// <summary>
+    /// Validates the bounded request shape, then asks the requested kind's managed-fulfillment policy for its
+    /// profile, target, monitoring, and search rules.
+    /// </summary>
+    /// <exception cref="ArgumentException">The request is malformed or breaks one of its kind's rules.</exception>
     internal static void Validate(CreateManagedRequestInput input) {
         if (input.OperationId == Guid.Empty || input.EntityId == Guid.Empty || input.LibraryRootId == Guid.Empty
-            || input.ReviewedWork is not { EntityKind: EntityKind.Movie or EntityKind.VideoSeries or EntityKind.ComicSeries or EntityKind.Book, ExternalIds.Count: > 0 and <= 64 }
+            || input.ReviewedWork is not { ExternalIds.Count: > 0 and <= 64 }
             || input.ReviewedWork.ExternalIds.Any(pair => string.IsNullOrWhiteSpace(pair.Key) || pair.Key.Length > 128
                 || string.IsNullOrWhiteSpace(pair.Value) || pair.Value.Length > 2048)
-            || input.ReviewedWork.EntityKind is not (EntityKind.ComicSeries or EntityKind.Book)
-                && (string.IsNullOrWhiteSpace(input.ProfileId) || input.ProfileId.Length > 512)
-            || input.ReviewedWork.EntityKind is EntityKind.ComicSeries or EntityKind.Book && input.ProfileId is not null
-            || (input.ReviewedWork.EntityKind == EntityKind.Book) != (input.ReviewedWork.BookRendition is not null)
-            || input.ReviewedWork.BookRendition is not null && !Enum.IsDefined(input.ReviewedWork.BookRendition.Value)
-            || input.ReviewedWork.EntityKind == EntityKind.Movie
-                && ((input.TargetEntityIds?.Count ?? 0) != 0 || (input.ReviewedWork.Targets?.Count ?? 0) != 0)
-            || input.ReviewedWork.EntityKind == EntityKind.Book
-                && ((input.TargetEntityIds?.Count ?? 0) != 0 || (input.ReviewedWork.Targets?.Count ?? 0) != 0
-                    || !input.Monitored)
-            || input.ReviewedWork.EntityKind == EntityKind.VideoSeries
-                && (input.TargetEntityIds is not { Count: > 0 }
-                    || input.TargetEntityIds.Any(id => id == Guid.Empty)
-                    || input.TargetEntityIds.Distinct().Count() != input.TargetEntityIds.Count
-                    || input.ReviewedWork.Targets is not { Count: > 0 }
-                    || input.ReviewedWork.Targets.Count != input.TargetEntityIds.Count
-                    || input.Monitored
-                    || !input.Search)
-            || input.ReviewedWork.EntityKind == EntityKind.ComicSeries
-                && (input.TargetEntityIds is not { Count: 1 } || input.TargetEntityIds[0] == Guid.Empty
-                    || input.ReviewedWork.Targets is not { Count: 1 }
-                    || input.ReviewedWork.Targets[0].EntityKind != EntityKind.ComicInstallment
-                    || string.IsNullOrWhiteSpace(input.ReviewedWork.Targets[0].IssueLabel)
-                    || !input.Search))
+            || input.ProfileId is { Length: > 512 }) {
             throw new ArgumentException("Select reviewed wanted work, its exact target, and a mapped external library.");
+        }
+
+        var targetIds = input.TargetEntityIds ?? [];
+        var reviewedTargets = input.ReviewedWork.Targets ?? [];
+        if (targetIds.Any(id => id == Guid.Empty) || targetIds.Distinct().Count() != targetIds.Count
+            || reviewedTargets.Count != targetIds.Count) {
+            throw new ArgumentException("Each selected target needs one unique reviewed identity.");
+        }
+
+        var policy = ManagedFulfillmentPolicy.For(input.ReviewedWork.EntityKind);
+        var target = policy.TargetFor(input.ReviewedWork.BookRendition);
+        if (reviewedTargets.Any(reviewed => reviewed.EntityKind != target.Kind)) {
+            throw new ArgumentException("A selected target does not belong to this kind of work.");
+        }
+
+        policy.RequireRequest(input.ProfileId, input.ReviewedWork.BookRendition, targetIds.Count,
+            reviewedTargets.Select(reviewed => reviewed.IssueLabel).ToArray(), input.Monitored, input.Search);
     }
+
     internal static ManagedRequestResponse Map(StoredManagedRequest work) {
         var state = work.Operation.State;
         return new(state.OperationId, state.ConnectionId, state.EntityId, state.LibraryRootId, work.Plan.DisplayTitle(), state.Phase,

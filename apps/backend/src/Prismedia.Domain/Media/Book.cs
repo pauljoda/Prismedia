@@ -3,6 +3,7 @@ using Prismedia.Domain.Entities;
 using BookMetadataDocumentCapability = Prismedia.Contracts.Entities.BookMetadataCapability;
 using ContractCapability = Prismedia.Contracts.Entities.EntityCapability;
 using ThumbnailMetaIcons = Prismedia.Contracts.Entities.EntityThumbnailMetaIcons;
+using ExternalIdProviders = Prismedia.Contracts.Entities.ExternalIdProviders;
 
 namespace Prismedia.Domain.Media;
 
@@ -38,12 +39,26 @@ public sealed class BookEntityKindDefinition() : EntityKindDefinition<Book>(
         new CapabilityProgress(),
         new CapabilityConsumption()
     ]),
-    IAudioPlaybackOwnerKindDefinition {
+    IAudioPlaybackOwnerKindDefinition,
+    IManagedFulfillmentKindDefinition {
     /// <inheritdoc />
     public AudioPlaybackPolicy AudioPlaybackPolicy { get; } = new(
         EntityKind.AudioTrack,
         PreservesQueueOrder: true,
         SupportsPlaybackRate: true);
+
+    /// <inheritdoc />
+    /// <remarks>Ebook and audiobook are owned, monitored, and delivered independently under one work.</remarks>
+    public ManagedFulfillmentPolicy ManagedFulfillment { get; } = new(
+        identityProviders: [ExternalIdProviders.OpenLibraryWork],
+        identityDescription: "one exact Open Library work",
+        usesProfile: false,
+        renditionTargets: new Dictionary<BookRendition, ManagedTarget> {
+            [BookRendition.Ebook] = new(EntityKind.Book, ManagedTargetShape.Item),
+            [BookRendition.Audiobook] = new(EntityKind.AudioTrack, ManagedTargetShape.Part)
+        },
+        requiredMonitoring: true,
+        monitorsWholeItem: true);
 
     /// <inheritdoc />
     public override EntityProgressTopology ProgressTopology => EntityProgressTopology.Work(EntityKind.Book);
