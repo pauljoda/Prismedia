@@ -365,43 +365,6 @@ public sealed record StampedHintOwner(Guid TopLevelEntityId, string TopLevelKind
 public sealed record WantedAudioTrackReconciliation(Guid EntityId, bool NeedsWaveformRegeneration);
 
 /// <summary>
-/// One season's owned episode files, independent of structural folder provenance. A null folder means
-/// new episodes use the configured season template; existing files retain their exact paths and coverage.
-/// </summary>
-public sealed record TvSeasonDiskLayout(
-    Guid SeasonEntityId,
-    string? FolderPath,
-    IReadOnlyDictionary<int, string> EpisodeFileByNumber) {
-    /// <summary>Duplicate seasons or unnumbered owned files prevent a safe interpretation of this season's coverage.</summary>
-    public bool HasUnresolvedOwnership { get; init; }
-
-    /// <summary>Episode numbers with competing entities or sources, excluded from the unambiguous owned-file map.</summary>
-    public IReadOnlySet<int> AmbiguousEpisodeNumbers { get; init; } = new HashSet<int>();
-}
-
-/// <summary>An existing on-disk series' folder layout: the series folder and its seasons keyed by season number.</summary>
-public sealed record TvSeriesDiskLayout(
-    Guid SeriesEntityId,
-    string SeriesFolderPath,
-    IReadOnlyDictionary<int, TvSeasonDiskLayout> Seasons) {
-    /// <summary>Physical paths with unresolved ownership, including owners outside the unambiguous episode map.</summary>
-    public IReadOnlySet<string> UnresolvedSourcePaths { get; init; } = new HashSet<string>();
-}
-
-/// <summary>An existing on-disk movie: its folder and the owned video file when one exists.</summary>
-public sealed record MovieDiskTarget(Guid MovieEntityId, string FolderPath, string? OwnedSourceFilePath);
-
-/// <summary>
-/// An existing on-disk album target: the album folder when the album owns one, the artist folder when
-/// only the grouping exists on disk, and the album's already-owned files (relative to the album folder).
-/// </summary>
-public sealed record AlbumDiskTarget(
-    Guid AlbumEntityId,
-    string? AlbumFolderPath,
-    string? ArtistFolderPath,
-    IReadOnlySet<string> ExistingRelativeFiles);
-
-/// <summary>
 /// Resolves where an acquisition's linked library entity already lives on disk, so an import merges
 /// into the existing folder tree instead of minting a template-derived duplicate. Every method accepts
 /// the entity at any granularity the acquisition may link (an episode, a season, or the series itself;
