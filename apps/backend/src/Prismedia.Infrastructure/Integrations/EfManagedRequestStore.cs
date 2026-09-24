@@ -240,8 +240,8 @@ public sealed partial class EfManagedRequestStore(PrismediaDbContext db, IExtern
         var seriesIdentity = identities.Where(row => row.EntityId == series.Id).Select(row => row.Value).Distinct().ToArray();
         var issueIdentity = identities.Where(row => row.EntityId == issueId).Select(row => row.Value).Distinct().ToArray();
         if (seriesIdentity.Length != 1 || issueIdentity.Length != 1
-            || !seriesIdentity[0].StartsWith(ComicVineIdentityFormats.SeriesPrefix, StringComparison.Ordinal)
-            || !issueIdentity[0].StartsWith(ComicVineIdentityFormats.IssuePrefix, StringComparison.Ordinal))
+            || !policy.IdentityFormats[0].IsCanonical(seriesIdentity[0])
+            || !policy.TargetIdentityFormats[0].IsCanonical(issueIdentity[0]))
             throw new ArgumentException($"Identify the series and selected issue with {policy.IdentityDescription} first.");
         var positions = await db.EntityPositions.AsNoTracking()
             .Where(row => row.EntityId == issueId && row.Code == EntityPositionCodes.Chapter)

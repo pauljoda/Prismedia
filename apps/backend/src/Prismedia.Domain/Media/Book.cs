@@ -3,7 +3,6 @@ using Prismedia.Domain.Entities;
 using BookMetadataDocumentCapability = Prismedia.Contracts.Entities.BookMetadataCapability;
 using ContractCapability = Prismedia.Contracts.Entities.EntityCapability;
 using ThumbnailMetaIcons = Prismedia.Contracts.Entities.EntityThumbnailMetaIcons;
-using ExternalIdProviders = Prismedia.Contracts.Entities.ExternalIdProviders;
 using MediaContentTypes = Prismedia.Contracts.Media.MediaContentTypes;
 
 namespace Prismedia.Domain.Media;
@@ -58,7 +57,7 @@ public sealed class BookEntityKindDefinition() : EntityKindDefinition<Book>(
     /// <inheritdoc />
     /// <remarks>Ebook and audiobook are owned, monitored, and delivered independently under one work.</remarks>
     public ManagedFulfillmentPolicy ManagedFulfillment { get; } = new(
-        identityProviders: [ExternalIdProviders.OpenLibraryWork],
+        identityFormats: [ProviderIdentityFormat.OpenLibraryWork],
         identityDescription: "one exact Open Library work",
         usesProfile: false,
         renditionTargets: new Dictionary<BookRendition, ManagedTarget> {

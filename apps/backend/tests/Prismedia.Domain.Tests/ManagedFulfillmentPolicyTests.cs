@@ -52,4 +52,21 @@ public sealed class ManagedFulfillmentPolicyTests {
         string? label, bool accepted) =>
         Assert.Equal(accepted, ManagedTargetShape.All.Single(candidate => candidate.Name == shape)
             .Accepts(item, target, season, episode, null, label));
+
+    [Theory]
+    [InlineData("tmdb", "603", true)]
+    [InlineData("tmdb", "0603", false)]
+    [InlineData("comicvine", "4050-1234", true)]
+    [InlineData("comicvine", "4000-1234", false)]
+    [InlineData("openlibrarywork", "OL45804W", true)]
+    [InlineData("openlibrarywork", "OL45804M", false)]
+    public void PinningIdentitiesUseTheirProvidersCanonicalSpelling(string provider, string value, bool pinned) {
+        var kind = provider switch {
+            "tmdb" => EntityKind.Movie,
+            "comicvine" => EntityKind.ComicSeries,
+            _ => EntityKind.Book
+        };
+        var identity = ManagedFulfillmentPolicy.For(kind).PinningIdentity(new Dictionary<string, string> { [provider] = value });
+        Assert.Equal(pinned, identity is not null);
+    }
 }

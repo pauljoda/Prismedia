@@ -3,7 +3,6 @@ using Prismedia.Domain.Entities;
 using ContractCapability = Prismedia.Contracts.Entities.EntityCapability;
 using SeriesMetadataDocumentCapability = Prismedia.Contracts.Entities.SeriesMetadataCapability;
 using ThumbnailMetaIcons = Prismedia.Contracts.Entities.EntityThumbnailMetaIcons;
-using ExternalIdProviders = Prismedia.Contracts.Entities.ExternalIdProviders;
 
 namespace Prismedia.Domain.Media;
 
@@ -43,7 +42,7 @@ public sealed class ComicSeriesEntityKindDefinition() : EntityKindDefinition<Com
     /// <inheritdoc />
     /// <remarks>An issue request never creates its run; the run is added through its own reviewed flow.</remarks>
     public ManagedFulfillmentPolicy ManagedFulfillment { get; } = new(
-        identityProviders: [ExternalIdProviders.ComicVine],
+        identityFormats: [ProviderIdentityFormat.ComicVineSeries],
         identityDescription: "exact Comic Vine identities",
         usesProfile: false,
         target: new(EntityKind.ComicInstallment, ManagedTargetShape.Issue),
@@ -52,7 +51,7 @@ public sealed class ComicSeriesEntityKindDefinition() : EntityKindDefinition<Com
         requiresSearch: true,
         createsHolding: false,
         selectsControlTarget: true,
-        targetIdentityProviders: [ExternalIdProviders.ComicVine]);
+        targetIdentityFormats: [ProviderIdentityFormat.ComicVineIssue]);
 
     /// <inheritdoc />
     public override EntityProgressTopology ProgressTopology =>

@@ -44,14 +44,21 @@ public sealed record ManagedFulfillmentPolicy {
     /// <summary>Whether a manager action is scoped to one exact selected target.</summary>
     public bool SelectsControlTarget { get; }
 
-    /// <summary>Provider identity namespaces that pin the requested work at the manager.</summary>
-    public IReadOnlyList<string> IdentityProviders { get; }
+    /// <summary>Provider identities that pin the requested work at the manager, in preference order.</summary>
+    public IReadOnlyList<ProviderIdentityFormat> IdentityFormats { get; }
+
+    /// <summary>Provider identities that pin each explicit target, empty when targets need none.</summary>
+    public IReadOnlyList<ProviderIdentityFormat> TargetIdentityFormats { get; }
+
+    /// <summary>Provider namespaces that pin the requested work, in preference order.</summary>
+    public IReadOnlyList<string> IdentityProviders => IdentityFormats.Select(format => format.Provider).Distinct().ToArray();
+
+    /// <summary>Provider namespaces that pin each explicit target.</summary>
+    public IReadOnlyList<string> TargetIdentityProviders => TargetIdentityFormats.Select(format => format.Provider).Distinct().ToArray();
 
     /// <summary>How the pinning identity is described to a person, completing "Identify this work with …".</summary>
     public string IdentityDescription { get; }
 
-    /// <summary>Provider identity namespaces that pin each explicit target, empty when targets need none.</summary>
-    public IReadOnlyList<string> TargetIdentityProviders { get; }
 
     /// <summary>Whether each request must choose one independently fulfilled rendition.</summary>
     public bool RequiresRendition => RenditionTargets.Count > 0;
@@ -69,7 +76,7 @@ public sealed record ManagedFulfillmentPolicy {
     /// <summary>Creates one validated managed-fulfillment policy.</summary>
     /// <exception cref="ArgumentException">The rules contradict each other.</exception>
     public ManagedFulfillmentPolicy(
-        IReadOnlyList<string> identityProviders,
+        IReadOnlyList<ProviderIdentityFormat> identityFormats,
         string identityDescription,
         bool usesProfile,
         ManagedTarget? target = null,
@@ -81,10 +88,10 @@ public sealed record ManagedFulfillmentPolicy {
         bool createsHolding = true,
         bool monitorsWholeItem = false,
         bool selectsControlTarget = false,
-        IReadOnlyList<string>? targetIdentityProviders = null) {
+        IReadOnlyList<ProviderIdentityFormat>? targetIdentityFormats = null) {
         RenditionTargets = renditionTargets ?? new Dictionary<BookRendition, ManagedTarget>();
-        if (identityProviders is not { Count: > 0 }) {
-            throw new ArgumentException("A managed kind needs at least one pinning identity provider.", nameof(identityProviders));
+        if (identityFormats is not { Count: > 0 }) {
+            throw new ArgumentException("A managed kind needs at least one pinning identity.", nameof(identityFormats));
         }
 
         if (target is null == (RenditionTargets.Count == 0)) {
@@ -99,11 +106,11 @@ public sealed record ManagedFulfillmentPolicy {
             throw new ArgumentException("An exact control target requires exactly one explicit request target.", nameof(selectsControlTarget));
         }
 
-        IdentityProviders = identityProviders;
+        IdentityFormats = identityFormats;
         IdentityDescription = string.IsNullOrWhiteSpace(identityDescription)
             ? throw new ArgumentException("Describe the identity a manager needs.", nameof(identityDescription))
             : identityDescription;
-        TargetIdentityProviders = targetIdentityProviders ?? [];
+        TargetIdentityFormats = targetIdentityFormats ?? [];
         UsesProfile = usesProfile;
         Target = target;
         MinimumTargets = minimumTargets;
@@ -130,6 +137,14 @@ public sealed record ManagedFulfillmentPolicy {
             ? managed.ManagedFulfillment
             : throw new ArgumentException($"A connected manager cannot fulfill {definition.GroupLabel.ToLowerInvariant()}.", nameof(kind));
     }
+
+    #endregion
+
+    #region Actions - Identity
+
+    /// <summary>The first canonical pinning identity found in a provider map, in preference order, or null.</summary>
+    public ExternalIdentity? PinningIdentity(IReadOnlyDictionary<string, string> identities) =>
+        IdentityFormats.Select(format => format.Find(identities)).FirstOrDefault(identity => identity is not null);
 
     #endregion
 

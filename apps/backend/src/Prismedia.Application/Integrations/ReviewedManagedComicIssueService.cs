@@ -36,16 +36,15 @@ public sealed class ReviewedManagedComicIssueService(
             ?? throw new ArgumentException("The selected comic issue changed. Refresh the connected run.");
         if (snapshot.Files.Any(file => file.Targets.Any(target => target.RemoteId == issue.RemoteId)))
             throw new ArgumentException("This issue already has a final file. Link its local source instead of requesting it again.");
-        if (!snapshot.Item.ExternalIds.TryGetValue(ExternalIdProviders.ComicVine, out var seriesId)
-            || !seriesId.StartsWith(ComicVineIdentityFormats.SeriesPrefix, StringComparison.Ordinal)
-            || issue.ExternalIds is not { Count: 1 }
-            || !issue.ExternalIds.TryGetValue(ExternalIdProviders.ComicVine, out var issueId)
-            || !issueId.StartsWith(ComicVineIdentityFormats.IssuePrefix, StringComparison.Ordinal))
-            throw new ArgumentException("The connected run and issue need exact Comic Vine identities.");
+        var comic = ManagedFulfillmentPolicy.For(EntityKind.ComicSeries);
+        var seriesIdentity = comic.PinningIdentity(snapshot.Item.ExternalIds);
+        var issueIdentity = issue.ExternalIds is { Count: 1 } issueIds ? comic.TargetIdentityFormats[0].Find(issueIds) : null;
+        if (seriesIdentity is null || issueIdentity is null)
+            throw new ArgumentException($"The connected run and issue need {comic.IdentityDescription}.");
         var work = new ManagedLookupInput(EntityKind.ComicSeries,
-            new Dictionary<string, string> { [ExternalIdProviders.ComicVine] = seriesId },
-            [new(EntityKind.ComicInstallment,
-                new Dictionary<string, string> { [ExternalIdProviders.ComicVine] = issueId },
+            new Dictionary<string, string> { [seriesIdentity.Namespace] = seriesIdentity.Value },
+            [new(comic.Target!.Kind,
+                new Dictionary<string, string> { [issueIdentity.Namespace] = issueIdentity.Value },
                 IssueLabel: issue.IssueLabel)]);
         var lookup = await creation.LookupAsync(authorized.Manifest.Id, authorized.Context, work, token);
         ManagedCreationEvidence.ValidateLookup(work, lookup);

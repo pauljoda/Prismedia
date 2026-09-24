@@ -86,12 +86,10 @@ public sealed class ManagedDiscoveryService(
     }
 
     private static ExternalIdentity ManagerSeriesIdentity(ReviewedRequestCommitRequest request) {
-        var tvdb = request.Proposal?.Patch.ExternalIds.GetValueOrDefault(ExternalIdProviders.Tvdb);
-        var identity = tvdb is null ? null : new ExternalIdentity(ExternalIdProviders.Tvdb, tvdb);
-        if (!CanonicalSeriesIdentity(identity))
-            throw new RequestCommitValidationException(
-                "The reviewed series no longer includes Sonarr's exact TVDB identity.");
-        return identity!;
+        var primary = ManagedFulfillmentPolicy.For(EntityKind.VideoSeries).IdentityFormats[0];
+        return primary.Find(request.Proposal?.Patch.ExternalIds ?? new Dictionary<string, string>())
+            ?? throw new RequestCommitValidationException(
+                "The reviewed series no longer includes the manager's exact series identity.");
     }
 
     /// <summary>Creates or enriches a wanted movie only after refreshing the exact connection-scoped review.</summary>
@@ -162,7 +160,7 @@ public sealed class ManagedDiscoveryService(
         string? expectedPluginId,
         CancellationToken token) {
         var identities = candidate.ExternalIds
-            .Where(pair => CanonicalSeriesIdentity(new(pair.Key, pair.Value)))
+            .Where(pair => IsPinningIdentity(EntityKind.VideoSeries, new(pair.Key, pair.Value)))
             .Select(pair => new ExternalIdentity(pair.Key, pair.Value))
             .ToArray();
         var routes = await identityRouter.ResolveAsync(
@@ -268,38 +266,20 @@ public sealed class ManagedDiscoveryService(
         return false;
     }
 
-    private static ExternalIdentity CanonicalIdentity(EntityKind kind, IReadOnlyDictionary<string, string> ids) {
-        if (kind == EntityKind.Movie && ids.TryGetValue(ExternalIdProviders.Tmdb, out var tmdb)
-            && CanonicalMovieIdentity(new(ExternalIdProviders.Tmdb, tmdb))) return new(ExternalIdProviders.Tmdb, tmdb);
-        if (kind == EntityKind.VideoSeries) {
-            if (ids.TryGetValue(ExternalIdProviders.Tvdb, out var tvdb)
-                && CanonicalSeriesIdentity(new(ExternalIdProviders.Tvdb, tvdb))) return new(ExternalIdProviders.Tvdb, tvdb);
-            if (ids.TryGetValue(ExternalIdProviders.Tmdb, out tmdb)
-                && CanonicalSeriesIdentity(new(ExternalIdProviders.Tmdb, tmdb))) return new(ExternalIdProviders.Tmdb, tmdb);
-        }
-        if (kind == EntityKind.ComicSeries && ids.TryGetValue(ExternalIdProviders.ComicVine, out var comicVine)
-            && CanonicalComicSeriesIdentity(new(ExternalIdProviders.ComicVine, comicVine)))
-            return new(ExternalIdProviders.ComicVine, comicVine);
-        throw InvalidEvidence();
-    }
+    private static ExternalIdentity CanonicalIdentity(EntityKind kind, IReadOnlyDictionary<string, string> ids) =>
+        ManagedFulfillmentPolicy.For(kind).PinningIdentity(ids) ?? throw InvalidEvidence();
 
-    private static bool CanonicalMovieIdentity(ExternalIdentity? identity) => identity?.Namespace == ExternalIdProviders.Tmdb
-        && int.TryParse(identity.Value, NumberStyles.None, CultureInfo.InvariantCulture, out var id) && id > 0
-        && id.ToString(CultureInfo.InvariantCulture) == identity.Value;
-    private static bool CanonicalSeriesIdentity(ExternalIdentity? identity) => identity?.Namespace is ExternalIdProviders.Tmdb or ExternalIdProviders.Tvdb
-        && int.TryParse(identity.Value, NumberStyles.None, CultureInfo.InvariantCulture, out var id) && id > 0
-        && id.ToString(CultureInfo.InvariantCulture) == identity.Value;
-    private static bool CanonicalComicSeriesIdentity(ExternalIdentity? identity) =>
-        identity?.Namespace == ExternalIdProviders.ComicVine
-        && identity.Value.StartsWith(ComicVineIdentityFormats.SeriesPrefix, StringComparison.Ordinal)
-        && int.TryParse(identity.Value.AsSpan(ComicVineIdentityFormats.SeriesPrefix.Length), NumberStyles.None,
-            CultureInfo.InvariantCulture, out var id) && id > 0
-        && ComicVineIdentityFormats.SeriesPrefix + id.ToString(CultureInfo.InvariantCulture) == identity.Value;
-    private static bool SupportedDiscoveryIdentity(EntityKind kind, ExternalIdentity? identity) => kind switch {
-        EntityKind.Movie => CanonicalMovieIdentity(identity),
-        EntityKind.VideoSeries => CanonicalSeriesIdentity(identity),
-        _ => false
-    };
+    /// <summary>
+    /// Manager discovery reviews movies from the manager's own metadata and series from a metadata plugin matched
+    /// by the manager's pinning identity; both require one of the kind's canonical pinning identities.
+    /// </summary>
+    private static bool SupportedDiscoveryIdentity(EntityKind kind, ExternalIdentity? identity) =>
+        kind is EntityKind.Movie or EntityKind.VideoSeries && IsPinningIdentity(kind, identity);
+
+    private static bool IsPinningIdentity(EntityKind kind, ExternalIdentity? identity) =>
+        identity is not null && ManagedFulfillmentPolicy.For(kind).IdentityFormats
+            .Any(format => format.Provider == identity.Namespace && format.IsCanonical(identity.Value));
+
     private static bool Identities(IReadOnlyDictionary<string, string>? values) => values is { Count: > 0 and <= 64 }
         && values.All(pair => Text(pair.Key, 128) && Text(pair.Value, 2048));
     private static bool OptionalList(IReadOnlyList<string>? values, int count, int length) => values is null

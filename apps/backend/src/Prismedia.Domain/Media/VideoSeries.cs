@@ -3,7 +3,6 @@ using Prismedia.Domain.Entities;
 using ContractCapability = Prismedia.Contracts.Entities.EntityCapability;
 using SeriesMetadataDocumentCapability = Prismedia.Contracts.Entities.SeriesMetadataCapability;
 using ThumbnailMetaIcons = Prismedia.Contracts.Entities.EntityThumbnailMetaIcons;
-using ExternalIdProviders = Prismedia.Contracts.Entities.ExternalIdProviders;
 
 namespace Prismedia.Domain.Media;
 
@@ -43,7 +42,7 @@ public sealed class VideoSeriesEntityKindDefinition() : EntityKindDefinition<Vid
     /// <inheritdoc />
     /// <remarks>Selected episodes are searched without turning on broad series monitoring.</remarks>
     public ManagedFulfillmentPolicy ManagedFulfillment { get; } = new(
-        identityProviders: [ExternalIdProviders.Tvdb, ExternalIdProviders.Tmdb],
+        identityFormats: [ProviderIdentityFormat.Tvdb, ProviderIdentityFormat.Tmdb],
         identityDescription: "a TVDB or TMDB identity",
         usesProfile: true,
         target: new(EntityKind.VideoEpisode, ManagedTargetShape.Episode),
@@ -51,7 +50,7 @@ public sealed class VideoSeriesEntityKindDefinition() : EntityKindDefinition<Vid
         maximumTargets: ManagedFulfillmentPolicy.FiniteChildren,
         requiredMonitoring: false,
         requiresSearch: true,
-        targetIdentityProviders: [ExternalIdProviders.Tvdb]);
+        targetIdentityFormats: [ProviderIdentityFormat.Tvdb]);
 
     /// <inheritdoc />
     public override EntityProgressTopology ProgressTopology => EntityProgressTopology.OrderedContainer(EntityKind.VideoEpisode);

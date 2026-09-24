@@ -67,14 +67,11 @@ public sealed class ReviewedManagedComicRunService(
     }
 
     private static ManagedLookupInput Work(ExternalIdentity identity) => new(EntityKind.ComicSeries,
-        new Dictionary<string, string> { [ExternalIdProviders.ComicVine] = identity.Value });
+        new Dictionary<string, string> { [identity.Namespace] = identity.Value });
 
     private static void RequireIdentity(ExternalIdentity identity) {
-        if (identity?.Namespace != ExternalIdProviders.ComicVine
-            || !identity.Value.StartsWith(ComicVineIdentityFormats.SeriesPrefix, StringComparison.Ordinal)
-            || !int.TryParse(identity.Value.AsSpan(ComicVineIdentityFormats.SeriesPrefix.Length),
-                NumberStyles.None, CultureInfo.InvariantCulture, out var id)
-            || id <= 0 || ComicVineIdentityFormats.SeriesPrefix + id.ToString(CultureInfo.InvariantCulture) != identity.Value)
-            throw new ArgumentException("Choose one exact Comic Vine run from Kapowarr search.");
+        var format = ManagedFulfillmentPolicy.For(EntityKind.ComicSeries).IdentityFormats[0];
+        if (identity?.Namespace != format.Provider || !format.IsCanonical(identity.Value))
+            throw new ArgumentException("Choose one exact comic run from the manager's search.");
     }
 }
