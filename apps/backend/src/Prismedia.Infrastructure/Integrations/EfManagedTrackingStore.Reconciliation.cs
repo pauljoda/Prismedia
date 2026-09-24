@@ -197,7 +197,7 @@ public sealed partial class EfManagedTrackingStore {
                 var hasPlayableSource = sources.Any(file => file.EntityId == entity.Id && file.Role == EntityFileRole.Source)
                     || await db.EntityFiles.AnyAsync(file => file.EntityId == entity.Id
                         && file.Role == EntityFileRole.Source && !sourceIds.Contains(file.Id), leaseToken);
-                var ownerEntityId = work.Tracking.Item.EntityKind == EntityKind.Book ? reservationIds[0] : entity.Id;
+                var ownerEntityId = work.Tracking.Item.BookRendition is not null ? reservationIds[0] : entity.Id;
                 var hasCurrentOwner = await db.FulfillmentReservations.AnyAsync(owner => owner.EntityId == ownerEntityId
                     && owner.OwnerId == row.Id && owner.BookRendition == work.Tracking.Item.BookRendition
                     && owner.ReleasedAt == null, leaseToken);
@@ -465,7 +465,7 @@ public sealed partial class EfManagedTrackingStore {
             && db.Entities.Any(entity => entity.Id == identity.EntityId && entity.KindCode == holdingKindCode)).ToArrayAsync(token);
         if (localIds.Any(identity => expectedIdentities.TryGetValue(identity.Provider, out var expected) && identity.Value != expected))
             throw new ArgumentException("The selected local scope has conflicting provider identities. Review its metadata before linking.");
-        if (holdingKind == EntityKind.Book) {
+        if (rendition is not null) {
             if (rendition is null || await db.Monitors.AnyAsync(monitor => monitor.EntityId != null
                     && scope.Contains(monitor.EntityId.Value) && monitor.Kind == EntityKind.Book
                     && (monitor.BookRendition ?? BookRendition.Ebook) == rendition, token)

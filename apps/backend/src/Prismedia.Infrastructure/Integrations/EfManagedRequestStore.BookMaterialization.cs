@@ -22,7 +22,7 @@ public sealed partial class EfManagedRequestStore {
         if (!work.Operation.Phase.AwaitsFiles || snapshot.Item.RemoteId != state.RemoteId)
             throw new ArgumentException("The Book file evidence does not belong to this accepted request.");
         if (snapshot.Files.Count == 0) return new(false, "Waiting for the manager to import this Book rendition.");
-        var expectedKind = rendition == BookRendition.Ebook ? EntityKind.Book : EntityKind.AudioTrack;
+        var expectedKind = ManagedFulfillmentPolicy.For(work.Plan.Creation.Work.EntityKind).TargetFor(rendition).Kind;
         if (rendition == BookRendition.Ebook && snapshot.Files.Count != 1
             || snapshot.Files.Any(file => file.Targets is not [{ EntityKind: var kind }] || kind != expectedKind))
             throw new ArgumentException("A Book manager request requires exact files and one matching target per file.");
@@ -131,7 +131,7 @@ public sealed partial class EfManagedRequestStore {
                     });
                     sourceEntityId = Guid.NewGuid();
                     db.Entities.Add(new() { Id = sourceEntityId, ParentEntityId = book.Id,
-                        KindCode = EntityKind.AudioTrack.ToCode(), Title = part.Target.Title,
+                        KindCode = expectedKind.ToCode(), Title = part.Target.Title,
                         SortOrder = index, IsNsfw = book.IsNsfw, CreatedAt = now, UpdatedAt = now });
                     db.AudioTrackDetails.Add(new() { EntityId = sourceEntityId });
                     db.EntityLibraryRoots.Add(new() { EntityId = sourceEntityId, LibraryRootId = state.LibraryRootId });

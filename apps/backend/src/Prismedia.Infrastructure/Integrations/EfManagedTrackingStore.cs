@@ -52,9 +52,9 @@ public sealed partial class EfManagedTrackingStore(PrismediaDbContext db, IExter
         }
         if (!await db.ExternalLibraryMounts.AnyAsync(mount => mount.ConnectionId == connectionId && mount.LibraryRootId == request.LibraryRootId, token))
             throw new ArgumentException("Choose a library mapped to this connection.");
-        if (item.EntityKind is not (EntityKind.Movie or EntityKind.VideoSeries or EntityKind.ComicSeries or EntityKind.Book)
-            || (item.EntityKind == EntityKind.Book) != (item.BookRendition is not null))
-            throw new ArgumentException("Choose a supported holding and one rendition for a Book work.");
+        if (!ManagedFulfillmentPolicy.Supports(item.EntityKind)
+            || !ManagedFulfillmentPolicy.For(item.EntityKind).AcceptsRendition(item.BookRendition))
+            throw new ArgumentException("Choose a supported holding, with one rendition for a work that has renditions.");
         var sourceEntityIds = selections.Select(selection => selection.EntityId).Distinct().ToArray();
         var ownerIds = await new ManagedReservationScopeResolver(db).ResolveAsync(sourceEntityIds, item, token);
         await using var transaction = await db.Database.BeginTransactionAsync(token);
@@ -160,7 +160,7 @@ public sealed partial class EfManagedTrackingStore(PrismediaDbContext db, IExter
     }
 
     private async Task<ManagedTrackingResponse> MapAsync(ManagedHoldingRow row, CancellationToken token) {
-        var bookWorkId = row.Kind == EntityKind.Book
+        var bookWorkId = row.BookRendition is not null
             ? await db.FulfillmentReservations.AsNoTracking().Where(owner => owner.OwnerId == row.Id
                     && owner.BookRendition == row.BookRendition)
                 .Select(owner => (Guid?)owner.EntityId).SingleOrDefaultAsync(token)

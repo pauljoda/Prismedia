@@ -94,7 +94,7 @@ public sealed partial class EfManagedRequestStore {
         ManagedRequestTarget target,
         ManagedItemSnapshot snapshot,
         IReadOnlyList<ManagedResolvedTarget>? resolvedTargets) {
-        if (target.Work.EntityKind == EntityKind.Book) return [];
+        if (target.Work.BookRendition is not null) return [];
         if (target.Targets is not { Count: > 0 }) {
             return [new(new(snapshot.Item.RemoteId, snapshot.Item.EntityKind, null, null, null), target.EntityId)];
         }
@@ -123,11 +123,11 @@ public sealed partial class EfManagedRequestStore {
 
     /// <inheritdoc />
     public async Task<ManagedRequestMaterialization> MaterializeAsync(StoredManagedRequest work, ManagedItemSnapshot snapshot, CancellationToken token) {
-        if (work.Plan.Creation.Work.EntityKind == EntityKind.Book)
+        var policy = ManagedFulfillmentPolicy.For(work.Plan.Creation.Work.EntityKind);
+        if (policy.RequiresRendition)
             return await MaterializeBookAsync(work, snapshot, token);
-        if (work.Plan.Creation.Work.EntityKind is EntityKind.VideoSeries or EntityKind.ComicSeries) {
+        if (policy.MaximumTargets > 0)
             return await MaterializeEpisodesAsync(work, snapshot, token);
-        }
         return await MaterializeMovieAsync(work, snapshot, token);
     }
 
@@ -202,8 +202,10 @@ public sealed partial class EfManagedRequestStore {
         CancellationToken token) {
         ManagedCreationEvidence.ValidateHolding(work.Plan.Creation.Work, snapshot);
         var state = work.Operation.State;
-        var isComic = work.Plan.Creation.Work.EntityKind == EntityKind.ComicSeries;
-        var expectedKind = isComic ? EntityKind.ComicInstallment : EntityKind.VideoEpisode;
+        var expectedTarget = ManagedFulfillmentPolicy.For(work.Plan.Creation.Work.EntityKind).Target!;
+        var expectedKind = expectedTarget.Kind;
+        // Issue-shaped targets arrive as comic archives; episode-shaped targets arrive as video files.
+        var deliveredExtensions = expectedTarget.Shape.RequiresIssueLabel ? SupportedExtensions.ComicArchive : SupportedExtensions.Video;
         if (!work.Operation.Phase.AwaitsFiles || snapshot.Item.RemoteId != state.RemoteId)
             throw new ArgumentException("The selected target file evidence does not belong to this accepted holding.");
 
@@ -279,7 +281,7 @@ public sealed partial class EfManagedRequestStore {
             if (mapped.LibraryRootId != state.LibraryRootId || mapped.LocalPath is null)
                 throw new ArgumentException("A selected target file is outside this request's mapped library.");
             if (!mapped.IsReadable || !mapped.SizeMatches) continue;
-            if (!(isComic ? SupportedExtensions.ComicArchive : SupportedExtensions.Video).Contains(Path.GetExtension(mapped.LocalPath)))
+            if (!deliveredExtensions.Contains(Path.GetExtension(mapped.LocalPath)))
                 throw new ArgumentException("A selected target file has an unsupported format.");
             candidates.Add((remote, mapped, mapped.LocalPath, WrittenAt(mapped.LocalPath)));
         }
