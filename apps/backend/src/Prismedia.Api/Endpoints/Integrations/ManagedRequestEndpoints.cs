@@ -41,6 +41,15 @@ public static class ManagedRequestEndpoints {
             ReviewedManagedComicIssueService service, CancellationToken token) =>
             Results.Ok(await service.ReviewAsync(id, request, token)))
             .WithName("ReviewManagedComicIssue").Produces<ReviewedManagedComicIssue>().Produces<ApiProblem>(400);
+        group.MapPost("/comic-run/review", async (Guid id, ReviewManagedComicRunInput request,
+            ReviewedManagedComicRunService service, CancellationToken token) =>
+            Results.Ok(await service.ReviewAsync(id, request, token)))
+            .WithName("ReviewManagedComicRun").Produces<ReviewedManagedComicRun>().Produces<ApiProblem>(400);
+        group.MapPost("/comic-run/commit", async (Guid id, CommitManagedComicRunInput request,
+            ReviewedManagedComicRunService service, CancellationToken token) =>
+            Results.Ok(await service.CommitAsync(id, request, token)))
+            .WithName("CommitManagedComicRun").Produces<CommitManagedComicRunResponse>()
+            .Produces<ApiProblem>(400).Produces<ApiProblem>(409);
         group.MapPost("/comic-issue/commit", async (Guid id, CommitManagedComicIssueInput request,
             ReviewedManagedComicIssueService service, CancellationToken token) =>
             Results.Accepted(value: await service.CommitAsync(id, request, token)))

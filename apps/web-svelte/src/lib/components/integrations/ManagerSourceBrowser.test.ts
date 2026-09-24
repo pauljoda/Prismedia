@@ -1,12 +1,14 @@
-import { fireEvent, render, screen } from "@testing-library/svelte";
+import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { page } from "$app/state";
 import { CONNECTION_STATUS, ENTITY_KIND, EXTERNAL_ID_PROVIDER, INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
 import type { ConnectionResponse } from "$lib/api/generated/model";
 import ManagerSourceBrowser from "./ManagerSourceBrowser.svelte";
 
-const mocks = vi.hoisted(() => ({ searchManagerTitles: vi.fn(), fetchManagedLibrary: vi.fn(), goto: vi.fn(async (_url: string) => {}) }));
+const mocks = vi.hoisted(() => ({ searchManagerTitles: vi.fn(), fetchManagedLibrary: vi.fn(),
+  fetchManagedComicRunReview: vi.fn(), addManagedComicRun: vi.fn(), goto: vi.fn(async (_url: string) => {}) }));
 vi.mock("$lib/api/managed-discovery", () => ({ searchManagerTitles: mocks.searchManagerTitles }));
+vi.mock("$lib/api/managed-comic-runs", () => ({ fetchManagedComicRunReview: mocks.fetchManagedComicRunReview, addManagedComicRun: mocks.addManagedComicRun }));
 vi.mock("$lib/api/managed-libraries", () => ({ fetchManagedLibrary: mocks.fetchManagedLibrary }));
 vi.mock("$app/navigation", () => ({ goto: mocks.goto }));
 
@@ -79,5 +81,41 @@ describe("Manager source discovery", () => {
     const url = new URL(mocks.goto.mock.calls[0]![0], "http://localhost");
     expect(url.pathname).toBe("/request/series/360893");
     expect(url.searchParams.get("namespace")).toBe(EXTERNAL_ID_PROVIDER.tvdb);
+  });
+
+  it("reviews a comic run, adds it unmonitored, and opens its connected holding", async () => {
+    const comicConnection: ConnectionResponse = {
+      ...connection, id: "comic-manager", name: "Kapowarr",
+      effectiveCapabilities: [{ kind: PLUGIN_CAPABILITY.externalManager,
+        entityKinds: [ENTITY_KIND.comicSeries],
+        operations: [INTEGRATION_OPERATION.discoverManaged, INTEGRATION_OPERATION.lookupManaged, INTEGRATION_OPERATION.ensureManaged] }],
+    };
+    const identity = { namespace: EXTERNAL_ID_PROVIDER.comicVine, value: "4050-1001" };
+    const item = { entityKind: ENTITY_KIND.comicSeries, remoteId: "77",
+      expectedExternalIds: { [EXTERNAL_ID_PROVIDER.comicVine]: identity.value } };
+    mocks.searchManagerTitles.mockResolvedValue({ items: [{ entityKind: ENTITY_KIND.comicSeries,
+      title: "Atomic Attack", year: 1952, externalIdentity: identity }] });
+    mocks.fetchManagedComicRunReview.mockResolvedValue({ connectionRevision: 4,
+      candidate: { entityKind: ENTITY_KIND.comicSeries, title: "Atomic Attack", year: 1952,
+        externalIds: { [EXTERNAL_ID_PROVIDER.comicVine]: identity.value } },
+      mounts: [{ id: "mount-1", connectionId: comicConnection.id, libraryRootId: "local-root",
+        remoteRootId: "2", remotePath: "/comics", localPath: "/media/comics", label: "Comics" }],
+      existing: null });
+    mocks.addManagedComicRun.mockResolvedValue({ item, created: true });
+    render(ManagerSourceBrowser, { connection: comicConnection });
+
+    await fireEvent.input(screen.getByRole("textbox", { name: "Find new titles in Kapowarr" }), {
+      target: { value: "Atomic Attack" },
+    });
+    await fireEvent.click(screen.getByRole("button", { name: "Search" }));
+    await fireEvent.click(await screen.findByRole("button", { name: "Atomic Attack" }));
+    expect(mocks.fetchManagedComicRunReview).toHaveBeenCalledWith(comicConnection.id, { identity });
+    await fireEvent.click(await screen.findByRole("button", { name: "Add run" }));
+
+    await waitFor(() => expect(mocks.addManagedComicRun).toHaveBeenCalledWith(comicConnection.id,
+      expect.objectContaining({ identity, expectedTitle: "Atomic Attack", mountId: "mount-1", expectedConnectionRevision: 4 })));
+    await waitFor(() => expect(mocks.goto).toHaveBeenCalled());
+    expect(new URL(mocks.goto.mock.calls[0]![0], "http://localhost").pathname)
+      .toBe("/request/source/comic-manager/comic-series/77");
   });
 });

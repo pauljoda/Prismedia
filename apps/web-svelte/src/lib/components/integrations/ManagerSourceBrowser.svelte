@@ -5,8 +5,8 @@
   import { page } from "$app/state";
   import { Library, Search } from "@lucide/svelte";
   import { Alert, Button, DialogBase, Panel, Tabs, TextInput } from "@prismedia/ui-svelte";
-  import { CONNECTION_STATUS, INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
-  import type { ConnectionResponse, EntityKind, ManagedDiscoverySearchResponse } from "$lib/api/generated/model";
+  import { CONNECTION_STATUS, ENTITY_KIND, INTEGRATION_OPERATION, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
+  import type { ConnectionResponse, EntityKind, ManagedDiscoverySearchResponse, ManagedDiscoverySearchResult } from "$lib/api/generated/model";
   import { searchManagerTitles } from "$lib/api/managed-discovery";
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import DiscoveryResults from "$lib/components/requests/DiscoveryResults.svelte";
@@ -14,6 +14,7 @@
   import { requestKindForEntityKind } from "$lib/requests/request-helpers";
   import ConnectedLibraryBrowser from "./ConnectedLibraryBrowser.svelte";
   import ExternalLibraryMappings from "./ExternalLibraryMappings.svelte";
+  import ManagedComicRunRequest from "./ManagedComicRunRequest.svelte";
 
   let { connection, initialEntityKind = null }: {
     connection: ConnectionResponse;
@@ -36,6 +37,7 @@
   let loading = $state(false);
   let error = $state<string | null>(null);
   let settingsOpen = $state(false);
+  let selectedComicRun = $state<ManagedDiscoverySearchResult | null>(null);
   let sequence = 0;
 
   onMount(() => {
@@ -64,6 +66,10 @@
   function openReview(index: number) {
     const item = results?.items[index];
     if (!item) return;
+    if (item.entityKind === ENTITY_KIND.comicSeries) {
+      selectedComicRun = item;
+      return;
+    }
     const requestKind = requestKindForEntityKind(item.entityKind);
     if (!requestKind) return;
     const back = new URLSearchParams(page.url.searchParams);
@@ -127,3 +133,8 @@
     <DialogBase.Footer><Button variant="outline" onclick={() => settingsOpen = false}>Done</Button></DialogBase.Footer>
   </DialogBase.Content>
 </DialogBase.Root>
+
+{#if selectedComicRun}
+  <ManagedComicRunRequest connectionId={connection.id} connectionName={connection.name}
+    identity={selectedComicRun.externalIdentity} onclose={() => selectedComicRun = null} />
+{/if}

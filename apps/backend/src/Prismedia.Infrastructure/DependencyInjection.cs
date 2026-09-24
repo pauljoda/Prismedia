@@ -126,6 +126,7 @@ public static class DependencyInjection {
         services.AddScoped<ReviewedManagedRequestService>();
         services.AddScoped<ReviewedManagedBookRequestService>();
         services.AddScoped<ReviewedManagedComicIssueService>();
+        services.AddScoped<ReviewedManagedComicRunService>();
         services.AddScoped<ManagedRequestProcessor>();
         services.AddSingleton(new ExternalLibraryStorageOptions(dataDir, cacheDir));
         services.AddScoped<IExternalLibraryMountStore, EfExternalLibraryMountStore>();

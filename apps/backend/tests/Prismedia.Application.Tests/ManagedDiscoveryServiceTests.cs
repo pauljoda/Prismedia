@@ -56,6 +56,19 @@ public sealed class ManagedDiscoveryServiceTests {
     }
 
     [Fact]
+    public async Task ComicRunSearchKeepsTheExactComicVineSeriesIdentityWithoutWriting() {
+        var fixture = new Fixture(comic: true);
+
+        var response = await fixture.Service.SearchAsync(fixture.Connection.State.Id,
+            new(EntityKind.ComicSeries, "Atomic Attack", 10), default);
+
+        var result = Assert.Single(response.Items);
+        Assert.Equal(new ExternalIdentity(ExternalIdProviders.ComicVine, "4050-1001"), result.ExternalIdentity);
+        Assert.Equal(0, fixture.LookupCalls);
+        Assert.Equal(0, fixture.Writer.EnsureCalls);
+    }
+
+    [Fact]
     public async Task SeriesSearchUsesSonarrCanonicalTvdbIdentityAndOpensNormalFiniteMetadataReview() {
         var router = new SeriesRouter();
         var reviews = new SeriesReviewPreparation();
@@ -216,9 +229,11 @@ public sealed class ManagedDiscoveryServiceTests {
             bool series = false,
             IPluginIdentityRouter? router = null,
             IPluginRequestReviewSource? reviews = null,
-            IIdentifyProviderService? providers = null) {
-            Kind = series ? EntityKind.VideoSeries : EntityKind.Movie;
-            Identity = new(ExternalIdProviders.Tmdb, series ? "1396" : "19");
+            IIdentifyProviderService? providers = null,
+            bool comic = false) {
+            Kind = comic ? EntityKind.ComicSeries : series ? EntityKind.VideoSeries : EntityKind.Movie;
+            Identity = comic ? new(ExternalIdProviders.ComicVine, "4050-1001")
+                : new(ExternalIdProviders.Tmdb, series ? "1396" : "19");
             IntegrationSupport[] support = [new(PluginCapability.ExternalManager,
                 [IntegrationOperation.DiscoverManaged, IntegrationOperation.LookupManaged], [Kind])];
             Connection = IntegrationConnection.Create(PluginId, "Radarr", "https://radarr.test", true,
@@ -237,7 +252,10 @@ public sealed class ManagedDiscoveryServiceTests {
                 providers ?? new SeriesProviders("tmdb"));
         }
 
-        private ManagedCandidate Candidate() => Kind == EntityKind.VideoSeries
+        private ManagedCandidate Candidate() => Kind == EntityKind.ComicSeries
+            ? new(EntityKind.ComicSeries, "Atomic Attack", 1954,
+                new Dictionary<string, string> { [ExternalIdProviders.ComicVine] = Identity.Value })
+            : Kind == EntityKind.VideoSeries
             ? new(EntityKind.VideoSeries, "Breaking Bad", 2008,
                 new Dictionary<string, string> {
                     [ExternalIdProviders.Tmdb] = "1396",

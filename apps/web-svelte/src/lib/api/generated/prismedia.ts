@@ -59,6 +59,8 @@ import type {
   CommitManagedBookRequestResponse,
   CommitManagedComicIssueInput,
   CommitManagedComicIssueResponse,
+  CommitManagedComicRunInput,
+  CommitManagedComicRunResponse,
   CommitRequestParams,
   CommitReviewedManagedRequestInput,
   CommitReviewedRequestParams,
@@ -284,10 +286,12 @@ import type {
   ReviewEntityRequestParams,
   ReviewManagedBookRequestInput,
   ReviewManagedComicIssueInput,
+  ReviewManagedComicRunInput,
   ReviewManagedRequestInput,
   ReviewRequestParams,
   ReviewedManagedBookRequest,
   ReviewedManagedComicIssue,
+  ReviewedManagedComicRun,
   ReviewedManagedRequest,
   ReviewedManagedRequestCommitResponse,
   ReviewedRequestCommitRequest,
@@ -9696,6 +9700,95 @@ export const reviewManagedComicIssue = async (id: string,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       reviewManagedComicIssueInput,)
+  }
+);}
+
+
+
+export type reviewManagedComicRunResponse200 = {
+  data: ReviewedManagedComicRun
+  status: 200
+}
+
+export type reviewManagedComicRunResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type reviewManagedComicRunResponseSuccess = (reviewManagedComicRunResponse200) & {
+  headers: Headers;
+};
+export type reviewManagedComicRunResponseError = (reviewManagedComicRunResponse400) & {
+  headers: Headers;
+};
+
+export type reviewManagedComicRunResponse = (reviewManagedComicRunResponseSuccess | reviewManagedComicRunResponseError)
+
+export const getReviewManagedComicRunUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/manager/requests/comic-run/review`
+}
+
+export const reviewManagedComicRun = async (id: string,
+    reviewManagedComicRunInput: ReviewManagedComicRunInput, options?: RequestInit): Promise<reviewManagedComicRunResponse> => {
+
+  return orvalFetch<reviewManagedComicRunResponse>(getReviewManagedComicRunUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      reviewManagedComicRunInput,)
+  }
+);}
+
+
+
+export type commitManagedComicRunResponse200 = {
+  data: CommitManagedComicRunResponse
+  status: 200
+}
+
+export type commitManagedComicRunResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
+export type commitManagedComicRunResponse409 = {
+  data: ApiProblem
+  status: 409
+}
+
+export type commitManagedComicRunResponseSuccess = (commitManagedComicRunResponse200) & {
+  headers: Headers;
+};
+export type commitManagedComicRunResponseError = (commitManagedComicRunResponse400 | commitManagedComicRunResponse409) & {
+  headers: Headers;
+};
+
+export type commitManagedComicRunResponse = (commitManagedComicRunResponseSuccess | commitManagedComicRunResponseError)
+
+export const getCommitManagedComicRunUrl = (id: string,) => {
+
+
+
+
+  return `/api/connections/${id}/manager/requests/comic-run/commit`
+}
+
+export const commitManagedComicRun = async (id: string,
+    commitManagedComicRunInput: CommitManagedComicRunInput, options?: RequestInit): Promise<commitManagedComicRunResponse> => {
+
+  return orvalFetch<commitManagedComicRunResponse>(getCommitManagedComicRunUrl(id),
+  {
+    ...options,
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(
+      commitManagedComicRunInput,)
   }
 );}
 

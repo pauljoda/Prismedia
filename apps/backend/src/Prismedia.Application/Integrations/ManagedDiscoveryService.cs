@@ -219,9 +219,9 @@ public sealed class ManagedDiscoveryService(
     }
 
     private static void ValidateSearch(ManagedDiscoveryQuery input) {
-        if (input is null || input.EntityKind is not (EntityKind.Movie or EntityKind.VideoSeries) || string.IsNullOrWhiteSpace(input.Query)
+        if (input is null || input.EntityKind is not (EntityKind.Movie or EntityKind.VideoSeries or EntityKind.ComicSeries) || string.IsNullOrWhiteSpace(input.Query)
             || input.Query.Length > 512 || input.Query.Any(char.IsControl) || input.Limit is < 1 or > 100)
-            throw new ArgumentException("Enter a movie or series title up to 512 characters and a result limit from 1 to 100.");
+            throw new ArgumentException("Enter a title up to 512 characters and a result limit from 1 to 100.");
     }
 
     private static void ValidateCandidate(ManagedDiscoveryCandidate candidate, EntityKind kind) {
@@ -277,6 +277,9 @@ public sealed class ManagedDiscoveryService(
             if (ids.TryGetValue(ExternalIdProviders.Tmdb, out tmdb)
                 && CanonicalSeriesIdentity(new(ExternalIdProviders.Tmdb, tmdb))) return new(ExternalIdProviders.Tmdb, tmdb);
         }
+        if (kind == EntityKind.ComicSeries && ids.TryGetValue(ExternalIdProviders.ComicVine, out var comicVine)
+            && CanonicalComicSeriesIdentity(new(ExternalIdProviders.ComicVine, comicVine)))
+            return new(ExternalIdProviders.ComicVine, comicVine);
         throw InvalidEvidence();
     }
 
@@ -286,6 +289,12 @@ public sealed class ManagedDiscoveryService(
     private static bool CanonicalSeriesIdentity(ExternalIdentity? identity) => identity?.Namespace is ExternalIdProviders.Tmdb or ExternalIdProviders.Tvdb
         && int.TryParse(identity.Value, NumberStyles.None, CultureInfo.InvariantCulture, out var id) && id > 0
         && id.ToString(CultureInfo.InvariantCulture) == identity.Value;
+    private static bool CanonicalComicSeriesIdentity(ExternalIdentity? identity) =>
+        identity?.Namespace == ExternalIdProviders.ComicVine
+        && identity.Value.StartsWith(ComicVineIdentityFormats.SeriesPrefix, StringComparison.Ordinal)
+        && int.TryParse(identity.Value.AsSpan(ComicVineIdentityFormats.SeriesPrefix.Length), NumberStyles.None,
+            CultureInfo.InvariantCulture, out var id) && id > 0
+        && ComicVineIdentityFormats.SeriesPrefix + id.ToString(CultureInfo.InvariantCulture) == identity.Value;
     private static bool SupportedDiscoveryIdentity(EntityKind kind, ExternalIdentity? identity) => kind switch {
         EntityKind.Movie => CanonicalMovieIdentity(identity),
         EntityKind.VideoSeries => CanonicalSeriesIdentity(identity),

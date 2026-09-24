@@ -12,6 +12,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Added
 
+- Kapowarr can search for new Comic Vine runs from Request and add a reviewed run to a mapped comic library with monitoring and automatic search off. Open the connected run afterward to request individual issues.
+
 - A reviewed Book or an existing Book can request an ebook, audiobook, or both through a connected Book manager in one submission. Each format keeps its own mapped library, status, and safe retry result.
 
 - Internet Archive comic connections can browse and search explicitly public-domain-labeled items, review original CBZ files, and import a selected issue with source and license details retained.
