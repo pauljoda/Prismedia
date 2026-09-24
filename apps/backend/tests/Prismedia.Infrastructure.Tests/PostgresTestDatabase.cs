@@ -16,6 +16,15 @@ internal sealed class PostgresTestDatabase(
     string databaseName,
     string adminConnectionString,
     string connectionString) : IAsyncDisposable {
+    private const string TestDatabasePrefix = "prismedia_test_";
+    private const string TemplatePrefix = "prismedia_template_";
+    private static readonly object TemplateLock = new();
+    private static readonly SemaphoreSlim CloneGate = new(1, 1);
+    private static Task<string>? template;
+
+    /// <summary>Name of this isolated database on the test server.</summary>
+    internal string Name => databaseName;
+
     /// <summary>Creates a DbContext connected to this isolated test database.</summary>
     internal PrismediaDbContext CreateContext() =>
         new(new DbContextOptionsBuilder<PrismediaDbContext>()
@@ -73,8 +82,28 @@ internal sealed class PostgresTestDatabase(
         await command.ExecuteNonQueryAsync();
     }
 
-    /// <summary>Creates, migrates, and returns a new current-schema test database.</summary>
+    /// <summary>
+    /// Creates and returns a new test database. A current-schema database is cloned from a template that is
+    /// migrated once per test process; a target-migration database is migrated from scratch.
+    /// </summary>
     internal static async Task<PostgresTestDatabase> CreateAsync(string? targetMigration = null) {
+        var adminConnectionString = await RequireAdminConnectionStringAsync();
+        var template = targetMigration is null ? await CurrentSchemaTemplateAsync(adminConnectionString) : null;
+        var database = await CreateEmptyAsync(adminConnectionString, template);
+        if (template is not null) {
+            return database;
+        }
+
+        try {
+            await database.MigrateAsync(targetMigration!);
+            return database;
+        } catch {
+            await database.DisposeAsync();
+            throw;
+        }
+    }
+
+    private static async Task<string> RequireAdminConnectionStringAsync() {
         var configured = Environment.GetEnvironmentVariable("PRISMEDIA_TEST_DATABASE_URL")
             ?? "Host=localhost;Port=5432;Database=postgres;Username=prismedia;Password=prismedia";
         var adminBuilder = new NpgsqlConnectionStringBuilder(configured) {
@@ -89,32 +118,102 @@ internal sealed class PostgresTestDatabase(
                 $"PostgreSQL test requires PRISMEDIA_TEST_DATABASE_URL or the local dev database: {exception.Message}");
         }
 
-        var name = $"prismedia_test_{Guid.NewGuid():N}";
-        await using (var admin = new NpgsqlConnection(adminBuilder.ConnectionString)) {
+        return adminBuilder.ConnectionString;
+    }
+
+    private static async Task<PostgresTestDatabase> CreateEmptyAsync(string adminConnectionString, string? template) {
+        var name = $"{TestDatabasePrefix}{Guid.NewGuid():N}";
+        var templateClause = template is null ? string.Empty : $" TEMPLATE \"{template}\"";
+        await CloneGate.WaitAsync();
+        try {
+            await using var admin = new NpgsqlConnection(adminConnectionString);
             await admin.OpenAsync();
-            await using var create = new NpgsqlCommand($"CREATE DATABASE \"{name}\"", admin);
+            await using var create = new NpgsqlCommand($"CREATE DATABASE \"{name}\"{templateClause}", admin);
             await create.ExecuteNonQueryAsync();
+        } finally {
+            CloneGate.Release();
         }
 
-        var testBuilder = new NpgsqlConnectionStringBuilder(adminBuilder.ConnectionString) {
+        var testBuilder = new NpgsqlConnectionStringBuilder(adminConnectionString) {
             Database = name,
             Pooling = false
         };
-        var database = new PostgresTestDatabase(
-            name,
-            adminBuilder.ConnectionString,
-            testBuilder.ConnectionString);
-        try {
-            if (targetMigration is null) {
-                await using var context = database.CreateContext();
-                await context.Database.MigrateAsync();
-            } else {
-                await database.MigrateAsync(targetMigration);
+        return new PostgresTestDatabase(name, adminConnectionString, testBuilder.ConnectionString);
+    }
+
+    /// <summary>
+    /// Migrates one template per test process and build. The name carries the test assembly's module version
+    /// so a rebuilt model never reuses a stale schema, and templates left by earlier runs are removed.
+    /// </summary>
+    private static Task<string> CurrentSchemaTemplateAsync(string adminConnectionString) {
+        lock (TemplateLock) {
+            return template ??= CreateTemplateAsync(adminConnectionString);
+        }
+    }
+
+    private static async Task<string> CreateTemplateAsync(string adminConnectionString) {
+        var name = $"{TemplatePrefix}{typeof(PrismediaDbContext).Assembly.ManifestModule.ModuleVersionId:N}_{Environment.ProcessId}";
+        await DropStaleTemplatesAsync(adminConnectionString);
+        var database = await CreateEmptyAsync(adminConnectionString, template: null);
+        await using (var context = database.CreateContext()) {
+            await context.Database.MigrateAsync();
+        }
+
+        NpgsqlConnection.ClearAllPools();
+        await using var admin = new NpgsqlConnection(adminConnectionString);
+        await admin.OpenAsync();
+        await using var rename = new NpgsqlCommand(
+            $"ALTER DATABASE \"{database.Name}\" RENAME TO \"{name}\"; ALTER DATABASE \"{name}\" WITH IS_TEMPLATE TRUE",
+            admin);
+        await rename.ExecuteNonQueryAsync();
+        AppDomain.CurrentDomain.ProcessExit += (_, _) => DropTemplate(adminConnectionString, name);
+        return name;
+    }
+
+    private static async Task DropStaleTemplatesAsync(string adminConnectionString) {
+        await using var admin = new NpgsqlConnection(adminConnectionString);
+        await admin.OpenAsync();
+        await using var list = new NpgsqlCommand(
+            "SELECT datname FROM pg_database WHERE datname LIKE @prefix AND datname NOT LIKE @current",
+            admin);
+        list.Parameters.AddWithValue("prefix", TemplatePrefix + "%");
+        list.Parameters.AddWithValue("current", $"%\\_{Environment.ProcessId}");
+        var stale = new List<string>();
+        await using (var reader = await list.ExecuteReaderAsync()) {
+            while (await reader.ReadAsync()) {
+                stale.Add(reader.GetString(0));
             }
-            return database;
-        } catch {
-            await database.DisposeAsync();
-            throw;
+        }
+
+        foreach (var name in stale.Where(name => !IsRunningProcess(name))) {
+            DropTemplate(adminConnectionString, name);
+        }
+    }
+
+    private static bool IsRunningProcess(string templateName) {
+        var suffix = templateName[(templateName.LastIndexOf('_') + 1)..];
+        if (!int.TryParse(suffix, out var processId)) {
+            return false;
+        }
+
+        try {
+            using var process = System.Diagnostics.Process.GetProcessById(processId);
+            return !process.HasExited;
+        } catch (ArgumentException) {
+            return false;
+        }
+    }
+
+    private static void DropTemplate(string adminConnectionString, string name) {
+        try {
+            using var admin = new NpgsqlConnection(adminConnectionString);
+            admin.Open();
+            using var command = new NpgsqlCommand(
+                $"ALTER DATABASE \"{name}\" WITH IS_TEMPLATE FALSE; DROP DATABASE IF EXISTS \"{name}\" WITH (FORCE)",
+                admin);
+            command.ExecuteNonQuery();
+        } catch (NpgsqlException) {
+            // Another run may be removing the same leftover template.
         }
     }
 
