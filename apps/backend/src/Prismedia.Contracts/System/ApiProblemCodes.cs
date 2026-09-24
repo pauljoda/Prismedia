@@ -167,6 +167,9 @@ public static class ApiProblemCodes {
     /// <summary>Problem code <c>invalid_entity</c>.</summary>
     public const string InvalidEntity = "invalid_entity";
 
+    /// <summary>A progress report is malformed for the work's declared consumption modalities.</summary>
+    public const string InvalidProgress = "invalid_progress";
+
     /// <summary>Problem code <c>invalid_entity_image_upload</c>.</summary>
     public const string InvalidEntityImageUpload = "invalid_entity_image_upload";
 

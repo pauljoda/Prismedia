@@ -204,6 +204,38 @@ public sealed class CapabilityProgress : EntityCapability {
         return true;
     }
 
+    /// <summary>
+    /// Marks the work finished without moving the cursor, for a completing signal whose position
+    /// does not place the cursor (for example audio outside any paired chapter).
+    /// </summary>
+    /// <returns><see langword="true"/> when completion was recorded.</returns>
+    public bool TryMarkCompleted(DateTimeOffset updatedAt) {
+        if (!AcceptsProgressSignal(updatedAt)) {
+            return false;
+        }
+
+        CompletedAt = updatedAt;
+        UpdatedAt = updatedAt;
+        ConsumedCount = Math.Max(ConsumedCount, Math.Max(0, Total));
+        return true;
+    }
+
+    /// <summary>
+    /// Starts consumed coverage and completion over without moving the cursor, for a start-over
+    /// signal whose position does not place the cursor.
+    /// </summary>
+    /// <returns><see langword="true"/> when coverage was reset.</returns>
+    public bool TryResetCoverage(DateTimeOffset updatedAt) {
+        if (!AcceptsProgressSignal(updatedAt)) {
+            return false;
+        }
+
+        CompletedAt = null;
+        ConsumedCount = 0;
+        UpdatedAt = updatedAt;
+        return true;
+    }
+
     private bool AcceptsProgressSignal(DateTimeOffset updatedAt) =>
         UpdatedAt is null || updatedAt >= UpdatedAt;
 

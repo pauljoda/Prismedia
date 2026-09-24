@@ -19,14 +19,14 @@ public sealed class EntityCapabilityServiceProgressTests {
         var repository = new FakeEntityWriteRepository(new CapabilityProgress());
         var service = new EntityCapabilityService(repository, new CanonicalEntityReadStub(), new TestProgressTopologyResolver());
 
-        var result = await service.UpdateProgressAsync(
-            BookId, BookId, ProgressUnit.Cfi, 1, 10000, ReaderMode.Paged,
-            completed: null, reset: false, location: null,
-            activitySeconds: null, activityKind: ConsumptionActivityKind.Listening,
-            CancellationToken.None,
-            listening: new BookListeningPositionRequest(Guid.NewGuid(), null, 10));
+        var result = await service.ReportProgressAsync(
+            BookId,
+            new EntityProgressReport(
+                Modality: ConsumptionModality.Listening,
+                Listening: new ListeningPositionRequest(Guid.NewGuid(), null, 10)),
+            CancellationToken.None);
 
-        Assert.Null(result);
+        Assert.Equal(EntityProgressReportStatus.NotFound, result.Status);
         Assert.Null(repository.SavedEntity);
         Assert.Null(repository.Book.Progress?.CheckpointFor(ConsumptionModality.Listening));
     }

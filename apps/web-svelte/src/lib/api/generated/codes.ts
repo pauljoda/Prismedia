@@ -1899,6 +1899,7 @@ export const PROBLEM_CODE = {
   invalidEntityMetadataPatch: "invalid_entity_metadata_patch",
   invalidOpdsRequest: "invalid_opds_request",
   invalidPath: "invalid_path",
+  invalidProgress: "invalid_progress",
   invalidUpload: "invalid_upload",
   lastAdminRequired: "last_admin_required",
   libraryRootPathConflict: "library_root_path_conflict",

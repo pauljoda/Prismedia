@@ -178,6 +178,10 @@ public sealed partial class WorkAlignment {
 
     #region Actions - Location
 
+    /// <summary>Whether <paramref name="markerId"/> still identifies an audio chapter window on the track.</summary>
+    public bool HasAudioWindow(Guid trackEntityId, Guid markerId) =>
+        Rows.Any(row => row.Audio?.Identifies(trackEntityId, markerId) == true);
+
     private AnchoredPosition Locate(ProgressCheckpoint checkpoint) =>
         checkpoint.Definition.AddressesByOffset ? LocateListening(checkpoint) : LocateReading(checkpoint);
 
