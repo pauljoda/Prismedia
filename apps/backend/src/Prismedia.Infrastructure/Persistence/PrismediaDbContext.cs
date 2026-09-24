@@ -7,13 +7,7 @@ namespace Prismedia.Infrastructure.Persistence;
 /// Entity Framework context for the Prismedia persistence model.
 /// </summary>
 public sealed class PrismediaDbContext : DbContext {
-    /// <summary>
-    /// Creates the context with provider-specific options supplied by dependency injection.
-    /// </summary>
-    /// <param name="options">EF Core context options, including the PostgreSQL connection and provider configuration.</param>
-    public PrismediaDbContext(DbContextOptions<PrismediaDbContext> options)
-        : base(options) {
-    }
+    #region Variables
 
     public DbSet<EntityKindRow> EntityKinds => Set<EntityKindRow>();
 
@@ -60,6 +54,8 @@ public sealed class PrismediaDbContext : DbContext {
     public DbSet<EntityPageEntryRow> EntityPageEntries => Set<EntityPageEntryRow>();
 
     public DbSet<UserEntityStateRow> UserEntityStates => Set<UserEntityStateRow>();
+
+    public DbSet<UserProgressCheckpointRow> UserProgressCheckpoints => Set<UserProgressCheckpointRow>();
 
     public DbSet<EntityConsumptionEventRow> EntityConsumptionEvents => Set<EntityConsumptionEventRow>();
 
@@ -205,6 +201,22 @@ public sealed class PrismediaDbContext : DbContext {
 
     public DbSet<MonitorRow> Monitors => Set<MonitorRow>();
 
+    #endregion
+
+    #region Constructors
+
+    /// <summary>
+    /// Creates the context with provider-specific options supplied by dependency injection.
+    /// </summary>
+    /// <param name="options">EF Core context options, including the PostgreSQL connection and provider configuration.</param>
+    public PrismediaDbContext(DbContextOptions<PrismediaDbContext> options)
+        : base(options) {
+    }
+
+    #endregion
+
+    #region Actions - Model
+
     protected override void OnModelCreating(ModelBuilder modelBuilder) {
         modelBuilder.ConfigureBaseEntityModel();
         modelBuilder.ConfigureEntityRelationshipModel();
@@ -238,4 +250,6 @@ public sealed class PrismediaDbContext : DbContext {
                 .IsRowVersion();
         }
     }
+
+    #endregion
 }

@@ -1,5 +1,6 @@
-using Prismedia.Contracts.Entities;
+using Prismedia.Application.Books;
 using Prismedia.Application.Playback;
+using Prismedia.Contracts.Entities;
 using Prismedia.Domain.Capabilities;
 using Prismedia.Domain.Entities;
 
@@ -16,13 +17,7 @@ namespace Prismedia.Application.Entities;
 /// identifier.
 /// </summary>
 public sealed partial class EntityCapabilityService {
-    private readonly IEntityWriteRepository _entities;
-    private readonly IEntityReadService _entityReads;
-    private readonly IEntityProgressTopologyResolver _progressTopology;
-    private readonly IEntityVisibilityChecker? _visibility;
-    private readonly IConsumptionEventStore _consumptionEvents;
-    private readonly IConsumptionActivityStore _consumptionActivities;
-    private readonly TimeProvider _timeProvider;
+    #region Static Variables
 
     /// <summary>
     /// Maximum active duration accepted from one reader/player heartbeat. This bounds time inflation
@@ -33,10 +28,46 @@ public sealed partial class EntityCapabilityService {
     /// <summary>Largest real-world wall-clock offset accepted for daily buckets.</summary>
     private const int MaxUtcOffsetMinutes = 16 * 60;
 
+    /// <summary>Fraction of the runtime below which an item is treated as not started.</summary>
+    private const double StartedFraction = 0.05;
+
+    /// <summary>Fraction of a video runtime at or above which the item is treated as watched.</summary>
+    private const double VideoWatchedFraction = 0.90;
+
+    /// <summary>Maximum optimistic-concurrency retries for a single user-state mutation.</summary>
+    private const int MaxConcurrencyRetries = 4;
+
+    #endregion
+
+    #region Variables
+
+    private readonly IEntityWriteRepository _entities;
+    private readonly IEntityReadService _entityReads;
+    private readonly IEntityProgressTopologyResolver _progressTopology;
+    private readonly IEntityVisibilityChecker? _visibility;
+    private readonly IConsumptionEventStore _consumptionEvents;
+    private readonly IConsumptionActivityStore _consumptionActivities;
+    private readonly IWorkAlignmentReader? _workAlignments;
+    private readonly TimeProvider _timeProvider;
+
+    #endregion
+
+    #region Constructors
+
     /// <summary>
     /// Creates the service over the entity write port.
     /// </summary>
     /// <param name="entities">Entity write repository implemented by Infrastructure.</param>
+    /// <param name="entityReads">Entity document reads used to answer mutations.</param>
+    /// <param name="progressTopology">Declared progress-owner and cursor resolution.</param>
+    /// <param name="visibility">Library visibility guard; null trusts every Entity.</param>
+    /// <param name="consumptionEvents">Consumption event staging.</param>
+    /// <param name="timeProvider">Clock for accepted signals.</param>
+    /// <param name="consumptionActivities">Daily activity staging.</param>
+    /// <param name="workAlignments">
+    /// Reading/listening alignment used to place the cursor from listening positions; without it a
+    /// listening report records its checkpoint and leaves the cursor alone.
+    /// </param>
     public EntityCapabilityService(
         IEntityWriteRepository entities,
         IEntityReadService entityReads,
@@ -44,15 +75,21 @@ public sealed partial class EntityCapabilityService {
         IEntityVisibilityChecker? visibility = null,
         IConsumptionEventStore? consumptionEvents = null,
         TimeProvider? timeProvider = null,
-        IConsumptionActivityStore? consumptionActivities = null) {
+        IConsumptionActivityStore? consumptionActivities = null,
+        IWorkAlignmentReader? workAlignments = null) {
         _entities = entities;
         _entityReads = entityReads;
         _progressTopology = progressTopology;
         _visibility = visibility;
         _consumptionEvents = consumptionEvents ?? NullConsumptionEventStore.Instance;
         _consumptionActivities = consumptionActivities ?? NullConsumptionActivityStore.Instance;
+        _workAlignments = workAlignments;
         _timeProvider = timeProvider ?? TimeProvider.System;
     }
+
+    #endregion
+
+    #region Actions - User State
 
     /// <summary>
     /// Sets or clears the entity's user rating.
@@ -82,12 +119,6 @@ public sealed partial class EntityCapabilityService {
         }, new EntityMutableStateChange(
             userOpinionChanged: isFavorite.HasValue,
             curationFlagsChanged: isNsfw.HasValue || isOrganized.HasValue), cancellationToken);
-
-    /// <summary>Fraction of the runtime below which an item is treated as not started.</summary>
-    private const double StartedFraction = 0.05;
-
-    /// <summary>Fraction of a video runtime at or above which the item is treated as watched.</summary>
-    private const double VideoWatchedFraction = 0.90;
 
     /// <summary>
     /// Updates timed resume and consumption state using canonical Prismedia thresholds so all
@@ -432,262 +463,9 @@ public sealed partial class EntityCapabilityService {
         }, cancellationToken, normalizedSessionId);
     }
 
-    private async Task<Guid?> UpdateProgressOwnerAsync(
-        Guid id,
-        Guid currentEntityId,
-        ProgressUnit unit,
-        int index,
-        int total,
-        ReaderMode? mode,
-        bool? completed,
-        bool reset,
-        string? location,
-        double? activitySeconds,
-        ConsumptionActivityKind? activityKind,
-        int? utcOffsetMinutes,
-        CancellationToken cancellationToken,
-        BookListeningPositionRequest? listening) {
-        // A reader heartbeat is one action even if it races another client. Keep its timestamp
-        // stable while every retry reloads topology and latest-cursor state from the database.
-        var occurredAt = _timeProvider.GetUtcNow();
-        return await ExecuteWriteAttemptAsync(
-            attemptCancellationToken => UpdateProgressOwnerAttemptAsync(
-                id,
-                currentEntityId,
-                unit,
-                index,
-                total,
-                mode,
-                completed,
-                reset,
-                location,
-                activitySeconds,
-                activityKind,
-                utcOffsetMinutes,
-                occurredAt,
-                attemptCancellationToken,
-                listening),
-            cancellationToken);
-    }
+    #endregion
 
-    private async Task<Guid?> UpdateProgressOwnerAttemptAsync(
-        Guid id,
-        Guid currentEntityId,
-        ProgressUnit unit,
-        int index,
-        int total,
-        ReaderMode? mode,
-        bool? completed,
-        bool reset,
-        string? location,
-        double? activitySeconds,
-        ConsumptionActivityKind? activityKind,
-        int? utcOffsetMinutes,
-        DateTimeOffset occurredAt,
-        CancellationToken cancellationToken,
-        BookListeningPositionRequest? listening) {
-        // Progress ownership is derived from the requested entity only. A cursor is data within
-        // that owner tree; it must never be allowed to redirect this mutation to another work.
-        if (_visibility is not null &&
-            (!await _visibility.IsVisibleAsync(id, cancellationToken) ||
-             !await _visibility.IsVisibleAsync(currentEntityId, cancellationToken))) {
-            return null;
-        }
-
-        var owner = await _progressTopology.ResolveOwnerAsync(id, cancellationToken);
-        if (owner is null) {
-            return null;
-        }
-        if (_visibility is not null && !await _visibility.IsVisibleAsync(owner.OwnerId, cancellationToken)) {
-            return null;
-        }
-
-        var requested = await _entities.FindShallowAsync(id, cancellationToken);
-        if (requested is null) {
-            return null;
-        }
-
-        var proposedCursor = await _progressTopology.ResolveCursorAsync(
-            owner.OwnerId,
-            currentEntityId,
-            cancellationToken);
-        if (proposedCursor is null) {
-            return null;
-        }
-
-        var entity = owner.OwnerId == requested.Id
-            ? requested
-            : await _entities.FindShallowAsync(owner.OwnerId, cancellationToken);
-        if (entity is null) {
-            return null;
-        }
-
-        if (!entity.Definition.SupportsDefaultCapability<CapabilityProgress>()) {
-            return null;
-        }
-
-        if (listening is not null) {
-            if (entity.Kind != EntityKind.Book ||
-                !double.IsFinite(listening.OffsetSeconds) || listening.OffsetSeconds < 0 ||
-                _visibility is not null && !await _visibility.IsVisibleAsync(listening.TrackEntityId, cancellationToken)) {
-                return null;
-            }
-            var track = await _entities.FindShallowAsync(listening.TrackEntityId, cancellationToken);
-            if (track?.Kind != EntityKind.AudioTrack || track.ParentEntityId != entity.Id) {
-                return null;
-            }
-        }
-
-        var progress = GetOrAddDefaultCapability<CapabilityProgress>(entity)!;
-        var hasActivity = await AccumulateConsumptionActivityAsync(
-            entity,
-            activitySeconds,
-            activityKind,
-            utcOffsetMinutes,
-            occurredAt,
-            cancellationToken);
-
-        // Explicit "mark unread": clear completion in place, independent of the cursor. Bypasses the
-        // cursor mutation so a finished item can be reopened without losing the page
-        // position. It still obeys the latest-signal timestamp so an old client cannot reopen a
-        // newer completion.
-        if (!reset && completed == false) {
-            if (progress.TryMarkIncomplete(occurredAt) || hasActivity) {
-                await SaveProgressStateAsync(entity, cancellationToken);
-            }
-            return entity.Id;
-        }
-
-        var normalizedTotal = Math.Max(0, total);
-        var normalizedIndex = normalizedTotal == 0
-            ? 0
-            : Math.Clamp(index, 0, normalizedTotal - 1);
-        var proposedPosition = await _progressTopology.ResolveWorkPositionAsync(
-            owner.OwnerId,
-            currentEntityId,
-            normalizedIndex,
-            normalizedTotal,
-            cancellationToken);
-
-        var targetCursorId = proposedPosition?.CursorId ?? proposedCursor.NormalizedCursorId;
-        var normalizedLocation = string.IsNullOrWhiteSpace(location) ? null : location.Trim();
-
-        var consumedTotal = proposedPosition?.Total ?? normalizedTotal;
-        var consumedIndex = proposedPosition?.Index ?? normalizedIndex;
-        var consumedCount = reset
-            ? 0
-            : completed == true
-                ? consumedTotal
-                : Math.Max(progress.ConsumedCount, consumedTotal > 0 ? consumedIndex + 1 : 0);
-
-        var retainedCheckpoint = false;
-        if (entity.Kind == EntityKind.Book) {
-            if (listening is not null) {
-                retainedCheckpoint = progress.RecordListening(new BookListeningCheckpoint(
-                    listening.TrackEntityId,
-                    listening.MarkerId,
-                    listening.OffsetSeconds,
-                    targetCursorId,
-                    unit,
-                    normalizedIndex,
-                    normalizedTotal,
-                    occurredAt));
-            } else if (activityKind != ConsumptionActivityKind.Listening) {
-                retainedCheckpoint = progress.RecordReading(new BookReadingCheckpoint(
-                    targetCursorId,
-                    unit,
-                    normalizedIndex,
-                    normalizedTotal,
-                    mode,
-                    normalizedLocation,
-                    occurredAt));
-            }
-        }
-
-        // Explicit start-over resets coverage; ordinary progress always follows the most recent
-        // accepted cursor even when it moved backward.
-        if (reset) {
-            progress.TryMarkIncomplete(occurredAt);
-            if (progress.TryMoveTo(
-                    targetCursorId,
-                    unit,
-                    normalizedIndex,
-                    normalizedTotal,
-                    mode,
-                    occurredAt,
-                    normalizedLocation,
-                    consumedCount: 0) || retainedCheckpoint || hasActivity) {
-                await SaveProgressStateAsync(entity, cancellationToken);
-            }
-            return entity.Id;
-        }
-
-        if (!progress.TryMoveTo(
-                targetCursorId,
-                unit,
-                normalizedIndex,
-                normalizedTotal,
-                mode,
-                occurredAt,
-                normalizedLocation,
-                completed: completed == true,
-                consumedCount: consumedCount)) {
-            if (retainedCheckpoint || hasActivity) {
-                await SaveProgressStateAsync(entity, cancellationToken);
-            }
-            return entity.Id;
-        }
-
-        ConsumptionEventAppend? completedEvent = null;
-        if (completed == true) {
-            var consumption = GetOrAddDefaultCapability<CapabilityConsumption>(entity);
-            if (consumption is not null) {
-                consumption.RecordCompletedOccurrence(occurredAt);
-                completedEvent = CompletedEvent(entity, occurredAt, positionSeconds: null, durationSeconds: null);
-            }
-        }
-
-        if (completedEvent is not null) {
-            await _consumptionEvents.StageAsync(completedEvent, cancellationToken);
-        }
-        await SaveProgressStateAsync(entity, cancellationToken);
-
-        return entity.Id;
-    }
-
-    private async Task<bool> AccumulateConsumptionActivityAsync(
-        Entity entity,
-        double? activitySeconds,
-        ConsumptionActivityKind? activityKind,
-        int? utcOffsetMinutes,
-        DateTimeOffset occurredAt,
-        CancellationToken cancellationToken) {
-        if (entity.Definition.Engagement.Mode == EntityEngagementMode.None ||
-            BoundActivitySeconds(activitySeconds) is not { } boundedSeconds) {
-            return false;
-        }
-
-        var consumption = GetOrAddDefaultCapability<CapabilityConsumption>(entity);
-        if (consumption is null) {
-            return false;
-        }
-
-        consumption.AccumulateActiveDuration(TimeSpan.FromSeconds(boundedSeconds), occurredAt);
-        await _consumptionActivities.StageAsync(new ConsumptionActivityAppend(
-            entity.Id,
-            activityKind ?? entity.Definition.Engagement.DefaultActivityKind ?? ConsumptionActivityKind.Reading,
-            ActivityDate(occurredAt, utcOffsetMinutes),
-            boundedSeconds),
-            cancellationToken);
-        return true;
-    }
-
-    private Task SaveProgressStateAsync(Entity entity, CancellationToken cancellationToken) =>
-        _entities.SaveMutableStateAsync(
-            entity,
-            new EntityMutableStateChange(
-                changedCapabilityTypes: [typeof(CapabilityProgress), typeof(CapabilityConsumption)]),
-            cancellationToken);
+    #region Actions - Markers
 
     /// <summary>
     /// Appends a new marker to the entity's marker capability.
@@ -737,8 +515,9 @@ public sealed partial class EntityCapabilityService {
             new EntityMutableStateChange(changedCapabilityTypes: [typeof(CapabilityMarkers)]),
             cancellationToken);
 
-    /// <summary>Maximum optimistic-concurrency retries for a single user-state mutation.</summary>
-    private const int MaxConcurrencyRetries = 4;
+    #endregion
+
+    #region Actions - Mutation Helpers
 
     /// <summary>
     /// Executes one complete user-state mutation attempt. The callback must load fresh state and
@@ -959,4 +738,5 @@ public sealed partial class EntityCapabilityService {
             new(true, consumptionEvent, activity);
     }
 
+    #endregion
 }

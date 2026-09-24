@@ -41,21 +41,6 @@ public sealed class UserEntityStateRow {
     /// </summary>
     public DateTimeOffset? ProgressUpdatedAt { get; set; }
     public int ProgressConsumedCount { get; set; }
-    public Guid? ReadingCurrentEntityId { get; set; }
-    public string? ReadingUnit { get; set; }
-    public int? ReadingIndex { get; set; }
-    public int? ReadingTotal { get; set; }
-    public string? ReadingMode { get; set; }
-    public string? ReadingLocation { get; set; }
-    public DateTimeOffset? ReadingUpdatedAt { get; set; }
-    public Guid? ListeningTrackEntityId { get; set; }
-    public Guid? ListeningMarkerId { get; set; }
-    public double? ListeningOffsetSeconds { get; set; }
-    public Guid? ListeningCurrentEntityId { get; set; }
-    public string? ListeningUnit { get; set; }
-    public int? ListeningIndex { get; set; }
-    public int? ListeningTotal { get; set; }
-    public DateTimeOffset? ListeningUpdatedAt { get; set; }
     public DateTimeOffset UpdatedAt { get; set; }
 }
 

@@ -6,6 +6,7 @@
  */
 import type { MusicPlayerContextAlbumCoverUrls } from './musicPlayerContextAlbumCoverUrls';
 import type { MusicPlayerContextPlaybackOwnerEntityKind } from './musicPlayerContextPlaybackOwnerEntityKind';
+import type { MusicPlayerContextProgressModality } from './musicPlayerContextProgressModality';
 import type { PlaybackProgressMapping } from './playbackProgressMapping';
 
 export interface MusicPlayerContext {
@@ -30,4 +31,5 @@ export interface MusicPlayerContext {
   progressMappings?: PlaybackProgressMapping[] | null;
   preservesQueueOrder?: boolean;
   supportsPlaybackRate?: boolean;
+  progressModality?: MusicPlayerContextProgressModality;
 }

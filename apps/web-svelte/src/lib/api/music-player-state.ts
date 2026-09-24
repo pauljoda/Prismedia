@@ -80,7 +80,7 @@ function fromResponse(response: MusicPlayerStateResponse): RestoredMusicPlayerSt
           playbackOwnerEntityId: response.context.playbackOwnerEntityId,
           playbackOwnerTitle: response.context.playbackOwnerTitle,
           playbackOwnerEntityKind: response.context.playbackOwnerEntityKind,
-          progressMappings: response.context.progressMappings,
+          progressModality: response.context.progressModality ?? null,
           preservesQueueOrder: response.context.preservesQueueOrder,
           supportsPlaybackRate: response.context.supportsPlaybackRate,
         }
@@ -112,7 +112,7 @@ function toRequest(state: PersistMusicPlayerState): UpdateMusicPlayerStateReques
           playbackOwnerEntityId: state.context.playbackOwnerEntityId ?? null,
           playbackOwnerTitle: state.context.playbackOwnerTitle ?? null,
           playbackOwnerEntityKind: state.context.playbackOwnerEntityKind ?? undefined,
-          progressMappings: state.context.progressMappings ?? null,
+          progressModality: state.context.progressModality ?? undefined,
           preservesQueueOrder: state.context.preservesQueueOrder ?? false,
           supportsPlaybackRate: state.context.supportsPlaybackRate ?? false,
         }

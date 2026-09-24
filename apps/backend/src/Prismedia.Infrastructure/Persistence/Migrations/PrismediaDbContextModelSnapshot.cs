@@ -5172,39 +5172,6 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("last_active_at");
 
-                    b.Property<Guid?>("ListeningCurrentEntityId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("listening_current_entity_id");
-
-                    b.Property<int?>("ListeningIndex")
-                        .HasColumnType("integer")
-                        .HasColumnName("listening_index");
-
-                    b.Property<Guid?>("ListeningMarkerId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("listening_marker_id");
-
-                    b.Property<double?>("ListeningOffsetSeconds")
-                        .HasColumnType("double precision")
-                        .HasColumnName("listening_offset_seconds");
-
-                    b.Property<int?>("ListeningTotal")
-                        .HasColumnType("integer")
-                        .HasColumnName("listening_total");
-
-                    b.Property<Guid?>("ListeningTrackEntityId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("listening_track_entity_id");
-
-                    b.Property<string>("ListeningUnit")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("listening_unit");
-
-                    b.Property<DateTimeOffset?>("ListeningUpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("listening_updated_at");
-
                     b.Property<DateTimeOffset?>("ProgressCompletedAt")
                         .HasColumnType("timestamp with time zone")
                         .HasColumnName("progress_completed_at");
@@ -5248,36 +5215,6 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                         .HasColumnType("integer")
                         .HasColumnName("rating_value");
 
-                    b.Property<Guid?>("ReadingCurrentEntityId")
-                        .HasColumnType("uuid")
-                        .HasColumnName("reading_current_entity_id");
-
-                    b.Property<int?>("ReadingIndex")
-                        .HasColumnType("integer")
-                        .HasColumnName("reading_index");
-
-                    b.Property<string>("ReadingLocation")
-                        .HasColumnType("text")
-                        .HasColumnName("reading_location");
-
-                    b.Property<string>("ReadingMode")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("reading_mode");
-
-                    b.Property<int?>("ReadingTotal")
-                        .HasColumnType("integer")
-                        .HasColumnName("reading_total");
-
-                    b.Property<string>("ReadingUnit")
-                        .HasMaxLength(64)
-                        .HasColumnType("character varying(64)")
-                        .HasColumnName("reading_unit");
-
-                    b.Property<DateTimeOffset?>("ReadingUpdatedAt")
-                        .HasColumnType("timestamp with time zone")
-                        .HasColumnName("reading_updated_at");
-
                     b.Property<double>("ResumeSeconds")
                         .HasColumnType("double precision")
                         .HasColumnName("resume_seconds");
@@ -5310,8 +5247,6 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
 
                     b.ToTable("user_entity_states", null, t =>
                         {
-                            t.HasCheckConstraint("ck_user_entity_states_book_checkpoint_bounds", "(reading_index IS NULL OR reading_index >= 0) AND (reading_total IS NULL OR reading_total >= 0) AND (listening_index IS NULL OR listening_index >= 0) AND (listening_total IS NULL OR listening_total >= 0) AND (listening_offset_seconds IS NULL OR listening_offset_seconds >= 0)");
-
                             t.HasCheckConstraint("ck_user_entity_states_progress_bounds", "progress_index >= 0 AND progress_total >= 0");
                         });
                 });
@@ -5335,6 +5270,74 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                     b.HasIndex("LibraryRootId");
 
                     b.ToTable("user_library_access", (string)null);
+                });
+
+            modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.UserProgressCheckpointRow", b =>
+                {
+                    b.Property<Guid>("UserId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("user_id");
+
+                    b.Property<Guid>("EntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("entity_id");
+
+                    b.Property<string>("Modality")
+                        .HasMaxLength(32)
+                        .HasColumnType("character varying(32)")
+                        .HasColumnName("modality");
+
+                    b.Property<int>("Index")
+                        .HasColumnType("integer")
+                        .HasColumnName("index");
+
+                    b.Property<string>("Location")
+                        .HasColumnType("text")
+                        .HasColumnName("location");
+
+                    b.Property<Guid?>("MarkerId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("marker_id");
+
+                    b.Property<string>("Mode")
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("mode");
+
+                    b.Property<double?>("OffsetSeconds")
+                        .HasColumnType("double precision")
+                        .HasColumnName("offset_seconds");
+
+                    b.Property<Guid>("PositionEntityId")
+                        .HasColumnType("uuid")
+                        .HasColumnName("position_entity_id");
+
+                    b.Property<int>("Total")
+                        .HasColumnType("integer")
+                        .HasColumnName("total");
+
+                    b.Property<string>("Unit")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character varying(64)")
+                        .HasColumnName("unit");
+
+                    b.Property<DateTimeOffset>("UpdatedAt")
+                        .HasColumnType("timestamp with time zone")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("UserId", "EntityId", "Modality");
+
+                    b.HasIndex("MarkerId");
+
+                    b.HasIndex("PositionEntityId");
+
+                    b.ToTable("user_progress_checkpoints", null, t =>
+                        {
+                            t.HasCheckConstraint("ck_user_progress_checkpoints_bounds", "\"index\" >= 0 AND total >= 0 AND \"index\" <= total AND (offset_seconds IS NULL OR offset_seconds >= 0)");
+
+                            t.HasCheckConstraint("ck_user_progress_checkpoints_offset", "(modality IN ('listening')) = (offset_seconds IS NOT NULL) AND (marker_id IS NULL OR offset_seconds IS NOT NULL)");
+                        });
                 });
 
             modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.UserRow", b =>
@@ -6460,6 +6463,26 @@ namespace Prismedia.Infrastructure.Persistence.Migrations
                     b.HasOne("Prismedia.Infrastructure.Persistence.Entities.UserRow", null)
                         .WithMany()
                         .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Prismedia.Infrastructure.Persistence.Entities.UserProgressCheckpointRow", b =>
+                {
+                    b.HasOne("Prismedia.Infrastructure.Persistence.Entities.EntityMarkerRow", null)
+                        .WithMany()
+                        .HasForeignKey("MarkerId")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("Prismedia.Infrastructure.Persistence.Entities.EntityRow", null)
+                        .WithMany()
+                        .HasForeignKey("PositionEntityId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("Prismedia.Infrastructure.Persistence.Entities.UserEntityStateRow", null)
+                        .WithMany()
+                        .HasForeignKey("UserId", "EntityId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
                 });

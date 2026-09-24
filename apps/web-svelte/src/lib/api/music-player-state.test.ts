@@ -21,7 +21,7 @@ vi.mock("$lib/entities/audio-track-items", () => ({
 }));
 
 import { fetchMusicPlayerState, saveMusicPlayerProgress, saveMusicPlayerState } from "./music-player-state";
-import { MUSIC_PLAYER_MINI_SIDE, MUSIC_PLAYER_REPEAT_MODE } from "$lib/api/generated/codes";
+import { CONSUMPTION_MODALITY, MUSIC_PLAYER_MINI_SIDE, MUSIC_PLAYER_REPEAT_MODE } from "$lib/api/generated/codes";
 
 describe("music player state API", () => {
   beforeEach(() => {
@@ -124,15 +124,7 @@ describe("music player state API", () => {
           playbackOwnerEntityId: "book-1",
           playbackOwnerTitle: "Project Hail Mary",
           playbackOwnerEntityKind: "book",
-          progressMappings: [{
-            itemId: "part-2",
-            currentEntityId: "book-1",
-            unit: "cfi",
-            startIndex: 2000,
-            endIndex: 4000,
-            total: 10000,
-            mode: "paged",
-          }],
+          progressModality: CONSUMPTION_MODALITY.listening,
           preservesQueueOrder: true,
           supportsPlaybackRate: true,
         },
@@ -145,7 +137,7 @@ describe("music player state API", () => {
       playbackOwnerEntityId: "book-1",
       playbackOwnerTitle: "Project Hail Mary",
       playbackOwnerEntityKind: "book",
-      progressMappings: [expect.objectContaining({ itemId: "part-2" })],
+      progressModality: CONSUMPTION_MODALITY.listening,
       preservesQueueOrder: true,
       supportsPlaybackRate: true,
     });
@@ -170,7 +162,7 @@ describe("music player state API", () => {
         playbackOwnerEntityId: "book-1",
         playbackOwnerTitle: "Project Hail Mary",
         playbackOwnerEntityKind: "book",
-        progressMappings: [expect.objectContaining({ itemId: "part-2" })],
+        progressModality: CONSUMPTION_MODALITY.listening,
         preservesQueueOrder: true,
         supportsPlaybackRate: true,
       }),

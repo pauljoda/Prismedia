@@ -29,10 +29,6 @@
   import { waveformForDisplay } from "./audio-waveform";
   import { ConsumptionActivityClock } from "$lib/entities/consumption-activity-clock";
   import {
-    audioProgressUpdateForItem,
-    resolvePlaybackProgressMappingForTime,
-  } from "$lib/player/audio-progress-mapping";
-  import {
     AUDIO_PLAYBACK_SAVE_EVENT,
     resolveAudioArtist,
     resolveAudioArtwork,
@@ -43,6 +39,7 @@
     AUDIO_PLAYBACK_DIAGNOSTIC_EVENT,
     AUDIO_PLAYBACK_PAUSE_SOURCE,
     CONSUMPTION_EVENT_KIND,
+    CONSUMPTION_MODALITY,
     ENTITY_KIND,
     MUSIC_PLAYER_MINI_SIDE,
     MUSIC_PLAYER_REPEAT_MODE,
@@ -116,7 +113,7 @@
   const preservesQueueOrder = $derived(ctx?.preservesQueueOrder === true);
   const supportsPlaybackRate = $derived(ctx?.supportsPlaybackRate === true);
   const hasMappedProgress = $derived(
-    Boolean(ctx?.playbackOwnerEntityId && ctx?.progressMappings?.length),
+    Boolean(ctx?.playbackOwnerEntityId && ctx?.progressModality === CONSUMPTION_MODALITY.listening),
   );
   const playbackOwnerHref = $derived(
     ctx?.playbackOwnerEntityId && ctx.playbackOwnerEntityKind
@@ -559,12 +556,6 @@
     const ownerId = ctx?.playbackOwnerEntityId;
     const track = activeTrack;
     if (!hasMappedProgress || !ownerId || !track) return;
-    const mapping = resolvePlaybackProgressMappingForTime(
-      ctx?.progressMappings ?? [],
-      track.id,
-      playback.currentTime,
-    );
-    if (!mapping) return;
     if (track.id !== lastMappedItemId) {
       lastMappedItemId = track.id;
       lastMappedProgressSeconds = null;
@@ -587,13 +578,18 @@
       : playing
         ? mappedProgressActivityClock.take()
         : null;
-    const update = audioProgressUpdateForItem(
-      mapping,
-      positionSeconds,
-      durationSeconds,
+    // Every heartbeat reports the exact physical position, paired chapter or not; the server keeps
+    // the listening checkpoint and places the owner's shared cursor from it.
+    const update = {
+      modality: CONSUMPTION_MODALITY.listening,
+      listening: {
+        trackEntityId: track.id,
+        markerId: null,
+        offsetSeconds: Math.max(0, positionSeconds),
+      },
+      completed: options.completed ? true : null,
       activitySeconds,
-      options.completed,
-    );
+    };
     // Preserve seek/pause/part-transition ordering. Parallel writes can resolve backwards and move
     // the owner cursor to an older position even though the browser emitted events in the right order.
     mappedProgressSave = mappedProgressSave

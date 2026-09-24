@@ -30,19 +30,23 @@ describe("BookCombinedProgressCard", () => {
     expect(onCombined).toHaveBeenCalledOnce();
   });
 
-  it("names the explicit start point when the current chapter has no audio", async () => {
+  it("explains an unaligned chapter instead of jumping to another one", async () => {
     const onCombined = vi.fn();
     render(BookCombinedProgressCard, {
       progressPercent: 5,
-      combinedActionLabel: "Start both at first paired chapter",
-      combinedExplanation: "Your current chapter has no paired audio. Starting both begins at Epigraphs.",
+      listenLabel: "Continue listening ≈",
+      listenHint: "Listening estimated from where you stopped reading.",
+      combinedLabel: "Read & listen",
+      combinedDisabled: true,
+      explanation: "“Epigraphs” has no matching audiobook chapter.",
       onRead: vi.fn(),
       onListen: vi.fn(),
       onCombined,
     });
 
-    expect(screen.getByText(/current chapter has no paired audio/)).toBeInTheDocument();
-    await fireEvent.click(screen.getByRole("button", { name: "Start both at first paired chapter" }));
-    expect(onCombined).toHaveBeenCalledOnce();
+    expect(screen.getByText(/has no matching audiobook chapter/)).toBeInTheDocument();
+    expect(screen.getByText(/estimated from where you stopped reading/)).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Read & listen" })).toBeDisabled();
+    expect(onCombined).not.toHaveBeenCalled();
   });
 });

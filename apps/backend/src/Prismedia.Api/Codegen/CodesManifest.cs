@@ -104,6 +104,7 @@ public sealed record AcquisitionProfileManifestEntry(
 /// <param name="SupportsManualManagement">Whether users may create and delete this kind directly.</param>
 /// <param name="ManualAcquisition">Definition-owned browser upload and replacement behavior.</param>
 /// <param name="EngagementMode">Completion/filter vocabulary exposed by the kind.</param>
+/// <param name="Modalities">Consumption modality codes that keep independent exact checkpoints.</param>
 /// <param name="SupportsRequests">Whether a committable request descriptor materializes this Entity kind.</param>
 /// <param name="EnumeratesIdentifyChildren">Whether this kind is an identify container whose local children are enumerated for cascade identify.</param>
 /// <param name="AcquisitionProfile">Definition-owned acquisition-profile policy, when the kind owns profiles.</param>
@@ -132,6 +133,7 @@ public sealed record EntityKindManifestEntry(
     bool SupportsManualManagement,
     EntityManualAcquisitionManifestEntry ManualAcquisition,
     string EngagementMode,
+    IReadOnlyList<string> Modalities,
     bool SupportsRequests,
     bool EnumeratesIdentifyChildren,
     AcquisitionProfileManifestEntry? AcquisitionProfile);
@@ -203,6 +205,8 @@ public sealed record CodesManifest(
     IReadOnlyList<MediaResolutionManifestEntry> MediaResolutionTiers,
     IReadOnlyDictionary<string, EntityKindLibraryRootManifestEntry> EntityKindLibraryRoots,
     IReadOnlyDictionary<string, IReadOnlyDictionary<string, IReadOnlyDictionary<string, bool>>> ClosedSetFacts) {
+    #region Actions - Build
+
     /// <summary>Reflects the current backend registries into a fresh manifest.</summary>
     public static CodesManifest Build() {
         var enums = BuildEnums();
@@ -376,6 +380,7 @@ public sealed record CodesManifest(
                     descriptor.ManualAcquisition.SupportsUpload,
                     descriptor.ManualAcquisition.SupportsReplacement),
                 descriptor.Engagement.Mode.ToCode(),
+                descriptor.Engagement.Modalities.Select(modality => modality.Modality.ToCode()).ToArray(),
                 requestableKinds.Contains(descriptor.Kind),
                 descriptor.Identification.EnumeratesChildren,
                 descriptor.AcquisitionProfile is { } acquisitionProfile
@@ -416,4 +421,6 @@ public sealed record CodesManifest(
             .Select(field => new ConstantEntry(field.Name, (string)field.GetRawConstantValue()!))
             .OrderBy(entry => entry.Name, StringComparer.Ordinal)
             .ToArray();
+
+    #endregion
 }

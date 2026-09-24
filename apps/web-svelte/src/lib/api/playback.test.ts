@@ -71,6 +71,7 @@ describe("playback API", () => {
           activitySeconds: 15,
           activityKind: "reading",
           utcOffsetMinutes: 0,
+          modality: null,
           listening: null,
         }),
       }),

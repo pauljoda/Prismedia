@@ -47,33 +47,44 @@ public sealed record ConsumptionEventCreateRequest(
     string? SessionId = null);
 
 /// <summary>
-/// Request body for recording non-time progress such as a reading cursor.
+/// Request body for recording progress. A reading or legacy report carries the cursor fields; a
+/// listening report carries the <paramref name="Modality"/> and <paramref name="Listening"/> position
+/// instead, and the server places the shared cursor from it.
 /// </summary>
-/// <param name="CurrentEntityId">Current child entity, such as a chapter identifier.</param>
-/// <param name="Unit">Unit being tracked, such as page or item.</param>
-/// <param name="Index">Zero-based position within the tracked unit.</param>
-/// <param name="Total">Total number of tracked units available.</param>
+/// <param name="CurrentEntityId">Current child entity, such as a chapter identifier. Required unless listening.</param>
+/// <param name="Unit">Unit being tracked, such as page or item. Required unless listening.</param>
+/// <param name="Index">Zero-based position within the tracked unit. Required unless listening.</param>
+/// <param name="Total">Total number of tracked units available. Required unless listening.</param>
 /// <param name="Mode">Optional reader/viewing mode associated with the progress.</param>
 /// <param name="Completed">When true, marks the progress complete; when false, clears completion in place. Independent of the cursor.</param>
-/// <param name="Reset">When true, resets the cursor and independent consumed coverage to the supplied start position and clears completion.</param>
+/// <param name="Reset">When true, resets the posting modality's position, the consumed coverage, and completion.</param>
 /// <param name="Location">Optional format-specific resume locator (e.g. an EPUB CFI) stored alongside the index.</param>
 /// <param name="ActivitySeconds">Optional active time since the client's preceding heartbeat.</param>
-/// <param name="ActivityKind">Viewing, listening, or reading mode for <paramref name="ActivitySeconds"/>.</param>
+/// <param name="ActivityKind">
+/// Viewing, listening, or reading mode for <paramref name="ActivitySeconds"/>. Ignored when
+/// <paramref name="Modality"/> is given, because the modality owns its activity bucket.
+/// </param>
 /// <param name="UtcOffsetMinutes">Client wall-clock offset used to choose the daily activity bucket.</param>
-/// <param name="Listening">Exact physical audiobook position when this Book update came from playback.</param>
+/// <param name="Modality">
+/// Consumption modality that produced the report, for kinds that keep per-modality checkpoints.
+/// Omitted by older clients; the server then infers it from <paramref name="Listening"/> or
+/// <paramref name="ActivityKind"/>.
+/// </param>
+/// <param name="Listening">Exact physical audio position; required for listening reports.</param>
 public sealed record EntityProgressUpdateRequest(
-    Guid CurrentEntityId,
-    ProgressUnit Unit,
-    int Index,
-    int Total,
-    ReaderMode? Mode,
-    bool? Completed,
+    Guid? CurrentEntityId = null,
+    ProgressUnit? Unit = null,
+    int? Index = null,
+    int? Total = null,
+    ReaderMode? Mode = null,
+    bool? Completed = null,
     bool Reset = false,
     string? Location = null,
     double? ActivitySeconds = null,
     ConsumptionActivityKind? ActivityKind = null,
     int? UtcOffsetMinutes = null,
-    BookListeningPositionRequest? Listening = null);
+    ConsumptionModality? Modality = null,
+    ListeningPositionRequest? Listening = null);
 
 /// <summary>
 /// Request body for creating or updating a timeline marker.

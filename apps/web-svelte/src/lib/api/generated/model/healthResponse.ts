@@ -8,4 +8,5 @@
 export interface HealthResponse {
   status: string;
   runtime: string;
+  version: string;
 }
