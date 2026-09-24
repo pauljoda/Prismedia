@@ -43,6 +43,7 @@ public sealed class LibraryRootRow {
         LibraryRootMediaCapability.ScanBooks => ScanBooks,
         LibraryRootMediaCapability.ScanVideos => ScanVideos,
         LibraryRootMediaCapability.ScanAudio => ScanAudio,
+        LibraryRootMediaCapability.ScanImages => ScanImages,
         _ => false
     };
 }

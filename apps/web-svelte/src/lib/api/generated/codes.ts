@@ -1224,6 +1224,7 @@ export const LIBRARY_ROOT_MEDIA_CAPABILITY = {
   scanBooks: "scanBooks",
   scanVideos: "scanVideos",
   scanAudio: "scanAudio",
+  scanImages: "scanImages",
 } as const;
 
 export type LibraryRootMediaCapabilityCode = (typeof LIBRARY_ROOT_MEDIA_CAPABILITY)[keyof typeof LIBRARY_ROOT_MEDIA_CAPABILITY];

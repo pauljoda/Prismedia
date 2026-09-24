@@ -149,9 +149,10 @@ public sealed class RemoteTransferProcessor(IIntegrationTransferStore store, Int
                             throw new IntegrationInvocationException("Artifact delivery differs from the accepted output manifest.");
                         verified = await bytes.TransferAsync(new(operationId, artifact.Id, connection.Context.BaseUrl,
                             delivery with { SuggestedFileName = fileName },
-                            work.Plan.EntityKind == EntityKind.Gallery ? Math.Min(intent.MaximumBytes, IntegrationMediaFormats.MaximumImageBytes) : intent.MaximumBytes), cancellationToken);
+                            Math.Min(intent.MaximumBytes, IntegrationImportPolicy.For(work.Plan.EntityKind).Content.MaximumBytes)), cancellationToken);
                     }
-                    await verifier.VerifyAsync(verified, work.Plan.EntityKind == EntityKind.Gallery ? EntityKind.Image : work.Plan.EntityKind, cancellationToken);
+                    await verifier.VerifyAsync(verified,
+                        IntegrationImportPolicy.For(work.Plan.EntityKind).ContentKind ?? work.Plan.EntityKind, cancellationToken);
                     transfer.RecordVerified(artifact.Id, verified.SizeBytes, verified.Sha256);
                     await PersistAsync();
                 }
@@ -218,7 +219,7 @@ public sealed class RemoteTransferProcessor(IIntegrationTransferStore store, Int
     private static bool SupportsSingleArtifact(IReadOnlyList<IntegrationArtifact> artifacts, IntegrationTransferPlan plan, SubmitTransferInput intent) =>
         intent.ItemIds.Count == 1 && artifacts.Count == 1 && artifacts[0].Role == IntegrationArtifactRole.Content
         && artifacts[0].ItemId == intent.ItemIds[0] && artifacts[0].SizeBytes <= intent.MaximumBytes
-        && IntegrationMediaFormats.IsSupported(plan.EntityKind, artifacts[0].RelativePath);
+        && IntegrationImportPolicy.For(plan.EntityKind).AcceptsFileName(artifacts[0].RelativePath);
 
     private static TimeSpan PollDelay(DateTimeOffset? nextPollAfter) =>
         TimeSpan.FromSeconds(Math.Clamp((nextPollAfter - DateTimeOffset.UtcNow)?.TotalSeconds ?? 15, 5, 3600));

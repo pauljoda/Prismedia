@@ -7,6 +7,9 @@ namespace Prismedia.Application.Integrations;
 public sealed class IntegrationGalleryOutputSet {
     /// <summary>Maximum images imported as one finite gallery selection.</summary>
     public const int MaximumImages = 1000;
+
+    /// <summary>Import rules for each still image in a gallery.</summary>
+    private static IntegrationImportPolicy Member => IntegrationImportPolicy.For(EntityKind.Gallery).Content;
     /// <summary>Opaque group identity from the sealed executor manifest.</summary>
     public string GroupId { get; }
     /// <summary>Exact image outputs in their declared one-based order.</summary>
@@ -25,8 +28,8 @@ public sealed class IntegrationGalleryOutputSet {
             var artifact = ordered[index];
             if (artifact.ItemId != selectedItemId || artifact.GroupId != GroupId || artifact.Ordinal != index + 1
                 || artifact.Role != IntegrationArtifactRole.Content || !ids.Add(artifact.Id)
-                || !IntegrationMediaFormats.IsSupported(EntityKind.Image, artifact.RelativePath)
-                || artifact.SizeBytes <= 0 || artifact.SizeBytes > IntegrationMediaFormats.MaximumImageBytes
+                || !Member.AcceptsFileName(artifact.RelativePath)
+                || artifact.SizeBytes <= 0 || artifact.SizeBytes > Member.MaximumBytes
                 || artifact.SizeBytes > maximumBytes - total)
                 throw new ArgumentException("The gallery must contain only the selected item's complete ordered images within the accepted limits.");
             total += artifact.SizeBytes;

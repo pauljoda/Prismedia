@@ -67,7 +67,7 @@ public sealed class ExecutorAcquisitionServiceTests {
         var fixture = new Fixture(EntityKind.Gallery);
         await fixture.Service.AcquireAsync(fixture.Connection.State.Id, fixture.Request, default);
         Assert.Equal(1, fixture.AcceptedPlan!.Executor!.MaximumItems);
-        Assert.Equal(ExecutorAcquisitionService.MaximumPublicationBytes, fixture.AcceptedPlan.Executor.MaximumBytes);
+        Assert.Equal(IntegrationImportPolicy.PublicationByteLimit, fixture.AcceptedPlan.Executor.MaximumBytes);
         var nonrecursive = new Fixture(EntityKind.Gallery, recursive: false);
         await Assert.ThrowsAsync<ArgumentException>(() => nonrecursive.Service.AcquireAsync(nonrecursive.Connection.State.Id, nonrecursive.Request, default));
         Assert.Equal(0, nonrecursive.Creates);

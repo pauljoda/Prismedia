@@ -23,17 +23,18 @@ public sealed class CatalogAcquisitionService(IIntegrationTransferStore store, I
             return IntegrationTransferService.ToResponse(previous);
         }
         var selection = tokens.ReadSelection(connectionId, request.SelectionToken);
-        if (selection.EntityKind is not (EntityKind.Book or EntityKind.ComicInstallment or EntityKind.Image))
-            throw new ArgumentException("Direct catalog imports currently support books, comic installments, and still images.");
+        if (!IntegrationImportPolicy.Supports(selection.EntityKind) || !IntegrationImportPolicy.For(selection.EntityKind).AcceptsDirectFiles)
+            throw new ArgumentException("Direct catalog imports support only kinds that import as one exact file.");
+        var import = IntegrationImportPolicy.For(selection.EntityKind);
         var allowedRoots = await currentUser.GetAllowedLibraryRootIdsAsync(cancellationToken);
         var root = await roots.GetLibraryRootAsync(request.LibraryRootId, cancellationToken);
-        if (root is null || !IntegrationMediaFormats.SupportsRoot(selection.EntityKind, root) || allowedRoots is not null && !allowedRoots.Contains(root.Id))
+        if (root is null || !root.Accepts(import) || allowedRoots is not null && !allowedRoots.Contains(root.Id))
             throw new ArgumentException("Choose an accessible, enabled library that scans this media type.");
         var offer = await discovery.ResolveAsync(connectionId, request.SelectionToken, request.OfferId, cancellationToken);
-        if (!IntegrationMediaFormats.IsSupported(selection.EntityKind, offer.Delivery.SuggestedFileName))
-            throw new ArgumentException("This format cannot be imported. Choose an EPUB/PDF book, a CBZ comic, or a JPEG/PNG/WebP still image.");
-        if (selection.EntityKind == EntityKind.Image && offer.Delivery.ByteSize > IntegrationMediaFormats.MaximumImageBytes)
-            throw new ArgumentException("Choose an image no larger than 64 MiB.");
+        if (!import.AcceptsFileName(offer.Delivery.SuggestedFileName))
+            throw new ArgumentException($"This format cannot be imported here. Choose a {string.Join(", ", import.Extensions)} file.");
+        if (offer.Delivery.ByteSize > import.MaximumBytes)
+            throw new ArgumentException($"Choose a file no larger than {import.MaximumBytes / (1024 * 1024)} MiB.");
         var ownership = Fingerprint(new { connectionId, selection.ItemId, selection.EntityKind });
         var transfer = IntegrationTransfer.CreateSourceDownload(request.OperationId, connectionId);
         var plan = new IntegrationTransferPlan(offer.Publication.Title, selection.EntityKind, root.Id, Path.GetFullPath(root.Path), ownership, fingerprint,

@@ -6,7 +6,6 @@ namespace Prismedia.Application.Integrations;
 
 /// <summary>Validates bounded, exact source-preparation observations against the immutable accepted selection.</summary>
 internal static class SourceAcquisitionValidation {
-    internal const long MaximumPublicationBytes = 2L * 1024 * 1024 * 1024;
 
     internal static void Validate(SourceAcquisitionObservation observation, SourceSelection selection, string offerId,
         CatalogPublication? publication = null, CatalogOffer? offer = null) {
@@ -21,9 +20,9 @@ internal static class SourceAcquisitionValidation {
             new(selection.EntityKind, Limit: 1));
         var expectedAccess = SourceAcquisitionStateDefinition.For(observation.State).OfferAccess;
         if (observation.Offer.Access != expectedAccess || string.IsNullOrWhiteSpace(observation.Offer.MediaType)
-            || !IntegrationMediaFormats.IsSupportedMediaType(selection.EntityKind, observation.Offer.MediaType)
-            || observation.Offer.ByteSize > MaximumPublicationBytes
-            || selection.EntityKind == EntityKind.Image && observation.Offer.ByteSize > IntegrationMediaFormats.MaximumImageBytes
+            || !IntegrationImportPolicy.Supports(selection.EntityKind)
+            || !IntegrationImportPolicy.For(selection.EntityKind).AcceptsMediaType(observation.Offer.MediaType)
+            || observation.Offer.ByteSize > IntegrationImportPolicy.For(selection.EntityKind).MaximumBytes
             || publication is not null && !SamePublication(publication, observation.Publication)
             || offer is not null && (offer.Id != observation.Offer.Id || offer.MediaType != observation.Offer.MediaType
                 || offer.ByteSize != observation.Offer.ByteSize))

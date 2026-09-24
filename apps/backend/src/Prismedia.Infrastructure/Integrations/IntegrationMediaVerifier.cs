@@ -15,13 +15,13 @@ public sealed class IntegrationMediaVerifier : IIntegrationMediaVerifier {
     private const int MaximumEntries = 10000;
     private const long MaximumExpandedBytes = 2L * 1024 * 1024 * 1024;
     private const int MaximumXmlBytes = 2 * 1024 * 1024;
-    private const long MaximumImageBytes = 64L * 1024 * 1024;
     private static readonly XNamespace ContainerNamespace = "urn:oasis:names:tc:opendocument:xmlns:container";
     private static readonly XNamespace PackageNamespace = "http://www.idpf.org/2007/opf";
 
     /// <inheritdoc />
     public async Task VerifyAsync(VerifiedIntegrationArtifact artifact, EntityKind kind, CancellationToken cancellationToken) {
-        if (!IntegrationMediaFormats.IsSupported(kind, artifact.FileName)) throw new InvalidDataException("This media format cannot be imported.");
+        if (!IntegrationImportPolicy.Supports(kind) || !IntegrationImportPolicy.For(kind).AcceptsFileName(artifact.FileName))
+            throw new InvalidDataException("This media format cannot be imported.");
         cancellationToken.ThrowIfCancellationRequested();
         try {
             if (kind == EntityKind.Image) {
@@ -51,7 +51,7 @@ public sealed class IntegrationMediaVerifier : IIntegrationMediaVerifier {
 
     private static void ValidateImage(VerifiedIntegrationArtifact artifact, CancellationToken cancellationToken) {
         var file = new FileInfo(artifact.Path);
-        if (artifact.SizeBytes <= 0 || file.Length != artifact.SizeBytes || file.Length > IntegrationMediaFormats.MaximumImageBytes)
+        if (artifact.SizeBytes <= 0 || file.Length != artifact.SizeBytes || file.Length > IntegrationImportPolicy.For(EntityKind.Image).MaximumBytes)
             throw new InvalidDataException("The image exceeds its byte limit or differs from verified staging.");
         using var stream = File.OpenRead(artifact.Path);
         if (Path.GetExtension(artifact.FileName).Equals(".png", StringComparison.OrdinalIgnoreCase))
@@ -147,7 +147,7 @@ public sealed class IntegrationMediaVerifier : IIntegrationMediaVerifier {
         if (pages.Length == 0) throw new InvalidDataException("The comic archive has no readable image pages.");
         foreach (var page in pages) {
             cancellationToken.ThrowIfCancellationRequested();
-            if (page.Length > MaximumImageBytes) throw new InvalidDataException("A comic page exceeds the image byte limit.");
+            if (page.Length > IntegrationImportPolicy.For(EntityKind.Image).MaximumBytes) throw new InvalidDataException("A comic page exceeds the image byte limit.");
             using var stream = page.Open();
             using var codec = SKCodec.Create(stream);
             if (codec is null || codec.Info.Width <= 0 || codec.Info.Height <= 0 || (long)codec.Info.Width * codec.Info.Height > 100_000_000)

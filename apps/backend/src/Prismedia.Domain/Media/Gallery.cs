@@ -4,6 +4,7 @@ using ContractCapability = Prismedia.Contracts.Entities.EntityCapability;
 using CoverSelectionDocumentCapability = Prismedia.Contracts.Entities.CoverSelectionCapability;
 using GalleryMetadataDocumentCapability = Prismedia.Contracts.Entities.GalleryMetadataCapability;
 using ThumbnailMetaIcons = Prismedia.Contracts.Entities.EntityThumbnailMetaIcons;
+using MediaContentTypes = Prismedia.Contracts.Media.MediaContentTypes;
 
 namespace Prismedia.Domain.Media;
 
@@ -34,7 +35,17 @@ public sealed class GalleryEntityKindDefinition() : EntityKindDefinition<Gallery
         catalogVisibility: new(topLevelOnlySurfaces: EntityCatalogSurface.KindBrowse),
         libraryVisibility: EntityLibraryVisibilityPolicy.DirectRoot,
         supportsFileDeletion: true),
-    defaultCapabilities: static () => [new CapabilityCredits(), new CapabilityConsumption()]) {
+    defaultCapabilities: static () => [new CapabilityCredits(), new CapabilityConsumption()]),
+    IIntegrationImportKindDefinition {
+    /// <inheritdoc />
+    /// <remarks>A gallery arrives as an ordered set of still images in its own folder.</remarks>
+    public IntegrationImportPolicy IntegrationImport { get; } = new(
+        LibraryRootMediaCapability.ScanImages,
+        extensions: [],
+        mediaTypes: [],
+        requiresRecursiveRoot: true,
+        contentKind: EntityKind.Image);
+
     /// <inheritdoc />
     public override EntityProgressTopology ProgressTopology => EntityProgressTopology.None;
 

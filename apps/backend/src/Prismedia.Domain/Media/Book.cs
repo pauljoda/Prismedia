@@ -4,6 +4,7 @@ using BookMetadataDocumentCapability = Prismedia.Contracts.Entities.BookMetadata
 using ContractCapability = Prismedia.Contracts.Entities.EntityCapability;
 using ThumbnailMetaIcons = Prismedia.Contracts.Entities.EntityThumbnailMetaIcons;
 using ExternalIdProviders = Prismedia.Contracts.Entities.ExternalIdProviders;
+using MediaContentTypes = Prismedia.Contracts.Media.MediaContentTypes;
 
 namespace Prismedia.Domain.Media;
 
@@ -40,7 +41,14 @@ public sealed class BookEntityKindDefinition() : EntityKindDefinition<Book>(
         new CapabilityConsumption()
     ]),
     IAudioPlaybackOwnerKindDefinition,
-    IManagedFulfillmentKindDefinition {
+    IManagedFulfillmentKindDefinition,
+    IIntegrationImportKindDefinition {
+    /// <inheritdoc />
+    public IntegrationImportPolicy IntegrationImport { get; } = new(
+        LibraryRootMediaCapability.ScanBooks,
+        extensions: [".epub", ".pdf"],
+        mediaTypes: [MediaContentTypes.Epub, MediaContentTypes.Pdf]);
+
     /// <inheritdoc />
     public AudioPlaybackPolicy AudioPlaybackPolicy { get; } = new(
         EntityKind.AudioTrack,

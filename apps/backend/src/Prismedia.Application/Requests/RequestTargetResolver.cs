@@ -73,6 +73,7 @@ public sealed class RequestTargetResolver(
             LibraryRootMediaCapability.ScanBooks => root.ScanBooks,
             LibraryRootMediaCapability.ScanVideos => root.ScanVideos,
             LibraryRootMediaCapability.ScanAudio => root.ScanAudio,
+            LibraryRootMediaCapability.ScanImages => root.ScanImages,
             _ => false
         };
 }

@@ -1,3 +1,4 @@
+using Prismedia.Domain.Entities;
 using System.Security.Cryptography;
 using Prismedia.Application.Files;
 using Prismedia.Application.Integrations;
@@ -14,7 +15,7 @@ public sealed class IntegrationImportPlacement(ILibraryFileMutationGuard mutatio
         await using var protection = await mutations.EnterAsync([root.Path], cancellationToken);
         var rootPath = ValidateDestination(operationId, plan, root);
         var fileName = Path.GetFileName(artifact.RelativePath);
-        if (!IntegrationMediaFormats.IsSupported(plan.EntityKind, fileName)
+        if (!IntegrationImportPolicy.For(plan.EntityKind).AcceptsFileName(fileName)
             || artifact.SizeBytes <= 0 || artifact.Sha256 is not { Length: 64 } || !artifact.Sha256.All(Uri.IsHexDigit))
             throw new InvalidDataException("The accepted media file has no valid placement evidence.");
         var target = Path.Combine(rootPath, IntegrationPublicationNames.FileName(operationId, plan.Title, artifact.Id, fileName));
@@ -30,7 +31,7 @@ public sealed class IntegrationImportPlacement(ILibraryFileMutationGuard mutatio
         VerifiedIntegrationArtifact artifact, CancellationToken cancellationToken) {
         await using var protection = await mutations.EnterAsync([root.Path], cancellationToken);
         var rootPath = ValidateDestination(operationId, plan, root);
-        if (!IntegrationMediaFormats.IsSupported(plan.EntityKind, artifact.FileName)
+        if (!IntegrationImportPolicy.For(plan.EntityKind).AcceptsFileName(artifact.FileName)
             || artifact.SizeBytes <= 0 || artifact.Sha256 is not { Length: 64 } || !artifact.Sha256.All(Uri.IsHexDigit))
             throw new InvalidDataException("The media file has no valid placement evidence.");
         RejectLink(rootPath);
@@ -70,7 +71,7 @@ public sealed class IntegrationImportPlacement(ILibraryFileMutationGuard mutatio
 
     private static string ValidateDestination(Guid operationId, IntegrationTransferPlan plan, LibraryRootData root) {
         var rootPath = Path.GetFullPath(root.Path);
-        if (operationId == Guid.Empty || root.Id != plan.LibraryRootId || !IntegrationMediaFormats.SupportsRoot(plan.EntityKind, root)
+        if (operationId == Guid.Empty || root.Id != plan.LibraryRootId || !root.Accepts(IntegrationImportPolicy.For(plan.EntityKind))
             || !FileSystemPathComparison.Comparer.Equals(rootPath, Path.GetFullPath(plan.LibraryPath)) || !Directory.Exists(rootPath))
             throw new InvalidDataException("The accepted destination library is unavailable or has moved.");
         RejectLink(rootPath);

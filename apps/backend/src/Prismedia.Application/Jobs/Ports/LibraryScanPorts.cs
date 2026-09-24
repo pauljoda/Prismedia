@@ -586,7 +586,20 @@ public sealed record LibraryRootData(
     bool ScanBooks,
     bool IsNsfw,
     bool AutoIdentify = true,
-    bool IsReadOnly = false);
+    bool IsReadOnly = false) {
+    /// <summary>Whether this enabled, writable root can receive an import governed by <paramref name="policy"/>.</summary>
+    public bool Accepts(IntegrationImportPolicy policy) =>
+        Enabled && !IsReadOnly && Scans(policy.RootCapability) && (!policy.RequiresRecursiveRoot || Recursive);
+
+    /// <summary>Whether this root scans the media a library-root capability names.</summary>
+    public bool Scans(LibraryRootMediaCapability capability) => capability switch {
+        LibraryRootMediaCapability.ScanBooks => ScanBooks,
+        LibraryRootMediaCapability.ScanVideos => ScanVideos,
+        LibraryRootMediaCapability.ScanAudio => ScanAudio,
+        LibraryRootMediaCapability.ScanImages => ScanImages,
+        _ => false
+    };
+}
 
 public sealed record EntityTechnicalData(
     double? DurationSeconds,

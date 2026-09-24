@@ -15,7 +15,7 @@ public sealed class SourceTransferProcessorTests {
     public async Task ImageDownloadUsesTheImageByteBudgetAndRecordsExactImageOwnership() {
         var fixture = new Fixture(pendingDownload: true, kind: EntityKind.Image);
         await fixture.RunAsync();
-        Assert.Equal(IntegrationMediaFormats.MaximumImageBytes, fixture.Download!.MaximumBytes);
+        Assert.Equal(IntegrationImportPolicy.For(EntityKind.Image).MaximumBytes, fixture.Download!.MaximumBytes);
         Assert.Equal(IntegrationTransferPhase.Completed, fixture.State.Phase);
         Assert.Equal(fixture.EntityId, Assert.Single(Assert.Single(fixture.State.Imports!).EntityIds));
     }

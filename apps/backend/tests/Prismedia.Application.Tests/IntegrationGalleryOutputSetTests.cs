@@ -37,7 +37,7 @@ public sealed class IntegrationGalleryOutputSetTests {
             "unselected item" => pages[1] with { ItemId = "unselected" },
             "sidecar" => pages[1] with { Role = Enum.GetValues<IntegrationArtifactRole>().First(role => role != IntegrationArtifactRole.Content) },
             "unsupported image" => pages[1] with { RelativePath = "page.svg" },
-            "oversized image" => pages[1] with { SizeBytes = IntegrationMediaFormats.MaximumImageBytes + 1 },
+            "oversized image" => pages[1] with { SizeBytes = IntegrationImportPolicy.For(EntityKind.Image).MaximumBytes + 1 },
             _ => pages[1]
         };
         if (problem == "aggregate budget") limit = 199;

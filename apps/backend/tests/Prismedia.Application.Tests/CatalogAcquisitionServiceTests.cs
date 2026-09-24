@@ -58,7 +58,7 @@ public sealed class CatalogAcquisitionServiceTests {
     [Fact]
     public async Task DeclaredOversizedImageCannotCreateIntent() {
         var fixture = new Fixture();
-        fixture.Delivery = fixture.Delivery with { ByteSize = IntegrationMediaFormats.MaximumImageBytes + 1 };
+        fixture.Delivery = fixture.Delivery with { ByteSize = IntegrationImportPolicy.For(EntityKind.Image).MaximumBytes + 1 };
         await Assert.ThrowsAsync<ArgumentException>(() => fixture.AcquireAsync());
         Assert.Null(fixture.Stored);
     }

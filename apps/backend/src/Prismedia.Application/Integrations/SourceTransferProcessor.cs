@@ -10,7 +10,6 @@ namespace Prismedia.Application.Integrations;
 public sealed class SourceTransferProcessor(IIntegrationTransferStore store, CatalogDiscoveryService discovery,
     IntegrationConnectionAccess access, IIntegrationArtifactTransfer bytes, IIntegrationMediaVerifier verifier,
     IIntegrationImportPlacement placement, ILibraryScanRootPersistence roots, IImportedEntityMaterializer materializer) {
-    private const long MaximumPublicationBytes = 2L * 1024 * 1024 * 1024;
 
     /// <summary>Verifies, places, and materializes exact publication bytes, persisting evidence between each recoverable boundary.</summary>
     public async Task ProcessAsync(Guid operationId, JobContext context, CancellationToken cancellationToken) {
@@ -35,11 +34,12 @@ public sealed class SourceTransferProcessor(IIntegrationTransferStore store, Cat
                 }
                 var connection = await access.RequireAsync(transfer.State.ConnectionId, PluginCapability.AcquisitionSource,
                     IntegrationOperation.Resolve, work.Plan.EntityKind, cancellationToken);
-                if (!IntegrationMediaFormats.IsSupported(work.Plan.EntityKind, resolved.Delivery.SuggestedFileName))
+                var import = IntegrationImportPolicy.For(work.Plan.EntityKind);
+                if (!import.AcceptsFileName(resolved.Delivery.SuggestedFileName))
                     throw new InvalidDataException("The selected source changed to an unsupported publication format.");
                 var origin = IntegrationDeliveryOriginPolicy.RequireAllowedOrigin(connection.Manifest.Integration, connection.Context.BaseUrl, resolved.Delivery);
                 artifact = await bytes.TransferAsync(new(operationId, source.OfferId, origin,
-                    resolved.Delivery, work.Plan.EntityKind == EntityKind.Image ? IntegrationMediaFormats.MaximumImageBytes : MaximumPublicationBytes), cancellationToken);
+                    resolved.Delivery, import.MaximumBytes), cancellationToken);
                 await VerifyPublicationAsync(artifact, work.Plan.EntityKind, cancellationToken);
                 transfer.AcceptSourceArtifact(new(artifact.ArtifactId, source.Selection.ItemId, artifact.FileName,
                     resolved.Offer.MediaType ?? "application/octet-stream", artifact.SizeBytes, artifact.Sha256, IntegrationArtifactRole.Content));

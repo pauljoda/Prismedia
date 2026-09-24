@@ -14,7 +14,6 @@ public sealed class ExecutorAcquisitionService(IntegrationConnectionAccess acces
     ICurrentUserContext currentUser, IntegrationTransferService status) {
     private const int MaximumInspectedItems = 100;
     /// <summary>Enforced publication budget, independent of size estimates supplied by a remote source.</summary>
-    public const long MaximumPublicationBytes = 2L * 1024 * 1024 * 1024;
     private static readonly IntegrationOperation[] RequiredOperations = [IntegrationOperation.Submit, IntegrationOperation.FindSubmission,
         IntegrationOperation.GetJob, IntegrationOperation.ListArtifacts, IntegrationOperation.AuthorizeArtifact,
         IntegrationOperation.RenewRetention, IntegrationOperation.Acknowledge, IntegrationOperation.Cancel, IntegrationOperation.CancelSubmission];
@@ -55,10 +54,11 @@ public sealed class ExecutorAcquisitionService(IntegrationConnectionAccess acces
             ?? throw new ArgumentException("Choose an item from the inspected selection.");
         var allowed = await currentUser.GetAllowedLibraryRootIdsAsync(cancellationToken);
         var root = await roots.GetLibraryRootAsync(request.LibraryRootId, cancellationToken);
-        if (root is null || root.IsReadOnly || !IntegrationMediaFormats.SupportsRoot(selection.EntityKind, root) || allowed is not null && !allowed.Contains(root.Id))
+        var import = IntegrationImportPolicy.For(selection.EntityKind);
+        if (root is null || !root.Accepts(import) || allowed is not null && !allowed.Contains(root.Id))
             throw new ArgumentException("Choose an accessible, enabled library that scans the selected media type.");
         var intent = new SubmitTransferInput(request.OperationId, selection.Inspection.CanonicalUrl, selection.Inspection.SelectionId,
-            selection.Inspection.Revision, [item.Id], 1, selection.EntityKind == EntityKind.Image ? IntegrationMediaFormats.MaximumImageBytes : MaximumPublicationBytes);
+            selection.Inspection.Revision, [item.Id], 1, import.MaximumBytes);
         var plan = new IntegrationTransferPlan(item.Title, selection.EntityKind, root.Id, Path.GetFullPath(root.Path),
             Hash(new { connectionId, ItemId = item.Id, selection.EntityKind }), fingerprint, Executor: intent);
         await store.CreateAsync(IntegrationTransfer.Create(request.OperationId, connectionId, selection.InstanceId), plan, cancellationToken);

@@ -27,11 +27,11 @@ public sealed class SourceAcquisitionService(IIntegrationTransferStore store, ID
         }
 
         var selection = tokens.ReadSelection(connectionId, request.SelectionToken);
-        if (selection.EntityKind is not (EntityKind.Book or EntityKind.ComicInstallment or EntityKind.Image))
-            throw new ArgumentException("Source preparation currently supports books, comic installments, and still images.");
+        if (!IntegrationImportPolicy.Supports(selection.EntityKind) || !IntegrationImportPolicy.For(selection.EntityKind).AcceptsDirectFiles)
+            throw new ArgumentException("Source preparation supports only kinds that import as one exact file.");
         var allowedRoots = await currentUser.GetAllowedLibraryRootIdsAsync(cancellationToken);
         var root = await roots.GetLibraryRootAsync(request.LibraryRootId, cancellationToken);
-        if (root is null || !IntegrationMediaFormats.SupportsRoot(selection.EntityKind, root)
+        if (root is null || !root.Accepts(IntegrationImportPolicy.For(selection.EntityKind))
             || allowedRoots is not null && !allowedRoots.Contains(root.Id))
             throw new ArgumentException("Choose an accessible, enabled library that scans this media type.");
 
