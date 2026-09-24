@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Files;
 using Prismedia.Domain.Entities;
+using Prismedia.Domain.Integrations;
 using Prismedia.Infrastructure.Acquisition;
 
 namespace Prismedia.Infrastructure.Media.Persistence;
@@ -11,7 +12,7 @@ public sealed partial class LibraryScanPersistenceService {
         await _db.ManagedHoldings.AsNoTracking().Where(holding => holding.LibraryRootId == rootId
             && (holding.Kind == EntityKind.Movie || holding.Kind == EntityKind.VideoSeries)).Select(holding => holding.Id)
             .Union(_db.ManagedRequests.AsNoTracking().Where(request => request.LibraryRootId == rootId
-                && request.Phase != ManagedRequestPhase.Cancelled && request.Phase != ManagedRequestPhase.Completed).Select(request => request.Id)).ToArrayAsync(token);
+                && ManagedRequestPhaseDefinition.Active.Contains(request.Phase)).Select(request => request.Id)).ToArrayAsync(token);
     /// <inheritdoc />
     public async Task<IReadOnlyList<Guid>> ListManagedComicHoldingsForRootAsync(Guid rootId, CancellationToken token) =>
         await _db.ManagedHoldings.AsNoTracking().Where(holding => holding.LibraryRootId == rootId

@@ -19,7 +19,7 @@ public sealed partial class EfManagedRequestStore {
         var state = work.Operation.State;
         var rendition = work.Plan.Creation.Work.BookRendition
             ?? throw new ArgumentException("The accepted Book request has no rendition.");
-        if (state.Phase != ManagedRequestPhase.AwaitingFiles || snapshot.Item.RemoteId != state.RemoteId)
+        if (!work.Operation.Phase.AwaitsFiles || snapshot.Item.RemoteId != state.RemoteId)
             throw new ArgumentException("The Book file evidence does not belong to this accepted request.");
         if (snapshot.Files.Count == 0) return new(false, "Waiting for the manager to import this Book rendition.");
         var expectedKind = rendition == BookRendition.Ebook ? EntityKind.Book : EntityKind.AudioTrack;

@@ -154,8 +154,7 @@ public sealed class EfManagedReleaseStore(PrismediaDbContext db, IManagedTrackin
             if (state.Revision != row.Revision || state.Phase != row.Phase) throw Conflict();
             var operation = new ManagedRequestOperation(state);
             if (complete) {
-                if (state.Phase is not (ManagedRequestPhase.AwaitingFiles
-                    or ManagedRequestPhase.RemoteRemoved or ManagedRequestPhase.Completed)) continue;
+                if (!ManagedRequestPhaseDefinition.For(state.Phase).HoldsRemoteIdentity) continue;
                 operation.ReleaseOwnership();
             } else if (plan.ExistingHoldingId == holding.Id && operation.CanCancel) {
                 var targets = (plan.Request.TargetEntityIds ?? []).ToArray();

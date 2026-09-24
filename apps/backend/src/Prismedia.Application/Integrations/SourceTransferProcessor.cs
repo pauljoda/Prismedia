@@ -16,19 +16,18 @@ public sealed class SourceTransferProcessor(IIntegrationTransferStore store, Cat
     public async Task ProcessAsync(Guid operationId, JobContext context, CancellationToken cancellationToken) {
         var work = await store.FindAsync(operationId, cancellationToken) ?? throw new IntegrationTransferNotFoundException();
         var transfer = work.Transfer;
-        if (transfer.State.Phase is IntegrationTransferPhase.Completed or IntegrationTransferPhase.Cancelled) return;
-        if (transfer.State.Mode is not (IntegrationTransferMode.SourceDownload or IntegrationTransferMode.SourceRequest)
-            || work.Plan.Source is not { } source)
+        if (transfer.Phase.IsTerminal) return;
+        if (!transfer.Mode.IsSource || work.Plan.Source is not { } source)
             throw new InvalidOperationException("This processor requires an accepted source publication.");
         var revision = transfer.State.Revision;
         try {
             VerifiedIntegrationArtifact artifact;
             LibraryRootData? root = null;
             if (transfer.State.Phase == IntegrationTransferPhase.Transferring) {
-                await context.ReportProgressAsync(transfer.State.Mode == IntegrationTransferMode.SourceRequest ? 55 : 5,
+                await context.ReportProgressAsync(transfer.Mode.PreparesAtSource ? 55 : 5,
                     "Resolving selected publication", cancellationToken);
                 var resolved = await discovery.ResolveSelectionAsync(transfer.State.ConnectionId, source.Selection, source.OfferId, cancellationToken);
-                if (transfer.State.Mode == IntegrationTransferMode.SourceRequest) {
+                if (transfer.Mode.PreparesAtSource) {
                     if (source.Publication is null || source.Offer is null)
                         throw new InvalidDataException("The accepted source request is incomplete.");
                     SourceAcquisitionValidation.Validate(new(source.Selection, source.OfferId, resolved.Publication,

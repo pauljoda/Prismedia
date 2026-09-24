@@ -125,9 +125,9 @@ public sealed class IntegrationTransferTests {
     [Fact]
     public void SourceRequestRejectsUnboundedProgressAndProblems() {
         var transfer = IntegrationTransfer.CreateSourceRequest(Guid.NewGuid(), Guid.NewGuid());
-        Assert.Throws<InvalidOperationException>(() => transfer.ObserveSource(SourceAcquisitionState.Downloading, double.NaN, null));
-        Assert.Throws<InvalidOperationException>(() => transfer.ObserveSource(SourceAcquisitionState.Downloading, 1.01, null));
-        Assert.Throws<InvalidOperationException>(() => transfer.ObserveSource(SourceAcquisitionState.Failed, null, new string('x', 4097)));
+        Assert.Throws<ArgumentException>(() => transfer.ObserveSource(SourceAcquisitionState.Downloading, double.NaN, null));
+        Assert.Throws<ArgumentException>(() => transfer.ObserveSource(SourceAcquisitionState.Downloading, 1.01, null));
+        Assert.Throws<ArgumentException>(() => transfer.ObserveSource(SourceAcquisitionState.Failed, null, new string('x', 4097)));
         Assert.Equal(IntegrationTransferPhase.PendingSubmission, transfer.State.Phase);
     }
 

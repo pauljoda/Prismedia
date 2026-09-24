@@ -18,7 +18,7 @@ internal static class PluginIntegrationContract {
                 || capability.EntityKinds is not { Count: > 0 }
                 || capability.Operations.Distinct().Count() != capability.Operations.Count
                 || capability.EntityKinds.Distinct().Count() != capability.EntityKinds.Count
-                || capability.Operations.Any(operation => !PluginCapabilityPolicy.Allows(capability.Kind, operation))
+                || capability.Operations.Any(operation => !PluginCapabilityDefinition.For(capability.Kind).Allows(operation))
                 || capability.EntityKinds.Any(kind => !Enum.IsDefined(kind))) return false;
         }
         return definition.Settings.Count == 0 || PluginManifestContract.IsUsableSearch(new PluginSearchDefinition(definition.Settings));

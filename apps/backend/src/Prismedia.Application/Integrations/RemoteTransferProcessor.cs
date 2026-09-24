@@ -16,9 +16,9 @@ public sealed class RemoteTransferProcessor(IIntegrationTransferStore store, Int
     public async Task ProcessAsync(Guid operationId, JobContext context, CancellationToken cancellationToken) {
         var work = await store.FindAsync(operationId, cancellationToken) ?? throw new IntegrationTransferNotFoundException();
         var transfer = work.Transfer;
-        if (transfer.State.Mode != IntegrationTransferMode.RemoteExecutor || work.Plan.Executor is not { } intent)
+        if (transfer.Mode.IsSource || work.Plan.Executor is not { } intent)
             throw new InvalidOperationException("This processor requires a durable executor intent.");
-        if (transfer.State.Phase is IntegrationTransferPhase.Completed or IntegrationTransferPhase.Cancelled or IntegrationTransferPhase.Failed) return;
+        if (transfer.Phase.IsTerminal) return;
         var persistedRevision = transfer.State.Revision;
         async Task PersistAsync(string? message = null) {
             if (transfer.State.Revision == persistedRevision) {
@@ -100,7 +100,7 @@ public sealed class RemoteTransferProcessor(IIntegrationTransferStore store, Int
                     throw new JobRetryLaterException("Waiting for the executor to stop the accepted operation.", PollDelay(snapshot.NextPollAfter));
                 return;
             }
-            if (transfer.State.Phase is IntegrationTransferPhase.AwaitingRemote or IntegrationTransferPhase.NeedsReview) {
+            if (transfer.Phase.AwaitsRemoteExecution) {
                 if (snapshot is null) {
                     var connection = await AuthorizeAsync(IntegrationOperation.GetJob);
                     snapshot = await gateway.GetJobAsync(connection.Manifest.Id, connection.Context, new(transfer.State.JobId!), cancellationToken);
@@ -110,7 +110,7 @@ public sealed class RemoteTransferProcessor(IIntegrationTransferStore store, Int
                 await PersistAsync();
                 if (transfer.State.Phase == IntegrationTransferPhase.AwaitingRemote)
                     throw new JobRetryLaterException("Waiting for the executor to finish the accepted item.", PollDelay(snapshot.NextPollAfter));
-                if (snapshot.State is RemoteJobState.Failed or RemoteJobState.Cancelled) return;
+                if (RemoteJobStateDefinition.For(snapshot.State) is { IsTerminal: true, RetainsManifest: false }) return;
                 if (snapshot.State == RemoteJobState.Partial) {
                     await RenewRequiredAsync();
                     await PersistAsync("The executor produced only part of the selected item. No partial content was imported.");
@@ -122,7 +122,7 @@ public sealed class RemoteTransferProcessor(IIntegrationTransferStore store, Int
                     throw new JobRetryLaterException("Waiting for the executor to restore its retained outputs.", TimeSpan.FromMinutes(5));
                 }
             }
-            if (transfer.State.Phase is IntegrationTransferPhase.AwaitingArtifacts or IntegrationTransferPhase.NeedsReview) {
+            if (transfer.Phase.AwaitsManifest) {
                 await RenewRequiredAsync();
                 var connection = await AuthorizeAsync(IntegrationOperation.ListArtifacts);
                 var manifest = await manifests.ReadAsync(connection.Manifest.Id, connection.Context, transfer.State.JobId!, transfer.State.ManifestRevision!, cancellationToken);

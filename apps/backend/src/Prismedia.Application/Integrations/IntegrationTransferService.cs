@@ -21,7 +21,7 @@ public sealed class IntegrationTransferService(IIntegrationTransferStore store, 
     public async Task<IntegrationTransferResponse> CancelAsync(Guid id, CancellationToken cancellationToken) {
         var work = await store.FindAsync(id, cancellationToken) ?? throw new IntegrationTransferNotFoundException();
         var transfer = work.Transfer;
-        if (transfer.State.Mode == IntegrationTransferMode.RemoteExecutor) {
+        if (!transfer.Mode.IsSource) {
             if (!transfer.CanCancelRemote && !transfer.State.CancellationRequested && transfer.State.Phase != IntegrationTransferPhase.Cancelled)
                 throw new ArgumentException("Local import has started or this operation is already terminal. Reconcile its existing files before requesting another copy.");
             var expected = transfer.State.Revision;
@@ -30,8 +30,7 @@ public sealed class IntegrationTransferService(IIntegrationTransferStore store, 
             else if (transfer.State.Phase != IntegrationTransferPhase.Cancelled) await store.EnqueueRetryAsync(id, cancellationToken);
             return await GetAsync(id, cancellationToken);
         }
-        if (transfer.State.Mode is not (IntegrationTransferMode.SourceDownload or IntegrationTransferMode.SourceRequest)
-            || !transfer.CanCancelSource && transfer.State.Phase != IntegrationTransferPhase.Cancelled)
+        if (!transfer.CanCancelSource && transfer.State.Phase != IntegrationTransferPhase.Cancelled)
             throw new ArgumentException("This transfer has already begun library import and cannot be cancelled. Retry it to reconcile its files.");
         var revision = transfer.State.Revision;
         transfer.CancelSourceDownload();

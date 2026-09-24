@@ -1,5 +1,6 @@
 using Prismedia.Application.Jobs;
 using Prismedia.Domain.Entities;
+using Prismedia.Domain.Integrations;
 
 namespace Prismedia.Application.Integrations;
 
@@ -10,8 +11,8 @@ public sealed class SourceAcquisitionProcessor(IIntegrationTransferStore store, 
     public async Task ProcessAsync(Guid operationId, JobContext context, CancellationToken cancellationToken) {
         var work = await store.FindAsync(operationId, cancellationToken) ?? throw new IntegrationTransferNotFoundException();
         var transfer = work.Transfer;
-        if (transfer.State.Phase is IntegrationTransferPhase.Completed or IntegrationTransferPhase.Cancelled) return;
-        if (transfer.State.Mode != IntegrationTransferMode.SourceRequest || work.Plan.Source is not { } source
+        if (transfer.Phase.IsTerminal) return;
+        if (!transfer.Mode.PreparesAtSource || work.Plan.Source is not { } source
             || source.Publication is null || source.Offer is null)
             throw new InvalidOperationException("This processor requires an accepted exact source request.");
         var revision = transfer.State.Revision;
@@ -23,8 +24,7 @@ public sealed class SourceAcquisitionProcessor(IIntegrationTransferStore store, 
         }
 
         try {
-            if (transfer.State.Phase is IntegrationTransferPhase.PendingSubmission or IntegrationTransferPhase.SubmissionUncertain
-                or IntegrationTransferPhase.AwaitingRemote or IntegrationTransferPhase.NeedsReview) {
+            if (transfer.Phase.AwaitsSourcePreparation) {
                 var observe = await access.RequireAsync(transfer.State.ConnectionId, PluginCapability.AcquisitionSource,
                     IntegrationOperation.ObserveSource, work.Plan.EntityKind, cancellationToken);
                 var observation = await gateway.ObserveSourceAsync(observe.Manifest.Id, observe.Context,
@@ -64,24 +64,17 @@ public sealed class SourceAcquisitionProcessor(IIntegrationTransferStore store, 
 
         // Preparation ends at the persisted Ready/Transferring boundary. Resolution, verified byte
         // transfer, and local import own their failures and revision after this delegation begins.
-        if (transfer.State.Phase is IntegrationTransferPhase.Transferring or IntegrationTransferPhase.Importing)
+        if (transfer.Phase.VerifiesBytes)
             await sourceTransfers.ProcessAsync(operationId, context, cancellationToken);
     }
 
     private static Task ReportAsync(Prismedia.Contracts.Integrations.SourceAcquisitionObservation observation,
         JobContext context, CancellationToken cancellationToken) {
+        var state = SourceAcquisitionStateDefinition.For(observation.State);
         var progress = observation.Progress is { } sourceProgress
             ? 10 + (int)Math.Round(sourceProgress * 40, MidpointRounding.AwayFromZero)
-            : observation.State == SourceAcquisitionState.Ready ? 50 : 10;
-        var message = observation.State switch {
-            SourceAcquisitionState.NotObserved => "Requesting selected publication",
-            SourceAcquisitionState.Queued => "Selected publication is queued at the source",
-            SourceAcquisitionState.Downloading => "Source is preparing selected publication",
-            SourceAcquisitionState.Ready => "Selected publication is ready for transfer",
-            SourceAcquisitionState.Failed => "Source preparation needs review",
-            _ => "Observing selected publication"
-        };
-        return context.ReportProgressAsync(progress, message, cancellationToken);
+            : state.BasePercent;
+        return context.ReportProgressAsync(progress, state.ProgressMessage, cancellationToken);
     }
 
     private static TimeSpan PollDelay(DateTimeOffset? nextPollAfter) =>

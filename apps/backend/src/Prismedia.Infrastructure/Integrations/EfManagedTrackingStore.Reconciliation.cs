@@ -155,8 +155,7 @@ public sealed partial class EfManagedTrackingStore {
                     if (relatedState.Revision != related.Revision || relatedState.Phase != related.Phase)
                         throw new ConnectionConflictException();
                     var relatedOperation = new ManagedRequestOperation(relatedState);
-                    if (relatedState.Phase is ManagedRequestPhase.AwaitingFiles
-                        or ManagedRequestPhase.RemoteRemoved or ManagedRequestPhase.Completed)
+                    if (ManagedRequestPhaseDefinition.For(relatedState.Phase).HoldsRemoteIdentity)
                         relatedOperation.ConfirmRemoteRemoval();
                     else if (relatedOperation.IsActive)
                         relatedOperation.RequireReview();

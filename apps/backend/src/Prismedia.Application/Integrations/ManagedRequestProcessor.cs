@@ -14,7 +14,7 @@ public sealed class ManagedRequestProcessor(IManagedRequestStore store, Integrat
         var holdingId = work.Plan.ExistingHoldingId ?? id;
         if (!work.Operation.IsActive) return work.Operation.State.Phase != ManagedRequestPhase.Completed;
         try {
-            if (work.Operation.State.Phase is ManagedRequestPhase.PendingCreation or ManagedRequestPhase.CreationUncertain) {
+            if (work.Operation.Phase.AwaitsHolding) {
                 await ResolveCreationAsync(work, token);
                 return true;
             }

@@ -22,7 +22,7 @@ public static class IntegrationCapabilityNegotiation {
             if (advertised.Length != 1) continue;
             var peer = advertised[0];
             var operations = capability.Operations.Intersect(peer.Operations ?? [])
-                .Where(operation => PluginCapabilityPolicy.Allows(capability.Kind, operation)).ToArray();
+                .Where(operation => PluginCapabilityDefinition.For(capability.Kind).Allows(operation)).ToArray();
             var kinds = capability.EntityKinds.Intersect(peer.EntityKinds ?? []).ToArray();
             if (operations.Length > 0 && kinds.Length > 0) result.Add(new(capability.Kind, operations, kinds));
         }

@@ -31,8 +31,7 @@ public sealed class EfManagedControlStore(PrismediaDbContext db, IManagedTrackin
     }
     private async Task<ManagedTrackingResponse> RequireHoldingAsync(Guid connectionId, Guid holdingId, CancellationToken token) {
         var holding = (await tracking.FindAsync(holdingId, token))?.Tracking;
-        if (holding is null || holding.ConnectionId != connectionId || holding.Status is not (ManagedTrackingStatus.Tracking
-                or ManagedTrackingStatus.WaitingForFiles or ManagedTrackingStatus.Removed)
+        if (holding is null || holding.ConnectionId != connectionId || !ManagedTrackingStatusDefinition.For(holding.Status).AcceptsControls
             || holding.Item.EntityKind != EntityKind.Book && holding.Targets.Count == 0)
             throw new ManagedControlConflictException("Refresh and verify this holding's tracked associations before changing its manager settings.");
         var entityIds = holding.Targets.Select(binding => binding.EntityId).Distinct().ToArray();

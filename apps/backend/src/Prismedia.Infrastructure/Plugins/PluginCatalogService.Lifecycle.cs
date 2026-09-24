@@ -12,13 +12,12 @@ public sealed partial class PluginCatalogService {
         CancellationToken token) {
         var connections = _db.IntegrationConnections.Where(row => row.PluginId == pluginId).Select(row => row.Id);
         var blocked = await _db.IntegrationTransfers.AnyAsync(row => connections.Contains(row.ConnectionId)
-                && row.Phase != IntegrationTransferPhase.Completed && row.Phase != IntegrationTransferPhase.Cancelled && row.Phase != IntegrationTransferPhase.Failed, token)
+                && !IntegrationTransferPhaseDefinition.Terminal.Contains(row.Phase), token)
             || await _db.ManagedControls.AnyAsync(row => connections.Contains(row.ConnectionId) && row.ActiveHoldingId != null, token)
             || await _db.ManagedRequests.AnyAsync(row => connections.Contains(row.ConnectionId)
-                && (row.Phase == ManagedRequestPhase.PendingCreation
-                    || row.Phase == ManagedRequestPhase.CreationUncertain), token)
+                && ManagedRequestPhaseDefinition.AwaitingHolding.Contains(row.Phase), token)
             || await _db.ManagedHoldings.AnyAsync(row => connections.Contains(row.ConnectionId)
-                && (row.Status == ManagedTrackingStatus.Pending || row.Status == ManagedTrackingStatus.ReleasePending), token);
+                && ManagedTrackingStatusDefinition.BlockingPluginChanges.Contains(row.Status), token);
         if (!blocked) {
             var observations = await _db.ManagedRequests.AsNoTracking()
                 .Where(row => connections.Contains(row.ConnectionId) && row.Phase == ManagedRequestPhase.AwaitingFiles)

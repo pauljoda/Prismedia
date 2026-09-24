@@ -3,6 +3,7 @@ using Prismedia.Application.Entities;
 using Prismedia.Application.Integrations;
 using Prismedia.Contracts.Integrations;
 using Prismedia.Domain.Entities;
+using Prismedia.Domain.Integrations;
 using Prismedia.Infrastructure.Persistence;
 using Prismedia.Infrastructure.Persistence.Entities;
 
@@ -60,7 +61,7 @@ public sealed class EfReviewedFulfillmentOwnershipReader(
 
         var activeMatches = matches.Where(match =>
             !requests.TryGetValue(match.Reservation.OwnerId, out var request)
-            || request.Phase is not (ManagedRequestPhase.Cancelled or ManagedRequestPhase.OwnershipReleased));
+            || ManagedRequestPhaseDefinition.HoldingFulfillment.Contains(request.Phase));
         var projected = activeMatches
             .GroupBy(match => new {
                 match.Reservation.OwnerId,

@@ -77,7 +77,7 @@ public sealed class ReviewedManagedBookRequestService(
                 var retained = (await requestStore.ListAsync(connectionId, token)).Where(item =>
                     item.Operation.State.EntityId == entityId
                     && item.Plan.Request.ReviewedWork.BookRendition == choice.Rendition
-                    && item.Operation.State.Phase is not (ManagedRequestPhase.Cancelled or ManagedRequestPhase.OwnershipReleased)
+                    && item.Operation.Phase.HoldsFulfillment
                     && ManagedRequestIdentity.SameWork(item.Plan.Request.ReviewedWork, renditionReview.Work))
                     .ToArray();
                 if (retained.Length > 0) {

@@ -1,3 +1,4 @@
+using Prismedia.Domain.Integrations;
 using System.Text.Json;
 using Microsoft.EntityFrameworkCore;
 using Prismedia.Application.Entities;
@@ -32,7 +33,7 @@ public sealed class EfEntityExternalLibraryProvenanceReader(PrismediaDbContext d
         // Requests own a library boundary before a file scan can give the Entity an effective root.
         // Episode ownership is exact: an unrequested sibling never inherits another episode's request.
         var requests = db.ManagedRequests.AsNoTracking()
-            .Where(row => row.Phase != ManagedRequestPhase.Cancelled && row.Phase != ManagedRequestPhase.OwnershipReleased)
+            .Where(row => ManagedRequestPhaseDefinition.HoldingFulfillment.Contains(row.Phase))
             .Where(row => row.EntityId == entityId || db.FulfillmentReservations.Any(owner =>
                 owner.EntityId == entityId && owner.OwnerId == row.Id
                 && owner.ConnectionId == row.ConnectionId && owner.OwnerKind == FulfillmentOwnerKind.ExternalManager

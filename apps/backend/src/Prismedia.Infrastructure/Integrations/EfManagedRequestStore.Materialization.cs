@@ -52,7 +52,7 @@ public sealed partial class EfManagedRequestStore {
                 var retained = JsonSerializer.Deserialize<ManagedTargetBinding[]>(holding.TargetsJson, Json)!;
                 if (holding.ConnectionId != state.ConnectionId || holding.LibraryRootId != state.LibraryRootId
                     || holding.ReleasedAt is not null || holding.ReleaseOperationId is not null
-                    || holding.Status is not (ManagedTrackingStatus.Tracking or ManagedTrackingStatus.WaitingForFiles)
+                    || !ManagedTrackingStatusDefinition.For(holding.Status).IsEstablished
                     || holding.RemoteId != snapshot.Item.RemoteId
                     || retainedItem.EntityKind != item.EntityKind
                     || item.ExpectedExternalIds.Any(pair => retainedItem.ExpectedExternalIds.GetValueOrDefault(pair.Key) != pair.Value)
@@ -131,7 +131,7 @@ public sealed partial class EfManagedRequestStore {
         CancellationToken token) {
         ManagedCreationEvidence.ValidateHolding(work.Plan.Creation.Work, snapshot);
         var state = work.Operation.State;
-        if (state.Phase != ManagedRequestPhase.AwaitingFiles || snapshot.Item.RemoteId != state.RemoteId)
+        if (!work.Operation.Phase.AwaitsFiles || snapshot.Item.RemoteId != state.RemoteId)
             throw new ArgumentException("The final file evidence does not belong to this accepted holding.");
         if (snapshot.Files.Count == 0) return new(false, "Waiting for the manager to import a final file.");
         if (snapshot.Files.Count != 1) throw new ArgumentException("A movie request requires one exact final file association.");
@@ -195,7 +195,7 @@ public sealed partial class EfManagedRequestStore {
         var state = work.Operation.State;
         var isComic = work.Plan.Creation.Work.EntityKind == EntityKind.ComicSeries;
         var expectedKind = isComic ? EntityKind.ComicInstallment : EntityKind.VideoEpisode;
-        if (state.Phase != ManagedRequestPhase.AwaitingFiles || snapshot.Item.RemoteId != state.RemoteId)
+        if (!work.Operation.Phase.AwaitsFiles || snapshot.Item.RemoteId != state.RemoteId)
             throw new ArgumentException("The selected target file evidence does not belong to this accepted holding.");
 
         var holdingId = work.Plan.ExistingHoldingId ?? state.OperationId;

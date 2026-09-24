@@ -296,11 +296,11 @@ public sealed partial class EfManagedRequestStore(PrismediaDbContext db, IExtern
                             || ownerRequest.ConnectionId != state.ConnectionId || ownerRequest.EntityId != state.EntityId
                             || ownerState.Revision != ownerRequest.Revision || ownerState.Phase != ownerRequest.Phase
                             || ownerState.ReviewRequired
-                            || ownerState.Phase is not (ManagedRequestPhase.AwaitingFiles or ManagedRequestPhase.Completed))
+                            || !ManagedRequestPhaseDefinition.For(ownerState.Phase).ProvidesHolding)
                         || holding is null || holding.ConnectionId != state.ConnectionId
                         || holding.LibraryRootId != state.LibraryRootId || holding.ReleasedAt is not null
                         || holding.ReleaseOperationId is not null
-                        || holding.Status is not (ManagedTrackingStatus.Tracking or ManagedTrackingStatus.WaitingForFiles)
+                        || !ManagedTrackingStatusDefinition.For(holding.Status).IsEstablished
                         || item is null || item.EntityKind != plan.Creation.Work.EntityKind
                         || plan.Creation.Work.ExternalIds.Any(pair => item.ExpectedExternalIds.GetValueOrDefault(pair.Key) != pair.Value))
                         throw new ManagedRequestConflictException("The reviewed holding is no longer available for this target.");
@@ -318,9 +318,7 @@ public sealed partial class EfManagedRequestStore(PrismediaDbContext db, IExtern
                         .Where(request => request.ConnectionId == state.ConnectionId
                             && request.EntityId == state.EntityId
                             && request.Id != state.OperationId
-                            && (request.Phase == ManagedRequestPhase.PendingCreation
-                                || request.Phase == ManagedRequestPhase.CreationUncertain
-                                || request.Phase == ManagedRequestPhase.AwaitingFiles))
+                            && ManagedRequestPhaseDefinition.InFlight.Contains(request.Phase))
                         .ToArrayAsync(ct);
                     if (activeExpansions.Any(request => {
                         var accepted = JsonSerializer.Deserialize<ManagedRequestPlan>(request.PlanJson, Json);

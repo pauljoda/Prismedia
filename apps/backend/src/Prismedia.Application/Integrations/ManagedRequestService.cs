@@ -126,7 +126,7 @@ public sealed class ManagedRequestService(IManagedRequestStore store, Integratio
             && holding.Item.EntityKind == EntityKind.ComicSeries
             && holding.Item.RemoteId == snapshot.Item.RemoteId
             && holding.Item.ExpectedExternalIds.All(pair => snapshot.Item.ExternalIds.GetValueOrDefault(pair.Key) == pair.Value)
-            && holding.Status is ManagedTrackingStatus.Tracking or ManagedTrackingStatus.WaitingForFiles
+            && ManagedTrackingStatusDefinition.For(holding.Status).IsEstablished
             && holding.ReleasedAt is null).ToArray();
         if (matches.Length > 1)
             throw new ManagedRequestConflictException("More than one linked holding matches this comic run. Review its associations first.");

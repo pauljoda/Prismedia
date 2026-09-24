@@ -62,7 +62,7 @@ public sealed class EfIntegrationTransferStore(PrismediaDbContext db, TransferPl
         row.StateJson = JsonSerializer.Serialize(transfer.State, Json);
         row.LastError = error is { Length: > 4096 } ? error[..4096] : error;
         row.UpdatedAt = DateTimeOffset.UtcNow;
-        if (transfer.State.Phase is IntegrationTransferPhase.Completed or IntegrationTransferPhase.Failed or IntegrationTransferPhase.Cancelled) row.ActiveOwnershipKey = null;
+        if (transfer.Phase.IsTerminal) row.ActiveOwnershipKey = null;
         try { await db.SaveChangesAsync(cancellationToken); }
         catch (DbUpdateConcurrencyException) { throw new IntegrationTransferConflictException("This transfer changed while saving its progress."); }
     }
@@ -80,7 +80,7 @@ public sealed class EfIntegrationTransferStore(PrismediaDbContext db, TransferPl
     /// <inheritdoc />
     public async Task EnqueueRetryAsync(Guid operationId, CancellationToken cancellationToken) {
         var work = await FindAsync(operationId, cancellationToken) ?? throw new IntegrationTransferNotFoundException();
-        if (work.Transfer.State.Phase is IntegrationTransferPhase.Completed or IntegrationTransferPhase.Cancelled or IntegrationTransferPhase.Failed)
+        if (work.Transfer.Phase.IsTerminal)
             throw new ArgumentException("This transfer is terminal. Create a new explicit acquisition if another copy is needed.");
         await scheduler.EnqueueAsync(operationId, work.Plan.Title, cancellationToken);
     }
@@ -115,11 +115,7 @@ public sealed class EfIntegrationTransferStore(PrismediaDbContext db, TransferPl
             || string.IsNullOrWhiteSpace(plan.OwnershipKey) || plan.OwnershipKey.Length > 256
             || plan.RequestFingerprint is not { Length: 64 } || !plan.RequestFingerprint.All(Uri.IsHexDigit)
             || (plan.Source is null) == (plan.Executor is null)
-            || (transfer.State.Mode switch {
-                IntegrationTransferMode.SourceDownload or IntegrationTransferMode.SourceRequest => plan.Source is null || plan.Executor is not null,
-                IntegrationTransferMode.RemoteExecutor => plan.Executor is null || plan.Source is not null,
-                _ => true
-            }))
+            || (transfer.Mode.IsSource ? plan.Source is null : plan.Executor is null))
             throw new ArgumentException("A transfer needs one valid finite intent, destination, and request identity.");
     }
 }

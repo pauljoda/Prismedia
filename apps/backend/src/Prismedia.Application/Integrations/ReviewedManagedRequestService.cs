@@ -190,13 +190,13 @@ public sealed class ReviewedManagedRequestService(
         }
         if (holdings.Length != 1) return null;
         var holding = holdings[0];
-        if (holding.Status is not (ManagedTrackingStatus.Tracking or ManagedTrackingStatus.WaitingForFiles)
+        if (!ManagedTrackingStatusDefinition.For(holding.Status).IsEstablished
             || holding.LibraryRootId != libraryRootId
             || existing is null || existing.Item.RemoteId != holding.Item.RemoteId)
             return null;
         var ownerRequest = await requests.FindAsync(holding.Id, token);
         if (ownerRequest is not null && (ownerRequest.Operation.State.ReviewRequired
-            || ownerRequest.Operation.State.Phase is not (ManagedRequestPhase.AwaitingFiles or ManagedRequestPhase.Completed)
+            || !ownerRequest.Operation.Phase.ProvidesHolding
             || ownerRequest.Plan.ExistingHoldingId is not null))
             return null;
         if (existingFulfillments.Any(owner => owner.OwnerKind != FulfillmentOwnerKind.ExternalManager

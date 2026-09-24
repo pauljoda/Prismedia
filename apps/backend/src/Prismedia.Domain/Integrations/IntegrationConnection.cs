@@ -36,7 +36,7 @@ public sealed class IntegrationConnection(IntegrationConnectionState state) {
             || !string.IsNullOrEmpty(endpoint.UserInfo) || !string.IsNullOrEmpty(endpoint.Query) || !string.IsNullOrEmpty(endpoint.Fragment))
             throw new ArgumentException("Use an absolute HTTP or HTTPS base URL without embedded credentials, query, or fragment.");
         if (capabilities is not { Count: > 0 and <= 8 } || capabilities.Distinct().Count() != capabilities.Count
-            || capabilities.Any(capability => !Enum.IsDefined(capability) || capability == PluginCapability.Metadata))
+            || capabilities.Any(capability => !Enum.IsDefined(capability) || !PluginCapabilityDefinition.For(capability).EnabledPerConnection))
             throw new ArgumentException("Select at least one supported connection capability.");
         if (settings is null || settings.Count > 32 || settings.Any(pair => string.IsNullOrWhiteSpace(pair.Key)
             || pair.Key.Length > 100 || pair.Value is null || pair.Value.Length > 4096)) throw new ArgumentException("Connection settings exceed their limits.");

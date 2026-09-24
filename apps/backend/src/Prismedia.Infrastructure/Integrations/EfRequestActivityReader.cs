@@ -69,11 +69,13 @@ public sealed class EfRequestActivityReader(
         Guid? connectionId,
         ActivityCursor? after,
         int limit) {
+        var settled = IntegrationTransferPhaseDefinition.Settled;
+        var needingAttention = IntegrationTransferPhaseDefinition.NeedingAttention;
         var query =
             from row in db.IntegrationTransfers.AsNoTracking()
-            let groupRank = row.Phase == IntegrationTransferPhase.Completed || row.Phase == IntegrationTransferPhase.Cancelled
+            let groupRank = settled.Contains(row.Phase)
                 ? RecentGroupRank
-                : row.LastError != null || row.Phase == IntegrationTransferPhase.NeedsReview || row.Phase == IntegrationTransferPhase.Failed
+                : row.LastError != null || needingAttention.Contains(row.Phase)
                     ? AttentionGroupRank
                     : ProgressGroupRank
             where connectionId == null || row.ConnectionId == connectionId
@@ -92,18 +94,18 @@ public sealed class EfRequestActivityReader(
         int limit,
         bool hideNsfw) {
         var supportsJsonContainment = db.Database.ProviderName?.Contains("Npgsql", StringComparison.Ordinal) == true;
+        var settled = ManagedRequestPhaseDefinition.Settled;
+        var needingAttention = ManagedRequestPhaseDefinition.NeedingAttention;
         var query =
             from row in db.ManagedRequests.AsNoTracking()
             let reviewRequired = supportsJsonContainment
                 ? EF.Functions.JsonContains(row.StateJson, """{"reviewRequired":true}""")
                 : row.StateJson.Contains("\"reviewRequired\":true", StringComparison.Ordinal)
-            let groupRank = row.Phase == ManagedRequestPhase.Completed || row.Phase == ManagedRequestPhase.Cancelled
-                || row.Phase == ManagedRequestPhase.OwnershipReleased || row.Phase == ManagedRequestPhase.RemoteRemoved
-                    ? RecentGroupRank
-                    : reviewRequired || row.Phase == ManagedRequestPhase.CreationUncertain
-                        || row.Phase == ManagedRequestPhase.Rejected
-                            ? AttentionGroupRank
-                            : ProgressGroupRank
+            let groupRank = settled.Contains(row.Phase)
+                ? RecentGroupRank
+                : reviewRequired || needingAttention.Contains(row.Phase)
+                    ? AttentionGroupRank
+                    : ProgressGroupRank
             where connectionId == null || row.ConnectionId == connectionId
             where reviewRequired || !db.ManagedHoldings.Any(holding => holding.Id == row.Id)
             where !hideNsfw || !db.LibraryRoots.Any(root => root.Id == row.LibraryRootId && root.IsNsfw)
@@ -123,6 +125,9 @@ public sealed class EfRequestActivityReader(
         int limit,
         bool hideNsfw) {
         var supportsJsonContainment = db.Database.ProviderName?.Contains("Npgsql", StringComparison.Ordinal) == true;
+        var settledHoldings = ManagedTrackingStatusDefinition.Settled;
+        var attentionHoldings = ManagedTrackingStatusDefinition.NeedingAttention;
+        var followedHoldings = ManagedTrackingStatusDefinition.Followed;
         var query =
             from holding in db.ManagedHoldings.AsNoTracking()
             join request in db.ManagedRequests.AsNoTracking() on holding.Id equals request.Id into matchedRequests
@@ -134,11 +139,11 @@ public sealed class EfRequestActivityReader(
                 ?? (request == null ? (DateTimeOffset?)null : request.CreatedAt)
                 ?? holding.NextCheckAt
             let sortAt = request == null ? DateTimeOffset.UnixEpoch : request.CreatedAt
-            let groupRank = holding.Status == ManagedTrackingStatus.Released || holding.Status == ManagedTrackingStatus.Removed
+            let groupRank = settledHoldings.Contains(holding.Status)
                 ? RecentGroupRank
-                : holding.Problem != null || holding.Status == ManagedTrackingStatus.NeedsReview || holding.Status == ManagedTrackingStatus.Stale
+                : holding.Problem != null || attentionHoldings.Contains(holding.Status)
                     ? AttentionGroupRank
-                    : holding.Status == ManagedTrackingStatus.Tracking
+                    : followedHoldings.Contains(holding.Status)
                         ? FollowingGroupRank
                         : ProgressGroupRank
             where connectionId == null || holding.ConnectionId == connectionId

@@ -109,7 +109,7 @@ public sealed class EfIntegrationArtifactStagingMaintenance(
             || state.Artifacts is not { Count: > 0 } artifacts || state.Imports is not { } imports || imports.Count != artifacts.Count
             || artifacts.Select(item => item.Id).Distinct(StringComparer.Ordinal).Count() != artifacts.Count
             || imports.Select(item => item.ArtifactId).Distinct(StringComparer.Ordinal).Count() != imports.Count) return false;
-        if (state.Mode == IntegrationTransferMode.RemoteExecutor && state.ReceiptId is null) return false;
+        if (IntegrationTransferModeDefinition.For(state.Mode).AcknowledgesImports && state.ReceiptId is null) return false;
         var imported = imports.ToDictionary(item => item.ArtifactId, StringComparer.Ordinal);
         return artifacts.All(artifact => imported.TryGetValue(artifact.Id, out var evidence)
             && evidence.Sha256.Equals(artifact.Sha256, StringComparison.OrdinalIgnoreCase)

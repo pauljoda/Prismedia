@@ -20,7 +20,7 @@ public sealed class IntegrationConnectionAccess(IIntegrationConnectionStore stor
             && connection.State.EffectiveCapabilities.Any(support => support.Kind == capability && support.Operations.Contains(operation));
         var packaged = manifest.Integration?.Capabilities.Any(support => support.Kind == capability
             && support.Operations.Contains(operation) && support.EntityKinds.Count > 0) == true;
-        if (!negotiated || !packaged || !PluginCapabilityPolicy.Allows(capability, operation))
+        if (!negotiated || !packaged || !PluginCapabilityDefinition.For(capability).Allows(operation))
             throw new ConnectionCapabilityUnavailableException();
         var auth = IntegrationCredentialScope.ForManifest(manifest,
             await store.ReadSecretsAsync(id, manifest.Auth.Select(field => field.Key).ToArray(), cancellationToken));
@@ -34,7 +34,7 @@ public sealed class IntegrationConnectionAccess(IIntegrationConnectionStore stor
         var connection = (await store.FindAsync(id, cancellationToken))?.Connection ?? throw new ConnectionNotFoundException();
         var manifest = await plugins.FindAsync(connection.State.PluginId, cancellationToken)
             ?? throw new IntegrationInvocationException("The integration plugin is unavailable or disabled.");
-        if (!connection.Allows(capability, operation, kind) || !PluginCapabilityPolicy.Allows(capability, operation)
+        if (!connection.Allows(capability, operation, kind) || !PluginCapabilityDefinition.For(capability).Allows(operation)
             || manifest.Integration?.Capabilities.Any(support => support.Kind == capability
                 && support.Operations.Contains(operation) && support.EntityKinds.Contains(kind)) != true)
             throw new ConnectionCapabilityUnavailableException();

@@ -1,5 +1,6 @@
 using Prismedia.Contracts.Integrations;
 using Prismedia.Domain.Entities;
+using Prismedia.Domain.Integrations;
 
 namespace Prismedia.Application.Integrations;
 
@@ -14,12 +15,11 @@ internal static class SourceAcquisitionValidation {
             || observation.Offer?.Id != offerId || !Enum.IsDefined(observation.State)
             || observation.Progress is { } progress && (!double.IsFinite(progress) || progress is < 0 or > 1)
             || observation.Problem?.Length > 4096
-            || observation.State == SourceAcquisitionState.Failed && string.IsNullOrWhiteSpace(observation.Problem))
+            || SourceAcquisitionStateDefinition.For(observation.State).RequiresProblem && string.IsNullOrWhiteSpace(observation.Problem))
             throw InvalidObservation();
         CatalogDiscoveryService.ValidatePage(new("Source preparation", [new(selection, false, observation.Publication, [observation.Offer])]),
             new(selection.EntityKind, Limit: 1));
-        var expectedAccess = observation.State == SourceAcquisitionState.Ready
-            ? AcquisitionAccessKind.Download : AcquisitionAccessKind.Request;
+        var expectedAccess = SourceAcquisitionStateDefinition.For(observation.State).OfferAccess;
         if (observation.Offer.Access != expectedAccess || string.IsNullOrWhiteSpace(observation.Offer.MediaType)
             || !IntegrationMediaFormats.IsSupportedMediaType(selection.EntityKind, observation.Offer.MediaType)
             || observation.Offer.ByteSize > MaximumPublicationBytes

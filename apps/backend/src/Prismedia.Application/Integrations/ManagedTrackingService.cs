@@ -51,7 +51,8 @@ public sealed class ManagedTrackingService(
     /// <summary>Observes remote state before applying an all-or-nothing domain decision to the same saved local owners.</summary>
     public async Task ReconcileAsync(Guid id, CancellationToken token) {
         var work = await store.FindAsync(id, token) ?? throw new ArgumentException("This tracked holding no longer exists.");
-        if (work.Tracking.Status is ManagedTrackingStatus.ReleasePending or ManagedTrackingStatus.Released) return;
+        var status = ManagedTrackingStatusDefinition.For(work.Tracking.Status);
+        if (status.FreezesHostActions) return;
         if (work.Tracking.Status == ManagedTrackingStatus.WaitingForFiles && work.Tracking.Bindings.Count == 0)
             return;
         try {
@@ -98,13 +99,11 @@ public sealed class ManagedTrackingService(
             await store.ConfirmRemovalAsync(work,
                 "The connected manager no longer contains this holding. Local files, metadata, and history were retained.", token);
         } catch (Exception error) when (error is IntegrationInvocationException or ConnectionNotFoundException or ConnectionSecretUnavailableException or ConnectionCapabilityUnavailableException) {
-            var status = work.Tracking.Status == ManagedTrackingStatus.Removed
-                ? ManagedTrackingStatus.Removed
-                : ManagedTrackingStatus.Stale;
-            var problem = status == ManagedTrackingStatus.Removed
+            var unverified = status.KeepsStatusWhenUnverifiable ? status.Status : ManagedTrackingStatus.Stale;
+            var problem = status.KeepsStatusWhenUnverifiable
                 ? "The connection could not be verified. The last confirmed removal and local data were retained."
                 : "The connection could not be verified. Previous bindings are retained; no alternate acquisition was started.";
-            await store.RecordProblemAsync(id, work.Tracking.Revision, status, problem, token);
+            await store.RecordProblemAsync(id, work.Tracking.Revision, unverified, problem, token);
         } catch (ArgumentException error) {
             await store.RecordProblemAsync(id, work.Tracking.Revision, ManagedTrackingStatus.NeedsReview, error.Message, token);
         }

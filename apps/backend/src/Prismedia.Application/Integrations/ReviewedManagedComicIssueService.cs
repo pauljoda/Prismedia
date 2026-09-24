@@ -62,7 +62,7 @@ public sealed class ReviewedManagedComicIssueService(
         if (!options.Roots.Any(root => root.Id == mount.RemoteRootId && root.Path == mount.RemotePath && root.Accessible != false))
             throw new ArgumentException("The mapped comic root changed. Review its connection before requesting an issue.");
         var active = (await store.ListAsync(connectionId, token)).Where(request =>
-            request.Operation.State.Phase is not (ManagedRequestPhase.Cancelled or ManagedRequestPhase.OwnershipReleased)
+            request.Operation.Phase.HoldsFulfillment
             && ManagedRequestIdentity.SameWork(request.Plan.Request.ReviewedWork, work)).ToArray();
         if (active.Length > 1)
             throw new ManagedRequestConflictException("More than one active request matches this exact issue. Review request activity.");

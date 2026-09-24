@@ -39,7 +39,7 @@ public sealed class ManagedControlOperationTests {
     }
     [Fact] public void Command_identity_includes_full_queue_timestamp() {
         var action = Create(false); action.BeginSearch(); action.AcceptCommand(Command);
-        Assert.Throws<InvalidOperationException>(() => action.ObserveCommand(Command with { QueuedAt = Command.QueuedAt.AddTicks(1) }, ManagedCommandStatus.Completed));
+        Assert.Throws<ArgumentException>(() => action.ObserveCommand(Command with { QueuedAt = Command.QueuedAt.AddTicks(1) }, ManagedCommandStatus.Completed));
     }
     [Fact] public void Unknown_history_can_recover_without_redispatch() {
         var action = Create(false); action.BeginSearch(); action.AcceptCommand(Command);
