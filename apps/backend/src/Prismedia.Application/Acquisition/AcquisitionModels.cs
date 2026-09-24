@@ -21,6 +21,12 @@ public sealed record IndexerRelease(
     DateTimeOffset? PublishedAt) {
     /// <summary>Advertised payload filenames when the provider exposes them before download; empty means unknown.</summary>
     public IReadOnlyList<string> KnownFileNames { get; init; } = [];
+
+    /// <summary>
+    /// How many files the indexer says the payload holds (the Torznab <c>files</c> attribute), or null when
+    /// it does not say. A hint only: it tells one file from many, never which files they are.
+    /// </summary>
+    public int? AdvertisedFileCount { get; init; }
 }
 
 /// <summary>

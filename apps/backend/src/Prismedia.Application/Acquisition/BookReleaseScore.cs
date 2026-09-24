@@ -1,3 +1,5 @@
+using Prismedia.Domain.Entities;
+
 namespace Prismedia.Application.Acquisition;
 
 /// <summary>
@@ -23,19 +25,27 @@ public static class BookReleaseScore {
     public const double PreferenceBoost = 10;
 
     /// <summary>
-    /// Composite ranking score: detected quality dominates, then profile preference (preferred terms,
-    /// custom weighted terms, preferred languages), then seeders (log-scaled so a 1000-seed release does
-    /// not bury a healthy 50-seed one), with peers as a small tiebreak. Quality is detected from the
-    /// title, so an untagged release scores at the quality floor and is ordered purely by
-    /// preference/seeders — never rejected here (acceptance is the engine's job).
-    /// </summary>
-    /// <summary>
     /// Volume-scoped searches: a release that NAMES the sought volume outranks a volume-less one
     /// (which may be an omnibus or unlabeled), mirroring the TV exact-unit tier. Sized to dominate
     /// quality and relevance so unit precision decides the auto-grab.
     /// </summary>
     public const double ExactVolumeBoost = 10_000_000;
 
+    /// <summary>
+    /// Audiobook searches: each step of <see cref="AudiobookReleaseShape.Rank"/> is worth this much, so an
+    /// expected single M4B outranks one file per chapter, which outranks an unknown layout, part files, and
+    /// finally one long MP3, whatever their source tier, preferences, or seeders. Structure is not a stored
+    /// quality tier; it ranks only the audiobook rendition.
+    /// </summary>
+    public const double AudiobookStructureBoost = 1_000_000_000;
+
+    /// <summary>
+    /// Composite ranking score: for audiobooks the expected chapter structure dominates, then detected
+    /// quality, then profile preference (preferred terms, custom weighted terms, preferred languages), then
+    /// seeders (log-scaled so a 1000-seed release does not bury a healthy 50-seed one), with peers as a small
+    /// tiebreak. Quality is detected from the title, so an untagged release scores at the quality floor and
+    /// is ordered purely by preference/seeders — never rejected here (acceptance is the engine's job).
+    /// </summary>
     public static double Of(IndexerRelease release, BookAcquisitionRules rules) {
         var quality = BookFormatDetection.DetectQuality(release.Title).Value;
         var seeders = Math.Max(release.Seeders ?? 0, 0);
@@ -43,7 +53,11 @@ public static class BookReleaseScore {
         var volumeBoost = rules.VolumeNumber is { } volume && BookReleaseTokens.ParseVolume(release.Title) == volume
             ? ExactVolumeBoost
             : 0;
-        return volumeBoost
+        var structureBoost = rules.BookRendition == BookRendition.Audiobook
+            ? AudiobookReleaseShape.Expected(release).Rank * AudiobookStructureBoost
+            : 0;
+        return structureBoost
+            + volumeBoost
             + (quality * QualityRankBoost)
             + ReleaseTitleRelevance.Score(release, rules)
             + (MediaReleaseEvaluation.PreferenceScore(release, rules) * PreferenceBoost)

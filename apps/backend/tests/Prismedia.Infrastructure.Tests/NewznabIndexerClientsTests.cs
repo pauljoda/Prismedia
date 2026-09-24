@@ -29,6 +29,7 @@ public sealed class NewznabIndexerClientsTests {
               <torznab:attr name="peers" value="15" />
               <torznab:attr name="infohash" value="ABCDEF0123456789" />
               <torznab:attr name="magneturl" value="magnet:?xt=urn:btih:abcdef0123456789" />
+              <torznab:attr name="files" value="1" />
             </item>
           </channel>
         </rss>
@@ -85,6 +86,7 @@ public sealed class NewznabIndexerClientsTests {
         Assert.Equal("ABCDEF0123456789", release.InfoHash);
         Assert.Equal("https://tracker.example/details/42#comments", release.InfoUrl);
         Assert.NotNull(release.PublishedAt);
+        Assert.Equal(1, release.AdvertisedFileCount);
     }
 
     [Fact]
@@ -98,6 +100,7 @@ public sealed class NewznabIndexerClientsTests {
         Assert.Equal("https://indexer.example/getnzb/99.nzb", release.DownloadUrl);
         Assert.Equal(1_073_741_824, release.SizeBytes);
         Assert.Null(release.Seeders);
+        Assert.Null(release.AdvertisedFileCount);
     }
 
     [Fact]

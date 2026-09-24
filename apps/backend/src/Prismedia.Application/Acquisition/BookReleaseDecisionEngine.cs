@@ -121,14 +121,20 @@ public sealed class BookUnitSpecification : IReleaseSpecification {
 
 /// <summary>
 /// Rejects releases the importer can't handle. A title naming only an unimportable format (CBR/RAR/MOBI/AZW)
-/// is rejected up front so it is never downloaded only to dead-end at import. When a profile restricts
-/// formats, a title naming an importable format outside that set is also rejected. Titles that name no
-/// recognizable format pass — the actual payload is checked at import.
+/// is rejected up front so it is never downloaded only to dead-end at import; for the audiobook rendition the
+/// same holds for audio Prismedia cannot import (a FLAC, Opus, OGG, AAX, MKA, or AAC release, or advertised
+/// files with no MP3/M4A/M4B). When a profile restricts formats, a title naming an importable format outside
+/// that set is also rejected. Titles that name no recognizable format pass — the actual payload is checked
+/// while downloading and at import.
 /// </summary>
 public sealed class FormatSpecification : IReleaseSpecification {
     public ReleaseRejectionReason Reason => ReleaseRejectionReason.UnsupportedFormat;
 
     public ReleaseRejectionReason? Evaluate(IndexerRelease release, BookAcquisitionRules rules) {
+        if (rules.BookRendition == BookRendition.Audiobook && !AudiobookReleaseShape.Expected(release).IsAdmissible) {
+            return Reason;
+        }
+
         var detected = BookFormatDetection.Detect(release.Title);
         if (detected.Count == 0) {
             // No importable format named — reject only if the title declares an unimportable format.

@@ -18,6 +18,21 @@ public static class BookFormatDetection {
     private static readonly string[] RetailSourceTokens = ["retail", "official"];
     private static readonly string[] WebSourceTokens = ["web", "webrip", "webdl", "digital", "converted", "calibre"];
 
+    /// <summary>Audio container words release titles use, mapped to the file extension each names.</summary>
+    private static readonly IReadOnlyDictionary<string, string> AudioContainerTokens = new Dictionary<string, string>(StringComparer.Ordinal) {
+        ["m4b"] = ".m4b",
+        ["m4a"] = ".m4a",
+        ["mp3"] = ".mp3",
+        ["flac"] = ".flac",
+        ["opus"] = ".opus",
+        ["ogg"] = ".ogg",
+        ["aax"] = ".aax",
+        ["aaxc"] = ".aaxc",
+        ["mka"] = ".mka",
+        ["aac"] = ".aac",
+        ["wma"] = ".wma"
+    };
+
     /// <summary>
     /// Importable prose-book formats named in <paramref name="title"/>, mapped onto Prismedia's
     /// <see cref="BookFormat"/> set. Comic archive tokens are deliberately excluded.
@@ -46,6 +61,17 @@ public static class BookFormatDetection {
 
         return formats;
     }
+
+    /// <summary>
+    /// The audio file extensions a release title names, importable or not ("M4B" names .m4b, "FLAC" names
+    /// .flac). <see cref="AudiobookReleaseShape"/> reads them to expect a release's layout before download.
+    /// </summary>
+    public static IReadOnlyList<string> NamedAudioExtensions(string title) =>
+        ReleaseTitleText.Tokens(title)
+            .Select(token => AudioContainerTokens.GetValueOrDefault(token))
+            .OfType<string>()
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
 
     /// <summary>Whether a release title names a CBZ or ZIP serialized-comic archive.</summary>
     public static bool NamesImageArchive(string title) =>

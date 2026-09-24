@@ -43,6 +43,7 @@ public static class NewznabProtocol {
     public const string AttrInfoHash = "infohash";
     public const string AttrMagnetUrl = "magneturl";
     public const string AttrSize = "size";
+    public const string AttrFiles = "files";
     public const string ErrorElement = "error";
     public const string ErrorCode = "code";
     public const string ErrorDescription = "description";
@@ -201,7 +202,9 @@ public abstract class NewznabIndexerClientBase(HttpClient http) : IIndexerSearch
                 attrs.GetValueOrDefault(NewznabProtocol.AttrInfoHash),
                 item.Element(NewznabProtocol.Comments)?.Value ?? PermalinkGuid(item),
                 Language: null,
-                PublishedAt: ParsePubDate(item.Element(NewznabProtocol.PubDate)?.Value)));
+                PublishedAt: ParsePubDate(item.Element(NewznabProtocol.PubDate)?.Value)) {
+                AdvertisedFileCount = IntValue(attrs.GetValueOrDefault(NewznabProtocol.AttrFiles)) is > 0 and var files ? files : null
+            });
         }
 
         return releases;
