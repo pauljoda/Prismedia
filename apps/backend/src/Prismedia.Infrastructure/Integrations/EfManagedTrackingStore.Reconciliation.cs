@@ -618,14 +618,15 @@ public sealed partial class EfManagedTrackingStore {
         }
 
         if (rendition is not null) {
-            if (rendition is null || await db.Monitors.AnyAsync(monitor => monitor.EntityId != null
+            if (await db.Monitors.AnyAsync(monitor => monitor.EntityId != null
                     && scope.Contains(monitor.EntityId.Value) && monitor.Kind == EntityKind.Book
                     && (monitor.BookRendition ?? BookRendition.Ebook) == rendition, token)
                 || await db.Acquisitions.AnyAsync(acquisition => acquisition.EntityId != null
                     && scope.Contains(acquisition.EntityId.Value) && acquisition.Kind == EntityKind.Book
                     && (acquisition.BookRendition ?? BookRendition.Ebook) == rendition
                     && owning.Contains(acquisition.Status), token)) {
-                throw new ArgumentException("This book rendition has a native acquisition owner. Resolve it before linking a manager.");
+                throw new FulfillmentOwnershipConflictException(
+                    problem: "This book rendition has a native acquisition owner. Resolve it before linking a manager.");
             }
 
             return;
@@ -634,8 +635,8 @@ public sealed partial class EfManagedTrackingStore {
         if (await db.Monitors.AnyAsync(monitor => monitor.EntityId != null && scope.Contains(monitor.EntityId.Value), token)
             || await db.Acquisitions.AnyAsync(acquisition => acquisition.EntityId != null && scope.Contains(acquisition.EntityId.Value)
                 && owning.Contains(acquisition.Status), token)) {
-            throw new ArgumentException(
-                "This scope has a native monitoring or acquisition owner. Resolve its ownership before linking a manager.");
+            throw new FulfillmentOwnershipConflictException(
+                problem: "This scope has a native monitoring or acquisition owner. Resolve its ownership before linking a manager.");
         }
     }
 
