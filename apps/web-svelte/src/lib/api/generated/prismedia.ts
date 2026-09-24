@@ -185,6 +185,7 @@ import type {
   LibraryRootSummary,
   LibraryRootUpdateRequest,
   ListAcquisitionHistoryParams,
+  ListAcquisitionRulePresetsParams,
   ListAudioLibrariesParams,
   ListAudioTracksParams,
   ListBookAuthorsParams,
@@ -14501,27 +14502,41 @@ export type listAcquisitionRulePresetsResponse200 = {
   status: 200
 }
 
+export type listAcquisitionRulePresetsResponse400 = {
+  data: ApiProblem
+  status: 400
+}
+
 export type listAcquisitionRulePresetsResponseSuccess = (listAcquisitionRulePresetsResponse200) & {
   headers: Headers;
 };
-;
+export type listAcquisitionRulePresetsResponseError = (listAcquisitionRulePresetsResponse400) & {
+  headers: Headers;
+};
 
-export type listAcquisitionRulePresetsResponse = (listAcquisitionRulePresetsResponseSuccess)
+export type listAcquisitionRulePresetsResponse = (listAcquisitionRulePresetsResponseSuccess | listAcquisitionRulePresetsResponseError)
 
-export const getListAcquisitionRulePresetsUrl = () => {
+export const getListAcquisitionRulePresetsUrl = (params?: ListAcquisitionRulePresetsParams,) => {
+  const normalizedParams = new URLSearchParams();
 
+  Object.entries(params || {}).forEach(([key, value]) => {
 
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
 
+  const stringifiedParams = normalizedParams.toString();
 
-  return `/api/acquisitions/rule-presets`
+  return stringifiedParams.length > 0 ? `/api/acquisitions/rule-presets?${stringifiedParams}` : `/api/acquisitions/rule-presets`
 }
 
 /**
- * @summary Lists editable starter rules for common audio language and format preferences.
+ * @summary Lists editable starter rules for common language, format, and audiobook preferences, optionally only those that fit the profile governing one kind.
  */
-export const listAcquisitionRulePresets = async ( options?: RequestInit): Promise<listAcquisitionRulePresetsResponse> => {
+export const listAcquisitionRulePresets = async (params?: ListAcquisitionRulePresetsParams, options?: RequestInit): Promise<listAcquisitionRulePresetsResponse> => {
 
-  return orvalFetch<listAcquisitionRulePresetsResponse>(getListAcquisitionRulePresetsUrl(),
+  return orvalFetch<listAcquisitionRulePresetsResponse>(getListAcquisitionRulePresetsUrl(params),
   {
     ...options,
     method: 'GET'

@@ -4,8 +4,8 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { AcquisitionRulePresetViewProfileKindsItem } from './acquisitionRulePresetViewProfileKindsItem';
 import type { CustomFormatConditionView } from './customFormatConditionView';
-import type { EntityKind } from './entityKind';
 
 export interface AcquisitionRulePresetView {
   name: string;
@@ -13,7 +13,7 @@ export interface AcquisitionRulePresetView {
   /** @pattern ^-?(?:0|[1-9]\d*)$ */
   suggestedScore: number | string;
   conditions: CustomFormatConditionView[];
-  profileKinds: EntityKind[];
+  profileKinds: AcquisitionRulePresetViewProfileKindsItem[];
   /** @nullable */
   audioLanguage?: string | null;
 }
