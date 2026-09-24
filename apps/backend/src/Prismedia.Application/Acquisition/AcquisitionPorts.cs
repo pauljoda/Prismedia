@@ -610,6 +610,12 @@ public interface IAcquisitionStore : IAcquisitionLifecycleStore {
     Task UpdateOwnedQualityAsync(Guid acquisitionId, BookQualityRank ownedQuality, CancellationToken cancellationToken);
 
     /// <summary>
+    /// Records the audiobook layout observed in an in-flight download's file list. Ignored once the
+    /// acquisition is imported (its shape is then the owned shape) or being stopped.
+    /// </summary>
+    Task RecordAudiobookShapeAsync(Guid acquisitionId, AudiobookReleaseShape shape, CancellationToken cancellationToken);
+
+    /// <summary>
     /// Updates an acquisition's owned media-quality ladder code, revision, and custom-format score (after a
     /// successful movie/episode upgrade swap) without changing its status. <paramref name="ownedMediaRevision"/>
     /// is the PROPER/REPACK revision detected from the release that replaced the owned copy, so the upgrade
@@ -665,8 +671,10 @@ public interface IAcquisitionStore : IAcquisitionLifecycleStore {
     /// <paramref name="ownedFormatScore"/> is the total custom-format score of the same selected release
     /// (computed against the profile's formats), stored for every kind so the upgrade loop's same-quality
     /// format-score cutoff can advance (defaults to 0).
+    /// <paramref name="audiobookShape"/> is the layout of the audiobook files actually imported, recorded in the
+    /// same commit as the owned shape the upgrade loop compares against; null for every other import.
     /// </summary>
-    Task MarkImportedWithQualityAsync(Guid id, BookQualityRank ownedQuality, string? message, CancellationToken cancellationToken, string? ownedMediaQuality = null, int ownedMediaRevision = 1, int ownedFormatScore = 0);
+    Task MarkImportedWithQualityAsync(Guid id, BookQualityRank ownedQuality, string? message, CancellationToken cancellationToken, string? ownedMediaQuality = null, int ownedMediaRevision = 1, int ownedFormatScore = 0, AudiobookReleaseShape? audiobookShape = null);
 
     /// <summary>
     /// Replaces the candidate set and publishes <see cref="AcquisitionStatus.AwaitingSelection"/> in one

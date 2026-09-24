@@ -434,7 +434,7 @@ public sealed class AcquisitionMonitorJobHandler(
                         "AcquisitionMonitor: transfer {TransferId} failed payload admission ({Conflict}); abandoning it for recovery.",
                         transfer.TransferId, conflict);
                     await EnqueueFailedHandleAsync(context, transfer.AcquisitionId,
-                        inspection.RecheckTvCoverage ? BlocklistReason.NotAnUpgrade : BlocklistReason.WrongContent,
+                        inspection.Reason ?? (inspection.RecheckTvCoverage ? BlocklistReason.NotAnUpgrade : BlocklistReason.WrongContent),
                         conflict, cancellationToken, inspection.RecheckTvCoverage);
                     return;
                 }
@@ -560,7 +560,12 @@ public sealed class AcquisitionMonitorJobHandler(
     /// never immediately fails a download. Unavailable metadata keeps an admission hold closed
     /// until a later inspection succeeds or the normal stall recovery window expires.
     /// </summary>
-    private sealed record PayloadInspection(string? Conflict = null, bool RecheckTvCoverage = false, bool Ready = false);
+    /// <param name="Reason">Blocklist reason for a conflict when it is more specific than wrong content.</param>
+    private sealed record PayloadInspection(
+        string? Conflict = null,
+        bool RecheckTvCoverage = false,
+        bool Ready = false,
+        BlocklistReason? Reason = null);
 
     private async Task<PayloadInspection> InspectPayloadAsync(
         IDownloadClient downloadClient,
@@ -600,6 +605,12 @@ public sealed class AcquisitionMonitorJobHandler(
                 input.AbsoluteEpisodeNumber,
                 episodeTitles, input.AlternativeWorkTitles);
             if (conflict is not null) return new(conflict);
+            if (input.Kind == EntityKind.Book && input.BookRendition == BookRendition.Audiobook) {
+                return await InspectAudiobookPayloadAsync(
+                    input,
+                    files.Select(file => new ImportCandidateFile(file.Name, file.SizeBytes)).ToArray(),
+                    cancellationToken);
+            }
             if (payloadAdmission is not null && input.Kind == EntityKind.VideoSeason) {
                 var payloadFiles = files.Select(file => new ImportCandidateFile(file.Name, file.SizeBytes)).ToArray();
                 if (await payloadAdmission.HasNoBenefitAsync(input, payloadFiles, cancellationToken)) {
@@ -614,6 +625,24 @@ public sealed class AcquisitionMonitorJobHandler(
             logger.LogDebug(ex, "AcquisitionMonitor: payload validation skipped for transfer {TransferId}", transfer.TransferId);
             return new();
         }
+    }
+
+    /// <summary>
+    /// Audiobook payload admission: records the layout the download's file list shows, and turns away a
+    /// download with no audio Prismedia can import so recovery can pick another release before any bytes
+    /// arrive. Mixed formats are judged by the set the import would keep.
+    /// </summary>
+    private async Task<PayloadInspection> InspectAudiobookPayloadAsync(
+        AcquisitionSearchInput input,
+        IReadOnlyList<ImportCandidateFile> files,
+        CancellationToken cancellationToken) {
+        var shape = AudiobookReleaseShape.Resolve(files);
+        await acquisitions.RecordAudiobookShapeAsync(input.Id, shape, cancellationToken);
+        return shape.IsAdmissible
+            ? new(Ready: true)
+            : new(
+                "The download contains no audio Prismedia can import (M4B, M4A, or MP3).",
+                Reason: BlocklistReason.NoImportableFiles);
     }
 
     /// <summary>

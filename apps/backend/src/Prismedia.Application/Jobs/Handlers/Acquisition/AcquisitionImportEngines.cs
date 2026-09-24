@@ -428,6 +428,11 @@ public sealed partial class BookAcquisitionImportEngine(
         // The owned custom-format score is the selected release scored against this profile's formats, so the
         // upgrade loop's same-quality format-score cutoff has a baseline. Null-safe: no selected release → 0.
         var ownedFormatScore = await OwnedFormatScore.ComputeAsync(profiles, import.ProfileId, import.Kind, selected, cancellationToken);
+        var audiobookShape = import.BookRendition == BookRendition.Audiobook
+            ? PlacedAudiobookShape(checkpoint.Units
+                .Where(unit => unit.IsMedia)
+                .Select(unit => (unit.SourceRelativePath, unit.FinalPath!)))
+            : null;
 
         await acquisitions.WriteImportHintAsync(import.Id, checkpoint.HintPath, import, ownedQuality, cancellationToken);
         await acquisitions.SetFinalSourcePathAsync(import.Id, checkpoint.FinalSourcePath, cancellationToken);
@@ -446,10 +451,30 @@ public sealed partial class BookAcquisitionImportEngine(
                 ownedQuality,
                 checkpoint.SuccessMessage,
                 ownedFormatScore: ownedFormatScore,
-                touchedAncestorIds: materialized.TouchedAncestorIds),
+                touchedAncestorIds: materialized.TouchedAncestorIds,
+                audiobookShape: audiobookShape),
             cancellationToken);
 
         await torrents.HandleImportedAsync(import, checkpoint.ImportMode, cancellationToken);
+    }
+
+    /// <summary>
+    /// The layout of the audiobook files an import placed, read from their payload-relative names and the
+    /// sizes of the placed files, so a resumed import records the same shape as a fresh one.
+    /// </summary>
+    private static AudiobookReleaseShape PlacedAudiobookShape(
+        IEnumerable<(string SourceRelativePath, string PlacedPath)> placed) =>
+        AudiobookReleaseShape.Resolve(placed
+            .Select(file => new ImportCandidateFile(file.SourceRelativePath, SizeOf(file.PlacedPath)))
+            .ToArray());
+
+    private static long SizeOf(string path) {
+        try {
+            var file = new FileInfo(path);
+            return file.Exists ? file.Length : 0;
+        } catch (Exception exception) when (exception is IOException or UnauthorizedAccessException) {
+            return 0;
+        }
     }
 
     private async Task<LibraryRootData?> ResolveCheckpointRootAsync(

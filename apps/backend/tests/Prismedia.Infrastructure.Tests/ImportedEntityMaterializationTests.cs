@@ -310,7 +310,11 @@ public sealed partial class ImportedEntityMaterializationTests : IDisposable {
             audiobookTrackIds.Contains(file.EntityId)
             && file.Role == EntityFileRole.Source
             && file.Path.EndsWith(".m4b", StringComparison.OrdinalIgnoreCase)));
-        Assert.Contains(queue.Enqueued, request => request.Type == JobType.ReconcileEntity);
+        var reconciliation = Assert.Single(queue.Enqueued, request =>
+            request.Type == JobType.ReconcileEntity && request.PayloadJson is not null);
+        Assert.Same(
+            AudiobookReleaseShape.SingleM4b,
+            AcquisitionFinalizeJobPayload.Parse(reconciliation.PayloadJson!).OwnedAudiobookShape());
         Assert.Equal(AcquisitionStatus.Importing, await StatusOfAsync(db, import.Id));
     }
 

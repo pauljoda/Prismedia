@@ -769,6 +769,17 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         await db.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task RecordAudiobookShapeAsync(Guid acquisitionId, AudiobookReleaseShape shape, CancellationToken cancellationToken) {
+        var row = await db.Acquisitions.FirstOrDefaultAsync(row => row.Id == acquisitionId, cancellationToken);
+        if (row is null || row.Status is AcquisitionStatus.Imported or AcquisitionStatus.Stopping || row.AudiobookShape == shape) {
+            return;
+        }
+
+        row.AudiobookShape = shape;
+        row.UpdatedAt = DateTimeOffset.UtcNow;
+        await db.SaveChangesAsync(cancellationToken);
+    }
+
     public async Task UpdateOwnedMediaQualityAsync(Guid acquisitionId, string ownedMediaQuality, int ownedMediaRevision, int ownedFormatScore, CancellationToken cancellationToken) {
         var row = await db.Acquisitions.FirstOrDefaultAsync(row => row.Id == acquisitionId, cancellationToken);
         if (row is null || row.Status == AcquisitionStatus.Stopping) {
@@ -782,7 +793,7 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         await db.SaveChangesAsync(cancellationToken);
     }
 
-    public async Task MarkImportedWithQualityAsync(Guid id, BookQualityRank ownedQuality, string? message, CancellationToken cancellationToken, string? ownedMediaQuality = null, int ownedMediaRevision = 1, int ownedFormatScore = 0) {
+    public async Task MarkImportedWithQualityAsync(Guid id, BookQualityRank ownedQuality, string? message, CancellationToken cancellationToken, string? ownedMediaQuality = null, int ownedMediaRevision = 1, int ownedFormatScore = 0, AudiobookReleaseShape? audiobookShape = null) {
         var row = await db.Acquisitions.FirstOrDefaultAsync(row => row.Id == id, cancellationToken);
         if (row is null || row.Status == AcquisitionStatus.Stopping) {
             return;
@@ -830,6 +841,10 @@ public sealed partial class EfAcquisitionStore(PrismediaDbContext db, IAcquisiti
         }
 
         row.OwnedFormatScore = ownedFormatScore;
+        if (audiobookShape is not null) {
+            row.AudiobookShape = audiobookShape;
+        }
+
         row.UpgradeQualityCaptured = true;
         row.ImportCheckpointJson = null;
         row.ImportClaimJobId = null;
