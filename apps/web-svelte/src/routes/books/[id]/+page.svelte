@@ -739,7 +739,14 @@
       return;
     }
     if (options.exact && !options.combined) {
-      openSingleFileReader();
+      // The reader reopens its own exact checkpoint, including the precise locator.
+      void goto(bookReaderHref({
+        bookId: book.id,
+        kind: "book",
+        id: book.id,
+        returnId: book.id,
+        command: "resume",
+      }));
       return;
     }
 
