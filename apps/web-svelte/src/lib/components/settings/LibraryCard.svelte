@@ -1,12 +1,14 @@
 <script module lang="ts">
-  /** A library flag the card can switch. */
-  export type LibraryFlag = "enabled" | "scanVideos" | "scanImages" | "scanAudio" | "scanBooks" | "isNsfw" | "autoIdentify";
+  import type { LibraryRootMediaCapabilityCode } from "$lib/api/generated/codes";
+
+  /** A library flag the card can switch: one of the media-capability codes or a root-level switch. */
+  export type LibraryFlag = LibraryRootMediaCapabilityCode | "enabled" | "isNsfw" | "autoIdentify";
 </script>
 
 <script lang="ts">
   import { ExternalLink, EyeOff, FolderOpen, Loader2, RefreshCw, Sparkles, Trash2, UsersRound } from "@lucide/svelte";
   import { Button, Toggle, cn } from "@prismedia/ui-svelte";
-  import { ENTITY_KIND } from "$lib/api/generated/codes";
+  import { ENTITY_KIND, LIBRARY_ROOT_MEDIA_CAPABILITY } from "$lib/api/generated/codes";
   import { getGetPluginIconUrl } from "$lib/api/generated/prismedia";
   import type { LibraryRoot } from "$lib/api/settings";
   import PluginIcon from "$lib/components/plugins/PluginIcon.svelte";
@@ -38,10 +40,10 @@
 
   /** What a library can scan for, each painted as the media family it feeds. */
   const SCANS = [
-    { flag: "scanVideos", label: "Video", family: mediaFamilyForKind(ENTITY_KIND.video) },
-    { flag: "scanImages", label: "Images", family: mediaFamilyForKind(ENTITY_KIND.image) },
-    { flag: "scanAudio", label: "Audio", family: mediaFamilyForKind(ENTITY_KIND.audioLibrary) },
-    { flag: "scanBooks", label: "Books & comics", family: mediaFamilyForKind(ENTITY_KIND.book) },
+    { flag: LIBRARY_ROOT_MEDIA_CAPABILITY.scanVideos, label: "Video", family: mediaFamilyForKind(ENTITY_KIND.video) },
+    { flag: LIBRARY_ROOT_MEDIA_CAPABILITY.scanImages, label: "Images", family: mediaFamilyForKind(ENTITY_KIND.image) },
+    { flag: LIBRARY_ROOT_MEDIA_CAPABILITY.scanAudio, label: "Audio", family: mediaFamilyForKind(ENTITY_KIND.audioLibrary) },
+    { flag: LIBRARY_ROOT_MEDIA_CAPABILITY.scanBooks, label: "Books & comics", family: mediaFamilyForKind(ENTITY_KIND.book) },
   ] as const satisfies ReadonlyArray<{ flag: LibraryFlag; label: string; family: unknown }>;
 
   const readOnly = $derived(Boolean(root.isReadOnly));
