@@ -843,6 +843,60 @@ public sealed class JobQueueServiceTests {
         Assert.Equal(JobRunStatus.Cancelled, clearedFailed.Status);
     }
 
+    [Fact]
+    public async Task ActivityBucketsEveryRunInTheWindowPerTypeAndHourAndHidesNsfwTargets() {
+        await using var db = CreateContext();
+        var now = DateTimeOffset.UtcNow;
+        var nsfwEntity = new EntityRow {
+            Id = Guid.NewGuid(),
+            KindCode = EntityKind.Video.ToCode(),
+            Title = "Hidden",
+            IsNsfw = true,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        db.Entities.Add(nsfwEntity);
+        db.JobRuns.AddRange(
+            Run(JobType.ScanLibrary, JobRunStatus.Completed, created: now.AddHours(-3), finished: now.AddHours(-2)),
+            Run(JobType.ScanLibrary, JobRunStatus.Failed, created: now.AddHours(-2.5), finished: now.AddHours(-2)),
+            Run(JobType.ScanLibrary, JobRunStatus.Running, created: now.AddHours(-30), started: now.AddHours(-30)),
+            Run(JobType.ProbeVideo, JobRunStatus.Completed, created: now.AddHours(-1), finished: now.AddMinutes(-30), target: nsfwEntity.Id),
+            Run(JobType.ProbeVideo, JobRunStatus.Completed, created: now.AddDays(-2), finished: now.AddDays(-2)));
+        await db.SaveChangesAsync();
+        var service = new JobQueueService(db);
+
+        var visible = await service.ListActivityAsync(24, hideNsfw: false, CancellationToken.None);
+        var safe = await service.ListActivityAsync(24, hideNsfw: true, CancellationToken.None);
+
+        Assert.Equal(24, visible.Hours);
+        var scanHour = Assert.Single(visible.Buckets, bucket => bucket.Type == JobType.ScanLibrary && bucket.Total == 2);
+        Assert.Equal(1, scanHour.Failed);
+        Assert.Equal(0, scanHour.Running);
+        Assert.Equal(HourOf(now.AddHours(-2)), scanHour.Start);
+        var liveHour = Assert.Single(visible.Buckets, bucket => bucket.Type == JobType.ScanLibrary && bucket.Running == 1);
+        Assert.Equal(HourOf(now), liveHour.Start);
+        Assert.Single(visible.Buckets, bucket => bucket.Type == JobType.ProbeVideo);
+        Assert.DoesNotContain(safe.Buckets, bucket => bucket.Type == JobType.ProbeVideo);
+        Assert.Equal(2, safe.Buckets.Count(bucket => bucket.Type == JobType.ScanLibrary));
+
+        static JobRunRow Run(JobType type, JobRunStatus status, DateTimeOffset created,
+            DateTimeOffset? started = null, DateTimeOffset? finished = null, Guid? target = null) => new() {
+            Id = Guid.NewGuid(),
+            Type = type,
+            Status = status,
+            CreatedAt = created,
+            AvailableAt = created,
+            StartedAt = started ?? (finished is null ? null : created),
+            FinishedAt = finished,
+            TargetEntityId = target?.ToString(),
+        };
+
+        static DateTimeOffset HourOf(DateTimeOffset moment) {
+            var utc = moment.ToUniversalTime();
+            return new DateTimeOffset(utc.Year, utc.Month, utc.Day, utc.Hour, 0, 0, TimeSpan.Zero);
+        }
+    }
+
     private static PrismediaDbContext CreateContext() {
         var options = new DbContextOptionsBuilder<PrismediaDbContext>()
             .UseInMemoryDatabase($"job-queue-{Guid.NewGuid():N}")

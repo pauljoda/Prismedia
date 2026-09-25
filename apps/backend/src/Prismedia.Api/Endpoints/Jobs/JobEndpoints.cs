@@ -11,6 +11,7 @@ public static class JobEndpoints {
             .WithTags("Jobs");
 
         group.MapJobListEndpoint();
+        group.MapJobActivityEndpoint();
         group.MapJobGraphEndpoints();
         group.MapJobCreateEndpoint();
         group.MapJobCancelEndpoints();

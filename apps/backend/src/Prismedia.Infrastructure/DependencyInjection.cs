@@ -500,7 +500,9 @@ public static class DependencyInjection {
             TimeSpan.FromDays(1)));
         services.AddSingleton<IWorkerHeartbeatStore>(new FileWorkerHeartbeatStore(dataDir));
         services.AddScoped<IDatabaseBackupService, DatabaseBackupService>();
-        services.AddScoped<IJobQueueService, JobQueueService>();
+        services.AddScoped<JobQueueService>();
+        services.AddScoped<IJobQueueService>(provider => provider.GetRequiredService<JobQueueService>());
+        services.AddScoped<IJobActivityReader>(provider => provider.GetRequiredService<JobQueueService>());
         services.AddScoped<IJobGraphService, JobGraphService>();
         services.AddSingleton<SettingsSnapshotCache>();
         services.AddScoped<EfSettingsPersistence>();

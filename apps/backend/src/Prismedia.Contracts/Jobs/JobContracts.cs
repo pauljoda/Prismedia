@@ -147,3 +147,17 @@ public sealed record JobGraphDetailResponse(
 
 /// <summary>Result of graph cancellation.</summary>
 public sealed record JobGraphCancelResponse(bool Cancelled);
+
+/// <summary>One hour of background work for one job type.</summary>
+/// <param name="Type">Queue operation type.</param>
+/// <param name="Start">Start of the hour, in UTC.</param>
+/// <param name="Total">Runs that landed in this hour: finished, started, queued, or still running.</param>
+/// <param name="Failed">Runs of those that failed.</param>
+/// <param name="Running">Runs of those still running.</param>
+public sealed record JobActivityBucket(JobType Type, DateTimeOffset Start, int Total, int Failed, int Running);
+
+/// <summary>Per-type hourly activity for the jobs dashboard's recent window.</summary>
+/// <param name="Hours">Window length in hours, ending at <paramref name="Now"/>.</param>
+/// <param name="Now">The server time the window ends at.</param>
+/// <param name="Buckets">Non-empty hours only, ordered by type then hour.</param>
+public sealed record JobActivityResponse(int Hours, DateTimeOffset Now, IReadOnlyList<JobActivityBucket> Buckets);
