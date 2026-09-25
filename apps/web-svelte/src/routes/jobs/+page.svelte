@@ -6,12 +6,13 @@
     cancelJobGraph,
     clearJobFailures,
     createJob,
+    fetchJobActivity,
     fetchJobGraph,
     fetchJobGraphs,
     fetchJobs,
     fetchWorkerHealth,
   } from "$lib/api/jobs";
-  import type { JobGraphDetailResponse, JobGraphSummary, JobQueueCountDto, JobRun } from "$lib/api/generated/model";
+  import type { JobActivityBucket, JobGraphDetailResponse, JobGraphSummary, JobQueueCountDto, JobRun } from "$lib/api/generated/model";
   import { JOB_RUN_STATUS } from "$lib/api/generated/codes";
   import { fetchSettingsValues } from "$lib/api/settings";
   import { settingKeys, valuesToLibrarySettings } from "$lib/settings/app-settings";
@@ -39,6 +40,7 @@
 
   let runs = $state.raw<JobRun[]>([]);
   let counts = $state.raw<JobQueueCountDto[]>([]);
+  let activity = $state.raw<JobActivityBucket[]>([]);
   let graphs = $state.raw<JobGraphSummary[]>([]);
   let graphDetails = $state.raw<Record<string, JobGraphDetailResponse>>({});
   let dashboard = $state.raw<JobsDashboard | null>(null);
@@ -62,7 +64,7 @@
   const graphGroups = $derived(groupJobGraphsByActivity(graphs));
   const liveGraphs = $derived([...graphGroups.active, ...graphGroups.waiting]);
   const waitingCount = $derived(graphGroups.waiting.length);
-  const lanes = $derived(buildJobLanes(runs, counts, now));
+  const lanes = $derived(buildJobLanes(runs, counts, activity, now));
   const totals = $derived(totalLaneCounts(lanes));
   const sections = $derived(
     JOB_LANE_SECTIONS.map((section) => {
@@ -109,12 +111,18 @@
   async function loadDashboard() {
     try {
       const hideNsfw = nsfw.mode === "off";
-      const [graphResponse, jobResponse] = await Promise.all([fetchJobGraphs(hideNsfw), fetchJobs(hideNsfw)]);
+      const [graphResponse, jobResponse, activityResponse] = await Promise.all([
+        fetchJobGraphs(hideNsfw),
+        fetchJobs(hideNsfw),
+        fetchJobActivity(hideNsfw),
+      ]);
       graphs = graphResponse.items;
       runs = jobResponse.items;
       counts = jobResponse.counts;
+      activity = activityResponse.buckets;
       dashboard = buildJobsDashboard(jobResponse.items, scheduleInfo, jobResponse.counts);
-      now = Date.now();
+      // The strips align to the server's clock, which cut the hourly buckets.
+      now = Date.parse(activityResponse.now) || Date.now();
       if (expandedGraphId) {
         const detail = await fetchJobGraph(expandedGraphId, hideNsfw);
         graphDetails = { ...graphDetails, [expandedGraphId]: detail };

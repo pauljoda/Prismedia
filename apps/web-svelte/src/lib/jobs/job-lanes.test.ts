@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { JOB_RUN_STATUS, JOB_TYPE } from "$lib/api/generated/codes";
-import type { JobRun } from "$lib/api/generated/model";
+import type { JobActivityBucket, JobRun } from "$lib/api/generated/model";
 import { ACTIVITY_WINDOW_HOURS } from "./job-activity";
 import { JOB_LANE_SECTION, buildJobLanes, isQuietLane, totalLaneCounts } from "./job-lanes";
 
@@ -33,8 +33,12 @@ describe("buildJobLanes", () => {
       { type: JOB_TYPE.acquisitionMonitor, status: JOB_RUN_STATUS.completed, count: 480 },
       { type: JOB_TYPE.acquisitionMonitor, status: JOB_RUN_STATUS.failed, count: 1 },
     ];
+    const activity: JobActivityBucket[] = [
+      { type: JOB_TYPE.acquisitionMonitor, start: "2026-09-25T11:00:00Z", total: 1, failed: 0, running: 0 },
+      { type: JOB_TYPE.acquisitionMonitor, start: "2026-09-25T12:00:00Z", total: 2, failed: 1, running: 0 },
+    ];
 
-    const [lane] = buildJobLanes(runs, counts, NOW);
+    const [lane] = buildJobLanes(runs, counts, activity, NOW);
 
     expect(lane?.section).toBe(JOB_LANE_SECTION.acquisition);
     expect(lane?.counts.completed).toBe(480);
@@ -43,11 +47,14 @@ describe("buildJobLanes", () => {
     expect(lane?.buckets.at(-1)).toMatchObject({ total: 2, failed: 1 });
   });
 
-  it("puts live lanes first and folds lanes with no recent runs into the quiet list", () => {
+  it("puts live lanes first and folds lanes with no recent activity into the quiet list", () => {
     const runs = [run("s", JOB_TYPE.scanLibrary, JOB_RUN_STATUS.running, null)];
     const counts = [{ type: JOB_TYPE.databaseBackup, status: JOB_RUN_STATUS.completed, count: 12 }];
+    const activity: JobActivityBucket[] = [
+      { type: JOB_TYPE.scanLibrary, start: "2026-09-25T12:00:00Z", total: 1, failed: 0, running: 1 },
+    ];
 
-    const lanes = buildJobLanes(runs, counts, NOW);
+    const lanes = buildJobLanes(runs, counts, activity, NOW);
 
     expect(lanes.map((lane) => lane.type)).toEqual([JOB_TYPE.scanLibrary, JOB_TYPE.databaseBackup]);
     expect(lanes[0]?.buckets.at(-1)?.running).toBe(1);

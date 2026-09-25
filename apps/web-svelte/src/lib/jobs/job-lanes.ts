@@ -1,7 +1,7 @@
 import { JOB_RUN_STATUS, JOB_TYPE, type JobTypeCode } from "$lib/api/generated/codes";
-import type { JobQueueCountDto, JobRun } from "$lib/api/generated/model";
+import type { JobActivityBucket, JobQueueCountDto, JobRun } from "$lib/api/generated/model";
 import { jobLabelForType } from "$lib/jobs/jobs-dashboard";
-import { bucketJobActivity, jobRunMoment, type ActivityBucket } from "./job-activity";
+import { activityTotal, fillActivityBuckets, jobRunMoment, type ActivityBucket } from "./job-activity";
 
 /** View grouping for lanes. These are presentation sections, not server state. */
 export const JOB_LANE_SECTION = {
@@ -119,16 +119,29 @@ function addCount(counts: LaneCounts, status: string, amount: number) {
 }
 
 /**
- * Folds the retained run list and per-type totals into one lane per job type. Totals come from the
- * server's per-type counts (all retained runs); the run list and activity strip come from the
- * bounded recent window the jobs API returns.
+ * Folds the retained run list, per-type totals, and per-type hourly activity into one lane per job
+ * type. Totals come from the server's per-type counts (all retained runs); the run list comes from
+ * the bounded recent window the jobs API returns; the activity strip comes from the server's hourly
+ * buckets, which cover every run in the window regardless of that cap.
  */
-export function buildJobLanes(runs: readonly JobRun[], counts: readonly JobQueueCountDto[], now: number): JobLane[] {
+export function buildJobLanes(
+  runs: readonly JobRun[],
+  counts: readonly JobQueueCountDto[],
+  activity: readonly JobActivityBucket[],
+  now: number,
+): JobLane[] {
   const runsByType = new Map<string, JobRun[]>();
   for (const run of runs) {
     const list = runsByType.get(run.type);
     if (list) list.push(run);
     else runsByType.set(run.type, [run]);
+  }
+
+  const activityByType = new Map<string, JobActivityBucket[]>();
+  for (const bucket of activity) {
+    const list = activityByType.get(bucket.type);
+    if (list) list.push(bucket);
+    else activityByType.set(bucket.type, [bucket]);
   }
 
   const countsByType = new Map<string, LaneCounts>();
@@ -140,7 +153,7 @@ export function buildJobLanes(runs: readonly JobRun[], counts: readonly JobQueue
     countsByType.set(entry.type, laneCounts);
   }
 
-  const types = new Set([...runsByType.keys(), ...countsByType.keys()]);
+  const types = new Set([...runsByType.keys(), ...countsByType.keys(), ...activityByType.keys()]);
   const lanes: JobLane[] = [];
   for (const type of types) {
     const typeRuns = [...(runsByType.get(type) ?? [])].sort(
@@ -158,7 +171,7 @@ export function buildJobLanes(runs: readonly JobRun[], counts: readonly JobQueue
       counts: laneCounts,
       runs: typeRuns,
       lastRunAt: typeRuns[0] ? jobRunMoment(typeRuns[0]) : null,
-      buckets: bucketJobActivity(typeRuns, now),
+      buckets: fillActivityBuckets(activityByType.get(type) ?? [], now),
     });
   }
 
@@ -172,9 +185,9 @@ export function buildJobLanes(runs: readonly JobRun[], counts: readonly JobQueue
   );
 }
 
-/** A lane with nothing live and no runs in the recent window folds into the section's quiet list. */
+/** A lane with nothing live and no activity in the recent window folds into the section's quiet list. */
 export function isQuietLane(lane: JobLane): boolean {
-  return lane.runs.length === 0 && lane.counts.running === 0 && lane.counts.queued === 0;
+  return activityTotal(lane.buckets) === 0 && lane.counts.running === 0 && lane.counts.queued === 0;
 }
 
 /** Sums every lane's retained totals. */
