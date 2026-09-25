@@ -12,7 +12,7 @@
     X,
   } from "@lucide/svelte";
   import { Button } from "@prismedia/ui-svelte";
-  import { fetchEntities } from "$lib/api/entities";
+  import { fetchUnidentifiedCounts } from "$lib/api/identify-client";
   import ManagePageHeader from "$lib/components/manage/ManagePageHeader.svelte";
   import {
     useIdentifyStore,
@@ -34,7 +34,7 @@
   let unidentified = $state<Record<string, number>>({});
   let countedFor = "";
 
-  /** Counts files that are not organized yet, one `limit: 1` request per identifiable kind. */
+  /** Counts files that are not organized yet, per identifiable kind, in one request. */
   $effect(() => {
     const kinds = store.supportedKinds.map((entry) => entry.kind);
     const hideNsfw = nsfw.mode === "off";
@@ -42,12 +42,10 @@
     if (kinds.length === 0 || key === countedFor) return;
     countedFor = key;
     unidentified = {};
-    for (const kind of kinds) {
-      fetchEntities({ kind, organized: false, hasFile: true, wanted: false, limit: 1, hideNsfw }).then(
-        (response) => (unidentified = { ...unidentified, [kind]: Number(response.totalCount) || 0 }),
-        () => undefined,
-      );
-    }
+    fetchUnidentifiedCounts(kinds, hideNsfw).then(
+      (counts) => { if (countedFor === key) unidentified = counts; },
+      () => undefined,
+    );
   });
 
   const totalUnidentified = $derived(Object.values(unidentified).reduce((sum, count) => sum + count, 0));
