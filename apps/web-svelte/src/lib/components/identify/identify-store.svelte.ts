@@ -98,6 +98,17 @@ export interface IdentifyQueueItem {
   updatedAt?: string | null;
 }
 
+/**
+ * The review as it was on screen when Accept was pressed. The route keeps rendering it while the
+ * queue item passes through applying and done, or leaves the polled queue, until the page that
+ * follows the apply is in place.
+ */
+export interface IdentifyApplyingReview {
+  entity: EntityCard;
+  proposal: EntityMetadataProposal;
+  detail?: EntityDetailCard | null;
+}
+
 export interface IdentifyKindInfo {
   kind: string;
   label: string;
@@ -127,6 +138,8 @@ export class IdentifyStore {
   error = $state<string | null>(null);
   message = $state<string | null>(null);
   applying = $state(false);
+  /** The review whose apply is in flight, held for the route until the next page is in place. */
+  applyingReview = $state<IdentifyApplyingReview | null>(null);
   applyProgress = $state<IdentifyApplyProgress | null>(null);
   bulkStarting = $state(false);
   bulkAccepting = $state(false);
@@ -188,6 +201,11 @@ export class IdentifyStore {
   reviewableCount = $derived(this.queue.filter((item) =>
     (item.state === IDENTIFY_QUEUE_STATE.proposal && Boolean(item.proposal)) ||
     (item.state === IDENTIFY_QUEUE_STATE.search && item.candidates.length > 0)).length);
+
+  /** Entity id of the review being applied, or null. Poll-driven navigation leaves that review alone. */
+  get applyingEntityId(): string | null {
+    return this.applyingReview?.entity.id ?? null;
+  }
 
   /** Whether the entity's queue item is waiting on or running a requested search. */
   isItemBusy(entityId: string): boolean {
@@ -421,6 +439,10 @@ export class IdentifyStore {
     let afterApply: (() => void | Promise<void>) | null = null;
     let applied = false;
     this.applying = true;
+    // Hold the review as shown: the queue item passes through applying and done, or leaves the
+    // polled queue, before the next page is in place, and none of that may swap the review out.
+    const shown = this.queue.find((item) => item.entityId === entity.id);
+    this.applyingReview = { entity, proposal: shown?.proposal ?? proposal, detail: shown?.detail ?? null };
     this.applyProgress = initialApplyProgress(progressId, entity, proposal, selectedFields);
     this.error = null;
     this.#stopApplyProgressPolling?.();
@@ -475,6 +497,7 @@ export class IdentifyStore {
     if (applied) this.#removeActiveQueueItem(entity.id);
     this.applying = false;
     this.applyProgress = null;
+    this.applyingReview = null;
   }
 
   async rejectQueueItem(entityId: string, options: IdentifyRejectOptions = {}) {
@@ -962,6 +985,8 @@ export class IdentifyStore {
       ? this.view.entity.id
       : null;
     if (!entityId) return;
+    // The applied item leaves the polled queue before its review moves on; applyProposal owns that exit.
+    if (entityId === this.applyingEntityId) return;
     if (this.queue.some((item) => item.entityId === entityId)) return;
     this.navigateToDashboard();
   }

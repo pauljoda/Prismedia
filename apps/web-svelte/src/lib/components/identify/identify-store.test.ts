@@ -5,8 +5,17 @@ import type { EntityCard, EntityDetailCard } from "$lib/api/entities";
 import { ENTITY_KIND } from "$lib/entities/entity-codes";
 import { MAIN_SCROLL_TOP_EVENT } from "$lib/stores/main-scroll";
 
+const goto = vi.fn(async (_href: string) => {});
 const fetchPluginProviders = vi.fn();
 const fetchSettingsValues = vi.fn();
+
+vi.mock("$app/navigation", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("$app/navigation")>();
+  return {
+    ...actual,
+    goto: (href: string) => goto(href),
+  };
+});
 const fetchIdentifyQueue = vi.fn();
 const fetchIdentifyEntity = vi.fn();
 const fetchIdentifyQueueItem = vi.fn();
@@ -57,6 +66,7 @@ vi.mock("$lib/api/identify-client", async (importOriginal) => {
 
 describe("IdentifyStore", () => {
   beforeEach(() => {
+    goto.mockReset();
     fetchPluginProviders.mockReset();
     fetchSettingsValues.mockReset();
     fetchIdentifyQueue.mockReset();
@@ -436,6 +446,66 @@ describe("IdentifyStore", () => {
     }
   });
 
+  it("holds the review while the applied item leaves the polled queue and drops it only after moving on", async () => {
+    vi.useFakeTimers();
+    const store = new IdentifyStore();
+    try {
+      const movie = entity("video-1", { kind: "video", title: "Friendship" });
+      const shown = proposal("tmdb:movie:123", { targetKind: "video", title: "Friendship" });
+      const movieDetail = detail("video-1", { kind: "video", title: "Friendship" });
+      store.queue = [
+        { ...queueItem("video-1", { state: "proposal", provider: "tmdb", proposal: shown }), entity: movie, detail: movieDetail },
+        { ...queueItem("video-2", { state: "queued" }), entity: entity("video-2") },
+      ];
+      store.view = { kind: "review-parent", entity: movie, proposal: shown, detail: movieDetail };
+      const leaveReview = vi.spyOn(store, "navigateToDashboard");
+      // The server applies in the background: the item reports applying, then done, while the
+      // polled queue (which omits finished items) stops listing it before the apply completes.
+      applyIdentifyQueueItem.mockResolvedValue(queueItem("video-1", { state: "applying" }));
+      fetchIdentifyQueueItem
+        .mockResolvedValueOnce(queueItem("video-1", { state: "applying" }))
+        .mockResolvedValue(queueItem("video-1", { state: "done" }));
+      fetchIdentifyQueue.mockResolvedValue([queueItem("video-2", { state: "queued" })]);
+      let atNavigation: { applying: boolean; stillQueued: boolean } | null = null;
+      goto.mockImplementation(async () => {
+        atNavigation = { applying: store.applying, stillQueued: store.queue.some((item) => item.entityId === "video-1") };
+      });
+
+      store.ensureQueuePolling();
+      const apply = store.applyProposal(movie, proposal("tmdb:movie:123", { targetKind: "video" }), ["title"]);
+
+      // First queue poll: the item is gone from the list, yet the review stays put.
+      await vi.advanceTimersByTimeAsync(300);
+      expect(store.queue.some((item) => item.entityId === "video-1")).toBe(false);
+      expect(store.applyingEntityId).toBe("video-1");
+      // The hold is the review as shown (the queue item's proposal and detail), not the apply payload.
+      expect(store.applyingReview?.proposal).toStrictEqual(shown);
+      expect(store.applyingReview?.detail).toStrictEqual(movieDetail);
+      expect(store.view.kind).toBe("review-parent");
+      expect(leaveReview).not.toHaveBeenCalled();
+
+      // The apply poll reports done; the hold persists until the next page is in place.
+      await vi.advanceTimersByTimeAsync(100);
+      expect(store.queue.find((item) => item.entityId === "video-1")?.state).toBe("done");
+      expect(store.applying).toBe(true);
+      expect(store.applyingEntityId).toBe("video-1");
+
+      await vi.advanceTimersByTimeAsync(700);
+      await apply;
+
+      expect(goto).toHaveBeenCalledWith("/identify");
+      expect(atNavigation).toEqual({ applying: true, stillQueued: true });
+      expect(store.queue.some((item) => item.entityId === "video-1")).toBe(false);
+      expect(store.applying).toBe(false);
+      expect(store.applyingReview).toBeNull();
+      expect(store.applyingEntityId).toBeNull();
+      expect(leaveReview).not.toHaveBeenCalled();
+    } finally {
+      store.destroy();
+      vi.useRealTimers();
+    }
+  });
+
   it("starts a bulk batch with one request and shows the queued rows immediately", async () => {
     const store = new IdentifyStore();
     const first = entity("video-1", { kind: "video", title: "First" });
@@ -580,7 +650,7 @@ function queueItem(
   id: string,
   options: {
     isNsfw?: boolean;
-    state?: "search" | "queued" | "searching" | "proposal" | "done" | "deleted" | "error";
+    state?: "search" | "queued" | "searching" | "proposal" | "applying" | "done" | "deleted" | "error";
     provider?: string | null;
     title?: string;
     candidates?: Array<{

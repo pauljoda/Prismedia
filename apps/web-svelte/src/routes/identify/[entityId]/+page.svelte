@@ -27,20 +27,16 @@
   const current = $derived(store.queue.find((item) => item.entityId === entityId) ?? null);
   /**
    * The proposal being reviewed stays on screen while it applies: the queue item passes through
-   * "applying" (and may leave the polled queue) before the page moves on, and neither should
-   * swap the review for the search view or a loader.
+   * "applying" and "done" (and may leave the polled queue) before the page moves on, and none of
+   * that should swap the review for the search view or a loader. The store holds the review as it
+   * was when Accept was pressed, so the hold needs no local state.
    */
-  let heldItem = $state<typeof current>(null);
-  $effect(() => {
-    if (current?.proposal && current.state === IDENTIFY_QUEUE_STATE.proposal) heldItem = current;
-  });
-  const applyingHeld = $derived(
-    Boolean(heldItem && heldItem.entityId === entityId && store.applying
-      && (!current || current.state === IDENTIFY_QUEUE_STATE.applying)),
+  const heldReview = $derived(
+    store.applying && store.applyingReview?.entity.id === entityId ? store.applyingReview : null,
   );
   /** One review instance spans the proposal and its apply, so selections and progress stay put. */
   const reviewItem = $derived(
-    applyingHeld ? heldItem : current?.state === IDENTIFY_QUEUE_STATE.proposal && current.proposal ? current : null,
+    heldReview ?? (current?.state === IDENTIFY_QUEUE_STATE.proposal && current.proposal ? current : null),
   );
   const providers = $derived(current ? store.providersForKind(current.entityKind) : []);
 
@@ -206,7 +202,7 @@
   {/if}
 
   <svelte:boundary onerror={(error) => console.error("[identify] review render failed", error)}>
-  {#if reviewItem?.proposal && !activeReviewChild && (applyingHeld || !store.loading)}
+  {#if reviewItem?.proposal && !activeReviewChild && (heldReview || !store.loading)}
     <IdentifyReviewParent entity={reviewItem.entity} proposal={reviewItem.proposal} detail={reviewItem.detail} />
   {:else if store.loading || !current}
     <div class="flex flex-col items-center justify-center gap-3 py-16 text-center">
