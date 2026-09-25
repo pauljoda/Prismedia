@@ -13,7 +13,7 @@ namespace Prismedia.Application.Requests;
 public sealed class ReviewedWantedMovieService(IWantedEntityWriter wanted, IWantedSuppressionStore suppressions,
     IPluginIdentityRouter routes, IEntityLifecycleMutationLease lifecycle) : IManagedWantedWorkPreparer {
     /// <inheritdoc />
-    public RequestMediaKind Kind => RequestMediaKind.Movie;
+    public IReadOnlyList<RequestMediaKind> Kinds { get; } = [RequestMediaKind.Movie];
 
     /// <inheritdoc />
     public async Task<ManagedWantedWork> PrepareForManagerAsync(ReviewedRequestCommitRequest request, bool managerOrigin,

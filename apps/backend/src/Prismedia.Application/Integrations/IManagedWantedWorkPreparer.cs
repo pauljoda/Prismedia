@@ -11,8 +11,8 @@ namespace Prismedia.Application.Integrations;
 public interface IManagedWantedWorkPreparer {
     #region Variables
 
-    /// <summary>Request kind this preparer reviews and materializes.</summary>
-    RequestMediaKind Kind { get; }
+    /// <summary>Request kinds this preparer reviews and materializes; renditions of one work share a preparer.</summary>
+    IReadOnlyList<RequestMediaKind> Kinds { get; }
 
     #endregion
 

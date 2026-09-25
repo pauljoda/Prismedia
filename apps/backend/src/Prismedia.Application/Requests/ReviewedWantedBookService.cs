@@ -1,4 +1,5 @@
 using Prismedia.Application.Entities;
+using Prismedia.Application.Integrations;
 using Prismedia.Application.Plugins;
 using Prismedia.Contracts.Entities;
 using Prismedia.Contracts.Integrations;
@@ -12,7 +13,17 @@ public sealed class ReviewedWantedBookService(
     IWantedEntityWriter wanted,
     IWantedSuppressionStore suppressions,
     IPluginIdentityRouter routes,
-    IEntityLifecycleMutationLease lifecycle) {
+    IEntityLifecycleMutationLease lifecycle) : IManagedWantedWorkPreparer {
+    #region Variables
+
+    /// <inheritdoc />
+    /// <remarks>Both renditions resolve to one Book work, so one preparer reviews either request entry.</remarks>
+    public IReadOnlyList<RequestMediaKind> Kinds { get; } = [RequestMediaKind.Book, RequestMediaKind.Audiobook];
+
+    #endregion
+
+    #region Actions - Preparation
+
     /// <summary>Reuses the exact work identity and applies selected metadata without starting acquisition or monitoring.</summary>
     public async Task<PreparedWantedBookResponse> PrepareAsync(
         ReviewedRequestCommitRequest request,
@@ -42,6 +53,30 @@ public sealed class ReviewedWantedBookService(
         }, token)) throw new EntityLifecycleMutationConflictException(book.EntityId);
         return new(book.EntityId, title.Trim(), false);
     }
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// A Book's file is rendition-specific, so the work never reports every file as present here; each
+    /// rendition scope asks the request store whether its own rendition still lacks a file.
+    /// </remarks>
+    public async Task<ManagedWantedWork> PrepareForManagerAsync(ReviewedRequestCommitRequest request, bool managerOrigin,
+        CancellationToken token) {
+        var prepared = await PrepareAsync(request, token);
+        return new(prepared.EntityId, MissingTargetEntityIds: null, HasEveryFile: false);
+    }
+
+    /// <inheritdoc />
+    public Task<ReviewedWantedPlan> ReviewForManagerAsync(ReviewedRequestCommitRequest request, bool managerOrigin,
+        CancellationToken token) {
+        var (workId, title) = ReviewWork(request);
+        var provider = ManagedFulfillmentPolicy.For(EntityKind.Book).IdentityProviders[0];
+        return Task.FromResult(new ReviewedWantedPlan(title, new(EntityKind.Book,
+            new Dictionary<string, string> { [provider] = workId })));
+    }
+
+    #endregion
+
+    #region Actions - Validation
 
     /// <summary>Validates one reviewed Book without writing it, for connected-manager preflight.</summary>
     public static (string WorkId, string Title) ReviewWork(ReviewedRequestCommitRequest request) {
@@ -75,4 +110,6 @@ public sealed class ReviewedWantedBookService(
             throw new RequestCommitValidationException("Keep the reviewed Open Library work identity when saving this Book.");
         return selected;
     }
+
+    #endregion
 }

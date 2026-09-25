@@ -59,8 +59,11 @@ public static class DependencyInjection {
         services.AddScoped<ReviewedWantedMovieService>();
         services.AddScoped<ReviewedWantedBookService>();
         services.AddScoped<ReviewedWantedSeriesService>();
+        services.AddScoped<ReviewedWantedComicIssueService>();
         services.AddScoped<IManagedWantedWorkPreparer>(provider => provider.GetRequiredService<ReviewedWantedMovieService>());
         services.AddScoped<IManagedWantedWorkPreparer>(provider => provider.GetRequiredService<ReviewedWantedSeriesService>());
+        services.AddScoped<IManagedWantedWorkPreparer>(provider => provider.GetRequiredService<ReviewedWantedBookService>());
+        services.AddScoped<IManagedConnectedTargetPreparer>(provider => provider.GetRequiredService<ReviewedWantedComicIssueService>());
         services.AddScoped<IMonitoredEntityRecovery>(sp => sp.GetRequiredService<RequestCommitService>());
         services.AddScoped<IRequestChildHydrator>(sp => sp.GetRequiredService<RequestCommitService>());
         services.AddScoped<IRequestGraphAcquisitionStarter>(sp => sp.GetRequiredService<RequestCommitService>());

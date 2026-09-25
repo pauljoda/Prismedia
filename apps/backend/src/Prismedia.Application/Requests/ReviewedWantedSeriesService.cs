@@ -19,7 +19,7 @@ public sealed class ReviewedWantedSeriesService(
     IPluginIdentityRouter routes,
     IEntityLifecycleMutationLease lifecycle) : IManagedWantedWorkPreparer {
     /// <inheritdoc />
-    public RequestMediaKind Kind => RequestMediaKind.Series;
+    public IReadOnlyList<RequestMediaKind> Kinds { get; } = [RequestMediaKind.Series];
 
     /// <inheritdoc />
     public async Task<ManagedWantedWork> PrepareForManagerAsync(ReviewedRequestCommitRequest request, bool managerOrigin,

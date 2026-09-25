@@ -125,8 +125,6 @@ public static class DependencyInjection {
         services.AddScoped<IReviewedManagedRequestCommitScope, EfReviewedManagedRequestCommitScope>();
         services.AddScoped<ManagedRequestService>();
         services.AddScoped<ReviewedManagedRequestService>();
-        services.AddScoped<ReviewedManagedBookRequestService>();
-        services.AddScoped<ReviewedManagedComicIssueService>();
         services.AddScoped<ReviewedManagedComicRunService>();
         services.AddScoped<ManagedRequestProcessor>();
         services.AddSingleton(new ExternalLibraryStorageOptions(dataDir, cacheDir));

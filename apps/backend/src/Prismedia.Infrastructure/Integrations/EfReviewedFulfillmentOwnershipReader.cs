@@ -33,13 +33,15 @@ public sealed class EfReviewedFulfillmentOwnershipReader(
 
         var scopeIds = scopes.Select(scope => scope.EntityId).ToArray();
         var scopeKinds = scopes.Select(scope => scope.Kind.ToCode()).ToArray();
+        // A rendition scope only overlaps ownership of that rendition; whole-work scopes overlap every owner.
+        var rendition = work.BookRendition?.ToCode();
         var matchRows = await db.Database.SqlQuery<OwnershipMatchRow>($$"""
                 SELECT reservation.id AS "ReservationId", target.entity_id AS "ScopeId"
                 FROM fulfillment_reservations reservation
                 CROSS JOIN unnest({{scopeIds}}, {{scopeKinds}}) AS target(entity_id, kind_code)
                 WHERE reservation.released_at IS NULL
                   AND prismedia_fulfillment_matches(
-                      reservation, target.entity_id, target.kind_code, NULL::text)
+                      reservation, target.entity_id, target.kind_code, {{rendition}}::text)
                 """)
             .ToArrayAsync(cancellationToken);
         var reservationIds = matchRows.Select(match => match.ReservationId).Distinct().ToArray();
@@ -59,12 +61,7 @@ public sealed class EfReviewedFulfillmentOwnershipReader(
         var connections = await db.IntegrationConnections.AsNoTracking()
             .Where(connection => connectionIds.Contains(connection.Id))
             .ToDictionaryAsync(connection => connection.Id, cancellationToken);
-        var sourceScopeIds = await db.EntityFiles.AsNoTracking()
-            .Where(file => scopeIds.Contains(file.EntityId)
-                && file.Role == EntityFileRole.Source)
-            .Select(file => file.EntityId)
-            .Distinct()
-            .ToHashSetAsync(cancellationToken);
+        var sourceScopeIds = await SourceScopeIdsAsync(scopeIds, work, cancellationToken);
 
         var activeMatches = matches.Where(match =>
             !requests.TryGetValue(match.Reservation.OwnerId, out var request)
@@ -94,7 +91,7 @@ public sealed class EfReviewedFulfillmentOwnershipReader(
             .ToList();
 
         var externallyOwnedScopeIds = activeMatches.Select(match => match.ScopeId).ToHashSet();
-        var nativeScopeIds = await NativeScopeIdsAsync(scopes, cancellationToken);
+        var nativeScopeIds = await NativeScopeIdsAsync(scopes, work.BookRendition, cancellationToken);
         nativeScopeIds.UnionWith(sourceScopeIds);
         nativeScopeIds.ExceptWith(externallyOwnedScopeIds);
         if (nativeScopeIds.Count != 0) {
@@ -258,18 +255,53 @@ public sealed class EfReviewedFulfillmentOwnershipReader(
 
     #region Actions - Native Ownership
 
+    /// <summary>
+    /// Scopes that already hold a local source: the Entity's own source file, or, for a rendition whose
+    /// files belong to child Entities, a child of the rendition's target kind with a source file.
+    /// </summary>
+    private async Task<HashSet<Guid>> SourceScopeIdsAsync(
+        Guid[] scopeIds,
+        ManagedLookupInput work,
+        CancellationToken cancellationToken) {
+        var target = work.BookRendition is { } rendition && ManagedFulfillmentPolicy.Supports(work.EntityKind)
+            ? ManagedFulfillmentPolicy.For(work.EntityKind).TargetFor(rendition)
+            : null;
+        if (target is null || target.Kind == work.EntityKind) {
+            return await db.EntityFiles.AsNoTracking()
+                .Where(file => scopeIds.Contains(file.EntityId)
+                    && file.Role == EntityFileRole.Source)
+                .Select(file => file.EntityId)
+                .Distinct()
+                .ToHashSetAsync(cancellationToken);
+        }
+
+        var childKind = target.Kind.ToCode();
+        return await db.Entities.AsNoTracking()
+            .Where(child => child.KindCode == childKind && child.ParentEntityId != null
+                && scopeIds.Contains(child.ParentEntityId.Value)
+                && db.EntityFiles.Any(file => file.EntityId == child.Id && file.Role == EntityFileRole.Source))
+            .Select(child => child.ParentEntityId!.Value)
+            .Distinct()
+            .ToHashSetAsync(cancellationToken);
+    }
+
     private async Task<HashSet<Guid>> NativeScopeIdsAsync(
         IReadOnlyList<(Guid EntityId, EntityKind Kind)> scopes,
+        BookRendition? scopeRendition,
         CancellationToken cancellationToken) {
         var scopeIds = scopes.Select(scope => scope.EntityId).ToArray();
         var scopeKinds = scopes.Select(scope => scope.Kind.ToCode()).ToArray();
         var owning = AcquisitionStatusDefinition.OwningFulfillment.Select(status => status.ToCode()).ToArray();
+        // Native owners of another rendition do not own this scope; owners without a rendition own the default one.
+        var rendition = scopeRendition?.ToCode();
+        var defaultRendition = BookRendition.Ebook.ToCode();
         return (await db.Database.SqlQuery<Guid>($$"""
                 SELECT DISTINCT target.entity_id AS "Value"
                 FROM unnest({{scopeIds}}, {{scopeKinds}}) AS target(entity_id, kind_code)
                 WHERE EXISTS (
                     SELECT 1 FROM acquisitions acquisition
                     WHERE acquisition.status = ANY({{owning}})
+                      AND ({{rendition}}::text IS NULL OR coalesce(acquisition.book_rendition, {{defaultRendition}}) = {{rendition}}::text)
                       AND (
                         (acquisition.entity_id IS NOT NULL
                           AND prismedia_fulfillment_overlap(acquisition.entity_id, target.entity_id))
@@ -283,7 +315,8 @@ public sealed class EfReviewedFulfillmentOwnershipReader(
                    OR EXISTS (
                     SELECT 1 FROM monitors monitor
                     LEFT JOIN acquisitions acquisition ON acquisition.id = monitor.acquisition_id
-                    WHERE (monitor.entity_id IS NOT NULL
+                    WHERE ({{rendition}}::text IS NULL OR coalesce(monitor.book_rendition, {{defaultRendition}}) = {{rendition}}::text)
+                      AND ((monitor.entity_id IS NOT NULL
                             AND prismedia_fulfillment_overlap(monitor.entity_id, target.entity_id))
                        OR (acquisition.id IS NOT NULL
                            AND acquisition.status = ANY({{owning}})
@@ -295,7 +328,7 @@ public sealed class EfReviewedFulfillmentOwnershipReader(
                                    SELECT 1 FROM entity_external_ids identity
                                    WHERE identity.entity_id = target.entity_id
                                      AND lower(identity.provider) = lower(acquisition.identity_namespace)
-                                     AND identity.value = acquisition.identity_value)))))
+                                     AND identity.value = acquisition.identity_value))))))
                 """)
             .ToArrayAsync(cancellationToken)).ToHashSet();
     }

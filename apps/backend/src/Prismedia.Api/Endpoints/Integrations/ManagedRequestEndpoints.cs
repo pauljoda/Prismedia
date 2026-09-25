@@ -9,41 +9,12 @@ namespace Prismedia.Api.Endpoints;
 public static class ManagedRequestEndpoints {
     #region Actions - Routes
 
-    /// <summary>Maps review, durable acceptance, observation, and cancellation without exposing direct mutation gateway calls.</summary>
+    /// <summary>
+    /// Maps the one review-and-commit intake for every managed kind, the reviewed addition of a comic run,
+    /// and observation and cancellation of accepted requests, without exposing direct mutation gateway calls.
+    /// </summary>
     public static void MapManagedRequestEndpoints(this RouteGroupBuilder connections) {
         var group = connections.MapGroup("/{id:guid}/manager/requests");
-        group.MapPost("/preview", async (Guid id, PreviewManagedRequestInput request, ManagedRequestService service,
-            CancellationToken token) =>
-            Results.Ok(await service.PreviewAsync(id, request, token)))
-            .WithName("PreviewManagedRequest").Produces<ManagedRequestPreview>().Produces<ApiProblem>(400);
-        group.MapPost("/book/review", async (Guid id, ReviewManagedBookRequestInput request,
-            ReviewedManagedBookRequestService service, CancellationToken token) => {
-            try {
-                return Results.Ok(await service.ReviewAsync(id, request, token));
-            } catch (RequestProposalChangedException error) {
-                return Results.Conflict(new ApiProblem(ApiProblemCodes.RequestProposalChanged, error.Message));
-            } catch (RequestCommitValidationException error) {
-                return Results.BadRequest(new ApiProblem(ApiProblemCodes.RequestInvalid, error.Message));
-            }
-        })
-            .WithName("ReviewManagedBookRequest").Produces<ReviewedManagedBookRequest>()
-            .Produces<ApiProblem>(400).Produces<ApiProblem>(409);
-        group.MapPost("/book/commit", async (Guid id, CommitManagedBookRequestInput request,
-            ReviewedManagedBookRequestService service, CancellationToken token) => {
-            try {
-                return Results.Accepted(value: await service.CommitAsync(id, request, token));
-            } catch (RequestProposalChangedException error) {
-                return Results.Conflict(new ApiProblem(ApiProblemCodes.RequestProposalChanged, error.Message));
-            } catch (RequestCommitValidationException error) {
-                return Results.BadRequest(new ApiProblem(ApiProblemCodes.RequestInvalid, error.Message));
-            }
-        })
-            .WithName("CommitManagedBookRequest").Produces<CommitManagedBookRequestResponse>(202)
-            .Produces<ApiProblem>(400).Produces<ApiProblem>(409);
-        group.MapPost("/comic-issue/review", async (Guid id, ReviewManagedComicIssueInput request,
-            ReviewedManagedComicIssueService service, CancellationToken token) =>
-            Results.Ok(await service.ReviewAsync(id, request, token)))
-            .WithName("ReviewManagedComicIssue").Produces<ReviewedManagedComicIssue>().Produces<ApiProblem>(400);
         group.MapPost("/comic-run/review", async (Guid id, ReviewManagedComicRunInput request,
             ReviewedManagedComicRunService service, CancellationToken token) =>
             Results.Ok(await service.ReviewAsync(id, request, token)))
@@ -52,11 +23,6 @@ public static class ManagedRequestEndpoints {
             ReviewedManagedComicRunService service, CancellationToken token) =>
             Results.Ok(await service.CommitAsync(id, request, token)))
             .WithName("CommitManagedComicRun").Produces<CommitManagedComicRunResponse>()
-            .Produces<ApiProblem>(400).Produces<ApiProblem>(409);
-        group.MapPost("/comic-issue/commit", async (Guid id, CommitManagedComicIssueInput request,
-            ReviewedManagedComicIssueService service, CancellationToken token) =>
-            Results.Accepted(value: await service.CommitAsync(id, request, token)))
-            .WithName("CommitManagedComicIssue").Produces<CommitManagedComicIssueResponse>(202)
             .Produces<ApiProblem>(400).Produces<ApiProblem>(409);
         group.MapPost("/review", async (Guid id, ReviewManagedRequestInput request, ReviewedManagedRequestService service,
             CancellationToken token) => {
@@ -84,9 +50,6 @@ public static class ManagedRequestEndpoints {
         group.MapGet("/", async (Guid id, ManagedRequestService service, CancellationToken token) =>
             Results.Ok(await service.ListAsync(id, token)))
             .WithName("ListManagedRequests").Produces<IReadOnlyList<ManagedRequestResponse>>();
-        group.MapPost("/", async (Guid id, CreateManagedRequestInput request, ManagedRequestService service, CancellationToken token) =>
-            Results.Accepted(value: await service.CreateAsync(id, request, token)))
-            .WithName("CreateManagedRequest").Produces<ManagedRequestResponse>(202).Produces<ApiProblem>(400).Produces<ApiProblem>(409);
         group.MapPost("/{requestId:guid}/refresh", async (Guid id, Guid requestId, ManagedRequestService service,
             CancellationToken token) => {
             await service.RefreshAsync(id, requestId, token);

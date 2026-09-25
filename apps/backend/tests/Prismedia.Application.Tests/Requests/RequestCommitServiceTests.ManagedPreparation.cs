@@ -185,20 +185,43 @@ public sealed partial class RequestCommitServiceTests {
     }
 
     [Fact]
-    public void ConnectedBookBatchRequiresOneWorkAndUniqueMappedFormats() {
+    public void ConnectedRequestScopesFollowTheKindsRenditionRules() {
+        var book = ManagedFulfillmentPolicy.For(EntityKind.Book);
+        var movie = ManagedFulfillmentPolicy.For(EntityKind.Movie);
+        var root = Guid.NewGuid();
+        var ebook = new ManagedRequestScopeChoice(BookRendition.Ebook, root);
+        var audio = new ManagedRequestScopeChoice(BookRendition.Audiobook, Guid.NewGuid());
+
+        ReviewedManagedRequestService.RequireScopes(book, [ebook, audio], requireLibrary: true);
+        ReviewedManagedRequestService.RequireScopes(book, [audio], requireLibrary: false);
+        ReviewedManagedRequestService.RequireScopes(movie, [new(LibraryRootId: root)], requireLibrary: true);
+        ReviewedManagedRequestService.RequireScopes(movie, [new()], requireLibrary: false);
+        Assert.Throws<ArgumentException>(() =>
+            ReviewedManagedRequestService.RequireScopes(book, [ebook, ebook], requireLibrary: false));
+        Assert.Throws<ArgumentException>(() =>
+            ReviewedManagedRequestService.RequireScopes(book, [new(LibraryRootId: root)], requireLibrary: false));
+        Assert.Throws<ArgumentException>(() =>
+            ReviewedManagedRequestService.RequireScopes(movie, [ebook], requireLibrary: false));
+        Assert.Throws<ArgumentException>(() =>
+            ReviewedManagedRequestService.RequireScopes(movie, [new(), new()], requireLibrary: false));
+        Assert.Throws<ArgumentException>(() =>
+            ReviewedManagedRequestService.RequireScopes(book, [ebook with { LibraryRootId = Guid.Empty }], requireLibrary: true));
+    }
+
+    [Fact]
+    public void ConnectedRequestCommitNamesExactlyOneSourceAndEveryLibrary() {
         var book = ManagedBookReview();
         var root = Guid.NewGuid();
-        var ebook = new ManagedBookRenditionChoice(BookRendition.Ebook, root, Search: false);
-        var audio = new ManagedBookRenditionChoice(BookRendition.Audiobook, Guid.NewGuid(), Search: true);
+        IReadOnlyList<ManagedRequestScopeChoice> scopes = [new(BookRendition.Ebook, root)];
 
-        ReviewedManagedBookRequestService.Validate(null, book, [ebook, audio]);
-        ReviewedManagedBookRequestService.Validate(Guid.NewGuid(), null, [ebook]);
-        Assert.Throws<ArgumentException>(() =>
-            ReviewedManagedBookRequestService.Validate(Guid.NewGuid(), book, [ebook]));
-        Assert.Throws<ArgumentException>(() =>
-            ReviewedManagedBookRequestService.Validate(null, book, [ebook, ebook]));
-        Assert.Throws<ArgumentException>(() =>
-            ReviewedManagedBookRequestService.Validate(null, book, [ebook with { LibraryRootId = Guid.Empty }]));
+        ReviewedManagedRequestService.ValidateCommitInput(new(Guid.NewGuid(), 1, scopes, null, true, true, Request: book));
+        ReviewedManagedRequestService.ValidateCommitInput(new(Guid.NewGuid(), 1, scopes, null, true, true, EntityId: Guid.NewGuid()));
+        Assert.Throws<RequestCommitValidationException>(() => ReviewedManagedRequestService.ValidateCommitInput(
+            new(Guid.NewGuid(), 1, scopes, null, true, true, EntityId: Guid.NewGuid(), Request: book)));
+        Assert.Throws<ArgumentException>(() => ReviewedManagedRequestService.ValidateCommitInput(
+            new(Guid.NewGuid(), 1, [new(BookRendition.Ebook)], null, true, true, Request: book)));
+        Assert.Throws<ArgumentException>(() => ReviewedManagedRequestService.ValidateCommitInput(
+            new(Guid.Empty, 1, scopes, null, true, true, Request: book)));
     }
 
     [Fact]
@@ -275,11 +298,11 @@ public sealed partial class RequestCommitServiceTests {
         var input = new CommitReviewedManagedRequestInput(
             Guid.NewGuid(),
             7,
-            Guid.NewGuid(),
+            [new(LibraryRootId: Guid.NewGuid())],
             "profile-one",
             Monitored: true,
             Search: true,
-            request);
+            Request: request);
 
         var fingerprint = ReviewedManagedRequestIdentity.Fingerprint(connectionId, input);
 
@@ -304,7 +327,7 @@ public sealed partial class RequestCommitServiceTests {
     [Fact]
     public void ReviewedManagerCommitRejectsMissingRequestBeforeFingerprinting() {
         var input = new CommitReviewedManagedRequestInput(
-            Guid.NewGuid(), 7, Guid.NewGuid(), "profile-one", true, true, null!);
+            Guid.NewGuid(), 7, [new(LibraryRootId: Guid.NewGuid())], "profile-one", true, true);
 
         Assert.Throws<RequestCommitValidationException>(() =>
             ReviewedManagedRequestService.ValidateCommitInput(input));
@@ -313,8 +336,8 @@ public sealed partial class RequestCommitServiceTests {
     [Fact]
     public void ReviewedManagerCommitRejectsMissingProposalSelectionBeforeFingerprinting() {
         var input = new CommitReviewedManagedRequestInput(
-            Guid.NewGuid(), 7, Guid.NewGuid(), "profile-one", true, true,
-            ManagedMovieReview() with { SelectedProposalIds = null! });
+            Guid.NewGuid(), 7, [new(LibraryRootId: Guid.NewGuid())], "profile-one", true, true,
+            Request: ManagedMovieReview() with { SelectedProposalIds = null! });
 
         Assert.Throws<RequestCommitValidationException>(() =>
             ReviewedManagedRequestService.ValidateCommitInput(input));

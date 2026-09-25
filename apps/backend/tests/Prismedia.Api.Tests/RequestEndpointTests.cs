@@ -241,7 +241,7 @@ public sealed class RequestEndpointTests {
         using var factory = CreateFactory();
         using var client = factory.CreateAuthenticatedClient();
         var input = new CommitReviewedManagedRequestInput(
-            Guid.NewGuid(), 1, Guid.NewGuid(), "profile", true, true, null!);
+            Guid.NewGuid(), 1, [new(LibraryRootId: Guid.NewGuid())], "profile", true, true);
 
         using var response = await client.PostAsJsonAsync(
             $"/api/connections/{Guid.NewGuid():D}/manager/requests/commit-reviewed",
@@ -264,7 +264,7 @@ public sealed class RequestEndpointTests {
             "revision",
             null!);
         var input = new CommitReviewedManagedRequestInput(
-            Guid.NewGuid(), 1, Guid.NewGuid(), "profile", true, true, request);
+            Guid.NewGuid(), 1, [new(LibraryRootId: Guid.NewGuid())], "profile", true, true, Request: request);
 
         using var response = await client.PostAsJsonAsync(
             $"/api/connections/{Guid.NewGuid():D}/manager/requests/commit-reviewed",

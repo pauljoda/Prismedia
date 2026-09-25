@@ -95,6 +95,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Changed
 
+- Connected-manager requests for movies, series, Books, and comic issues go through one review-and-commit flow: every request names its work once, asks for the scopes it needs (each Book format keeps its own mapped library and outcome), and the older per-kind manager request routes are gone.
+
 - Reading and listening are linked only when Prismedia can line them up exactly: the audiobook has real chapter boundaries (embedded chapters, or one file per chapter) and at least one chapter is paired by you, by a reviewed in-order fill, or by an exact title match. Linked books keep switching between formats and one shared progress. Every other book, including single-file audiobooks without chapter markers and audiobooks split into parts, tracks reading and listening separately: the Book page and library thumbnails show two progress meters with the reason, listening never moves the reading position, and nothing switches between the formats.
 
 - Request Activity loads a paged server feed that separates problems, active work, followed library titles, and recent history in compact rows, with full source credits on demand. History stays visible while a source is offline, and completed manager requests no longer repeat as separate tracked items. Unreadable downloaded books and comics are reported as invalid media rather than connection or destination failures, without exposing private paths. Links to imported items follow the current content visibility mode, including nested comic and book pages, and Activity explains when a retained import is unavailable or hidden.

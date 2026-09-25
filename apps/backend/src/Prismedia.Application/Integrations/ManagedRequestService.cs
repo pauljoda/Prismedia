@@ -4,79 +4,34 @@ using Prismedia.Domain.Integrations;
 
 namespace Prismedia.Application.Integrations;
 
-/// <summary>Accepts explicit finite wanted-work fulfillment through a chosen external manager and mapped library.</summary>
+/// <summary>
+/// Accepts preflighted wanted-work fulfillment through a chosen external manager and mapped library, and
+/// tracks its durable progress. Reviewing and preparing the work is <see cref="ReviewedManagedRequestService"/>'s job.
+/// </summary>
 public sealed class ManagedRequestService(IManagedRequestStore store, IntegrationConnectionAccess access,
-    IIntegrationManagerCreationGateway gateway, ManagedLibraryService library, IManagedTrackingStore tracking) {
-    #region Actions - Preview
-
-    /// <summary>Shows exact identity and existing remote settings without taking ownership or creating a holding.</summary>
-    public async Task<ManagedRequestPreview> PreviewAsync(Guid connectionId, PreviewManagedRequestInput input, CancellationToken token) {
-        var target = await store.RequireTargetAsync(
-            connectionId,
-            input.EntityId,
-            input.LibraryRootId,
-            input.TargetEntityIds,
-            input.BookRendition,
-            token);
-        var connection = await access.RequireAsync(connectionId, PluginCapability.ExternalManager, IntegrationOperation.LookupManaged,
-            target.Work.EntityKind, token);
-        var lookup = await gateway.LookupAsync(connection.Manifest.Id, connection.Context, target.Work, token);
-        ManagedCreationEvidence.ValidateLookup(target.Work, lookup);
-        var options = await library.OptionsAsync(connectionId, new(target.Work.EntityKind, target.Work.BookRendition), token);
-        if (!options.Roots.Any(root => root.Id == target.Mount.RemoteRootId && root.Path == target.Mount.RemotePath
-            && root.Accessible != false)) {
-            throw new ArgumentException(
-                "The mapped external root changed or became inaccessible. Review its connection before requesting this work.");
-        }
-
-        return new(target.EntityId, target.Title, target.Work, target.Mount, options, lookup.Existing,
-            target.Targets?.Select(item => item.EntityId).ToArray());
-    }
-
-    #endregion
-
+    IManagedTrackingStore tracking) {
     #region Actions - Acceptance
 
-    /// <summary>Commits the reviewed request and exclusive fulfillment owner before publishing any remote mutation.</summary>
-    public async Task<ManagedRequestResponse> CreateAsync(Guid connectionId, CreateManagedRequestInput input, CancellationToken token) {
-        Validate(input);
-        var fingerprint = ManagedRequestIdentity.Fingerprint(input);
-        if (await store.FindAsync(input.OperationId, token) is { } existing) {
-            if (existing.Operation.State.ConnectionId != connectionId || existing.Plan.Fingerprint != fingerprint) {
-                throw new ManagedRequestConflictException("This operation ID already accepted a different managed request.");
-            }
-
-            return Map(existing);
-        }
-
-        var preview = await PreviewAsync(
-            connectionId,
-            new(input.EntityId, input.LibraryRootId, input.TargetEntityIds, input.ReviewedWork.BookRendition),
-            token);
-        if (!ManagedRequestIdentity.SameWork(preview.Work, input.ReviewedWork)) {
-            throw new ManagedRequestConflictException("The wanted item's metadata identity changed. Review the request again.");
-        }
-
-        var policy = ManagedFulfillmentPolicy.For(preview.Work.EntityKind);
-        RequireReviewedHolding(policy, preview, input);
+    /// <summary>
+    /// Requires every manager capability an acceptance will use: reconciliation and configuration always,
+    /// creation only when the kind creates its holding and the manager has none, search when asked, and
+    /// reading the connected library for later materialization.
+    /// </summary>
+    internal async Task RequireAcceptanceCapabilitiesAsync(Guid connectionId, EntityKind kind, ManagedFulfillmentPolicy policy,
+        ManagedItemSnapshot? existing, bool search, CancellationToken token) {
         foreach (var operation in new[] { IntegrationOperation.ReconcileManaged, IntegrationOperation.ConfigureManaged }) {
-            await access.RequireAsync(connectionId, PluginCapability.ExternalManager, operation, preview.Work.EntityKind, token);
+            await access.RequireAsync(connectionId, PluginCapability.ExternalManager, operation, kind, token);
         }
 
-        if (preview.Existing is null && policy.CreatesHolding) {
-            await access.RequireAsync(connectionId, PluginCapability.ExternalManager, IntegrationOperation.EnsureManaged,
-                preview.Work.EntityKind, token);
+        if (existing is null && policy.CreatesHolding) {
+            await access.RequireAsync(connectionId, PluginCapability.ExternalManager, IntegrationOperation.EnsureManaged, kind, token);
         }
 
-        if (input.Search) {
-            await access.RequireAsync(connectionId, PluginCapability.ExternalManager, IntegrationOperation.RequestManaged,
-                preview.Work.EntityKind, token);
+        if (search) {
+            await access.RequireAsync(connectionId, PluginCapability.ExternalManager, IntegrationOperation.RequestManaged, kind, token);
         }
 
-        await access.RequireAsync(connectionId, PluginCapability.ConnectedLibrary, IntegrationOperation.GetLibraryItem,
-            preview.Work.EntityKind, token);
-        return await AcceptAsync(connectionId, input, preview, reviewedCommitFingerprint: null,
-            expectedConnectionRevision: null, existingHoldingId: null, token);
+        await access.RequireAsync(connectionId, PluginCapability.ConnectedLibrary, IntegrationOperation.GetLibraryItem, kind, token);
     }
 
     /// <summary>Returns a previously accepted reviewed commit without requiring current provider availability.</summary>
