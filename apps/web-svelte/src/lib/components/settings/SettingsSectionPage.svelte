@@ -47,9 +47,11 @@
 
   type Props = {
     sectionId: SettingsSectionId | string;
+    /** Rendered inside a settings layout that already provides navigation, so the back link and description are left out. */
+    embedded?: boolean;
   };
 
-  let { sectionId }: Props = $props();
+  let { sectionId, embedded = false }: Props = $props();
 
   const session = useSession();
   const settingsSectionsUsingLibraryConfig: readonly SettingsSectionId[] = [
@@ -303,12 +305,12 @@
 {:else}
 <div class="space-y-6" style:--settings-accent={section.accent}>
   <div>
-    <BackLink fallback="/settings" label="Settings" variant="text" />
+    {#if !embedded}<BackLink fallback="/settings" label="Settings" variant="text" />{/if}
     <h1 class="mt-1 flex items-center gap-2.5">
       <SectionIcon class="settings-page-icon h-5 w-5" />
       {section.title}
     </h1>
-    <p class="mt-1 text-[0.78rem] text-text-muted">{section.description}</p>
+    {#if !embedded}<p class="mt-1 text-[0.78rem] text-text-muted">{section.description}</p>{/if}
   </div>
 
   <!-- Toast messages -->
