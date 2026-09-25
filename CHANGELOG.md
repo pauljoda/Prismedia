@@ -105,6 +105,12 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 - The Dashboard's featured progress bar uses the colour of the item's media family, and Books tracked separately show reading and listening progress as two bars.
 
+- Identify opens on its queue, showing each item's cover, provider, media type, and match strength instead of internal codes, followed by one card per media family with how many items are still unidentified for each kind and the providers that can identify them. Choosing a kind opens its identify grid.
+
+- Watched Libraries show each library as a card with switches for the media it scans, NSFW, and automatic identification, a Scan button for that library alone, and a confirmation before removing it.
+
+- Add to Collection can create a new collection from the typed name and add the selection to it in one step.
+
 - Request and connected-source administration can open as focused pages inside the iOS app, using its native navigation and background while staying current with the web interface.
 
 - Book chapter alignment shows total automatic and manual coverage for readable and audio chapters and clearly marks chapters without a match. Saving rejects targets that are no longer in the Book's readable contents and keeps the existing choices.

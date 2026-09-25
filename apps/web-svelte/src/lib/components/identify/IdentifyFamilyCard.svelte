@@ -21,11 +21,10 @@
     family: MediaFamily;
     kinds: IdentifyFamilyKind[];
     providers: PluginProvider[];
-    selectedKind: string | null;
     onOpenKind: (kind: string) => void;
   }
 
-  let { family, kinds, providers, selectedKind, onOpenKind }: Props = $props();
+  let { family, kinds, providers, onOpenKind }: Props = $props();
 
   const numberFormat = new Intl.NumberFormat();
   const Icon = $derived(family.icon);
@@ -61,11 +60,7 @@
         <Button
           variant="ghost"
           size="sm"
-          class={cn(
-            "h-auto w-full justify-between gap-3 px-2 py-1.5 font-normal",
-            selectedKind === entry.kind && "bg-[var(--color-surface-3)]",
-          )}
-          aria-pressed={selectedKind === entry.kind}
+          class="h-auto w-full justify-between gap-3 px-2 py-1.5 font-normal"
           onclick={() => onOpenKind(entry.kind)}
         >
           <span class="min-w-0 truncate text-caption text-text-secondary">{entry.label}</span>

@@ -4,7 +4,7 @@
 </script>
 
 <script lang="ts">
-  import { EyeOff, FolderOpen, Loader2, RefreshCw, Sparkles, Trash2, UsersRound } from "@lucide/svelte";
+  import { ExternalLink, EyeOff, FolderOpen, Loader2, RefreshCw, Sparkles, Trash2, UsersRound } from "@lucide/svelte";
   import { Button, Toggle, cn } from "@prismedia/ui-svelte";
   import { ENTITY_KIND } from "$lib/api/generated/codes";
   import { getGetPluginIconUrl } from "$lib/api/generated/prismedia";
@@ -17,13 +17,24 @@
     root: LibraryRoot;
     scanning?: boolean;
     canManageAccess?: boolean;
+    /** Whether this account may see and set the NSFW flag. */
+    showNsfw?: boolean;
     onToggle: (root: LibraryRoot, flag: LibraryFlag) => void;
     onScan: (root: LibraryRoot) => void;
     onAccess: (root: LibraryRoot) => void;
     onRemove: (root: LibraryRoot) => void;
   }
 
-  let { root, scanning = false, canManageAccess = false, onToggle, onScan, onAccess, onRemove }: Props = $props();
+  let {
+    root,
+    scanning = false,
+    canManageAccess = false,
+    showNsfw = false,
+    onToggle,
+    onScan,
+    onAccess,
+    onRemove,
+  }: Props = $props();
 
   /** What a library can scan for, each painted as the media family it feeds. */
   const SCANS = [
@@ -69,7 +80,23 @@
       <h3 class="truncate font-heading text-sm font-semibold text-text-primary">{root.label}</h3>
       <p class="truncate font-mono text-[0.66rem] text-text-muted" title={root.path}>{root.path}</p>
       {#if origin}
-        <p class="truncate text-caption text-text-secondary">{origin.connectionName}</p>
+        <p class="flex min-w-0 items-center gap-1.5 text-caption text-text-secondary">
+          <span class="truncate">{origin.connectionName}</span>
+          <span class="text-text-disabled">· read-only</span>
+          <a
+            href={origin.managementUrl}
+            target="_blank"
+            rel="noreferrer"
+            class="shrink-0 text-text-muted transition-colors hover:text-text-primary"
+            aria-label="Open {origin.connectionName}"
+            title="Open {origin.connectionName}"
+          >
+            <ExternalLink class="size-3" aria-hidden="true" />
+          </a>
+        </p>
+        <p class="truncate font-mono text-[0.62rem] text-text-disabled" title={origin.remotePath}>{origin.remotePath}</p>
+      {:else if readOnly}
+        <p class="text-caption text-text-muted">Read-only</p>
       {/if}
     </div>
     <Toggle
@@ -93,7 +120,6 @@
         <Toggle
           size="sm"
           checked={on}
-          disabled={readOnly}
           ariaLabel="Scan {scan.label} in {root.label}"
           onchange={() => onToggle(root, scan.flag)}
         />
@@ -102,11 +128,13 @@
   </ul>
 
   <ul class="mt-3 flex flex-col gap-1 border-t border-[var(--color-border-subtle)] px-4 pt-3 pb-4">
-    <li class="grid grid-cols-[1.75rem_minmax(0,1fr)_auto] items-center gap-2.5">
-      <EyeOff class="size-3.5 justify-self-center text-text-muted" aria-hidden="true" />
-      <span class="text-caption text-text-secondary">NSFW</span>
-      <Toggle size="sm" checked={root.isNsfw} ariaLabel="Mark {root.label} NSFW" onchange={() => onToggle(root, "isNsfw")} />
-    </li>
+    {#if showNsfw}
+      <li class="grid grid-cols-[1.75rem_minmax(0,1fr)_auto] items-center gap-2.5">
+        <EyeOff class="size-3.5 justify-self-center text-text-muted" aria-hidden="true" />
+        <span class="text-caption text-text-secondary">NSFW</span>
+        <Toggle size="sm" checked={root.isNsfw} ariaLabel="Mark {root.label} NSFW" onchange={() => onToggle(root, "isNsfw")} />
+      </li>
+    {/if}
     <li class="grid grid-cols-[1.75rem_minmax(0,1fr)_auto] items-center gap-2.5">
       <Sparkles class="size-3.5 justify-self-center text-text-muted" aria-hidden="true" />
       <span class="text-caption text-text-secondary">Auto identify</span>
@@ -139,7 +167,7 @@
         class="text-text-muted hover:text-error-text"
         disabled={readOnly}
         aria-label="Remove {root.label}"
-        title="Remove"
+        title={readOnly ? "Turn off scanning to pause an external library" : "Remove"}
         onclick={() => onRemove(root)}
       >
         <Trash2 aria-hidden="true" />

@@ -5,12 +5,15 @@
   import {
     AlertCircle,
     Check,
-    Home,
+    ChevronLeft,
     Loader2,
     ScanSearch,
+    Sparkles,
     X,
   } from "@lucide/svelte";
-  import { Button, cn } from "@prismedia/ui-svelte";
+  import { Button } from "@prismedia/ui-svelte";
+  import { fetchEntities } from "$lib/api/entities";
+  import ManagePageHeader from "$lib/components/manage/ManagePageHeader.svelte";
   import {
     useIdentifyStore,
   } from "$lib/components/identify/identify-store.svelte";
@@ -19,12 +22,35 @@
   import IdentifyReviewChoice from "$lib/components/identify/IdentifyReviewChoice.svelte";
   import IdentifyReviewParent from "$lib/components/identify/IdentifyReviewParent.svelte";
   import IdentifyReviewChild from "$lib/components/identify/IdentifyReviewChild.svelte";
-  import { entityKindIcon } from "$lib/entities/entity-kind-icons";
-  import { entityAccentForKind } from "$lib/entities/entity-accent";
+  import { labelForEntityKind } from "$lib/entities/entity-codes";
+  import { useNsfw } from "$lib/nsfw/store.svelte";
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
 
   const store = useIdentifyStore();
   const appChrome = useAppChrome();
+  const nsfw = useNsfw();
+  const numberFormat = new Intl.NumberFormat();
+
+  let unidentified = $state<Record<string, number>>({});
+  let countedFor = "";
+
+  /** Counts files that are not organized yet, one `limit: 1` request per identifiable kind. */
+  $effect(() => {
+    const kinds = store.supportedKinds.map((entry) => entry.kind);
+    const hideNsfw = nsfw.mode === "off";
+    const key = `${hideNsfw}:${kinds.join(",")}`;
+    if (kinds.length === 0 || key === countedFor) return;
+    countedFor = key;
+    unidentified = {};
+    for (const kind of kinds) {
+      fetchEntities({ kind, organized: false, hasFile: true, wanted: false, limit: 1, hideNsfw }).then(
+        (response) => (unidentified = { ...unidentified, [kind]: Number(response.totalCount) || 0 }),
+        () => undefined,
+      );
+    }
+  });
+
+  const totalUnidentified = $derived(Object.values(unidentified).reduce((sum, count) => sum + count, 0));
 
   onMount(() => {
     const entityId = page.url.searchParams.get("entity");
@@ -38,7 +64,12 @@
   });
 
   $effect(() => {
-    return appChrome.setBreadcrumbs([{ label: "Identify" }]);
+    const view = store.view;
+    return appChrome.setBreadcrumbs(
+      view.kind === "kind-tab"
+        ? [{ label: "Identify" }, { label: labelForEntityKind(view.entityKind) }]
+        : [{ label: "Identify" }],
+    );
   });
 </script>
 
@@ -47,79 +78,30 @@
 </svelte:head>
 
 <div class="flex flex-col gap-0 pb-16">
-  <!-- ── Header ── -->
-  <div class="flex items-start justify-between gap-4">
-    <div class="flex items-center gap-3">
-      <ScanSearch class="h-5 w-5 text-text-accent" />
-      <div>
-        <h1 class="flex items-center gap-2">
-          Identify
-          {#if store.view.kind !== "dashboard"}
-            <span class="rounded-xs border border-phosphor-600/20 bg-surface-3 px-1.5 py-0.5 font-mono text-[0.62rem] text-phosphor-600">
-              {store.view.kind === "kind-tab" ? store.view.entityKind : "review"}
-            </span>
-          {/if}
-        </h1>
-        <p class="mt-0.5 text-[0.78rem] text-text-muted">
-          {#if store.view.kind === "dashboard"}
-            Identify entities via plugin providers
-          {:else if store.view.kind === "kind-tab"}
-            Scoped to {store.view.entityKind}
-          {:else}
-            Reviewing proposal
-          {/if}
-        </p>
-      </div>
-    </div>
-  </div>
-
-  <!-- ── Tab strip (dashboard + per-kind tabs) ── -->
-  {#if store.view.kind === "dashboard" || store.view.kind === "kind-tab"}
-    <nav class="mt-4 flex items-stretch overflow-hidden touch-pan-x rounded-sm border border-border-subtle bg-gradient-to-b from-surface-2 to-surface-1">
-      <Button
-        type="button"
-        variant="ghost"
-        size="sm"
-        aria-pressed={store.view.kind === "dashboard"}
-        class={cn(
-          "h-auto items-center gap-2 rounded-none border-b-2 border-r border-r-border-subtle px-3.5 py-2.5 font-heading text-[0.78rem] font-semibold transition-colors",
-          store.view.kind === "dashboard"
-            ? "border-b-accent-500 bg-accent-950/20 text-text-accent-bright"
-            : "border-b-transparent text-text-muted hover:bg-surface-2 hover:text-text-primary",
-        )}
-        onclick={() => store.navigateToDashboard()}
-      >
-        <Home class="h-3.5 w-3.5" />
-        Dashboard
+  <ManagePageHeader icon={ScanSearch} title="Identify">
+    {#snippet status()}
+      <span class="flex flex-wrap gap-x-3 font-mono text-[0.72rem] text-text-muted">
+        <span class={store.reviewableCount > 0 ? "text-text-primary" : undefined}>{store.reviewableCount} to review</span>
+        {#if store.queuedCount > 0}<span>{store.queuedCount} queued</span>{/if}
+        {#if store.searchingCount > 0}<span>{store.searchingCount} searching</span>{/if}
+        {#if totalUnidentified > 0}<span>{numberFormat.format(totalUnidentified)} unidentified</span>{/if}
+      </span>
+    {/snippet}
+    {#snippet actions()}
+      <Button variant="secondary" size="sm" disabled={store.reviewableCount === 0} onclick={() => store.resumeNext()}>
+        <Sparkles aria-hidden="true" />
+        Review next
       </Button>
+    {/snippet}
+  </ManagePageHeader>
 
-      <div class="scrollbar-hidden flex min-w-0 flex-1 items-stretch overflow-x-auto overflow-y-hidden overscroll-y-none">
-        {#each store.supportedKinds as kindInfo (kindInfo.kind)}
-          {@const isActive = store.view.kind === "kind-tab" && store.view.entityKind === kindInfo.kind}
-          {@const KindIcon = entityKindIcon(kindInfo.kind)}
-          {@const kindAccent = entityAccentForKind(kindInfo.kind).primary}
-          <Button
-            type="button"
-            variant="ghost"
-            size="sm"
-            aria-pressed={isActive}
-            class={cn(
-              "h-auto items-center gap-2 whitespace-nowrap rounded-none border-b-2 px-3.5 py-2.5 font-heading text-[0.8rem] font-semibold transition-colors",
-              isActive
-                ? "border-b-accent-500 bg-accent-950/20 text-text-accent-bright"
-                : "border-b-transparent text-text-secondary hover:bg-surface-2 hover:text-text-primary",
-            )}
-            onclick={() => store.navigateToKind(kindInfo.kind)}
-          >
-            <KindIcon class="h-3.5 w-3.5" color={kindAccent} aria-hidden="true" />
-            <span>{kindInfo.label}</span>
-            {#if kindInfo.pending > 0}
-              <span class="font-mono text-[0.6rem] text-text-accent">{kindInfo.pending}</span>
-            {/if}
-          </Button>
-        {/each}
-      </div>
-    </nav>
+  {#if store.view.kind === "kind-tab"}
+    <div class="mt-4">
+      <Button variant="ghost" size="sm" class="-ml-2" onclick={() => store.navigateToDashboard()}>
+        <ChevronLeft aria-hidden="true" />
+        Families
+      </Button>
+    </div>
   {/if}
 
   <!-- ── Notices ── -->
@@ -165,7 +147,7 @@
         <Loader2 class="h-6 w-6 animate-spin text-text-accent" />
       </div>
     {:else if store.view.kind === "dashboard"}
-      <IdentifyDashboard />
+      <IdentifyDashboard {unidentified} />
     {:else if store.view.kind === "kind-tab"}
       <IdentifyKindTab entityKind={store.view.entityKind} />
     {:else if store.view.kind === "review-choice"}
