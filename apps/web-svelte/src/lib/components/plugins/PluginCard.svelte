@@ -46,9 +46,10 @@
   const hasCredentials = $derived(plugin.supports.length > 0 && plugin.auth.length > 0);
   const missingKeys = $derived(plugin.missingAuthKeys.length > 0);
 
-  function connectionLed(connection: ConnectionResponse): LedStatus {
+  /** The LED for a connection that needs attention; a ready connection rests with no LED at all. */
+  function connectionLed(connection: ConnectionResponse): LedStatus | null {
     if (!connection.enabled) return "idle";
-    if (connection.status === CONNECTION_STATUS.ready) return "phosphor";
+    if (connection.status === CONNECTION_STATUS.ready) return null;
     if (connection.status === CONNECTION_STATUS.unverified) return "info";
     return "error";
   }
@@ -119,17 +120,19 @@
       {:else}
         <ul class="flex flex-col gap-1" aria-label="Connections using {plugin.name}">
           {#each connections as connection (connection.id)}
-            {@const ready = connection.enabled && connection.status === CONNECTION_STATUS.ready}
+            {@const led = connectionLed(connection)}
             <li>
               <a
                 href="/settings/connections"
                 class="flex min-w-0 items-center justify-between gap-3 text-caption transition-colors hover:text-text-primary"
               >
                 <span class="flex min-w-0 items-center gap-2 text-text-secondary">
-                  <StatusLed status={connectionLed(connection)} size="sm" />
+                  {#if led}
+                    <StatusLed status={led} size="sm" />
+                  {/if}
                   <span class="truncate">{connection.name}</span>
                 </span>
-                {#if ready}
+                {#if !led}
                   <span class="sr-only">{connectionStatusLabels[connection.status]}</span>
                 {:else}
                   <span class="shrink-0 text-text-muted">
