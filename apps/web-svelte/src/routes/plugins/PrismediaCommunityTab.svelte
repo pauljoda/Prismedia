@@ -1,19 +1,11 @@
 <script lang="ts">
-  import {
-    AlertCircle,
-    Check,
-    Download,
-    KeyRound,
-    Loader2,
-    RefreshCw,
-    Sparkles,
-  } from "@lucide/svelte";
-  import { Badge, Button, SearchInput } from "@prismedia/ui-svelte";
+  import { Check, Download, KeyRound, Loader2, RefreshCw, Sparkles } from "@lucide/svelte";
+  import { Button, SearchInput } from "@prismedia/ui-svelte";
   import type { PluginProvider } from "$lib/api/generated/model";
-  import PluginIntegrationCapabilities from "$lib/components/plugins/PluginIntegrationCapabilities.svelte";
+  import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
+  import FamilyBandStrip from "$lib/components/entities/FamilyBandStrip.svelte";
   import PluginIcon from "$lib/components/plugins/PluginIcon.svelte";
-  import PluginCapabilityChips from "$lib/components/plugins/PluginCapabilityChips.svelte";
-  import { pluginCapabilities } from "$lib/plugins/plugin-capabilities";
+  import { pluginFamilies } from "$lib/plugins/plugin-families";
   import PluginCredentialForm from "./PluginCredentialForm.svelte";
 
   interface Props {
@@ -42,17 +34,22 @@
   let authExpandedFor = $state<string | null>(null);
   let authValues = $state<Record<string, string>>({});
 
+  /** Not-yet-installed plugins lead; installed ones follow so the catalog still reads complete. */
+  const ordered = $derived(
+    [...plugins].sort(
+      (left, right) =>
+        Number(left.installed && left.enabled) - Number(right.installed && right.enabled) ||
+        left.name.localeCompare(right.name),
+    ),
+  );
   const filteredPlugins = $derived.by(() => {
-    const q = search.trim().toLowerCase();
-    if (!q) return plugins;
-    return plugins.filter((plugin) =>
-      plugin.name.toLowerCase().includes(q) || plugin.id.toLowerCase().includes(q),
+    const query = search.trim().toLowerCase();
+    if (!query) return ordered;
+    return ordered.filter(
+      (plugin) => plugin.name.toLowerCase().includes(query) || plugin.id.toLowerCase().includes(query),
     );
   });
-
-  const capabilitiesByPlugin = $derived(
-    new Map(plugins.map((plugin) => [plugin.id, pluginCapabilities(plugin.supports)])),
-  );
+  const familiesByPlugin = $derived(new Map(plugins.map((plugin) => [plugin.id, pluginFamilies(plugin)])));
 
   function toggleAuthExpanded(pluginId: string) {
     if (authExpandedFor === pluginId) {
@@ -79,122 +76,88 @@
   }
 </script>
 
-<section class="space-y-3">
-  <div class="flex items-center justify-between gap-3 flex-wrap">
-    <p class="text-text-muted text-[0.72rem]">
-      {plugins.length} plugins available
-    </p>
-    <div class="flex items-center gap-2">
-      <SearchInput
-        name="community-plugin-search"
-        ariaLabel="Search community plugins"
-        class="w-64"
-        placeholder="Filter by name or ID..."
-        bind:value={search}
-      />
-      <Button variant="secondary" size="sm" onclick={onRefresh} disabled={loading}>
-        {#if loading}
-          <Loader2 class="h-3.5 w-3.5 animate-spin" />
-        {:else}
-          <RefreshCw class="h-3.5 w-3.5" />
-        {/if}
-        Refresh
-      </Button>
-    </div>
+<section class="flex flex-col gap-4">
+  <div class="flex flex-wrap items-center gap-2">
+    <SearchInput
+      name="community-plugin-search"
+      ariaLabel="Search community plugins"
+      class="w-full sm:w-64"
+      placeholder="Filter by name or ID..."
+      bind:value={search}
+    />
+    <Button variant="ghost" size="sm" onclick={onRefresh} disabled={loading}>
+      {#if loading}<Loader2 class="animate-spin" aria-hidden="true" />{:else}<RefreshCw aria-hidden="true" />{/if}
+      Refresh
+    </Button>
   </div>
 
   {#if loading && !loaded}
-    <div class="surface-card no-lift p-12 flex items-center justify-center">
-      <Loader2 class="h-6 w-6 animate-spin text-text-muted" />
-    </div>
+    <StatePlaceholder icon={Sparkles} title="Loading plugin index" busy />
   {:else if filteredPlugins.length === 0}
-    <div class="surface-card no-lift p-8 text-center">
-      <Sparkles class="h-8 w-8 text-text-disabled mx-auto mb-3" />
-      <p class="text-text-muted text-sm">
-        {search
-          ? "No plugins match your search."
-          : loaded
-            ? "No plugins available."
-            : "Loading plugin index..."}
-      </p>
-    </div>
+    <StatePlaceholder icon={Sparkles} title={search ? "No matching plugins" : "No plugins available"} />
   {:else}
-    <div class="space-y-1">
+    <ul
+      class="flex flex-col divide-y divide-[var(--color-border-subtle)] overflow-hidden rounded-[var(--radius-md)] border border-[var(--color-border-subtle)] bg-[var(--color-surface-1)]"
+    >
       {#each filteredPlugins as plugin (plugin.id)}
+        {@const families = familiesByPlugin.get(plugin.id) ?? []}
         {@const authExpanded = authExpandedFor === plugin.id}
         {@const hasAuth = plugin.supports.length > 0 && plugin.auth.length > 0}
-        <div class="surface-card no-lift px-4 py-3 flex items-center gap-3">
-          <PluginIcon name={plugin.name} iconUrl={plugin.iconUrl} class="size-11" />
-          <div class="min-w-0 flex-1">
-            <div class="flex items-center gap-2 flex-wrap">
-              <p class="text-sm font-medium">{plugin.name}</p>
-              <span class="text-mono-sm text-text-disabled">v{plugin.version}</span>
-              {#if plugin.installed}
-                <Badge variant={plugin.enabled ? "accent" : "default"}>
-                  {plugin.enabled ? "Installed" : "Disabled"}
-                </Badge>
+        {@const active = plugin.installed && plugin.enabled}
+        {@const operations = [...new Set(families.flatMap((support) => support.operations))]}
+        <li class="min-w-0">
+          <div class="flex min-w-0 items-center gap-3 px-3 py-2.5 sm:px-4">
+            <PluginIcon name={plugin.name} iconUrl={plugin.iconUrl} class="size-9" />
+            <div class="min-w-0 flex-1">
+              <div class="flex min-w-0 flex-wrap items-baseline gap-x-2">
+                <p class="truncate text-label font-medium text-text-primary">{plugin.name}</p>
+                <span class="font-mono text-[0.64rem] text-text-disabled">v{plugin.version}</span>
+                {#if hasAuth}
+                  <KeyRound class="size-3 self-center text-text-disabled" aria-label="Requires credentials" />
+                {/if}
+              </div>
+              <p class="truncate text-caption text-text-muted">
+                {families.map((support) => support.family.label).join(", ") || "—"}
+                {#if operations.length > 0}<span class="text-text-disabled"> — {operations.join(" · ")}</span>{/if}
+              </p>
+            </div>
+            <FamilyBandStrip
+              bands={families.map((support) => ({ key: support.family.key, label: support.family.label, accent: support.family.accent }))}
+              height={4}
+              label="Families"
+              class="hidden w-24 shrink-0 md:flex"
+            />
+            <div class="flex shrink-0 items-center gap-1">
+              {#if hasAuth && plugin.installed}
+                <Button
+                  variant={plugin.missingAuthKeys.length > 0 && !authExpanded ? "secondary" : "ghost"}
+                  size="sm"
+                  aria-expanded={authExpanded}
+                  onclick={() => toggleAuthExpanded(plugin.id)}
+                >
+                  <KeyRound aria-hidden="true" />
+                  {authExpanded ? "Close" : "Keys"}
+                </Button>
               {/if}
-              {#if plugin.missingAuthKeys.length === 0 && hasAuth}
-                <Badge variant="success">
-                  <Check class="h-2.5 w-2.5" />Auth OK
-                </Badge>
-              {:else if hasAuth && plugin.missingAuthKeys.length > 0}
-                <Badge variant="warning">
-                  <AlertCircle class="h-2.5 w-2.5" />Auth Required
-                </Badge>
+              {#if active}
+                <span class="flex h-control-sm items-center gap-1.5 px-2 text-caption text-text-muted">
+                  <Check class="size-3.5" aria-hidden="true" />
+                  Installed
+                </span>
+              {:else}
+                <Button variant="secondary" size="sm" onclick={() => onInstall(plugin)} disabled={installingId === plugin.id}>
+                  {#if installingId === plugin.id}<Loader2 class="animate-spin" aria-hidden="true" />{:else}<Download aria-hidden="true" />{/if}
+                  {plugin.installed ? "Enable" : "Install"}
+                </Button>
               {/if}
             </div>
-            <p class="text-text-disabled text-[0.65rem] mt-0.5 font-mono">
-              {plugin.id}
-            </p>
-            <PluginCapabilityChips
-              capabilities={capabilitiesByPlugin.get(plugin.id) ?? []}
-              class="mt-1.5"
-            />
-                <PluginIntegrationCapabilities integration={plugin.integration} />
           </div>
-          <div class="flex items-center gap-2 shrink-0">
-            {#if hasAuth && plugin.installed}
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onclick={() => toggleAuthExpanded(plugin.id)}
-                class={"h-auto gap-1.5 px-2.5 py-1.5 text-xs transition-colors duration-fast hover:bg-transparent " +
-                  (plugin.missingAuthKeys.length > 0 ? "text-status-warning-text" : "text-text-muted hover:text-text-primary")}
-              >
-                <KeyRound class="h-3.5 w-3.5" />
-                {authExpanded ? "Close" : "Configure"}
-              </Button>
-            {/if}
-            {#if !plugin.installed || !plugin.enabled}
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                onclick={() => onInstall(plugin)}
-                disabled={installingId === plugin.id}
-                class="h-auto shrink-0 gap-1.5 px-2.5 py-1.5 text-xs text-text-muted transition-colors duration-fast hover:bg-transparent hover:text-text-accent"
-              >
-                {#if installingId === plugin.id}
-                  <Loader2 class="h-3.5 w-3.5 animate-spin" />
-                {:else}
-                  <Download class="h-3.5 w-3.5" />
-                {/if}
-                Install
-              </Button>
-            {/if}
-          </div>
-        </div>
 
-        {#if authExpanded}
-          <div class="surface-card no-lift">
+          {#if authExpanded}
             <PluginCredentialForm
               fields={plugin.auth}
               getPlaceholder={(field) =>
-                plugin.missingAuthKeys.includes(field.key)
-                  ? "Required"
-                  : "Saved - enter a new value to replace"}
+                plugin.missingAuthKeys.includes(field.key) ? "Required" : "Saved - enter a new value to replace"}
               getValueKey={(field) => field.key}
               inputIdPrefix={`community-plugin-auth-${plugin.id}`}
               onCancel={closeAuthForm}
@@ -202,9 +165,9 @@
               saving={authSavingFor === `prismedia:${plugin.id}`}
               bind:values={authValues}
             />
-          </div>
-        {/if}
+          {/if}
+        </li>
       {/each}
-    </div>
+    </ul>
   {/if}
 </section>

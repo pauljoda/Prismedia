@@ -1,6 +1,6 @@
 <script lang="ts">
   import { cn } from "@prismedia/ui-svelte";
-  import { bandGradient, type SpectrumBand } from "./media-families";
+  import { bandGradient, type SpectrumBand } from "$lib/entities/media-families";
 
   interface Props {
     bands: SpectrumBand[];

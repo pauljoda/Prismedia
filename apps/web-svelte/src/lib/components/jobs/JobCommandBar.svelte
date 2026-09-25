@@ -17,8 +17,8 @@
 </script>
 
 <!--
-  The administrative run catalog as one compact bar: each group a labelled cluster of the same
-  actions Job control offers, so starting a scan never means scrolling past history.
+  The administrative run catalog as one compact bar: each group a labelled cluster of actions, so
+  starting a scan never means scrolling past history.
 -->
 <div
   class={cn(
@@ -38,6 +38,7 @@
             variant="outline"
             size="sm"
             disabled={pendingType !== null}
+            title={entry.description}
             onclick={() => onRun(entry.jobType)}
           >
             {#if pendingType === entry.jobType}

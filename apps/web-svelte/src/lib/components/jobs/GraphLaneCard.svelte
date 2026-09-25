@@ -102,9 +102,10 @@
 
 <article
   class={cn(
-    "surface-card no-lift overflow-hidden border-l-2",
+    "min-w-0 overflow-hidden rounded-[var(--radius-md)] border border-l-2 border-[var(--color-border-default)] bg-[var(--color-surface-2)] shadow-[var(--shadow-card)]",
     graph.origin === JOB_GRAPH_ORIGIN.interactive ? "border-l-border-accent" : "border-l-border-default",
   )}
+  aria-label={graph.displayName}
 >
   <div class="flex items-start gap-3 p-3">
     <Button variant="outline" size="sm"
@@ -124,7 +125,7 @@
 
     <div class="min-w-0 flex-1">
       <div class="flex flex-wrap items-center gap-2">
-        <StatusLed status={statusTone(graph.status)} pulse={graph.status === JOB_GRAPH_STATUS.running} />
+        <StatusLed status={statusTone(graph.status)} size="sm" />
         <h3 class="min-w-0 truncate text-sm font-semibold text-text-primary">{graph.displayName}</h3>
         <Badge variant={graph.origin === JOB_GRAPH_ORIGIN.interactive ? "accent" : "default"}>
           {graph.origin}

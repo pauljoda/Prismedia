@@ -1,34 +1,21 @@
 <script lang="ts">
-  import {
-    AlertCircle,
-    Check,
-    Download,
-    Film,
-    KeyRound,
-    Loader2,
-    Package,
-    Sparkles,
-    Trash2,
-    Users,
-  } from "@lucide/svelte";
-  import { Badge, Button, SearchInput } from "@prismedia/ui-svelte";
-  import { ENTITY_KIND } from "$lib/api/generated/codes";
-  import type { PluginProvider } from "$lib/api/generated/model";
-  import PluginIntegrationCapabilities from "$lib/components/plugins/PluginIntegrationCapabilities.svelte";
-  import PluginIcon from "$lib/components/plugins/PluginIcon.svelte";
-  import PluginCapabilityChips from "$lib/components/plugins/PluginCapabilityChips.svelte";
-  import { pluginCapabilities } from "$lib/plugins/plugin-capabilities";
-  import { entityTerms } from "$lib/terminology";
+  import { Package, Sparkles } from "@lucide/svelte";
+  import { Button, SearchInput } from "@prismedia/ui-svelte";
+  import type { ConnectionResponse, PluginProvider } from "$lib/api/generated/model";
+  import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
+  import PluginCard from "$lib/components/plugins/PluginCard.svelte";
+  import PluginCoverage from "$lib/components/plugins/PluginCoverage.svelte";
+  import { familyCoverage, pluginServesFamily } from "$lib/plugins/plugin-families";
   import PluginCredentialForm from "./PluginCredentialForm.svelte";
-
-  type CapFilter = "all" | "scene" | "performer";
 
   interface Props {
     authExpandedFor: string | null;
     authSavingFor: string | null;
     authValues: Record<string, string>;
-    isSfw: boolean;
+    /** Connections, grouped onto the plugin cards that back them. */
+    connections?: ConnectionResponse[];
     onAuthCancel: () => void;
+    onBrowseCommunity?: () => void;
     onProviderAuthToggle: (pluginId: string) => void;
     onProviderInstall: (plugin: PluginProvider) => void;
     onProviderRemove: (plugin: PluginProvider) => void;
@@ -44,8 +31,9 @@
     authExpandedFor,
     authSavingFor,
     authValues = $bindable(),
-    isSfw,
+    connections = [],
     onAuthCancel,
+    onBrowseCommunity,
     onProviderAuthToggle,
     onProviderInstall,
     onProviderRemove,
@@ -58,259 +46,95 @@
   }: Props = $props();
 
   let search = $state("");
-  let capFilter = $state<CapFilter>("all");
+  let family = $state<string | null>(null);
 
+  const ordered = $derived(
+    [...providers].sort(
+      (left, right) => Number(right.enabled) - Number(left.enabled) || left.name.localeCompare(right.name),
+    ),
+  );
+  const coverage = $derived(familyCoverage(providers));
   const filteredProviders = $derived.by(() => {
     const query = search.trim().toLowerCase();
-    return providers.filter((plugin) => {
-      if (query && !plugin.name.toLowerCase().includes(query) && !plugin.id.toLowerCase().includes(query)) {
-        return false;
-      }
-
-      return matchesProviderCapabilityFilter(plugin);
-    });
+    return ordered.filter(
+      (plugin) =>
+        (!query || plugin.name.toLowerCase().includes(query) || plugin.id.toLowerCase().includes(query)) &&
+        (!family || pluginServesFamily(plugin, family)),
+    );
   });
-
-  function matchesProviderCapabilityFilter(plugin: PluginProvider): boolean {
-    if (capFilter === "all") return true;
-    if (capFilter === "scene") {
-      return plugin.supports.some((support) =>
-        support.entityKind === ENTITY_KIND.video || support.entityKind === ENTITY_KIND.videoSeries,
-      );
+  const connectionsByPlugin = $derived.by(() => {
+    const grouped = new Map<string, ConnectionResponse[]>();
+    for (const connection of connections) {
+      const list = grouped.get(connection.pluginId);
+      if (list) list.push(connection);
+      else grouped.set(connection.pluginId, [connection]);
     }
-
-    return plugin.supports.some((support) => support.entityKind === ENTITY_KIND.person);
-  }
-
-  const capabilitiesByPlugin = $derived(
-    new Map(providers.map((plugin) => [plugin.id, pluginCapabilities(plugin.supports)])),
-  );
+    return grouped;
+  });
 </script>
 
-<section class="space-y-2">
-  <div class="surface-well flex items-center gap-2 px-3 py-2 flex-wrap">
-    <SearchInput
-      name="installed-plugin-search"
-      ariaLabel="Search installed plugins"
-      class="w-56"
-      placeholder="Search installed..."
-      bind:value={search}
-    />
-    {#if !isSfw}
-      <div class="w-px h-4 bg-border-subtle mx-1"></div>
-      {#each ["all", "scene", "performer"] as const as filter (filter)}
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
-          onclick={() => (capFilter = filter)}
-          class={"h-auto gap-1.5 rounded-xs border px-2.5 py-1.5 text-xs transition-all duration-fast " +
-            (capFilter === filter
-              ? "bg-accent-950 text-text-accent border border-border-accent"
-              : "text-text-muted hover:text-text-secondary border border-transparent")}
-        >
-          {#if filter === "all"}
-            <Package class="h-3 w-3" />All
-          {:else if filter === "scene"}
-            <Film class="h-3 w-3" />{entityTerms.videos}
-          {:else}
-            <Users class="h-3 w-3" />{entityTerms.performers}
-          {/if}
-        </Button>
-      {/each}
+{#if providers.length === 0}
+  <StatePlaceholder icon={Package} title="No plugins installed">
+    {#if onBrowseCommunity}
+      <Button variant="secondary" size="sm" onclick={onBrowseCommunity}>
+        <Sparkles aria-hidden="true" />
+        Browse community
+      </Button>
     {/if}
-    <div class="flex-1"></div>
-    <span class="text-mono-sm text-text-disabled">{filteredProviders.length} shown</span>
-  </div>
+  </StatePlaceholder>
+{:else}
+  <section class="flex flex-col gap-4">
+    <PluginCoverage {coverage} selected={family} onSelect={(next) => (family = next)} />
 
-  {#if filteredProviders.length === 0}
-    <div class="surface-card no-lift p-8 text-center">
-      <Package class="h-8 w-8 text-text-disabled mx-auto mb-3" />
-      <p class="text-text-muted text-sm">
-        {#if providers.length === 0}
-          {isSfw
-            ? "No SFW plugins installed. Browse the Prismedia Community tab to find plugins."
-            : "No plugins installed. Browse the community tabs to get started."}
-        {:else}
-          No plugins match your filters.
-        {/if}
-      </p>
+    <div class="flex flex-wrap items-center gap-3">
+      <SearchInput
+        name="installed-plugin-search"
+        ariaLabel="Search installed plugins"
+        class="w-full sm:w-64"
+        placeholder="Search installed..."
+        bind:value={search}
+      />
+      {#if search.trim() || family}
+        <span class="font-mono text-[0.72rem] text-text-muted">
+          <span class="text-text-secondary">{filteredProviders.length}</span>/{providers.length}
+        </span>
+      {/if}
     </div>
-  {:else}
-    <div class="plugin-list">
-      {#each filteredProviders as plugin (plugin.id)}
-        {@const authExpanded = authExpandedFor === `prismedia:${plugin.id}`}
-        {@const hasAuth = plugin.supports.length > 0 && plugin.auth.length > 0}
-        <div
-          class={"surface-card no-lift transition-opacity duration-fast " +
-            (plugin.installed && plugin.enabled ? "" : "opacity-80")}
-        >
-          <div class="plugin-row">
-            <div class="plugin-heading">
-              <PluginIcon name={plugin.name} iconUrl={plugin.iconUrl} class="size-11 shrink-0" />
-              <div class="min-w-0 flex-1">
-                <div class="flex items-center gap-2.5 flex-wrap">
-                  <p class="text-sm font-semibold">{plugin.name}</p>
-                  <Badge variant={plugin.installed && plugin.enabled ? "accent" : "default"}>
-                    {plugin.installed && plugin.enabled ? "Installed" : "Available"}
-                  </Badge>
-                  {#if plugin.updateAvailable}
-                    <Badge variant="success">
-                      <Sparkles class="h-2.5 w-2.5" />v{plugin.availableVersion} available
-                    </Badge>
-                  {/if}
-                  {#if plugin.missingAuthKeys.length === 0 && hasAuth}
-                    <Badge variant="success">
-                      <Check class="h-2.5 w-2.5" />Auth OK
-                    </Badge>
-                  {:else if hasAuth && plugin.missingAuthKeys.length > 0}
-                    <Badge variant="warning">
-                      <AlertCircle class="h-2.5 w-2.5" />Auth Required
-                    </Badge>
-                  {/if}
-                </div>
-                <p class="text-mono-sm text-text-disabled mt-0.5">
-                  {plugin.id} · v{plugin.version}
-                </p>
-              </div>
-              <div class="plugin-actions">
-                {#if plugin.installed && plugin.updateAvailable}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onclick={() => onProviderUpdate(plugin)}
-                    disabled={providerUpdatingId === plugin.id}
-                    class="h-auto gap-1.5 px-2.5 py-1.5 text-xs text-status-success-text transition-colors duration-fast hover:bg-transparent hover:text-text-primary"
-                  >
-                    {#if providerUpdatingId === plugin.id}
-                      <Loader2 class="h-3.5 w-3.5 animate-spin" />
-                    {:else}
-                      <Download class="h-3.5 w-3.5" />
-                    {/if}
-                    Update
-                  </Button>
-                {/if}
-                {#if !plugin.installed || !plugin.enabled}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onclick={() => onProviderInstall(plugin)}
-                    disabled={providerInstallingId === plugin.id}
-                    class="h-auto gap-1.5 px-2.5 py-1.5 text-xs text-text-muted transition-colors duration-fast hover:bg-transparent hover:text-text-accent"
-                  >
-                    {#if providerInstallingId === plugin.id}
-                      <Loader2 class="h-3.5 w-3.5 animate-spin" />
-                    {:else}
-                      <Download class="h-3.5 w-3.5" />
-                    {/if}
-                    Install
-                  </Button>
-                {/if}
-                {#if hasAuth}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onclick={() => onProviderAuthToggle(plugin.id)}
-                    class={"h-auto gap-1.5 px-2.5 py-1.5 text-xs transition-colors duration-fast hover:bg-transparent " +
-                      (plugin.missingAuthKeys.length > 0 ? "text-status-warning-text" : "text-text-muted hover:text-text-primary")}
-                  >
-                    <KeyRound class="h-3.5 w-3.5" />
-                    {authExpanded ? "Close" : "Configure"}
-                  </Button>
-                {/if}
-                {#if plugin.installed}
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="sm"
-                    onclick={() => onProviderRemove(plugin)}
-                    disabled={providerRemovingId === plugin.id}
-                    class="h-auto gap-1.5 px-2.5 py-1.5 text-xs text-text-muted transition-colors duration-fast hover:bg-transparent hover:text-status-error-text"
-                  >
-                    {#if providerRemovingId === plugin.id}
-                      <Loader2 class="h-3.5 w-3.5 animate-spin" />
-                    {:else}
-                      <Trash2 class="h-3.5 w-3.5" />
-                    {/if}
-                    Remove
-                  </Button>
-                {/if}
-              </div>
-            </div>
-            <div class="plugin-details">
-              <PluginCapabilityChips capabilities={capabilitiesByPlugin.get(plugin.id) ?? []} />
-              <PluginIntegrationCapabilities integration={plugin.integration} />
-            </div>
-          </div>
 
-          {#if authExpanded}
-            <PluginCredentialForm
-              fields={plugin.auth}
-              getPlaceholder={(field) =>
-                plugin.missingAuthKeys.includes(field.key)
-                  ? "Required"
-                  : "Saved - enter a new value to replace"}
-              getValueKey={(field) => `prismedia:${plugin.id}:${field.key}`}
-              inputIdPrefix={`plugin-auth-${plugin.id}`}
-              onCancel={onAuthCancel}
-              onSave={() => onProviderSaveAuth(plugin)}
-              saving={authSavingFor === `prismedia:${plugin.id}`}
-              bind:values={authValues}
-            />
-          {/if}
-        </div>
-      {/each}
-    </div>
-  {/if}
-</section>
-
-<style>
-  .plugin-list {
-    display: flex;
-    flex-direction: column;
-    gap: 0.35rem;
-  }
-
-  .plugin-row {
-    padding: 0.85rem 1rem;
-  }
-
-  .plugin-heading {
-    display: flex;
-    align-items: flex-start;
-    flex-wrap: wrap;
-    gap: 0.75rem;
-  }
-
-  .plugin-actions {
-    display: flex;
-    align-items: center;
-    flex-wrap: wrap;
-    gap: 0.25rem;
-    margin-left: auto;
-  }
-
-  .plugin-details {
-    display: flex;
-    align-items: flex-start;
-    flex-wrap: wrap;
-    gap: 0.25rem 0.75rem;
-    margin-top: 0.5rem;
-    margin-left: 3.5rem;
-  }
-
-  .plugin-details :global([aria-label="Integration capabilities"]) {
-    margin-top: 0;
-  }
-
-  @media (max-width: 40rem) {
-    .plugin-actions,
-    .plugin-details {
-      width: 100%;
-      margin-left: 0;
-    }
-  }
-</style>
+    {#if filteredProviders.length === 0}
+      <StatePlaceholder icon={Package} title="No matching plugins" />
+    {:else}
+      <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+        {#each filteredProviders as plugin (plugin.id)}
+          {@const credentialsOpen = authExpandedFor === `prismedia:${plugin.id}`}
+          <PluginCard
+            {plugin}
+            connections={connectionsByPlugin.get(plugin.id) ?? []}
+            {credentialsOpen}
+            updating={providerUpdatingId === plugin.id}
+            removing={providerRemovingId === plugin.id}
+            enabling={providerInstallingId === plugin.id}
+            onUpdate={onProviderUpdate}
+            onRemove={onProviderRemove}
+            onEnable={onProviderInstall}
+            onToggleCredentials={(target) => onProviderAuthToggle(target.id)}
+          >
+            {#snippet credentials()}
+              <PluginCredentialForm
+                fields={plugin.auth}
+                getPlaceholder={(field) =>
+                  plugin.missingAuthKeys.includes(field.key) ? "Required" : "Saved - enter a new value to replace"}
+                getValueKey={(field) => `prismedia:${plugin.id}:${field.key}`}
+                inputIdPrefix={`plugin-auth-${plugin.id}`}
+                onCancel={onAuthCancel}
+                onSave={() => onProviderSaveAuth(plugin)}
+                saving={authSavingFor === `prismedia:${plugin.id}`}
+                bind:values={authValues}
+              />
+            {/snippet}
+          </PluginCard>
+        {/each}
+      </div>
+    {/if}
+  </section>
+{/if}

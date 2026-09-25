@@ -99,7 +99,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 - Request Activity loads a paged server feed that separates problems, active work, followed library titles, and recent history in compact rows, with full source credits on demand. History stays visible while a source is offline, and completed manager requests no longer repeat as separate tracked items. Unreadable downloaded books and comics are reported as invalid media rather than connection or destination failures, without exposing private paths. Links to imported items follow the current content visibility mode, including nested comic and book pages, and Activity explains when a retained import is unavailable or hidden.
 
-- Installed plugins now appear in compact full-width rows, with capabilities grouped beneath each plugin's name and actions.
+- Installed plugins appear as cards that show each media family a plugin serves, what it does there, and the connections it backs, with update, credential, and removal actions on the card. A coverage strip shows which families have a plugin and narrows the cards to one family. Plugins show a status only when something needs attention, such as missing keys or a connection that is down.
+
+- Jobs groups background work into one lane per job type with its last 24 hours of activity and retained totals, so repeated runs no longer fill the page. Starting work, cancelling workflows, and reviewing or clearing failures stay on the page, and idle job types fold into a short list.
+
+- The Dashboard's featured progress bar uses the colour of the item's media family, and Books tracked separately show reading and listening progress as two bars.
 
 - Request and connected-source administration can open as focused pages inside the iOS app, using its native navigation and background while staying current with the web interface.
 

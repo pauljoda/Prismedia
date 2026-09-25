@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { StatusLed, cn } from "@prismedia/ui-svelte";
-  import type { JobLane } from "./job-lanes";
+  import { cn } from "@prismedia/ui-svelte";
+  import type { JobLane } from "$lib/jobs/job-lanes";
 
   interface Props {
     lanes: JobLane[];
@@ -21,10 +21,7 @@
     className,
   )}
 >
-  <p class="flex items-center gap-2 px-4 pt-3 pb-1 font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-disabled">
-    <StatusLed status="idle" size="sm" />
-    Quiet
-  </p>
+  <p class="px-4 pt-3 pb-1 font-mono text-[0.6rem] uppercase tracking-[0.14em] text-text-disabled">Quiet</p>
   <ul class="divide-y divide-[var(--color-border-subtle)]">
     {#each lanes as lane (lane.type)}
       <li class="flex min-w-0 items-baseline justify-between gap-4 px-4 py-2">

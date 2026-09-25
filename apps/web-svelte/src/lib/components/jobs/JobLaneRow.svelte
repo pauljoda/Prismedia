@@ -1,27 +1,26 @@
 <script lang="ts">
   import { ChevronDown } from "@lucide/svelte";
-  import { prefersReducedMotion } from "svelte/motion";
-  import { Collapsible, StatusLed, buttonVariants, cn, type LedStatus } from "@prismedia/ui-svelte";
+  import { Button, Collapsible, StatusLed, cn, type LedStatus } from "@prismedia/ui-svelte";
   import { JOB_RUN_STATUS } from "$lib/api/generated/codes";
   import type { JobRun } from "$lib/api/generated/model";
   import { displayJobDetail, displayJobHeading } from "$lib/jobs/helpers";
   import { mapJobRun } from "$lib/jobs/jobs-dashboard";
   import { formatRelativeTime } from "$lib/utils/format";
   import ActivityStrip from "./ActivityStrip.svelte";
-  import { jobRunMoment } from "./job-activity";
-  import type { JobLane } from "./job-lanes";
+  import { jobRunMoment } from "$lib/jobs/job-activity";
+  import type { JobLane } from "$lib/jobs/job-lanes";
 
   interface Props {
     lane: JobLane;
     nsfwMode: string;
-    /** How many recent runs the expanded list shows before pointing to Job control. */
+    /** How many recent runs the expanded list shows before offering the rest. */
     listLimit?: number;
   }
 
   let { lane, nsfwMode, listLimit = 12 }: Props = $props();
 
   let open = $state(false);
-  const motionOk = $derived(!prefersReducedMotion.current);
+  let showAll = $state(false);
   const compact = new Intl.NumberFormat(undefined, { notation: "compact", maximumFractionDigits: 1 });
 
   const laneLed = $derived.by((): LedStatus => {
@@ -47,7 +46,9 @@
     { label: "Done", value: lane.counts.completed, tone: "text-text-secondary" },
   ]);
 
-  const shownRuns = $derived(lane.runs.slice(0, listLimit).map((run) => ({ run, view: mapJobRun(run) })));
+  const shownRuns = $derived(
+    (showAll ? lane.runs : lane.runs.slice(0, listLimit)).map((run) => ({ run, view: mapJobRun(run) })),
+  );
 
   const RUN_STATUS_LABEL: Record<string, string> = {
     [JOB_RUN_STATUS.running]: "Running",
@@ -75,7 +76,7 @@
       class="grid min-w-0 gap-3 p-3.5 sm:p-4 lg:grid-cols-[minmax(0,15rem)_minmax(0,1fr)_minmax(0,14rem)] lg:items-center lg:gap-6"
     >
       <div class="flex min-w-0 items-center gap-2.5">
-        <StatusLed status={laneLed} size="sm" pulse={lane.counts.running > 0 && motionOk} />
+        <StatusLed status={laneLed} size="sm" />
         <h3 class="min-w-0 truncate font-heading text-sm font-semibold text-text-primary">{lane.label}</h3>
       </div>
 
@@ -98,7 +99,7 @@
         class="flex w-full items-center justify-between gap-3 rounded-b-[var(--radius-md)] border-t border-[var(--color-border-subtle)] px-4 py-2.5 text-left text-caption text-text-muted transition-colors hover:bg-[var(--color-surface-3)]/40 hover:text-text-primary focus-visible:outline-2 focus-visible:outline-offset-[-2px] focus-visible:outline-[var(--color-border-accent-strong)] data-[state=open]:rounded-b-none"
       >
         <span>
-          <span class="font-mono text-text-secondary">{Math.min(lane.runs.length, listLimit)}</span>
+          <span class="font-mono text-text-secondary">{lane.runs.length}</span>
           recent {lane.runs.length === 1 ? "run" : "runs"}
         </span>
         <span class="flex items-center gap-2">
@@ -112,7 +113,7 @@
         <ol class="divide-y divide-[var(--color-border-subtle)] border-t border-[var(--color-border-subtle)]">
           {#each shownRuns as { run, view } (run.id)}
             <li class="flex min-w-0 items-center gap-3 px-4 py-2">
-              <StatusLed status={runLed(run)} size="sm" pulse={run.status === JOB_RUN_STATUS.running && motionOk} />
+              <StatusLed status={runLed(run)} size="sm" />
               <div class="min-w-0 flex-1">
                 <p class="truncate text-label text-text-primary">{displayJobHeading(view, nsfwMode)}</p>
                 <p
@@ -131,11 +132,11 @@
             </li>
           {/each}
         </ol>
-        {#if lane.runs.length > listLimit}
+        {#if lane.runs.length > listLimit && !showAll}
           <div class="border-t border-[var(--color-border-subtle)] px-2 py-1.5">
-            <a href="/jobs" class={buttonVariants({ variant: "ghost", size: "sm" })}>
-              +{lane.runs.length - listLimit} in Job control
-            </a>
+            <Button variant="ghost" size="sm" onclick={() => (showAll = true)}>
+              Show {lane.runs.length - listLimit} more
+            </Button>
           </div>
         {/if}
       </Collapsible.Content>

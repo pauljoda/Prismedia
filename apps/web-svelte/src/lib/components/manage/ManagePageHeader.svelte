@@ -5,7 +5,7 @@
   interface Props {
     title: string;
     icon?: Component;
-    /** Compact live facts shown beside the title (status LEDs, counts). */
+    /** Compact facts under the title: counts, and states that need attention. */
     status?: Snippet;
     actions?: Snippet;
     class?: string;
@@ -15,8 +15,8 @@
 </script>
 
 <!--
-  One management header for every operate/settings page. Its single accent moment is the beam
-  hairline underneath: neutral white light on the left that disperses into the spectrum on the right.
+  The header for management pages. Its one accent moment is the beam hairline underneath: neutral
+  light on the left that disperses into the spectrum on the right.
 -->
 <header class={cn("relative flex flex-col gap-4 pb-5", className)}>
   <div class="flex flex-wrap items-start justify-between gap-4">

@@ -44,7 +44,7 @@ describe("PrismediaCommunityTab", () => {
       props: baseProps({ onSaveAuth }),
     });
 
-    await fireEvent.click(screen.getByRole("button", { name: "Configure" }));
+    await fireEvent.click(screen.getByRole("button", { name: "Keys" }));
     await fireEvent.input(screen.getByLabelText(/api key/i), {
       target: { value: "secret" },
     });
@@ -63,10 +63,10 @@ describe("PrismediaCommunityTab", () => {
       target: { value: "missing" },
     });
 
-    expect(screen.getByText("No plugins match your search.")).toBeInTheDocument();
+    expect(screen.getByText("No matching plugins")).toBeInTheDocument();
     await fireEvent.click(screen.getByRole("button", { name: "Clear search" }));
     expect(screen.getByRole("searchbox")).toHaveValue("");
     expect(screen.getByRole("searchbox")).toHaveFocus();
-    expect(screen.getByRole("button", { name: "Configure" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Keys" })).toBeInTheDocument();
   });
 });

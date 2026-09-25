@@ -1,5 +1,4 @@
 <script lang="ts">
-  import type { Snippet } from "svelte";
   import { ToggleButton, cn } from "@prismedia/ui-svelte";
   import { PRISM_SPECTRUM } from "$lib/entities/entity-accent";
   import { entityKindIcon } from "$lib/entities/entity-kind-icons";
@@ -14,18 +13,10 @@
     activeKind?: string | null;
     /** Called with the band's kind, or null when the active band is chosen again. */
     onSelect?: (kind: string | null) => void;
-    /**
-     * Replaces the legend's second line. Defaults to consumption figures (opened and active time);
-     * a surface that disperses something other than activity, such as library composition, supplies
-     * its own honest detail here.
-     */
-    detail?: Snippet<[ConsumptionDispersionBand]>;
-    /** Lay the legend out in two columns below the desktop breakpoint, where it sits under the drawing. */
-    compactLegend?: boolean;
     class?: string;
   }
 
-  let { bands, activeKind = null, onSelect, detail, compactLegend = false, class: className }: Props = $props();
+  let { bands, activeKind = null, onSelect, class: className }: Props = $props();
 
   /** Smallest readable band thickness, so a 1% family is still a visible line of light. */
   const MIN_BAND_THICKNESS = 7;
@@ -252,7 +243,7 @@
     {/if}
   </div>
 
-  <ul class={cn("dispersion-legend", compactLegend && "is-compact")}>
+  <ul class="dispersion-legend">
     {#each bands as band (band.kind)}
       {@const Icon = entityKindIcon(band.kind)}
       {@const isActive = activeKind === band.kind}
@@ -271,11 +262,7 @@
           <span class="legend-label">{band.label}</span>
           <span class="legend-share">{shareLabel(band.share)}</span>
           <span class="legend-detail">
-            {#if detail}
-              {@render detail(band)}
-            {:else}
-              {band.accessedCount.toLocaleString()} opened · {formatActiveDuration(band.activeSeconds)}
-            {/if}
+            {band.accessedCount.toLocaleString()} opened · {formatActiveDuration(band.activeSeconds)}
           </span>
         </ToggleButton>
       </li>
@@ -370,13 +357,6 @@
     padding: 0;
     list-style: none;
     min-width: 0;
-  }
-
-  @media (max-width: 63.99rem) {
-    .dispersion-legend.is-compact {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-    }
   }
 
   .dispersion-legend :global(.legend-row) {

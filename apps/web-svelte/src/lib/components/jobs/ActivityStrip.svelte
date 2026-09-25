@@ -1,6 +1,6 @@
 <script lang="ts">
   import { cn } from "@prismedia/ui-svelte";
-  import type { ActivityBucket } from "./job-activity";
+  import type { ActivityBucket } from "$lib/jobs/job-activity";
 
   interface Props {
     buckets: ActivityBucket[];
