@@ -8,6 +8,7 @@
     Layers,
     Loader2,
   } from "@lucide/svelte";
+  import { dev } from "$app/environment";
   import { page } from "$app/state";
   import MetadataProposalReview from "$lib/components/review/MetadataProposalReview.svelte";
   import ProposalReviewLayout from "$lib/components/review/ProposalReviewLayout.svelte";
@@ -52,8 +53,8 @@
   let { entity, proposal, detail = null }: Props = $props();
 
   const store = useIdentifyStore();
-  /** Concept: `?layout=preview` renders the preview-and-decide review layout with the same controls. */
-  const previewLayout = $derived(page.url.searchParams.get("layout") === "preview");
+  /** Concept (dev only): `?layout=preview` renders the preview-and-decide review layout with the same controls. */
+  const previewLayout = $derived(dev && page.url.searchParams.get("layout") === "preview");
 
   const DIFF_FIELD_KEYS = $derived(reviewBaseFieldKeys(proposal));
 

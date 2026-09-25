@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { dev } from "$app/environment";
   import { goto } from "$app/navigation";
   import { resolve } from "$app/paths";
   import { page } from "$app/state";
@@ -79,8 +80,8 @@
   const namespaceQuery = $derived(page.url.searchParams.get("namespace"));
   /** Query string of the originating search page, chained through so Back returns to live results. */
   const backQuery = $derived(page.url.searchParams.get("back"));
-  /** Concept: `?layout=preview` renders the preview-and-decide review layout with the same controls. */
-  const previewLayout = $derived(page.url.searchParams.get("layout") === "preview");
+  /** Concept (dev only): `?layout=preview` renders the preview-and-decide review layout with the same controls. */
+  const previewLayout = $derived(dev && page.url.searchParams.get("layout") === "preview");
   const backHref = $derived(backQuery ? `/request?${backQuery}` : "/request");
   const nsfw = useNsfw();
   const session = useSession();

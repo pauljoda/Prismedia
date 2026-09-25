@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { dev } from "$app/environment";
   import { page } from "$app/state";
   import { afterNavigate, goto } from "$app/navigation";
   import { Activity, Compass, Link, Send, Settings } from "@lucide/svelte";
@@ -17,8 +18,8 @@
 
   const session = useSession();
   const appChrome = useAppChrome();
-  /** Concept: `?layout=preview` shows family cards and the compact search bar. */
-  const preview = $derived(page.url.searchParams.get("layout") === "preview");
+  /** Concept (dev only): `?layout=preview` shows family cards and the compact search bar. */
+  const preview = $derived(dev && page.url.searchParams.get("layout") === "preview");
   // These are view labels, not server state codes.
   const browseTab = "Browse";
   const activityTab = "Activity";
