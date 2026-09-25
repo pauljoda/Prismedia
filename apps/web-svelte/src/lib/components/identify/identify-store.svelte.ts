@@ -419,6 +419,7 @@ export class IdentifyStore {
     const progressId = createOperationId();
     const progressStartedAt = nowMs();
     let afterApply: (() => void | Promise<void>) | null = null;
+    let applied = false;
     this.applying = true;
     this.applyProgress = initialApplyProgress(progressId, entity, proposal, selectedFields);
     this.error = null;
@@ -429,11 +430,11 @@ export class IdentifyStore {
       const item = requested.state === IDENTIFY_QUEUE_STATE.applying
         ? await this.#waitForApplyCompletion(entity.id)
         : requested;
-      this.#removeActiveQueueItem(item.entityId);
+      applied = true;
       if (options.navigateNext) {
         const next = this.nextQueueItem(item.entityId);
         if (next) {
-          afterApply = () => this.reviewQueueItem(next);
+          afterApply = () => goto(`/identify/${next.entityId}`);
         }
       }
 
@@ -446,7 +447,10 @@ export class IdentifyStore {
 
       if (!afterApply) {
         this.message = `${proposal.patch.title ?? entity.title} identified`;
-        afterApply = () => this.navigateToDashboard();
+        afterApply = () => {
+          this.navigateTo({ kind: "dashboard" });
+          return goto("/identify");
+        };
       }
     } catch (err) {
       this.error = readError(err);
@@ -454,10 +458,10 @@ export class IdentifyStore {
       await waitForMinimumApplyProgress(progressStartedAt);
       this.#stopApplyProgressPolling?.();
       this.#stopApplyProgressPolling = null;
-      this.applying = false;
-      this.applyProgress = null;
     }
 
+    // The review stays on screen, with its progress, until the next page is in place; the applied
+    // item leaves the queue only afterwards, so the route never falls back to search or a loader.
     if (!this.error && afterApply) {
       try {
         await afterApply();
@@ -468,6 +472,9 @@ export class IdentifyStore {
         this.navigateToDashboard();
       }
     }
+    if (applied) this.#removeActiveQueueItem(entity.id);
+    this.applying = false;
+    this.applyProgress = null;
   }
 
   async rejectQueueItem(entityId: string, options: IdentifyRejectOptions = {}) {

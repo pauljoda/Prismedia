@@ -20,6 +20,7 @@
   import type { EntityDetailCard } from "$lib/api/entities";
   import type { EntityMetadataProposal } from "$lib/api/identify-types";
   import EntityThumbnail from "$lib/components/thumbnails/EntityThumbnail.svelte";
+  import { toAspectRatioNumeric } from "$lib/entities/entity-thumbnail";
   import PluginIcon from "$lib/components/plugins/PluginIcon.svelte";
   import {
     groupReviewImages,
@@ -187,9 +188,9 @@
             {labelForEntityKind(proposal.targetKind)}
           </p>
           {#if currentPosterUrl && currentPosterUrl !== previewUrl}
-            <p class="flex items-center gap-2 text-caption text-text-muted">
+            <p class="flex items-center gap-2 text-caption text-text-muted" title="Artwork in your library today">
               <img src={currentPosterUrl} alt="" class="h-8 w-auto rounded-[var(--radius-xs)] object-cover opacity-80" decoding="async" />
-              <span class="font-mono text-[0.62rem] uppercase tracking-[0.1em]">Now</span>
+              Current artwork
             </p>
           {/if}
           <div class="flex items-center gap-2">
@@ -213,9 +214,9 @@
 
   <fieldset {disabled} class="flex min-w-0 flex-col gap-4 border-0 p-0">
     {#if sections.length > 1}
-      <nav class="sticky top-14 z-10 -mx-1 flex gap-1 overflow-x-auto bg-black/70 px-1 py-1.5 backdrop-blur scrollbar-hidden" aria-label="Review sections">
+      <nav class="flex gap-1 overflow-x-auto border-b border-[var(--color-border-subtle)] pb-1.5 scrollbar-hidden" aria-label="Review sections">
         {#each sections as section (section.id)}
-          <Button variant="ghost" size="sm" class="shrink-0 text-text-secondary" onclick={() => jump(section.id)}>
+          <Button variant="ghost" size="sm" class="shrink-0 text-text-secondary first:-ml-2.5" onclick={() => jump(section.id)}>
             {section.label}
             {#if section.count !== null}<span class="font-mono text-caption text-text-muted">{section.count}</span>{/if}
           </Button>
@@ -223,12 +224,12 @@
       </nav>
     {/if}
 
-    <div id="review-details-{proposal.proposalId}" class="scroll-mt-28">
+    <div id="review-details-{proposal.proposalId}" class="scroll-mt-20">
       <ReviewDetailsList {proposal} {selectedFields} {currentValue} {onFieldChange} {onAllFields} />
     </div>
 
     {#snippet cardStrip(entries: EntityMetadataProposal[], id: string, label: string)}
-      <section id="review-{id}-{proposal.proposalId}" class="flex min-w-0 scroll-mt-28 flex-col gap-2" aria-label={label}>
+      <section id="review-{id}-{proposal.proposalId}" class="flex min-w-0 scroll-mt-20 flex-col gap-2" aria-label={label}>
         <h3 class="font-heading text-sm font-semibold text-text-primary">
           {label}
           <span class="ml-1 font-mono text-caption font-normal text-text-muted">
@@ -238,11 +239,13 @@
         <ul class="flex gap-2.5 overflow-x-auto pb-2 scrollbar-hidden">
           {#each entries as entry (entry.proposalId)}
             {@const status = statusLabel(entry)}
-            <li class="relative w-28 shrink-0">
+            {@const card = id === "people"
+              ? creditCard(entry, proposal, relationshipTitlesForDetail(detail, entry.targetKind), selectedImages, proposal.proposalId, imageSelectionStore)
+              : relationshipCard(entry, relationshipTitlesForDetail(detail, entry.targetKind), selectedImages, proposal.proposalId, imageSelectionStore)}
+            <!-- Wide cards (studios, episodes) take episode width; portrait cards stay narrow. -->
+            <li class={cn("relative shrink-0", toAspectRatioNumeric(card.aspectRatio) > 1.2 ? "w-44" : "w-28")}>
               <EntityThumbnail
-                card={id === "people"
-                  ? creditCard(entry, proposal, relationshipTitlesForDetail(detail, entry.targetKind), selectedImages, proposal.proposalId, imageSelectionStore)
-                  : relationshipCard(entry, relationshipTitlesForDetail(detail, entry.targetKind), selectedImages, proposal.proposalId, imageSelectionStore)}
+                {card}
                 linkable={false}
                 onActivate={onActivate ? () => onActivate?.(entry) : undefined}
                 selectable
@@ -265,7 +268,7 @@
     {#if related.length > 0}{@render cardStrip(related, "related", "Related")}{/if}
 
     {#if imageGroups.length > 0}
-      <section id="review-artwork-{proposal.proposalId}" class="flex min-w-0 scroll-mt-28 flex-col gap-4" aria-label="Artwork">
+      <section id="review-artwork-{proposal.proposalId}" class="flex min-w-0 scroll-mt-20 flex-col gap-4" aria-label="Artwork">
         {#each imageGroups as group (group.kind)}
           <div class="flex min-w-0 flex-col gap-2">
             <h3 class="font-heading text-sm font-semibold text-text-primary">
@@ -303,7 +306,7 @@
     {/if}
 
     {#if looseTags.length > 0}
-      <section id="review-tags-{proposal.proposalId}" class="flex min-w-0 scroll-mt-28 flex-col gap-2" aria-label="Tags">
+      <section id="review-tags-{proposal.proposalId}" class="flex min-w-0 scroll-mt-20 flex-col gap-2" aria-label="Tags">
         <h3 class="font-heading text-sm font-semibold text-text-primary">
           Tags <span class="ml-1 font-mono text-caption font-normal text-text-muted">{looseTags.filter((tag) => selectedTags[tag]).length}/{looseTags.length}</span>
         </h3>
@@ -333,7 +336,7 @@
     {/if}
 
     {#if structure}
-      <div id="review-contents-{proposal.proposalId}" class="scroll-mt-28">{@render structure()}</div>
+      <div id="review-contents-{proposal.proposalId}" class="scroll-mt-20">{@render structure()}</div>
     {/if}
   </fieldset>
 </div>

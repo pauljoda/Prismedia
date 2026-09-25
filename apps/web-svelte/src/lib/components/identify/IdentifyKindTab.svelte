@@ -125,23 +125,6 @@
       />
     {/if}
 
-    <div class="flex-1"></div>
-
-    {#if selectedIds.length > 0 && activeProvider}
-      <Button variant="outline" size="sm"
-        type="button"
-        class="inline-flex h-7 items-center gap-1.5 px-2.5 text-[0.72rem] font-medium disabled:cursor-not-allowed disabled:opacity-40"
-        disabled={store.bulkStarting}
-        onclick={handleBulkQueue}
-      >
-        {#if store.bulkStarting}
-          <Loader2 class="h-3 w-3 animate-spin" />
-        {:else}
-          <Sparkles class="h-3 w-3" />
-        {/if}
-        Queue {selectedIds.length}
-      </Button>
-    {/if}
   </div>
 
   <!-- Entity grid -->
@@ -171,5 +154,24 @@
           ]
         : []}
     />
+  {/if}
+
+  <!-- The one thing to do here: identify what is selected. Floating so it is never scrolled away. -->
+  {#if !loading && activeProvider && cards.length > 0}
+    <div class="pointer-events-none sticky bottom-24 z-30 flex justify-center md:bottom-5">
+      <div class="app-glass pointer-events-auto flex items-center gap-3 rounded-[var(--radius-lg)] border py-2 pr-2 pl-4">
+        <span class="font-mono text-[0.72rem] text-text-muted">
+          <span class={selectedIds.length > 0 ? "text-text-primary" : undefined}>{selectedIds.length}</span> selected
+        </span>
+        <Button
+          variant="primary"
+          disabled={selectedIds.length === 0 || store.bulkStarting}
+          onclick={handleBulkQueue}
+        >
+          {#if store.bulkStarting}<Loader2 class="animate-spin" aria-hidden="true" />{:else}<Sparkles aria-hidden="true" />{/if}
+          Identify {selectedIds.length > 0 ? selectedIds.length : ""} with {activeProvider.name}
+        </Button>
+      </div>
+    </div>
   {/if}
 </div>

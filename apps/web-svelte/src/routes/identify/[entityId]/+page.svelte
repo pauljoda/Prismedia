@@ -25,6 +25,23 @@
   const appChrome = useAppChrome();
   const entityId = $derived(page.params.entityId ?? "");
   const current = $derived(store.queue.find((item) => item.entityId === entityId) ?? null);
+  /**
+   * The proposal being reviewed stays on screen while it applies: the queue item passes through
+   * "applying" (and may leave the polled queue) before the page moves on, and neither should
+   * swap the review for the search view or a loader.
+   */
+  let heldItem = $state<typeof current>(null);
+  $effect(() => {
+    if (current?.proposal && current.state === IDENTIFY_QUEUE_STATE.proposal) heldItem = current;
+  });
+  const applyingHeld = $derived(
+    Boolean(heldItem && heldItem.entityId === entityId && store.applying
+      && (!current || current.state === IDENTIFY_QUEUE_STATE.applying)),
+  );
+  /** One review instance spans the proposal and its apply, so selections and progress stay put. */
+  const reviewItem = $derived(
+    applyingHeld ? heldItem : current?.state === IDENTIFY_QUEUE_STATE.proposal && current.proposal ? current : null,
+  );
   const providers = $derived(current ? store.providersForKind(current.entityKind) : []);
 
   const queueIndex = $derived(store.queue.findIndex((item) => item.entityId === entityId));
@@ -189,7 +206,9 @@
   {/if}
 
   <svelte:boundary onerror={(error) => console.error("[identify] review render failed", error)}>
-  {#if store.loading || !current}
+  {#if reviewItem?.proposal && !activeReviewChild && (applyingHeld || !store.loading)}
+    <IdentifyReviewParent entity={reviewItem.entity} proposal={reviewItem.proposal} detail={reviewItem.detail} />
+  {:else if store.loading || !current}
     <div class="flex flex-col items-center justify-center gap-3 py-16 text-center">
       <Loader2 class="h-6 w-6 animate-spin text-text-accent" />
       <div class="space-y-1">
@@ -208,8 +227,6 @@
       parentProposal={activeReviewChild.parentProposal}
       ancestors={activeReviewChild.ancestors}
     />
-  {:else if current.state === IDENTIFY_QUEUE_STATE.proposal && current.proposal}
-    <IdentifyReviewParent entity={current.entity} proposal={current.proposal} detail={current.detail} />
   {:else}
     {#if current.state === IDENTIFY_QUEUE_STATE.error && current.errorMessage}
       <div class="rounded-xs border border-error/40 bg-surface-1 px-3 py-2.5 text-[0.82rem] text-error-text">

@@ -8,6 +8,8 @@
     showNext?: boolean;
     disabled?: boolean;
     compact?: boolean;
+    /** Full-width buttons at the standard control size, stacked to match Accept in a decision panel. */
+    fill?: boolean;
     class?: string;
   }
 
@@ -16,19 +18,24 @@
     showNext = false,
     disabled = false,
     compact = false,
+    fill = false,
     class: className = "",
   }: Props = $props();
 
   const store = useIdentifyStore();
   const buttonSize = $derived(
-    compact ? "h-8 px-2.5 text-[0.76rem]" : "h-10 px-3 text-[0.78rem] md:h-9",
+    fill ? "h-control w-full md:w-full" : compact ? "h-8 px-2.5 text-[0.76rem]" : "h-10 px-3 text-[0.78rem] md:h-9",
   );
   const buttonDisabled = $derived(disabled || store.applying);
   const dangerButtonClass =
     "border-error/40 bg-error-muted/20 text-error-text shadow-[0_0_14px_rgba(168,72,80,0.08)] hover:border-error/70 hover:bg-error-muted/40 disabled:cursor-not-allowed disabled:opacity-40";
 </script>
 
-<div class={cn("flex w-full flex-col gap-2 md:w-auto md:flex-row md:items-center md:gap-3", className)}>
+<div class={cn(
+  "flex w-full flex-col gap-2",
+  !fill && "md:w-auto md:flex-row md:items-center md:gap-3",
+  className,
+)}>
   <Button variant="outline" size="sm"
     type="button"
     class={cn(

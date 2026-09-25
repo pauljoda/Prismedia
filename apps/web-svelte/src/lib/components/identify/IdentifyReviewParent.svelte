@@ -300,7 +300,7 @@
           Accept and next
         </Button>
       {/if}
-      <IdentifyRejectQueueActions entityId={entity.id} showNext={Boolean(nextQueueItem)} disabled={store.applying} />
+      <IdentifyRejectQueueActions entityId={entity.id} showNext={Boolean(nextQueueItem)} disabled={store.applying} fill />
     </div>
     {#if cascadeRunning}
       <p class="flex items-center gap-1.5 font-mono text-[0.68rem] text-text-muted" aria-live="polite">

@@ -27,13 +27,15 @@
     /** "View all" destination; omit to hide the link. */
     href?: string | null;
     sizing?: "width" | "height";
+    /** Fixed card width for width-sized shelves whose artwork reads large at the default width. */
+    itemWidth?: string;
     /** Smaller related-entity shelf for detail pages. */
     compact?: boolean;
     headerAccessory?: Snippet;
     item?: Snippet<[EntityThumbnailCard]>;
   }
 
-  const { label, icon: Icon, cards, href = null, sizing = "width", compact = false, headerAccessory, item }: Props = $props();
+  const { label, icon: Icon, cards, href = null, sizing = "width", itemWidth, compact = false, headerAccessory, item }: Props = $props();
   const shelfAccent = $derived(entityAccentForKind(cards[0]?.entity.kind));
   const shelfId = $props.id();
   let scroller: HTMLDivElement | undefined;
@@ -75,7 +77,7 @@
   }
 
   function itemWidthStyle(card: EntityThumbnailCard): string {
-    if (sizing === "width") return compact ? "clamp(132px, 24vw, 156px)" : "clamp(140px, 18vw, 220px)";
+    if (sizing === "width") return itemWidth ?? (compact ? "clamp(132px, 24vw, 156px)" : "clamp(140px, 18vw, 220px)");
     return `calc(var(--shelf-h) * ${toAspectRatioNumeric(card.aspectRatio).toFixed(4)})`;
   }
 </script>

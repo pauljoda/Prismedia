@@ -111,6 +111,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 - Add to Collection can create a new collection from the typed name and add the selection to it in one step.
 
+- Identify's kind grids keep a floating "Identify N with <provider>" button in view, so starting identification for the selected items is one clear action.
+
+- Studios use the same 16:9 frame and size as episodes: larger on detail pages and in reviews, smaller on the Dashboard.
+
 - Request and connected-source administration can open as focused pages inside the iOS app, using its native navigation and background while staying current with the web interface.
 
 - Book chapter alignment shows total automatic and manual coverage for readable and audio chapters and clearly marks chapters without a match. Saving rejects targets that are no longer in the Book's readable contents and keeps the existing choices.
@@ -200,6 +204,8 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 - Audio-track detail and saved-queue payloads no longer duplicate embedded artist and album fields outside the Entity's `embedded-audio-metadata` capability.
 
 ### Fixed
+
+- Accepting an Identify proposal keeps the review and its progress on screen until the next page opens, instead of briefly showing the search view or a loader.
 
 - Automatic audiobook chapter matching no longer guesses: it never pairs chapters by position, by file name, by the placeholder of an untitled chapter, or by titles whose chapter numbers differ, and repeated or out-of-order titles stay unpaired. Existing automatic pairs are recomputed once under these rules. Audiobook track order no longer flips between file-name order and track-number tags.
 - Audio longer than an hour, such as a single-file audiobook, now resumes at its saved position and shows its full length in the player instead of being cut off at the minute-and-second reading of its hour-and-minute label. Opening or reloading a page with a paused player no longer overwrites a newer listening position saved on another device.

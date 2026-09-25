@@ -14,7 +14,7 @@ public sealed class StudioEntityKindDefinition() : RootEntityKindDefinition<Stud
     new EntityKindPresentation(
         EntityKindIcon.Studio,
         EntityKindIcon.Studio,
-        21,
+        16,
         9,
         EntityAccentHue.Orange,
         EntityAccentHue.Magenta,

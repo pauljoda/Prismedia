@@ -37,6 +37,8 @@
     label: string;
     icon: typeof Film;
     href: string;
+    /** Card width override for kinds whose artwork reads large at the shelf default. */
+    itemWidth?: string;
   }
 
   interface DashboardSection extends SectionDef {
@@ -53,7 +55,8 @@
     { kind: ENTITY_KIND.image, label: "Images", icon: ImageIcon, href: "/images" },
     { kind: ENTITY_KIND.audioLibrary, label: "Audio", icon: Music, href: "/audio" },
     { kind: ENTITY_KIND.person, label: "People", icon: Users, href: "/people" },
-    { kind: ENTITY_KIND.studio, label: "Studios", icon: Building2, href: "/studios" },
+    // Studio plates match episode cards rather than the full-width poster shelf.
+    { kind: ENTITY_KIND.studio, label: "Studios", icon: Building2, href: "/studios", itemWidth: "clamp(140px, 13vw, 176px)" },
     { kind: ENTITY_KIND.tag, label: "Tags", icon: Tag, href: "/tags" },
   ];
 
@@ -390,6 +393,7 @@
           icon={section.icon}
           cards={section.cards}
           href={section.href}
+          itemWidth={section.itemWidth}
         />
       {/if}
     {/each}

@@ -98,9 +98,15 @@ const entityDateTypeLabels: Record<string, string> = {
   [ENTITY_DATE_TYPE.careerEnd]: "Career end",
 };
 
-/** Readable name for a typed date; unknown types fall back to their code. */
+/** Provider stat and date keys are open vocabulary; camelCase and dashes read as words. */
+export function readableProviderKey(key: string): string {
+  const words = key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[-_]/g, " ").toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
+}
+
+/** Readable name for a date: typed dates use their labels, provider keys read as words. */
 export function reviewDateTypeLabel(type: string): string {
-  return entityDateTypeLabels[type] ?? type;
+  return entityDateTypeLabels[type] ?? readableProviderKey(type);
 }
 
 export interface IdentifyReviewSelectionState {

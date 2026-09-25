@@ -6,6 +6,7 @@
     proposalFieldValue,
     proposalHasField,
     reviewBaseFieldKeys,
+    readableProviderKey,
     reviewDateTypeLabel,
     reviewFieldLabels,
   } from "$lib/components/identify-review";
@@ -43,14 +44,19 @@
     return left.size === right.size && [...left].every((part) => right.has(part));
   }
 
-  /** Current dates arrive as "type: value" pairs; they read with the same labels as the proposal. */
+  /** Current dates and stats arrive as "key: value" pairs; they read with the same labels as the proposal. */
   function readableCurrent(field: string, value: string): string {
-    if (field !== METADATA_PATCH_FIELD.dates) return value;
+    const label = field === METADATA_PATCH_FIELD.dates
+      ? reviewDateTypeLabel
+      : field === METADATA_PATCH_FIELD.stats
+        ? readableProviderKey
+        : null;
+    if (!label) return value;
     return value
       .split(/,\s*/)
       .map((pair) => {
-        const [type, ...rest] = pair.split(": ");
-        return rest.length > 0 ? `${reviewDateTypeLabel(type ?? "")}: ${rest.join(": ")}` : pair;
+        const [key, ...rest] = pair.split(": ");
+        return rest.length > 0 ? `${label(key ?? "")}: ${rest.join(": ")}` : pair;
       })
       .join(", ");
   }
@@ -84,7 +90,7 @@
       <ReviewFieldValue {proposal} field={entry.field} />
       {#if entry.current && !entry.unchanged}
         <p class="mt-1.5 line-clamp-2 text-caption text-text-muted">
-          <span class="font-mono text-[0.62rem] uppercase tracking-[0.1em] text-text-disabled">Now</span>
+          <span class="text-text-disabled">Current:</span>
           {entry.current}
         </p>
       {/if}

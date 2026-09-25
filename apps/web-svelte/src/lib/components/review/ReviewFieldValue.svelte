@@ -3,7 +3,7 @@
   import { Button } from "@prismedia/ui-svelte";
   import type { EntityMetadataProposal } from "$lib/api/identify-types";
   import { METADATA_PATCH_FIELD } from "$lib/entities/entity-codes";
-  import { proposalFieldValue, reviewDateTypeLabel } from "$lib/components/identify-review";
+  import { proposalFieldValue, readableProviderKey, reviewDateTypeLabel } from "$lib/components/identify-review";
 
   interface Props {
     proposal: EntityMetadataProposal;
@@ -24,18 +24,6 @@
     return Number.isNaN(parsed.getTime()) ? value : dateFormat.format(parsed);
   }
 
-  /** Provider stat keys are open vocabulary; split camelCase into words for reading. */
-  function humanize(key: string): string {
-    const words = key.replace(/([a-z0-9])([A-Z])/g, "$1 $2").replace(/[-_]/g, " ").toLowerCase();
-    return words.charAt(0).toUpperCase() + words.slice(1);
-  }
-
-  /** Typed dates use their labels; provider date keys outside the typed set read as words. */
-  function dateLabel(type: string): string {
-    const label = reviewDateTypeLabel(type);
-    return label === type ? humanize(type) : label;
-  }
-
   function hostname(url: string): string {
     try {
       return new URL(url).hostname.replace(/^www\./, "");
@@ -48,8 +36,8 @@
   const dates = $derived.by(() => {
     const seen = new Set<string>();
     return [
-      ...(patch.dateEntries ?? []).map((entry) => ({ label: dateLabel(entry.type), value: entry.value })),
-      ...Object.entries(patch.dates ?? {}).map(([key, value]) => ({ label: dateLabel(key), value })),
+      ...(patch.dateEntries ?? []).map((entry) => ({ label: reviewDateTypeLabel(entry.type), value: entry.value })),
+      ...Object.entries(patch.dates ?? {}).map(([key, value]) => ({ label: reviewDateTypeLabel(key), value })),
     ].filter((date) => {
       const key = `${date.label}:${date.value}`;
       if (seen.has(key)) return false;
@@ -108,7 +96,7 @@
 {:else if field === METADATA_PATCH_FIELD.stats}
   <dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-0.5">
     {#each Object.entries(patch.stats ?? {}) as [key, value] (key)}
-      <dt class="text-caption text-text-muted">{humanize(key)}</dt>
+      <dt class="text-caption text-text-muted">{readableProviderKey(key)}</dt>
       <dd class="tabular-nums">{numberFormat.format(value)}</dd>
     {/each}
   </dl>
