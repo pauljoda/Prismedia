@@ -442,7 +442,7 @@
 <div class="space-y-5">
   {#if preview}
     {#if !selectedKind && !connection}
-      <div class="grid items-start gap-3 md:grid-cols-2 xl:grid-cols-3" role="group" aria-label="Choose what to find">
+      <div class="grid gap-3 md:grid-cols-2 xl:grid-cols-4" role="group" aria-label="Choose what to find">
         {#each familyGroups as group (group.family.key)}
           <RequestFamilyCard
             family={group.family}
