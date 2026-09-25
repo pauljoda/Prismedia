@@ -8,7 +8,9 @@
     Layers,
     Loader2,
   } from "@lucide/svelte";
+  import { page } from "$app/state";
   import MetadataProposalReview from "$lib/components/review/MetadataProposalReview.svelte";
+  import ProposalReviewLayout from "$lib/components/review/ProposalReviewLayout.svelte";
   import ReviewSection from "$lib/components/review/ReviewSection.svelte";
   import IdentifyTargetPreview from "./IdentifyTargetPreview.svelte";
   import IdentifyChildrenGrid from "./IdentifyChildrenGrid.svelte";
@@ -50,6 +52,8 @@
   let { entity, proposal, detail = null }: Props = $props();
 
   const store = useIdentifyStore();
+  /** Concept: `?layout=preview` renders the preview-and-decide review layout with the same controls. */
+  const previewLayout = $derived(page.url.searchParams.get("layout") === "preview");
 
   const DIFF_FIELD_KEYS = $derived(reviewBaseFieldKeys(proposal));
 
@@ -209,32 +213,7 @@
   }
 </script>
 
-<div class="flex flex-col gap-4">
-  <!-- Preview of what we are identifying (collapsed by default) -->
-  <IdentifyTargetPreview {entity} />
-
-  <MetadataProposalReview
-    {proposal}
-    title={contextTitle}
-    subtitle={showEntitySubtitle ? entity.title : null}
-    kindLabel={entity.kind}
-    posterUrl={contextPosterUrl}
-    imageShape={coverIsSquare ? "square" : contextImageWide ? "wide" : "portrait"}
-    {detail}
-    {selectedFields}
-    {selectedImages}
-    {selectedTags}
-    currentValue={(field) => currentFieldValueForReview(entity, detail, field)}
-    onFieldChange={setFieldSelected}
-    onAllFields={setAllFields}
-    onImageChange={setImageSelected}
-    onTagChange={setTagSelected}
-    onProposalSelected={setRelationshipSelected}
-    isProposalSelected={(proposalId) => store.isReviewProposalSelected(proposalId)}
-    imageSelectionsForProposal={(proposalId) => store.getReviewImageSelections(proposalId)}
-    onActivate={walkChild}
-  />
-
+{#snippet childSections()}
   <!-- New structure the provider proposes: children below move in here as they resolve -->
   {#if newContainers.length > 0}
     <ReviewSection
@@ -262,11 +241,13 @@
       <IdentifyChildrenGrid {cascadeRunning} childEntities={remainingChildEntities} {proposal} onWalkChild={walkChild} />
     </ReviewSection>
   {/if}
+{/snippet}
 
+{#snippet applyProgress()}
   {#if store.applying && store.applyProgress}
     <div class="apply-progress-row" aria-live="polite">
       <div class="flex min-w-0 items-center gap-2">
-        <span class="grid h-8 w-8 shrink-0 place-items-center rounded-xs border border-border-accent bg-accent-950/40 text-text-accent shadow-[0_0_18px_rgba(199, 201, 204,0.18)]">
+        <span class="grid h-8 w-8 shrink-0 place-items-center rounded-xs border border-border-accent bg-accent-950/40 text-text-accent">
           <Loader2 class="h-4 w-4 animate-spin" />
         </span>
         <div class="min-w-0">
@@ -293,6 +274,124 @@
       <Progress value={applyProgressPercent} aria-label="Apply progress" class="mt-3 h-1.5" />
     </div>
   {/if}
+{/snippet}
+
+{#snippet decision()}
+  <section class="flex flex-col gap-3 rounded-[var(--radius-md)] border border-[var(--color-border-subtle)] bg-[var(--color-surface-2)] p-3" aria-label="Decision">
+    {@render applyProgress()}
+    <div class="flex flex-col gap-2" data-testid="identify-proposal-actions">
+      <Button
+        variant="primary"
+        class="w-full gap-2"
+        disabled={store.applying || cascadeRunning}
+        onclick={() => handleApply(false)}
+      >
+        {#if store.applying}<Loader2 class="animate-spin" aria-hidden="true" />{:else}<Check aria-hidden="true" />{/if}
+        Accept
+      </Button>
+      {#if nextQueueItem}
+        <Button
+          variant="secondary"
+          class="w-full gap-2"
+          disabled={store.applying || cascadeRunning}
+          onclick={() => handleApply(true)}
+        >
+          <Check aria-hidden="true" />
+          Accept and next
+        </Button>
+      {/if}
+      <IdentifyRejectQueueActions entityId={entity.id} showNext={Boolean(nextQueueItem)} disabled={store.applying} />
+    </div>
+    {#if cascadeRunning}
+      <p class="flex items-center gap-1.5 font-mono text-[0.68rem] text-text-muted" aria-live="polite">
+        <Loader2 class="size-3 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+        Identifying children
+      </p>
+    {/if}
+    <dl class="grid grid-cols-5 gap-1 border-t border-[var(--color-border-subtle)] pt-3 text-center">
+      {#each [
+        { label: "Fields", value: Object.values(selectedFields).filter(Boolean).length },
+        { label: "Art", value: Object.values(selectedImages).filter(Boolean).length },
+        { label: "Links", value: selectedRelationshipCount },
+        { label: "Tags", value: selectedTagCount },
+        { label: "Items", value: selectedChildCount },
+      ] as stat (stat.label)}
+        <div>
+          <dd class="font-mono text-sm tabular-nums text-text-primary">{stat.value}</dd>
+          <dt class="font-mono text-[0.56rem] uppercase tracking-[0.1em] text-text-disabled">{stat.label}</dt>
+        </div>
+      {/each}
+    </dl>
+    {#if store.queue.length > 1 && queueIndex >= 0}
+      <div class="flex items-center justify-between gap-2 border-t border-[var(--color-border-subtle)] pt-2">
+        <Button variant="ghost" size="icon-sm" disabled={!prevQueueNavItem} aria-label="Previous queue item"
+          onclick={() => prevQueueNavItem && store.reviewQueueItem(prevQueueNavItem)}>
+          <ChevronUp aria-hidden="true" />
+        </Button>
+        <span class="font-mono text-[0.7rem] text-text-muted">{queueIndex + 1}/{store.queue.length}</span>
+        <Button variant="ghost" size="icon-sm" disabled={!nextQueueNavItem} aria-label="Next queue item"
+          onclick={() => nextQueueNavItem && store.reviewQueueItem(nextQueueNavItem)}>
+          <ChevronDown aria-hidden="true" />
+        </Button>
+      </div>
+    {/if}
+  </section>
+{/snippet}
+
+{#if previewLayout}
+  <ProposalReviewLayout
+    {proposal}
+    title={contextTitle}
+    subtitle={showEntitySubtitle ? entity.title : null}
+    posterUrl={contextPosterUrl}
+    currentPosterUrl={entity.coverThumbUrl ?? entity.coverUrl ?? null}
+    imageShape={coverIsSquare ? "square" : contextImageWide ? "wide" : "portrait"}
+    {detail}
+    {selectedFields}
+    {selectedImages}
+    {selectedTags}
+    currentValue={(field) => currentFieldValueForReview(entity, detail, field)}
+    onFieldChange={setFieldSelected}
+    onAllFields={setAllFields}
+    onImageChange={setImageSelected}
+    onTagChange={setTagSelected}
+    onProposalSelected={setRelationshipSelected}
+    isProposalSelected={(proposalId) => store.isReviewProposalSelected(proposalId)}
+    imageSelectionsForProposal={(proposalId) => store.getReviewImageSelections(proposalId)}
+    onActivate={walkChild}
+    structure={newContainers.length > 0 || remainingChildEntities.length > 0 ? childSections : undefined}
+    sidebar={decision}
+  />
+{:else}
+<div class="flex flex-col gap-4">
+  <!-- Preview of what we are identifying (collapsed by default) -->
+  <IdentifyTargetPreview {entity} />
+
+  <MetadataProposalReview
+    {proposal}
+    title={contextTitle}
+    subtitle={showEntitySubtitle ? entity.title : null}
+    kindLabel={entity.kind}
+    posterUrl={contextPosterUrl}
+    imageShape={coverIsSquare ? "square" : contextImageWide ? "wide" : "portrait"}
+    {detail}
+    {selectedFields}
+    {selectedImages}
+    {selectedTags}
+    currentValue={(field) => currentFieldValueForReview(entity, detail, field)}
+    onFieldChange={setFieldSelected}
+    onAllFields={setAllFields}
+    onImageChange={setImageSelected}
+    onTagChange={setTagSelected}
+    onProposalSelected={setRelationshipSelected}
+    isProposalSelected={(proposalId) => store.isReviewProposalSelected(proposalId)}
+    imageSelectionsForProposal={(proposalId) => store.getReviewImageSelections(proposalId)}
+    onActivate={walkChild}
+  />
+
+  {@render childSections()}
+
+  {@render applyProgress()}
 
   <!-- Action footer -->
   <div class="flex flex-col gap-2 py-2 md:flex-row md:items-center md:gap-3">
@@ -372,6 +471,7 @@
     </div>
   </div>
 </div>
+{/if}
 
 <style>
   .apply-progress-row {

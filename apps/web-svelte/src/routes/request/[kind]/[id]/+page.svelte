@@ -34,6 +34,7 @@
     structuralChildProposals,
   } from "$lib/components/identify-review";
   import MetadataProposalReview from "$lib/components/review/MetadataProposalReview.svelte";
+  import ProposalReviewLayout from "$lib/components/review/ProposalReviewLayout.svelte";
   import ProposalReviewSummary from "$lib/components/review/ProposalReviewSummary.svelte";
   import { aspectRatioForKind } from "$lib/entities/entity-thumbnail";
   import { resolveEntityHref } from "$lib/entities/entity-codes";
@@ -78,6 +79,8 @@
   const namespaceQuery = $derived(page.url.searchParams.get("namespace"));
   /** Query string of the originating search page, chained through so Back returns to live results. */
   const backQuery = $derived(page.url.searchParams.get("back"));
+  /** Concept: `?layout=preview` renders the preview-and-decide review layout with the same controls. */
+  const previewLayout = $derived(page.url.searchParams.get("layout") === "preview");
   const backHref = $derived(backQuery ? `/request?${backQuery}` : "/request");
   const nsfw = useNsfw();
   const session = useSession();
@@ -695,6 +698,44 @@
       </Button>
     {/if}
 
+    {#snippet reviewStructure()}
+    <ProposalReviewSummary
+      proposal={activeProposal ?? proposal}
+      selectedIds={activeSelectedProposalIds}
+      selectableIds={activeSelectableProposalIds}
+      onSelectedChange={setActiveProposalSelected}
+      onActivate={openProposal}
+      childrenTitle={activeChildrenTitle}
+      subtitle={review ? `${review.externalIdentity.namespace}:${review.externalIdentity.value}` : null}
+      showOverview={false}
+      showRelationships={false}
+      statusLabel={identifyingStatus}
+    />
+    {/snippet}
+
+    {#if previewLayout}
+    <ProposalReviewLayout
+      proposal={activeProposal ?? proposal}
+      title={activeTitle}
+      posterUrl={activePosterUrl}
+      imageShape={activeImageShape}
+      selectedFields={activeSelectedFields}
+      selectedImages={activeSelectedImages}
+      selectedTags={activeSelectedTags}
+      onFieldChange={setMetadataField}
+      onAllFields={setAllMetadataFields}
+      onImageChange={setMetadataImage}
+      onTagChange={setMetadataTag}
+      onProposalSelected={setMetadataProposal}
+      isProposalSelected={(proposalId) => selectedCascade[proposalId] !== false}
+      imageSelectionsForProposal={(proposalId) => selectedImagesByProposal[proposalId]}
+      onActivate={openProposal}
+      statusLabel={identifyingStatus}
+      structure={reviewStructure}
+      sidebar={requestOptions}
+      disabled={submitting || !!pendingManagerCommit}
+    />
+    {:else}
     <div class="min-w-0 space-y-4">
     <MetadataProposalReview
       proposal={activeProposal ?? proposal}
@@ -718,23 +759,10 @@
       statusLabel={identifyingStatus}
       sidebar={requestOptions}
       disabled={submitting || !!pendingManagerCommit}
-    >
-      {#snippet structure()}
-    <ProposalReviewSummary
-      proposal={activeProposal ?? proposal}
-      selectedIds={activeSelectedProposalIds}
-      selectableIds={activeSelectableProposalIds}
-      onSelectedChange={setActiveProposalSelected}
-      onActivate={openProposal}
-      childrenTitle={activeChildrenTitle}
-      subtitle={review ? `${review.externalIdentity.namespace}:${review.externalIdentity.value}` : null}
-      showOverview={false}
-      showRelationships={false}
-      statusLabel={identifyingStatus}
+      structure={reviewStructure}
     />
-      {/snippet}
-    </MetadataProposalReview>
     </div>
+    {/if}
 
     {#snippet requestOptions()}
     <section class="space-y-3 rounded-sm border border-border-accent bg-surface-1 p-4">

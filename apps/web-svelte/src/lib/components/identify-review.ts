@@ -98,6 +98,11 @@ const entityDateTypeLabels: Record<string, string> = {
   [ENTITY_DATE_TYPE.careerEnd]: "Career end",
 };
 
+/** Readable name for a typed date; unknown types fall back to their code. */
+export function reviewDateTypeLabel(type: string): string {
+  return entityDateTypeLabels[type] ?? type;
+}
+
 export interface IdentifyReviewSelectionState {
   selectedFieldsByProposal: Record<string, Record<string, boolean>>;
   selectedImagesByProposal: Record<string, Record<string, string | null>>;

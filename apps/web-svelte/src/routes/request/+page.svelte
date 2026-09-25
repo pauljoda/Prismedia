@@ -13,9 +13,12 @@
   import StatePlaceholder from "$lib/components/StatePlaceholder.svelte";
   import { useAppChrome } from "$lib/stores/app-chrome.svelte";
   import { useSession } from "$lib/stores/session.svelte";
+  import ManagePageHeader from "$lib/components/manage/ManagePageHeader.svelte";
 
   const session = useSession();
   const appChrome = useAppChrome();
+  /** Concept: `?layout=preview` shows family cards and the compact search bar. */
+  const preview = $derived(page.url.searchParams.get("layout") === "preview");
   // These are view labels, not server state codes.
   const browseTab = "Browse";
   const activityTab = "Activity";
@@ -83,6 +86,16 @@
   <StatePlaceholder icon={Send} title="Request access required" description="Ask an administrator to allow content requests for your account." />
 {:else}
   <div class="space-y-5">
+    {#if preview}
+      <ManagePageHeader icon={Send} title="Request">
+        {#snippet actions()}
+          {#if session.isAdmin}
+            <a class={buttonVariants({ variant: "secondary", size: "sm" })} href="/request/urls"><Link />Add from URL</a>
+            <a class={buttonVariants({ variant: "ghost", size: "sm" })} href="/settings/connections"><Settings />Sources</a>
+          {/if}
+        {/snippet}
+      </ManagePageHeader>
+    {:else}
     <header class="flex flex-wrap items-center justify-between gap-4">
       <div><h1>Request</h1><p class="mt-1 text-sm text-text-muted">Find something to add to your library.</p></div>
       {#if session.isAdmin}<div class="flex gap-2">
@@ -90,6 +103,7 @@
         <a class={buttonVariants({ variant: "ghost", size: "sm" })} href="/settings/connections"><Settings />Sources</a>
       </div>{/if}
     </header>
+    {/if}
     {#if error}<Alert.Root variant="destructive"><Alert.Description>{error}</Alert.Description></Alert.Root>{/if}
     <Tabs.Root value={activeTab} onValueChange={chooseTab}>
       <Tabs.List variant="line" aria-label="Request workspace">
@@ -97,7 +111,7 @@
         {#if session.isAdmin}<Tabs.Trigger value={activityTab}><Activity />Activity</Tabs.Trigger>{/if}
       </Tabs.List>
       <Tabs.Content value={browseTab} class={activeTab === browseTab ? "pt-5" : "hidden"}>
-        {#if loaded}<RequestDiscover {connections} initialConnectionId={routeConnectionId} initialKind={routeRequestKind} onConnectionChange={chooseConnection} onKindChange={chooseKind} />
+        {#if loaded}<RequestDiscover {preview} {connections} initialConnectionId={routeConnectionId} initialKind={routeRequestKind} onConnectionChange={chooseConnection} onKindChange={chooseKind} />
         {:else}<StatePlaceholder icon={Compass} title="Loading sources" busy />{/if}
       </Tabs.Content>
       {#if session.isAdmin}<Tabs.Content value={activityTab} class="pt-5">{#if activeTab === activityTab}<RequestActivity {connections} />{/if}</Tabs.Content>{/if}
