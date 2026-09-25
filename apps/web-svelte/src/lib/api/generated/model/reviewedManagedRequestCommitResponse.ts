@@ -4,11 +4,9 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
-import type { ManagedRequestResponse } from './managedRequestResponse';
+import type { ManagedRequestScopeResult } from './managedRequestScopeResult';
 
 export interface ReviewedManagedRequestCommitResponse {
   entityId: string;
-  /** @nullable */
-  targetEntityIds: string[] | null;
-  managedRequest: null | ManagedRequestResponse;
+  scopes: ManagedRequestScopeResult[];
 }

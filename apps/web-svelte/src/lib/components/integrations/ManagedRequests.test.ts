@@ -1,11 +1,16 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/svelte";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { CONNECTION_STATUS, ENTITY_KIND, INTEGRATION_OPERATION, MANAGED_REQUEST_PHASE, PLUGIN_CAPABILITY } from "$lib/api/generated/codes";
-import type { ConnectionResponse, ManagedRequestPreview, ManagedRequestResponse } from "$lib/api/generated/model";
+import type { ConnectionResponse, ManagedRequestResponse, ReviewedManagedRequest, ReviewedManagedRequestScope } from "$lib/api/generated/model";
 import ManagedRequests from "./ManagedRequests.svelte";
 
 const api = vi.hoisted(() => ({ fetchManagedRequests: vi.fn(), fetchManagedRequestPreview: vi.fn(), saveManagedRequest: vi.fn(), refreshRequest: vi.fn(), cancelRequest: vi.fn(), fetchLibraryMounts: vi.fn(), fetchEntities: vi.fn() }));
 vi.mock("$lib/api/managed-requests", () => ({ ...api, ManagedRequestRejectedError: class extends Error {} }));
+vi.mock("$lib/api/reviewed-managed-requests", () => ({
+  fetchReviewedManagedRequest: api.fetchManagedRequestPreview,
+  saveReviewedManagedRequest: api.saveManagedRequest,
+  reviewScope: (review: ReviewedManagedRequest) => review.scopes[0],
+}));
 vi.mock("$lib/api/managed-libraries", () => api);
 vi.mock("$lib/api/entities", () => api);
 const connection: ConnectionResponse = {
@@ -25,24 +30,35 @@ const seriesConnection: ConnectionResponse = {
   }],
 };
 const mount = { id: "mount", connectionId: connection.id, libraryRootId: "root", remoteRootId: "1", remotePath: "/movies", localPath: "/local/movies", label: "Movie library" };
-const preview: ManagedRequestPreview = { entityId: "wanted", title: "Wanted film", work: { entityKind: ENTITY_KIND.movie, externalIds: { tmdb: "42" } },
-  mount, options: { profiles: [{ id: "7", label: "Preferred quality" }], roots: [{ id: "1", path: "/movies", accessible: true }] }, existing: null };
-const seriesPreview: ManagedRequestPreview = {
+const movieScope: ReviewedManagedRequestScope = { rendition: null, work: { entityKind: ENTITY_KIND.movie, externalIds: { tmdb: "42" } },
+  mount, options: { profiles: [{ id: "7", label: "Preferred quality" }], roots: [{ id: "1", path: "/movies", accessible: true }] }, existing: null, existingFulfillments: [] };
+const preview: ReviewedManagedRequest = { connectionRevision: 1, managerDiscoveryRevision: null, entityId: "wanted", title: "Wanted film", scopes: [movieScope] };
+const seriesPreview: ReviewedManagedRequest = {
+  connectionRevision: 1,
+  managerDiscoveryRevision: null,
   entityId: "series",
   title: "Wanted series",
-  work: {
-    entityKind: ENTITY_KIND.videoSeries,
-    externalIds: { tvdb: "42" },
-    targets: [
-      { entityKind: ENTITY_KIND.videoEpisode, externalIds: { tvdb: "101" }, seasonNumber: 1, episodeNumber: 1 },
-      { entityKind: ENTITY_KIND.videoEpisode, externalIds: { tvdb: "102" }, seasonNumber: 1, episodeNumber: 2 },
-    ],
-  },
-  mount: { ...mount, remoteRootId: "tv", remotePath: "/series", label: "Series library" },
-  options: { profiles: [{ id: "7", label: "Preferred quality" }], roots: [{ id: "tv", path: "/series", accessible: true }] },
-  existing: null,
-  targetEntityIds: ["episode-1", "episode-2"],
+  scopes: [{
+    rendition: null,
+    work: {
+      entityKind: ENTITY_KIND.videoSeries,
+      externalIds: { tvdb: "42" },
+      targets: [
+        { entityKind: ENTITY_KIND.videoEpisode, externalIds: { tvdb: "101" }, seasonNumber: 1, episodeNumber: 1 },
+        { entityKind: ENTITY_KIND.videoEpisode, externalIds: { tvdb: "102" }, seasonNumber: 1, episodeNumber: 2 },
+      ],
+    },
+    mount: { ...mount, remoteRootId: "tv", remotePath: "/series", label: "Series library" },
+    options: { profiles: [{ id: "7", label: "Preferred quality" }], roots: [{ id: "tv", path: "/series", accessible: true }] },
+    existing: null,
+    existingFulfillments: [],
+    targetEntityIds: ["episode-1", "episode-2"],
+  }],
 };
+/** A committed whole-work request as the unified commit reports it. */
+function accepted(saved: ManagedRequestResponse) {
+  return { entityId: saved.entityId, scopes: [{ rendition: null, targetEntityIds: saved.targetEntityIds ?? null, managedRequest: saved }] };
+}
 function request(values: Partial<ManagedRequestResponse> = {}): ManagedRequestResponse {
   return { id: "request", connectionId: connection.id, entityId: "wanted", libraryRootId: "root", title: "Wanted film", phase: MANAGED_REQUEST_PHASE.pendingCreation,
     revision: 1, remoteId: null, monitored: false, search: true, reviewRequired: false, canCancel: true,
@@ -62,7 +78,7 @@ describe("Managed requests", () => {
   beforeEach(() => {
     vi.resetAllMocks(); api.fetchManagedRequests.mockResolvedValue([]); api.fetchLibraryMounts.mockResolvedValue([mount]);
     api.fetchEntities.mockResolvedValue({ items: [{ id: "wanted", title: "Wanted film", coverThumbUrl: null }] });
-    api.fetchManagedRequestPreview.mockResolvedValue(preview); api.saveManagedRequest.mockResolvedValue(request());
+    api.fetchManagedRequestPreview.mockResolvedValue(preview); api.saveManagedRequest.mockResolvedValue(accepted(request()));
   });
   it("does not repeat a request already represented by a followed library item", async () => {
     api.fetchManagedRequests.mockResolvedValue([request({ phase: MANAGED_REQUEST_PHASE.completed, canCancel: false }), request({ id: "still-pending", title: "Another film" })]);
@@ -76,7 +92,7 @@ describe("Managed requests", () => {
     await review(); await fireEvent.click(screen.getByRole("checkbox", { name: "Search now" }));
     await fireEvent.click(screen.getByRole("button", { name: "Request through manager" }));
     await waitFor(() => expect(api.saveManagedRequest).toHaveBeenCalledWith(connection.id, expect.objectContaining({
-      entityId: "wanted", libraryRootId: "root", reviewedWork: preview.work, profileId: "7", monitored: false, search: false,
+      entityId: "wanted", expectedConnectionRevision: 1, scopes: [{ libraryRootId: "root" }], profileId: "7", monitored: false, search: false,
     })));
     expect(api.fetchEntities).toHaveBeenCalledWith(expect.objectContaining({ kind: ENTITY_KIND.movie, wanted: true, hasFile: false }));
     await screen.findByText("Request queued");
@@ -91,7 +107,7 @@ describe("Managed requests", () => {
     expect(api.saveManagedRequest.mock.calls[1][1]).toEqual(api.saveManagedRequest.mock.calls[0][1]);
   });
   it("keeps an existing profile fixed during initial delegation", async () => {
-    api.fetchManagedRequestPreview.mockResolvedValue({ ...preview, existing: { item: { profileId: "7", monitored: true } } });
+    api.fetchManagedRequestPreview.mockResolvedValue({ ...preview, scopes: [{ ...movieScope, existing: { item: { profileId: "7", monitored: true } } }] });
     await review();
     expect(screen.getByRole("button", { name: "Request profile" })).toBeDisabled();
     expect(screen.getByRole("checkbox", { name: "Monitor this movie" })).toBeChecked();
@@ -114,11 +130,11 @@ describe("Managed requests", () => {
 
   it("submits only the prepared finite episode scope without broad series monitoring", async () => {
     api.fetchManagedRequestPreview.mockResolvedValue(seriesPreview);
-    api.saveManagedRequest.mockResolvedValue(request({
+    api.saveManagedRequest.mockResolvedValue(accepted(request({
       entityId: "series",
       title: "Wanted series",
       targetEntityIds: ["episode-1", "episode-2"],
-    }));
+    })));
     render(ManagedRequests, {
       connection: seriesConnection,
       entityKind: ENTITY_KIND.videoSeries,
@@ -140,7 +156,7 @@ describe("Managed requests", () => {
     })));
     expect(api.fetchManagedRequestPreview).toHaveBeenCalledWith(seriesConnection.id, {
       entityId: "series",
-      libraryRootId: "root",
+      scopes: [{ libraryRootId: "root" }],
       targetEntityIds: ["episode-2", "episode-1"],
     });
   });

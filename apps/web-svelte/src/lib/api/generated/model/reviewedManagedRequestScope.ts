@@ -4,18 +4,24 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { BookRendition } from './bookRendition';
 import type { ExternalLibraryMount } from './externalLibraryMount';
 import type { ManagedItemSnapshot } from './managedItemSnapshot';
 import type { ManagedLookupInput } from './managedLookupInput';
+import type { ManagedRequestExpansion } from './managedRequestExpansion';
+import type { ManagedRequestResponse } from './managedRequestResponse';
 import type { ManagerOptions } from './managerOptions';
+import type { ReviewedFulfillmentOwnership } from './reviewedFulfillmentOwnership';
 
-export interface ManagedRequestPreview {
-  entityId: string;
-  title: string;
+export interface ReviewedManagedRequestScope {
+  rendition: null | BookRendition;
   work: ManagedLookupInput;
   mount: ExternalLibraryMount;
   options: ManagerOptions;
   existing: null | ManagedItemSnapshot;
+  existingFulfillments: ReviewedFulfillmentOwnership[];
+  expansion?: null | ManagedRequestExpansion;
+  existingRequest?: null | ManagedRequestResponse;
   /** @nullable */
   targetEntityIds?: string[] | null;
 }

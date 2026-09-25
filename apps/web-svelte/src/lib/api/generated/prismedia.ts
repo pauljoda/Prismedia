@@ -56,10 +56,6 @@ import type {
   CollectionWriteRequest,
   CommitBookRenditionsRequestParams,
   CommitEntityRequestParams,
-  CommitManagedBookRequestInput,
-  CommitManagedBookRequestResponse,
-  CommitManagedComicIssueInput,
-  CommitManagedComicIssueResponse,
   CommitManagedComicRunInput,
   CommitManagedComicRunResponse,
   CommitRequestParams,
@@ -69,12 +65,12 @@ import type {
   ConsumptionEventCreateRequest,
   ConsumptionStatisticsResponse,
   ConsumptionUpdateRequest,
+  CountUnidentifiedEntitiesParams,
   CreateConnectionRequest,
   CreateExternalLibraryMountRequest,
   CreateFileFolderParams,
   CreateFirstAdminRequest,
   CreateManagedControlRequest,
-  CreateManagedRequestInput,
   CustomFormatSaveRequest,
   CustomFormatView,
   DatabaseBackupDto,
@@ -170,6 +166,7 @@ import type {
   IndexerTestResponse,
   InspectExecutorRequest,
   IntegrationTransferResponse,
+  JobActivityResponse,
   JobCancelResponse,
   JobCreateResponse,
   JobFailureClearResponse,
@@ -202,6 +199,7 @@ import type {
   ListIdentifyProvidersParams,
   ListIdentifyQueueParams,
   ListImagesParams,
+  ListJobActivityParams,
   ListJobGraphsParams,
   ListJobsParams,
   ListMissingWantedParams,
@@ -228,7 +226,6 @@ import type {
   ManagedLibraryPage,
   ManagedLibraryQuery,
   ManagedReleasePreview,
-  ManagedRequestPreview,
   ManagedRequestResponse,
   ManagedTrackingPreview,
   ManagedTrackingResponse,
@@ -262,7 +259,6 @@ import type {
   PreparedWantedSeriesResponse,
   PreviewCollectionRulesParams,
   PreviewManagedControlsParams,
-  PreviewManagedRequestInput,
   ProblemDetails,
   ProviderLibraryConnection,
   RatingUpdateRequest,
@@ -286,13 +282,9 @@ import type {
   RescanFileRootParams,
   ResolveIdentifyQueueCandidateParams,
   ReviewEntityRequestParams,
-  ReviewManagedBookRequestInput,
-  ReviewManagedComicIssueInput,
   ReviewManagedComicRunInput,
   ReviewManagedRequestInput,
   ReviewRequestParams,
-  ReviewedManagedBookRequest,
-  ReviewedManagedComicIssue,
   ReviewedManagedComicRun,
   ReviewedManagedRequest,
   ReviewedManagedRequestCommitResponse,
@@ -314,6 +306,7 @@ import type {
   SubtitleProviderTestResponse,
   TrackManagedHoldingRequest,
   TranscodeCacheStatusResponse,
+  UnidentifiedKindCount,
   UpdateCheckResponse,
   UpdateConnectionRequest,
   UpdateMetadataFieldLockRequest,
@@ -7046,6 +7039,49 @@ export const cancelJobs = async (params?: CancelJobsParams, options?: RequestIni
 
 
 
+export type listJobActivityResponse200 = {
+  data: JobActivityResponse
+  status: 200
+}
+
+export type listJobActivityResponseSuccess = (listJobActivityResponse200) & {
+  headers: Headers;
+};
+;
+
+export type listJobActivityResponse = (listJobActivityResponseSuccess)
+
+export const getListJobActivityUrl = (params?: ListJobActivityParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/jobs/activity?${stringifiedParams}` : `/api/jobs/activity`
+}
+
+/**
+ * @summary Buckets recent background work per job type and hour for the operations dashboard.
+ */
+export const listJobActivity = async (params?: ListJobActivityParams, options?: RequestInit): Promise<listJobActivityResponse> => {
+
+  return orvalFetch<listJobActivityResponse>(getListJobActivityUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
 export type listJobGraphsResponse200 = {
   data: JobGraphListResponse
   status: 200
@@ -9577,184 +9613,6 @@ export const closeUnverifiedManagedControl = async (id: string,
 
 
 
-export type previewManagedRequestResponse200 = {
-  data: ManagedRequestPreview
-  status: 200
-}
-
-export type previewManagedRequestResponse400 = {
-  data: ApiProblem
-  status: 400
-}
-
-export type previewManagedRequestResponseSuccess = (previewManagedRequestResponse200) & {
-  headers: Headers;
-};
-export type previewManagedRequestResponseError = (previewManagedRequestResponse400) & {
-  headers: Headers;
-};
-
-export type previewManagedRequestResponse = (previewManagedRequestResponseSuccess | previewManagedRequestResponseError)
-
-export const getPreviewManagedRequestUrl = (id: string,) => {
-
-
-
-
-  return `/api/connections/${id}/manager/requests/preview`
-}
-
-export const previewManagedRequest = async (id: string,
-    previewManagedRequestInput: PreviewManagedRequestInput, options?: RequestInit): Promise<previewManagedRequestResponse> => {
-
-  return orvalFetch<previewManagedRequestResponse>(getPreviewManagedRequestUrl(id),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(
-      previewManagedRequestInput,)
-  }
-);}
-
-
-
-export type reviewManagedBookRequestResponse200 = {
-  data: ReviewedManagedBookRequest
-  status: 200
-}
-
-export type reviewManagedBookRequestResponse400 = {
-  data: ApiProblem
-  status: 400
-}
-
-export type reviewManagedBookRequestResponse409 = {
-  data: ApiProblem
-  status: 409
-}
-
-export type reviewManagedBookRequestResponseSuccess = (reviewManagedBookRequestResponse200) & {
-  headers: Headers;
-};
-export type reviewManagedBookRequestResponseError = (reviewManagedBookRequestResponse400 | reviewManagedBookRequestResponse409) & {
-  headers: Headers;
-};
-
-export type reviewManagedBookRequestResponse = (reviewManagedBookRequestResponseSuccess | reviewManagedBookRequestResponseError)
-
-export const getReviewManagedBookRequestUrl = (id: string,) => {
-
-
-
-
-  return `/api/connections/${id}/manager/requests/book/review`
-}
-
-export const reviewManagedBookRequest = async (id: string,
-    reviewManagedBookRequestInput: ReviewManagedBookRequestInput, options?: RequestInit): Promise<reviewManagedBookRequestResponse> => {
-
-  return orvalFetch<reviewManagedBookRequestResponse>(getReviewManagedBookRequestUrl(id),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(
-      reviewManagedBookRequestInput,)
-  }
-);}
-
-
-
-export type commitManagedBookRequestResponse202 = {
-  data: CommitManagedBookRequestResponse
-  status: 202
-}
-
-export type commitManagedBookRequestResponse400 = {
-  data: ApiProblem
-  status: 400
-}
-
-export type commitManagedBookRequestResponse409 = {
-  data: ApiProblem
-  status: 409
-}
-
-export type commitManagedBookRequestResponseSuccess = (commitManagedBookRequestResponse202) & {
-  headers: Headers;
-};
-export type commitManagedBookRequestResponseError = (commitManagedBookRequestResponse400 | commitManagedBookRequestResponse409) & {
-  headers: Headers;
-};
-
-export type commitManagedBookRequestResponse = (commitManagedBookRequestResponseSuccess | commitManagedBookRequestResponseError)
-
-export const getCommitManagedBookRequestUrl = (id: string,) => {
-
-
-
-
-  return `/api/connections/${id}/manager/requests/book/commit`
-}
-
-export const commitManagedBookRequest = async (id: string,
-    commitManagedBookRequestInput: CommitManagedBookRequestInput, options?: RequestInit): Promise<commitManagedBookRequestResponse> => {
-
-  return orvalFetch<commitManagedBookRequestResponse>(getCommitManagedBookRequestUrl(id),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(
-      commitManagedBookRequestInput,)
-  }
-);}
-
-
-
-export type reviewManagedComicIssueResponse200 = {
-  data: ReviewedManagedComicIssue
-  status: 200
-}
-
-export type reviewManagedComicIssueResponse400 = {
-  data: ApiProblem
-  status: 400
-}
-
-export type reviewManagedComicIssueResponseSuccess = (reviewManagedComicIssueResponse200) & {
-  headers: Headers;
-};
-export type reviewManagedComicIssueResponseError = (reviewManagedComicIssueResponse400) & {
-  headers: Headers;
-};
-
-export type reviewManagedComicIssueResponse = (reviewManagedComicIssueResponseSuccess | reviewManagedComicIssueResponseError)
-
-export const getReviewManagedComicIssueUrl = (id: string,) => {
-
-
-
-
-  return `/api/connections/${id}/manager/requests/comic-issue/review`
-}
-
-export const reviewManagedComicIssue = async (id: string,
-    reviewManagedComicIssueInput: ReviewManagedComicIssueInput, options?: RequestInit): Promise<reviewManagedComicIssueResponse> => {
-
-  return orvalFetch<reviewManagedComicIssueResponse>(getReviewManagedComicIssueUrl(id),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(
-      reviewManagedComicIssueInput,)
-  }
-);}
-
-
-
 export type reviewManagedComicRunResponse200 = {
   data: ReviewedManagedComicRun
   status: 200
@@ -9839,53 +9697,6 @@ export const commitManagedComicRun = async (id: string,
     headers: { 'Content-Type': 'application/json', ...options?.headers },
     body: JSON.stringify(
       commitManagedComicRunInput,)
-  }
-);}
-
-
-
-export type commitManagedComicIssueResponse202 = {
-  data: CommitManagedComicIssueResponse
-  status: 202
-}
-
-export type commitManagedComicIssueResponse400 = {
-  data: ApiProblem
-  status: 400
-}
-
-export type commitManagedComicIssueResponse409 = {
-  data: ApiProblem
-  status: 409
-}
-
-export type commitManagedComicIssueResponseSuccess = (commitManagedComicIssueResponse202) & {
-  headers: Headers;
-};
-export type commitManagedComicIssueResponseError = (commitManagedComicIssueResponse400 | commitManagedComicIssueResponse409) & {
-  headers: Headers;
-};
-
-export type commitManagedComicIssueResponse = (commitManagedComicIssueResponseSuccess | commitManagedComicIssueResponseError)
-
-export const getCommitManagedComicIssueUrl = (id: string,) => {
-
-
-
-
-  return `/api/connections/${id}/manager/requests/comic-issue/commit`
-}
-
-export const commitManagedComicIssue = async (id: string,
-    commitManagedComicIssueInput: CommitManagedComicIssueInput, options?: RequestInit): Promise<commitManagedComicIssueResponse> => {
-
-  return orvalFetch<commitManagedComicIssueResponse>(getCommitManagedComicIssueUrl(id),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(
-      commitManagedComicIssueInput,)
   }
 );}
 
@@ -10013,53 +9824,6 @@ export const listManagedRequests = async (id: string, options?: RequestInit): Pr
     method: 'GET'
 
 
-  }
-);}
-
-
-
-export type createManagedRequestResponse202 = {
-  data: ManagedRequestResponse
-  status: 202
-}
-
-export type createManagedRequestResponse400 = {
-  data: ApiProblem
-  status: 400
-}
-
-export type createManagedRequestResponse409 = {
-  data: ApiProblem
-  status: 409
-}
-
-export type createManagedRequestResponseSuccess = (createManagedRequestResponse202) & {
-  headers: Headers;
-};
-export type createManagedRequestResponseError = (createManagedRequestResponse400 | createManagedRequestResponse409) & {
-  headers: Headers;
-};
-
-export type createManagedRequestResponse = (createManagedRequestResponseSuccess | createManagedRequestResponseError)
-
-export const getCreateManagedRequestUrl = (id: string,) => {
-
-
-
-
-  return `/api/connections/${id}/manager/requests`
-}
-
-export const createManagedRequest = async (id: string,
-    createManagedRequestInput: CreateManagedRequestInput, options?: RequestInit): Promise<createManagedRequestResponse> => {
-
-  return orvalFetch<createManagedRequestResponse>(getCreateManagedRequestUrl(id),
-  {
-    ...options,
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...options?.headers },
-    body: JSON.stringify(
-      createManagedRequestInput,)
   }
 );}
 
@@ -11657,6 +11421,49 @@ export const getListIdentifyQueueUrl = (params?: ListIdentifyQueueParams,) => {
 export const listIdentifyQueue = async (params?: ListIdentifyQueueParams, options?: RequestInit): Promise<listIdentifyQueueResponse> => {
 
   return orvalFetch<listIdentifyQueueResponse>(getListIdentifyQueueUrl(params),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+export type countUnidentifiedEntitiesResponse200 = {
+  data: UnidentifiedKindCount[]
+  status: 200
+}
+
+export type countUnidentifiedEntitiesResponseSuccess = (countUnidentifiedEntitiesResponse200) & {
+  headers: Headers;
+};
+;
+
+export type countUnidentifiedEntitiesResponse = (countUnidentifiedEntitiesResponseSuccess)
+
+export const getCountUnidentifiedEntitiesUrl = (params?: CountUnidentifiedEntitiesParams,) => {
+  const normalizedParams = new URLSearchParams();
+
+  Object.entries(params || {}).forEach(([key, value]) => {
+
+    if (value !== undefined) {
+      normalizedParams.append(key, value === null ? 'null' : value.toString())
+    }
+  });
+
+  const stringifiedParams = normalizedParams.toString();
+
+  return stringifiedParams.length > 0 ? `/api/identify/unidentified?${stringifiedParams}` : `/api/identify/unidentified`
+}
+
+/**
+ * @summary Counts items with media that still wait for identification, per kind.
+ */
+export const countUnidentifiedEntities = async (params?: CountUnidentifiedEntitiesParams, options?: RequestInit): Promise<countUnidentifiedEntitiesResponse> => {
+
+  return orvalFetch<countUnidentifiedEntitiesResponse>(getCountUnidentifiedEntitiesUrl(params),
   {
     ...options,
     method: 'GET'

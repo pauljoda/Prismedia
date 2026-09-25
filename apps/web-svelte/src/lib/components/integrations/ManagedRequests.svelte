@@ -2,10 +2,11 @@
   import { onMount } from "svelte";
   import { Alert, Badge, Button, Checkbox, Panel, Select } from "@prismedia/ui-svelte";
   import { ENTITY_KIND, MANAGED_REQUEST_PHASE } from "$lib/api/generated/codes";
-  import type { ConnectionResponse, CreateManagedRequestInput, EntityKind, ExternalLibraryMount, ManagedRequestPreview, ManagedRequestResponse } from "$lib/api/generated/model";
+  import type { CommitReviewedManagedRequestInput, ConnectionResponse, EntityKind, ExternalLibraryMount, ManagedRequestResponse, ReviewedManagedRequest } from "$lib/api/generated/model";
   import { fetchEntities } from "$lib/api/entities";
   import { fetchLibraryMounts } from "$lib/api/managed-libraries";
-  import { cancelRequest, fetchManagedRequestPreview, fetchManagedRequests, ManagedRequestRejectedError, refreshRequest, saveManagedRequest } from "$lib/api/managed-requests";
+  import { cancelRequest, fetchManagedRequests, ManagedRequestRejectedError, refreshRequest } from "$lib/api/managed-requests";
+  import { fetchReviewedManagedRequest, reviewScope, saveReviewedManagedRequest } from "$lib/api/reviewed-managed-requests";
   import EntityPicker, { type EntityPickerItem } from "$lib/components/forms/EntityPicker.svelte";
   import ManagedHoldingControls from "./ManagedHoldingControls.svelte";
 
@@ -33,8 +34,10 @@
   let mounts = $state<ExternalLibraryMount[]>([]);
   let selected = $state<EntityPickerItem[]>([]);
   let libraryRootId = $state("");
-  let preview = $state<ManagedRequestPreview | null>(null);
-  let pending = $state<CreateManagedRequestInput | null>(null);
+  let preview = $state<ReviewedManagedRequest | null>(null);
+  /** An existing wanted work is requested as one whole-work scope. */
+  const scope = $derived(preview ? reviewScope(preview) : null);
+  let pending = $state<CommitReviewedManagedRequestInput | null>(null);
   let expanded = $state(false);
   let busy = $state(false);
   let profileId = $state("");
@@ -84,31 +87,33 @@
     if (!selected[0] || !libraryRootId) return;
     busy = true; error = null; preview = null;
     try {
-      const result = await fetchManagedRequestPreview(connection.id, {
+      const result = await fetchReviewedManagedRequest(connection.id, {
         entityId: selected[0].id,
-        libraryRootId,
+        scopes: [{ libraryRootId }],
         ...(isSeries ? { targetEntityIds: initialTargetEntityIds } : {}),
       });
-      if (alive) { preview = result; profileId = result.existing?.item.profileId ?? result.options.profiles[0]?.id ?? ""; monitored = result.existing?.item.monitored ?? false; search = true; }
+      const resultScope = reviewScope(result);
+      if (alive) { preview = result; profileId = resultScope.existing?.item.profileId ?? resultScope.options.profiles[0]?.id ?? ""; monitored = resultScope.existing?.item.monitored ?? false; search = true; }
     } catch (cause) { if (alive) error = message(cause); }
     finally { if (alive) busy = false; }
   }
   async function submit() {
-    if (!pending && (!preview || !profileId)) return;
-    if (!pending && preview) pending = {
+    if (!pending && (!preview || !scope || !profileId)) return;
+    if (!pending && preview && scope) pending = {
       operationId: createUuid(),
+      expectedConnectionRevision: preview.connectionRevision,
       entityId: preview.entityId,
-      libraryRootId: preview.mount.libraryRootId,
-      reviewedWork: preview.work,
+      scopes: [{ libraryRootId: scope.mount.libraryRootId }],
       profileId,
       monitored: isSeries ? false : monitored,
       search: isSeries ? true : search,
-      ...(isSeries ? { targetEntityIds: preview.targetEntityIds ?? initialTargetEntityIds } : {}),
+      ...(isSeries ? { targetEntityIds: scope.targetEntityIds ?? initialTargetEntityIds } : {}),
     };
     busy = true; error = null; sequence++;
     try {
-      const saved = await saveManagedRequest(connection.id, pending!);
-      if (alive) { requests = [saved, ...requests.filter(item => item.id !== saved.id)]; pending = null; preview = null; selected = []; if (initialEntity) expanded = false; }
+      const result = await saveReviewedManagedRequest(connection.id, pending!);
+      const saved = result.scopes[0]?.managedRequest ?? null;
+      if (alive) { if (saved) requests = [saved, ...requests.filter(item => item.id !== saved.id)]; pending = null; preview = null; selected = []; if (initialEntity) expanded = false; }
     } catch (cause) {
       if (alive) { error = message(cause); if (cause instanceof ManagedRequestRejectedError) { pending = null; preview = null; } }
     } finally { if (alive) busy = false; }
@@ -157,18 +162,18 @@
         <Select ariaLabel="Mapped library" value={libraryRootId} options={mounts.map(mount => ({ value: mount.libraryRootId, label: mount.label }))}
           disabled={busy || !!pending} onchange={value => { libraryRootId = value; preview = null; }} />
         <Button variant="outline" size="sm" disabled={busy || !!pending || !selected.length || !libraryRootId} onclick={review}>Review manager request</Button>
-        {#if preview}
+        {#if preview && scope}
           <div class="space-y-3 border-t border-border-subtle pt-3">
             <p class="break-words text-sm font-medium">{preview.title}</p>
-            <p class="text-sm text-text-muted">{preview.existing
+            <p class="text-sm text-text-muted">{scope.existing
               ? isSeries
                 ? "This series already exists in the connected app. Its current profile, location, and monitoring stay unchanged."
                 : "This movie already exists in the connected app. Its current profile and location will be retained."
               : `The ${entityLabel} will be added to the selected external library.`}</p>
-            <Select ariaLabel="Request profile" value={profileId} options={preview.options.profiles.map(profile => ({ value: profile.id, label: profile.label }))}
-              disabled={busy || !!pending || !!preview.existing} onchange={value => profileId = value} />
+            <Select ariaLabel="Request profile" value={profileId} options={scope.options.profiles.map(profile => ({ value: profile.id, label: profile.label }))}
+              disabled={busy || !!pending || !!scope.existing} onchange={value => profileId = value} />
             {#if isSeries}
-              <p class="text-sm text-text-muted">Only the {preview.targetEntityIds?.length ?? initialTargetEntityIds.length} selected episode{(preview.targetEntityIds?.length ?? initialTargetEntityIds.length) === 1 ? "" : "s"} will be searched. Series monitoring stays unchanged.</p>
+              <p class="text-sm text-text-muted">Only the {scope.targetEntityIds?.length ?? initialTargetEntityIds.length} selected episode{(scope.targetEntityIds?.length ?? initialTargetEntityIds.length) === 1 ? "" : "s"} will be searched. Series monitoring stays unchanged.</p>
             {:else}
               <label class="flex items-center gap-3 text-sm"><Checkbox aria-label="Monitor this movie" checked={monitored} disabled={busy || !!pending} onchange={value => monitored = value} />Monitor this movie in {connection.name}</label>
               <label class="flex items-center gap-3 text-sm"><Checkbox aria-label="Search now" checked={search} disabled={busy || !!pending} onchange={value => search = value} />Search now</label>

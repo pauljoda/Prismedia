@@ -1,15 +1,15 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ManagerActionRejectedError, saveControlAction } from "./managed-controls";
-import { ManagedRequestRejectedError, saveManagedRequest } from "./managed-requests";
+import { ManagedRequestRejectedError, saveReviewedManagedRequest } from "./reviewed-managed-requests";
 import { ManagedReleaseRejectedError, saveOwnershipRelease } from "./managed-release";
-import type { CreateManagedControlRequest, CreateManagedRequestInput, ReleaseManagedHoldingRequest } from "./generated/model";
+import type { CommitReviewedManagedRequestInput, CreateManagedControlRequest, ReleaseManagedHoldingRequest } from "./generated/model";
 import { PROBLEM_CODE } from "./generated/codes";
 
 describe("Durable manager acceptance failures", () => {
   afterEach(() => vi.unstubAllGlobals());
   const operations = [
     [() => saveControlAction("connection", "holding", {} as CreateManagedControlRequest), ManagerActionRejectedError],
-    [() => saveManagedRequest("connection", {} as CreateManagedRequestInput), ManagedRequestRejectedError],
+    [() => saveReviewedManagedRequest("connection", {} as CommitReviewedManagedRequestInput), ManagedRequestRejectedError],
     [() => saveOwnershipRelease("connection", "holding", {} as ReleaseManagedHoldingRequest), ManagedReleaseRejectedError],
   ] as const;
   it.each(operations)("classifies a real HTTP conflict as a definite refusal", async (submit, rejected) => {
@@ -27,7 +27,7 @@ describe("Durable manager acceptance failures", () => {
       message: "Review changed",
     }), { status: 409, headers: { "content-type": "application/json" } })));
 
-    await expect(saveManagedRequest("connection", {} as CreateManagedRequestInput)).rejects.toMatchObject({
+    await expect(saveReviewedManagedRequest("connection", {} as CommitReviewedManagedRequestInput)).rejects.toMatchObject({
       problemCode: PROBLEM_CODE.requestProposalChanged,
     });
   });

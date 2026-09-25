@@ -7,6 +7,7 @@ import type {
   ReviewManagedRequestInput,
   ReviewedManagedRequest,
   ReviewedManagedRequestCommitResponse,
+  ReviewedManagedRequestScope,
 } from "$lib/api/generated/model";
 import { acceptManagedIntent } from "$lib/api/managed-acceptance";
 import { unwrapGenerated } from "$lib/api/generated-response";
@@ -20,6 +21,9 @@ export interface ManagedRequestChoice {
   monitored: boolean;
   search: boolean;
 }
+
+/** The one scope of a work requested as a whole (movies, series, existing entities). */
+export const reviewScope = (review: ReviewedManagedRequest): ReviewedManagedRequestScope => review.scopes[0]!;
 
 /** Reads canonical metadata, current manager choices, and holding evidence without persisting intent. */
 export const fetchReviewedManagedRequest = (

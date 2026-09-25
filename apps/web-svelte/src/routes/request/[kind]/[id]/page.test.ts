@@ -54,6 +54,7 @@ vi.mock("$lib/api/managed-requests", async (original) => ({
 vi.mock("$lib/api/reviewed-managed-requests", () => ({
   fetchReviewedManagedRequest: mocks.fetchReviewedManagedRequest,
   saveReviewedManagedRequest: mocks.saveReviewedManagedRequest,
+  reviewScope: (review: { scopes: unknown[] }) => review.scopes[0],
 }));
 vi.mock("$lib/api/managed-libraries", () => ({ fetchLibraryMounts: mocks.fetchLibraryMounts }));
 
@@ -81,6 +82,11 @@ vi.mock("$lib/stores/session.svelte", () => ({
   useSession: () => ({ canRequestContent: true, isAdmin: mocks.isAdmin }),
 }));
 
+/** The unified review shape: a whole-work review carries its evidence in one scope. */
+function scoped({ work, mount, options, existing, existingFulfillments, expansion, ...rest }: Record<string, unknown>) {
+  return { ...rest, scopes: [{ rendition: null, work, mount, options, existing, existingFulfillments, expansion }] };
+}
+
 describe("reviewed request route", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -88,7 +94,7 @@ describe("reviewed request route", () => {
     mocks.fetchConnections.mockResolvedValue([]);
     mocks.fetchManagedRequests.mockResolvedValue([]);
     mocks.fetchLibraryMounts.mockResolvedValue([{ id: "mount", connectionId: "manager", libraryRootId: "external-root", label: "Movie library", remoteRootId: "1", remotePath: "/movies", localPath: "/movies" }]);
-    mocks.fetchReviewedManagedRequest.mockImplementation(async (_id, input) => ({
+    mocks.fetchReviewedManagedRequest.mockImplementation(async (_id, input) => scoped({
       connectionRevision: 7, managerDiscoveryRevision: input.managerDiscoveryRevision ?? null,
       request: input.request, title: "Reviewed title", work: {
         entityKind: input.request.review.entityKind,
@@ -101,7 +107,7 @@ describe("reviewed request route", () => {
       options: { profiles: [{ id: "profile", label: "Any" }], roots: [{ id: "1", path: "/movies" }] }, existing: null,
       existingFulfillments: [],
     }));
-    mocks.saveReviewedManagedRequest.mockResolvedValue({ entityId: "wanted-movie", targetEntityIds: null, managedRequest: null });
+    mocks.saveReviewedManagedRequest.mockResolvedValue({ entityId: "wanted-movie", scopes: [{ rendition: null, targetEntityIds: null, managedRequest: null }] });
     page.params = {};
     page.url = new URL("http://localhost/request") as unknown as typeof page.url;
     mocks.fetchAccessibleLibraryRoots.mockResolvedValue([videoRoot()]);
@@ -135,7 +141,7 @@ describe("reviewed request route", () => {
     await fireEvent.click(screen.getByRole("button", { name: "Request" }));
     await waitFor(() => expect(mocks.goto).toHaveBeenCalledWith("/movies/wanted-movie"));
     expect(mocks.saveReviewedManagedRequest).toHaveBeenCalledWith("manager", expect.objectContaining({
-      expectedConnectionRevision: 7, libraryRootId: "external-root", profileId: "profile", managerDiscoveryRevision: 7,
+      expectedConnectionRevision: 7, scopes: [{ libraryRootId: "external-root" }], profileId: "profile", managerDiscoveryRevision: 7,
       request: expect.objectContaining({ rootExternalIdentity: review.externalIdentity }),
     }));
     expect(mocks.commitReviewedRequest).not.toHaveBeenCalled();
@@ -149,7 +155,7 @@ describe("reviewed request route", () => {
         operations: [INTEGRATION_OPERATION.lookupManaged, INTEGRATION_OPERATION.ensureManaged, INTEGRATION_OPERATION.requestManaged, INTEGRATION_OPERATION.reconcileManaged, INTEGRATION_OPERATION.configureManaged] }, { kind: PLUGIN_CAPABILITY.connectedLibrary, entityKinds: [ENTITY_KIND.movie], operations: [INTEGRATION_OPERATION.getLibraryItem, INTEGRATION_OPERATION.listLibraries] }] };
     mocks.fetchConnections.mockResolvedValue([connection]);
     mocks.reviewManagerTitle.mockResolvedValue({ connectionRevision: 7, review });
-    mocks.fetchReviewedManagedRequest.mockImplementation(async (_id, input) => ({
+    mocks.fetchReviewedManagedRequest.mockImplementation(async (_id, input) => scoped({
       connectionRevision: 7, managerDiscoveryRevision: input.managerDiscoveryRevision ?? null,
       request: input.request, title: "Reviewed title", work: { entityKind: ENTITY_KIND.movie, externalIds: {} },
       mount: { id: "mount", connectionId: "manager", libraryRootId: "external-root", label: "Movie library", remoteRootId: "1", remotePath: "/movies", localPath: "/movies" },
@@ -214,7 +220,7 @@ describe("reviewed request route", () => {
     const connection = { id: "manager", pluginId: "radarr", name: "Movie manager", enabled: true, status: CONNECTION_STATUS.ready, effectiveCapabilities: [] };
     mocks.fetchConnections.mockResolvedValue([connection]);
     mocks.reviewManagerTitle.mockResolvedValue({ connectionRevision: 7, review });
-    const reviewedResult = (existingFulfillments: Array<Record<string, unknown>>) => ({
+    const reviewedResult = (existingFulfillments: Array<Record<string, unknown>>) => scoped({
       connectionRevision: 7, managerDiscoveryRevision: 7,
       title: "Reviewed title", work: { entityKind: ENTITY_KIND.movie, externalIds: {} },
       mount: { id: "mount", connectionId: "manager", libraryRootId: "external-root", label: "Movie library", remoteRootId: "1", remotePath: "/movies", localPath: "/movies" },
@@ -348,7 +354,7 @@ describe("reviewed request route", () => {
         operations: [INTEGRATION_OPERATION.lookupManaged, INTEGRATION_OPERATION.ensureManaged, INTEGRATION_OPERATION.requestManaged, INTEGRATION_OPERATION.reconcileManaged, INTEGRATION_OPERATION.configureManaged] }, { kind: PLUGIN_CAPABILITY.connectedLibrary, entityKinds: [ENTITY_KIND.videoSeries], operations: [INTEGRATION_OPERATION.getLibraryItem, INTEGRATION_OPERATION.listLibraries] }] };
     mocks.fetchConnections.mockResolvedValue([connection]);
     mocks.reviewManagerTitle.mockResolvedValue({ connectionRevision: 7, review });
-    mocks.fetchReviewedManagedRequest.mockImplementation(async (_id, input) => ({
+    mocks.fetchReviewedManagedRequest.mockImplementation(async (_id, input) => scoped({
       connectionRevision: 7, managerDiscoveryRevision: 7, request: input.request, title: "Reviewed title",
       work: {
         entityKind: ENTITY_KIND.videoSeries,

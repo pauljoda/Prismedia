@@ -4,12 +4,9 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
-import type { ExternalLibraryMount } from './externalLibraryMount';
-import type { ManagedItemSnapshot } from './managedItemSnapshot';
-import type { ManagedLookupInput } from './managedLookupInput';
-import type { ManagedRequestExpansion } from './managedRequestExpansion';
-import type { ManagerOptions } from './managerOptions';
-import type { ReviewedFulfillmentOwnership } from './reviewedFulfillmentOwnership';
+import type { ManagedConnectedTargetInput } from './managedConnectedTargetInput';
+import type { ReviewedManagedRequestScope } from './reviewedManagedRequestScope';
+import type { ReviewedManagedTarget } from './reviewedManagedTarget';
 import type { ReviewedRequestCommitRequest } from './reviewedRequestCommitRequest';
 
 export interface ReviewedManagedRequest {
@@ -20,12 +17,12 @@ export interface ReviewedManagedRequest {
      * @pattern ^-?(?:0|[1-9]\d*)$
      */
   managerDiscoveryRevision: number | string | null;
-  request: ReviewedRequestCommitRequest;
   title: string;
-  work: ManagedLookupInput;
-  mount: ExternalLibraryMount;
-  options: ManagerOptions;
-  existing: null | ManagedItemSnapshot;
-  existingFulfillments: ReviewedFulfillmentOwnership[];
-  expansion?: null | ManagedRequestExpansion;
+  scopes: ReviewedManagedRequestScope[];
+  /** @nullable */
+  entityId?: string | null;
+  request?: null | ReviewedRequestCommitRequest;
+  connected?: null | ManagedConnectedTargetInput;
+  /** @nullable */
+  targets?: ReviewedManagedTarget[] | null;
 }

@@ -12,14 +12,14 @@
     ExternalBookRenditionProvenance,
     ManagedRequestResponse,
     MonitorView,
-    ReviewedManagedBookRendition,
+    ReviewedManagedRequestScope,
     ReviewedRequestCommitRequest,
-    CommitManagedBookRequestInput,
+    CommitReviewedManagedRequestInput,
   } from "$lib/api/generated/model";
   import { fetchConnections } from "$lib/api/connections";
   import { fetchLibraryMounts } from "$lib/api/managed-libraries";
   import { ManagedRequestRejectedError } from "$lib/api/managed-requests";
-  import { reviewManagedBook, saveManagedBook } from "$lib/api/managed-book-requests";
+  import { fetchReviewedManagedRequest, saveReviewedManagedRequest } from "$lib/api/reviewed-managed-requests";
   import { createUuid } from "$lib/utils/uuid";
   import { supportsBookManager } from "$lib/requests/book-manager-connection";
   import { bookRenditionCanRequest, bookRenditionManagerOwner, bookRenditionRows } from "$lib/requests/book-rendition-acquisition";
@@ -56,10 +56,10 @@
   let mounts = $state<ExternalLibraryMount[]>([]);
   let selected = $state<BookRenditionCode[]>([]);
   let rootIds = $state<Partial<Record<BookRenditionCode, string>>>({});
-  let previews = $state<Partial<Record<BookRenditionCode, ReviewedManagedBookRendition>>>({});
+  let previews = $state<Partial<Record<BookRenditionCode, ReviewedManagedRequestScope>>>({});
   let reviewRevision = $state<number | string | null>(null);
   let reviewedRequestJson = $state("");
-  let pendingCommit = $state<CommitManagedBookRequestInput | null>(null);
+  let pendingCommit = $state<CommitReviewedManagedRequestInput | null>(null);
   let accepted = $state<Partial<Record<BookRenditionCode, ManagedRequestResponse>>>({});
   let search = $state(false);
   let loading = $state(true);
@@ -142,13 +142,13 @@
     error = null;
     previews = {};
     try {
-      const response = await reviewManagedBook(connectionId, {
+      const response = await fetchReviewedManagedRequest(connectionId, {
         entityId: bookId,
         request,
-        renditions: selected.map(rendition => ({ rendition, libraryRootId: rootIds[rendition]!, search })),
+        scopes: selected.map(rendition => ({ rendition, libraryRootId: rootIds[rendition]! })),
       });
       if (alive) {
-        previews = Object.fromEntries(response.renditions.map(item => [item.rendition, item]));
+        previews = Object.fromEntries(response.scopes.map(item => [item.rendition, item]));
         reviewRevision = response.connectionRevision;
         reviewedRequestJson = JSON.stringify(request);
         needsReview = false;
@@ -164,27 +164,31 @@
     if (!connectionId || !canSubmit || needsReview) return;
     busy = true;
     error = null;
+    // Every Book format is monitored by its manager until its files arrive; the kind allows no other choice.
     const intent = pendingCommit ?? {
       operationId: createUuid(),
       expectedConnectionRevision: reviewRevision!,
       entityId: bookId,
       request,
-      renditions: selected.map(rendition => ({ rendition, libraryRootId: rootIds[rendition]!, search })),
+      scopes: selected.map(rendition => ({ rendition, libraryRootId: rootIds[rendition]! })),
+      profileId: null,
+      monitored: true,
+      search,
     };
     pendingCommit = intent;
     try {
-      const result = await saveManagedBook(connectionId, intent);
+      const result = await saveReviewedManagedRequest(connectionId, intent);
       if (!alive) return;
       const nextAccepted = { ...accepted };
-      for (const outcome of result.renditions) {
-        if (outcome.request) {
-          nextAccepted[outcome.rendition] = outcome.request;
+      for (const outcome of result.scopes) {
+        if (outcome.managedRequest && outcome.rendition) {
+          nextAccepted[outcome.rendition] = outcome.managedRequest;
           if (!accepted[outcome.rendition]) onAccepted?.(outcome.rendition);
         }
       }
       accepted = nextAccepted;
-      error = result.renditions.filter(outcome => outcome.error)
-        .map(outcome => `${label(outcome.rendition)}: ${outcome.error}`).join(" ") || null;
+      error = result.scopes.filter(outcome => outcome.error)
+        .map(outcome => `${outcome.rendition ? label(outcome.rendition) : "Format"}: ${outcome.error}`).join(" ") || null;
       pendingCommit = null;
       if (error) {
         needsReview = true;

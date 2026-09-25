@@ -32,19 +32,22 @@ const review: ReviewedManagedRequest = {
   managerDiscoveryRevision: null,
   request,
   title: "Reviewed movie",
-  work: { entityKind: ENTITY_KIND.movie, externalIds: { tmdb: "12" } },
-  mount: {
-    id: "mount",
-    connectionId: "connection",
-    libraryRootId: "library",
-    remoteRootId: "remote-root",
-    remotePath: "/remote/movies",
-    localPath: "/media/movies",
-    label: "Movies",
-  },
-  options: { profiles: [{ id: "profile", label: "Balanced" }], roots: [] },
-  existing: null,
-  existingFulfillments: [],
+  scopes: [{
+    rendition: null,
+    work: { entityKind: ENTITY_KIND.movie, externalIds: { tmdb: "12" } },
+    mount: {
+      id: "mount",
+      connectionId: "connection",
+      libraryRootId: "library",
+      remoteRootId: "remote-root",
+      remotePath: "/remote/movies",
+      localPath: "/media/movies",
+      label: "Movies",
+    },
+    options: { profiles: [{ id: "profile", label: "Balanced" }], roots: [] },
+    existing: null,
+    existingFulfillments: [],
+  }],
 };
 
 describe("reviewed managed requests API", () => {
@@ -52,7 +55,7 @@ describe("reviewed managed requests API", () => {
 
   it("uses only the read-only review endpoint during preflight", async () => {
     const input: ReviewManagedRequestInput = {
-      libraryRootId: null,
+      scopes: [{ libraryRootId: null }],
       request,
       managerDiscoveryRevision: null,
     };
@@ -67,13 +70,12 @@ describe("reviewed managed requests API", () => {
   it("accepts the atomic reviewed commit response", async () => {
     const response: ReviewedManagedRequestCommitResponse = {
       entityId: "entity",
-      targetEntityIds: null,
-      managedRequest: null,
+      scopes: [{ rendition: null, targetEntityIds: null, managedRequest: null }],
     };
     const input: CommitReviewedManagedRequestInput = {
       operationId: "operation",
       expectedConnectionRevision: review.connectionRevision,
-      libraryRootId: review.mount.libraryRootId,
+      scopes: [{ libraryRootId: review.scopes[0]!.mount.libraryRootId }],
       profileId: "profile",
       monitored: false,
       search: true,
@@ -95,7 +97,7 @@ describe("reviewed managed requests API", () => {
     const input: CommitReviewedManagedRequestInput = {
       operationId: "operation",
       expectedConnectionRevision: review.connectionRevision,
-      libraryRootId: review.mount.libraryRootId,
+      scopes: [{ libraryRootId: review.scopes[0]!.mount.libraryRootId }],
       profileId: "profile",
       monitored: false,
       search: true,

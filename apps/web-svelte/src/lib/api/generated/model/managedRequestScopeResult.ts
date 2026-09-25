@@ -7,9 +7,11 @@
 import type { BookRendition } from './bookRendition';
 import type { ManagedRequestResponse } from './managedRequestResponse';
 
-export interface ManagedBookRenditionResult {
-  rendition: BookRendition;
-  request?: null | ManagedRequestResponse;
+export interface ManagedRequestScopeResult {
+  rendition: null | BookRendition;
+  /** @nullable */
+  targetEntityIds: string[] | null;
+  managedRequest: null | ManagedRequestResponse;
   /** @nullable */
   error?: string | null;
 }

@@ -13,6 +13,7 @@ import type {
   ConnectionResponse,
   ReviewManagedRequestInput,
   ReviewedManagedRequest,
+  ReviewedManagedRequestScope,
   ReviewedRequestCommitRequest,
 } from "$lib/api/generated/model";
 import ManagerRequestOptions from "./ManagerRequestOptions.svelte";
@@ -29,6 +30,7 @@ vi.mock("$lib/api/managed-libraries", () => ({ fetchLibraryMounts: mocks.fetchLi
 vi.mock("$lib/api/settings", () => ({ fetchAccessibleLibraryRoots: mocks.fetchAccessibleLibraryRoots }));
 vi.mock("$lib/api/reviewed-managed-requests", () => ({
   fetchReviewedManagedRequest: mocks.fetchReviewedManagedRequest,
+  reviewScope: (review: ReviewedManagedRequest) => review.scopes[0],
 }));
 
 const connection: ConnectionResponse = {
@@ -84,20 +86,28 @@ function reviewed(
     managerDiscoveryRevision: null,
     request: input,
     title: `Movie ${input.rootExternalIdentity.value}`,
-    work: { entityKind: ENTITY_KIND.movie, externalIds: { tmdb: input.rootExternalIdentity.value } },
-    mount: {
-      id: `mount-${libraryRootId}`,
-      connectionId: connection.id,
-      libraryRootId,
-      remoteRootId: `remote-${libraryRootId}`,
-      remotePath: `/remote/${libraryRootId}`,
-      localPath: `/media/${libraryRootId}`,
-      label: libraryRootId,
-    },
-    options: { profiles, roots: [] },
-    existing: null,
-    existingFulfillments: [],
+    scopes: [{
+      rendition: null,
+      work: { entityKind: ENTITY_KIND.movie, externalIds: { tmdb: input.rootExternalIdentity.value } },
+      mount: {
+        id: `mount-${libraryRootId}`,
+        connectionId: connection.id,
+        libraryRootId,
+        remoteRootId: `remote-${libraryRootId}`,
+        remotePath: `/remote/${libraryRootId}`,
+        localPath: `/media/${libraryRootId}`,
+        label: libraryRootId,
+      },
+      options: { profiles, roots: [] },
+      existing: null,
+      existingFulfillments: [],
+    }],
   };
+}
+
+/** A whole-work review with its one scope's evidence changed. */
+function withScope(review: ReviewedManagedRequest, scope: Partial<ReviewedManagedRequestScope>): ReviewedManagedRequest {
+  return { ...review, scopes: [{ ...review.scopes[0]!, ...scope }] };
 }
 
 function deferred<T>() {
@@ -111,8 +121,8 @@ describe("Manager request options", () => {
     vi.clearAllMocks();
     mocks.fetchConnections.mockResolvedValue([connection]);
     mocks.fetchLibraryMounts.mockResolvedValue([
-      reviewed(request("1")).mount,
-      reviewed(request("1"), "library-two").mount,
+      reviewed(request("1")).scopes[0]!.mount,
+      reviewed(request("1"), "library-two").scopes[0]!.mount,
     ]);
     mocks.fetchAccessibleLibraryRoots.mockResolvedValue([
       { id: "library-one", label: "Movies", scanVideos: true, scanImages: false, scanAudio: false, scanBooks: false, isNsfw: false },
@@ -120,7 +130,7 @@ describe("Manager request options", () => {
     ]);
     mocks.fetchReviewedManagedRequest.mockImplementation(
       (_connectionId: string, input: ReviewManagedRequestInput) =>
-        Promise.resolve(reviewed(input.request, input.libraryRootId ?? "library-one")),
+        Promise.resolve(reviewed(input.request!, input.scopes[0]?.libraryRootId ?? "library-one")),
     );
   });
 
@@ -138,7 +148,7 @@ describe("Manager request options", () => {
     await screen.findByRole("button", { name: "Manager quality profile" });
 
     expect(mocks.fetchReviewedManagedRequest).toHaveBeenCalledWith(connection.id, {
-      libraryRootId: null,
+      scopes: [{ libraryRootId: null }],
       request: request("1"),
       managerDiscoveryRevision: 12,
     });
@@ -159,7 +169,7 @@ describe("Manager request options", () => {
       .mockImplementationOnce(() => first.promise)
       .mockImplementationOnce(() => second.promise)
       .mockImplementation((_connectionId: string, input: ReviewManagedRequestInput) =>
-        Promise.resolve(reviewed(input.request, input.libraryRootId ?? "library-one")));
+        Promise.resolve(reviewed(input.request!, input.scopes[0]?.libraryRootId ?? "library-one")));
     const onChange = vi.fn();
     const view = render(ManagerRequestOptions, {
       entityKind: ENTITY_KIND.movie,
@@ -182,8 +192,7 @@ describe("Manager request options", () => {
       true, null,
     ));
 
-    first.resolve({
-      ...reviewed(requestOne),
+    first.resolve(withScope(reviewed(requestOne), {
       existingFulfillments: [{
         entityId: "stale-movie",
         targetEntityIds: null,
@@ -194,7 +203,7 @@ describe("Manager request options", () => {
         requestPhase: MANAGED_REQUEST_PHASE.awaitingFiles,
         hasLocalSource: false,
       }],
-    });
+    }));
     await new Promise((resolve) => window.setTimeout(resolve, 0));
     expect(onChange).toHaveBeenLastCalledWith(
       expect.objectContaining({ review: expect.objectContaining({ title: "Movie 2" }) }),
@@ -205,8 +214,7 @@ describe("Manager request options", () => {
 
   it("keeps repeated movie review openable when an existing request owns it", async () => {
     const onChange = vi.fn();
-    mocks.fetchReviewedManagedRequest.mockResolvedValue({
-      ...reviewed(request("1")),
+    mocks.fetchReviewedManagedRequest.mockResolvedValue(withScope(reviewed(request("1")), {
       existingFulfillments: [{
         entityId: "existing-movie",
         targetEntityIds: null,
@@ -217,7 +225,7 @@ describe("Manager request options", () => {
         requestPhase: MANAGED_REQUEST_PHASE.awaitingFiles,
         hasLocalSource: false,
       }],
-    });
+    }));
 
     render(ManagerRequestOptions, {
       entityKind: ENTITY_KIND.movie,
@@ -238,8 +246,7 @@ describe("Manager request options", () => {
 
   it("explains a partial series overlap so the selection can be changed", async () => {
     const onChange = vi.fn();
-    mocks.fetchReviewedManagedRequest.mockResolvedValue({
-      ...reviewed(request("series")),
+    mocks.fetchReviewedManagedRequest.mockResolvedValue(withScope(reviewed(request("series")), {
       work: {
         entityKind: ENTITY_KIND.videoSeries,
         externalIds: { tvdb: "100" },
@@ -258,7 +265,7 @@ describe("Manager request options", () => {
         requestPhase: MANAGED_REQUEST_PHASE.awaitingFiles,
         hasLocalSource: false,
       }],
-    });
+    }));
 
     render(ManagerRequestOptions, {
       entityKind: ENTITY_KIND.videoSeries,
@@ -277,8 +284,7 @@ describe("Manager request options", () => {
 
   it("submits only the reviewed append when selected episodes share the retained holding", async () => {
     const onChange = vi.fn();
-    mocks.fetchReviewedManagedRequest.mockResolvedValue({
-      ...reviewed(request("series")),
+    mocks.fetchReviewedManagedRequest.mockResolvedValue(withScope(reviewed(request("series")), {
       work: {
         entityKind: ENTITY_KIND.videoSeries,
         externalIds: { tvdb: "100" },
@@ -303,7 +309,7 @@ describe("Manager request options", () => {
         selectedOwnedTargetCount: 1,
         newTargetCount: 1,
       },
-    });
+    }));
 
     render(ManagerRequestOptions, {
       entityKind: ENTITY_KIND.videoSeries,
@@ -316,7 +322,7 @@ describe("Manager request options", () => {
     expect(screen.getByText(/Only the new selection will be searched/)).toBeInTheDocument();
     await waitFor(() => expect(onChange).toHaveBeenLastCalledWith(
       expect.objectContaining({ review: expect.objectContaining({
-        expansion: expect.objectContaining({ holdingId: "holding-one", newTargetCount: 1 }),
+        scopes: [expect.objectContaining({ expansion: expect.objectContaining({ holdingId: "holding-one", newTargetCount: 1 }) })],
       }) }),
       true,
       null,
@@ -370,11 +376,11 @@ describe("Manager request options", () => {
     await fireEvent.pointerUp(await screen.findByRole("option", { name: /Cold storage/ }));
     await waitFor(() => expect(mocks.fetchReviewedManagedRequest).toHaveBeenLastCalledWith(
       connection.id,
-      expect.objectContaining({ libraryRootId: "library-two" }),
+      expect.objectContaining({ scopes: [{ libraryRootId: "library-two" }] }),
     ));
     await waitFor(() => expect(onChange).toHaveBeenLastCalledWith(
       expect.objectContaining({
-        review: expect.objectContaining({ mount: expect.objectContaining({ libraryRootId: "library-two" }) }),
+        review: expect.objectContaining({ scopes: [expect.objectContaining({ mount: expect.objectContaining({ libraryRootId: "library-two" }) })] }),
         profileId: "profile-two",
       }),
       true, null,

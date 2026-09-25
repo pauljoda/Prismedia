@@ -14,7 +14,7 @@
   import type { EntityMetadataProposal } from "$lib/api/identify-types";
   import { ApiError } from "$lib/api/orval-fetch";
   import { commitReviewedRequest, fetchRequestReview, reviewRequest } from "$lib/api/requests";
-  import { saveReviewedManagedRequest, type ManagedRequestChoice } from "$lib/api/reviewed-managed-requests";
+  import { reviewScope, saveReviewedManagedRequest, type ManagedRequestChoice } from "$lib/api/reviewed-managed-requests";
   import { ManagedRequestRejectedError } from "$lib/api/managed-requests";
   import ManagerRequestOptions from "$lib/components/integrations/ManagerRequestOptions.svelte";
   import BookManagerRequest from "$lib/components/books/BookManagerRequest.svelte";
@@ -192,11 +192,12 @@
   const managedSeriesSelected = $derived(
     managerSelected && review?.entityKind === ENTITY_KIND.videoSeries,
   );
-  const managerExpansionCount = $derived(Number(managerChoice?.review.expansion?.newTargetCount ?? 0));
+  const managerScope = $derived(managerChoice ? reviewScope(managerChoice.review) : null);
+  const managerExpansionCount = $derived(Number(managerScope?.expansion?.newTargetCount ?? 0));
   const managedSeriesTargetCount = $derived(
-    managerChoice?.review.expansion
-      ? Number(managerChoice.review.expansion.newTargetCount)
-      : (managerChoice?.review.work.targets?.length ?? 0),
+    managerScope?.expansion
+      ? Number(managerScope.expansion.newTargetCount)
+      : (managerScope?.work.targets?.length ?? 0),
   );
   const presetOptions = $derived([
     ...MONITOR_PRESET_OPTIONS.map((option) => ({ value: option.value, label: option.label })),
@@ -543,7 +544,7 @@
             input: {
               operationId: createUuid(),
               expectedConnectionRevision: managerChoice.review.connectionRevision,
-              libraryRootId: managerChoice.review.mount.libraryRootId,
+              scopes: [{ libraryRootId: reviewScope(managerChoice.review).mount.libraryRootId }],
               profileId: managerChoice.profileId,
               monitored: managerChoice.monitored,
               search: managerChoice.search,
@@ -872,7 +873,7 @@
           onclick={() => void requestSelection()}>
           {#if submitting}<Loader2 class="h-4 w-4 animate-spin" />{:else if managerOwnership && !pendingManagerCommit}<ExternalLink class="h-4 w-4" />{:else}<Send class="h-4 w-4" />{/if}
           {submitting ? (managerOwnership && !pendingManagerCommit ? "Opening…" : "Requesting…") : pendingManagerCommit ? "Retry request" : managerOwnership ? "Open in library" : managedSeriesSelected && managedSeriesTargetCount > 0
-            ? `Request ${managedSeriesTargetCount}${managerChoice?.review.expansion ? " more" : ""} episode${managedSeriesTargetCount === 1 ? "" : "s"}` : canChooseBookRenditions ? `Request ${selectedBookRenditions.length === 2 ? "both formats" : selectedBookRenditions[0] === BOOK_RENDITION.audiobook ? "audiobook" : "ebook"}` : managedSeriesSelected ? "Request selected episodes" : selectsChildren && selectedProposalIds.length > 0
+            ? `Request ${managedSeriesTargetCount}${managerScope?.expansion ? " more" : ""} episode${managedSeriesTargetCount === 1 ? "" : "s"}` : canChooseBookRenditions ? `Request ${selectedBookRenditions.length === 2 ? "both formats" : selectedBookRenditions[0] === BOOK_RENDITION.audiobook ? "audiobook" : "ebook"}` : managedSeriesSelected ? "Request selected episodes" : selectsChildren && selectedProposalIds.length > 0
               ? `Request ${selectedProposalIds.length} ${childNoun}${selectedProposalIds.length === 1 ? "" : "s"}` : "Request"}
         </Button>
       {/if}

@@ -6,8 +6,8 @@
  */
 import type { ManagedItemInput } from './managedItemInput';
 
-export interface ReviewManagedComicIssueInput {
+export interface ManagedConnectedTargetInput {
   item: ManagedItemInput;
-  remoteIssueId: string;
-  issueLabel: string;
+  remoteTargetId: string;
+  targetLabel: string;
 }

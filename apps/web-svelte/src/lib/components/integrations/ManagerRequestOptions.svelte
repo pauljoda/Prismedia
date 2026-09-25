@@ -21,6 +21,7 @@
   import { fetchLibraryMounts } from "$lib/api/managed-libraries";
   import {
     fetchReviewedManagedRequest,
+    reviewScope,
     type ManagedRequestChoice,
   } from "$lib/api/reviewed-managed-requests";
   import { fetchAccessibleLibraryRoots } from "$lib/api/settings";
@@ -83,6 +84,8 @@
       : connections.find((candidate) => candidate.id === connectionId) ?? null,
   );
   const isSeries = $derived(entityKind === ENTITY_KIND.videoSeries);
+  /** Reviewed movies and series ask for one whole-work scope. */
+  const scope = $derived(review ? reviewScope(review) : null);
   const requestKey = $derived(request ? JSON.stringify(request) : "");
   const mappedLibraries = $derived(
     mounts.filter((mount) => roots.length === 0 || roots.some((root) => root.id === mount.libraryRootId)),
@@ -92,16 +95,16 @@
     label: roots.find((root) => root.id === mount.libraryRootId)?.label ?? mount.label,
     annotation: mount.remotePath,
   })));
-  const profileOptions = $derived(review?.options.profiles.map((profile) => ({
+  const profileOptions = $derived(scope?.options.profiles.map((profile) => ({
     value: profile.id,
     label: profile.label,
   })) ?? []);
-  const canExpand = $derived(Number(review?.expansion?.newTargetCount ?? 0) > 0);
+  const canExpand = $derived(Number(scope?.expansion?.newTargetCount ?? 0) > 0);
   const ownership = $derived.by((): ManagedRequestOwnership | null => {
-    const fulfillments = review?.existingFulfillments ?? [];
+    const fulfillments = scope?.existingFulfillments ?? [];
     if (fulfillments.length === 0) return null;
     if (!isSeries) return { entityId: fulfillments[0].entityId, partialSelection: false, fulfillments };
-    const selectedCount = review?.work.targets?.length ?? 0;
+    const selectedCount = scope?.work.targets?.length ?? 0;
     const overlappingTargets = new Set(fulfillments.flatMap((item) => item.targetEntityIds ?? []));
     return {
       entityId: fulfillments[0].entityId,
@@ -176,7 +179,7 @@
     try {
       const [result, nextMounts, nextRoots] = await Promise.all([
         fetchReviewedManagedRequest(selectedConnectionId, {
-          libraryRootId: libraryRootId || null,
+          scopes: [{ libraryRootId: libraryRootId || null }],
           request: payload,
           managerDiscoveryRevision: revision,
         }),
@@ -188,18 +191,19 @@
       mounts = nextMounts;
       roots = nextRoots;
       review = result;
-      libraryRootId = result.mount.libraryRootId;
+      const resultScope = reviewScope(result);
+      libraryRootId = resultScope.mount.libraryRootId;
 
-      const existingProfile = result.existing?.item.profileId ?? "";
-      const validExistingProfile = result.options.profiles.some((profile) => profile.id === existingProfile);
-      const retainedProfile = sameWork && result.options.profiles.some((profile) => profile.id === profileId)
+      const existingProfile = resultScope.existing?.item.profileId ?? "";
+      const validExistingProfile = resultScope.options.profiles.some((profile) => profile.id === existingProfile);
+      const retainedProfile = sameWork && resultScope.options.profiles.some((profile) => profile.id === profileId)
         ? profileId
         : "";
-      profileId = result.existing
+      profileId = resultScope.existing
         ? validExistingProfile ? existingProfile : ""
-        : retainedProfile || result.options.profiles[0]?.id || "";
+        : retainedProfile || resultScope.options.profiles[0]?.id || "";
       if (!sameWork) {
-        monitored = result.existing?.item.monitored ?? false;
+        monitored = resultScope.existing?.item.monitored ?? false;
         search = true;
       }
       if (isSeries) {
@@ -261,7 +265,7 @@
   }
 
   function workKey(value: ReviewedManagedRequest): string {
-    return JSON.stringify(value.work);
+    return JSON.stringify(reviewScope(value).work);
   }
 
   function message(cause: unknown, fallback: string): string {
@@ -344,7 +348,7 @@
       <Loader2 class="size-4 animate-spin" />
       Reviewing manager options…
     </div>
-  {:else if connection && review && ownership && !canExpand}
+  {:else if connection && review && scope && ownership && !canExpand}
     <div class="border-l-2 border-border-accent pl-3" aria-live="polite">
       <p class="flex items-center gap-2 text-sm font-medium text-text-primary">
         {#if ownership.fulfillments.every((item) => item.hasLocalSource || item.requestPhase === MANAGED_REQUEST_PHASE.completed)}
@@ -375,14 +379,14 @@
         <p class="mt-1 text-xs text-text-muted">{phaseLabel(ownership.fulfillments[0])}</p>
       {/if}
     </div>
-  {:else if connection && review}
-    {#if ownership && review.expansion && canExpand}
+  {:else if connection && review && scope}
+    {#if ownership && scope.expansion && canExpand}
       <div class="border-l-2 border-border-accent pl-3" aria-live="polite">
         <p class="text-sm font-medium text-text-primary">
-          Request {review.expansion.newTargetCount} more episode{review.expansion.newTargetCount === 1 ? "" : "s"}
+          Request {scope.expansion.newTargetCount} more episode{scope.expansion.newTargetCount === 1 ? "" : "s"}
         </p>
         <p class="mt-1 text-xs leading-relaxed text-text-muted">
-          {review.expansion.selectedOwnedTargetCount} selected episode{review.expansion.selectedOwnedTargetCount === 1 ? " is" : "s are"} already retained by this series. Only the new selection will be searched.
+          {scope.expansion.selectedOwnedTargetCount} selected episode{scope.expansion.selectedOwnedTargetCount === 1 ? " is" : "s are"} already retained by this series. Only the new selection will be searched.
         </p>
       </div>
     {/if}
@@ -393,7 +397,7 @@
           ariaLabel="Manager library"
           value={libraryRootId}
           options={libraryOptions}
-          disabled={disabled || Boolean(review.existing) || mappedLibraries.length <= 1}
+          disabled={disabled || Boolean(scope.existing) || mappedLibraries.length <= 1}
           onchange={selectLibrary}
         />
       </label>
@@ -403,7 +407,7 @@
           ariaLabel="Manager quality profile"
           value={profileId}
           options={profileOptions}
-          disabled={disabled || Boolean(review.existing)}
+          disabled={disabled || Boolean(scope.existing)}
           onchange={selectProfile}
         />
       </label>
@@ -411,7 +415,7 @@
 
     {#if isSeries}
       <p class="text-sm leading-relaxed text-text-muted">
-        {review.work.targets?.length ?? 0} selected episode{review.work.targets?.length === 1 ? "" : "s"} will be searched now; broad series monitoring stays off.
+        {scope.work.targets?.length ?? 0} selected episode{scope.work.targets?.length === 1 ? "" : "s"} will be searched now; broad series monitoring stays off.
       </p>
     {:else}
       <div class="flex flex-wrap gap-x-6 gap-y-2">
@@ -436,14 +440,14 @@
       </div>
     {/if}
 
-    {#if review.existing}
+    {#if scope.existing}
       <p class="text-xs leading-relaxed text-text-muted">
         This title already exists in {connection.name}; its current library and quality profile are retained.
       </p>
     {/if}
-    {#if profileOptions.length === 0 || (review.existing && !profileId)}
+    {#if profileOptions.length === 0 || (scope.existing && !profileId)}
       <p class="text-sm leading-relaxed text-text-muted">
-        {review.existing
+        {scope.existing
           ? "The title's current quality profile is no longer available."
           : "No quality profile is available from this manager."}
         <a class="ml-1 font-medium underline underline-offset-2" href="/settings/connections">Check connection settings</a>

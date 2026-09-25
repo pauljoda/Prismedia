@@ -4,15 +4,21 @@
  * Prismedia.Api | v1
  * OpenAPI spec version: 1.0.0
  */
+import type { ManagedConnectedTargetInput } from './managedConnectedTargetInput';
+import type { ManagedRequestScopeChoice } from './managedRequestScopeChoice';
 import type { ReviewedRequestCommitRequest } from './reviewedRequestCommitRequest';
 
 export interface ReviewManagedRequestInput {
+  scopes: ManagedRequestScopeChoice[];
   /** @nullable */
-  libraryRootId: string | null;
-  request: ReviewedRequestCommitRequest;
+  entityId?: string | null;
+  /** @nullable */
+  targetEntityIds?: string[] | null;
+  request?: null | ReviewedRequestCommitRequest;
   /**
      * @nullable
      * @pattern ^-?(?:0|[1-9]\d*)$
      */
   managerDiscoveryRevision?: number | string | null;
+  connected?: null | ManagedConnectedTargetInput;
 }
