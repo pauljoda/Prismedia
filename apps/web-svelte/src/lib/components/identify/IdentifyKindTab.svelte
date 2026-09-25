@@ -138,9 +138,7 @@
       selectable
       prefsKey="identify-{entityKind}"
       emptyTitle={showAll ? `No ${kindLabel.toLowerCase()} in library` : `All ${kindLabel.toLowerCase()} organized`}
-      emptyMessage={showAll
-        ? `No ${kindLabel.toLowerCase()} found in your library.`
-        : `All ${kindLabel.toLowerCase()} have been organized. Toggle "Show all" to see everything.`}
+      emptyMessage=""
       onSelectionChange={(ids) => (selectedIds = ids)}
       initialSelectionActive
       cardLinks={false}

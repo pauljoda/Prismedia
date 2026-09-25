@@ -147,16 +147,7 @@
 
 <Panel>
   <div class="p-5 space-y-5">
-  <div class="flex flex-wrap items-center justify-between gap-3">
-    <div class="flex items-center gap-2.5">
-      <FolderOpen class="h-4 w-4 text-text-accent" />
-      <div>
-        <h2 class="text-kicker text-text-primary">Watched Libraries</h2>
-        <p class="text-[0.68rem] text-text-muted">
-          Add mounted folders to scan for media files
-        </p>
-      </div>
-    </div>
+  <div class="flex flex-wrap items-center justify-end gap-3">
     <div class="flex flex-wrap items-center gap-2">
       {#if session.isAdmin}<ProviderLibraryDialog {roots} onComplete={onRootsChanged} {onError} {onMessage} />{/if}
       <Button

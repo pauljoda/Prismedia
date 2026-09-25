@@ -169,7 +169,7 @@
         class="text-text-muted hover:text-error-text"
         disabled={readOnly}
         aria-label="Remove {root.label}"
-        title={readOnly ? "Turn off scanning to pause an external library" : "Remove"}
+        title="Remove"
         onclick={() => onRemove(root)}
       >
         <Trash2 aria-hidden="true" />
