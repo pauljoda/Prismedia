@@ -40,7 +40,7 @@
   } from "./identify-review-helpers";
   import type { EntityMetadataProposal } from "$lib/api/identify-types";
   import type { EntityCard, EntityDetailCard } from "$lib/api/entities";
-  import { ENTITY_KIND } from "$lib/entities/entity-codes";
+  import { ENTITY_KIND, displayNameForEntityKind } from "$lib/entities/entity-codes";
   import { aspectRatioForKind } from "$lib/entities/entity-thumbnail";
   import { useIdentifyStore } from "./identify-store.svelte";
 
@@ -372,7 +372,7 @@
     {proposal}
     title={contextTitle}
     subtitle={showEntitySubtitle ? entity.title : null}
-    kindLabel={entity.kind}
+    kindLabel={displayNameForEntityKind(entity.kind)}
     posterUrl={contextPosterUrl}
     imageShape={coverIsSquare ? "square" : contextImageWide ? "wide" : "portrait"}
     {detail}

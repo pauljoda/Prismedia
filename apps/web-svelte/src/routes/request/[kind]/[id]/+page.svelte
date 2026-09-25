@@ -38,7 +38,7 @@
   import ProposalReviewLayout from "$lib/components/review/ProposalReviewLayout.svelte";
   import ProposalReviewSummary from "$lib/components/review/ProposalReviewSummary.svelte";
   import { aspectRatioForKind } from "$lib/entities/entity-thumbnail";
-  import { resolveEntityHref } from "$lib/entities/entity-codes";
+  import { displayNameForEntityKind, resolveEntityHref } from "$lib/entities/entity-codes";
   import { useNsfw } from "$lib/nsfw/store.svelte";
   import {
     DEFAULT_MONITOR_PRESET,
@@ -742,7 +742,7 @@
       proposal={activeProposal ?? proposal}
       title={activeTitle}
       subtitle={review ? `${review.externalIdentity.namespace}:${review.externalIdentity.value}` : null}
-      kindLabel={(activeProposal ?? proposal).targetKind}
+      kindLabel={displayNameForEntityKind((activeProposal ?? proposal).targetKind)}
       posterUrl={activePosterUrl}
       imageShape={activeImageShape}
       selectedFields={activeSelectedFields}
