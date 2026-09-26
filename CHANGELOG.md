@@ -207,6 +207,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/), and this
 
 ### Fixed
 
+- Request, Identify, and Files pages inside the iOS app now scroll as one page from anywhere, including drags that start on buttons, and render every row. Content stays clear of the status bar and tab bar, toolbars pin below the status bar, and Files fills the space between the bars.
 - Accepting an Identify proposal keeps the review and its progress on screen until the next page opens, instead of briefly showing the search view or a loader.
 
 - Automatic audiobook chapter matching no longer guesses: it never pairs chapters by position, by file name, by the placeholder of an untitled chapter, or by titles whose chapter numbers differ, and repeated or out-of-order titles stay unpaired. Existing automatic pairs are recomputed once under these rules. Audiobook track order no longer flips between file-name order and track-number tags.

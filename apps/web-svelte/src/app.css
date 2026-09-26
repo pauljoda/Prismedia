@@ -257,6 +257,39 @@
   }
 
   /*
+   * Embedded pages run edge to edge (viewport-fit=cover) and keep their content clear of the native bars.
+   * The gutter matches the regular shell's so full-bleed workspaces can bleed by the same amount. The grid
+   * lets a workspace sized at 100% fill the space between the bars, while longer pages grow and scroll
+   * the document. There is no canvas header, so sticky toolbars pin just below the status bar.
+   */
+  [data-native-content] {
+    --native-content-gutter: 1.25rem;
+    --prismedia-canvas-header-height: env(safe-area-inset-top);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    min-height: 100dvh;
+    padding:
+      calc(env(safe-area-inset-top) + var(--native-content-gutter))
+      calc(env(safe-area-inset-right) + var(--native-content-gutter))
+      calc(env(safe-area-inset-bottom) + var(--native-content-gutter))
+      calc(env(safe-area-inset-left) + var(--native-content-gutter));
+  }
+
+  /* Embedded pages scroll under the status bar; this soft edge keeps them from colliding with it. */
+  .native-status-scrim {
+    position: fixed;
+    inset: 0 0 auto;
+    z-index: 60;
+    height: env(safe-area-inset-top);
+    pointer-events: none;
+    background: linear-gradient(180deg, rgb(0 0 0 / 0.78) 0%, rgb(0 0 0 / 0.5) 100%);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    mask-image: linear-gradient(180deg, #000 55%, transparent 100%);
+    -webkit-mask-image: linear-gradient(180deg, #000 55%, transparent 100%);
+  }
+
+  /*
    * iOS Safari zooms the viewport when a focused text input has a computed font-size < 16px — but that
    * only happens on touch. The floor is therefore scoped to coarse pointers (below); on desktop, text
    * inputs/textareas keep their component (Tailwind) font size so they stay visually consistent with the

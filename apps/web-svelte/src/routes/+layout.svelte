@@ -101,6 +101,14 @@
   provideSearch();
   const playback = provideAudioPlayback();
   let mainScroller = $state<HTMLElement | null>(null);
+  // Embedded pages scroll the document, so scroll-to-top and restoration act on it. They also lay out
+  // edge to edge under the native bars and pad themselves by the safe area.
+  $effect(() => {
+    if (!embeddedShell) return;
+    mainScroller = document.scrollingElement as HTMLElement | null;
+    const viewport = document.querySelector<HTMLMetaElement>('meta[name="viewport"]');
+    if (viewport && !viewport.content.includes("viewport-fit")) viewport.content += ", viewport-fit=cover";
+  });
   let musicPlayerPersistenceReady = $state(false);
   let lastMusicPlayerSnapshot = "";
   let lastMusicPlayerTimeSnapshot = "";
@@ -294,11 +302,13 @@
 {#if bareShell}
   {@render pageContent()}
 {:else if embeddedShell}
-  <main
-    bind:this={mainScroller}
-    class="h-dvh overflow-y-auto p-4 sm:p-6"
-    data-native-content
-  >
+  <!--
+    The native app's WebView owns scrolling for embedded pages: the document is the only scroller, so
+    every drag (including one that starts on a button) moves the page, and no inner fixed-height box can
+    slide away from its own content under the WebView's safe-area insets.
+  -->
+  <div class="native-status-scrim" aria-hidden="true"></div>
+  <main data-native-content>
     {@render pageContent()}
   </main>
 {:else}
